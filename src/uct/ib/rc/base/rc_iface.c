@@ -369,13 +369,12 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_rc_iface_config_t *config, unsigned rx_priv_len,
                     unsigned rx_cq_len, unsigned rx_hdr_len,
-                    unsigned srq_size, unsigned fc_req_size)
+                    unsigned srq_size, unsigned fc_req_size, int rx_mp_slow_start)
 {
     struct ibv_srq_init_attr srq_init_attr;
     ucs_status_t status;
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     unsigned tx_cq_len = config->tx.cq_len;
-    int is_accel = 0;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               rx_priv_len, rx_hdr_len, tx_cq_len, rx_cq_len,
@@ -412,14 +411,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    if (!strcmp("rc_mlx5",params->tl_name)) {
-        is_accel = 1;
-    }
-
     /* Create RX buffers mempool */
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
                                           "rc_recv_desc", &self->rx.mp,
-                                          is_accel);
+                                          rx_mp_slow_start);
     if (status != UCS_OK) {
         goto err;
     }
@@ -460,7 +455,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         self->rx.srq.available       = ucs_min(config->super.rx.queue_init_len,
                                                srq_init_attr.attr.max_wr);
         self->rx.srq.reserved        = srq_init_attr.attr.max_wr - self->rx.srq.available;
+
+printf("self->rx.srq.available %d self->rx.srq.reserved %d\n", self->rx.srq.available, self->rx.srq.reserved);
     } else {
+printf("2self->rx.srq.available %d self->rx.srq.reserved %d\n", self->rx.srq.available, self->rx.srq.reserved);
         self->rx.srq.srq             = NULL;
     }
 
