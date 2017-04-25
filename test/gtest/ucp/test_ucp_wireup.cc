@@ -9,6 +9,7 @@
 #include "ucp_test.h"
 
 #include <algorithm>
+#include <set>
 
 extern "C" {
 #include <ucp/wireup/address.h>
@@ -248,12 +249,18 @@ UCS_TEST_P(test_ucp_wireup, address) {
     size_t size;
     void *buffer;
     unsigned order[UCP_MAX_RESOURCES];
+    const ucp_address_entry_t *ae;
+    std::set<uint8_t> packed_dev_priorities, unpacked_dev_priorities;
+    int tl;
 
     status = ucp_address_pack(sender().worker(), NULL, -1, order, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
     EXPECT_LE(size, 512ul); /* Expect a reasonable address size */
+    for (tl = 0; tl < sender().worker()->context->num_tls; tl++) {
+        packed_dev_priorities.insert(sender().worker()->iface_attrs[tl].priority);
+    }
 
     char name[UCP_WORKER_NAME_MAX];
     uint64_t uuid;
@@ -265,11 +272,17 @@ UCS_TEST_P(test_ucp_wireup, address) {
     EXPECT_EQ(sender().worker()->uuid, uuid);
     EXPECT_EQ(std::string(ucp_worker_get_name(sender().worker())), std::string(name));
     EXPECT_LE(address_count, static_cast<unsigned>(sender().ucph()->num_tls));
+    for (ae = address_list; ae < address_list + address_count; ++ae) {
+        unpacked_dev_priorities.insert(ae->iface_attr.priority);
+    }
 
     /* TODO test addresses */
 
     ucs_free(address_list);
     ucs_free(buffer);
+    /* Make sure that the packed device priorities are equal to the unpacked
+     * device priorities */
+    ASSERT_TRUE(packed_dev_priorities == unpacked_dev_priorities);
 }
 
 UCS_TEST_P(test_ucp_wireup, empty_address) {
