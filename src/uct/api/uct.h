@@ -932,11 +932,12 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief check if remote side is alive
+ * @brief check if the destination endpoint is alive in respect to UCT library
  *
- * This function checks if remote side is alive or not. It returns @ref UCS_OK
- * or error immediately if status of @a ep is known or @ref UCS_INPROGRESS if
- * synchronization is needed, then status will be propagated by @a comp callback
+ * This function checks if the destination endpoint is alive in respect to UCT
+ * library. It returns @ref UCS_OK or error immediately if status of @a ep is
+ * known or @ref UCS_INPROGRESS if synchronization is needed, then status will
+ * be propagated by @a comp callback
  *
  * @param [in]  ep      Endpoint to check
  * @param [in]  flags   Flags that define level of check
