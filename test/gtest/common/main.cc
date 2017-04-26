@@ -19,13 +19,16 @@ static int ucs_gtest_random_seed = -1;
 
 void parse_test_opts(int argc, char **argv) {
     int c;
-    while ((c = getopt(argc, argv, "s:")) != -1) {
+    while ((c = getopt(argc, argv, "st:")) != -1) {
         switch (c) {
         case 's':
             ucs_gtest_random_seed = atoi(optarg);
             break;
+        case 't':
+            ucs::gtest_threads_num = atoi(optarg);
+            break;
         default:
-            fprintf(stderr, "Usage: gtest [ -s rand-seed ]\n");
+            fprintf(stderr, "Usage: gtest [ -s rand-seed -t mt-test-threads-num ]\n");
             exit(1);
         }
     }

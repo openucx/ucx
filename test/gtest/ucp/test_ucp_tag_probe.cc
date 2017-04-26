@@ -14,6 +14,17 @@ class test_ucp_tag_probe : public test_ucp_tag {
 public:
     using test_ucp_tag::get_ctx_params;
 
+    static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
+                                                        const ucp_worker_params_t& worker_params,
+                                                        const std::string& name,
+                                                        const std::string& test_case_name,
+                                                        const std::string& tls) {
+        std::vector<ucp_test_param> result;
+        generate_test_params_variant(ctx_params, worker_params, name, test_case_name, tls,
+                                     DEFAULT_PARAM_VARIANT, result, true);
+        return result;
+    }
+
     /* The parameters mean the following:
      *  - s_size and r_size: send and recv buffer sizes.
      *    Can be different for checking message transaction error
@@ -29,35 +40,37 @@ public:
         ucp_tag_message_h message;
         request *send_req = NULL, *recv_req = NULL;
 
+        int thread_id = UCS_GET_THREAD_ID;
+
         std::vector<char> sendbuf(s_size, 0);
         std::vector<char> recvbuf(r_size, 0);
 
         ucs::fill_random(sendbuf);
 
-        message = ucp_tag_probe_nb(receiver().worker(), 0x1337, 0xffff,
+        message = ucp_tag_probe_nb(receiver().worker(), 0x1337 + thread_id, 0xffff,
                                    is_recv_msg, &info);
         EXPECT_TRUE(message == NULL);
 
         if (is_sync) {
             send_req = send_sync_nb(&sendbuf[0], sendbuf.size(), DATATYPE,
-                                    0x111337);
+                                    0x111337 + thread_id);
 
         } else {
-            send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+            send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337 + thread_id);
         }
 
         do {
             progress();
-            message = ucp_tag_probe_nb(receiver().worker(), 0x1337, 0xffff,
+            message = ucp_tag_probe_nb(receiver().worker(), 0x1337 + thread_id, 0xffff,
                                        is_recv_msg, &info);
         } while (message == NULL);
 
         EXPECT_EQ(sendbuf.size(),      info.length);
-        EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+        EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), info.sender_tag);
 
         if (is_recv_msg == 0) {
             recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE,
-                               0x1337, 0xffff);
+                               0x1337 + thread_id, 0xffff);
         } else {
             recv_req = (request*)ucp_tag_msg_recv_nb(receiver().worker(),
                                                      &recvbuf[0],recvbuf.size(),
@@ -74,7 +87,7 @@ public:
             /* Everything should be received correctly */
             EXPECT_EQ(UCS_OK,              recv_req->status);
             EXPECT_EQ(sendbuf.size(),      recv_req->info.length);
-            EXPECT_EQ((ucp_tag_t)0x111337, recv_req->info.sender_tag);
+            EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), recv_req->info.sender_tag);
             EXPECT_EQ(sendbuf, recvbuf);
         }
         request_release(recv_req);
@@ -113,21 +126,33 @@ public:
 
 
 UCS_TEST_P(test_ucp_tag_probe, send_probe) {
-    test_send_probe (8, 8, false, 0);
-    test_send_probe (8, 8, true,  0);
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        test_send_probe (8, 8, false, 0);
+        test_send_probe (8, 8, true,  0);
+    }
 }
 
 UCS_TEST_P(test_ucp_tag_probe, send_medium_msg_probe, "RNDV_THRESH=1048576") {
-    test_send_probe (50000, 50000, false, 1);
-    test_send_probe (50000, 50000, true,  1);
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        test_send_probe (50000, 50000, false, 1);
+        test_send_probe (50000, 50000, true,  1);
+    }
 }
 
 UCS_TEST_P(test_ucp_tag_probe, send_medium_msg_probe_truncated, "RNDV_THRESH=1048576") {
-    test_send_probe (50000, 0, false, 1);
-    test_send_probe (50000, 0, true,  1);
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        test_send_probe (50000, 0, false, 1);
+        test_send_probe (50000, 0, true,  1);
+    }
 }
 
 UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
+    if (GetParam().thread_type != SINGLE_THREAD) {
+        /* TODO: rndv test needs to be modified in order to accomodate
+         * multithreading test. */
+        UCS_TEST_SKIP_R("multithreading test is not supported.");
+    }
+
     static const size_t size = 1148576;
     ucp_tag_recv_info info;
     ucp_tag_message_h message;
@@ -180,6 +205,12 @@ UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
 }
 
 UCS_TEST_P(test_ucp_tag_probe, limited_probe_size) {
+    if (GetParam().thread_type != SINGLE_THREAD) {
+        /* TODO: limited_probe_size test needs to be modified in order
+         * to accomodate multithreading test. */
+        UCS_TEST_SKIP_R("multithreading test is not supported.");
+    }
+
     static const int COUNT = 1000;
     std::string sendbuf, recvbuf;
     std::vector<request*> reqs;

@@ -12,7 +12,10 @@ extern "C" {
 }
 #include <common/test.h>
 
-#define MT_TEST_NUM_THREADS 4
+#if _OPENMP
+#include <omp.h>
+#endif
+
 
 struct ucp_test_param {
     ucp_params_t              ctx_params;
@@ -32,45 +35,54 @@ public:
 
     class entity {
     public:
-        entity(const ucp_test_param& test_param, ucp_config_t* ucp_config);
+        static const int default_worker = -1;
+        static const int default_ep     = -1;
+
+        entity(const ucp_test_param& test_param, int num_workers,
+               ucp_config_t* ucp_config);
 
         ~entity();
 
         void connect(const entity* other);
 
-        void flush_ep(int ep_index = 0) const;
+        void flush_ep(int ep_index = default_ep) const;
 
-        void flush_worker(int worker_index = 0) const;
+        void flush_all_eps() const;
 
-        void fence(int worker_index = 0) const;
+        void flush_worker(int worker_index = default_worker) const;
 
-        void disconnect(int ep_index = 0);
+        void fence(int worker_index = default_worker) const;
 
-        void* disconnect_nb(int ep_index = 0) const;
+        void disconnect(int ep_index = default_ep);
 
-        void destroy_worker(int worker_index = 0);
+        void* disconnect_nb(int ep_index = default_ep) const;
 
-        ucp_ep_h ep(int ep_index = 0) const;
+        void destroy_worker(int worker_index = default_worker);
 
-        ucp_ep_h revoke_ep(int ep_index = 0) const;
+        ucp_ep_h ep(int ep_index = default_ep) const;
 
-        ucp_worker_h worker(int worker_index = 0) const;
+        ucp_ep_h revoke_ep(int ep_index = default_ep) const;
+
+        ucp_worker_h worker(int worker_index = default_worker) const;
+
+        int get_worker_index() const;
 
         ucp_context_h ucph() const;
 
-        void progress(int worker_index = 0);
+        void progress(int worker_index = default_worker);
 
-        int get_num_workers() const;
+        void create_rkeys(void *rkey_buffer, std::vector<ucp_rkey_h> *rkeys);
+
+        void destroy_rkeys(std::vector<ucp_rkey_h> *rkeys);
 
         void cleanup();
 
-    protected:
-        ucs::handle<ucp_context_h> m_ucph;
+    private:
+        ucs::handle<ucp_context_h>               m_ucph;
         std::vector<ucs::handle<ucp_worker_h> >  m_workers;
         std::vector<ucs::handle<ucp_ep_h> >      m_eps;
-
-        int num_workers;
-    };
+        int                                      m_thread_type;
+   };
 };
 
 /**
@@ -112,7 +124,7 @@ public:
                                  const std::string& tls,
                                  int variant,
                                  std::vector<ucp_test_param>& test_params,
-                                 int thread_type = SINGLE_THREAD);
+                                 bool multi_thread = false);
 
     virtual void modify_config(const std::string& name, const std::string& value);
     void stats_activate();
@@ -123,18 +135,22 @@ protected:
     virtual void cleanup();
     entity* create_entity(bool add_in_front = false);
 
-    void progress(int worker_index = 0) const;
-    void short_progress_loop(int worker_index = 0) const;
+    void progress(int worker_index = entity::default_worker) const;
+    void short_progress_loop(int worker_index = entity::default_worker) const;
     void disconnect(const entity& entity);
-    void wait(void *req, int worker_index = 0);
+    void wait(void *req, int worker_index = entity::default_worker);
     static void disable_errors();
     static void restore_errors();
+    int mt_num_workers() const;
+    int mt_num_threads() const;
 
     template <typename T>
-    void wait_for_flag(volatile T *flag, double timeout = 10.0) {
+    void wait_for_flag(volatile T *flag, double timeout = 10.0,
+                       int worker_index = entity::default_worker)
+    {
         ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
         while ((ucs_get_time() < loop_end_limit) && (!(*flag))) {
-            short_progress_loop();
+            short_progress_loop(worker_index);
         }
     }
 
@@ -150,7 +166,27 @@ private:
                                                va_list ap);
 
     static std::string m_last_err_msg;
+
+    int m_mt_num_workers;
+    int m_mt_num_threads;
 };
+
+#if _OPENMP && ENABLE_MT
+
+#  define UCS_OMP_PARALLEL_FOR(_var) \
+    _Pragma("omp parallel for") \
+    for (int _var = 0; _var < mt_num_threads(); ++_var)
+#  define UCS_GET_THREAD_ID \
+    omp_get_thread_num()
+
+#else
+
+#  define UCS_OMP_PARALLEL_FOR(_var) \
+    int _var = 0;
+#  define UCS_GET_THREAD_ID \
+    0
+
+#endif
 
 
 std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);

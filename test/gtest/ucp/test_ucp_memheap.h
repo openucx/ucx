@@ -51,6 +51,17 @@ public:
 protected:
     const static size_t DEFAULT_SIZE  = 0;
     const static int    DEFAULT_ITERS = 0;
+
+    void flush(int is_ep_flush);
+
+    void do_blocking_xfer(nonblocking_send_func_t send,
+                          void *memheap, std::vector<ucp_rkey_h> rkeys, size_t size,
+                          size_t offset, bool is_ep_flush);
+
+    void do_nonblocking_xfer(nonblocking_send_func_t send,
+                             int max_iter, void *memheap, std::vector<ucp_rkey_h> rkeys,
+                             size_t alignment, size_t size, size_t memheap_size, bool is_ep_flush);
+
     void test_blocking_xfer(blocking_send_func_t send, size_t len, int max_iters,
                             size_t alignment, bool malloc_allocate, bool is_ep_flush);
 

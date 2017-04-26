@@ -71,6 +71,10 @@ int test_time_multiplier();
  */
 void safe_usleep(double usec);
 
+/*
+ * Number of threads in multithreading tests.
+ */
+extern int gtest_threads_num;
 
 /*
  * For gtest's EXPECT_EQ

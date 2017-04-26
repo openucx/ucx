@@ -24,6 +24,63 @@ test_ucp_memheap::enum_test_params(const ucp_params_t& ctx_params,
     return result;
 }
 
+void test_ucp_memheap::do_nonblocking_xfer(nonblocking_send_func_t send,
+                                           int max_iter, void *memheap, std::vector<ucp_rkey_h> rkeys,
+                                           size_t alignment, size_t size, size_t memheap_size, bool is_ep_flush)
+{
+    int thread_id = UCS_GET_THREAD_ID;
+    int worker_index = sender().get_worker_index();
+    std::string expected_data[300];
+    size_t size_per_iter = size * mt_num_threads();
+    assert(max_iter <= 300);
+
+    for (int i = 0; i < max_iter; ++i) {
+        expected_data[i].resize(size);
+        ucs::fill_random(expected_data[i]);
+        ucs_assert(size_per_iter * i + alignment <= memheap_size);
+
+        (this->*send)(&sender(), size,
+                      (void*)((uintptr_t)memheap + alignment + i * size_per_iter + thread_id * size),
+                      rkeys[worker_index], expected_data[i]);
+    }
+
+    flush(is_ep_flush);
+
+    for (int i = 0; i < max_iter; ++i) {
+        EXPECT_EQ(expected_data[i],
+                  std::string((char *)((uintptr_t)memheap + alignment + i * size_per_iter + thread_id * size),
+                              expected_data[i].length()));
+    }
+}
+
+void test_ucp_memheap::flush(int is_ep_flush)
+{
+    if (is_ep_flush) {
+        sender().flush_ep();
+    } else {
+        sender().flush_worker();
+    }
+}
+
+void test_ucp_memheap::do_blocking_xfer(nonblocking_send_func_t send,
+                                        void *memheap, std::vector<ucp_rkey_h> rkeys, size_t size,
+                                        size_t offset, bool is_ep_flush)
+{
+    std::string expected_data;
+    expected_data.resize(size);
+    ucs::fill_random(expected_data);
+
+    int worker_id = sender().get_worker_index();
+
+    (this->*send)(&sender(), size, (void*)((uintptr_t)memheap + offset),
+                  rkeys[worker_id], expected_data);
+
+    flush(is_ep_flush);
+
+    EXPECT_EQ(expected_data, std::string((char*)memheap + offset,
+                                         expected_data.length()));
+}
+
 void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_func_t send,
                                                              size_t size, int max_iter,
                                                              size_t alignment,
@@ -46,7 +103,7 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     if (size == DEFAULT_SIZE) {
         size = ucs_max((size_t)ucs::rand() % (12*1024), alignment);
     }
-    memheap_size = max_iter * size + alignment;
+    memheap_size = max_iter * size * mt_num_threads() + alignment;
 
     sender().connect(&receiver());
     if (&sender() != &receiver()) {
@@ -89,43 +146,16 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     status = ucp_rkey_pack(receiver().ucph(), memh, &rkey_buffer, &rkey_buffer_size);
     ASSERT_UCS_OK(status);
 
-    ucp_rkey_h rkey;
-    status = ucp_ep_rkey_unpack(sender().ep(), rkey_buffer, &rkey);
-    ASSERT_UCS_OK(status);
+    std::vector<ucp_rkey_h> rkeys;
+    sender().create_rkeys(rkey_buffer, &rkeys);
 
-    std::string expected_data[300];
-    assert (max_iter <= 300);
-
-    for (int i = 0; i < max_iter; ++i) {
-        expected_data[i].resize(size);
-
-        ucs::fill_random(expected_data[i]);
-
-        ucs_assert(size * i + alignment <= memheap_size);
-
-        (this->*send)(&sender(), size,
-                      (void*)((uintptr_t)memheap + alignment + i * size),
-                      rkey, expected_data[i]);
-
-        ASSERT_UCS_OK(status);
-
+    UCS_OMP_PARALLEL_FOR(i) {
+        do_nonblocking_xfer(send, max_iter, memheap, rkeys,
+                            alignment, size, memheap_size, is_ep_flush);
     }
 
-    if (is_ep_flush) {
-        sender().flush_ep();
-    } else {
-        sender().flush_worker();
-    }
-
-    for (int i = 0; i < max_iter; ++i) {
-        EXPECT_EQ(expected_data[i],
-                  std::string((char *)((uintptr_t)memheap + alignment + i * size),
-                              expected_data[i].length()));
-    }
-
-    ucp_rkey_destroy(rkey);
-    receiver().flush_worker();
-
+    sender().destroy_rkeys(&rkeys);
+    receiver().flush_all_eps();
     disconnect(sender());
     disconnect(receiver());
 
@@ -159,6 +189,8 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
         memheap_size = 3 * 1024;
         zero_offset = 1;
     }
+
+    memheap_size *= mt_num_threads();
 
     sender().connect(&receiver());
     if (&sender() != &receiver()) {
@@ -203,9 +235,8 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
     status = ucp_rkey_pack(receiver().ucph(), memh, &rkey_buffer, &rkey_buffer_size);
     ASSERT_UCS_OK(status);
 
-    ucp_rkey_h rkey;
-    status = ucp_ep_rkey_unpack(sender().ep(), rkey_buffer, &rkey);
-    ASSERT_UCS_OK(status);
+    std::vector<ucp_rkey_h> rkeys;
+    sender().create_rkeys(rkey_buffer, &rkeys);
 
     ucp_rkey_buffer_release(rkey_buffer);
 
@@ -225,29 +256,15 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
         ucs_assert(((((uintptr_t)memheap + offset)) % alignment) == 0);
         ucs_assert(size + offset <= memheap_size);
 
-        std::string expected_data;
-        expected_data.resize(size);
+        size /= mt_num_threads();
 
-        ucs::fill_random(expected_data);
-
-        (this->*send)(&sender(), size, (void*)((uintptr_t)memheap + offset),
-                      rkey, expected_data);
-
-        if (is_ep_flush) {
-            sender().flush_ep();
-        } else {
-            sender().flush_worker();
+        UCS_OMP_PARALLEL_FOR(i) {
+            do_blocking_xfer(send, memheap, rkeys, size, offset + size * i, is_ep_flush);
         }
-
-        EXPECT_EQ(expected_data,
-                  std::string((char*)memheap + offset, expected_data.length()));
-
-        expected_data.clear();
     }
 
-    ucp_rkey_destroy(rkey);
-    receiver().flush_worker();
-
+    sender().destroy_rkeys(&rkeys);
+    receiver().flush_all_eps();
     status = ucp_mem_unmap(receiver().ucph(), memh);
     ASSERT_UCS_OK(status);
 

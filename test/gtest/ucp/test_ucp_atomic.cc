@@ -18,12 +18,11 @@ test_ucp_atomic::enum_test_params(const ucp_params_t& ctx_params,
                                   const std::string& tls)
 {
     std::vector<ucp_test_param> result;
-    generate_test_params_variant(ctx_params, worker_params, name, test_case_name, tls,
-                                 UCP_ATOMIC_MODE_CPU, result);
-    generate_test_params_variant(ctx_params, worker_params, name, test_case_name, tls,
-                                 UCP_ATOMIC_MODE_DEVICE, result);
-    generate_test_params_variant(ctx_params, worker_params, name, test_case_name, tls,
-                                 UCP_ATOMIC_MODE_GUESS, result);
+    for (int variant = UCP_ATOMIC_MODE_CPU; variant < UCP_ATOMIC_MODE_LAST; variant++) {
+        generate_test_params_variant(ctx_params, worker_params, name, test_case_name,
+                                     tls, variant, result, true);
+    }
+
     return result;
 }
 
