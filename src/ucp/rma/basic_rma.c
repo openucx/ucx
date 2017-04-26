@@ -449,7 +449,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
-    ucs_status_t status;
+    ucs_status_t     status;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
@@ -470,4 +470,3 @@ out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return status;
 }
-

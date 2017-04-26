@@ -165,7 +165,12 @@ enum ucp_worker_params_field {
  * present. It is used for the enablement of backward compatibility support.
  */
 enum ucp_ep_params_field {
-    UCP_EP_PARAM_FIELD_REMOTE_ADDRESS  = UCS_BIT(0)  /**< Address of remote peer */
+    UCP_EP_PARAM_FIELD_REMOTE_ADDRESS    = UCS_BIT(0), /**< Address of remote
+                                                            peer */
+    UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE = UCS_BIT(1), /**< Error handling mode.
+                                                            @ref ucp_err_handling_mode_t */
+    UCP_EP_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(2)  /**< Handler to process
+                                                            transport level errors */
 };
 
 
@@ -663,6 +668,17 @@ typedef struct ucp_ep_params {
      * specified.
      */
     const ucp_address_t     *address;
+
+    /**
+     * Desired error handling mode, optional parameter. Default value is
+     * @ref UCP_ERR_HANDLING_MODE_NONE
+     */
+    ucp_err_handling_mode_t err_mode;
+
+    /**
+     * Handler to process transport level failure.
+     */
+    ucp_err_handler_t       err_handler;
 } ucp_ep_params_t;
 
 
@@ -1680,6 +1696,9 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  *
  * @note The user should not modify any part of the @a buffer after this
  *       operation is called, until the operation completes.
+ * @note Returns @ref UCS_ERR_UNSUPPORTED if @ref UCP_ERR_HANDLING_MODE_PEER is
+ *       enabled. This is a temporary implementation-related constraint that
+ *       will be addressed in future releases.
  *
  * @param [in]  ep          Destination endpoint handle.
  * @param [in]  buffer      Pointer to the message buffer (payload).

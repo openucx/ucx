@@ -132,6 +132,9 @@ typedef struct ucp_ep_config {
         /* Threshold for switching from eager to AM based rendezvous */
         size_t                 am_thresh;
     } rndv;
+
+    /* Error handling mode */
+    ucp_err_handling_mode_t    err_mode;
 } ucp_ep_config_t;
 
 

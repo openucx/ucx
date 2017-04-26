@@ -27,7 +27,7 @@ ucp_params_t test_ucp_tag::get_ctx_params() {
 void test_ucp_tag::init()
 {
     ucp_test::init();
-    sender().connect(&receiver());
+    sender().connect(&receiver(), &GetParam().ep_params_cmn);
 
     ctx_attr.field_mask = 0;
     ctx_attr.field_mask |= UCP_ATTR_FIELD_REQUEST_SIZE;
@@ -199,11 +199,11 @@ test_ucp_tag::send_sync_nb(const void *buffer, size_t count, ucp_datatype_t data
     req = (request*)ucp_tag_send_sync_nb(sender().ep(worker_index), buffer, count, datatype,
                                          tag, send_callback);
     if (!UCS_PTR_IS_PTR(req)) {
-        UCS_TEST_ABORT("ucp_tag_send_sync_nb returned status " <<
-                       ucs_status_string(UCS_PTR_STATUS(req)));
-    } else {
-        return req;
+        UCS_TEST_MESSAGE << "ucp_tag_send_sync_nb returned status " <<
+                         ucs_status_string(UCS_PTR_STATUS(req));
     }
+
+    return req;
 }
 
 test_ucp_tag::request*

@@ -21,6 +21,7 @@ public:
     static std::vector<ucp_test_param>
     enum_test_params(const ucp_params_t& ctx_params,
                      const ucp_worker_params_t& worker_params,
+                     const ucp_ep_params_t& ep_params,
                      const std::string& name,
                      const std::string& test_case_name,
                      const std::string& tls);
@@ -74,6 +75,7 @@ private:
 std::vector<ucp_test_param>
 test_ucp_wireup::enum_test_params(const ucp_params_t& ctx_params,
                                   const ucp_worker_params_t& worker_params,
+                                  const ucp_ep_params_t& ep_params,
                                   const std::string& name,
                                   const std::string& test_case_name,
                                   const std::string& tls)
@@ -82,12 +84,12 @@ test_ucp_wireup::enum_test_params(const ucp_params_t& ctx_params,
     ucp_params_t tmp_ctx_params = ctx_params;
 
     tmp_ctx_params.features = UCP_FEATURE_RMA;
-    generate_test_params_variant(tmp_ctx_params, worker_params, name, test_case_name + "/rma",
-                                 tls, TEST_RMA, result);
+    generate_test_params_variant(tmp_ctx_params, worker_params, ep_params, name,
+                                 test_case_name + "/rma", tls, TEST_RMA, result);
 
     tmp_ctx_params.features = UCP_FEATURE_TAG;
-    generate_test_params_variant(tmp_ctx_params, worker_params, name, test_case_name + "/tag",
-                                 tls, TEST_TAG, result);
+    generate_test_params_variant(tmp_ctx_params, worker_params, ep_params, name,
+                                 test_case_name + "/tag", tls, TEST_TAG, result);
 
     return result;
 }
