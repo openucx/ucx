@@ -280,9 +280,10 @@ typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
  * This callback routine is invoked when transport level error detected.
  *
  * @param [in]  arg      User argument to be passed to the callback.
- * @param [in]  ep       Endpoint to handle transport level error,
- *                       @a ep becomes unusable. All following operation on @a ep
- *                       will return @a status error.
+ * @param [in]  ep       Endpoint to handle transport level error. Upon return
+ *                       from the callback, this @a ep is no longer usable and
+ *                       all subsequent operations on this @a ep will fail with
+ *                       the error code passed in @a status.
  * @param [in]  status   @ref ucs_status_t "error status".
  */
 typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status);
