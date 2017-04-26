@@ -16,10 +16,11 @@ extern "C" {
 #include <ucs/sys/preprocessor.h>
 
 
-template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, bool ONESIDED>
+template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
 class ucp_perf_test_runner {
 public:
-    static const ucp_tag_t TAG = 0x1337a880u;
+    static const ucp_tag_t TAG      = 0x1337a880u;
+    static const ucp_tag_t TAG_MASK = (FLAGS & UCX_PERF_TEST_FLAG_TAG_WILDCARD) ? 0 : -1;
 
     typedef uint8_t psn_t;
 
@@ -81,7 +82,7 @@ public:
     }
 
     void UCS_F_ALWAYS_INLINE progress_responder() {
-        if (!ONESIDED) {
+        if (!(FLAGS & UCX_PERF_TEST_FLAG_ONE_SIDED)) {
             ucp_worker_progress(m_perf.ucp.worker);
         }
     }
@@ -116,8 +117,13 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
-            request = ucp_tag_send_nb(ep, buffer, length, datatype, TAG,
-                                      (ucp_send_callback_t)ucs_empty_function);
+            if (FLAGS & UCX_PERF_TEST_FLAG_TAG_SYNC) {
+                request = ucp_tag_send_sync_nb(ep, buffer, length, datatype, TAG,
+                                               (ucp_send_callback_t)ucs_empty_function);
+            } else {
+                request = ucp_tag_send_nb(ep, buffer, length, datatype, TAG,
+                                          (ucp_send_callback_t)ucs_empty_function);
+            }
             return wait(request, true);
         case UCX_PERF_CMD_PUT:
             *((uint8_t*)buffer + length - 1) = sn;
@@ -171,7 +177,7 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
-            request = ucp_tag_recv_nb(worker, buffer, length, datatype, TAG, 0,
+            request = ucp_tag_recv_nb(worker, buffer, length, datatype, TAG, TAG_MASK,
                                       (ucp_tag_recv_callback_t)ucs_empty_function);
             return wait(request, false);
         case UCX_PERF_CMD_PUT:
@@ -347,24 +353,38 @@ private:
 };
 
 
-#define TEST_CASE(_perf, _cmd, _type, _onesided) \
+#define TEST_CASE(_perf, _cmd, _type, _flags, _mask) \
     if (((_perf)->params.command == (_cmd)) && \
         ((_perf)->params.test_type == (_type)) && \
-        (!!((_perf)->params.flags & UCX_PERF_TEST_FLAG_ONE_SIDED) == !!(_onesided))) \
+        (((_perf)->params.flags & (_mask)) == (_flags))) \
     { \
-        ucp_perf_test_runner<_cmd, _type, _onesided> r(*_perf); \
+        ucp_perf_test_runner<_cmd, _type, _flags> r(*_perf); \
         return r.run(); \
     }
-#define TEST_CASE_ALL_OSD(_perf, _case) \
-   TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, true) \
-   TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, false)
 
+#define TEST_CASE_ALL_TAG(_perf, _case) \
+    TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
+              0, \
+              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_SYNC) \
+    TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
+              UCX_PERF_TEST_FLAG_TAG_WILDCARD, \
+              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_SYNC) \
+    TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
+              UCX_PERF_TEST_FLAG_TAG_SYNC, \
+              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_SYNC) \
+    TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
+              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_SYNC, \
+              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_SYNC) \
+
+#define TEST_CASE_ALL_OSD(_perf, _case) \
+    TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
+              0, UCX_PERF_TEST_FLAG_ONE_SIDED) \
+    TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
+              UCX_PERF_TEST_FLAG_ONE_SIDED, UCX_PERF_TEST_FLAG_ONE_SIDED)
 
 ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
 {
     UCS_PP_FOREACH(TEST_CASE_ALL_OSD, perf,
-        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_PINGPONG),
-        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_PINGPONG),
         (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_GET,   UCX_PERF_TEST_TYPE_STREAM_UNI),
@@ -372,6 +392,10 @@ ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
         (UCX_PERF_CMD_FADD,  UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_SWAP,  UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI)
+        );
+    UCS_PP_FOREACH(TEST_CASE_ALL_TAG, perf,
+        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_PINGPONG),
+        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_STREAM_UNI)
         );
 
     ucs_error("Invalid test case");
