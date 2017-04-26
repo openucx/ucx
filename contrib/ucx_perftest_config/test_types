@@ -32,3 +32,5 @@ ucp_iov_iov_tag_bw          -t tag_bw  -D iov,iov
 ucp_contig_contig_tag_bw    -t tag_bw  -D contig,contig
 #IOV with RNDV is not yet supported
 #ucp_contig_iov_tag_bw       -t tag_bw  -D contig,iov
+ucp_sync_tag_lat            -t tag_lat -S
+ucp_wild_tag_lat            -t tag_lat -C
