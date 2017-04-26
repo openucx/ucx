@@ -457,8 +457,8 @@ void uct_md_component_config_print(ucs_config_print_flags_t print_flags)
 
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 {
-    memcpy(rkey_buffer, md->component->name, UCT_MD_COMPONENT_NAME_MAX);
-    return md->ops->mkey_pack(md, memh, rkey_buffer + UCT_MD_COMPONENT_NAME_MAX);
+    void *rbuf = uct_md_fill_md_name(md, rkey_buffer);
+    return md->ops->mkey_pack(md, memh, rbuf);
 }
 
 ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob)

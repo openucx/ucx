@@ -796,7 +796,6 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
 {
     uct_ib_md_t *md         = ucs_derived_of(uct_md, uct_ib_md_t);
     uct_ib_mem_t *memh      = uct_memh;
-    uint64_t *packed_rkey_p = rkey_buffer;
     uint32_t atomic_rkey;
     uint16_t umr_offset;
     ucs_status_t status;
@@ -820,8 +819,7 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         atomic_rkey = UCT_IB_INVALID_RKEY;
     }
 
-    *packed_rkey_p = (((uint64_t)atomic_rkey) << 32) | memh->mr->rkey;
-    ucs_trace("packed rkey: direct 0x%x indirect 0x%x", memh->mr->rkey, atomic_rkey);
+    uct_ib_md_pack_rkey(memh->mr->rkey, atomic_rkey, rkey_buffer);
     return UCS_OK;
 }
 

@@ -90,6 +90,16 @@ enum {
 
 
 /**
+ * Check the condition and return status as a pointer if not true.
+ */
+#define UCT_CHECK_PARAM_PTR(_condition, _err_message, ...) \
+    if (ENABLE_PARAMS_CHECK && !(_condition)) { \
+        ucs_error(_err_message, ## __VA_ARGS__); \
+        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+    }
+
+
+/**
  * Check the size of the IOV array
  */
 #define UCT_CHECK_IOV_SIZE(_iovcnt, _max_iov, _name) \
