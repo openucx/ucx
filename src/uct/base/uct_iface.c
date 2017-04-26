@@ -287,11 +287,6 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
      * Failed ep will use that queue for purge. */
     uct_ep_pending_purge(tl_ep, uct_ep_failed_purge_cb, &f_iface->pend_q);
 
-    if (iface->err_handler) {
-        iface->err_handler(iface->err_handler_arg, tl_ep,
-                           UCS_ERR_ENDPOINT_TIMEOUT);
-    }
-
     ops->ep_get_address     = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_connect_to_ep   = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_flush           = (void*)ucs_empty_function_return_ep_timeout;
@@ -318,6 +313,11 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
     ucs_class_call_cleanup_chain(cls, tl_ep, -1);
 
     tl_ep->iface = &f_iface->super;
+
+    if (iface->err_handler) {
+        iface->err_handler(iface->err_handler_arg, tl_ep,
+                           UCS_ERR_ENDPOINT_TIMEOUT);
+    }
 }
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
