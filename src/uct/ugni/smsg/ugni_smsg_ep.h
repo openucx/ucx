@@ -43,7 +43,7 @@ typedef struct uct_ugni_smsg_ep {
 
 typedef struct uct_ugni_smsg_desc {
     uint32_t msg_id;
-    uct_ugni_ep_t  *ep;
+    uct_ugni_flush_group_t *flush_group;
     struct uct_ugni_smsg_desc *next;
 } uct_ugni_smsg_desc_t;
 

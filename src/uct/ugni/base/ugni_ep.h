@@ -44,23 +44,22 @@ ucs_arbiter_cb_result_t uct_ugni_ep_process_pending(ucs_arbiter_t *arbiter,
 ucs_arbiter_cb_result_t uct_ugni_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
                                                      ucs_arbiter_elem_t *elem,
                                                      void *arg);
+ucs_status_t uct_ugni_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                               uct_completion_t *comp);
 
-static inline void uct_ugni_ep_check_flush(uct_ugni_ep_t *ep)
+static inline int uct_ugni_ep_can_send(uct_ugni_ep_t *ep)
 {
-    if (!ep->outstanding && ep->flush_flag && !ep->arb_flush) {
-        ep->flush_flag = 0;
-    }
+    return (ucs_arbiter_group_is_empty(&ep->arb_group) || ep->arb_sched) ? 1 : 0;
 }
 
-static inline int uct_ugni_can_send(uct_ugni_ep_t *ep)
+static inline int uct_ugni_ep_can_flush(uct_ugni_ep_t *ep)
 {
-
-    return (((ep->arb_size > 0) || ep->flush_flag) && !ep->arb_sched) ? 0 : 1;
+    return (ep->flush_group->flush_comp.count == 1 && uct_ugni_ep_can_send(ep)) ? 1 : 0;
 }
 
-static inline int uct_ugni_can_flush(uct_ugni_ep_t *ep)
+static inline void uct_ugni_check_flush(uct_ugni_flush_group_t *flush_group)
 {
-    return ((ep->arb_flush <= 0) || ep->arb_sched) && !ep->outstanding ? 1 : 0;
+    uct_invoke_completion(&flush_group->flush_comp, UCS_OK);
 }
 
 #endif

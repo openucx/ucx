@@ -21,6 +21,7 @@ struct uct_ugni_udt_desc;
 typedef struct uct_ugni_udt_ep {
     uct_ugni_ep_t super;
     struct uct_ugni_udt_desc *posted_desc;
+    uct_ugni_flush_group_t *desc_flush_group;
 } uct_ugni_udt_ep_t;
 
 ucs_status_t uct_ugni_udt_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
