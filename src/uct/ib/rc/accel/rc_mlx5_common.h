@@ -124,6 +124,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     ucs_status_t status;
     void *udesc;
     unsigned flags;
+    unsigned count;
 
     ucs_assert(uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq,
                                        mlx5_common_iface->rx.srq.mask)->srq.next_wqe_index == 0);
@@ -210,8 +211,9 @@ done:
     max_batch = rc_iface->super.config.rx_max_batch;
     if (rc_iface->rx.srq.available >= max_batch) {
         if (rc_iface->rx.srq.reserved) {
-            ++rc_iface->rx.srq.available;
-            --rc_iface->rx.srq.reserved;
+            count = ucs_min(rc_iface->rx.srq.reserved, 16);
+            rc_iface->rx.srq.available += count;
+            rc_iface->rx.srq.reserved  -= count;
         }
         uct_rc_mlx5_iface_srq_post_recv(rc_iface, &mlx5_common_iface->rx.srq);
     }
