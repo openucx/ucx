@@ -9,6 +9,7 @@
 
 #include "types.h"
 
+#include <ucs/stats/stats_fwd.h>
 #include <ucs/type/status.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -89,6 +90,15 @@ typedef struct {
 
     /* Limit for profiling log size */
      size_t                   profile_log_size;
+
+    /* Counters to be included in statistics summary */
+    ucs_config_names_array_t stats_filter;
+
+    /* statistics format options */
+    ucs_stats_formats_t      stats_format;
+
+    /* statistics summary threshold */
+    size_t                   stats_threshold;
 
 } ucs_global_opts_t;
 

@@ -317,5 +317,13 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
 size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,
                                size_t max_size);
 
+/**
+ * Look for a string in config names array.
+ *
+ * @param config_names     lookup array of config names.
+ * @param str              string to search.
+ */
+int ucs_config_names_search(ucs_config_names_array_t config_names,
+                            const char *str);
 
 #endif

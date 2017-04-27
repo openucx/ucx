@@ -20,6 +20,11 @@
 #include <sys/ioctl.h>
 #include <linux/futex.h>
 
+const char *ucs_stats_formats_names[] = {
+    [UCS_STATS_FULL]        = "FULL",
+    [UCS_STATS_SUMMARY]     = "SUMMARY",
+    [UCS_STATS_LAST]        = NULL
+};
 
 #if ENABLE_STATS
 
@@ -43,6 +48,7 @@ typedef struct {
     volatile unsigned    flags;
 
     ucs_time_t           start_time;
+    ucs_stats_summary_t  sum_list;
     ucs_stats_node_t     root_node;
     ucs_stats_counter_t  root_counters[UCS_ROOT_STATS_LAST];
 
@@ -63,6 +69,7 @@ typedef struct {
 static ucs_stats_context_t ucs_stats_context = {
     .flags            = 0,
     .root_node        = {},
+    .sum_list         = {},
     .lock             = PTHREAD_MUTEX_INITIALIZER,
     .thread           = 0xfffffffful
 };
@@ -125,12 +132,44 @@ static void ucs_stats_node_init_root(const char *name, ...)
     }
 
     va_start(ap, name);
+    ucs_stats_context.root_node.counters_sum =
+             ucs_malloc(sizeof(ucs_stats_counter_list_t *) *
+                        ucs_stats_root_node_class.num_counters,
+                        "root counter sum");
     status = ucs_stats_node_initv(&ucs_stats_context.root_node,
                                  &ucs_stats_root_node_class, name, ap);
     ucs_assert_always(status == UCS_OK);
     va_end(ap);
 
     ucs_stats_context.root_node.parent = NULL;
+}
+
+static ucs_status_t ucs_stats_summary_new(ucs_stats_summary_t **p_summary)
+{
+    ucs_stats_summary_t *stats_summary;
+
+    stats_summary = ucs_malloc(sizeof(ucs_stats_summary_t), "stats summary");
+    if (stats_summary == NULL) {
+        ucs_error("Failed to allocate stats summary for");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    *p_summary = stats_summary;
+    return UCS_OK;
+}
+
+static ucs_status_t ucs_stats_counter_new(ucs_stats_counter_list_t **p_counter)
+{
+    ucs_stats_counter_list_t *stats_counter;
+
+    stats_counter = ucs_malloc(sizeof(ucs_stats_counter_list_t), "stats counter");
+    if (stats_counter == NULL) {
+        ucs_error("Failed to allocate stats counter for");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    *p_counter = stats_counter;
+    return UCS_OK;
 }
 
 static ucs_status_t ucs_stats_node_new(ucs_stats_class_t *cls, ucs_stats_node_t **p_node)
@@ -140,13 +179,65 @@ static ucs_status_t ucs_stats_node_new(ucs_stats_class_t *cls, ucs_stats_node_t 
     node = ucs_malloc(sizeof(ucs_stats_node_t) +
                       sizeof(ucs_stats_counter_t) * cls->num_counters,
                       "stats node");
+
     if (node == NULL) {
         ucs_error("Failed to allocate stats node for %s", cls->name);
         return UCS_ERR_NO_MEMORY;
     }
 
+    node->counters_sum = ucs_malloc(sizeof(ucs_stats_counter_list_t *) *
+                                    cls->num_counters, "stats sum list");
+    if (node->counters_sum == NULL) {
+        ucs_free(node);
+        ucs_error("Failed to allocate counter summary for %s", cls->name);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    memset(node->counters_sum, 0, sizeof(ucs_stats_counter_list_t *) *
+                                  cls->num_counters);
+
     *p_node = node;
     return UCS_OK;
+}
+
+static void ucs_stats_add_wildcard(ucs_stats_node_t *node,
+                                   ucs_stats_summary_t* sum_list)
+{
+    unsigned i;
+    int filter_index = 0;
+    ucs_stats_summary_t *elem;
+    ucs_stats_counter_list_t *counter_item;
+
+    for (i = 0; i < node->cls->num_counters; ++i) {
+        node->counters_sum[i] = (ucs_stats_counter_list_t *) NULL;
+        filter_index = ucs_config_names_search(ucs_global_opts.stats_filter,
+                                               node->cls->counter_names[i]);
+        if (filter_index >= 0) {
+            int found = 0;
+            ucs_list_for_each(elem, &sum_list->list, list) {
+                if (!strcmp(elem->class_name, node->cls->name) &&
+                    !strcmp(elem->counter_name, node->cls->counter_names[i])) {
+                    found = 1;
+                    break;
+                }
+            }
+            if (!found) {
+                if (!ucs_stats_summary_new(&elem)) {
+                    strncpy(elem->counter_name, node->cls->counter_names[i],
+                            sizeof(elem->counter_name) - 1);
+                    strncpy(elem->class_name, node->cls->name,
+                            sizeof(elem->class_name) - 1);
+                    ucs_list_add_tail(&sum_list->list, &elem->list);
+                    ucs_list_head_init(&elem->counter_list);
+                }
+            }
+            if (!ucs_stats_counter_new(&counter_item)) {
+                counter_item->counter = &node->counters[i];
+                node->counters_sum[i] = counter_item;
+                ucs_list_add_tail(&elem->counter_list, &counter_item->list);
+            }
+        }
+    }
 }
 
 ucs_status_t ucs_stats_node_alloc(ucs_stats_node_t** p_node, ucs_stats_class_t *cls,
@@ -178,12 +269,15 @@ ucs_status_t ucs_stats_node_alloc(ucs_stats_node_t** p_node, ucs_stats_class_t *
     ucs_trace("allocated stats node '"UCS_STATS_NODE_FMT"'", UCS_STATS_NODE_ARG(node));
 
     ucs_stats_node_add(node, parent);
+    ucs_stats_add_wildcard(node, &ucs_stats_context.sum_list);
     *p_node = node;
     return UCS_OK;
 }
 
 void ucs_stats_node_free(ucs_stats_node_t *node)
 {
+    int i;
+
     if (node == NULL) {
         return;
     }
@@ -194,7 +288,14 @@ void ucs_stats_node_free(ucs_stats_node_t *node)
     if (ucs_stats_context.flags & UCS_STATS_FLAG_ON_EXIT) {
         ucs_stats_node_remove(node, 1);
     } else {
+        for (i = 0; i < node->cls->num_counters; ++i) {
+            if (node->counters_sum[i]) {
+                ucs_list_del(&node->counters_sum[i]->list);
+                ucs_free(node->counters_sum[i]);
+            }
+        }
         ucs_stats_node_remove(node, 0);
+        ucs_free(node->counters_sum);
         ucs_free(node);
     }
 }
@@ -363,6 +464,59 @@ static void ucs_stats_set_trigger()
     }
 }
 
+static void
+ucs_stats_sum_clean()
+{
+    ucs_stats_summary_t *sum_item, *tmp_sum_item;
+    ucs_stats_counter_list_t *counter_item, *tmp_counter_item;
+    ucs_list_for_each_safe(sum_item, tmp_sum_item,
+                           &ucs_stats_context.sum_list.list, list) {
+        ucs_list_for_each_safe(counter_item, tmp_counter_item,
+                               &sum_item->counter_list, list) {
+            ucs_free(counter_item);
+        }
+        ucs_free(sum_item);
+    }
+}
+
+static void
+ucs_stats_traverse_sum_counters()
+{
+    ucs_stats_summary_t *sum_item;
+    ucs_stats_counter_list_t *counter_item;
+    char current_class[80] = "";
+    int first_item = 1;
+
+    fprintf(ucs_stats_context.stream, "%s:", ucs_stats_context.root_node.name);
+    ucs_list_for_each(sum_item, &ucs_stats_context.sum_list.list, list) {
+        sum_item->counter_sum = 0;
+        ucs_list_for_each(counter_item, &sum_item->counter_list, list) {
+            sum_item->counter_sum += *counter_item->counter;
+        }
+        if (sum_item->counter_sum < ucs_global_opts.stats_threshold) {
+            continue;
+        }
+        if (strcmp(current_class, sum_item->class_name)) {
+            if (current_class[0]) {
+                first_item = 1;
+                fprintf(ucs_stats_context.stream, "]");
+            }
+            fprintf(ucs_stats_context.stream, "%s{", sum_item->class_name);
+            strcpy(current_class, sum_item->class_name);
+        }
+        if (!first_item) {
+            fprintf(ucs_stats_context.stream, " ");
+        }
+        fprintf(ucs_stats_context.stream, "%s:%"PRIu64,
+                sum_item->counter_name, sum_item->counter_sum);
+        first_item = 0;
+    }
+    if (current_class[0]) {
+        fprintf(ucs_stats_context.stream, "}");
+    }
+    fprintf(ucs_stats_context.stream, "\n");
+}
+
 static void ucs_stats_unset_trigger()
 {
     void *result;
@@ -375,7 +529,11 @@ static void ucs_stats_unset_trigger()
 
     if (ucs_stats_context.flags & UCS_STATS_FLAG_ON_EXIT) {
         ucs_debug("dumping stats");
-        __ucs_stats_dump(1);
+        if (ucs_global_opts.stats_format == UCS_STATS_FULL) {
+            __ucs_stats_dump(1);
+        } else {
+            ucs_stats_traverse_sum_counters();
+        }
         ucs_stats_context.flags &= ~UCS_STATS_FLAG_ON_EXIT;
     }
 
@@ -388,6 +546,7 @@ static void ucs_stats_unset_trigger()
 static void ucs_stats_clean_node_recurs(ucs_stats_node_t *node)
 {
     ucs_stats_node_t *child, *tmp;
+    int i;
 
     if (!ucs_list_is_empty(&node->children[UCS_STATS_ACTIVE_CHILDREN])) {
         ucs_warn("stats node "UCS_STATS_NODE_FMT" still has active children",
@@ -397,6 +556,12 @@ static void ucs_stats_clean_node_recurs(ucs_stats_node_t *node)
     ucs_list_for_each_safe(child, tmp, &node->children[UCS_STATS_INACTIVE_CHILDREN], list) {
         ucs_stats_clean_node_recurs(child);
         ucs_stats_node_remove(child, 0);
+        for (i = 0; i < child->cls->num_counters; ++i) {
+            if (child->counters_sum[i]) {
+                ucs_list_del(&child->counters_sum[i]->list);
+                ucs_free(child->counters_sum[i]);
+            }
+        }
         ucs_free(child);
     }
 }
@@ -413,6 +578,7 @@ void ucs_stats_init()
 
     UCS_STATS_START_TIME(ucs_stats_context.start_time);
     ucs_stats_node_init_root("%s:%d", ucs_get_host_name(), getpid());
+    ucs_list_head_init(&ucs_stats_context.sum_list.list);
     ucs_stats_set_trigger();
 
     ucs_debug("statistics enabled, flags: %c%c%c%c%c%c%c",
@@ -433,6 +599,7 @@ void ucs_stats_cleanup()
 
     ucs_stats_unset_trigger();
     ucs_stats_clean_node_recurs(&ucs_stats_context.root_node);
+    ucs_stats_sum_clean();
     ucs_stats_close_dest();
     ucs_assert(ucs_stats_context.flags == 0);
 }
@@ -440,7 +607,12 @@ void ucs_stats_cleanup()
 void ucs_stats_dump()
 {
     pthread_mutex_lock(&ucs_stats_context.lock);
-    __ucs_stats_dump(0);
+    if (ucs_global_opts.stats_format == UCS_STATS_FULL) {
+        __ucs_stats_dump(0);
+    } else {
+        ucs_stats_traverse_sum_counters();
+        fflush(ucs_stats_context.stream);
+    }
     pthread_mutex_unlock(&ucs_stats_context.lock);
 }
 

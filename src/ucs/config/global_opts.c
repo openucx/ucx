@@ -9,6 +9,7 @@
 #include <ucs/config/parser.h>
 #include <ucs/debug/profile.h>
 #include <ucs/debug/log.h>
+#include <ucs/stats/stats_fwd.h>
 #include <sys/signal.h>
 
 
@@ -33,7 +34,10 @@ ucs_global_opts_t ucs_global_opts = {
     .stats_trigger         = "exit",
     .memtrack_dest         = "",
     .profile_mode          = 0,
-    .profile_file          = ""
+    .profile_file          = "",
+    .stats_filter          = { NULL, 0 },
+    .stats_format          = UCS_STATS_FULL,
+    .stats_threshold       = 0,
 };
 
 static const char *ucs_handle_error_modes[] = {
@@ -132,6 +136,29 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "  signal:<signo>    - dump when process is signaled.\n"
   "  timer:<interval>  - dump in specified intervals (in seconds).",
   ucs_offsetof(ucs_global_opts_t, stats_trigger), UCS_CONFIG_TYPE_STRING},
+
+  {"STATS_FILTER", "*",
+   "Used for filter counters summary.\n"
+   "Comma-separated list of regular expressions (globing) specifying \n"
+   "counters.\n"
+   "Statistics summary will contain only the matching counters.\n"
+   "The order is not meaningful.\n"
+   "Each expression in the list may contain any of the following wildcard:\n"
+   "* - matches any number of any characters including none.\n"
+   "? - matches any single character.\n"
+   "[abc] - matches one character given in the bracket.\n"
+   "[a-z] - matches one character from the range given in the bracket.\n",
+   ucs_offsetof(ucs_global_opts_t, stats_filter), UCS_CONFIG_TYPE_STRING_ARRAY},
+
+  {"STATS_FORMAT", "FULL",
+   "Statistics format parameter.\n"
+   "FULL - each counter will be displayed in a separate line \n"
+   "SUMMARY - all counters will be printed in the same line.\n",
+   ucs_offsetof(ucs_global_opts_t, stats_format), UCS_CONFIG_TYPE_ENUM(ucs_stats_formats_names)},
+
+  {"STATS_THRESH", "0",
+   "Only counters above this threshold will be displayed in the summary report.\n",
+   ucs_offsetof(ucs_global_opts_t, stats_threshold), UCS_CONFIG_TYPE_UINT},
 
 #endif
 
