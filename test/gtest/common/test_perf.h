@@ -20,7 +20,7 @@ protected:
         ucx_perf_api_t         api;
         ucx_perf_cmd_t         command;
         ucx_perf_test_type_t   test_type;
-        uct_perf_data_layout_t data_layout;
+        int                    data_layout;
         size_t                 msg_stride;
         size_t                 msglencnt;
         size_t                 msglen[3];
@@ -28,9 +28,9 @@ protected:
         size_t                 iters;
         size_t                 field_offset;
         double                 norm;
-
         double                 min; /* TODO remove this field */
         double                 max; /* TODO remove this field */
+        unsigned               test_flags;
     };
 
     static std::vector<int> get_affinity();

@@ -200,15 +200,13 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     params.report_arg      = NULL;
     ucs_strncpy_zero(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name));
     ucs_strncpy_zero(params.uct.tl_name , tl_name.c_str(),  sizeof(params.uct.tl_name));
-    params.uct.data_layout = test.data_layout;
+    params.uct.data_layout = (uct_perf_data_layout_t)test.data_layout;
     params.uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
     params.msg_size_cnt    = test.msglencnt;
     params.msg_size_list   = (size_t *)test.msglen;
     params.iov_stride      = test.msg_stride;
-    params.ucp.send_datatype = (UCT_PERF_DATA_LAYOUT_ZCOPY == test.data_layout) ?
-                               UCP_PERF_DATATYPE_IOV : UCP_PERF_DATATYPE_CONTIG;
-    params.ucp.recv_datatype = (UCT_PERF_DATA_LAYOUT_ZCOPY == test.data_layout) ?
-                               UCP_PERF_DATATYPE_IOV : UCP_PERF_DATATYPE_CONTIG;
+    params.ucp.send_datatype = (ucp_perf_datatype_t)test.data_layout;
+    params.ucp.recv_datatype = (ucp_perf_datatype_t)test.data_layout;
 
     thread_arg arg0;
     arg0.params   = params;
