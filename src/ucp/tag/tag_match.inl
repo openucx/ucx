@@ -17,6 +17,12 @@
 #include <inttypes.h>
 
 
+/* Hash size is a prime number just below 1024. Prime number for even distribution,
+ * and small enough to fit L1 cache. */
+#define UCP_TAG_MATCH_HASH_SIZE     1021
+
+
+
 #define ucp_tag_log_match(_recv_tag, _recv_len,_req, _exp_tag, _exp_tag_mask, \
                           _offset, _title) \
     ucs_trace_req("matched tag %"PRIx64" len %zu to %s request %p offset %zu " \
@@ -52,7 +58,9 @@ int ucp_tag_recv_is_match(ucp_tag_t recv_tag, unsigned recv_flags,
 static UCS_F_ALWAYS_INLINE size_t
 ucp_tag_match_calc_hash(ucp_tag_t tag)
 {
-    return tag % UCP_TAG_MATCH_HASH_SIZE;
+    /* Compute two 32-bit modulo and combine their result */
+    return ((uint32_t)tag % UCP_TAG_MATCH_HASH_SIZE) ^
+           ((uint32_t)(tag >> 32) % UCP_TAG_MATCH_HASH_SIZE);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_queue_head_t*

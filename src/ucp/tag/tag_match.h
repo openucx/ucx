@@ -13,8 +13,7 @@
 #include <ucs/sys/compiler_def.h>
 
 
-#define UCP_TAG_MASK_FULL           ((ucp_tag_t)-1)
-#define UCP_TAG_MATCH_HASH_SIZE     945
+#define UCP_TAG_MASK_FULL     0xffffffffffffffffUL  /* All 1-s */
 
 
 /**
