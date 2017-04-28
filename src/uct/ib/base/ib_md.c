@@ -1128,7 +1128,8 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     md->prefer_nearest_device = md_config->prefer_nearest_device;
 
     /* Create statistics */
-    status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class, NULL,
+    status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
+                                  ucs_stats_get_root(),
                                   "%s-%p", ibv_get_device_name(ib_device), md);
     if (status != UCS_OK) {
         goto err_free_md;
