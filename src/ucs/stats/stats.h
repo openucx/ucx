@@ -33,6 +33,7 @@ ucs_status_t ucs_stats_node_alloc(ucs_stats_node_t** p_node, ucs_stats_class_t *
                                  ucs_stats_node_t *parent, const char *name, ...);
 void ucs_stats_node_free(ucs_stats_node_t *node);
 
+ucs_stats_node_t * ucs_stats_get_root();
 
 #define UCS_STATS_ARG(_arg) , _arg
 
