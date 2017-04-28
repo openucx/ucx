@@ -65,7 +65,8 @@ void frag_list::init()
     modify_config("STATS_TRIGGER", "");
 #endif
     ucs_stats_init();
-    ucs_frag_list_init(0, &m_frags, -1 UCS_STATS_ARG(NULL));
+    ucs_frag_list_init(0, &m_frags,
+                       -1 UCS_STATS_ARG(ucs_stats_get_root()));
 }
 
 void frag_list::cleanup()
