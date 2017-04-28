@@ -448,7 +448,9 @@ void ucs_memtrack_init()
     }
 
     sglib_hashed_ucs_memtrack_entry_t_init(ucs_memtrack_context.entries);
-    status = UCS_STATS_NODE_ALLOC(&ucs_memtrack_context.stats, &ucs_memtrack_stats_class, NULL);
+    status = UCS_STATS_NODE_ALLOC(&ucs_memtrack_context.stats,
+                                  &ucs_memtrack_stats_class,
+                                  ucs_stats_get_root());
     if (status != UCS_OK) {
         return;
     }
