@@ -53,7 +53,9 @@ public:
             { "counter0","counter1","counter2","counter3" }
         };
 
-        ucs_status_t status = UCS_STATS_NODE_ALLOC(&cat_node, &category_stats_class.cls, NULL);
+        ucs_status_t status = UCS_STATS_NODE_ALLOC(&cat_node,
+                                                   &category_stats_class.cls,
+                                                   ucs_stats_get_root());
         ASSERT_UCS_OK(status);
         for (unsigned i = 0; i < NUM_DATA_NODES; ++i) {
             status = UCS_STATS_NODE_ALLOC(&data_nodes[i], &data_stats_class.cls,
@@ -244,6 +246,16 @@ public:
     }
 };
 
+UCS_TEST_F(stats_on_demand_test, null_root) {
+        static stats_class<0> category_stats_class = {
+            {"category", 0, {}}
+        };
+        ucs_status_t status = UCS_STATS_NODE_ALLOC(&cat_node,
+                                                   &category_stats_class.cls,
+                                                   NULL);
+
+        EXPECT_GE(status, UCS_ERR_INVALID_PARAM);
+}
 
 UCS_TEST_F(stats_udp_test, report) {
     prepare_nodes();
