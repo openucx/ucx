@@ -9,19 +9,20 @@
 
 ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm)
 {
-    size_t bucket;
+    size_t hash_size, bucket;
+
+    hash_size = ucs_roundup_pow2(UCP_TAG_MATCH_HASH_SIZE);
 
     tm->expected.sn   = 0;
     ucs_queue_head_init(&tm->expected.wildcard);
 
-    tm->expected.hash = ucs_malloc(sizeof(*tm->expected.hash) *
-                                   UCP_TAG_MATCH_HASH_SIZE,
+    tm->expected.hash = ucs_malloc(sizeof(*tm->expected.hash) * hash_size,
                                    "ucp_tm_exp_hash");
     if (tm->expected.hash == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    for (bucket = 0; bucket < UCP_TAG_MATCH_HASH_SIZE; ++bucket) {
+    for (bucket = 0; bucket < hash_size; ++bucket) {
         ucs_queue_head_init(&tm->expected.hash[bucket]);
     }
 
