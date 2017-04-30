@@ -155,6 +155,10 @@ static void ucp_rndv_complete_rndv_get(ucp_request_t *rndv_req)
 {
     ucp_request_t *rreq = rndv_req->send.rndv_get.rreq;
 
+    ucs_assertv(rndv_req->send.state.offset == rndv_req->send.length,
+                "rndv_req=%p offset=%zu length=%zu", rndv_req,
+                rndv_req->send.state.offset, rndv_req->send.length);
+
     ucs_trace_data("ep: %p rndv get completed", rndv_req->send.ep);
 
     UCS_PROFILE_REQUEST_EVENT(rreq, "complete_rndv_get", 0); // TODO
@@ -279,10 +283,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_get_zcopy, (self),
                                   iov[0].length);
         rndv_req->send.state.offset += length;
         if (rndv_req->send.state.offset == rndv_req->send.length) {
+            rndv_req->send.uct_comp.count--; /* sent all fragments */
             if (status == UCS_OK) {
-                rndv_req->send.uct_comp.count--;
                 /* if the zcopy operation was locally-completed, the uct_comp callback
                  * won't be called, so do the completion procedure here */
+                rndv_req->send.uct_comp.count--;
+            }
+            if (rndv_req->send.uct_comp.count == 0) {
                 ucp_rndv_complete_rndv_get(rndv_req);
             }
             return UCS_OK;
@@ -300,10 +307,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self, status),
 {
     ucp_request_t *rndv_req = ucs_container_of(self, ucp_request_t, send.uct_comp);
 
-    if (rndv_req->send.state.offset == rndv_req->send.length) {
-        ucs_trace_req("completed rndv get operation rndv_req: %p", rndv_req);
-        ucp_rndv_complete_rndv_get(rndv_req);
-    }
+    ucs_trace_req("completed rndv get operation rndv_req: %p", rndv_req);
+    ucp_rndv_complete_rndv_get(rndv_req);
 }
 
 static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *rreq,
@@ -335,7 +340,8 @@ static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *
         }
         rndv_req->send.length         = rndv_rts_hdr->size;
         rndv_req->send.uct_comp.func  = ucp_rndv_get_completion;
-        rndv_req->send.uct_comp.count = 0;
+        rndv_req->send.uct_comp.count = 1; /* start from 1 for avoid completion
+                                              until all fragments are sent */
         rndv_req->send.state.offset   = 0;
         rndv_req->send.lane           = ucp_ep_get_rndv_get_lane(rndv_req->send.ep);
         rndv_req->send.state.dt.contig.memh = UCT_MEM_HANDLE_NULL;
