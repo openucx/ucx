@@ -36,7 +36,7 @@ static ucs_status_t ucs_stats_name_check(const char *name)
 }
 
 ucs_status_t ucs_stats_node_initv(ucs_stats_node_t *node, ucs_stats_class_t *cls,
-                                 const char *name, va_list ap)
+                                  const char *name, va_list ap)
 {
     ucs_status_t status;
     unsigned i;

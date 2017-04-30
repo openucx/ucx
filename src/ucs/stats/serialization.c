@@ -303,22 +303,84 @@ ucs_stats_serialize_binary(FILE *stream, ucs_stats_node_t *root,
 }
 
 static ucs_status_t
-ucs_stats_serialize_text_recurs(FILE *stream, ucs_stats_node_t *node,
-                                ucs_stats_children_sel_t sel, unsigned indent)
+ucs_stats_serialize_text_recurs_filtered(FILE *stream,
+                                         ucs_stats_filter_node_t *filter_node,
+                                         unsigned indent)
 {
-    ucs_stats_node_t *child;
+    ucs_stats_filter_node_t *filter_child;
+    ucs_stats_node_t *node;
     unsigned i;
+    int is_sum = ucs_global_opts.stats_format == UCS_STATS_SUMMARY;
+    char *nl = is_sum ? "" : "\n";
+    char *space =  is_sum ? "" : " ";
+    char *left_b = is_sum ? "{" : "";
+    char *rigth_b = is_sum ? "} " : "";
 
-    fprintf(stream, "%*s"UCS_STATS_NODE_FMT":\n", indent * 2, "",
-            UCS_STATS_NODE_ARG(node));
-
-    for (i = 0; i < node->cls->num_counters; ++i) {
-        fprintf(stream, "%*s%s: %"PRIu64"\n", (indent + 1) * 2, "",
-                node->cls->counter_names[i], node->counters[i]);
+    if (!filter_node->ref_count) {
+        return UCS_OK;
     }
 
-    ucs_list_for_each(child, &node->children[sel], list) {
-        ucs_stats_serialize_text_recurs(stream, child, sel, indent + 1);
+    if (ucs_list_is_empty(&filter_node->type_list_head)) {
+        ucs_error("no node is associated with node filter");
+        return UCS_OK;
+    }
+
+    node = ucs_list_head(&filter_node->type_list_head,
+                         ucs_stats_node_t,
+                         type_list);
+    if (filter_node->type_list_len > 1) {
+        fprintf(stream, "%*s%s*:%s", UCS_STATS_INDENT(is_sum, indent),
+                node->cls->name, nl);
+    } else {
+        if (ucs_global_opts.stats_format == UCS_STATS_SUMMARY) {
+            fprintf(stream, "%*s%s:%s",
+                    UCS_STATS_INDENT(is_sum, indent),
+                    strlen(node->cls->name) ? node->cls->name : node->name, nl);
+
+        } else {
+            fprintf(stream, "%*s"UCS_STATS_NODE_FMT":%s",
+                    UCS_STATS_INDENT(is_sum, indent),
+                    UCS_STATS_NODE_ARG(node), nl);
+        }
+    }
+
+    /* Root shouldn't be with brackets.*/
+    if (filter_node->parent) {
+        fputs(left_b, stream);
+    }
+
+    for (i = 0; (i < node->cls->num_counters) && (i < 64); ++i) {
+        ucs_stats_counter_t counters_acc = 0;
+        if (filter_node->counters_bitmask & UCS_BIT(i)) {
+            ucs_stats_node_t * temp_node;
+            ucs_list_for_each(temp_node, &filter_node->type_list_head, type_list) {
+                counters_acc += temp_node->counters[i];
+            }
+
+            fprintf(stream, "%*s%s:%s%"PRIu64"%s",
+                    UCS_STATS_INDENT(is_sum, indent + 1),
+                    node->cls->counter_names[i],
+                    space, counters_acc, nl);
+
+            /* Don't print space on last counter */
+            if (UCS_STATS_IS_LAST_COUNTER(filter_node->counters_bitmask, i) &&
+                is_sum) {
+                fputs(" ", stream);
+            }
+        }
+    }
+
+    ucs_list_for_each(filter_child, &filter_node->children, list) {
+        ucs_stats_serialize_text_recurs_filtered(stream, filter_child,
+                                                 indent + 1);
+    }
+
+    if (filter_node->parent) {
+        /* Root shouldn't be with parent brackets.*/
+        fputs(rigth_b, stream);
+    } else {
+        /* End report with new line.*/
+        fputs("\n", stream);
     }
 
     return UCS_OK;
@@ -334,7 +396,9 @@ ucs_status_t ucs_stats_serialize(FILE *stream, ucs_stats_node_t *root, int optio
     if (options & UCS_STATS_SERIALIZE_BINARY) {
         return ucs_stats_serialize_binary(stream, root, sel);
     } else {
-        return ucs_stats_serialize_text_recurs(stream, root, sel, 0);
+        return ucs_stats_serialize_text_recurs_filtered(stream,
+                                                        root->filter_node,
+                                                        0);
     }
 }
 
