@@ -240,7 +240,8 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     }
 
     uct_ib_mlx5_log_tx(&iface->super, qp_type, ctrl, txwq->qstart, txwq->qend,
-                       (opcode == MLX5_OPCODE_SEND) ? uct_rc_ep_am_packet_dump : NULL);
+                       ((opcode == MLX5_OPCODE_SEND) || (opcode == MLX5_OPCODE_SEND_IMM)) ?
+                       uct_rc_ep_am_packet_dump : NULL);
 
     posted = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size);
     if (sig_flag & MLX5_WQE_CTRL_CQ_UPDATE) {
