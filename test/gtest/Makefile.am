@@ -84,6 +84,7 @@ gtest_SOURCES = \
 	uct/uct_p2p_test.cc \
 	uct/uct_test.cc \
 	uct/test_stats.cc \
+	ucs/test_stats_filter.cc \
 	uct/test_wakeup.cc \
 	uct/test_error_handling.cc \
 	uct/test_tag.cc \
