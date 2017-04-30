@@ -33,7 +33,9 @@ ucs_global_opts_t ucs_global_opts = {
     .stats_trigger         = "exit",
     .memtrack_dest         = "",
     .profile_mode          = 0,
-    .profile_file          = ""
+    .profile_file          = "",
+    .stats_filter          = { NULL, 0 },
+    .stats_format          = UCS_STATS_FULL,
 };
 
 static const char *ucs_handle_error_modes[] = {
@@ -132,6 +134,25 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "  signal:<signo>    - dump when process is signaled.\n"
   "  timer:<interval>  - dump in specified intervals (in seconds).",
   ucs_offsetof(ucs_global_opts_t, stats_trigger), UCS_CONFIG_TYPE_STRING},
+
+  {"STATS_FILTER", "*",
+   "Used for filter counters summary.\n"
+   "Comma-separated list of glob patterns specifying counters.\n"
+   "Statistics summary will contain only the matching counters.\n"
+   "The order is not meaningful.\n"
+   "Each expression in the list may contain any of the following wildcard:\n"
+   "  *     - matches any number of any characters including none.\n"
+   "  ?     - matches any single character.\n"
+   "  [abc] - matches one character given in the bracket.\n"
+   "  [a-z] - matches one character from the range given in the bracket.",
+   ucs_offsetof(ucs_global_opts_t, stats_filter), UCS_CONFIG_TYPE_STRING_ARRAY},
+
+  {"STATS_FORMAT", "full",
+   "Statistics format parameter:\n"
+   "  full    - each counter will be displayed in a separate line \n"
+   "  agg     - like full but there will also be an aggregation between similar counters\n"
+   "  summary - all counters will be printed in the same line.",
+   ucs_offsetof(ucs_global_opts_t, stats_format), UCS_CONFIG_TYPE_ENUM(ucs_stats_formats_names)},
 
 #endif
 
