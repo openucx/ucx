@@ -137,7 +137,7 @@ void ucp_tag_send_start_rndv(ucp_request_t *sreq)
 
 static void ucp_rndv_send_ats(ucp_request_t *rndv_req, uintptr_t remote_request)
 {
-    ucs_trace_req("ep: %p send ats. rndv_req: %p, remote_request: %zu",
+    ucs_trace_req("send ats ep %p rndv_req %p remote_request 0x%lx",
                   rndv_req->send.ep, rndv_req, remote_request);
 
     UCS_PROFILE_REQUEST_EVENT(rndv_req->send.rndv_get.rreq, "send_ats", 0);
@@ -307,8 +307,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self, status),
 static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *rreq,
                                         ucp_rndv_rts_hdr_t *rndv_rts_hdr)
 {
-    ucs_trace_req("handle contig datatype on rndv receive. local rndv_req: %p, "
-                  "recv request: %p", rndv_req, rreq);
+    ucs_trace_req("ucp_rndv_handle_recv_contig rndv_req %p rreq %p", rndv_req,
+                  rreq);
 
     /* rndv_req is the request that would perform the get operation */
     rndv_req->send.uct.func     = ucp_proto_progress_rndv_get_zcopy;
@@ -344,9 +344,7 @@ static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *
 static void ucp_rndv_handle_recv_am(ucp_request_t *rndv_req, ucp_request_t *rreq,
                                     ucp_rndv_rts_hdr_t *rndv_rts_hdr)
 {
-
-    ucs_trace_req("handle generic datatype on rndv receive. local rndv_req: %p, "
-                  "recv request: %p", rndv_req, rreq);
+    ucs_trace_req("ucp_rndv_handle_recv_am rndv_req %p rreq %p", rndv_req, rreq);
 
     ucp_rndv_recv_am(rndv_req, rreq, rndv_rts_hdr->sreq.reqptr,
                      rndv_rts_hdr->size);
@@ -378,9 +376,9 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     rndv_req->send.rndv_get.rkey_bundle.rkey = UCT_INVALID_RKEY;
     rndv_req->send.datatype = rreq->recv.datatype;
 
-    ucs_trace_req("ucp_rndv_matched. remote data address: %zu. remote request: %zu. "
-                  "local rndv_req: %p", rndv_rts_hdr->address,
-                  rndv_rts_hdr->sreq.reqptr, rndv_req);
+    ucs_trace_req("ucp_rndv_matched remote_address 0x%"PRIx64" remote_req 0x%lx "
+                  "rndv_req %p", rndv_rts_hdr->address, rndv_rts_hdr->sreq.reqptr,
+                  rndv_req);
 
     /* if the receive side is not connected yet then the RTS was received on a stub ep */
     if (ucp_ep_is_stub(ep)) {
@@ -714,28 +712,27 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 
     switch (id) {
     case UCP_AM_ID_RNDV_RTS:
-        snprintf(buffer, max, "RNDV_RTS tag %"PRIx64" uuid %"PRIx64
+        snprintf(buffer, max, "RNDV_RTS tag %"PRIx64" uuid %"PRIx64" sreq 0x%lx "
                  "address 0x%"PRIx64" size %zu rkey ", rndv_rts_hdr->super.tag,
-                 rndv_rts_hdr->sreq.sender_uuid,
-                 rndv_rts_hdr->sreq.reqptr, rndv_rts_hdr->size);
-
+                 rndv_rts_hdr->sreq.sender_uuid, rndv_rts_hdr->sreq.reqptr,
+                 rndv_rts_hdr->address, rndv_rts_hdr->size);
         ucs_log_dump_hex((void*)rndv_rts_hdr + sizeof(*rndv_rts_hdr), length,
                          buffer + strlen(buffer), max - strlen(buffer));
         break;
     case UCP_AM_ID_RNDV_ATS:
-        snprintf(buffer, max, "RNDV_ATS request %0"PRIx64" status '%s'", rep_hdr->reqptr,
-                 ucs_status_string(rep_hdr->status));
+        snprintf(buffer, max, "RNDV_ATS sreq 0x%lx status '%s'",
+                 rep_hdr->reqptr, ucs_status_string(rep_hdr->status));
         break;
     case UCP_AM_ID_RNDV_RTR:
-        snprintf(buffer, max, "RNDV_RTR sreq_ptr 0x%"PRIx64" rreq_ptr 0x%"PRIx64,
+        snprintf(buffer, max, "RNDV_RTR sreq 0x%lx rreq 0x%lx",
                  rndv_rtr_hdr->sreq_ptr, rndv_rtr_hdr->rreq_ptr);
         break;
     case UCP_AM_ID_RNDV_DATA:
-        snprintf(buffer, max, "RNDV_DATA rreq_ptr 0x%"PRIx64,
+        snprintf(buffer, max, "RNDV_DATA rreq 0x%"PRIx64,
                  rndv_data->rreq_ptr);
         break;
     case UCP_AM_ID_RNDV_DATA_LAST:
-        snprintf(buffer, max, "RNDV_DATA_LAST rreq_ptr 0x%"PRIx64,
+        snprintf(buffer, max, "RNDV_DATA_LAST rreq 0x%"PRIx64,
                  rndv_data->rreq_ptr);
         break;
     default:
