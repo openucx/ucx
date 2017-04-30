@@ -56,14 +56,16 @@ static inline void ucs_mpool_add_to_freelist(ucs_mpool_t *mp, ucs_mpool_elem_t *
     }
 }
 
+static inline ucs_mpool_elem_t *ucs_mpool_obj_to_elem(void *obj)
+{
+    ucs_mpool_elem_t *elem = (ucs_mpool_elem_t*)obj - 1;
+    VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
+    return elem;
+}
+
 static inline ucs_mpool_t *ucs_mpool_obj_owner(void *obj)
 {
-    ucs_mpool_elem_t *elem;
-
-    /* Reconnect the element to the pool */
-    elem = (ucs_mpool_elem_t*)obj - 1;
-    VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
-    return elem->mpool;
+    return ucs_mpool_obj_to_elem(obj)->mpool;
 }
 
 static inline void ucs_mpool_put_inline(void *obj)
@@ -71,8 +73,8 @@ static inline void ucs_mpool_put_inline(void *obj)
     ucs_mpool_elem_t *elem;
     ucs_mpool_t *mp;
 
-    elem = (ucs_mpool_elem_t*)obj - 1;
-    mp = ucs_mpool_obj_owner(obj);
+    elem = ucs_mpool_obj_to_elem(obj);
+    mp   = elem->mpool;
     ucs_mpool_add_to_freelist(mp, elem,
                               ENABLE_DEBUG_DATA && ucs_global_opts.mpool_fifo);
     VALGRIND_MAKE_MEM_NOACCESS(elem, sizeof *elem);
