@@ -121,6 +121,7 @@ protected:
         size_t length() const;
         uct_mem_h memh() const;
         uct_rkey_t rkey() const;
+        const uct_iov_t* iov() const;
 
         void pattern_fill(uint64_t seed);
         void pattern_check(uint64_t seed);
@@ -138,6 +139,7 @@ protected:
         void                    *m_end;
         uct_rkey_bundle_t       m_rkey;
         uct_allocated_memory_t  m_mem;
+        uct_iov_t               m_iov;
     };
 
     template <typename T>

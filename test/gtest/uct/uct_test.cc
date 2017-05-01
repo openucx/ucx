@@ -485,6 +485,11 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         m_rkey.handle = NULL;
         m_rkey.type   = NULL;
     }
+    m_iov.buffer = ptr();
+    m_iov.length = length();
+    m_iov.count  = 1;
+    m_iov.stride = 0;
+    m_iov.memh   = memh();
 }
 
 uct_test::mapped_buffer::~mapped_buffer() {
@@ -574,6 +579,10 @@ uct_mem_h uct_test::mapped_buffer::memh() const {
 
 uct_rkey_t uct_test::mapped_buffer::rkey() const {
     return m_rkey.rkey;
+}
+
+const uct_iov_t*  uct_test::mapped_buffer::iov() const {
+    return &m_iov;
 }
 
 size_t uct_test::mapped_buffer::pack(void *dest, void *arg) {

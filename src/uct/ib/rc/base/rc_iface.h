@@ -90,6 +90,16 @@ enum {
 };
 
 
+/* flags for uct_rc_iface_send_op_t */
+enum {
+#if ENABLE_ASSERT
+    UCT_RC_IFACE_SEND_OP_FLAG_INUSE = UCS_BIT(15)
+#else
+    UCT_RC_IFACE_SEND_OP_FLAG_INUSE = 0
+#endif
+};
+
+
 typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op, const void *resp);
 
 
@@ -215,6 +225,7 @@ struct uct_rc_iface_send_op {
     ucs_queue_elem_t              queue;
     uct_rc_send_handler_t         handler;
     uint16_t                      sn;
+    uint16_t                      flags;
     unsigned                      length;
     union {
         void                      *buffer;

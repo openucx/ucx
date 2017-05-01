@@ -286,6 +286,8 @@ uct_rc_txqp_add_send_op(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op)
      * than completion zero-based index).
      */
     ucs_assert(op != NULL);
+    ucs_assertv(!(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_INUSE), "op=%p", op);
+    op->flags |= UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
     ucs_queue_push(&txqp->outstanding, &op->queue);
 }
 
@@ -320,6 +322,7 @@ uct_rc_txqp_completion_desc(uct_rc_txqp_t *txqp, uint16_t sn)
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         op->handler(op, ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1);
+        op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
     }
 }
 
@@ -331,6 +334,7 @@ uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t 
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         op->handler(op, resp);
+        op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
     }
 }
 
