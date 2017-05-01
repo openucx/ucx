@@ -229,9 +229,6 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->super.config.tx_moderation = 0; /* disable tx moderation for dcs */
     ucs_list_head_init(&self->tx.gc_list);
 
-    ucs_debug("dc iface %p: using '%s' policy with %d dcis", self,
-              uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci);
-
     /* create DC target */
     status = uct_dc_iface_create_dct(self);
     if (status != UCS_OK) {
@@ -243,6 +240,10 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     if (status != UCS_OK) {
         goto err_destroy_dct;
     }
+
+    ucs_debug("dc iface %p: using '%s' policy with %d dcis, dct 0x%x", self,
+              uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci,
+              self->rx.dct->dct_num);
 
     /* Create fake endpoint which will be used for sending FC grants */
     uct_dc_iface_init_fc_ep(self);
