@@ -129,6 +129,11 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
    "Prefer nearest device to cpu when selecting a device from NET_DEVICES list.\n",
    ucs_offsetof(uct_ib_md_config_t, ext.prefer_nearest_device), UCS_CONFIG_TYPE_BOOL},
 
+  {"CONTIG_PAGES", "n",
+   "Enable allocation with contiguous pages. Warning: enabling this option may\n"
+   "cause stack smashing.\n",
+   ucs_offsetof(uct_ib_md_config_t, ext.enable_contig_pages), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
@@ -155,7 +160,9 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
                              UCT_MD_FLAG_ADVISE;
     md_attr->rkey_packed_size = sizeof(uint64_t);
 
-    if (IBV_EXP_HAVE_CONTIG_PAGES(&md->dev.dev_attr)) {
+    if (md->config.enable_contig_pages &&
+        IBV_EXP_HAVE_CONTIG_PAGES(&md->dev.dev_attr))
+    {
         md_attr->cap.flags |= UCT_MD_FLAG_ALLOC;
     }
 
@@ -657,6 +664,10 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
     uct_ib_mem_t *memh;
     size_t length;
 
+    if (!md->config.enable_contig_pages) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     memh = uct_ib_memh_alloc();
     if (memh == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -1149,6 +1160,12 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     status = uct_ib_device_init(&md->dev, ib_device UCS_STATS_ARG(md->stats));
     if (status != UCS_OK) {
         goto err_release_stats;
+    }
+
+    /* Disable contig pages allocator for IB transport objects */
+    if (!md->config.enable_contig_pages) {
+        ibv_exp_setenv(md->dev.ibv_context, "MLX_QP_ALLOC_TYPE", "ANON", 0);
+        ibv_exp_setenv(md->dev.ibv_context, "MLX_CQ_ALLOC_TYPE", "ANON", 0);
     }
 
     if (md->config.odp.max_size == UCS_CONFIG_MEMUNITS_AUTO) {

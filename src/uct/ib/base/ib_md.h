@@ -48,6 +48,8 @@ typedef struct uct_ib_md_ext_config {
                                                 enabled on the Ethernet network */
     int                      prefer_nearest_device; /**< Give priority for near
                                                          device */
+    int                      enable_contig_pages; /** Enable contiguous pages */
+
     struct {
         uct_ib_numa_policy_t numa_policy;  /**< NUMA policy flags for ODP */
         int                  prefetch;     /**< Auto-prefetch non-blocking memory
