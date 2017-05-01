@@ -98,9 +98,7 @@ void test_error_handling::init()
         GetParam()->tl_name == "dc" || GetParam()->tl_name == "dc_mlx5") {
         set_config("RC_TIMEOUT=0.0001"); /* 100 us should be enough */
         set_config("RC_RETRY_COUNT=2");
-    } else if (GetParam()->tl_name == "ud") {
-        set_config("TIMEOUT=1s");
-    } else if (GetParam()->tl_name == "ud_mlx5") {
+    } else if (GetParam()->tl_name == "ud" || GetParam()->tl_name == "ud_mlx5") {
         set_config("UD_TIMEOUT=1s");
     }
 
