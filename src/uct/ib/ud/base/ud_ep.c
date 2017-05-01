@@ -102,7 +102,7 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
 
     ep->rx.acked_psn = UCT_UD_INITIAL_PSN - 1;
     ucs_frag_list_init(ep->tx.psn-1, &ep->rx.ooo_pkts, 0 /*TODO: ooo support */
-                       UCS_STATS_ARG(ep->rx.stats));
+                       UCS_STATS_ARG(ep->super.stats));
 }
 
 static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)

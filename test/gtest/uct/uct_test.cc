@@ -221,7 +221,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 
     params->tl_name    = const_cast<char*>(resource.tl_name.c_str());
     params->dev_name   = const_cast<char*>(resource.dev_name.c_str());
-    params->stats_root = NULL;
+    params->stats_root = ucs_stats_get_root();
     UCS_CPU_ZERO(&params->cpu_mask);
 
     UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,

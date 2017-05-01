@@ -582,7 +582,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&worker->stats, &ucp_worker_stats_class,
-                                  NULL, "-%p", worker);
+                                  ucs_stats_get_root(), "-%p", worker);
     if (status != UCS_OK) {
         goto err_free_attrs;
     }

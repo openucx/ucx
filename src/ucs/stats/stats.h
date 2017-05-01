@@ -16,7 +16,7 @@ void ucs_stats_init();
 void ucs_stats_cleanup();
 void ucs_stats_dump();
 int ucs_stats_is_active();
-
+#include "stats_fwd.h"
 #if ENABLE_STATS
 
 #include "libstats.h"
@@ -32,7 +32,6 @@ int ucs_stats_is_active();
 ucs_status_t ucs_stats_node_alloc(ucs_stats_node_t** p_node, ucs_stats_class_t *cls,
                                  ucs_stats_node_t *parent, const char *name, ...);
 void ucs_stats_node_free(ucs_stats_node_t *node);
-
 
 #define UCS_STATS_ARG(_arg) , _arg
 

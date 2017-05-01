@@ -83,19 +83,20 @@ ucs_sys_futex(volatile void *addr1, int op, int val1, struct timespec *timeout,
     return syscall(SYS_futex, addr1, op, val1, timeout, uaddr2, val3);
 }
 
-static void ucs_stats_node_add(ucs_stats_node_t *node, ucs_stats_node_t *parent)
+static int ucs_stats_node_add(ucs_stats_node_t *node, ucs_stats_node_t *parent)
 {
     ucs_assert(node != &ucs_stats_context.root_node);
+    if (parent == NULL) {
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     /* Append node to existing tree */
     pthread_mutex_lock(&ucs_stats_context.lock);
-    if (parent == NULL) {
-        parent = &ucs_stats_context.root_node;
-    }
     ucs_list_add_tail(&parent->children[UCS_STATS_ACTIVE_CHILDREN], &node->list);
     node->parent = parent;
 
     pthread_mutex_unlock(&ucs_stats_context.lock);
+    return UCS_OK;
 }
 
 static void ucs_stats_node_remove(ucs_stats_node_t *node, int make_inactive)
@@ -177,7 +178,12 @@ ucs_status_t ucs_stats_node_alloc(ucs_stats_node_t** p_node, ucs_stats_class_t *
 
     ucs_trace("allocated stats node '"UCS_STATS_NODE_FMT"'", UCS_STATS_NODE_ARG(node));
 
-    ucs_stats_node_add(node, parent);
+    status = ucs_stats_node_add(node, parent);
+    if (status != UCS_OK) {
+        ucs_free(node);
+        return status;
+    }
+
     *p_node = node;
     return UCS_OK;
 }
@@ -449,6 +455,10 @@ int ucs_stats_is_active()
     return ucs_stats_context.flags & (UCS_STATS_FLAG_SOCKET|UCS_STATS_FLAG_STREAM);
 }
 
+ucs_stats_node_t * ucs_stats_get_root() {
+    return &ucs_stats_context.root_node;
+}
+
 #else
 
 void ucs_stats_init()
@@ -468,4 +478,8 @@ int ucs_stats_is_active()
     return 0;
 }
 
+ucs_stats_node_t *ucs_stats_get_root()
+{
+    return NULL;
+}
 #endif
