@@ -795,7 +795,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (md->prefer_nearest_device) {
+    if (md->config.prefer_nearest_device) {
         ret = sched_getaffinity(0, sizeof(process_affinity), &process_affinity);
         if (ret) {
             ucs_error("sched_getaffinity() failed: %m");
