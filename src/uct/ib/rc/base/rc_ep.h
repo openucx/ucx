@@ -206,7 +206,7 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
                                                const void *resp);
 
-void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op,
+void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
                                              const void *resp);
 
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n);
@@ -286,6 +286,8 @@ uct_rc_txqp_add_send_op(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op)
      * than completion zero-based index).
      */
     ucs_assert(op != NULL);
+    ucs_assertv(!(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_INUSE), "op=%p", op);
+    op->flags |= UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
     ucs_queue_push(&txqp->outstanding, &op->queue);
 }
 
@@ -307,30 +309,37 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     }
 
     op            = uct_rc_iface_get_send_op(iface);
-    op->handler   = uct_rc_ep_send_completion_proxy_handler;
     op->user_comp = comp;
     uct_rc_txqp_add_send_op_sn(txqp, op, sn);
 }
 
-static inline void
+static UCS_F_ALWAYS_INLINE void
+uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp)
+{
+    ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_INUSE);
+    op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
+    op->handler(op, resp);
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_rc_txqp_completion_desc(uct_rc_txqp_t *txqp, uint16_t sn)
 {
     uct_rc_iface_send_op_t *op;
 
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        op->handler(op, ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1);
+        uct_rc_txqp_completion_op(op, ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1);
     }
 }
 
-static inline void
+static UCS_F_ALWAYS_INLINE void
 uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t sn)
 {
     uct_rc_iface_send_op_t *op;
 
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        op->handler(op, resp);
+        uct_rc_txqp_completion_op(op, resp);
     }
 }
 
