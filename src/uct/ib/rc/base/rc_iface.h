@@ -93,8 +93,10 @@ enum {
 /* flags for uct_rc_iface_send_op_t */
 enum {
 #if ENABLE_ASSERT
-    UCT_RC_IFACE_SEND_OP_FLAG_INUSE = UCS_BIT(15)
+    UCT_RC_IFACE_SEND_OP_FLAG_IFACE = UCS_BIT(14), /* belongs to iface ops buffer */
+    UCT_RC_IFACE_SEND_OP_FLAG_INUSE = UCS_BIT(15)  /* queued on a txqp */
 #else
+    UCT_RC_IFACE_SEND_OP_FLAG_IFACE = 0,
     UCT_RC_IFACE_SEND_OP_FLAG_INUSE = 0
 #endif
 };
@@ -162,15 +164,15 @@ typedef struct uct_rc_srq {
 
 
 struct uct_rc_iface {
-    uct_ib_iface_t           super;
+    uct_ib_iface_t             super;
 
     struct {
-        ucs_mpool_t          mp;
-        ucs_mpool_t          fc_mp; /* pool for FC grant pending reguests */
-        uct_rc_iface_send_op_t *ops;
-        unsigned             cq_available;
-        unsigned             next_op;
-        ucs_arbiter_t        arbiter;
+        ucs_mpool_t             mp;      /* pool for send descriptors */
+        ucs_mpool_t             fc_mp;   /* pool for FC grant pending requests */
+        unsigned                cq_available; /* credits for completions */
+        uct_rc_iface_send_op_t  *free_ops; /* stack of free send operations */
+        ucs_arbiter_t           arbiter;
+        uct_rc_iface_send_op_t  *ops_buffer;
     } tx;
 
     struct {
@@ -182,7 +184,7 @@ struct uct_rc_iface {
         unsigned             tx_qp_len;
         unsigned             tx_min_sge;
         unsigned             tx_min_inline;
-        unsigned             tx_ops_mask;
+        unsigned             tx_ops_count;
         unsigned             rx_inline;
         uint16_t             tx_moderation;
 
@@ -222,14 +224,18 @@ UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h,
 
 
 struct uct_rc_iface_send_op {
-    ucs_queue_elem_t              queue;
+    union {
+        ucs_queue_elem_t          queue;  /* used when enqueued on a txqp */
+        uct_rc_iface_send_op_t    *next;  /* used when on free list */
+    };
     uct_rc_send_handler_t         handler;
     uint16_t                      sn;
     uint16_t                      flags;
     unsigned                      length;
     union {
-        void                      *buffer;
-        void                      *unpack_arg;
+        void                      *buffer;        /* atomics / desc */
+        void                      *unpack_arg;    /* get_bcopy / desc */
+        uct_rc_iface_t            *iface;         /* zcopy / op */
     };
     uct_completion_t              *user_comp;
 };
@@ -316,9 +322,21 @@ uct_rc_iface_have_tx_cqe_avail(uct_rc_iface_t* iface)
 static UCS_F_ALWAYS_INLINE uct_rc_iface_send_op_t*
 uct_rc_iface_get_send_op(uct_rc_iface_t *iface)
 {
-    return &iface->tx.ops[(iface->tx.next_op++) & iface->config.tx_ops_mask];
+    uct_rc_iface_send_op_t *op;
+    op = iface->tx.free_ops;
+    iface->tx.free_ops = op->next;
+    return op;
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_put_send_op(uct_rc_iface_send_op_t *op)
+{
+    uct_rc_iface_t *iface = op->iface;
+    ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_INUSE);
+    ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IFACE);
+    op->next = iface->tx.free_ops;
+    iface->tx.free_ops = op;
+}
 
 static inline void
 uct_rc_bcopy_desc_fill(uct_rc_hdr_t *rch, uint8_t id,

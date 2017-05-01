@@ -325,6 +325,46 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
                                hdr + 1, length, flags);
 }
 
+static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
+{
+    const unsigned count = iface->config.tx_ops_count;
+    uct_rc_iface_send_op_t *op;
+
+    iface->tx.ops_buffer = ucs_calloc(count, sizeof(*iface->tx.ops_buffer),
+                                     "rc_tx_ops");
+    if (iface->tx.ops_buffer == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    iface->tx.free_ops = &iface->tx.ops_buffer[0];
+    for (op = iface->tx.ops_buffer; op < iface->tx.ops_buffer + count - 1; ++op) {
+        op->handler = uct_rc_ep_send_op_completion_handler;
+        op->flags   = UCT_RC_IFACE_SEND_OP_FLAG_IFACE;
+        op->iface   = iface;
+        op->next    = op + 1;
+    }
+    iface->tx.ops_buffer[count - 1].next = NULL;
+    return UCS_OK;
+}
+
+static void uct_rc_iface_tx_ops_cleanup(uct_rc_iface_t *iface)
+{
+    const unsigned total_count = iface->config.tx_ops_count;
+    uct_rc_iface_send_op_t *op;
+    unsigned free_count;
+
+    free_count = 0;
+    for (op = iface->tx.free_ops; op != NULL; op = op->next) {
+        ++free_count;
+        ucs_assert(free_count <= total_count);
+    }
+    if (free_count != iface->config.tx_ops_count) {
+        ucs_warn("rc_iface %p: %u/%d send ops were not released", iface,
+                 total_count- free_count, total_count);
+    }
+    ucs_free(iface->tx.ops_buffer);
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_rc_iface_config_t *config, unsigned rx_priv_len,
@@ -334,21 +374,20 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     struct ibv_srq_init_attr srq_init_attr;
     ucs_status_t status;
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
-    unsigned tx_cq_len   = config->tx.cq_len;
+    unsigned tx_cq_len = config->tx.cq_len;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               rx_priv_len, rx_hdr_len, tx_cq_len, rx_cq_len,
                               SIZE_MAX, is_ex_cq, &config->super);
 
     self->tx.cq_available           = tx_cq_len - 1; /* Reserve one for error */
-    self->tx.next_op                = 0;
     self->rx.srq.available          = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
     self->config.tx_min_sge         = config->super.tx.min_sge;
     self->config.tx_min_inline      = config->super.tx.min_inline;
     self->config.tx_moderation      = ucs_min(config->super.tx.cq_moderation,
                                               config->super.tx.queue_len / 4);
-    self->config.tx_ops_mask        = ucs_roundup_pow2(tx_cq_len) - 1;
+    self->config.tx_ops_count       = tx_cq_len;
     self->config.rx_inline          = config->super.rx.inl;
     self->config.min_rnr_timer      = uct_ib_to_fabric_time(config->tx.rnr_timeout);
     self->config.timeout            = uct_ib_to_fabric_time(config->tx.timeout);
@@ -393,14 +432,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     }
 
     /* Allocate tx operations */
-    self->tx.ops = ucs_calloc(self->config.tx_ops_mask + 1, sizeof(*self->tx.ops),
-                              "rc_tx_ops");
-    if (self->tx.ops == NULL) {
+    status = uct_rc_iface_tx_ops_init(self);
+    if (status != UCS_OK) {
         goto err_destroy_tx_mp;
     }
 
+    /* Create SRQ */
     if (srq_size > 0) {
-        /* Create SRQ */
         srq_init_attr.attr.max_sge   = 1;
         srq_init_attr.attr.max_wr    = srq_size;
         srq_init_attr.attr.srq_limit = 0;
@@ -472,7 +510,7 @@ err_destroy_srq:
         ibv_destroy_srq(self->rx.srq.srq);
     }
 err_free_tx_ops:
-    ucs_free(self->tx.ops);
+    uct_rc_iface_tx_ops_cleanup(self);
 err_destroy_tx_mp:
     ucs_mpool_cleanup(&self->tx.mp, 1);
 err_destroy_rx_mp:
@@ -506,7 +544,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
             ucs_warn("failed to destroy SRQ: %m");
         }
     }
-    ucs_free(self->tx.ops);
+    uct_rc_iface_tx_ops_cleanup(self);
     ucs_mpool_cleanup(&self->tx.mp, 1);
     ucs_mpool_cleanup(&self->rx.mp, 0); /* Cannot flush SRQ */
     if (self->config.fc_enabled) {

@@ -206,7 +206,7 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
                                                const void *resp);
 
-void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op,
+void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
                                              const void *resp);
 
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n);
@@ -309,7 +309,6 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     }
 
     op            = uct_rc_iface_get_send_op(iface);
-    op->handler   = uct_rc_ep_send_completion_proxy_handler;
     op->user_comp = comp;
     uct_rc_txqp_add_send_op_sn(txqp, op, sn);
 }

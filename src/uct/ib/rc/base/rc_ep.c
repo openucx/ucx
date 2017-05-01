@@ -257,10 +257,11 @@ void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
     ucs_mpool_put(desc);
 }
 
-void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op,
-                                             const void *resp)
+void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
+                                          const void *resp)
 {
     uct_invoke_completion(op->user_comp, UCS_OK);
+    uct_rc_iface_put_send_op(op);
 }
 
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
@@ -391,7 +392,9 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
                 uct_invoke_completion(op->user_comp, status);
             }
         }
-        if (op->handler != uct_rc_ep_send_completion_proxy_handler) {
+        if (op->handler == uct_rc_ep_send_op_completion_handler) {
+            uct_rc_iface_put_send_op(op);
+        } else {
             desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
             ucs_mpool_put(desc);
         }
