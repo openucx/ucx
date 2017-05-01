@@ -159,9 +159,6 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev, struct ibv_device *ibv_dev
     uint8_t i;
     int ret;
 
-    setenv("MLX5_TOTAL_UUARS",       "64", 1);
-    setenv("MLX5_NUM_LOW_LAT_UUARS", "60", 1);
-
     /* Open verbs context */
     dev->ibv_context = ibv_open_device(ibv_device);
     if (dev->ibv_context == NULL) {
