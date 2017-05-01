@@ -17,6 +17,12 @@
 #include <inttypes.h>
 
 
+/* Hash size is a prime number just below 1024. Prime number for even distribution,
+ * and small enough to fit L1 cache. */
+#define UCP_TAG_MATCH_HASH_SIZE     1021
+
+
+
 #define ucp_tag_log_match(_recv_tag, _recv_len,_req, _exp_tag, _exp_tag_mask, \
                           _offset, _title) \
     ucs_trace_req("matched tag %"PRIx64" len %zu to %s request %p offset %zu " \
@@ -49,20 +55,52 @@ int ucp_tag_recv_is_match(ucp_tag_t recv_tag, unsigned recv_flags,
               (recv_tag == curr_tag)));
 }
 
+static UCS_F_ALWAYS_INLINE size_t
+ucp_tag_match_calc_hash(ucp_tag_t tag)
+{
+    /* Compute two 32-bit modulo and combine their result */
+    return ((uint32_t)tag % UCP_TAG_MATCH_HASH_SIZE) ^
+           ((uint32_t)(tag >> 32) % UCP_TAG_MATCH_HASH_SIZE);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_queue_head_t*
+ucp_tag_exp_get_queue_for_tag(ucp_tag_match_t *tm, ucp_tag_t tag)
+{
+    return &tm->expected.hash[ucp_tag_match_calc_hash(tag)];
+}
+
+static UCS_F_ALWAYS_INLINE ucs_queue_head_t*
+ucp_tag_exp_get_queue(ucp_tag_match_t *tm, ucp_request_t *req)
+{
+    if (req->recv.tag_mask == UCP_TAG_MASK_FULL) {
+        return ucp_tag_exp_get_queue_for_tag(tm, req->recv.tag);
+    } else {
+        return &tm->expected.wildcard;
+    }
+}
+
 static UCS_F_ALWAYS_INLINE
 void ucp_tag_exp_add(ucp_tag_match_t *tm, ucp_request_t *req)
 {
-    ucs_queue_push(&tm->expected, &req->recv.queue);
+    req->recv.sn = tm->expected.sn++;
+    ucs_queue_push(ucp_tag_exp_get_queue(tm, req), &req->recv.queue);
 }
 
 static UCS_F_ALWAYS_INLINE ucp_request_t *
 ucp_tag_exp_search(ucp_tag_match_t *tm, ucp_tag_t recv_tag, size_t recv_len,
                    unsigned recv_flags)
 {
+    ucs_queue_head_t *queue;
     ucs_queue_iter_t iter;
     ucp_request_t *req;
 
-    ucs_queue_for_each_safe(req, iter, &tm->expected, recv.queue) {
+    queue = ucp_tag_exp_get_queue_for_tag(tm, recv_tag);
+    if (ucs_unlikely(!ucs_queue_is_empty(&tm->expected.wildcard))) {
+        return ucp_tag_exp_search_all(tm, queue, recv_tag, recv_len, recv_flags);
+    }
+
+    /* fast path - wildcard queue is empty, search only the specific queue */
+    ucs_queue_for_each_safe(req, iter, queue, recv.queue) {
         req = ucs_container_of(*iter, ucp_request_t, recv.queue);
         if (ucp_tag_recv_is_match(recv_tag, recv_flags, req->recv.tag,
                                   req->recv.tag_mask, req->recv.state.offset,
@@ -71,12 +109,11 @@ ucp_tag_exp_search(ucp_tag_match_t *tm, ucp_tag_t recv_tag, size_t recv_len,
             ucp_tag_log_match(recv_tag, recv_len, req, req->recv.tag,
                               req->recv.tag_mask, req->recv.state.offset, "expected");
             if (recv_flags & UCP_RECV_DESC_FLAG_LAST) {
-                ucs_queue_del_iter(&tm->expected, iter);
+                ucs_queue_del_iter(queue, iter);
             }
             return req;
         }
     }
-
     return NULL;
 }
 
