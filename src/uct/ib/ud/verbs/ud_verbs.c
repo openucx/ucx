@@ -30,6 +30,14 @@ uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max);
 static inline void
 uct_ud_verbs_iface_post_recv(uct_ud_verbs_iface_t *iface);
 
+static ucs_config_field_t uct_ud_verbs_iface_config_table[] = {
+  {"UD_", "", NULL,
+   0, UCS_CONFIG_TYPE_TABLE(uct_ud_iface_config_table)},
+
+  {NULL}
+};
+
+
 UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, uct_iface_h tl_iface)
 {
     uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_verbs_iface_t);
@@ -614,6 +622,6 @@ UCT_TL_COMPONENT_DEFINE(uct_ud_verbs_tl,
                         uct_ud_verbs_iface_t,
                         "ud",
                         "UD_VERBS_",
-                        uct_ud_iface_config_table,
+                        uct_ud_verbs_iface_config_table,
                         uct_ud_iface_config_t);
 UCT_MD_REGISTER_TL(&uct_ib_mdc, &uct_ud_verbs_tl);
