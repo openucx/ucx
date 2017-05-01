@@ -331,7 +331,7 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
     uct_rc_iface_send_op_t *op;
 
     iface->tx.ops_buffer = ucs_calloc(count, sizeof(*iface->tx.ops_buffer),
-                                     "rc_tx_ops");
+                                      "rc_tx_ops");
     if (iface->tx.ops_buffer == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
