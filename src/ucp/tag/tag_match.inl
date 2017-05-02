@@ -94,12 +94,13 @@ ucp_tag_exp_search(ucp_tag_match_t *tm, ucp_tag_t recv_tag, size_t recv_len,
     ucs_queue_iter_t iter;
     ucp_request_t *req;
 
-    queue = ucp_tag_exp_get_queue_for_tag(tm, recv_tag);
     if (ucs_unlikely(!ucs_queue_is_empty(&tm->expected.wildcard))) {
+        queue = ucp_tag_exp_get_queue_for_tag(tm, recv_tag);
         return ucp_tag_exp_search_all(tm, queue, recv_tag, recv_len, recv_flags);
     }
 
     /* fast path - wildcard queue is empty, search only the specific queue */
+    queue = ucp_tag_exp_get_queue_for_tag(tm, recv_tag);
     ucs_queue_for_each_safe(req, iter, queue, recv.queue) {
         req = ucs_container_of(*iter, ucp_request_t, recv.queue);
         if (ucp_tag_recv_is_match(recv_tag, recv_flags, req->recv.tag,
