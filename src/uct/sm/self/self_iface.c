@@ -49,7 +49,8 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
                                    UCT_IFACE_FLAG_ATOMIC_CSWAP32   |
                                    UCT_IFACE_FLAG_ATOMIC_CPU       |
                                    UCT_IFACE_FLAG_PENDING          |
-                                   UCT_IFACE_FLAG_AM_CB_SYNC;
+                                   UCT_IFACE_FLAG_AM_CB_SYNC       |
+                                   UCT_IFACE_FLAG_EP_CHECK;
 
     attr->cap.put.max_short       = UINT_MAX;
     attr->cap.put.max_bcopy       = SIZE_MAX;
@@ -141,6 +142,7 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .ep_atomic_swap32         = uct_sm_ep_atomic_swap32,
     .ep_pending_add           = ucs_empty_function_return_busy,
     .ep_pending_purge         = ucs_empty_function,
+    .ep_check                 = ucs_empty_function_return_success
 };
 
 static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
