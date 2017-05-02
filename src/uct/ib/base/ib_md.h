@@ -43,12 +43,21 @@ enum {
 };
 
 
-typedef struct uct_ib_odp_config {
-    uct_ib_numa_policy_t numa_policy;/**< NUMA policy flags for ODP */
-    int                  prefetch;   /**< Auto-prefetch non-blocking memory
-                                          registrations / allocations */
-    size_t               max_size;   /**< Maximal memory region size for ODP */
-} uct_ib_odp_config_t;
+typedef struct uct_ib_md_ext_config {
+    int                      eth_pause;    /**< Whether or not Pause Frame is
+                                                enabled on the Ethernet network */
+    int                      prefer_nearest_device; /**< Give priority for near
+                                                         device */
+    int                      enable_contig_pages; /** Enable contiguous pages */
+
+    struct {
+        uct_ib_numa_policy_t numa_policy;  /**< NUMA policy flags for ODP */
+        int                  prefetch;     /**< Auto-prefetch non-blocking memory
+                                                registrations / allocations */
+        size_t               max_size;     /**< Maximal memory region size for ODP */
+    } odp;
+
+} uct_ib_md_ext_config_t;
 
 
 typedef struct uct_ib_mem {
@@ -67,19 +76,15 @@ typedef struct uct_ib_md {
     struct ibv_pd            *pd;       /**< IB memory domain */
     uct_ib_device_t          dev;       /**< IB device */
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
-    int                      eth_pause; /**< Pause Frame on an Ethernet network */
-    uct_ib_odp_config_t      odp;       /**< ODP configuration */
     /* keep it in md because pd is needed to create umr_qp/cq */
     struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
     struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
     UCS_STATS_NODE_DECLARE(stats);
-
+    uct_ib_md_ext_config_t   config;    /* IB external configuration */
     struct {
         uct_ib_device_spec_t *specs;    /* Custom device specifications */
         unsigned             count;     /* Number of custom devices */
     } custom_devices;
-    int                      prefer_nearest_device; /**< Give priority for near
-                                                         device */
 } uct_ib_md_t;
 
 
@@ -99,14 +104,10 @@ typedef struct uct_ib_md_config {
     uct_linear_growth_t      uc_reg_cost;  /**< Memory registration cost estimation
                                                 without using the cache */
     unsigned                 fork_init;    /**< Use ibv_fork_init() */
-    int                      eth_pause;    /**< Whether or not Pause Frame is
-                                                enabled on the Ethernet network */
-    uct_ib_odp_config_t      odp;          /**< ODP configuration */
+
+    uct_ib_md_ext_config_t   ext;          /**< External configuration */
 
     UCS_CONFIG_STRING_ARRAY_FIELD(spec) custom_devices; /**< Custom device specifications */
-
-    int                      prefer_nearest_device; /**< Give priority for near
-                                                         device */
 
 } uct_ib_md_config_t;
 

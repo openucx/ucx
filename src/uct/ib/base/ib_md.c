@@ -93,7 +93,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
    "ensure zero loss under congestion on Ethernet family computer networks.\n"
    "This parameter, if set to 'no', will disqualify IB transports that may not perform\n"
    "well on a lossy fabric when working with RoCE.",
-   ucs_offsetof(uct_ib_md_config_t, eth_pause), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_ib_md_config_t, ext.eth_pause), UCS_CONFIG_TYPE_BOOL},
 
   {"ODP_NUMA_POLICY", "preferred",
    "Override NUMA policy for ODP regions, to avoid extra page migrations.\n"
@@ -103,16 +103,16 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
    "     policy of ODP regions to MPOL_PREFERRED/MPOL_BIND, respectively.\n"
    "     If the numa node mask of the current thread is not defined, use the numa\n"
    "     nodes which correspond to its cpu affinity mask.",
-   ucs_offsetof(uct_ib_md_config_t, odp.numa_policy),
+   ucs_offsetof(uct_ib_md_config_t, ext.odp.numa_policy),
    UCS_CONFIG_TYPE_ENUM(uct_ib_numa_policy_names)},
 
   {"ODP_PREFETCH", "n",
    "Force prefetch of memory regions created with ODP.\n",
-   ucs_offsetof(uct_ib_md_config_t, odp.prefetch), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_ib_md_config_t, ext.odp.prefetch), UCS_CONFIG_TYPE_BOOL},
 
   {"ODP_MAX_SIZE", "auto",
    "Maximal memory region size to enable ODP for. 0 - disable.\n",
-   ucs_offsetof(uct_ib_md_config_t, odp.max_size), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_ib_md_config_t, ext.odp.max_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"DEVICE_SPECS", "",
    "Array of custom device specification. Each element is a string of the following format:\n"
@@ -127,7 +127,12 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
 
   {"PREFER_NEAREST_DEVICE", "y",
    "Prefer nearest device to cpu when selecting a device from NET_DEVICES list.\n",
-   ucs_offsetof(uct_ib_md_config_t, prefer_nearest_device), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_ib_md_config_t, ext.prefer_nearest_device), UCS_CONFIG_TYPE_BOOL},
+
+  {"CONTIG_PAGES", "n",
+   "Enable allocation with contiguous pages. Warning: enabling this option may\n"
+   "cause stack smashing.\n",
+   ucs_offsetof(uct_ib_md_config_t, ext.enable_contig_pages), UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };
@@ -155,7 +160,9 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
                              UCT_MD_FLAG_ADVISE;
     md_attr->rkey_packed_size = sizeof(uint64_t);
 
-    if (IBV_EXP_HAVE_CONTIG_PAGES(&md->dev.dev_attr)) {
+    if (md->config.enable_contig_pages &&
+        IBV_EXP_HAVE_CONTIG_PAGES(&md->dev.dev_attr))
+    {
         md_attr->cap.flags |= UCT_MD_FLAG_ALLOC;
     }
 
@@ -508,7 +515,7 @@ static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
     uint64_t exp_access = 0;
 
     if ((flags & UCT_MD_MEM_FLAG_NONBLOCK) && (length > 0) &&
-        (length <= md->odp.max_size)) {
+        (length <= md->config.odp.max_size)) {
         exp_access |= IBV_EXP_ACCESS_ON_DEMAND;
     }
     return exp_access;
@@ -523,7 +530,7 @@ static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *me
     ucs_status_t status;
 
     if (!(memh->flags & UCT_IB_MEM_FLAG_ODP) ||
-        (md->odp.numa_policy == UCT_IB_NUMA_POLICY_DEFAULT) ||
+        (md->config.odp.numa_policy == UCT_IB_NUMA_POLICY_DEFAULT) ||
         (numa_available() < 0))
     {
         status = UCS_OK;
@@ -559,7 +566,7 @@ static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *me
         break;
     }
 
-    switch (md->odp.numa_policy) {
+    switch (md->config.odp.numa_policy) {
     case UCT_IB_NUMA_POLICY_BIND:
         new_policy = MPOL_BIND;
         break;
@@ -567,7 +574,7 @@ static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *me
         new_policy = MPOL_PREFERRED;
         break;
     default:
-        ucs_error("unexpected numa policy %d", md->odp.numa_policy);
+        ucs_error("unexpected numa policy %d", md->config.odp.numa_policy);
         status = UCS_ERR_INVALID_PARAM;
         goto out_free;
     }
@@ -657,6 +664,10 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
     uct_ib_mem_t *memh;
     size_t length;
 
+    if (!md->config.enable_contig_pages) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     memh = uct_ib_memh_alloc();
     if (memh == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -678,7 +689,7 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
     uct_ib_mem_init(memh, exp_access);
     uct_ib_mem_set_numa_policy(md, memh);
 
-    if (md->odp.prefetch) {
+    if (md->config.odp.prefetch) {
         uct_ib_mem_prefetch_internal(md, memh, memh->mr->addr, memh->mr->length);
     }
 
@@ -734,7 +745,7 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
 
     uct_ib_mem_init(memh, exp_access);
     uct_ib_mem_set_numa_policy(md, memh);
-    if (md->odp.prefetch) {
+    if (md->config.odp.prefetch) {
         uct_ib_mem_prefetch_internal(md, memh, memh->mr->addr, memh->mr->length);
     }
 
@@ -785,7 +796,7 @@ uct_ib_mem_advise(uct_md_h uct_md, uct_mem_h memh, void *addr, size_t length,
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 
     ucs_debug("memh %p advice %d", memh, advice);
-    if ((advice == UCT_MADV_WILLNEED) && !md->odp.prefetch) {
+    if ((advice == UCT_MADV_WILLNEED) && !md->config.odp.prefetch) {
         return uct_ib_mem_prefetch_internal(md, memh, addr, length);
     }
     return UCS_OK;
@@ -1119,13 +1130,11 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto out_free_dev_list;
     }
 
-    md->super.ops       = &uct_ib_md_ops;
-    md->super.component = &uct_ib_mdc;
-    md->eth_pause       = md_config->eth_pause;
-    md->rcache          = NULL;
-    md->reg_cost        = md_config->uc_reg_cost;
-    md->odp             = md_config->odp;
-    md->prefer_nearest_device = md_config->prefer_nearest_device;
+    md->super.ops             = &uct_ib_md_ops;
+    md->super.component       = &uct_ib_mdc;
+    md->rcache                = NULL;
+    md->reg_cost              = md_config->uc_reg_cost;
+    md->config                = md_config->ext;
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
@@ -1153,9 +1162,15 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto err_release_stats;
     }
 
-    if (md->odp.max_size == UCS_CONFIG_MEMUNITS_AUTO) {
+    /* Disable contig pages allocator for IB transport objects */
+    if (!md->config.enable_contig_pages) {
+        ibv_exp_setenv(md->dev.ibv_context, "MLX_QP_ALLOC_TYPE", "ANON", 0);
+        ibv_exp_setenv(md->dev.ibv_context, "MLX_CQ_ALLOC_TYPE", "ANON", 0);
+    }
+
+    if (md->config.odp.max_size == UCS_CONFIG_MEMUNITS_AUTO) {
         /* Must be done after we open and query the device */
-        md->odp.max_size = uct_ib_device_odp_max_size(&md->dev);
+        md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
     }
 
     /* Allocate memory domain */
