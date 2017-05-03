@@ -13,6 +13,7 @@
 
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/khash.h>
+#include <ucs/datastruct/queue_types.h>
 #include <ucs/async/async.h>
 
 KHASH_MAP_INIT_INT64(ucp_worker_ep_hash, ucp_ep_t *);
@@ -67,6 +68,17 @@ enum {
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
                              UCP_WORKER_STAT_TAG_RX_RNDV_##_is_exp, 1);
 
+/**
+ * UCP worker iface, which encapsulates UCT iface, its attributes and
+ * some auxiliary info needed for tag matching offloads.
+ */
+typedef struct ucp_worker_iface {
+    uct_iface_h                   iface;
+    uct_iface_attr_t              attr;
+    ucs_queue_elem_t              queue;
+    ucp_rsc_index_t               rsc_index;
+} ucp_worker_iface_t;
+
 
 /**
  * UCP worker wake-up context.
@@ -96,8 +108,7 @@ typedef struct ucp_worker {
     unsigned                      stub_pend_count;/* Number of pending requests on stub endpoints*/
 
     khash_t(ucp_worker_ep_hash)   ep_hash;       /* Hash table of all endpoints */
-    uct_iface_h                   *ifaces;       /* Array of interfaces, one for each resource */
-    uct_iface_attr_t              *iface_attrs;  /* Array of interface attributes */
+    ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     UCS_STATS_NODE_DECLARE(stats);
     unsigned                      ep_config_max; /* Maximal number of configurations */
@@ -129,6 +140,12 @@ static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uui
     }
 
     return kh_value(&worker->ep_hash, hash_it);
+}
+
+static UCS_F_ALWAYS_INLINE
+uint64_t ucp_worker_is_tl_tag_offload(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
+{
+    return 0; /* Stub for now, offload TM proto is not implemented yet */
 }
 
 #endif

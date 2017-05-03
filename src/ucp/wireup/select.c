@@ -8,6 +8,7 @@
 #include "address.h"
 
 #include <ucs/algorithm/qsort_r.h>
+#include <ucs/datastruct/queue.h>
 #include <ucp/core/ucp_ep.inl>
 #include <string.h>
 #include <inttypes.h>
@@ -18,7 +19,8 @@ enum {
     UCP_WIREUP_LANE_USAGE_AM   = UCS_BIT(0),
     UCP_WIREUP_LANE_USAGE_RMA  = UCS_BIT(1),
     UCP_WIREUP_LANE_USAGE_AMO  = UCS_BIT(2),
-    UCP_WIREUP_LANE_USAGE_RNDV = UCS_BIT(3)
+    UCP_WIREUP_LANE_USAGE_RNDV = UCS_BIT(3),
+    UCP_WIREUP_LANE_USAGE_TAG  = UCS_BIT(4)
 };
 
 
@@ -61,7 +63,11 @@ static const char *ucp_wireup_iface_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_AM_CB_SYNC)]       = "sync am callback",
     [ucs_ilog2(UCT_IFACE_FLAG_AM_CB_ASYNC)]      = "async am callback",
     [ucs_ilog2(UCT_IFACE_FLAG_WAKEUP)]           = "wakeup",
-    [ucs_ilog2(UCT_IFACE_FLAG_PENDING)]          = "pending"
+    [ucs_ilog2(UCT_IFACE_FLAG_PENDING)]          = "pending",
+    [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_SHORT)]  = "tag eager short",
+    [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_BCOPY)]  = "tag eager bcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_ZCOPY)]  = "tag eager zcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy"
 };
 
 static double ucp_wireup_aux_score_func(ucp_context_h context,
@@ -118,7 +124,8 @@ static int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_inde
 {
     ucp_context_h context = worker->context;
     return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
-           uct_iface_is_reachable(worker->ifaces[rsc_index], ae->dev_addr, ae->iface_addr);
+           uct_iface_is_reachable(worker->ifaces[rsc_index].iface, ae->dev_addr,
+                                  ae->iface_addr);
 }
 
 /**
@@ -199,7 +206,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
      * has a reachable tl on the remote peer */
     for (rsc_index = 0; addr_index_map && (rsc_index < context->num_tls); ++rsc_index) {
         resource     = &context->tl_rscs[rsc_index].tl_rsc;
-        iface_attr   = &worker->iface_attrs[rsc_index];
+        iface_attr   = &worker->ifaces[rsc_index].attr;
         md_attr      = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
         /* Check that local md and interface satisfy the criteria */
@@ -647,6 +654,49 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count
     return UCS_OK;
 }
 
+/* Lane for transport offloaded tag interface */
+static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
+                                            const ucp_address_entry_t *address_list,
+                                            ucp_wireup_lane_desc_t *lane_descs,
+                                            ucp_lane_index_t *num_lanes_p)
+{
+    ucp_wireup_criteria_t criteria;
+    ucp_rsc_index_t rsc_index;
+    ucs_status_t status;
+    unsigned addr_index;
+    double score;
+
+    if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) ||
+        ucs_queue_is_empty(&ep->worker->context->tm.offload_ifaces)) {
+        return UCS_OK;
+    }
+
+    criteria.title              = "tag_offload";
+    criteria.local_md_flags     = UCT_MD_FLAG_REG; /* needed for posting tags to HW */
+    criteria.remote_md_flags    = UCT_MD_FLAG_REG; /* needed for posting tags to HW */
+    criteria.remote_iface_flags = UCT_IFACE_FLAG_TAG_EAGER_BCOPY;
+    criteria.local_iface_flags  = UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                                  UCT_IFACE_FLAG_PENDING;
+
+    /* Use RMA score func for now (to target mid size messages).
+     * TODO: have to align to TM_THRESH value. */
+    criteria.calc_score         = ucp_wireup_rma_score_func;
+
+    if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
+        criteria.remote_iface_flags |= UCT_IFACE_FLAG_WAKEUP;
+    }
+
+    status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
+                                         -1, -1, 0, &rsc_index, &addr_index, &score);
+    if (status == UCS_OK) {
+         ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
+                                  address_list[addr_index].md_index, score,
+                                  UCP_WIREUP_LANE_USAGE_TAG);
+    }
+
+    return UCS_OK;
+}
+
 static ucp_lane_index_t
 ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
                                   const ucp_address_entry_t *address_list,
@@ -668,7 +718,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
         /* if the current lane satisfies the wireup criteria, choose it for wireup.
          * if it doesn't take a lane with a p2p transport */
         if (ucp_wireup_check_flags(resource,
-                                   worker->iface_attrs[rsc_index].cap.flags,
+                                   worker->ifaces[rsc_index].attr.cap.flags,
                                    ucp_wireup_aux_criteria.local_iface_flags,
                                    ucp_wireup_aux_criteria.title,
                                    ucp_wireup_iface_flags, NULL, 0) &&
@@ -744,6 +794,12 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
         return status;
     }
 
+    status = ucp_wireup_add_tag_lane(ep, address_count, address_list,
+                                     lane_descs, &key->num_lanes);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     /* User should not create endpoints unless requested communication features */
     if (key->num_lanes == 0) {
         ucs_error("No transports selected to %s (features: 0x%lx)",
@@ -775,6 +831,10 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
         }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AMO) {
             key->amo_lanes[lane] = lane;
+        }
+        if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_TAG) {
+            ucs_assert(key->tag_lane == UCP_NULL_LANE);
+            key->tag_lane = lane;
         }
     }
 

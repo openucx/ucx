@@ -36,7 +36,7 @@ typedef struct {
 /**
  * Defines functions for a protocol, on all possible data types.
  */
-typedef struct ucp_proto {
+struct ucp_proto {
     uct_pending_callback_t     contig_short;     /**< Progress short data */
     uct_pending_callback_t     bcopy_single;     /**< Progress bcopy single fragment */
     uct_pending_callback_t     bcopy_multi;      /**< Progress bcopy multi-fragment */
@@ -46,7 +46,7 @@ typedef struct ucp_proto {
     size_t                     only_hdr_size;    /**< Header size for single / short */
     size_t                     first_hdr_size;   /**< Header size for first of multi */
     size_t                     mid_hdr_size;     /**< Header size for rest of multi */
-} ucp_proto_t;
+};
 
 
 ucs_status_t ucp_proto_progress_am_bcopy_single(uct_pending_req_t *self);

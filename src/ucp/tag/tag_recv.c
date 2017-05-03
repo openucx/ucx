@@ -45,6 +45,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
             ucp_tag_log_match(recv_tag, rdesc->length - rdesc->hdr_len, req, tag,
                               tag_mask, req->recv.state.offset, "unexpected");
             ucs_queue_del_iter(&context->tm.unexpected, iter);
+
             if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
                 UCS_PROFILE_REQUEST_EVENT(req, "eager_match", 0);
                 status = ucp_eager_unexp_match(worker, rdesc, recv_tag, flags,
@@ -163,7 +164,9 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t buffer_size,
         req->recv.tag      = tag;
         req->recv.tag_mask = tag_mask;
         req->recv.cb       = cb;
+
         ucp_tag_exp_add(&worker->context->tm, req);
+
         ucs_trace_req("%s returning expected request %p (%p)", debug_name,
                       req, req + 1);
     }

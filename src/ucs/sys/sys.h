@@ -250,6 +250,7 @@ ucs_status_t ucs_empty_function_return_success();
 ucs_status_t ucs_empty_function_return_unsupported();
 ucs_status_t ucs_empty_function_return_inprogress();
 ucs_status_t ucs_empty_function_return_no_resource();
+ucs_status_ptr_t ucs_empty_function_return_ptr_no_resource();
 ucs_status_t ucs_empty_function_return_ep_timeout();
 ssize_t ucs_empty_function_return_bc_ep_timeout();
 ucs_status_t ucs_empty_function_return_busy();

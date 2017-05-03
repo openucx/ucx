@@ -23,7 +23,7 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
                                       const ucp_proto_t *proto)
 {
     ucp_ep_config_t *config   = ucp_ep_config(req->send.ep);
-    ucp_lane_index_t lane     = ucp_ep_get_am_lane(req->send.ep);
+    ucp_lane_index_t lane     = config->tag.lane;
     ucp_worker_h worker       = req->send.ep->worker;
     size_t only_hdr_size      = proto->only_hdr_size;
     unsigned flag_iov_single  = 1;
@@ -40,11 +40,12 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
         req->send.state.dt.iov.iovcnt_offset = 0;
         req->send.state.dt.iov.iov_offset    = 0;
         req->send.state.dt.iov.iovcnt        = count;
-        flag_iov_single                      = (count <= config->am.max_iovcnt);
+        flag_iov_single                      = (count <= config->tag.eager.max_iov) ||
+                                                config->tag.offload.enabled;
         if (0 == count) {
             /* disable zcopy */
             zcopy_thresh = SIZE_MAX;
-        } else if (!config->am.zcopy_auto_thresh) {
+        } else if (!config->tag.eager.zcopy_auto_thresh) {
             /* The user defined threshold or no zcopy enabled */
             zcopy_thresh = zcopy_thresh_arr[0];
         } else if (count <= UCP_MAX_IOV) {
@@ -56,7 +57,7 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
             zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(count,
                                &ucp_ep_md_attr(req->send.ep, lane)->reg_cost,
                                worker->context,
-                               worker->iface_attrs[rsc_index].bandwidth);
+                               worker->ifaces[rsc_index].attr.bandwidth);
         }
     } else {
         length       = ucp_contig_dt_length(req->send.datatype, count);
@@ -74,15 +75,13 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
         /* short */
         req->send.uct.func = proto->contig_short;
         UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
-    } else if ((((config->key.rndv_lane != UCP_NULL_RESOURCE) &&
-               (length >= rndv_rma_thresh)) ||
-               (length >= rndv_am_thresh)) && !is_iov) {
+    } else if ((length >= rndv_rma_thresh) || (length >= rndv_am_thresh)) {
         /* RMA/AM rendezvous */
         ucp_tag_send_start_rndv(req);
         UCS_PROFILE_REQUEST_EVENT(req, "start_rndv", req->send.length);
     } else if (length < zcopy_thresh) {
         /* bcopy */
-        if (length <= (config->am.max_bcopy - only_hdr_size)) {
+        if (length <= (config->tag.eager.max_bcopy - only_hdr_size)) {
             req->send.uct.func   = proto->bcopy_single;
             UCS_PROFILE_REQUEST_EVENT(req, "start_egr_bcopy_single", req->send.length);
         } else {
@@ -99,7 +98,7 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
         req->send.uct_comp.func  = proto->zcopy_completion;
         req->send.uct_comp.count = 1;
 
-        if ((length <= (config->am.max_zcopy - only_hdr_size)) &&
+        if ((length <= (config->tag.eager.max_zcopy - only_hdr_size)) &&
             flag_iov_single) {
             req->send.uct.func   = proto->zcopy_single;
             UCS_PROFILE_REQUEST_EVENT(req, "start_egr_zcopy_single", req->send.length);
@@ -126,14 +125,14 @@ static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
     req->send.state.dt.generic.state = state;
     req->send.length = length = dt_gen->ops.packed_size(state);
 
-    if (length >= rndv_am_thresh) {
-        /* rendezvous */
-        ucp_tag_send_start_rndv(req);
-        UCS_PROFILE_REQUEST_EVENT(req, "start_rndv", req->send.length);
-    } else if (length <= config->am.max_bcopy - proto->only_hdr_size) {
+    if (length <= config->tag.eager.max_bcopy - proto->only_hdr_size) {
         /* bcopy single */
         req->send.uct.func = proto->bcopy_single;
         UCS_PROFILE_REQUEST_EVENT(req, "start_gen_bcopy_single", req->send.length);
+    } else if ((length >= rndv_am_thresh) || config->tag.offload.enabled) {
+        /* rendezvous */
+        ucp_tag_send_start_rndv(req);
+        UCS_PROFILE_REQUEST_EVENT(req, "start_rndv", req->send.length);
     } else {
         /* bcopy multi */
         req->send.uct.func = proto->bcopy_multi;
@@ -231,7 +230,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
 
     if (ucs_likely(UCP_DT_IS_CONTIG(datatype))) {
         length = ucp_contig_dt_length(datatype, count);
-        if (ucs_likely((ssize_t)length <= ucp_ep_config(ep)->am.max_eager_short)) {
+        if (ucs_likely((ssize_t)length <= ucp_ep_config(ep)->tag.eager.max_short)) {
             status = UCS_PROFILE_CALL(ucp_tag_send_eager_short, ep, tag, buffer,
                                       length);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
@@ -251,11 +250,11 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
     ucp_tag_send_req_init(req, ep, buffer, datatype, tag, 0);
 
     ret = ucp_tag_send_req(req, count,
-                           ucp_ep_config(ep)->am.max_eager_short,
-                           ucp_ep_config(ep)->am.zcopy_thresh,
-                           ucp_ep_config(ep)->rndv.rma_thresh,
-                           ucp_ep_config(ep)->rndv.am_thresh,
-                           cb, &ucp_tag_eager_proto);
+                           ucp_ep_config(ep)->tag.eager.max_short,
+                           ucp_ep_config(ep)->tag.eager.zcopy_thresh,
+                           ucp_ep_config(ep)->tag.rndv.rma_thresh,
+                           ucp_ep_config(ep)->tag.rndv.am_thresh,
+                           cb, ucp_ep_config(ep)->tag.proto);
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return ret;
@@ -292,10 +291,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
 
     ret = ucp_tag_send_req(req, count,
                            -1, /* disable short method */
-                           ucp_ep_config(ep)->am.sync_zcopy_thresh,
-                           ucp_ep_config(ep)->rndv.rma_thresh,
-                           ucp_ep_config(ep)->rndv.am_thresh,
-                           cb, &ucp_tag_eager_sync_proto);
+                           ucp_ep_config(ep)->tag.eager.sync_zcopy_thresh,
+                           ucp_ep_config(ep)->tag.rndv.rma_thresh,
+                           ucp_ep_config(ep)->tag.rndv.am_thresh,
+                           cb, ucp_ep_config(ep)->tag.sync_proto);
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return ret;

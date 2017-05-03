@@ -341,7 +341,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
 {
     ucp_worker_h worker          = ep->worker;
     ucp_rsc_index_t rsc_index    = ucp_ep_get_rsc_index(ep, lane);
-    uct_iface_attr_t *iface_attr = &worker->iface_attrs[rsc_index];
+    uct_iface_attr_t *iface_attr = &worker->ifaces[rsc_index].attr;
     uct_ep_h new_uct_ep;
     ucs_status_t status;
 
@@ -353,7 +353,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
         ((ep->uct_eps[lane] == NULL) || ucp_stub_ep_test(ep->uct_eps[lane])))
     {
         /* create an endpoint connected to the remote interface */
-        status = uct_ep_create_connected(worker->ifaces[rsc_index],
+        status = uct_ep_create_connected(worker->ifaces[rsc_index].iface,
                                          address_list[addr_index].dev_addr,
                                          address_list[addr_index].iface_addr,
                                          &new_uct_ep);

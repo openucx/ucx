@@ -404,11 +404,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
-        if (worker->ifaces[rsc_index] == NULL) {
+        if (worker->ifaces[rsc_index].iface == NULL) {
             continue;
         }
 
-        status = uct_iface_fence(worker->ifaces[rsc_index], 0);
+        status = uct_iface_fence(worker->ifaces[rsc_index].iface, 0);
         if (status != UCS_OK) {
             goto out;
         }
@@ -432,11 +432,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
 
     /* TODO flush in parallel */
     for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
-        if (worker->ifaces[rsc_index] == NULL) {
+        if (worker->ifaces[rsc_index].iface == NULL) {
             continue;
         }
 
-        while (uct_iface_flush(worker->ifaces[rsc_index], 0, NULL) != UCS_OK) {
+        while (uct_iface_flush(worker->ifaces[rsc_index].iface, 0, NULL) != UCS_OK) {
             ucp_worker_progress(worker);
         }
     }

@@ -7,6 +7,7 @@
 
 #include "ucp_context.h"
 #include "ucp_request.h"
+#include <ucp/proto/proto.h>
 
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/crc.h>
@@ -128,6 +129,11 @@ static ucs_config_field_t ucp_config_table[] = {
    "n      - Not use mutex for multithreading support in UCP (use spinlock by default).\n"
    "y      - Use mutex for multithreading support in UCP.\n",
    ucs_offsetof(ucp_config_t, ctx.use_mt_mutex), UCS_CONFIG_TYPE_BOOL},
+
+  {"TM_THRESH", "1024",
+   "Threshold for using tag matching offload capabilities.\n"
+   "Smaller buffers will not be posted to the transport.",
+   ucs_offsetof(ucp_config_t, ctx.tm_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {NULL}
 };
@@ -708,6 +714,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                      config->ctx.use_mt_mutex ? UCP_MT_TYPE_MUTEX
                                               : UCP_MT_TYPE_SPINLOCK);
     context->config.ext = config->ctx;
+
+    /* Post threshold for tag offload should not be less than ucp_request_hdr_t
+     * size, because this header may be scattered to user buffer in case of
+     * expected SW RNDV protocol. */
+    context->tm.post_thresh = ucs_max(context->config.ext.tm_thresh,
+                                      sizeof(ucp_request_hdr_t));
 
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_

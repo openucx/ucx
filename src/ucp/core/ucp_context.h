@@ -37,6 +37,9 @@ typedef struct ucp_context_config {
     size_t                                 bcopy_bw;
     /** Size of packet data that is dumped to the log system in debug mode */
     size_t                                 log_data_size;
+    /** Threshold for using tag matching offload capabilities. Smaller buffers
+     *  will not be posted to the transport. */
+    size_t                                 tm_thresh;
     /** Maximal size of worker name for debugging */
     unsigned                               max_worker_name;
     /** Atomic mode */
@@ -99,7 +102,7 @@ typedef struct ucp_context {
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/
 
-    ucp_tag_match_t               tm;         /* Tag-matching queues */
+    ucp_tag_match_t               tm;         /* Tag-matching queues and offload info */
 
     struct {
 

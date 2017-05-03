@@ -34,6 +34,10 @@ typedef struct ucp_tag_match {
         uint64_t              sn;
     } expected;
     ucs_queue_head_t          unexpected; /* Unexpected received descriptors */
+
+    /* Tag offload fields */
+    ucs_queue_head_t         offload_ifaces; /* Interfaces which support tag offload */
+    size_t                   post_thresh;
 } ucp_tag_match_t;
 
 
