@@ -48,6 +48,7 @@
 #include <pthread.h> /* pthread_self */
 #include <errno.h>   /* errno */
 #include <time.h>
+#include <signal.h>  /* raise */
 
 struct msg {
     uint64_t        data_len;
@@ -63,6 +64,12 @@ enum ucp_test_mode_t {
     TEST_MODE_EVENTFD
 } ucp_test_mode = TEST_MODE_PROBE;
 
+static struct err_handling {
+    ucp_err_handling_mode_t ucp_err_mode;
+    int                     failure;
+} err_handling_opt;
+
+static ucs_status_t client_status = UCS_OK;
 static uint16_t server_port = 13337;
 static long test_string_length = 16;
 static const ucp_tag_t tag  = 0x1337a880u;
@@ -87,8 +94,18 @@ static void send_handle(void *request, ucs_status_t status)
 
     context->completed = 1;
 
-    printf("[0x%x] send handler called with status %d\n",
-           (unsigned int)pthread_self(), status);
+    printf("[0x%x] send handler called with status %d (%s)\n",
+           (unsigned int)pthread_self(), status, ucs_status_string(status));
+}
+
+static void failure_handler(void *arg, ucp_ep_h ep, ucs_status_t status)
+{
+    ucs_status_t *arg_status = (ucs_status_t *)arg;
+
+    printf("[0x%x] failure handler called with status %d (%s)\n",
+           (unsigned int)pthread_self(), status, ucs_status_string(status));
+
+    *arg_status = status;
 }
 
 static void recv_handle(void *request, ucs_status_t status,
@@ -98,8 +115,9 @@ static void recv_handle(void *request, ucs_status_t status,
 
     context->completed = 1;
 
-    printf("[0x%x] receive handler called with status %d (length %lu)\n",
-           (unsigned int)pthread_self(), status, info->length);
+    printf("[0x%x] receive handler called with status %d (%s), length %lu\n",
+           (unsigned int)pthread_self(), status, ucs_status_string(status),
+           info->length);
 }
 
 static void wait(ucp_worker_h ucp_worker, struct ucx_context *context)
@@ -162,8 +180,8 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     int ret = -1;
 
     /* Send client UCX address to server */
-    ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-    ep_params.address    = peer_addr;
+    ep_params.field_mask      = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.address         = peer_addr;
 
     status = ucp_ep_create(ucp_worker, &ep_params, &server_ep);
     CHKERR_JUMP(status != UCS_OK, "ucp_ep_create\n", err);
@@ -183,13 +201,17 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
         free(msg);
         goto err_ep;
     } else if (UCS_PTR_STATUS(request) != UCS_OK) {
-        fprintf(stderr, "UCX address message was scheduled for send\n");
         wait(ucp_worker, request);
         request->completed = 0; /* Reset request state before recycling it */
         ucp_request_release(request);
     }
 
     free (msg);
+
+    if (err_handling_opt.failure) {
+        fprintf(stderr, "Emulating unexpected failure on client side\n");
+        raise(SIGKILL);
+    }
 
     /* Receive test string from server */
     do {
@@ -308,8 +330,13 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     free(msg);
 
     /* Send test string to client */
-    ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-    ep_params.address    = peer_addr;
+    ep_params.field_mask      = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS |
+                                UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                UCP_EP_PARAM_FIELD_ERR_HANDLER;
+    ep_params.address         = peer_addr;
+    ep_params.err_mode        = err_handling_opt.ucp_err_mode;
+    ep_params.err_handler.cb  = failure_handler;
+    ep_params.err_handler.arg = &client_status;
 
     status = ucp_ep_create(ucp_worker, &ep_params, &client_ep);
     CHKERR_JUMP(status != UCS_OK, "ucp_ep_create\n", err);
@@ -334,6 +361,10 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
         request->completed = 0;
         ucp_request_release(request);
     }
+
+    status = ucp_ep_flush(client_ep);
+    fprintf(stderr, "ucp_ep_flush is completed with status %d (%s)\n",
+            status, ucs_status_string(status));
 
     ret = 0;
     free(msg);
@@ -444,8 +475,10 @@ int main(int argc, char **argv)
 
     ret = run_test(client_target_name, ucp_worker);
 
-    /* Make sure remote is disconnected before destroying local worker */
-    barrier(oob_sock);
+    if (!err_handling_opt.failure) {
+        /* Make sure remote is disconnected before destroying local worker */
+        barrier(oob_sock);
+    }
     close(oob_sock);
 
 err_peer_addr:
@@ -468,7 +501,11 @@ int parse_cmd(int argc, char * const argv[], char **server_name)
 {
     int c = 0, index = 0;
     opterr = 0;
-    while ((c = getopt(argc, argv, "wfbn:p:s:h")) != -1) {
+
+    err_handling_opt.ucp_err_mode   = UCP_ERR_HANDLING_MODE_NONE;
+    err_handling_opt.failure        = 0;
+
+    while ((c = getopt(argc, argv, "wfben:p:s:h")) != -1) {
         switch (c) {
         case 'w':
             ucp_test_mode = TEST_MODE_WAIT;
@@ -478,6 +515,10 @@ int parse_cmd(int argc, char * const argv[], char **server_name)
             break;
         case 'b':
             ucp_test_mode = TEST_MODE_PROBE;
+            break;
+        case 'e':
+            err_handling_opt.ucp_err_mode   = UCP_ERR_HANDLING_MODE_PEER;
+            err_handling_opt.failure        = 1;
             break;
         case 'n':
             *server_name = optarg;
@@ -515,6 +556,9 @@ int parse_cmd(int argc, char * const argv[], char **server_name)
                     "ucp_worker_get_efd function with later poll\n");
             fprintf(stderr, "  -b      Select test mode \"busy polling\" to test "
                     "ucp_tag_probe_nb and ucp_worker_progress (default)\n");
+            fprintf(stderr, "  -e      Emulate unexpected failure on server side"
+                    "and handle an error on client side with enabled "
+                    "UCP_ERR_HANDLING_MODE_PEER\n");
             fprintf(stderr, "  -n name Set node name or IP address "
                     "of the server (required for client and should be ignored "
                     "for server)\n");
