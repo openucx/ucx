@@ -270,7 +270,7 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_t *iface,
         status = iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, UCT_CB_FLAG_DESC,
                                          tm_info.tag.tag, desc + tm_info_len,
                                          cqe->byte_len - tm_info_len, tm_info.rndv.vaddr,
-                                         tm_info.rndv.len, rb);
+                                         tm_info.rndv.len, desc + cqe->byte_len);
 
         uct_rc_verbs_iface_unexp_consumed(iface, ib_desc,
                                           &iface->tm.rndv_desc, status);
@@ -715,6 +715,7 @@ void uct_rc_verbs_iface_tag_query(uct_rc_verbs_iface_t *iface,
         iface_attr->cap.tag.eager.max_iov   = 1;
         iface_attr->cap.tag.rndv.max_iov    = 1;
         iface_attr->cap.tag.recv.max_iov    = 1;
+        iface_attr->cap.tag.recv.min_recv   = 0;
     }
 #endif
 }
