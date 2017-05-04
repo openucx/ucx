@@ -369,9 +369,6 @@ static void usage(struct perftest_context *ctx, const char *program)
 #endif
     printf("     -h             Show this help message.\n");
     printf("\n");
-    printf("  Server options:\n");
-    printf("     -l             Accept clients in an infinite loop\n");
-    printf("\n");
 }
 
 static const char *__basename(const char *path)
