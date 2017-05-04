@@ -72,7 +72,8 @@ static size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     rndv_rts_hdr->sreq.reqptr      = (uintptr_t)sreq;
     rndv_rts_hdr->sreq.sender_uuid = sreq->send.ep->worker->uuid;
     rndv_rts_hdr->size             = sreq->send.length;
-    if (UCP_DT_IS_CONTIG(sreq->send.datatype)) {
+    if (UCP_DT_IS_CONTIG(sreq->send.datatype) ||
+        UCP_DT_IS_IOV(sreq->send.datatype)) {
         rndv_rts_hdr->address = (uintptr_t) sreq->send.buffer;
         packed_len += ucp_tag_rndv_pack_rkey(sreq, rndv_rts_hdr);
     } else if (UCP_DT_IS_GENERIC(sreq->send.datatype)) {

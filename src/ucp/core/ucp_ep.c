@@ -773,6 +773,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     config->tag.lane                    = UCP_NULL_LANE;
     config->tag.proto                   = &ucp_tag_eager_proto;
     config->tag.sync_proto              = &ucp_tag_eager_sync_proto;
+    config->tag.offload.enabled         = 0;
     config->tag.rndv.rma_thresh         = SIZE_MAX;
     config->tag.rndv.max_get_zcopy      = SIZE_MAX;
     config->tag.rndv.am_thresh          = SIZE_MAX;
@@ -823,7 +824,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         rsc_index   = config->key.lanes[lane].rsc_index;
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = &worker->ifaces[rsc_index].attr;
-            md_attr   = &context->tl_mds[rsc_index].attr;
+            md_attr   = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
             ucp_ep_config_init_attrs(worker, rsc_index, &config->am,
                                      iface_attr->cap.am.max_short,
                                      iface_attr->cap.am.max_bcopy,
