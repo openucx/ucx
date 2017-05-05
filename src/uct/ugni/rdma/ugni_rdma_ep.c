@@ -713,7 +713,7 @@ ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t 
                      iface->config.rdma_max_size, "get_zcopy");
 
     /* Special flow for an unalign data */
-    if (ucs_unlikely((GNI_DEVICE_GEMINI == iface->super.dev->type && 
+    if (ucs_unlikely((uct_ugni_check_device_type(&iface->super, GNI_DEVICE_GEMINI) && 
                       ucs_check_if_align_pow2((uintptr_t)buffer, UGNI_GET_ALIGN)) ||
                       ucs_check_if_align_pow2(remote_addr, UGNI_GET_ALIGN)        ||
                       ucs_check_if_align_pow2(length, UGNI_GET_ALIGN))) {

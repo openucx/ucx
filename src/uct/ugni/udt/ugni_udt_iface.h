@@ -101,4 +101,8 @@ static inline int uct_ugni_udt_ep_any_post(uct_ugni_udt_iface_t *iface)
     return UCS_OK;
 }
 
+static inline gni_nic_handle_t uct_ugni_udt_iface_nic_handle(uct_ugni_udt_iface_t *iface)
+{
+    return uct_ugni_iface_nic_handle(&iface->super);
+}
 #endif

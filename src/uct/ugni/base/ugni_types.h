@@ -12,22 +12,6 @@
 #include <gni_pub.h>
 #include <stdbool.h>
 
-/**
- * @brief UGNI Memory domain
- *
- * Ugni does not define MD, instead I use
- * device handle that "simulates" the MD.
- * Memory that is registered with one device handle
- * can be accessed with any other.
- */
-typedef struct uct_ugni_md {
-    uct_md_t super;         /**< Domain info */
-    gni_cdm_handle_t cdm_handle; /**< Ugni communication domain */
-    gni_nic_handle_t nic_handle; /**< Ugni NIC handle */
-    uint32_t address;            /**< UGNI address */
-    int ref_count;               /**< UGNI Domain ref count */
-} uct_ugni_md_t;
-
 typedef struct uct_ugni_device {
     gni_nic_device_t type;                      /**< Device type */
     char             type_name[UCT_UGNI_MAX_TYPE_NAME];  /**< Device type name */
@@ -40,8 +24,34 @@ typedef struct uct_ugni_device {
                                                   to the device */
     cpu_set_t        cpu_mask;                  /**< CPU mask */
     bool             attached;                  /**< device was attached */
+#if ENABLE_MT
+    ucs_spinlock_t   lock;                      /**< Device lock */
+#endif
     /* TBD - reference counter */
 } uct_ugni_device_t;
+
+typedef struct uct_ugni_cdm {
+    gni_cdm_handle_t   cdm_handle; /**< Ugni communication domain */
+    gni_nic_handle_t   nic_handle; /**< Ugni NIC handle */
+    uct_ugni_device_t *dev;        /**< Ugni device the cdm is connected to */
+    ucs_thread_mode_t  thread_mode;
+    uint32_t           address; 
+    uint16_t           domain_id;
+} uct_ugni_cdm_t;
+
+/**
+ * @brief UGNI Memory domain
+ *
+ * Ugni does not define MD, instead I use
+ * device handle that "simulates" the MD.
+ * Memory that is registered with one device handle
+ * can be accessed with any other.
+ */
+typedef struct uct_ugni_md {
+    uct_md_t super;         /**< Domain info */
+    uct_ugni_cdm_t cdm;     /**< Communication domain for memory registration*/
+    int ref_count;          /**< UGNI Domain ref count */
+} uct_ugni_md_t;
 
 typedef struct uct_devaddr_ugni_t {
     uint32_t nic_addr;
@@ -70,15 +80,11 @@ typedef struct uct_ugni_ep {
 
 typedef struct uct_ugni_iface {
     uct_base_iface_t        super;
-    uct_ugni_device_t       *dev;                        /**< Ugni device iface is connected to */
-    gni_cdm_handle_t        cdm_handle;                  /**< Ugni communication domain */
-    gni_nic_handle_t        nic_handle;                  /**< Ugni NIC handle */
+    uct_ugni_cdm_t          cdm;                         /**< Ugni communication domain and handles */
     gni_cq_handle_t         local_cq;                    /**< Completion queue */
-    uint16_t                domain_id;                   /**< Id for UGNI domain creation */
     uct_ugni_ep_t           *eps[UCT_UGNI_HASH_SIZE];    /**< Array of QPs */
     unsigned                outstanding;                 /**< Counter for outstanding packets
                                                               on the interface */
-    bool                    activated;                   /**< nic status */
     ucs_arbiter_t           arbiter;                     /**< arbiter structure for pending operations */
     ucs_mpool_t             flush_pool;                  /**< Memory pool for flush objects */
 } uct_ugni_iface_t;

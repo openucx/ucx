@@ -23,22 +23,24 @@ ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *
 int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *dev_addr, 
 				const uct_iface_addr_t *iface_addr);
 void uct_ugni_progress(void *arg);
-ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface);
-ucs_status_t ugni_deactivate_iface(uct_ugni_iface_t *iface);
-ucs_status_t uct_ugni_init_nic(int device_index,
-                               uint16_t *domain_id,
-                               gni_cdm_handle_t *cdm_handle,
-                               gni_nic_handle_t *nic_handle,
-                               uint32_t *address);
+ucs_status_t uct_ugni_fetch_pmi();
 void uct_ugni_base_desc_init(ucs_mpool_t *mp, void *obj, void *chunk);
 void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h memh);
 ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
                                          uct_tl_resource_desc_t **resource_p,
                                          unsigned *num_resources_p);
-
 static inline uct_ugni_device_t *uct_ugni_iface_device(uct_ugni_iface_t *iface)
 {
-    return iface->dev;
+    return iface->cdm.dev;
+}
+static inline gni_nic_handle_t uct_ugni_iface_nic_handle(uct_ugni_iface_t *iface)
+{
+    return iface->cdm.nic_handle;
+}
+static inline int uct_ugni_check_device_type(uct_ugni_iface_t *iface, gni_nic_device_t type)
+{
+    uct_ugni_device_t *dev = uct_ugni_iface_device(iface);
+    return dev->type == type;
 }
 
 #endif

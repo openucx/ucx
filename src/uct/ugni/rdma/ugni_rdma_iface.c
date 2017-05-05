@@ -69,7 +69,7 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                          UCT_IFACE_FLAG_PENDING;
 
-    if(GNI_DEVICE_ARIES == iface->super.dev->type) {
+    if (uct_ugni_check_device_type(&iface->super, GNI_DEVICE_ARIES)) {
         iface_attr->cap.flags         |= UCT_IFACE_FLAG_PUT_SHORT |
                                          UCT_IFACE_FLAG_ATOMIC_SWAP64 |
                                          UCT_IFACE_FLAG_ATOMIC_SWAP32 |
@@ -90,12 +90,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_rdma_iface_t)
 {
     uct_worker_progress_unregister(self->super.super.worker,
                                    uct_ugni_progress, self);
-
-    if (!self->super.activated) {
-        /* We done with release */
-        return;
-    }
-
     ucs_mpool_cleanup(&self->free_desc_get_buffer, 1);
     ucs_mpool_cleanup(&self->free_desc_get, 1);
     ucs_mpool_cleanup(&self->free_desc_famo, 1);
@@ -271,20 +265,12 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
         goto clean_famo;
     }
 
-    status = ugni_activate_iface(&self->super);
-    if (UCS_OK != status) {
-        ucs_error("Failed to activate the interface");
-        goto clean_get_buffer;
-    }
-
     /* TBD: eventually the uct_ugni_progress has to be moved to
      * rdma layer so each ugni layer will have own progress */
     uct_worker_progress_register(worker, uct_ugni_progress, self);
     pthread_mutex_unlock(&uct_ugni_global_lock);
     return UCS_OK;
 
-clean_get_buffer:
-    ucs_mpool_cleanup(&self->free_desc_get_buffer, 1);
 clean_famo:
     ucs_mpool_cleanup(&self->free_desc_famo, 1);
 clean_buffer:

@@ -15,4 +15,6 @@ void uct_ugni_device_destroy(uct_ugni_device_t *dev);
 void uct_ugni_device_get_resource(const char *tl_name, uct_ugni_device_t *dev,
                                   uct_tl_resource_desc_t *resource);
 ucs_status_t uct_ugni_iface_get_dev_address(uct_iface_t *tl_iface, uct_device_addr_t *addr);
+ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device, ucs_thread_mode_t thread_mode);
+ucs_status_t uct_ugni_destroy_cdm(uct_ugni_cdm_t *cdm);
 #endif
