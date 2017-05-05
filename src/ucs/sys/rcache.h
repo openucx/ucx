@@ -50,6 +50,12 @@ struct ucs_rcache_ops {
      *                          `region_struct_size' in @ref ucs_rcache_params.
      *                         This function may store relevant information (such
      *                          as memory keys) inside the larger structure.
+     *
+     * @return UCS_OK if registration is successful, error otherwise.
+     *
+     * @note This function should be able to handle inaccessible memory addresses
+     *       and return error status in this case, without any destructive consequences
+     *       such as error messages or fatal failure.
      */
     ucs_status_t           (*mem_reg)(void *context, ucs_rcache_t *rcache,
                                       void *arg, ucs_rcache_region_t *region);

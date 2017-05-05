@@ -297,7 +297,7 @@ static inline int ucs_rcache_region_test(ucs_rcache_region_t *region, int prot)
 /* Lock must be held */
 static ucs_status_t
 ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
-                         ucs_pgt_addr_t *end, int *prot,
+                         ucs_pgt_addr_t *end, int *prot, int *merged,
                          ucs_rcache_region_t **region_p)
 {
     ucs_rcache_region_t *region, *tmp;
@@ -370,8 +370,9 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
         ucs_rcache_region_trace(rcache, region,
                                 "merge 0x%lx..0x%lx "UCS_RCACHE_PROT_FMT" with",
                                 *start, *end, UCS_RCACHE_PROT_ARG(*prot));
-        *start = ucs_min(*start, region->super.start);
-        *end   = ucs_max(*end,   region->super.end);
+        *start  = ucs_min(*start, region->super.start);
+        *end    = ucs_max(*end,   region->super.end);
+        *merged = 1;
         ucs_rcache_region_invalidate(rcache, region, 1, 0);
     }
     return UCS_OK;
@@ -384,12 +385,14 @@ ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
     ucs_rcache_region_t *region = NULL;
     ucs_pgt_addr_t start, end;
     ucs_status_t status;
+    int merged;
 
     ucs_trace_func("rcache=%s, address=%p, length=%zu", rcache->name, address,
                    length);
 
     pthread_rwlock_wrlock(&rcache->lock);
 
+retry:
     /* Align to page size */
     start = ucs_align_down_pow2((uintptr_t)address,
                                 rcache->params.alignment);
@@ -397,8 +400,9 @@ ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
                                 rcache->params.alignment);
 
     /* Check overlap with existing regions */
+    merged = 0;
     status = UCS_PROFILE_CALL(ucs_rcache_check_overlap, rcache, &start, &end,
-                              &prot, &region);
+                              &prot, &merged, &region);
     if (status == UCS_ERR_ALREADY_EXISTS) {
         /* Found a matching region (it could have been added after we released
          * the lock)
@@ -442,12 +446,19 @@ ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
         UCS_PROFILE_NAMED_CALL("mem_reg", rcache->params.ops->mem_reg,
                                rcache->params.context, rcache, arg, region);
     if (status != UCS_OK) {
-        /* In case region is not registered, we don't return it to the user,
-         * so no need to increment reference count.
-         */
-        ucs_rcache_region_debug(rcache, region, "created with status %s",
-                                ucs_status_string(status));
-        goto out_unlock;
+        if (merged) {
+            /* failure may be due to merge, retry with original address */
+            ucs_debug("failed to register merged region " UCS_PGT_REGION_FMT ": %s, retrying",
+                      UCS_PGT_REGION_ARG(&region->super), ucs_status_string(status));
+            status = ucs_pgtable_remove(&rcache->pgtable, &region->super);
+            ucs_assert_always(status == UCS_OK);
+            ucs_mem_region_destroy_internal(rcache, region);
+            goto retry;
+        } else {
+            ucs_warn("failed to register region " UCS_PGT_REGION_FMT ": %s",
+                     UCS_PGT_REGION_ARG(&region->super), ucs_status_string(status));
+            goto out_unlock;
+        }
     }
 
     region->flags   |= UCS_RCACHE_REGION_FLAG_REGISTERED;

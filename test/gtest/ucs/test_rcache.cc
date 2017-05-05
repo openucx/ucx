@@ -460,17 +460,37 @@ protected:
     virtual ucs_status_t mem_reg(region *region) {
         return UCS_ERR_IO_ERROR;
     }
+
+    static ucs_log_func_rc_t
+    log_handler(const char *file, unsigned line, const char *function,
+                ucs_log_level_t level, const char *prefix, const char *message,
+                va_list ap)
+    {
+        /* Ignore warnings about empty memory pool */
+        if ((level == UCS_LOG_LEVEL_WARN) && strstr(message, "failed to register")) {
+            char buf[ucs_global_opts.log_buffer_size];
+            vsnprintf(buf, sizeof(buf), message, ap);
+            UCS_TEST_MESSAGE << "" << buf;
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
 };
 
 UCS_MT_TEST_F(test_rcache_no_register, register_failure, 10) {
     static const size_t size = 1 * 1024 * 1024;
     void *ptr = malloc(size);
 
+    ucs_log_push_handler(log_handler);
+
     ucs_status_t status;
     ucs_rcache_region_t *r;
     status = ucs_rcache_get(m_rcache, ptr, size, PROT_READ|PROT_WRITE, NULL, &r);
     EXPECT_EQ(UCS_ERR_IO_ERROR, status);
     EXPECT_EQ(0u, m_reg_count);
+
+    ucs_log_pop_handler();
 
     free(ptr);
 }

@@ -32,6 +32,21 @@ protected:
         return m_pd;
     }
 
+    static void* alloc_thread(void *arg)
+    {
+        volatile int *stop_flag = (int*)arg;
+
+        while (!*stop_flag) {
+            int count = rand() % 100;
+            std::vector<void*> buffers;
+            for (int i = 0; i < count; ++i) {
+                buffers.push_back(malloc(rand() % (256*1024)));
+            }
+            std::for_each(buffers.begin(), buffers.end(), free);
+        }
+        return NULL;
+    }
+
 private:
     ucs::handle<uct_md_config_t*> m_md_config;
     ucs::handle<uct_md_h>         m_pd;
@@ -257,6 +272,43 @@ UCS_TEST_P(test_pd, alloc_advise) {
     memset(address, 0xBB, size);
     uct_md_mem_free(pd(), memh);
 }
+
+/*
+ * reproduce issue #1284, main thread is registering memory while another thread
+ * allocates and releases memory.
+ */
+UCS_TEST_P(test_pd, reg_multi_thread) {
+    ucs_status_t status;
+
+    check_caps(UCT_MD_FLAG_REG, "registration");
+
+    pthread_t thread_id;
+    int stop_flag = 0;
+    pthread_create(&thread_id, NULL, alloc_thread, &stop_flag);
+
+    ucs_time_t start_time = ucs_get_time();
+    while (ucs_get_time() - start_time < ucs_time_from_sec(0.5)) {
+        const size_t size = (rand() % 65536) + 1;
+
+        void *buffer = malloc(size);
+        ASSERT_TRUE(buffer != NULL);
+
+        uct_mem_h memh;
+        status = uct_md_mem_reg(pd(), buffer, size, UCT_MD_MEM_FLAG_NONBLOCK, &memh);
+        ASSERT_UCS_OK(status, << " buffer=" << buffer << " size=" << size);
+        ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
+
+        sched_yield();
+
+        status = uct_md_mem_dereg(pd(), memh);
+        EXPECT_UCS_OK(status);
+        free(buffer);
+    }
+
+    stop_flag = 1;
+    pthread_join(thread_id, NULL);
+}
+
 
 #define UCT_PD_INSTANTIATE_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_PD_INSTANTIATE_TEST_CASE, _test_case, \
