@@ -298,6 +298,7 @@ UCS_MT_TEST_F(test_callbackq_thread, threads, 10) {
             barrier(); /*4*/
             dispatch(100);
             barrier(); /*5*/
+            barrier(); /*6*/ /* Next loop barrier*/
         }
     } else {
         for (unsigned i = 0; i < COUNT; ++i) {
@@ -316,6 +317,7 @@ UCS_MT_TEST_F(test_callbackq_thread, threads, 10) {
             unsigned count = ctx.count;
             barrier(); /*5*/
             EXPECT_EQ(count, ctx.count);
+            barrier(); /*6*/ /* Next loop barrier*/
         }
     }
 }
