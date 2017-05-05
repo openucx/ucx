@@ -23,4 +23,7 @@ ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
                                          unsigned *num_resources_p);
 ucs_status_t init_device_list();
 ucs_status_t uct_ugni_create_md_cdm(uct_ugni_cdm_t *cdm);
+ucs_status_t uct_ugni_create_cq(gni_cq_handle_t *cq, unsigned cq_size, uct_ugni_cdm_t *cdm);
+ucs_status_t uct_ugni_destroy_cq(gni_cq_handle_t cq, uct_ugni_cdm_t *cdm);
+
 #endif

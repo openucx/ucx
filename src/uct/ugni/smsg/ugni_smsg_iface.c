@@ -6,6 +6,7 @@
 
 #include "ugni_smsg_iface.h"
 #include "ugni_smsg_ep.h"
+#include <uct/ugni/base/ugni_def.h>
 #include <uct/ugni/base/ugni_md.h>
 #include <uct/ugni/base/ugni_device.h>
 #include <ucs/arch/cpu.h>
@@ -31,8 +32,9 @@ static ucs_status_t progress_local_cq(uct_ugni_smsg_iface_t *iface){
     uct_ugni_smsg_desc_t message_data;
     uct_ugni_smsg_desc_t *message_pointer;
 
+    uct_ugni_device_lock(&iface->super.cdm);
     ugni_rc = GNI_CqGetEvent(iface->super.local_cq, &event_data);
-
+    uct_ugni_device_unlock(&iface->super.cdm);
     if(GNI_RC_NOT_DONE == ugni_rc){
         return UCS_OK;
     }
@@ -60,48 +62,45 @@ static void process_mbox(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_ep_t *ep){
     uct_ugni_smsg_header_t *header;
     void *user_data;
 
-    pthread_mutex_lock(&uct_ugni_global_lock);
-
+    /* Only one thread at a time can process mboxes for the iface. After it's done
+       then everyone's messages have been drained. */
+    if (!ucs_spin_trylock(&iface->mbox_lock)) {
+        return;
+    }
     while(1){
         tag = GNI_SMSG_ANY_TAG;
+        uct_ugni_device_lock(&iface->super.cdm);
         ugni_rc = GNI_SmsgGetNextWTag(ep->super.ep, (void **)&data_ptr, &tag);
-
+        uct_ugni_device_unlock(&iface->super.cdm);
         /* Yes, GNI_RC_NOT_DONE means that you're done with the smsg mailbox */
         if(GNI_RC_NOT_DONE == ugni_rc){
-            pthread_mutex_unlock(&uct_ugni_global_lock);
-            return;
+            break;
         }
-
         if(GNI_RC_SUCCESS != ugni_rc){
             ucs_error("Unhandled smsg error: %s %d", gni_err_str[ugni_rc], ugni_rc);
-            pthread_mutex_unlock(&uct_ugni_global_lock);
-            return;
+            break;
         }
-
         if(NULL == data_ptr){
             ucs_error("Empty data pointer in smsg.");
-            pthread_mutex_unlock(&uct_ugni_global_lock);
-            return;
+            break;
         }
-
         header = (uct_ugni_smsg_header_t *)data_ptr;
         user_data = (void *)(header + 1);
 
         uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_RECV,
                            tag, user_data, header->length, "RX: AM");
 
-        pthread_mutex_unlock(&uct_ugni_global_lock);
         uct_iface_invoke_am(&iface->super.super, tag, user_data,
                             header->length, 0);
-        pthread_mutex_lock(&uct_ugni_global_lock);
-
+        uct_ugni_device_lock(&iface->super.cdm);
         ugni_rc = GNI_SmsgRelease(ep->super.ep);
+        uct_ugni_device_unlock(&iface->super.cdm);
         if(GNI_RC_SUCCESS != ugni_rc){
             ucs_error("Unhandled smsg error in GNI_SmsgRelease: %s %d", gni_err_str[ugni_rc], ugni_rc);
-            pthread_mutex_unlock(&uct_ugni_global_lock);
-            return;
+            break;
         }
     }
+    ucs_spin_unlock(&iface->mbox_lock);
 }
 
 static void uct_ugni_smsg_handle_remote_overflow(uct_ugni_smsg_iface_t *iface){
@@ -112,10 +111,11 @@ static void uct_ugni_smsg_handle_remote_overflow(uct_ugni_smsg_iface_t *iface){
     uct_ugni_smsg_ep_t *ep;
 
     /* We don't know which EP dropped a completion entry, so flush everything */
+    uct_ugni_device_lock(&iface->super.cdm);
     do{
         ugni_rc = GNI_CqGetEvent(iface->remote_cq, &event_data);
     } while(GNI_RC_NOT_DONE != ugni_rc);
-
+    uct_ugni_device_unlock(&iface->super.cdm);
     current_ep = sglib_hashed_uct_ugni_ep_t_it_init(&ep_iterator, iface->super.eps);
 
     while(NULL != current_ep){
@@ -133,8 +133,9 @@ ucs_status_t progress_remote_cq(uct_ugni_smsg_iface_t *iface)
     uct_ugni_ep_t *ugni_ep;
     uct_ugni_smsg_ep_t *ep;
 
+    uct_ugni_device_lock(&iface->super.cdm);
     ugni_rc = GNI_CqGetEvent(iface->remote_cq, &event_data);
-
+    uct_ugni_device_unlock(&iface->super.cdm);
     if(GNI_RC_NOT_DONE == ugni_rc){
         return UCS_OK;
     }
@@ -219,7 +220,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_iface_t)
                                    uct_ugni_smsg_progress, self);
     ucs_mpool_cleanup(&self->free_desc, 1);
     ucs_mpool_cleanup(&self->free_mbox, 1);
-    GNI_CqDestroy(self->remote_cq);
+    uct_ugni_destroy_cq(self->remote_cq, &self->super.cdm);
+    ucs_spinlock_destroy(&self->mbox_lock);
 }
 
 uct_iface_ops_t uct_ugni_smsg_iface_ops = {
@@ -264,8 +266,6 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
     unsigned int bytes_per_mbox;
     gni_smsg_attr_t smsg_attr;
 
-    pthread_mutex_lock(&uct_ugni_global_lock);
-
     UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params,
                               &uct_ugni_smsg_iface_ops,
                               &config->super UCS_STATS_ARG(NULL));
@@ -280,14 +280,14 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
     smsg_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
     smsg_attr.mbox_maxcredit = self->config.smsg_max_credit;
     smsg_attr.msg_maxsize = self->config.smsg_seg_size;
+    status = ucs_spinlock_init(&self->mbox_lock);
+    if (UCS_OK != status) {
+            goto exit;
+    }
 
-    ugni_rc = GNI_CqCreate(uct_ugni_iface_nic_handle(&self->super), 40000, 0,
-                           GNI_CQ_NOBLOCK,
-                           NULL, NULL, &self->remote_cq);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_CqCreate failed, Error status: %s %d",
-                  gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_NO_DEVICE;
+    status = uct_ugni_create_cq(&self->remote_cq, 40000, &self->super.cdm);
+    if (UCS_OK != status) {
+        goto clean_lock;
     }
     ugni_rc = GNI_SmsgBufferSizeNeeded(&(smsg_attr), &bytes_per_mbox);
     self->bytes_per_mbox = ucs_align_up_pow2(bytes_per_mbox, ucs_get_page_size());
@@ -295,7 +295,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
     if (ugni_rc != GNI_RC_SUCCESS) {
         ucs_error("Smsg buffer size calculation failed");
         status = UCS_ERR_INVALID_PARAM;
-        goto exit;
+        goto clean_cq;
     }
 
     status = ucs_mpool_init(&self->free_desc,
@@ -310,7 +310,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
 
     if (UCS_OK != status) {
         ucs_error("Desc Mpool creation failed");
-        goto exit;
+        goto clean_cq;
     }
 
     status = ucs_mpool_init(&self->free_mbox,
@@ -339,17 +339,20 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
     /* TBD: eventually the uct_ugni_progress has to be moved to
      * udt layer so each ugni layer will have own progress */
     uct_worker_progress_register(worker, uct_ugni_smsg_progress, self);
-    pthread_mutex_unlock(&uct_ugni_global_lock);
+
     return UCS_OK;
 
  clean_desc:
     ucs_mpool_cleanup(&self->free_desc, 1);
  clean_mbox:
     ucs_mpool_cleanup(&self->free_mbox, 1);
+ clean_cq:
+    uct_ugni_destroy_cq(self->remote_cq, &self->super.cdm);
+ clean_lock:
+    ucs_spinlock_destroy(&self->mbox_lock);
  exit:
     uct_ugni_cleanup_base_iface(&self->super);
     ucs_error("Failed to activate interface");
-    pthread_mutex_unlock(&uct_ugni_global_lock);
     return status;
 }
 

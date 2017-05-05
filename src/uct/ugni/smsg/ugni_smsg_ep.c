@@ -51,15 +51,13 @@ static ucs_status_t uct_ugni_smsg_mbox_reg(uct_ugni_smsg_iface_t *iface, uct_ugn
         ucs_error("Unexpected length %zu", iface->bytes_per_mbox);
         return UCS_ERR_INVALID_PARAM;
     }
-    pthread_mutex_lock(&uct_ugni_global_lock);
 
+    uct_ugni_device_lock(&iface->super.cdm);
     ugni_rc = GNI_MemRegister(uct_ugni_iface_nic_handle(&iface->super), (uint64_t)address,
                               iface->bytes_per_mbox, iface->remote_cq,
                               GNI_MEM_READWRITE,
                               -1, &(mbox->gni_mem));
-
-    pthread_mutex_unlock(&uct_ugni_global_lock);
-
+    uct_ugni_device_unlock(&iface->super.cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_MemRegister failed (addr %p, size %zu), Error status: %s %d",
                   address, iface->bytes_per_mbox, gni_err_str[ugni_rc], ugni_rc);
@@ -74,12 +72,12 @@ static ucs_status_t uct_ugni_smsg_mbox_reg(uct_ugni_smsg_iface_t *iface, uct_ugn
 static ucs_status_t uct_ugni_smsg_mbox_dereg(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_mbox_t *mbox){
     gni_return_t ugni_rc;
 
-    pthread_mutex_lock(&uct_ugni_global_lock);
+    uct_ugni_device_lock(&iface->super.cdm);
     ugni_rc = GNI_MemDeregister(uct_ugni_iface_nic_handle(&iface->super), &mbox->gni_mem);
-    pthread_mutex_unlock(&uct_ugni_global_lock);
+    uct_ugni_device_unlock(&iface->super.cdm);
 
     if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_MemDeegister failed Error status: %s %d",
+        ucs_error("GNI_MemDeregister failed Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);
         return UCS_ERR_IO_ERROR;
     }
@@ -158,38 +156,33 @@ ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
     uint32_t ep_hash;
 
     uncompact_smsg_attr(ucs_derived_of(iface, uct_ugni_smsg_iface_t), compact_remote_attr, &remote_attr);
-
-    pthread_mutex_lock(&uct_ugni_global_lock);
     rc = ugni_connect_ep(iface, ugni_dev_addr, &iface_addr->super, &ep->super);
 
     if(UCS_OK != rc){
         ucs_error("Could not connect ep in smsg");
-        goto exit_lock;
+        return rc;
     }
-
+    uct_ugni_device_lock(&iface->cdm);
     gni_rc = GNI_SmsgInit(ep->super.ep, local_attr, &remote_attr);
+    uct_ugni_device_unlock(&iface->cdm);
 
     if(GNI_RC_SUCCESS != gni_rc){
         ucs_error("Failed to initalize smsg. %s [%i]", gni_err_str[gni_rc], gni_rc);
         if(GNI_RC_INVALID_PARAM == gni_rc){
-            rc = UCS_ERR_INVALID_PARAM;
+            return UCS_ERR_INVALID_PARAM;
         } else {
-            rc = UCS_ERR_NO_MEMORY;
+            return UCS_ERR_NO_MEMORY;
         }
-        goto exit_lock;
     }
 
     ep_hash = (uint32_t)iface_addr->ep_hash;
+    uct_ugni_device_lock(&iface->cdm);
     gni_rc = GNI_EpSetEventData(ep->super.ep, iface->cdm.domain_id, ep_hash);
+    uct_ugni_device_unlock(&iface->cdm);
 
     if(GNI_RC_SUCCESS != gni_rc){
         ucs_error("Could not set GNI_EpSetEventData!");
     }
-
-
- exit_lock:
-    pthread_mutex_unlock(&uct_ugni_global_lock);
-
     return rc;
 }
 
@@ -206,10 +199,10 @@ uct_ugni_smsg_ep_am_common_send(uct_ugni_smsg_ep_t *ep, uct_ugni_smsg_iface_t *i
 
     desc->msg_id = iface->smsg_id++;
     desc->flush_group = ep->super.flush_group;
-
+    uct_ugni_device_lock(&iface->super.cdm);
     gni_rc = GNI_SmsgSendWTag(ep->super.ep, header, header_length, 
                               payload, payload_length, desc->msg_id, am_id);
-
+    uct_ugni_device_unlock(&iface->super.cdm);
     if(GNI_RC_SUCCESS != gni_rc){
         goto exit_no_res;
     }

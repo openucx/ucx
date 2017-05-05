@@ -93,12 +93,14 @@ static inline int uct_ugni_udt_ep_any_post(uct_ugni_udt_iface_t *iface)
     gni_return_t ugni_rc;
 
     uct_ugni_udt_reset_desc(iface->desc_any, iface);
+    uct_ugni_device_lock(&iface->super.cdm);
     ugni_rc = GNI_EpPostDataWId(iface->ep_any,
                                 uct_ugni_udt_get_sheader(iface->desc_any, iface),
                                 iface->config.udt_seg_size,
                                 uct_ugni_udt_get_rheader(iface->desc_any, iface),
                                 iface->config.udt_seg_size,
                                 UCT_UGNI_UDT_ANY);
+    uct_ugni_device_unlock(&iface->super.cdm);
     UCT_UGNI_UDT_CHECK_RC(ugni_rc, iface->desc_any);
     return UCS_OK;
 }

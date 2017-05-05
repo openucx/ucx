@@ -11,7 +11,5 @@
 #include <uct/base/uct_md.h>
 
 extern uct_md_component_t uct_ugni_md_component;
-/** @brief Global lock for the component */
-extern pthread_mutex_t uct_ugni_global_lock;
 
 #endif
