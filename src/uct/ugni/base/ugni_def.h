@@ -8,15 +8,17 @@
 
 #include <ucs/async/async.h>
 
-#define UCT_UGNI_MD_NAME       "ugni"
-#define UCT_UGNI_HASH_SIZE     256
-#define UCT_UGNI_MAX_DEVICES   2
-#define UCT_UGNI_LOCAL_CQ      8192
-#define UCT_UGNI_RKEY_MAGIC    0xdeadbeefLL
-#define UCT_UGNI_MAX_TYPE_NAME 10
-#define LEN_64                 (sizeof(uint64_t))
-#define LEN_32                 (sizeof(uint32_t))
-#define UGNI_GET_ALIGN         4
+#define UCT_UGNI_MD_NAME        "ugni"
+#define UCT_UGNI_HASH_SIZE      256
+#define UCT_UGNI_MAX_DEVICES    2
+#define UCT_UGNI_LOCAL_CQ       8192
+#define UCT_UGNI_RKEY_MAGIC     0xdeadbeefLL
+#define UCT_UGNI_MAX_TYPE_NAME  10
+#define LEN_64                  (sizeof(uint64_t))
+#define LEN_32                  (sizeof(uint32_t))
+#define UGNI_GET_ALIGN          4
+#define UCT_UGNI_INIT_FLUSH     1
+#define UCT_UGNI_INIT_FLUSH_REQ 2
 
 #define UCT_UGNI_ZERO_LENGTH_POST(len)              \
 if (0 == len) {                                     \

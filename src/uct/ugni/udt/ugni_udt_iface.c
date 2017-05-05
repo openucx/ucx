@@ -50,6 +50,8 @@ static ucs_status_t recieve_datagram(uct_ugni_udt_iface_t *iface, uint64_t id, u
     uct_ugni_udt_desc_t *desc;
     uct_ugni_udt_header_t *header;
 
+    ucs_trace_func("iface=%p, id=%lx", iface, id);
+
     if (UCT_UGNI_UDT_ANY == id) {
         ep = NULL;
         gni_ep = iface->ep_any;
@@ -81,8 +83,6 @@ static ucs_status_t recieve_datagram(uct_ugni_udt_iface_t *iface, uint64_t id, u
 
     if (UCT_UGNI_UDT_ANY != id) {
         --iface->super.outstanding;
-        --ep->super.outstanding;
-        uct_ugni_ep_check_flush(&ep->super);
     }
 
     header = uct_ugni_udt_get_rheader(desc, iface);
@@ -93,7 +93,7 @@ static ucs_status_t recieve_datagram(uct_ugni_udt_iface_t *iface, uint64_t id, u
         /* ack message, no data */
         ucs_assert_always(NULL != ep);
         ucs_mpool_put(ep->posted_desc);
-        uct_ugni_ep_check_flush(&ep->super);
+        uct_ugni_check_flush(ep->desc_flush_group);
         ep->posted_desc = NULL;
         return UCS_OK;
     }
@@ -199,6 +199,8 @@ void uct_ugni_proccess_datagram_pipe(int event_id, void *arg) {
     gni_return_t ugni_rc;
     uint64_t id;
 
+    ucs_trace_func("");
+
     pthread_mutex_lock(&uct_ugni_global_lock);
     ugni_rc = GNI_PostDataProbeById(iface->super.nic_handle, &id);
     pthread_mutex_unlock(&uct_ugni_global_lock);
@@ -216,7 +218,7 @@ void uct_ugni_proccess_datagram_pipe(int event_id, void *arg) {
                     ucs_mpool_put(datagram);
                 }
                 ep->posted_desc = NULL;
-                uct_ugni_ep_check_flush(&ep->super);
+                uct_ugni_check_flush(ep->desc_flush_group);
             } else {
                 ucs_trace_data("Processing wildcard");
                 datagram = iface->desc_any;

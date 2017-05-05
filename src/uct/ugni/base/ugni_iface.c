@@ -60,14 +60,13 @@ void uct_ugni_progress(void *arg)
     if (NULL != desc->comp_cb) {
         uct_invoke_completion(desc->comp_cb, UCS_OK);
     }
-    --iface->outstanding;
-    --desc->ep->outstanding;
 
     if (ucs_likely(0 == desc->not_ready_to_free)) {
         ucs_mpool_put(desc);
     }
 
-    uct_ugni_ep_check_flush(desc->ep);
+    iface->outstanding--;
+    uct_ugni_check_flush(desc->flush_group);
 
 out:
     /* have a go a processing the pending queue */
@@ -88,28 +87,9 @@ ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface, unsigned flags,
         UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
         return UCS_OK;
     }
-    uct_ugni_progress(iface);
+
     UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
     return UCS_INPROGRESS;
-}
-
-ucs_status_t uct_ugni_ep_flush(uct_ep_h tl_ep, unsigned flags,
-                               uct_completion_t *comp)
-{
-    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
-    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface,
-                                           uct_ugni_iface_t);
-
-    if (uct_ugni_can_flush(ep)) {
-        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
-        return UCS_OK;
-    }
-
-    ep->flush_flag = 1;
-    ep->arb_flush = ep->arb_size;
-    uct_ugni_progress(iface);
-    UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
-    return UCS_ERR_NO_RESOURCE;
 }
 
 ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
@@ -356,34 +336,50 @@ ucs_status_t ugni_deactivate_iface(uct_ugni_iface_t *iface)
     return UCS_OK;
 }
 
+static ucs_mpool_ops_t uct_ugni_flush_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL
+};
+
 UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
                     uct_iface_ops_t *uct_ugni_iface_ops,
                     const uct_iface_config_t *tl_config
                     UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
-  uct_ugni_device_t *dev;
+    uct_ugni_device_t *dev;
+    ucs_status_t status;
+    uct_ugni_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_iface_config_t);
+    unsigned grow =  (config->mpool.bufs_grow == 0) ? 128 : config->mpool.bufs_grow;
 
-  dev = uct_ugni_device_by_name(params->dev_name);
-  if (NULL == dev) {
-    ucs_error("No device was found: %s", params->dev_name);
-    return UCS_ERR_NO_DEVICE;
-  }
-
-  UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, uct_ugni_iface_ops, md, worker,
-                            params, tl_config UCS_STATS_ARG(params->stats_root)
-                            UCS_STATS_ARG(UCT_UGNI_MD_NAME));
-
-  self->dev      = dev;
-
-  self->activated = false;
-  self->outstanding = 0;
-
-  sglib_hashed_uct_ugni_ep_t_init(self->eps);
-
-  ucs_arbiter_init(&self->arbiter);
-
-  return UCS_OK;
+    dev = uct_ugni_device_by_name(params->dev_name);
+    if (NULL == dev) {
+        ucs_error("No device was found: %s", params->dev_name);
+        return UCS_ERR_NO_DEVICE;
+    }
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, uct_ugni_iface_ops, md, worker,
+                              params, tl_config UCS_STATS_ARG(params->stats_root)
+                              UCS_STATS_ARG(UCT_UGNI_MD_NAME));
+    self->dev         = dev;
+    self->activated   = false;
+    self->outstanding = 0;
+    sglib_hashed_uct_ugni_ep_t_init(self->eps);
+    ucs_arbiter_init(&self->arbiter);
+    status = ucs_mpool_init(&self->flush_pool,
+                            0,
+                            sizeof(uct_ugni_flush_group_t),
+                            0,                            /* alignment offset */
+                            UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                            grow,                         /* grow */
+                            config->mpool.max_bufs,       /* max buffers */
+                            &uct_ugni_flush_mpool_ops,
+                            "UGNI-DESC-ONLY");
+    if (UCS_OK != status) {
+        ucs_error("Could not init iface");
+    }
+    return status;
 }
 
 UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t, uct_md_h, uct_worker_h,
