@@ -382,7 +382,7 @@ static ucs_status_t
 ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
                          int prot, void *arg, ucs_rcache_region_t **region_p)
 {
-    ucs_rcache_region_t *region = NULL;
+    ucs_rcache_region_t *region;
     ucs_pgt_addr_t start, end;
     ucs_status_t status;
     int merged;
@@ -394,13 +394,14 @@ ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
 
 retry:
     /* Align to page size */
-    start = ucs_align_down_pow2((uintptr_t)address,
-                                rcache->params.alignment);
-    end   = ucs_align_up_pow2  ((uintptr_t)address + length,
-                                rcache->params.alignment);
+    start  = ucs_align_down_pow2((uintptr_t)address,
+                                 rcache->params.alignment);
+    end    = ucs_align_up_pow2  ((uintptr_t)address + length,
+                                 rcache->params.alignment);
+    region = NULL;
+    merged = 0;
 
     /* Check overlap with existing regions */
-    merged = 0;
     status = UCS_PROFILE_CALL(ucs_rcache_check_overlap, rcache, &start, &end,
                               &prot, &merged, &region);
     if (status == UCS_ERR_ALREADY_EXISTS) {
