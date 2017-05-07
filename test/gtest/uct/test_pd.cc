@@ -37,10 +37,10 @@ protected:
         volatile int *stop_flag = (int*)arg;
 
         while (!*stop_flag) {
-            int count = rand() % 100;
+            int count = ucs::rand() % 100;
             std::vector<void*> buffers;
             for (int i = 0; i < count; ++i) {
-                buffers.push_back(malloc(rand() % (256*1024)));
+                buffers.push_back(malloc(ucs::rand() % (256*1024)));
             }
             std::for_each(buffers.begin(), buffers.end(), free);
         }
@@ -138,10 +138,7 @@ UCS_TEST_P(test_pd, alloc) {
         }
 
         status = uct_md_mem_alloc(pd(), &size, &address, 0, "test", &memh);
-        if (size == 0) {
-            EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
-            continue;
-        }
+        EXPECT_GT(size, 0ul);
 
         ASSERT_UCS_OK(status);
         EXPECT_GE(size, orig_size);
@@ -288,7 +285,7 @@ UCS_TEST_P(test_pd, reg_multi_thread) {
 
     ucs_time_t start_time = ucs_get_time();
     while (ucs_get_time() - start_time < ucs_time_from_sec(0.5)) {
-        const size_t size = (rand() % 65536) + 1;
+        const size_t size = (ucs::rand() % 65536) + 1;
 
         void *buffer = malloc(size);
         ASSERT_TRUE(buffer != NULL);
