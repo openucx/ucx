@@ -23,7 +23,7 @@
 void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
 {
     static char  *buffer         = MAP_FAILED;
-    static size_t buffer_size    = 2048;
+    static size_t buffer_size    = 32768;
     static pthread_rwlock_t lock = PTHREAD_RWLOCK_INITIALIZER;
     ssize_t read_size, offset;
     unsigned long start, end;
