@@ -131,8 +131,6 @@ protected:
     void short_progress_loop(int worker_index = 0) const;
     void disconnect(const entity& entity);
     void wait(void *req, int worker_index = 0);
-    static void disable_errors();
-    static void restore_errors();
 
     template <typename T>
     void wait_for_flag(volatile T *flag, double timeout = 10.0) {
@@ -148,12 +146,6 @@ private:
     static bool check_test_param(const std::string& name,
                                  const std::string& test_case_name,
                                  const ucp_test_param& test_param);
-    static ucs_log_func_rc_t empty_log_handler(const char *file, unsigned line,
-                                               const char *function, ucs_log_level_t level,
-                                               const char *prefix, const char *message,
-                                               va_list ap);
-
-    static std::string m_last_err_msg;
 };
 
 
