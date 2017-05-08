@@ -325,8 +325,9 @@ uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
 
 static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
                                      size_t length, uint64_t exp_access,
-                                     struct ibv_mr **mr_p)
+                                     int silent, struct ibv_mr **mr_p)
 {
+    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
     struct ibv_mr *mr;
 
     if (exp_access) {
@@ -341,8 +342,8 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
 
         mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &in);
         if (mr == NULL) {
-            ucs_error("ibv_exp_reg_mr(address=%p, length=%Zu, exp_access=0x%lx) failed: %m",
-                      in.addr, in.length, in.exp_access);
+            ucs_log(level, "ibv_exp_reg_mr(address=%p, length=%Zu, exp_access=0x%lx) failed: %m",
+                    in.addr, in.length, in.exp_access);
             return UCS_ERR_IO_ERROR;
         }
 #else
@@ -352,7 +353,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
         mr = UCS_PROFILE_CALL(ibv_reg_mr, md->pd, address, length,
                               UCT_IB_MEM_ACCESS_FLAGS);
         if (mr == NULL) {
-            ucs_error("ibv_reg_mr(address=%p, length=%Zu, access=0x%x) failed: %m",
+            ucs_log(level, "ibv_reg_mr(address=%p, length=%Zu, access=0x%x) failed: %m",
                       address, length, UCT_IB_MEM_ACCESS_FLAGS);
             return UCS_ERR_IO_ERROR;
         }
@@ -677,7 +678,7 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
     length     = ucs_memtrack_adjust_alloc_size(*length_p);
     exp_access = uct_ib_md_access_flags(md, flags, length) |
                  IBV_EXP_ACCESS_ALLOCATE_MR;
-    status = uct_ib_md_reg_mr(md, NULL, length, exp_access, &memh->mr);
+    status = uct_ib_md_reg_mr(md, NULL, length, exp_access, 0, &memh->mr);
     if (status != UCS_OK) {
         goto err_free_memh;
     }
@@ -727,14 +728,14 @@ static ucs_status_t uct_ib_mem_free(uct_md_h md, uct_mem_h memh)
 
 static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
                                             size_t length, unsigned flags,
-                                            uct_ib_mem_t *memh)
+                                            int silent, uct_ib_mem_t *memh)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     ucs_status_t status;
     uint64_t exp_access;
 
     exp_access = uct_ib_md_access_flags(md, flags, length);
-    status = uct_ib_md_reg_mr(md, address, length, exp_access, &memh->mr);
+    status = uct_ib_md_reg_mr(md, address, length, exp_access, silent, &memh->mr);
     if (status != UCS_OK) {
         return status;
     }
@@ -764,7 +765,7 @@ static ucs_status_t uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_ib_mem_reg_internal(uct_md, address, length, flags, memh);
+    status = uct_ib_mem_reg_internal(uct_md, address, length, flags, 0, memh);
     if (status != UCS_OK) {
         uct_ib_memh_free(memh);
         return status;
@@ -916,7 +917,7 @@ static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache
 
     status = uct_ib_mem_reg_internal(&md->super, (void*)region->super.super.start,
                                      region->super.super.end - region->super.super.start,
-                                     *flags, &region->memh);
+                                     *flags, 1, &region->memh);
     if (status != UCS_OK) {
         return status;
     }
