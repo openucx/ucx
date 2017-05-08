@@ -10,10 +10,19 @@
 #include <stdint.h>
 
 
-typedef uint64_t                   ucs_stats_counter_t; /* Stats counter*/
-typedef struct ucs_stats_class     ucs_stats_class_t;   /* Stats class */
-typedef struct ucs_stats_node      ucs_stats_node_t;    /* Stats node */
+typedef uint64_t                          ucs_stats_counter_t;        /* Stats counter*/
+typedef struct ucs_stats_class            ucs_stats_class_t;          /* Stats class */
+typedef struct ucs_stats_node             ucs_stats_node_t;           /* Stats node */
+typedef struct ucs_stats_filter_node      ucs_stats_filter_node_t;    /* Stats filter node */
 
+typedef enum {
+    UCS_STATS_FULL,        /* Full statistics report */
+    UCS_STATS_FULL_AGG,    /* Full statistics report */
+    UCS_STATS_SUMMARY,     /* Summary statistics report */
+    UCS_STATS_LAST
+} ucs_stats_formats_t;
+
+extern const char *ucs_stats_formats_names[];
 ucs_stats_node_t * ucs_stats_get_root();
 
 #endif /* STATS_FD_H_ */

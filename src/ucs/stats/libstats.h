@@ -35,6 +35,9 @@ enum {
 #define UCS_STATS_NODE_ARG(_node) \
     (_node)->cls->name, (_node)->name
 
+#define UCS_STATS_INDENT(_is_sum, _indent)  _is_sum ? 0 : (_indent) * 2, ""
+#define UCS_STATS_IS_LAST_COUNTER(_counters_bits, _current) \
+    (_counters_bits > ((2ull<<_current) - 1))
 
 typedef struct ucs_stats_server    *ucs_stats_server_h; /* Handle to server */
 typedef struct ucs_stats_client    *ucs_stats_client_h; /* Handle to client */
@@ -54,16 +57,88 @@ struct ucs_stats_class {
     const char*          counter_names[];
 };
 
+/*
+ * ucs_stats_node is used to hold the counters, their classes and the
+ * relationship between them.
+ * ucs_stats_filter_node is a data structure used to filter the counters
+ * on the report.
+ * Therre are 3 types of filtering: Full, Aggregate, and summary
+ * Following is an example of the data structures in aggregate mode:
+ *
+ *      ucs_stats_node                        ucs_stats_filter_node
+ *      --------------                        ---------------------
+ *
+ *             +-----+                              +-----+
+ *             | A-1 |............................> | A-1 |      
+ *             +-----+                              +-----+     
+ *               A A A                                A 
+ *               | | |                                | 
+ *               | | +----------+                     |
+ *               | |            |                     |
+ *            +--+ +--+      +--+--+................. |
+ *            |       |      | B-1 |                : |
+ *            |       |      +-----+                : | 
+ *            |    +-----+....|..A................. : |
+ *            |    | B-2 |    |  |                : : |
+ *            |    +-----+ <--+  |                V V |
+ *       +-----+......|..........|.............> +-----+        
+ *       | B-3 |      ||         +---------------| B*  |
+ *       +-----+ <----+                          +-----+
+ *       cntr1                                   cntr1*
+ *       cntr2                                   cntr2*
+ *       cntr3                                   cntr3*   
+ *                               
+ * unfiltered statistics report:
+ * 
+ *  A-1:
+ *     B-1:
+ *        cntr1: 11111
+ *        cntr2: 22222
+ *        cntr3: 33333
+ *     B-2:
+ *        cntr1: 11111
+ *        cntr2: 22222
+ *        cntr3: 33333
+ *     B-3:
+ *        cntr1: 11111
+ *        cntr2: 22222
+ *        cntr3: 33333
+ *
+ * filtered statistics report:
+ * 
+ *  A-1:
+ *     B*:
+ *        cntr1: 33333
+ *        cntr2: 66666
+ *        cntr3: 99999
+ *
+ */
+
 /* In-memory statistics node */
+
 struct ucs_stats_node {
-    ucs_stats_class_t    *cls;
-    ucs_stats_node_t     *parent;
-    char                 name[UCS_STAT_NAME_MAX + 1];
-    ucs_list_link_t      list;
-    ucs_list_link_t      children[UCS_STATS_CHILDREN_LAST];
-    ucs_stats_counter_t  counters[];
+    ucs_stats_class_t        *cls;               /* Class info */
+    ucs_stats_node_t         *parent;            /* Hierachy structure */
+    char                     name[UCS_STAT_NAME_MAX + 1];
+                                                 /* instance name */
+    ucs_list_link_t          list;               /* nodes sharing same parent */
+    ucs_list_link_t          children[UCS_STATS_CHILDREN_LAST];
+                                                 /* children list head */
+    ucs_list_link_t          type_list;          /* nodes with same class/es
+                                                    hierarchy */
+    ucs_stats_filter_node_t  *filter_node;       /* ptr to type list head */
+    ucs_stats_counter_t      counters[];         /* instance counters */
 };
 
+struct ucs_stats_filter_node {
+    ucs_stats_filter_node_t   *parent;
+    ucs_list_link_t           list;               /* nodes sharing same parent.*/
+    ucs_list_link_t           children;
+    ucs_list_link_t           type_list_head;     /* nodes with same ancestors classes */
+    int                       type_list_len;      /* length of list */
+    int                       ref_count;          /* report node when non zero */
+    uint64_t                  counters_bitmask;   /* which counters to print */
+};
 
 /**
  * Initialize statistics node.
