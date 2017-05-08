@@ -18,5 +18,16 @@
  */
 size_t ucm_get_shm_seg_size(const void *shmaddr);
 
+/**
+ * @brief Get the size of a shared memory segment, attached with shmat()
+ *        from opened @a fd
+ *
+ * @param [in]  shmaddr  Segment pointer.
+ * @param [in]  fd       Open file descriptor. Typically, this is a descriptor
+ *                       of "/proc/self/maps"
+ *
+ * @return Segment size, or 0 if not found.
+ */
+size_t ucm_get_shm_seg_size_fd(const void *shmaddr, int fd);
 
 #endif

@@ -61,6 +61,7 @@ gtest_SOURCES = \
 	common/test.cc \
 	\
 	ucm/malloc_hook.cc \
+	ucm/shm_seg.cc \
 	\
 	uct/test_amo.cc \
 	uct/test_amo_add.cc \

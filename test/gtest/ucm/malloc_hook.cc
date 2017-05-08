@@ -94,12 +94,16 @@ private:
     }
 
     bool is_ptr_in_range(void *ptr, size_t size, const std::vector<range> &ranges) {
+        bool res = false;
+        pthread_mutex_lock(&m_stats_lock);
         for (std::vector<range>::const_iterator iter = ranges.begin(); iter != ranges.end(); ++iter) {
             if ((ptr >= iter->first) && ((char*)ptr < iter->second)) {
-                return true;
+                res = true;
+                break;
             }
         }
-        return false;
+        pthread_mutex_unlock(&m_stats_lock);
+        return res;
     }
 
     void test();
@@ -132,11 +136,13 @@ void test_thread::mem_event(ucm_event_type_t event_type, ucm_event_t *event)
         m_map_ranges.push_back(range(event->vm_mapped.address,
                                      (char*)event->vm_mapped.address + event->vm_mapped.size));
         m_map_size += event->vm_mapped.size;
+        EXPECT_NE(0ul, event->vm_mapped.size);
         break;
     case UCM_EVENT_VM_UNMAPPED:
         m_unmap_ranges.push_back(range(event->vm_unmapped.address,
                                        (char*)event->vm_unmapped.address + event->vm_unmapped.size));
         m_unmap_size += event->vm_unmapped.size;
+        EXPECT_NE(0ul, event->vm_unmapped.size);
         break;
     default:
         break;
@@ -162,8 +168,10 @@ void test_thread::test() {
 
     ptr_r = malloc(small_alloc_size);
 
+    pthread_mutex_lock(&m_stats_lock);
     m_map_ranges.reserve  ((m_test->small_alloc_count * 8 + 10) * m_num_threads);
     m_unmap_ranges.reserve((m_test->small_alloc_count * 8 + 10) * m_num_threads);
+    pthread_mutex_unlock(&m_stats_lock);
 
     total_ptrs_in_range = 0;
 
@@ -241,8 +249,10 @@ void test_thread::test() {
     /* Release old pointers (should not crash) */
     old_ptrs.clear();
 
+    pthread_mutex_lock(&m_stats_lock);
     m_map_ranges.clear();
     m_unmap_ranges.clear();
+    pthread_mutex_unlock(&m_stats_lock);
 
     /* Don't release pointers before other threads exit, so they will map new memory
      * and not reuse memory from other threads.
