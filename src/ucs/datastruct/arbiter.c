@@ -158,9 +158,9 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
             elem->list.next = NULL;
 
             ucs_assert(elem->group == group);
-            ucs_trace_data("dispatching arbiter element %p", elem);
+            ucs_trace_poll("dispatching arbiter element %p", elem);
             result = cb(arbiter, elem, cb_arg);
-            ucs_trace_data("dispatch result %d", result);
+            ucs_trace_poll("dispatch result %d", result);
             ++group_dispatch_count;
 
             if (result == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
@@ -226,7 +226,7 @@ out:
     ucs_list_for_each_safe(elem, next_elem, &resched_groups, list) {
         ucs_list_del(&elem->list);
         elem->list.next = NULL;
-        ucs_trace_data("reschedule group %p", elem->group);
+        ucs_trace_poll("reschedule group %p", elem->group);
         ucs_arbiter_group_schedule_nonempty(arbiter, elem->group);
     }
 }
