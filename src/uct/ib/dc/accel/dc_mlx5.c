@@ -524,8 +524,11 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     dci = uct_dc_iface_dci_find(&iface->super, qp_num);
     txqp = &iface->super.tx.dcis[dci].txqp;
     txwq = &iface->dci_wqs[dci];
-
     hw_ci = ntohs(cqe->wqe_counter);
+
+    ucs_trace_poll("dc_mlx5 iface %p tx_cqe: dci[%d] qpn 0x%x txqp %p hw_ci %d",
+                   iface, dci, qp_num, txqp, hw_ci);
+
     uct_rc_txqp_available_set(txqp, uct_ib_mlx5_txwq_update_bb(txwq, hw_ci));
     uct_dc_iface_dci_put(&iface->super, dci);
     uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);

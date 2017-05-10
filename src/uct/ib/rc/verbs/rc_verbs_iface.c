@@ -105,6 +105,8 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         count = uct_rc_verbs_txcq_get_comp_count(&wc[i]);
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
+        ucs_trace_poll("rc_verbs iface %p tx_wc: ep %p qpn 0x%x count %d",
+                       iface, ep, wc[i].qp_num, count);
 
         if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
             iface->super.super.ops->handle_failure(&iface->super.super, &wc[i]);

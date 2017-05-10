@@ -10,6 +10,7 @@
 #include "rc_iface.h"
 
 #include <uct/api/uct.h>
+#include <ucs/debug/debug.h>
 
 
 enum {
@@ -294,6 +295,8 @@ uct_rc_txqp_add_send_op(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op)
 static UCS_F_ALWAYS_INLINE void
 uct_rc_txqp_add_send_op_sn(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op, uint16_t sn)
 {
+    ucs_trace_poll("txqp %p add send op %p sn %d handler %s", txqp, op, sn,
+                   ucs_debug_get_symbol_name((void*)op->handler));
     op->sn = sn;
     uct_rc_txqp_add_send_op(txqp, op);
 }
@@ -316,6 +319,8 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
 static UCS_F_ALWAYS_INLINE void
 uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp)
 {
+    ucs_trace_poll("complete op %p sn %d handler %s", op, op->sn,
+                   ucs_debug_get_symbol_name((void*)op->handler));
     ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_INUSE);
     op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
     op->handler(op, resp);
@@ -326,6 +331,7 @@ uct_rc_txqp_completion_desc(uct_rc_txqp_t *txqp, uint16_t sn)
 {
     uct_rc_iface_send_op_t *op;
 
+    ucs_trace_poll("txqp %p complete ops up to sn %d", txqp, sn);
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         uct_rc_txqp_completion_op(op, ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1);
@@ -337,6 +343,7 @@ uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t 
 {
     uct_rc_iface_send_op_t *op;
 
+    ucs_trace_poll("txqp %p complete ops up to sn %d", txqp, sn);
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         uct_rc_txqp_completion_op(op, resp);

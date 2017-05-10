@@ -278,6 +278,8 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
     uct_iface_ops_t    *ops;
     uct_base_iface_t   *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
 
+    ucs_debug("set ep %p to failed state", tl_ep);
+
     /* TBD: consider allocating one instance per interface
      * rather than for each endpoint */
     f_iface = ucs_malloc(sizeof(*f_iface), "failed iface");
