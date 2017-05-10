@@ -237,6 +237,11 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq
 void uct_ib_mlx5_txwq_cleanup(uct_worker_h worker, uct_ib_mlx5_txwq_t* txwq);
 
 /**
+ * Reset txwq contents and posting indices.
+ */
+void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq);
+
+/**
  * Initialize rxwq structure.
  */
 ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);

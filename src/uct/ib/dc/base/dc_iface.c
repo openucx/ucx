@@ -133,21 +133,6 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
     return UCS_OK;
 }
 
-/* restore dc qp from error to rts state */
-ucs_status_t uct_dc_iface_dci_reconnect(uct_dc_iface_t *iface,
-                                        uct_rc_txqp_t *txqp)
-{
-    uct_rc_iface_ops_t *rc_ops = ucs_derived_of(iface->super.super.ops,
-                                                uct_rc_iface_ops_t);
-    ucs_status_t       status  = rc_ops->reset_qp(&iface->super, txqp);
-
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    return uct_dc_iface_dci_connect(iface, txqp);
-}
-
 static void uct_dc_iface_dcis_destroy(uct_dc_iface_t *iface, int max)
 {
     int i;
@@ -198,14 +183,14 @@ void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config
                                 ucs_min(iface->super.config.tx_qp_len, config->quota);
 }
 
-UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
+UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     unsigned rx_priv_len, uct_dc_iface_config_t *config)
 {
     ucs_status_t status;
     ucs_trace_func("");
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &ops->super, md, worker, params,
                               &config->super, rx_priv_len,
                               config->super.super.rx.queue_len, 0,
                               sizeof(uct_rc_hdr_t),
@@ -487,19 +472,36 @@ void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num)
 {
     uct_dc_iface_t  *iface  = ucs_derived_of(ib_iface, uct_dc_iface_t);
     uint8_t         dci     = uct_dc_iface_dci_find(iface, qp_num);
+    uct_rc_txqp_t   *txqp   = &iface->tx.dcis[dci].txqp;
     uct_dc_ep_t     *ep     = iface->tx.dcis[dci].ep;
+    uct_dc_iface_ops_t *dc_ops = ucs_derived_of(iface->super.super.ops,
+                                                uct_dc_iface_ops_t);
+    ucs_status_t status;
 
     if (!ep) {
         return;
     }
 
-    uct_rc_ep_failed_purge_outstanding(&ep->super.super, ib_iface,
-                                       &iface->tx.dcis[dci].txqp);
+    uct_rc_txqp_purge_outstanding(txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
 
-    if (UCS_OK != uct_dc_iface_dci_reconnect(iface, &iface->tx.dcis[dci].txqp)) {
-        ucs_fatal("Unsuccessful reconnect of DC QP #%u", qp_num);
+    uct_rc_txqp_available_set(txqp, iface->super.config.tx_qp_len);
+    iface->super.super.ops->set_ep_failed(ib_iface, &ep->super.super);
+
+    /* since we removed all outstanding ops on the dci, it should be released */
+    if (ep->dci != UCT_DC_EP_NO_DCI) {
+        uct_dc_iface_dci_put(iface, dci);
+        ucs_assert_always(ep->dci == UCT_DC_EP_NO_DCI);
     }
 
-    uct_rc_txqp_available_set(&iface->tx.dcis[dci].txqp,
-                              iface->super.config.tx_qp_len);
+    status = dc_ops->reset_dci(iface, dci);
+    if (status != UCS_OK) {
+        ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
+                   iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+    }
+
+    status = uct_dc_iface_dci_connect(iface, txqp);
+    if (status != UCS_OK) {
+        ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
+                  iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+    }
 }
