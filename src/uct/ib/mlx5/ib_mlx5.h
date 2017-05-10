@@ -95,6 +95,9 @@ typedef struct uct_ib_mlx5_cq {
     unsigned           cq_ci;
     unsigned           cq_length;
     unsigned           cqe_size_log;
+#if ENABLE_DEBUG_DATA
+    unsigned           cq_num;
+#endif
 } uct_ib_mlx5_cq_t;
 
 

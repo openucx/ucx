@@ -147,6 +147,9 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     mlx5_cq->cq_buf    = ibv_cq_info.buf;
     mlx5_cq->cq_ci     = 0;
     mlx5_cq->cq_length = ibv_cq_info.cqe_cnt;
+#if ENABLE_DEBUG_DATA
+    mlx5_cq->cq_num    = ibv_cq_info.cqn;
+#endif
     cqe_size           = ibv_cq_info.cqe_size;
 #else
     struct mlx5_cq *mcq = ucs_container_of(cq, struct mlx5_cq, ibv_cq);
@@ -160,6 +163,9 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     mlx5_cq->cq_buf      = mcq->active_buf->buf;
     mlx5_cq->cq_ci       = 0;
     mlx5_cq->cq_length   = mcq->ibv_cq.cqe + 1;
+#if ENABLE_DEBUG_DATA
+    mlx5_cq->cq_num      = mcq->cqn;
+#endif
     cqe_size             = mcq->cqe_sz;
 #endif
 
