@@ -91,22 +91,6 @@ ucs_sys_futex(volatile void *addr1, int op, int val1, struct timespec *timeout,
     return syscall(SYS_futex, addr1, op, val1, timeout, uaddr2, val3);
 }
 
-static int ucs_stats_node_add(ucs_stats_node_t *node, ucs_stats_node_t *parent)
-{
-    ucs_assert(node != &ucs_stats_context.root_node);
-    if (parent == NULL) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    /* Append node to existing tree */
-    pthread_mutex_lock(&ucs_stats_context.lock);
-    ucs_list_add_tail(&parent->children[UCS_STATS_ACTIVE_CHILDREN], &node->list);
-    node->parent = parent;
-
-    pthread_mutex_unlock(&ucs_stats_context.lock);
-    return UCS_OK;
-}
-
 static void ucs_stats_clean_node(ucs_stats_node_t *node) {
     ucs_stats_filter_node_t * temp_filter_node;
     ucs_stats_filter_node_t * filter_node;
@@ -241,7 +225,7 @@ static ucs_stats_filter_node_t * ucs_stats_find_class(ucs_stats_filter_node_t *f
 }
 
 static void ucs_stats_add_to_filter(ucs_stats_node_t *node,
-                                    ucs_stats_filter_node_t* filter_tree)
+                                    ucs_stats_filter_node_t * new_filter_node)
 {
     ucs_stats_filter_node_t *temp_filter_node;
     ucs_stats_filter_node_t *filter_node = NULL;
@@ -249,7 +233,6 @@ static void ucs_stats_add_to_filter(ucs_stats_node_t *node,
     int found = 0;
     int filter_index = 0;
     int i;
-    ucs_status_t status;
 
     if (ucs_global_opts.stats_format == UCS_STATS_SUMMARY) {
         filter_parent = &ucs_stats_context.root_filter_node;
@@ -262,10 +245,7 @@ static void ucs_stats_add_to_filter(ucs_stats_node_t *node,
     }
 
     if (!filter_node) {
-        status = ucs_stats_filter_node_new(node->cls, &filter_node);
-        if (status != UCS_OK) {
-            return;
-        }
+        filter_node = new_filter_node;
 
         filter_node->type_list_len = 0;
         filter_node->ref_count = 0;
@@ -298,10 +278,31 @@ static void ucs_stats_add_to_filter(ucs_stats_node_t *node,
     }
 }
 
+static int ucs_stats_node_add(ucs_stats_node_t *node,
+                              ucs_stats_node_t *parent,
+                              ucs_stats_filter_node_t *filter_node)
+{
+    ucs_assert(node != &ucs_stats_context.root_node);
+    if (parent == NULL) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    /* Append node to existing tree */
+    pthread_mutex_lock(&ucs_stats_context.lock);
+    ucs_list_add_tail(&parent->children[UCS_STATS_ACTIVE_CHILDREN], &node->list);
+    node->parent = parent;
+    ucs_stats_add_to_filter(node, filter_node);
+
+    pthread_mutex_unlock(&ucs_stats_context.lock);
+
+    return UCS_OK;
+}
+
 ucs_status_t ucs_stats_node_alloc(ucs_stats_node_t** p_node, ucs_stats_class_t *cls,
                                  ucs_stats_node_t *parent, const char *name, ...)
 {
     ucs_stats_node_t *node;
+    ucs_stats_filter_node_t *filter_node;
     ucs_status_t status;
     va_list ap;
 
@@ -324,15 +325,25 @@ ucs_status_t ucs_stats_node_alloc(ucs_stats_node_t** p_node, ucs_stats_class_t *
         return status;
     }
 
-    ucs_trace("allocated stats node '"UCS_STATS_NODE_FMT"'", UCS_STATS_NODE_ARG(node));
-
-    status = ucs_stats_node_add(node, parent);
+    status = ucs_stats_filter_node_new(node->cls, &filter_node);
     if (status != UCS_OK) {
         ucs_free(node);
         return status;
     }
 
-    ucs_stats_add_to_filter(node, &ucs_stats_context.root_filter_node);
+    ucs_trace("allocated stats node '"UCS_STATS_NODE_FMT"'", UCS_STATS_NODE_ARG(node));
+
+    status = ucs_stats_node_add(node, parent, filter_node);
+    if (status != UCS_OK) {
+        ucs_free(node);
+        ucs_free(filter_node);
+        return status;
+    }
+
+    if (node->filter_node != filter_node) {
+        ucs_free(filter_node);
+    }
+
     *p_node = node;
     return UCS_OK;
 }
