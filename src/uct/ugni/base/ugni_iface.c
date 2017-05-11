@@ -239,6 +239,14 @@ static ucs_mpool_ops_t uct_ugni_flush_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
+void uct_ugni_cleanup_base_iface(uct_ugni_iface_t *iface)
+{
+    ucs_arbiter_cleanup(&iface->arbiter);
+    ucs_mpool_cleanup(&iface->flush_pool, 1);
+    GNI_CqDestroy(iface->local_cq);
+    uct_ugni_destroy_cdm(&iface->cdm);
+}
+
 UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
                     uct_iface_ops_t *uct_ugni_iface_ops,
@@ -270,7 +278,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_CqCreate failed, Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_NO_DEVICE;
+        goto clean_cdm;
     }
     self->outstanding = 0;
     sglib_hashed_uct_ugni_ep_t_init(self->eps);
@@ -286,7 +294,13 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
                             "UGNI-DESC-ONLY");
     if (UCS_OK != status) {
         ucs_error("Could not init iface");
+        goto clean_cq;
     }
+    return status;
+clean_cq:
+    GNI_CqDestroy(self->local_cq);
+clean_cdm:
+    uct_ugni_destroy_cdm(&self->cdm);
     return status;
 }
 
@@ -296,9 +310,7 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t, uct_md_h, uct_worker_h,
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
 {
-    GNI_CqDestroy(self->local_cq);
-    uct_ugni_destroy_cdm(&self->cdm);
-    ucs_arbiter_cleanup(&self->arbiter);
+    uct_ugni_cleanup_base_iface(self);
 }
 
 UCS_CLASS_DEFINE(uct_ugni_iface_t, uct_base_iface_t);

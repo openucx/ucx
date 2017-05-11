@@ -471,6 +471,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_udt_iface_t, uct_md_h md, uct_worker_h worke
  clean_pipe:
     ucs_async_pipe_destroy(&self->event_pipe);
  exit:
+    uct_ugni_cleanup_base_iface(&self->super);
     ucs_error("Failed to activate interface");
     return status;
 }

@@ -347,6 +347,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
  clean_mbox:
     ucs_mpool_cleanup(&self->free_mbox, 1);
  exit:
+    uct_ugni_cleanup_base_iface(&self->super);
     ucs_error("Failed to activate interface");
     pthread_mutex_unlock(&uct_ugni_global_lock);
     return status;

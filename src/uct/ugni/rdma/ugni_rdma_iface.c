@@ -280,6 +280,7 @@ clean_desc_get:
 clean_desc:
     ucs_mpool_cleanup(&self->free_desc, 1);
 exit:
+    uct_ugni_cleanup_base_iface(&self->super);
     ucs_error("Failed to activate interface");
     pthread_mutex_unlock(&uct_ugni_global_lock);
     return status;

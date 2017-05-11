@@ -29,6 +29,7 @@ void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h memh);
 ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
                                          uct_tl_resource_desc_t **resource_p,
                                          unsigned *num_resources_p);
+void uct_ugni_cleanup_base_iface(uct_ugni_iface_t *iface);
 static inline uct_ugni_device_t *uct_ugni_iface_device(uct_ugni_iface_t *iface)
 {
     return iface->cdm.dev;
