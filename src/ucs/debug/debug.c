@@ -122,6 +122,38 @@ khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
 
 
+static void *ucs_debug_alloc_mem(size_t length)
+{
+    void *ptr;
+
+    ptr = mmap(NULL, ucs_align_up_pow2(length, ucs_get_page_size()),
+               PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    if (ptr == MAP_FAILED) {
+        ucs_log_fatal_error("failed to allocate %zu bytes with mmap: %m", length);
+        return NULL;
+    }
+
+    return ptr;
+}
+
+static void ucs_debug_free_mem(void *ptr, size_t length)
+{
+    munmap(ptr, ucs_align_up_pow2(length, ucs_get_page_size()));
+}
+
+static char *ucs_debug_strdup(const char *str)
+{
+    size_t length;
+    char *newstr;
+
+    length = strlen(str) + 1;
+    newstr = ucs_debug_alloc_mem(length);
+    if (newstr != NULL) {
+        strncpy(newstr, str, length);
+    }
+    return newstr;
+}
+
 static int dl_match_address(struct dl_phdr_info *info, size_t size, void *data)
 {
     struct dl_address_search *dl = data;
@@ -295,7 +327,7 @@ static backtrace_h ucs_debug_backtrace_create(void)
     int i, num_addresses;
     backtrace_h bckt;
 
-    bckt = malloc(sizeof *bckt);
+    bckt = ucs_debug_alloc_mem(sizeof *bckt);
     if (!bckt) {
         return NULL;
     }
@@ -329,7 +361,7 @@ static void ucs_debug_backtrace_destroy(backtrace_h bckt)
         free(bckt->lines[i].function);
         free(bckt->lines[i].file);
     }
-    free(bckt);
+    ucs_debug_free_mem(bckt, sizeof(*bckt));
 }
 
 static ucs_status_t
@@ -598,38 +630,6 @@ const char *ucs_debug_get_symbol_name(void *address)
 out:
     pthread_mutex_unlock(&lock);
     return sym ? sym : UCS_DEBUG_UNKNOWN_SYM;
-}
-
-static void *ucs_debug_alloc_mem(size_t length)
-{
-    void *ptr;
-
-    ptr = mmap(NULL, ucs_align_up_pow2(length, ucs_get_page_size()),
-               PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
-    if (ptr == MAP_FAILED) {
-        ucs_log_fatal_error("failed to allocate %zu bytes with mmap: %m", length);
-        return NULL;
-    }
-
-    return ptr;
-}
-
-static void ucs_debug_free_mem(void *ptr, size_t length)
-{
-    munmap(ptr, ucs_align_up_pow2(length, ucs_get_page_size()));
-}
-
-static char *ucs_debug_strdup(const char *str)
-{
-    size_t length;
-    char *newstr;
-
-    length = strlen(str) + 1;
-    newstr = ucs_debug_alloc_mem(length);
-    if (newstr != NULL) {
-        strncpy(newstr, str, length);
-    }
-    return newstr;
 }
 
 static void ucs_debugger_attach()
