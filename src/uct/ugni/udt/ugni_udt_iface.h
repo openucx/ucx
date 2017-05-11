@@ -77,6 +77,8 @@ if (ucs_unlikely(GNI_RC_SUCCESS != rc)) {                          \
     }                                                              \
 }
 
+#define uct_ugni_udt_iface_nic_handle(_iface) uct_ugni_iface_nic_handle(&(_iface)->super)
+
 static inline void uct_ugni_udt_reset_desc(uct_ugni_udt_desc_t *desc, uct_ugni_udt_iface_t *iface)
 {
     uct_ugni_udt_header_t *sheader = uct_ugni_udt_get_sheader(desc, iface);
@@ -101,8 +103,4 @@ static inline int uct_ugni_udt_ep_any_post(uct_ugni_udt_iface_t *iface)
     return UCS_OK;
 }
 
-static inline gni_nic_handle_t uct_ugni_udt_iface_nic_handle(uct_ugni_udt_iface_t *iface)
-{
-    return uct_ugni_iface_nic_handle(&iface->super);
-}
 #endif

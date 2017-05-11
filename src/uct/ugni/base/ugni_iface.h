@@ -30,18 +30,7 @@ ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
                                          uct_tl_resource_desc_t **resource_p,
                                          unsigned *num_resources_p);
 void uct_ugni_cleanup_base_iface(uct_ugni_iface_t *iface);
-static inline uct_ugni_device_t *uct_ugni_iface_device(uct_ugni_iface_t *iface)
-{
-    return iface->cdm.dev;
-}
-static inline gni_nic_handle_t uct_ugni_iface_nic_handle(uct_ugni_iface_t *iface)
-{
-    return iface->cdm.nic_handle;
-}
-static inline int uct_ugni_check_device_type(uct_ugni_iface_t *iface, gni_nic_device_t type)
-{
-    uct_ugni_device_t *dev = uct_ugni_iface_device(iface);
-    return dev->type == type;
-}
-
+#define uct_ugni_iface_device(_iface) ((_iface)->cdm.dev)
+#define uct_ugni_iface_nic_handle(_iface) ((_iface)->cdm.nic_handle)
+#define uct_ugni_check_device_type(_iface, _type) ((_iface)->cdm.dev->type == _type)
 #endif
