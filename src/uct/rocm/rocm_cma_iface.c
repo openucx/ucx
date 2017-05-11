@@ -1,23 +1,6 @@
 /*
- * Copyright 2017 Advanced Micro Devices, Inc.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
- * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
- * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
- * OTHER DEALINGS IN THE SOFTWARE.
+ * Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
+ * See file LICENSE for terms.
  */
 
 #include "rocm_cma_iface.h"
@@ -32,8 +15,8 @@
 #include <uct/sm/base/sm_iface.h>
 
 /**
- * Specify special environment variables to tune ROCm interface.
- * So far none but keep for future.
+ *  Specify special environment variables to tune ROCm interface.
+ *  So far none but keep for future.
  */
 static ucs_config_field_t uct_rocm_cma_iface_config_table[] = {
 
@@ -42,8 +25,8 @@ static ucs_config_field_t uct_rocm_cma_iface_config_table[] = {
         on uct_iface_config_t */
 
     {"", "", NULL,
-     ucs_offsetof(uct_rocm_cma_iface_config_t, super),
-     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+    ucs_offsetof(uct_rocm_cma_iface_config_t, super),
+    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     {NULL}
 };
@@ -52,7 +35,7 @@ static ucs_config_field_t uct_rocm_cma_iface_config_table[] = {
 UCT_MD_REGISTER_TL(&uct_rocm_cma_md_component, &uct_rocm_cma_tl);
 
 static ucs_status_t uct_rocm_cma_iface_get_address(uct_iface_t *tl_iface,
-                                                   uct_iface_addr_t *addr)
+                                                    uct_iface_addr_t *addr)
 {
     /* Use process id as interface address */
     *(pid_t*)addr = getpid();
@@ -75,9 +58,11 @@ static ucs_status_t uct_rocm_cma_iface_query(uct_iface_h tl_iface,
 
     iface_attr->cap.get.min_zcopy       = 0;
     iface_attr->cap.get.max_zcopy       = SIZE_MAX;
-    iface_attr->cap.get.opt_zcopy_align = iface_attr->cap.put.opt_zcopy_align;
+    iface_attr->cap.get.opt_zcopy_align = sizeof(uint32_t);
     iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
-    iface_attr->cap.get.max_iov         = uct_sm_get_max_iov();
+    /* Note: There is bug in ROCm 1.5 stack preventing using multiple ranges.
+            Temporally force it to 1 till ROCm 1.6 will be published */
+    iface_attr->cap.get.max_iov         = 1;//uct_sm_get_max_iov();
 
     iface_attr->cap.am.max_iov          = 1;
     iface_attr->cap.am.opt_zcopy_align  = 1;
@@ -113,29 +98,32 @@ static ucs_status_t uct_rocm_cma_iface_query(uct_iface_h tl_iface,
 static UCS_CLASS_DECLARE_DELETE_FUNC(uct_rocm_cma_iface_t, uct_iface_t);
 
 static uct_iface_ops_t uct_rocm_cma_iface_ops = {
-    .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_cma_iface_t),
-    .iface_query         = uct_rocm_cma_iface_query,
-    .iface_get_address   = uct_rocm_cma_iface_get_address,
+    .ep_put_zcopy           = uct_rocm_cma_ep_put_zcopy,
+    .ep_get_zcopy           = uct_rocm_cma_ep_get_zcopy,
+    .ep_pending_add         = ucs_empty_function_return_busy,
+    .ep_pending_purge       = ucs_empty_function,
+    .ep_flush               = uct_base_ep_flush,
+    .ep_fence               = uct_sm_ep_fence,
+    .ep_create_connected    = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_cma_ep_t),
+    .ep_destroy             = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_cma_ep_t),
+    .iface_flush            = uct_base_iface_flush,
+    .iface_fence            = uct_sm_iface_fence,
+    .iface_close            = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_cma_iface_t),
+    .iface_query            = uct_rocm_cma_iface_query,
+    .iface_get_address      = uct_rocm_cma_iface_get_address,
     .iface_get_device_address = uct_sm_iface_get_device_address,
-    .iface_is_reachable  = uct_sm_iface_is_reachable,
-    .iface_fence         = uct_sm_iface_fence,
-    .ep_put_zcopy        = uct_rocm_cma_ep_put_zcopy,
-    .ep_get_zcopy        = uct_rocm_cma_ep_get_zcopy,
-    .ep_fence            = uct_sm_ep_fence,
-    .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_cma_ep_t),
-    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_cma_ep_t),
-    .ep_pending_purge    = (void*)ucs_empty_function_return_success,
+    .iface_is_reachable     = uct_sm_iface_is_reachable
 };
 
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_cma_iface_t, uct_md_h md, uct_worker_h worker,
-                           const uct_iface_params_t *params,
-                           const uct_iface_config_t *tl_config)
+                            const uct_iface_params_t *params,
+                            const uct_iface_config_t *tl_config)
 {
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_cma_iface_ops, md, worker,
-                              tl_config UCS_STATS_ARG(params->stats_root)
-                              UCS_STATS_ARG(UCT_ROCM_CMA_TL_NAME));
+                            params, tl_config UCS_STATS_ARG(params->stats_root)
+                            UCS_STATS_ARG(UCT_ROCM_CMA_TL_NAME));
 
     self->rocm_md = (uct_rocm_cma_md_t *)md;
 
@@ -151,8 +139,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rocm_cma_iface_t)
 UCS_CLASS_DEFINE(uct_rocm_cma_iface_t, uct_base_iface_t);
 
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_rocm_cma_iface_t, uct_iface_t, uct_md_h,
-                                 uct_worker_h, const uct_iface_params_t*,
-                                 const uct_iface_config_t *);
+                                uct_worker_h, const uct_iface_params_t*,
+                                const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_cma_iface_t, uct_iface_t);
 
 
@@ -165,8 +153,6 @@ static ucs_status_t uct_rocm_cma_query_tl_resources(uct_md_h md,
      *        numerous agents (multi-GPUs cases) especially for
      *        p2p transfer cases.
      */
-    uct_rocm_cma_md_t *rocm_md = (uct_rocm_cma_md_t *)md;
-
     uct_tl_resource_desc_t *resource;
 
     resource = ucs_calloc(1, sizeof(uct_tl_resource_desc_t), "ROCm resource desc");
@@ -176,24 +162,14 @@ static ucs_status_t uct_rocm_cma_query_tl_resources(uct_md_h md,
     }
 
     ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name), "%s",
-                      UCT_ROCM_CMA_TL_NAME);
+                        UCT_ROCM_CMA_TL_NAME);
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s",
-                      md->component->name);
+                        md->component->name);
 
-    ucs_trace("uct_rocm_cma_query_tl_resources: TL %s, DEV %s",
-                        resource->tl_name, resource->dev_name);
+    ucs_trace_func("TL %s, DEV %s", resource->tl_name, resource->dev_name);
 
-    /* Note: acc_dev is controlled by environment variable */
-    if (rocm_md->acc_dev) {
-        resource->dev_type = UCT_DEVICE_TYPE_ACC;  /* Specify device type as
-                                                    "accelerator" device.*/
-        ucs_trace("uct_rocm_cma_query_tl_resources(): Set dev_type as UCT_DEVICE_TYPE_ACC");
-    }
-    else {
-        resource->dev_type = UCT_DEVICE_TYPE_SHM;  /* Specify device type as
-                                                      "shared memory" device.*/
-        ucs_trace("uct_rocm_cma_query_tl_resources(): Set dev_type as UCT_DEVICE_TYPE_SHM");
-    }
+    resource->dev_type = UCT_DEVICE_TYPE_ACC;  /* Specify device type as
+                                                "accelerator" device.*/
 
     *num_resources_p = 1;
     *resource_p      = resource;

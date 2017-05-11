@@ -1,23 +1,6 @@
 /*
- * Copyright 2017 Advanced Micro Devices, Inc.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
- * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
- * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
- * OTHER DEALINGS IN THE SOFTWARE.
+ * Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
+ * See file LICENSE for terms.
  */
 
 #include "rocm_common.h"
@@ -32,7 +15,7 @@ static pthread_mutex_t rocm_init_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 /** Max number of HSA agents supported */
-#define MAX_HSA_AGENTS         64
+#define MAX_HSA_AGENTS      64
 
 
 /** Structure to keep all collected configuration info */
@@ -49,14 +32,14 @@ static struct {
         } gpu_info[MAX_HSA_AGENTS];
         hsa_agent_t gpu_agent[MAX_HSA_AGENTS];/**< HSA GPU Agent handles */
         struct {
-            hsa_agent_t           agent;    /**< HSA Agent handle for CPU */
-            hsa_amd_memory_pool_t pool;     /**< Global pool associated with agent.
+            hsa_agent_t             agent;  /**< HSA Agent handle for CPU */
+            hsa_amd_memory_pool_t   pool;   /**< Global pool associated with agent.
                                              @note Current we assume that there
                                              is only one global pool per agent
                                              base on the current behaviour */
         } cpu;
     } agents;
-    int num_of_gpu;
+    int     num_of_gpu;
 } uct_rocm_cfg;
 
 /** Flag to specify if ROCm UCX support was initialized or not */
@@ -64,10 +47,10 @@ static volatile bool rocm_ucx_initialized;
 
 /** Internal structure to store information about memory */
 typedef struct {
-    void                    *ptr;
-    hsa_amd_pointer_info_t   info;
-    uint32_t                 num_agents_accessible;
-    hsa_agent_t              accessible[MAX_HSA_AGENTS];
+    void                   *ptr;
+    hsa_amd_pointer_info_t  info;
+    uint32_t                num_agents_accessible;
+    hsa_agent_t             accessible[MAX_HSA_AGENTS];
 } uct_rocm_ptr_t;
 
 
@@ -75,14 +58,15 @@ typedef struct {
  *  Try to find global pool assuming one global pool per agent.
 */
 static hsa_status_t uct_rocm_hsa_amd_memory_pool_callback(
-                                hsa_amd_memory_pool_t memory_pool, void* data)
+                                                        hsa_amd_memory_pool_t memory_pool,
+                                                        void* data)
 {
     hsa_status_t status;
     hsa_amd_segment_t amd_segment;
 
     status = hsa_amd_memory_pool_get_info(memory_pool,
-                                         HSA_AMD_MEMORY_POOL_INFO_SEGMENT,
-                                         &amd_segment);
+                                            HSA_AMD_MEMORY_POOL_INFO_SEGMENT,
+                                            &amd_segment);
 
     if (status != HSA_STATUS_SUCCESS) {
         ucs_error("Failure to get pool info: 0x%x", status);
@@ -211,35 +195,49 @@ hsa_status_t uct_rocm_init()
     rocm_ucx_initialized = true;
 
 end:
-
     pthread_mutex_unlock(&rocm_init_mutex);
     return status;
 }
 
-bool uct_rocm_is_ptr_gpu_accessible(void *ptr, void **gpu_ptr)
+int uct_rocm_is_ptr_gpu_accessible(void *ptr, void **gpu_ptr)
 {
     hsa_amd_pointer_info_t info;
     info.size = sizeof(hsa_amd_pointer_info_t);
 
     hsa_status_t status = hsa_amd_pointer_info(ptr, &info,
-                                          NULL, NULL, NULL);
+                                                NULL, NULL, NULL);
 
     if (status == HSA_STATUS_SUCCESS) {
         if (info.type != HSA_EXT_POINTER_TYPE_UNKNOWN) {
-
             if (gpu_ptr) {
                 *gpu_ptr = info.agentBaseAddress;
+
+                /** Note: hsa_amd_pointer_info() will return information
+                    about base address of allocated pool or registered memory.
+                    Accordingly if passed address is "inside" of range 
+                    we need to correspondingly adjust returned information */
+                if (info.type == HSA_EXT_POINTER_TYPE_LOCKED) {
+                    /* This is memory allocated outside of ROCm stack */
+                    *gpu_ptr += ptr - info.hostBaseAddress;
+                }
+                else if (info.type == HSA_EXT_POINTER_TYPE_HSA) {
+                    /* This is the GPU pointer */
+                    *gpu_ptr += ptr - info.agentBaseAddress;
+                }
+                else {
+                    /* Assume that "ptr" is GPU pointer */
+                    *gpu_ptr += ptr - info.agentBaseAddress;
+                }
             }
 
-            ucs_trace("Address %p is GPU accessible (Agent addr %p)",
-                       ptr, info.agentBaseAddress);
-
-            return true;
+            ucs_trace("%p is GPU accessible (agent addr %p, Host Base %p)",
+                        ptr, info.agentBaseAddress, info.hostBaseAddress);
+            return 1;
         }
     }
 
-    ucs_trace("Address %p is not GPU accessible", ptr);
-    return false;
+    ucs_trace_func("%p is not GPU accessible", ptr);
+    return 0;
 }
 
 
@@ -248,10 +246,9 @@ hsa_status_t uct_rocm_memory_lock(void *ptr, size_t size, void **gpu_ptr)
     /* We need to lock / register memory on all GPUs because we do not know
        the location of other memory */
     hsa_status_t status = hsa_amd_memory_lock(ptr, size,
-                                             uct_rocm_cfg.agents.gpu_agent,
-                                             uct_rocm_cfg.num_of_gpu,
-                                             gpu_ptr
-                                             );
+                                                uct_rocm_cfg.agents.gpu_agent,
+                                                uct_rocm_cfg.num_of_gpu,
+                                                gpu_ptr);
 
     if (status != HSA_STATUS_SUCCESS) {
         ucs_error("Failed to lock memory (%p): 0x%x\n", ptr, status);
