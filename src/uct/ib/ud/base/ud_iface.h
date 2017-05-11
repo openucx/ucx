@@ -118,7 +118,7 @@ struct uct_ud_iface {
         ucs_queue_head_t       async_comp_q;
     } tx;
     struct {
-        ucs_time_t           peer_timout;
+        ucs_time_t           peer_timeout;
         unsigned             tx_qp_len;
         unsigned             max_inline;
     } config;
