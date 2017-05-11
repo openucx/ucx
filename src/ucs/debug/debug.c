@@ -126,10 +126,11 @@ static void *ucs_debug_alloc_mem(size_t length)
 {
     void *ptr;
 
-    ptr = mmap(NULL, ucs_align_up_pow2(length, ucs_get_page_size()),
-               PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    length = ucs_align_up_pow2(length, ucs_get_page_size());
+    ptr = mmap(NULL, length, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     if (ptr == MAP_FAILED) {
-        ucs_log_fatal_error("failed to allocate %zu bytes with mmap: %m", length);
+        ucs_log_fatal_error("mmap(NULL, %zu, READ|WRITE, PRIVATE|ANON) failed: %m",
+                            length);
         return NULL;
     }
 
@@ -138,7 +139,13 @@ static void *ucs_debug_alloc_mem(size_t length)
 
 static void ucs_debug_free_mem(void *ptr, size_t length)
 {
-    munmap(ptr, ucs_align_up_pow2(length, ucs_get_page_size()));
+    int ret;
+
+    length = ucs_align_up_pow2(length, ucs_get_page_size());
+    ret = munmap(ptr, length);
+    if (ret) {
+        ucs_log_fatal_error("munmap(%p, %zu) failed: %m", ptr, length);
+    }
 }
 
 static char *ucs_debug_strdup(const char *str)
