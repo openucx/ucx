@@ -26,36 +26,6 @@ public:
     };
 
     uct_p2p_err_test() : uct_p2p_test(0) {
-        errors.clear();
-    }
-
-    ~uct_p2p_err_test() {
-        errors.clear();
-    }
-
-    static ucs_log_func_rc_t
-    log_handler(const char *file, unsigned line, const char *function,
-                ucs_log_level_t level, const char *prefix, const char *message,
-                va_list ap)
-    {
-        char buf[200] = {0};
-
-        if (level > UCS_LOG_LEVEL_WARN) {
-            /* debug messages are ignored */
-            return UCS_LOG_FUNC_RC_CONTINUE;
-        }
-
-        va_list ap_copy;
-        va_copy(ap_copy, ap); /* Create a copy of arglist, to use it 2nd time */
-
-        ucs_log_default_handler(file, line, function, UCS_LOG_LEVEL_DEBUG,
-                                prefix, message, ap);
-        vsnprintf(buf, sizeof(buf), message, ap_copy);
-        va_end(ap_copy);
-
-        UCS_TEST_MESSAGE << "   < " << buf << " >";
-        errors.push_back(buf);
-        return UCS_LOG_FUNC_RC_STOP;
     }
 
     static size_t pack_cb(void *dest, void *arg)
@@ -72,10 +42,9 @@ public:
     {
         pack_arg arg;
 
-        errors.clear();
+        wrap_errors();
 
-        ucs_log_push_handler(log_handler);
-        UCS_TEST_SCOPE_EXIT() { ucs_log_pop_handler(); } UCS_TEST_SCOPE_EXIT_END
+        UCS_TEST_SCOPE_EXIT() { restore_errors(); } UCS_TEST_SCOPE_EXIT_END
 
         ucs_status_t status = UCS_OK;
         ssize_t packed_len;
@@ -130,8 +99,8 @@ public:
         /* Count how many error messages match/don't match the given pattern */
         size_t num_matched   = 0;
         size_t num_unmatched = 0;
-        for (std::vector<std::string>::iterator iter = errors.begin();
-                        iter != errors.end(); ++iter) {
+        for (std::vector<std::string>::iterator iter = m_errors.begin();
+                        iter != m_errors.end(); ++iter) {
             if (iter->find(error_pattern) != iter->npos) {
                 ++num_matched;
             } else {
@@ -144,15 +113,12 @@ public:
                         "' has occurred during the test";
         EXPECT_EQ(0ul, num_unmatched) <<
                         "Unexpected error(s) occurred during the test";
-        errors.clear();
     }
 
-    static std::vector<std::string> errors;
     static ucs_status_t last_error;
 
 };
 
-std::vector<std::string> uct_p2p_err_test::errors;
 ucs_status_t uct_p2p_err_test::last_error = UCS_OK;
 
 

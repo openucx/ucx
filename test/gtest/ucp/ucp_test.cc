@@ -12,8 +12,6 @@ extern "C" {
 }
 
 
-std::string ucp_test::m_last_err_msg;
-
 std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
 {
     std::vector<std::string>::const_iterator iter;
@@ -256,7 +254,7 @@ bool ucp_test::check_test_param(const std::string& name,
     ucp_context_h ucph;
     ucs_status_t status;
     {
-        disable_errors();
+        hide_errors();
         status = ucp_init(&test_param.ctx_params, config, &ucph);
         restore_errors();
     }
@@ -275,37 +273,6 @@ bool ucp_test::check_test_param(const std::string& name,
     UCS_TEST_MESSAGE << "checking " << name << ": " << (result ? "yes" : "no");
     cache[name] = result;
     return result;
-}
-
-ucs_log_func_rc_t ucp_test::empty_log_handler(const char *file, unsigned line,
-                                              const char *function, ucs_log_level_t level,
-                                              const char *prefix, const char *message,
-                                              va_list ap)
-{
-    if (level == UCS_LOG_LEVEL_ERROR) {
-        va_list ap2;
-        std::string msg;
-        msg.resize(256);
-        va_copy(ap2, ap);
-        vsnprintf(&msg[0], msg.size() - 1, message, ap2);
-        va_end(ap2);
-        msg.resize(strlen(&msg[0]));
-        m_last_err_msg = msg;
-        level = UCS_LOG_LEVEL_DEBUG;
-    }
-
-    ucs_log_default_handler(file, line, function, level, prefix, message, ap);
-    return UCS_LOG_FUNC_RC_STOP;
-}
-
-void ucp_test::disable_errors()
-{
-    ucs_log_push_handler((ucs_log_func_t)empty_log_handler);
-}
-
-void ucp_test::restore_errors()
-{
-    ucs_log_pop_handler();
 }
 
 ucp_test_base::entity::entity(const ucp_test_param& test_param, ucp_config_t* ucp_config) {
@@ -365,7 +332,7 @@ void ucp_test_base::entity::connect(const entity* other,
         status = ucp_worker_get_address(other->worker(i), &address, &address_length);
         ASSERT_UCS_OK(status);
 
-        ucp_test::disable_errors();
+        ucp_test::hide_errors();
         ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
         ep_params.address     = address;
 
@@ -374,7 +341,7 @@ void ucp_test_base::entity::connect(const entity* other,
 
         if (status == UCS_ERR_UNREACHABLE) {
             ucp_worker_release_address(other->worker(i), address);
-            UCS_TEST_SKIP_R(ucp_test::m_last_err_msg);
+            UCS_TEST_SKIP_R(m_errors.empty() ? "" : m_errors.back());
         }
 
         ASSERT_UCS_OK(status);

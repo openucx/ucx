@@ -126,10 +126,14 @@ UCS_TEST_P(test_error_handling, peer_failure)
 
     err_count = 0ul;
 
+    wrap_errors();
+
     close_peer();
     EXPECT_EQ(uct_ep_put_short(ep(), NULL, 0, 0, 0), UCS_OK);
 
     flush();
+
+    restore_errors();
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, NULL, 0, NULL, 1);
 
@@ -179,6 +183,8 @@ UCS_TEST_P(test_error_handling, purge_failed_peer)
     req_count = 0ul;
     err_count = 0ul;
 
+    wrap_errors();
+
     close_peer();
 
     do {
@@ -193,6 +199,8 @@ UCS_TEST_P(test_error_handling, purge_failed_peer)
     flush();
 
     EXPECT_EQ(uct_ep_am_short(ep(), 0, 0, NULL, 0), UCS_ERR_ENDPOINT_TIMEOUT);
+
+    restore_errors();
 
     uct_ep_pending_purge(ep(), purge_cb, NULL);
     EXPECT_EQ(num_pend_sends, req_count);
@@ -222,10 +230,12 @@ UCS_TEST_P(test_err_handling_destroy_ep_cb, desproy_ep_cb)
 {
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
 
+    wrap_errors();
     close_peer();
     EXPECT_EQ(uct_ep_put_short(ep(), NULL, 0, 0, 0), UCS_OK);
 
     flush();
+    restore_errors();
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_err_handling_destroy_ep_cb)

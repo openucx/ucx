@@ -83,7 +83,7 @@ UCS_TEST_P(test_ucp_version, wrong_api_version) {
     ucp_context_h ucph;
     ucs_status_t status;
     {
-        disable_errors();
+        wrap_errors();
         status = ucp_init_version(99, 99, &params, config.get(), &ucph);
         restore_errors();
     }

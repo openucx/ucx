@@ -15,6 +15,7 @@ extern "C" {
 namespace ucs {
 
 unsigned test_base::m_total_warnings = 0;
+std::vector<std::string> test_base::m_errors;
 
 test_base::test_base() :
                 m_state(NEW),
@@ -88,14 +89,69 @@ void test_base::pop_config()
     m_config_stack.pop_back();
 }
 
+void test_base::hide_errors()
+{
+    ucs_log_push_handler(hide_errors_logger);
+}
+
+void test_base::wrap_errors()
+{
+    ucs_log_push_handler(wrap_errors_logger);
+}
+
+void test_base::restore_errors()
+{
+    ucs_log_pop_handler();
+}
+
 ucs_log_func_rc_t
-test_base::log_handler(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level, const char *prefix, const char *message,
-                       va_list ap)
+test_base::count_warns_logger(const char *file, unsigned line, const char *function,
+                              ucs_log_level_t level, const char *prefix,
+                              const char *message, va_list ap)
 {
     if (level == UCS_LOG_LEVEL_WARN) {
         ++m_total_warnings;
     }
+    return UCS_LOG_FUNC_RC_CONTINUE;
+}
+
+std::string test_base::format_message(const char *message, va_list ap)
+{
+    char buf[ucs_global_opts.log_buffer_size];
+    vsnprintf(buf, ucs_global_opts.log_buffer_size, message, ap);
+    return std::string(buf);
+}
+
+ucs_log_func_rc_t
+test_base::hide_errors_logger(const char *file, unsigned line, const char *function,
+                              ucs_log_level_t level, const char *prefix,
+                              const char *message, va_list ap)
+{
+    if (level == UCS_LOG_LEVEL_ERROR) {
+        va_list ap2;
+        va_copy(ap2, ap);
+        m_errors.push_back(format_message(message, ap2));
+        va_end(ap2);
+        level = UCS_LOG_LEVEL_DEBUG;
+    }
+
+    ucs_log_default_handler(file, line, function, level, prefix, message, ap);
+    return UCS_LOG_FUNC_RC_STOP;
+}
+
+ucs_log_func_rc_t
+test_base::wrap_errors_logger(const char *file, unsigned line, const char *function,
+                              ucs_log_level_t level, const char *prefix,
+                              const char *message, va_list ap)
+{
+    /* Ignore warnings about empty memory pool */
+    if (level == UCS_LOG_LEVEL_ERROR) {
+        std::string text = format_message(message, ap);
+        m_errors.push_back(text);
+        UCS_TEST_MESSAGE << "< " << text << " >";
+        return UCS_LOG_FUNC_RC_STOP;
+    }
+
     return UCS_LOG_FUNC_RC_CONTINUE;
 }
 
@@ -104,7 +160,8 @@ void test_base::SetUpProxy() {
     m_num_valgrind_errors_before = VALGRIND_COUNT_ERRORS;
     m_num_warnings_before        = m_total_warnings;
 
-    ucs_log_push_handler(log_handler);
+    m_errors.clear();
+    ucs_log_push_handler(count_warns_logger);
 
     try {
         init();
@@ -129,6 +186,7 @@ void test_base::TearDownProxy() {
     }
 
     ucs_log_pop_handler();
+    m_errors.clear();
 
     int num_valgrind_errors = VALGRIND_COUNT_ERRORS - m_num_valgrind_errors_before;
     if (num_valgrind_errors > 0) {
