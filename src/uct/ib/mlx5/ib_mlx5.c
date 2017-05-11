@@ -147,6 +147,9 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     mlx5_cq->cq_buf    = ibv_cq_info.buf;
     mlx5_cq->cq_ci     = 0;
     mlx5_cq->cq_length = ibv_cq_info.cqe_cnt;
+#if ENABLE_DEBUG_DATA
+    mlx5_cq->cq_num    = ibv_cq_info.cqn;
+#endif
     cqe_size           = ibv_cq_info.cqe_size;
 #else
     struct mlx5_cq *mcq = ucs_container_of(cq, struct mlx5_cq, ibv_cq);
@@ -160,6 +163,9 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     mlx5_cq->cq_buf      = mcq->active_buf->buf;
     mlx5_cq->cq_ci       = 0;
     mlx5_cq->cq_length   = mcq->ibv_cq.cqe + 1;
+#if ENABLE_DEBUG_DATA
+    mlx5_cq->cq_num      = mcq->cqn;
+#endif
     cqe_size             = mcq->cqe_sz;
 #endif
 
@@ -242,6 +248,7 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
         return NULL; /* No CQE */
     case MLX5_CQE_REQ_ERR:
         iface->ops->handle_failure(iface, cqe);
+        ucs_debug("iface %p requester error on cqe[%d]=%p", iface, cq->cq_ci, cqe);
         ++cq->cq_ci;
         return NULL;
     case MLX5_CQE_RESP_ERR:
@@ -411,5 +418,6 @@ void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq)
 
     status = uct_ib_mlx5_get_srq_info(verbs_srq, &srq_info);
     ucs_assert_always(status == UCS_OK);
-    ucs_assert_always(srq->tail == srq_info.tail);
+    ucs_assertv_always(srq->tail == srq_info.tail, "srq->tail=%d srq_info.tail=%d",
+                       srq->tail, srq_info.tail);
 }

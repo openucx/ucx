@@ -705,8 +705,10 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
         count = uct_rc_verbs_txcq_get_comp_count(&wc[i]);
         ucs_assert(count == 1);
         dci = uct_dc_iface_dci_find(&iface->super, wc[i].qp_num);
+        ucs_trace_poll("dc_verbs iface %p tx_wc: dci[%d] qpn 0x%x count %d",
+                       iface, dci, wc[i].qp_num, count);
+
         uct_rc_verbs_txqp_completed(&iface->super.tx.dcis[dci].txqp, &iface->dcis_txcnt[dci], count);
-        ucs_trace_poll("dc tx completion on dc %d count %d", dci, count);
         uct_dc_iface_dci_put(&iface->super, dci);
         uct_rc_txqp_completion_desc(&iface->super.tx.dcis[dci].txqp, iface->dcis_txcnt[dci].ci);
     }
