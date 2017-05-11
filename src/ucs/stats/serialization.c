@@ -301,6 +301,23 @@ ucs_stats_serialize_binary(FILE *stream, ucs_stats_node_t *root,
 
     return UCS_OK;
 }
+int
+node_sum(ucs_stats_node_t *node)
+{
+    ucs_stats_node_t *child;
+    unsigned sum = 0;;
+
+
+    ucs_list_for_each(child, &node->children[UCS_STATS_INACTIVE_CHILDREN], list) {
+        sum = node_sum(child);
+    }
+
+    ucs_list_for_each(child, &node->children[UCS_STATS_ACTIVE_CHILDREN], list) {
+        sum = node_sum(child);
+    }
+
+    return sum;
+}
 
 static ucs_status_t
 ucs_stats_serialize_text_recurs_filtered(FILE *stream,
@@ -349,11 +366,22 @@ ucs_stats_serialize_text_recurs_filtered(FILE *stream,
         fputs(left_b, stream);
     }
 
+int end_less = 0;
     for (i = 0; (i < node->cls->num_counters) && (i < 64); ++i) {
         ucs_stats_counter_t counters_acc = 0;
+
+if (end_less++ > 20) {
+printf("aborting %s %d\n", __FUNCTION__, __LINE__);
+abort();
+}
         if (filter_node->counters_bitmask & UCS_BIT(i)) {
+int end_less2 = 0;
             ucs_stats_node_t * temp_node;
             ucs_list_for_each(temp_node, &filter_node->type_list_head, type_list) {
+if (end_less2++ > 20) {
+printf("aborting %s %d\n", __FUNCTION__, __LINE__);
+abort();
+}
                 counters_acc += temp_node->counters[i];
             }
 
@@ -369,8 +397,15 @@ ucs_stats_serialize_text_recurs_filtered(FILE *stream,
             }
         }
     }
-
+int end_less3 = 0;
     ucs_list_for_each(filter_child, &filter_node->children, list) {
+
+if (end_less3++ > 1000) {
+printf("aborting\n");
+printf("filter_node->child_len %d\n", filter_node->child_len);
+printf("filter_child->type_list_len %d\n", filter_child->type_list_len);
+abort();
+}
         ucs_stats_serialize_text_recurs_filtered(stream, filter_child,
                                                  indent + 1);
     }

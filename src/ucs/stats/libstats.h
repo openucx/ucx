@@ -138,6 +138,7 @@ struct ucs_stats_filter_node {
     int                       type_list_len;      /* length of list */
     int                       ref_count;          /* report node when non zero */
     uint64_t                  counters_bitmask;   /* which counters to print */
+    int child_len;
 };
 
 /**
