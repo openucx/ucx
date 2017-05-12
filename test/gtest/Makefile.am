@@ -86,7 +86,7 @@ gtest_SOURCES = \
 	uct/test_stats.cc \
 	ucs/test_stats_filter.cc \
 	uct/test_wakeup.cc \
-	uct/test_error_handling.cc \
+	uct/test_peer_failure.cc \
 	uct/test_tag.cc \
 	\
 	ucp/test_ucp_error_handling.cc \

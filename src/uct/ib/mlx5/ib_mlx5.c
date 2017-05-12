@@ -247,14 +247,15 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
     case MLX5_CQE_INVALID:
         return NULL; /* No CQE */
     case MLX5_CQE_REQ_ERR:
-        iface->ops->handle_failure(iface, cqe);
         ucs_debug("iface %p requester error on cqe[%d]=%p", iface, cq->cq_ci, cqe);
+        /* update ci before invoking error callback, since it can poll on cq */
         ++cq->cq_ci;
+        iface->ops->handle_failure(iface, cqe);
         return NULL;
     case MLX5_CQE_RESP_ERR:
         /* Local side failure - treat as fatal */
-        uct_ib_mlx5_completion_with_err((void*)cqe, UCS_LOG_LEVEL_FATAL);
         ++cq->cq_ci;
+        uct_ib_mlx5_completion_with_err((void*)cqe, UCS_LOG_LEVEL_FATAL);
         return NULL;
     default:
         /* CQE might have been updated by HW. Skip it now, and it would be handled
@@ -276,6 +277,16 @@ static void uct_ib_mlx5_bf_init(uct_ib_mlx5_bf_t *bf, uintptr_t addr, unsigned b
 
 static void uct_ib_mlx5_bf_cleanup(uct_ib_mlx5_bf_t *bf)
 {
+}
+
+void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
+{
+    txwq->curr     = txwq->qstart;
+    txwq->sw_pi    = txwq->prev_sw_pi = 0;
+#if ENABLE_ASSERT
+    txwq->hw_ci    = 0xFFFF;
+#endif
+    memset(txwq->qstart, 0, txwq->qend - txwq->qstart);
 }
 
 ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq,
@@ -306,8 +317,6 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq
 
     txwq->qstart   = qp_info.sq.buf;
     txwq->qend     = qp_info.sq.buf + (qp_info.sq.stride * qp_info.sq.wqe_cnt);
-    txwq->curr     = txwq->qstart;
-    txwq->sw_pi    = txwq->prev_sw_pi = 0;
     txwq->bf       = uct_worker_tl_data_get(worker,
                                             UCT_IB_MLX5_WORKER_BF_KEY,
                                             uct_ib_mlx5_bf_t,
@@ -323,11 +332,9 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq
      *  exact number of bbs once we actually are sending.
      */
     txwq->bb_max   = qp_info.sq.wqe_cnt - 2 * UCT_IB_MLX5_MAX_BB;
-#if ENABLE_ASSERT
-    txwq->hw_ci    = 0xFFFF;
-#endif
     ucs_assert_always(txwq->bb_max > 0);
-    memset(txwq->qstart, 0, txwq->qend - txwq->qstart);
+
+    uct_ib_mlx5_txwq_reset(txwq);
     return UCS_OK;
 }
 

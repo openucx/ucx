@@ -609,16 +609,29 @@ static void uct_dc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
 {
     struct ibv_wc *wc = arg;
 
-    uct_dc_handle_failure(ib_iface, wc->qp_num);
     ucs_log(ib_iface->super.config.failure_level,
-            "Send completion with error: %s",
-            ibv_wc_status_str(wc->status));
+            "Send completion with error on qp 0x%x: %s syndrome 0x%x",
+            wc->qp_num, ibv_wc_status_str(wc->status), wc->vendor_err);
+    uct_dc_handle_failure(ib_iface, wc->qp_num);
 }
 
 static void uct_dc_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep)
 {
     uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_verbs_ep_t), ep,
                       &iface->super.super);
+}
+
+static ucs_status_t uct_dc_verbs_reset_dci(uct_dc_iface_t *dc_iface, int dci)
+{
+    uct_dc_verbs_iface_t *iface = ucs_derived_of(dc_iface, uct_dc_verbs_iface_t);
+    uint16_t new_ci;
+
+    new_ci = iface->dcis_txcnt[dci].pi;
+    ucs_debug("iface %p resetting dci[%d], ci %d --> %d", iface, dci,
+              iface->dcis_txcnt[dci].ci, new_ci);
+    iface->dcis_txcnt[dci].ci = new_ci;
+
+    return uct_rc_modify_qp(&dc_iface->tx.dcis[dci].txqp, IBV_QPS_RESET);
 }
 
 /* Send either request for grants or grant message. Request includes ep
@@ -736,7 +749,8 @@ static void uct_dc_verbs_iface_progress(void *arg)
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t)(uct_iface_t*);
 
-static uct_rc_iface_ops_t uct_dc_verbs_iface_ops = {
+static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
+    {
     {
         {
             .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t),
@@ -783,7 +797,8 @@ static uct_rc_iface_ops_t uct_dc_verbs_iface_ops = {
     },
     .fc_ctrl                  = uct_dc_verbs_ep_fc_ctrl,
     .fc_handler               = uct_dc_iface_fc_handler,
-    .reset_qp                 = uct_rc_reset_qp
+    },
+    .reset_dci                = uct_dc_verbs_reset_dci
 };
 
 void uct_dc_verbs_iface_init_wrs(uct_dc_verbs_iface_t *self)

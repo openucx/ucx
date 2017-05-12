@@ -196,7 +196,7 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *dev_addr,
                                      const uct_ep_addr_t *ep_addr);
 
-ucs_status_t uct_rc_reset_qp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp);
+ucs_status_t uct_rc_modify_qp(uct_rc_txqp_t *txqp, enum ibv_qp_state state);
 
 void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                               void *data, size_t length, size_t valid_length,
