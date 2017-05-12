@@ -87,7 +87,9 @@ static void uct_ib_async_event_handler(int fd, void *arg)
 
     ret = ibv_get_async_event(dev->ibv_context, &event);
     if (ret != 0) {
-        ucs_warn("ibv_get_async_event() failed: %m");
+        if (errno != EAGAIN) {
+            ucs_warn("ibv_get_async_event() failed: %m");
+        }
         return;
     }
 
