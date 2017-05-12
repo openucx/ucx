@@ -9,6 +9,7 @@
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/arch/bitops.h>
 #include <uct/ib/ud/base/ud_ep.h>
 };
 
@@ -514,7 +515,7 @@ UCS_TEST_P(test_ud, ca_ai) {
 UCS_TEST_P(test_ud, ca_md, "IB_TX_QUEUE_LEN=" UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW)) {
 
     ucs_status_t status;
-    int new_cwnd;
+    int prev_cwnd, new_cwnd;
     int i;
 
     if (RUNNING_ON_VALGRIND) {
@@ -541,17 +542,20 @@ UCS_TEST_P(test_ud, ca_md, "IB_TX_QUEUE_LEN=" UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_W
 
     ep(m_e1)->tx.tx_hook = count_tx;
     do {
-        new_cwnd = ep(m_e1, 0)->ca.cwnd / UCT_UD_CA_MD_FACTOR;
+        prev_cwnd = ep(m_e1, 0)->ca.cwnd;
         tx_count = 0;
         do {
             progress();
-        } while (ep(m_e1, 0)->ca.cwnd != new_cwnd);
+        } while (ep(m_e1, 0)->ca.cwnd > (prev_cwnd / UCT_UD_CA_MD_FACTOR));
         short_progress_loop();
 
-        /* up to 3 additional ack_reqs per each resend */
+        new_cwnd = ep(m_e1, 0)->ca.cwnd;
         EXPECT_GE(tx_count, new_cwnd - 1);
-        EXPECT_LE(tx_count, new_cwnd - 1 + 3);
-        EXPECT_EQ(ep(m_e1, 0)->ca.cwnd, new_cwnd);
+        if (new_cwnd > UCT_UD_CA_MIN_WINDOW) {
+           /* up to 3 additional ack_reqs per each resend */
+           EXPECT_LE(tx_count, (new_cwnd - prev_cwnd) +
+                               3 * ucs_ilog2(prev_cwnd/new_cwnd));
+	}
 
     } while (ep(m_e1, 0)->ca.cwnd > UCT_UD_CA_MIN_WINDOW);
 }
