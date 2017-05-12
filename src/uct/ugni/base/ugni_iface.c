@@ -8,7 +8,6 @@
 #include "ugni_device.h"
 #include "ugni_ep.h"
 #include "ugni_iface.h"
-#include <pmi.h>
 
 void uct_ugni_base_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
@@ -24,52 +23,6 @@ void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h memh)
   uct_ugni_base_desc_init(NULL, obj, NULL);
   /* set local keys */
   base->desc.local_mem_hndl = *(gni_mem_handle_t *)memh;
-}
-
-void uct_ugni_progress(void *arg)
-{
-    gni_cq_entry_t  event_data = 0;
-    gni_post_descriptor_t *event_post_desc_ptr;
-    uct_ugni_base_desc_t *desc;
-    uct_ugni_iface_t * iface = (uct_ugni_iface_t *)arg;
-    gni_return_t ugni_rc;
-
-    ugni_rc = GNI_CqGetEvent(iface->local_cq, &event_data);
-    if (GNI_RC_NOT_DONE == ugni_rc) {
-        goto out;
-    }
-
-    if ((GNI_RC_SUCCESS != ugni_rc && !event_data) || GNI_CQ_OVERRUN(event_data)) {
-        ucs_error("GNI_CqGetEvent falied. Error status %s %d ",
-                  gni_err_str[ugni_rc], ugni_rc);
-        return;
-    }
-
-    ugni_rc = GNI_GetCompleted(iface->local_cq, event_data, &event_post_desc_ptr);
-    if (GNI_RC_SUCCESS != ugni_rc && GNI_RC_TRANSACTION_ERROR != ugni_rc) {
-        ucs_error("GNI_GetCompleted falied. Error status %s %d %d",
-                  gni_err_str[ugni_rc], ugni_rc, GNI_RC_TRANSACTION_ERROR);
-        return;
-    }
-
-    desc = (uct_ugni_base_desc_t *)event_post_desc_ptr;
-    ucs_trace_async("Completion received on %p", desc);
-
-    if (NULL != desc->comp_cb) {
-        uct_invoke_completion(desc->comp_cb, UCS_OK);
-    }
-
-    if (ucs_likely(0 == desc->not_ready_to_free)) {
-        ucs_mpool_put(desc);
-    }
-
-    iface->outstanding--;
-    uct_ugni_check_flush(desc->flush_group);
-
-out:
-    /* have a go a processing the pending queue */
-    ucs_arbiter_dispatch(&iface->arbiter, 1, uct_ugni_ep_process_pending, NULL);
-    return;
 }
 
 ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface, unsigned flags,
@@ -90,40 +43,6 @@ ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
-                                         uct_tl_resource_desc_t **resource_p,
-                                         unsigned *num_resources_p)
-{
-    uct_tl_resource_desc_t *resources;
-    int num_devices = job_info.num_devices;
-    uct_ugni_device_t *devs = job_info.devices;
-    int i;
-    ucs_status_t status = UCS_OK;
-
-    pthread_mutex_lock(&uct_ugni_global_lock);
-
-    resources = ucs_calloc(job_info.num_devices, sizeof(uct_tl_resource_desc_t),
-                          "resource desc");
-    if (NULL == resources) {
-      ucs_error("Failed to allocate memory");
-      num_devices = 0;
-      resources = NULL;
-      status = UCS_ERR_NO_MEMORY;
-      goto error;
-    }
-
-    for (i = 0; i < job_info.num_devices; i++) {
-        uct_ugni_device_get_resource(tl_name, &devs[i], &resources[i]);
-    }
-
-error:
-    *num_resources_p = num_devices;
-    *resource_p      = resources;
-    pthread_mutex_unlock(&uct_ugni_global_lock);
-
-    return status;
-}
-
 ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
                                         uct_iface_addr_t *addr)
 {
@@ -137,99 +56,6 @@ ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
 int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *dev_addr, const uct_iface_addr_t *iface_addr)
 {
     return 1;
-}
-
-static ucs_status_t get_cookie(uint32_t *cookie)
-{
-    char           *cookie_str;
-    char           *cookie_token;
-
-    cookie_str = getenv("PMI_GNI_COOKIE");
-    if (NULL == cookie_str) {
-        ucs_error("getenv PMI_GNI_COOKIE failed");
-        return UCS_ERR_IO_ERROR;
-    }
-
-    cookie_token = strtok(cookie_str, ":");
-    if (NULL == cookie_token) {
-        ucs_error("Failed to read PMI_GNI_COOKIE token");
-        return UCS_ERR_IO_ERROR;
-    }
-
-    *cookie = (uint32_t) atoi(cookie_token);
-    return UCS_OK;
-}
-
-static ucs_status_t get_ptag(uint8_t *ptag)
-{
-    char           *ptag_str;
-    char           *ptag_token;
-
-    ptag_str = getenv("PMI_GNI_PTAG");
-    if (NULL == ptag_str) {
-        ucs_error("getenv PMI_GNI_PTAG failed");
-        return UCS_ERR_IO_ERROR;
-    }
-
-    ptag_token = strtok(ptag_str, ":");
-    if (NULL == ptag_token) {
-        ucs_error("Failed to read PMI_GNI_PTAG token");
-        return UCS_ERR_IO_ERROR;
-    }
-
-    *ptag = (uint8_t) atoi(ptag_token);
-    return UCS_OK;
-}
-
-ucs_status_t uct_ugni_fetch_pmi()
-{
-    int spawned = 0,
-        rc;
-
-    if(job_info.initialized) {
-        return UCS_OK;
-    }
-
-    /* Fetch information from Cray's PMI */
-    rc = PMI_Init(&spawned);
-    if (PMI_SUCCESS != rc) {
-        ucs_error("PMI_Init failed, Error status: %d", rc);
-        return UCS_ERR_IO_ERROR;
-    }
-    ucs_debug("PMI spawned %d", spawned);
-
-    rc = PMI_Get_size(&job_info.pmi_num_of_ranks);
-    if (PMI_SUCCESS != rc) {
-        ucs_error("PMI_Get_size failed, Error status: %d", rc);
-        return UCS_ERR_IO_ERROR;
-    }
-    ucs_debug("PMI size %d", job_info.pmi_num_of_ranks);
-
-    rc = PMI_Get_rank(&job_info.pmi_rank_id);
-    if (PMI_SUCCESS != rc) {
-        ucs_error("PMI_Get_rank failed, Error status: %d", rc);
-        return UCS_ERR_IO_ERROR;
-    }
-    ucs_debug("PMI rank %d", job_info.pmi_rank_id);
-
-    rc = get_ptag(&job_info.ptag);
-    if (UCS_OK != rc) {
-        ucs_error("get_ptag failed, Error status: %d", rc);
-        return rc;
-    }
-    ucs_debug("PMI ptag %d", job_info.ptag);
-
-    rc = get_cookie(&job_info.cookie);
-    if (UCS_OK != rc) {
-        ucs_error("get_cookie failed, Error status: %d", rc);
-        return rc;
-    }
-    ucs_debug("PMI cookie %d", job_info.cookie);
-
-    /* Context and domain is activated */
-    job_info.initialized = true;
-    ucs_debug("UGNI job info was activated");
-    return UCS_OK;
 }
 
 static ucs_mpool_ops_t uct_ugni_flush_mpool_ops = {
