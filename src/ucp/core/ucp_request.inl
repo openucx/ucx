@@ -63,51 +63,6 @@
     }
 
 
-/*
- * @return Whether completed.
- *         *req_status if filled with the completion status if completed.
- */
-static int UCS_F_ALWAYS_INLINE
-ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status)
-{
-    ucs_status_t status;
-
-    status = req->send.uct.func(&req->send.uct);
-    if (status == UCS_OK) {
-        /* Completed the operation */
-        *req_status = UCS_OK;
-        return 1;
-    } else if (status == UCS_INPROGRESS) {
-        /* Not completed, but made progress */
-        return 0;
-    } else if (status != UCS_ERR_NO_RESOURCE) {
-        /* Unexpected error */
-        *req_status = status;
-        return 1;
-    }
-
-    /* No send resources, try to add to pending queue */
-    ucs_assert(status == UCS_ERR_NO_RESOURCE);
-    return ucp_request_pending_add(req, req_status);
-}
-
-/**
- * Start sending a request.
- *
- * @param [in]  req   Request to start.
- *
- * @return UCS_OK - completed (callback will not be called)
- *         UCS_INPROGRESS - started but not completed
- *         other error - failure
- */
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_request_start_send(ucp_request_t *req)
-{
-    ucs_status_t status = UCS_ERR_NOT_IMPLEMENTED;
-    while (!ucp_request_try_send(req, &status));
-    return status;
-}
-
 static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {
@@ -136,6 +91,52 @@ ucp_request_complete_recv(ucp_request_t *req, ucs_status_t status)
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
     ucp_request_complete(req, recv.cb, status, &req->recv.info);
+}
+
+/*
+ * @return Whether completed.
+ *         *req_status if filled with the completion status if completed.
+ */
+static int UCS_F_ALWAYS_INLINE
+ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status)
+{
+    ucs_status_t status;
+
+    status = req->send.uct.func(&req->send.uct);
+    if (status == UCS_OK) {
+        /* Completed the operation */
+        *req_status = UCS_OK;
+        return 1;
+    } else if (status == UCS_INPROGRESS) {
+        /* Not completed, but made progress */
+        return 0;
+    } else if (status != UCS_ERR_NO_RESOURCE) {
+        /* Unexpected error */
+        ucp_request_complete_send(req, status);
+        *req_status = status;
+        return 1;
+    }
+
+    /* No send resources, try to add to pending queue */
+    ucs_assert(status == UCS_ERR_NO_RESOURCE);
+    return ucp_request_pending_add(req, req_status);
+}
+
+/**
+ * Start sending a request.
+ *
+ * @param [in]  req   Request to start.
+ *
+ * @return UCS_OK - completed (callback will not be called)
+ *         UCS_INPROGRESS - started but not completed
+ *         other error - failure
+ */
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_start_send(ucp_request_t *req)
+{
+    ucs_status_t status = UCS_ERR_NOT_IMPLEMENTED;
+    while (!ucp_request_try_send(req, &status));
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE
