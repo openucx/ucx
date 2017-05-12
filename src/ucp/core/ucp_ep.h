@@ -29,6 +29,7 @@ enum {
     UCP_EP_FLAG_REMOTE_CONNECTED = UCS_BIT(1), /* All remote endpoints are connected */
     UCP_EP_FLAG_CONNECT_REQ_SENT = UCS_BIT(2), /* Connection request was sent */
     UCP_EP_FLAG_CONNECT_REP_SENT = UCS_BIT(3), /* Debug: Connection reply was sent */
+    UCP_EP_FLAG_FAILED           = UCS_BIT(4)  /* EP is in failed state */
 };
 
 
@@ -76,6 +77,9 @@ typedef struct ucp_ep_config_key {
      */
     ucp_md_map_t           reachable_md_map;
 
+    /* Error handling mode */
+    ucp_err_handling_mode_t    err_mode;
+    ucs_status_t               status;
 } ucp_ep_config_key_t;
 
 
@@ -132,9 +136,6 @@ typedef struct ucp_ep_config {
         /* Threshold for switching from eager to AM based rendezvous */
         size_t                 am_thresh;
     } rndv;
-
-    /* Error handling mode */
-    ucp_err_handling_mode_t    err_mode;
 } ucp_ep_config_t;
 
 

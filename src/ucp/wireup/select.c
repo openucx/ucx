@@ -456,7 +456,17 @@ static double ucp_wireup_rma_score_func(ucp_context_h context,
                    (4096.0 / ucs_min(iface_attr->bandwidth, remote_iface_attr->bandwidth)));
 }
 
-static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, unsigned address_count,
+static void ucp_wireup_fill_ep_params_criteria(ucp_wireup_criteria_t *criteria,
+                                               const ucp_ep_params_t *params)
+{
+    if ((params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) &&
+        (params->err_mode == UCP_ERR_HANDLING_MODE_PEER)) {
+        criteria->local_iface_flags |= UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+    }
+}
+
+static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
+                                             unsigned address_count,
                                              const ucp_address_entry_t *address_list,
                                              ucp_wireup_lane_desc_t *lane_descs,
                                              ucp_lane_index_t *num_lanes_p)
@@ -476,6 +486,7 @@ static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, unsigned address_count
     criteria.local_iface_flags  = criteria.remote_iface_flags |
                                   UCT_IFACE_FLAG_PENDING;
     criteria.calc_score         = ucp_wireup_rma_score_func;
+    ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
     return ucp_wireup_add_memaccess_lanes(ep, address_count, address_list,
                                           lane_descs, num_lanes_p, &criteria,
@@ -491,7 +502,8 @@ double ucp_wireup_amo_score_func(ucp_context_h context,
     return 1e-3 / (ucp_tl_iface_latency(context, iface_attr) + iface_attr->overhead);
 }
 
-static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, unsigned address_count,
+static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
+                                             unsigned address_count,
                                              const ucp_address_entry_t *address_list,
                                              ucp_wireup_lane_desc_t *lane_descs,
                                              ucp_lane_index_t *num_lanes_p)
@@ -513,6 +525,7 @@ static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, unsigned address_count
     criteria.local_iface_flags  = criteria.remote_iface_flags |
                                   UCT_IFACE_FLAG_PENDING;
     criteria.calc_score         = ucp_wireup_amo_score_func;
+    ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
     /* We can use only non-p2p resources or resources which are explicitly
      * selected for atomics. Otherwise, the remote peer would not be able to
@@ -555,7 +568,8 @@ static double ucp_wireup_rndv_score_func(ucp_context_h context,
                 (UCP_WIREUP_RNDV_TEST_MSG_SIZE * md_attr->reg_cost.growth));
 }
 
-static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, unsigned address_count,
+static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *params,
+                                           unsigned address_count,
                                            const ucp_address_entry_t *address_list,
                                            ucp_wireup_lane_desc_t *lane_descs,
                                            ucp_lane_index_t *num_lanes_p)
@@ -588,6 +602,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, unsigned address_count,
                                   UCT_IFACE_FLAG_AM_CB_SYNC;
     criteria.local_iface_flags  = UCT_IFACE_FLAG_AM_BCOPY;
     criteria.calc_score         = ucp_wireup_am_score_func;
+    ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_TAG |
                                                             UCP_FEATURE_WAKEUP)) {
@@ -606,7 +621,9 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, unsigned address_count,
     return UCS_OK;
 }
 
-static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count,
+static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep,
+                                             const ucp_ep_params_t *params,
+                                             unsigned address_count,
                                              const ucp_address_entry_t *address_list,
                                              ucp_wireup_lane_desc_t *lane_descs,
                                              ucp_lane_index_t *num_lanes_p)
@@ -629,6 +646,7 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count
                                   UCT_IFACE_FLAG_PENDING;
     criteria.local_iface_flags  = UCT_IFACE_FLAG_GET_ZCOPY;
     criteria.calc_score         = ucp_wireup_rndv_score_func;
+    ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
         criteria.remote_iface_flags |= UCT_IFACE_FLAG_WAKEUP;
@@ -707,7 +725,8 @@ ucp_wireup_get_reachable_mds(ucp_worker_h worker, unsigned address_count,
     return reachable_mds;
 }
 
-ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
+ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
+                                     unsigned address_count,
                                      const ucp_address_entry_t *address_list,
                                      uint8_t *addr_indices,
                                      ucp_ep_config_key_t *key)
@@ -720,25 +739,29 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
     memset(lane_descs, 0, sizeof(lane_descs));
     ucp_ep_config_key_reset(key);
 
-    status = ucp_wireup_add_rma_lanes(ep, address_count, address_list,
+    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
+        key->err_mode = params->err_mode;
+    }
+
+    status = ucp_wireup_add_rma_lanes(ep, params, address_count, address_list,
                                       lane_descs, &key->num_lanes);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucp_wireup_add_amo_lanes(ep, address_count, address_list,
+    status = ucp_wireup_add_amo_lanes(ep, params, address_count, address_list,
                                       lane_descs, &key->num_lanes);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucp_wireup_add_am_lane(ep, address_count, address_list,
+    status = ucp_wireup_add_am_lane(ep, params, address_count, address_list,
                                     lane_descs, &key->num_lanes);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucp_wireup_add_rndv_lane(ep, address_count, address_list,
+    status = ucp_wireup_add_rndv_lane(ep, params, address_count, address_list,
                                       lane_descs, &key->num_lanes);
     if (status != UCS_OK) {
         return status;

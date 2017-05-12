@@ -114,6 +114,9 @@ void ucp_test::disconnect(const entity& entity) {
         entity.flush_worker(i);
         void *dreq = entity.disconnect_nb(i);
         if (!UCS_PTR_IS_PTR(dreq)) {
+            if (UCS_ERR_ENDPOINT_TIMEOUT == UCS_PTR_STATUS(dreq)) {
+                continue;
+            }
             ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
         }
         wait(dreq, i);
@@ -134,6 +137,10 @@ void ucp_test::wait(void *req, int worker_index)
     } while (status == UCS_INPROGRESS);
     ASSERT_UCS_OK(status);
     ucp_request_release(req);
+}
+
+void ucp_test::set_ucp_config(ucp_config_t *config) {
+    set_ucp_config(config, GetParam());
 }
 
 std::vector<ucp_test_param>

@@ -131,6 +131,7 @@ protected:
     void short_progress_loop(int worker_index = 0) const;
     void disconnect(const entity& entity);
     void wait(void *req, int worker_index = 0);
+    void set_ucp_config(ucp_config_t *config);
 
     template <typename T>
     void wait_for_flag(volatile T *flag, double timeout = 10.0) {

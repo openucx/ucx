@@ -218,10 +218,87 @@ ucp_to_uct_wakeup_events(ucp_wakeup_event_t ucp_events)
     return uct_events;
 }
 
+static void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_status_t status = (uintptr_t)arg;
+
+    ucp_request_complete_send(req, status);
+}
+
+static void
+ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
+{
+    ucp_worker_h       worker           = (ucp_worker_h)arg;
+    ucp_ep_h           ucp_ep           = NULL;
+    uint64_t           dest_uuid UCS_V_UNUSED;
+    ucp_ep_h           ucp_ep_iter;
+    khiter_t           ucp_ep_errh_iter;
+    ucp_err_handler_t  err_handler;
+    ucp_rsc_index_t    lane, n_lanes, failed_lane;
+
+    /* TODO: need to optimize uct_ep -> ucp_ep lookup */
+    kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep_iter, {
+        for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep_iter); ++lane) {
+            if (uct_ep == ucp_ep_iter->uct_eps[lane]) {
+                ucp_ep = ucp_ep_iter;
+                failed_lane = lane;
+                goto found_ucp_ep;
+            }
+        }
+    });
+
+    ucs_fatal("No uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
+              uct_ep, worker);
+    return;
+
+found_ucp_ep:
+
+    /* Purge outstanding */
+    uct_ep_pending_purge(uct_ep, ucp_ep_err_pending_purge, (void*)status);
+
+    /* Destroy all lanes excepting failed one since ucp_ep becomes unusable as well */
+    for (lane = 0, n_lanes = ucp_ep_num_lanes(ucp_ep); lane < n_lanes; ++lane) {
+        if ((lane != failed_lane) && ucp_ep->uct_eps[lane]) {
+            /* TODO flush and purge outstanding operations */
+            uct_ep_destroy(ucp_ep->uct_eps[lane]);
+            ucp_ep->uct_eps[lane] = NULL;
+        }
+    }
+
+    /* Move failed lane at 0 index */
+    if (failed_lane != 0) {
+        ucp_ep->uct_eps[0] = ucp_ep->uct_eps[failed_lane];
+        ucp_ep->uct_eps[failed_lane] = NULL;
+    }
+
+    /* Redirect all lanes to failed one */
+    ucp_ep_config_key_t key = ucp_ep_config(ucp_ep)->key;
+    key.am_lane            = 0;
+    key.wireup_lane        = 0;
+    key.rndv_lane          = 0;
+    key.amo_lanes[0]       = 0;
+    key.rma_lanes[0]       = 0;
+    key.lanes[0].rsc_index = UCP_NULL_RESOURCE;
+    key.num_lanes          = 1;
+    key.status             = status;
+
+    ucp_ep->cfg_index = ucp_worker_get_ep_config(worker, &key);
+    ucp_ep->flags    |= UCP_EP_FLAG_FAILED;
+    ucp_ep->am_lane   = 0;
+
+    ucp_ep_errh_iter = kh_get(ucp_ep_errh_hash, &worker->ep_errh_hash,
+                              (uintptr_t)ucp_ep);
+    if (ucp_ep_errh_iter != kh_end(&worker->ep_errh_hash)) {
+        err_handler = kh_val(&worker->ep_errh_hash, ucp_ep_errh_iter);
+        err_handler.cb(err_handler.arg, ucp_ep, status);
+    }
+}
+
 static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
                                          ucp_rsc_index_t tl_id,
                                          size_t rx_headroom,
-                                         ucs_cpu_set_t const * cpu_mask_param,
+                                         ucs_cpu_set_t const *cpu_mask_param,
                                          ucp_wakeup_event_t events)
 {
     ucp_context_h context = worker->context;
@@ -247,6 +324,8 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     iface_params.stats_root  = UCS_STATS_RVAL(worker->stats);
     iface_params.rx_headroom = rx_headroom;
     iface_params.cpu_mask    = *cpu_mask_param;
+    iface_params.err_handler_arg = worker;
+    iface_params.err_handler     = ucp_worker_iface_error_handler;
 
     /* Open UCT interface */
     status = uct_iface_open(context->tl_mds[resource->md_index].md, worker->uct,
@@ -522,7 +601,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_status_t status;
     unsigned config_count;
     unsigned name_length;
-    ucs_cpu_set_t empty_cpu_mask;
+    ucs_cpu_set_t cpu_mask;
     ucs_thread_mode_t thread_mode;
     ucp_wakeup_event_t events;
     const size_t rx_headroom = sizeof(ucp_recv_desc_t);
@@ -566,6 +645,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                       getpid());
 
     kh_init_inplace(ucp_worker_ep_hash, &worker->ep_hash);
+    kh_init_inplace(ucp_ep_errh_hash,   &worker->ep_errh_hash);
 
     worker->ifaces = ucs_calloc(context->num_tls, sizeof(*worker->ifaces),
                                 "ucp iface");
@@ -613,22 +693,23 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_destroy_uct_worker;
     }
 
+    if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
+        cpu_mask = params->cpu_mask;
+    } else {
+        UCS_CPU_ZERO(&cpu_mask);
+    }
+
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_EVENTS) {
         events = params->events;
     } else {
         events = UCP_WAKEUP_RMA | UCP_WAKEUP_AMO | UCP_WAKEUP_TAG_SEND |
                  UCP_WAKEUP_TAG_RECV;
     }
+
     /* Open all resources as interfaces on this worker */
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
-        if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
-            status = ucp_worker_add_iface(worker, tl_id, rx_headroom,
-                                          &params->cpu_mask, events);
-        } else {
-            UCS_CPU_ZERO(&empty_cpu_mask);
-            status = ucp_worker_add_iface(worker, tl_id, rx_headroom,
-                                          &empty_cpu_mask, events);
-        }
+        status = ucp_worker_add_iface(worker, tl_id, rx_headroom, &cpu_mask,
+                                      events);
         if (status != UCS_OK) {
             goto err_close_ifaces;
         }
@@ -690,6 +771,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_free(worker->iface_attrs);
     ucs_free(worker->ifaces);
     kh_destroy_inplace(ucp_worker_ep_hash, &worker->ep_hash);
+    kh_destroy_inplace(ucp_ep_errh_hash, &worker->ep_errh_hash);
     UCP_THREAD_LOCK_FINALIZE(&worker->mt_lock);
     UCS_STATS_NODE_FREE(worker->stats);
     ucs_free(worker);

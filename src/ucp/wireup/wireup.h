@@ -80,11 +80,13 @@ double ucp_wireup_amo_score_func(ucp_context_h context,
 
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self);
 
-ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned address_count,
+ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
+                                   unsigned address_count,
                                    const ucp_address_entry_t *address_list,
                                    uint8_t *addr_indices);
 
-ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
+ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
+                                     unsigned address_count,
                                      const ucp_address_entry_t *address_list,
                                      uint8_t *addr_indices,
                                      ucp_ep_config_key_t *key);
