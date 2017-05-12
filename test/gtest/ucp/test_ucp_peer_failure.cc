@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -7,7 +7,7 @@
 #include "test_ucp_tag.h"
 
 
-class test_ucp_error_handling : public test_ucp_tag {
+class test_ucp_peer_failure : public test_ucp_tag {
 public:
     static ucp_ep_params_t get_ep_params() {
         ucp_ep_params_t params = test_ucp_tag::get_ep_params();
@@ -17,7 +17,7 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_error_handling, disable_sync_send) {
+UCS_TEST_P(test_ucp_peer_failure, disable_sync_send) {
     /* 1GB memory markup takes too long time with valgrind, reduce to 1MB */
     const size_t        max_size = RUNNING_ON_VALGRIND ? (1024 * 1024) :
                                    (1024 * 1024 * 1024);
@@ -37,4 +37,4 @@ UCS_TEST_P(test_ucp_error_handling, disable_sync_send) {
     }
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_error_handling)
+UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure)
