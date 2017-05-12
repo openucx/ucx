@@ -116,7 +116,7 @@ UCS_TEST_F(test_time, timerq) {
         }
         EXPECT_EQ(0u, counter1);
         EXPECT_NEAR(test_time / interval2, counter2, 1);
-        EXPECT_LE(ucs_timerq_min_interval(&timerq), UCS_TIME_INFINITY);
+        EXPECT_EQ(interval2, ucs_timerq_min_interval(&timerq));
 
         /*
          * Check that after rescheduling, both timers are invoked again
