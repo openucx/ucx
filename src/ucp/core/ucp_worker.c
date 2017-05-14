@@ -241,6 +241,7 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
         goto out;
     }
 
+    memset(&iface_params, 0, sizeof(iface_params));
     iface_params.tl_name     = resource->tl_rsc.tl_name;
     iface_params.dev_name    = resource->tl_rsc.dev_name;
     iface_params.stats_root  = UCS_STATS_RVAL(worker->stats);
