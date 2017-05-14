@@ -13,6 +13,7 @@ extern "C" {
 #include <netinet/in.h>
 
 #if ENABLE_STATS
+#define NUM_DATA_NODES 20
 
 class stats_test : public ucs::test {
 public:
@@ -43,7 +44,8 @@ public:
     virtual std::string stats_dest_config()    = 0;
     virtual std::string stats_trigger_config() = 0;
 
-    void prepare_nodes() {
+    void prepare_nodes(ucs_stats_node_t **cat_node,
+                       ucs_stats_node_t *data_nodes[NUM_DATA_NODES]) {
         static stats_class<0> category_stats_class = {
             {"category", 0, {}}
         };
@@ -53,13 +55,13 @@ public:
             { "counter0","counter1","counter2","counter3" }
         };
 
-        ucs_status_t status = UCS_STATS_NODE_ALLOC(&cat_node,
+        ucs_status_t status = UCS_STATS_NODE_ALLOC(cat_node,
                                                    &category_stats_class.cls,
                                                    ucs_stats_get_root());
         ASSERT_UCS_OK(status);
         for (unsigned i = 0; i < NUM_DATA_NODES; ++i) {
             status = UCS_STATS_NODE_ALLOC(&data_nodes[i], &data_stats_class.cls,
-                                         cat_node, "-%d", i);
+                                          *cat_node, "-%d", i);
             ASSERT_UCS_OK(status);
 
             UCS_STATS_UPDATE_COUNTER(data_nodes[i], 0, 10);
@@ -69,23 +71,26 @@ public:
         }
 
         /* make sure our original node is ok */
-        check_cat_node(cat_node);
+        check_cat_node(*cat_node, data_nodes);
     }
 
-    void free_nodes() {
+    void free_nodes(ucs_stats_node_t *cat_node,
+                    ucs_stats_node_t *data_nodes[NUM_DATA_NODES]) {
         for (unsigned i = 0; i < NUM_DATA_NODES; ++i) {
             UCS_STATS_NODE_FREE(data_nodes[i]);
         }
         UCS_STATS_NODE_FREE(cat_node);
     }
 
-    void check_tree(ucs_stats_node_t *root) {
+    void check_tree(ucs_stats_node_t *root,
+                    ucs_stats_node_t *data_nodes[NUM_DATA_NODES]) {
         EXPECT_EQ(1ul, ucs_list_length(&root->children[UCS_STATS_ACTIVE_CHILDREN]));
         check_cat_node(ucs_list_head(&root->children[UCS_STATS_ACTIVE_CHILDREN],
-                                     ucs_stats_node_t, list));
+                                     ucs_stats_node_t, list), data_nodes);
     }
 
-    void check_cat_node(ucs_stats_node_t *cat_node) {
+    void check_cat_node(ucs_stats_node_t *cat_node,
+                        ucs_stats_node_t *data_nodes[NUM_DATA_NODES]) {
         EXPECT_EQ(std::string("category"), std::string(cat_node->cls->name));
         EXPECT_EQ((unsigned)0, cat_node->cls->num_counters);
 
@@ -103,11 +108,7 @@ public:
     }
 
 protected:    
-    static const unsigned NUM_DATA_NODES = 20;
     static const unsigned NUM_COUNTERS   = 4;
-
-    ucs_stats_node_t       *cat_node;
-    ucs_stats_node_t       *data_nodes[NUM_DATA_NODES];
 };
 
 class stats_udp_test : public stats_test {
@@ -139,11 +140,11 @@ public:
         return "timer:0.1s";
     }
 
-    void read_and_check_stats() {
+    void read_and_check_stats(ucs_stats_node_t *data_nodes[NUM_DATA_NODES]) {
         ucs_list_link_t *list = ucs_stats_server_get_stats(m_server);
         ucs_assert(1ul == ucs_list_length(list));
         ASSERT_EQ(1ul, ucs_list_length(list));
-        check_tree(ucs_list_head(list, ucs_stats_node_t, list));
+        check_tree(ucs_list_head(list, ucs_stats_node_t, list), data_nodes);
         ucs_stats_server_purge_stats(m_server);
     }
 
@@ -247,27 +248,35 @@ public:
 };
 
 UCS_TEST_F(stats_on_demand_test, null_root) {
-        static stats_class<0> category_stats_class = {
-            {"category", 0, {}}
-        };
-        ucs_status_t status = UCS_STATS_NODE_ALLOC(&cat_node,
-                                                   &category_stats_class.cls,
-                                                   NULL);
+    ucs_stats_node_t       *cat_node;
 
-        EXPECT_GE(status, UCS_ERR_INVALID_PARAM);
+    static stats_class<0> category_stats_class = {
+        {"category", 0, {}}
+    };
+    ucs_status_t status = UCS_STATS_NODE_ALLOC(&cat_node,
+                                               &category_stats_class.cls,
+                                               NULL);
+
+    EXPECT_GE(status, UCS_ERR_INVALID_PARAM);
 }
 
 UCS_TEST_F(stats_udp_test, report) {
-    prepare_nodes();
+    ucs_stats_node_t       *cat_node;
+    ucs_stats_node_t       *data_nodes[NUM_DATA_NODES] = {NULL};
+
+    prepare_nodes(&cat_node, data_nodes);
     wait_for_stats();
-    read_and_check_stats();
-    free_nodes();
+    read_and_check_stats(data_nodes);
+    free_nodes(cat_node, data_nodes);
 }
 
 UCS_TEST_F(stats_file_test, report) {
-    prepare_nodes();
+    ucs_stats_node_t       *cat_node;
+    ucs_stats_node_t       *data_nodes[NUM_DATA_NODES] = {NULL};
+
+    prepare_nodes(&cat_node, data_nodes);
     ucs_stats_dump();
-    free_nodes();
+    free_nodes(cat_node, data_nodes);
 
     std::string data = get_data();
     FILE *f = fmemopen(&data[0], data.size(), "rb");
@@ -276,29 +285,49 @@ UCS_TEST_F(stats_file_test, report) {
     ASSERT_UCS_OK(status);
     fclose(f);
 
-    check_tree(root);
+    check_tree(root, data_nodes);
     ucs_stats_free(root);
 }
 
 UCS_TEST_F(stats_on_demand_test, report) {
-    prepare_nodes();
+    ucs_stats_node_t       *cat_node;
+    ucs_stats_node_t       *data_nodes[NUM_DATA_NODES] = {NULL};
+
+    prepare_nodes(&cat_node, data_nodes);
     ucs_stats_dump();
     wait_for_stats();
-    read_and_check_stats();
-    free_nodes();
+    read_and_check_stats(data_nodes);
+    free_nodes(cat_node, data_nodes);
 }
 
 UCS_TEST_F(stats_on_signal_test, report) {
-    prepare_nodes();
+    ucs_stats_node_t       *cat_node;
+    ucs_stats_node_t       *data_nodes[NUM_DATA_NODES] = {NULL};
+
+    prepare_nodes(&cat_node, data_nodes);
     kill(getpid(), SIGUSR1);
     wait_for_stats();
-    read_and_check_stats();
-    free_nodes();
+    read_and_check_stats(data_nodes);
+    free_nodes(cat_node, data_nodes);
 }
 
 UCS_TEST_F(stats_on_exit_test, dump) {
-    prepare_nodes();
-    free_nodes();
+    ucs_stats_node_t       *cat_node;
+    ucs_stats_node_t       *data_nodes[NUM_DATA_NODES] = {NULL};
+
+    prepare_nodes(&cat_node, data_nodes);
+    free_nodes(cat_node, data_nodes);
+}
+
+UCS_MT_TEST_F(stats_file_test, mt_add_remove, 10) {
+    ucs_stats_node_t       *cat_node;
+    ucs_stats_node_t       *data_nodes[NUM_DATA_NODES] = {NULL};
+    unsigned i;
+
+    for (i = 0; i < 100; i++) {
+        prepare_nodes(&cat_node, data_nodes);
+        free_nodes(cat_node, data_nodes);
+    }
 }
 
 #endif
