@@ -553,8 +553,8 @@ UCS_TEST_P(test_ud, ca_md, "IB_TX_QUEUE_LEN=" UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_W
         EXPECT_GE(tx_count, new_cwnd - 1);
         if (new_cwnd > UCT_UD_CA_MIN_WINDOW) {
            /* up to 3 additional ack_reqs per each resend */
-           EXPECT_LE(tx_count, (new_cwnd - prev_cwnd) +
-                               3 * ucs_ilog2(prev_cwnd/new_cwnd));
+           EXPECT_LE(tx_count, (prev_cwnd - new_cwnd) +
+                               (int)(3 * ucs_ilog2(prev_cwnd/new_cwnd)));
 	}
 
     } while (ep(m_e1, 0)->ca.cwnd > UCT_UD_CA_MIN_WINDOW);
