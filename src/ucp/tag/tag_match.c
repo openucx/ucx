@@ -15,6 +15,7 @@ ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm)
 
     tm->expected.sn   = 0;
     ucs_queue_head_init(&tm->expected.wildcard);
+    ucs_list_head_init(&tm->unexpected.all);
 
     tm->expected.hash = ucs_malloc(sizeof(*tm->expected.hash) * hash_size,
                                    "ucp_tm_exp_hash");
@@ -22,27 +23,35 @@ ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm)
         return UCS_ERR_NO_MEMORY;
     }
 
-    for (bucket = 0; bucket < hash_size; ++bucket) {
-        ucs_queue_head_init(&tm->expected.hash[bucket]);
+    tm->unexpected.hash = ucs_malloc(sizeof(*tm->unexpected.hash) * hash_size,
+                                     "ucp_tm_unexp_hash");
+    if (tm->unexpected.hash == NULL) {
+        ucs_free(tm->expected.hash);
+        return UCS_ERR_NO_MEMORY;
     }
 
-    ucs_queue_head_init(&tm->unexpected);
+    for (bucket = 0; bucket < hash_size; ++bucket) {
+        ucs_queue_head_init(&tm->expected.hash[bucket]);
+        ucs_list_head_init(&tm->unexpected.hash[bucket]);
+    }
+
     return UCS_OK;
 }
 
 void ucp_tag_match_cleanup(ucp_tag_match_t *tm)
 {
+    ucs_free(tm->unexpected.hash);
     ucs_free(tm->expected.hash);
 }
 
 int ucp_tag_unexp_is_empty(ucp_tag_match_t *tm)
 {
-    return ucs_queue_is_empty(&tm->unexpected);
+    return ucs_list_is_empty(&tm->unexpected.all);
 }
 
 void ucp_tag_exp_remove(ucp_tag_match_t *tm, ucp_request_t *req)
 {
-    ucs_queue_head_t *queue = ucp_tag_exp_get_queue(tm, req);
+    ucs_queue_head_t *queue = ucp_tag_exp_get_req_queue(tm, req);
     ucs_queue_iter_t iter;
     ucp_request_t *qreq;
 
