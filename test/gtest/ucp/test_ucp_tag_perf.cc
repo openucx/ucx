@@ -1,6 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -66,16 +65,20 @@ UCS_TEST_P(test_ucp_tag_perf, multi_exp) {
 UCS_TEST_P(test_ucp_tag_perf, multi_unexp) {
     ucp_tag_recv_info_t info;
 
-    ucs_time_t start_time = ucs_get_time();
 
     send_b(NULL, 0, DATATYPE, 0xdeadbeef);
     do_sends();
     recv_b(NULL, 0, DATATYPE, 0xdeadbeef, TAG_MASK, &info);
 
+    ucs_time_t start_time = ucs_get_time();
     for (size_t i = 0; i < COUNT; ++i) {
         recv_b(NULL, 0, DATATYPE, i, TAG_MASK, &info);
     }
     check_perf(start_time, 1e7);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_perf)
+/**
+ * Instantiate performance test only on 'self' transport, so network time would
+ * not affect the performance. We only care to check SW matching performance.
+ */
+UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,  "\\self")
