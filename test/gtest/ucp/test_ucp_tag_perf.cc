@@ -19,66 +19,96 @@ public:
     }
 
 protected:
-    static const size_t    COUNT    = 10000;
+    static const size_t    COUNT    = 8192;
     static const ucp_tag_t TAG_MASK = 0xffffffffffffffffUL;
 
-    void check_perf(ucs_time_t start_time, double exp_time_ns);
-    void do_sends();
+    double check_perf(size_t count, bool is_exp);
+    void check_scalability(double max_growth, bool is_exp);
+    void do_sends(size_t count);
 };
 
-void test_ucp_tag_perf::check_perf(ucs_time_t start_time, double exp_time_ns)
+double test_ucp_tag_perf::check_perf(size_t count, bool is_exp)
 {
-    ucs_time_t elapsed = ucs_get_time() - start_time;
-    double nsec_per_req = (ucs_time_to_nsec(elapsed) / COUNT);
-    UCS_TEST_MESSAGE << nsec_per_req << " ns per request";
-    EXPECT_LT(nsec_per_req, exp_time_ns) << "Tag matching is not scalable";
+    ucs_time_t start_time;
+
+    if (is_exp) {
+        std::vector<request*> rreqs;
+
+        for (size_t i = 0; i < count; ++i) {
+            request *rreq = recv_nb(NULL, 0, DATATYPE, i, TAG_MASK);
+            ucs_assert(!UCS_PTR_IS_ERR(rreq));
+            EXPECT_FALSE(rreq->completed);
+            rreqs.push_back(rreq);
+        }
+
+        start_time = ucs_get_time();
+        do_sends(count);
+        while (!rreqs.empty()) {
+            request *rreq = rreqs.back();
+            rreqs.pop_back();
+            wait_and_validate(rreq);
+        }
+    } else {
+        ucp_tag_recv_info_t info;
+
+        send_b(NULL, 0, DATATYPE, 0xdeadbeef);
+        do_sends(count);
+        recv_b(NULL, 0, DATATYPE, 0xdeadbeef, TAG_MASK, &info);
+
+        start_time = ucs_get_time();
+        for (size_t i = 0; i < count; ++i) {
+            recv_b(NULL, 0, DATATYPE, i, TAG_MASK, &info);
+        }
+    }
+
+    return ucs_time_to_sec(ucs_get_time() - start_time) / count;
 }
 
-void test_ucp_tag_perf::do_sends()
+void test_ucp_tag_perf::do_sends(size_t count)
 {
-    for (int i = (int)COUNT - 1; i >= 0; --i) {
+    size_t i = count;
+    while (i > 0) {
+        --i;
         send_b(NULL, 0, DATATYPE, i);
     }
 }
 
+void test_ucp_tag_perf::check_scalability(double max_growth, bool is_exp)
+{
+    double prev_time = 0.0, total_growth = 0.0;
+    size_t n = 0;
+
+    /* Estimate by how much the tag matching time grows when the matching queue
+     * length grows by 2x. A result close to 1.0 means O(1) scalability (which
+     * is good), while a result of 2.0 or higher means O(n) or higher.
+     */
+    for (size_t count = 1; count <= COUNT; count *= 2) {
+        size_t iters = ucs_max(1ul, COUNT / count);
+        double total_time = 0;
+        for (size_t i = 0; i < iters; ++i) {
+            total_time += check_perf(count, is_exp);
+        }
+
+        double time = total_time / iters;
+        if (count >= 16) {
+            /* don't measure first few iterations - warmup */
+            total_growth += (time / prev_time);
+            ++n;
+        }
+        prev_time = time;
+    }
+
+    double avg_growth = total_growth / n;
+    UCS_TEST_MESSAGE << "Average growth: " << avg_growth;
+    EXPECT_LT(avg_growth, max_growth) << "Tag matching is not scalable";
+}
+
 UCS_TEST_P(test_ucp_tag_perf, multi_exp) {
-    std::vector<request*> rreqs;
-
-    for (size_t i = 0; i < COUNT; ++i) {
-        request *rreq = recv_nb(NULL, 0, DATATYPE, i, TAG_MASK);
-        ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq));
-        EXPECT_FALSE(rreq->completed);
-        rreqs.push_back(rreq);
-    }
-
-    ucs_time_t start_time = ucs_get_time();
-    do_sends();
-
-    for (size_t i = 0; i < COUNT; ++i) {
-        request *rreq = rreqs.back();
-        rreqs.pop_back();
-        wait_and_validate(rreq);
-    }
-    check_perf(start_time, 1e5);
+    check_scalability(1.3, true);
 }
 
 UCS_TEST_P(test_ucp_tag_perf, multi_unexp) {
-    ucp_tag_recv_info_t info;
-
-
-    send_b(NULL, 0, DATATYPE, 0xdeadbeef);
-    do_sends();
-    recv_b(NULL, 0, DATATYPE, 0xdeadbeef, TAG_MASK, &info);
-
-    ucs_time_t start_time = ucs_get_time();
-    for (size_t i = 0; i < COUNT; ++i) {
-        recv_b(NULL, 0, DATATYPE, i, TAG_MASK, &info);
-    }
-    check_perf(start_time, 1e7);
+    check_scalability(10.0, false); /* unexpected is not scalable yet*/
 }
 
-/**
- * Instantiate performance test only on 'self' transport, so network time would
- * not affect the performance. We only care to check SW matching performance.
- */
-UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,  "\\self")
+UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_perf)
