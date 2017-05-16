@@ -13,7 +13,7 @@
 #include <ucs/datastruct/queue.h>
 
 
-static UCS_F_ALWAYS_INLINE ucp_recv_desc_t*
+static UCS_F_ALWAYS_INLINE ucs_queue_iter_t
 ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
                      ucp_tag_recv_info_t *info, int remove)
 {
@@ -44,9 +44,12 @@ ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
             }
 
             if (remove) {
-                ucs_queue_del_iter(&context->tm.unexpected, iter);
+                /* Prevent the receive descriptor, and any fragments after it,
+                 * from being matched by receive requests.
+                 */
+                rdesc->flags &= ~UCP_RECV_DESC_FLAG_FIRST;
             }
-            return rdesc;
+            return iter;
         }
     }
 
@@ -58,16 +61,16 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
                                    ucp_tag_recv_info_t *info)
 {
     ucp_context_h context = worker->context;
-    ucp_recv_desc_t *ret;
+    ucs_queue_iter_t message;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
     UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
 
     ucs_trace_req("probe_nb tag %"PRIx64"/%"PRIx64, tag, tag_mask);
-    ret = ucp_tag_probe_search(context, tag, tag_mask, info, remove);
+    message = ucp_tag_probe_search(context, tag, tag_mask, info, remove);
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
 
-    return ret;
+    return message;
 }

@@ -164,6 +164,7 @@ ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_worker_h worker, void *data,
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_unexp_desc_release(ucp_recv_desc_t *rdesc)
 {
+    ucs_trace_req("release receive descriptor %p", rdesc);
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
         uct_iface_release_desc(rdesc); /* uct desc is slowpath */
     } else {

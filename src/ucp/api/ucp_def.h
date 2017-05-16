@@ -219,7 +219,7 @@ typedef uint64_t                         ucp_tag_t;
  * @ref ucp_tag_probe_nb. This handle can be passed to @ref ucp_tag_msg_recv_nb
  * in order to receive the message data to a specific buffer.
  */
-typedef struct ucp_recv_desc             *ucp_tag_message_h;
+typedef void                             *ucp_tag_message_h;
 
 
 /**
