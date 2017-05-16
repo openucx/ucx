@@ -74,9 +74,8 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
         /* short */
         req->send.uct.func = proto->contig_short;
         UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
-    } else if ((((config->key.rndv_lane != UCP_NULL_RESOURCE) &&
-               (length >= rndv_rma_thresh)) ||
-               (length >= rndv_am_thresh)) && !is_iov) {
+    } else if ((((config->key.rndv_lane != UCP_NULL_RESOURCE) && (length >= rndv_rma_thresh)) ||
+               length >= rndv_am_thresh)) {
         /* RMA/AM rendezvous */
         ucp_tag_send_start_rndv(req);
         UCS_PROFILE_REQUEST_EVENT(req, "start_rndv", req->send.length);
