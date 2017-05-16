@@ -103,6 +103,8 @@ ucp_tag_exp_search(ucp_tag_match_t *tm, ucp_tag_t recv_tag, size_t recv_len,
     queue = ucp_tag_exp_get_queue_for_tag(tm, recv_tag);
     ucs_queue_for_each_safe(req, iter, queue, recv.queue) {
         req = ucs_container_of(*iter, ucp_request_t, recv.queue);
+        ucs_trace_data("checking req %p tag %"PRIx64"/%"PRIx64" with recv_tag %"PRIx64,
+                       req, req->recv.tag, req->recv.tag_mask, recv_tag);
         if (ucp_tag_recv_is_match(recv_tag, recv_flags, req->recv.tag,
                                   req->recv.tag_mask, req->recv.state.offset,
                                   req->recv.info.sender_tag))
