@@ -43,7 +43,10 @@ ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
             }
 
             if (remove) {
-                ucp_tag_unexp_remove(rdesc);
+                /* Prevent the receive descriptor, and any fragments after it,
+                 * from being matched by receive requests.
+                 */
+                rdesc->flags &= ~UCP_RECV_DESC_FLAG_FIRST;
             }
             return rdesc;
         }
