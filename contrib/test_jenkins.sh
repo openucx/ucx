@@ -441,13 +441,16 @@ run_gtest() {
 	$AFFINITY $TIMEOUT make -C test/gtest test
 	(cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
-	if ! [[ $(uname -m) =~ "aarch" ]]
+	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]]
 	then
 		echo "==== Running valgrind tests ===="
-		if [ $(valgrind --version) != "valgrind-3.10.0" ]
+
+		# Load newer valgrind if naative is older than 3.10
+		if ! (echo "valgrind-3.10.0"; valgrind --version) | sort -CV
 		then
 			module load tools/valgrind-latest
 		fi
+
 		export VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes"
 		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
 		(cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
