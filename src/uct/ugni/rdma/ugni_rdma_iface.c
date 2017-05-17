@@ -14,7 +14,7 @@ static ucs_config_field_t uct_ugni_rdma_iface_config_table[] = {
     { "", "MAX_SHORT=2048;MAX_BCOPY=2048;ALLOC=huge,mmap,heap", NULL,
     ucs_offsetof(uct_ugni_rdma_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-    UCT_IFACE_MPOOL_CONFIG_FIELDS("RDMA", -1, 0, "rdma",
+    UCT_IFACE_MPOOL_CONFIG_FIELDS("RDMA", -1, 0, 0, "rdma",
                                   ucs_offsetof(uct_ugni_rdma_iface_config_t, mpool),
                                   "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
                                   "and could cause deadlock or performance degradation."),
@@ -205,6 +205,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
                             sizeof(uct_ugni_base_desc_t),
                             0,                            /* alignment offset */
                             UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                            128,                          /* start */
                             128,                          /* grow */
                             config->mpool.max_bufs,       /* max buffers */
                             &uct_ugni_rdma_desc_mpool_ops,
@@ -219,6 +220,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
                             sizeof(uct_ugni_rdma_fetch_desc_t),
                             0,                            /* alignment offset */
                             UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                            128 ,                         /* start */
                             128 ,                         /* grow */
                             config->mpool.max_bufs,       /* max buffers */
                             &uct_ugni_rdma_desc_mpool_ops,
@@ -248,6 +250,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
                                   sizeof(uct_ugni_rdma_fetch_desc_t),/* alignment offset */
                                   UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
                                   &config->mpool,               /* mpool config */
+                                  128 ,                         /* start*/
                                   128 ,                         /* grow */
                                   uct_ugni_base_desc_key_init,  /* memory/key init */
                                   "UGNI-DESC-FAMO");
@@ -263,6 +266,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
                                   sizeof(uct_ugni_rdma_fetch_desc_t), /* alignment offset */
                                   UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
                                   &config->mpool,               /* mpool config */
+                                  128 ,                         /* start */
                                   128 ,                         /* grow */
                                   uct_ugni_base_desc_key_init,  /* memory/key init */
                                   "UGNI-DESC-GET");

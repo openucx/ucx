@@ -17,7 +17,7 @@ static ucs_config_field_t uct_ugni_udt_iface_config_table[] = {
     ucs_offsetof(uct_ugni_iface_config_t, super),
     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-    UCT_IFACE_MPOOL_CONFIG_FIELDS("UDT", -1, 0, "udt",
+    UCT_IFACE_MPOOL_CONFIG_FIELDS("UDT", -1, 0, 0, "udt",
                                   ucs_offsetof(uct_ugni_iface_config_t, mpool),
                                   "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
                                   "and could cause deadlock or performance degradation."),
@@ -405,6 +405,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_udt_iface_t, uct_md_h md, uct_worker_h worke
                             uct_ugni_udt_get_diff(self) + self->config.udt_seg_size * 2,
                             uct_ugni_udt_get_diff(self),
                             UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                            128,                          /* start */
                             128,                          /* grow */
                             config->mpool.max_bufs,       /* max buffers */
                             &uct_ugni_udt_desc_mpool_ops,
