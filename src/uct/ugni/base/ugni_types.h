@@ -86,14 +86,6 @@ typedef struct uct_ugni_iface {
     ucs_mpool_t             flush_pool;                  /**< Memory pool for flush objects */
 } uct_ugni_iface_t;
 
-typedef struct uct_ugni_base_desc {
-    gni_post_descriptor_t desc;
-    uct_completion_t *comp_cb;
-    uct_unpack_callback_t unpack_cb;
-    uct_ugni_flush_group_t *flush_group;
-    int not_ready_to_free;
-} uct_ugni_base_desc_t;
-
 typedef struct uct_ugni_iface_config {
     uct_iface_config_t       super;
     uct_iface_mpool_config_t mpool;

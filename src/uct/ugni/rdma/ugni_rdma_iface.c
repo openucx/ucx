@@ -86,6 +86,23 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
     return UCS_OK;
 }
 
+void uct_ugni_base_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+  uct_ugni_base_desc_t *base = (uct_ugni_base_desc_t *) obj;
+  /* zero base descriptor */
+  memset(base, 0 , sizeof(*base));
+  base->free_cb = ucs_mpool_put;
+}
+
+void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h memh)
+{
+  uct_ugni_base_desc_t *base = (uct_ugni_base_desc_t *)obj;
+  /* call base initialization */
+  uct_ugni_base_desc_init(NULL, obj, NULL);
+  /* set local keys */
+  base->desc.local_mem_hndl = *(gni_mem_handle_t *)memh;
+}
+
 void uct_ugni_progress(void *arg)
 {
     gni_cq_entry_t  event_data = 0;
@@ -94,43 +111,37 @@ void uct_ugni_progress(void *arg)
     uct_ugni_iface_t * iface = (uct_ugni_iface_t *)arg;
     gni_return_t ugni_rc;
 
-    uct_ugni_device_lock(&iface->cdm);
-    ugni_rc = GNI_CqGetEvent(iface->local_cq, &event_data);
-    if (GNI_RC_NOT_DONE == ugni_rc) {
+    while (1) {
+        uct_ugni_device_lock(&iface->cdm);
+        ugni_rc = GNI_CqGetEvent(iface->local_cq, &event_data);
+        if (GNI_RC_NOT_DONE == ugni_rc) {
+            uct_ugni_device_unlock(&iface->cdm);
+            break;
+        }
+        if ((GNI_RC_SUCCESS != ugni_rc && !event_data) || GNI_CQ_OVERRUN(event_data)) {
+            uct_ugni_device_unlock(&iface->cdm);
+            ucs_error("GNI_CqGetEvent falied. Error status %s %d ",
+                      gni_err_str[ugni_rc], ugni_rc);
+            return;
+        }
+
+        ugni_rc = GNI_GetCompleted(iface->local_cq, event_data, &event_post_desc_ptr);
         uct_ugni_device_unlock(&iface->cdm);
-        goto out;
+        if (GNI_RC_SUCCESS != ugni_rc && GNI_RC_TRANSACTION_ERROR != ugni_rc) {
+            ucs_error("GNI_GetCompleted falied. Error status %s %d",
+                      gni_err_str[ugni_rc], ugni_rc);
+            return;
+        }
+
+        desc = (uct_ugni_base_desc_t *)event_post_desc_ptr;
+        ucs_trace_async("Completion received on %p", desc);
+        if (NULL != desc->comp_cb) {
+            uct_invoke_completion(desc->comp_cb, UCS_OK);
+        }
+        desc->free_cb(desc);
+        iface->outstanding--;
+        uct_ugni_check_flush(desc->flush_group);
     }
-
-    if ((GNI_RC_SUCCESS != ugni_rc && !event_data) || GNI_CQ_OVERRUN(event_data)) {
-        uct_ugni_device_unlock(&iface->cdm);
-        ucs_error("GNI_CqGetEvent falied. Error status %s %d ",
-                  gni_err_str[ugni_rc], ugni_rc);
-        return;
-    }
-
-    ugni_rc = GNI_GetCompleted(iface->local_cq, event_data, &event_post_desc_ptr);
-    if (GNI_RC_SUCCESS != ugni_rc && GNI_RC_TRANSACTION_ERROR != ugni_rc) {
-        uct_ugni_device_unlock(&iface->cdm);
-        ucs_error("GNI_GetCompleted falied. Error status %s %d %d",
-                  gni_err_str[ugni_rc], ugni_rc, GNI_RC_TRANSACTION_ERROR);
-        return;
-    }
-    uct_ugni_device_unlock(&iface->cdm);
-    desc = (uct_ugni_base_desc_t *)event_post_desc_ptr;
-    ucs_trace_async("Completion received on %p", desc);
-
-    if (NULL != desc->comp_cb) {
-        uct_invoke_completion(desc->comp_cb, UCS_OK);
-    }
-
-    if (ucs_likely(0 == desc->not_ready_to_free)) {
-        ucs_mpool_put(desc);
-    }
-
-    iface->outstanding--;
-    uct_ugni_check_flush(desc->flush_group);
-
-out:
     /* have a go a processing the pending queue */
     ucs_arbiter_dispatch(&iface->arbiter, 1, uct_ugni_ep_process_pending, NULL);
     return;

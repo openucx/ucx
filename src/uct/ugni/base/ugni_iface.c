@@ -9,22 +9,6 @@
 #include "ugni_ep.h"
 #include "ugni_iface.h"
 
-void uct_ugni_base_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
-{
-  uct_ugni_base_desc_t *base = (uct_ugni_base_desc_t *) obj;
-  /* zero base descriptor */
-  memset(base, 0 , sizeof(*base));
-}
-
-void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h memh)
-{
-  uct_ugni_base_desc_t *base = (uct_ugni_base_desc_t *)obj;
-  /* call base initialization */
-  uct_ugni_base_desc_init(NULL, obj, NULL);
-  /* set local keys */
-  base->desc.local_mem_hndl = *(gni_mem_handle_t *)memh;
-}
-
 ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                   uct_completion_t *comp)
 {
