@@ -52,6 +52,7 @@ struct uct_ib_iface_config {
 
     struct {
         unsigned            queue_len;       /* Queue length */
+        unsigned            queue_init_len;  /* Queue initial length */
         unsigned            max_batch;       /* How many buffers can be batched to one post receive */
         unsigned            max_poll;        /* How many wcs can be picked when polling rx cq */
         size_t              inl;             /* Inline space to reserve in CQ/QP */

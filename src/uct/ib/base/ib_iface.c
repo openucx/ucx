@@ -90,6 +90,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Length of receive queue in the QPs.",
    ucs_offsetof(uct_ib_iface_config_t, rx.queue_len), UCS_CONFIG_TYPE_UINT},
 
+  {"RX_QUEUE_LEN_INIT", "128",
+   "Initial length of receive queue and pre-posted receive operations.",
+   ucs_offsetof(uct_ib_iface_config_t, rx.queue_init_len), UCS_CONFIG_TYPE_UINT},
+
   {"RX_MAX_BATCH", "16",
    "How many post-receives to perform in one batch.",
    ucs_offsetof(uct_ib_iface_config_t, rx.max_batch), UCS_CONFIG_TYPE_UINT},
@@ -146,21 +150,16 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
                                           const uct_ib_iface_config_t *config,
                                           const char *name, ucs_mpool_t *mp)
 {
-    unsigned grow;
+    unsigned mpool_size;
 
-    if (config->rx.queue_len < 1024) {
-        grow = 1024;
-    } else {
-        /* We want to have some free (+10%) elements to avoid mem pool expansion */
-        grow = ucs_min( (int)(1.1 * config->rx.queue_len + 0.5),
-                        config->rx.mp.max_bufs);
-    }
+    mpool_size = ucs_min(config->rx.queue_len, config->rx.queue_init_len);
+    mpool_size = ucs_min(mpool_size, config->rx.mp.max_bufs);
 
     return uct_iface_mpool_init(&iface->super, mp,
                                 iface->config.rx_payload_offset + iface->config.seg_size,
                                 iface->config.rx_hdr_offset,
                                 UCS_SYS_CACHE_LINE_SIZE,
-                                &config->rx.mp, grow,
+                                &config->rx.mp, mpool_size,
                                 uct_ib_iface_recv_desc_init,
                                 name);
 }
