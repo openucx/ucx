@@ -42,13 +42,16 @@ static void ucs_mpool_chunk_leak_check(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk
 
 ucs_status_t ucs_mpool_init(ucs_mpool_t *mp, size_t priv_size,
                             size_t elem_size, size_t align_offset, size_t alignment,
-                            unsigned elems_per_chunk, unsigned max_elems,
-                            ucs_mpool_ops_t *ops, const char *name)
+                            unsigned start_chunk,unsigned elems_per_chunk,
+                            unsigned max_elems, ucs_mpool_ops_t *ops,
+                            const char *name)
 {
     /* Check input values */
     if ((elem_size == 0) || (align_offset > elem_size) ||
         (alignment == 0) || !ucs_is_pow2(alignment) ||
-        (elems_per_chunk == 0) || (max_elems < elems_per_chunk))
+        (elems_per_chunk == 0) || (start_chunk == 0) ||
+        (max_elems < elems_per_chunk) ||
+        (max_elems < start_chunk)) 
     {
         ucs_error("Invalid memory pool parameter(s)");
         return UCS_ERR_INVALID_PARAM;
@@ -66,6 +69,9 @@ ucs_status_t ucs_mpool_init(ucs_mpool_t *mp, size_t priv_size,
     mp->data->align_offset = sizeof(ucs_mpool_elem_t) + align_offset;
     mp->data->quota        = max_elems;
     mp->data->tail         = NULL;
+    mp->data->start_size   = sizeof(ucs_mpool_chunk_t) + alignment +
+                             start_chunk * ucs_mpool_elem_total_size(mp->data);
+    mp->data->is_start     = 1;
     mp->data->chunk_size   = sizeof(ucs_mpool_chunk_t) + alignment +
                              elems_per_chunk * ucs_mpool_elem_total_size(mp->data);
     mp->data->chunks       = NULL;
@@ -169,7 +175,8 @@ void *ucs_mpool_get_grow(ucs_mpool_t *mp)
         return NULL;
     }
 
-    chunk_size = data->chunk_size;
+    chunk_size = data->is_start ? data->start_size : data->chunk_size;
+    data->is_start = 0;
     status = data->ops->chunk_alloc(mp, &chunk_size, &ptr);
     if (status != UCS_OK) {
         ucs_error("Failed to allocate memory pool chunk: %s", ucs_status_string(status));
