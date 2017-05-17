@@ -21,7 +21,6 @@ ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
     }
 };
 #endif
-
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq)
 {
     uct_ib_mlx5_srq_seg_t *seg;
@@ -36,7 +35,6 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
                       sizeof(struct mlx5_wqe_srq_next_seg));
 
     ucs_assert(UCS_CIRCULAR_COMPARE16(srq->ready_idx, <=, srq->free_idx));
-
     index = srq->ready_idx;
     for (;;) {
         next_index = index + 1;
@@ -143,6 +141,7 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                   sizeof(uct_rc_iface_send_desc_t) + UCT_RC_MAX_ATOMIC_SIZE,
                                   UCS_SYS_CACHE_LINE_SIZE,
                                   &config->super.tx.mp,
+                                  rc_iface->config.tx_qp_len,
                                   rc_iface->config.tx_qp_len,
                                   uct_rc_iface_send_desc_init,
                                   "rc_mlx5_atomic_desc");
