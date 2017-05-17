@@ -15,6 +15,23 @@ extern "C" {
 
 class test_mpool : public ucs::test {
 protected:
+    static ucs_status_t test_alloc_size(ucs_mpool_t *mp, size_t *size_p, void **chunk_p) {
+        static unsigned first_time = 1;
+
+        if (first_time) {
+            if (*size_p != 2712) {
+                return UCS_ERR_INVALID_PARAM;
+            }
+            first_time = 0;
+        } else {
+            if (*size_p != 5272) {
+                return UCS_ERR_INVALID_PARAM;
+            }
+        }
+        *chunk_p = malloc(*size_p);
+        return (*chunk_p == NULL) ? UCS_ERR_NO_MEMORY : UCS_OK;
+    }
+
     static ucs_status_t test_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p) {
         *chunk_p = malloc(*size_p);
         return (*chunk_p == NULL) ? UCS_ERR_NO_MEMORY : UCS_OK;
@@ -114,6 +131,38 @@ UCS_TEST_F(test_mpool, custom_alloc) {
     EXPECT_TRUE(obj != NULL);
 
     ucs_mpool_put(obj);
+
+    ucs_mpool_cleanup(&mp, 1);
+}
+
+UCS_TEST_F(test_mpool, test_first_size) {
+    ucs_status_t status;
+    ucs_mpool_t mp;
+    ucs_mpool_ops_t ops = {
+       test_alloc_size,
+       test_free,
+       NULL,
+       NULL
+    };
+
+    status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
+                            10, 20, 190, &ops, "test");
+    ASSERT_UCS_OK(status);
+    std::queue<void*> q;
+    void *obj;
+    for (unsigned i = 0; i < 190; ++i) {
+        obj = ucs_mpool_get(&mp);
+        ASSERT_TRUE(obj != NULL);
+        q.push(obj);
+    }
+
+    obj = ucs_mpool_get(&mp);
+    ASSERT_TRUE(obj == NULL);
+
+    while (!q.empty()) {
+        ucs_mpool_put(q.front());
+        q.pop();
+    }
 
     ucs_mpool_cleanup(&mp, 1);
 }
