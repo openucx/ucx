@@ -275,19 +275,25 @@ struct uct_iface_config {
  * Memory pool configuration.
  */
 typedef struct uct_iface_mpool_config {
-    unsigned          max_bufs;  /* Upper limit to number of buffers */
-    unsigned          bufs_grow; /* How many buffers (approx.) are allocated every time */
+    unsigned          max_bufs;   /* Upper limit to number of buffers */
+    unsigned          bufs_start; /* How many buffers (approx.) are allocated on first time */
+    unsigned          bufs_grow;  /* How many buffers (approx.) are allocated every time */
 } uct_iface_mpool_config_t;
 
 
 /**
  * Define configuration fields for memory pool parameters.
  */
-#define UCT_IFACE_MPOOL_CONFIG_FIELDS(_prefix, _dfl_max, _dfl_grow, _mp_name, _offset, _desc) \
+#define UCT_IFACE_MPOOL_CONFIG_FIELDS(_prefix, _dfl_max, _dfl_start, _dfl_grow, _mp_name, _offset, _desc) \
     {_prefix "MAX_BUFS", UCS_PP_QUOTE(_dfl_max), \
      "Maximal number of " _mp_name " buffers for the interface. -1 is infinite." \
      _desc, \
      (_offset) + ucs_offsetof(uct_iface_mpool_config_t, max_bufs), UCS_CONFIG_TYPE_INT}, \
+    \
+    {_prefix "BUFS_START", UCS_PP_QUOTE(_dfl_start), \
+     "How much buffers are added on " _mp_name " memory pool starts\n" \
+     "0 means the value is chosen by the transport.", \
+     (_offset) + ucs_offsetof(uct_iface_mpool_config_t, bufs_start), UCS_CONFIG_TYPE_UINT}, \
     \
     {_prefix "BUFS_GROW", UCS_PP_QUOTE(_dfl_grow), \
      "How much buffers are added every time the " _mp_name " memory pool grows.\n" \
@@ -458,14 +464,15 @@ extern ucs_config_field_t uct_iface_config_table[];
  * @param align_offset
  * @param alignment    Data will be aligned to these units.
  * @param config       Memory pool configuration.
+ * @param start        Default number of buffers added for start chunk.
  * @param grow         Default number of buffers added for every chunk.
  * @param init_obj_cb  Object constructor.
  * @param name         Memory pool name.
  */
 ucs_status_t uct_iface_mpool_init(uct_base_iface_t *iface, ucs_mpool_t *mp,
                                   size_t elem_size, size_t align_offset, size_t alignment,
-                                  const uct_iface_mpool_config_t *config, unsigned grow,
-                                  uct_iface_mpool_init_obj_cb_t init_obj_cb,
+                                  const uct_iface_mpool_config_t *config, unsigned start,
+                                  unsigned grow, uct_iface_mpool_init_obj_cb_t init_obj_cb,
                                   const char *name);
 
 

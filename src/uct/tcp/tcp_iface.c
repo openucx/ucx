@@ -191,6 +191,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                             self->config.max_bcopy,
                             0,                        /* alignment offset */
                             UCS_SYS_CACHE_LINE_SIZE,  /* alignment */
+                            32,                       /* start */
                             32,                       /* grow */
                             -1,                       /* max buffers */
                             &uct_tcp_mpool_ops,

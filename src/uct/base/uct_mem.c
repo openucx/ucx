@@ -349,17 +349,19 @@ static ucs_mpool_ops_t uct_iface_mpool_ops = {
 
 ucs_status_t uct_iface_mpool_init(uct_base_iface_t *iface, ucs_mpool_t *mp,
                                   size_t elem_size, size_t align_offset, size_t alignment,
-                                  const uct_iface_mpool_config_t *config, unsigned grow,
-                                  uct_iface_mpool_init_obj_cb_t init_obj_cb,
+                                  const uct_iface_mpool_config_t *config, unsigned start,
+                                  unsigned grow, uct_iface_mpool_init_obj_cb_t init_obj_cb,
                                   const char *name)
 {
     unsigned elems_per_chunk;
+    unsigned start_chunk;
     ucs_status_t status;
 
     elems_per_chunk = (config->bufs_grow != 0) ? config->bufs_grow : grow;
+    start_chunk = (config->bufs_start != 0) ? config->bufs_start: start;
     status = ucs_mpool_init(mp, sizeof(uct_iface_mp_priv_t),
                             elem_size, align_offset, alignment,
-                            elems_per_chunk, config->max_bufs,
+                            start_chunk, elems_per_chunk, config->max_bufs,
                             &uct_iface_mpool_ops, name);
     if (status != UCS_OK) {
         return status;
