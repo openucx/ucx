@@ -42,7 +42,7 @@ UCS_TEST_F(test_mpool, no_allocs) {
     };
 
     status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
-                             6, 18, &ops, "test");
+                             6, 6, 18, &ops, "test");
     ASSERT_UCS_OK(status);
     ucs_mpool_cleanup(&mp, 1);
 }
@@ -69,7 +69,7 @@ UCS_TEST_F(test_mpool, basic) {
         }
 #endif
         status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
-                                 6, 18, &ops, "test");
+                                 6, 6, 18, &ops, "test");
         ASSERT_UCS_OK(status);
 
         for (unsigned loop = 0; loop < 10; ++loop) {
@@ -107,7 +107,7 @@ UCS_TEST_F(test_mpool, custom_alloc) {
     };
 
     status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
-                            5, 18, &ops, "test");
+                            5, 5, 18, &ops, "test");
     ASSERT_UCS_OK(status);
 
     void *obj = ucs_mpool_get(&mp);
@@ -131,7 +131,7 @@ UCS_TEST_F(test_mpool, infinite) {
     };
 
     status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
-                            10000, UINT_MAX, &ops, "test");
+                            10000, 10000, UINT_MAX, &ops, "test");
     ASSERT_UCS_OK(status);
 
     std::queue<void*> q;
