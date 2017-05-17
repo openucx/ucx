@@ -553,6 +553,7 @@ public:
 
         status1 = uct_config_modify(m_iface_config, "IB_TX_MAX_BUFS" , "32");
         status2 = uct_config_modify(m_iface_config, "IB_TX_BUFS_GROW" , "32");
+        status2 = uct_config_modify(m_iface_config, "IB_TX_BUFS_START" , "16");
         if ((status1 != UCS_OK) || (status2 != UCS_OK)) {
             m_inited = false;
         } else {
