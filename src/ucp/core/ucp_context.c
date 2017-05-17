@@ -116,10 +116,6 @@ static ucs_config_field_t ucp_config_table[] = {
    "          Otherwise the CPU mode is selected.",
    ucs_offsetof(ucp_config_t, ctx.atomic_mode), UCS_CONFIG_TYPE_ENUM(ucp_atomic_modes)},
 
-  {"LOG_DATA", "0",
-   "Size of packet data that is dumped to the log system in debug mode (0 - nothing).",
-   ucs_offsetof(ucp_config_t, ctx.log_data_size), UCS_CONFIG_TYPE_MEMUNITS},
-
   {"MAX_WORKER_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_NAME_MAX),
    "Maximal length of worker name. Affects the size of worker address in debug builds.",
    ucs_offsetof(ucp_config_t, ctx.max_worker_name), UCS_CONFIG_TYPE_UINT},
@@ -851,7 +847,7 @@ void ucp_cleanup(ucp_context_h context)
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
                       const void *data, size_t length)
 {
-    size_t data_size = context->config.ext.log_data_size;
+    size_t data_size = ucs_global_opts.log_data_size;
     char *p, *endp;
     size_t offset;
 

@@ -35,8 +35,6 @@ typedef struct ucp_context_config {
     size_t                                 zcopy_thresh;
     /** Estimation of bcopy bandwidth */
     size_t                                 bcopy_bw;
-    /** Size of packet data that is dumped to the log system in debug mode */
-    size_t                                 log_data_size;
     /** Maximal size of worker name for debugging */
     unsigned                               max_worker_name;
     /** Atomic mode */
