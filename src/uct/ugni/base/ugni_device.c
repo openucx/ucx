@@ -194,7 +194,11 @@ ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device,
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_CdmAttach failed (domain id %d, %d), Error status: %s %d",
                   cdm->domain_id, ugni_domain_counter, gni_err_str[ugni_rc], ugni_rc);
-        GNI_CdmDestroy(cdm->cdm_handle);
+        ugni_rc = GNI_CdmDestroy(cdm->cdm_handle);
+        if (GNI_RC_SUCCESS != ugni_rc) {
+            ucs_error("GNI_CdmDestroy error status: %s (%d)",
+                      gni_err_str[ugni_rc], ugni_rc);
+        }
         status = UCS_ERR_NO_DEVICE;
     }
 
