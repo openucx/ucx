@@ -104,11 +104,11 @@ void test_ucp_tag_perf::check_scalability(double max_growth, bool is_exp)
 }
 
 UCS_TEST_P(test_ucp_tag_perf, multi_exp) {
-    check_scalability(1.3, true);
+    check_scalability(1.7, true);
 }
 
 UCS_TEST_P(test_ucp_tag_perf, multi_unexp) {
-    check_scalability(1.3, false);
+    check_scalability(1.7, false);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_perf)
