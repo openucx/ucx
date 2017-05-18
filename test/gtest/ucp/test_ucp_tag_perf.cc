@@ -108,7 +108,7 @@ UCS_TEST_P(test_ucp_tag_perf, multi_exp) {
 }
 
 UCS_TEST_P(test_ucp_tag_perf, multi_unexp) {
-    check_scalability(10.0, false); /* unexpected is not scalable yet*/
+    check_scalability(1.3, false);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_perf)
