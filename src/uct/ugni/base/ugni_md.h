@@ -27,6 +27,7 @@ typedef struct uct_ugni_job_info {
     bool                initialized;                    /**< Info status */
 } uct_ugni_job_info_t;
 
+uct_ugni_job_info_t *uct_ugni_get_job_info();
 extern uct_ugni_job_info_t job_info;
 extern uct_md_component_t uct_ugni_md_component;
 

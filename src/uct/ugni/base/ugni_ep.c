@@ -187,6 +187,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
     const uct_devaddr_ugni_t *ugni_dev_addr = (const uct_devaddr_ugni_t *)dev_addr;
     ucs_status_t rc = UCS_OK;
     gni_return_t ugni_rc;
+    uint32_t *big_hash;
 
     self->arb_sched = 0;
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
@@ -196,7 +197,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
     self->flush_group->parent = NULL;
 #endif
 
-    ugni_rc = GNI_EpCreate(iface->nic_handle, iface->local_cq, &self->ep);
+    ugni_rc = GNI_EpCreate(uct_ugni_iface_nic_handle(iface), iface->local_cq, &self->ep);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_CdmCreate failed, Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);
@@ -208,11 +209,9 @@ UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
     }
 
     ucs_arbiter_group_init(&self->arb_group);
-
-    uint32_t *big_hash;
     big_hash = (void *)&self->ep;
     self->hash_key = big_hash[0];
-    if (GNI_DEVICE_ARIES == iface->dev->type) {
+    if (uct_ugni_check_device_type(iface, GNI_DEVICE_ARIES)) {
         self->hash_key &= 0x00FFFFFF;
     }
     ucs_debug("Adding ep hash %x to iface %p", self->hash_key, iface);

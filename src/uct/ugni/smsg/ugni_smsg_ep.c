@@ -53,7 +53,7 @@ static ucs_status_t uct_ugni_smsg_mbox_reg(uct_ugni_smsg_iface_t *iface, uct_ugn
     }
     pthread_mutex_lock(&uct_ugni_global_lock);
 
-    ugni_rc = GNI_MemRegister(iface->super.nic_handle, (uint64_t)address,
+    ugni_rc = GNI_MemRegister(uct_ugni_iface_nic_handle(&iface->super), (uint64_t)address,
                               iface->bytes_per_mbox, iface->remote_cq,
                               GNI_MEM_READWRITE,
                               -1, &(mbox->gni_mem));
@@ -75,7 +75,7 @@ static ucs_status_t uct_ugni_smsg_mbox_dereg(uct_ugni_smsg_iface_t *iface, uct_u
     gni_return_t ugni_rc;
 
     pthread_mutex_lock(&uct_ugni_global_lock);
-    ugni_rc = GNI_MemDeregister(iface->super.nic_handle, &mbox->gni_mem);
+    ugni_rc = GNI_MemDeregister(uct_ugni_iface_nic_handle(&iface->super), &mbox->gni_mem);
     pthread_mutex_unlock(&uct_ugni_global_lock);
 
     if (GNI_RC_SUCCESS != ugni_rc) {
@@ -180,7 +180,7 @@ ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
     }
 
     ep_hash = (uint32_t)iface_addr->ep_hash;
-    gni_rc = GNI_EpSetEventData(ep->super.ep, iface->domain_id, ep_hash);
+    gni_rc = GNI_EpSetEventData(ep->super.ep, iface->cdm.domain_id, ep_hash);
 
     if(GNI_RC_SUCCESS != gni_rc){
         ucs_error("Could not set GNI_EpSetEventData!");

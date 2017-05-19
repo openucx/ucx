@@ -10,8 +10,6 @@
 #include "ugni_iface.h"
 #include <pmi.h>
 
-static uint16_t ugni_domain_global_counter = 0;
-
 void uct_ugni_base_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
   uct_ugni_base_desc_t *base = (uct_ugni_base_desc_t *) obj;
@@ -132,7 +130,7 @@ ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
     uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
     uct_sockaddr_ugni_t *iface_addr = (uct_sockaddr_ugni_t*)addr;
 
-    iface_addr->domain_id   = iface->domain_id;
+    iface_addr->domain_id   = iface->cdm.domain_id;
     return UCS_OK;
 }
 
@@ -183,7 +181,7 @@ static ucs_status_t get_ptag(uint8_t *ptag)
     return UCS_OK;
 }
 
-static ucs_status_t uct_ugni_fetch_pmi()
+ucs_status_t uct_ugni_fetch_pmi()
 {
     int spawned = 0,
         rc;
@@ -234,114 +232,20 @@ static ucs_status_t uct_ugni_fetch_pmi()
     return UCS_OK;
 }
 
-ucs_status_t uct_ugni_init_nic(int device_index,
-                               uint16_t *domain_id,
-                               gni_cdm_handle_t *cdm_handle,
-                               gni_nic_handle_t *nic_handle,
-                               uint32_t *address)
-{
-    int modes;
-    ucs_status_t status;
-    gni_return_t ugni_rc = GNI_RC_SUCCESS;
-
-    status = uct_ugni_fetch_pmi();
-    if (UCS_OK != status) {
-        ucs_error("Failed to activate context, Error status: %d", status);
-        return status;
-    }
-
-    *domain_id = job_info.pmi_rank_id + job_info.pmi_num_of_ranks * ugni_domain_global_counter;
-    modes = GNI_CDM_MODE_FORK_FULLCOPY | GNI_CDM_MODE_CACHED_AMO_ENABLED |
-        GNI_CDM_MODE_ERR_NO_KILL | GNI_CDM_MODE_FAST_DATAGRAM_POLL;
-    ucs_debug("Creating new command domain with id %d (%d + %d * %d)",
-              *domain_id, job_info.pmi_rank_id,
-              job_info.pmi_num_of_ranks, ugni_domain_global_counter);
-    ugni_rc = GNI_CdmCreate(*domain_id, job_info.ptag, job_info.cookie,
-                            modes, cdm_handle);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_CdmCreate failed, Error status: %s %d",
-                  gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    /* For now we use the first device for allocation of the domain */
-    ugni_rc = GNI_CdmAttach(*cdm_handle, job_info.devices[device_index].device_id,
-                            address, nic_handle);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_CdmAttach failed (domain id %d, %d), Error status: %s %d",
-                  *domain_id, ugni_domain_global_counter, gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    ++ugni_domain_global_counter;
-    return UCS_OK;
-}
-
-ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface)
-{
-    ucs_status_t status;
-    gni_return_t ugni_rc;
-    uint32_t pe_address;
-
-    if(iface->activated) {
-        return UCS_OK;
-    }
-
-    status = uct_ugni_init_nic(0, &iface->domain_id,
-                               &iface->cdm_handle, &iface->nic_handle,
-                               &pe_address);
-    if (UCS_OK != status) {
-        ucs_error("Failed to UGNI NIC, Error status: %d", status);
-        return status;
-    }
-
-    ucs_debug("Made ugni interface. iface->dev->nic_addr = %i iface->domain_id = %i", iface->dev->address, iface->domain_id);
-
-    ugni_rc = GNI_CqCreate(iface->nic_handle, UCT_UGNI_LOCAL_CQ, 0,
-                           GNI_CQ_NOBLOCK,
-                           NULL, NULL, &iface->local_cq);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_CqCreate failed, Error status: %s %d",
-                  gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_NO_DEVICE;
-    }
-    iface->activated = true;
-
-    /* iface is activated */
-    return UCS_OK;
-}
-
-ucs_status_t ugni_deactivate_iface(uct_ugni_iface_t *iface)
-{
-    gni_return_t ugni_rc;
-
-    if(!iface->activated) {
-        return UCS_OK;
-    }
-
-    ugni_rc = GNI_CqDestroy(iface->local_cq);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_warn("GNI_CqDestroy failed, Error status: %s %d",
-                 gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_IO_ERROR;
-    }
-    ugni_rc = GNI_CdmDestroy(iface->cdm_handle);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_warn("GNI_CdmDestroy error status: %s (%d)",
-                 gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    iface->activated = false ;
-    return UCS_OK;
-}
-
 static ucs_mpool_ops_t uct_ugni_flush_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = NULL,
     .obj_cleanup   = NULL
 };
+
+void uct_ugni_cleanup_base_iface(uct_ugni_iface_t *iface)
+{
+    ucs_arbiter_cleanup(&iface->arbiter);
+    ucs_mpool_cleanup(&iface->flush_pool, 1);
+    GNI_CqDestroy(iface->local_cq);
+    uct_ugni_destroy_cdm(&iface->cdm);
+}
 
 UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
@@ -350,20 +254,32 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
                     UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
     uct_ugni_device_t *dev;
+    gni_return_t ugni_rc;
     ucs_status_t status;
     uct_ugni_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_iface_config_t);
     unsigned grow =  (config->mpool.bufs_grow == 0) ? 128 : config->mpool.bufs_grow;
 
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, uct_ugni_iface_ops, md, worker,
+                              params, tl_config UCS_STATS_ARG(params->stats_root)
+                              UCS_STATS_ARG(UCT_UGNI_MD_NAME));
     dev = uct_ugni_device_by_name(params->dev_name);
     if (NULL == dev) {
         ucs_error("No device was found: %s", params->dev_name);
         return UCS_ERR_NO_DEVICE;
     }
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, uct_ugni_iface_ops, md, worker,
-                              params, tl_config UCS_STATS_ARG(params->stats_root)
-                              UCS_STATS_ARG(UCT_UGNI_MD_NAME));
-    self->dev         = dev;
-    self->activated   = false;
+    status = uct_ugni_create_cdm(&self->cdm, dev, worker->thread_mode);
+    if (UCS_OK != status) {
+        ucs_error("Failed to UGNI NIC, Error status: %d", status);
+        return status;
+    }
+    ugni_rc = GNI_CqCreate(uct_ugni_iface_nic_handle(self), UCT_UGNI_LOCAL_CQ, 0,
+                           GNI_CQ_NOBLOCK,
+                           NULL, NULL, &self->local_cq);
+    if (GNI_RC_SUCCESS != ugni_rc) {
+        ucs_error("GNI_CqCreate failed, Error status: %s %d",
+                  gni_err_str[ugni_rc], ugni_rc);
+        goto clean_cdm;
+    }
     self->outstanding = 0;
     sglib_hashed_uct_ugni_ep_t_init(self->eps);
     ucs_arbiter_init(&self->arbiter);
@@ -378,7 +294,13 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
                             "UGNI-DESC-ONLY");
     if (UCS_OK != status) {
         ucs_error("Could not init iface");
+        goto clean_cq;
     }
+    return status;
+clean_cq:
+    GNI_CqDestroy(self->local_cq);
+clean_cdm:
+    uct_ugni_destroy_cdm(&self->cdm);
     return status;
 }
 
@@ -386,10 +308,9 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t, uct_md_h, uct_worker_h,
                           const uct_iface_params_t*, uct_iface_ops_t *,
                           const uct_iface_config_t * UCS_STATS_ARG(ucs_stats_node_t *));
 
-static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t){
-
-    ugni_deactivate_iface(self);
-    ucs_arbiter_cleanup(&self->arbiter);
+static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
+{
+    uct_ugni_cleanup_base_iface(self);
 }
 
 UCS_CLASS_DEFINE(uct_ugni_iface_t, uct_base_iface_t);
