@@ -19,11 +19,10 @@ ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
 {
     ucp_recv_desc_t *rdesc;
     ucp_tag_hdr_t *hdr;
-    ucs_queue_iter_t iter;
     ucp_tag_t recv_tag;
     unsigned flags;
 
-    ucs_queue_for_each_safe(rdesc, iter, &context->tm.unexpected, queue) {
+    ucs_list_for_each(rdesc, &context->tm.unexpected.all, list[UCP_RDESC_ALL_LIST]) {
         hdr      = (void*)(rdesc + 1);
         recv_tag = hdr->tag;
         flags    = rdesc->flags;
@@ -44,7 +43,7 @@ ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
             }
 
             if (remove) {
-                ucs_queue_del_iter(&context->tm.unexpected, iter);
+                ucp_tag_unexp_remove(rdesc);
             }
             return rdesc;
         }

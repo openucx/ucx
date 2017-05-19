@@ -33,7 +33,10 @@ typedef struct ucp_tag_match {
         ucs_queue_head_t      *hash;      /* Hash table of expected non-wild tags */
         uint64_t              sn;
     } expected;
-    ucs_queue_head_t          unexpected; /* Unexpected received descriptors */
+    struct {
+        ucs_list_link_t       all;        /* Linked list of all tags */
+        ucs_list_link_t       *hash;      /* Hash table of unexpected tags */
+    } unexpected;
 } ucp_tag_match_t;
 
 
