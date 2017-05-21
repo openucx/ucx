@@ -323,6 +323,9 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
     if (iface->err_handler) {
         iface->err_handler(iface->err_handler_arg, tl_ep,
                            UCS_ERR_ENDPOINT_TIMEOUT);
+    } else {
+        ucs_error("Error %s was not handled for ep %p",
+                  ucs_status_string(UCS_ERR_ENDPOINT_TIMEOUT), tl_ep);
     }
 }
 
