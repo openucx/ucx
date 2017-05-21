@@ -303,6 +303,28 @@ typedef struct ucp_err_handler {
 
 /**
  * @ingroup UCP_COMM
+ * @brief Completion callback for non-blocking stream oriented receives.
+ *
+ * This callback routine is invoked whenever the @ref ucp_stream_recv_nb
+ * "receive operation" is completed and the data is ready in the receive buffer.
+ *
+ * @param [in]  request   The completed receive request.
+ * @param [in]  status    Completion status. If the send operation was completed
+ *                        successfully UCX_OK is returned. If send operation was
+ *                        canceled UCS_ERR_CANCELED is returned. If the data can
+ *                        not fit into the receive buffer the
+ *                        @ref UCS_ERR_MESSAGE_TRUNCATED error code is returned.
+ *                        Otherwise, an @ref ucs_status_t "error status" is
+ *                        returned.
+ * @param [in]  count     How many elements actually arrived to original buffer.
+ *                        The value is valid only if the status is UCS_OK.
+ */
+typedef void (*ucp_stream_recv_callback_t)(void *request, ucs_status_t status,
+                                           size_t count);
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Completion callback for non-blocking tag receives.
  *
  * This callback routine is invoked whenever the @ref ucp_tag_recv_nb
