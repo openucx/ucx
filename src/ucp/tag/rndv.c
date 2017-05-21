@@ -75,7 +75,8 @@ static size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     if (UCP_DT_IS_CONTIG(sreq->send.datatype)) {
         rndv_rts_hdr->address = (uintptr_t) sreq->send.buffer;
         packed_len += ucp_tag_rndv_pack_rkey(sreq, rndv_rts_hdr);
-    } else if (UCP_DT_IS_GENERIC(sreq->send.datatype)) {
+    } else if (UCP_DT_IS_GENERIC(sreq->send.datatype) ||
+               UCP_DT_IS_IOV(sreq->send.datatype)) {
         rndv_rts_hdr->address = 0;
     }
 
@@ -225,13 +226,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_get_zcopy, (self),
     if (!(ucp_tag_rndv_is_get_op_possible(rndv_req->send.ep,
                                           rndv_req->send.rndv_get.rkey_bundle.rkey))) {
         /* can't perform get_zcopy - switch to AM rndv */
+        if (rndv_req->send.rndv_get.rkey_bundle.rkey != UCT_INVALID_RKEY) {
+            uct_rkey_release(&rndv_req->send.rndv_get.rkey_bundle);
+        }
         ucp_rndv_recv_am(rndv_req, rndv_req->send.rndv_get.rreq,
                          rndv_req->send.rndv_get.remote_request,
                          rndv_req->send.length);
 
-        if (rndv_req->send.rndv_get.rkey_bundle.rkey != UCT_INVALID_RKEY) {
-            uct_rkey_release(&rndv_req->send.rndv_get.rkey_bundle);
-        }
         return UCS_INPROGRESS;
     }
 
@@ -407,7 +408,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
              * with AM messages */
             ucp_rndv_handle_recv_am(rndv_req, rreq, rndv_rts_hdr);
         }
-    } else if (UCP_DT_IS_GENERIC(rreq->recv.datatype)) {
+    } else if (UCP_DT_IS_GENERIC(rreq->recv.datatype) ||
+               UCP_DT_IS_IOV(rreq->recv.datatype)) {
         /* if the recv side has a generic datatype,
          * send an RTR and the sender will send the data with AM messages */
         ucp_rndv_handle_recv_am(rndv_req, rreq, rndv_rts_hdr);
