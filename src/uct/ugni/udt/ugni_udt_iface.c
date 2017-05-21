@@ -13,7 +13,7 @@
 #define UCT_UGNI_UDT_TL_NAME "ugni_udt"
 
 static ucs_config_field_t uct_ugni_udt_iface_config_table[] = {
-    {"", "ALLOC=huge,mmap,heap", NULL,
+    {"", "ALLOC=huge,thp,mmap,heap", NULL,
     ucs_offsetof(uct_ugni_iface_config_t, super),
     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 

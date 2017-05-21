@@ -13,7 +13,7 @@
 #define UCT_UGNI_SMSG_TL_NAME "ugni_smsg"
 
 static ucs_config_field_t uct_ugni_smsg_iface_config_table[] = {
-    {"", "ALLOC=huge,mmap,heap", NULL,
+    {"", "ALLOC=huge,thp,mmap,heap", NULL,
      ucs_offsetof(uct_ugni_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 

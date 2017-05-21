@@ -482,7 +482,7 @@ ucs_config_field_t uct_iface_config_table[] = {
    "up to this limit, the actual size can be lower due to transport constraints.",
    ucs_offsetof(uct_iface_config_t, max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"ALLOC", "huge,md,mmap,heap",
+  {"ALLOC", "huge,thp,md,mmap,heap",
    "Priority of methods to allocate intermediate buffers for communication",
    ucs_offsetof(uct_iface_config_t, alloc_methods), UCS_CONFIG_TYPE_ARRAY(alloc_methods)},
 

@@ -239,6 +239,8 @@ typedef struct uct_tl_resource_desc {
  * @brief  Memory allocation methods.
  */
 typedef enum {
+    UCT_ALLOC_METHOD_THP,  /**< Allocate from OS using libc allocator with
+                                Transparent Huge Pages enabled*/
     UCT_ALLOC_METHOD_MD,   /**< Allocate using memory domain */
     UCT_ALLOC_METHOD_HEAP, /**< Allocate from heap using libc allocator */
     UCT_ALLOC_METHOD_MMAP, /**< Allocate from OS using mmap() syscall */
