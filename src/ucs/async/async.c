@@ -69,6 +69,7 @@ static ucs_async_ops_t ucs_async_poll_ops = {
     .context_unblock    = ucs_empty_function,
     .add_event_fd       = ucs_empty_function_return_success,
     .remove_event_fd    = ucs_empty_function_return_success,
+    .modify_event_fd    = ucs_empty_function_return_success,
     .add_timer          = ucs_empty_function_return_success,
     .remove_timer       = ucs_empty_function_return_success,
 };
@@ -338,9 +339,10 @@ void ucs_async_context_destroy(ucs_async_context_t *async)
     ucs_free(async);
 }
 
-static ucs_status_t ucs_async_alloc_handler(ucs_async_mode_t mode, int id,
-                                            ucs_async_event_cb_t cb, void *arg,
-                                            ucs_async_context_t *async)
+static ucs_status_t
+ucs_async_alloc_handler(int id, ucs_async_mode_t mode, int events,
+                        ucs_async_event_cb_t cb, void *arg,
+                        ucs_async_context_t *async)
 {
     ucs_async_handler_t *handler;
     ucs_status_t status;
@@ -369,6 +371,7 @@ static ucs_status_t ucs_async_alloc_handler(ucs_async_mode_t mode, int id,
 
     handler->id       = id;
     handler->mode     = mode;
+    handler->events   = events;
     handler->cb       = cb;
     handler->arg      = arg;
     handler->async    = async;
@@ -405,7 +408,7 @@ ucs_status_t ucs_async_set_event_handler(ucs_async_mode_t mode, int event_fd,
         goto err;
     }
 
-    status = ucs_async_alloc_handler(mode, event_fd, cb, arg, async);
+    status = ucs_async_alloc_handler(event_fd, mode, events, cb, arg, async);
     if (status != UCS_OK) {
         goto err;
     }
@@ -439,7 +442,7 @@ ucs_status_t ucs_async_add_timer(ucs_async_mode_t mode, ucs_time_t interval,
             timer_id = UCS_ASYNC_TIMER_ID_MIN;
         }
 
-        status = ucs_async_alloc_handler(mode, timer_id, cb, arg, async);
+        status = ucs_async_alloc_handler(timer_id, mode, 1, cb, arg, async);
     } while (status == UCS_ERR_ALREADY_EXISTS);
     if (status != UCS_OK) {
         goto err;
@@ -505,6 +508,28 @@ ucs_status_t ucs_async_remove_handler(int id, int sync)
     return UCS_OK;
 }
 
+ucs_status_t ucs_async_modify_handler(int fd, int events)
+{
+    ucs_async_handler_t *handler;
+    ucs_status_t status;
+
+    if (fd >= UCS_ASYNC_TIMER_ID_MIN) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    handler = ucs_async_handler_get(fd);
+    if (handler == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    handler->events = events;
+    status = ucs_async_method_call(handler->mode, modify_event_fd,
+                                   handler->async, fd, handler->events);
+    ucs_async_handler_put(handler);
+
+    return status;
+}
+
 void __ucs_async_poll_missed(ucs_async_context_t *async)
 {
     ucs_async_handler_t *handler;
@@ -553,7 +578,8 @@ void ucs_async_poll(ucs_async_context_t *async)
     n = 0;
     kh_foreach_value(&ucs_async_global_context.handlers, handler, {
         if (((async == NULL) || (async == handler->async)) &&  /* Async context match */
-            ((handler->async == NULL) || (handler->async->poll_block == 0))) /* Not blocked */
+            ((handler->async == NULL) || (handler->async->poll_block == 0)) && /* Not blocked */
+            handler->events) /* Non-empty event set */
         {
             ucs_async_handler_hold(handler);
             handlers[n++] = handler;

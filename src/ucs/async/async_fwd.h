@@ -83,6 +83,19 @@ ucs_status_t ucs_async_remove_handler(int id, int sync);
 
 /**
  * @ingroup UCS_RESOURCE
+ *
+ * Modify events mask for an existing event handler (event file).
+ *
+ * @param fd        File descriptor modify events for.
+ * @param events    New set of events to wait on (POLLxx/EPOLLxx bits).
+ *
+ * @return Error code as defined by @ref ucs_status_t.
+ */
+ucs_status_t ucs_async_modify_handler(int fd, int events);
+
+
+/**
+ * @ingroup UCS_RESOURCE
  * @brief Create an asynchronous execution context
  *
  * Allocate and initialize an asynchronous execution context.
