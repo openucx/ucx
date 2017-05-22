@@ -179,6 +179,64 @@ UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
     request_release(my_recv_req);
 }
 
+UCS_TEST_P(test_ucp_tag_probe, send_2_msg_probe, "RNDV_THRESH=inf") {
+    const ucp_datatype_t DT_INT = ucp_dt_make_contig(sizeof(int));
+    const ucp_tag_t      TAG    = 0xaaa;
+    const size_t         COUNT  = 20000;
+
+    /*
+     * send in order: 1, 2
+     */
+    std::vector<int> sdata1(COUNT, 1);
+    std::vector<int> sdata2(COUNT, 2);
+    send_b(&sdata1[0], COUNT, DT_INT, TAG);
+    send_b(&sdata2[0], COUNT, DT_INT, TAG);
+
+    /*
+     * probe in order: 1, 2
+     */
+    ucp_tag_message_h message1, message2;
+    ucp_tag_recv_info info;
+    do {
+        progress();
+        message1 = ucp_tag_probe_nb(receiver().worker(), TAG, 0xffff, 1, &info);
+    } while (message1 == NULL);
+    do {
+        progress();
+        message2 = ucp_tag_probe_nb(receiver().worker(), TAG, 0xffff, 1, &info);
+    } while (message2 == NULL);
+
+    /*
+     * receive in **reverse** order: 2, 1
+     */
+    std::vector<int> rdata2(COUNT);
+    request *rreq2 = (request*)ucp_tag_msg_recv_nb(receiver().worker(), &rdata2[0],
+                                                   COUNT, DT_INT, message2,
+                                                   recv_callback);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq2));
+    wait(rreq2);
+
+    std::vector<int> rdata1(COUNT);
+    request *rreq1 = (request*)ucp_tag_msg_recv_nb(receiver().worker(), &rdata1[0],
+                                                   COUNT, DT_INT, message1,
+                                                   recv_callback);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq1));
+    wait(rreq1);
+
+    /*
+     * expect data to arrive in probe order (rather than recv order)
+     */
+    EXPECT_TRUE(rreq1->completed);
+    EXPECT_TRUE(rreq2->completed);
+    EXPECT_EQ(UCS_OK, rreq1->status);
+    EXPECT_EQ(UCS_OK, rreq2->status);
+    EXPECT_EQ(sdata1, rdata1);
+    EXPECT_EQ(sdata2, rdata2);
+
+    request_release(rreq1);
+    request_release(rreq2);
+}
+
 UCS_TEST_P(test_ucp_tag_probe, limited_probe_size) {
     static const int COUNT = 1000;
     std::string sendbuf, recvbuf;
