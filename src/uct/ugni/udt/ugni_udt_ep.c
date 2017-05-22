@@ -9,7 +9,7 @@
 #include <uct/ugni/base/ugni_device.h>
 #include <uct/ugni/base/ugni_md.h>
 
-#define uct_ugni_udt_can_send(_ep) ((uct_ugni_can_send(&_ep->super)) && (_ep->posted_desc == NULL))
+#define uct_ugni_udt_can_send(_ep) ((uct_ugni_ep_can_send(&_ep->super)) && (_ep->posted_desc == NULL))
 
 ucs_status_t uct_ugni_udt_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
 {
@@ -104,7 +104,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_udt_ep_t)
         }
         iface->super.outstanding--;
         ucs_mpool_put(self->posted_desc);
-
     }
 }
 
@@ -137,10 +136,12 @@ uct_ugni_udt_ep_am_common_send(const unsigned is_short, uct_ugni_udt_ep_t *ep, u
     ssize_t packed_length;
 
     UCT_CHECK_AM_ID(am_id);
-    if (ucs_unlikely(!uct_ugni_can_send(&ep->super)) || ucs_unlikely(ep->posted_desc != NULL)) {
+    if (ucs_unlikely(!uct_ugni_udt_can_send(ep))) {
         UCS_STATS_UPDATE_COUNTER(ep->super.super.stats, UCT_EP_STAT_NO_RES, 1);
         return UCS_ERR_NO_RESOURCE;
     }
+
+    ep->desc_flush_group = ep->super.flush_group;
 
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc,
                              desc, return UCS_ERR_NO_RESOURCE);
@@ -184,7 +185,7 @@ uct_ugni_udt_ep_am_common_send(const unsigned is_short, uct_ugni_udt_ep_t *ep, u
     UCT_UGNI_UDT_CHECK_RC(ugni_rc, desc);
 
     ep->posted_desc = desc;
-    ++ep->super.outstanding;
+    ++ep->desc_flush_group->flush_comp.count;
     ++iface->super.outstanding;
 
     return is_short ? UCS_OK : packed_length;

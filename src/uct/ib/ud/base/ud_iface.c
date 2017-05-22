@@ -431,7 +431,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     self->rx.available           = config->super.rx.queue_len;
     self->config.tx_qp_len       = config->super.tx.queue_len;
-    self->config.peer_timout     = ucs_time_from_sec(config->peer_timeout);
+    self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
 
     /* Redefine receive desc release callback */
     self->super.release_desc.cb  = uct_ud_iface_release_desc;
@@ -512,7 +512,7 @@ UCS_CLASS_DEFINE(uct_ud_iface_t, uct_ib_iface_t);
 ucs_config_field_t uct_ud_iface_config_table[] = {
     {"IB_", "", NULL,
      ucs_offsetof(uct_ud_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
-    {"TIMEOUT", "1.0m", "Transport timeout",
+    {"TIMEOUT", "5.0m", "Transport timeout",
      ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
     {NULL}
 };

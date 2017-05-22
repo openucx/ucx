@@ -524,8 +524,11 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     dci = uct_dc_iface_dci_find(&iface->super, qp_num);
     txqp = &iface->super.tx.dcis[dci].txqp;
     txwq = &iface->dci_wqs[dci];
-
     hw_ci = ntohs(cqe->wqe_counter);
+
+    ucs_trace_poll("dc_mlx5 iface %p tx_cqe: dci[%d] qpn 0x%x txqp %p hw_ci %d",
+                   iface, dci, qp_num, txqp, hw_ci);
+
     uct_rc_txqp_available_set(txqp, uct_ib_mlx5_txwq_update_bb(txwq, hw_ci));
     uct_dc_iface_dci_put(&iface->super, dci);
     uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
@@ -557,8 +560,8 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg
     struct mlx5_cqe64 *cqe   = arg;
     uint32_t          qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
 
-    uct_dc_handle_failure(ib_iface, qp_num);
     uct_ib_mlx5_completion_with_err(arg, UCS_LOG_LEVEL_ERROR);
+    uct_dc_handle_failure(ib_iface, qp_num);
 }
 
 static void uct_dc_mlx5_ep_set_failed(uct_ib_iface_t *ib_iface, uct_ep_h ep)
@@ -632,23 +635,30 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t)(uct_iface_t*);
 
-static ucs_status_t uct_dc_mlx5_reset_qp(uct_rc_iface_t *iface,
-                                         uct_rc_txqp_t *txqp)
+static ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_iface_t *dc_iface, int dci)
 {
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(dc_iface, uct_dc_mlx5_iface_t);
     ucs_status_t status;
-    uct_dc_mlx5_iface_t *mlx5_iface = ucs_derived_of(iface, uct_dc_mlx5_iface_t);
+
+    ucs_debug("iface %p reset dci[%d]", iface, dci);
+
     /* Synchronize CQ index with the driver, since it would remove pending
      * completions for this QP (both send and receive) during ibv_destroy_qp().
      */
-    uct_rc_mlx5_iface_common_update_cqs_ci(&mlx5_iface->mlx5_common,
-                                           &mlx5_iface->super.super.super);
-    status = uct_rc_reset_qp(iface, txqp);
-    uct_rc_mlx5_iface_common_sync_cqs_ci(&mlx5_iface->mlx5_common,
-                                         &mlx5_iface->super.super.super);
+    uct_rc_mlx5_iface_common_update_cqs_ci(&iface->mlx5_common,
+                                           &iface->super.super.super);
+    status = uct_rc_modify_qp(&iface->super.tx.dcis[dci].txqp, IBV_QPS_RESET);
+    uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->mlx5_common,
+                                         &iface->super.super.super);
+
+    /* Resume posting from to the beginning of the QP */
+    uct_ib_mlx5_txwq_reset(&iface->dci_wqs[dci]);
+
     return status;
 }
 
-static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
+static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
+    {
     {
         {
             .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t),
@@ -695,7 +705,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     },
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_dc_iface_fc_handler,
-    .reset_qp                 = uct_dc_mlx5_reset_qp
+    },
+    .reset_dci                = uct_dc_mlx5_iface_reset_dci
 };
 
 

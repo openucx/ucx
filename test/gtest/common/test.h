@@ -31,10 +31,15 @@ public:
 
     void set_num_threads(unsigned num_threads);
     unsigned num_threads() const;
+
     virtual void set_config(const std::string& config_str);
     virtual void modify_config(const std::string& name, const std::string& value);
     virtual void push_config();
     virtual void pop_config();
+
+    static void hide_errors();
+    static void wrap_errors();
+    static void restore_errors();
 
 protected:
 
@@ -43,11 +48,6 @@ protected:
     } state_t;
 
     typedef std::vector<ucs_global_opts_t> config_stack_t;
-
-    static ucs_log_func_rc_t
-    log_handler(const char *file, unsigned line, const char *function,
-                ucs_log_level_t level, const char *prefix, const char *message,
-                va_list ap);
 
     void SetUpProxy();
     void TearDownProxy();
@@ -66,12 +66,30 @@ protected:
     int                  m_num_valgrind_errors_before;
     unsigned             m_num_warnings_before;
 
-    static unsigned m_total_warnings;
+    static unsigned                 m_total_warnings;
+    static std::vector<std::string> m_errors;
 
 private:
     void skipped(const test_skip_exception& e);
     void run();
     static void *thread_func(void *arg);
+
+    static ucs_log_func_rc_t
+    count_warns_logger(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level, const char *prefix,
+                       const char *message,
+                       va_list ap);
+
+    static std::string format_message(const char *message, va_list ap);
+
+    static ucs_log_func_rc_t
+    hide_errors_logger(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level, const char *prefix,
+                       const char *message, va_list ap);
+    static ucs_log_func_rc_t
+    wrap_errors_logger(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level, const char *prefix,
+                       const char *message, va_list ap);
 
     pthread_barrier_t    m_barrier;
 };

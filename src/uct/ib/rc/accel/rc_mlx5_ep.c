@@ -449,15 +449,26 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 {
     uct_rc_mlx5_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
                                                 uct_rc_mlx5_iface_t);
-    uct_rc_iface_ops_t *rc_ops = ucs_derived_of(iface->super.super.ops,
-                                                uct_rc_iface_ops_t);
 
     uct_worker_progress_unregister(iface->super.super.super.worker,
                                    uct_rc_mlx5_iface_progress, iface);
     uct_ib_mlx5_txwq_cleanup(iface->super.super.super.worker, &self->tx.wq);
+
+    /* Modify QP to error to make HW generate CQEs for all in-progress SRQ
+     * receives from the QP, so we clean them all before ibv_modify_qp() can
+     * see them.
+     */
+    (void)uct_rc_modify_qp(&self->super.txqp, IBV_QPS_ERR);
     uct_rc_mlx5_iface_commom_clean_srq(&iface->mlx5_common, &iface->super,
-                                       self->super.txqp.qp->qp_num);
-    rc_ops->reset_qp(&iface->super, &self->super.txqp);
+                                       self->qp_num);
+
+    /* Synchronize CQ index with the driver, since it would remove pending
+     * completions for this QP (both send and receive) during ibv_destroy_qp().
+     */
+    uct_rc_mlx5_iface_common_update_cqs_ci(&iface->mlx5_common, &iface->super.super);
+    (void)uct_rc_modify_qp(&self->super.txqp, IBV_QPS_RESET);
+    uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->mlx5_common, &iface->super.super);
+
     uct_ib_mlx5_srq_cleanup(&iface->mlx5_common.rx.srq, iface->super.rx.srq.srq);
 }
 

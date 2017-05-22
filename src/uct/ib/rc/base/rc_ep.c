@@ -205,19 +205,19 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     return status;
 }
 
-ucs_status_t uct_rc_reset_qp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp)
+ucs_status_t uct_rc_modify_qp(uct_rc_txqp_t *txqp, enum ibv_qp_state state)
 {
     struct ibv_qp_attr qp_attr;
-    ucs_status_t status = UCS_OK;
 
+    ucs_debug("modify QP 0x%x to state %d", txqp->qp->qp_num, state);
     memset(&qp_attr, 0, sizeof(qp_attr));
-    qp_attr.qp_state = IBV_QPS_RESET;
+    qp_attr.qp_state = state;
     if (ibv_modify_qp(txqp->qp, &qp_attr, IBV_QP_STATE)) {
         ucs_warn("modify qp 0x%x to RESET failed: %m", txqp->qp->qp_num);
-        status = UCS_ERR_IO_ERROR;
+        return UCS_ERR_IO_ERROR;
     }
 
-    return status;
+    return UCS_OK;
 }
 
 void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,

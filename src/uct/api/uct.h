@@ -1037,6 +1037,54 @@ ucs_status_t uct_wakeup_signal(uct_wakeup_h wakeup);
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief UCT progress types 
+ */
+enum uct_progress_types {
+    UCT_PROGRESS_RX   = UCS_BIT(0),  /**< progress UCT receive operations */
+    UCT_PROGRESS_TX   = UCS_BIT(1)   /**< progress UCT send operations */
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Enable synchronous progress for the interface
+ *
+ * Notify the transport that it should do work 
+ * during @ref uct_worker_progress(). 
+ * Thus the latency of the transport may be reduced.
+ *
+ * The function can be called from any context or thread.
+ *
+ * By default, progress is enabled when the interface is created.
+ *
+ * @param [in]  iface    The interface to enable progress.
+ * @param [in]  flags    What kind progress to enable. See @ref uct_progress_types 
+ *
+ */
+void uct_iface_progress_enable(uct_iface_h iface, unsigned flags);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Disable synchronous progress for the interface
+ *
+ * Notify the transport that it should avoid doing anything
+ * during @ref uct_worker_progress(). Thus the latency of
+ * other transports may be reduced.
+ *
+ * The function can be called from any context or thread.
+ *
+ * By default, progress is enabled when the interface is created.
+ *
+ * @param [in]  iface    The interface to disable progress.
+ * @param [in]  flags    What kind of progress to disable. See @ref uct_progress_types  
+ *
+ */
+void uct_iface_progress_disable(uct_iface_h iface, unsigned flags);
+
+
+/**
+ * @ingroup UCT_RESOURCE
  */
 ucs_status_t uct_iface_mem_alloc(uct_iface_h iface, size_t length, unsigned flags,
                                  const char *name, uct_allocated_memory_t *mem);

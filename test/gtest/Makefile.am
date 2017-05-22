@@ -84,8 +84,9 @@ gtest_SOURCES = \
 	uct/uct_p2p_test.cc \
 	uct/uct_test.cc \
 	uct/test_stats.cc \
+	ucs/test_stats_filter.cc \
 	uct/test_wakeup.cc \
-	uct/test_error_handling.cc \
+	uct/test_peer_failure.cc \
 	uct/test_tag.cc \
 	\
 	ucp/test_ucp_error_handling.cc \
@@ -98,6 +99,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_tag_cancel.cc \
 	ucp/test_ucp_tag_match.cc \
 	ucp/test_ucp_tag_mt.cc \
+	ucp/test_ucp_tag_perf.cc \
 	ucp/test_ucp_tag_probe.cc \
 	ucp/test_ucp_tag_xfer.cc \
 	ucp/test_ucp_tag.cc \

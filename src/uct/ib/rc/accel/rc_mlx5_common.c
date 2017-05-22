@@ -242,6 +242,8 @@ void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_
     }
     ucs_assert(pi == mlx5_cq->cq_ci);
 
+    ucs_memory_cpu_load_fence();
+
     /* Remove CQEs of the destroyed QP, so the drive would not see them and try
      * to remove them itself, creating a mess with the free-list.
      */

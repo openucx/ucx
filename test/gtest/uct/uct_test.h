@@ -2,6 +2,7 @@
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 *
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED
 * See file LICENSE for terms.
 */
 
@@ -18,6 +19,8 @@ extern "C" {
 
 
 #define UCT_TEST_TIMEOUT_IN_SEC   10.0
+#define DEFAULT_DELAY_MS           1.0
+#define DEFAULT_TIMEOUT_SEC       10.0
 
 
 /* Testing resource */
@@ -181,9 +184,6 @@ protected:
             }
         }
     }
-
-    static const double DEFAULT_DELAY_MS    = 1.0;
-    static const double DEFAULT_TIMEOUT_SEC = 10.0;
 
     virtual void init();
     virtual void cleanup();

@@ -76,7 +76,8 @@ static size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
         UCP_DT_IS_IOV(sreq->send.datatype)) {
         rndv_rts_hdr->address = (uintptr_t) sreq->send.buffer;
         packed_len += ucp_tag_rndv_pack_rkey(sreq, rndv_rts_hdr);
-    } else if (UCP_DT_IS_GENERIC(sreq->send.datatype)) {
+    } else if (UCP_DT_IS_GENERIC(sreq->send.datatype) ||
+               UCP_DT_IS_IOV(sreq->send.datatype)) {
         rndv_rts_hdr->address = 0;
     }
 
@@ -409,7 +410,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
             ucp_rndv_handle_recv_am(rndv_req, rreq, rndv_rts_hdr);
         }
     } else if (UCP_DT_IS_GENERIC(rreq->recv.datatype) ||
-               UCP_DT_IS_IOV(rreq->recv.datatype) ) {
+               UCP_DT_IS_IOV(rreq->recv.datatype)) {
         /* if the recv side has a generic datatype,
          * send an RTR and the sender will send the data with AM messages */
         ucp_rndv_handle_recv_am(rndv_req, rreq, rndv_rts_hdr);

@@ -46,9 +46,8 @@ static ucs_status_t progress_local_cq(uct_ugni_smsg_iface_t *iface){
     message_data.msg_id = GNI_CQ_GET_MSG_ID(event_data);
     message_pointer = sglib_hashed_uct_ugni_smsg_desc_t_find_member(iface->smsg_list,&message_data);
     ucs_assert(NULL != message_pointer);
-    message_pointer->ep->outstanding--;
+    uct_ugni_check_flush(message_pointer->flush_group);
     iface->super.outstanding--;
-    uct_ugni_ep_check_flush(message_pointer->ep);
     sglib_hashed_uct_ugni_smsg_desc_t_delete(iface->smsg_list,message_pointer);
     ucs_mpool_put(message_pointer);
     return UCS_INPROGRESS;
@@ -218,64 +217,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_iface_t)
 {
     uct_worker_progress_unregister(self->super.super.worker,
                                    uct_ugni_smsg_progress, self);
-    if (!self->super.activated) {
-        return;
-    }
-
     ucs_mpool_cleanup(&self->free_desc, 1);
     ucs_mpool_cleanup(&self->free_mbox, 1);
-}
-
-static ucs_status_t uct_ugni_smsg_iface_flush(uct_iface_h tl_iface, unsigned flags,
-                                              uct_completion_t *comp)
-{
-    uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_smsg_iface_t);
-    ucs_status_t status;
-
-    if (comp != NULL) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    /* Always progress to local cq to get back send credits */
-    status = progress_local_cq(iface);
-
-    if (UCS_OK == status) {
-        UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
-    } else {
-        UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
-    }
-
-    return status;
-}
-
-static ucs_status_t uct_ugni_smsg_ep_flush(uct_ep_h tl_ep, unsigned flags,
-                                           uct_completion_t *comp)
-{
-    uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
-    ucs_status_t status;
-
-    /* Even if we have no outstanding requests we can still get back send credits */
-    status = progress_local_cq(ucs_derived_of(tl_ep->iface, uct_ugni_smsg_iface_t));
-
-    if((0 == ep->super.outstanding) && (ep->super.arb_size == 0)) {
-        ep->super.flush_flag = 0;
-    }
-    
-    if(uct_ugni_can_flush(&ep->super)) {
-        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
-        status = UCS_OK;
-    } else {
-        ep->super.flush_flag = 1;
-        UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
-        status = UCS_ERR_NO_RESOURCE;
-    }
-
-    return status;
+    GNI_CqDestroy(self->remote_cq);
 }
 
 uct_iface_ops_t uct_ugni_smsg_iface_ops = {
     .iface_query           = uct_ugni_smsg_iface_query,
-    .iface_flush           = uct_ugni_smsg_iface_flush,
+    .iface_flush           = uct_ugni_iface_flush,
     .iface_close           = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_smsg_iface_t),
     .iface_get_address     = uct_ugni_iface_get_address,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
@@ -288,84 +237,8 @@ uct_iface_ops_t uct_ugni_smsg_iface_ops = {
     .ep_pending_purge      = uct_ugni_ep_pending_purge,
     .ep_am_short           = uct_ugni_smsg_ep_am_short,
     .ep_am_bcopy           = uct_ugni_smsg_ep_am_bcopy,
-    .ep_flush              = uct_ugni_smsg_ep_flush,
+    .ep_flush              = uct_ugni_ep_flush,
 };
-
-static ucs_status_t ugni_smsg_activate_iface(uct_ugni_smsg_iface_t *iface)
-{
-    ucs_status_t status;
-    gni_return_t ugni_rc;
-    uint32_t pe_address;
-
-    if(iface->super.activated) {
-        return UCS_OK;
-    }
-    /*pull out these chunks into common routines */
-    status = uct_ugni_init_nic(0, &iface->super.domain_id,
-                               &iface->super.cdm_handle, &iface->super.nic_handle,
-                               &pe_address);
-    if (UCS_OK != status) {
-        ucs_error("Failed to UGNI NIC, Error status: %d", status);
-        return status;
-    }
-
-    ugni_rc = GNI_CqCreate(iface->super.nic_handle, UCT_UGNI_LOCAL_CQ, 0,
-                           GNI_CQ_NOBLOCK,
-                           NULL, NULL, &iface->super.local_cq);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_CqCreate failed, Error status: %s %d",
-                  gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    ugni_rc = GNI_CqCreate(iface->super.nic_handle, 40000, 0,
-                           GNI_CQ_NOBLOCK,
-                           NULL, NULL, &iface->remote_cq);
-
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_CqCreate failed, Error status: %s %d",
-                  gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    iface->super.activated = true;
-
-    /* iface is activated */
-    return UCS_OK;
-}
-
-static ucs_status_t ugni_smsg_deactivate_iface(uct_ugni_smsg_iface_t *iface)
-{
-    gni_return_t ugni_rc;
-
-    if(!iface->super.activated) {
-        return UCS_OK;
-    }
-
-    ugni_rc = GNI_CqDestroy(iface->super.local_cq);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_warn("GNI_CqDestroy failed, Error status: %s %d",
-                 gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    ugni_rc = GNI_CqDestroy(iface->remote_cq);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_warn("GNI_CqDestroy failed, Error status: %s %d",
-                 gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    ugni_rc = GNI_CdmDestroy(iface->super.cdm_handle);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_warn("GNI_CdmDestroy error status: %s (%d)",
-                 gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    iface->super.activated = false ;
-    return UCS_OK;
-}
 
 static ucs_mpool_ops_t uct_ugni_smsg_desc_mpool_ops = {
     .chunk_alloc   = ucs_mpool_hugetlb_malloc,
@@ -408,6 +281,14 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
     smsg_attr.mbox_maxcredit = self->config.smsg_max_credit;
     smsg_attr.msg_maxsize = self->config.smsg_seg_size;
 
+    ugni_rc = GNI_CqCreate(uct_ugni_iface_nic_handle(&self->super), 40000, 0,
+                           GNI_CQ_NOBLOCK,
+                           NULL, NULL, &self->remote_cq);
+    if (GNI_RC_SUCCESS != ugni_rc) {
+        ucs_error("GNI_CqCreate failed, Error status: %s %d",
+                  gni_err_str[ugni_rc], ugni_rc);
+        return UCS_ERR_NO_DEVICE;
+    }
     ugni_rc = GNI_SmsgBufferSizeNeeded(&(smsg_attr), &bytes_per_mbox);
     self->bytes_per_mbox = ucs_align_up_pow2(bytes_per_mbox, ucs_get_page_size());
 
@@ -444,21 +325,15 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
 
     if (UCS_OK != status) {
         ucs_error("Mbox Mpool creation failed");
-        goto clean_desc;
-    }
-
-    status = ugni_smsg_activate_iface(self);
-    if (UCS_OK != status) {
-        ucs_error("Failed to activate the interface");
         goto clean_mbox;
     }
 
-    ugni_rc = GNI_SmsgSetMaxRetrans(self->super.nic_handle, self->config.smsg_max_retransmit);
+    ugni_rc = GNI_SmsgSetMaxRetrans(uct_ugni_iface_nic_handle(&self->super), self->config.smsg_max_retransmit);
 
     if (ugni_rc != GNI_RC_SUCCESS) {
         ucs_error("Smsg setting max retransmit count failed.");
         status = UCS_ERR_INVALID_PARAM;
-        goto clean_iface;
+        goto clean_desc;
     }
 
     /* TBD: eventually the uct_ugni_progress has to be moved to
@@ -467,13 +342,12 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
     pthread_mutex_unlock(&uct_ugni_global_lock);
     return UCS_OK;
 
- clean_iface:
-    ugni_smsg_deactivate_iface(self);
  clean_desc:
     ucs_mpool_cleanup(&self->free_desc, 1);
  clean_mbox:
     ucs_mpool_cleanup(&self->free_mbox, 1);
  exit:
+    uct_ugni_cleanup_base_iface(&self->super);
     ucs_error("Failed to activate interface");
     pthread_mutex_unlock(&uct_ugni_global_lock);
     return status;

@@ -17,6 +17,7 @@
 
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
+#include <ucm/util/sys.h>
 #include <sys/ioctl.h>
 #include <sys/shm.h>
 #include <sys/mman.h>
@@ -517,93 +518,52 @@ ucs_status_t ucs_sysv_free(void *address)
     return UCS_OK;
 }
 
+typedef struct {
+    unsigned long start;
+    unsigned long end;
+    int           prot;
+    int           found;
+} ucs_get_mem_prot_ctx_t;
+
+static int ucs_get_mem_prot_cb(void *arg, void *addr, size_t length, int prot)
+{
+    ucs_get_mem_prot_ctx_t *ctx = arg;
+    unsigned long seg_start = (uintptr_t)addr;
+    unsigned long seg_end   = (uintptr_t)addr + length;
+
+    if (ctx->start < seg_start) {
+        ucs_trace("address 0x%lx is before next mapping 0x%lx..0x%lx", ctx->start,
+                  seg_start, seg_end);
+        return 1;
+    } else if (ctx->start < seg_end) {
+        ucs_trace("range 0x%lx..0x%lx overlaps with mapping 0x%lx..0x%lx prot 0x%x",
+                  ctx->start, ctx->end, seg_start, seg_end, prot);
+
+        if (!ctx->found) {
+            /* first segment sets protection flags */
+            ctx->prot  = prot;
+            ctx->found = 1;
+        } else {
+            /* subsequent segments update protection flags */
+            ctx->prot &= prot;
+        }
+
+        if (ctx->end <= seg_end) {
+            /* finished going over entire memory region */
+            return 1;
+        }
+
+        /* continue from the end of current segment */
+        ctx->start = seg_end;
+    }
+    return 0;
+}
+
 int ucs_get_mem_prot(unsigned long start, unsigned long end)
 {
-    static int maps_fd = -1;
-    char buffer[1024];
-    unsigned long start_addr, end_addr;
-    unsigned prot_flags;
-    char read_c, write_c, exec_c, priv_c;
-    char *ptr, *newline;
-    ssize_t read_size;
-    size_t read_offset;
-    int ret;
-
-    if (maps_fd == -1) {
-        maps_fd = open(UCS_PROCESS_MAPS_FILE, O_RDONLY);
-        if (maps_fd < 0) {
-            ucs_fatal("cannot open %s for reading: %m", UCS_PROCESS_MAPS_FILE);
-        }
-    }
-
-    ret = lseek(maps_fd, 0, SEEK_SET);
-    if (ret < 0) {
-        ucs_fatal("failed to lseek(0): %m");
-    }
-
-    prot_flags = PROT_READ|PROT_WRITE|PROT_EXEC;
-
-    read_offset = 0;
-    while (1) {
-        read_size = read(maps_fd, buffer + read_offset, sizeof(buffer) - 1 - read_offset);
-        if (read_size < 0) {
-            if (errno == EINTR) {
-                continue;
-            } else {
-                ucs_fatal("failed to read from %s: %m", UCS_PROCESS_MAPS_FILE);
-            }
-        } else if (read_size == 0) {
-            goto out;
-        } else {
-            buffer[read_size + read_offset] = 0;
-        }
-
-        ptr = buffer;
-        while ( (newline = strchr(ptr, '\n')) != NULL ) {
-            /* 00400000-0040b000 r-xp ... \n */
-            ret = sscanf(ptr, "%lx-%lx %c%c%c%c", &start_addr, &end_addr, &read_c,
-                         &write_c, &exec_c, &priv_c);
-            if (ret != 6) {
-                ucs_fatal("Parse error at %s", ptr);
-            }
-
-            /* Address will not appear on the list */
-            if (start < start_addr) {
-                goto out;
-            }
-
-            /* Start address falls within current VMA */
-            if (start < end_addr) {
-                ucs_trace_data("existing mapping: start=0x%08lx end=0x%08lx prot=%u",
-                               start_addr, end_addr, prot_flags);
-
-                if (read_c != 'r') {
-                    prot_flags &= ~PROT_READ;
-                }
-                if (write_c != 'w') {
-                    prot_flags &= ~PROT_WRITE;
-                }
-                if (exec_c != 'x') {
-                    prot_flags &= ~PROT_EXEC;
-                }
-
-                /* Finished going over entire memory region */
-                if (end <= end_addr) {
-                    return prot_flags;
-                }
-
-                /* Start from the end of current VMA */
-                start = end_addr;
-            }
-
-            ptr = newline + 1;
-        }
-
-        read_offset = strlen(ptr);
-        memmove(buffer, ptr, read_offset);
-    }
-out:
-    return PROT_NONE;
+    ucs_get_mem_prot_ctx_t ctx = { start, end, PROT_NONE, 0 };
+    ucm_parse_proc_self_maps(ucs_get_mem_prot_cb, &ctx);
+    return ctx.prot;
 }
 
 const char* ucs_get_process_cmdline()

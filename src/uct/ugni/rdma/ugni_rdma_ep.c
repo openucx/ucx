@@ -35,7 +35,7 @@ static inline void uct_ugni_format_fma(uct_ugni_base_desc_t *fma, gni_post_type_
     fma->desc.remote_addr = remote_addr;
     fma->desc.remote_mem_hndl = *(gni_mem_handle_t *)rkey;
     fma->desc.length = length;
-    fma->ep = ep;
+    fma->flush_group = ep->flush_group;
     fma->comp_cb = comp;
     fma->unpack_cb = unpack_cb;
     ucs_assert(0 == fma->not_ready_to_free);
@@ -81,7 +81,7 @@ static inline void uct_ugni_format_rdma(uct_ugni_base_desc_t *rdma, gni_post_typ
     rdma->desc.remote_mem_hndl = *(gni_mem_handle_t *)rkey;
     rdma->desc.length = length;
     rdma->desc.src_cq_hndl = cq;
-    rdma->ep = ep;
+    rdma->flush_group = ep->flush_group;
     rdma->comp_cb = comp;
     ucs_assert(0 == rdma->not_ready_to_free);
 }
@@ -92,7 +92,7 @@ static inline ucs_status_t uct_ugni_post_rdma(uct_ugni_rdma_iface_t *iface,
 {
     gni_return_t ugni_rc;
 
-    if (ucs_unlikely(!uct_ugni_can_send(ep))) {
+    if (ucs_unlikely(!uct_ugni_ep_can_send(ep))) {
         ucs_mpool_put(rdma);
         return UCS_ERR_NO_RESOURCE;
     }
@@ -111,7 +111,7 @@ static inline ucs_status_t uct_ugni_post_rdma(uct_ugni_rdma_iface_t *iface,
         }
     }
 
-    ++ep->outstanding;
+    ++rdma->flush_group->flush_comp.count;
     ++iface->super.outstanding;
 
     return UCS_INPROGRESS;
@@ -124,7 +124,7 @@ static inline ssize_t uct_ugni_post_fma(uct_ugni_rdma_iface_t *iface,
 {
     gni_return_t ugni_rc;
 
-    if (ucs_unlikely(!uct_ugni_can_send(ep))) {
+    if (ucs_unlikely(!uct_ugni_ep_can_send(ep))) {
         ucs_mpool_put(fma);
         return UCS_ERR_NO_RESOURCE;
     }
@@ -143,7 +143,7 @@ static inline ssize_t uct_ugni_post_fma(uct_ugni_rdma_iface_t *iface,
         }
     }
 
-    ++ep->outstanding;
+    ++fma->flush_group->flush_comp.count;
     ++iface->super.outstanding;
 
     return ok_status;
@@ -713,7 +713,7 @@ ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t 
                      iface->config.rdma_max_size, "get_zcopy");
 
     /* Special flow for an unalign data */
-    if (ucs_unlikely((GNI_DEVICE_GEMINI == iface->super.dev->type && 
+    if (ucs_unlikely((uct_ugni_check_device_type(&iface->super, GNI_DEVICE_GEMINI) && 
                       ucs_check_if_align_pow2((uintptr_t)buffer, UGNI_GET_ALIGN)) ||
                       ucs_check_if_align_pow2(remote_addr, UGNI_GET_ALIGN)        ||
                       ucs_check_if_align_pow2(length, UGNI_GET_ALIGN))) {

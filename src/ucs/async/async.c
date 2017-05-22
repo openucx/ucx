@@ -110,22 +110,6 @@ out_unlock:
     return handler;
 }
 
-static ucs_async_mode_t ucs_async_handler_mode(int id)
-{
-    ucs_async_mode_t mode;
-    khiter_t hash_it;
-
-    pthread_rwlock_rdlock(&ucs_async_global_context.handlers_lock);
-    hash_it = ucs_async_handler_kh_get(id);
-    if (ucs_async_handler_kh_is_end(hash_it)) {
-        mode = UCS_ASYNC_MODE_POLL;
-    } else {
-        mode = kh_value(&ucs_async_global_context.handlers, hash_it)->mode;
-    }
-    pthread_rwlock_unlock(&ucs_async_global_context.handlers_lock);
-    return mode;
-}
-
 /* remove from hash and return the handler */
 static ucs_async_handler_t *ucs_async_handler_extract(int id)
 {
@@ -477,13 +461,16 @@ err:
 
 ucs_status_t ucs_async_remove_handler(int id, int sync)
 {
-    ucs_async_mode_t mode = ucs_async_handler_mode(id);
     ucs_async_handler_t *handler;
     ucs_status_t status;
 
-    ucs_async_method_call(mode, block);
+    /* We can't find the async handle mode without taking a read lock, which in
+     * turn may cause a deadlock if async handle is running. So we have to block
+     * all modes.
+     */
+    ucs_async_method_call_all(block);
     handler = ucs_async_handler_extract(id);
-    ucs_async_method_call(mode, unblock);
+    ucs_async_method_call_all(unblock);
     if (handler == NULL) {
         return UCS_ERR_NO_ELEM;
     }

@@ -105,6 +105,8 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         count = uct_rc_verbs_txcq_get_comp_count(&wc[i]);
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
+        ucs_trace_poll("rc_verbs iface %p tx_wc: ep %p qpn 0x%x count %d",
+                       iface, ep, wc[i].qp_num, count);
 
         if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
             iface->super.super.ops->handle_failure(&iface->super.super, &wc[i]);
@@ -204,7 +206,6 @@ uct_rc_verbs_iface_unexp_consumed(uct_rc_verbs_iface_t *iface,
         uct_rc_verbs_iface_post_op(iface, &wr, NULL, 0, IBV_WR_TAG_SYNC,
                                    NULL, 0);
     }
-    ++iface->tm.unexpected_cnt;
     ++iface->tm.xrq.available;
 }
 
@@ -270,7 +271,7 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_t *iface,
         status = iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, UCT_CB_FLAG_DESC,
                                          tm_info.tag.tag, desc + tm_info_len,
                                          cqe->byte_len - tm_info_len, tm_info.rndv.vaddr,
-                                         tm_info.rndv.len, rb);
+                                         tm_info.rndv.len, desc + cqe->byte_len);
 
         uct_rc_verbs_iface_unexp_consumed(iface, ib_desc,
                                           &iface->tm.rndv_desc, status);
@@ -715,6 +716,7 @@ void uct_rc_verbs_iface_tag_query(uct_rc_verbs_iface_t *iface,
         iface_attr->cap.tag.eager.max_iov   = 1;
         iface_attr->cap.tag.rndv.max_iov    = 1;
         iface_attr->cap.tag.recv.max_iov    = 1;
+        iface_attr->cap.tag.recv.min_recv   = 0;
     }
 #endif
 }

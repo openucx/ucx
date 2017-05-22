@@ -69,8 +69,8 @@ ucx_perftest_SOURCE_FILES = \
 perftest.lo: $(ucx_perftest_SOURCE_FILES)
 	$(AM_V_CC)
 	@$(LIBTOOL) $(AM_V_lt) --mode=compile --tag=CC $(ucx_perftest_CC) \
-		$(DEFS) -I$(top_builddir) $(CFLAGS) $(CPPFLAGS) $(AM_CPPFLAGS) $(ucx_perftest_CPPFLAGS) \
-		$(ucx_perftest_CFLAGS) $(ucx_perftest_SOURCE_FILES) -c -o $@
+		$(DEFS) -I. -I$(top_builddir) $(AM_CPPFLAGS) $(CPPFLAGS) $(ucx_perftest_CPPFLAGS) \
+		$(AM_CFLAGS) $(CFLAGS) $(ucx_perftest_CFLAGS) $(ucx_perftest_SOURCE_FILES) -c -o $@
 
 ucx_perftest$(EXEEXT): perftest.lo $(ucx_perftest_LDADD)
 	$(AM_V_CCLD)

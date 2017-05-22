@@ -37,6 +37,18 @@ uct_ugni_job_info_t job_info = {
     .initialized        = false,
 };
 
+uct_ugni_job_info_t *uct_ugni_get_job_info()
+{
+    ucs_status_t status;
+
+    status = uct_ugni_fetch_pmi();
+    if (UCS_OK != status) {
+        ucs_error("Could not fetch PMI info.");
+        return NULL;
+    }
+    return &job_info;
+}
+
 static ucs_status_t uct_ugni_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->rkey_packed_size  = 3 * sizeof(uint64_t);
@@ -72,7 +84,7 @@ static ucs_status_t uct_ugni_mem_reg(uct_md_h md, void *address, size_t length,
         goto mem_err;
     }
 
-    ugni_rc = GNI_MemRegister(ugni_md->nic_handle, (uint64_t)address,
+    ugni_rc = GNI_MemRegister(ugni_md->cdm.nic_handle, (uint64_t)address,
                               length, NULL,
                               GNI_MEM_READWRITE | GNI_MEM_RELAXED_PI_ORDERING,
                               -1, mem_hndl);
@@ -104,7 +116,7 @@ static ucs_status_t uct_ugni_mem_dereg(uct_md_h md, uct_mem_h memh)
 
     pthread_mutex_lock(&uct_ugni_global_lock);
 
-    ugni_rc = GNI_MemDeregister(ugni_md->nic_handle, mem_hndl);
+    ugni_rc = GNI_MemDeregister(ugni_md->cdm.nic_handle, mem_hndl);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_MemDeregister failed, Error status: %s %d",
                  gni_err_str[ugni_rc], ugni_rc);
@@ -250,7 +262,7 @@ static void uct_ugni_md_close(uct_md_h md)
     pthread_mutex_lock(&uct_ugni_global_lock);
     ugni_md->ref_count--;
     if (!ugni_md->ref_count) {
-        ugni_rc = GNI_CdmDestroy(ugni_md->cdm_handle);
+        ugni_rc = GNI_CdmDestroy(ugni_md->cdm.cdm_handle);
         if (GNI_RC_SUCCESS != ugni_rc) {
             ucs_warn("GNI_CdmDestroy error status: %s (%d)",
                      gni_err_str[ugni_rc], ugni_rc);
@@ -263,7 +275,6 @@ static void uct_ugni_md_close(uct_md_h md)
 static ucs_status_t uct_ugni_md_open(const char *md_name, const uct_md_config_t *md_config,
                                      uct_md_h *md_p)
 {
-    uint16_t domain_id;
     ucs_status_t status = UCS_OK;
 
     pthread_mutex_lock(&uct_ugni_global_lock);
@@ -291,9 +302,7 @@ static ucs_status_t uct_ugni_md_open(const char *md_name, const uct_md_config_t 
             ucs_error("Failed to init device list, Error status: %d", status);
             goto error;
         }
-        status = uct_ugni_init_nic(0, &domain_id,
-                                   &md.cdm_handle, &md.nic_handle,
-                                   &md.address);
+        status = uct_ugni_create_cdm(&md.cdm, &job_info.devices[0], UCS_THREAD_MODE_MULTI);
         if (UCS_OK != status) {
             ucs_error("Failed to UGNI NIC, Error status: %d", status);
             goto error;

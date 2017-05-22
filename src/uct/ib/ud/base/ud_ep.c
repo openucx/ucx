@@ -121,7 +121,7 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
         return;
     }
 
-    if (diff > iface->config.peer_timout) {
+    if (diff > iface->config.peer_timeout) {
         iface->super.ops->handle_failure(&iface->super, ep);
         return;
     } else if (diff > 3*uct_ud_slow_tick()) {

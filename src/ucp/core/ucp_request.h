@@ -55,6 +55,15 @@ enum {
 };
 
 
+/**
+ * Receive descriptor list pointers
+ */
+enum {
+    UCP_RDESC_HASH_LIST = 0,
+    UCP_RDESC_ALL_LIST  = 1
+};
+
+
 /* Callback for UCP requests */
 typedef void (*ucp_request_callback_t)(ucp_request_t *req);
 
@@ -143,7 +152,7 @@ struct ucp_request {
  * Unexpected receive descriptor.
  */
 typedef struct ucp_recv_desc {
-    ucs_queue_elem_t              queue;    /* Queue element */
+    ucs_list_link_t               list[2];  /* Hash list element */
     size_t                        length;   /* Received length */
     uint16_t                      hdr_len;  /* Header size */
     uint16_t                      flags;    /* Flags */

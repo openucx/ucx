@@ -70,20 +70,32 @@ ucp_tag_exp_get_queue_for_tag(ucp_tag_match_t *tm, ucp_tag_t tag)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_queue_head_t*
-ucp_tag_exp_get_queue(ucp_tag_match_t *tm, ucp_request_t *req)
+ucp_tag_exp_get_queue(ucp_tag_match_t *tm, ucp_tag_t tag, ucp_tag_t tag_mask)
 {
-    if (req->recv.tag_mask == UCP_TAG_MASK_FULL) {
-        return ucp_tag_exp_get_queue_for_tag(tm, req->recv.tag);
+    if (tag_mask == UCP_TAG_MASK_FULL) {
+        return ucp_tag_exp_get_queue_for_tag(tm, tag);
     } else {
         return &tm->expected.wildcard;
     }
 }
 
-static UCS_F_ALWAYS_INLINE
-void ucp_tag_exp_add(ucp_tag_match_t *tm, ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE ucs_queue_head_t*
+ucp_tag_exp_get_req_queue(ucp_tag_match_t *tm, ucp_request_t *req)
+{
+    return ucp_tag_exp_get_queue(tm, req->recv.tag, req->recv.tag_mask);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_exp_push(ucp_tag_match_t *tm, ucs_queue_head_t *queue, ucp_request_t *req)
 {
     req->recv.sn = tm->expected.sn++;
-    ucs_queue_push(ucp_tag_exp_get_queue(tm, req), &req->recv.queue);
+    ucs_queue_push(queue, &req->recv.queue);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_exp_add(ucp_tag_match_t *tm, ucp_request_t *req)
+{
+    ucp_tag_exp_push(tm, ucp_tag_exp_get_req_queue(tm, req), req);
 }
 
 static UCS_F_ALWAYS_INLINE ucp_request_t *
@@ -103,6 +115,8 @@ ucp_tag_exp_search(ucp_tag_match_t *tm, ucp_tag_t recv_tag, size_t recv_len,
     queue = ucp_tag_exp_get_queue_for_tag(tm, recv_tag);
     ucs_queue_for_each_safe(req, iter, queue, recv.queue) {
         req = ucs_container_of(*iter, ucp_request_t, recv.queue);
+        ucs_trace_data("checking req %p tag %"PRIx64"/%"PRIx64" with recv_tag %"PRIx64,
+                       req, req->recv.tag, req->recv.tag_mask, recv_tag);
         if (ucp_tag_recv_is_match(recv_tag, recv_flags, req->recv.tag,
                                   req->recv.tag_mask, req->recv.state.offset,
                                   req->recv.info.sender_tag))
@@ -123,12 +137,26 @@ static UCS_F_ALWAYS_INLINE ucp_tag_t ucp_rdesc_get_tag(ucp_recv_desc_t *rdesc)
     return ((ucp_tag_hdr_t*)(rdesc + 1))->tag;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_list_link_t*
+ucp_tag_unexp_get_list_for_tag(ucp_tag_match_t *tm, ucp_tag_t tag)
+{
+    return &tm->unexpected.hash[ucp_tag_match_calc_hash(tag)];
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_unexp_remove(ucp_recv_desc_t *rdesc)
+{
+    ucs_list_del(&rdesc->list[UCP_RDESC_HASH_LIST]);
+    ucs_list_del(&rdesc->list[UCP_RDESC_ALL_LIST] );
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_worker_h worker, void *data,
                    size_t length, unsigned am_flags, uint16_t hdr_len,
                    uint16_t flags)
 {
     ucp_recv_desc_t *rdesc = (ucp_recv_desc_t *)data - 1;
+    ucs_list_link_t *hash_list;
     ucs_status_t status;
 
     if (ucs_unlikely(am_flags & UCT_CB_FLAG_DESC)) {
@@ -157,13 +185,16 @@ ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_worker_h worker, void *data,
 
     rdesc->length  = length;
     rdesc->hdr_len = hdr_len;
-    ucs_queue_push(&tm->unexpected, &rdesc->queue);
+    hash_list = ucp_tag_unexp_get_list_for_tag(tm, ucp_rdesc_get_tag(rdesc));
+    ucs_list_add_tail(hash_list,           &rdesc->list[UCP_RDESC_HASH_LIST]);
+    ucs_list_add_tail(&tm->unexpected.all, &rdesc->list[UCP_RDESC_ALL_LIST]);
     return status;
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_unexp_desc_release(ucp_recv_desc_t *rdesc)
 {
+    ucs_trace_req("release receive descriptor %p", rdesc);
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
         uct_iface_release_desc(rdesc); /* uct desc is slowpath */
     } else {

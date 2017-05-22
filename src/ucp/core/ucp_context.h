@@ -35,8 +35,6 @@ typedef struct ucp_context_config {
     size_t                                 zcopy_thresh;
     /** Estimation of bcopy bandwidth */
     size_t                                 bcopy_bw;
-    /** Size of packet data that is dumped to the log system in debug mode */
-    size_t                                 log_data_size;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;

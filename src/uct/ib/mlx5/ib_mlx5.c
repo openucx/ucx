@@ -147,6 +147,9 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     mlx5_cq->cq_buf    = ibv_cq_info.buf;
     mlx5_cq->cq_ci     = 0;
     mlx5_cq->cq_length = ibv_cq_info.cqe_cnt;
+#if ENABLE_DEBUG_DATA
+    mlx5_cq->cq_num    = ibv_cq_info.cqn;
+#endif
     cqe_size           = ibv_cq_info.cqe_size;
 #else
     struct mlx5_cq *mcq = ucs_container_of(cq, struct mlx5_cq, ibv_cq);
@@ -160,6 +163,9 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     mlx5_cq->cq_buf      = mcq->active_buf->buf;
     mlx5_cq->cq_ci       = 0;
     mlx5_cq->cq_length   = mcq->ibv_cq.cqe + 1;
+#if ENABLE_DEBUG_DATA
+    mlx5_cq->cq_num      = mcq->cqn;
+#endif
     cqe_size             = mcq->cqe_sz;
 #endif
 
@@ -241,13 +247,15 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
     case MLX5_CQE_INVALID:
         return NULL; /* No CQE */
     case MLX5_CQE_REQ_ERR:
-        iface->ops->handle_failure(iface, cqe);
+        ucs_debug("iface %p requester error on cqe[%d]=%p", iface, cq->cq_ci, cqe);
+        /* update ci before invoking error callback, since it can poll on cq */
         ++cq->cq_ci;
+        iface->ops->handle_failure(iface, cqe);
         return NULL;
     case MLX5_CQE_RESP_ERR:
         /* Local side failure - treat as fatal */
-        uct_ib_mlx5_completion_with_err((void*)cqe, UCS_LOG_LEVEL_FATAL);
         ++cq->cq_ci;
+        uct_ib_mlx5_completion_with_err((void*)cqe, UCS_LOG_LEVEL_FATAL);
         return NULL;
     default:
         /* CQE might have been updated by HW. Skip it now, and it would be handled
@@ -269,6 +277,16 @@ static void uct_ib_mlx5_bf_init(uct_ib_mlx5_bf_t *bf, uintptr_t addr, unsigned b
 
 static void uct_ib_mlx5_bf_cleanup(uct_ib_mlx5_bf_t *bf)
 {
+}
+
+void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
+{
+    txwq->curr     = txwq->qstart;
+    txwq->sw_pi    = txwq->prev_sw_pi = 0;
+#if ENABLE_ASSERT
+    txwq->hw_ci    = 0xFFFF;
+#endif
+    memset(txwq->qstart, 0, txwq->qend - txwq->qstart);
 }
 
 ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq,
@@ -299,8 +317,6 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq
 
     txwq->qstart   = qp_info.sq.buf;
     txwq->qend     = qp_info.sq.buf + (qp_info.sq.stride * qp_info.sq.wqe_cnt);
-    txwq->curr     = txwq->qstart;
-    txwq->sw_pi    = txwq->prev_sw_pi = 0;
     txwq->bf       = uct_worker_tl_data_get(worker,
                                             UCT_IB_MLX5_WORKER_BF_KEY,
                                             uct_ib_mlx5_bf_t,
@@ -316,11 +332,9 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq
      *  exact number of bbs once we actually are sending.
      */
     txwq->bb_max   = qp_info.sq.wqe_cnt - 2 * UCT_IB_MLX5_MAX_BB;
-#if ENABLE_ASSERT
-    txwq->hw_ci    = 0xFFFF;
-#endif
     ucs_assert_always(txwq->bb_max > 0);
-    memset(txwq->qstart, 0, txwq->qend - txwq->qstart);
+
+    uct_ib_mlx5_txwq_reset(txwq);
     return UCS_OK;
 }
 
@@ -411,5 +425,6 @@ void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq)
 
     status = uct_ib_mlx5_get_srq_info(verbs_srq, &srq_info);
     ucs_assert_always(status == UCS_OK);
-    ucs_assert_always(srq->tail == srq_info.tail);
+    ucs_assertv_always(srq->tail == srq_info.tail, "srq->tail=%d srq_info.tail=%d",
+                       srq->tail, srq_info.tail);
 }

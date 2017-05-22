@@ -53,7 +53,7 @@ static ucs_status_t uct_ugni_smsg_mbox_reg(uct_ugni_smsg_iface_t *iface, uct_ugn
     }
     pthread_mutex_lock(&uct_ugni_global_lock);
 
-    ugni_rc = GNI_MemRegister(iface->super.nic_handle, (uint64_t)address,
+    ugni_rc = GNI_MemRegister(uct_ugni_iface_nic_handle(&iface->super), (uint64_t)address,
                               iface->bytes_per_mbox, iface->remote_cq,
                               GNI_MEM_READWRITE,
                               -1, &(mbox->gni_mem));
@@ -75,7 +75,7 @@ static ucs_status_t uct_ugni_smsg_mbox_dereg(uct_ugni_smsg_iface_t *iface, uct_u
     gni_return_t ugni_rc;
 
     pthread_mutex_lock(&uct_ugni_global_lock);
-    ugni_rc = GNI_MemDeregister(iface->super.nic_handle, &mbox->gni_mem);
+    ugni_rc = GNI_MemDeregister(uct_ugni_iface_nic_handle(&iface->super), &mbox->gni_mem);
     pthread_mutex_unlock(&uct_ugni_global_lock);
 
     if (GNI_RC_SUCCESS != ugni_rc) {
@@ -180,7 +180,7 @@ ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
     }
 
     ep_hash = (uint32_t)iface_addr->ep_hash;
-    gni_rc = GNI_EpSetEventData(ep->super.ep, iface->domain_id, ep_hash);
+    gni_rc = GNI_EpSetEventData(ep->super.ep, iface->cdm.domain_id, ep_hash);
 
     if(GNI_RC_SUCCESS != gni_rc){
         ucs_error("Could not set GNI_EpSetEventData!");
@@ -200,12 +200,12 @@ uct_ugni_smsg_ep_am_common_send(uct_ugni_smsg_ep_t *ep, uct_ugni_smsg_iface_t *i
 {
     gni_return_t gni_rc;
 
-    if (ucs_unlikely(!uct_ugni_can_send(&ep->super))) {
+    if (ucs_unlikely(!uct_ugni_ep_can_send(&ep->super))) {
         goto exit_no_res;
     }
 
     desc->msg_id = iface->smsg_id++;
-    desc->ep = &ep->super;
+    desc->flush_group = ep->super.flush_group;
 
     gni_rc = GNI_SmsgSendWTag(ep->super.ep, header, header_length, 
                               payload, payload_length, desc->msg_id, am_id);
@@ -214,7 +214,7 @@ uct_ugni_smsg_ep_am_common_send(uct_ugni_smsg_ep_t *ep, uct_ugni_smsg_iface_t *i
         goto exit_no_res;
     }
 
-    ++ep->super.outstanding;
+    ++desc->flush_group->flush_comp.count;
     ++iface->super.outstanding;
 
     sglib_hashed_uct_ugni_smsg_desc_t_add(iface->smsg_list, desc);
@@ -222,8 +222,7 @@ uct_ugni_smsg_ep_am_common_send(uct_ugni_smsg_ep_t *ep, uct_ugni_smsg_iface_t *i
     return UCS_OK;
 
 exit_no_res:
-    ucs_trace("Can't send: arb_size = %u arb_sched = %u flush_flag = %u",
-              ep->super.arb_size, ep->super.arb_sched, ep->super.flush_flag);
+    ucs_trace("Smsg send failed.");
     ucs_mpool_put(desc);
     UCS_STATS_UPDATE_COUNTER(ep->super.super.stats, UCT_EP_STAT_NO_RES, 1);
     return UCS_ERR_NO_RESOURCE;

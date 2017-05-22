@@ -95,6 +95,9 @@ typedef struct uct_ib_mlx5_cq {
     unsigned           cq_ci;
     unsigned           cq_length;
     unsigned           cqe_size_log;
+#if ENABLE_DEBUG_DATA
+    unsigned           cq_num;
+#endif
 } uct_ib_mlx5_cq_t;
 
 
@@ -232,6 +235,11 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
 ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq,
                                    struct ibv_qp *verbs_qp);
 void uct_ib_mlx5_txwq_cleanup(uct_worker_h worker, uct_ib_mlx5_txwq_t* txwq);
+
+/**
+ * Reset txwq contents and posting indices.
+ */
+void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq);
 
 /**
  * Initialize rxwq structure.

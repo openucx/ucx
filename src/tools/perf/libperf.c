@@ -199,14 +199,14 @@ static void ucx_perf_test_reset(ucx_perf_context_t *perf,
 
 void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 {
-    double latency_factor;
+    double factor;
     double sec_value;
 
     sec_value = ucs_time_from_sec(1.0);
     if (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG) {
-        latency_factor = 2.0;
+        factor = 2.0;
     } else {
-        latency_factor = 1.0;
+        factor = 1.0;
     }
 
     result->iters = perf->current.iters;
@@ -218,19 +218,19 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
     result->latency.typical =
         __find_median_quick_select(perf->timing_queue, TIMING_QUEUE_SIZE)
         / sec_value
-        / latency_factor;
+        / factor;
 
     result->latency.moment_average =
         (double)(perf->current.time - perf->prev.time)
         / (perf->current.iters - perf->prev.iters)
         / sec_value
-        / latency_factor;
+        / factor;
 
     result->latency.total_average =
         (double)(perf->current.time - perf->start_time)
         / perf->current.iters
         / sec_value
-        / latency_factor;
+        / factor;
 
 
     /* Bandwidth */
@@ -239,11 +239,11 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
     result->bandwidth.moment_average =
         (perf->current.bytes - perf->prev.bytes) * sec_value
-        / (double)(perf->current.time - perf->prev.time);
+        / (double)(perf->current.time - perf->prev.time) * factor;
 
     result->bandwidth.total_average =
         perf->current.bytes * sec_value
-        / (double)(perf->current.time - perf->start_time);
+        / (double)(perf->current.time - perf->start_time) * factor;
 
 
     /* Packet rate */
@@ -252,11 +252,11 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
     result->msgrate.moment_average =
         (perf->current.msgs - perf->prev.msgs) * sec_value
-        / (double)(perf->current.time - perf->prev.time);
+        / (double)(perf->current.time - perf->prev.time) * factor;
 
     result->msgrate.total_average =
         perf->current.msgs * sec_value
-        / (double)(perf->current.time - perf->start_time);
+        / (double)(perf->current.time - perf->start_time) * factor;
 
 }
 
