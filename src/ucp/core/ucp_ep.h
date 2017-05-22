@@ -155,13 +155,13 @@ typedef struct ucp_ep_config {
             size_t          rma_thresh;
             /* Threshold for switching from eager to AM based rendezvous */
             size_t          am_thresh;
-            /* Maximal iov count for RNDV offload */
-            size_t          max_iov;
         } rndv;
 
         struct {
+            /* Maximal iov count for tag recv offload */
             size_t          max_recv_iov;
-            unsigned        enabled;
+            /* Maximal iov count for RNDV offload */
+            size_t          max_rndv_iov;
         } offload;
     } tag;
 

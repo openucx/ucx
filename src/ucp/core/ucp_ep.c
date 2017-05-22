@@ -671,34 +671,34 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
     uct_iface_attr_t *iface_attr;
     uct_md_attr_t *md_attr;
 
-    if (lane != UCP_NULL_LANE) {
-        rsc_index   = config->key.lanes[lane].rsc_index;
-        if (rsc_index != UCP_NULL_RESOURCE) {
-            iface_attr = &worker->ifaces[rsc_index].attr;
-            md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
-            ucs_assert_always(iface_attr->cap.flags & rndv_cap_flag);
-
-            if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
-                /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
-                rndv_thresh = ucp_ep_config_calc_rndv_thresh(context, iface_attr,
-                                                             md_attr, SIZE_MAX, 1);
-            } else {
-                /* In order to disable rendezvous, need to set the threshold to
-                 * infinite (-1).
-                 */
-                rndv_thresh = context->config.ext.rndv_thresh;
-            }
-
-            /* use rendezvous only starting from minimal zero-copy get size */
-            ucs_assert(iface_attr->cap.get.min_zcopy <= iface_attr->cap.get.max_zcopy);
-            rndv_thresh = ucs_max(rndv_thresh, iface_attr->cap.get.min_zcopy);
-
-            config->tag.rndv.max_get_zcopy = iface_attr->cap.get.max_zcopy;
-            config->tag.rndv.rma_thresh    = ucs_min(rndv_thresh, adjust_min_val);
-        } else {
-            ucs_debug("rendezvous (get_zcopy) protocol is not supported ");
-        }
+    if (lane == UCP_NULL_LANE) {
+        ucs_debug("rendezvous (get_zcopy) protocol is not supported");
+        return;
     }
+
+    rsc_index = config->key.lanes[lane].rsc_index;
+    if (rsc_index == UCP_NULL_RESOURCE) {
+        return;
+    }
+
+    iface_attr = &worker->ifaces[rsc_index].attr;
+    md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+    ucs_assert_always(iface_attr->cap.flags & rndv_cap_flag);
+
+    if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+        /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
+        rndv_thresh = ucp_ep_config_calc_rndv_thresh(context, iface_attr,
+                                                     md_attr, SIZE_MAX, 1);
+    } else {
+        rndv_thresh = context->config.ext.rndv_thresh;
+    }
+
+    /* use rendezvous only starting from minimal zero-copy get size */
+    ucs_assert(iface_attr->cap.get.min_zcopy <= iface_attr->cap.get.max_zcopy);
+    rndv_thresh = ucs_max(rndv_thresh, iface_attr->cap.get.min_zcopy);
+
+    config->tag.rndv.max_get_zcopy = iface_attr->cap.get.max_zcopy;
+    config->tag.rndv.rma_thresh    = ucs_min(rndv_thresh, adjust_min_val);
 }
 
 static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
@@ -714,7 +714,6 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     size_t it;
     size_t zcopy_thresh;
 
-
     if (iface_attr->cap.flags & short_flag) {
         config->max_short = max_short - hdr_len;
     } else {
@@ -725,26 +724,28 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
         config->max_bcopy = max_bcopy;
     }
 
-    if ((iface_attr->cap.flags & zcopy_flag) && (md_attr->cap.flags & UCT_MD_FLAG_REG)) {
-        config->max_zcopy = max_zcopy;
-        config->max_iov   = ucs_min(UCP_MAX_IOV, max_iov);
+    if (!((iface_attr->cap.flags & zcopy_flag) && (md_attr->cap.flags & UCT_MD_FLAG_REG))) {
+        return;
+    }
 
-        if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
-            config->zcopy_auto_thresh = 1;
-            for (it = 0; it < UCP_MAX_IOV; ++it) {
-                zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(it + 1,
-                                                                   &md_attr->reg_cost,
-                                                                   context,
-                                                                   iface_attr->bandwidth);
-                zcopy_thresh = ucs_min(zcopy_thresh, adjust_min_val);
-                config->sync_zcopy_thresh[it] = zcopy_thresh;
-                config->zcopy_thresh[it]      = zcopy_thresh;
-            }
-        } else {
-            config->zcopy_auto_thresh = 0;
-            config->sync_zcopy_thresh[0] = config->zcopy_thresh[0] =
-                    ucs_min(context->config.ext.zcopy_thresh, adjust_min_val);
+    config->max_zcopy = max_zcopy;
+    config->max_iov   = ucs_min(UCP_MAX_IOV, max_iov);
+
+    if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+        config->zcopy_auto_thresh = 1;
+        for (it = 0; it < UCP_MAX_IOV; ++it) {
+            zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(it + 1,
+                                                               &md_attr->reg_cost,
+                                                               context,
+                                                               iface_attr->bandwidth);
+            zcopy_thresh = ucs_min(zcopy_thresh, adjust_min_val);
+            config->sync_zcopy_thresh[it] = zcopy_thresh;
+            config->zcopy_thresh[it]      = zcopy_thresh;
         }
+    } else {
+        config->zcopy_auto_thresh    = 0;
+        config->sync_zcopy_thresh[0] = config->zcopy_thresh[0] =
+                ucs_min(context->config.ext.zcopy_thresh, adjust_min_val);
     }
 }
 
@@ -758,6 +759,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     ucp_lane_index_t lane;
     size_t it;
     size_t max_rndv_thresh;
+    size_t max_am_rndv_thresh;
 
     /* Default settings */
     for (it = 0; it < UCP_MAX_IOV; ++it) {
@@ -773,11 +775,11 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     config->tag.lane                    = UCP_NULL_LANE;
     config->tag.proto                   = &ucp_tag_eager_proto;
     config->tag.sync_proto              = &ucp_tag_eager_sync_proto;
-    config->tag.offload.enabled         = 0;
     config->tag.rndv.rma_thresh         = SIZE_MAX;
     config->tag.rndv.max_get_zcopy      = SIZE_MAX;
     config->tag.rndv.am_thresh          = SIZE_MAX;
     max_rndv_thresh                     = SIZE_MAX;
+    max_am_rndv_thresh                  = SIZE_MAX;
 
     /* Collect p2p lanes */
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
@@ -806,12 +808,12 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                                      iface_attr->cap.tag.eager.max_bcopy);
 
             config->tag.offload.max_recv_iov = iface_attr->cap.tag.recv.max_iov;
-            config->tag.rndv.max_iov         = iface_attr->cap.tag.rndv.max_iov;
+            config->tag.offload.max_rndv_iov = iface_attr->cap.tag.rndv.max_iov;
             config->tag.sync_proto           = NULL;
             config->tag.proto                = NULL;
             config->tag.lane                 = lane;
-            config->tag.offload.enabled      = 1;
             max_rndv_thresh                  = iface_attr->cap.tag.eager.max_zcopy;
+            max_am_rndv_thresh               = iface_attr->cap.tag.eager.max_bcopy;
 
             ucp_ep_config_set_rndv_thresh(worker, config, lane,
                                           UCT_IFACE_FLAG_TAG_RNDV_ZCOPY,
@@ -838,9 +840,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             /* Calculate rndv threshold for AM Rendezvous, which may be used by
              * any tag-matching protocol (AM and offload). */
             ucp_ep_config_set_am_rndv_thresh(context, iface_attr, md_attr, config,
-                                             max_rndv_thresh);
+                                             max_am_rndv_thresh);
 
-            if (!config->tag.offload.enabled) {
+            if (!ucp_ep_is_tag_offload_enabled(config)) {
                 /* Tag offload is disabled, AM will be used for all
                  * tag-matching protocols */
                 ucp_ep_config_set_rndv_thresh(worker, config, config->key.rndv_lane,
@@ -1054,8 +1056,8 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
     fprintf(stream, "#\n");
 
     if (context->config.features & UCP_FEATURE_TAG) {
-         tag_config = (config->tag.offload.enabled) ? &config->tag.eager :
-                                                      &config->am;
+         tag_config = (ucp_ep_is_tag_offload_enabled((ucp_ep_config_t *)config)) ?
+                       &config->tag.eager : &config->am;
          ucp_ep_config_print_tag_proto(stream, "tag_send",
                                        tag_config->max_short,
                                        tag_config->zcopy_thresh[0],

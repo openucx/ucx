@@ -40,13 +40,24 @@ static inline ucp_lane_index_t ucp_ep_get_rndv_get_lane(ucp_ep_h ep)
 
 static inline ucp_lane_index_t ucp_ep_get_tag_lane(ucp_ep_h ep)
 {
-    ucs_assert(ucp_ep_config(ep)->key.tag_lane != UCP_NULL_RESOURCE);
+    ucs_assert(ucp_ep_config(ep)->key.tag_lane != UCP_NULL_LANE);
     return ucp_ep_config(ep)->key.tag_lane;
 }
 
 static inline int ucp_ep_is_rndv_lane_present(ucp_ep_h ep)
 {
     return ucp_ep_config(ep)->key.rndv_lane != UCP_NULL_RESOURCE;
+}
+
+static inline int ucp_ep_is_tag_offload_enabled(ucp_ep_config_t *config)
+{
+    ucp_lane_index_t lane = config->key.tag_lane;
+
+    if (lane != UCP_NULL_LANE) {
+        ucs_assert(config->key.lanes[lane].rsc_index != UCP_NULL_RESOURCE);
+        return 1;
+    }
+    return 0;
 }
 
 static inline uct_ep_h ucp_ep_get_am_uct_ep(ucp_ep_h ep)

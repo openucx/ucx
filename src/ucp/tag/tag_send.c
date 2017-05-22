@@ -27,6 +27,7 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
     ucp_worker_h worker       = req->send.ep->worker;
     size_t only_hdr_size      = proto->only_hdr_size;
     unsigned flag_iov_single  = 1;
+    size_t rndv_thresh        = rndv_rma_thresh;
     ucp_rsc_index_t rsc_index;
     unsigned is_iov;
     size_t zcopy_thresh;
@@ -40,8 +41,11 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
         req->send.state.dt.iov.iovcnt_offset = 0;
         req->send.state.dt.iov.iov_offset    = 0;
         req->send.state.dt.iov.iovcnt        = count;
-        flag_iov_single                      = (count <= config->tag.eager.max_iov) ||
-                                                config->tag.offload.enabled;
+        flag_iov_single                      = (count <= config->tag.eager.max_iov);
+        if ((!flag_iov_single) && ucp_ep_is_tag_offload_enabled(config)) {
+            rndv_thresh = length; /* make sure SW RNDV will be used */
+        }
+
         if (0 == count) {
             /* disable zcopy */
             zcopy_thresh = SIZE_MAX;
@@ -66,16 +70,16 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
     req->send.length = length;
 
     ucs_trace_req("select request(%p) progress algorithm datatype=%lx buffer=%p "
-                  " length=%zu max_short=%zd rndv_rma_thresh=%zu ndv_rma_thresh=%zu "
+                  " length=%zu max_short=%zd rndv_rma_thresh=%zu(%zu) rndv_am_thresh=%zu "
                   "zcopy_thresh=%zu",
                   req, req->send.datatype, req->send.buffer, length, max_short,
-                  rndv_rma_thresh, rndv_am_thresh, zcopy_thresh);
+                  rndv_rma_thresh, rndv_thresh, rndv_am_thresh, zcopy_thresh);
 
     if (((ssize_t)length <= max_short) && !is_iov) {
         /* short */
         req->send.uct.func = proto->contig_short;
         UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
-    } else if ((length >= rndv_rma_thresh) || (length >= rndv_am_thresh)) {
+    } else if ((length >= rndv_thresh) || (length >= rndv_am_thresh)) {
         /* RMA/AM rendezvous */
         ucp_tag_send_start_rndv(req);
         UCS_PROFILE_REQUEST_EVENT(req, "start_rndv", req->send.length);
@@ -129,7 +133,7 @@ static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
         /* bcopy single */
         req->send.uct.func = proto->bcopy_single;
         UCS_PROFILE_REQUEST_EVENT(req, "start_gen_bcopy_single", req->send.length);
-    } else if ((length >= rndv_am_thresh) || config->tag.offload.enabled) {
+    } else if (length >= rndv_am_thresh) {
         /* rendezvous */
         ucp_tag_send_start_rndv(req);
         UCS_PROFILE_REQUEST_EVENT(req, "start_rndv", req->send.length);

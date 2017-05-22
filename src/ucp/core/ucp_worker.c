@@ -56,11 +56,7 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
         if (ucp_worker_is_tl_tag_offload(worker, rsc_index)) {
             ucs_queue_remove(&worker->context->tm.offload_ifaces,
                              &worker->ifaces[rsc_index].queue);
-            if (ucs_queue_length(&worker->context->tm.offload_ifaces) == 1) {
-                /* Enable offload, because just one tag offload capable interface left */
-                worker->context->tm.post_thresh = ucs_max(worker->context->config.ext.tm_thresh,
-                                                          sizeof(ucp_request_hdr_t));
-            }
+            ucp_context_tag_offload_enable(worker->context);
         }
 
         uct_iface_close(worker->ifaces[rsc_index].iface);
@@ -312,16 +308,9 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     }
 
     if (ucp_worker_is_tl_tag_offload(worker, tl_id)) {
-        if (ucs_queue_is_empty(&context->tm.offload_ifaces)) {
-            context->tm.post_thresh = ucs_max(context->config.ext.tm_thresh,
-                                              sizeof(ucp_request_hdr_t));
-        } else {
-            /* Some offload interface/s already configured. Disable TM receive offload,
-             * because multiple offload ifaces are not supported yet. */
-            context->tm.post_thresh = SIZE_MAX;
-        }
         worker->ifaces[tl_id].rsc_index = tl_id;
         ucs_queue_push(&context->tm.offload_ifaces, &worker->ifaces[tl_id].queue);
+        ucp_context_tag_offload_enable(context);
     }
 
     ucs_debug("created interface[%d] using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",

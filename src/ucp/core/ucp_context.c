@@ -929,3 +929,18 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
 
     fprintf(stream, "#\n");
 }
+
+
+void ucp_context_tag_offload_enable(ucp_context_h context)
+{
+    if (ucs_queue_length(&context->tm.offload_ifaces) == 1) {
+        /* Enable offload, because just one tag offload capable interface is present */
+        context->tm.post_thresh = ucs_max(context->config.ext.tm_thresh,
+                                          sizeof(ucp_request_hdr_t));
+    } else {
+        /* Some offload interface/s already configured. Disable TM receive offload,
+         * because multiple offload ifaces are not supported yet. */
+        context->tm.post_thresh = SIZE_MAX;
+    }
+}
+
