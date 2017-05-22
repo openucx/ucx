@@ -8,7 +8,7 @@
 #ifndef UCS_ARCH_CPU_H
 #define UCS_ARCH_CPU_H
 
-#include <ucs/sys/math.h>
+#include <ucs/sys/compiler_def.h>
 
 
 /* CPU models */

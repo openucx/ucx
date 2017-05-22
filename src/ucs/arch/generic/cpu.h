@@ -9,6 +9,8 @@
 #define UCS_GENERIC_CPU_H_
 
 #include <sys/time.h>
+#include <stdint.h>
+
 
 static inline uint64_t ucs_arch_generic_read_hres_clock(void)
 {
