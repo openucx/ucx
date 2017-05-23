@@ -249,6 +249,10 @@ static uct_iface_t ucp_stub_iface = {
         .ep_am_short          = (void*)ucp_stub_ep_send_func,
         .ep_am_bcopy          = ucp_stub_ep_am_bcopy,
         .ep_am_zcopy          = (void*)ucp_stub_ep_send_func,
+        .ep_tag_eager_short   = (void*)ucp_stub_ep_send_func,
+        .ep_tag_eager_bcopy   = (void*)ucp_stub_ep_bcopy_send_func,
+        .ep_tag_eager_zcopy   = (void*)ucp_stub_ep_send_func,
+        .ep_tag_rndv_zcopy    = (void*)ucs_empty_function_return_ptr_no_resource,
         .ep_atomic_add64      = (void*)ucp_stub_ep_send_func,
         .ep_atomic_fadd64     = (void*)ucp_stub_ep_send_func,
         .ep_atomic_swap64     = (void*)ucp_stub_ep_send_func,
@@ -286,7 +290,7 @@ ucp_stub_ep_connect_aux(ucp_stub_ep_t *stub_ep, unsigned address_count,
     aux_addr = &address_list[aux_addr_index];
 
     /* create auxiliary endpoint connected to the remote iface. */
-    status = uct_ep_create_connected(worker->ifaces[stub_ep->aux_rsc_index],
+    status = uct_ep_create_connected(worker->ifaces[stub_ep->aux_rsc_index].iface,
                                      aux_addr->dev_addr, aux_addr->iface_addr,
                                      &stub_ep->aux_ep);
     if (status != UCS_OK) {
@@ -358,7 +362,7 @@ ucs_status_t ucp_stub_ep_connect(uct_ep_h uct_ep, ucp_rsc_index_t rsc_index,
 
     ucs_assert(ucp_stub_ep_test(uct_ep));
 
-    status = uct_ep_create(worker->ifaces[rsc_index], &stub_ep->next_ep);
+    status = uct_ep_create(worker->ifaces[rsc_index].iface, &stub_ep->next_ep);
     if (status != UCS_OK) {
         goto err;
     }

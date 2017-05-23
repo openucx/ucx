@@ -12,6 +12,7 @@
 #include <ucp/wireup/stub_ep.h>
 #include <ucp/tag/eager.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucs/datastruct/queue.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/sys/string.h>
 
@@ -44,7 +45,7 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
     ucp_rsc_index_t rsc_index;
 
     for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
-        if (worker->ifaces[rsc_index] == NULL) {
+        if (worker->ifaces[rsc_index].iface == NULL) {
             continue;
         }
 
@@ -52,7 +53,13 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
             uct_wakeup_close(worker->wakeup.iface_wakeups[rsc_index]);
         }
 
-        uct_iface_close(worker->ifaces[rsc_index]);
+        if (ucp_worker_is_tl_tag_offload(worker, rsc_index)) {
+            ucs_queue_remove(&worker->context->tm.offload_ifaces,
+                             &worker->ifaces[rsc_index].queue);
+            ucp_context_tag_offload_enable(worker->context);
+        }
+
+        uct_iface_close(worker->ifaces[rsc_index].iface);
     }
 }
 
@@ -108,9 +115,9 @@ static void ucp_worker_remove_am_handlers(ucp_worker_h worker)
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
         for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
             if (context->config.features & ucp_am_handlers[am_id].features) {
-                (void)uct_iface_set_am_handler(worker->ifaces[tl_id], am_id,
-                                               ucp_stub_am_handler, worker,
-                                               UCT_AM_CB_FLAG_ASYNC);
+                (void)uct_iface_set_am_handler(worker->ifaces[tl_id].iface,
+                                               am_id, ucp_stub_am_handler,
+                                               worker, UCT_AM_CB_FLAG_ASYNC);
             }
         }
     }
@@ -257,12 +264,12 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
         goto out;
     }
 
-    status = uct_iface_query(iface, &worker->iface_attrs[tl_id]);
+    status = uct_iface_query(iface, &worker->ifaces[tl_id].attr);
     if (status != UCS_OK) {
         goto out;
     }
 
-    attr = &worker->iface_attrs[tl_id];
+    attr = &worker->ifaces[tl_id].attr;
 
     /* Set active message handlers for tag matching */
     if ((attr->cap.flags & (UCT_IFACE_FLAG_AM_SHORT|UCT_IFACE_FLAG_AM_BCOPY|UCT_IFACE_FLAG_AM_ZCOPY))) {
@@ -300,11 +307,17 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
         }
     }
 
+    if (ucp_worker_is_tl_tag_offload(worker, tl_id)) {
+        worker->ifaces[tl_id].rsc_index = tl_id;
+        ucs_queue_push(&context->tm.offload_ifaces, &worker->ifaces[tl_id].queue);
+        ucp_context_tag_offload_enable(context);
+    }
+
     ucs_debug("created interface[%d] using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
               tl_id, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc), worker);
 
     worker->wakeup.iface_wakeups[tl_id] = wakeup;
-    worker->ifaces[tl_id] = iface;
+    worker->ifaces[tl_id].iface = iface;
     return UCS_OK;
 
 out_close_wakeup:
@@ -333,7 +346,7 @@ static void ucp_worker_init_cpu_atomics(ucp_worker_h worker)
 
     /* Enable all interfaces which have host-based atomics */
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-        if (worker->iface_attrs[rsc_index].cap.flags & UCT_IFACE_FLAG_ATOMIC_CPU) {
+        if (worker->ifaces[rsc_index].attr.cap.flags & UCT_IFACE_FLAG_ATOMIC_CPU) {
             ucp_worker_enable_atomic_tl(worker, "cpu", rsc_index);
         }
     }
@@ -371,7 +384,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
         rsc        = &context->tl_rscs[rsc_index];
         md_index   = rsc->md_index;
         md_attr    = &context->tl_mds[md_index].attr;
-        iface_attr = &worker->iface_attrs[rsc_index];
+        iface_attr = &worker->ifaces[rsc_index].attr;
 
         if (!(md_attr->cap.flags & UCT_MD_FLAG_REG) ||
             !ucs_test_all_flags(iface_attr->cap.flags, iface_cap_flags))
@@ -418,7 +431,7 @@ static void ucp_worker_init_guess_atomics(ucp_worker_h worker)
     uint64_t accumulated_flags = 0;
 
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-        accumulated_flags |= worker->iface_attrs[rsc_index].cap.flags;
+        accumulated_flags |= worker->ifaces[rsc_index].attr.cap.flags;
     }
 
     if (accumulated_flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
@@ -460,7 +473,7 @@ static ucs_status_t ucp_worker_init_am_mpool(ucp_worker_h worker,
     size_t           max_am_mp_entry_size = 0;
 
     for (tl_id = 0; tl_id < worker->context->num_tls; ++tl_id) {
-        if_attr = &worker->iface_attrs[tl_id];
+        if_attr = &worker->ifaces[tl_id].attr;
         max_am_mp_entry_size = ucs_max(max_am_mp_entry_size,
                                        if_attr->cap.am.max_short);
         max_am_mp_entry_size = ucs_max(max_am_mp_entry_size,
@@ -567,25 +580,18 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     kh_init_inplace(ucp_worker_ep_hash, &worker->ep_hash);
 
-    worker->ifaces = ucs_calloc(context->num_tls, sizeof(*worker->ifaces),
+    worker->ifaces = ucs_calloc(context->num_tls, sizeof(ucp_worker_iface_t),
                                 "ucp iface");
     if (worker->ifaces == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free;
     }
 
-    worker->iface_attrs = ucs_calloc(context->num_tls,
-                                     sizeof(*worker->iface_attrs),
-                                     "ucp iface_attr");
-    if (worker->iface_attrs == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_free_ifaces;
-    }
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&worker->stats, &ucp_worker_stats_class,
                                   ucs_stats_get_root(), "-%p", worker);
     if (status != UCS_OK) {
-        goto err_free_attrs;
+        goto err_free_ifaces;
     }
 
     status = ucp_worker_wakeup_context_init(&worker->wakeup, context->num_tls);
@@ -657,8 +663,6 @@ err_free_wakeup:
     ucp_worker_wakeup_context_cleanup(&worker->wakeup);
 err_free_stats:
     UCS_STATS_NODE_FREE(worker->stats);
-err_free_attrs:
-    ucs_free(worker->iface_attrs);
 err_free_ifaces:
     ucs_free(worker->ifaces);
 err_free:
@@ -687,7 +691,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
     ucp_worker_wakeup_context_cleanup(&worker->wakeup);
-    ucs_free(worker->iface_attrs);
     ucs_free(worker->ifaces);
     kh_destroy_inplace(ucp_worker_ep_hash, &worker->ep_hash);
     UCP_THREAD_LOCK_FINALIZE(&worker->mt_lock);

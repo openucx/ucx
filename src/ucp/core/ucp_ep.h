@@ -63,6 +63,7 @@ typedef struct ucp_ep_config_key {
 
     ucp_lane_index_t       am_lane;      /* Lane for AM (can be NULL) */
     ucp_lane_index_t       rndv_lane;    /* Lane for zcopy Rendezvous (can be NULL) */
+    ucp_lane_index_t       tag_lane;     /* Lane for tag matching offload (can be NULL) */
     ucp_lane_index_t       wireup_lane;  /* Lane for wireup messages (can be NULL) */
 
     /* Lanes for remote memory access, sorted by priority, highest first */
@@ -93,48 +94,77 @@ typedef struct ucp_ep_rma_config {
 } ucp_ep_rma_config_t;
 
 
+/*
+ * Configuration for AM and tag offload protocols
+ */
+typedef struct ucp_ep_msg_config {
+        ssize_t            max_short;
+        size_t             max_bcopy;
+        size_t             max_zcopy;
+        size_t             max_iov;
+
+        /* zero-copy threshold for operations which do not have to wait for remote side */
+        size_t             zcopy_thresh[UCP_MAX_IOV];
+
+        /* zero-copy threshold for operations which anyways have to wait for remote side */
+        size_t             sync_zcopy_thresh[UCP_MAX_IOV];
+        uint8_t            zcopy_auto_thresh; /* if != 0 the zcopy enabled */
+} ucp_ep_msg_config_t;
+
+
 typedef struct ucp_ep_config {
 
     /* A key which uniquely defines the configuration, and all other fields of
      * configuration (in the current worker) and defined only by it.
      */
-    ucp_ep_config_key_t    key;
+    ucp_ep_config_key_t     key;
 
     /* Bitmap of which lanes are p2p; affects the behavior of connection
      * establishment protocols.
      */
-    ucp_lane_map_t         p2p_lanes;
-
-    /* Limits for active-message based protocols */
-    struct {
-        ssize_t                max_eager_short;  /* Maximal payload of eager short */
-        ssize_t                max_short;        /* Maximal payload of am short */
-        size_t                 max_bcopy;        /* Maximal total size of am_bcopy */
-        size_t                 max_zcopy;        /* Maximal total size of am_zcopy */
-        size_t                 max_iovcnt;       /* Maximal size of iovcnt */
-        /* zero-copy threshold for operations which do not have to wait for remote side */
-        size_t                 zcopy_thresh[UCP_MAX_IOV];
-        /* zero-copy threshold for operations which anyways have to wait for remote side */
-        size_t                 sync_zcopy_thresh[UCP_MAX_IOV];
-        uint8_t                zcopy_auto_thresh; /* if != 0 the zcopy enabled */
-    } am;
+    ucp_lane_map_t          p2p_lanes;
 
     /* Configuration for each lane that provides RMA */
-    ucp_ep_rma_config_t        rma[UCP_MAX_LANES];
+    ucp_ep_rma_config_t     rma[UCP_MAX_LANES];
     /* Threshold for switching from put_short to put_bcopy */
-    size_t                     bcopy_thresh;
-
-    struct {
-        /* Maximal total size of rndv_get_zcopy */
-        size_t                 max_get_zcopy;
-        /* Threshold for switching from eager to RMA based rendezvous */
-        size_t                 rma_thresh;
-        /* Threshold for switching from eager to AM based rendezvous */
-        size_t                 am_thresh;
-    } rndv;
+    size_t                  bcopy_thresh;
 
     /* Error handling mode */
-    ucp_err_handling_mode_t    err_mode;
+    ucp_err_handling_mode_t err_mode;
+
+    /* Configuration for AM lane */
+    ucp_ep_msg_config_t     am;
+
+    struct {
+        /* Protocols used for tag matching operations
+         * (can be AM based or tag offload). */
+        const ucp_proto_t   *proto;
+        const ucp_proto_t   *sync_proto;
+
+        /* Lane used for tag matching operations. */
+        ucp_lane_index_t    lane;
+
+        /* Configuration of the lane used for eager protocols
+         * (can be AM or tag offload). */
+        ucp_ep_msg_config_t eager;
+
+        struct {
+            /* Maximal total size of rndv_get_zcopy */
+            size_t          max_get_zcopy;
+            /* Threshold for switching from eager to RMA based rendezvous */
+            size_t          rma_thresh;
+            /* Threshold for switching from eager to AM based rendezvous */
+            size_t          am_thresh;
+        } rndv;
+
+        struct {
+            /* Maximal iov count for tag recv offload */
+            size_t          max_recv_iov;
+            /* Maximal iov count for RNDV offload */
+            size_t          max_rndv_iov;
+        } offload;
+    } tag;
+
 } ucp_ep_config_t;
 
 

@@ -153,7 +153,7 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
-    size_t max_iov     = ucp_ep_config(ep)->am.max_iovcnt;
+    size_t max_iov     = ucp_ep_config(ep)->am.max_iov;
     uct_iov_t *iov     = ucs_alloca(max_iov * sizeof(uct_iov_t));
     size_t iovcnt      = 0;
     ucp_dt_state_t saved_state;
@@ -189,7 +189,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep            = req->send.ep;
     const size_t max_middle = ucp_ep_config(ep)->am.max_zcopy - hdr_size_middle;
-    const size_t max_iov    = ucp_ep_config(ep)->am.max_iovcnt;
+    const size_t max_iov    = ucp_ep_config(ep)->am.max_iov;
     uct_iov_t *iov          = ucs_alloca(max_iov * sizeof(uct_iov_t));
     ucp_dt_state_t *state = &req->send.state;
     unsigned flag_iov_mid   = 0;

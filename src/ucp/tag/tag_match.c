@@ -35,6 +35,8 @@ ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm)
         ucs_list_head_init(&tm->unexpected.hash[bucket]);
     }
 
+    ucs_queue_head_init(&tm->offload_ifaces);
+    tm->post_thresh = SIZE_MAX;
     return UCS_OK;
 }
 

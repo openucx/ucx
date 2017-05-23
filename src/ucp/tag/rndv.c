@@ -239,8 +239,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_get_zcopy, (self),
     /* reset the lane to rndv since it might have been set to 0 since it was stub on RTS receive */
     rndv_req->send.lane = ucp_ep_get_rndv_get_lane(rndv_req->send.ep);
     rsc_index = ucp_ep_get_rsc_index(rndv_req->send.ep, rndv_req->send.lane);
-    align     = rndv_req->send.ep->worker->iface_attrs[rsc_index].cap.get.opt_zcopy_align;
-    ucp_mtu   = rndv_req->send.ep->worker->iface_attrs[rsc_index].cap.get.align_mtu;
+    align     = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.opt_zcopy_align;
+    ucp_mtu   = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.align_mtu;
 
     ucs_trace_data("ep: %p try to progress get_zcopy for rndv get. rndv_req: %p. lane: %d",
                    rndv_req->send.ep, rndv_req, rndv_req->send.lane);
@@ -260,7 +260,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_get_zcopy, (self),
         length = ucp_mtu - ((uintptr_t)rndv_req->send.buffer % align);
     } else {
         length = ucs_min(rndv_req->send.length - offset,
-                         ucp_ep_config(rndv_req->send.ep)->rndv.max_get_zcopy);
+                         ucp_ep_config(rndv_req->send.ep)->tag.rndv.max_get_zcopy);
     }
 
     ucs_trace_data("offset %zu remainder %zu. read to %p len %zu",
@@ -439,6 +439,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
                               rndv_rts_hdr->size, recv_flags);
     if (rreq != NULL) {
         ucp_rndv_matched(worker, rreq, rndv_rts_hdr);
+
         UCP_WORKER_STAT_RNDV(worker, EXP);
         status = UCS_OK;
     } else {
