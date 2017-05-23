@@ -375,8 +375,6 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     rreq->recv.info.sender_tag = rndv_rts_hdr->super.tag;
     rreq->recv.info.length     = rndv_rts_hdr->size;
 
-    ucs_assert_always(rreq->recv.length != 0);
-
     /* the internal send request allocated on receiver side (to perform a "get"
      * operation, send "ATS" and "RTR") */
     rndv_req = ucp_worker_allocate_reply(worker, rndv_rts_hdr->sreq.sender_uuid);
