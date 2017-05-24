@@ -5,6 +5,7 @@
  */
 
 #include "tag_match.inl"
+#include <ucp/tag/offload.h>
 
 
 ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm)
@@ -54,11 +55,13 @@ int ucp_tag_unexp_is_empty(ucp_tag_match_t *tm)
 void ucp_tag_exp_remove(ucp_tag_match_t *tm, ucp_request_t *req)
 {
     ucs_queue_head_t *queue = ucp_tag_exp_get_req_queue(tm, req);
+    ucp_context_t *ctx      = ucs_container_of(tm, ucp_context_t, tm);
     ucs_queue_iter_t iter;
     ucp_request_t *qreq;
 
     ucs_queue_for_each_safe(qreq, iter, queue, recv.queue) {
         if (qreq == req) {
+            ucp_tag_offload_cancel(ctx, req, 0);
             ucs_queue_del_iter(queue, iter);
             return;
         }

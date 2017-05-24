@@ -6,6 +6,7 @@
 
 #include "eager.h"
 #include "tag_match.inl"
+#include "offload.h"
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_worker.h>
@@ -69,6 +70,11 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
         if (flags & UCP_RECV_DESC_FLAG_FIRST) {
             UCP_WORKER_STAT_EAGER_MSG(worker, flags);
             req->recv.info.sender_tag = recv_tag;
+
+            /* Cancel req in transport if it was offloaded,
+             * because it arrived as unexpected */
+            ucp_tag_offload_cancel(context, req, 1);
+
             if (flags & UCP_RECV_DESC_FLAG_LAST) {
                 req->recv.info.length = recv_len;
             } else {
@@ -167,6 +173,21 @@ static ucs_status_t ucp_eager_sync_ack_handler(void *arg, void *data,
     req = (ucp_request_t*)rep_hdr->reqptr;
     ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_REMOTE_COMPLETED);
     return UCS_OK;
+}
+
+ucs_status_t ucp_tag_offload_unexp_eager(void *arg, void *data, size_t length,
+                                         unsigned flags, uct_tag_t stag,  uint64_t imm)
+{
+    /* Align data with AM protocol. We should add tag before the data. */
+    ucp_eager_hdr_t *hdr = ((ucp_eager_hdr_t*)data) - 1;
+    hdr->super.tag       = stag;
+
+    return ucp_eager_handler(arg, hdr, length + sizeof(ucp_eager_hdr_t), flags,
+                             UCP_RECV_DESC_FLAG_EAGER |
+                             UCP_RECV_DESC_FLAG_FIRST |
+                             UCP_RECV_DESC_FLAG_LAST  |
+                             UCP_RECV_DESC_FLAG_OFFLOAD,
+                             sizeof(ucp_eager_hdr_t));
 }
 
 static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,

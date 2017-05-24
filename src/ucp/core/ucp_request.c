@@ -8,7 +8,6 @@
 #include "ucp_worker.h"
 #include "ucp_request.inl"
 
-#include <ucp/tag/tag_match.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/debug.h>
 #include <ucs/debug/log.h>
@@ -86,7 +85,10 @@ UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
         UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
 
         ucp_tag_exp_remove(&worker->context->tm, req);
-        ucp_request_complete_recv(req, UCS_ERR_CANCELED);
+        /* If tag posted to the transport need to wait its completion */
+        if (!(req->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
+            ucp_request_complete_recv(req, UCS_ERR_CANCELED);
+        }
 
         UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);
         UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
@@ -166,25 +168,26 @@ void ucp_iov_buffer_memh_dereg(uct_md_h uct_md, uct_mem_h *memh,
     }
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_request_send_buffer_reg, (req, lane),
-                 ucp_request_t *req, ucp_lane_index_t lane)
+ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
+                                    void *buffer, size_t length,
+                                    ucp_datatype_t datatype, ucp_dt_state_t *state)
 {
-    uct_md_h uct_md       = ucp_ep_md(req->send.ep, lane);
-    ucp_dt_state_t *state = &req->send.state;
+    ucp_rsc_index_t mdi = context->tl_rscs[rsc_index].md_index;
+    uct_md_h uct_md     = context->tl_mds[mdi].md;
+    uct_md_attr_t *uct_md_attr;
     size_t iov_it, iovcnt;
     const ucp_dt_iov_t *iov;
     uct_mem_h *memh;
     ucs_status_t status;
 
     status = UCS_OK;
-    switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
+    switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        status = uct_md_mem_reg(uct_md, (void *)req->send.buffer, req->send.length,
-                                0, &state->dt.contig.memh);
+        status = uct_md_mem_reg(uct_md, buffer, length, 0, &state->dt.contig.memh);
         break;
     case UCP_DATATYPE_IOV:
         iovcnt = state->dt.iov.iovcnt;
-        iov    = req->send.buffer;
+        iov    = buffer;
         memh   = ucs_malloc(sizeof(*memh) * iovcnt, "IOV memh");
         if (NULL == memh) {
             status = UCS_ERR_NO_MEMORY;
@@ -208,31 +211,30 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_send_buffer_reg, (req, lane),
         break;
     default:
         status = UCS_ERR_INVALID_PARAM;
-        ucs_error("Invalid data type %lx", req->send.datatype);
+        ucs_error("Invalid data type %lx", datatype);
     }
 
 err:
     if (status != UCS_OK) {
+        uct_md_attr = &context->tl_mds[mdi].attr;
         ucs_error("failed to register user buffer [datatype=%lx address=%p "
-                  "len=%zu pd=\"%s\"]: %s",
-                  req->send.datatype, req->send.buffer, req->send.length,
-                  ucp_ep_md_attr(req->send.ep, lane)->component_name,
-                  ucs_status_string(status));
+                  "len=%zu pd=\"%s\"]: %s", datatype, buffer, length,
+                  uct_md_attr->component_name, ucs_status_string(status));
     }
     return status;
 }
 
-UCS_PROFILE_FUNC_VOID(ucp_request_send_buffer_dereg, (req, lane),
-                      ucp_request_t *req, ucp_lane_index_t lane)
+void ucp_request_memory_dereg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
+                              ucp_datatype_t datatype, ucp_dt_state_t *state)
 {
-    uct_md_h uct_md       = ucp_ep_md(req->send.ep, lane);
-    ucp_dt_state_t *state = &req->send.state;
+    ucp_rsc_index_t mdi = context->tl_rscs[rsc_index].md_index;
+    uct_md_h uct_md     = context->tl_mds[mdi].md;
     uct_mem_h *memh;
     size_t iov_it;
 
-    switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
+    switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        if (req->send.state.dt.contig.memh != UCT_MEM_HANDLE_NULL) {
+        if (state->dt.contig.memh != UCT_MEM_HANDLE_NULL) {
             uct_md_mem_dereg(uct_md, state->dt.contig.memh);
         }
         break;
@@ -248,5 +250,26 @@ UCS_PROFILE_FUNC_VOID(ucp_request_send_buffer_dereg, (req, lane),
     default:
         ucs_error("Invalid data type");
     }
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_request_send_buffer_reg, (req, lane),
+                 ucp_request_t *req, ucp_lane_index_t lane)
+{
+    ucp_context_t *context    = req->send.ep->worker->context;
+    ucp_rsc_index_t rsc_index = ucp_ep_get_rsc_index(req->send.ep, lane);
+
+    return ucp_request_memory_reg(context, rsc_index, (void*)req->send.buffer,
+                                  req->send.length, req->send.datatype,
+                                  &req->send.state);
+}
+
+UCS_PROFILE_FUNC_VOID(ucp_request_send_buffer_dereg, (req, lane),
+                      ucp_request_t *req, ucp_lane_index_t lane)
+{
+    ucp_context_t *context    = req->send.ep->worker->context;
+    ucp_rsc_index_t rsc_index = ucp_ep_get_rsc_index(req->send.ep, lane);
+
+    return ucp_request_memory_dereg(context, rsc_index, req->send.datatype,
+                                    &req->send.state);
 }
 

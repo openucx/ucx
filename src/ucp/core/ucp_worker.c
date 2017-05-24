@@ -11,6 +11,7 @@
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/stub_ep.h>
 #include <ucp/tag/eager.h>
+#include <ucp/tag/offload.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/cpu_set.h>
@@ -254,6 +255,8 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     iface_params.stats_root  = UCS_STATS_RVAL(worker->stats);
     iface_params.rx_headroom = rx_headroom;
     iface_params.cpu_mask    = *cpu_mask_param;
+    iface_params.eager_arg   = worker;
+    iface_params.eager_cb    = ucp_tag_offload_unexp_eager;
 
     /* Open UCT interface */
     status = uct_iface_open(context->tl_mds[resource->md_index].md, worker->uct,
@@ -538,7 +541,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_cpu_set_t empty_cpu_mask;
     ucs_thread_mode_t thread_mode;
     ucp_wakeup_event_t events;
-    const size_t rx_headroom = sizeof(ucp_recv_desc_t);
+
+    /* Space for eager header is needed for unexpected tag offload messages */
+    const size_t rx_headroom = sizeof(ucp_recv_desc_t) + sizeof(ucp_eager_hdr_t);
 
     config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
                            UINT8_MAX);

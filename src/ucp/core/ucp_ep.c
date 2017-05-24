@@ -12,6 +12,7 @@
 #include <ucp/wireup/stub_ep.h>
 #include <ucp/wireup/wireup.h>
 #include <ucp/tag/eager.h>
+#include <ucp/tag/offload.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
@@ -809,8 +810,8 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
             config->tag.offload.max_recv_iov = iface_attr->cap.tag.recv.max_iov;
             config->tag.offload.max_rndv_iov = iface_attr->cap.tag.rndv.max_iov;
-            config->tag.sync_proto           = NULL;
-            config->tag.proto                = NULL;
+            config->tag.sync_proto           = &ucp_tag_offload_sync_proto;
+            config->tag.proto                = &ucp_tag_offload_proto;
             config->tag.lane                 = lane;
             max_rndv_thresh                  = iface_attr->cap.tag.eager.max_zcopy;
             max_am_rndv_thresh               = iface_attr->cap.tag.eager.max_bcopy;
