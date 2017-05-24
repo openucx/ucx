@@ -125,7 +125,7 @@ UCS_TEST_P(test_ud_slow_timer, retransmitn) {
     ep(m_e2)->rx.rx_hook = uct_ud_ep_null_hook;
     EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
     EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
-    twait(500);
+    twait(500*ucs::test_time_multiplier());
     //short_progress_loop();
     
     EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
