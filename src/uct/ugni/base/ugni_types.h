@@ -17,13 +17,10 @@ typedef struct uct_ugni_device {
     char             type_name[UCT_UGNI_MAX_TYPE_NAME];  /**< Device type name */
     char             fname[UCT_DEVICE_NAME_MAX];/**< Device full name */
     uint32_t         device_id;                 /**< Device id */
-    int              device_index;              /**< Index of the device in the
-                                                  array of devices */
     uint32_t         address;                   /**< Device address */
     uint32_t         cpu_id;                    /**< CPU attached directly
                                                   to the device */
     cpu_set_t        cpu_mask;                  /**< CPU mask */
-    bool             attached;                  /**< device was attached */
 #if ENABLE_MT
     ucs_spinlock_t   lock;                      /**< Device lock */
 #endif

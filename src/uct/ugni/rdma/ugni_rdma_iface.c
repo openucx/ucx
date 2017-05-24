@@ -85,6 +85,51 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
     return UCS_OK;
 }
 
+void uct_ugni_progress(void *arg)
+{
+    gni_cq_entry_t  event_data = 0;
+    gni_post_descriptor_t *event_post_desc_ptr;
+    uct_ugni_base_desc_t *desc;
+    uct_ugni_iface_t * iface = (uct_ugni_iface_t *)arg;
+    gni_return_t ugni_rc;
+
+    ugni_rc = GNI_CqGetEvent(iface->local_cq, &event_data);
+    if (GNI_RC_NOT_DONE == ugni_rc) {
+        goto out;
+    }
+
+    if ((GNI_RC_SUCCESS != ugni_rc && !event_data) || GNI_CQ_OVERRUN(event_data)) {
+        ucs_error("GNI_CqGetEvent falied. Error status %s %d ",
+                  gni_err_str[ugni_rc], ugni_rc);
+        return;
+    }
+
+    ugni_rc = GNI_GetCompleted(iface->local_cq, event_data, &event_post_desc_ptr);
+    if (GNI_RC_SUCCESS != ugni_rc && GNI_RC_TRANSACTION_ERROR != ugni_rc) {
+        ucs_error("GNI_GetCompleted falied. Error status %s %d %d",
+                  gni_err_str[ugni_rc], ugni_rc, GNI_RC_TRANSACTION_ERROR);
+        return;
+    }
+
+    desc = (uct_ugni_base_desc_t *)event_post_desc_ptr;
+    ucs_trace_async("Completion received on %p", desc);
+
+    if (NULL != desc->comp_cb) {
+        uct_invoke_completion(desc->comp_cb, UCS_OK);
+    }
+
+    if (ucs_likely(0 == desc->not_ready_to_free)) {
+        ucs_mpool_put(desc);
+    }
+
+    iface->outstanding--;
+    uct_ugni_check_flush(desc->flush_group);
+
+out:
+    /* have a go a processing the pending queue */
+    ucs_arbiter_dispatch(&iface->arbiter, 1, uct_ugni_ep_process_pending, NULL);
+    return;
+}
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_rdma_iface_t)
 {
@@ -157,17 +202,16 @@ static ucs_mpool_ops_t uct_ugni_rdma_desc_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
-static uct_iface_ops_t *uct_ugni_rdma_choose_ops_by_device(int id)
+static uct_iface_ops_t *uct_ugni_rdma_choose_ops_by_device(uct_ugni_device_t *dev)
 {
-    gni_nic_device_t device = uct_ugni_find_gni_device_type(id);
-    switch(device) {
+    switch(dev->type) {
     case GNI_DEVICE_GEMINI:
         return &uct_ugni_gemini_rdma_iface_ops;
     case GNI_DEVICE_ARIES:
         return &uct_ugni_aries_rdma_iface_ops;
     default:
         ucs_error("Unexpected device found in uct_ugni_rdma_choose_ops_by_device."
-                  "device id = %i unexpected device %i", id, device);
+                  "unexpected device type %s", dev->type_name);
         return NULL;
     }
 }
@@ -183,7 +227,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
 
     pthread_mutex_lock(&uct_ugni_global_lock);
 
-    ops = uct_ugni_rdma_choose_ops_by_device(dev->device_index);
+    ops = uct_ugni_rdma_choose_ops_by_device(dev);
     if (NULL == ops) {
         status = UCS_ERR_NO_DEVICE;
         goto exit;
