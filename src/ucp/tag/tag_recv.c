@@ -79,7 +79,6 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
             ucp_tag_log_match(recv_tag, rdesc->length - rdesc->hdr_len, req, tag,
                               tag_mask, req->recv.state.offset, "unexpected");
             ucp_tag_unexp_remove(rdesc);
-            req->flags |= UCP_REQUEST_FLAG_MATCHED;
 
             if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
                 UCS_PROFILE_REQUEST_EVENT(req, "eager_match", 0);
@@ -210,13 +209,9 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->recv.cb       = cb;
         ucp_tag_exp_push(&context->tm, queue, req);
 
-        if (!(req->flags & UCP_REQUEST_FLAG_MATCHED)) {
-            /* If offload supported, post this tag to transport as well.
-             * Check for match flag, because it may be a part of already
-             * matched message in AM protocol (thus we do not need to post
-             * tag to transport, because it is already being handled by AM). */
-            ucp_tag_offload_post(worker->context, req);
-        }
+        /* If offload supported, post this tag to transport as well.
+         * TODO: need to distinguish the cases when posting is not needed. */
+        ucp_tag_offload_try_post(worker->context, req);
         ucs_trace_req("%s returning expected request %p (%p)", debug_name, req,
                       req + 1);
     }

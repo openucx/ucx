@@ -198,7 +198,7 @@ ucp_tag_unexp_desc_release(ucp_recv_desc_t *rdesc)
     ucs_trace_req("release receive descriptor %p", rdesc);
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
         /* uct desc is slowpath */
-        if (rdesc->flags & UCP_RECV_DESC_FLAG_OFFLOAD) {
+        if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_OFFLOAD)) {
             uct_iface_release_desc(rdesc);
         } else {
             uct_iface_release_desc((char*)rdesc - sizeof(ucp_eager_hdr_t));

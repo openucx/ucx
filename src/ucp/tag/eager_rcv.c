@@ -73,7 +73,9 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
 
             /* Cancel req in transport if it was offloaded,
              * because it arrived as unexpected */
-            ucp_tag_offload_cancel(context, req, 1);
+            if (flags & UCP_RECV_DESC_FLAG_OFFLOAD) {
+                ucp_tag_offload_cancel(context, req, 1);
+            }
 
             if (flags & UCP_RECV_DESC_FLAG_LAST) {
                 req->recv.info.length = recv_len;

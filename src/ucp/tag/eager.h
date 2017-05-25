@@ -68,7 +68,7 @@ void ucp_tag_eager_zcopy_req_complete(ucp_request_t *req);
 static inline ucs_status_t ucp_tag_send_eager_short(ucp_ep_t *ep, ucp_tag_t tag,
                                                     const void *buffer, size_t length)
 {
-    if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
+    if (ep->flags & UCP_EP_FLAG_TAG_OFFLOAD_ENABLED) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uct_tag_t));
         return uct_ep_tag_eager_short(ucp_ep_get_tag_uct_ep(ep), tag, buffer, length);
     } else {

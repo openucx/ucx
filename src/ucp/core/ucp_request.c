@@ -168,9 +168,10 @@ void ucp_iov_buffer_memh_dereg(uct_md_h uct_md, uct_mem_h *memh,
     }
 }
 
-ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
-                                    void *buffer, size_t length,
-                                    ucp_datatype_t datatype, ucp_dt_state_t *state)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
+                 (context, rsc_index, buffer, length, datatype, state),
+                 ucp_context_t *context, ucp_rsc_index_t rsc_index, void *buffer,
+                 size_t length, ucp_datatype_t datatype, ucp_dt_state_t *state)
 {
     ucp_rsc_index_t mdi = context->tl_rscs[rsc_index].md_index;
     uct_md_h uct_md     = context->tl_mds[mdi].md;
@@ -224,8 +225,10 @@ err:
     return status;
 }
 
-void ucp_request_memory_dereg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
-                              ucp_datatype_t datatype, ucp_dt_state_t *state)
+UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg,
+                      (context, rsc_index, datatype, state),
+                      ucp_context_t *context, ucp_rsc_index_t rsc_index,
+                      ucp_datatype_t datatype, ucp_dt_state_t *state)
 {
     ucp_rsc_index_t mdi = context->tl_rscs[rsc_index].md_index;
     uct_md_h uct_md     = context->tl_mds[mdi].md;
@@ -252,8 +255,8 @@ void ucp_request_memory_dereg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
     }
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_request_send_buffer_reg, (req, lane),
-                 ucp_request_t *req, ucp_lane_index_t lane)
+ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req,
+                                         ucp_lane_index_t lane)
 {
     ucp_context_t *context    = req->send.ep->worker->context;
     ucp_rsc_index_t rsc_index = ucp_ep_get_rsc_index(req->send.ep, lane);
@@ -263,13 +266,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_send_buffer_reg, (req, lane),
                                   &req->send.state);
 }
 
-UCS_PROFILE_FUNC_VOID(ucp_request_send_buffer_dereg, (req, lane),
-                      ucp_request_t *req, ucp_lane_index_t lane)
+void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane)
 {
     ucp_context_t *context    = req->send.ep->worker->context;
     ucp_rsc_index_t rsc_index = ucp_ep_get_rsc_index(req->send.ep, lane);
 
-    return ucp_request_memory_dereg(context, rsc_index, req->send.datatype,
-                                    &req->send.state);
+    ucp_request_memory_dereg(context, rsc_index, req->send.datatype,
+                             &req->send.state);
 }
 

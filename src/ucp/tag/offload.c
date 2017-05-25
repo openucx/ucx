@@ -49,34 +49,29 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
     ucp_worker_iface_t *ucp_iface;
     ucs_status_t status;
 
-    if (req->flags & UCP_REQUEST_FLAG_OFFLOADED) {
-        ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
-                                                  ucp_worker_iface_t, queue);
-        ucp_request_memory_dereg(ctx, ucp_iface->rsc_index, req->recv.datatype,
-                                 &req->recv.state);
-        status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx, force);
-        if (status != UCS_OK) {
-            ucs_error("Failed to cancel recv in the transport: %s",
-                      ucs_status_string(status));
-        }
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_OFFLOADED);
+
+    ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
+                                              ucp_worker_iface_t, queue);
+    ucp_request_memory_dereg(ctx, ucp_iface->rsc_index, req->recv.datatype,
+                             &req->recv.state);
+    status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx, force);
+    if (status != UCS_OK) {
+        ucs_error("Failed to cancel recv in the transport: %s",
+                  ucs_status_string(status));
     }
 }
 
-void ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
+int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
 {
     size_t length = req->recv.length;
     ucp_worker_iface_t *ucp_iface;
     ucs_status_t status;
     uct_iov_t iov;
 
-    if (length < ctx->tm.post_thresh) {
-        /* Message is smaller than post threshold or offloading is disabled. */
-        goto skip;
-    }
-
     if (!UCP_DT_IS_CONTIG(req->recv.datatype)) {
         /* Non-contig buffers not supported yet. */
-        goto skip;
+        return 0;
     }
 
     if ((ctx->config.tag_sender_mask & req->recv.tag_mask) !=
@@ -84,13 +79,13 @@ void ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
         /* Wildcard.
          * TODO add check that only offload capable iface present. In
          * this case can post tag as well. */
-        goto skip;
+        return 0;
     }
 
     if (ctx->tm.sw_req_count) {
         /* There are some requests which must be completed in SW. Do not post
          * tags to HW until they are completed. */
-        goto skip;
+        return 0;
     }
 
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
@@ -99,7 +94,7 @@ void ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
                                     req->recv.length, req->recv.datatype,
                                     &req->recv.state);
     if (status != UCS_OK) {
-        goto skip;
+        return 0;
     }
 
     req->recv.uct_ctx.tag_consumed_cb = ucp_tag_offload_tag_consumed;
@@ -115,16 +110,12 @@ void ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
                                       &req->recv.uct_ctx);
     if (status != UCS_OK) {
         /* No more matching entries in the transport. */
-        goto skip;
+        return 0;
     }
     req->flags |= UCP_REQUEST_FLAG_OFFLOADED;
     ucs_trace_req("recv request %p (%p) was posted to transport (rsc %d)",
                   req, req + 1, ucp_iface->rsc_index);
-    return;
-
-skip:
-    req->flags |= UCP_REQUEST_FLAG_BLOCK_OFFLOAD;
-    ++ctx->tm.sw_req_count;
+    return 1;
 }
 
 static size_t ucp_tag_offload_pack_eager(void *dest, void *arg)
