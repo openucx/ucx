@@ -342,14 +342,16 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
 
     uct_ud_iface_reserve_skbs(iface, iface->tx.available);
 
-    status = ucs_twheel_init(&iface->async.slow_timer, uct_ud_slow_tick() / 4,
+    /* TODO: make tick configurable */
+    iface->async.slow_tick = ucs_time_from_msec(100);
+    status = ucs_twheel_init(&iface->async.slow_timer,
+                             iface->async.slow_tick / 4,
                              uct_ud_iface_get_async_time(iface));
     if (status != UCS_OK) {
         goto err;
     }
 
-    /* TODO: make tick configurable */
-    status = ucs_async_add_timer(async_mode, uct_ud_slow_tick(),
+    status = ucs_async_add_timer(async_mode, iface->async.slow_tick,
                                  uct_ud_iface_timer, iface, async,
                                  &iface->async.timer_id);
     if (status != UCS_OK) {
@@ -433,6 +435,14 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->config.tx_qp_len       = config->super.tx.queue_len;
     self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
 
+    if (config->slow_timer_backoff <= 0.) {
+        ucs_error("The slow timer back off should be > 0 (%lf)",
+                  config->slow_timer_backoff);
+        return UCS_ERR_INVALID_PARAM;
+    } else {
+        self->config.slow_timer_backoff = config->slow_timer_backoff;
+    }
+
     /* Redefine receive desc release callback */
     self->super.release_desc.cb  = uct_ud_iface_release_desc;
 
@@ -514,6 +524,9 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
      ucs_offsetof(uct_ud_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
     {"TIMEOUT", "5.0m", "Transport timeout",
      ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
+    {"SLOW_TIMER_BACKOFF", "2.0", "Timeout multiplier for resending trigger",
+     ucs_offsetof(uct_ud_iface_config_t, slow_timer_backoff),
+                  UCS_CONFIG_TYPE_DOUBLE},
     {NULL}
 };
 
