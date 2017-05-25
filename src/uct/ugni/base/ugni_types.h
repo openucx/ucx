@@ -48,7 +48,7 @@ typedef struct uct_devaddr_ugni_t {
 } UCS_S_PACKED uct_devaddr_ugni_t;
 
 typedef struct uct_sockaddr_ugni {
-     uint16_t   domain_id;
+     uint32_t   domain_id;
 } UCS_S_PACKED uct_sockaddr_ugni_t;
 
 typedef struct uct_ugni_flush_group {
