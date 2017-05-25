@@ -393,7 +393,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     if (ucp_ep_is_stub(ep)) {
         ucs_debug("received rts on a stub ep, ep=%p, rndv_lane=%d, "
                   "am_lane=%d", ep, ucp_ep_is_rndv_lane_present(ep) ?
-                  ucp_ep_get_rndv_get_lane(ep): UCP_NULL_RESOURCE,
+                  ucp_ep_get_rndv_get_lane(ep): UCP_NULL_LANE,
                   ucp_ep_get_am_lane(ep));
     }
 

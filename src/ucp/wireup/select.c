@@ -704,7 +704,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
                                   ucp_lane_index_t num_lanes)
 {
     ucp_context_h context     = worker->context;
-    ucp_lane_index_t p2p_lane = UCP_NULL_RESOURCE;
+    ucp_lane_index_t p2p_lane = UCP_NULL_LANE;
     uct_tl_resource_desc_t *resource;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;

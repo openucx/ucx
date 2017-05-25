@@ -22,7 +22,7 @@ static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
 
 static inline ucp_lane_index_t ucp_ep_get_am_lane(ucp_ep_h ep)
 {
-    ucs_assert(ucp_ep_config(ep)->key.am_lane != UCP_NULL_RESOURCE);
+    ucs_assert(ucp_ep_config(ep)->key.am_lane != UCP_NULL_LANE);
     return ep->am_lane;
 }
 
@@ -34,7 +34,7 @@ static inline ucp_lane_index_t ucp_ep_get_wireup_msg_lane(ucp_ep_h ep)
 
 static inline ucp_lane_index_t ucp_ep_get_rndv_get_lane(ucp_ep_h ep)
 {
-    ucs_assert(ucp_ep_config(ep)->key.rndv_lane != UCP_NULL_RESOURCE);
+    ucs_assert(ucp_ep_config(ep)->key.rndv_lane != UCP_NULL_LANE);
     return ucp_ep_config(ep)->key.rndv_lane;
 }
 
@@ -46,7 +46,7 @@ static inline ucp_lane_index_t ucp_ep_get_tag_lane(ucp_ep_h ep)
 
 static inline int ucp_ep_is_rndv_lane_present(ucp_ep_h ep)
 {
-    return ucp_ep_config(ep)->key.rndv_lane != UCP_NULL_RESOURCE;
+    return ucp_ep_config(ep)->key.rndv_lane != UCP_NULL_LANE;
 }
 
 static inline int ucp_ep_is_tag_offload_enabled(ucp_ep_config_t *config)
