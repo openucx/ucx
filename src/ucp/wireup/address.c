@@ -47,6 +47,7 @@ typedef struct {
 typedef struct {
     float            overhead;
     float            bandwidth;
+    double           lat_ovh;
     uint32_t         prio_cap_flags; /* 8 lsb: prio, 24 msb - cap flags */
 } ucp_address_packed_iface_attr_t;
 
@@ -234,6 +235,7 @@ static void ucp_address_pack_iface_attr(ucp_address_packed_iface_attr_t *packed,
     packed->prio_cap_flags = ((uint8_t)iface_attr->priority);
     packed->overhead       = iface_attr->overhead;
     packed->bandwidth      = iface_attr->bandwidth;
+    packed->lat_ovh        = iface_attr->latency.overhead;
 
     /* Keep only the bits defined by UCP_ADDRESS_IFACE_FLAGS, to shrink address. */
     packed_flag = UCS_BIT(8);
@@ -260,6 +262,7 @@ ucp_address_unpack_iface_attr(ucp_address_iface_attr_t *iface_attr,
     iface_attr->priority  = packed->prio_cap_flags & UCS_MASK(8);
     iface_attr->overhead  = packed->overhead;
     iface_attr->bandwidth = packed->bandwidth;
+    iface_attr->lat_ovh   = packed->lat_ovh;
 
     packed_flag = UCS_BIT(8);
     bit         = 1;
@@ -387,12 +390,15 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
 
             ucs_trace("pack addr[%d] : "UCT_TL_RESOURCE_DESC_FMT
-                      " md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e ",
+                      " md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e "
+                      "lat_ovh: %e dev_priority %d",
                       index,
                       UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[i].tl_rsc),
                       md_flags, worker->iface_attrs[i].cap.flags,
                       worker->iface_attrs[i].bandwidth,
-                      worker->iface_attrs[i].overhead);
+                      worker->iface_attrs[i].overhead,
+                      worker->iface_attrs[i].latency.overhead,
+                      worker->iface_attrs[i].priority);
             ++index;
         }
     }
@@ -568,10 +574,13 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
             address->tl_addr      = (tl_addr_len > 0) ? ptr : NULL;
             address->tl_addr_len  = tl_addr_len;
 
-            ucs_trace("unpack addr[%d] : md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e ",
+            ucs_trace("unpack addr[%d] : md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e "
+                      "lat_ovh %e dev_priority %d",
                       (int)(address - address_list),
                       address->md_flags, address->iface_attr.cap_flags,
-                      address->iface_attr.bandwidth, address->iface_attr.overhead);
+                      address->iface_attr.bandwidth, address->iface_attr.overhead,
+                      address->iface_attr.lat_ovh,
+                      address->iface_attr.priority);
             ++address;
 
             ptr += tl_addr_len;

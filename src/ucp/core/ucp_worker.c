@@ -360,6 +360,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     dummy_iface_attr.cap_flags  = -1;
     dummy_iface_attr.overhead   = 0;
     dummy_iface_attr.priority   = 0;
+    dummy_iface_attr.lat_ovh    = 0;
 
     supp_tls                    = 0;
     best_score                  = -1;
