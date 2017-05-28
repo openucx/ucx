@@ -490,6 +490,7 @@ void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num)
         uct_dc_iface_dci_put(iface, dci);
         ucs_assert_always(ep->dci == UCT_DC_EP_NO_DCI);
     }
+    iface->super.tx.cq_available++;
 
     iface->super.super.ops->set_ep_failed(ib_iface, &ep->super.super);
 
