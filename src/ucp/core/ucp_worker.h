@@ -145,7 +145,7 @@ static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uui
 static UCS_F_ALWAYS_INLINE
 uint64_t ucp_worker_is_tl_tag_offload(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return 0; /* Stub for now, offload TM proto is not implemented yet */
+    return 0; /* Stub for now, offload TM RNDV is not implemented yet */
 }
 
 #endif

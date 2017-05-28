@@ -135,6 +135,10 @@ ucp_request_complete_recv(ucp_request_t *req, ucs_status_t status)
                   req->recv.info.sender_tag, req->recv.info.length,
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
+
+    if (req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD) {
+        --req->recv.worker->context->tm.sw_req_count;
+    }
     ucp_request_complete(req, recv.cb, status, &req->recv.info);
 }
 

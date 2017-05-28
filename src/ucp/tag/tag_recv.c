@@ -7,6 +7,7 @@
 #include "eager.h"
 #include "rndv.h"
 #include "tag_match.inl"
+#include "offload.h"
 
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_request.inl>
@@ -78,6 +79,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
             ucp_tag_log_match(recv_tag, rdesc->length - rdesc->hdr_len, req, tag,
                               tag_mask, req->recv.state.offset, "unexpected");
             ucp_tag_unexp_remove(rdesc);
+
             if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
                 UCS_PROFILE_REQUEST_EVENT(req, "eager_match", 0);
                 status = ucp_eager_unexp_match(worker, rdesc, recv_tag, flags,
@@ -123,6 +125,7 @@ ucp_tag_recv_request_init(ucp_request_t *req, ucp_worker_h worker, void* buffer,
     ucp_dt_generic_t *dt_gen;
     req->flags = UCP_REQUEST_FLAG_EXPECTED | UCP_REQUEST_FLAG_RECV | req_flags;
     req->recv.state.offset = 0;
+    req->recv.worker       = worker;
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_IOV:
@@ -160,6 +163,9 @@ ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
 
     req->status = status;
     req->flags |= UCP_REQUEST_FLAG_COMPLETED;
+    if (req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD) {
+        --req->recv.worker->context->tm.sw_req_count;
+    }
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
 }
 
@@ -202,6 +208,10 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->recv.tag_mask = tag_mask;
         req->recv.cb       = cb;
         ucp_tag_exp_push(&context->tm, queue, req);
+
+        /* If offload supported, post this tag to transport as well.
+         * TODO: need to distinguish the cases when posting is not needed. */
+        ucp_tag_offload_try_post(worker->context, req);
         ucs_trace_req("%s returning expected request %p (%p)", debug_name, req,
                       req + 1);
     }
