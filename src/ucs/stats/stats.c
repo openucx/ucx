@@ -44,7 +44,8 @@ enum {
     UCS_ROOT_STATS_RUNTIME,
     UCS_ROOT_STATS_LAST
 };
-
+extern int
+node_sum(ucs_stats_node_t *node);
 typedef struct {
     volatile unsigned    flags;
 
@@ -107,6 +108,7 @@ static void ucs_stats_clean_node(ucs_stats_node_t *node) {
     }
 
     if (!filter_node->type_list_len) {
+	filter_node->child_len--;
         ucs_list_del(&filter_node->list);
     }
     ucs_list_del(&node->type_list);
@@ -199,7 +201,7 @@ static ucs_status_t ucs_stats_filter_node_new(ucs_stats_class_t *cls, ucs_stats_
         ucs_error("Failed to allocate stats filter node for %s", cls->name);
         return UCS_ERR_NO_MEMORY;
     }
-
+node->child_len = 0;
     *p_node = node;
     return UCS_OK;
 }
@@ -208,8 +210,16 @@ static ucs_stats_filter_node_t * ucs_stats_find_class(ucs_stats_filter_node_t *f
                                                       const char *class_name) {
     ucs_stats_filter_node_t *filter_node;
     ucs_stats_node_t * node;
-
+//int end_less = 0;
+ 
     ucs_list_for_each(filter_node, &filter_parent->children, list) {
+
+
+//if (end_less++ > 20) {
+//printf("aborting %s %d \n", __FUNCTION__, __LINE__);
+//abort();
+//}
+
         if (ucs_list_is_empty(&filter_node->type_list_head)) {
             ucs_error("type list is empty");
             return NULL;
@@ -254,6 +264,43 @@ static void ucs_stats_add_to_filter(ucs_stats_node_t *node,
         ucs_list_head_init(&filter_node->type_list_head);
         filter_node->parent = filter_parent;
         ucs_list_add_tail(&filter_parent->children, &filter_node->list);
+filter_parent->child_len++;
+        int end_less3 = 0;
+        ucs_stats_filter_node_t * filter_child_temp;
+printf("node sum %d\n", node_sum(&ucs_stats_context.root_node));
+printf("filter_parent->child_len %d\n", filter_parent->child_len);
+        ucs_list_for_each(filter_child_temp, &filter_parent->children, list) {
+
+            if ((end_less3++ > filter_parent->child_len++) || (filter_parent->child_len > 10000)){
+                printf("aborting\n");
+printf("ucs_global_opts.stats_format %d\n", ucs_global_opts.stats_format);
+printf("filter node sons list size %d\n", filter_parent->child_len);
+                int end_less4 = 0;
+                ucs_stats_filter_node_t * filter_child_temp2;
+                ucs_list_for_each(filter_child_temp2, &filter_parent->children, list) {
+                    ucs_stats_node_t * t_node = ucs_list_head(&filter_child_temp2->type_list_head,
+                             ucs_stats_node_t,
+                             type_list);
+
+                    printf("filter_child_temp->name %s %s \n", t_node->cls->name, t_node->name);
+                    if (end_less4++ > filter_parent->child_len++) {
+                        abort();
+                    } 
+                }  
+            }
+        }
+    }
+
+    ucs_stats_node_t *my_temp_node;
+
+    ucs_list_for_each(my_temp_node, &filter_parent->type_list_head, type_list) {
+        if (node == my_temp_node) {
+
+            printf("my_temp_node->name %s %s \n", my_temp_node->cls->name, my_temp_node->name);
+            printf("filter_child_temp->name %s %s \n", node->cls->name, node->name);
+
+            abort();
+        }
     }
 
     filter_node->type_list_len++;
@@ -271,7 +318,12 @@ static void ucs_stats_add_to_filter(ucs_stats_node_t *node,
 
     if (found) {
         temp_filter_node = filter_node;
+//int end_less = 0;
         while (temp_filter_node != NULL) {
+//if (end_less++ > 20) {
+//printf("aborting\n");
+//abort();
+//}
             temp_filter_node->ref_count++;
             temp_filter_node = temp_filter_node->parent;
         }
@@ -558,8 +610,12 @@ static void ucs_stats_clean_node_recurs(ucs_stats_node_t *node)
         ucs_warn("stats node "UCS_STATS_NODE_FMT" still has active children",
                  UCS_STATS_NODE_ARG(node));
     }
-
+//int end_less = 0;
     ucs_list_for_each_safe(child, tmp, &node->children[UCS_STATS_INACTIVE_CHILDREN], list) {
+//if (end_less++ > 20) {
+//printf("aborting  %s %d\n", __FUNCTION__, __LINE__);
+//abort();;
+//}      
         ucs_stats_clean_node_recurs(child);
         ucs_stats_node_remove(child, 0);
     }
@@ -597,6 +653,7 @@ void ucs_stats_cleanup()
 
     ucs_stats_unset_trigger();
     ucs_stats_clean_node_recurs(&ucs_stats_context.root_node);
+//    ucs_stats_clean_filter_node_recurs(&ucs_stats_context.root_filter_node);
     ucs_stats_close_dest();
     ucs_assert(ucs_stats_context.flags == 0);
 }
