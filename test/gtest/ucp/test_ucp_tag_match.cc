@@ -502,7 +502,6 @@ UCS_TEST_P(test_ucp_tag_match, rndv_truncated, "RNDV_THRESH=1048576") {
     ucs_status_t status;
 
     std::vector<char> sendbuf(size, 0);
-    std::vector<char> recvbuf(size, 0);
 
     skip_loopback();
 
@@ -515,8 +514,9 @@ UCS_TEST_P(test_ucp_tag_match, rndv_truncated, "RNDV_THRESH=1048576") {
     /* receiver - get the RTS and put it into unexpected */
     short_progress_loop();
 
-    /* receiver - issue a receive request, match it with the RTS and perform rndv get */
-    status = recv_b(&recvbuf[0], (recvbuf.size())/2, DATATYPE, 0x1337, 0xffff, &info);
+    /* receiver - issue a receive request with zero length,
+     * no assertions should occur */
+    status = recv_b(NULL, 0, DATATYPE, 0x1337, 0xffff, &info);
     EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED, status);
 
     /* sender - get the ATS and set send request to completed */
