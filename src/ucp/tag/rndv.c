@@ -75,7 +75,8 @@ static size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     if (UCP_DT_IS_CONTIG(sreq->send.datatype)) {
         rndv_rts_hdr->address = (uintptr_t) sreq->send.buffer;
         packed_len += ucp_tag_rndv_pack_rkey(sreq, rndv_rts_hdr);
-    } else if (UCP_DT_IS_GENERIC(sreq->send.datatype)) {
+    } else if (UCP_DT_IS_GENERIC(sreq->send.datatype) ||
+               UCP_DT_IS_IOV(sreq->send.datatype)) {
         rndv_rts_hdr->address = 0;
     }
 
@@ -225,21 +226,21 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_get_zcopy, (self),
     if (!(ucp_tag_rndv_is_get_op_possible(rndv_req->send.ep,
                                           rndv_req->send.rndv_get.rkey_bundle.rkey))) {
         /* can't perform get_zcopy - switch to AM rndv */
+        if (rndv_req->send.rndv_get.rkey_bundle.rkey != UCT_INVALID_RKEY) {
+            uct_rkey_release(&rndv_req->send.rndv_get.rkey_bundle);
+        }
         ucp_rndv_recv_am(rndv_req, rndv_req->send.rndv_get.rreq,
                          rndv_req->send.rndv_get.remote_request,
                          rndv_req->send.length);
 
-        if (rndv_req->send.rndv_get.rkey_bundle.rkey != UCT_INVALID_RKEY) {
-            uct_rkey_release(&rndv_req->send.rndv_get.rkey_bundle);
-        }
         return UCS_INPROGRESS;
     }
 
     /* reset the lane to rndv since it might have been set to 0 since it was stub on RTS receive */
     rndv_req->send.lane = ucp_ep_get_rndv_get_lane(rndv_req->send.ep);
     rsc_index = ucp_ep_get_rsc_index(rndv_req->send.ep, rndv_req->send.lane);
-    align     = rndv_req->send.ep->worker->iface_attrs[rsc_index].cap.get.opt_zcopy_align;
-    ucp_mtu   = rndv_req->send.ep->worker->iface_attrs[rsc_index].cap.get.align_mtu;
+    align     = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.opt_zcopy_align;
+    ucp_mtu   = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.align_mtu;
 
     ucs_trace_data("ep: %p try to progress get_zcopy for rndv get. rndv_req: %p. lane: %d",
                    rndv_req->send.ep, rndv_req, rndv_req->send.lane);
@@ -259,7 +260,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_get_zcopy, (self),
         length = ucp_mtu - ((uintptr_t)rndv_req->send.buffer % align);
     } else {
         length = ucs_min(rndv_req->send.length - offset,
-                         ucp_ep_config(rndv_req->send.ep)->rndv.max_get_zcopy);
+                         ucp_ep_config(rndv_req->send.ep)->tag.rndv.max_get_zcopy);
     }
 
     ucs_trace_data("offset %zu remainder %zu. read to %p len %zu",
@@ -375,8 +376,6 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     rreq->recv.info.sender_tag = rndv_rts_hdr->super.tag;
     rreq->recv.info.length     = rndv_rts_hdr->size;
 
-    ucs_assert_always(rreq->recv.length != 0);
-
     /* the internal send request allocated on receiver side (to perform a "get"
      * operation, send "ATS" and "RTR") */
     rndv_req = ucp_worker_allocate_reply(worker, rndv_rts_hdr->sreq.sender_uuid);
@@ -392,7 +391,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     if (ucp_ep_is_stub(ep)) {
         ucs_debug("received rts on a stub ep, ep=%p, rndv_lane=%d, "
                   "am_lane=%d", ep, ucp_ep_is_rndv_lane_present(ep) ?
-                  ucp_ep_get_rndv_get_lane(ep): UCP_NULL_RESOURCE,
+                  ucp_ep_get_rndv_get_lane(ep): UCP_NULL_LANE,
                   ucp_ep_get_am_lane(ep));
     }
 
@@ -407,7 +406,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
              * with AM messages */
             ucp_rndv_handle_recv_am(rndv_req, rreq, rndv_rts_hdr);
         }
-    } else if (UCP_DT_IS_GENERIC(rreq->recv.datatype)) {
+    } else if (UCP_DT_IS_GENERIC(rreq->recv.datatype) ||
+               UCP_DT_IS_IOV(rreq->recv.datatype)) {
         /* if the recv side has a generic datatype,
          * send an RTR and the sender will send the data with AM messages */
         ucp_rndv_handle_recv_am(rndv_req, rreq, rndv_rts_hdr);
@@ -437,6 +437,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
                               rndv_rts_hdr->size, recv_flags);
     if (rreq != NULL) {
         ucp_rndv_matched(worker, rreq, rndv_rts_hdr);
+
         UCP_WORKER_STAT_RNDV(worker, EXP);
         status = UCS_OK;
     } else {

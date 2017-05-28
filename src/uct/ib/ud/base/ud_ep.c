@@ -124,13 +124,14 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
     if (diff > iface->config.peer_timeout) {
         iface->super.ops->handle_failure(&iface->super, ep);
         return;
-    } else if (diff > 3*uct_ud_slow_tick()) {
-        ucs_trace("sceduling resend now: %lu send_time: %lu diff: %lu tick: %lu",
-                   now, ep->tx.send_time, now - ep->tx.send_time, uct_ud_slow_tick());
+    } else if (diff > 3*iface->async.slow_tick) {
+        ucs_trace("scheduling resend now: %lu send_time: %lu diff: %lu tick: %lu",
+                  now, ep->tx.send_time, now - ep->tx.send_time,
+                  ep->tx.slow_tick);
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
         uct_ud_ep_ca_drop(ep);
         uct_ud_ep_resend_start(iface, ep);
-    } else if (diff > uct_ud_slow_tick() && uct_ud_ep_is_connected(ep)) {
+    } else if ((diff > iface->async.slow_tick) && uct_ud_ep_is_connected(ep)) {
         /* It is possible that the sender is slow.
          * Try to flush the window twice before going into
          * full resend mode.
@@ -138,8 +139,10 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
     }
 
-    ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer,
-                   uct_ud_slow_tick());
+    /* Cool down the timer on rescheduling/resending */
+    ep->tx.slow_tick *= iface->config.slow_timer_backoff;
+    ep->tx.slow_tick = ucs_min(ep->tx.slow_tick, iface->config.peer_timeout/3);
+    ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer, ep->tx.slow_tick);
 }
 
 UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
@@ -153,6 +156,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
     uct_ud_ep_reset(self);
     ucs_list_head_init(&self->cep_list);
     uct_ud_iface_add_ep(iface, self);
+    self->tx.slow_tick = iface->async.slow_tick;
     ucs_wtimer_init(&self->slow_timer, uct_ud_ep_slow_timer);
     ucs_arbiter_group_init(&self->tx.pending.group);
     ucs_arbiter_elem_init(&self->tx.pending.elem);
@@ -402,6 +406,7 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
 
+    ep->tx.slow_tick = iface->async.slow_tick;
     ep->tx.send_time = uct_ud_iface_get_async_time(iface);
 }
 

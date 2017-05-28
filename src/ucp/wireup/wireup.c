@@ -349,7 +349,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
 {
     ucp_worker_h worker          = ep->worker;
     ucp_rsc_index_t rsc_index    = ucp_ep_get_rsc_index(ep, lane);
-    uct_iface_attr_t *iface_attr = &worker->iface_attrs[rsc_index];
+    uct_iface_attr_t *iface_attr = &worker->ifaces[rsc_index].attr;
     uct_ep_h new_uct_ep;
     ucs_status_t status;
 
@@ -361,7 +361,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
         ((ep->uct_eps[lane] == NULL) || ucp_stub_ep_test(ep->uct_eps[lane])))
     {
         /* create an endpoint connected to the remote interface */
-        status = uct_ep_create_connected(worker->ifaces[rsc_index],
+        status = uct_ep_create_connected(worker->ifaces[rsc_index].iface,
                                          address_list[addr_index].dev_addr,
                                          address_list[addr_index].iface_addr,
                                          &new_uct_ep);
@@ -503,6 +503,11 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     /* If we don't have a p2p transport, we're connected */
     if (!ucp_ep_config(ep)->p2p_lanes) {
         ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+    }
+
+    /* Cache tag offload state in the flags for fast-path */
+    if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
+        ep->flags |= UCP_EP_FLAG_TAG_OFFLOAD_ENABLED;
     }
 
     return UCS_OK;

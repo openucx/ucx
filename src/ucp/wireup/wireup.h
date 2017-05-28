@@ -93,7 +93,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 
 static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return !(worker->iface_attrs[rsc_index].cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
+    return !(worker->ifaces[rsc_index].attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
 }
 
 

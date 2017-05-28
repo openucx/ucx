@@ -33,7 +33,18 @@ typedef struct ucp_tag_match {
         ucs_queue_head_t      *hash;      /* Hash table of expected non-wild tags */
         uint64_t              sn;
     } expected;
-    ucs_queue_head_t          unexpected; /* Unexpected received descriptors */
+    struct {
+        ucs_list_link_t       all;        /* Linked list of all tags */
+        ucs_list_link_t       *hash;      /* Hash table of unexpected tags */
+    } unexpected;
+
+    /* Tag offload fields */
+    ucs_queue_head_t          offload_ifaces; /* Interfaces which support tag offload */
+    size_t                    post_thresh;    /* Messages are posted to the transport
+                                                 starting from this threshold. */
+    unsigned                  sw_req_count;   /* Number of requests which need to be matched
+                                                 in software. If 0 - tags can be posted to the
+                                                 transport */
 } ucp_tag_match_t;
 
 

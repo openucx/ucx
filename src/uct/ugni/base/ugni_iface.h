@@ -6,7 +6,6 @@
 #ifndef UCT_UGNI_IFACE_H
 #define UCT_UGNI_IFACE_H
 
-#include "ugni_def.h"
 #include "ugni_types.h"
 #include <uct/base/uct_iface.h>
 #include <uct/api/uct.h>
@@ -17,28 +16,13 @@ UCS_CLASS_DECLARE(uct_ugni_iface_t, uct_md_h, uct_worker_h,
 
 ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                   uct_completion_t *comp);
-ucs_status_t uct_ugni_ep_flush(uct_ep_h tl_ep, unsigned flags,
-                               uct_completion_t *comp);
 ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr);
 int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *dev_addr, 
 				const uct_iface_addr_t *iface_addr);
-void uct_ugni_progress(void *arg);
-ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface);
-ucs_status_t ugni_deactivate_iface(uct_ugni_iface_t *iface);
-ucs_status_t uct_ugni_init_nic(int device_index,
-                               uint16_t *domain_id,
-                               gni_cdm_handle_t *cdm_handle,
-                               gni_nic_handle_t *nic_handle,
-                               uint32_t *address);
 void uct_ugni_base_desc_init(ucs_mpool_t *mp, void *obj, void *chunk);
 void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h memh);
-ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
-                                         uct_tl_resource_desc_t **resource_p,
-                                         unsigned *num_resources_p);
-
-static inline uct_ugni_device_t *uct_ugni_iface_device(uct_ugni_iface_t *iface)
-{
-    return iface->dev;
-}
-
+void uct_ugni_cleanup_base_iface(uct_ugni_iface_t *iface);
+#define uct_ugni_iface_device(_iface) ((_iface)->cdm.dev)
+#define uct_ugni_iface_nic_handle(_iface) ((_iface)->cdm.nic_handle)
+#define uct_ugni_check_device_type(_iface, _type) ((_iface)->cdm.dev->type == _type)
 #endif

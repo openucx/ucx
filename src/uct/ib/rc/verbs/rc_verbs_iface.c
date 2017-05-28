@@ -206,7 +206,6 @@ uct_rc_verbs_iface_unexp_consumed(uct_rc_verbs_iface_t *iface,
         uct_rc_verbs_iface_post_op(iface, &wr, NULL, 0, IBV_WR_TAG_SYNC,
                                    NULL, 0);
     }
-    ++iface->tm.unexpected_cnt;
     ++iface->tm.xrq.available;
 }
 

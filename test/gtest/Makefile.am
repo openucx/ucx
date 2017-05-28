@@ -99,6 +99,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_tag_cancel.cc \
 	ucp/test_ucp_tag_match.cc \
 	ucp/test_ucp_tag_mt.cc \
+	ucp/test_ucp_tag_perf.cc \
 	ucp/test_ucp_tag_probe.cc \
 	ucp/test_ucp_tag_xfer.cc \
 	ucp/test_ucp_tag.cc \
