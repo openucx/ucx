@@ -58,11 +58,13 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
 
     rts.sreq      = sreq->super;
     rts.super.tag = stag;
+    rts.flags     = 0;
     rts.address   = 0; /* RNDV needs to be completed in SW */
     rts.size      = sreq->length;
 
     ucp_request_memory_dereg(ctx, iface->rsc_index, req->recv.datatype,
                              &req->recv.state);
+    /* coverity[address_of] */
     ucp_rndv_matched(req->recv.worker, req, &rts);
 }
 
