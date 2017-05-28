@@ -59,6 +59,17 @@ public:
     virtual void cleanup();
 
 protected:
+    void fail_receiver() {
+        /* TODO: need to handle non-empty TX window in UD EP destructor",
+         *       see debug message (ud_ep.c:220)
+         *       ucs_debug("ep=%p id=%d conn_id=%d has %d unacked packets",
+         *                 self, self->ep_id, self->conn_id,
+         *                 (int)ucs_queue_length(&self->tx.window));
+         */
+        receiver().flush_worker();
+        m_entities.remove(&receiver());
+    }
+
     void smoke_test() {
         long buf = 0;
         request *req = recv_nb(&buf, sizeof(buf), DATATYPE, 0, 0);
@@ -76,6 +87,7 @@ protected:
 void test_ucp_peer_failure::init() {
     test_ucp_peer_failure_base::init();
     test_ucp_tag::init();
+    smoke_test();
 
     /* Make second pair */
     create_entity(true);
@@ -112,7 +124,7 @@ UCS_TEST_P(test_ucp_peer_failure, disable_sync_send) {
 
 UCS_TEST_P(test_ucp_peer_failure, status_after_error) {
 
-    m_entities.remove(&receiver());
+    fail_receiver();
 
     send_nb(NULL, 0, DATATYPE, 0x111337);
     wait_err();
@@ -171,8 +183,7 @@ UCS_TEST_P(test_ucp_peer_failure_with_rma, status_after_error) {
     ucp_rkey_buffer_release(rkey_buffer);
     ucp_mem_unmap(receiver().ucph(), memh);
 
-    m_entities.remove(&receiver());
-
+    fail_receiver();
     send_nb(NULL, 0, DATATYPE, 0x111337);
     wait_err();
 
