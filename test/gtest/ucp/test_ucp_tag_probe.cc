@@ -43,7 +43,7 @@ public:
                                     0x111337);
 
         } else {
-            send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+            send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
         }
 
         do {
@@ -79,7 +79,7 @@ public:
         }
         request_release(recv_req);
 
-        if (is_sync) {
+        if (UCS_PTR_IS_PTR(send_req)) {
             wait(send_req);
             EXPECT_TRUE(send_req->completed);
             EXPECT_EQ(UCS_OK, send_req->status);

@@ -7,6 +7,7 @@
 #include "rndv.h"
 #include "tag_match.inl"
 
+#include "offload.h"
 #include <ucp/proto/proto_am.inl>
 #include <ucp/core/ucp_request.inl>
 #include <ucs/datastruct/queue.h>
@@ -121,8 +122,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rtr, (self),
     return status;
 }
 
-void ucp_tag_send_start_rndv(ucp_request_t *sreq)
+ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
 {
+    ucs_status_t status;
+
     ucs_trace_req("starting rndv. sreq: %p. buffer: %p, length: %zu",
                   sreq, sreq->send.buffer, sreq->send.length);
     sreq->flags |= UCP_REQUEST_FLAG_RNDV;
@@ -132,8 +135,15 @@ void ucp_tag_send_start_rndv(ucp_request_t *sreq)
     if (UCP_DT_IS_CONTIG(sreq->send.datatype)) {
         sreq->send.state.dt.contig.memh = UCT_MEM_HANDLE_NULL;
     }
-
-    sreq->send.uct.func = ucp_proto_progress_rndv_rts;
+    if (sreq->send.ep->flags & UCP_EP_FLAG_TAG_OFFLOAD_ENABLED) {
+        status = ucp_tag_offload_start_rndv(sreq);
+        if (status != UCS_OK) {
+            return status;
+        }
+    } else {
+        sreq->send.uct.func = ucp_proto_progress_rndv_rts;
+    }
+    return UCS_OK;
 }
 
 static void ucp_rndv_send_ats(ucp_request_t *rndv_req, uintptr_t remote_request)
@@ -398,7 +408,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     }
 
     if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
-        if ((rndv_rts_hdr->address != 0) && ucp_ep_is_rndv_lane_present(ep)) {
+        if ((rndv_rts_hdr->address != 0) && (ucp_ep_is_rndv_lane_present(ep) ||
+            (rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_OFFLOAD))) {
             /* read the data from the sender with a get_zcopy operation on the
              * rndv lane */
             ucp_rndv_handle_recv_contig(rndv_req, rreq, rndv_rts_hdr);
@@ -421,12 +432,14 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
-                 (arg, data, length, am_flags),
-                 void *arg, void *data, size_t length, unsigned am_flags)
+                 (arg, data, length, tl_flags, desc_flags),
+                 void *arg, void *data, size_t length, unsigned tl_flags,
+                 unsigned desc_flags)
 {
     const unsigned recv_flags = UCP_RECV_DESC_FLAG_FIRST |
-                                UCP_RECV_DESC_FLAG_LAST |
-                                UCP_RECV_DESC_FLAG_RNDV;
+                                UCP_RECV_DESC_FLAG_LAST  |
+                                UCP_RECV_DESC_FLAG_RNDV  |
+                                desc_flags;
     ucp_worker_h worker = arg;
     ucp_rndv_rts_hdr_t *rndv_rts_hdr = data;
     ucp_context_h context = worker->context;
@@ -440,15 +453,26 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
     if (rreq != NULL) {
         ucp_rndv_matched(worker, rreq, rndv_rts_hdr);
 
+        /* Cancel req in transport if it was offloaded, because it arrived
+           as unexpected */
+        if (recv_flags & UCP_RECV_DESC_FLAG_OFFLOAD) {
+            ucp_tag_offload_cancel(context, rreq, 1);
+        }
+
         UCP_WORKER_STAT_RNDV(worker, EXP);
         status = UCS_OK;
     } else {
-        status = ucp_tag_unexp_recv(&context->tm, worker, data, length, am_flags,
+        status = ucp_tag_unexp_recv(&context->tm, worker, data, length, tl_flags,
                                     sizeof(*rndv_rts_hdr), recv_flags);
     }
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
     return status;
+}
+ucs_status_t ucp_rndv_rts_handler_wrap(void *arg, void *data, size_t length,
+                                       unsigned tl_flags)
+{
+    return ucp_rndv_rts_handler(arg, data, length, tl_flags, 0);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
@@ -460,7 +484,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
 
     /* dereg the original send request and set it to complete */
     UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_ats_recv", 0);
-    ucp_rndv_rma_request_send_buffer_dereg(sreq);
+    if (sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) {
+        ucp_tag_offload_cancel_rndv(sreq);
+        ucp_request_send_buffer_dereg(sreq, ucp_ep_get_tag_lane(sreq->send.ep));
+    } else {
+        ucp_rndv_rma_request_send_buffer_dereg(sreq);
+    }
     ucp_request_send_generic_dt_finish(sreq);
     ucp_request_complete_send(sreq, UCS_OK);
     return UCS_OK;
@@ -591,7 +620,11 @@ static void ucp_rndv_prepare_zcopy_send_buffer(ucp_request_t *sreq, ucp_ep_h ep)
 {
     ucs_status_t status;
 
-    if ((ucp_ep_is_rndv_lane_present(ep)) &&
+    if ((sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) &&
+        (ucp_ep_get_am_lane(ep) != ucp_ep_get_tag_lane(ep))) {
+        ucp_request_send_buffer_dereg(sreq, ucp_ep_get_tag_lane(sreq->send.ep));
+        sreq->send.state.dt.contig.memh = UCT_MEM_HANDLE_NULL;
+    } else if ((ucp_ep_is_rndv_lane_present(ep)) &&
         (ucp_ep_get_am_lane(ep) != ucp_ep_get_rndv_get_lane(ep))) {
         /* dereg the original send request since we are going to send on the AM lane next */
         ucp_rndv_rma_request_send_buffer_dereg(sreq);
@@ -635,6 +668,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     /* make sure that the ep on which the rtr was received on is connected */
     ucs_assert_always(!ucp_ep_is_stub(ep));
     ucs_trace_req("RTR received. start sending on sreq %p", sreq);
+
+    if (sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) {
+        /* Do not deregister memory here, because am zcopy rndv may
+         * need it registered (if am and tag is the same lane). */
+        ucp_tag_offload_cancel_rndv(sreq);
+    }
 
     if ((UCP_DT_IS_CONTIG(sreq->send.datatype)) &&
         (sreq->send.length >= ucp_ep_config(ep)->am.zcopy_thresh[0])) {
@@ -751,7 +790,7 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     }
 }
 
-UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_RNDV_RTS, ucp_rndv_rts_handler,
+UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_RNDV_RTS, ucp_rndv_rts_handler_wrap,
               ucp_rndv_dump, UCT_AM_CB_FLAG_SYNC);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_RNDV_ATS, ucp_rndv_ats_handler,
               ucp_rndv_dump, UCT_AM_CB_FLAG_SYNC);

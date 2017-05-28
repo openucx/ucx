@@ -255,8 +255,9 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     iface_params.stats_root  = UCS_STATS_RVAL(worker->stats);
     iface_params.rx_headroom = rx_headroom;
     iface_params.cpu_mask    = *cpu_mask_param;
-    iface_params.eager_arg   = worker;
+    iface_params.eager_arg   = iface_params.rndv_arg = worker;
     iface_params.eager_cb    = ucp_tag_offload_unexp_eager;
+    iface_params.rndv_cb     = ucp_tag_offload_unexp_rndv;
 
     /* Open UCT interface */
     status = uct_iface_open(context->tl_mds[resource->md_index].md, worker->uct,

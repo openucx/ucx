@@ -14,7 +14,8 @@
 #include <ucp/proto/proto.h>
 
 enum {
-    UCP_RNDV_RTS_FLAG_PACKED_RKEY  = UCS_BIT(0)
+    UCP_RNDV_RTS_FLAG_PACKED_RKEY  = UCS_BIT(0),
+    UCP_RNDV_RTS_FLAG_OFFLOAD      = UCS_BIT(1)
 };
 
 /*
@@ -45,12 +46,17 @@ typedef struct {
 } UCS_S_PACKED ucp_rndv_data_hdr_t;
 
 
-void ucp_tag_send_start_rndv(ucp_request_t *req);
+ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *req);
 
 void ucp_rndv_matched(ucp_worker_h worker, ucp_request_t *req,
                       ucp_rndv_rts_hdr_t *rndv_rts_hdr);
 
 ucs_status_t ucp_proto_progress_rndv_get_zcopy(uct_pending_req_t *self);
+
+ucs_status_t
+ucp_rndv_rts_handler(void *arg, void *data, size_t length, unsigned tl_flags,
+                     unsigned desc_flags);
+
 
 static inline size_t ucp_rndv_total_len(ucp_rndv_rts_hdr_t *hdr)
 {
