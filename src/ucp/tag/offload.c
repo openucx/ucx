@@ -290,7 +290,6 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
 
 ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
 {
-    void *rndv_op;
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
     size_t max_iov     = ucp_ep_config(ep)->tag.eager.max_iov;
@@ -300,6 +299,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
         .sender_uuid = ep->worker->uuid,
         .reqptr      = (uintptr_t)req
     };
+    void *rndv_op;
 
     req->send.uct_comp.count = 1;
     req->send.uct_comp.func  = ucp_tag_eager_zcopy_completion;
