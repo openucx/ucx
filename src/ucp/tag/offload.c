@@ -74,34 +74,40 @@ ucs_status_t ucp_tag_offload_unexp_rndv(void *arg, unsigned flags,
                                         uint64_t remote_addr, size_t length,
                                         const void *rkey_buf)
 {
-    ucp_rndv_rts_hdr_t *rts = (ucp_rndv_rts_hdr_t*)(((ucp_tag_hdr_t*)hdr) - 1);
-    ucp_worker_t *worker    = arg;
-    void *rkey              = rts + 1;
-    size_t len              = sizeof(*rts);
-    ucp_ep_t *ep            = ucp_worker_get_reply_ep(worker, rts->sreq.sender_uuid);
-    const uct_md_attr_t *md_attrs;
-    size_t rkey_size;
+    ucp_worker_t *worker          = arg;
+    ucp_request_hdr_t *rndv_hdr   = (ucp_request_hdr_t*)hdr;
+    ucp_ep_t *ep                  = ucp_worker_get_reply_ep(worker, rndv_hdr->sender_uuid);
+    const uct_md_attr_t *md_attr  = ucp_ep_md_attr(ep, ucp_ep_get_tag_lane(ep));
+    size_t rkey_size        = rkey_buf ? md_attr->rkey_packed_size : 0;
+    size_t len              = sizeof(ucp_rndv_rts_hdr_t) + rkey_size;
+    ucp_rndv_rts_hdr_t *rts = ucs_alloca(len);
+    ucp_sw_rndv_hdr_t  *sw_rndv_hdr;
 
-    /* rts.req  should be alredy in place - it is sent by the sender.
-     * Fill the rest of rts header and pass to common rts handler */
-    if (rkey_buf) {
-        /* Copy rkey before to fill rts, to avoid overriding rkey */
-        md_attrs   = ucp_ep_md_attr(ep, ucp_ep_get_tag_lane(ep));
-        rkey_size  = md_attrs->rkey_packed_size;
-        memcpy(rkey, rkey_buf, rkey_size);
-        len       += rkey_size;
-        rts->flags = UCP_RNDV_RTS_FLAG_PACKED_RKEY | UCP_RNDV_RTS_FLAG_OFFLOAD;
-        rts->size  = length;
-    } else {
-        ucs_assert(remote_addr == 0ul);
-        /* This must be SW RNDV request. Take length from its header. */
-        rts->size = ((ucp_sw_rndv_hdr_t*)hdr)->length;
-    }
-
+    /* Fill RTS to emulate SW RNDV flow. */
     rts->super.tag = stag;
+    rts->sreq      = *rndv_hdr;
     rts->address   = remote_addr;
 
-    return ucp_rndv_rts_handler(arg, rts, len, flags, UCP_RECV_DESC_FLAG_OFFLOAD);
+    if (remote_addr) {
+        rts->size  = length;
+        rts->flags = UCP_RNDV_RTS_FLAG_OFFLOAD;
+        if (rkey_buf) {
+            memcpy(rts + 1, rkey_buf, rkey_size);
+            len        += rkey_size;
+            rts->flags |= UCP_RNDV_RTS_FLAG_PACKED_RKEY;
+        }
+    } else {
+        /* This must be SW RNDV request. Take length from its header. */
+        sw_rndv_hdr = ucs_derived_of(hdr, ucp_sw_rndv_hdr_t);
+        rts->size   = sw_rndv_hdr->length;
+        rts->flags  = 0;
+    }
+
+    /* Pass 0 as tl flags, because RTS needs to be stored in UCP pool. */
+    ucp_rndv_process_rts(arg, rts, len, 0);
+
+    /* Always return UCS_OK, since RNDV hdr should be stored in UCP mpool. */
+    return UCS_OK;
 }
 
 void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
@@ -109,16 +115,17 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
     ucp_worker_iface_t *ucp_iface;
     ucs_status_t status;
 
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_OFFLOADED);
-
-    ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
-                                              ucp_worker_iface_t, queue);
-    ucp_request_memory_dereg(ctx, ucp_iface->rsc_index, req->recv.datatype,
-                             &req->recv.state);
-    status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx, force);
-    if (status != UCS_OK) {
-        ucs_error("Failed to cancel recv in the transport: %s",
-                  ucs_status_string(status));
+    if (req->flags & UCP_REQUEST_FLAG_OFFLOADED) {
+        ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
+                                                   ucp_worker_iface_t, queue);
+        ucp_request_memory_dereg(ctx, ucp_iface->rsc_index, req->recv.datatype,
+                                 &req->recv.state);
+        status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx,
+                                           force);
+        if (status != UCS_OK) {
+            ucs_error("Failed to cancel recv in the transport: %s",
+                    ucs_status_string(status));
+        }
     }
 }
 

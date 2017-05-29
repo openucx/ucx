@@ -431,15 +431,13 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
-                 (arg, data, length, tl_flags, desc_flags),
-                 void *arg, void *data, size_t length, unsigned tl_flags,
-                 unsigned desc_flags)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_process_rts,
+                 (arg, data, length, tl_flags),
+                 void *arg, void *data, size_t length, unsigned tl_flags)
 {
     const unsigned recv_flags = UCP_RECV_DESC_FLAG_FIRST |
                                 UCP_RECV_DESC_FLAG_LAST  |
-                                UCP_RECV_DESC_FLAG_RNDV  |
-                                desc_flags;
+                                UCP_RECV_DESC_FLAG_RNDV;
     ucp_worker_h worker = arg;
     ucp_rndv_rts_hdr_t *rndv_rts_hdr = data;
     ucp_context_h context = worker->context;
@@ -455,9 +453,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
 
         /* Cancel req in transport if it was offloaded, because it arrived
            as unexpected */
-        if (recv_flags & UCP_RECV_DESC_FLAG_OFFLOAD) {
-            ucp_tag_offload_cancel(context, rreq, 1);
-        }
+        ucp_tag_offload_cancel(context, rreq, 1);
 
         UCP_WORKER_STAT_RNDV(worker, EXP);
         status = UCS_OK;
@@ -469,10 +465,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
     UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
     return status;
 }
-ucs_status_t ucp_rndv_rts_handler_wrap(void *arg, void *data, size_t length,
-                                       unsigned tl_flags)
+
+ucs_status_t ucp_rndv_rts_handler(void *arg, void *data, size_t length,
+                                  unsigned tl_flags)
 {
-    return ucp_rndv_rts_handler(arg, data, length, tl_flags, 0);
+    return ucp_rndv_process_rts(arg, data, length, tl_flags);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
@@ -790,7 +787,7 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     }
 }
 
-UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_RNDV_RTS, ucp_rndv_rts_handler_wrap,
+UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_RNDV_RTS, ucp_rndv_rts_handler,
               ucp_rndv_dump, UCT_AM_CB_FLAG_SYNC);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_RNDV_ATS, ucp_rndv_ats_handler,
               ucp_rndv_dump, UCT_AM_CB_FLAG_SYNC);

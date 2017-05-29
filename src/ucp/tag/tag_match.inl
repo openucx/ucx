@@ -156,14 +156,15 @@ ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_worker_h worker, void *data,
                    size_t length, unsigned am_flags, uint16_t hdr_len,
                    uint16_t flags)
 {
-    ucp_recv_desc_t *rdesc = (ucp_recv_desc_t *)data - 1;
+    ucp_recv_desc_t *rdesc;
     ucs_list_link_t *hash_list;
     ucs_status_t status;
 
     if (ucs_unlikely(am_flags & UCT_CB_FLAG_DESC)) {
-        /* desc==data is slowpath */
+        /* slowpath */
+        rdesc        = (ucp_recv_desc_t *)data - 1;
         rdesc->flags = flags | UCP_RECV_DESC_FLAG_UCT_DESC;
-        status = UCS_INPROGRESS;
+        status       = UCS_INPROGRESS;
     } else {
         rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
         if (rdesc == NULL) {
