@@ -44,7 +44,7 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
         flag_iov_single                      = (count <= config->tag.eager.max_iov);
         
         if (!flag_iov_single && ucp_ep_is_tag_offload_enabled(config)) {
-            /* Make sure SW RNDV will be used, becasuse tag offload does
+            /* Make sure SW RNDV will be used, because tag offload does
              * not support multi-packet eager protocols. */
             force_sw_rndv = 1;
         }
