@@ -162,9 +162,13 @@ ucs_status_t ugni_connect_ep(uct_ugni_iface_t *iface,
                              uct_ugni_ep_t *ep){
     gni_return_t ugni_rc;
 
+    uct_ugni_device_lock(&iface->cdm);
     ugni_rc = GNI_EpBind(ep->ep, dev_addr->nic_addr, iface_addr->domain_id);
+    uct_ugni_device_unlock(&iface->cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
+        uct_ugni_device_lock(&iface->cdm);
         (void)GNI_EpDestroy(ep->ep);
+        uct_ugni_device_unlock(&iface->cdm);
         ucs_error("GNI_EpBind failed, Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);
         return UCS_ERR_UNREACHABLE;
@@ -196,8 +200,9 @@ UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
     self->flush_group->flush_comp.func = NULL;
     self->flush_group->parent = NULL;
 #endif
-
+    uct_ugni_device_lock(&iface->cdm);
     ugni_rc = GNI_EpCreate(uct_ugni_iface_nic_handle(iface), iface->local_cq, &self->ep);
+    uct_ugni_device_unlock(&iface->cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_CdmCreate failed, Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);
@@ -230,8 +235,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_ep_t)
 
     ucs_arbiter_group_purge(&iface->arbiter, &self->arb_group,
                             uct_ugni_ep_abriter_purge_cb, NULL);
-
+    uct_ugni_device_lock(&iface->cdm);
     ugni_rc = GNI_EpDestroy(self->ep);
+    uct_ugni_device_unlock(&iface->cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_warn("GNI_EpDestroy failed, Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);

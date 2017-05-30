@@ -50,7 +50,6 @@ static ucs_status_t uct_ugni_mem_reg(uct_md_h md, void *address, size_t length,
     uct_ugni_md_t *ugni_md = ucs_derived_of(md, uct_ugni_md_t);
     gni_mem_handle_t * mem_hndl = NULL;
 
-    pthread_mutex_lock(&uct_ugni_global_lock);
     if (0 == length) {
         ucs_error("Unexpected length %zu", length);
         return UCS_ERR_INVALID_PARAM;
@@ -63,10 +62,12 @@ static ucs_status_t uct_ugni_mem_reg(uct_md_h md, void *address, size_t length,
         goto mem_err;
     }
 
+    uct_ugni_device_lock(&ugni_md->cdm);
     ugni_rc = GNI_MemRegister(ugni_md->cdm.nic_handle, (uint64_t)address,
                               length, NULL,
                               GNI_MEM_READWRITE | GNI_MEM_RELAXED_PI_ORDERING,
                               -1, mem_hndl);
+    uct_ugni_device_unlock(&ugni_md->cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_MemRegister failed (addr %p, size %zu), Error status: %s %d",
                  address, length, gni_err_str[ugni_rc], ugni_rc);
@@ -77,12 +78,10 @@ static ucs_status_t uct_ugni_mem_reg(uct_md_h md, void *address, size_t length,
     ucs_debug("Memory registration address %p, len %lu, keys [%"PRIx64" %"PRIx64"]",
               address, length, mem_hndl->qword1, mem_hndl->qword2);
     *memh_p = mem_hndl;
-    pthread_mutex_unlock(&uct_ugni_global_lock);
     return UCS_OK;
 
 mem_err:
     free(mem_hndl);
-    pthread_mutex_unlock(&uct_ugni_global_lock);
     return status;
 }
 
@@ -93,9 +92,9 @@ static ucs_status_t uct_ugni_mem_dereg(uct_md_h md, uct_mem_h memh)
     gni_return_t ugni_rc;
     ucs_status_t status = UCS_OK;
 
-    pthread_mutex_lock(&uct_ugni_global_lock);
-
+    uct_ugni_device_lock(&ugni_md->cdm);
     ugni_rc = GNI_MemDeregister(ugni_md->cdm.nic_handle, mem_hndl);
+    uct_ugni_device_unlock(&ugni_md->cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_MemDeregister failed, Error status: %s %d",
                  gni_err_str[ugni_rc], ugni_rc);
@@ -103,7 +102,6 @@ static ucs_status_t uct_ugni_mem_dereg(uct_md_h md, uct_mem_h memh)
     }
     ucs_free(mem_hndl);
 
-    pthread_mutex_unlock(&uct_ugni_global_lock);
     return status;
 }
 
@@ -158,18 +156,13 @@ static ucs_status_t uct_ugni_rkey_unpack(uct_md_component_t *mdc, const void *rk
 
 static void uct_ugni_md_close(uct_md_h md)
 {
-    gni_return_t ugni_rc;
     uct_ugni_md_t *ugni_md = ucs_derived_of(md, uct_ugni_md_t);
 
     pthread_mutex_lock(&uct_ugni_global_lock);
     ugni_md->ref_count--;
     if (!ugni_md->ref_count) {
-        ugni_rc = GNI_CdmDestroy(ugni_md->cdm.cdm_handle);
-        if (GNI_RC_SUCCESS != ugni_rc) {
-            ucs_warn("GNI_CdmDestroy error status: %s (%d)",
-                     gni_err_str[ugni_rc], ugni_rc);
-        }
-        ucs_debug("MD GNI_CdmDestroy");
+        ucs_debug("Tearing down MD CDM");
+        uct_ugni_destroy_cdm(&ugni_md->cdm);
     }
     pthread_mutex_unlock(&uct_ugni_global_lock);
 }

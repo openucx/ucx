@@ -64,9 +64,9 @@ static ucs_status_t recieve_datagram(uct_ugni_udt_iface_t *iface, uint64_t id, u
     }
 
     *ep_out = ep;
-    pthread_mutex_lock(&uct_ugni_global_lock);
+    uct_ugni_device_lock(&iface->super.cdm);
     ugni_rc = GNI_EpPostDataWaitById(gni_ep, id, -1, &post_state, &rem_addr, &rem_id);
-    pthread_mutex_unlock(&uct_ugni_global_lock);
+    uct_ugni_device_unlock(&iface->super.cdm);
     if (ucs_unlikely(GNI_RC_SUCCESS != ugni_rc)) {
         ucs_error("GNI_EpPostDataWaitById, id=%lu Error status: %s %d",
                   id, gni_err_str[ugni_rc], ugni_rc);
@@ -201,9 +201,9 @@ void uct_ugni_proccess_datagram_pipe(int event_id, void *arg) {
 
     ucs_trace_func("");
 
-    pthread_mutex_lock(&uct_ugni_global_lock);
+    uct_ugni_device_lock(&iface->super.cdm);
     ugni_rc = GNI_PostDataProbeById(uct_ugni_udt_iface_nic_handle(iface), &id);
-    pthread_mutex_unlock(&uct_ugni_global_lock);
+    uct_ugni_device_unlock(&iface->super.cdm);
     while (GNI_RC_SUCCESS == ugni_rc) {
         status = recieve_datagram(iface, id, &ep);
         if (UCS_INPROGRESS == status) {
@@ -229,9 +229,7 @@ void uct_ugni_proccess_datagram_pipe(int event_id, void *arg) {
                     user_desc = uct_ugni_udt_get_user_desc(datagram, iface);
                     uct_recv_desc(user_desc) = &iface->release_desc;
                 }
-                pthread_mutex_lock(&uct_ugni_global_lock);
                 status = uct_ugni_udt_ep_any_post(iface);
-                pthread_mutex_unlock(&uct_ugni_global_lock);
                 if (UCS_OK != status) {
                     /* We can't continue if we can't post the first receive */
                     ucs_error("Failed to post wildcard request");
@@ -239,9 +237,9 @@ void uct_ugni_proccess_datagram_pipe(int event_id, void *arg) {
                 }
             }
         }
-        pthread_mutex_lock(&uct_ugni_global_lock);
+        uct_ugni_device_lock(&iface->super.cdm);
         ugni_rc = GNI_PostDataProbeById(uct_ugni_udt_iface_nic_handle(iface), &id);
-        pthread_mutex_unlock(&uct_ugni_global_lock);
+        uct_ugni_device_unlock(&iface->super.cdm);
     }
 
     ucs_async_pipe_drain(&iface->event_pipe);
@@ -258,10 +256,10 @@ static void uct_ugni_udt_clean_wildcard(uct_ugni_udt_iface_t *iface)
     gni_return_t ugni_rc;
     uint32_t rem_addr, rem_id;
     gni_post_state_t post_state;
-    pthread_mutex_lock(&uct_ugni_global_lock);
+    uct_ugni_device_lock(&iface->super.cdm);
     ugni_rc = GNI_EpPostDataCancelById(iface->ep_any, UCT_UGNI_UDT_ANY);
     if (GNI_RC_SUCCESS != ugni_rc) {
-        pthread_mutex_unlock(&uct_ugni_global_lock);
+        uct_ugni_device_unlock(&iface->super.cdm);
         ucs_error("GNI_EpPostDataCancel failed, Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);
         return;
@@ -269,7 +267,7 @@ static void uct_ugni_udt_clean_wildcard(uct_ugni_udt_iface_t *iface)
     ugni_rc = GNI_EpPostDataTestById(iface->ep_any, UCT_UGNI_UDT_ANY, &post_state, &rem_addr, &rem_id);
     if (GNI_RC_SUCCESS != ugni_rc) {
         if (GNI_RC_NO_MATCH != ugni_rc) {
-            pthread_mutex_unlock(&uct_ugni_global_lock);
+            uct_ugni_device_unlock(&iface->super.cdm);
             ucs_error("GNI_EpPostDataTestById failed, Error status: %s %d",
                       gni_err_str[ugni_rc], ugni_rc);
             return;
@@ -281,11 +279,10 @@ static void uct_ugni_udt_clean_wildcard(uct_ugni_udt_iface_t *iface)
     }
     ugni_rc = GNI_EpDestroy(iface->ep_any);
     if (GNI_RC_SUCCESS != ugni_rc) {
-        pthread_mutex_unlock(&uct_ugni_global_lock);
         ucs_error("GNI_EpDestroy failed, Error status: %s %d\n",
                   gni_err_str[ugni_rc], ugni_rc);
     }
-    pthread_mutex_unlock(&uct_ugni_global_lock);
+    uct_ugni_device_unlock(&iface->super.cdm);
 }
 
 /* Before this function is called, you MUST
@@ -298,8 +295,10 @@ static inline void uct_ugni_udt_terminate_thread(uct_ugni_udt_iface_t *iface)
     gni_return_t ugni_rc;
     gni_ep_handle_t   ep;
 
+    uct_ugni_device_lock(&iface->super.cdm);
     ugni_rc = GNI_EpCreate(uct_ugni_udt_iface_nic_handle(iface), iface->super.local_cq, &ep);
     if (GNI_RC_SUCCESS != ugni_rc) {
+        uct_ugni_device_unlock(&iface->super.cdm);
         ucs_error("GNI_EpCreate, Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);
         return;
@@ -307,6 +306,7 @@ static inline void uct_ugni_udt_terminate_thread(uct_ugni_udt_iface_t *iface)
     ugni_rc = GNI_EpBind(ep, iface->super.cdm.dev->address, iface->super.cdm.domain_id);
     if (GNI_RC_SUCCESS != ugni_rc) {
         GNI_EpDestroy(ep);
+        uct_ugni_device_unlock(&iface->super.cdm);
         ucs_error("GNI_EpBind failed, Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);
         return;
@@ -321,6 +321,7 @@ static inline void uct_ugni_udt_terminate_thread(uct_ugni_udt_iface_t *iface)
     }
     /* When the gni_ep is destroyed the above post will be canceled */
     ugni_rc = GNI_EpDestroy(ep);
+    uct_ugni_device_unlock(&iface->super.cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_EpDestroy failed, Error status: %s %d\n",
                   gni_err_str[ugni_rc], ugni_rc);
@@ -424,9 +425,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_udt_iface_t, uct_md_h md, uct_worker_h worke
 
     /* Init any desc */
     self->desc_any = desc;
-    pthread_mutex_lock(&uct_ugni_global_lock);
     status = uct_ugni_udt_ep_any_post(self);
-    pthread_mutex_unlock(&uct_ugni_global_lock);
     if (UCS_OK != status) {
         /* We can't continue if we can't post the first receive */
         ucs_error("Failed to post wildcard request");

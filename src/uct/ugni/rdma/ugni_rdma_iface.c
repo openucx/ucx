@@ -6,6 +6,7 @@
 
 #include "ugni_rdma_ep.h"
 #include "ugni_rdma_iface.h"
+#include <uct/ugni/base/ugni_def.h>
 #include <uct/ugni/base/ugni_md.h>
 #include <uct/ugni/base/ugni_device.h>
 
@@ -93,12 +94,15 @@ void uct_ugni_progress(void *arg)
     uct_ugni_iface_t * iface = (uct_ugni_iface_t *)arg;
     gni_return_t ugni_rc;
 
+    uct_ugni_device_lock(&iface->cdm);
     ugni_rc = GNI_CqGetEvent(iface->local_cq, &event_data);
     if (GNI_RC_NOT_DONE == ugni_rc) {
+        uct_ugni_device_unlock(&iface->cdm);
         goto out;
     }
 
     if ((GNI_RC_SUCCESS != ugni_rc && !event_data) || GNI_CQ_OVERRUN(event_data)) {
+        uct_ugni_device_unlock(&iface->cdm);
         ucs_error("GNI_CqGetEvent falied. Error status %s %d ",
                   gni_err_str[ugni_rc], ugni_rc);
         return;
@@ -106,11 +110,12 @@ void uct_ugni_progress(void *arg)
 
     ugni_rc = GNI_GetCompleted(iface->local_cq, event_data, &event_post_desc_ptr);
     if (GNI_RC_SUCCESS != ugni_rc && GNI_RC_TRANSACTION_ERROR != ugni_rc) {
+        uct_ugni_device_unlock(&iface->cdm);
         ucs_error("GNI_GetCompleted falied. Error status %s %d %d",
                   gni_err_str[ugni_rc], ugni_rc, GNI_RC_TRANSACTION_ERROR);
         return;
     }
-
+    uct_ugni_device_unlock(&iface->cdm);
     desc = (uct_ugni_base_desc_t *)event_post_desc_ptr;
     ucs_trace_async("Completion received on %p", desc);
 
@@ -225,8 +230,6 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
     uct_ugni_device_t *dev = uct_ugni_device_by_name(params->dev_name);
     uct_iface_ops_t *ops;
 
-    pthread_mutex_lock(&uct_ugni_global_lock);
-
     ops = uct_ugni_rdma_choose_ops_by_device(dev);
     if (NULL == ops) {
         status = UCS_ERR_NO_DEVICE;
@@ -312,7 +315,6 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
     /* TBD: eventually the uct_ugni_progress has to be moved to
      * rdma layer so each ugni layer will have own progress */
     uct_worker_progress_register(worker, uct_ugni_progress, self);
-    pthread_mutex_unlock(&uct_ugni_global_lock);
     return UCS_OK;
 
 clean_famo:
@@ -326,7 +328,6 @@ clean_desc:
 exit:
     uct_ugni_cleanup_base_iface(&self->super);
     ucs_error("Failed to activate interface");
-    pthread_mutex_unlock(&uct_ugni_global_lock);
     return status;
 }
 
