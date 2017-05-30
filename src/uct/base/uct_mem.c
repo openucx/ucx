@@ -25,6 +25,7 @@ typedef struct {
 
 
 const char *uct_alloc_method_names[] = {
+    [UCT_ALLOC_METHOD_THP]  = "thp",
     [UCT_ALLOC_METHOD_MD]   = "md",
     [UCT_ALLOC_METHOD_HEAP] = "heap",
     [UCT_ALLOC_METHOD_MMAP] = "mmap",
@@ -129,8 +130,44 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             }
             break;
 
+        case UCT_ALLOC_METHOD_THP:
+#ifdef MADV_HUGEPAGE
+            if (!ucs_is_thp_enabled()) {
+                break;
+            }
+
+            /* Fixed option is not supported for thp allocation*/
+            if (flags & UCT_MD_MEM_FLAG_FIXED) {
+                break;
+            }
+
+            alloc_length = ucs_align_up(min_length, ucs_get_huge_page_size());
+            address = ucs_memalign(ucs_get_huge_page_size(), alloc_length
+                                   UCS_MEMTRACK_VAL);
+            if (address != NULL) {
+                status = madvise(address, alloc_length, MADV_HUGEPAGE);
+                if (status != UCS_OK) {
+                    ucs_error("madvise failure status (%d): %m", status);
+                    ucs_free(address);
+                    break;
+                } else {
+                    goto allocated_without_md;
+                }
+            }
+
+            ucs_debug("failed to allocate by thp %zu bytes: %m", alloc_length);
+#endif
+
+            break;
+
         case UCT_ALLOC_METHOD_HEAP:
             /* Allocate aligned memory using libc allocator */
+
+            /* Fixed option is not supported for heap allocation*/
+            if (flags & UCT_MD_MEM_FLAG_FIXED) {
+                break;
+            }
+
             alloc_length = min_length;
             address = ucs_memalign(UCS_SYS_CACHE_LINE_SIZE, alloc_length
                                    UCS_MEMTRACK_VAL);
@@ -198,6 +235,7 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem)
     case UCT_ALLOC_METHOD_MD:
         return uct_md_mem_free(mem->md, mem->memh);
 
+    case UCT_ALLOC_METHOD_THP:
     case UCT_ALLOC_METHOD_HEAP:
         ucs_free(mem->address);
         return UCS_OK;

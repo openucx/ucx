@@ -235,6 +235,14 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header);
 
 
 /**
+ * Check if transparent huge-pages are enabled .
+ *
+ * @return 1 for true and 0 for false
+ */
+int ucs_is_thp_enabled();
+
+
+/**
  * Get shmmax size from /proc/sys/kernel/shmmax.
  *
  * @return shmmax size
