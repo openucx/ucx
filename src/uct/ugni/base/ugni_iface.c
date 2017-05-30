@@ -8,9 +8,11 @@
 #include "ugni_device.h"
 #include "ugni_ep.h"
 #include "ugni_iface.h"
+#include <ucs/arch/atomic.h>
+#include <ucs/sys/math.h>
 #include <pmi.h>
 
-static uint16_t ugni_domain_global_counter = 0;
+static uint32_t ugni_domain_global_counter = 1;
 
 void uct_ugni_base_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
@@ -250,7 +252,7 @@ ucs_status_t uct_ugni_init_nic(int device_index,
         return status;
     }
 
-    *domain_id = job_info.pmi_rank_id + job_info.pmi_num_of_ranks * ugni_domain_global_counter;
+    *domain_id = ucs_get_tid() * ucs_get_prime(0) + ucs_atomic_fadd32(&ugni_domain_global_counter,1) * ucs_get_prime(1);
     modes = GNI_CDM_MODE_FORK_FULLCOPY | GNI_CDM_MODE_CACHED_AMO_ENABLED |
         GNI_CDM_MODE_ERR_NO_KILL | GNI_CDM_MODE_FAST_DATAGRAM_POLL;
     ucs_debug("Creating new command domain with id %d (%d + %d * %d)",
@@ -273,7 +275,6 @@ ucs_status_t uct_ugni_init_nic(int device_index,
         return UCS_ERR_NO_DEVICE;
     }
 
-    ++ugni_domain_global_counter;
     return UCS_OK;
 }
 
