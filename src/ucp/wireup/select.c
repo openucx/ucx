@@ -291,6 +291,14 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     return UCS_OK;
 }
 
+static inline double ucp_wireup_tl_iface_latency(ucp_context_h context,
+                                                 const uct_iface_attr_t *iface_attr,
+                                                 const ucp_address_iface_attr_t *remote_iface_attr)
+{
+    return ucs_max(iface_attr->latency.overhead, remote_iface_attr->lat_ovh) +
+           (iface_attr->latency.growth * context->config.est_num_eps);
+}
+
 static UCS_F_NOINLINE void
 ucp_wireup_add_lane_desc(ucp_wireup_lane_desc_t *lane_descs,
                          ucp_lane_index_t *num_lanes_p, ucp_rsc_index_t rsc_index,
@@ -452,7 +460,8 @@ static double ucp_wireup_rma_score_func(ucp_context_h context,
                                         const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* best for 4k messages */
-    return 1e-3 / (ucp_tl_iface_latency(context, iface_attr) + iface_attr->overhead +
+    return 1e-3 / (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
+                   iface_attr->overhead +
                    (4096.0 / ucs_min(iface_attr->bandwidth, remote_iface_attr->bandwidth)));
 }
 
@@ -488,7 +497,8 @@ double ucp_wireup_amo_score_func(ucp_context_h context,
                                  const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* best one-sided latency */
-    return 1e-3 / (ucp_tl_iface_latency(context, iface_attr) + iface_attr->overhead);
+    return 1e-3 / (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
+                   iface_attr->overhead);
 }
 
 static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, unsigned address_count,
@@ -536,7 +546,7 @@ static double ucp_wireup_am_score_func(ucp_context_h context,
                                        const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* best end-to-end latency */
-    return 1e-3 / (ucp_tl_iface_latency(context, iface_attr) +
+    return 1e-3 / (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
                    iface_attr->overhead + remote_iface_attr->overhead);
 }
 
@@ -549,8 +559,9 @@ static double ucp_wireup_rndv_score_func(ucp_context_h context,
      * a size which is likely to be used with the Rendezvous protocol, for
      * how long it would take to transfer it with a certain transport. */
 
-    return 1 / ((UCP_WIREUP_RNDV_TEST_MSG_SIZE / iface_attr->bandwidth) +
-                ucp_tl_iface_latency(context, iface_attr) +
+    return 1 / ((UCP_WIREUP_RNDV_TEST_MSG_SIZE /
+                ucs_min(iface_attr->bandwidth, remote_iface_attr->bandwidth)) +
+                ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
                 iface_attr->overhead + md_attr->reg_cost.overhead +
                 (UCP_WIREUP_RNDV_TEST_MSG_SIZE * md_attr->reg_cost.growth));
 }
@@ -801,8 +812,8 @@ static double ucp_wireup_aux_score_func(ucp_context_h context,
                                         const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* best end-to-end latency and larger bcopy size */
-    return (1e-3 / (ucp_tl_iface_latency(context, iface_attr) + iface_attr->overhead +
-                    remote_iface_attr->overhead)) +
+    return (1e-3 / (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
+            iface_attr->overhead + remote_iface_attr->overhead)) +
            (1e3 * ucs_max(iface_attr->cap.am.max_bcopy, iface_attr->cap.am.max_short));
 }
 
