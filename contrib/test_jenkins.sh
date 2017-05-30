@@ -24,6 +24,11 @@ WORKSPACE=${WORKSPACE:=$PWD}
 MAKE="make -j$(($(nproc) / 2 + 1))"
 ucx_inst=${WORKSPACE}/install
 
+if [ $(hostname) == odroid64 ]
+then
+	export JENKINS_RUN_TESTS=1
+fi
+
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
 	BUILD_NUMBER=1
@@ -239,6 +244,7 @@ run_hello() {
 
 	sleep 5
 
+    export UCX_LOG_LEVEL=trace
 	# need to be ran in background to reflect application PID in $!
 	./${test_name} ${test_args} -n $(hostname) -p ${tcp_port} &
 	hw_client_pid=$!
@@ -251,12 +257,17 @@ run_hello() {
 # Compile and run UCP hello world example
 #
 run_ucp_hello() {
-	for test_mode in -w -f -b
-	do
-		echo "==== Running UCP hello world with mode ${test_mode} ===="
-		run_hello ucp ${test_mode}
-	done
-	rm -f ./ucp_hello_world
+    # Hack: Due to the event driver communication requirement for now this
+    # test required IB
+    if [ `ibv_devinfo  | grep PORT_ACTIVE | wc -l` -gt 0 ]
+    then
+	    for test_mode in -w -f -b
+	    do
+		    echo "==== Running UCP hello world with mode ${test_mode} ===="
+		    run_hello ucp ${test_mode}
+	    done
+	    rm -f ./ucp_hello_world
+   fi
 }
 
 #
