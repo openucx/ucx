@@ -3,6 +3,7 @@
 * Copyright (C) The University of Tennessee and The University 
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -1268,6 +1269,8 @@ int main(int argc, char **argv)
     ucs_status_t status;
     int rte = 0;
     int ret;
+
+    memset(&ctx, 0, sizeof(ctx));
 
     /* Parse command line */
     if (parse_opts(&ctx, argc, argv) != UCS_OK) {

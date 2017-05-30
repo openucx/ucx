@@ -2,6 +2,7 @@
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -148,7 +149,7 @@ size_t ucx_perf_get_message_size(const ucx_perf_params_t *params)
 {
     size_t length, it;
 
-    ucs_assert(params->msg_size_list != NULL);
+    ucs_assert_always(params->msg_size_list != NULL);
 
     length = 0;
     for (it = 0; it < params->msg_size_cnt; ++it) {
