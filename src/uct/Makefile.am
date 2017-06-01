@@ -1,6 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-# Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+# Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 # Copyright (c) The University of Tennesse and the University of Tennessee
 #               Research Foundation. 2016.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
@@ -8,9 +8,9 @@
 
 lib_LTLIBRARIES     = libuct.la
 
-libuct_la_CFLAGS   =
+libuct_la_CFLAGS   = $(BASE_CFLAGS)
 libuct_la_LIBS     =
-libuct_la_CPPFLAGS = -I$(abs_top_srcdir)/src -I$(abs_top_builddir)/src 
+libuct_la_CPPFLAGS = $(BASE_CPPFLAGS) -I$(abs_top_srcdir)/src -I$(abs_top_builddir)/src 
 libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libuct_la_LIBADD   = $(LIBM) ../ucs/libucs.la
 libuct_ladir       = $(includedir)/uct
@@ -58,7 +58,7 @@ if HAVE_MLX5_HW
 libuct_la_SOURCES += \
 	ib/mlx5/ib_mlx5_log.c \
 	ib/mlx5/ib_mlx5.c
-	
+
 noinst_HEADERS += \
 	ib/mlx5/ib_mlx5_log.h \
 	ib/mlx5/ib_mlx5.h \
@@ -112,7 +112,7 @@ libuct_la_SOURCES += \
 	ib/dc/accel/dc_mlx5.c
 endif
 endif
-				  
+
 if HAVE_TL_UD
 libuct_la_SOURCES += \
 	ib/ud/base/ud_iface.c \

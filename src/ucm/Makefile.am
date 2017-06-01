@@ -1,5 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+# Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -14,11 +15,13 @@ libucm_la_LDFLAGS  = \
     -Xlinker -z -Xlinker interpose
 
 libucm_la_CPPFLAGS = \
+    $(BASE_CPPFLAGS) \
     -I$(abs_top_srcdir)/src \
     -I$(abs_top_builddir)/src \
     -DUCM_MALLOC_PREFIX=ucm_dl
 
 libucm_la_CFLAGS = \
+	$(BASE_CFLAGS) \
 	$(CFLAGS_NO_DEPRECATED)
 
 nobase_dist_libucm_la_HEADERS = \
