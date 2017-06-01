@@ -42,7 +42,7 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
         req->send.state.dt.iov.iov_offset    = 0;
         req->send.state.dt.iov.iovcnt        = count;
         flag_iov_single                      = (count <= config->tag.eager.max_iov);
-        
+
         if (!flag_iov_single && ucp_ep_is_tag_offload_enabled(config)) {
             /* Make sure SW RNDV will be used, because tag offload does
              * not support multi-packet eager protocols. */
@@ -85,7 +85,10 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
     } else if ((length >= rndv_rma_thresh) || (length >= rndv_am_thresh) ||
                force_sw_rndv) {
         /* RMA/AM rendezvous */
-        ucp_tag_send_start_rndv(req);
+        status = ucp_tag_send_start_rndv(req);
+        if (status != UCS_OK) {
+            return status;
+        }
         UCS_PROFILE_REQUEST_EVENT(req, "start_rndv", req->send.length);
     } else if (length < zcopy_thresh) {
         /* bcopy */
