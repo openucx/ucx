@@ -431,9 +431,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_process_rts,
-                 (arg, data, length, tl_flags),
-                 void *arg, void *data, size_t length, unsigned tl_flags)
+ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
+                                  unsigned tl_flags)
 {
     const unsigned recv_flags = UCP_RECV_DESC_FLAG_FIRST |
                                 UCP_RECV_DESC_FLAG_LAST  |
@@ -466,8 +465,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_process_rts,
     return status;
 }
 
-ucs_status_t ucp_rndv_rts_handler(void *arg, void *data, size_t length,
-                                  unsigned tl_flags)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
+                 (arg, data, length, tl_flags),
+                 void *arg, void *data, size_t length, unsigned tl_flags)
 {
     return ucp_rndv_process_rts(arg, data, length, tl_flags);
 }

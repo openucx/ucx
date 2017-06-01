@@ -56,6 +56,7 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
                                                               ucp_worker_iface_t, queue);
     ucp_rndv_rts_hdr_t rts;
 
+    /* Emulate RTS without rkey (to be handled as AM-based RNDV). */
     rts.sreq      = sreq->super;
     rts.super.tag = stag;
     rts.flags     = 0;
@@ -68,11 +69,11 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
     ucp_rndv_matched(req->recv.worker, req, &rts);
 }
 
-ucs_status_t ucp_tag_offload_unexp_rndv(void *arg, unsigned flags,
-                                        uint64_t stag, const void *hdr,
-                                        unsigned hdr_length,
-                                        uint64_t remote_addr, size_t length,
-                                        const void *rkey_buf)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
+                 (arg, flags, stag, hdr, hdr_length, remote_addr, length, rkey_buf),
+                 void *arg, unsigned flags, uint64_t stag, const void *hdr,
+                 unsigned hdr_length, uint64_t remote_addr, size_t length,
+                 const void *rkey_buf)
 {
     ucp_worker_t *worker          = arg;
     ucp_request_hdr_t *rndv_hdr   = (ucp_request_hdr_t*)hdr;
@@ -115,17 +116,19 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
     ucp_worker_iface_t *ucp_iface;
     ucs_status_t status;
 
-    if (req->flags & UCP_REQUEST_FLAG_OFFLOADED) {
-        ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
-                                                   ucp_worker_iface_t, queue);
-        ucp_request_memory_dereg(ctx, ucp_iface->rsc_index, req->recv.datatype,
-                                 &req->recv.state);
-        status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx,
-                                           force);
-        if (status != UCS_OK) {
-            ucs_error("Failed to cancel recv in the transport: %s",
-                    ucs_status_string(status));
-        }
+    if (!(req->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
+        return;
+    }
+
+    ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
+                                              ucp_worker_iface_t, queue);
+    ucp_request_memory_dereg(ctx, ucp_iface->rsc_index, req->recv.datatype,
+                             &req->recv.state);
+    status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx,
+                                       force);
+    if (status != UCS_OK) {
+        ucs_error("Failed to cancel recv in the transport: %s",
+                  ucs_status_string(status));
     }
 }
 
