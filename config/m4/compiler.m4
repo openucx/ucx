@@ -1,12 +1,13 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+# Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
 #
 # Initialize CFLAGS
 #
-CFLAGS="-g -Wall -Werror $UCX_CFLAGS"
+BASE_CFLAGS="-g -Wall -Werror $UCX_CFLAGS"
 
 #
 # Debug mode
@@ -16,8 +17,8 @@ AC_ARG_ENABLE(debug,
         [],
         [enable_debug=no])
 AS_IF([test "x$enable_debug" == xyes],
-        [CFLAGS="-O0 -D_DEBUG $CFLAGS"],
-        [CFLAGS="-O3 $CFLAGS"])
+        [BASE_CFLAGS="-O0 -D_DEBUG $BASE_CFLAGS"],
+        [BASE_CFLAGS="-O3 $BASE_CFLAGS"])
 
 
 #
@@ -84,7 +85,7 @@ AC_DEFUN([CHECK_DEPRECATED_DECL_FLAG],
 [
          AC_MSG_CHECKING([whether $1 overrides deprecated declarations])
          SAVE_CFLAGS="$CFLAGS"
-         CFLAGS="$CFLAGS $1"
+         CFLAGS="$BASE_CFLAGS $CFLAGS $1"
          AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
                                   int __attribute__ ((__deprecated__)) f() { return 0; }
                                   int main() { return f(); }
@@ -156,5 +157,9 @@ CHECK_SPECIFIC_ATTRIBUTE([optimize], [NOOPTIMIZE],
 #
 # Set C++ optimization/debug flags to be the same as for C
 #
-CPPFLAGS="$CPPFLAGS -DCPU_FLAGS=\"$OPT_CFLAGS\""
-CXXFLAGS="$CFLAGS"
+BASE_CPPFLAGS="-DCPU_FLAGS=\"$OPT_CFLAGS\""
+BASE_CXXFLAGS="$CFLAGS"
+
+AC_SUBST([BASE_CPPFLAGS], [$BASE_CPPFLAGS])
+AC_SUBST([BASE_CFLAGS], [$BASE_CFLAGS]) 
+AC_SUBST([BASE_CXXFLAGS], [$BASE_CXXFLAGS])
