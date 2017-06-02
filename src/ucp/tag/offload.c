@@ -44,18 +44,88 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
     ucp_request_complete_recv(req, status);
 }
 
+/* RNDV request matched by the transport. Need to proceed with AM based RNDV */
+void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
+                             const void *header, unsigned header_length,
+                             ucs_status_t status)
+{
+    ucp_request_t *req        = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
+    ucp_context_t *ctx        = req->recv.worker->context;
+    ucp_sw_rndv_hdr_t *sreq   = (ucp_sw_rndv_hdr_t*)header;
+    ucp_worker_iface_t *iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
+                                                              ucp_worker_iface_t, queue);
+    ucp_rndv_rts_hdr_t rts;
+
+    /* Emulate RTS without rkey (to be handled as AM-based RNDV). */
+    rts.sreq      = sreq->super;
+    rts.super.tag = stag;
+    rts.flags     = 0;
+    rts.address   = 0; /* RNDV needs to be completed in SW */
+    rts.size      = sreq->length;
+
+    ucp_request_memory_dereg(ctx, iface->rsc_index, req->recv.datatype,
+                             &req->recv.state);
+    /* coverity[address_of] */
+    ucp_rndv_matched(req->recv.worker, req, &rts);
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
+                 (arg, flags, stag, hdr, hdr_length, remote_addr, length, rkey_buf),
+                 void *arg, unsigned flags, uint64_t stag, const void *hdr,
+                 unsigned hdr_length, uint64_t remote_addr, size_t length,
+                 const void *rkey_buf)
+{
+    ucp_worker_t *worker          = arg;
+    ucp_request_hdr_t *rndv_hdr   = (ucp_request_hdr_t*)hdr;
+    ucp_ep_t *ep                  = ucp_worker_get_reply_ep(worker, rndv_hdr->sender_uuid);
+    const uct_md_attr_t *md_attr  = ucp_ep_md_attr(ep, ucp_ep_get_tag_lane(ep));
+    size_t rkey_size        = rkey_buf ? md_attr->rkey_packed_size : 0;
+    size_t len              = sizeof(ucp_rndv_rts_hdr_t) + rkey_size;
+    ucp_rndv_rts_hdr_t *rts = ucs_alloca(len);
+    ucp_sw_rndv_hdr_t  *sw_rndv_hdr;
+
+    /* Fill RTS to emulate SW RNDV flow. */
+    rts->super.tag = stag;
+    rts->sreq      = *rndv_hdr;
+    rts->address   = remote_addr;
+
+    if (remote_addr) {
+        rts->size  = length;
+        rts->flags = UCP_RNDV_RTS_FLAG_OFFLOAD;
+        if (rkey_buf) {
+            memcpy(rts + 1, rkey_buf, rkey_size);
+            len        += rkey_size;
+            rts->flags |= UCP_RNDV_RTS_FLAG_PACKED_RKEY;
+        }
+    } else {
+        /* This must be SW RNDV request. Take length from its header. */
+        sw_rndv_hdr = ucs_derived_of(hdr, ucp_sw_rndv_hdr_t);
+        rts->size   = sw_rndv_hdr->length;
+        rts->flags  = 0;
+    }
+
+    /* Pass 0 as tl flags, because RTS needs to be stored in UCP pool. */
+    ucp_rndv_process_rts(arg, rts, len, 0);
+
+    /* Always return UCS_OK, since RNDV hdr should be stored in UCP mpool. */
+    return UCS_OK;
+}
+
 void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
 {
     ucp_worker_iface_t *ucp_iface;
     ucs_status_t status;
 
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_OFFLOADED);
+    if (!(req->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
+        return;
+    }
 
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
                                               ucp_worker_iface_t, queue);
     ucp_request_memory_dereg(ctx, ucp_iface->rsc_index, req->recv.datatype,
                              &req->recv.state);
-    status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx, force);
+    status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx,
+                                       force);
     if (status != UCS_OK) {
         ucs_error("Failed to cancel recv in the transport: %s",
                   ucs_status_string(status));
@@ -99,6 +169,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
 
     req->recv.uct_ctx.tag_consumed_cb = ucp_tag_offload_tag_consumed;
     req->recv.uct_ctx.completed_cb    = ucp_tag_offload_completed;
+    req->recv.uct_ctx.rndv_cb         = ucp_tag_offload_rndv_cb;
 
     iov.buffer = (void*)req->recv.buffer;
     iov.length = length;
@@ -211,6 +282,81 @@ static ucs_status_t ucp_tag_offload_eager_bcopy(uct_pending_req_t *self)
 static ucs_status_t ucp_tag_offload_eager_zcopy(uct_pending_req_t *self)
 {
     return ucp_do_tag_offload_zcopy(self, 0ul, ucp_tag_eager_zcopy_req_complete);
+}
+
+ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_ep_t *ep       = req->send.ep;
+    ucp_sw_rndv_hdr_t rndv_hdr = {
+        .super.sender_uuid = req->send.ep->worker->uuid,
+        .super.reqptr      = (uintptr_t)req,
+        .length            = req->send.length
+    };
+
+    return uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane], req->send.tag,
+                                   &rndv_hdr, sizeof(rndv_hdr));
+}
+
+ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_ep_t *ep       = req->send.ep;
+    size_t max_iov     = ucp_ep_config(ep)->tag.eager.max_iov;
+    uct_iov_t *iov     = ucs_alloca(max_iov * sizeof(uct_iov_t));
+    size_t iovcnt      = 0;
+    ucp_request_hdr_t rndv_hdr = {
+        .sender_uuid = ep->worker->uuid,
+        .reqptr      = (uintptr_t)req
+    };
+    void *rndv_op;
+
+    req->send.uct_comp.count = 1;
+    req->send.uct_comp.func  = ucp_tag_eager_zcopy_completion;
+
+    ucs_assert_always(UCP_DT_IS_CONTIG(req->send.datatype));
+    ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, &req->send.state, req->send.buffer,
+                        req->send.datatype, req->send.length);
+
+    rndv_op = uct_ep_tag_rndv_zcopy(ep->uct_eps[req->send.lane], req->send.tag,
+                                    &rndv_hdr, sizeof(rndv_hdr), iov, iovcnt,
+                                    &req->send.uct_comp);
+    if (UCS_PTR_IS_ERR(rndv_op)) {
+        return UCS_PTR_STATUS(rndv_op);
+    }
+    req->flags |= UCP_REQUEST_FLAG_OFFLOADED;
+    req->send.tag_offload.rndv_op = rndv_op;
+    return UCS_OK;
+}
+
+void ucp_tag_offload_cancel_rndv(ucp_request_t *req)
+{
+    ucp_ep_t *ep = req->send.ep;
+    ucs_status_t status;
+
+    status = uct_ep_tag_rndv_cancel(ep->uct_eps[ucp_ep_get_tag_lane(ep)],
+                                    req->send.tag_offload.rndv_op);
+    if (status != UCS_OK) {
+        ucs_error("Failed to cancel tag rndv op %s", ucs_status_string(status));
+    }
+}
+
+ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
+{
+    ucs_status_t status;
+    ucp_lane_index_t lane = ucp_ep_get_tag_lane(sreq->send.ep);
+
+    sreq->send.lane = lane;
+    if (UCP_DT_IS_CONTIG(sreq->send.datatype)) {
+        status = ucp_request_send_buffer_reg(sreq, lane);
+        if (status != UCS_OK) {
+            return status;
+        }
+        sreq->send.uct.func = ucp_tag_offload_rndv_zcopy;
+    } else {
+        sreq->send.uct.func = ucp_tag_offload_sw_rndv;
+    }
+    return UCS_OK;
 }
 
 const ucp_proto_t ucp_tag_offload_proto = {

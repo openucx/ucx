@@ -399,6 +399,21 @@ size_t ucs_get_phys_mem_size()
     return phys_pages * ucs_get_page_size();
 }
 
+#define UCS_SYS_THP_ENABLED_FILE "/sys/kernel/mm/transparent_hugepage/enabled"
+int ucs_is_thp_enabled()
+{
+    char buf[256];
+    int rc;
+
+    rc = ucs_read_file(buf, sizeof(buf), 1, UCS_SYS_THP_ENABLED_FILE);
+    if (rc < 0) {
+        ucs_debug("failed to read %s:%m", UCS_SYS_THP_ENABLED_FILE);
+        return 0;
+    }
+
+    return (strcmp(buf, "always madvise [never]") != 0);
+}
+
 #define UCS_PROC_SYS_SHMMAX_FILE "/proc/sys/kernel/shmmax"
 size_t ucs_get_shmmax()
 {

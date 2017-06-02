@@ -82,9 +82,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_udt_ep_t)
 
     if (self->posted_desc) {
         ucs_debug("Cleaning outstanding request");
-        pthread_mutex_lock(&uct_ugni_global_lock);
+        uct_ugni_device_lock(&iface->super.cdm);
         ugni_rc = GNI_EpPostDataCancelById(self->super.ep, self->super.hash_key);
-        pthread_mutex_unlock(&uct_ugni_global_lock);
+        uct_ugni_device_unlock(&iface->super.cdm);
         if (GNI_RC_SUCCESS != ugni_rc) {
             if (GNI_RC_NO_MATCH == ugni_rc) {
                 /* We raced with the async thread, it recieved and cleaned up this reply. It's fine. */
@@ -94,9 +94,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_udt_ep_t)
                       gni_err_str[ugni_rc], ugni_rc);
             return;
         }
-        pthread_mutex_lock(&uct_ugni_global_lock);
+        uct_ugni_device_lock(&iface->super.cdm);
         ugni_rc = GNI_EpPostDataWaitById(self->super.ep, self->super.hash_key, 100, &post_state, &rem_addr, &rem_id);
-        pthread_mutex_unlock(&uct_ugni_global_lock);
+        uct_ugni_device_unlock(&iface->super.cdm);
         if (GNI_RC_SUCCESS != ugni_rc) {
             ucs_warn("GNI_EpPostDataWaitById failed, Error status: %s %d",
                      gni_err_str[ugni_rc], ugni_rc);
@@ -175,12 +175,12 @@ uct_ugni_udt_ep_am_common_send(const unsigned is_short, uct_ugni_udt_ep_t *ep, u
 
     ucs_assertv(msg_length <= GNI_DATAGRAM_MAXSIZE, "msg_length=%u", msg_length);
 
-    pthread_mutex_lock(&uct_ugni_global_lock);
+    uct_ugni_device_lock(&iface->super.cdm);
     ugni_rc = GNI_EpPostDataWId(ep->super.ep,
                                 sheader, msg_length,
                                 rheader, (uint16_t)iface->config.udt_seg_size,
                                 ep->super.hash_key);
-    pthread_mutex_unlock(&uct_ugni_global_lock);
+    uct_ugni_device_unlock(&iface->super.cdm);
 
     UCT_UGNI_UDT_CHECK_RC(ugni_rc, desc);
 

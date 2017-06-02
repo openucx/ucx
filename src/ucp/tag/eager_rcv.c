@@ -75,6 +75,8 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
              * because it arrived as unexpected */
             if (flags & UCP_RECV_DESC_FLAG_OFFLOAD) {
                 ucp_tag_offload_cancel(context, req, 1);
+            } else {
+                ucs_assert(!(req->flags & UCP_REQUEST_FLAG_OFFLOADED));
             }
 
             if (flags & UCP_RECV_DESC_FLAG_LAST) {

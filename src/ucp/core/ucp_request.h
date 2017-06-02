@@ -127,6 +127,11 @@ struct ucp_request {
                     uint64_t              value;
                     void                  *result;
                 } amo;
+                struct {
+                    void *rndv_op; /* Handler of issued rndv send. Needs to cancel the
+                                      operation if it is completed by SW */
+                 } tag_offload;
+
             };
 
             ucp_lane_index_t      lane;     /* Lane on which this request is being sent */

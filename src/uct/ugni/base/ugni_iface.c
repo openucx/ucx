@@ -69,7 +69,7 @@ void uct_ugni_cleanup_base_iface(uct_ugni_iface_t *iface)
 {
     ucs_arbiter_cleanup(&iface->arbiter);
     ucs_mpool_cleanup(&iface->flush_pool, 1);
-    GNI_CqDestroy(iface->local_cq);
+    uct_ugni_destroy_cq(iface->local_cq, &iface->cdm);
     uct_ugni_destroy_cdm(&iface->cdm);
 }
 
@@ -80,7 +80,6 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
                     UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
     uct_ugni_device_t *dev;
-    gni_return_t ugni_rc;
     ucs_status_t status;
     uct_ugni_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_iface_config_t);
     unsigned grow =  (config->mpool.bufs_grow == 0) ? 128 : config->mpool.bufs_grow;
@@ -98,12 +97,8 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
         ucs_error("Failed to UGNI NIC, Error status: %d", status);
         return status;
     }
-    ugni_rc = GNI_CqCreate(uct_ugni_iface_nic_handle(self), UCT_UGNI_LOCAL_CQ, 0,
-                           GNI_CQ_NOBLOCK,
-                           NULL, NULL, &self->local_cq);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_CqCreate failed, Error status: %s %d",
-                  gni_err_str[ugni_rc], ugni_rc);
+    status = uct_ugni_create_cq(&self->local_cq, UCT_UGNI_LOCAL_CQ, &self->cdm);
+    if (UCS_OK != status) {
         goto clean_cdm;
     }
     self->outstanding = 0;
@@ -124,7 +119,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
     }
     return status;
 clean_cq:
-    GNI_CqDestroy(self->local_cq);
+    uct_ugni_destroy_cq(self->local_cq, &self->cdm);
 clean_cdm:
     uct_ugni_destroy_cdm(&self->cdm);
     return status;

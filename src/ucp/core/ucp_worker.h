@@ -147,7 +147,9 @@ static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uui
 static UCS_F_ALWAYS_INLINE
 uint64_t ucp_worker_is_tl_tag_offload(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return 0; /* Stub for now, offload TM RNDV is not implemented yet */
+    return (worker->ifaces[rsc_index].attr.cap.flags &
+            (UCT_IFACE_FLAG_TAG_EAGER_SHORT | UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+             UCT_IFACE_FLAG_TAG_EAGER_ZCOPY | UCT_IFACE_FLAG_TAG_RNDV_ZCOPY));
 }
 
 #endif

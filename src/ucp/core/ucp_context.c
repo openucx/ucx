@@ -73,9 +73,9 @@ static ucs_config_field_t ucp_config_table[] = {
    " and disables aliasing.\n",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"ALLOC_PRIO", "md:sysv,md:posix,huge,md:*,mmap,heap",
+  {"ALLOC_PRIO", "md:sysv,md:posix,huge,thp,md:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
-   "an allocation method (huge, mmap, libc) or md:<NAME> which means to use the\n"
+   "an allocation method (huge, thp, mmap, libc) or md:<NAME> which means to use the\n"
    "specified memory domain for allocation. NAME can be either a MD component\n"
    "name, or a wildcard - '*' - which expands to all MD components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},

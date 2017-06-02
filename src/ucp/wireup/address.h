@@ -44,6 +44,7 @@ struct ucp_address_iface_attr {
     double                     overhead;      /* Interface performance - overhead */
     double                     bandwidth;     /* Interface performance - bandwidth */
     int                        priority;      /* Priority of device */
+    double                     lat_ovh;       /* latency overhead */
 };
 
 

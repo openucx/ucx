@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -390,6 +391,8 @@ ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
         goto out;
     }
 
+    ucs_memory_cpu_load_fence();
+
     ucs_assert(0 == (cqe->op_own &
                (MLX5_INLINE_SCATTER_32|MLX5_INLINE_SCATTER_64)));
     ucs_assert(ntohs(cqe->wqe_counter) == iface->rx.wq.cq_wqe_counter);
@@ -427,6 +430,7 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
     if (cqe == NULL) {
         return;
     }
+    ucs_memory_cpu_load_fence();
     uct_ib_mlx5_log_cqe(cqe);
     iface->super.tx.available = uct_ib_mlx5_txwq_update_bb(&iface->tx.wq, ntohs(cqe->wqe_counter));
 }

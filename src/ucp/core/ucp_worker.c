@@ -334,8 +334,9 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     iface_params.cpu_mask        = *cpu_mask_param;
     iface_params.err_handler_arg = worker;
     iface_params.err_handler     = ucp_worker_iface_error_handler;
-    iface_params.eager_arg       = worker;
+    iface_params.eager_arg       = iface_params.rndv_arg = worker;
     iface_params.eager_cb        = ucp_tag_offload_unexp_eager;
+    iface_params.rndv_cb         = ucp_tag_offload_unexp_rndv;
 
     /* Open UCT interface */
     status = uct_iface_open(context->tl_mds[resource->md_index].md, worker->uct,
@@ -455,6 +456,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     dummy_iface_attr.cap_flags  = -1;
     dummy_iface_attr.overhead   = 0;
     dummy_iface_attr.priority   = 0;
+    dummy_iface_attr.lat_ovh    = 0;
 
     supp_tls                    = 0;
     best_score                  = -1;

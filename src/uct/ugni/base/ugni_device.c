@@ -4,38 +4,14 @@
  * See file LICENSE for terms.
  */
 
-#ifdef HAVE_CONFIG_H
-#  include "config.h"
-#endif
-
 #include "ugni_device.h"
 #include "ugni_md.h"
 #include "ugni_iface.h"
 #include <uct/base/uct_md.h>
+#include <ucs/arch/atomic.h>
 #include <ucs/sys/string.h>
 #include <pmi.h>
 
-#if ENABLE_MT
-#define uct_ugni_check_lock_needed(_cdm) UCS_THREAD_MODE_MULTI == _cdm->thread_mode
-#define uct_ugni_device_init_lock(_dev) ucs_spinlock_init(&_dev->lock)
-#define uct_ugni_device_destroy_lock(_dev) ucs_spinlock_destroy(&_dev->lock)
-#define uct_ugni_device_lock(_cdm) \
-if (uct_ugni_check_lock_needed(_cdm)) {  \
-    ucs_spin_lock(&cdm->dev->lock);          \
-}
-#define uct_ugni_device_unlock(_cdm) \
-if (uct_ugni_check_lock_needed(_cdm)) {    \
-    ucs_spin_unlock(&cdm->dev->lock);          \
-}
-#else
-#define uct_ugni_device_init_lock(x) UCS_OK
-#define uct_ugni_device_destroy_lock(x) UCS_OK
-#define uct_ugni_device_lock(x)
-#define uct_ugni_device_unlock(x)
-#define uct_ugni_check_lock_needed(x) 0
-#endif
-
-uint16_t ugni_domain_counter = 0;
 /**
  * @breif Static information about UGNI job
  *
@@ -62,6 +38,8 @@ static uct_ugni_job_info_t job_info = {
     .initialized        = false,
 };
 
+uint32_t ugni_domain_counter = 0;
+
 void uct_ugni_device_get_resource(const char *tl_name, uct_ugni_device_t *dev,
                                   uct_tl_resource_desc_t *resource)
 {
@@ -80,8 +58,6 @@ ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
     int i;
     ucs_status_t status = UCS_OK;
 
-    pthread_mutex_lock(&uct_ugni_global_lock);
-
     resources = ucs_calloc(job_info.num_devices, sizeof(uct_tl_resource_desc_t),
                           "resource desc");
     if (NULL == resources) {
@@ -99,7 +75,6 @@ ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
 error:
     *num_resources_p = num_devices;
     *resource_p      = resources;
-    pthread_mutex_unlock(&uct_ugni_global_lock);
 
     return status;
 }
@@ -215,16 +190,17 @@ ucs_status_t init_device_list()
     int i, num_active_devices;
     int *dev_ids = NULL;
     gni_return_t ugni_rc = GNI_RC_SUCCESS;
+    uct_ugni_job_info_t *inf = uct_ugni_get_job_info();
 
     /* check if devices were already initilized */
 
-    if (-1 != job_info.num_devices) {
+    if (-1 != inf->num_devices) {
         ucs_debug("The device list is already initialized");
         status = UCS_OK;
         goto err_zero;
     }
 
-    ugni_rc = GNI_GetNumLocalDevices(&job_info.num_devices);
+    ugni_rc = GNI_GetNumLocalDevices(&inf->num_devices);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_GetNumLocalDevices failed, Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);
@@ -232,28 +208,28 @@ ucs_status_t init_device_list()
         goto err_zero;
     }
 
-    if (0 == job_info.num_devices) {
+    if (0 == inf->num_devices) {
         ucs_debug("UGNI No device found");
         status = UCS_OK;
         goto err_zero;
     }
 
-    if (job_info.num_devices >= UCT_UGNI_MAX_DEVICES) {
+    if (inf->num_devices >= UCT_UGNI_MAX_DEVICES) {
         ucs_error("UGNI, number of discovered devices (%d) " \
                   "is above the maximum supported devices (%d)",
-                  job_info.num_devices, UCT_UGNI_MAX_DEVICES);
+                  inf->num_devices, UCT_UGNI_MAX_DEVICES);
         status = UCS_ERR_UNSUPPORTED;
         goto err_zero;
     }
 
-    dev_ids = ucs_calloc(job_info.num_devices, sizeof(int), "ugni device ids");
+    dev_ids = ucs_calloc(inf->num_devices, sizeof(int), "ugni device ids");
     if (NULL == dev_ids) {
         ucs_error("Failed to allocate memory");
         status = UCS_ERR_NO_MEMORY;
         goto err_zero;
     }
 
-    ugni_rc = GNI_GetLocalDeviceIds(job_info.num_devices, dev_ids);
+    ugni_rc = GNI_GetLocalDeviceIds(inf->num_devices, dev_ids);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_GetLocalDeviceIds failed, Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);
@@ -262,8 +238,8 @@ ucs_status_t init_device_list()
     }
 
     num_active_devices = 0;
-    for (i = 0; i < job_info.num_devices; i++) {
-        status = uct_ugni_device_create(dev_ids[i], num_active_devices, &job_info.devices[i]);
+    for (i = 0; i < inf->num_devices; i++) {
+        status = uct_ugni_device_create(dev_ids[i], num_active_devices, &inf->devices[i]);
         if (status != UCS_OK) {
             ucs_warn("Failed to initialize ugni device %d (%s), ignoring it",
                      i, ucs_status_string(status));
@@ -272,13 +248,13 @@ ucs_status_t init_device_list()
         }
     }
 
-    if (num_active_devices != job_info.num_devices) {
+    if (num_active_devices != inf->num_devices) {
         ucs_warn("Error in detection devices");
         status = UCS_ERR_NO_DEVICE;
         goto err_dev_id;
     }
 
-    ucs_debug("Initialized UGNI component with %d devices", job_info.num_devices);
+    ucs_debug("Initialized UGNI component with %d devices", inf->num_devices);
 
 err_dev_id:
     ucs_free(dev_ids);
@@ -438,7 +414,7 @@ ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device,
     cdm->thread_mode = thread_mode;
     cdm->dev = device;
     uct_ugni_device_lock(cdm);
-    cdm->domain_id = job_info->pmi_rank_id + job_info->pmi_num_of_ranks * ugni_domain_counter++;
+    cdm->domain_id = job_info->pmi_rank_id + job_info->pmi_num_of_ranks * ucs_atomic_fadd32(&ugni_domain_counter,1);
     ucs_debug("Creating new command domain with id %d (%d + %d * %d)",
               cdm->domain_id, job_info->pmi_rank_id,
               job_info->pmi_num_of_ranks, ugni_domain_counter);
@@ -456,13 +432,11 @@ ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device,
     ugni_rc = GNI_CdmAttach(cdm->cdm_handle, device->device_id,
                             &cdm->address, &cdm->nic_handle);
     if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_CdmAttach failed (domain id %d, %d), Error status: %s %d",
-                  cdm->domain_id, ugni_domain_counter, gni_err_str[ugni_rc], ugni_rc);
-        ugni_rc = GNI_CdmDestroy(cdm->cdm_handle);
-        if (GNI_RC_SUCCESS != ugni_rc) {
-            ucs_error("GNI_CdmDestroy error status: %s (%d)",
-                      gni_err_str[ugni_rc], ugni_rc);
-        }
+        ucs_error("GNI_CdmAttach failed, Error status: %s\n"
+                  "Created domain %d (%d + %d * %d)",
+                  gni_err_str[ugni_rc], cdm->domain_id, job_info->pmi_rank_id,
+                  job_info->pmi_num_of_ranks, ugni_domain_counter);
+        uct_ugni_destroy_cdm(cdm);
         status = UCS_ERR_NO_DEVICE;
     }
 
@@ -483,12 +457,48 @@ ucs_status_t uct_ugni_destroy_cdm(uct_ugni_cdm_t *cdm)
 {
     gni_return_t ugni_rc;
 
-    ucs_debug("MD GNI_CdmDestroy");
+    ucs_trace_func("cdm=%p", cdm);
+    uct_ugni_device_lock(cdm);
     ugni_rc = GNI_CdmDestroy(cdm->cdm_handle);
+    uct_ugni_device_unlock(cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_CdmDestroy error status: %s (%d)",
                  gni_err_str[ugni_rc], ugni_rc);
         return UCS_ERR_IO_ERROR;
     }
+    return UCS_OK;
+}
+
+ucs_status_t uct_ugni_create_cq(gni_cq_handle_t *cq, unsigned cq_size, uct_ugni_cdm_t *cdm)
+{
+    gni_return_t ugni_rc;
+
+    uct_ugni_device_lock(cdm);
+    ugni_rc = GNI_CqCreate(cdm->nic_handle, UCT_UGNI_LOCAL_CQ, 0,
+                           GNI_CQ_NOBLOCK,
+                           NULL, NULL, cq);
+    uct_ugni_device_unlock(cdm);
+    if (GNI_RC_SUCCESS != ugni_rc) {
+        ucs_error("GNI_CqCreate failed, Error status: %s %d",
+                  gni_err_str[ugni_rc], ugni_rc);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_ugni_destroy_cq(gni_cq_handle_t cq, uct_ugni_cdm_t *cdm)
+{
+    gni_return_t ugni_rc;
+
+    uct_ugni_device_lock(cdm);
+    ugni_rc = GNI_CqDestroy(cq);
+    uct_ugni_device_unlock(cdm);
+    if (GNI_RC_SUCCESS != ugni_rc) {
+        ucs_warn("GNI_CqDestroy failed, Error status: %s %d",
+                 gni_err_str[ugni_rc], ugni_rc);
+        return UCS_ERR_IO_ERROR;
+    }
+
     return UCS_OK;
 }
