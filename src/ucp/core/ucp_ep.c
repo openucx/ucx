@@ -205,7 +205,11 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
 
     ep = ucp_worker_ep_find(worker, dest_uuid);
     if (ep != NULL) {
-        /* TODO handle a case where the existing endpoint is incomplete */
+        /* TODO: handle a case where:
+         * 1) the existing endpoint is incomplete
+         * 2) configuration (key) of existing endpoint does not match requested
+         *    parameters, for example, error handling level
+         */
         *ep_p = ep;
         status = UCS_OK;
         goto out_free_address;
@@ -231,19 +235,10 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
         if (ucs_unlikely(hash_it == kh_end(&worker->ep_errh_hash))) {
             ucs_error("Hash failed on setup error handler of endpoint %p with status %d ",
                       ep, hash_extra_status);
-            status = UCS_ERR_NO_RESOURCE;
+            status = UCS_ERR_NO_MEMORY;
             goto err_destroy_ep;
         }
         kh_value(&worker->ep_errh_hash, hash_it) = params->err_handler;
-
-        ucp_ep_config(ep)->err_mode = params->err_mode;
-    }
-
-    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
-        if (params->err_mode == UCP_ERR_HANDLING_MODE_PEER) {
-            /* Disable RNDV */
-            ucp_ep_config(ep)->tag.rndv.am_thresh = SIZE_MAX;
-        }
     }
 
     /* send initial wireup message */

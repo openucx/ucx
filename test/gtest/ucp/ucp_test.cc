@@ -114,9 +114,6 @@ void ucp_test::disconnect(const entity& entity) {
         entity.flush_worker(i);
         void *dreq = entity.disconnect_nb(i);
         if (!UCS_PTR_IS_PTR(dreq)) {
-            if (UCS_ERR_ENDPOINT_TIMEOUT == UCS_PTR_STATUS(dreq)) {
-                continue;
-            }
             ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
         }
         wait(dreq, i);

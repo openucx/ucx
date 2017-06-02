@@ -134,9 +134,6 @@ typedef struct ucp_ep_config {
     /* Threshold for switching from put_short to put_bcopy */
     size_t                  bcopy_thresh;
 
-    /* Error handling mode */
-    ucp_err_handling_mode_t err_mode;
-
     /* Configuration for AM lane */
     ucp_ep_msg_config_t     am;
 
