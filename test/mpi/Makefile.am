@@ -12,10 +12,12 @@ LD = $(MPICC)
 # (some MPIs have hooks of their own and we make sure ours still work)
 noinst_PROGRAMS       = test_memhooks shmem_pingpong
 AM_CPPFLAGS           = \
+    $(BASE_CPPFLAGS) \
     -I$(abs_top_srcdir)/src \
     -I$(abs_top_builddir)/src \
     -DUCM_LIB_DIR="$(abs_top_builddir)/src/ucm/.libs" \
     -DTEST_LIB_DIR="$(abs_builddir)/.libs"
+AM_CFLAGS             = $(BASE_CFLAGS)
 test_memhooks_SOURCES = test_memhooks.c
 
 
