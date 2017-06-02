@@ -117,7 +117,14 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci);
         ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
     }
-    iface->super.tx.cq_available += num_wcs;
+
+    if (num_wcs) {
+        iface->super.tx.cq_available += num_wcs;
+        if (iface->super.super.wakeup_events & UCT_WAKEUP_TX_COMPLETION) {
+            iface->super.super.ops->arm_tx_cq(&iface->super.super);
+        }
+    }
+
     ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending, NULL);
 }
 

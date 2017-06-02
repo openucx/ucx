@@ -534,6 +534,9 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
 
     iface->super.super.tx.cq_available++;
+    if (iface->super.super.super.wakeup_events & UCT_WAKEUP_TX_COMPLETION) {
+        iface->super.super.super.ops->arm_tx_cq(&iface->super.super.super);
+    }
 
     if (uct_dc_iface_dci_can_alloc(&iface->super)) {
         ucs_arbiter_dispatch(uct_dc_iface_dci_waitq(&iface->super), 1,

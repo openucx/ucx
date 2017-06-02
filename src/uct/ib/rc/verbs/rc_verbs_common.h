@@ -163,6 +163,10 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
                                      wc[i].byte_len, wc[i].imm_data, wc[i].slid);
     }
     iface->rx.srq.available += num_wcs;
+    if (iface->super.wakeup_events &
+        (UCT_WAKEUP_RX_AM | UCT_WAKEUP_RX_SIGNALED_AM)) {
+        iface->super.ops->arm_rx_cq(&iface->super, 0);
+    }
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_IFACE_STAT_RX_COMPLETION, num_wcs);
 
 out:

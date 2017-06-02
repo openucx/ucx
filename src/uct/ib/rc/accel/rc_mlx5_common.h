@@ -204,6 +204,10 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     }
 
     ++rc_iface->rx.srq.available;
+    if (rc_iface->super.wakeup_events & UCT_WAKEUP_TX_COMPLETION) {
+        rc_iface->super.ops->arm_tx_cq(&rc_iface->super);
+    }
+
     status = UCS_OK;
 
 done:
