@@ -52,6 +52,7 @@ gtest_CPPFLAGS = \
 	$(OPENMP_CFLAGS)
 
 gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install
+gtest_CFLAGS   = $(BASE_CFLAGS)
 gtest_CXXFLAGS = $(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -g -O3 -fno-tree-vectorize
 
 gtest_SOURCES = \

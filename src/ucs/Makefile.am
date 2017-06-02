@@ -7,7 +7,7 @@
 
 AUTOMAKE_OPTIONS    = nostdinc # avoid collision with built-in debug.h
 AM_CPPFLAGS         = $(BASE_CPPFLAGS) -I$(top_builddir) -I$(abs_top_srcdir)/src
-AM_CFLAGS           = $(BASE_CFLAGS)
+libucs_la_CFLAGS    = $(BASE_CFLAGS)
 lib_LTLIBRARIES     = libucs.la
 bin_PROGRAMS        =
 
