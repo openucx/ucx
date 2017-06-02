@@ -6,6 +6,7 @@
 
 #include "tcp.h"
 
+#include <uct/base/uct_worker.h>
 #include <ucs/async/async.h>
 #include <sys/poll.h>
 

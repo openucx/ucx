@@ -7,7 +7,7 @@
 #include "ugni_ep.h"
 #include "ugni_iface.h"
 
-#include <src/ucs/arch/atomic.h>
+#include <ucs/arch/atomic.h>
 
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_ugni_ep_t, uct_ugni_ep_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ugni_ep_t, UCT_UGNI_HASH_SIZE, uct_ugni_ep_hash);

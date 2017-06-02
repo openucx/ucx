@@ -7,6 +7,7 @@
 #include "mm_iface.h"
 #include "mm_ep.h"
 
+#include <uct/base/uct_worker.h>
 #include <uct/sm/base/sm_ep.h>
 #include <uct/sm/base/sm_iface.h>
 #include <ucs/arch/atomic.h>

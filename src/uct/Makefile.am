@@ -26,12 +26,14 @@ noinst_HEADERS = \
 	base/uct_md.h \
 	base/uct_iface.h \
 	base/uct_log.h \
+	base/uct_worker.h \
 	tcp/tcp.h
 
 libuct_la_SOURCES = \
 	base/uct_md.c \
 	base/uct_mem.c \
 	base/uct_iface.c \
+	base/uct_worker.c \
 	tcp/tcp_ep.c \
 	tcp/tcp_iface.c \
 	tcp/tcp_md.c \
