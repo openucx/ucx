@@ -6,11 +6,14 @@
 
 extern "C" {
 #include <uct/api/uct.h>
+#include <uct/ib/base/ib_md.h>
 #include <ucs/time/time.h>
 }
 #include <common/test.h>
 
-class test_md : public testing::TestWithParam<std::string>,
+#define  IBV_EXP_ODP_SUPPORT_IMPLICIT  1 << 1
+
+class test_md : public testing::TestWithParam<std::tr1::tuple<std::string, std::string> >,
                 public ucs::test_base
 {
 public:
@@ -19,6 +22,8 @@ public:
     static std::vector<std::string> enum_mds(const std::string& mdc_name);
 
     test_md();
+
+    std::string                   tl;
 
 protected:
     virtual void init();
@@ -50,6 +55,9 @@ protected:
 private:
     ucs::handle<uct_md_config_t*> m_md_config;
     ucs::handle<uct_md_h>         m_pd;
+    int                           support_odp;
+    std::string                   reg_method;
+    int                           skip_test;
 };
 
 std::vector<std::string> test_md::enum_mds(const std::string& mdc_name) {
@@ -83,20 +91,101 @@ std::vector<std::string> test_md::enum_mds(const std::string& mdc_name) {
 
 test_md::test_md()
 {
+    skip_test = 0;
+    support_odp = 0;
+    tl = std::tr1::get<0>(GetParam());
+    reg_method = std::tr1::get<1>(GetParam());
     UCS_TEST_CREATE_HANDLE(uct_md_config_t*, m_md_config,
                            (void (*)(uct_md_config_t*))uct_config_release,
-                           uct_md_config_read, GetParam().c_str(), NULL, NULL);
+                           uct_md_config_read, tl.c_str(), NULL, NULL);
 }
 
 void test_md::init()
 {
+    std::string tl;
+
+    tl = std::tr1::get<0>(GetParam());
+    reg_method = std::tr1::get<1>(GetParam());
+    struct ibv_device **dev_list;
+    struct ibv_device **orig_dev_list;
+    int num_devices;
+
+    skip_test = 0;
+
+    support_odp = 0;
+#if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
+    if (reg_method == "odp") {
+        orig_dev_list = dev_list = ibv_get_device_list(&num_devices);
+        if (!dev_list) {
+            UCS_TEST_ABORT("Failed to get the device list.");
+        }
+
+        while (*dev_list) {
+            if (tl ==  (std::string("ib/") + ibv_get_device_name(*dev_list)))  {
+                struct ibv_exp_device_attr device_attr;
+                struct ibv_device_attr device_legacy_attr;
+                struct ibv_context *ctx;
+                int ret;
+
+                ctx = ibv_open_device(*dev_list);
+                if (!ctx) {
+                   fprintf(stderr, "Failed to open device\n");
+                }
+
+                memset(&device_attr, 0, sizeof(device_attr));
+                device_attr.comp_mask = IBV_EXP_DEVICE_ATTR_RESERVED - 1;
+                if (ibv_exp_query_device(ctx, &device_attr)) {
+                    ret = ibv_query_device(ctx, &device_legacy_attr);
+                    if (ret) {
+                       ucs_error("query device failed %d: %m", ret);
+                    }
+
+                    ASSERT_TRUE(ret == 0); 
+                    memcpy(&device_attr, &device_legacy_attr, sizeof(device_legacy_attr));
+                }
+                ibv_close_device(ctx);
+
+                if (device_attr.odp_caps.general_odp_caps &
+                    IBV_EXP_ODP_SUPPORT_IMPLICIT) {
+                    support_odp = 1;
+                }
+
+                break;
+            }
+            ++dev_list;
+        }
+        ibv_free_device_list(orig_dev_list);
+    }
+#else
+    skip_test = 1;
+#endif
     ucs::test_base::init();
+    push_config();
+
+    if (tl.substr(0, 2) == "ib") {
+        if (reg_method == "odp")  {
+            if (support_odp) {
+                modify_config("REG_METHODS" , reg_method);
+            } else {
+                skip_test = 1;
+            }
+        } else {
+            modify_config("REG_METHODS" , reg_method);
+        }
+    } else {
+        /* Avoid test duplication - test other then ib only if direct */
+        if (reg_method != "direct") {
+            skip_test = 1;
+        }
+    }
+
     UCS_TEST_CREATE_HANDLE(uct_md_h, m_pd, uct_md_close, uct_md_open,
-                           GetParam().c_str(), m_md_config);
+                           tl.c_str(), m_md_config);
 }
 
 void test_md::cleanup()
 {
+    pop_config();
     m_pd.reset();
     ucs::test_base::cleanup();
 }
@@ -115,12 +204,18 @@ void test_md::check_caps(uint64_t flags, const std::string& name)
 {
     uct_md_attr_t md_attr;
     ucs_status_t status = uct_md_query(pd(), &md_attr);
+    std::stringstream ss;
     ASSERT_UCS_OK(status);
     if (!ucs_test_all_flags(md_attr.cap.flags, flags)) {
-        std::stringstream ss;
-        ss << name << " is not supported by " << GetParam();
+        ss << name << " is not supported by " << tl;
         UCS_TEST_SKIP_R(ss.str());
     }
+
+    if (skip_test) {
+        ss << name << " skip test " << tl;
+        UCS_TEST_SKIP_R(ss.str());
+    }
+
 }
 
 UCS_TEST_P(test_md, alloc) {
@@ -215,7 +310,7 @@ UCS_TEST_P(test_md, reg_perf) {
             }
         }
 
-        UCS_TEST_MESSAGE << GetParam() << ": Registration time for " <<
+        UCS_TEST_MESSAGE << tl << ": Registration time for " <<
                         size << " bytes: " <<
                         long(ucs_time_to_nsec(end_time - start_time) / n) << " ns";
 
@@ -321,6 +416,7 @@ UCS_TEST_P(test_md, reg_multi_thread) {
                    )
 #define _UCT_PD_INSTANTIATE_TEST_CASE(_test_case, _mdc_name) \
     INSTANTIATE_TEST_CASE_P(_mdc_name, _test_case, \
-                            testing::ValuesIn(_test_case::enum_mds(#_mdc_name)));
+                            testing::Combine(testing::ValuesIn(_test_case::enum_mds(#_mdc_name)), \
+                                             testing::Values("odp","rcache","direct")));
 
 UCT_PD_INSTANTIATE_TEST_CASE(test_md)

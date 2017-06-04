@@ -330,7 +330,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_iface_mp_chunk_alloc, (mp, size_p, chunk_p),
     size_t length;
 
     length = sizeof(*hdr) + *size_p;
-    status = uct_iface_mem_alloc(&iface->super, length, 0, ucs_mpool_name(mp),
+    status = uct_iface_mem_alloc(&iface->super, length, UCT_MD_MEM_ODP_DISABLE,
+                                 ucs_mpool_name(mp),
                                  &mem);
     if (status != UCS_OK) {
         return status;

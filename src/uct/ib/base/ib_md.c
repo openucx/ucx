@@ -63,8 +63,12 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
   {"", "", NULL,
    ucs_offsetof(uct_ib_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-  {"RCACHE", "try", "Enable using memory registration cache",
-   ucs_offsetof(uct_ib_md_config_t, rcache.enable), UCS_CONFIG_TYPE_TERNARY},
+  {"REG_METHODS", "rcache,odp,direct",
+   "List of registration methods in order of prefernce. Suported methods are:\n"
+   "  odp	  - implicit on-demand paging\n"
+   "  rcache	  - userspace registration cache\n"
+   "  direct	  - direct registration\n",
+   ucs_offsetof(uct_ib_md_config_t, reg_methods), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCT_IB_MD_RCACHE_DEFAULT_ALIGN),
    "Registration cache address alignment, must be power of 2\n"
@@ -757,8 +761,17 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
 static ucs_status_t uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                    unsigned flags, uct_mem_h *memh_p)
 {
+    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     ucs_status_t status;
     uct_ib_mem_t *memh;
+
+    if (md->global_mem.mr && !(flags & UCT_MD_MEM_ODP_DISABLE)) {
+        if (md->config.odp.prefetch) {
+            uct_ib_mem_prefetch_internal(md, &md->global_mem, address, length);
+        }
+        *memh_p = &md->global_mem;
+        return UCS_OK;
+    }
 
     memh = uct_ib_memh_alloc();
     if (memh == NULL) {
@@ -782,10 +795,16 @@ static ucs_status_t uct_ib_mem_dereg_internal(uct_ib_mem_t *memh)
 
 static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
 {
+    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     uct_ib_mem_t *ib_memh = memh;
     ucs_status_t status;
 
+    if (memh == &md->global_mem) {
+        return UCS_OK;
+    }
+
     status = uct_ib_mem_dereg_internal(ib_memh);
+
     uct_ib_memh_free(ib_memh);
     return status;
 }
@@ -1028,6 +1047,62 @@ static void uct_ib_md_release_device_config(uct_ib_md_t *md)
 }
 
 static ucs_status_t
+uct_ib_md_parse_reg_methods(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
+{
+    ucs_status_t status = UCS_ERR_NO_RESOURCE;
+    ucs_rcache_params_t rcache_params;
+    int i;
+
+    for (i = 0; i < md_config->reg_methods.count; i++) {
+        if (!strcasecmp(md_config->reg_methods.rmtd[i], "rcache")) {
+            UCS_STATIC_ASSERT(UCS_PGT_ADDR_ALIGN >= UCT_IB_MD_RCACHE_DEFAULT_ALIGN);
+            rcache_params.region_struct_size = sizeof(uct_ib_rcache_region_t);
+            rcache_params.alignment          = md_config->rcache.alignment;
+            rcache_params.ucm_event_priority = md_config->rcache.event_prio;
+            rcache_params.context            = md;
+            rcache_params.ops                = &uct_ib_rcache_ops;
+            status = ucs_rcache_create(&rcache_params, uct_ib_device_name(&md->dev)
+                                       UCS_STATS_ARG(md->stats), &md->rcache);
+
+            if (status == UCS_OK) {
+                md->super.ops         = &uct_ib_md_rcache_ops;
+                md->reg_cost.overhead = md_config->rcache.overhead;
+                md->reg_cost.growth   = 0; /* It's close enough to 0 */
+                return status;
+            }
+            ucs_debug("rcache reg method selected"); 
+#if HAVE_DECL_IBV_EXP_REG_MR
+        } else if (!strcasecmp(md_config->reg_methods.rmtd[i], "odp")) {
+            if (!uct_ib_device_odp_max_size(md->dev.dev_attr)) {
+                continue;
+            }
+
+            struct ibv_exp_reg_mr_in in;
+            memset(&in, 0, sizeof(in));
+            in.pd             = md->pd;
+            in.length         = UINT64_MAX;
+            in.exp_access     = UCT_IB_MEM_ACCESS_FLAGS | IBV_EXP_ACCESS_ON_DEMAND;
+            md->global_mem.mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &in);
+            if (!md->global_mem.mr) {
+                continue;
+            }
+
+            md->reg_cost.overhead = 0; /* TODO */
+            md->reg_cost.growth   = 0; /* TODO */
+            uct_ib_mem_init(&md->global_mem, in.exp_access);
+            ucs_debug("odp reg method selected"); 
+            return UCS_OK;
+#endif
+        } else if (!strcmp(md_config->reg_methods.rmtd[i], "direct")) {
+            ucs_debug("direct reg method selected");
+            return UCS_OK;
+        }
+    }
+
+    return status;
+}
+
+static ucs_status_t
 uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
 {
     uct_ib_device_spec_t *spec;
@@ -1094,13 +1169,24 @@ err:
     return status;
 }
 
+static void uct_ib_md_release_reg_method(uct_ib_md_t *md) {
+    if (md->rcache != NULL) {
+        ucs_rcache_destroy(md->rcache);
+    }
+    if (md->global_mem.atomic_mr != NULL) {
+        uct_ib_dereg_mr(md->global_mem.atomic_mr);
+    }
+    if (md->global_mem.mr != NULL) {
+        uct_ib_dereg_mr(md->global_mem.mr);
+    }
+}
+
 static ucs_status_t
 uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
     const uct_ib_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_ib_md_config_t);
     struct ibv_device **ib_device_list, *ib_device;
     char tmp_md_name[UCT_MD_NAME_MAX];
-    ucs_rcache_params_t rcache_params;
     ucs_status_t status;
     int i, num_devices, ret;
     uct_ib_md_t *md;
@@ -1126,17 +1212,18 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto out_free_dev_list;
     }
 
-    md = ucs_malloc(sizeof(*md), "ib_md");
+    md = ucs_calloc(1, sizeof(*md), "ib_md");
     if (md == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto out_free_dev_list;
     }
 
-    md->super.ops             = &uct_ib_md_ops;
-    md->super.component       = &uct_ib_mdc;
-    md->rcache                = NULL;
-    md->reg_cost              = md_config->uc_reg_cost;
-    md->config                = md_config->ext;
+    md->rcache          = NULL;
+    md->config          = md_config->ext;
+    md->super.ops       = &uct_ib_md_ops;
+    md->super.component = &uct_ib_mdc;
+    md->reg_cost        = md_config->uc_reg_cost;
+    md->config.odp      = md_config->ext.odp;
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
@@ -1172,7 +1259,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
 
     if (md->config.odp.max_size == UCS_CONFIG_MEMUNITS_AUTO) {
         /* Must be done after we open and query the device */
-        md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
+        md->config.odp.max_size = uct_ib_device_odp_max_size(md->dev.dev_attr);
     }
 
     /* Allocate memory domain */
@@ -1191,35 +1278,16 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto err_dealloc_pd;
     }
 
-    if (md_config->rcache.enable != UCS_NO) {
-        UCS_STATIC_ASSERT(UCS_PGT_ADDR_ALIGN >= UCT_IB_MD_RCACHE_DEFAULT_ALIGN);
-        rcache_params.region_struct_size = sizeof(uct_ib_rcache_region_t);
-        rcache_params.alignment          = md_config->rcache.alignment;
-        rcache_params.ucm_event_priority = md_config->rcache.event_prio;
-        rcache_params.context            = md;
-        rcache_params.ops                = &uct_ib_rcache_ops;
-        status = ucs_rcache_create(&rcache_params, uct_ib_device_name(&md->dev)
-                                   UCS_STATS_ARG(md->stats), &md->rcache);
-        if (status == UCS_OK) {
-            md->super.ops         = &uct_ib_md_rcache_ops;
-            md->reg_cost.overhead = md_config->rcache.overhead;
-            md->reg_cost.growth   = 0; /* It's close enough to 0 */
-        } else {
-            ucs_assert(md->rcache == NULL);
-            if (md_config->rcache.enable == UCS_YES) {
-                ucs_error("Failed to create registration cache: %s",
-                          ucs_status_string(status));
-                goto err_destroy_umr_qp;
-            } else {
-                ucs_debug("Could not create registration cache for: %s",
-                          ucs_status_string(status));
-            }
-        }
+    status = uct_ib_md_parse_reg_methods(md, md_config);
+    if (status != UCS_OK) {
+        ucs_debug("Could not initialize registration: %s",
+                  ucs_status_string(status));
+        goto err_destroy_umr_qp;
     }
 
     status = uct_ib_md_parse_device_config(md, md_config);
     if (status != UCS_OK) {
-        goto err_destroy_rcache;
+        goto err_release_reg_method;
     }
 
     *md_p = &md->super;
@@ -1230,10 +1298,8 @@ out_free_dev_list:
 out:
     return status;
 
-err_destroy_rcache:
-    if (md->rcache != NULL) {
-        ucs_rcache_destroy(md->rcache);
-    }
+err_release_reg_method:
+    uct_ib_md_release_reg_method(md);
 err_destroy_umr_qp:
     uct_ib_md_umr_qp_destroy(md);
 err_dealloc_pd:
@@ -1252,9 +1318,7 @@ static void uct_ib_md_close(uct_md_h uct_md)
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 
     uct_ib_md_release_device_config(md);
-    if (md->rcache != NULL) {
-        ucs_rcache_destroy(md->rcache);
-    }
+    uct_ib_md_release_reg_method(md);
     uct_ib_md_umr_qp_destroy(md);
     ibv_dealloc_pd(md->pd);
     uct_ib_device_cleanup(&md->dev);

@@ -247,7 +247,7 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
                                      const char *resource_dev_name,
                                      uint8_t *p_port_num);
 
-size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev);
+size_t uct_ib_device_odp_max_size(struct ibv_exp_device_attr dev_attr);
 
 static inline struct ibv_exp_port_attr*
 uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)

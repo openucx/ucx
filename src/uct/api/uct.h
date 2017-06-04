@@ -337,8 +337,10 @@ enum uct_md_mem_flags {
                                                 mapping may be deferred until
                                                 it is accessed by the CPU or a
                                                 transport. */
-    UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1)  /**< Place the mapping at exactly
+    UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1), /**< Place the mapping at exactly
                                                 defined address */
+    UCT_MD_MEM_ODP_DISABLE   = UCS_BIT(2)  /**< Memory can't be used with
+                                                ODP. */
 };
 
 
