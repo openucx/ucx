@@ -177,6 +177,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg
     uint8_t addr_indices[UCP_MAX_LANES];
     ucp_lane_index_t lane, remote_lane;
     ucp_rsc_index_t rsc_index;
+    ucp_ep_params_t params;
     ucs_status_t status;
     uint64_t tl_bitmap = 0;
 
@@ -190,8 +191,15 @@ static void ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg
         }
     }
 
+    /* Use default parameters to initialize local lanes.
+     * This might not always work - need to pass some parameters in the wireup
+     * message or support endpoint reconfiguration.
+     */
+    params.field_mask = 0;
+
     /* Initialize lanes (possible destroy existing lanes) */
-    status = ucp_wireup_init_lanes(ep, address_count, address_list, addr_indices);
+    status = ucp_wireup_init_lanes(ep, &params, address_count, address_list,
+                                   addr_indices);
     if (status != UCS_OK) {
         return;
     }
@@ -429,7 +437,8 @@ static void ucp_wireup_print_config(ucp_context_h context,
     }
 }
 
-ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned address_count,
+ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
+                                   unsigned address_count,
                                    const ucp_address_entry_t *address_list,
                                    uint8_t *addr_indices)
 {
@@ -442,7 +451,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned address_count,
 
     ucs_trace("ep %p: initialize lanes", ep);
 
-    status = ucp_wireup_select_lanes(ep, address_count, address_list,
+    status = ucp_wireup_select_lanes(ep, params, address_count, address_list,
                                      addr_indices, &key);
     if (status != UCS_OK) {
         goto err;

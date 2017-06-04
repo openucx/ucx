@@ -41,6 +41,8 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->wireup_lane      = UCP_NULL_LANE;
     key->tag_lane         = UCP_NULL_LANE;
     key->reachable_md_map = 0;
+    key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
+    key->status           = UCS_OK;
     memset(key->rma_lanes, UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->amo_lanes, UCP_NULL_LANE, sizeof(key->amo_lanes));
 }
@@ -111,6 +113,11 @@ static void ucp_ep_delete_from_hash(ucp_ep_h ep)
     if (hash_it != kh_end(&ep->worker->ep_hash)) {
         kh_del(ucp_worker_ep_hash, &ep->worker->ep_hash, hash_it);
     }
+
+    hash_it = kh_get(ucp_ep_errh_hash, &ep->worker->ep_errh_hash, (uintptr_t)ep);
+    if (hash_it != kh_end(&ep->worker->ep_errh_hash)) {
+        kh_del(ucp_ep_errh_hash, &ep->worker->ep_errh_hash, hash_it);
+    }
 }
 
 static void ucp_ep_delete(ucp_ep_h ep)
@@ -176,6 +183,8 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
     ucs_status_t status;
     uint64_t dest_uuid;
     ucp_ep_h ep;
+    khiter_t hash_it;
+    int hash_extra_status = 0;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
@@ -196,7 +205,11 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
 
     ep = ucp_worker_ep_find(worker, dest_uuid);
     if (ep != NULL) {
-        /* TODO handle a case where the existing endpoint is incomplete */
+        /* TODO: handle a case where:
+         * 1) the existing endpoint is incomplete
+         * 2) configuration (key) of existing endpoint does not match requested
+         *    parameters, for example, error handling level
+         */
         *ep_p = ep;
         status = UCS_OK;
         goto out_free_address;
@@ -209,19 +222,23 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
     }
 
     /* initialize transport endpoints */
-    status = ucp_wireup_init_lanes(ep, address_count, address_list, addr_indices);
+    status = ucp_wireup_init_lanes(ep, params, address_count, address_list,
+                                   addr_indices);
     if (status != UCS_OK) {
         goto err_destroy_ep;
     }
 
-    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
-        ucp_ep_config(ep)->err_mode = params->err_mode;
-        if (params->err_mode == UCP_ERR_HANDLING_MODE_PEER) {
-            /* Disable RNDV */
-            ucp_ep_config(ep)->tag.rndv.am_thresh = SIZE_MAX;
+    /* Setup error handler */
+    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER) {
+        hash_it = kh_put(ucp_ep_errh_hash, &worker->ep_errh_hash, (uintptr_t)ep,
+                         &hash_extra_status);
+        if (ucs_unlikely(hash_it == kh_end(&worker->ep_errh_hash))) {
+            ucs_error("Hash failed on setup error handler of endpoint %p with status %d ",
+                      ep, hash_extra_status);
+            status = UCS_ERR_NO_MEMORY;
+            goto err_destroy_ep;
         }
-    } else {
-        ucp_ep_config(ep)->err_mode = UCP_ERR_HANDLING_MODE_NONE;
+        kh_value(&worker->ep_errh_hash, hash_it) = params->err_handler;
     }
 
     /* send initial wireup message */
@@ -247,7 +264,10 @@ out:
 
 static void ucp_ep_flush_error(ucp_request_t *req, ucs_status_t status)
 {
-    ucs_error("error during flush: %s", ucs_status_string(status));
+    if (ucp_ep_config(req->send.ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER) {
+        ucs_error("error during flush: %s", ucs_status_string(status));
+    }
+
     req->status = status;
     --req->send.uct_comp.count;
 }
@@ -408,6 +428,8 @@ static void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
 
+    ucs_trace("flush completion req=%p status=%d", req, status);
+
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
     if (status == UCS_OK) {
@@ -445,10 +467,8 @@ void ucp_ep_destroy_internal(ucp_ep_h ep, const char *message)
     ucs_free(ep);
 }
 
-static void ucp_ep_disconnected(ucp_request_t *req)
+static void ucp_ep_disconnected(ucp_ep_h ep)
 {
-    ucp_ep_h ep = req->send.ep;
-
     if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
         /* Endpoints which have remote connection are destroyed only when the
          * worker is destroyed, to enable remote endpoints keep sending
@@ -462,12 +482,22 @@ static void ucp_ep_disconnected(ucp_request_t *req)
     ucp_ep_destroy_internal(ep, " from disconnect");
 }
 
+static void ucp_ep_flushed_callback(ucp_request_t *req)
+{
+    ucp_ep_disconnected(req->send.ep);
+}
+
 static ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep)
 {
     ucs_status_t status;
     ucp_request_t *req;
 
     ucs_debug("disconnect ep %p", ep);
+
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        ucp_ep_disconnected(ep);
+        return NULL;
+    }
 
     req = ucs_mpool_get(&ep->worker->req_mp);
     if (req == NULL) {
@@ -488,7 +518,7 @@ static ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep)
     req->flags                  = 0;
     req->status                 = UCS_OK;
     req->send.ep                = ep;
-    req->send.flush.flushed_cb  = ucp_ep_disconnected;
+    req->send.flush.flushed_cb  = ucp_ep_flushed_callback;
     req->send.flush.lanes       = UCS_MASK(ucp_ep_num_lanes(ep));
     req->send.flush.cbq_elem.cb = ucp_ep_flushed_slow_path_callback;
     req->send.flush.cbq_elem_on = 0;
@@ -501,10 +531,10 @@ static ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep)
 
     if (req->send.uct_comp.count == 0) {
         status = req->status;
-        ucp_ep_disconnected(req);
         ucs_trace_req("ep %p: releasing flush request %p, returning status %s",
                       ep, req, ucs_status_string(status));
         ucs_mpool_put(req);
+        ucp_ep_disconnected(ep);
         return UCS_STATUS_PTR(status);
     }
 
@@ -570,7 +600,9 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->am_lane          != key2->am_lane) ||
         (key1->rndv_lane        != key2->rndv_lane) ||
         (key1->tag_lane         != key2->tag_lane) ||
-        (key1->wireup_lane      != key2->wireup_lane))
+        (key1->wireup_lane      != key2->wireup_lane) ||
+        (key1->err_mode         != key2->err_mode) ||
+        (key1->status           != key2->status))
     {
         return 0;
     }
@@ -644,7 +676,10 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_at
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
     ucs_assert(config->key.lanes[config->key.am_lane].rsc_index != UCP_NULL_RESOURCE);
 
-    if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+    if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+        /* Disable RNDV */
+        rndv_thresh = SIZE_MAX;
+    } else if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the AM rndv threshold on its own.*/
         rndv_thresh = ucp_ep_config_calc_rndv_thresh(context, iface_attr, md_attr,
                                                      context->config.ext.bcopy_bw,

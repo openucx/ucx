@@ -29,7 +29,8 @@ enum {
     UCP_EP_FLAG_REMOTE_CONNECTED    = UCS_BIT(1), /* All remote endpoints are connected */
     UCP_EP_FLAG_CONNECT_REQ_SENT    = UCS_BIT(2), /* Connection request was sent */
     UCP_EP_FLAG_CONNECT_REP_SENT    = UCS_BIT(3), /* Debug: Connection reply was sent */
-    UCP_EP_FLAG_TAG_OFFLOAD_ENABLED = UCS_BIT(4)  /* Endpoint uses tl offload for tag matching */
+    UCP_EP_FLAG_TAG_OFFLOAD_ENABLED = UCS_BIT(4),  /* Endpoint uses tl offload for tag matching */
+    UCP_EP_FLAG_FAILED              = UCS_BIT(5)  /* EP is in failed state */
 };
 
 
@@ -78,6 +79,9 @@ typedef struct ucp_ep_config_key {
      */
     ucp_md_map_t           reachable_md_map;
 
+    /* Error handling mode */
+    ucp_err_handling_mode_t    err_mode;
+    ucs_status_t               status;
 } ucp_ep_config_key_t;
 
 
@@ -129,9 +133,6 @@ typedef struct ucp_ep_config {
     ucp_ep_rma_config_t     rma[UCP_MAX_LANES];
     /* Threshold for switching from put_short to put_bcopy */
     size_t                  bcopy_thresh;
-
-    /* Error handling mode */
-    ucp_err_handling_mode_t err_mode;
 
     /* Configuration for AM lane */
     ucp_ep_msg_config_t     am;

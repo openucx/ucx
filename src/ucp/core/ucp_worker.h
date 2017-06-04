@@ -17,6 +17,7 @@
 #include <ucs/async/async.h>
 
 KHASH_MAP_INIT_INT64(ucp_worker_ep_hash, ucp_ep_t *);
+KHASH_MAP_INIT_INT64(ucp_ep_errh_hash,   ucp_err_handler_t);
 
 
 enum {
@@ -108,6 +109,7 @@ typedef struct ucp_worker {
     unsigned                      stub_pend_count;/* Number of pending requests on stub endpoints*/
 
     khash_t(ucp_worker_ep_hash)   ep_hash;       /* Hash table of all endpoints */
+    khash_t(ucp_ep_errh_hash)     ep_errh_hash;  /* Hash table of error handlers associated with endpoints */
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     UCS_STATS_NODE_DECLARE(stats);

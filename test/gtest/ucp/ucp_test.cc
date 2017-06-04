@@ -136,6 +136,10 @@ void ucp_test::wait(void *req, int worker_index)
     ucp_request_release(req);
 }
 
+void ucp_test::set_ucp_config(ucp_config_t *config) {
+    set_ucp_config(config, GetParam());
+}
+
 std::vector<ucp_test_param>
 ucp_test::enum_test_params(const ucp_params_t& ctx_params,
                            const ucp_worker_params_t& worker_params,

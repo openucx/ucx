@@ -491,6 +491,10 @@ void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num)
         ucs_assert_always(ep->dci == UCT_DC_EP_NO_DCI);
     }
 
+    /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
+     * is not updated for the error cqe */
+    iface->super.tx.cq_available++;
+
     iface->super.super.ops->set_ep_failed(ib_iface, &ep->super.super);
 
     status = dc_ops->reset_dci(iface, dci);

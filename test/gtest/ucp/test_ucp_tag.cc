@@ -187,8 +187,6 @@ test_ucp_tag::request *
 test_ucp_tag::send_sync_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
                            ucp_tag_t tag, int buf_index)
 {
-    request *req;
-
     int worker_index = 0;
     if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
         worker_index = buf_index;
@@ -196,14 +194,8 @@ test_ucp_tag::send_sync_nb(const void *buffer, size_t count, ucp_datatype_t data
         ucs_assert((buf_index == 0) && (worker_index == 0));
     }
 
-    req = (request*)ucp_tag_send_sync_nb(sender().ep(worker_index), buffer, count, datatype,
-                                         tag, send_callback);
-    if (!UCS_PTR_IS_PTR(req)) {
-        UCS_TEST_MESSAGE << "ucp_tag_send_sync_nb returned status " <<
-                         ucs_status_string(UCS_PTR_STATUS(req));
-    }
-
-    return req;
+    return (request*)ucp_tag_send_sync_nb(sender().ep(worker_index), buffer, count,
+                                          datatype, tag, send_callback);
 }
 
 test_ucp_tag::request*
