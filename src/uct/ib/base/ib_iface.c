@@ -866,11 +866,6 @@ ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup)
         ibv_ack_cq_events(iface->recv_cq, recv_cq_count);
     }
 
-    /* avoid re-arming the interface if any events exists */
-    if ((send_cq_count > 0) || (recv_cq_count > 0)) {
-        return UCS_ERR_BUSY;
-    }
-
     if (wakeup->events & UCT_WAKEUP_TX_COMPLETION) {
         status = iface->ops->arm_tx_cq(iface);
         if (status != UCS_OK) {
@@ -885,7 +880,7 @@ ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup)
         }
     }
 
-    return UCS_OK;
+    return ((send_cq_count > 0) || (recv_cq_count > 0)) ? UCS_ERR_BUSY : UCS_OK;
 }
 
 ucs_status_t uct_ib_iface_wakeup_get_fd(uct_wakeup_h wakeup, int *fd_p)
