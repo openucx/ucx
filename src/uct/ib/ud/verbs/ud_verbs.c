@@ -333,11 +333,6 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
 
     }
     iface->super.rx.available += num_wcs;
-    if (iface->super.super.wakeup_events &
-        (UCT_WAKEUP_RX_AM | UCT_WAKEUP_RX_SIGNALED_AM)) {
-        iface->super.super.ops->arm_rx_cq(&iface->super.super, 0);
-    }
-
 out:
     uct_ud_verbs_iface_post_recv(iface);
     return status;

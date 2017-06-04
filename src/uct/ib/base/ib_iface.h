@@ -90,9 +90,8 @@ struct uct_ib_iface {
 
     struct ibv_cq           *send_cq;
     struct ibv_cq           *recv_cq;
-    uct_recv_desc_t         release_desc;
     struct ibv_comp_channel *comp_channel;
-    unsigned                wakeup_events;
+    uct_recv_desc_t         release_desc;
 
     uint8_t                 *path_bits;
     unsigned                path_bits_count;

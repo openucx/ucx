@@ -608,7 +608,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    self->wakeup_events = 0;
     self->comp_channel = ibv_create_comp_channel(dev->ibv_context);
     if (self->comp_channel == NULL) {
         ucs_error("ibv_create_comp_channel() failed: %m");
@@ -924,7 +923,6 @@ ucs_status_t uct_ib_iface_wakeup_open(uct_iface_h iface, unsigned events,
 {
     uct_ib_iface_t *ib_iface = ucs_derived_of(iface, uct_ib_iface_t);
     wakeup->fd = ib_iface->comp_channel->fd;
-    ib_iface->wakeup_events = events;
     return UCS_OK;
 }
 
@@ -935,8 +933,6 @@ ucs_status_t uct_ib_iface_wakeup_signal(uct_wakeup_h wakeup)
 
 void uct_ib_iface_wakeup_close(uct_wakeup_h wakeup)
 {
-    uct_ib_iface_t *ib_iface = ucs_derived_of(wakeup->iface, uct_ib_iface_t);
-    ib_iface->wakeup_events = 0;
 }
 
 static ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface, struct ibv_cq *cq,
