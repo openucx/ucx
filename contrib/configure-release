@@ -12,6 +12,7 @@
 
 basedir=$(cd $(dirname $0) && pwd)
 $basedir/../configure \
+	--enable-optimizations \
 	--disable-logging \
 	--disable-debug \
 	--disable-assertions \
