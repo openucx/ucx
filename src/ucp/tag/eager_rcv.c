@@ -175,7 +175,7 @@ static ucs_status_t ucp_eager_sync_ack_handler(void *arg, void *data,
     ucp_request_t *req;
 
     req = (ucp_request_t*)rep_hdr->reqptr;
-    ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_REMOTE_COMPLETED);
+    ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_REMOTE_COMPLETED, UCS_OK);
     return UCS_OK;
 }
 

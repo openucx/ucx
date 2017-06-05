@@ -168,3 +168,8 @@ ucp_request_wait_uct_comp(ucp_request_t *req)
         ucp_worker_progress(req->send.ep->worker);
     }
 }
+
+static UCS_F_ALWAYS_INLINE int
+ucp_request_is_send_buffer_reg(ucp_request_t *req) {
+    return req->send.rsc != UCP_NULL_RESOURCE;
+}

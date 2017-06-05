@@ -29,8 +29,9 @@ static int ucp_tag_rndv_is_get_op_possible(ucp_ep_h ep, uct_rkey_t rkey)
 
 static void ucp_rndv_rma_request_send_buffer_dereg(ucp_request_t *sreq)
 {
-    if ((UCP_DT_IS_CONTIG(sreq->send.datatype)) &&
-        (ucp_ep_is_rndv_lane_present(sreq->send.ep))) {
+    if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
+        ucp_ep_is_rndv_lane_present(sreq->send.ep) &&
+        ucp_request_is_send_buffer_reg(sreq) /* TODO: How is this possible? */) {
         ucp_request_send_buffer_dereg(sreq, ucp_ep_get_rndv_get_lane(sreq->send.ep));
     }
 }
@@ -571,17 +572,17 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_bcopy_send, (self),
     return status;
 }
 
-static void ucp_rndv_zcopy_req_complete(ucp_request_t *req)
+static void ucp_rndv_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
     ucp_request_send_buffer_dereg(req, ucp_ep_get_am_lane(req->send.ep));
-    ucp_request_complete_send(req, UCS_OK);
+    ucp_request_complete_send(req, status);
 }
 
 static void ucp_rndv_contig_zcopy_completion(uct_completion_t *self,
                                              ucs_status_t status)
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct_comp);
-    ucp_rndv_zcopy_req_complete(sreq);
+    ucp_rndv_zcopy_req_complete(sreq, status);
 }
 
 static ucs_status_t ucp_rndv_zcopy_single(uct_pending_req_t *self)

@@ -259,19 +259,19 @@ ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req,
                                          ucp_lane_index_t lane)
 {
     ucp_context_t *context    = req->send.ep->worker->context;
-    ucp_rsc_index_t rsc_index = ucp_ep_get_rsc_index(req->send.ep, lane);
+    req->send.rsc             = ucp_ep_get_rsc_index(req->send.ep, lane);
+    ucs_assert(req->send.rsc != UCP_NULL_RESOURCE);
 
-    return ucp_request_memory_reg(context, rsc_index, (void*)req->send.buffer,
-                                  req->send.length, req->send.datatype,
-                                  &req->send.state);
+    return ucp_request_memory_reg(context, req->send.rsc,
+                                  (void*)req->send.buffer, req->send.length,
+                                  req->send.datatype, &req->send.state);
 }
 
 void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane)
 {
     ucp_context_t *context    = req->send.ep->worker->context;
-    ucp_rsc_index_t rsc_index = ucp_ep_get_rsc_index(req->send.ep, lane);
-
-    ucp_request_memory_dereg(context, rsc_index, req->send.datatype,
+    ucs_assert(req->send.rsc != UCP_NULL_RESOURCE);
+    ucp_request_memory_dereg(context, req->send.rsc, req->send.datatype,
                              &req->send.state);
+    req->send.rsc = UCP_NULL_RESOURCE;
 }
-

@@ -255,7 +255,7 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
     status = uct_ep_tag_eager_zcopy(ep->uct_eps[req->send.lane], req->send.tag,
                                     imm_data, iov, iovcnt, &req->send.uct_comp);
     if (status == UCS_OK) {
-        complete(req);
+        complete(req, UCS_OK);
     } else if (status < 0) {
         req->send.state = saved_state; /* need to restore the offsets state */
         return status;

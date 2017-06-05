@@ -218,6 +218,7 @@ static void ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.buffer       = buffer;
     req->send.datatype     = datatype;
     req->send.tag          = tag;
+    req->send.rsc          = UCP_NULL_RESOURCE;
     req->send.state.offset = 0;
 #if ENABLE_ASSERT
     req->send.lane         = UCP_NULL_LANE;
