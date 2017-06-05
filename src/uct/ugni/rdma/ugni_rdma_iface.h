@@ -41,6 +41,16 @@ typedef struct uct_ugni_rdma_iface_config {
     uct_iface_mpool_config_t mpool;
 } uct_ugni_rdma_iface_config_t;
 
+typedef void (*ugni_desc_free_cb_t)(void *desc);
+
+typedef struct uct_ugni_base_desc {
+    gni_post_descriptor_t   desc;
+    uct_completion_t       *comp_cb;
+    uct_unpack_callback_t   unpack_cb;
+    uct_ugni_flush_group_t *flush_group;
+    ugni_desc_free_cb_t     free_cb;
+} uct_ugni_base_desc_t;
+
 typedef struct uct_ugni_rdma_fetch_desc {
     uct_ugni_base_desc_t super;
     uct_completion_t tmp;
@@ -48,9 +58,6 @@ typedef struct uct_ugni_rdma_fetch_desc {
     size_t padding;
 
     /* Handling unalined composed get messages */
-    size_t expected_bytes;          /**< Number of bytes expected to be delivered
-                                         including padding */
-    size_t network_completed_bytes; /**< Total number of delivered bytes */
     struct uct_ugni_rdma_fetch_desc* head; /**< Pointer to the head descriptor
                                          that manages the completion of the operation */
     void *user_buffer;              /**< Pointer to user's buffer, here to ensure it's always available for composed messages */
