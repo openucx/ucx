@@ -127,9 +127,13 @@ struct ucp_request {
                     uint64_t              value;
                     void                  *result;
                 } amo;
+
                 struct {
-                    void *rndv_op; /* Handler of issued rndv send. Needs to cancel the
-                                      operation if it is completed by SW */
+                    uint64_t          sender_uuid; /* Sender uuid, which is sent back in sync ack */
+                    ucp_tag_t         sender_tag;  /* Sender tag, which is sent back in sync ack */
+                    ucs_queue_elem_t  queue;    /* Elem in outgoing ssend reqs queue */
+                    void              *rndv_op; /* Handler of issued rndv send. Need to cancel
+                                                   the operation if it is completed by SW. */
                  } tag_offload;
 
             };
