@@ -10,10 +10,10 @@ class test_ucp_peer_failure_base {
 protected:
     test_ucp_peer_failure_base() {
         /* Set small TL timeouts to reduce testing time */
-        env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",     "10us"));
-        env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",     "10us"));
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
         std::string ud_timeout = ucs::to_string<int>(1 * ucs::test_time_multiplier()) + "s";
-        env.push_back(new ucs::scoped_setenv("UCX_UD_TIMEOUT", ud_timeout.c_str()));
+        m_env.push_back(new ucs::scoped_setenv("UCX_UD_TIMEOUT", ud_timeout.c_str()));
     }
 
     static ucp_ep_params_t get_ep_params() {
@@ -42,7 +42,7 @@ protected:
     static ucs_status_t m_err_status;
 
 private:
-    ucs::ptr_vector<ucs::scoped_setenv> env;
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 size_t       test_ucp_peer_failure_base::m_err_cntr   = 0;
@@ -53,10 +53,15 @@ class test_ucp_peer_failure :
                     public test_ucp_tag,
                     protected test_ucp_peer_failure_base {
 public:
+    test_ucp_peer_failure() : m_msg_size(1024) {
+    }
+
     using test_ucp_peer_failure_base::get_ep_params;
 
     virtual void init();
     virtual void cleanup();
+
+    void test_status_after();
 
 protected:
     void fail_receiver() {
@@ -82,6 +87,9 @@ protected:
             progress();
         }
     }
+
+protected:
+    const size_t m_msg_size;
 };
 
 void test_ucp_peer_failure::init() {
@@ -100,6 +108,34 @@ void test_ucp_peer_failure::init() {
 void test_ucp_peer_failure::cleanup() {
     restore_errors();
     test_ucp_tag::cleanup();
+}
+
+void test_ucp_peer_failure::test_status_after()
+{
+    fail_receiver();
+
+    std::vector<uint8_t> buf(m_msg_size, 0);
+    request *req = send_nb(buf.data(), buf.size(), DATATYPE,
+                                         0x111337);
+    wait_err();
+    EXPECT_NE(UCS_OK, m_err_status);
+    if (UCS_PTR_IS_PTR(req)) {
+        EXPECT_TRUE(req->completed);
+        EXPECT_EQ(m_err_status, req->status);
+        ucp_request_release((void *)req);
+    }
+
+    ucs_status_ptr_t status_ptr = ucp_tag_send_nb(sender().ep(), NULL, 0, DATATYPE,
+                                           0x111337, NULL);
+    EXPECT_FALSE(UCS_PTR_IS_PTR(status_ptr));
+    EXPECT_EQ(m_err_status, UCS_PTR_STATUS(status_ptr));
+
+    /* Destroy failed sender */
+    sender().destroy_worker();
+    m_entities.remove(&sender());
+
+    /* Check workability of second pair */
+    smoke_test();
 }
 
 UCS_TEST_P(test_ucp_peer_failure, disable_sync_send) {
@@ -123,28 +159,26 @@ UCS_TEST_P(test_ucp_peer_failure, disable_sync_send) {
 }
 
 UCS_TEST_P(test_ucp_peer_failure, status_after_error) {
-
-    fail_receiver();
-
-    send_nb(NULL, 0, DATATYPE, 0x111337);
-    wait_err();
-
-    EXPECT_NE(UCS_OK, m_err_status);
-
-    ucs_status_ptr_t status_ptr = ucp_tag_send_nb(sender().ep(), NULL, 0, DATATYPE,
-                                           0x111337, NULL);
-    EXPECT_FALSE(UCS_PTR_IS_PTR(status_ptr));
-    EXPECT_EQ(m_err_status, UCS_PTR_STATUS(status_ptr));
-
-    /* Destroy failed sender */
-    sender().destroy_worker();
-    m_entities.remove(&sender());
-
-    /* Check workability of second pair */
-    smoke_test();
+    test_status_after();
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure)
+
+
+class test_ucp_peer_failure_zcopy : public test_ucp_peer_failure
+{
+public:
+    virtual void init() {
+        modify_config("ZCOPY_THRESH", ucs::to_string(m_msg_size - 1));
+        test_ucp_peer_failure::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_peer_failure_zcopy, status_after_error) {
+    test_status_after();
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_zcopy)
 
 
 class test_ucp_peer_failure_with_rma : public test_ucp_peer_failure {
