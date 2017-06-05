@@ -12,7 +12,8 @@ noinst_PROGRAMS = \
 objdir = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
 
 test_dlopen_SOURCES  = dlopen.c
-test_dlopen_CPPFLAGS = -g -DUCP_LIB_PATH=$(abs_top_builddir)/src/ucp/$(objdir)/libucp.so
+test_dlopen_CPPFLAGS = $(BASE_CPPFLAGS) -g -DUCP_LIB_PATH=$(abs_top_builddir)/src/ucp/$(objdir)/libucp.so
+test_dlopen_CFLAGS   = $(BASE_CFLAGS)
 test_dlopen_LDADD    = -ldl
 
 if HAVE_PROFILING
@@ -21,5 +22,6 @@ noinst_PROGRAMS += \
 
 test_profiling_SOURCES  = profiling.c
 test_profiling_LDADD    = $(top_builddir)/src/ucs/libucs.la
-test_profiling_CPPFLAGS = -g -I$(top_srcdir)/src
+test_profiling_CPPFLAGS = $(BASE_CPPFLAGS) -g -I$(top_srcdir)/src
+test_profiling_CFLAGS   = $(BASE_CFLAGS)
 endif
