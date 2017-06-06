@@ -1,12 +1,13 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-# Copyright (C) 2014 Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+# Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
 AUTOMAKE_OPTIONS    = nostdinc # avoid collision with built-in debug.h
-AM_CPPFLAGS         = -I$(top_builddir) -I$(abs_top_srcdir)/src
+AM_CPPFLAGS         = $(BASE_CPPFLAGS) -I$(top_builddir) -I$(abs_top_srcdir)/src
+libucs_la_CFLAGS    = $(BASE_CFLAGS)
 lib_LTLIBRARIES     = libucs.la
 bin_PROGRAMS        =
 
@@ -120,7 +121,7 @@ libucs_la_SOURCES = \
 	type/class.c \
 	type/component.c \
 	type/status.c
-	
+
 if HAVE_STATS
 libucs_la_SOURCES += \
 	stats/client_server.c \

@@ -1,12 +1,13 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+# Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
 #
 # Initialize CFLAGS
 #
-CFLAGS="-g -Wall -Werror $UCX_CFLAGS"
+BASE_CFLAGS="-g -Wall -Werror"
 
 #
 # Debug mode
@@ -16,8 +17,8 @@ AC_ARG_ENABLE(debug,
         [],
         [enable_debug=no])
 AS_IF([test "x$enable_debug" == xyes],
-        [CFLAGS="-O0 -D_DEBUG $CFLAGS"],
-        [CFLAGS="-O3 $CFLAGS"])
+        [BASE_CFLAGS="-O0 -D_DEBUG $BASE_CFLAGS"],
+        [BASE_CFLAGS="-O3 $BASE_CFLAGS"])
 
 
 #
@@ -39,12 +40,15 @@ AC_DEFUN([CHECK_CROSS_COMP], [
 #
 AC_DEFUN([CHECK_SPECIFIC_ATTRIBUTE], [
     AC_CACHE_VAL(ucx_cv_attribute_[$1], [
+        SAVE_CFLAGS="$CFLAGS"
+        CFLAGS="$BASE_CFLAGS $CFLAGS"
         #
         # Try to compile using the C compiler
         #
         AC_TRY_COMPILE([$3],[],
                        [ucx_cv_attribute_[$1]=1],
                        [ucx_cv_attribute_[$1]=0])
+	CFLAGS="$SAVE_CFLAGS"
     ])
 	AC_MSG_CHECKING([for __attribute__([$1])])
 	AC_MSG_RESULT([$ucx_cv_attribute_[$1]])
@@ -64,7 +68,7 @@ AC_DEFUN([COMPILER_OPTION],
    
     AS_IF([test "x$with_$1" != "xno"],
           [SAVE_CFLAGS="$CFLAGS"
-           CFLAGS="$CFLAGS $3"
+           CFLAGS="$BASE_CFLAGS $CFLAGS $3"
            AC_MSG_CHECKING([$2])
            CHECK_CROSS_COMP([AC_LANG_SOURCE([$5])],
                             [AC_MSG_RESULT([yes])
@@ -84,7 +88,7 @@ AC_DEFUN([CHECK_DEPRECATED_DECL_FLAG],
 [
          AC_MSG_CHECKING([whether $1 overrides deprecated declarations])
          SAVE_CFLAGS="$CFLAGS"
-         CFLAGS="$CFLAGS $1"
+         CFLAGS="$BASE_CFLAGS $CFLAGS $1"
          AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
                                   int __attribute__ ((__deprecated__)) f() { return 0; }
                                   int main() { return f(); }
@@ -104,7 +108,7 @@ AC_SUBST([CFLAGS_NO_DEPRECATED], [$CFLAGS_NO_DEPRECATED])
 # Disable format-string warning on ICC
 #
 SAVE_CFLAGS="$CFLAGS"
-CFLAGS="$CFLAGS -diag-disable 269"
+CFLAGS="$BASE_CFLAGS $CFLAGS -diag-disable 269"
 AC_MSG_CHECKING([-diag-disable 269])
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
                      #include <stdlib.h>
@@ -156,5 +160,9 @@ CHECK_SPECIFIC_ATTRIBUTE([optimize], [NOOPTIMIZE],
 #
 # Set C++ optimization/debug flags to be the same as for C
 #
-CPPFLAGS="$CPPFLAGS -DCPU_FLAGS=\"$OPT_CFLAGS\""
-CXXFLAGS="$CFLAGS"
+BASE_CPPFLAGS="-DCPU_FLAGS=\"$OPT_CFLAGS\""
+BASE_CXXFLAGS="$CFLAGS"
+
+AC_SUBST([BASE_CPPFLAGS], [$BASE_CPPFLAGS])
+AC_SUBST([BASE_CFLAGS], [$BASE_CFLAGS]) 
+AC_SUBST([BASE_CXXFLAGS], [$BASE_CXXFLAGS])

@@ -7,6 +7,7 @@
 
 bin_PROGRAMS          = ucx_info
 AM_CPPFLAGS           = \
+    $(BASE_CPPFLAGS) \
     -I$(abs_top_srcdir)/src \
     -I$(abs_top_builddir)/src
 if HAVE_IB
@@ -22,7 +23,7 @@ DISTCLEANFILES = build_config.h
 build_config.h: $(top_builddir)/config.h Makefile
 	$(SED) -nr 's:\s*#define\s+(\w+)(\s+(\w+)|\s+(".*")|\s*)$$:{"\1", UCS_PP_MAKE_STRING(\3\4)},:p' <$(top_builddir)/config.h >$@
 
-ucx_info_CFLAGS =
+ucx_info_CFLAGS = $(BASE_CFLAGS)
 if HAVE_CRAY_UGNI
 ucx_info_CFLAGS += $(CRAY_UGNI_CFLAGS)
 endif

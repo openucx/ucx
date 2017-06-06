@@ -1,6 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-# Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+# Copyright (C) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
@@ -13,7 +13,7 @@ ucx_perftest_CC = $(MPICC)
 else
 ucx_perftest_CC = $(CC)
 endif
-	
+
 perftestdir = $(pkgdatadir)/perftest
 dist_perftest_DATA = \
 	$(top_srcdir)/contrib/ucx_perftest_config/msg_pow2 \
@@ -23,7 +23,9 @@ dist_perftest_DATA = \
 
 bin_PROGRAMS          = ucx_perftest
 noinst_LTLIBRARIES    = libucxperf.la
+
 AM_CPPFLAGS           = \
+    $(BASE_CPPFLAGS) \
     -I$(abs_top_srcdir)/src \
     -I$(abs_top_builddir)/src \
     $(RTE_CPPFLAGS)
@@ -42,6 +44,7 @@ libucxperf_la_CXXFLAGS = \
 	-nostdlib -fno-exceptions -fno-rtti \
 	$(OPENMP_CFLAGS)
 libucxperf_la_CFLAGS = \
+	$(BASE_CFLAGS) \
 	$(OPENMP_CFLAGS)
 libucxperf_la_LIBADD = \
 	$(abs_top_builddir)/src/uct/libuct.la \

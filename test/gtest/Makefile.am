@@ -43,6 +43,7 @@ gtest_LDADD = \
 	$(GTEST_LIBS)
 
 gtest_CPPFLAGS = \
+        $(BASE_CPPFLAGS) \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/test \
 	-I$(top_builddir)/src \
@@ -51,7 +52,8 @@ gtest_CPPFLAGS = \
 	$(OPENMP_CFLAGS)
 
 gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install
-gtest_CXXFLAGS = $(GTEST_CXXFLAGS) -g -O3 -fno-tree-vectorize
+gtest_CFLAGS   = $(BASE_CFLAGS)
+gtest_CXXFLAGS = $(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -g -O3 -fno-tree-vectorize
 
 gtest_SOURCES = \
 	common/gtest-all.cc \
@@ -209,7 +211,7 @@ list: gtest
 test: ucx gtest
 	@rm -f core.*
 	$(LAUNCHER) $(abs_builddir)/gtest $(GTEST_ARGS)
-	
+
 #
 # Run unit tests with GDB
 #
