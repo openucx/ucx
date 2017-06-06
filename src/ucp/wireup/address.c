@@ -47,7 +47,7 @@ typedef struct {
 typedef struct {
     float            overhead;
     float            bandwidth;
-    double           lat_ovh;
+    float            lat_ovh;
     uint32_t         prio_cap_flags; /* 8 lsb: prio, 24 msb - cap flags */
 } ucp_address_packed_iface_attr_t;
 
