@@ -13,7 +13,6 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
-#include <ucs/datastruct/callbackq.inl>
 #include <ucs/sys/string.h>
 #include <malloc.h>
 
@@ -212,57 +211,6 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_md_component_t *mdc,
     *handle_p = NULL;
     return UCS_OK;
 }
-
-static UCS_CLASS_INIT_FUNC(uct_worker_t, ucs_async_context_t *async,
-                           ucs_thread_mode_t thread_mode)
-{
-    self->async       = async;
-    self->thread_mode = thread_mode;
-    ucs_callbackq_init(&self->progress_q, 64, async);
-    ucs_list_head_init(&self->tl_data);
-    return UCS_OK;
-}
-
-static UCS_CLASS_CLEANUP_FUNC(uct_worker_t)
-{
-    ucs_callbackq_cleanup(&self->progress_q);
-}
-
-void uct_worker_progress(uct_worker_h worker)
-{
-    ucs_callbackq_dispatch(&worker->progress_q);
-}
-
-void uct_worker_progress_register(uct_worker_h worker,
-                                  ucs_callback_t func, void *arg)
-{
-    ucs_callbackq_add(&worker->progress_q, func, arg);
-}
-
-void uct_worker_progress_unregister(uct_worker_h worker,
-                                    ucs_callback_t func, void *arg)
-{
-    ucs_callbackq_remove(&worker->progress_q, func, arg);
-}
-
-void uct_worker_slowpath_progress_register(uct_worker_h worker,
-                                           ucs_callbackq_slow_elem_t *elem)
-{
-    ucs_callbackq_add_slow_path(&worker->progress_q, elem);
-}
-
-void uct_worker_slowpath_progress_unregister(uct_worker_h worker,
-                                             ucs_callbackq_slow_elem_t *elem)
-{
-    ucs_callbackq_remove_slow_path(&worker->progress_q, elem);
-}
-
-
-UCS_CLASS_DEFINE(uct_worker_t, void);
-UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_worker_create, uct_worker_t, uct_worker_t,
-                                ucs_async_context_t*, ucs_thread_mode_t)
-UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_worker_destroy, uct_worker_t, uct_worker_t)
-
 
 static ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
                                     ucs_config_field_t *config_table,

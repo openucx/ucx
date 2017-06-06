@@ -7,6 +7,7 @@
 #ifndef UCT_IB_CM_H_
 #define UCT_IB_CM_H_
 
+#include <uct/base/uct_worker.h>
 #include <uct/ib/base/ib_iface.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/sys/compiler.h>

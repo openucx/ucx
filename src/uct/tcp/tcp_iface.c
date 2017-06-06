@@ -5,6 +5,7 @@
 
 #include "tcp.h"
 
+#include <uct/base/uct_worker.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
 #include <sys/socket.h>

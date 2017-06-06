@@ -8,6 +8,7 @@
 #ifndef UCT_UD_IFACE_H
 #define UCT_UD_IFACE_H
 
+#include <uct/base/uct_worker.h>
 #include <uct/ib/base/ib_iface.h>
 #include <ucs/datastruct/sglib_wrapper.h>
 #include <ucs/datastruct/ptr_array.h>
