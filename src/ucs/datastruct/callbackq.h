@@ -34,7 +34,9 @@ typedef void                       (*ucs_callback_t)(void *arg);
  * Callback flags
  */
 enum ucs_callbackq_flags {
-    UCS_CALLBACKQ_FLAG_FAST        = UCS_BIT(0)  /**< Fast-path (best effort) */
+    UCS_CALLBACKQ_FLAG_FAST        = UCS_BIT(0), /**< Fast-path (best effort) */
+    UCS_CALLBACKQ_FLAG_ONESHOT     = UCS_BIT(1)  /**< Call the callback only once
+                                                      (cannot be used with FAST) */
 };
 
 

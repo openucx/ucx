@@ -188,6 +188,21 @@ UCS_TEST_P(test_callbackq, add_another) {
     EXPECT_EQ(count + 2, ctx2.count);
 }
 
+UCS_TEST_P(test_callbackq, oneshot) {
+    callback_ctx ctx;
+
+    if (GetParam()) {
+        UCS_TEST_SKIP_R("oneshot is only for slow-path");
+    }
+
+    init_ctx(&ctx);
+    ctx.command = COMMAND_NONE;
+
+    add(&ctx, UCS_CALLBACKQ_FLAG_ONESHOT);
+    dispatch(100);
+    EXPECT_EQ(1u, ctx.count);
+}
+
 
 UCS_MT_TEST_P(test_callbackq, threads, 10) {
 
