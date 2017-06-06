@@ -8,7 +8,6 @@
 #define UCT_IFACE_H_
 
 #include <uct/api/uct.h>
-#include <uct/base/addr.h>
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue.h>
