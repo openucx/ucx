@@ -313,8 +313,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param, ucp_config_t* uc
 }
 
 ucp_test_base::entity::~entity() {
-    m_workers.clear();
-    m_eps.clear();
+    cleanup();
 }
 
 void ucp_test_base::entity::connect(const entity* other,
@@ -416,6 +415,7 @@ void ucp_test_base::entity::progress(int worker_index)
 }
 
 int ucp_test_base::entity::get_num_workers() const {
+    ucs_assert(m_workers.size() == size_t(num_workers));
     return num_workers;
 }
 
