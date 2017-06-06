@@ -7,20 +7,46 @@
 
 #include <ucs/type/spinlock.h>
 #include <ucs/arch/atomic.h>
+#include <ucs/arch/bitops.h>
 #include <ucs/async/async.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug.h>
 #include <ucs/sys/sys.h>
 
 #include "callbackq.h"
-#include "callbackq.inl"
+
+
+#define UCS_CALLBACKQ_IDX_FLAG_SLOW  0x80000000u
+#define UCS_CALLBACKQ_IDX_MASK       0x7fffffffu
+#define UCS_CALLBACKQ_FAST_MAX       (UCS_CALLBACKQ_FAST_COUNT - 1)
 
 
 typedef struct ucs_callbackq_priv {
-    ucs_spinlock_t                   lock;     /**< Protects adding / removing */
-    ucs_async_context_t              *async;   /**< Async context */
+    ucs_spinlock_t         lock;           /**< Protects adding / removing */
+
+    ucs_callbackq_elem_t   *slow_elems;    /**< Array of slow-path elements */
+    unsigned               num_slow_elems; /**< Number of slow-path elements */
+    unsigned               max_slow_elems; /**< Maximal number of slow-path elements */
+    unsigned               slow_idx;       /**< Iterator over slow-path elements */
+    int                    slow_proxy_id;  /**< ID of slow-path proxy in fast-path array.
+                                                keep track while this moves around. */
+
+    uint64_t               fast_remove_mask; /**< Mask of which fast-path elements
+                                                  should be removed */
+    unsigned               num_fast_elems; /**< Number of fast-path elements */
+
+    /* Lookup table for callback IDs. This allows moving callbacks around in
+     * the arrays, while the user can always use a single ID to remove the
+     * callback in O(1).
+     */
+    int                    free_idx_id;    /**< Index of first free item in the list */
+    int                    num_idxs;       /**< Size of idxs array */
+    unsigned               *idxs;          /**< ID-to-index lookup */
+
 } ucs_callbackq_priv_t;
 
+
+static void ucs_callbackq_slow_proxy(void *arg);
 
 static inline ucs_callbackq_priv_t* ucs_callbackq_priv(ucs_callbackq_t *cbq)
 {
@@ -28,301 +54,469 @@ static inline ucs_callbackq_priv_t* ucs_callbackq_priv(ucs_callbackq_t *cbq)
     return (void*)cbq->priv;
 }
 
-static void ucs_callbackq_service_enable(ucs_callbackq_t *cbq)
-{
-    cbq->start = cbq->ptr;
-}
-
-static void ucs_callbackq_service_disable(ucs_callbackq_t *cbq)
-{
-    cbq->start = cbq->ptr + 1;
-}
-
 static void ucs_callbackq_enter(ucs_callbackq_t *cbq)
 {
-    if (ucs_callbackq_priv(cbq)->async != NULL) {
-        UCS_ASYNC_BLOCK(ucs_callbackq_priv(cbq)->async);
-    }
     ucs_spin_lock(&ucs_callbackq_priv(cbq)->lock);
 }
 
 static void ucs_callbackq_leave(ucs_callbackq_t *cbq)
 {
     ucs_spin_unlock(&ucs_callbackq_priv(cbq)->lock);
-    if (ucs_callbackq_priv(cbq)->async != NULL) {
-        UCS_ASYNC_UNBLOCK(ucs_callbackq_priv(cbq)->async);
-    }
 }
 
-/* called with lock held */
-static ucs_callbackq_elem_t* ucs_callbackq_find(ucs_callbackq_t *cbq,
-                                                ucs_callback_t cb, void *arg)
+static void ucs_callbackq_elem_reset(ucs_callbackq_t *cbq,
+                                     ucs_callbackq_elem_t *elem)
 {
-    ucs_callbackq_elem_t *elem;
-    ucs_callbackq_for_each(elem, cbq) {
-        if ((elem->cb == cb) && (elem->arg == arg)) {
-            return elem;
-        }
-    }
-    return NULL;
+    elem->cb    = NULL;
+    elem->arg   = cbq;
+    elem->id    = UCS_CALLBACKQ_ID_NULL;
+    elem->flags = 0;
 }
 
-/* called with lock held */
-static void ucs_callbackq_remove_elem(ucs_callbackq_t *cbq, ucs_callbackq_elem_t *elem)
+static void *ucs_callbackq_array_grow(ucs_callbackq_t *cbq, void *ptr,
+                                      size_t elem_size, int count,
+                                      int *new_count, const char *alloc_name)
 {
-    ucs_trace("cbq %p: remove %p %s(arg=%p) [start:%p end:%p]", cbq, elem,
-              ucs_debug_get_symbol_name(elem->cb), elem->arg, cbq->start,
-              cbq->end);
+    void *new_ptr;
 
-    ucs_assert(cbq->start < cbq->end);
-
-    if (elem != cbq->end - 1) {
-        *elem = *(cbq->end - 1);
+    if (count == 0) {
+        *new_count = ucs_get_page_size() / elem_size;
+    } else {
+        *new_count = count * 2;
     }
-    --cbq->end;
+
+    new_ptr = ucs_sys_realloc(ptr, elem_size * count, elem_size * *new_count);
+    if (new_ptr == NULL) {
+        ucs_fatal("cbq %p: could not allocate memory for %s", cbq, alloc_name);
+    }
+    return new_ptr;
 }
 
-/* *
- * Perform the operation of the service callback - remove all the elements from
- * the queue whose refcount is zero and move the start pointer to after the service
- * callback function.
- */
-static void ucs_callbackq_invoke_service_cb(ucs_callbackq_t *cbq)
+static void ucs_callbackq_array_free(void *ptr, size_t elem_size, int count)
 {
-    ucs_callbackq_elem_t *elem;
-
-    elem = cbq->ptr + 1;
-    while (elem < cbq->end) {
-        if (elem->refcount == 0) {
-            ucs_callbackq_remove_elem(cbq, elem);
-        } else {
-            ++elem;
-        }
-    }
-    ucs_callbackq_service_disable(cbq);
+    ucs_sys_free(ptr, elem_size * count);
 }
 
 /*
- * Service callback is a special callback in the callback queue, which is always
- * in the first entry in the array. It is responsible for adding / removing items
- * to the callback queue on behalf of other threads, since it is guaranteed to
- * run from the thread which is dispatching the callbacks.
+ * @param [in]  id  ID to release in the lookup array.
+ * @return index which this ID used to hold.
  */
-static void ucs_callbackq_service_cb(void *arg)
+int ucs_callbackq_put_id(ucs_callbackq_t *cbq, int id)
 {
-    ucs_callbackq_t *cbq = arg;
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    unsigned idx_with_flag;
+
+    ucs_trace_func("cbq=%p id=%d", cbq, id);
+
+    ucs_assert(id != UCS_CALLBACKQ_ID_NULL);
+
+    idx_with_flag     = priv->idxs[id];    /* Retrieve the index */
+    priv->idxs[id]    = priv->free_idx_id; /* Add ID to free-list head */
+    priv->free_idx_id = id;                /* Update free-list head */
+
+    return idx_with_flag;
+}
+
+/**
+ * @param [in]  idx  Index to save in the lookup array.
+ * @return unique ID which holds index 'idx'.
+ */
+int ucs_callbackq_get_id(ucs_callbackq_t *cbq, unsigned idx)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    int new_num_idxs;
+    int id;
+
+    ucs_trace_func("cbq=%p idx=%u", cbq, idx);
+
+    if (priv->free_idx_id == UCS_CALLBACKQ_ID_NULL) {
+        priv->idxs = ucs_callbackq_array_grow(cbq, priv->idxs, sizeof(*priv->idxs),
+                                              priv->num_idxs, &new_num_idxs,
+                                              "indexes");
+
+        /* Add new items to free-list */
+        for (id = priv->num_idxs; id < new_num_idxs; ++id) {
+            priv->idxs[id]    = priv->free_idx_id;
+            priv->free_idx_id = id;
+        }
+
+        priv->num_idxs = new_num_idxs;
+    }
+
+    id = priv->free_idx_id;             /* Get free ID from the list */
+    ucs_assert(id != UCS_CALLBACKQ_ID_NULL);
+    priv->free_idx_id = priv->idxs[id]; /* Update free-list head */
+    priv->idxs[id]    = idx;            /* Install provided idx to array */
+    return id;
+}
+
+static unsigned ucs_callbackq_get_fast_idx(ucs_callbackq_t *cbq)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    unsigned idx;
+
+    idx = priv->num_fast_elems++;
+    ucs_assert(idx < UCS_CALLBACKQ_FAST_MAX);
+    return idx;
+}
+
+static void ucs_callbackq_remove_common(ucs_callbackq_t *cbq,
+                                        ucs_callbackq_elem_t *elems,
+                                        unsigned idx, unsigned last_idx,
+                                        unsigned idx_slow_flag,
+                                        uint64_t *remove_mask)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    int id;
+
+    ucs_trace_func("cbq=%p idx=%u last_idx=%u slow_flag=0x%x", cbq, idx,
+                   last_idx, idx_slow_flag);
+
+    ucs_assert(idx <= last_idx);
+
+    /* replace removed with last */
+    elems[idx] = elems[last_idx];
+    ucs_callbackq_elem_reset(cbq, &elems[last_idx]);
+
+    if (*remove_mask & UCS_BIT(last_idx)) {
+        /* replaced by marked-for-removal element, still need to remove 'idx' */
+        *remove_mask &= ~UCS_BIT(last_idx);
+    } else {
+        /* replaced by a live element, remove from the mask and update 'idxs' */
+        *remove_mask &= ~UCS_BIT(idx);
+        if (last_idx != idx) {
+            id = elems[idx].id;
+            ucs_assert(id != UCS_CALLBACKQ_ID_NULL);
+            priv->idxs[id] = idx | idx_slow_flag;
+        }
+    }
+}
+
+static int ucs_callbackq_add_fast(ucs_callbackq_t *cbq, ucs_callback_t cb,
+                                  void *arg, unsigned flags)
+{
+    unsigned idx;
+    int id;
+
+    ucs_trace_func("cbq=%p cb=%s arg=%p flags=%u", cbq,
+                   ucs_debug_get_symbol_name(cb), arg, flags);
+
+    idx = ucs_callbackq_get_fast_idx(cbq);
+    id  = ucs_callbackq_get_id(cbq, idx);
+    cbq->fast_elems[idx].cb    = cb;
+    cbq->fast_elems[idx].arg   = arg;
+    cbq->fast_elems[idx].flags = flags;
+    cbq->fast_elems[idx].id    = id;
+    return id;
+}
+
+/* should be called from dispatch thread only */
+static void ucs_callbackq_remove_fast(ucs_callbackq_t *cbq, unsigned idx)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    unsigned last_idx;
+
+    ucs_trace_func("cbq=%p idx=%u", cbq, idx);
+
+    ucs_assert(priv->num_fast_elems > 0);
+    last_idx = --priv->num_fast_elems;
+    ucs_callbackq_remove_common(cbq, cbq->fast_elems, idx, last_idx, 0,
+                                &priv->fast_remove_mask);
+}
+
+/* should be called from dispatch thread only */
+static void ucs_callbackq_purge_fast(ucs_callbackq_t *cbq)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    unsigned idx;
+
+    ucs_trace_func("cbq=%p map=0x%"PRIx64, cbq, priv->fast_remove_mask);
+
+    /* Remove fast-path callbacks marked for removal */
+    while (priv->fast_remove_mask) {
+        idx = ucs_ffs64(priv->fast_remove_mask);
+        ucs_callbackq_remove_fast(cbq, idx);
+    }
+}
+
+static void ucs_callbackq_enable_proxy(ucs_callbackq_t *cbq)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    unsigned idx;
+    int id;
+
+    ucs_trace_func("cbq=%p", cbq);
+
+    if (priv->slow_proxy_id != UCS_CALLBACKQ_ID_NULL) {
+        return;
+    }
+
+    ucs_assert((priv->num_slow_elems > 0) || priv->fast_remove_mask);
+
+    idx = ucs_callbackq_get_fast_idx(cbq);
+    id  = ucs_callbackq_get_id(cbq, idx);
+
+    ucs_assert(cbq->fast_elems[idx].arg == cbq);
+    cbq->fast_elems[idx].cb    = ucs_callbackq_slow_proxy;
+    cbq->fast_elems[idx].flags = 0;
+    cbq->fast_elems[idx].id    = id;
+    /* Avoid writing 'arg' because the dispatching thread may not see it in case
+     * of weak memory ordering. Instead, 'arg' is reset to 'cbq' for all free and
+     * removed elements, from the main thread.
+     */
+
+    priv->slow_proxy_id        = id;
+}
+
+static void ucs_callbackq_disable_proxy(ucs_callbackq_t *cbq)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    unsigned idx;
+
+    ucs_trace_func("cbq=%p slow_proxy_id=%d", cbq, priv->slow_proxy_id);
+
+    if (priv->slow_proxy_id == UCS_CALLBACKQ_ID_NULL) {
+        return;
+    }
+
+    idx = ucs_callbackq_put_id(cbq, priv->slow_proxy_id);
+    ucs_callbackq_remove_fast(cbq, idx);
+    priv->slow_proxy_id = UCS_CALLBACKQ_ID_NULL;
+}
+
+static int ucs_callbackq_add_slow(ucs_callbackq_t *cbq, ucs_callback_t cb,
+                                  void *arg, unsigned flags)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    ucs_callbackq_elem_t *new_slow_elems;
+    int new_max_slow_elems;
+    unsigned idx;
+    int id;
+
+    ucs_trace_func("cbq=%p cb=%s arg=%p flags=%u", cbq,
+                   ucs_debug_get_symbol_name(cb), arg, flags);
+
+    /* Grow slow-path array if needed */
+    if (priv->num_slow_elems >= priv->max_slow_elems) {
+        new_slow_elems = ucs_callbackq_array_grow(cbq, priv->slow_elems,
+                                                  sizeof(*priv->slow_elems),
+                                                  priv->max_slow_elems,
+                                                  &new_max_slow_elems,
+                                                  "slow_elems");
+        for (idx = priv->max_slow_elems; idx < new_max_slow_elems; ++idx) {
+            ucs_callbackq_elem_reset(cbq, &new_slow_elems[idx]);
+        }
+
+        priv->max_slow_elems = new_max_slow_elems;
+        priv->slow_elems     = new_slow_elems;
+    }
+
+    /* Add slow-path element to the queue */
+    idx = priv->num_slow_elems++;
+    id  = ucs_callbackq_get_id(cbq, idx | UCS_CALLBACKQ_IDX_FLAG_SLOW);
+    priv->slow_elems[idx].cb    = cb;
+    priv->slow_elems[idx].arg   = arg;
+    priv->slow_elems[idx].flags = flags;
+    priv->slow_elems[idx].id    = id;
+
+    ucs_callbackq_enable_proxy(cbq);
+    return id;
+}
+
+static void ucs_callbackq_remove_slow(ucs_callbackq_t *cbq, unsigned idx)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    unsigned last_idx;
+    uint64_t dummy = 0;
+
+    ucs_trace_func("cbq=%p idx=%u", cbq, idx);
+
+    /* When the slow-path proxy callback sees there are no more elements, it
+     * will disable itself.
+     */
+    ucs_assert(priv->num_slow_elems > 0);
+    last_idx = --priv->num_slow_elems;
+    ucs_callbackq_remove_common(cbq, priv->slow_elems, idx, last_idx,
+                                UCS_CALLBACKQ_IDX_FLAG_SLOW, &dummy);
+
+    /* Make the slow-path iterator go over the element we moved from the end of
+     * the array, otherwise it would be skipped. */
+    if (idx <= priv->slow_idx) {
+        priv->slow_idx = idx;
+    }
+}
+
+static void ucs_callbackq_slow_proxy(void *arg)
+{
+    ucs_callbackq_t      *cbq  = arg;
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    ucs_callbackq_elem_t *elem;
+    unsigned slow_idx, fast_idx;
+    ucs_callbackq_elem_t tmp_elem;
+
+    ucs_trace_poll("cbq=%p", cbq);
 
     ucs_callbackq_enter(cbq);
-    ucs_callbackq_invoke_service_cb(cbq);
+
+    /* Execute and update slow-path callbacks */
+    while ( (slow_idx = priv->slow_idx) < priv->num_slow_elems ) {
+        elem = &priv->slow_elems[slow_idx];
+        priv->slow_idx++; /* Increment slow_idx here to give the remove functions
+                             an opportunity to rewind it */
+
+        tmp_elem = *elem;
+        if (elem->flags & UCS_CALLBACKQ_FLAG_FAST) {
+            if (priv->num_fast_elems < UCS_CALLBACKQ_FAST_MAX) {
+                fast_idx = ucs_callbackq_get_fast_idx(cbq);
+                cbq->fast_elems[fast_idx] = *elem;
+                priv->idxs[elem->id]      = fast_idx;
+                ucs_callbackq_remove_slow(cbq, slow_idx);
+            }
+        }
+
+        ucs_callbackq_leave(cbq);
+
+        tmp_elem.cb(tmp_elem.arg); /* Execute callback without lock */
+
+        ucs_callbackq_enter(cbq);
+    }
+
+    priv->slow_idx = 0;
+
+    ucs_callbackq_purge_fast(cbq);
+
+    /* Disable this proxy if no more work to do */
+    if (!priv->fast_remove_mask && (priv->num_slow_elems == 0)) {
+        ucs_callbackq_disable_proxy(cbq);
+    }
+
     ucs_callbackq_leave(cbq);
 }
 
-ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq, size_t size,
-                                ucs_async_context_t *async)
+ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq)
 {
-    /* reserve a slot for the special service callback */
-    ++size;
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    unsigned idx;
 
-    cbq->ptr  = ucs_malloc(size * sizeof(*cbq->ptr), "callback queue");
-    if (cbq->ptr == NULL) {
-        return UCS_ERR_NO_MEMORY;
+    for (idx = 0; idx < UCS_CALLBACKQ_FAST_COUNT; ++idx) {
+        ucs_callbackq_elem_reset(cbq, &cbq->fast_elems[idx]);
     }
 
-    cbq->ptr->cb       = ucs_callbackq_service_cb;
-    cbq->ptr->arg      = cbq;
-    cbq->ptr->refcount = 1;
-    cbq->size          = size;
-    cbq->start         = cbq->ptr + 1;
-    cbq->end           = cbq->start;
-    ucs_callbackq_priv(cbq)->async = async;
-    ucs_spinlock_init(&ucs_callbackq_priv(cbq)->lock);
-    ucs_list_head_init(&cbq->slow_path);
+    ucs_spinlock_init(&priv->lock);
+    priv->slow_elems        = NULL;
+    priv->num_slow_elems    = 0;
+    priv->max_slow_elems    = 0;
+    priv->slow_idx          = 0;
+    priv->slow_proxy_id     = UCS_CALLBACKQ_ID_NULL;
+    priv->fast_remove_mask  = 0;
+    priv->num_fast_elems    = 0;
+    priv->free_idx_id       = UCS_CALLBACKQ_ID_NULL;
+    priv->num_idxs          = 0;
+    priv->idxs              = NULL;
     return UCS_OK;
 }
 
 void ucs_callbackq_cleanup(ucs_callbackq_t *cbq)
 {
-    ucs_callbackq_elem_t *elem;
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
 
-    /* to execute pending remove requests */
-    ucs_callbackq_invoke_service_cb(cbq);
-    if (cbq->start != cbq->end) {
-        ucs_warn("%zd callbacks still remain in callback queue",
-                 cbq->end - cbq->start);
-        ucs_callbackq_for_each(elem, cbq) {
-            ucs_warn("cbq %p: remain %p %s(arg=%p)", cbq, elem,
-                     ucs_debug_get_symbol_name(elem->cb), elem->arg);
-        }
+    ucs_callbackq_disable_proxy(cbq);
+
+    if ((priv->num_fast_elems) > 0 || (priv->num_slow_elems > 0)) {
+        ucs_warn("%d fast-path and %d slow-path callbacks remain in the queue",
+                 priv->num_fast_elems, priv->num_slow_elems);
     }
-    ucs_free(cbq->ptr);
+
+    ucs_callbackq_array_free(priv->slow_elems, sizeof(*priv->slow_elems),
+                             priv->max_slow_elems);
+    ucs_callbackq_array_free(priv->idxs, sizeof(*priv->idxs), priv->num_idxs);
 }
 
-void ucs_callbackq_add(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg)
+int ucs_callbackq_add(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg,
+                      unsigned flags)
 {
-    ucs_callbackq_elem_t *elem;
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    int id;
 
     ucs_callbackq_enter(cbq);
 
-    elem = ucs_callbackq_find(cbq, cb, arg);
-    if (elem != NULL) {
-        ucs_atomic_add32(&elem->refcount, 1);
-        ucs_callbackq_leave(cbq);
-        return;
+    ucs_trace_func("cbq=%p cb=%s arg=%p flags=%u", cbq,
+                   ucs_debug_get_symbol_name(cb), arg, flags);
+
+    if ((flags & UCS_CALLBACKQ_FLAG_FAST) &&
+        (priv->num_fast_elems < UCS_CALLBACKQ_FAST_MAX))
+    {
+        id = ucs_callbackq_add_fast(cbq, cb, arg, flags);
+    } else {
+        id = ucs_callbackq_add_slow(cbq, cb, arg, flags);
     }
 
-    if (cbq->end >= cbq->ptr + cbq->size) {
-        /* TODO support expanding the callback queue */
-        ucs_fatal("callback queue %p is full, cannot add %s()", cbq,
-                  ucs_debug_get_symbol_name(cb));
+    ucs_callbackq_leave(cbq);
+    return id;
+}
+
+void ucs_callbackq_remove(ucs_callbackq_t *cbq, int id)
+{
+    unsigned idx_with_flag, idx;
+
+    ucs_callbackq_enter(cbq);
+
+    ucs_trace_func("cbq=%p id=%d", cbq, id);
+
+    ucs_callbackq_purge_fast(cbq);
+
+    idx_with_flag = ucs_callbackq_put_id(cbq, id);
+    idx           = idx_with_flag & UCS_CALLBACKQ_IDX_MASK;
+
+    if (idx_with_flag & UCS_CALLBACKQ_IDX_FLAG_SLOW) {
+        ucs_callbackq_remove_slow(cbq, idx);
+    } else {
+        ucs_callbackq_remove_fast(cbq, idx);
     }
 
-    elem = cbq->end;
+    ucs_callbackq_leave(cbq);
+}
 
-    ucs_trace("cbq %p: adding %p %s(arg=%p) [start:%p end:%p]", cbq, elem,
-              ucs_debug_get_symbol_name(cb), arg, cbq->start, cbq->end);
+int ucs_callbackq_add_safe(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg,
+                           unsigned flags)
+{
+    int id;
 
-    elem->cb       = cb;
-    elem->arg      = arg;
-    elem->refcount = 1;
+    ucs_callbackq_enter(cbq);
 
-    /* Make sure a thread dispatching the callbacks would see 'end' only after
-     * the new element is set.
+    ucs_trace_func("cbq=%p cb=%s arg=%p flags=%u", cbq,
+                   ucs_debug_get_symbol_name(cb), arg, flags);
+
+    /* Add callback to slow-path, and it may be upgraded to fast-path later by
+     * the proxy callback. It's not safe to add fast-path callback directly
+     * from this context.
      */
-    ucs_memory_cpu_store_fence();
+    id = ucs_callbackq_add_slow(cbq, cb, arg, flags);
 
-    ++cbq->end;
     ucs_callbackq_leave(cbq);
+    return id;
 }
 
-ucs_status_t ucs_callbackq_remove(ucs_callbackq_t *cbq, ucs_callback_t cb,
-                                  void *arg)
+void ucs_callbackq_remove_safe(ucs_callbackq_t *cbq, int id)
 {
-    ucs_callbackq_elem_t *elem;
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    unsigned idx_with_flag, idx;
 
     ucs_callbackq_enter(cbq);
 
-    elem = ucs_callbackq_find(cbq, cb, arg);
-    if (elem == NULL) {
-        ucs_debug("callback not found in progress chain");
-        ucs_callbackq_leave(cbq);
-        return UCS_ERR_NO_ELEM;
-    }
+    ucs_trace_func("cbq=%p id=%d", cbq, id);
 
-    if (ucs_atomic_fadd32(&elem->refcount, -1) == 1) {
-        ucs_callbackq_remove_elem(cbq, elem);
-    }
+    idx_with_flag = ucs_callbackq_put_id(cbq, id);
+    idx           = idx_with_flag & UCS_CALLBACKQ_IDX_MASK;
 
-    ucs_callbackq_leave(cbq);
-    return UCS_OK;
-}
-
-void ucs_callbackq_remove_all(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg)
-{
-    ucs_callbackq_elem_t *elem;
-
-    ucs_callbackq_enter(cbq);
-    elem = ucs_callbackq_find(cbq, cb, arg);
-    if (elem != NULL) {
-        ucs_callbackq_remove_elem(cbq, elem);
-    }
-    ucs_callbackq_leave(cbq);
-}
-
-ucs_status_t ucs_callbackq_add_safe(ucs_callbackq_t *cbq, ucs_callback_t cb,
-                                    void *arg)
-{
-    ucs_callbackq_add(cbq, cb, arg);
-    return UCS_OK;
-}
-
-ucs_status_t ucs_callbackq_remove_safe(ucs_callbackq_t *cbq, ucs_callback_t cb,
-                                       void *arg)
-{
-    ucs_callbackq_elem_t *elem;
-
-    ucs_callbackq_enter(cbq);
-
-    elem = ucs_callbackq_find(cbq, cb, arg);
-    if (elem == NULL) {
-        ucs_debug("callback not found in progress chain");
-        ucs_callbackq_leave(cbq);
-        return UCS_ERR_NO_ELEM;
-    }
-
-    if (ucs_atomic_fadd32(&elem->refcount, -1) == 1) {
-        ucs_callbackq_service_enable(cbq);
-    }
-
-    ucs_callbackq_leave(cbq);
-    return UCS_OK;
-}
-
-static void ucs_callbackq_slow_path_cb(void *arg)
-{
-    ucs_callbackq_t *cbq = arg;
-    ucs_callbackq_slow_elem_t *elem, *tmp_elem;
-
-    ucs_callbackq_enter(cbq);
-
-    /* TODO avoid locks on every iteration. For instance implement
-     * lazy remove with additional list of elements to be removed. */
-    ucs_list_for_each_safe(elem, tmp_elem, &cbq->slow_path, list) {
-        ucs_callbackq_leave(cbq);
-        elem->cb(elem);
-        ucs_callbackq_enter(cbq);
-    }
-
-    ucs_callbackq_leave(cbq);
-}
-
-void ucs_callbackq_add_slow_path(ucs_callbackq_t *cbq,
-                                 ucs_callbackq_slow_elem_t* elem)
-{
-    ucs_status_t status;
-
-    ucs_callbackq_enter(cbq);
-
-    /* Note: multiple calls with the same element are not allowed */
-    ucs_list_add_tail(&cbq->slow_path, &elem->list);
-    status = ucs_callbackq_add_safe(cbq, ucs_callbackq_slow_path_cb, cbq);
-    ucs_assert_always(status == UCS_OK);
-
-    ucs_callbackq_leave(cbq);
-}
-
-static void ucs_callbackq_slow_path_remove_elem(ucs_callbackq_t *cbq,
-                                                ucs_callbackq_slow_elem_t* elem)
-{
-    ucs_status_t status;
-
-    /* Note: The element should have been added previously */
-    ucs_list_del(&elem->list);
-    status = ucs_callbackq_remove(cbq, ucs_callbackq_slow_path_cb, cbq);
-    ucs_assert_always(status == UCS_OK);
-}
-
-void ucs_callbackq_remove_slow_path(ucs_callbackq_t *cbq,
-                                    ucs_callbackq_slow_elem_t* elem)
-{
-    ucs_callbackq_enter(cbq);
-    ucs_callbackq_slow_path_remove_elem(cbq, elem);
-    ucs_callbackq_leave(cbq);
-}
-
-void ucs_callbackq_purge_slow_path(ucs_callbackq_t *cbq, ucs_callback_slow_t cb,
-                                   ucs_list_link_t *list)
-{
-    ucs_callbackq_slow_elem_t *elem, *tmp_elem;
-
-    ucs_callbackq_enter(cbq);
-
-    ucs_list_for_each_safe(elem, tmp_elem, &cbq->slow_path, list) {
-        if (elem->cb == cb) {
-            ucs_callbackq_slow_path_remove_elem(cbq, elem);
-            if (list != NULL) {
-                ucs_list_add_tail(list, &elem->list);
-            }
-        }
+    if (idx_with_flag & UCS_CALLBACKQ_IDX_FLAG_SLOW) {
+        ucs_callbackq_remove_slow(cbq, idx);
+    } else {
+        UCS_STATIC_ASSERT(UCS_CALLBACKQ_FAST_MAX <= 64);
+        ucs_assert(idx < priv->num_fast_elems);
+        priv->fast_remove_mask |= UCS_BIT(idx);
+        cbq->fast_elems[idx].id = UCS_CALLBACKQ_ID_NULL; /* for assertion */
+        ucs_callbackq_enable_proxy(cbq);
     }
 
     ucs_callbackq_leave(cbq);

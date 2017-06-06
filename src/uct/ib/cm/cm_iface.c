@@ -274,7 +274,7 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.max_outstanding = config->max_outstanding;
     self->config.retry_count  = ucs_min(config->retry_count, UINT8_MAX);
     self->notify_q.head       = NULL;
-    self->slow_prog_id        = NULL;
+    self->slow_prog_id        = UCS_CALLBACKQ_ID_NULL;
     ucs_queue_head_init(&self->notify_q);
     ucs_queue_head_init(&self->outstanding_q);
 

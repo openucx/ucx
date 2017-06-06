@@ -404,10 +404,10 @@ static void uct_mm_iface_recv_messages(uct_mm_iface_t *iface)
         if (ret == sizeof(sig)) {
             ucs_debug("mm_iface %p: got connect message", iface);
             if (iface->super.prog.refcount++ == 0) {
-                iface->super.prog.cb  = uct_mm_iface_progress;
-                iface->super.prog.arg = iface;
-                ucs_callbackq_add_safe(&iface->super.worker->progress_q,
-                                       uct_mm_iface_progress, iface);
+                uct_worker_progress_register_safe(iface->super.worker,
+                                                  uct_mm_iface_progress, iface,
+                                                  UCS_CALLBACKQ_FLAG_FAST,
+                                                  &iface->super.prog.id);
             }
         } else {
             if (ret < 0) {

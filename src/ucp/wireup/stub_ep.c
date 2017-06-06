@@ -313,7 +313,7 @@ UCS_CLASS_INIT_FUNC(ucp_stub_ep_t, ucp_ep_h ep)
     self->aux_rsc_index = UCP_NULL_RESOURCE;
     self->pending_count = 0;
     self->flags         = 0;
-    self->progress_id   = NULL;
+    self->progress_id   = UCS_CALLBACKQ_ID_NULL;
     ucs_queue_head_init(&self->pending_q);
     ucs_trace("ep %p: created stub ep %p to %s ", ep, self, ucp_ep_peer_name(ep));
     return UCS_OK;

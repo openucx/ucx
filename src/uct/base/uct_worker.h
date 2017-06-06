@@ -33,8 +33,7 @@ struct uct_worker {
 
 
 typedef struct uct_worker_progress {
-    ucs_callback_t         cb;
-    void                   *arg;
+    uct_worker_cb_id_t     id;
     int                    refcount;
 } uct_worker_progress_t;
 
