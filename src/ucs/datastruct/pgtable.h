@@ -21,6 +21,8 @@
  *
  */
 
+#include <ucs/sys/compiler.h>
+
 
 /* Address alignment requirements */
 #define UCS_PGT_ADDR_SHIFT         4
