@@ -129,9 +129,9 @@ AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
 #  Enable/disable turning on machine-specific optimizations
 #
 AC_ARG_ENABLE(optimizations,
-        AC_HELP_STRING([--enable-optimizations], [Enable machine-specific optimizations, default: YES]),
+        AC_HELP_STRING([--enable-optimizations], [Enable machine-specific optimizations, default: NO]),
         [],
-        [enable_optimizations=yes])
+        [enable_optimizations=no])
 
 
 #
