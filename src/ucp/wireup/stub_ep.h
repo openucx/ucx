@@ -39,7 +39,7 @@ struct ucp_stub_ep {
     ucp_rsc_index_t           aux_rsc_index; /**< Index of auxiliary transport */
     volatile uint32_t         pending_count; /**< Number of pending wireup operations */
     volatile uint32_t         flags;         /**< Connection state flags */
-    ucs_callbackq_slow_elem_t elem;          /**< Slow-path callback */
+    uct_worker_cb_id_t        progress_id;   /**< ID of progress function */
 };
 
 

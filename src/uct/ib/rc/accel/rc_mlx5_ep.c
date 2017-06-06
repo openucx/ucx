@@ -441,7 +441,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
 
     uct_worker_progress_register(iface->super.super.super.worker,
-                                 uct_rc_mlx5_iface_progress, iface);
+                                 uct_rc_mlx5_iface_progress, iface,
+                                 &iface->super.super.super.prog);
     return UCS_OK;
 }
 
@@ -451,7 +452,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
                                                 uct_rc_mlx5_iface_t);
 
     uct_worker_progress_unregister(iface->super.super.super.worker,
-                                   uct_rc_mlx5_iface_progress, iface);
+                                   &iface->super.super.super.prog);
     uct_ib_mlx5_txwq_cleanup(iface->super.super.super.worker, &self->tx.wq);
 
     /* Modify QP to error to make HW generate CQEs for all in-progress SRQ

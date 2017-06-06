@@ -7,6 +7,8 @@
 #ifndef UCT_IFACE_H_
 #define UCT_IFACE_H_
 
+#include "uct_worker.h"
+
 #include <uct/api/uct.h>
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.h>
@@ -178,6 +180,7 @@ typedef struct uct_base_iface {
     uct_iface_t       super;
     uct_md_h          md;                    /* MD this interface is using */
     uct_worker_h      worker;                /* Worker this interface is on */
+    uct_worker_progress_t prog;
     UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
     uct_am_handler_t  am[UCT_AM_ID_MAX];     /* Active message table */
     uct_am_tracer_t   am_tracer;             /* Active message tracer */

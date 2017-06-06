@@ -116,10 +116,10 @@ struct ucp_request {
 
                 struct {
                     ucp_request_callback_t    flushed_cb;/* Called when flushed */
-                    ucs_callbackq_slow_elem_t cbq_elem;  /* Slow-path callback */
-                    uint8_t                   cbq_elem_on;
+                    uct_worker_cb_id_t        slow_cb_id;/* Slow-path callback */
                     ucp_lane_map_t            lanes;     /* Which lanes need to be flushed */
                 } flush;
+
                 struct {
                     uint64_t              remote_addr; /* Remote address */
                     ucp_atomic_fetch_op_t op; /* Requested AMO */
@@ -127,10 +127,11 @@ struct ucp_request {
                     uint64_t              value;
                     void                  *result;
                 } amo;
+
                 struct {
                     void *rndv_op; /* Handler of issued rndv send. Needs to cancel the
                                       operation if it is completed by SW */
-                 } tag_offload;
+                } tag_offload;
 
             };
 

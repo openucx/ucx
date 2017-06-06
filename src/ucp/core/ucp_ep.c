@@ -330,16 +330,13 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 static void ucp_ep_flush_slow_path_remove(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
-    if (req->send.flush.cbq_elem_on) {
-        uct_worker_slowpath_progress_unregister(ep->worker->uct,
-                                                &req->send.flush.cbq_elem);
-        req->send.flush.cbq_elem_on = 0;
-    }
+    uct_worker_progress_unregister_safe(ep->worker->uct,
+                                        &req->send.flush.slow_cb_id);
 }
 
-static void ucp_ep_flushed_slow_path_callback(ucs_callbackq_slow_elem_t *self)
+static void ucp_ep_flushed_slow_path_callback(void *arg)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.flush.cbq_elem);
+    ucp_request_t *req = arg;
     ucp_ep_h ep = req->send.ep;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
@@ -365,16 +362,15 @@ static int ucp_flush_check_completion(ucp_request_t *req)
 
     ucs_trace("adding slow-path callback to destroy ep %p", ep);
     ucp_ep_flush_slow_path_remove(req);
-    req->send.flush.cbq_elem.cb = ucp_ep_flushed_slow_path_callback;
-    req->send.flush.cbq_elem_on = 1;
-    uct_worker_slowpath_progress_register(ep->worker->uct,
-                                          &req->send.flush.cbq_elem);
+    uct_worker_progress_register_safe(ep->worker->uct,
+                                      ucp_ep_flushed_slow_path_callback, req, 0,
+                                      &req->send.flush.slow_cb_id);
     return 1;
 }
 
-static void ucp_ep_flush_resume_slow_path_callback(ucs_callbackq_slow_elem_t *self)
+static void ucp_ep_flush_resume_slow_path_callback(void *arg)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.flush.cbq_elem);
+    ucp_request_t *req = arg;
 
     ucp_ep_flush_slow_path_remove(req);
     ucp_ep_flush_progress(req);
@@ -405,12 +401,11 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     completed = ucp_flush_check_completion(req);
 
     /* If the operation has not completed, add slow-path progress to resume */
-    if (!completed && req->send.flush.lanes && !req->send.flush.cbq_elem_on) {
+    if (!completed && req->send.flush.lanes) {
         ucs_trace("ep %p: adding slow-path callback to resume flush", ep);
-        req->send.flush.cbq_elem.cb = ucp_ep_flush_resume_slow_path_callback;
-        req->send.flush.cbq_elem_on = 1;
-        uct_worker_slowpath_progress_register(ep->worker->uct,
-                                              &req->send.flush.cbq_elem);
+        uct_worker_progress_register_safe(ep->worker->uct,
+                                          ucp_ep_flush_resume_slow_path_callback,
+                                          req, 0, &req->send.flush.slow_cb_id);
     }
 
     if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
@@ -520,8 +515,7 @@ static ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep)
     req->send.ep                = ep;
     req->send.flush.flushed_cb  = ucp_ep_flushed_callback;
     req->send.flush.lanes       = UCS_MASK(ucp_ep_num_lanes(ep));
-    req->send.flush.cbq_elem.cb = ucp_ep_flushed_slow_path_callback;
-    req->send.flush.cbq_elem_on = 0;
+    req->send.flush.slow_cb_id  = NULL;
     req->send.lane              = UCP_NULL_LANE;
     req->send.uct.func          = ucp_ep_flush_progress_pending;
     req->send.uct_comp.func     = ucp_ep_flush_completion;

@@ -150,7 +150,7 @@ void uct_ugni_progress(void *arg)
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_rdma_iface_t)
 {
     uct_worker_progress_unregister(self->super.super.worker,
-                                   uct_ugni_progress, self);
+                                   &self->super.super.prog);
     ucs_mpool_cleanup(&self->free_desc_get_buffer, 1);
     ucs_mpool_cleanup(&self->free_desc_get, 1);
     ucs_mpool_cleanup(&self->free_desc_famo, 1);
@@ -325,7 +325,8 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
 
     /* TBD: eventually the uct_ugni_progress has to be moved to
      * rdma layer so each ugni layer will have own progress */
-    uct_worker_progress_register(worker, uct_ugni_progress, self);
+    uct_worker_progress_register(worker, uct_ugni_progress, self,
+                                 &self->super.super.prog);
     return UCS_OK;
 
 clean_famo:

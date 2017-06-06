@@ -17,7 +17,8 @@ ucs_status_t uct_ugni_udt_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
     ucs_status_t status = uct_ugni_ep_pending_add(tl_ep, n);
 
     if (UCS_OK == status) {
-        uct_worker_progress_register(iface->super.worker, uct_ugni_udt_progress, iface);
+        uct_worker_progress_register(iface->super.worker, uct_ugni_udt_progress,
+                                     iface, &iface->super.prog);
     }
     return status;
 }
@@ -32,7 +33,7 @@ ucs_arbiter_cb_result_t uct_ugni_udt_ep_process_pending(ucs_arbiter_t *arbiter,
 
     result = uct_ugni_ep_process_pending(arbiter, elem, arg);
     if (UCS_ARBITER_CB_RESULT_REMOVE_ELEM == result) {
-        uct_worker_progress_unregister(iface->super.worker, uct_ugni_udt_progress, iface);
+        uct_worker_progress_unregister(iface->super.worker, &iface->super.prog);
     }
     return result;
 }
@@ -47,7 +48,7 @@ static ucs_arbiter_cb_result_t uct_ugni_udt_ep_abriter_purge_cb(ucs_arbiter_t *a
 
     result = uct_ugni_ep_abriter_purge_cb(arbiter, elem, arg);
     if (UCS_ARBITER_CB_RESULT_REMOVE_ELEM == result) {
-        uct_worker_progress_unregister(iface->super.worker, uct_ugni_udt_progress, iface);
+        uct_worker_progress_unregister(iface->super.worker, &iface->super.prog);
     }
     return result;
 }

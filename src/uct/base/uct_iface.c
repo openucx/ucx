@@ -380,6 +380,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
     self->am_tracer_arg   = NULL;
     self->err_handler     = params->err_handler;
     self->err_handler_arg = params->err_handler_arg;
+    uct_worker_progress_init(&self->prog);
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {
         uct_iface_set_stub_am_handler(self, id);

@@ -725,42 +725,6 @@ void uct_worker_progress(uct_worker_h worker);
 
 /**
  * @ingroup UCT_CONTEXT
- * @brief Add a callback function to a worker progress.
- *
- * Add a function which will be called every time a progress is made on the worker.
- *
- * @param [in]  worker        Handle to worker.
- * @param [in]  func          Pointer to callback function.
- * @param [in]  arg           Argument to the function.
- *
- * @note If the same function and argument are already on the list, their reference
- *       count will be incremented.
- * @note This operation could potentially be slow.
- */
-void uct_worker_progress_register(uct_worker_h worker,
-                                  ucs_callback_t func, void *arg);
-
-
-/**
- * @ingroup UCT_CONTEXT
- * @brief Remove a callback function from worker's progress.
- *
- * Remove a previously added function from worker's progress.
- *
- * @param [in]  worker        Handle to worker.
- * @param [in]  func          Pointer to callback function.
- * @param [in]  arg           Argument to the function.
- *
- * @note If the reference count of the function is >1, it will be decremented and
- *       the function will not be removed.
- * @note This operation could potentially be slow.
- */
-void uct_worker_progress_unregister(uct_worker_h worker,
-                                    ucs_callback_t func, void *arg);
-
-
-/**
- * @ingroup UCT_CONTEXT
  * @brief Add a slow path callback function to a worker progress.
  *
  * Add a function which will be called every time a progress is made on the worker.
@@ -768,13 +732,15 @@ void uct_worker_progress_unregister(uct_worker_h worker,
  * element is allocated by the caller, but the overhead of calling this function
  * is slightly higher than @ref uct_worker_progress_register.
  *
- * @param [in]  worker        Handle to worker.
- * @param [in]  elem          Callback function to add, with it's associated context.
- *
- * @note This operation could potentially be slow.
+ * @param [in]    worker        Handle to worker.
+ * @param [in]    func          Pointer to callback function.
+ * @param [in]    arg           Argument to the function.
+ * @param [in]    flags         Callback flags, see @ref ucs_callbackq_flags
+ * @param [inout] id_p          Filled with callback ID.
  */
-void uct_worker_slowpath_progress_register(uct_worker_h worker,
-                                           ucs_callbackq_slow_elem_t *elem);
+void uct_worker_progress_register_safe(uct_worker_h worker, ucs_callback_t func,
+                                       void *arg, unsigned flags,
+                                       uct_worker_cb_id_t *id_p);
 
 
 /**
@@ -783,14 +749,12 @@ void uct_worker_slowpath_progress_register(uct_worker_h worker,
  *
  * Remove a function previously added by @ref uct_worker_slowpath_progress_register.
  *
- * @param [in]  worker        Handle to worker.
- * @param [in]  elem          Callback element to remove. Must be the same pointer
- *                            added earlier.
- *
- * @note This operation could potentially be slow.
+ * @param [in]    worker        Handle to worker.
+ * @param [inout] id_p          Callback ID to remove, after a call to this
+ *                              function it's set to UCS_CALLBACKQ_ID_NULL.
  */
-void uct_worker_slowpath_progress_unregister(uct_worker_h worker,
-                                             ucs_callbackq_slow_elem_t *elem);
+void uct_worker_progress_unregister_safe(uct_worker_h worker,
+                                         uct_worker_cb_id_t *id_p);
 
 
 /**

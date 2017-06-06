@@ -37,14 +37,13 @@ static ucs_config_field_t uct_cm_iface_config_table[] = {
 static uct_ib_iface_ops_t uct_cm_iface_ops;
 
 
-static void uct_cm_iface_progress(ucs_callbackq_slow_elem_t *arg)
+static void uct_cm_iface_progress(void *arg)
 {
     uct_cm_pending_req_priv_t *priv;
-    uct_cm_iface_t *iface = ucs_container_of(arg, uct_cm_iface_t, cbq_elem);
+    uct_cm_iface_t *iface = arg;
     uct_cm_iface_op_t *op;
 
     uct_cm_enter(iface);
-    ucs_assert(iface->cbq_elem_on == 1);
 
     /* Invoke flush completions at the head of the queue - the sends which
      * started before them were already completed.
@@ -64,9 +63,8 @@ static void uct_cm_iface_progress(ucs_callbackq_slow_elem_t *arg)
     if (ucs_queue_is_empty(&iface->outstanding_q) ||
         ucs_queue_head_elem_non_empty(&iface->outstanding_q, uct_cm_iface_op_t, queue)->is_id)
     {
-        uct_worker_slowpath_progress_unregister(uct_cm_iface_worker(iface),
-                                                &iface->cbq_elem);
-        iface->cbq_elem_on = 0;
+        uct_worker_progress_unregister_safe(uct_cm_iface_worker(iface),
+                                            &iface->slow_prog_id);
     }
 
     uct_cm_leave(iface);
@@ -235,11 +233,9 @@ static void uct_cm_iface_event_handler(int fd, void *arg)
             }
         }
 
-        if (!iface->cbq_elem_on) {
-            uct_worker_slowpath_progress_register(uct_cm_iface_worker(iface), 
-                                                  &iface->cbq_elem);
-            iface->cbq_elem_on = 1;
-        }
+        uct_worker_progress_register_safe(uct_cm_iface_worker(iface),
+                                          uct_cm_iface_progress, iface, 0,
+                                          &iface->slow_prog_id);
     }
 }
 
@@ -278,8 +274,7 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.max_outstanding = config->max_outstanding;
     self->config.retry_count  = ucs_min(config->retry_count, UINT8_MAX);
     self->notify_q.head       = NULL;
-    self->cbq_elem_on         = 0;
-    self->cbq_elem.cb         = uct_cm_iface_progress;
+    self->slow_prog_id        = NULL;
     ucs_queue_head_init(&self->notify_q);
     ucs_queue_head_init(&self->outstanding_q);
 
@@ -361,10 +356,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
     uct_cm_iface_outstanding_purge(self);
     ib_cm_destroy_id(self->listen_id);
     ib_cm_close_device(self->cmdev);
-    if (self->cbq_elem_on) {
-        uct_worker_slowpath_progress_unregister(uct_cm_iface_worker(self), 
-                                                &self->cbq_elem);
-    }
+    uct_worker_progress_unregister_safe(uct_cm_iface_worker(self),
+                                        &self->slow_prog_id);
     uct_cm_leave(self);
 
     /* At this point all outstanding have been removed, and no further events

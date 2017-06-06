@@ -52,9 +52,9 @@ static ucs_status_t ucp_stub_ep_connect_to_ep(uct_ep_h uct_ep,
  * We switch the endpoint in this function (instead in wireup code) since
  * this is guaranteed to run from the main thread.
  */
-static void ucp_stub_ep_progress(ucs_callbackq_slow_elem_t *elem)
+static void ucp_stub_ep_progress(void *arg)
 {
-    ucp_stub_ep_t *stub_ep = ucs_container_of(elem, ucp_stub_ep_t, elem);
+    ucp_stub_ep_t *stub_ep = arg;
     ucp_ep_h ep = stub_ep->ep;
     ucs_queue_head_t tmp_pending_queue;
     uct_pending_req_t *uct_req;
@@ -313,7 +313,7 @@ UCS_CLASS_INIT_FUNC(ucp_stub_ep_t, ucp_ep_h ep)
     self->aux_rsc_index = UCP_NULL_RESOURCE;
     self->pending_count = 0;
     self->flags         = 0;
-    self->elem.cb       = ucp_stub_ep_progress;
+    self->progress_id   = NULL;
     ucs_queue_head_init(&self->pending_q);
     ucs_trace("ep %p: created stub ep %p to %s ", ep, self, ucp_ep_peer_name(ep));
     return UCS_OK;
@@ -326,10 +326,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_stub_ep_t)
 
     ucs_debug("ep %p: destroy stub ep %p", self->ep, self);
 
-    if (self->flags & UCP_STUB_EP_FLAG_READY) {
-        uct_worker_slowpath_progress_unregister(self->ep->worker->uct,
-                                                &self->elem);
-    }
+    uct_worker_progress_unregister_safe(self->ep->worker->uct, &self->progress_id);
     if (self->aux_ep != NULL) {
         uct_ep_destroy(self->aux_ep);
     }
@@ -409,8 +406,9 @@ void ucp_stub_ep_remote_connected(uct_ep_h uct_ep)
 
     ucs_trace("ep %p: stub ep %p is remote-connected", stub_ep->ep, stub_ep);
     stub_ep->flags |= UCP_STUB_EP_FLAG_READY;
-    uct_worker_slowpath_progress_register(stub_ep->ep->worker->uct,
-                                          &stub_ep->elem);
+    uct_worker_progress_register_safe(stub_ep->ep->worker->uct,
+                                      ucp_stub_ep_progress, stub_ep, 0,
+                                      &stub_ep->progress_id);
 }
 
 int ucp_stub_ep_test(uct_ep_h uct_ep)
