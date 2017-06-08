@@ -588,7 +588,7 @@ static size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
                                              uct_md_attr_t *md_attr,
                                              size_t bcopy_bw, int recv_reg_cost)
 {
-    double numerator, denumerator;
+    double numerator, denumerator, md_reg_growth, md_reg_overhead;
     double diff_percent = 1.0 - context->config.ext.rndv_perf_diff / 100.0;
 
     /* We calculate the Rendezvous threshold by finding the message size at which:
@@ -614,15 +614,23 @@ static size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
      * The used latency functions for eager_zcopy and rndv are also specified in
      * the UCX wiki */
 
+    if (md_attr->cap.flags & UCT_MD_FLAG_REG) {
+        md_reg_growth   = md_attr->reg_cost.growth;
+        md_reg_overhead = md_attr->reg_cost.overhead;
+    } else {
+        md_reg_growth   = 0;
+        md_reg_overhead = 0;
+    }
+
     numerator = diff_percent * ((4 * ucp_tl_iface_latency(context, iface_attr)) +
                 (3 * iface_attr->overhead) +
-                (md_attr->reg_cost.overhead * (1 + recv_reg_cost))) -
-                md_attr->reg_cost.overhead - iface_attr->overhead;
+                (md_reg_overhead * (1 + recv_reg_cost))) -
+                 md_reg_overhead - iface_attr->overhead;
 
-    denumerator = md_attr->reg_cost.growth +
+    denumerator = md_reg_growth +
                   ucs_max((1.0 / iface_attr->bandwidth), (1.0 / context->config.ext.bcopy_bw)) -
                   (diff_percent * (ucs_max((1.0 / iface_attr->bandwidth), (1.0 / bcopy_bw)) +
-                  md_attr->reg_cost.growth * (1 + recv_reg_cost)));
+                   md_reg_growth * (1 + recv_reg_cost)));
 
     if ((numerator > 0) && (denumerator > 0)) {
         return (numerator / denumerator);

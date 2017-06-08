@@ -257,6 +257,8 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
         goto out;
     }
 
+    VALGRIND_MAKE_MEM_UNDEFINED(&worker->iface_attrs[tl_id],
+                                sizeof(worker->iface_attrs[tl_id]));
     status = uct_iface_query(iface, &worker->iface_attrs[tl_id]);
     if (status != UCS_OK) {
         goto out;
