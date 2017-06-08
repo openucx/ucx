@@ -261,6 +261,85 @@ enum uct_wakeup_event_types {
 };
 
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT progress types
+ */
+enum uct_progress_types {
+    UCT_PROGRESS_SEND   = UCS_BIT(0),  /**< Progress send operations */
+    UCT_PROGRESS_RECV   = UCS_BIT(1)   /**< Progress receive operations */
+};
+
+
+/**
+ * @ingroup UCT_AM
+ * @brief Active message callback flags.
+ *
+ * List of flags for active message callback
+ * A callback must have either SYNC or ASYNC flags.
+ */
+enum uct_am_cb_flags {
+    UCT_AM_CB_FLAG_SYNC  = UCS_BIT(1), /**< Callback is always invoked from the context (thread, process)
+                                            that called uct_iface_progress(). An interface must
+                                            have @ref UCT_IFACE_FLAG_AM_CB_SYNC flag set to support sync
+                                            callback invocation */
+
+    UCT_AM_CB_FLAG_ASYNC = UCS_BIT(2)  /**< Callback may be invoked from any context. For example,
+                                            it may be called from transport async progress thread. To guarantee
+                                            async invocation, interface must have @ref UCT_IFACE_FLAG_AM_CB_ASYNC
+                                            flag set.
+                                            If async callback is set on interface with only @ref
+                                            UCT_IFACE_FLAG_AM_CB_SYNC flags, it will behave exactly like a
+                                            sync callback  */
+};
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief  Memory domain capability flags.
+ */
+enum {
+    UCT_MD_FLAG_ALLOC     = UCS_BIT(0),  /**< MD support memory allocation */
+    UCT_MD_FLAG_REG       = UCS_BIT(1),  /**< MD support memory registration */
+    UCT_MD_FLAG_NEED_MEMH = UCS_BIT(2),  /**< The transport needs a valid local
+                                              memory handle for zero-copy operations */
+    UCT_MD_FLAG_NEED_RKEY = UCS_BIT(3),  /**< The transport needs a valid
+                                              remote memory key for remote memory
+                                              operations */
+    UCT_MD_FLAG_ADVISE    = UCS_BIT(4),  /**< MD support memory advice */
+    UCT_MD_FLAG_FIXED     = UCS_BIT(5)   /**< MD support memory allocation with
+                                              fixed address */
+};
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief  Memory allocation/registration flags.
+ */
+enum uct_md_mem_flags {
+    UCT_MD_MEM_FLAG_NONBLOCK = UCS_BIT(0), /**< Hint to perform non-blocking
+                                                allocation/registration: page
+                                                mapping may be deferred until
+                                                it is accessed by the CPU or a
+                                                transport. */
+    UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1)  /**< Place the mapping at exactly
+                                                defined address */
+};
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief list of UCT memory use advice
+ */
+typedef enum {
+    UCT_MADV_NORMAL  = 0,  /**< No special treatment */
+    UCT_MADV_WILLNEED      /**< can be used on the memory mapped with
+                                @ref UCT_MD_MEM_FLAG_NONBLOCK to speed up
+                                memory mapping and to avoid page faults when
+                                the memory is accessed for the first time. */
+} uct_mem_advice_t;
+
+
 /*
  * @ingroup UCT_RESOURCE
  * @brief Linear growth specification: f(x) = overhead + growth * x
@@ -409,39 +488,6 @@ struct uct_iface_params {
     uct_tag_unexp_eager_cb_t eager_cb;    /**< Callback for tag matching unexpected eager messages */
     void                     *rndv_arg;
     uct_tag_unexp_rndv_cb_t  rndv_cb;     /**< Callback for tag matching unexpected rndv messages */
-};
-
-
-/**
- * @ingroup UCT_MD
- * @brief  Memory domain capability flags.
- */
-enum {
-    UCT_MD_FLAG_ALLOC     = UCS_BIT(0),  /**< MD support memory allocation */
-    UCT_MD_FLAG_REG       = UCS_BIT(1),  /**< MD support memory registration */
-    UCT_MD_FLAG_NEED_MEMH = UCS_BIT(2),  /**< The transport needs a valid local
-                                              memory handle for zero-copy operations */
-    UCT_MD_FLAG_NEED_RKEY = UCS_BIT(3),  /**< The transport needs a valid
-                                              remote memory key for remote memory
-                                              operations */
-    UCT_MD_FLAG_ADVISE    = UCS_BIT(4),  /**< MD support memory advice */
-    UCT_MD_FLAG_FIXED     = UCS_BIT(5)   /**< MD support memory allocation with
-                                              fixed address */
-};
-
-
-/**
- * @ingroup UCT_MD
- * @brief  Memory domain capability flags.
- */
-enum {
-    UCT_MD_MEM_FLAG_NONBLOCK = UCS_BIT(0), /**< Hint to perform non-blocking
-                                                allocation/registration: page
-                                                mapping may be deferred until
-                                                it is accessed by the CPU or a
-                                                transport. */
-    UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1)  /**< Place the mapping at exactly
-                                                defined address */
 };
 
 
@@ -1039,16 +1085,6 @@ ucs_status_t uct_wakeup_signal(uct_wakeup_h wakeup);
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief UCT progress types 
- */
-enum uct_progress_types {
-    UCT_PROGRESS_RX   = UCS_BIT(0),  /**< progress UCT receive operations */
-    UCT_PROGRESS_TX   = UCS_BIT(1)   /**< progress UCT send operations */
-};
-
-
-/**
- * @ingroup UCT_RESOURCE
  * @brief Enable synchronous progress for the interface
  *
  * Notify the transport that it should do work 
@@ -1060,7 +1096,7 @@ enum uct_progress_types {
  * By default, progress is enabled when the interface is created.
  *
  * @param [in]  iface    The interface to enable progress.
- * @param [in]  flags    What kind progress to enable. See @ref uct_progress_types 
+ * @param [in]  flags    What kind progress to enable, see @ref uct_progress_types.
  *
  */
 void uct_iface_progress_enable(uct_iface_h iface, unsigned flags);
@@ -1079,7 +1115,7 @@ void uct_iface_progress_enable(uct_iface_h iface, unsigned flags);
  * By default, progress is enabled when the interface is created.
  *
  * @param [in]  iface    The interface to disable progress.
- * @param [in]  flags    What kind of progress to disable. See @ref uct_progress_types  
+ * @param [in]  flags    What kind of progress to disable, see @ref uct_progress_types.
  *
  */
 void uct_iface_progress_disable(uct_iface_h iface, unsigned flags);
@@ -1087,34 +1123,31 @@ void uct_iface_progress_disable(uct_iface_h iface, unsigned flags);
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Allocate memory which can be used for zero-copy communications.
+ *
+ * Allocate a region of memory which can be used for zero-copy data transfer or
+ * remote access on a particular transport interface.
+ *
+ * @param [in]  iface    Interface to allocate memory on.
+ * @param [in]  length   Size of memory region to allocate.
+ * @param [in]  flags    Memory allocation flags, see @ref uct_md_mem_flags.
+ * @param [in]  name     Allocation name, for debug purposes.
+ * @param [out] mem      Descriptor of allocated memory.
+ *
+ * @return UCS_OK if allocation was successful, error code otherwise.
  */
 ucs_status_t uct_iface_mem_alloc(uct_iface_h iface, size_t length, unsigned flags,
                                  const char *name, uct_allocated_memory_t *mem);
 
-void uct_iface_mem_free(const uct_allocated_memory_t *mem);
 
 /**
- * @ingroup UCT_AM
- * @brief AM callback capabilities
+ * @ingroup UCT_RESOURCE
+ * @brief Release memory allocated with @ref uct_iface_mem_alloc().
  *
- * List of capabilities of active message callback
- *
- * A callback must have either SYNC or ASYNC flags.
+ * @param [in]  mem      Descriptor of memory to release.
  */
-enum uct_am_cb_cap {
-    UCT_AM_CB_FLAG_SYNC  = UCS_BIT(1), /**< Callback is always invoked from the context (thread, process)
-                                            that called uct_iface_progress(). An interface must
-                                            have @ref UCT_IFACE_FLAG_AM_CB_SYNC flag set to support sync
-                                            callback invocation */
+void uct_iface_mem_free(const uct_allocated_memory_t *mem);
 
-    UCT_AM_CB_FLAG_ASYNC = UCS_BIT(2)  /**< Callback may be invoked from any context. For example,
-                                            it may be called from transport async progress thread. To guarantee
-                                            async invocation, interface must have @ref UCT_IFACE_FLAG_AM_CB_ASYNC
-                                            flag set.
-                                            If async callback is set on interface with only @ref
-                                            UCT_IFACE_FLAG_AM_CB_SYNC flags, it will behave exactly like a
-                                            sync callback  */
-};
 
 /**
  * @ingroup UCT_AM
@@ -1237,7 +1270,7 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr);
  *                              return, filled with the actual size that was allocated,
  *                              which may be larger than the one requested. Must be >0.
  * @param [in,out] address_p   The address
- * @param [in]     flags       Memory allocation flags, UCT_MD_MEM_FLAG_xx.
+ * @param [in]     flags       Memory allocation flags, see @ref uct_md_mem_flags.
  * @param [in]     name        Name of the allocated region, used to track memory
  *                              usage for debugging and profiling.
  * @param [out]    memh_p      Filled with handle for allocated region.
@@ -1255,18 +1288,6 @@ ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
  */
 ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
 
-/**
- * @ingroup UCT_MD
- * @brief list of UCT memory use advice
- *
- */
-typedef enum uct_mem_advice {
-    UCT_MADV_NORMAL  = 0,  /**< No special treatment */
-    UCT_MADV_WILLNEED      /**< can be used on the memory mapped with 
-                                @ref UCT_MD_MEM_FLAG_NONBLOCK to speed up 
-                                memory mapping and to avoid page faults when
-                                the memory is accessed for the first time. */
-} uct_mem_advice_t;
 
 /**
  * @ingroup UCT_MD
@@ -1299,7 +1320,7 @@ ucs_status_t uct_md_mem_advise(uct_md_h md, uct_mem_h memh, void *addr,
  * @param [in]     md        Memory domain to register memory on.
  * @param [out]    address   Memory to register.
  * @param [in]     length    Size of memory to register. Must be >0.
- * @param [in]     flags     Memory allocation flags, UCT_MD_MEM_FLAG_xx.
+ * @param [in]     flags     Memory allocation flags, see @ref uct_md_mem_flags.
  * @param [out]    memh_p    Filled with handle for allocated region.
  */
 ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
@@ -1338,7 +1359,7 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  *                             cannot be made, the allocation request fails.
  * @param [in]     min_length  Minimal size to allocate. The actual size may be
  *                             larger, for example because of alignment restrictions.
- * @param [in]     flags       Memory allocation flags, UCT_MD_MEM_FLAG_xx.
+ * @param [in]     flags       Memory allocation flags, see @ref uct_md_mem_flags.
  * @param [in]     methods     Array of memory allocation methods to attempt.
  * @param [in]     num_methods Length of 'methods' array.
  * @param [in]     mds         Array of memory domains to attempt to allocate
