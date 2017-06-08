@@ -7,20 +7,28 @@
 #include "proto.h"
 #include "proto_am.inl"
 
+#include <ucp/tag/offload.h>
 #include <ucp/core/ucp_request.inl>
 
 
 static size_t ucp_proto_pack(void *dest, void *arg)
 {
-    ucp_reply_hdr_t *rep_hdr = dest;
     ucp_request_t *req = arg;
+    ucp_reply_hdr_t *rep_hdr;
+    ucp_offload_ssend_hdr_t *off_rep_hdr;
 
     switch (req->send.proto.am_id) {
     case UCP_AM_ID_EAGER_SYNC_ACK:
     case UCP_AM_ID_RNDV_ATS:
+        rep_hdr = dest;
         rep_hdr->reqptr = req->send.proto.remote_request;
         rep_hdr->status = req->send.proto.status;
         return sizeof(*rep_hdr);
+    case UCP_AM_ID_OFFLOAD_SYNC_ACK:
+        off_rep_hdr = dest;
+        off_rep_hdr->sender_tag  = req->send.proto.sender_tag;
+        off_rep_hdr->sender_uuid = req->send.proto.sender_uuid;
+        return sizeof(*off_rep_hdr);
     }
 
     ucs_bug("unexpected am_id");

@@ -33,12 +33,14 @@ void ucp_eager_sync_send_handler(void *arg, void *data, uint16_t flags)
                                   UCP_RECV_DESC_FLAG_LAST|
                                   UCP_RECV_DESC_FLAG_SYNC)) {
         eagers_hdr = data;
+        ucs_assert(eagers_hdr->req.reqptr != 0);
         ucp_tag_eager_sync_send_ack(arg, eagers_hdr->req.sender_uuid,
                                     eagers_hdr->req.reqptr);
     } else if (ucs_test_all_flags(flags, UCP_RECV_DESC_FLAG_EAGER|
                                          UCP_RECV_DESC_FLAG_FIRST|
                                          UCP_RECV_DESC_FLAG_SYNC)) {
         eagers_first_hdr = data;
+        ucs_assert(eagers_first_hdr->req.reqptr != 0);
         ucp_tag_eager_sync_send_ack(arg, eagers_first_hdr->req.sender_uuid,
                                     eagers_first_hdr->req.reqptr);
     } else {
@@ -187,14 +189,13 @@ static ucs_status_t ucp_eager_offload_sync_ack_handler(void *arg, void *data,
     ucs_queue_iter_t iter;
 
     ucs_queue_for_each_safe(sreq, iter, queue, send.tag_offload.queue) {
-        if ((sreq->send.tag == rep_hdr->sender_tag) &&
+        if ((sreq->send.tag_offload.ssend_tag == rep_hdr->sender_tag) &&
             (worker->uuid == rep_hdr->sender_uuid)) {
             ucp_tag_eager_sync_completion(sreq, UCP_REQUEST_FLAG_REMOTE_COMPLETED);
             ucs_queue_del_iter(queue, iter);
             return UCS_OK;
         }
     }
-
     ucs_error("Unexpected sync ack received: tag %"PRIx64" uuid %"PRIx64"",
               rep_hdr->sender_tag, rep_hdr->sender_uuid);
     return UCS_OK;
@@ -251,6 +252,7 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     const ucp_eager_sync_first_hdr_t *eagers_first_hdr = data;
     const ucp_eager_sync_hdr_t *eagers_hdr       = data;
     const ucp_reply_hdr_t *rep_hdr               = data;
+    const ucp_offload_ssend_hdr_t *off_rep_hdr   = data;
     size_t header_len;
     char *p;
 
@@ -289,6 +291,11 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     case UCP_AM_ID_EAGER_SYNC_ACK:
         snprintf(buffer, max, "EGRS_A request 0x%lx status '%s'", rep_hdr->reqptr,
                  ucs_status_string(rep_hdr->status));
+        header_len = sizeof(*rep_hdr);
+        break;
+    case UCP_AM_ID_OFFLOAD_SYNC_ACK:
+        snprintf(buffer, max, "EGRS_A_O tag %"PRIx64" uuid %"PRIx64"",
+                 off_rep_hdr->sender_tag, off_rep_hdr->sender_uuid);
         header_len = sizeof(*rep_hdr);
         break;
     default:

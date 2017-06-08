@@ -66,7 +66,7 @@ enum {
                                           rndv (bcopy) */
     UCP_AM_ID_RNDV_DATA_LAST    =  13, /* The last rndv data fragment when using
                                           software rndv (bcopy) */
-    UCP_AM_ID_OFFLOAD_SYNC_ACK  = 14,  /* Eager sync ack for tag offload proto */
+    UCP_AM_ID_OFFLOAD_SYNC_ACK  =  14, /* Eager sync ack for tag offload proto */
     UCP_AM_ID_LAST
 };
 
