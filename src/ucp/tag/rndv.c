@@ -29,9 +29,14 @@ static int ucp_tag_rndv_is_get_op_possible(ucp_ep_h ep, uct_rkey_t rkey)
 
 static void ucp_rndv_rma_request_send_buffer_dereg(ucp_request_t *sreq)
 {
+    /*
+     * AM flow can come here with non registered memory.
+     * TODO: remove extra check inside ucp_request_memory_dereg:
+     *       (state->dt.contig.memh != UCT_MEM_HANDLE_NULL)
+     */
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
         ucp_ep_is_rndv_lane_present(sreq->send.ep) &&
-        ucp_request_is_send_buffer_reg(sreq) /* TODO: How is this possible? */) {
+        ucp_request_is_send_buffer_reg(sreq)) {
         ucp_request_send_buffer_dereg(sreq, ucp_ep_get_rndv_get_lane(sreq->send.ep));
     }
 }
