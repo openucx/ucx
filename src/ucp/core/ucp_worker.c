@@ -239,7 +239,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_worker_h       worker           = (ucp_worker_h)arg;
     ucp_ep_h           ucp_ep           = NULL;
-    ucp_stub_ep_t      *stub_ep;
+    uct_ep_h           aux_ep;
     uint64_t           dest_uuid UCS_V_UNUSED;
     ucp_ep_h           ucp_ep_iter;
     khiter_t           ucp_ep_errh_iter;
@@ -249,10 +249,11 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
     kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep_iter, {
         for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep_iter); ++lane) {
-            stub_ep = ucp_stub_ep_test(ucp_ep_iter->uct_eps[lane]) ?
-                      (ucp_stub_ep_t *)ucp_ep_iter->uct_eps[lane] : NULL;
-            if ((stub_ep && (uct_ep == stub_ep->aux_ep)) ||
-                (uct_ep == ucp_ep_iter->uct_eps[lane])) {
+            aux_ep = ucp_stub_ep_test(ucp_ep_iter->uct_eps[lane]) ?
+                     ucs_derived_of(ucp_ep_iter->uct_eps[lane],
+                                    ucp_stub_ep_t)->aux_ep :
+                     NULL;
+            if ((uct_ep == ucp_ep_iter->uct_eps[lane]) || (uct_ep == aux_ep)) {
                 ucp_ep = ucp_ep_iter;
                 failed_lane = lane;
                 goto found_ucp_ep;
