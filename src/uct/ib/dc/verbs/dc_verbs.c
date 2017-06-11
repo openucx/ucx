@@ -736,7 +736,6 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
                          uct_dc_iface_dci_do_pending_tx, NULL);
 }
 
-/* TODO: make a macro that defines progress func */
 static void uct_dc_verbs_iface_progress(void *arg)
 {
     uct_dc_verbs_iface_t *iface = arg;
@@ -778,8 +777,8 @@ static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
     .ep_destroy               = uct_dc_verbs_ep_destroy,
     .iface_flush              = uct_dc_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress_enable    = uct_dc_iface_progress_enable,
+    .iface_progress_disable   = uct_dc_iface_progress_disable,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t),
     .iface_query              = uct_dc_verbs_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,
@@ -794,7 +793,8 @@ static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
     .fc_ctrl                  = uct_dc_verbs_ep_fc_ctrl,
     .fc_handler               = uct_dc_iface_fc_handler,
     },
-    .reset_dci                = uct_dc_verbs_reset_dci
+    .reset_dci                = uct_dc_verbs_reset_dci,
+    .progress                 = uct_dc_verbs_iface_progress
 };
 
 void uct_dc_verbs_iface_init_wrs(uct_dc_verbs_iface_t *self)
@@ -864,9 +864,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
         goto err_common_cleanup;
     }
 
-    /* TODO: only register progress when we have a connection */
-    uct_worker_progress_add_safe(worker, uct_dc_verbs_iface_progress, self,
-                                 &self->super.super.super.super.prog);
+    uct_dc_iface_progress_enable(&self->super.super.super.super.super,
+                                 UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     ucs_debug("created dc iface %p", self);
     return UCS_OK;
 
@@ -879,8 +878,8 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_dc_verbs_iface_t)
 {
     ucs_trace_func("");
-    uct_worker_progress_remove(self->super.super.super.super.worker,
-                               &self->super.super.super.super.prog);
+    uct_dc_iface_progress_disable(&self->super.super.super.super.super,
+                                  UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
 }
 
