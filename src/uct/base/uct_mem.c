@@ -147,7 +147,8 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             if (address != NULL) {
                 status = madvise(address, alloc_length, MADV_HUGEPAGE);
                 if (status != UCS_OK) {
-                    ucs_error("madvise failure status (%d): %m", status);
+                    ucs_error("madvise failure status (%d) address(%p) len(%zu):"
+                              " %m", status, address, alloc_length);
                     ucs_free(address);
                     break;
                 } else {
