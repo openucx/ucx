@@ -19,14 +19,13 @@ extern "C" {
 class test_uct_stats : public uct_p2p_test {
 public:
     test_uct_stats() : uct_p2p_test(0), lbuf(NULL), rbuf(NULL)  {
-        m_comp.func  = atomic_completion;
+        m_comp.func  = NULL;
         m_comp.count = 0;
     }
 
     virtual void init() {
         stats_activate();
         uct_p2p_test::init();
-        m_comp.count = 0;
     }
 
     void init_bufs(size_t min, size_t max)
@@ -109,7 +108,24 @@ public:
         return count_wait;
     }
 
-    static void atomic_completion(uct_completion_t *self, ucs_status_t status) {
+    void init_completion() {
+        m_comp.count = 2;
+        m_comp.func  = NULL;
+    }
+
+    void wait_for_completion(ucs_status_t status) {
+
+        EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
+        if (status == UCS_OK) {
+            --m_comp.count;
+        }
+
+        ucs_time_t timeout = ucs_get_time() +
+                             ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
+        do {
+            short_progress_loop();
+        } while ((ucs_get_time() < timeout) && (m_comp.count > 1));
+        EXPECT_EQ(1, m_comp.count);
     }
 
 protected:
@@ -236,22 +252,12 @@ UCS_TEST_P(test_uct_stats, get_bcopy)
     check_caps(UCT_IFACE_FLAG_GET_BCOPY);
     init_bufs(0, sender().iface_attr().cap.get.max_bcopy);
 
-    m_comp.count = 2;
-    m_comp.func  = NULL;
+    init_completion();
     status = uct_ep_get_bcopy(sender_ep(), (uct_unpack_callback_t)memcpy,
                               lbuf->ptr(), lbuf->length(),
                               rbuf->addr(), rbuf->rkey(), &m_comp);
-    EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
-    if (status == UCS_OK) {
-        --m_comp.count;
-    }
+    wait_for_completion(status);
 
-    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
-    do {
-        short_progress_loop();
-    } while ((ucs_get_time() < timeout) && (m_comp.count != 1));
-
-    EXPECT_EQ(1, m_comp.count);
     short_progress_loop();
     check_tx_counters(UCT_EP_STAT_GET, UCT_EP_STAT_BYTES_BCOPY,
                       lbuf->length());
@@ -268,21 +274,11 @@ UCS_TEST_P(test_uct_stats, get_zcopy)
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
                             sender().iface_attr().cap.get.max_iov);
 
-    m_comp.count = 2;
-    m_comp.func  = NULL;
+    init_completion();
     status = uct_ep_get_zcopy(sender_ep(), iov, iovcnt, rbuf->addr(), rbuf->rkey(),
                               &m_comp);
-    EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
-    if (status == UCS_OK) {
-        --m_comp.count;
-    }
+    wait_for_completion(status);
 
-    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
-    do {
-        short_progress_loop();
-    } while ((ucs_get_time() < timeout) && (m_comp.count != 1));
-
-    EXPECT_EQ(1, m_comp.count);
     short_progress_loop();
     check_tx_counters(UCT_EP_STAT_GET, UCT_EP_STAT_BYTES_ZCOPY,
                       lbuf->length());
@@ -313,8 +309,9 @@ UCS_TEST_P(test_uct_stats, atomic_##func##val) \
     check_caps(UCT_IFACE_FLAG_ATOMIC_ ## flag ## val); \
     init_bufs(sizeof(result), sizeof(result)); \
 \
+    init_completion(); \
     status = uct_ep_atomic_##func##val (sender_ep(), 1, rbuf->addr(), rbuf->rkey(), &result, &m_comp); \
-    EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status); \
+    wait_for_completion(status); \
 \
     check_atomic_counters(); \
 }
@@ -334,8 +331,10 @@ UCS_TEST_P(test_uct_stats, atomic_cswap##val) \
     check_caps(UCT_IFACE_FLAG_ATOMIC_CSWAP ## val); \
     init_bufs(sizeof(result), sizeof(result)); \
 \
-    status = uct_ep_atomic_cswap##val (sender_ep(), 1, 2, rbuf->addr(), rbuf->rkey(), &result, &m_comp); \
-    EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status); \
+    init_completion(); \
+    status = uct_ep_atomic_cswap##val (sender_ep(), 1, 2, rbuf->addr(),\
+                                       rbuf->rkey(), &result, &m_comp); \
+    wait_for_completion(status); \
 \
     check_atomic_counters(); \
 }
