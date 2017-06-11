@@ -394,7 +394,7 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     }
 
     /* Set wake-up handlers */
-    if (attr->cap.flags & UCT_IFACE_FLAG_EVENT_FD) {
+    if (attr->cap.flags & UCP_WORKER_UCT_EVENT_CAP_FLAGS) {
         status = uct_iface_event_fd_get(iface, &tl_event_fd);
         if (status != UCS_OK) {
             goto out_close_iface;
@@ -868,7 +868,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     ucp_context_h context = worker->context;
 
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
-        if (worker->ifaces[tl_id].attr.cap.flags & UCT_IFACE_FLAG_EVENT_FD) {
+        if (worker->ifaces[tl_id].attr.cap.flags & UCP_WORKER_UCT_EVENT_CAP_FLAGS) {
             status = uct_iface_event_arm(worker->ifaces[tl_id].iface, worker->uct_events);
             if (status != UCS_OK) {
                 return status;

@@ -55,6 +55,10 @@ enum {
 };
 
 
+#define UCP_WORKER_UCT_EVENT_CAP_FLAGS (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
+                               UCT_IFACE_FLAG_EVENT_RECV_AM)
+
+
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
                              (_flags & UCP_RECV_DESC_FLAG_SYNC) ? \
