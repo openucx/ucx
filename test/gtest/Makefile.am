@@ -80,6 +80,7 @@ gtest_SOURCES = \
 	uct/test_p2p_rma.cc \
 	uct/test_pd.cc \
 	uct/test_pending.cc \
+	uct/test_progress.cc \
 	uct/test_uct_ep.cc \
 	uct/test_uct_perf.cc \
 	uct/test_zcopy_comp.cc \
