@@ -166,49 +166,14 @@ ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
     return ep->iface->ops.ep_check(ep, flags, comp);
 }
 
-ucs_status_t uct_wakeup_open(uct_iface_h iface, unsigned events,
-                             uct_wakeup_h *wakeup_p)
+ucs_status_t uct_iface_event_fd_get(uct_iface_h iface, int *fd_p)
 {
-    if ((events == 0) || (wakeup_p == NULL)) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    *wakeup_p = ucs_malloc(sizeof(**wakeup_p), "iface_wakeup_context");
-    if (*wakeup_p == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    (*wakeup_p)->fd = -1;
-    (*wakeup_p)->iface = iface;
-    (*wakeup_p)->events = events;
-
-    return iface->ops.iface_wakeup_open(iface, events, *wakeup_p);
+    return iface->ops.iface_event_fd_get(iface, fd_p);
 }
 
-ucs_status_t uct_wakeup_efd_get(uct_wakeup_h wakeup, int *fd_p)
+ucs_status_t uct_iface_event_arm(uct_iface_h iface, unsigned events)
 {
-    return wakeup->iface->ops.iface_wakeup_get_fd(wakeup, fd_p);
-}
-
-ucs_status_t uct_wakeup_efd_arm(uct_wakeup_h wakeup)
-{
-    return wakeup->iface->ops.iface_wakeup_arm(wakeup);
-}
-
-ucs_status_t uct_wakeup_wait(uct_wakeup_h wakeup)
-{
-    return wakeup->iface->ops.iface_wakeup_wait(wakeup);
-}
-
-ucs_status_t uct_wakeup_signal(uct_wakeup_h wakeup)
-{
-    return wakeup->iface->ops.iface_wakeup_signal(wakeup);
-}
-
-void uct_wakeup_close(uct_wakeup_h wakeup)
-{
-    wakeup->iface->ops.iface_wakeup_close(wakeup);
-    ucs_free(wakeup);
+    return iface->ops.iface_event_arm(iface, events);
 }
 
 void uct_iface_close(uct_iface_h iface)

@@ -116,7 +116,7 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
                                   UCT_IFACE_FLAG_PENDING   |
                                   UCT_IFACE_FLAG_CONNECT_TO_EP |
                                   UCT_IFACE_FLAG_AM_CB_SYNC |
-                                  UCT_IFACE_FLAG_WAKEUP;
+                                  UCT_IFACE_FLAG_EVENT_FD;
 
     if (uct_ib_atomic_is_supported(dev, 0, sizeof(uint64_t))) {
         iface_attr->cap.flags  |= UCT_IFACE_FLAG_ATOMIC_ADD64 |

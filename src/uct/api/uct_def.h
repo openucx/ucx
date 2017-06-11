@@ -81,7 +81,6 @@ enum uct_cb_flags {
  * @{
  */
 typedef struct uct_iface         *uct_iface_h;
-typedef struct uct_wakeup        *uct_wakeup_h;
 typedef struct uct_iface_config  uct_iface_config_t;
 typedef struct uct_md_config     uct_md_config_t;
 typedef struct uct_ep            *uct_ep_h;
@@ -345,6 +344,15 @@ typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, unsigned flags,
                                                 unsigned header_length,
                                                 uint64_t remote_addr, size_t length,
                                                 const void *rkey_buf);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief  Interface event callback.
+ *
+ * @param [in]  arg      User argument to be passed to the callback.
+ */
+typedef void (*uct_iface_event_cb_t)(void *arg);
 
 
 #endif
