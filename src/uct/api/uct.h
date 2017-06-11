@@ -1615,9 +1615,10 @@ UCT_INLINE_API ucs_status_t uct_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t he
  * @brief
  */
 UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
-                                       uct_pack_callback_t pack_cb, void *arg)
+                                       uct_pack_callback_t pack_cb, void *arg,
+                                       unsigned flags)
 {
-    return ep->iface->ops.ep_am_bcopy(ep, id, pack_cb, arg);
+    return ep->iface->ops.ep_am_bcopy(ep, id, pack_cb, arg, flags);
 }
 
 

@@ -75,7 +75,7 @@ public:
             case OP_AM_BCOPY:
                 arg.buffer = buffer;
                 arg.length = length;
-                packed_len = uct_ep_am_bcopy(sender_ep(), am_id, pack_cb, &arg);
+                packed_len = uct_ep_am_bcopy(sender_ep(), am_id, pack_cb, &arg, 0);
                 status = (packed_len >= 0) ? UCS_OK : (ucs_status_t)packed_len;
                 break;
             case OP_AM_ZCOPY:

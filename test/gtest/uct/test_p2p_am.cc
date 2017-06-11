@@ -127,7 +127,8 @@ public:
                           const mapped_buffer& recvbuf)
     {
         ssize_t packed_len;
-        packed_len = uct_ep_am_bcopy(ep, AM_ID, mapped_buffer::pack, (void*)&sendbuf);
+        packed_len = uct_ep_am_bcopy(ep, AM_ID, mapped_buffer::pack,
+                                     (void*)&sendbuf, 0);
         if (packed_len >= 0) {
             EXPECT_EQ(sendbuf.length(), (size_t)packed_len);
             return UCS_OK;

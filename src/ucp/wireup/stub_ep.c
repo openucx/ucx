@@ -221,13 +221,14 @@ static void ucp_stub_pending_purge(uct_ep_h uct_ep,
 }
 
 static ssize_t ucp_stub_ep_am_bcopy(uct_ep_h uct_ep, uint8_t id,
-                                    uct_pack_callback_t pack_cb, void *arg)
+                                    uct_pack_callback_t pack_cb, void *arg,
+                                    unsigned flags)
 {
     ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
 
     if (id == UCP_AM_ID_WIREUP) {
         return uct_ep_am_bcopy(ucp_stub_ep_get_wireup_msg_ep(stub_ep),
-                               UCP_AM_ID_WIREUP, pack_cb, arg);
+                               UCP_AM_ID_WIREUP, pack_cb, arg, flags);
     }
 
     return UCS_ERR_NO_RESOURCE;

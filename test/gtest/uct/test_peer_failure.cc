@@ -169,7 +169,7 @@ UCS_TEST_P(test_uct_peer_failure, peer_failure)
 
     /* Check that all ep operations return pre-defined error code */
     EXPECT_EQ(uct_ep_am_short(ep0(), 0, 0, NULL, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_am_bcopy(ep0(), 0, NULL, NULL), UCS_ERR_ENDPOINT_TIMEOUT);
+    EXPECT_EQ(uct_ep_am_bcopy(ep0(), 0, NULL, NULL, 0), UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_am_zcopy(ep0(), 0, NULL, 0, iov, iovcnt, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);

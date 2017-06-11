@@ -90,7 +90,8 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 }
 
 ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
-                             uct_pack_callback_t pack_cb, void *arg)
+                             uct_pack_callback_t pack_cb, void *arg,
+                             unsigned flags)
 {
     ucs_status_t status;
     uct_self_iface_t *self_iface = 0;

@@ -114,7 +114,7 @@ UCS_TEST_P(test_many2one_am, am_bcopy, "MAX_BCOPY=16384")
         for (;;) {
             entity& sender = senders.at(sender_num);
             packed_len = uct_ep_am_bcopy(sender.ep(0), AM_ID, mapped_buffer::pack,
-                                         (void*)&buffer);
+                                         (void*)&buffer, 0);
             if (packed_len != UCS_ERR_NO_RESOURCE) {
                 break;
             }

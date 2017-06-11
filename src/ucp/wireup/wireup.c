@@ -50,7 +50,7 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
         req->send.lane = ucp_ep_get_wireup_msg_lane(ep);
     }
     packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], UCP_AM_ID_WIREUP,
-                                 ucp_wireup_msg_pack, req);
+                                 ucp_wireup_msg_pack, req, 0);
     if (packed_len < 0) {
         if (packed_len != UCS_ERR_NO_RESOURCE) {
             ucs_error("failed to send wireup: %s", ucs_status_string(packed_len));

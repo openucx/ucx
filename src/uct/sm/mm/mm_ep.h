@@ -49,7 +49,7 @@ UCS_CLASS_DECLARE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
 ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                 const void *payload, unsigned length);
 ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
-                           void *arg);
+                           void *arg, unsigned flags);
 
 ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep, unsigned flags,
                              uct_completion_t *comp);

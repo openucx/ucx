@@ -102,7 +102,7 @@ ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface, unsigned flags,
 ucs_status_t uct_cm_iface_flush_do(uct_cm_iface_t *iface, uct_completion_t *comp);
 
 ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
-                           void *arg);
+                           void *arg, unsigned flags);
 
 ucs_status_t uct_cm_ep_pending_add(uct_ep_h ep, uct_pending_req_t *req);
 void uct_cm_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
