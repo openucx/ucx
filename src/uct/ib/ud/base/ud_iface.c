@@ -40,7 +40,6 @@ static void
 uct_ud_iface_cep_cleanup_eps(uct_ud_iface_t *iface, uct_ud_iface_peer_t *peer)
 {
     uct_ud_ep_t *ep, *tmp;
-    uct_iface_t *iface_h = &iface->super.super.super;
 
     ucs_list_for_each_safe(ep, tmp, &peer->ep_list, cep_list) {
         if (ep->conn_id < peer->conn_id_last) {
@@ -51,9 +50,8 @@ uct_ud_iface_cep_cleanup_eps(uct_ud_iface_t *iface, uct_ud_iface_peer_t *peer)
             continue;
         }
         ucs_list_del(&ep->cep_list);
-        uct_ep_t *ep_h = &ep->super.super;
         ucs_trace("cep:ep_destroy(%p) conn_id %d", ep, ep->conn_id);
-        iface_h->ops.ep_destroy(ep_h);
+        uct_ep_destroy(&ep->super.super);
     }
 }
 

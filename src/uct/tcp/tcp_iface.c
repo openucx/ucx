@@ -143,15 +143,19 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
 }
 
 static uct_iface_ops_t uct_tcp_iface_ops = {
-    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_iface_t),
-    .iface_get_device_address = uct_tcp_iface_get_device_address,
-    .iface_get_address        = uct_tcp_iface_get_address,
-    .iface_query              = uct_tcp_iface_query,
-    .iface_is_reachable       = uct_tcp_iface_is_reachable,
-    .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_tcp_ep_t),
-    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_ep_t),
     .ep_pending_add           = ucs_empty_function_return_busy,
     .ep_pending_purge         = ucs_empty_function,
+    .ep_flush                 = uct_base_ep_flush,
+    .ep_fence                 = uct_base_ep_fence,
+    .iface_flush              = uct_base_iface_flush,
+    .iface_fence              = uct_base_iface_fence,
+    .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_tcp_ep_t),
+    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_ep_t),
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_iface_t),
+    .iface_query              = uct_tcp_iface_query,
+    .iface_get_device_address = uct_tcp_iface_get_device_address,
+    .iface_get_address        = uct_tcp_iface_get_address,
+    .iface_is_reachable       = uct_tcp_iface_is_reachable
 };
 
 static ucs_mpool_ops_t uct_tcp_mpool_ops = {

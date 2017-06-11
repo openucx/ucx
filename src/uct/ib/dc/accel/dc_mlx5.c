@@ -660,48 +660,41 @@ static ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_iface_t *dc_iface, int dc
 static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     {
     {
-        {
-            .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t),
-            .iface_query              = uct_dc_mlx5_iface_query,
-            .iface_get_device_address = uct_ib_iface_get_device_address,
-            .iface_is_reachable       = uct_ib_iface_is_reachable,
-            .iface_get_address        = uct_dc_iface_get_address,
-
-            .iface_flush              = uct_dc_iface_flush,
-
-            .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_dc_mlx5_ep_t),
-            .ep_destroy               = uct_dc_mlx5_ep_destroy,
-
-            .ep_am_short              = uct_dc_mlx5_ep_am_short,
-            .ep_am_bcopy              = uct_dc_mlx5_ep_am_bcopy,
-            .ep_am_zcopy              = uct_dc_mlx5_ep_am_zcopy,
-
-            .ep_put_short             = uct_dc_mlx5_ep_put_short,
-            .ep_put_bcopy             = uct_dc_mlx5_ep_put_bcopy,
-            .ep_put_zcopy             = uct_dc_mlx5_ep_put_zcopy,
-
-            .ep_get_bcopy             = uct_dc_mlx5_ep_get_bcopy,
-            .ep_get_zcopy             = uct_dc_mlx5_ep_get_zcopy,
-
-            .ep_atomic_add64          = uct_dc_mlx5_ep_atomic_add64,
-            .ep_atomic_fadd64         = uct_dc_mlx5_ep_atomic_fadd64,
-            .ep_atomic_swap64         = uct_dc_mlx5_ep_atomic_swap64,
-            .ep_atomic_cswap64        = uct_dc_mlx5_ep_atomic_cswap64,
-
-            .ep_atomic_add32          = uct_dc_mlx5_ep_atomic_add32,
-            .ep_atomic_fadd32         = uct_dc_mlx5_ep_atomic_fadd32,
-            .ep_atomic_swap32         = uct_dc_mlx5_ep_atomic_swap32,
-            .ep_atomic_cswap32        = uct_dc_mlx5_ep_atomic_cswap32,
-
-            .ep_flush                 = uct_dc_mlx5_ep_flush,
-
-            .ep_pending_add           = uct_dc_ep_pending_add,
-            .ep_pending_purge         = uct_dc_ep_pending_purge,
-        },
-        .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
-        .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
-        .handle_failure           = uct_dc_mlx5_iface_handle_failure,
-        .set_ep_failed            = uct_dc_mlx5_ep_set_failed
+    {
+    .ep_put_short             = uct_dc_mlx5_ep_put_short,
+    .ep_put_bcopy             = uct_dc_mlx5_ep_put_bcopy,
+    .ep_put_zcopy             = uct_dc_mlx5_ep_put_zcopy,
+    .ep_get_bcopy             = uct_dc_mlx5_ep_get_bcopy,
+    .ep_get_zcopy             = uct_dc_mlx5_ep_get_zcopy,
+    .ep_am_short              = uct_dc_mlx5_ep_am_short,
+    .ep_am_bcopy              = uct_dc_mlx5_ep_am_bcopy,
+    .ep_am_zcopy              = uct_dc_mlx5_ep_am_zcopy,
+    .ep_atomic_add64          = uct_dc_mlx5_ep_atomic_add64,
+    .ep_atomic_fadd64         = uct_dc_mlx5_ep_atomic_fadd64,
+    .ep_atomic_swap64         = uct_dc_mlx5_ep_atomic_swap64,
+    .ep_atomic_cswap64        = uct_dc_mlx5_ep_atomic_cswap64,
+    .ep_atomic_add32          = uct_dc_mlx5_ep_atomic_add32,
+    .ep_atomic_fadd32         = uct_dc_mlx5_ep_atomic_fadd32,
+    .ep_atomic_swap32         = uct_dc_mlx5_ep_atomic_swap32,
+    .ep_atomic_cswap32        = uct_dc_mlx5_ep_atomic_cswap32,
+    .ep_pending_add           = uct_dc_ep_pending_add,
+    .ep_pending_purge         = uct_dc_ep_pending_purge,
+    .ep_flush                 = uct_dc_mlx5_ep_flush,
+    .ep_fence                 = uct_base_ep_fence,
+    .iface_flush              = uct_dc_iface_flush,
+    .iface_fence              = uct_base_iface_fence,
+    .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_dc_mlx5_ep_t),
+    .ep_destroy               = uct_dc_mlx5_ep_destroy,
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t),
+    .iface_query              = uct_dc_mlx5_iface_query,
+    .iface_get_device_address = uct_ib_iface_get_device_address,
+    .iface_is_reachable       = uct_ib_iface_is_reachable,
+    .iface_get_address        = uct_dc_iface_get_address,
+    },
+    .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
+    .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
+    .handle_failure           = uct_dc_mlx5_iface_handle_failure,
+    .set_ep_failed            = uct_dc_mlx5_ep_set_failed
     },
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_dc_iface_fc_handler,

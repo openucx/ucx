@@ -404,21 +404,23 @@ static ucs_status_t uct_cm_iface_get_address(uct_iface_h tl_iface,
 
 static uct_ib_iface_ops_t uct_cm_iface_ops = {
     {
-    .iface_query              = uct_cm_iface_query,
-    .iface_flush              = uct_cm_iface_flush,
-    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_iface_t),
-    .iface_get_address        = uct_cm_iface_get_address,
-    .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_ib_iface_is_reachable,
-    .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
-    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
     .ep_am_bcopy              = uct_cm_ep_am_bcopy,
     .ep_pending_add           = uct_cm_ep_pending_add,
     .ep_pending_purge         = uct_cm_ep_pending_purge,
     .ep_flush                 = uct_cm_ep_flush,
+    .ep_fence                 = uct_base_ep_fence,
+    .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
+    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
+    .iface_flush              = uct_cm_iface_flush,
+    .iface_fence              = uct_base_iface_fence,
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_iface_t),
+    .iface_query              = uct_cm_iface_query,
+    .iface_get_device_address = uct_ib_iface_get_device_address,
+    .iface_get_address        = uct_cm_iface_get_address,
+    .iface_is_reachable       = uct_ib_iface_is_reachable
     },
     .arm_tx_cq                = (void*)ucs_empty_function_return_success,
-    .arm_rx_cq                = (void*)ucs_empty_function_return_success,
+    .arm_rx_cq                = (void*)ucs_empty_function_return_success
 };
 
 static ucs_status_t uct_cm_query_resources(uct_md_h md,
