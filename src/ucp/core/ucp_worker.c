@@ -634,7 +634,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucp_wakeup_event_t events;
 
     /* Space for eager header is needed for unexpected tag offload messages */
-    const size_t rx_headroom = sizeof(ucp_recv_desc_t) + sizeof(ucp_eager_hdr_t);
+    const size_t rx_headroom = sizeof(ucp_recv_desc_t) + sizeof(ucp_eager_sync_hdr_t);
 
     config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
                            UINT8_MAX);
