@@ -34,7 +34,7 @@ const char *uct_alloc_method_names[] = {
 };
 
 
-static inline unsigned mmap_flags(unsigned uct_mmap_flags)
+static inline unsigned uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
 {
     unsigned mm_flags = MAP_PRIVATE | MAP_ANON;
 
@@ -180,7 +180,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             break;
 
         case UCT_ALLOC_METHOD_MMAP:
-            map_flags = mmap_flags(flags);
+            map_flags = uct_mem_get_mmap_flags(flags);
             /* Request memory from operating system using mmap() */
             alloc_length = ucs_align_up_pow2(min_length, ucs_get_page_size());
             address = ucs_mmap(addr, alloc_length, PROT_READ | PROT_WRITE,
