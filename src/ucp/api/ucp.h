@@ -1615,29 +1615,6 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
 
 
 /**
- * @ingroup UCP_MEM
- * @brief If possible translate remote address into local address which can be
- *        accessed using direct load and store operations.
- *
- * This routine returns a local memory address for the remote address such that
- * application can use the local address for direct memory load and store
- * operations. If the underlying hardware does not support this capability
- * this routine will return a corresponding error.
- *
- * @param [in]  ep              Endpoint handle that was used for rkey object
- *                              creation and is used for the remote memory address.
- * @param [in]  remote_addr     Remote address to translate.
- * @param [out] rkey            Remote key handle for the remote address.
- * @param [out] local_addr_p    Local memory address that can by accessed
- *                              directly using memory load and store operations.
- *
- * @return Error code as defined by @ref ucs_status_t
- */
-ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
-                          void **local_addr_p);
-
-
-/**
  * @ingroup UCP_COMM
  * @brief Non-blocking tagged-send operations
  *
