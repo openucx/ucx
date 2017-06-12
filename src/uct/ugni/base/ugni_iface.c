@@ -93,6 +93,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
                             sizeof(uct_ugni_flush_group_t),
                             0,                            /* alignment offset */
                             UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                            grow,                         /* start */
                             grow,                         /* grow */
                             config->mpool.max_bufs,       /* max buffers */
                             &uct_ugni_flush_mpool_ops,
