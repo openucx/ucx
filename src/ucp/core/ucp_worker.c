@@ -6,6 +6,7 @@
 */
 
 #include "ucp_worker.h"
+#include "ucp_mm.h"
 #include "ucp_request.inl"
 
 #include <ucp/wireup/address.h>
@@ -40,6 +41,15 @@ ucs_mpool_ops_t ucp_am_mpool_ops = {
     .obj_init      = ucs_empty_function,
     .obj_cleanup   = ucs_empty_function
 };
+
+
+ucs_mpool_ops_t ucp_reg_mpool_ops = {
+    .chunk_alloc   = ucp_mpool_malloc,
+    .chunk_release = ucp_mpool_free,
+    .obj_init      = ucp_mpool_obj_init,
+    .obj_cleanup   = ucs_empty_function
+};
+
 
 static void ucp_worker_close_ifaces(ucp_worker_h worker)
 {
@@ -551,29 +561,36 @@ static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
     }
 }
 
-static ucs_status_t ucp_worker_init_am_mpool(ucp_worker_h worker,
-                                             size_t rx_headroom)
+static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker,
+                                           size_t rx_headroom)
 {
     uct_iface_attr_t *if_attr;
     size_t           tl_id;
-    size_t           max_am_mp_entry_size = 0;
+    ucs_status_t     status;
+    size_t           max_mp_entry_size = 0;
 
     for (tl_id = 0; tl_id < worker->context->num_tls; ++tl_id) {
         if_attr = &worker->ifaces[tl_id].attr;
-        max_am_mp_entry_size = ucs_max(max_am_mp_entry_size,
-                                       if_attr->cap.am.max_short);
-        max_am_mp_entry_size = ucs_max(max_am_mp_entry_size,
-                                       if_attr->cap.am.max_bcopy);
-        max_am_mp_entry_size = ucs_max(max_am_mp_entry_size,
-                                       if_attr->cap.am.max_zcopy);
+        max_mp_entry_size = ucs_max(max_mp_entry_size,
+                                    if_attr->cap.am.max_short);
+        max_mp_entry_size = ucs_max(max_mp_entry_size,
+                                    if_attr->cap.am.max_bcopy);
+        max_mp_entry_size = ucs_max(max_mp_entry_size,
+                                    if_attr->cap.am.max_zcopy);
     }
 
-    max_am_mp_entry_size += rx_headroom;
+    status = ucs_mpool_init(&worker->am_mp, 0,
+                            max_mp_entry_size + rx_headroom,
+                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                            &ucp_am_mpool_ops, "ucp_am_bufs");
+    if (status == UCS_OK) {
+        status = ucs_mpool_init(&worker->reg_mp, 0,
+                                max_mp_entry_size + sizeof(ucp_mem_desc_t),
+                                sizeof(ucp_mem_desc_t), UCS_SYS_CACHE_LINE_SIZE,
+                                128, UINT_MAX, &ucp_reg_mpool_ops, "ucp_reg_bufs");
+    }
 
-    return ucs_mpool_init(&worker->am_mp, 0,
-                          max_am_mp_entry_size,
-                          0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                          &ucp_am_mpool_ops, "ucp_am_bufs");
+    return status;
 }
 
 /* All the ucp endpoints will share the configurations. No need for every ep to
@@ -730,8 +747,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         }
     }
 
-    /* Init AM memory pool */
-    status = ucp_worker_init_am_mpool(worker, rx_headroom);
+    /* Init AM and registered memory pools */
+    status = ucp_worker_init_mpools(worker, rx_headroom);
     if (status != UCS_OK) {
         goto err_close_ifaces;
     }
@@ -776,6 +793,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_remove_am_handlers(worker);
     ucp_worker_destroy_eps(worker);
     ucs_mpool_cleanup(&worker->am_mp, 1);
+    ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucp_worker_close_ifaces(worker);
     ucs_mpool_cleanup(&worker->req_mp, 1);
     uct_worker_destroy(worker->uct);

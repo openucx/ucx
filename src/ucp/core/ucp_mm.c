@@ -6,6 +6,7 @@
 
 #include "ucp_mm.h"
 #include "ucp_context.h"
+#include "ucp_worker.h"
 
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
@@ -444,3 +445,52 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
     UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
 }
+
+ucs_status_t ucp_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+{
+    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, reg_mp);
+    ucp_mem_desc_t *chunk_hdr;
+    ucp_mem_map_params_t mem_map_params;
+    ucp_mem_h memh;
+    ucs_status_t status;
+
+    mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                                UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    mem_map_params.address    = NULL;
+    mem_map_params.length     = *size_p + sizeof(*chunk_hdr);
+    mem_map_params.flags      = UCP_MEM_MAP_ALLOCATE;
+
+    status = ucp_mem_map(worker->context, &mem_map_params, &memh);
+    if (status == UCS_OK) {
+        chunk_hdr       = memh->address;
+        chunk_hdr->memh = memh;
+        *chunk_p        = chunk_hdr + 1;
+        *size_p         = memh->length - sizeof(*chunk_hdr);
+    }
+
+    return status;
+}
+
+void ucp_mpool_free(ucs_mpool_t *mp, void *chunk)
+{
+    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, reg_mp);
+    ucp_mem_desc_t *chunk_hdr;
+    ucs_status_t status;
+
+    chunk_hdr = (ucp_mem_desc_t*)chunk - 1;
+    status = ucp_mem_unmap(worker->context, chunk_hdr->memh);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucs_error("Failed to release UCP mem chunk %p: %s",
+                  chunk, ucs_status_string(status));
+    }
+}
+
+void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    ucp_mem_desc_t *elem_hdr  = obj;
+    ucp_mem_desc_t *chunk_hdr = (ucp_mem_desc_t*)((ucp_mem_desc_t*)chunk - 1);
+    elem_hdr->memh = chunk_hdr->memh;
+}
+
+
