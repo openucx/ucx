@@ -148,7 +148,7 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
     uct_rc_hdr_t *hdr;
     unsigned i;
     ucs_status_t status;
-    unsigned count;
+//    unsigned count;
     unsigned num_wcs = iface->super.config.rx_max_poll;
     struct ibv_wc wc[num_wcs];
 
@@ -165,11 +165,13 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
     }
     iface->rx.srq.available += num_wcs;
     /* increase maximum number of RX packets if "DDoS" detected */
+/*
     if (ucs_unlikely((num_wcs == iface->super.config.rx_max_poll) && iface->rx.srq.reserved)) {
         count = ucs_min(iface->rx.srq.reserved, num_wcs);
         iface->rx.srq.available += count;
         iface->rx.srq.reserved  -= count;
     }
+*/
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_IFACE_STAT_RX_COMPLETION, num_wcs);
 
 out:

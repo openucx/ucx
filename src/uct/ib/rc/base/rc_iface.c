@@ -452,8 +452,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
             status = UCS_ERR_IO_ERROR;
             goto err_free_tx_ops;
         }
-        self->rx.srq.available       = ucs_min(config->super.rx.queue_init_len,
-                                               srq_init_attr.attr.max_wr);
+        self->rx.srq.available       = srq_init_attr.attr.max_wr;
+//ucs_min(config->super.rx.queue_init_len,
+//                                               srq_init_attr.attr.max_wr);
         self->rx.srq.reserved        = srq_init_attr.attr.max_wr - self->rx.srq.available;
     } else {
         self->rx.srq.srq             = NULL;
