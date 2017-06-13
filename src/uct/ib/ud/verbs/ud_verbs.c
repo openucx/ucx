@@ -333,6 +333,19 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
 
     }
     iface->super.rx.available += num_wcs;
+
+    if (num_wcs) {
+        if (iface->super.rx.reserved) {
+            if (!iface->super.rx.probability) {
+                iface->super.rx.available++;
+                iface->super.rx.reserved--;
+            }
+            iface->super.rx.probability++;
+        }
+    } else {
+        iface->super.rx.probability = 1;
+    }
+
 out:
     uct_ud_verbs_iface_post_recv(iface);
     return status;

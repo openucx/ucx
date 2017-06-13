@@ -158,7 +158,7 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
         grow = 1024;
     } else {
         /* We want to have some free (+10%) elements to avoid mem pool expansion */
-        grow = ucs_min( (int)(1.1 * config->rx.queue_len + 0.5),
+        grow = ucs_min( (int)(config->rx.queue_len >> 3),
                         config->rx.mp.max_bufs);
     }
 

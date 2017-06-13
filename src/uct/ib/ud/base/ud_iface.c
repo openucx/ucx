@@ -431,7 +431,9 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->tx.unsignaled          = 0;
     self->tx.available           = config->super.tx.queue_len;
 
-    self->rx.available           = config->super.rx.queue_len;
+    self->rx.available           = config->super.rx.queue_init_len;
+    self->rx.reserved            = config->super.rx.queue_len - self->rx.available;
+    self->rx.probability         = 1;
     self->config.tx_qp_len       = config->super.tx.queue_len;
     self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
 
@@ -457,7 +459,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
                                           "ud_recv_skb", &self->rx.mp,
-                                          0);
+                                          1);
     if (status != UCS_OK) {
         goto err_qp;
     }
