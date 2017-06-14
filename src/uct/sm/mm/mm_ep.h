@@ -36,8 +36,7 @@ struct uct_mm_ep {
     socklen_t            cached_signal_addrlen;   /* cached address length of signaling socket */
     struct sockaddr_un   cached_signal_sockaddr;  /* cached address of signaling socket */
 
-    ucs_callbackq_slow_elem_t cbq_elem;           /* Slow-path callback */
-    uint8_t                   cbq_elem_on;
+    uct_worker_cb_id_t   slow_cb_id; /* Slow-path callback */
 
     /* Remote peer */
     uct_mm_remote_seg_t  mapped_desc; /* pointer to the descriptor of the destination's shared_mem (FIFO) */

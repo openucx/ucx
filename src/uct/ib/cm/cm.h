@@ -51,8 +51,7 @@ typedef struct uct_cm_iface {
     ucs_queue_head_t          notify_q;        /* Notification queue */
     uint32_t                  num_outstanding; /* Number of outstanding sends */
     ucs_queue_head_t          outstanding_q;   /* Outstanding operations queue */
-    ucs_callbackq_slow_elem_t cbq_elem;        /* Slow-path callback */
-    uint8_t                   cbq_elem_on;
+    uct_worker_cb_id_t        slow_prog_id;    /* Callback id for slowpath progress */
 
     struct {
         int                timeout_ms;

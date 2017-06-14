@@ -32,6 +32,13 @@ struct uct_worker {
 };
 
 
+typedef struct uct_worker_progress {
+    ucs_callback_t         cb;
+    void                   *arg;
+    int                    refcount;
+} uct_worker_progress_t;
+
+
 #define uct_worker_tl_data_get(_worker, _key, _type, _cmp_fn, _init_fn, ...) \
     ({ \
         uct_worker_tl_data_t *data; \
@@ -68,5 +75,13 @@ struct uct_worker {
         } \
     }
 
+
+void uct_worker_progress_init(uct_worker_progress_t *prog);
+
+void uct_worker_progress_register(uct_worker_h worker, ucs_callback_t cb,
+                                  void *arg, uct_worker_progress_t *prog);
+
+void uct_worker_progress_unregister(uct_worker_h worker,
+                                    uct_worker_progress_t *prog);
 
 #endif

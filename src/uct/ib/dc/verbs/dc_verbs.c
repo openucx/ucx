@@ -869,7 +869,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     }
 
     /* TODO: only register progress when we have a connection */
-    uct_worker_progress_register(worker, uct_dc_verbs_iface_progress, self);
+    uct_worker_progress_register(worker, uct_dc_verbs_iface_progress, self,
+                                 &self->super.super.super.super.prog);
     ucs_debug("created dc iface %p", self);
     return UCS_OK;
 
@@ -883,7 +884,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_verbs_iface_t)
 {
     ucs_trace_func("");
     uct_worker_progress_unregister(self->super.super.super.super.worker,
-                                   uct_dc_verbs_iface_progress, self);
+                                   &self->super.super.super.super.prog);
     uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
 }
 

@@ -103,6 +103,7 @@ typedef struct uct_iface_addr    uct_iface_addr_t;
 typedef struct uct_ep_addr       uct_ep_addr_t;
 typedef struct uct_tag_context   uct_tag_context_t;
 typedef uint64_t                 uct_tag_t;  /* tag type - 64 bit */
+typedef void*                    uct_worker_cb_id_t;
 /**
  * @}
  */
