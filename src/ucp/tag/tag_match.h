@@ -40,6 +40,7 @@ typedef struct ucp_tag_match {
 
     /* Tag offload fields */
     ucs_queue_head_t          offload_ifaces; /* Interfaces which support tag offload */
+    ucs_queue_head_t          sync_reqs;      /* Outgoing sync send requests */
     size_t                    post_thresh;    /* Messages are posted to the transport
                                                  starting from this threshold. */
     unsigned                  sw_req_count;   /* Number of requests which need to be matched

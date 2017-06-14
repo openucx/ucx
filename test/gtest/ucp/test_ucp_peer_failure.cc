@@ -126,8 +126,11 @@ UCS_TEST_P(test_ucp_peer_failure, status_after_error) {
 
     fail_receiver();
 
-    send_nb(NULL, 0, DATATYPE, 0x111337);
+    request *req = send_nb(NULL, 0, DATATYPE, 0x111337);
     wait_err();
+    if (UCS_PTR_IS_PTR(req)) {
+        request_release(req);
+    }
 
     EXPECT_NE(UCS_OK, m_err_status);
 
@@ -184,8 +187,11 @@ UCS_TEST_P(test_ucp_peer_failure_with_rma, status_after_error) {
     ucp_mem_unmap(receiver().ucph(), memh);
 
     fail_receiver();
-    send_nb(NULL, 0, DATATYPE, 0x111337);
+    request *req = send_nb(NULL, 0, DATATYPE, 0x111337);
     wait_err();
+    if (UCS_PTR_IS_PTR(req)) {
+        request_release(req);
+    }
 
     EXPECT_NE(UCS_OK, m_err_status);
 

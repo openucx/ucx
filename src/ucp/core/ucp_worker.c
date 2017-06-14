@@ -239,6 +239,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_worker_h       worker           = (ucp_worker_h)arg;
     ucp_ep_h           ucp_ep           = NULL;
+    uct_ep_h           aux_ep;
     uint64_t           dest_uuid UCS_V_UNUSED;
     ucp_ep_h           ucp_ep_iter;
     khiter_t           ucp_ep_errh_iter;
@@ -248,7 +249,11 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
     kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep_iter, {
         for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep_iter); ++lane) {
-            if (uct_ep == ucp_ep_iter->uct_eps[lane]) {
+            aux_ep = ucp_stub_ep_test(ucp_ep_iter->uct_eps[lane]) ?
+                     ucs_derived_of(ucp_ep_iter->uct_eps[lane],
+                                    ucp_stub_ep_t)->aux_ep :
+                     NULL;
+            if ((uct_ep == ucp_ep_iter->uct_eps[lane]) || (uct_ep == aux_ep)) {
                 ucp_ep = ucp_ep_iter;
                 failed_lane = lane;
                 goto found_ucp_ep;
@@ -300,6 +305,9 @@ found_ucp_ep:
     if (ucp_ep_errh_iter != kh_end(&worker->ep_errh_hash)) {
         err_handler = kh_val(&worker->ep_errh_hash, ucp_ep_errh_iter);
         err_handler.cb(err_handler.arg, ucp_ep, status);
+    } else {
+        ucs_error("Error %s was not handled for ep %p",
+                  ucs_status_string(status), ucp_ep);
     }
 }
 
@@ -347,6 +355,8 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
         goto out;
     }
 
+    VALGRIND_MAKE_MEM_UNDEFINED(&worker->ifaces[tl_id].attr,
+                                sizeof(worker->ifaces[tl_id].attr));
     status = uct_iface_query(iface, &worker->ifaces[tl_id].attr);
     if (status != UCS_OK) {
         goto out;
@@ -624,7 +634,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucp_wakeup_event_t events;
 
     /* Space for eager header is needed for unexpected tag offload messages */
-    const size_t rx_headroom = sizeof(ucp_recv_desc_t) + sizeof(ucp_eager_hdr_t);
+    const size_t rx_headroom = sizeof(ucp_recv_desc_t) + sizeof(ucp_eager_sync_hdr_t);
 
     config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
                            UINT8_MAX);

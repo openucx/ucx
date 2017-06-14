@@ -122,39 +122,13 @@ khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
 
 
-static void *ucs_debug_alloc_mem(size_t length)
-{
-    void *ptr;
-
-    length = ucs_align_up_pow2(length, ucs_get_page_size());
-    ptr = mmap(NULL, length, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
-    if (ptr == MAP_FAILED) {
-        ucs_log_fatal_error("mmap(NULL, %zu, READ|WRITE, PRIVATE|ANON) failed: %m",
-                            length);
-        return NULL;
-    }
-
-    return ptr;
-}
-
-static void ucs_debug_free_mem(void *ptr, size_t length)
-{
-    int ret;
-
-    length = ucs_align_up_pow2(length, ucs_get_page_size());
-    ret = munmap(ptr, length);
-    if (ret) {
-        ucs_log_fatal_error("munmap(%p, %zu) failed: %m", ptr, length);
-    }
-}
-
 static char *ucs_debug_strdup(const char *str)
 {
     size_t length;
     char *newstr;
 
     length = strlen(str) + 1;
-    newstr = ucs_debug_alloc_mem(length);
+    newstr = ucs_sys_realloc(NULL, 0, length);
     if (newstr != NULL) {
         strncpy(newstr, str, length);
     }
@@ -334,7 +308,7 @@ static backtrace_h ucs_debug_backtrace_create(void)
     int i, num_addresses;
     backtrace_h bckt;
 
-    bckt = ucs_debug_alloc_mem(sizeof *bckt);
+    bckt = ucs_sys_realloc(NULL, 0, sizeof *bckt);
     if (!bckt) {
         return NULL;
     }
@@ -368,7 +342,7 @@ static void ucs_debug_backtrace_destroy(backtrace_h bckt)
         free(bckt->lines[i].function);
         free(bckt->lines[i].file);
     }
-    ucs_debug_free_mem(bckt, sizeof(*bckt));
+    ucs_sys_free(bckt, sizeof(*bckt));
 }
 
 static ucs_status_t
@@ -694,7 +668,7 @@ static void ucs_debugger_attach()
         fd = open(gdb_commands_file, O_WRONLY|O_TRUNC|O_CREAT, 0600);
         if (fd >= 0) {
             if (RUNNING_ON_VALGRIND) {
-                vg_cmds = ucs_debug_alloc_mem(strlen(vg_cmds_fmt) + strlen(self_exe));
+                vg_cmds = ucs_sys_realloc(NULL, 0, strlen(vg_cmds_fmt) + strlen(self_exe));
                 sprintf(vg_cmds, vg_cmds_fmt, self_exe);
                 if (write(fd, vg_cmds, strlen(vg_cmds)) != strlen(vg_cmds)) {
                     ucs_log_fatal_error("Unable to write to command file: %m");
@@ -1100,7 +1074,7 @@ static void ucs_debug_set_signal_alt_stack()
                                      (sizeof(void*) * BACKTRACE_MAX) +
                                      (128 * UCS_KBYTE);
     ucs_debug_signal_stack.ss_sp =
-                    ucs_debug_alloc_mem(ucs_debug_signal_stack.ss_size);
+                    ucs_sys_realloc(NULL, 0, ucs_debug_signal_stack.ss_size);
     if (ucs_debug_signal_stack.ss_sp == NULL) {
         return;
     }
@@ -1110,8 +1084,8 @@ static void ucs_debug_set_signal_alt_stack()
     if (ret) {
         ucs_warn("sigaltstack(ss_sp=%p, ss_size=%zu) failed: %m",
                  ucs_debug_signal_stack.ss_sp, ucs_debug_signal_stack.ss_size);
-        ucs_debug_free_mem(ucs_debug_signal_stack.ss_sp,
-                           ucs_debug_signal_stack.ss_size);
+        ucs_sys_free(ucs_debug_signal_stack.ss_sp,
+                     ucs_debug_signal_stack.ss_size);
         ucs_debug_signal_stack.ss_sp = NULL;
         return;
     }
