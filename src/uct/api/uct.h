@@ -773,16 +773,20 @@ void uct_worker_progress(uct_worker_h worker);
  * @ingroup UCT_CONTEXT
  * @brief Add a slow path callback function to a worker progress.
  *
- * Add a function which will be called every time a progress is made on the worker.
- * The number of functions which can be added this way is unlimited since the
- * element is allocated by the caller, but the overhead of calling this function
- * is slightly higher than @ref uct_worker_progress_register.
+ * If 'id_p' points to a NULL identifier, this function will add a callback which
+ * will be called every time a progress is made on the worker.
  *
- * @param [in]    worker        Handle to worker.
- * @param [in]    func          Pointer to callback function.
- * @param [in]    arg           Argument to the function.
- * @param [in]    flags         Callback flags, see @ref ucs_callbackq_flags
- * @param [inout] id_p          Filled with callback ID.
+ * @param [in]    worker        Handle to the worker whose progress should invoke
+ *                              the callback.
+ * @param [in]    func          Pointer to the callback function.
+ * @param [in]    arg           Argument for the callback function.
+ * @param [in]    flags         Callback flags, see @ref ucs_callbackq_flags.
+ * @param [inout] id_p          Filled with callback identifier, which can be
+ *                              used to remove the callback. If *id_p is non-NULL,
+ *                              no operation will be performed and *id_p will be
+ *                              left unchanged.
+ *
+ * @note This function is thread safe.
  */
 void uct_worker_progress_register_safe(uct_worker_h worker, ucs_callback_t func,
                                        void *arg, unsigned flags,
@@ -793,11 +797,17 @@ void uct_worker_progress_register_safe(uct_worker_h worker, ucs_callback_t func,
  * @ingroup UCT_CONTEXT
  * @brief Remove a slow path callback function from worker's progress.
  *
- * Remove a function previously added by @ref uct_worker_slowpath_progress_register.
+ * If 'id_p' points to a non-NULL handle, remove a callback which was previously
+ * added by @ref uct_worker_progress_register_safe.
  *
- * @param [in]    worker        Handle to worker.
- * @param [inout] id_p          Callback ID to remove, after a call to this
- *                              function it's set to UCS_CALLBACKQ_ID_NULL.
+ * @param [in]    worker        Handle to the worker whose progress should invoke
+ *                              the callback.
+ * @param [inout] id_p          Points to callback identifier to remove, and filled
+ *                              with NULL by this function. If *id_p already points
+ *                              to NULL, no operation will be performed and *id_p
+ *                              will be left unchanged.
+ *
+ * @note This function is thread safe.
  */
 void uct_worker_progress_unregister_safe(uct_worker_h worker,
                                          uct_worker_cb_id_t *id_p);
