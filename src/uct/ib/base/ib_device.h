@@ -115,9 +115,6 @@ typedef struct uct_ib_device_spec {
 typedef struct uct_ib_device {
     struct ibv_context          *ibv_context;    /* Verbs context */
     struct ibv_exp_device_attr  dev_attr;        /* Cached device attributes */
-#if HAVE_IBV_EX_HW_TM
-    struct ibv_device_attr_ex   dev_attr_ex;     /* Cached extended device attributes */
-#endif
     uint8_t                     first_port;      /* Number of first port (usually 1) */
     uint8_t                     num_ports;       /* Amount of physical ports */
     cpu_set_t                   local_cpus;      /* CPUs local to device */
