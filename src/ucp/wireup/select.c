@@ -146,6 +146,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     int reachable;
     int found;
     uint8_t priority, best_score_priority;
+    float epsilon; /* a small value to overcome float imprecision */
 
     found       = 0;
     best_score  = 0.0;
@@ -250,8 +251,9 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
 
             /* First comparing score, if score equals to current best score,
              * comparing priority with the priority of best score */
-            if (!found || (score > best_score) ||
-                ((score == best_score) && (priority > best_score_priority))) {
+            epsilon = (score + best_score) * (1e-6);
+            if (!found || (score > (best_score + epsilon)) ||
+                ((fabs(score - best_score) < epsilon) && (priority > best_score_priority))) {
                 *rsc_index_p      = rsc_index;
                 *dst_addr_index_p = ae - address_list;
                 *score_p          = score;
