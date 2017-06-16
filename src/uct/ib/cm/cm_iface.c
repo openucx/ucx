@@ -260,7 +260,6 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
                               1 /* tx_cq_len */,
                               config->super.rx.queue_len /* rx_cq_len */,
                               IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE, /* mss */
-                              0, /* is_ex_recv_cq */
                               &config->super);
 
     if (worker->async == NULL) {
