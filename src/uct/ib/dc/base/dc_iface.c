@@ -192,7 +192,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &ops->super, md, worker, params,
                               &config->super, rx_priv_len,
-                              config->super.super.rx.queue_len, 0,
+                              config->super.super.rx.queue_len,
                               sizeof(uct_rc_hdr_t),
                               config->super.super.rx.queue_len,
                               sizeof(uct_dc_fc_request_t));

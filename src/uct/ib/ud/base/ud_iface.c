@@ -426,7 +426,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
                               params, rx_priv_len, rx_hdr_len,
                               config->super.tx.queue_len,
                               config->super.rx.queue_len,
-                              mtu, 0, &config->super);
+                              mtu, &config->super);
 
     self->tx.unsignaled          = 0;
     self->tx.available           = config->super.tx.queue_len;
