@@ -1,8 +1,3 @@
-<a href="https://scan.coverity.com/projects/5820">
-  <img alt="Coverity Scan Build Status"
-       src="https://scan.coverity.com/projects/5820/badge.svg"/>
-</a>
-
 UCX is a communication library implementing high-performance messaging for MPI/PGAS frameworks
 
 ### Quick start
