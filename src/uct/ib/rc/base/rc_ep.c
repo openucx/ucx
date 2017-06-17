@@ -392,6 +392,7 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
                 uct_invoke_completion(op->user_comp, status);
             }
         }
+        op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
         if (op->handler == uct_rc_ep_send_op_completion_handler) {
             uct_rc_iface_put_send_op(op);
         } else {
