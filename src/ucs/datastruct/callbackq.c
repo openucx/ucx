@@ -156,7 +156,7 @@ static unsigned ucs_callbackq_get_fast_idx(ucs_callbackq_t *cbq)
     unsigned idx;
 
     idx = priv->num_fast_elems++;
-    ucs_assert(idx < UCS_CALLBACKQ_FAST_MAX);
+    ucs_assert(idx < UCS_CALLBACKQ_FAST_COUNT);
     return idx;
 }
 
