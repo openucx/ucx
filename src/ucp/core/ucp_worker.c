@@ -583,13 +583,23 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker,
                             max_mp_entry_size + rx_headroom,
                             0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
                             &ucp_am_mpool_ops, "ucp_am_bufs");
-    if (status == UCS_OK) {
-        status = ucs_mpool_init(&worker->reg_mp, 0,
-                                max_mp_entry_size + sizeof(ucp_mem_desc_t),
-                                sizeof(ucp_mem_desc_t), UCS_SYS_CACHE_LINE_SIZE,
-                                128, UINT_MAX, &ucp_reg_mpool_ops, "ucp_reg_bufs");
+    if (status != UCS_OK) {
+        goto out;
     }
 
+    status = ucs_mpool_init(&worker->reg_mp, 0,
+                            max_mp_entry_size + sizeof(ucp_mem_desc_t),
+                            sizeof(ucp_mem_desc_t), UCS_SYS_CACHE_LINE_SIZE,
+                            128, UINT_MAX, &ucp_reg_mpool_ops, "ucp_reg_bufs");
+    if (status != UCS_OK) {
+        goto err_release_am_mpool;
+    }
+
+    return UCS_OK;
+
+err_release_am_mpool:
+    ucs_mpool_cleanup(&worker->am_mp, 0);
+out:
     return status;
 }
 
