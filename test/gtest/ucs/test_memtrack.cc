@@ -7,6 +7,7 @@
 #include <common/test.h>
 
 extern "C" {
+#include <ucp/api/ucp.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/sys.h>
 }
@@ -199,6 +200,45 @@ UCS_TEST_F(test_memtrack, custom) {
     free(ptr);
 
     test_total(1, ALLOC_SIZE);
+}
+
+UCS_TEST_F(test_memtrack, worker_memory) {
+    ucs_memtrack_entry_t entry;
+    ucp_params_t ucp_params;
+    ucp_worker_params_t worker_params;
+    ucp_config_t *config;
+    ucs_status_t status;
+    ucp_context_h ucp_context;
+    ucp_worker_h ucp_worker;
+
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+
+    memset(&ucp_params,    0, sizeof(ucp_params));
+    memset(&worker_params, 0, sizeof(worker_params));
+    memset(&entry,         0, sizeof(entry));
+
+    status = ucp_config_read(NULL, NULL, &config);
+    EXPECT_EQ(status, UCS_OK);
+
+    ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES;
+    ucp_params.features     = UCP_FEATURE_TAG;
+
+    status = ucp_init(&ucp_params, config, &ucp_context);
+    ucp_config_release(config);
+    EXPECT_EQ(status, UCS_OK);
+
+    status = ucp_worker_create(ucp_context, &worker_params, &ucp_worker);
+    EXPECT_EQ(status, UCS_OK);
+
+    ucs_memtrack_total(&entry);
+    UCS_TEST_MESSAGE << "Worker memory consumption: "
+                     << entry.peak_size / 1024
+                     << " KiB";
+
+    ucp_worker_destroy(ucp_worker);
+    ucp_cleanup(ucp_context);
 }
 
 #endif

@@ -144,6 +144,7 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                   UCS_SYS_CACHE_LINE_SIZE,
                                   &config->super.tx.mp,
                                   rc_iface->config.tx_qp_len,
+                                  rc_iface->config.tx_qp_len,
                                   uct_rc_iface_send_desc_init,
                                   "rc_mlx5_atomic_desc");
     if (status != UCS_OK) {

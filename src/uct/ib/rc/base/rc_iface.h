@@ -158,7 +158,8 @@ typedef struct uct_rc_iface_ops {
 
 typedef struct uct_rc_srq {
     struct ibv_srq           *srq;
-    unsigned                 available;
+    unsigned                 available; /* Number of buffers which can be posted to HW */
+    unsigned                 reserved;  /* By how much 'available' can grow */
 } uct_rc_srq_t;
 
 
@@ -219,7 +220,7 @@ struct uct_rc_iface {
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h,
                   uct_worker_h, const uct_iface_params_t*,
                   const uct_rc_iface_config_t*, unsigned, unsigned,
-                  unsigned, unsigned, unsigned)
+                  unsigned, unsigned, unsigned, int)
 
 
 struct uct_rc_iface_send_op {

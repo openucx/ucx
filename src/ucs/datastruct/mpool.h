@@ -74,6 +74,7 @@ struct ucs_mpool_data {
     unsigned               align_offset; /* Offset to alignment point */
     unsigned               quota;        /* How many more elements can be allocated */
     ucs_mpool_elem_t       *tail;        /* Free list tail */
+    size_t                 start_size;   /* Size of first chunk */
     size_t                 chunk_size;   /* Size of each chunk */
     ucs_mpool_chunk_t      *chunks;      /* List of allocated chunks */
     ucs_mpool_ops_t        *ops;         /* Memory pool operations */
@@ -136,6 +137,7 @@ struct ucs_mpool_ops {
  * @param elem_size        Size of an element.
  * @param align_offset     Offset in the element which should be aligned to the given boundary.
  * @param alignment        Boundary to which align the given offset within the element.
+ * @param start_chunk      Number of elements in first chunk.
  * @param elems_per_chunk  Number of elements in a single chunk.
  * @param max_elems        Maximal number of elements which can be allocated by the pool.
  *                         -1 or UINT_MAX means no limit.
@@ -146,8 +148,9 @@ struct ucs_mpool_ops {
  */
 ucs_status_t ucs_mpool_init(ucs_mpool_t *mp, size_t priv_size,
                             size_t elem_size, size_t align_offset, size_t alignment,
-                            unsigned elems_per_chunk, unsigned max_elems,
-                            ucs_mpool_ops_t *ops, const char *name);
+                            unsigned start_chunk, unsigned elems_per_chunk,
+                            unsigned max_elems, ucs_mpool_ops_t *ops,
+                            const char *name);
 
 
 /**

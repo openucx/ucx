@@ -431,7 +431,12 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->tx.unsignaled          = 0;
     self->tx.available           = config->super.tx.queue_len;
 
-    self->rx.available           = config->super.rx.queue_len;
+    self->rx.available           = ucs_min(config->super.rx.queue_len,
+                                           config->super.rx.queue_init_len);
+    self->rx.reserved            = config->super.rx.queue_len - self->rx.available;
+printf(" config->super.rx.queue_init_len %d config->super.rx.queue_len %d \n",config->super.rx.queue_init_len, config->super.rx.queue_len);
+printf(" self->rx.reserved %d self->rx.available %d \n", self->rx.reserved, self->rx.available);
+    self->rx.probability         = 1;
     self->config.tx_qp_len       = config->super.tx.queue_len;
     self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
 
@@ -456,7 +461,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     uct_ud_iface_cep_init(self);
 
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
-                                          "ud_recv_skb", &self->rx.mp);
+                                          "ud_recv_skb", &self->rx.mp,
+                                          1);
     if (status != UCS_OK) {
         goto err_qp;
     }
@@ -469,7 +475,9 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
                                   sizeof(uct_ud_send_skb_t) + data_size,
                                   sizeof(uct_ud_send_skb_t),
                                   UCS_SYS_CACHE_LINE_SIZE,
-                                  &config->super.tx.mp, self->config.tx_qp_len,
+                                  &config->super.tx.mp,
+                                  self->config.tx_qp_len,
+                                  self->config.tx_qp_len,
                                   uct_ud_iface_send_skb_init, "ud_tx_skb");
     if (status != UCS_OK) {
         goto err_mpool;

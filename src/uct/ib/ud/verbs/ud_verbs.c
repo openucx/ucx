@@ -333,6 +333,7 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
 
     }
     iface->super.rx.available += num_wcs;
+
 out:
     uct_ud_verbs_iface_post_recv(iface);
     return status;
@@ -522,11 +523,21 @@ uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max)
         return;
     }
 
+    if (iface->super.rx.reserved) {
+        if (!iface->super.rx.probability) {
+                iface->super.rx.available += 64;
+                iface->super.rx.reserved -= 64;
+        }
+        iface->super.rx.probability++;
+    }
+
     ret = ibv_post_recv(iface->super.qp, &wrs[0].ibwr, &bad_wr);
     if (ret != 0) {
         ucs_fatal("ibv_post_recv() returned %d: %m", ret);
     }
     iface->super.rx.available -= count;
+
+
 }
 
 static UCS_F_ALWAYS_INLINE void
