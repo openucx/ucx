@@ -664,6 +664,8 @@ ucs_status_t ucm_malloc_install(int events)
             ucm_debug("installing malloc relocations");
             ucm_malloc_populate_glibc_cache();
             ucm_malloc_install_symbols(ucm_malloc_symbol_patches);
+            ucs_assert(ucm_malloc_symbol_patches[0].value == ucm_free);
+            ucm_malloc_hook_state.free           = ucm_malloc_symbol_patches[0].prev_value;
             ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_MALL_SYMS;
         }
     } else {
