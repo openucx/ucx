@@ -174,21 +174,6 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     {
     {
-    .iface_query              = uct_rc_mlx5_iface_query,
-    .iface_flush              = uct_rc_iface_flush,
-    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
-    .iface_wakeup_open        = uct_ib_iface_wakeup_open,
-    .iface_wakeup_get_fd      = uct_ib_iface_wakeup_get_fd,
-    .iface_wakeup_arm         = uct_ib_iface_wakeup_arm,
-    .iface_wakeup_wait        = uct_ib_iface_wakeup_wait,
-    .iface_wakeup_signal      = uct_ib_iface_wakeup_signal,
-    .iface_wakeup_close       = uct_ib_iface_wakeup_close,
-    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
-    .ep_get_address           = uct_rc_ep_get_address,
-    .ep_connect_to_ep         = uct_rc_ep_connect_to_ep,
-    .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_ib_iface_is_reachable,
-    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_put_short             = uct_rc_mlx5_ep_put_short,
     .ep_put_bcopy             = uct_rc_mlx5_ep_put_bcopy,
     .ep_put_zcopy             = uct_rc_mlx5_ep_put_zcopy,
@@ -207,7 +192,24 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_atomic_cswap32        = uct_rc_mlx5_ep_atomic_cswap32,
     .ep_pending_add           = uct_rc_ep_pending_add,
     .ep_pending_purge         = uct_rc_ep_pending_purge,
-    .ep_flush                 = uct_rc_mlx5_ep_flush
+    .ep_flush                 = uct_rc_mlx5_ep_flush,
+    .ep_fence                 = uct_base_ep_fence,
+    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
+    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
+    .ep_get_address           = uct_rc_ep_get_address,
+    .ep_connect_to_ep         = uct_rc_ep_connect_to_ep,
+    .iface_flush              = uct_rc_iface_flush,
+    .iface_fence              = uct_base_iface_fence,
+    .iface_wakeup_open        = uct_ib_iface_wakeup_open,
+    .iface_wakeup_get_fd      = uct_ib_iface_wakeup_get_fd,
+    .iface_wakeup_arm         = uct_ib_iface_wakeup_arm,
+    .iface_wakeup_wait        = uct_ib_iface_wakeup_wait,
+    .iface_wakeup_signal      = uct_ib_iface_wakeup_signal,
+    .iface_wakeup_close       = uct_ib_iface_wakeup_close,
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
+    .iface_query              = uct_rc_mlx5_iface_query,
+    .iface_get_device_address = uct_ib_iface_get_device_address,
+    .iface_is_reachable       = uct_ib_iface_is_reachable
     },
     .arm_tx_cq                = uct_rc_mlx5_iface_arm_tx_cq,
     .arm_rx_cq                = uct_rc_mlx5_iface_arm_rx_cq,
@@ -215,7 +217,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .set_ep_failed            = uct_rc_mlx5_ep_set_failed
     },
     .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,
-    .fc_handler               = uct_rc_iface_fc_handler,
+    .fc_handler               = uct_rc_iface_fc_handler
 };
 
 

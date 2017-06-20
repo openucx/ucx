@@ -602,35 +602,32 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t)(uct_iface_t*);
 static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     {
     {
-    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t),
+    .ep_put_short             = uct_ud_mlx5_ep_put_short,
+    .ep_am_short              = uct_ud_mlx5_ep_am_short,
+    .ep_am_bcopy              = uct_ud_mlx5_ep_am_bcopy,
+    .ep_am_zcopy              = uct_ud_mlx5_ep_am_zcopy,
+    .ep_pending_add           = uct_ud_ep_pending_add,
+    .ep_pending_purge         = uct_ud_ep_pending_purge,
+    .ep_flush                 = uct_ud_ep_flush,
+    .ep_fence                 = uct_base_ep_fence,
+    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_ud_mlx5_ep_t),
+    .ep_create_connected      = uct_ud_mlx5_ep_create_connected,
+    .ep_destroy               = uct_ud_ep_disconnect ,
+    .ep_get_address           = uct_ud_ep_get_address,
+    .ep_connect_to_ep         = uct_ud_mlx5_ep_connect_to_ep,
     .iface_flush              = uct_ud_iface_flush,
+    .iface_fence              = uct_base_iface_fence,
     .iface_wakeup_open        = uct_ib_iface_wakeup_open,
     .iface_wakeup_get_fd      = uct_ib_iface_wakeup_get_fd,
     .iface_wakeup_arm         = uct_ib_iface_wakeup_arm,
     .iface_wakeup_wait        = uct_ib_iface_wakeup_wait,
     .iface_wakeup_signal      = uct_ib_iface_wakeup_signal,
     .iface_wakeup_close       = uct_ib_iface_wakeup_close,
-    .iface_get_address        = uct_ud_iface_get_address,
-    .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_ib_iface_is_reachable,
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t),
     .iface_query              = uct_ud_mlx5_iface_query,
-
-    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_ud_mlx5_ep_t),
-    .ep_destroy               = uct_ud_ep_disconnect,
-    .ep_get_address           = uct_ud_ep_get_address,
-
-    .ep_create_connected      = uct_ud_mlx5_ep_create_connected,
-    .ep_connect_to_ep         = uct_ud_mlx5_ep_connect_to_ep,
-
-    .ep_put_short             = uct_ud_mlx5_ep_put_short,
-    .ep_am_short              = uct_ud_mlx5_ep_am_short,
-    .ep_am_bcopy              = uct_ud_mlx5_ep_am_bcopy,
-    .ep_am_zcopy              = uct_ud_mlx5_ep_am_zcopy,
-
-    .ep_pending_add           = uct_ud_ep_pending_add,
-    .ep_pending_purge         = uct_ud_ep_pending_purge,
-
-    .ep_flush                 = uct_ud_ep_flush
+    .iface_get_device_address = uct_ib_iface_get_device_address,
+    .iface_get_address        = uct_ud_iface_get_address,
+    .iface_is_reachable       = uct_ib_iface_is_reachable
     },
     .arm_tx_cq                = uct_ud_mlx5_iface_arm_tx_cq,
     .arm_rx_cq                = uct_ud_mlx5_iface_arm_rx_cq,
