@@ -97,7 +97,7 @@ public:
         max = (n == 0) ? 1024 : n;
 
         for (count_wait = i = 0; i < max; i++) {
-            len = uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack, lbuf);
+            len = uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack, lbuf, 0);
             if (len != lbuf->length()) {
                 if (n == 0) {
                     return 1;
@@ -168,7 +168,7 @@ UCS_TEST_P(test_uct_stats, am_bcopy)
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_AM_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
-    v = uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack, lbuf);
+    v = uct_ep_am_bcopy(sender_ep(), 0, mapped_buffer::pack, lbuf, 0);
     EXPECT_EQ(lbuf->length(), v);
 
     check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_BCOPY, lbuf->length());
