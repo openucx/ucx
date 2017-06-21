@@ -229,9 +229,10 @@ int ucs_tgkill(int tgid, int tid, int sig);
 /**
  * Get CPU frequency from /proc/cpuinfo. Return value is clocks-per-second.
  *
- * @param mhz_header String in /proc/cpuinfo which precedes the clock speed number.
+ * @param header String in /proc/cpuinfo which precedes the clock speed number.
+ * @param scale  Frequency value units.
  */
-double ucs_get_cpuinfo_clock_freq(const char *mhz_header);
+double ucs_get_cpuinfo_clock_freq(const char *mhz_header, double scale);
 
 
 /**

@@ -216,27 +216,27 @@ void uct_iface_close(uct_iface_h iface)
     iface->ops.iface_close(iface);
 }
 
-static ucs_status_t uct_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
-                                         uct_completion_t *comp)
+ucs_status_t uct_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                  uct_completion_t *comp)
 {
     UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
     return UCS_OK;
 }
 
-static ucs_status_t uct_base_iface_fence(uct_iface_h tl_iface, unsigned flags)
+ucs_status_t uct_base_iface_fence(uct_iface_h tl_iface, unsigned flags)
 {
     UCT_TL_IFACE_STAT_FENCE(ucs_derived_of(tl_iface, uct_base_iface_t));
     return UCS_OK;
 }
 
-static ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
-                                      uct_completion_t *comp)
+ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                               uct_completion_t *comp)
 {
     UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
 }
 
-static ucs_status_t uct_base_ep_fence(uct_ep_h tl_ep, unsigned flags)
+ucs_status_t uct_base_ep_fence(uct_ep_h tl_ep, unsigned flags)
 {
     UCT_TL_EP_STAT_FENCE(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
@@ -295,12 +295,6 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
      * Failed ep will use that queue for purge. */
     uct_ep_pending_purge(tl_ep, uct_ep_failed_purge_cb, &f_iface->pend_q);
 
-    ops->ep_get_address     = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_connect_to_ep   = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_flush           = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_destroy         = uct_ep_failed_destroy;
-    ops->ep_pending_add     = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_pending_purge   = uct_ep_failed_purge;
     ops->ep_put_short       = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_put_bcopy       = (void*)ucs_empty_function_return_bc_ep_timeout;
     ops->ep_put_zcopy       = (void*)ucs_empty_function_return_ep_timeout;
@@ -317,6 +311,20 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
     ops->ep_atomic_fadd32   = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_atomic_swap32   = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_atomic_cswap32  = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_tag_eager_short = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_tag_eager_bcopy = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_tag_eager_zcopy = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_tag_rndv_zcopy  = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_tag_rndv_cancel = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_tag_rndv_request= (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_pending_add     = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_pending_purge   = uct_ep_failed_purge;
+    ops->ep_flush           = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_fence           = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_check           = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_connect_to_ep   = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_destroy         = uct_ep_failed_destroy;
+    ops->ep_get_address     = (void*)ucs_empty_function_return_ep_timeout;
 
     ucs_class_call_cleanup_chain(cls, tl_ep, -1);
 
@@ -333,24 +341,17 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
 {
+    ucs_assert_always(ops->ep_flush                 != NULL);
+    ucs_assert_always(ops->ep_fence                 != NULL);
+    ucs_assert_always(ops->ep_destroy               != NULL);
+    ucs_assert_always(ops->iface_flush              != NULL);
+    ucs_assert_always(ops->iface_fence              != NULL);
+    ucs_assert_always(ops->iface_close              != NULL);
+    ucs_assert_always(ops->iface_query              != NULL);
+    ucs_assert_always(ops->iface_get_device_address != NULL);
+    ucs_assert_always(ops->iface_is_reachable       != NULL);
 
     self->ops = *ops;
-    if (ops->ep_flush == NULL) {
-        self->ops.ep_flush = uct_base_ep_flush;
-    }
-
-    if (ops->ep_fence == NULL) {
-        self->ops.ep_fence = uct_base_ep_fence;
-    }
-
-    if (ops->iface_flush == NULL) {
-        self->ops.iface_flush = uct_base_iface_flush;
-    }
-
-    if (ops->iface_fence == NULL) {
-        self->ops.iface_fence = uct_base_iface_fence;
-    }
-
     return UCS_OK;
 }
 

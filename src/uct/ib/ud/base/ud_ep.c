@@ -426,7 +426,7 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
     uct_ep_t *ep_h;
     uct_iface_t *iface_h =  &iface->super.super.super;
     /* create new endpoint */
-    status = iface_h->ops.ep_create(iface_h, &ep_h);
+    status = uct_ep_create(iface_h, &ep_h);
     ucs_assert_always(status == UCS_OK);
     ep = ucs_derived_of(ep_h, uct_ud_ep_t);
 

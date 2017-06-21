@@ -177,14 +177,15 @@ typedef struct uct_wakeup {
  * Includes the AM table which we don't want to expose.
  */
 typedef struct uct_base_iface {
-    uct_iface_t       super;
-    uct_md_h          md;                    /* MD this interface is using */
-    uct_worker_h      worker;                /* Worker this interface is on */
-    uct_worker_progress_t prog;
-    UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
-    uct_am_handler_t  am[UCT_AM_ID_MAX];     /* Active message table */
-    uct_am_tracer_t   am_tracer;             /* Active message tracer */
-    void              *am_tracer_arg;        /* Tracer argument */
+    uct_iface_t             super;
+    uct_md_h                md;               /* MD this interface is using */
+    uct_worker_h            worker;           /* Worker this interface is on */
+    uct_am_handler_t        am[UCT_AM_ID_MAX];/* Active message table */
+    uct_am_tracer_t         am_tracer;        /* Active message tracer */
+    void                    *am_tracer_arg;   /* Tracer argument */
+    uct_error_handler_t     err_handler;      /* Error handler */
+    void                    *err_handler_arg; /* Error handler argument */
+    uct_worker_progress_t   prog;
 
     struct {
         unsigned            num_alloc_methods;
@@ -192,10 +193,9 @@ typedef struct uct_base_iface {
         ucs_log_level_t     failure_level;
     } config;
 
-    uct_error_handler_t err_handler;         /* Error handler */
-    void                *err_handler_arg;    /* Error handler argument */
-
+    UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
 } uct_base_iface_t;
+
 UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, const uct_iface_config_t*
                   UCS_STATS_ARG(ucs_stats_node_t*) UCS_STATS_ARG(const char*));
@@ -482,7 +482,17 @@ void uct_iface_mpool_empty_warn(uct_base_iface_t *iface, ucs_mpool_t *mp);
 
 void uct_set_ep_failed(ucs_class_t* cls, uct_ep_h tl_ep, uct_iface_h tl_iface);
 
-/**
+ucs_status_t uct_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                  uct_completion_t *comp);
+
+ucs_status_t uct_base_iface_fence(uct_iface_h tl_iface, unsigned flags);
+
+ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                               uct_completion_t *comp);
+
+ucs_status_t uct_base_ep_fence(uct_ep_h tl_ep, unsigned flags);
+
+/*
  * Invoke active message handler.
  *
  * @param iface    Interface to invoke the handler for.
