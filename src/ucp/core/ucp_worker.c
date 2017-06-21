@@ -580,7 +580,7 @@ static ucs_status_t ucp_worker_init_am_mpool(ucp_worker_h worker,
 
     return ucs_mpool_init(&worker->am_mp, 0,
                           max_am_mp_entry_size,
-                          0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                          0, UCS_SYS_CACHE_LINE_SIZE, 128, 128, UINT_MAX,
                           &ucp_am_mpool_ops, "ucp_am_bufs");
 }
 
@@ -710,7 +710,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     /* Create memory pool for requests */
     status = ucs_mpool_init(&worker->req_mp, 0,
                             sizeof(ucp_request_t) + context->config.request.size,
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                            0, UCS_SYS_CACHE_LINE_SIZE, 128, 128, UINT_MAX,
                             &ucp_request_mpool_ops, "ucp_requests");
     if (status != UCS_OK) {
         goto err_destroy_uct_worker;

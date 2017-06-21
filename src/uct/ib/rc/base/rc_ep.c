@@ -416,7 +416,7 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available)
     if (!uct_rc_iface_has_tx_resources(iface) || !uct_rc_ep_has_tx_resources(ep)) {
         return UCS_ERR_NO_RESOURCE;
     }
-
+printf("uct_rc_txqp_available(&ep->txqp)  %d max_available %d\n", uct_rc_txqp_available(&ep->txqp), max_available );
     if (uct_rc_txqp_available(&ep->txqp) == max_available) {
         UCT_TL_EP_STAT_FLUSH(&ep->super);
         return UCS_OK;

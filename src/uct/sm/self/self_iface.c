@@ -17,7 +17,7 @@ static ucs_config_field_t uct_self_iface_config_table[] = {
      ucs_offsetof(uct_self_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-     UCT_IFACE_MPOOL_CONFIG_FIELDS("", 16384, 16, "",
+     UCT_IFACE_MPOOL_CONFIG_FIELDS("", 16384, 16, 16, "",
                                    ucs_offsetof(uct_self_iface_config_t, mp), ""),
 
     {NULL}
@@ -183,6 +183,7 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
                                   sizeof(uct_recv_desc_t) + self->rx_headroom,
                                   UCS_SYS_CACHE_LINE_SIZE,
                                   &self_config->mp,
+                                  256,
                                   256,
                                   ucs_empty_function,
                                   "self_msg_desc");

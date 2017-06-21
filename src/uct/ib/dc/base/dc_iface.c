@@ -195,7 +195,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
                               config->super.super.rx.queue_len,
                               sizeof(uct_rc_hdr_t),
                               config->super.super.rx.queue_len,
-                              sizeof(uct_dc_fc_request_t));
+                              sizeof(uct_dc_fc_request_t), 0);
     if (config->ndci < 1) {
         ucs_error("dc interface must have at least 1 dci (requested: %d)",
                   config->ndci);
