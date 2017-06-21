@@ -6,6 +6,7 @@
 
 #include "ucp_mm.h"
 #include "ucp_context.h"
+#include "ucp_worker.h"
 
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
@@ -255,28 +256,12 @@ static inline int ucp_mem_map_is_allocate(ucp_mem_map_params_t *params)
            (params->flags & UCP_MEM_MAP_ALLOCATE);
 }
 
-ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *params,
-                         ucp_mem_h *memh_p)
+static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
+                                       size_t length, unsigned uct_flags,
+                                       int is_allocate, ucp_mem_h *memh_p)
 {
     ucs_status_t            status;
     ucp_mem_h               memh;
-    ucp_mem_map_params_t    mem_params;
-
-    /* always acquire context lock */
-    UCP_THREAD_CS_ENTER(&context->mt_lock);
-
-    mem_params = *params;
-    status = ucp_mem_map_check_and_adjust_params(&mem_params);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    if (mem_params.length == 0) {
-        ucs_debug("mapping zero length buffer, return dummy memh");
-        *memh_p = &ucp_mem_dummy_handle;
-        status  = UCS_OK;
-        goto out;
-    }
 
     /* Allocate the memory handle */
     ucs_assert(context->num_mds > 0);
@@ -287,26 +272,21 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         goto out;
     }
 
-    memh->address      = mem_params.address;
-    memh->length       = mem_params.length;
+    memh->address = address;
+    memh->length  = length;
 
-    if (ucp_mem_map_is_allocate(&mem_params)) {
-        ucs_debug("allocation user memory at %p length %zu", mem_params.address,
-                  mem_params.length);
-        status = ucp_mem_alloc(context, mem_params.length,
-                               ucp_mem_map_params2uct_flags(&mem_params),
+    if (is_allocate) {
+        ucs_debug("allocation user memory at %p length %zu", address, length);
+        status = ucp_mem_alloc(context, length, uct_flags,
                                "user allocation", memh);
         if (status != UCS_OK) {
             goto err_free_memh;
         }
     } else {
-        ucs_debug("registering user memory at %p length %zu", mem_params.address,
-                  mem_params.length);
+        ucs_debug("registering user memory at %p length %zu", address, length);
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
         memh->alloc_md     = NULL;
-        status = ucp_memh_reg_mds(context, memh,
-                                  ucp_mem_map_params2uct_flags(&mem_params),
-                                  UCT_MEM_HANDLE_NULL);
+        status = ucp_memh_reg_mds(context, memh, uct_flags, UCT_MEM_HANDLE_NULL);
         if (status != UCS_OK) {
             goto err_free_memh;
         }
@@ -322,24 +302,16 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
 err_free_memh:
     ucs_free(memh);
 out:
-    UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
 }
 
-ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
+static ucs_status_t ucp_mem_unmap_common(ucp_context_h context, ucp_mem_h memh)
 {
     uct_allocated_memory_t mem;
     uct_mem_h alloc_md_memh;
     ucs_status_t status;
 
-    /* always acquire context lock */
-    UCP_THREAD_CS_ENTER(&context->mt_lock);
-
     ucs_debug("unmapping buffer %p memh %p", memh->address, memh);
-    if (memh == &ucp_mem_dummy_handle) {
-        status = UCS_OK;
-        goto out;
-    }
 
     /* Unregister from all memory domains */
     status = ucp_memh_dereg_mds(context, memh, &alloc_md_memh);
@@ -363,6 +335,54 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
 
     ucs_free(memh);
     status = UCS_OK;
+out:
+    return status;
+}
+
+ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *params,
+                         ucp_mem_h *memh_p)
+{
+    ucs_status_t            status;
+    ucp_mem_map_params_t    mem_params;
+
+    /* always acquire context lock */
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
+
+    mem_params = *params;
+    status = ucp_mem_map_check_and_adjust_params(&mem_params);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    if (mem_params.length == 0) {
+        ucs_debug("mapping zero length buffer, return dummy memh");
+        *memh_p = &ucp_mem_dummy_handle;
+        status  = UCS_OK;
+        goto out;
+    }
+
+    status = ucp_mem_map_common(context, mem_params.address, mem_params.length,
+                                ucp_mem_map_params2uct_flags(&mem_params),
+                                ucp_mem_map_is_allocate(&mem_params), memh_p);
+out:
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
+    return status;
+}
+
+ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
+{
+    ucs_status_t status;
+
+    /* always acquire context lock */
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
+
+    if (memh == &ucp_mem_dummy_handle) {
+        ucs_debug("unmapping zero length buffer (dummy memh, do nothing)");
+        status = UCS_OK;
+        goto out;
+    }
+
+    status = ucp_mem_unmap_common(context, memh);
 out:
     UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
@@ -444,3 +464,43 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
     UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
 }
+
+ucs_status_t ucp_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+{
+    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, reg_mp);
+    ucp_mem_desc_t *chunk_hdr;
+    ucp_mem_h memh;
+    ucs_status_t status;
+
+
+    status = ucp_mem_map_common(worker->context, NULL, *size_p + sizeof(*chunk_hdr),
+                                0, 1, &memh);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    chunk_hdr       = memh->address;
+    chunk_hdr->memh = memh;
+    *chunk_p        = chunk_hdr + 1;
+    *size_p         = memh->length - sizeof(*chunk_hdr);
+out:
+    return status;
+}
+
+void ucp_mpool_free(ucs_mpool_t *mp, void *chunk)
+{
+    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, reg_mp);
+    ucp_mem_desc_t *chunk_hdr;
+
+    chunk_hdr = (ucp_mem_desc_t*)chunk - 1;
+    ucp_mem_unmap_common(worker->context, chunk_hdr->memh);
+}
+
+void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    ucp_mem_desc_t *elem_hdr  = obj;
+    ucp_mem_desc_t *chunk_hdr = (ucp_mem_desc_t*)((ucp_mem_desc_t*)chunk - 1);
+    elem_hdr->memh = chunk_hdr->memh;
+}
+
+

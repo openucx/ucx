@@ -18,7 +18,7 @@ double ucs_arch_get_clocks_per_sec()
 #if HAVE_DECL___PPC_GET_TIMEBASE_FREQ
     return __ppc_get_timebase_freq();
 #else
-    return ucs_get_cpuinfo_clock_freq("timebase");
+    return ucs_get_cpuinfo_clock_freq("timebase", 1.0);
 #endif
 }
 

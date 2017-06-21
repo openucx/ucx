@@ -105,6 +105,7 @@ typedef struct ucp_worker {
     khash_t(ucp_ep_errh_hash)     ep_errh_hash;  /* Hash table of error handlers associated with endpoints */
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
+    ucs_mpool_t                   reg_mp;        /* Registered memory pool */
     UCS_STATS_NODE_DECLARE(stats);
     unsigned                      ep_config_max; /* Maximal number of configurations */
     unsigned                      ep_config_count; /* Current number of configurations */

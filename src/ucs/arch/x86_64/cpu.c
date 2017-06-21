@@ -113,7 +113,7 @@ double ucs_arch_get_clocks_per_sec()
     }
 
     /* Read clock speed from cpuinfo */
-    return ucs_get_cpuinfo_clock_freq("cpu MHz");
+    return ucs_get_cpuinfo_clock_freq("cpu MHz", 1e6);
 }
 
 ucs_cpu_model_t ucs_arch_get_cpu_model()
