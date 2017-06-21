@@ -981,8 +981,7 @@ ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
  * @ingroup UCT_RESOURCE
  * @brief Obtain a notification file descriptor for polling.
  *
- * Only interfaces with the @ref UCT_IFACE_FLAG_WAKEUP_FD
- * implement this function.
+ * Only interfaces with the @ref UCT_IFACE_FLAG_EVENT_FD implement this function.
  *
  * @param [in]  iface      Interface to get the notification descriptor.
  * @param [out] fd_p       Location to write the notification file descriptor.
@@ -1092,7 +1091,7 @@ void uct_iface_mem_free(const uct_allocated_memory_t *mem);
  * @param [in]  id       Active message id. Must be 0..UCT_AM_ID_MAX-1.
  * @param [in]  cb       Active message callback. NULL to clear.
  * @param [in]  arg      Active message argument.
- * @param [in]  flags    Required @ref uct_am_cb_flags_t "active message callback flags"
+ * @param [in]  flags    Required @ref uct_am_cb_cap "active message callback capabilities"
  *
  * @return error code if the interface does not support active messages or
  *         requested callback flags

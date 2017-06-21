@@ -346,13 +346,4 @@ typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, unsigned flags,
                                                 const void *rkey_buf);
 
 
-/**
- * @ingroup UCT_RESOURCE
- * @brief  Interface event callback.
- *
- * @param [in]  arg      User argument to be passed to the callback.
- */
-typedef void (*uct_iface_event_cb_t)(void *arg);
-
-
 #endif

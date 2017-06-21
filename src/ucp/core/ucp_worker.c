@@ -218,7 +218,7 @@ err_pipe_cleanup:
 err_close_epfd:
     close(worker->epfd);
 out:
-    return UCS_OK;
+    return status;
 }
 
 static void ucp_worker_wakeup_cleanup(ucp_worker_h worker)
