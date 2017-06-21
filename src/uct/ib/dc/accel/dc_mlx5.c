@@ -29,6 +29,20 @@ static ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
   {NULL}
 };
 
+static void uct_dc_mlx5_iface_global_addr_error(uct_dc_mlx5_iface_t *iface,
+                                                const uct_ib_address_t *ib_addr)
+{
+    struct ibv_ah_attr ah_attr;
+    char gid_buf[64];
+
+    uct_ib_iface_fill_ah_attr(&iface->super.super.super, ib_addr, 0, &ah_attr);
+    inet_ntop(AF_INET6, ah_attr.grh.dgid.raw, gid_buf, sizeof(gid_buf));
+    ucs_error("dc_mlx5 does not support global address, cannot connect from %s:%d"
+              " to lid %d gid %s",
+              uct_ib_device_name(uct_ib_iface_device(&iface->super.super.super)),
+              iface->super.super.super.config.port_num, ah_attr.dlid, gid_buf);
+}
+
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_iface_t *tl_iface,
                            const uct_device_addr_t *dev_addr,
                            const uct_iface_addr_t *iface_addr)
@@ -51,7 +65,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_iface_t *tl_iface,
     }
 
     if (is_global) {
-        ucs_error("dc_mlx5 transport does not support global address");
+        uct_dc_mlx5_iface_global_addr_error(iface, ib_addr);
         return UCS_ERR_UNREACHABLE;
     }
 
@@ -657,6 +671,23 @@ static ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_iface_t *dc_iface, int dc
     return status;
 }
 
+static int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
+                                          const uct_device_addr_t *dev_addr,
+                                          const uct_iface_addr_t *iface_addr)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
+    const uct_ib_address_t *ib_addr = (const void*)dev_addr;
+    struct ibv_ah_attr ah_attr;
+
+    /* dc_mlx5 does not support global address */
+    uct_ib_iface_fill_ah_attr(&iface->super.super.super, ib_addr, 0, &ah_attr);
+    if (ah_attr.is_global) {
+        return 0;
+    }
+
+    return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
+}
+
 static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     {
     {
@@ -688,7 +719,7 @@ static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t),
     .iface_query              = uct_dc_mlx5_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_ib_iface_is_reachable,
+    .iface_is_reachable       = uct_dc_mlx5_iface_is_reachable,
     .iface_get_address        = uct_dc_iface_get_address,
     },
     .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
