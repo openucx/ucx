@@ -629,9 +629,9 @@ int ucs_tgkill(int tgid, int tid, int sig)
     return syscall(SYS_tgkill, tgid, tid, sig);
 }
 
-double ucs_get_cpuinfo_clock_freq(const char *mhz_header)
+double ucs_get_cpuinfo_clock_freq(const char *header, double scale)
 {
-    double mhz = 0.0;
+    double value = 0.0;
     double m;
     int rc;
     FILE* f;
@@ -644,7 +644,7 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header)
         return 0.0;
     }
 
-    snprintf(fmt, sizeof(fmt), "%s : %%lf", mhz_header);
+    snprintf(fmt, sizeof(fmt), "%s : %%lf ", header);
 
     warn = 0;
     while (fgets(buf, sizeof(buf), f)) {
@@ -654,22 +654,22 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header)
             continue;
         }
 
-        if (mhz == 0.0) {
-            mhz = m;
+        if (value == 0.0) {
+            value = m;
             continue;
         }
 
-        if (mhz != m) {
-            mhz = ucs_max(mhz,m);
+        if (value != m) {
+            value = ucs_max(value,m);
             warn = 1;
         }
     }
     fclose(f);
 
     if (warn) {
-        ucs_warn("Conflicting CPU frequencies detected, using: %.2f MHz", mhz);
+        ucs_warn("Conflicting CPU frequencies detected, using: %.2f", value);
     }
-    return mhz * 1e6;
+    return value * scale;
 }
 
 void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
