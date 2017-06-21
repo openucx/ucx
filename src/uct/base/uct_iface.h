@@ -163,16 +163,6 @@ typedef struct uct_am_handler {
 
 
 /**
- * Wakeup event handle item
- */
-typedef struct uct_wakeup {
-    uct_iface_h                 iface;
-    enum uct_wakeup_event_types events;
-    int                         fd;
-} uct_wakeup_t;
-
-
-/**
  * Base structure of all interfaces.
  * Includes the AM table which we don't want to expose.
  */
@@ -558,6 +548,5 @@ size_t uct_iov_total_length(const uct_iov_t *iov, size_t iovcnt)
 
     return total_length;
 }
-
 
 #endif

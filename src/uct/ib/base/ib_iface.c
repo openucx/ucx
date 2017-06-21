@@ -753,14 +753,23 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup)
+ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 {
-    int res, send_cq_count = 0, recv_cq_count = 0;
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    *fd_p  = iface->comp_channel->fd;
+    return UCS_OK;
+}
+
+ucs_status_t uct_ib_iface_event_arm(uct_iface_h tl_iface, unsigned events)
+{
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    int res, send_cq_count, recv_cq_count;
     ucs_status_t status;
     struct ibv_cq *cq;
     void *cq_context;
-    uct_ib_iface_t *iface = ucs_derived_of(wakeup->iface, uct_ib_iface_t);
 
+    send_cq_count = 0;
+    recv_cq_count = 0;
     do {
         res = ibv_get_cq_event(iface->comp_channel, &cq, &cq_context);
         if (0 == res) {
@@ -790,14 +799,14 @@ ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup)
         return UCS_ERR_BUSY;
     }
 
-    if (wakeup->events & UCT_WAKEUP_TX_COMPLETION) {
+    if (events & UCT_EVENT_SEND_COMP) {
         status = iface->ops->arm_tx_cq(iface);
         if (status != UCS_OK) {
             return status;
         }
     }
 
-    if (wakeup->events & (UCT_WAKEUP_RX_AM | UCT_WAKEUP_RX_SIGNALED_AM)) {
+    if (events & UCT_EVENT_RECV_AM) {
         status = iface->ops->arm_rx_cq(iface, 0);
         if (status != UCS_OK) {
             return status;
@@ -805,53 +814,6 @@ ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup)
     }
 
     return UCS_OK;
-}
-
-ucs_status_t uct_ib_iface_wakeup_get_fd(uct_wakeup_h wakeup, int *fd_p)
-{
-    *fd_p = wakeup->fd;
-    return UCS_OK;
-}
-
-ucs_status_t uct_ib_iface_wakeup_wait(uct_wakeup_h wakeup)
-{
-    ucs_status_t status;
-    int res;
-    struct pollfd polled = { .fd = wakeup->fd, .events = POLLIN };
-
-    status = wakeup->iface->ops.iface_wakeup_arm(wakeup);
-    if (UCS_ERR_BUSY == status) { /* if UCS_ERR_BUSY returned - no poll() must called */
-        return UCS_OK;
-    } else if (status != UCS_OK) {
-        return status;
-    }
-
-    do {
-        res = poll(&polled, 1, -1);
-    } while ((res == -1) && (errno == EINTR));
-
-    if ((res != 1) || (polled.revents != POLLIN)) {
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return status;
-}
-
-ucs_status_t uct_ib_iface_wakeup_open(uct_iface_h iface, unsigned events,
-                                      uct_wakeup_h wakeup)
-{
-    uct_ib_iface_t *ib_iface = ucs_derived_of(iface, uct_ib_iface_t);
-    wakeup->fd = ib_iface->comp_channel->fd;
-    return UCS_OK;
-}
-
-ucs_status_t uct_ib_iface_wakeup_signal(uct_wakeup_h wakeup)
-{
-    return UCS_ERR_UNSUPPORTED;
-}
-
-void uct_ib_iface_wakeup_close(uct_wakeup_h wakeup)
-{
 }
 
 static ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface, struct ibv_cq *cq,
