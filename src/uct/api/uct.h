@@ -773,18 +773,22 @@ void uct_worker_progress(uct_worker_h worker);
  * @ingroup UCT_CONTEXT
  * @brief Add a slow path callback function to a worker progress.
  *
- * If 'id_p' points to UCS_CALLBACKQ_ID_NULL, this function will add a callback
- * which will be called every time a progress is made on the worker.
+ * If *id_p is equal to UCS_CALLBACKQ_ID_NULL, this function will add a callback
+ * which will be invoked every time progress is made on the worker. *id_p will
+ * be updated with an id which refers to this callback and can be used in
+ * @ref uct_worker_progress_unregister_safe to remove it from the progress path.
  *
  * @param [in]    worker        Handle to the worker whose progress should invoke
  *                              the callback.
  * @param [in]    func          Pointer to the callback function.
  * @param [in]    arg           Argument for the callback function.
  * @param [in]    flags         Callback flags, see @ref ucs_callbackq_flags.
- * @param [inout] id_p          Filled with callback identifier, which can be
- *                              used to remove the callback. If *id_p is not equal
- *                              to UCS_CALLBACKQ_ID_NULL, no operation will be
- *                              performed and *id_p will be left unchanged.
+ * @param [inout] id_p          Points to a location to store a callback identifier.
+ *                              If *id_p is equal to UCS_CALLBACKQ_ID_NULL, a
+ *                              callback will be added and *id_p will be replaced
+ *                              with a callback identifier which can be subsequently
+ *                              used to remove the callback. Otherwise, no callback
+ *                              will be added and *id_p will be left unchanged.
  *
  * @note This function is thread safe.
  */
@@ -797,15 +801,19 @@ void uct_worker_progress_register_safe(uct_worker_h worker, ucs_callback_t func,
  * @ingroup UCT_CONTEXT
  * @brief Remove a slow path callback function from worker's progress.
  *
- * If 'id_p' does not point to UCS_CALLBACKQ_ID_NULL, remove a callback which
- * was previously added by @ref uct_worker_progress_register_safe.
+ * If *id_p is not equal to UCS_CALLBACKQ_ID_NULL, remove a callback which was
+ * previously added by @ref uct_worker_progress_register_safe. *id_p will be reset
+ * to UCS_CALLBACKQ_ID_NULL.
  *
  * @param [in]    worker        Handle to the worker whose progress should invoke
  *                              the callback.
- * @param [inout] id_p          Points to callback identifier to remove, and filled
- *                              with UCS_CALLBACKQ_ID_NULL by this function. If *id_p
- *                              already points to UCS_CALLBACKQ_ID_NULL, no operation
- *                              will be performed and *id_p will be left unchanged.
+ * @param [inout] id_p          Points to a callback identifier which indicates
+ *                              the callback to remove. If *id_p is not equal to
+ *                              UCS_CALLBACKQ_ID_NULL, the callback will be removed
+ *                              and *id_p will be reset to UCS_CALLBACKQ_ID_NULL.
+ *                              If *id_p is equal to UCS_CALLBACKQ_ID_NULL, no
+ *                              operation will be performed and *id_p will be
+ *                              left unchanged.
  *
  * @note This function is thread safe.
  */
