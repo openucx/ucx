@@ -369,7 +369,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_rc_iface_config_t *config, unsigned rx_priv_len,
                     unsigned rx_cq_len, unsigned rx_hdr_len,
-                    unsigned srq_size, unsigned fc_req_size)
+                    unsigned srq_size, unsigned fc_req_size, int rx_mp_slow_start)
 {
     struct ibv_srq_init_attr srq_init_attr;
     ucs_status_t status;
@@ -382,6 +382,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 
     self->tx.cq_available           = tx_cq_len - 1; /* Reserve one for error */
     self->rx.srq.available          = 0;
+    self->rx.srq.reserved           = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
     self->config.tx_min_sge         = config->super.tx.min_sge;
     self->config.tx_min_inline      = config->super.tx.min_inline;
@@ -412,7 +413,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 
     /* Create RX buffers mempool */
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
-                                          "rc_recv_desc", &self->rx.mp);
+                                          "rc_recv_desc", &self->rx.mp,
+                                          rx_mp_slow_start);
     if (status != UCS_OK) {
         goto err;
     }
@@ -424,6 +426,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                                   sizeof(uct_rc_iface_send_desc_t),
                                   UCS_SYS_CACHE_LINE_SIZE,
                                   &config->super.tx.mp,
+                                  self->config.tx_qp_len,
                                   self->config.tx_qp_len,
                                   uct_rc_iface_send_desc_init,
                                   "rc_send_desc");
@@ -449,8 +452,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
             status = UCS_ERR_IO_ERROR;
             goto err_free_tx_ops;
         }
-        self->rx.srq.available       = srq_init_attr.attr.max_wr;
+        self->rx.srq.available       = ucs_min(config->super.rx.queue_init_len,
+                                               srq_init_attr.attr.max_wr);
+        self->rx.srq.reserved        = srq_init_attr.attr.max_wr - self->rx.srq.available;
+
+printf("self->rx.srq.available %d self->rx.srq.reserved %d\n", self->rx.srq.available, self->rx.srq.reserved);
     } else {
+printf("2self->rx.srq.available %d self->rx.srq.reserved %d\n", self->rx.srq.available, self->rx.srq.reserved);
         self->rx.srq.srq             = NULL;
     }
 
@@ -489,6 +497,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                                 fc_req_size,
                                 0,
                                 1,
+                                128,
                                 128,
                                 UINT_MAX,
                                 &uct_rc_fc_pending_mpool_ops,

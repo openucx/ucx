@@ -18,7 +18,7 @@ static ucs_config_field_t uct_ugni_smsg_iface_config_table[] = {
      ucs_offsetof(uct_ugni_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-    UCT_IFACE_MPOOL_CONFIG_FIELDS("SMSG", -1, 0, "smsg",
+    UCT_IFACE_MPOOL_CONFIG_FIELDS("SMSG", -1, 0, 0, "smsg",
                                   ucs_offsetof(uct_ugni_iface_config_t, mpool),
                                   "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
                                   "and could cause deadlock or performance degradation."),
@@ -305,6 +305,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
                             self->config.smsg_seg_size + sizeof(uct_ugni_smsg_desc_t),
                             0,
                             UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                            128           ,               /* start */
                             128           ,               /* grow */
                             config->mpool.max_bufs,       /* max buffers */
                             &uct_ugni_smsg_desc_mpool_ops,
