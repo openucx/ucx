@@ -72,6 +72,19 @@ void ucp_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 
+static UCS_F_ALWAYS_INLINE uct_mem_h
+ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
+{
+    ucp_md_index_t uct_idx;
+
+    if (!(memh->md_map & UCS_BIT(md_idx))) {
+        return NULL;
+    }
+    uct_idx = ucs_count_one_bits(memh->md_map & UCS_MASK(md_idx));
+    return memh->uct[uct_idx];
+}
+
+
 #define UCP_RKEY_RESOLVE(_rkey, _ep, _op_type) \
     ({ \
         ucs_status_t status = UCS_OK; \

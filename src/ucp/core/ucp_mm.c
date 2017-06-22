@@ -451,10 +451,12 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
 
     status = UCS_OK;
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
-        if (!(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_ADVISE)) {
+        if (!(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_ADVISE) ||
+            !(memh->md_map & UCS_BIT(md_index))) {
             continue;
         }
-        tmp_status = uct_md_mem_advise(context->tl_mds[md_index].md, memh->uct[md_index],
+        tmp_status = uct_md_mem_advise(context->tl_mds[md_index].md,
+                                       ucp_memh2uct(memh, md_index),
                                        params->address, params->length, uct_advice);
         if (tmp_status != UCS_OK) {
             status = tmp_status;
