@@ -113,6 +113,17 @@
 #  define IBV_DEVICE_HAS_NOP(_attr)                 0
 #endif /* HAVE_DECL_IBV_EXP_WR_NOP */
 
+/*
+ * Adaptive Routing support
+ */
+#if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
+#  define UCX_IB_DEV_IS_OOO_SUPPORTED(_ibdev, _transport)  \
+    (((_ibdev)->dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_OOO_CAPS) && \
+     ((_ibdev)->dev_attr.ooo_caps._transport##_caps & IBV_EXP_OOO_SUPPORT_RW_DATA_PLACEMENT))
+#else
+#  define UCX_IB_DEV_IS_OOO_SUPPORTED(_ibdev, _transport)   0
+#endif
+
 
 /*
  * Safe setenv
