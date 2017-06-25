@@ -421,6 +421,7 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
     ucs_status_t status, tmp_status;
     int md_index;
     unsigned uct_advice;
+    uct_mem_h uct_memh;
 
     if (!ucs_test_all_flags(params->field_mask,
                             UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS|
@@ -451,12 +452,12 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
 
     status = UCS_OK;
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
+        uct_memh = ucp_memh2uct(memh, md_index);
         if (!(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_ADVISE) ||
-            !(memh->md_map & UCS_BIT(md_index))) {
+            (uct_memh == NULL)) {
             continue;
         }
-        tmp_status = uct_md_mem_advise(context->tl_mds[md_index].md,
-                                       ucp_memh2uct(memh, md_index),
+        tmp_status = uct_md_mem_advise(context->tl_mds[md_index].md, uct_memh,
                                        params->address, params->length, uct_advice);
         if (tmp_status != UCS_OK) {
             status = tmp_status;
