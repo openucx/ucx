@@ -128,7 +128,7 @@ struct uct_rc_iface_config {
     uct_ib_iface_config_t    super;
     uct_ib_mtu_t             path_mtu;
     unsigned                 max_rd_atomic;
-    unsigned                 ooo_rw; /* Enable out-of-order RDMA data placement */
+    int                      ooo_rw; /* Enable out-of-order RDMA data placement */
 
     struct {
         double               timeout;
@@ -206,7 +206,7 @@ struct uct_rc_iface {
         uint8_t              max_rd_atomic;
         enum ibv_mtu         path_mtu;
         /* Enable out-of-order RDMA data placement */
-        unsigned             ooo_rw;
+        uint8_t              ooo_rw;
 
         /* Atomic callbacks */
         uct_rc_send_handler_t  atomic64_handler;      /* 64bit ib-spec */

@@ -675,7 +675,7 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      struct ibv_ah_attr *ah_attr)
 {
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
-    struct ibv_exp_qp_attr qp_attr = {0};
+    struct ibv_exp_qp_attr qp_attr;
 #else
     struct ibv_qp_attr qp_attr;
 #endif
@@ -701,7 +701,8 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
 
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
     if (iface->config.ooo_rw &&
-        UCX_IB_DEV_IS_OOO_SUPPORTED(uct_ib_iface_device(&iface->super), rc)) {
+        UCX_IB_DEV_IS_OOO_SUPPORTED(&uct_ib_iface_device(&iface->super)->dev_attr,
+                                    rc)) {
         ucs_debug("enabling out-of-order on RC QP %x dev %s", qp->qp_num,
                    uct_ib_device_name(uct_ib_iface_device(&iface->super)));
         qp_attr_mask |= IBV_EXP_QP_OOO_RW_DATA_PLACEMENT;

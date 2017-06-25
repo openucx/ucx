@@ -14,11 +14,7 @@ const static char *uct_dc_tx_policy_names[] = {
 };
 
 ucs_config_field_t uct_dc_iface_config_table[] = {
-    {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=n;"
-#if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
-            "OOO_RW=n"
-#endif
-     , NULL,
+    {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=n", NULL,
      ucs_offsetof(uct_dc_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
@@ -69,7 +65,8 @@ static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
 
 #if HAVE_DECL_IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT
     if (iface->super.config.ooo_rw &&
-        UCX_IB_DEV_IS_OOO_SUPPORTED(uct_ib_iface_device(&iface->super.super), dc)) {
+        UCX_IB_DEV_IS_OOO_SUPPORTED(&uct_ib_iface_device(&iface->super.super)->dev_attr,
+                                    dc)) {
         ucs_debug("creating DC target with out-of-order support dev %s",
                    uct_ib_device_name(uct_ib_iface_device(&iface->super.super)));
         init_attr.create_flags |= IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT;
@@ -123,7 +120,8 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
 
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
     if (iface->super.config.ooo_rw &&
-        UCX_IB_DEV_IS_OOO_SUPPORTED(uct_ib_iface_device(&iface->super.super), dc)) {
+        UCX_IB_DEV_IS_OOO_SUPPORTED(&uct_ib_iface_device(&iface->super.super)->dev_attr,
+                                    dc)) {
         ucs_debug("enabling out-of-order on DCI QP 0x%x dev %s", dci->qp->qp_num,
                    uct_ib_device_name(uct_ib_iface_device(&iface->super.super)));
         attr_mask |= IBV_EXP_QP_OOO_RW_DATA_PLACEMENT;
