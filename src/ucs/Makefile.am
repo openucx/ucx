@@ -58,7 +58,6 @@ nobase_dist_libucs_la_HEADERS = \
 
 noinst_HEADERS = \
 	datastruct/arbiter.h \
-	datastruct/callbackq.inl \
 	datastruct/frag_list.h \
 	datastruct/hash.h \
 	datastruct/list.h \

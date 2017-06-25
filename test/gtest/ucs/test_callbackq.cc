@@ -9,10 +9,11 @@ extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/async/async.h>
 #include <ucs/datastruct/callbackq.h>
-#include <ucs/datastruct/callbackq.inl>
 }
 
-class test_callbackq_base : public ucs::test_base {
+class test_callbackq :
+    public ucs::test_base,
+    public ::testing::TestWithParam<bool> {
 protected:
 
     enum {
@@ -22,20 +23,19 @@ protected:
     };
 
     struct callback_ctx {
-        test_callbackq_base       *test;
+        test_callbackq            *test;
+        int                       callback_id;
         uint32_t                  count;
         int                       command;
         callback_ctx              *to_add;
-        ucs_callbackq_slow_elem_t slow_elem;
     };
 
-    test_callbackq_base() : m_async_ptr(NULL), is_fast_path(true) {
+    test_callbackq() {
         memset(&m_cbq, 0, sizeof(m_cbq)); /* Silence coverity */
     }
 
     virtual void init() {
-        ucs::test_base::init();
-        ucs_status_t status = ucs_callbackq_init(&m_cbq, 64, m_async_ptr);
+        ucs_status_t status = ucs_callbackq_init(&m_cbq);
         ASSERT_UCS_OK(status);
     }
 
@@ -44,15 +44,11 @@ protected:
         ucs::test_base::cleanup();
     }
 
+    UCS_TEST_BASE_IMPL;
+
     static void callback_proxy(void *arg)
     {
         callback_ctx *ctx = reinterpret_cast<callback_ctx*>(arg);
-        ctx->test->callback(ctx);
-    }
-
-    static void callback_slow_proxy(ucs_callbackq_slow_elem_t *self)
-    {
-        callback_ctx *ctx = ucs_container_of(self, callback_ctx, slow_elem);
         ctx->test->callback(ctx);
     }
 
@@ -75,30 +71,38 @@ protected:
 
     void init_ctx(callback_ctx *ctx)
     {
-        ctx->test    = this;
-        ctx->count   = 0;
-        ctx->command = COMMAND_NONE;
+        ctx->test        = this;
+        ctx->count       = 0;
+        ctx->command     = COMMAND_NONE;
+        ctx->callback_id = UCS_CALLBACKQ_ID_NULL;
     }
 
-    void add(callback_ctx *ctx)
+    unsigned fast_path_flag() {
+        return GetParam() ? UCS_CALLBACKQ_FLAG_FAST : 0;
+    }
+
+    void add(callback_ctx *ctx, unsigned flags = 0)
     {
-        if (is_fast_path) {
-            ucs_callbackq_add(&m_cbq, callback_proxy, reinterpret_cast<void*>(ctx));
-        } else {
-            ctx->slow_elem.cb = callback_slow_proxy;
-            ucs_callbackq_add_slow_path(&m_cbq, &ctx->slow_elem);
-        }
+        ctx->callback_id = ucs_callbackq_add(&m_cbq, callback_proxy,
+                                             reinterpret_cast<void*>(ctx),
+                                             fast_path_flag() | flags);
     }
 
     void remove(callback_ctx *ctx)
     {
-        if (is_fast_path) {
-            ucs_status_t status = ucs_callbackq_remove(&m_cbq, callback_proxy,
-                                                       reinterpret_cast<void*>(ctx));
-            ASSERT_UCS_OK(status);
-        } else {
-            ucs_callbackq_remove_slow_path(&m_cbq, &ctx->slow_elem);
-        }
+        ucs_callbackq_remove(&m_cbq, ctx->callback_id);
+    }
+
+    void add_safe(callback_ctx *ctx, unsigned flags = 0)
+    {
+        ctx->callback_id = ucs_callbackq_add_safe(&m_cbq, callback_proxy,
+                                                  reinterpret_cast<void*>(ctx),
+                                                  fast_path_flag() | flags);
+    }
+
+    void remove_safe(callback_ctx *ctx)
+    {
+        ucs_callbackq_remove_safe(&m_cbq, ctx->callback_id);
     }
 
     void dispatch(unsigned count = 1)
@@ -108,24 +112,7 @@ protected:
         }
     }
 
-    void purge_slow(size_t exp_count)
-    {
-        UCS_LIST_HEAD(list);
-        ucs_callbackq_purge_slow_path(&m_cbq, callback_slow_proxy, &list);
-        EXPECT_EQ(exp_count, ucs_list_length(&list));
-    }
-
     ucs_callbackq_t     m_cbq;
-    ucs_async_context_t *m_async_ptr;
-    bool is_fast_path;
-};
-
-class test_callbackq : public test_callbackq_base, public ::testing::TestWithParam<bool> {
-    virtual void init() {
-       test_callbackq_base::init();
-       is_fast_path = GetParam();
-    }
-    UCS_TEST_BASE_IMPL;
 };
 
 UCS_TEST_P(test_callbackq, single) {
@@ -136,29 +123,6 @@ UCS_TEST_P(test_callbackq, single) {
     dispatch();
     remove(&ctx);
     EXPECT_EQ(1u, ctx.count);
-}
-
-UCS_TEST_P(test_callbackq, refcount) {
-    if (!is_fast_path) {
-        UCS_TEST_SKIP;
-    }
-
-    callback_ctx ctx;
-
-    init_ctx(&ctx);
-    add(&ctx);
-    add(&ctx);
-
-    dispatch();
-    EXPECT_EQ(1u, ctx.count);
-
-    remove(&ctx);
-    dispatch();
-    EXPECT_EQ(2u, ctx.count);
-
-    remove(&ctx);
-    dispatch();
-    EXPECT_EQ(2u, ctx.count);
 }
 
 UCS_TEST_P(test_callbackq, multi) {
@@ -208,10 +172,7 @@ UCS_TEST_P(test_callbackq, add_another) {
     EXPECT_EQ(1u, ctx.count);
     ctx.command = COMMAND_NONE;
 
-    /* When element is added to the slow path while the last/only one is being
-     * dispatched, it will be called only in the next dispatch cycle.
-     * But fast path queue is updated on the fly. */
-    unsigned count = is_fast_path ? ctx.count : ctx.count - 1;
+    unsigned count = ctx.count;
 
     dispatch();
     EXPECT_EQ(2u, ctx.count);
@@ -227,60 +188,8 @@ UCS_TEST_P(test_callbackq, add_another) {
     EXPECT_EQ(count + 2, ctx2.count);
 }
 
-UCS_TEST_P(test_callbackq, purge_slow) {
-    is_fast_path = false;
 
-    callback_ctx ctx;
-    init_ctx(&ctx);
-
-    ctx.command = COMMAND_NONE;
-    add(&ctx);
-
-    dispatch(10);
-
-    EXPECT_GE(ctx.count, 0u);
-    unsigned prev_count = ctx.count;
-
-    purge_slow(1);
-
-    dispatch(10);
-
-    EXPECT_EQ(prev_count, ctx.count);
-}
-
-INSTANTIATE_TEST_CASE_P(fast_path, test_callbackq, ::testing::Values(true));
-INSTANTIATE_TEST_CASE_P(slow_path, test_callbackq, ::testing::Values(false));
-
-class test_callbackq_safe : public test_callbackq_base {
-
-protected:
-
-    void remove_all(callback_ctx *ctx)
-    {
-        ucs_callbackq_remove_all(&m_cbq, callback_proxy,
-                                 reinterpret_cast<void*>(ctx));
-    }
-
-    void add_safe(callback_ctx *ctx)
-    {
-        ucs_status_t status = ucs_callbackq_add_safe(&m_cbq, callback_proxy,
-                                                     reinterpret_cast<void*>(ctx));
-        ASSERT_UCS_OK(status);
-    }
-
-    void remove_safe(callback_ctx *ctx)
-    {
-        ucs_status_t status = ucs_callbackq_remove_safe(&m_cbq, callback_proxy,
-                                                        reinterpret_cast<void*>(ctx));
-        ASSERT_UCS_OK(status);
-    }
-};
-
-class test_callbackq_thread : public test_callbackq_safe, public ::testing::Test {
-    UCS_TEST_BASE_IMPL;
-};
-
-UCS_MT_TEST_F(test_callbackq_thread, threads, 10) {
+UCS_MT_TEST_P(test_callbackq, threads, 10) {
 
     static unsigned COUNT = 2000;
     if (barrier()) {
@@ -322,10 +231,16 @@ UCS_MT_TEST_F(test_callbackq_thread, threads, 10) {
     }
 }
 
-UCS_MT_TEST_F(test_callbackq_thread, remove_all, 10) {
+UCS_MT_TEST_P(test_callbackq, remove, 10) {
     static callback_ctx ctx1;
 
     init_ctx(&ctx1);
+
+    if (barrier()) {
+        add_safe(&ctx1);
+    }
+
+    sched_yield();
 
     if (barrier()) {
         callback_ctx ctx2;
@@ -334,133 +249,21 @@ UCS_MT_TEST_F(test_callbackq_thread, remove_all, 10) {
         dispatch(1000);
         add(&ctx2);
         barrier();
-        remove_all(&ctx1);
-        remove_all(&ctx2);
+        remove_safe(&ctx1);
+        remove_safe(&ctx2);
+        dispatch(1);
 
         /* this should remove all instances of 'ctx', including queued async
          * commands */
         uint32_t count1 = ctx1.count;
         dispatch(100);
         EXPECT_EQ(count1, ctx1.count);
-        EXPECT_EQ(0u,     ctx2.count);
     } else {
-        for (unsigned i = 0; i < 1000; ++i) {
-            add_safe(&ctx1);
-        }
+        dispatch(100);
         barrier();
     }
 }
 
-class test_callbackq_async : public test_callbackq_safe,
-                             public ::testing::TestWithParam<ucs_async_mode_t>
-{
-protected:
-    test_callbackq_async() : m_add_count(0) {
-        /* Silence coverity */
-        memset(&m_cbctx, 0, sizeof(m_cbctx));
-        memset(&m_async, 0, sizeof(m_async));
-    }
+INSTANTIATE_TEST_CASE_P(fast_path, test_callbackq, ::testing::Values(true));
+INSTANTIATE_TEST_CASE_P(slow_path, test_callbackq, ::testing::Values(false));
 
-    virtual void init() {
-        ucs_status_t status = ucs_async_context_init(&m_async, GetParam());
-        ASSERT_UCS_OK(status);
-        m_async_ptr = &m_async;
-        test_callbackq_base::init();
-        init_ctx(&m_cbctx);
-    }
-
-    virtual void cleanup() {
-        test_callbackq_base::cleanup();
-        ucs_async_context_cleanup(&m_async);
-    }
-
-    void add_timer(int *timer_id) {
-        ucs_status_t status;
-        status = ucs_async_add_timer(m_async.mode, ucs_time_from_msec(1),
-                                     timer_callback, this, &m_async, timer_id);
-        ASSERT_UCS_OK(status);
-    }
-
-    void remove_timer(int timer_id) {
-        ucs_async_remove_handler(timer_id, 1);
-    }
-
-    void timer() {
-        if (is_fast_path) {
-            if ((m_add_count > 0) && ((ucs::rand() % 2) == 0)) {
-                remove_safe(&m_cbctx);
-                --m_add_count;
-            } else {
-                add_safe(&m_cbctx);
-                ++m_add_count;
-            }
-        } else {
-            callback_ctx *tmp = new callback_ctx;
-            init_ctx(tmp);
-            add(tmp);
-            tmp->command = COMMAND_REMOVE_SELF;
-            m_cbctxs.push_back(tmp);
-        }
-    }
-
-
-    static void timer_callback(int timer_id, void *arg) {
-        test_callbackq_async *self = reinterpret_cast<test_callbackq_async*>(arg);
-        self->timer();
-    }
-
-protected:
-    ucs_async_context_t            m_async;
-    callback_ctx                   m_cbctx;
-    volatile uint32_t              m_add_count;
-    ucs::ptr_vector<callback_ctx>  m_cbctxs;
-
-    UCS_TEST_BASE_IMPL
-};
-
-
-UCS_TEST_P(test_callbackq_async, test_fast) {
-    int timer_id;
-
-    is_fast_path = true;
-    add_timer(&timer_id);
-
-    ucs_time_t end_time   = ucs_get_time() + ucs_time_from_msec(300);
-    while (ucs_get_time() < end_time) {
-        dispatch(10);
-        add(&m_cbctx);
-        dispatch(10);
-        remove(&m_cbctx);
-    }
-
-    remove_timer(timer_id);
-
-    remove_all(&m_cbctx);
-}
-
-UCS_TEST_P(test_callbackq_async, test_slow) {
-    int timer_id;
-
-    is_fast_path = false;
-    add_timer(&timer_id);
-
-    ucs_time_t end_time   = ucs_get_time() + ucs_time_from_msec(100);
-    while (ucs_get_time() < end_time) {
-        dispatch(10);
-    }
-
-    remove_timer(timer_id);
-
-    /* make sure every ctx element gets dispatched before to check count */
-    dispatch();
-
-    ucs::ptr_vector<callback_ctx>::const_iterator it;
-    for (it = m_cbctxs.begin(); it != m_cbctxs.end(); ++it) {
-        /* Count should be 1, because every context is created with
-         * REMOVE_SELF command */
-        EXPECT_EQ(1u, (*it)->count);
-    }
-}
-
-INSTANTIATE_TEST_CASE_P(signal, test_callbackq_async, ::testing::Values(UCS_ASYNC_MODE_SIGNAL));
-INSTANTIATE_TEST_CASE_P(thread, test_callbackq_async, ::testing::Values(UCS_ASYNC_MODE_THREAD));

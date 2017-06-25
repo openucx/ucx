@@ -135,7 +135,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     self->cached_signal_addrlen  = remote_fifo_ctl->signal_addrlen;
     self->cached_signal_sockaddr = remote_fifo_ctl->signal_sockaddr;
 
-    self->slow_cb_id = NULL;
+    self->slow_cb_id = UCS_CALLBACKQ_ID_NULL;
 
     /* Send connect message to remote side so it will start polling */
     status = uct_mm_ep_signal_remote(self, UCT_MM_IFACE_SIGNAL_CONNECT);

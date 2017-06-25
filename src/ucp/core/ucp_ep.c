@@ -515,7 +515,7 @@ static ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep)
     req->send.ep                = ep;
     req->send.flush.flushed_cb  = ucp_ep_flushed_callback;
     req->send.flush.lanes       = UCS_MASK(ucp_ep_num_lanes(ep));
-    req->send.flush.slow_cb_id  = NULL;
+    req->send.flush.slow_cb_id  = UCS_CALLBACKQ_ID_NULL;
     req->send.lane              = UCP_NULL_LANE;
     req->send.uct.func          = ucp_ep_flush_progress_pending;
     req->send.uct_comp.func     = ucp_ep_flush_completion;
