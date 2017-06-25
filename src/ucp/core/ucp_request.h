@@ -140,7 +140,7 @@ struct ucp_request {
             };
 
             ucp_lane_index_t      lane;     /* Lane on which this request is being sent */
-            ucp_rsc_index_t       rsc;      /* Resource on which memory is registered */
+            ucp_rsc_index_t       reg_rsc;  /* Resource on which memory is registered */
             ucp_dt_state_t        state;    /* Position in the send buffer */
             uct_pending_req_t     uct;      /* UCT pending request */
             uct_completion_t      uct_comp; /* UCT completion */
