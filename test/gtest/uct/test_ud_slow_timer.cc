@@ -44,6 +44,15 @@ public:
     {
         return UCS_ERR_INVALID_PARAM;
     }
+
+    void wait_for_rx_sn(unsigned sn)
+    {
+        ucs_time_t deadline = ucs_get_time() +
+                              ucs_time_from_sec(10) * ucs::test_time_multiplier();
+        while ((ucs_get_time() < deadline) && (ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts) < sn)) {
+            usleep(1000);
+        }
+    }
 };
 
 int test_ud_slow_timer::rx_limit = 10;
@@ -68,7 +77,7 @@ UCS_TEST_P(test_ud_slow_timer, txn) {
     for (i = 0; i < N; i++) {
         EXPECT_UCS_OK(tx(m_e1));
     }
-    twait(200);
+    wait_for_rx_sn(N);
     EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
     EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 }
@@ -104,7 +113,7 @@ UCS_TEST_P(test_ud_slow_timer, retransmit1) {
     ep(m_e2)->rx.rx_hook = uct_ud_ep_null_hook;
     EXPECT_EQ(2, ep(m_e1)->tx.psn);
     EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
-    twait(500);
+    wait_for_rx_sn(1);
     EXPECT_EQ(2, ep(m_e1)->tx.psn);
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 }
@@ -124,9 +133,7 @@ UCS_TEST_P(test_ud_slow_timer, retransmitn) {
     ep(m_e2)->rx.rx_hook = uct_ud_ep_null_hook;
     EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
     EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
-    twait(500*ucs::test_time_multiplier());
-    //short_progress_loop();
-    
+    wait_for_rx_sn(N);
     EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
     EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 }
@@ -159,9 +166,7 @@ UCS_TEST_P(test_ud_slow_timer, partial_drop) {
     short_progress_loop();
     
     EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
-    while (ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts) < N) {
-        progress();
-    }
+    wait_for_rx_sn(N);
     EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 }
 #endif
