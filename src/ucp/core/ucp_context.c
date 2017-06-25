@@ -470,6 +470,7 @@ static ucs_status_t ucp_fill_tl_md(const uct_md_resource_desc_t *md_rsc,
         return status;
     }
 
+    VALGRIND_MAKE_MEM_UNDEFINED(&tl_md->attr, sizeof(tl_md->attr));
     /* Save MD attributes */
     status = uct_md_query(tl_md->md, &tl_md->attr);
     if (status != UCS_OK) {

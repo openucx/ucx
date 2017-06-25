@@ -20,6 +20,7 @@
 typedef struct ucm_reloc_patch {
     const char       *symbol;
     void             *value;
+    void             *prev_value;
     ucs_list_link_t  list;
 } ucm_reloc_patch_t;
 

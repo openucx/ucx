@@ -481,7 +481,7 @@ UCS_TEST_P(test_tag, tag_send_no_tag)
                            NULL, UCT_AM_CB_FLAG_SYNC);
   mapped_buffer lbuf(200, SEND_SEED, sender());
   ssize_t len = uct_ep_am_bcopy(sender().ep(0), 0, mapped_buffer::pack,
-                                reinterpret_cast<void*>(&lbuf));
+                                reinterpret_cast<void*>(&lbuf), 0);
   EXPECT_EQ(lbuf.length(), static_cast<size_t>(len));
   wait_for_flag(&is_am_received);
   EXPECT_TRUE(is_am_received);

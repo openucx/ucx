@@ -9,6 +9,7 @@
 #define UCT_IB_MLX5_H_
 
 
+#include <uct/base/uct_worker.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/base/ib_device.h>
 #include <ucs/arch/cpu.h>

@@ -73,7 +73,7 @@ public:
          ssize_t status;
          for (;;) {
              status = uct_ep_am_bcopy(sender().ep(0), AM_ID, pack_cb,
-                                      (void*)&sendbuf);
+                                      (void*)&sendbuf, 0);
              if (status >= 0) {
                  return;
              } else if (status == UCS_ERR_NO_RESOURCE) {
@@ -99,7 +99,7 @@ public:
         ssize_t status;
 
         status = uct_ep_am_bcopy(sender().ep(0), AM_ID, pack_cb,
-                                 (void*)am_req->sendbuf);
+                                 (void*)am_req->sendbuf, 0);
         if (status >= 0) {
             --am_req->comp.count;
             return UCS_OK;
@@ -313,7 +313,7 @@ UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
      ssize_t packed_len;
      for (;;) {
          packed_len = uct_ep_am_bcopy(sender().ep(0), AM_ID, pack_cb,
-                                      (void*)&sendbuf);
+                                      (void*)&sendbuf, 0);
          if (packed_len == UCS_ERR_NO_RESOURCE) {
              break;
          }

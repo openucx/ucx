@@ -11,11 +11,21 @@
 #include <ucp/core/ucp_request.h>
 #include <ucp/proto/proto.h>
 
-
+/**
+ * Header for SW RNDV request
+ */
 typedef struct ucp_sw_rndv_hdr {
     ucp_request_hdr_t super;
     size_t            length;
 } UCS_S_PACKED ucp_sw_rndv_hdr_t;
+
+/**
+ * Header for sync send acknowledgment
+ */
+typedef struct {
+    uint64_t          sender_uuid;
+    ucp_tag_t         sender_tag;
+} UCS_S_PACKED ucp_offload_ssend_hdr_t;
 
 
 extern const ucp_proto_t ucp_tag_offload_proto;
@@ -27,6 +37,10 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self);
 void ucp_tag_offload_cancel_rndv(ucp_request_t *req);
 
 ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq);
+
+void ucp_tag_offload_eager_sync_send_ack(ucp_worker_h worker,
+                                         uint64_t sender_uuid,
+                                         ucp_tag_t sender_tag);
 
 ucs_status_t ucp_tag_offload_unexp_eager(void *arg, void *data, size_t length,
                                          unsigned flags, uct_tag_t stag, uint64_t imm);

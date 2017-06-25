@@ -25,19 +25,12 @@ void uct_mm_ep_connected(uct_mm_ep_t *ep)
     ep->cached_tail = ep->fifo_ctl->tail;
 }
 
-static void
-uct_mm_ep_signal_remote_slow_path_callback(ucs_callbackq_slow_elem_t *self)
+static void uct_mm_ep_signal_remote_slow_path_callback(void *arg)
 {
-    uct_mm_ep_t *ep = ucs_container_of(self, uct_mm_ep_t, cbq_elem);
-
+    uct_mm_ep_t *ep = arg;
     uct_mm_ep_signal_remote(ep, UCT_MM_IFACE_SIGNAL_CONNECT);
 }
 
-void uct_mm_ep_remove_slow_path_callback(uct_mm_iface_t *iface, uct_mm_ep_t *ep)
-{
-    uct_worker_slowpath_progress_unregister(iface->super.worker, &ep->cbq_elem);
-    ep->cbq_elem_on = 0;
-}
 
 /* send a signal to remote interface using Unix-domain socket */
 static ucs_status_t
@@ -57,9 +50,7 @@ uct_mm_ep_signal_remote(uct_mm_ep_t *ep, uct_mm_iface_conn_signal_t sig)
         ucs_debug("Sent connect from socket %d to %p", iface->signal_fd,
                   (const struct sockaddr*)&ep->cached_signal_sockaddr);
 
-        if (ep->cbq_elem_on) {
-            uct_mm_ep_remove_slow_path_callback(iface, ep);
-        }
+        uct_worker_progress_unregister_safe(iface->super.worker, &ep->slow_cb_id);
 
         /* point the ep->fifo_ctl to the remote fifo */
         uct_mm_ep_connected(ep);
@@ -78,10 +69,10 @@ uct_mm_ep_signal_remote(uct_mm_ep_t *ep, uct_mm_iface_conn_signal_t sig)
          * prevents the reading of incoming messages which blocks the remote sender.
          * Add the sending attempt as a callback to a slow progress.
          */
-        if ((!ep->cbq_elem_on) && (sig == UCT_MM_IFACE_SIGNAL_CONNECT)) {
-             ep->cbq_elem.cb = uct_mm_ep_signal_remote_slow_path_callback;
-             uct_worker_slowpath_progress_register(iface->super.worker, &ep->cbq_elem);
-             ep->cbq_elem_on = 1;
+        if (sig == UCT_MM_IFACE_SIGNAL_CONNECT) {
+            uct_worker_progress_register_safe(iface->super.worker,
+                                              uct_mm_ep_signal_remote_slow_path_callback,
+                                              ep, 0, &ep->slow_cb_id);
         }
 
         /* Return UCS_OK in this case even though couldn't send, so that the
@@ -144,7 +135,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     self->cached_signal_addrlen  = remote_fifo_ctl->signal_addrlen;
     self->cached_signal_sockaddr = remote_fifo_ctl->signal_sockaddr;
 
-    self->cbq_elem_on = 0;
+    self->slow_cb_id = NULL;
 
     /* Send connect message to remote side so it will start polling */
     status = uct_mm_ep_signal_remote(self, UCT_MM_IFACE_SIGNAL_CONNECT);
@@ -161,7 +152,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
 
     /* Register for send side progress */
     uct_worker_progress_register(iface->super.worker, uct_mm_iface_progress,
-                                 iface);
+                                 iface, &iface->super.prog);
 
     ucs_debug("mm: ep connected: %p, to remote_shmid: %zu", self, addr->id);
 
@@ -179,13 +170,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
      * from progressing and reading incoming messages  */
 
     /* make sure the slow path function isn't invoked after the ep's cleanup */
-    if (self->cbq_elem_on) {
-        ucs_debug("Removing a remaining slow path progress function.");
-        uct_mm_ep_remove_slow_path_callback(iface, self);
-    }
+    uct_worker_progress_unregister_safe(iface->super.worker, &self->slow_cb_id);
 
-    uct_worker_progress_unregister(iface->super.worker, uct_mm_iface_progress,
-                                   iface);
+    uct_worker_progress_unregister(iface->super.worker, &iface->super.prog);
 
     for (remote_seg = sglib_hashed_uct_mm_remote_seg_t_it_init(&iter, self->remote_segments_hash);
          remote_seg != NULL; remote_seg = sglib_hashed_uct_mm_remote_seg_t_it_next(&iter)) {
@@ -386,7 +373,7 @@ ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 }
 
 ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
-                           void *arg)
+                           void *arg, unsigned flags)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);

@@ -169,7 +169,8 @@ public:
                                        length - sizeof(am_short_hdr));
             case UCT_PERF_DATA_LAYOUT_BCOPY:
                 *(psn_t*)buffer = sn;
-                packed_len = uct_ep_am_bcopy(ep, UCT_PERF_TEST_AM_ID, pack_cb, (void*)this);
+                packed_len = uct_ep_am_bcopy(ep, UCT_PERF_TEST_AM_ID, pack_cb,
+                                             (void*)this, 0);
                 return (packed_len >= 0) ? UCS_OK : (ucs_status_t)packed_len;
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
                 *(psn_t*)buffer = sn;

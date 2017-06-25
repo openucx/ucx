@@ -219,7 +219,7 @@ struct uct_rc_iface {
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h,
                   uct_worker_h, const uct_iface_params_t*,
                   const uct_rc_iface_config_t*, unsigned, unsigned,
-                  int, unsigned, unsigned, unsigned)
+                  unsigned, unsigned, unsigned)
 
 
 struct uct_rc_iface_send_op {
@@ -331,7 +331,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_put_send_op(uct_rc_iface_send_op_t *op)
 {
     uct_rc_iface_t *iface = op->iface;
-    ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IFACE);
+    ucs_assert(op->flags == UCT_RC_IFACE_SEND_OP_FLAG_IFACE);
     op->next = iface->tx.free_ops;
     iface->tx.free_ops = op;
 }

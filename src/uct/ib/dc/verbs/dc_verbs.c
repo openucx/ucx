@@ -313,7 +313,8 @@ ucs_status_t uct_dc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 }
 
 ssize_t uct_dc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
-                                 uct_pack_callback_t pack_cb, void *arg)
+                                 uct_pack_callback_t pack_cb, void *arg,
+                                 unsigned flags)
 {
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_verbs_iface_t);
     uct_dc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
@@ -752,48 +753,41 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t)(uct_iface_t*);
 static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
     {
     {
-        {
-            .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t),
-            .iface_query              = uct_dc_verbs_iface_query,
-            .iface_get_device_address = uct_ib_iface_get_device_address,
-            .iface_is_reachable       = uct_ib_iface_is_reachable,
-            .iface_get_address        = uct_dc_iface_get_address,
-
-            .iface_flush              = uct_dc_iface_flush,
-
-            .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_dc_verbs_ep_t),
-            .ep_destroy               = uct_dc_verbs_ep_destroy,
-
-            .ep_am_short              = uct_dc_verbs_ep_am_short,
-            .ep_am_bcopy              = uct_dc_verbs_ep_am_bcopy,
-            .ep_am_zcopy              = uct_dc_verbs_ep_am_zcopy,
-
-            .ep_put_short             = uct_dc_verbs_ep_put_short,
-            .ep_put_bcopy             = uct_dc_verbs_ep_put_bcopy,
-            .ep_put_zcopy             = uct_dc_verbs_ep_put_zcopy,
-
-            .ep_get_bcopy             = uct_dc_verbs_ep_get_bcopy,
-            .ep_get_zcopy             = uct_dc_verbs_ep_get_zcopy,
-
-            .ep_atomic_add64          = uct_dc_verbs_ep_atomic_add64,
-            .ep_atomic_fadd64         = uct_dc_verbs_ep_atomic_fadd64,
-            .ep_atomic_swap64         = uct_dc_verbs_ep_atomic_swap64,
-            .ep_atomic_cswap64        = uct_dc_verbs_ep_atomic_cswap64,
-
-            .ep_atomic_add32          = uct_dc_verbs_ep_atomic_add32,
-            .ep_atomic_fadd32         = uct_dc_verbs_ep_atomic_fadd32,
-            .ep_atomic_swap32         = uct_dc_verbs_ep_atomic_swap32,
-            .ep_atomic_cswap32        = uct_dc_verbs_ep_atomic_cswap32,
-
-            .ep_flush                 = uct_dc_verbs_ep_flush,
-
-            .ep_pending_add           = uct_dc_ep_pending_add,
-            .ep_pending_purge         = uct_dc_ep_pending_purge
-        },
-        .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
-        .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
-        .handle_failure           = uct_dc_verbs_handle_failure,
-        .set_ep_failed            = uct_dc_verbs_ep_set_failed
+    {
+    .ep_put_short             = uct_dc_verbs_ep_put_short,
+    .ep_put_bcopy             = uct_dc_verbs_ep_put_bcopy,
+    .ep_put_zcopy             = uct_dc_verbs_ep_put_zcopy,
+    .ep_get_bcopy             = uct_dc_verbs_ep_get_bcopy,
+    .ep_get_zcopy             = uct_dc_verbs_ep_get_zcopy,
+    .ep_am_short              = uct_dc_verbs_ep_am_short,
+    .ep_am_bcopy              = uct_dc_verbs_ep_am_bcopy,
+    .ep_am_zcopy              = uct_dc_verbs_ep_am_zcopy,
+    .ep_atomic_add64          = uct_dc_verbs_ep_atomic_add64,
+    .ep_atomic_fadd64         = uct_dc_verbs_ep_atomic_fadd64,
+    .ep_atomic_swap64         = uct_dc_verbs_ep_atomic_swap64,
+    .ep_atomic_cswap64        = uct_dc_verbs_ep_atomic_cswap64,
+    .ep_atomic_add32          = uct_dc_verbs_ep_atomic_add32,
+    .ep_atomic_fadd32         = uct_dc_verbs_ep_atomic_fadd32,
+    .ep_atomic_swap32         = uct_dc_verbs_ep_atomic_swap32,
+    .ep_atomic_cswap32        = uct_dc_verbs_ep_atomic_cswap32,
+    .ep_pending_add           = uct_dc_ep_pending_add,
+    .ep_pending_purge         = uct_dc_ep_pending_purge,
+    .ep_flush                 = uct_dc_verbs_ep_flush,
+    .ep_fence                 = uct_base_ep_fence,
+    .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_dc_verbs_ep_t),
+    .ep_destroy               = uct_dc_verbs_ep_destroy,
+    .iface_flush              = uct_dc_iface_flush,
+    .iface_fence              = uct_base_iface_fence,
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t),
+    .iface_query              = uct_dc_verbs_iface_query,
+    .iface_get_device_address = uct_ib_iface_get_device_address,
+    .iface_is_reachable       = uct_ib_iface_is_reachable,
+    .iface_get_address        = uct_dc_iface_get_address
+    },
+    .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
+    .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
+    .handle_failure           = uct_dc_verbs_handle_failure,
+    .set_ep_failed            = uct_dc_verbs_ep_set_failed
     },
     .fc_ctrl                  = uct_dc_verbs_ep_fc_ctrl,
     .fc_handler               = uct_dc_iface_fc_handler,
@@ -869,7 +863,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     }
 
     /* TODO: only register progress when we have a connection */
-    uct_worker_progress_register(worker, uct_dc_verbs_iface_progress, self);
+    uct_worker_progress_register(worker, uct_dc_verbs_iface_progress, self,
+                                 &self->super.super.super.super.prog);
     ucs_debug("created dc iface %p", self);
     return UCS_OK;
 
@@ -883,7 +878,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_verbs_iface_t)
 {
     ucs_trace_func("");
     uct_worker_progress_unregister(self->super.super.super.super.worker,
-                                   uct_dc_verbs_iface_progress, self);
+                                   &self->super.super.super.super.prog);
     uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
 }
 

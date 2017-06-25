@@ -171,7 +171,7 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class {\
   ::test_info_ =\
     ::testing::internal::MakeAndRegisterTestInfo(\
         #test_case_name, \
-        (num_threads == 1) ? #test_name : #test_name "/mt-" #num_threads, \
+        (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
         "", "", \
         (parent_id), \
         parent_class::SetUpTestCase, \
@@ -198,13 +198,14 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
 
 
 /*
- * Define parameterized test with modified configuration
+ * Helper macro
  */
-#define UCS_TEST_P(test_case_name, test_name, ...) \
+#define UCS_TEST_P_(test_case_name, test_name, num_threads, ...) \
   class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) \
       : public test_case_name { \
    public: \
     GTEST_TEST_CLASS_NAME_(test_case_name, test_name)() {\
+       set_num_threads(num_threads); \
        UCS_PP_FOREACH(UCS_TEST_SET_CONFIG, _, __VA_ARGS__); \
     } \
     virtual void test_body(); \
@@ -214,7 +215,7 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
           GetTestCasePatternHolder<test_case_name>(\
               #test_case_name, __FILE__, __LINE__)->AddTestPattern(\
                   #test_case_name, \
-                  #test_name, \
+                  (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
                   new ::testing::internal::TestMetaFactory< \
                       GTEST_TEST_CLASS_NAME_(test_case_name, test_name)>()); \
       return 0; \
@@ -227,5 +228,19 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
                              test_name)::gtest_registering_dummy_ = \
       GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::AddToRegistry(); \
   void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
+
+
+/*
+ * Define parameterized test with modified configuration
+ */
+#define UCS_TEST_P(test_case_name, test_name, ...) \
+    UCS_TEST_P_(test_case_name, test_name, 1, __VA_ARGS__)
+
+
+/*
+ * Define parameterized test with multiple threads
+ */
+#define UCS_MT_TEST_P(test_case_name, test_name, num_threads, ...) \
+    UCS_TEST_P_(test_case_name, test_name, num_threads, __VA_ARGS__)
 
 #endif

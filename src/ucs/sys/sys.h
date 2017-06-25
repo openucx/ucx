@@ -229,9 +229,10 @@ int ucs_tgkill(int tgid, int tid, int sig);
 /**
  * Get CPU frequency from /proc/cpuinfo. Return value is clocks-per-second.
  *
- * @param mhz_header String in /proc/cpuinfo which precedes the clock speed number.
+ * @param header String in /proc/cpuinfo which precedes the clock speed number.
+ * @param scale  Frequency value units.
  */
-double ucs_get_cpuinfo_clock_freq(const char *mhz_header);
+double ucs_get_cpuinfo_clock_freq(const char *mhz_header, double scale);
 
 
 /**
@@ -248,6 +249,29 @@ int ucs_is_thp_enabled();
  * @return shmmax size
  */
 size_t ucs_get_shmmax();
+
+
+/**
+ * Allocate or re-allocate memory from the operating system.
+ *
+ * @param [in]  old_ptr     Pointer to existing block, may be NULL. If non-NULL,
+ *                          this block will be resized and potentially moved.
+ * @param [in]  old_length  Length of the block pointed by old_ptr.
+ * @param [in]  new_length  Length to allocate for the new block.
+ *
+ * @return New allocated block, with size 'new_length'.
+ * @note Actual allocation size is rounded up to system page size.
+ */
+void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length);
+
+
+/**
+ * Release memory previously allocated by @ref ucs_sys_realloc().
+ *
+ * @param [in]  ptr         Pointer to memory block to release.
+ * @param [in]  length      Length of the memory block.
+ */
+void ucs_sys_free(void *ptr, size_t length);
 
 
 /**

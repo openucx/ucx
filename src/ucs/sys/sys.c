@@ -629,9 +629,9 @@ int ucs_tgkill(int tgid, int tid, int sig)
     return syscall(SYS_tgkill, tgid, tid, sig);
 }
 
-double ucs_get_cpuinfo_clock_freq(const char *mhz_header)
+double ucs_get_cpuinfo_clock_freq(const char *header, double scale)
 {
-    double mhz = 0.0;
+    double value = 0.0;
     double m;
     int rc;
     FILE* f;
@@ -644,7 +644,7 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header)
         return 0.0;
     }
 
-    snprintf(fmt, sizeof(fmt), "%s : %%lf", mhz_header);
+    snprintf(fmt, sizeof(fmt), "%s : %%lf ", header);
 
     warn = 0;
     while (fgets(buf, sizeof(buf), f)) {
@@ -654,22 +654,61 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header)
             continue;
         }
 
-        if (mhz == 0.0) {
-            mhz = m;
+        if (value == 0.0) {
+            value = m;
             continue;
         }
 
-        if (mhz != m) {
-            mhz = ucs_max(mhz,m);
+        if (value != m) {
+            value = ucs_max(value,m);
             warn = 1;
         }
     }
     fclose(f);
 
     if (warn) {
-        ucs_warn("Conflicting CPU frequencies detected, using: %.2f MHz", mhz);
+        ucs_warn("Conflicting CPU frequencies detected, using: %.2f", value);
     }
-    return mhz * 1e6;
+    return value * scale;
+}
+
+void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
+{
+    void *ptr;
+
+    new_length = ucs_align_up_pow2(new_length, ucs_get_page_size());
+    if (old_ptr == NULL) {
+        ptr = mmap(NULL, new_length, PROT_READ|PROT_WRITE,
+                       MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+        if (ptr == MAP_FAILED) {
+            ucs_log_fatal_error("mmap(NULL, %zu, READ|WRITE, PRIVATE|ANON) failed: %m",
+                                new_length);
+            return NULL;
+        }
+    } else {
+        old_length = ucs_align_up_pow2(old_length, ucs_get_page_size());
+        ptr = mremap(old_ptr, old_length, new_length, MREMAP_MAYMOVE);
+        if (ptr == MAP_FAILED) {
+            ucs_log_fatal_error("mremap(%p, %zu, %zu, MAYMOVE) failed: %m",
+                                old_ptr, old_length, new_length);
+            return NULL;
+        }
+    }
+
+    return ptr;
+}
+
+void ucs_sys_free(void *ptr, size_t length)
+{
+    int ret;
+
+    if (ptr != NULL) {
+        length = ucs_align_up_pow2(length, ucs_get_page_size());
+        ret = munmap(ptr, length);
+        if (ret) {
+            ucs_log_fatal_error("munmap(%p, %zu) failed: %m", ptr, length);
+        }
+    }
 }
 
 void ucs_empty_function()

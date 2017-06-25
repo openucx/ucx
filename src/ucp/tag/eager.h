@@ -62,9 +62,15 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, uint64_t sender_uuid,
 void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag,
                                    ucs_status_t status);
 
+void ucp_eager_sync_send_handler(void *arg, void *data, uint16_t flags);
+
 void ucp_tag_eager_zcopy_completion(uct_completion_t *self, ucs_status_t status);
 
 void ucp_tag_eager_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
+
+void ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
+
+void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self, ucs_status_t status);
 
 static inline ucs_status_t ucp_tag_send_eager_short(ucp_ep_t *ep, ucp_tag_t tag,
                                                     const void *buffer, size_t length)
@@ -99,7 +105,6 @@ ucp_eager_unexp_match(ucp_worker_h worker, ucp_recv_desc_t *rdesc, ucp_tag_t tag
 {
     size_t recv_len, hdr_len;
     ucs_status_t status;
-    ucp_request_hdr_t *req_hdr;
     void *data = rdesc + 1;
 
     UCP_WORKER_STAT_EAGER_CHUNK(worker, UNEXP);
@@ -114,11 +119,7 @@ ucp_eager_unexp_match(ucp_worker_h worker, ucp_recv_desc_t *rdesc, ucp_tag_t tag
         info->length     = ucp_eager_total_len(data, flags, recv_len);
 
         if (ucs_unlikely(flags & UCP_RECV_DESC_FLAG_SYNC)) {
-            req_hdr = (flags & UCP_RECV_DESC_FLAG_LAST) ?
-                            &((ucp_eager_sync_hdr_t*)data)->req :
-                            &((ucp_eager_sync_first_hdr_t*)data)->req;
-            ucp_tag_eager_sync_send_ack(worker, req_hdr->sender_uuid,
-                                        req_hdr->reqptr);
+            ucp_eager_sync_send_handler(worker, data, flags);
         }
         UCP_WORKER_STAT_EAGER_MSG(worker, flags);
     }

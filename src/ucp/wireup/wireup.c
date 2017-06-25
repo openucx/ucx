@@ -50,7 +50,7 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
         req->send.lane = ucp_ep_get_wireup_msg_lane(ep);
     }
     packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], UCP_AM_ID_WIREUP,
-                                 ucp_wireup_msg_pack, req);
+                                 ucp_wireup_msg_pack, req, 0);
     if (packed_len < 0) {
         if (packed_len != UCS_ERR_NO_RESOURCE) {
             ucs_error("failed to send wireup: %s", ucs_status_string(packed_len));
@@ -416,16 +416,17 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
 static void ucp_wireup_print_config(ucp_context_h context,
                                     const ucp_ep_config_key_t *key,
                                     const char *title,
-                                    uint8_t *addr_indices)
+                                    uint8_t *addr_indices,
+                                    ucs_log_level_t log_level)
 {
     char lane_info[128] = {0};
     ucp_lane_index_t lane;
 
-    if (!ucs_log_enabled(UCS_LOG_LEVEL_DEBUG)) {
+    if (!ucs_log_enabled(log_level)) {
         return;
     }
 
-    ucs_debug("%s: am_lane %d wirep_lane %d reachable_mds 0x%lx",
+    ucs_log(log_level, "%s: am_lane %d wirep_lane %d reachable_mds 0x%lx",
               title, key->am_lane, key->wireup_lane,
               key->reachable_md_map);
 
@@ -433,7 +434,7 @@ static void ucp_wireup_print_config(ucp_context_h context,
         ucp_ep_config_lane_info_str(context, key, addr_indices, lane,
                                     UCP_NULL_RESOURCE, lane_info,
                                     sizeof(lane_info));
-        ucs_debug("%s: %s", title, lane_info);
+        ucs_log(log_level, "%s: %s", title, lane_info);
     }
 }
 
@@ -477,8 +478,9 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
          */
         ucs_debug("cannot reconfigure ep %p from [%d] to [%d]", ep, ep->cfg_index,
                   new_cfg_index);
-        ucp_wireup_print_config(worker->context, &ucp_ep_config(ep)->key, "old", NULL);
-        ucp_wireup_print_config(worker->context, &key, "new", NULL);
+        ucp_wireup_print_config(worker->context, &ucp_ep_config(ep)->key, "old",
+			       NULL, UCS_LOG_LEVEL_ERROR);
+        ucp_wireup_print_config(worker->context, &key, "new", NULL, UCS_LOG_LEVEL_ERROR);
         ucs_fatal("endpoint reconfiguration not supported yet");
     }
 
@@ -487,7 +489,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 
     snprintf(str, sizeof(str), "ep %p", ep);
     ucp_wireup_print_config(worker->context, &ucp_ep_config(ep)->key, str,
-                            addr_indices);
+                            addr_indices, UCS_LOG_LEVEL_DEBUG);
 
     ucs_trace("ep %p: connect lanes", ep);
 

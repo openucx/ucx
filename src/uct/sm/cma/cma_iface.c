@@ -68,18 +68,21 @@ static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
 static UCS_CLASS_DECLARE_DELETE_FUNC(uct_cma_iface_t, uct_iface_t);
 
 static uct_iface_ops_t uct_cma_iface_ops = {
+    .ep_put_zcopy        = uct_cma_ep_put_zcopy,
+    .ep_get_zcopy        = uct_cma_ep_get_zcopy,
+    .ep_pending_add      = ucs_empty_function_return_busy,
+    .ep_pending_purge    = ucs_empty_function,
+    .ep_flush            = uct_base_ep_flush,
+    .ep_fence            = uct_sm_ep_fence,
+    .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_cma_ep_t),
+    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_cma_ep_t),
+    .iface_flush         = uct_base_iface_flush,
+    .iface_fence         = uct_sm_iface_fence,
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_cma_iface_t),
     .iface_query         = uct_cma_iface_query,
     .iface_get_address   = uct_cma_iface_get_address,
     .iface_get_device_address = uct_sm_iface_get_device_address,
-    .iface_is_reachable  = uct_sm_iface_is_reachable,
-    .iface_fence         = uct_sm_iface_fence,
-    .ep_put_zcopy        = uct_cma_ep_put_zcopy,
-    .ep_get_zcopy        = uct_cma_ep_get_zcopy,
-    .ep_fence            = uct_sm_ep_fence,
-    .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_cma_ep_t),
-    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_cma_ep_t),
-    .ep_pending_purge    = (void*)ucs_empty_function_return_success,
+    .iface_is_reachable  = uct_sm_iface_is_reachable
 };
 
 static UCS_CLASS_INIT_FUNC(uct_cma_iface_t, uct_md_h md, uct_worker_h worker,

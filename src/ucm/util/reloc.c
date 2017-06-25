@@ -37,11 +37,12 @@ typedef struct ucm_auxv {
     long               value;
 } UCS_S_PACKED ucm_auxv_t;
 
+
 typedef struct ucm_reloc_dl_iter_context {
-    const char         *symbol;
-    void               *newvalue;
-    ucs_status_t        status;
+    ucm_reloc_patch_t  *patch;
+    ucs_status_t       status;
 } ucm_reloc_dl_iter_context_t;
+
 
 /* List of patches to be applied to additional libraries */
 static UCS_LIST_HEAD(ucm_reloc_patch_list);
@@ -142,7 +143,7 @@ static int ucm_reloc_get_aux_phsize()
 
 static ucs_status_t
 ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname,
-                     int phnum, int phsize, const char *symbol, void *newvalue)
+                     int phnum, int phsize, ucm_reloc_patch_t *patch)
 {
     ElfW(Phdr) *dphdr;
     ElfW(Rela) *reloc;
@@ -183,11 +184,11 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     /* Find matching symbol and replace it */
     for (reloc = jmprel; (void*)reloc < jmprel + pltrelsz; ++reloc) {
         elf_sym = (char*)strtab + symtab[ELF64_R_SYM(reloc->r_info)].st_name;
-        if (!strcmp(symbol, elf_sym)) {
+        if (!strcmp(patch->symbol, elf_sym)) {
             entry = (void *)(base + reloc->r_offset);
 
-            ucm_trace("'%s' entry in '%s' is at %p", symbol, basename(phname),
-                      entry);
+            ucm_trace("'%s' entry in '%s' is at %p", patch->symbol,
+                      basename(phname), entry);
 
             page  = (void *)((intptr_t)entry & ~(page_size - 1));
             ret = mprotect(page, page_size, PROT_READ|PROT_WRITE);
@@ -195,7 +196,8 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
                 ucm_error("failed to modify GOT page %p to rw: %m", page);
                 return UCS_ERR_UNSUPPORTED;
             }
-            *entry = newvalue;
+            patch->prev_value = *entry;
+            *entry = patch->value;
             break;
         }
     }
@@ -217,7 +219,7 @@ static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size, void 
 
     ctx->status = ucm_reloc_modify_got(info->dlpi_addr, info->dlpi_phdr,
                                        info->dlpi_name, info->dlpi_phnum,
-                                       phsize, ctx->symbol, ctx->newvalue);
+                                       phsize, ctx->patch);
     if (ctx->status == UCS_OK) {
         return 0; /* continue iteration and patch all objects */
     } else {
@@ -229,9 +231,8 @@ static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size, void 
 static ucs_status_t ucm_reloc_apply_patch(ucm_reloc_patch_t *patch)
 {
     ucm_reloc_dl_iter_context_t ctx = {
-        .symbol   = patch->symbol,
-        .newvalue = patch->value,
-        .status   = UCS_OK
+        .patch  = patch,
+        .status = UCS_OK
     };
 
     /* Avoid locks here because we don't modify ELF data structures.
@@ -239,7 +240,8 @@ static ucs_status_t ucm_reloc_apply_patch(ucm_reloc_patch_t *patch)
      */
     (void)dl_iterate_phdr(ucm_reloc_phdr_iterator, &ctx);
     if (ctx.status == UCS_OK) {
-        ucm_debug("modified '%s' to %p", ctx.symbol, ctx.newvalue);
+        ucm_debug("modified '%s' from %p to %p", patch->symbol,
+                  patch->prev_value, patch->value);
     }
     return ctx.status;
 }

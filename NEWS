@@ -1,19 +1,64 @@
 #
 ## Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 ## Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+## Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED.
 ##
 ## See file LICENSE for terms.
 ##
 #
 
+## Next Release
+Supported platforms:
+Features:
+Bugfixes:
+Known issues:
+
+## 1.2.0 (June 15, 2017)
+
+Supported platforms
+  - Shared memory: KNEM, CMA, XPMEM, SYSV, Posix
+  - VERBs over InfiniBand and RoCE.
+    VERBS over other RDMA interconnects (iWarp, OmniPath, etc.) is available
+    for community evaluation and has not been tested in context of this release
+  - Cray Gemini and Aries
+  - Architectures: x86_64, ARMv8 (64bit), Power64
+Features:
+  - Added support for InfiniBand DC and UD transports, including accelerated verbs for Mellanox devices
+  - Full support for PGAS/SHMEM interfaces, blocking and non-blocking APIs
+  - Support for MPI tag matching, both in software and offload mode
+  - Zero copy protocols and rendezvous, registration cache
+  - Handling transport errors
+  - Flow control for DC/RC
+  - Dataypes support: contiguous, IOV, generic
+  - Multi-threading support
+  - Support for ARMv8 64bit architecture
+  - A new API for efficient memory polling
+  - Support for malloc-hooks and memory registration caching
+Bugfixes:
+  - Multiple bugfixes improving overall stability of the library
+Known issues:
+  #1604 - Failure in ud/test_ud_slow_timer.retransmit1/1 with valgrind bug
+  #1588 - Fix reading cpuinfo timebase for ppc bug portability training
+  #1579 - Ud/test_ud.ca_md test takes too long too complete bug
+  #1576 - Failure in ud/test_ud_slow_timer.retransmit1/0 with valgrind bug
+  #1569 - Send completion with error with dc_verbs bug
+  #1566 - Segfault in malloc_hook.fork on arm bug
+  #1565 - Hang in udrc/test_ucp_rma.nonblocking_stream_get_nbi_flush_worker bug
+  #1534 - Wireup.c:473 Fatal: endpoint reconfiguration not supported yet bug
+  #1533 - Stack overflow under Valgrind 'rc_mlx5/uct_p2p_err_test.local_access_error/0' bug
+  #1513 - Hang in MPI_Finalize with UCX_TLS=rc[_x],sm on the bsend2 test bug
+  #1504 - Failure in cm/uct_p2p_am_test.am_bcopy/1 bug
+  #1492 - Hang when using polling fd bug
+  #1489 - Hang on the osu_fop_latency test with RoCE bug
+  #1005 - ROcE problem with OMPI direct modex - UD assertion
 
 ## 1.1.0 (September 1, 2015)
 
 Workarounds:
 Features:
-  - added support for AM based on FIFO in `mm` shared memory transport
-  - added support for UCT `knem` shared memory transport (http://knem.gforge.inria.fr)
-  - added support for UCT `mm/xpmem` shared memory transport (https://github.com/hjelmn/xpmem)
+  - Added support for AM based on FIFO in `mm` shared memory transport
+  - Added support for UCT `knem` shared memory transport (http://knem.gforge.inria.fr)
+  - Added support for UCT `mm/xpmem` shared memory transport (https://github.com/hjelmn/xpmem)
 
 
 Bugfixes:
@@ -24,18 +69,18 @@ Known issues:
 
 Features:
 
-  - added support for UCT `cma` shared memory transport (Cross-Memory Attatch)
-  - added support for UCT `mm` shared memory transport with mmap/sysv APIs
-  - added support for UCT `rc` transport based on Infiniband/RC with verbs
-  - added support for UCT `mlx5_rc` transport based on Infiniband/RC with accelerated verbs
-  - added support for UCT `cm` transport based on Infiniband/SIDR (Service ID Resolution)
-  - added support for UCT `ugni` transport based on Cray/UGNI
-  - added support for Doxygen based documentation generation
-  - added support for UCP basic protocol layer to fit PGAS paradigm (RMA, AMO)
-  - added ucx_perftest utility to exercise major UCX flows and provide performance metrics
-  - added test script for jenkins (contrib/test_jenkins.sh)
-  - added packaging for RPM/DEB based linux distributions (see contrib/buildrpm.sh)
-  - added Unit-tests infractucture for UCX functionality based on Google Test framework (see test/gtest/)
-  - added initial integration for OpenMPI with UCX for PGAS/SHMEM API 
+  - Added support for UCT `cma` shared memory transport (Cross-Memory Attatch)
+  - Added support for UCT `mm` shared memory transport with mmap/sysv APIs
+  - Added support for UCT `rc` transport based on Infiniband/RC with verbs
+  - Added support for UCT `mlx5_rc` transport based on Infiniband/RC with accelerated verbs
+  - Added support for UCT `cm` transport based on Infiniband/SIDR (Service ID Resolution)
+  - Added support for UCT `ugni` transport based on Cray/UGNI
+  - Added support for Doxygen based documentation generation
+  - Added support for UCP basic protocol layer to fit PGAS paradigm (RMA, AMO)
+  - Added ucx_perftest utility to exercise major UCX flows and provide performance metrics
+  - Added test script for jenkins (contrib/test_jenkins.sh)
+  - Added packaging for RPM/DEB based linux distributions (see contrib/buildrpm.sh)
+  - Added Unit-tests infractucture for UCX functionality based on Google Test framework (see test/gtest/)
+  - Added initial integration for OpenMPI with UCX for PGAS/SHMEM API
     (see: https://github.com/openucx/ompi-mirror/pull/1)
-  - added end-to-end testing infrastructure based on MTT (see contrib/mtt/README_MTT)
+  - Added end-to-end testing infrastructure based on MTT (see contrib/mtt/README_MTT)

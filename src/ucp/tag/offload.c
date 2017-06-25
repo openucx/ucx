@@ -39,6 +39,10 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
     req->recv.info.sender_tag = stag;
     req->recv.info.length     = length;
 
+    if (ucs_unlikely(imm)) {
+        /* Sync send - need to send a reply */
+        ucp_tag_offload_eager_sync_send_ack(req->recv.worker, imm, stag);
+    }
     ucp_request_memory_dereg(ctx, iface->rsc_index, req->recv.datatype,
                              &req->recv.state);
     ucp_request_complete_recv(req, status);
@@ -371,15 +375,70 @@ const ucp_proto_t ucp_tag_offload_proto = {
     .mid_hdr_size     = 0
 };
 
+
 /* Eager sync */
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_offload_sync_posted(ucp_worker_t *worker, ucp_request_t *req)
+{
+    req->send.tag_offload.ssend_tag = req->send.tag;
+    ucs_queue_push(&worker->context->tm.sync_reqs, &req->send.tag_offload.queue);
+}
+
+static ucs_status_t ucp_tag_offload_eager_sync_bcopy(uct_pending_req_t *self)
+{
+    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_worker_t *worker = req->send.ep->worker;
+    ucs_status_t status;
+
+    status = ucp_do_tag_offload_bcopy(self, worker->uuid,
+                                      ucp_tag_offload_pack_eager);
+    if (status == UCS_OK) {
+        ucp_tag_offload_sync_posted(worker, req);
+        ucp_request_send_generic_dt_finish(req);
+        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
+                                      UCS_OK);
+    }
+    return status;
+}
+
+static ucs_status_t ucp_tag_offload_eager_sync_zcopy(uct_pending_req_t *self)
+{
+    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_worker_t *worker = req->send.ep->worker;
+    ucs_status_t status;
+
+    status = ucp_do_tag_offload_zcopy(self, worker->uuid,
+                                      ucp_tag_eager_sync_zcopy_req_complete);
+    if (status == UCS_OK) {
+        ucp_tag_offload_sync_posted(worker, req);
+    }
+    return status;
+}
+
+void ucp_tag_offload_eager_sync_send_ack(ucp_worker_h worker,
+                                         uint64_t sender_uuid,
+                                         ucp_tag_t sender_tag)
+{
+    ucp_request_t *req;
+
+    ucs_trace_req("offload_send_sync_ack sender_uuid %"PRIx64" sender_tag %"PRIx64"",
+                  sender_uuid, sender_tag);
+
+    req = ucp_worker_allocate_reply(worker, sender_uuid);
+    req->send.uct.func          = ucp_proto_progress_am_bcopy_single;
+    req->send.proto.am_id       = UCP_AM_ID_OFFLOAD_SYNC_ACK;
+    req->send.proto.sender_uuid = sender_uuid;
+    req->send.proto.sender_tag  = sender_tag;
+    ucp_request_start_send(req);
+}
 
 const ucp_proto_t ucp_tag_offload_sync_proto = {
     .contig_short     = NULL,
-    .bcopy_single     = ucs_empty_function_return_unsupported,
+    .bcopy_single     = ucp_tag_offload_eager_sync_bcopy,
     .bcopy_multi      = NULL,
-    .zcopy_single     = ucs_empty_function_return_unsupported,
+    .zcopy_single     = ucp_tag_offload_eager_sync_zcopy,
     .zcopy_multi      = NULL,
-    .zcopy_completion = NULL,
+    .zcopy_completion = ucp_tag_eager_sync_zcopy_completion,
     .only_hdr_size    = 0,
     .first_hdr_size   = 0,
     .mid_hdr_size     = 0

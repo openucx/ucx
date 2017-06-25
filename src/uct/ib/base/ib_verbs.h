@@ -170,9 +170,9 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 /*
  * HW tag matching
  */
-#if HAVE_IBV_EX_HW_TM
+#if IBV_EXP_HW_TM
    /* TM (eager) is supported if tm_caps.max_num_tags is not 0. */
-#  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr_ex.tm_caps._field)
+#  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr.tm_caps._field)
 
    /* If the gap between SW and HW counters is more than 32K, all messages will
     * be dropped and RNR ACK will be returned. Set threshold to 16K to avoid

@@ -170,6 +170,16 @@ out:
     return status;
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_verbs_iface_fill_inl_sge(uct_rc_verbs_iface_common_t *iface, const void *addr0,
+                                unsigned len0, const void* addr1, unsigned len1)
+{
+    iface->inl_sge[0].addr      = (uintptr_t)addr0;
+    iface->inl_sge[0].length    = len0;
+    iface->inl_sge[1].addr      = (uintptr_t)addr1;
+    iface->inl_sge[1].length    = len1;
+}
+
 static inline void
 uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
                                    uint8_t id, uint64_t hdr,
@@ -179,11 +189,9 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
                                 iface->config.notag_hdr_size);
     am->rc_hdr.am_id = id;
     am->am_hdr       = hdr;
-
-    iface->inl_sge[0].addr      = (uintptr_t)iface->am_inl_hdr;
-    iface->inl_sge[0].length    = sizeof(*am) + iface->config.notag_hdr_size;
-    iface->inl_sge[1].addr      = (uintptr_t)buffer;
-    iface->inl_sge[1].length    = length;
+    uct_rc_verbs_iface_fill_inl_sge(iface, iface->am_inl_hdr,
+                                    sizeof(*am) + iface->config.notag_hdr_size,
+                                    buffer, length);
 }
 
 #define UCT_RC_VERBS_FILL_SGE(_wr, _sge, _length) \

@@ -266,7 +266,7 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_multi(uct_pending_req_t *self)
     return status;
 }
 
-static inline void
+void
 ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
     ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
@@ -304,8 +304,7 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
                                  ucp_tag_eager_sync_zcopy_req_complete);
 }
 
-static void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self,
-                                                ucs_status_t status)
+void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self, ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
     ucp_tag_eager_sync_zcopy_req_complete(req, status);

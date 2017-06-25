@@ -330,16 +330,13 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 static void ucp_ep_flush_slow_path_remove(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
-    if (req->send.flush.cbq_elem_on) {
-        uct_worker_slowpath_progress_unregister(ep->worker->uct,
-                                                &req->send.flush.cbq_elem);
-        req->send.flush.cbq_elem_on = 0;
-    }
+    uct_worker_progress_unregister_safe(ep->worker->uct,
+                                        &req->send.flush.slow_cb_id);
 }
 
-static void ucp_ep_flushed_slow_path_callback(ucs_callbackq_slow_elem_t *self)
+static void ucp_ep_flushed_slow_path_callback(void *arg)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.flush.cbq_elem);
+    ucp_request_t *req = arg;
     ucp_ep_h ep = req->send.ep;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
@@ -365,16 +362,15 @@ static int ucp_flush_check_completion(ucp_request_t *req)
 
     ucs_trace("adding slow-path callback to destroy ep %p", ep);
     ucp_ep_flush_slow_path_remove(req);
-    req->send.flush.cbq_elem.cb = ucp_ep_flushed_slow_path_callback;
-    req->send.flush.cbq_elem_on = 1;
-    uct_worker_slowpath_progress_register(ep->worker->uct,
-                                          &req->send.flush.cbq_elem);
+    uct_worker_progress_register_safe(ep->worker->uct,
+                                      ucp_ep_flushed_slow_path_callback, req, 0,
+                                      &req->send.flush.slow_cb_id);
     return 1;
 }
 
-static void ucp_ep_flush_resume_slow_path_callback(ucs_callbackq_slow_elem_t *self)
+static void ucp_ep_flush_resume_slow_path_callback(void *arg)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.flush.cbq_elem);
+    ucp_request_t *req = arg;
 
     ucp_ep_flush_slow_path_remove(req);
     ucp_ep_flush_progress(req);
@@ -405,12 +401,11 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     completed = ucp_flush_check_completion(req);
 
     /* If the operation has not completed, add slow-path progress to resume */
-    if (!completed && req->send.flush.lanes && !req->send.flush.cbq_elem_on) {
+    if (!completed && req->send.flush.lanes) {
         ucs_trace("ep %p: adding slow-path callback to resume flush", ep);
-        req->send.flush.cbq_elem.cb = ucp_ep_flush_resume_slow_path_callback;
-        req->send.flush.cbq_elem_on = 1;
-        uct_worker_slowpath_progress_register(ep->worker->uct,
-                                              &req->send.flush.cbq_elem);
+        uct_worker_progress_register_safe(ep->worker->uct,
+                                          ucp_ep_flush_resume_slow_path_callback,
+                                          req, 0, &req->send.flush.slow_cb_id);
     }
 
     if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
@@ -520,8 +515,7 @@ static ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep)
     req->send.ep                = ep;
     req->send.flush.flushed_cb  = ucp_ep_flushed_callback;
     req->send.flush.lanes       = UCS_MASK(ucp_ep_num_lanes(ep));
-    req->send.flush.cbq_elem.cb = ucp_ep_flushed_slow_path_callback;
-    req->send.flush.cbq_elem_on = 0;
+    req->send.flush.slow_cb_id  = NULL;
     req->send.lane              = UCP_NULL_LANE;
     req->send.uct.func          = ucp_ep_flush_progress_pending;
     req->send.uct_comp.func     = ucp_ep_flush_completion;
@@ -623,7 +617,7 @@ static size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
                                              uct_md_attr_t *md_attr,
                                              size_t bcopy_bw, int recv_reg_cost)
 {
-    double numerator, denumerator;
+    double numerator, denumerator, md_reg_growth, md_reg_overhead;
     double diff_percent = 1.0 - context->config.ext.rndv_perf_diff / 100.0;
 
     /* We calculate the Rendezvous threshold by finding the message size at which:
@@ -649,15 +643,23 @@ static size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
      * The used latency functions for eager_zcopy and rndv are also specified in
      * the UCX wiki */
 
+    if (md_attr->cap.flags & UCT_MD_FLAG_REG) {
+        md_reg_growth   = md_attr->reg_cost.growth;
+        md_reg_overhead = md_attr->reg_cost.overhead;
+    } else {
+        md_reg_growth   = 0;
+        md_reg_overhead = 0;
+    }
+
     numerator = diff_percent * ((4 * ucp_tl_iface_latency(context, iface_attr)) +
                 (3 * iface_attr->overhead) +
-                (md_attr->reg_cost.overhead * (1 + recv_reg_cost))) -
-                md_attr->reg_cost.overhead - iface_attr->overhead;
+                (md_reg_overhead * (1 + recv_reg_cost))) -
+                 md_reg_overhead - iface_attr->overhead;
 
-    denumerator = md_attr->reg_cost.growth +
+    denumerator = md_reg_growth +
                   ucs_max((1.0 / iface_attr->bandwidth), (1.0 / context->config.ext.bcopy_bw)) -
                   (diff_percent * (ucs_max((1.0 / iface_attr->bandwidth), (1.0 / bcopy_bw)) +
-                  md_attr->reg_cost.growth * (1 + recv_reg_cost)));
+                   md_reg_growth * (1 + recv_reg_cost)));
 
     if ((numerator > 0) && (denumerator > 0)) {
         return (numerator / denumerator);

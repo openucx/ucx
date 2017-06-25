@@ -13,6 +13,7 @@
 #include <uct/api/uct.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/log.h>
+#include <ucs/datastruct/mpool.h>
 
 #include <inttypes.h>
 
@@ -54,8 +55,22 @@ typedef struct ucp_mem {
 } ucp_mem_t;
 
 
+/**
+ * Memory descriptor.
+ * Contains a memory handle of the chunk it belongs to.
+ */
+typedef struct ucp_mem_desc {
+    ucp_mem_h                     memh;
+} ucp_mem_desc_t;
+
+
 void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep);
 
+ucs_status_t ucp_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+
+void ucp_mpool_free(ucs_mpool_t *mp, void *chunk);
+
+void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 
 #define UCP_RKEY_RESOLVE(_rkey, _ep, _op_type) \
     ({ \

@@ -251,11 +251,11 @@ AS_IF([test "x$with_ib" == xyes],
 
        # XRQ with Tag Matching support
        AS_IF([test "x$with_ib_hw_tm" != xno],
-           [AC_CHECK_MEMBER([struct ibv_rndv_data.rkey], [], [with_ib_hw_tm=no],
-                            [[#include <infiniband/verbs.h>]])
+           [AC_CHECK_MEMBER([struct ibv_exp_tmh.tag], [], [with_ib_hw_tm=no],
+                            [[#include <infiniband/verbs_exp.h>]])
            ])
        AS_IF([test "x$with_ib_hw_tm" != xno],
-           [AC_DEFINE([HAVE_IBV_EX_HW_TM], 1, [IB Tag Matching support])])
+           [AC_DEFINE([IBV_EXP_HW_TM], 1, [IB Tag Matching support])])
 
        mlnx_valg_libdir=$with_verbs/lib${libsuff}/mlnx_ofed/valgrind
        AC_MSG_NOTICE([Checking OFED valgrind libs $mlnx_valg_libdir])

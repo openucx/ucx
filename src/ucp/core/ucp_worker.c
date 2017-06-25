@@ -6,6 +6,7 @@
 */
 
 #include "ucp_worker.h"
+#include "ucp_mm.h"
 #include "ucp_request.inl"
 
 #include <ucp/wireup/address.h>
@@ -40,6 +41,15 @@ ucs_mpool_ops_t ucp_am_mpool_ops = {
     .obj_init      = ucs_empty_function,
     .obj_cleanup   = ucs_empty_function
 };
+
+
+ucs_mpool_ops_t ucp_reg_mpool_ops = {
+    .chunk_alloc   = ucp_mpool_malloc,
+    .chunk_release = ucp_mpool_free,
+    .obj_init      = ucp_mpool_obj_init,
+    .obj_cleanup   = ucs_empty_function
+};
+
 
 static void ucp_worker_close_ifaces(ucp_worker_h worker)
 {
@@ -239,6 +249,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_worker_h       worker           = (ucp_worker_h)arg;
     ucp_ep_h           ucp_ep           = NULL;
+    uct_ep_h           aux_ep;
     uint64_t           dest_uuid UCS_V_UNUSED;
     ucp_ep_h           ucp_ep_iter;
     khiter_t           ucp_ep_errh_iter;
@@ -248,7 +259,11 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
     kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep_iter, {
         for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep_iter); ++lane) {
-            if (uct_ep == ucp_ep_iter->uct_eps[lane]) {
+            aux_ep = ucp_stub_ep_test(ucp_ep_iter->uct_eps[lane]) ?
+                     ucs_derived_of(ucp_ep_iter->uct_eps[lane],
+                                    ucp_stub_ep_t)->aux_ep :
+                     NULL;
+            if ((uct_ep == ucp_ep_iter->uct_eps[lane]) || (uct_ep == aux_ep)) {
                 ucp_ep = ucp_ep_iter;
                 failed_lane = lane;
                 goto found_ucp_ep;
@@ -300,6 +315,9 @@ found_ucp_ep:
     if (ucp_ep_errh_iter != kh_end(&worker->ep_errh_hash)) {
         err_handler = kh_val(&worker->ep_errh_hash, ucp_ep_errh_iter);
         err_handler.cb(err_handler.arg, ucp_ep, status);
+    } else {
+        ucs_error("Error %s was not handled for ep %p",
+                  ucs_status_string(status), ucp_ep);
     }
 }
 
@@ -347,6 +365,8 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
         goto out;
     }
 
+    VALGRIND_MAKE_MEM_UNDEFINED(&worker->ifaces[tl_id].attr,
+                                sizeof(worker->ifaces[tl_id].attr));
     status = uct_iface_query(iface, &worker->ifaces[tl_id].attr);
     if (status != UCS_OK) {
         goto out;
@@ -549,29 +569,46 @@ static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
     }
 }
 
-static ucs_status_t ucp_worker_init_am_mpool(ucp_worker_h worker,
-                                             size_t rx_headroom)
+static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker,
+                                           size_t rx_headroom)
 {
     uct_iface_attr_t *if_attr;
     size_t           tl_id;
-    size_t           max_am_mp_entry_size = 0;
+    ucs_status_t     status;
+    size_t           max_mp_entry_size = 0;
 
     for (tl_id = 0; tl_id < worker->context->num_tls; ++tl_id) {
         if_attr = &worker->ifaces[tl_id].attr;
-        max_am_mp_entry_size = ucs_max(max_am_mp_entry_size,
-                                       if_attr->cap.am.max_short);
-        max_am_mp_entry_size = ucs_max(max_am_mp_entry_size,
-                                       if_attr->cap.am.max_bcopy);
-        max_am_mp_entry_size = ucs_max(max_am_mp_entry_size,
-                                       if_attr->cap.am.max_zcopy);
+        max_mp_entry_size = ucs_max(max_mp_entry_size,
+                                    if_attr->cap.am.max_short);
+        max_mp_entry_size = ucs_max(max_mp_entry_size,
+                                    if_attr->cap.am.max_bcopy);
+        max_mp_entry_size = ucs_max(max_mp_entry_size,
+                                    if_attr->cap.am.max_zcopy);
     }
 
-    max_am_mp_entry_size += rx_headroom;
+    status = ucs_mpool_init(&worker->am_mp, 0,
+                            max_mp_entry_size + rx_headroom,
+                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                            &ucp_am_mpool_ops, "ucp_am_bufs");
+    if (status != UCS_OK) {
+        goto out;
+    }
 
-    return ucs_mpool_init(&worker->am_mp, 0,
-                          max_am_mp_entry_size,
-                          0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                          &ucp_am_mpool_ops, "ucp_am_bufs");
+    status = ucs_mpool_init(&worker->reg_mp, 0,
+                            max_mp_entry_size + sizeof(ucp_mem_desc_t),
+                            sizeof(ucp_mem_desc_t), UCS_SYS_CACHE_LINE_SIZE,
+                            128, UINT_MAX, &ucp_reg_mpool_ops, "ucp_reg_bufs");
+    if (status != UCS_OK) {
+        goto err_release_am_mpool;
+    }
+
+    return UCS_OK;
+
+err_release_am_mpool:
+    ucs_mpool_cleanup(&worker->am_mp, 0);
+out:
+    return status;
 }
 
 /* All the ucp endpoints will share the configurations. No need for every ep to
@@ -624,7 +661,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucp_wakeup_event_t events;
 
     /* Space for eager header is needed for unexpected tag offload messages */
-    const size_t rx_headroom = sizeof(ucp_recv_desc_t) + sizeof(ucp_eager_hdr_t);
+    const size_t rx_headroom = sizeof(ucp_recv_desc_t) + sizeof(ucp_eager_sync_hdr_t);
 
     config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
                            UINT8_MAX);
@@ -728,8 +765,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         }
     }
 
-    /* Init AM memory pool */
-    status = ucp_worker_init_am_mpool(worker, rx_headroom);
+    /* Init AM and registered memory pools */
+    status = ucp_worker_init_mpools(worker, rx_headroom);
     if (status != UCS_OK) {
         goto err_close_ifaces;
     }
@@ -774,6 +811,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_remove_am_handlers(worker);
     ucp_worker_destroy_eps(worker);
     ucs_mpool_cleanup(&worker->am_mp, 1);
+    ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucp_worker_close_ifaces(worker);
     ucs_mpool_cleanup(&worker->req_mp, 1);
     uct_worker_destroy(worker->uct);

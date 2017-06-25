@@ -22,7 +22,8 @@ ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
     ssize_t packed_len;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len     = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], am_id, pack_cb, req);
+    packed_len     = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], am_id, pack_cb,
+                                     req, 0);
     if (packed_len < 0) {
         return packed_len;
     }
@@ -53,7 +54,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
 
     if (offset == 0) {
         /* First */
-        packed_len = uct_ep_am_bcopy(uct_ep, am_id_first, pack_first, req);
+        packed_len = uct_ep_am_bcopy(uct_ep, am_id_first, pack_first, req, 0);
         if (packed_len < 0) {
             goto err; /* Failed */
         }
@@ -62,7 +63,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         return UCS_INPROGRESS;
     } else if (offset + max_middle < req->send.length) {
         /* Middle */
-        packed_len = uct_ep_am_bcopy(uct_ep, am_id_middle, pack_middle, req);
+        packed_len = uct_ep_am_bcopy(uct_ep, am_id_middle, pack_middle, req, 0);
         if (packed_len < 0) {
             goto err; /* Failed */
         }
@@ -74,7 +75,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         return UCS_INPROGRESS;
     } else {
         /* Last */
-        packed_len = uct_ep_am_bcopy(uct_ep, am_id_last, pack_last, req);
+        packed_len = uct_ep_am_bcopy(uct_ep, am_id_last, pack_last, req, 0);
         if (packed_len < 0) {
             goto err; /* Failed */
         }

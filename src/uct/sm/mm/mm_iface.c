@@ -7,6 +7,7 @@
 #include "mm_iface.h"
 #include "mm_ep.h"
 
+#include <uct/base/uct_worker.h>
 #include <uct/sm/base/sm_ep.h>
 #include <uct/sm/base/sm_iface.h>
 #include <ucs/arch/atomic.h>
@@ -135,37 +136,6 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static UCS_CLASS_DECLARE_DELETE_FUNC(uct_mm_iface_t, uct_iface_t);
-
-static uct_iface_ops_t uct_mm_iface_ops = {
-    .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_iface_t),
-    .iface_query         = uct_mm_iface_query,
-    .iface_get_address   = uct_mm_iface_get_address,
-    .iface_get_device_address = uct_sm_iface_get_device_address,
-    .iface_is_reachable  = uct_sm_iface_is_reachable,
-    .iface_flush         = uct_mm_iface_flush,
-    .iface_fence         = uct_sm_iface_fence,
-    .ep_put_short        = uct_sm_ep_put_short,
-    .ep_put_bcopy        = uct_sm_ep_put_bcopy,
-    .ep_get_bcopy        = uct_sm_ep_get_bcopy,
-    .ep_am_short         = uct_mm_ep_am_short,
-    .ep_am_bcopy         = uct_mm_ep_am_bcopy,
-    .ep_atomic_add64     = uct_sm_ep_atomic_add64,
-    .ep_atomic_fadd64    = uct_sm_ep_atomic_fadd64,
-    .ep_atomic_cswap64   = uct_sm_ep_atomic_cswap64,
-    .ep_atomic_swap64    = uct_sm_ep_atomic_swap64,
-    .ep_atomic_add32     = uct_sm_ep_atomic_add32,
-    .ep_atomic_fadd32    = uct_sm_ep_atomic_fadd32,
-    .ep_atomic_cswap32   = uct_sm_ep_atomic_cswap32,
-    .ep_atomic_swap32    = uct_sm_ep_atomic_swap32,
-    .ep_pending_add      = uct_mm_ep_pending_add,
-    .ep_pending_purge    = uct_mm_ep_pending_purge,
-    .ep_flush            = uct_mm_ep_flush,
-    .ep_fence            = uct_sm_ep_fence,
-    .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_mm_ep_t),
-    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_ep_t),
-};
-
 static inline void uct_mm_progress_fifo_tail(uct_mm_iface_t *iface)
 {
     /* don't progress the tail every time - release in batches. improves performance */
@@ -278,6 +248,37 @@ void uct_mm_iface_progress(void *arg)
     /* progress the pending sends (if there are any) */
     ucs_arbiter_dispatch(&iface->arbiter, 1, uct_mm_ep_process_pending, NULL);
 }
+
+static UCS_CLASS_DECLARE_DELETE_FUNC(uct_mm_iface_t, uct_iface_t);
+
+static uct_iface_ops_t uct_mm_iface_ops = {
+    .ep_put_short        = uct_sm_ep_put_short,
+    .ep_put_bcopy        = uct_sm_ep_put_bcopy,
+    .ep_get_bcopy        = uct_sm_ep_get_bcopy,
+    .ep_am_short         = uct_mm_ep_am_short,
+    .ep_am_bcopy         = uct_mm_ep_am_bcopy,
+    .ep_atomic_add64     = uct_sm_ep_atomic_add64,
+    .ep_atomic_fadd64    = uct_sm_ep_atomic_fadd64,
+    .ep_atomic_cswap64   = uct_sm_ep_atomic_cswap64,
+    .ep_atomic_swap64    = uct_sm_ep_atomic_swap64,
+    .ep_atomic_add32     = uct_sm_ep_atomic_add32,
+    .ep_atomic_fadd32    = uct_sm_ep_atomic_fadd32,
+    .ep_atomic_cswap32   = uct_sm_ep_atomic_cswap32,
+    .ep_atomic_swap32    = uct_sm_ep_atomic_swap32,
+    .ep_pending_add      = uct_mm_ep_pending_add,
+    .ep_pending_purge    = uct_mm_ep_pending_purge,
+    .ep_flush            = uct_mm_ep_flush,
+    .ep_fence            = uct_sm_ep_fence,
+    .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_mm_ep_t),
+    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_ep_t),
+    .iface_flush         = uct_mm_iface_flush,
+    .iface_fence         = uct_sm_iface_fence,
+    .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_iface_t),
+    .iface_query         = uct_mm_iface_query,
+    .iface_get_device_address = uct_sm_iface_get_device_address,
+    .iface_get_address   = uct_mm_iface_get_address,
+    .iface_is_reachable  = uct_sm_iface_is_reachable
+};
 
 void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
@@ -402,8 +403,12 @@ static void uct_mm_iface_recv_messages(uct_mm_iface_t *iface)
         ret = recvfrom(iface->signal_fd, &sig, sizeof(sig), 0, NULL, 0);
         if (ret == sizeof(sig)) {
             ucs_debug("mm_iface %p: got connect message", iface);
-            ucs_callbackq_add_safe(&iface->super.worker->progress_q,
-                                   uct_mm_iface_progress, iface);
+            if (iface->super.prog.refcount++ == 0) {
+                iface->super.prog.cb  = uct_mm_iface_progress;
+                iface->super.prog.arg = iface;
+                ucs_callbackq_add_safe(&iface->super.worker->progress_q,
+                                       uct_mm_iface_progress, iface);
+            }
         } else {
             if (ret < 0) {
                 if (errno != EAGAIN) {
@@ -461,7 +466,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     /* check the value defining the size of the FIFO element */
     if (mm_config->super.max_short <= sizeof(uct_mm_fifo_element_t)) {
         ucs_error("The UCT_MM_MAX_SHORT parameter must be larger than the FIFO "
-                  "element header size. ( >= %ld bytes).",
+                  "element header size. ( > %ld bytes).",
                   sizeof(uct_mm_fifo_element_t));
         status = UCS_ERR_INVALID_PARAM;
         goto err;
@@ -565,8 +570,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
 
     ucs_async_remove_handler(self->signal_fd, 1);
 
-    ucs_callbackq_remove_all(&self->super.worker->progress_q,
-                             uct_mm_iface_progress, self);
+    if (self->super.prog.refcount) {
+        self->super.prog.refcount = 1;
+        uct_worker_progress_unregister(self->super.worker, &self->super.prog);
+    }
 
     /* return all the descriptors that are now 'assigned' to the FIFO,
      * to their mpool */

@@ -14,8 +14,7 @@
 #include <ucp/core/ucp_request.inl>
 
 
-static UCS_F_ALWAYS_INLINE void
-ucp_eager_sync_send_handler(void *arg, void *data, uint16_t flags)
+void ucp_eager_sync_send_handler(void *arg, void *data, uint16_t flags)
 {
     ucp_eager_sync_hdr_t        *eagers_hdr;
     ucp_eager_sync_first_hdr_t  *eagers_first_hdr;
@@ -23,14 +22,25 @@ ucp_eager_sync_send_handler(void *arg, void *data, uint16_t flags)
     if (ucs_test_all_flags(flags, UCP_RECV_DESC_FLAG_EAGER|
                                   UCP_RECV_DESC_FLAG_FIRST|
                                   UCP_RECV_DESC_FLAG_LAST|
+                                  UCP_RECV_DESC_FLAG_OFFLOAD|
                                   UCP_RECV_DESC_FLAG_SYNC)) {
         eagers_hdr = data;
+        ucp_tag_offload_eager_sync_send_ack(arg,
+                                            eagers_hdr->req.sender_uuid,
+                                            eagers_hdr->super.super.tag);
+    } else if (ucs_test_all_flags(flags, UCP_RECV_DESC_FLAG_EAGER|
+                                  UCP_RECV_DESC_FLAG_FIRST|
+                                  UCP_RECV_DESC_FLAG_LAST|
+                                  UCP_RECV_DESC_FLAG_SYNC)) {
+        eagers_hdr = data;
+        ucs_assert(eagers_hdr->req.reqptr != 0);
         ucp_tag_eager_sync_send_ack(arg, eagers_hdr->req.sender_uuid,
                                     eagers_hdr->req.reqptr);
     } else if (ucs_test_all_flags(flags, UCP_RECV_DESC_FLAG_EAGER|
                                          UCP_RECV_DESC_FLAG_FIRST|
                                          UCP_RECV_DESC_FLAG_SYNC)) {
         eagers_first_hdr = data;
+        ucs_assert(eagers_first_hdr->req.reqptr != 0);
         ucp_tag_eager_sync_send_ack(arg, eagers_first_hdr->req.sender_uuid,
                                     eagers_first_hdr->req.reqptr);
     } else {
@@ -168,6 +178,30 @@ static ucs_status_t ucp_eager_sync_first_handler(void *arg, void *data,
                              sizeof(ucp_eager_sync_first_hdr_t));
 }
 
+static ucs_status_t ucp_eager_offload_sync_ack_handler(void *arg, void *data,
+                                                       size_t length,
+                                                       unsigned am_flags)
+{
+    ucp_offload_ssend_hdr_t *rep_hdr = data;
+    ucp_worker_t *worker             = arg;
+    ucs_queue_head_t *queue          = &worker->context->tm.sync_reqs;
+    ucp_request_t *sreq;
+    ucs_queue_iter_t iter;
+
+    ucs_queue_for_each_safe(sreq, iter, queue, send.tag_offload.queue) {
+        if ((sreq->send.tag_offload.ssend_tag == rep_hdr->sender_tag) &&
+            (worker->uuid == rep_hdr->sender_uuid)) {
+            ucp_tag_eager_sync_completion(sreq, UCP_REQUEST_FLAG_REMOTE_COMPLETED,
+                                          UCS_OK);
+            ucs_queue_del_iter(queue, iter);
+            return UCS_OK;
+        }
+    }
+    ucs_error("Unexpected sync ack received: tag %"PRIx64" uuid %"PRIx64"",
+              rep_hdr->sender_tag, rep_hdr->sender_uuid);
+    return UCS_OK;
+}
+
 static ucs_status_t ucp_eager_sync_ack_handler(void *arg, void *data,
                                                size_t length, unsigned am_flags)
 {
@@ -180,18 +214,34 @@ static ucs_status_t ucp_eager_sync_ack_handler(void *arg, void *data,
 }
 
 ucs_status_t ucp_tag_offload_unexp_eager(void *arg, void *data, size_t length,
-                                         unsigned flags, uct_tag_t stag,  uint64_t imm)
+                                         unsigned tl_flags, uct_tag_t stag,
+                                         uint64_t imm)
 {
     /* Align data with AM protocol. We should add tag before the data. */
-    ucp_eager_hdr_t *hdr = ((ucp_eager_hdr_t*)data) - 1;
-    hdr->super.tag       = stag;
+    ucp_eager_hdr_t *hdr;
+    ucp_eager_sync_hdr_t *sync_hdr;
+    unsigned hdr_len;
+    uint16_t flags = UCP_RECV_DESC_FLAG_EAGER |
+                     UCP_RECV_DESC_FLAG_FIRST |
+                     UCP_RECV_DESC_FLAG_LAST  |
+                     UCP_RECV_DESC_FLAG_OFFLOAD;
 
-    return ucp_eager_handler(arg, hdr, length + sizeof(ucp_eager_hdr_t), flags,
-                             UCP_RECV_DESC_FLAG_EAGER |
-                             UCP_RECV_DESC_FLAG_FIRST |
-                             UCP_RECV_DESC_FLAG_LAST  |
-                             UCP_RECV_DESC_FLAG_OFFLOAD,
-                             sizeof(ucp_eager_hdr_t));
+    if (ucs_unlikely(imm)) {
+        /* It is a sync send, imm data contains sender uuid */
+        hdr_len  = sizeof(ucp_eager_sync_hdr_t);
+        hdr      = (ucp_eager_hdr_t*)((char*)data - hdr_len);
+        sync_hdr = ucs_derived_of(hdr, ucp_eager_sync_hdr_t);
+        flags   |= UCP_RECV_DESC_FLAG_SYNC;
+        sync_hdr->req.reqptr      = 0ul;
+        sync_hdr->req.sender_uuid = imm;
+    } else {
+        hdr     = ((ucp_eager_hdr_t*)data) - 1;
+        hdr_len = sizeof(ucp_eager_hdr_t);
+    }
+    hdr->super.tag = stag;
+
+    return ucp_eager_handler(arg, hdr, length + hdr_len, tl_flags,
+                             flags, hdr_len);
 }
 
 static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
@@ -203,6 +253,7 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     const ucp_eager_sync_first_hdr_t *eagers_first_hdr = data;
     const ucp_eager_sync_hdr_t *eagers_hdr       = data;
     const ucp_reply_hdr_t *rep_hdr               = data;
+    const ucp_offload_ssend_hdr_t *off_rep_hdr   = data;
     size_t header_len;
     char *p;
 
@@ -243,6 +294,11 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                  ucs_status_string(rep_hdr->status));
         header_len = sizeof(*rep_hdr);
         break;
+    case UCP_AM_ID_OFFLOAD_SYNC_ACK:
+        snprintf(buffer, max, "EGRS_A_O tag %"PRIx64" uuid %"PRIx64"",
+                 off_rep_hdr->sender_tag, off_rep_hdr->sender_uuid);
+        header_len = sizeof(*rep_hdr);
+        break;
     default:
         return;
     }
@@ -266,3 +322,5 @@ UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_SYNC_FIRST, ucp_eager_sync_first_
               ucp_eager_dump, UCT_AM_CB_FLAG_SYNC);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_SYNC_ACK, ucp_eager_sync_ack_handler,
               ucp_eager_dump, UCT_AM_CB_FLAG_SYNC);
+UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_OFFLOAD_SYNC_ACK,
+              ucp_eager_offload_sync_ack_handler, ucp_eager_dump, UCT_AM_CB_FLAG_SYNC);

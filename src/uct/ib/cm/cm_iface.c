@@ -37,14 +37,13 @@ static ucs_config_field_t uct_cm_iface_config_table[] = {
 static uct_ib_iface_ops_t uct_cm_iface_ops;
 
 
-static void uct_cm_iface_progress(ucs_callbackq_slow_elem_t *arg)
+static void uct_cm_iface_progress(void *arg)
 {
     uct_cm_pending_req_priv_t *priv;
-    uct_cm_iface_t *iface = ucs_container_of(arg, uct_cm_iface_t, cbq_elem);
+    uct_cm_iface_t *iface = arg;
     uct_cm_iface_op_t *op;
 
     uct_cm_enter(iface);
-    ucs_assert(iface->cbq_elem_on == 1);
 
     /* Invoke flush completions at the head of the queue - the sends which
      * started before them were already completed.
@@ -64,9 +63,8 @@ static void uct_cm_iface_progress(ucs_callbackq_slow_elem_t *arg)
     if (ucs_queue_is_empty(&iface->outstanding_q) ||
         ucs_queue_head_elem_non_empty(&iface->outstanding_q, uct_cm_iface_op_t, queue)->is_id)
     {
-        uct_worker_slowpath_progress_unregister(uct_cm_iface_worker(iface),
-                                                &iface->cbq_elem);
-        iface->cbq_elem_on = 0;
+        uct_worker_progress_unregister_safe(uct_cm_iface_worker(iface),
+                                            &iface->slow_prog_id);
     }
 
     uct_cm_leave(iface);
@@ -235,11 +233,9 @@ static void uct_cm_iface_event_handler(int fd, void *arg)
             }
         }
 
-        if (!iface->cbq_elem_on) {
-            uct_worker_slowpath_progress_register(uct_cm_iface_worker(iface), 
-                                                  &iface->cbq_elem);
-            iface->cbq_elem_on = 1;
-        }
+        uct_worker_progress_register_safe(uct_cm_iface_worker(iface),
+                                          uct_cm_iface_progress, iface, 0,
+                                          &iface->slow_prog_id);
     }
 }
 
@@ -264,7 +260,6 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
                               1 /* tx_cq_len */,
                               config->super.rx.queue_len /* rx_cq_len */,
                               IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE, /* mss */
-                              0, /* is_ex_recv_cq */
                               &config->super);
 
     if (worker->async == NULL) {
@@ -278,8 +273,7 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.max_outstanding = config->max_outstanding;
     self->config.retry_count  = ucs_min(config->retry_count, UINT8_MAX);
     self->notify_q.head       = NULL;
-    self->cbq_elem_on         = 0;
-    self->cbq_elem.cb         = uct_cm_iface_progress;
+    self->slow_prog_id        = NULL;
     ucs_queue_head_init(&self->notify_q);
     ucs_queue_head_init(&self->outstanding_q);
 
@@ -361,10 +355,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
     uct_cm_iface_outstanding_purge(self);
     ib_cm_destroy_id(self->listen_id);
     ib_cm_close_device(self->cmdev);
-    if (self->cbq_elem_on) {
-        uct_worker_slowpath_progress_unregister(uct_cm_iface_worker(self), 
-                                                &self->cbq_elem);
-    }
+    uct_worker_progress_unregister_safe(uct_cm_iface_worker(self),
+                                        &self->slow_prog_id);
     uct_cm_leave(self);
 
     /* At this point all outstanding have been removed, and no further events
@@ -411,21 +403,23 @@ static ucs_status_t uct_cm_iface_get_address(uct_iface_h tl_iface,
 
 static uct_ib_iface_ops_t uct_cm_iface_ops = {
     {
-    .iface_query              = uct_cm_iface_query,
-    .iface_flush              = uct_cm_iface_flush,
-    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_iface_t),
-    .iface_get_address        = uct_cm_iface_get_address,
-    .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_ib_iface_is_reachable,
-    .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
-    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
     .ep_am_bcopy              = uct_cm_ep_am_bcopy,
     .ep_pending_add           = uct_cm_ep_pending_add,
     .ep_pending_purge         = uct_cm_ep_pending_purge,
     .ep_flush                 = uct_cm_ep_flush,
+    .ep_fence                 = uct_base_ep_fence,
+    .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
+    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
+    .iface_flush              = uct_cm_iface_flush,
+    .iface_fence              = uct_base_iface_fence,
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_iface_t),
+    .iface_query              = uct_cm_iface_query,
+    .iface_get_device_address = uct_ib_iface_get_device_address,
+    .iface_get_address        = uct_cm_iface_get_address,
+    .iface_is_reachable       = uct_ib_iface_is_reachable
     },
     .arm_tx_cq                = (void*)ucs_empty_function_return_success,
-    .arm_rx_cq                = (void*)ucs_empty_function_return_success,
+    .arm_rx_cq                = (void*)ucs_empty_function_return_success
 };
 
 static ucs_status_t uct_cm_query_resources(uct_md_h md,

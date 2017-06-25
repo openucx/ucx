@@ -10,6 +10,7 @@
 #  include "config.h"
 #endif
 
+#include <uct/base/uct_worker.h>
 #include <ucs/async/async.h>
 
 #define UCT_UGNI_MD_NAME        "ugni"

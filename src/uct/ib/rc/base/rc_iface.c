@@ -368,7 +368,7 @@ static void uct_rc_iface_tx_ops_cleanup(uct_rc_iface_t *iface)
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_rc_iface_config_t *config, unsigned rx_priv_len,
-                    unsigned rx_cq_len, int is_ex_cq, unsigned rx_hdr_len,
+                    unsigned rx_cq_len, unsigned rx_hdr_len,
                     unsigned srq_size, unsigned fc_req_size)
 {
     struct ibv_srq_init_attr srq_init_attr;
@@ -378,7 +378,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               rx_priv_len, rx_hdr_len, tx_cq_len, rx_cq_len,
-                              SIZE_MAX, is_ex_cq, &config->super);
+                              SIZE_MAX, &config->super);
 
     self->tx.cq_available           = tx_cq_len - 1; /* Reserve one for error */
     self->rx.srq.available          = 0;

@@ -126,7 +126,7 @@ ucs_status_t do_am_bcopy(uct_ep_h ep, uint8_t id, const cmd_args_t *cmd_args,
     args.len  = cmd_args->test_strlen;
 
     /* Send active message to remote endpoint */
-    len = uct_ep_am_bcopy(ep, id, am_bcopy_data_pack_cb, &args);
+    len = uct_ep_am_bcopy(ep, id, am_bcopy_data_pack_cb, &args, 0);
     /* Negative len is an error code */
     return (len >= 0) ? UCS_OK : len;
 }
