@@ -76,4 +76,6 @@ void ucp_stub_ep_remote_connected(uct_ep_h uct_ep);
 
 int ucp_stub_ep_test(uct_ep_h uct_ep);
 
+void ucp_stub_ep_aux_failed(uct_ep_h *uct_ep);
+
 #endif

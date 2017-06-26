@@ -286,7 +286,8 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 found_ucp_ep:
 
     /* Purge outstanding */
-    uct_ep_pending_purge(uct_ep, ucp_ep_err_pending_purge, (void*)status);
+    uct_ep_pending_purge(ucp_ep_iter->uct_eps[lane], ucp_ep_err_pending_purge,
+                         UCS_STATUS_PTR(status));
 
     /* Destroy all lanes excepting failed one since ucp_ep becomes unusable as well */
     for (lane = 0, n_lanes = ucp_ep_num_lanes(ucp_ep); lane < n_lanes; ++lane) {
@@ -301,6 +302,13 @@ found_ucp_ep:
     if (failed_lane != 0) {
         ucp_ep->uct_eps[0] = ucp_ep->uct_eps[failed_lane];
         ucp_ep->uct_eps[failed_lane] = NULL;
+    }
+
+    /* NOTE: if failed ep is stub auxiliary then we need to replace the lane
+     *       with failed ep and destroy stub ep
+     */
+    if (ucp_stub_ep_test(ucp_ep_iter->uct_eps[0])) {
+        ucp_stub_ep_aux_failed(&ucp_ep_iter->uct_eps[0]);
     }
 
     /* Redirect all lanes to failed one */
