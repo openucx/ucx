@@ -60,6 +60,12 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
    "refers to the percentage of the FC_WND_SIZE value. (must be > 0 and < 1)",
    ucs_offsetof(uct_rc_iface_config_t, fc.hard_thresh), UCS_CONFIG_TYPE_DOUBLE},
 
+#if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
+  {"OOO_RW", "n",
+   "Enable out-of-order RDMA data placement",
+   ucs_offsetof(uct_rc_iface_config_t, ooo_rw), UCS_CONFIG_TYPE_BOOL},
+#endif
+
   {NULL}
 };
 
@@ -396,6 +402,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.retry_cnt          = ucs_min(config->tx.retry_count,
                                               UCR_RC_QP_MAX_RETRY_COUNT);
     self->config.max_rd_atomic      = config->max_rd_atomic;
+    self->config.ooo_rw             = config->ooo_rw;
 
     uct_rc_iface_set_path_mtu(self, config);
     memset(self->eps, 0, sizeof(self->eps));
@@ -667,7 +674,12 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t dest_qp_num,
                                      struct ibv_ah_attr *ah_attr)
 {
+#if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
+    struct ibv_exp_qp_attr qp_attr;
+#else
     struct ibv_qp_attr qp_attr;
+#endif
+    long qp_attr_mask;
     int ret;
 
     memset(&qp_attr, 0, sizeof(qp_attr));
@@ -679,15 +691,26 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     qp_attr.max_dest_rd_atomic    = iface->config.max_rd_atomic;
     qp_attr.min_rnr_timer         = iface->config.min_rnr_timer;
     qp_attr.ah_attr               = *ah_attr;
+    qp_attr_mask                  = IBV_QP_STATE              |
+                                    IBV_QP_AV                 |
+                                    IBV_QP_PATH_MTU           |
+                                    IBV_QP_DEST_QPN           |
+                                    IBV_QP_RQ_PSN             |
+                                    IBV_QP_MAX_DEST_RD_ATOMIC |
+                                    IBV_QP_MIN_RNR_TIMER;
 
-    ret = ibv_modify_qp(qp, &qp_attr,
-                        IBV_QP_STATE              |
-                        IBV_QP_AV                 |
-                        IBV_QP_PATH_MTU           |
-                        IBV_QP_DEST_QPN           |
-                        IBV_QP_RQ_PSN             |
-                        IBV_QP_MAX_DEST_RD_ATOMIC |
-                        IBV_QP_MIN_RNR_TIMER);
+#if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
+    if (iface->config.ooo_rw &&
+        UCX_IB_DEV_IS_OOO_SUPPORTED(&uct_ib_iface_device(&iface->super)->dev_attr,
+                                    rc)) {
+        ucs_debug("enabling out-of-order on RC QP %x dev %s", qp->qp_num,
+                   uct_ib_device_name(uct_ib_iface_device(&iface->super)));
+        qp_attr_mask |= IBV_EXP_QP_OOO_RW_DATA_PLACEMENT;
+    }
+    ret = ibv_exp_modify_qp(qp, &qp_attr, qp_attr_mask);
+#else
+    ret = ibv_modify_qp(qp, &qp_attr, qp_attr_mask);
+#endif
     if (ret) {
         ucs_error("error modifying QP to RTR: %m");
         return UCS_ERR_IO_ERROR;
@@ -699,13 +722,18 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     qp_attr.rnr_retry             = iface->config.rnr_retry;
     qp_attr.retry_cnt             = iface->config.retry_cnt;
     qp_attr.max_rd_atomic         = iface->config.max_rd_atomic;
-    ret = ibv_modify_qp(qp, &qp_attr,
-                        IBV_QP_STATE              |
-                        IBV_QP_TIMEOUT            |
-                        IBV_QP_RETRY_CNT          |
-                        IBV_QP_RNR_RETRY          |
-                        IBV_QP_SQ_PSN             |
-                        IBV_QP_MAX_QP_RD_ATOMIC);
+    qp_attr_mask                  = IBV_QP_STATE              |
+                                    IBV_QP_TIMEOUT            |
+                                    IBV_QP_RETRY_CNT          |
+                                    IBV_QP_RNR_RETRY          |
+                                    IBV_QP_SQ_PSN             |
+                                    IBV_QP_MAX_QP_RD_ATOMIC;
+
+#if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
+    ret = ibv_exp_modify_qp(qp, &qp_attr, qp_attr_mask);
+#else
+    ret = ibv_modify_qp(qp, &qp_attr, qp_attr_mask);
+#endif
     if (ret) {
         ucs_error("error modifying QP to RTS: %m");
         return UCS_ERR_IO_ERROR;

@@ -63,6 +63,16 @@ static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
     init_attr.hop_limit        = 1;
     init_attr.inline_size      = iface->super.config.rx_inline;
 
+#if HAVE_DECL_IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT
+    if (iface->super.config.ooo_rw &&
+        UCX_IB_DEV_IS_OOO_SUPPORTED(&uct_ib_iface_device(&iface->super.super)->dev_attr,
+                                    dc)) {
+        ucs_debug("creating DC target with out-of-order support dev %s",
+                   uct_ib_device_name(uct_ib_iface_device(&iface->super.super)));
+        init_attr.create_flags |= IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT;
+    }
+#endif
+
     iface->rx.dct = ibv_exp_create_dct(uct_ib_iface_device(&iface->super.super)->ibv_context,
                                        &init_attr);
     if (iface->rx.dct == NULL) {
@@ -78,6 +88,7 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
                                              uct_rc_txqp_t *dci)
 {
     struct ibv_exp_qp_attr attr;
+    long attr_mask;
 
     memset(&attr, 0, sizeof(attr));
     attr.qp_state        = IBV_QPS_INIT;
@@ -103,11 +114,21 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
     attr.min_rnr_timer              = 0;
     attr.max_dest_rd_atomic         = 1;
     attr.ah_attr.sl                 = iface->super.super.config.sl;
+    attr_mask                       = IBV_EXP_QP_STATE     |
+                                      IBV_EXP_QP_PATH_MTU  |
+                                      IBV_EXP_QP_AV;
 
-    if (ibv_exp_modify_qp(dci->qp, &attr,
-                         IBV_EXP_QP_STATE     |
-                         IBV_EXP_QP_PATH_MTU  |
-                         IBV_EXP_QP_AV)) {
+#if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
+    if (iface->super.config.ooo_rw &&
+        UCX_IB_DEV_IS_OOO_SUPPORTED(&uct_ib_iface_device(&iface->super.super)->dev_attr,
+                                    dc)) {
+        ucs_debug("enabling out-of-order on DCI QP 0x%x dev %s", dci->qp->qp_num,
+                   uct_ib_device_name(uct_ib_iface_device(&iface->super.super)));
+        attr_mask |= IBV_EXP_QP_OOO_RW_DATA_PLACEMENT;
+    }
+#endif
+
+    if (ibv_exp_modify_qp(dci->qp, &attr, attr_mask)) {
         ucs_error("error modifying QP to RTR: %m");
         return UCS_ERR_IO_ERROR;
     }
@@ -119,13 +140,13 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
     attr.rnr_retry      = iface->super.config.rnr_retry;
     attr.retry_cnt      = iface->super.config.retry_cnt;
     attr.max_rd_atomic  = iface->super.config.max_rd_atomic;
+    attr_mask           = IBV_EXP_QP_STATE      |
+                          IBV_EXP_QP_TIMEOUT    |
+                          IBV_EXP_QP_RETRY_CNT  |
+                          IBV_EXP_QP_RNR_RETRY  |
+                          IBV_EXP_QP_MAX_QP_RD_ATOMIC;
 
-    if (ibv_exp_modify_qp(dci->qp, &attr,
-                         IBV_EXP_QP_STATE      |
-                         IBV_EXP_QP_TIMEOUT    |
-                         IBV_EXP_QP_RETRY_CNT  |
-                         IBV_EXP_QP_RNR_RETRY  |
-                         IBV_EXP_QP_MAX_QP_RD_ATOMIC)) {
+    if (ibv_exp_modify_qp(dci->qp, &attr, attr_mask)) {
         ucs_error("error modifying QP to RTS: %m");
         return UCS_ERR_IO_ERROR;
     }
