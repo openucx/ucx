@@ -39,10 +39,14 @@ typedef struct ucp_tag_match {
     } unexpected;
 
     /* Tag offload fields */
-    ucs_queue_head_t          offload_ifaces; /* Interfaces which support tag offload */
-    ucs_queue_head_t          sync_reqs;      /* Outgoing sync send requests */
-    size_t                    post_thresh;    /* Messages are posted to the transport
-                                                 starting from this threshold. */
+    ucs_queue_head_t          offload_ifaces;   /* Interfaces which support tag offload */
+    ucs_queue_head_t          sync_reqs;        /* Outgoing sync send requests */
+    size_t                    post_thresh;      /* Messages are posted to the transport
+                                                   starting from this threshold. Either user
+                                                   buffer itself or preregistered internal
+                                                   buffer is posted. */
+    size_t                    post_user_thresh; /* Defines when user buffers should be posted
+                                                   to the transport. */
     unsigned                  sw_req_count;   /* Number of requests which need to be matched
                                                  in software. If 0 - tags can be posted to the
                                                  transport */

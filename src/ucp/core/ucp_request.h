@@ -34,7 +34,8 @@ enum {
     UCP_REQUEST_FLAG_SYNC                 = UCS_BIT(8),
     UCP_REQUEST_FLAG_RNDV                 = UCS_BIT(9),
     UCP_REQUEST_FLAG_OFFLOADED            = UCS_BIT(10),
-    UCP_REQUEST_FLAG_BLOCK_OFFLOAD        = UCS_BIT(11),
+    UCP_REQUEST_FLAG_OFFLOADED_BB         = UCS_BIT(11),
+    UCP_REQUEST_FLAG_BLOCK_OFFLOAD        = UCS_BIT(12),
 
 #if ENABLE_ASSERT
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(15)
@@ -157,6 +158,7 @@ struct ucp_request {
             ucp_tag_recv_info_t   info;     /* Completion info to fill */
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
+            void                  *mp_buffer;
 
             /* Transport offload context */
             uct_tag_context_t     uct_ctx;

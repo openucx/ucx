@@ -35,9 +35,14 @@ typedef struct ucp_context_config {
     size_t                                 zcopy_thresh;
     /** Estimation of bcopy bandwidth */
     size_t                                 bcopy_bw;
+    /** Segment size in the worker pre-registered memory pool */
+    size_t                                 worker_seg_size;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
+    /** Upper bound for posting tm offload receives with internal preregistered
+     *  bounce buffers. */
+    size_t                                 max_tm_bb;
     /** Maximal size of worker name for debugging */
     unsigned                               max_worker_name;
     /** Atomic mode */
@@ -169,7 +174,6 @@ void ucp_context_tag_offload_enable(ucp_context_h context);
 uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context);
 
 const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_csum);
-
 
 static inline double ucp_tl_iface_latency(ucp_context_h context,
                                           const uct_iface_attr_t *iface_attr)

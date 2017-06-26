@@ -12,6 +12,7 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_request.h>
+#include <ucp/core/ucp_mm.h>
 #include <ucp/tag/tag_match.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/sys/sys.h>
@@ -43,9 +44,28 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
         /* Sync send - need to send a reply */
         ucp_tag_offload_eager_sync_send_ack(req->recv.worker, imm, stag);
     }
-    ucp_request_memory_dereg(ctx, iface->rsc_index, req->recv.datatype,
-                             &req->recv.state);
+
+    if (req->flags & UCP_REQUEST_FLAG_OFFLOADED_BB) {
+        status = ucp_dt_unpack(req->recv.datatype, req->recv.buffer, req->recv.length,
+                               &req->recv.state, req->recv.mp_buffer, length, 1);
+        ucs_mpool_put_inline((ucp_mem_desc_t*)req->recv.mp_buffer - 1);
+    } else {
+        ucp_request_memory_dereg(ctx, iface->rsc_index, req->recv.datatype,
+                                 &req->recv.state);
+    }
     ucp_request_complete_recv(req, status);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_offload_release_buf(ucp_request_t *req, ucp_context_t *ctx,
+                            ucp_rsc_index_t rsc_idx)
+{
+    if (req->flags & UCP_REQUEST_FLAG_OFFLOADED_BB) {
+        ucs_mpool_put_inline((ucp_mem_desc_t*)req->recv.mp_buffer - 1);
+    } else {
+        ucp_request_memory_dereg(ctx, rsc_idx, req->recv.datatype,
+                                 &req->recv.state);
+    }
 }
 
 /* RNDV request matched by the transport. Need to proceed with AM based RNDV */
@@ -67,10 +87,9 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
     rts.address   = 0; /* RNDV needs to be completed in SW */
     rts.size      = sreq->length;
 
-    ucp_request_memory_dereg(ctx, iface->rsc_index, req->recv.datatype,
-                             &req->recv.state);
     /* coverity[address_of] */
     ucp_rndv_matched(req->recv.worker, req, &rts);
+    ucp_tag_offload_release_buf(req, ctx, iface->rsc_index);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
@@ -126,8 +145,8 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
 
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
                                               ucp_worker_iface_t, queue);
-    ucp_request_memory_dereg(ctx, ucp_iface->rsc_index, req->recv.datatype,
-                             &req->recv.state);
+    ucp_tag_offload_release_buf(req, ctx, ucp_iface->rsc_index);
+
     status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx,
                                        force);
     if (status != UCS_OK) {
@@ -138,9 +157,11 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
 
 int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
 {
-    size_t length = req->recv.length;
+    size_t length         = req->recv.length;
+    ucp_mem_desc_t *rdesc = NULL;
     ucp_worker_iface_t *ucp_iface;
     ucs_status_t status;
+    ucp_rsc_index_t mdi;
     uct_iov_t iov;
 
     if (!UCP_DT_IS_CONTIG(req->recv.datatype)) {
@@ -164,33 +185,55 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
 
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
                                               ucp_worker_iface_t, queue);
-    status = ucp_request_memory_reg(ctx, ucp_iface->rsc_index, req->recv.buffer,
-                                    req->recv.length, req->recv.datatype,
-                                    &req->recv.state);
-    if (status != UCS_OK) {
-        return 0;
+    if (length >= ctx->tm.post_user_thresh) {
+        status = ucp_request_memory_reg(ctx, ucp_iface->rsc_index, req->recv.buffer,
+                                        req->recv.length, req->recv.datatype,
+                                        &req->recv.state);
+        if (status != UCS_OK) {
+            return 0;
+        }
+        iov.buffer = (void*)req->recv.buffer;
+        iov.memh   = req->recv.state.dt.contig.memh;
+    } else {
+        rdesc = ucs_mpool_get_inline(&req->recv.worker->reg_mp);
+        if (rdesc == NULL) {
+            return 0;
+        }
+        req->recv.mp_buffer = rdesc + 1;
+        req->flags |= UCP_REQUEST_FLAG_OFFLOADED_BB;
+        mdi         = ctx->tl_rscs[ucp_iface->rsc_index].md_index;
+        iov.memh    = ucp_memh2uct(rdesc->memh, mdi);
+        iov.buffer  = req->recv.mp_buffer;
     }
+    iov.length = length;
+    iov.count  = 1;
+    iov.stride = 0;
 
     req->recv.uct_ctx.tag_consumed_cb = ucp_tag_offload_tag_consumed;
     req->recv.uct_ctx.completed_cb    = ucp_tag_offload_completed;
     req->recv.uct_ctx.rndv_cb         = ucp_tag_offload_rndv_cb;
 
-    iov.buffer = (void*)req->recv.buffer;
-    iov.length = length;
-    iov.memh   = req->recv.state.dt.contig.memh;
-    iov.count  = 1;
-    iov.stride = 0;
     status = uct_iface_tag_recv_zcopy(ucp_iface->iface, req->recv.tag,
                                       req->recv.tag_mask, &iov, 1,
                                       &req->recv.uct_ctx);
     if (status != UCS_OK) {
         /* No more matching entries in the transport. */
-        return 0;
+        goto err_release_mem;
     }
     req->flags |= UCP_REQUEST_FLAG_OFFLOADED;
     ucs_trace_req("recv request %p (%p) was posted to transport (rsc %d)",
                   req, req + 1, ucp_iface->rsc_index);
     return 1;
+
+err_release_mem:
+    if (length >= ctx->tm.post_user_thresh) {
+        ucp_request_memory_dereg(ctx, ucp_iface->rsc_index, req->recv.datatype,
+                                 &req->recv.state);
+    } else {
+        ucs_mpool_put(rdesc);
+        req->flags &= ~UCP_REQUEST_FLAG_OFFLOADED_BB;
+    }
+    return 0;
 }
 
 static size_t ucp_tag_offload_pack_eager(void *dest, void *arg)

@@ -126,10 +126,20 @@ static ucs_config_field_t ucp_config_table[] = {
    "y      - Use mutex for multithreading support in UCP.\n",
    ucs_offsetof(ucp_config_t, ctx.use_mt_mutex), UCS_CONFIG_TYPE_BOOL},
 
+  {"WORKER_SEG_SIZE", "8192",
+   "Size of a segment in the worker preregistered memory pool.",
+   ucs_offsetof(ucp_config_t, ctx.worker_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"TM_THRESH", "1024",
    "Threshold for using tag matching offload capabilities.\n"
    "Smaller buffers will not be posted to the transport.",
    ucs_offsetof(ucp_config_t, ctx.tm_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"TM_BB_MAX", "0",
+   "Maximal size for posting \"bounce buffer\" (UCX interal preregistered memory) for\n"
+   "tag offload receives. When message arrives, it is copied into the user buffer (similar\n"
+   "to eager protocol). The size is limited by worker segment size.",
+   ucs_offsetof(ucp_config_t, ctx.max_tm_bb), UCS_CONFIG_TYPE_MEMUNITS},
 
   {NULL}
 };
@@ -712,12 +722,6 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                                               : UCP_MT_TYPE_SPINLOCK);
     context->config.ext = config->ctx;
 
-    /* Post threshold for tag offload should not be less than ucp_request_hdr_t
-     * size, because this header may be scattered to user buffer in case of
-     * expected SW RNDV protocol. */
-    context->tm.post_thresh = ucs_max(context->config.ext.tm_thresh,
-                                      sizeof(ucp_request_hdr_t));
-
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_
      * routines */
@@ -931,17 +935,27 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
     fprintf(stream, "#\n");
 }
 
-
 void ucp_context_tag_offload_enable(ucp_context_h context)
 {
+    /* Enable offload, if only one tag offload capable interface is present
+     * (multiple offload ifaces are not supported yet). */
     if (ucs_queue_length(&context->tm.offload_ifaces) == 1) {
-        /* Enable offload, because just one tag offload capable interface is present */
+        /* Post threshold for tag offload should not be less than ucp_request_hdr_t
+         * size, because this header may be scattered to user buffer in case of
+         * expected SW RNDV protocol. */
         context->tm.post_thresh = ucs_max(context->config.ext.tm_thresh,
                                           sizeof(ucp_request_hdr_t));
+        if (context->config.ext.max_tm_bb > context->tm.post_thresh) {
+            context->tm.post_user_thresh = ucs_min(context->config.ext.max_tm_bb,
+                                                   context->config.ext.worker_seg_size);
+        } else {
+            context->tm.post_user_thresh = context->tm.post_thresh;
+        }
+        ucs_debug("Enable TM offload, post_thresh: %lu/%lu", context->tm.post_thresh,
+                                                             context->tm.post_user_thresh);
     } else {
-        /* Some offload interface/s already configured. Disable TM receive offload,
-         * because multiple offload ifaces are not supported yet. */
         context->tm.post_thresh = SIZE_MAX;
+        ucs_debug("Disable TM offload, multiple offload ifaces are not supported");
     }
 }
 
