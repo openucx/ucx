@@ -239,19 +239,28 @@ run_hello() {
 
 	sleep 5
 
+	# temporary disable 
+	if [[ ${test_args} == *"-e"* ]]
+	then
+		set +Ee
+	fi
+
 	# need to be ran in background to reflect application PID in $!
 	./${test_name} ${test_args} -n $(hostname) -p ${tcp_port} &
 	hw_client_pid=$!
 
 	# make sure server process is not running
 	wait ${hw_server_pid} ${hw_client_pid}
+
+	# return default
+	set -Ee
 }
 
 #
 # Compile and run UCP hello world example
 #
 run_ucp_hello() {
-	for test_mode in -w -f -b
+	for test_mode in -w -f -b -e
 	do
 		echo "==== Running UCP hello world with mode ${test_mode} ===="
 		run_hello ucp ${test_mode}
