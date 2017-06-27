@@ -2059,13 +2059,10 @@ UCT_INLINE_API ucs_status_t uct_iface_tag_recv_cancel(uct_iface_h iface,
  * @ingroup UCT_RESOURCE
  * @brief Enable synchronous progress for the interface
  *
- * Notify the transport that it should do work
- * during @ref uct_worker_progress().
- * Thus the latency of the transport may be reduced.
+ * Notify the transport that it should actively progress communications during
+ * @ref uct_worker_progress().
  *
- * The function can be called from any context or thread.
- *
- * By default, progress is enabled when the interface is created.
+ * When the interface is created, its progress is enabled.
  *
  * @param [in]  iface    The interface to enable progress.
  * @param [in]  flags    What kind progress to enable, see @ref uct_progress_types.
@@ -2081,11 +2078,9 @@ UCT_INLINE_API void uct_iface_progress_enable(uct_iface_h iface, unsigned flags)
  * @ingroup UCT_RESOURCE
  * @brief Disable synchronous progress for the interface
  *
- * Notify the transport that it should avoid doing anything
- * during @ref uct_worker_progress(). Thus the latency of
- * other transports may be reduced.
- *
- * The function can be called from any context or thread.
+ * Notify the transport that it should not progress its communications during
+ * @ref uct_worker_progress(). Thus the latency of other transports may be
+ * improved.
  *
  * By default, progress is enabled when the interface is created.
  *
