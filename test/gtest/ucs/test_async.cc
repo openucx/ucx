@@ -494,6 +494,35 @@ UCS_TEST_P(test_async, ctx_timer_block) {
     EXPECT_GE(lt.count(), 1); /* Timer could expire again after unblock */
 }
 
+UCS_TEST_P(test_async, modify_event) {
+    local_event le(GetParam());
+    int count;
+
+    le.push_event();
+    suspend_and_poll(&le, COUNT);
+    EXPECT_GE(le.count(), 1);
+
+    ucs_async_modify_handler(le.event_id(), 0);
+    sleep(1);
+    count = le.count();
+    le.push_event();
+    suspend_and_poll(&le, COUNT);
+    EXPECT_EQ(le.count(), count);
+
+    ucs_async_modify_handler(le.event_id(), POLLIN);
+    count = le.count();
+    le.push_event();
+    suspend_and_poll(&le, COUNT);
+    EXPECT_GT(le.count(), count);
+
+    ucs_async_modify_handler(le.event_id(), 0);
+    sleep(1);
+    count = le.count();
+    le.push_event();
+    suspend_and_poll(&le, COUNT);
+    EXPECT_EQ(le.count(), count);
+}
+
 class local_timer_remove_handler : public local_timer {
 public:
     local_timer_remove_handler(ucs_async_mode_t mode) : local_timer(mode) {
