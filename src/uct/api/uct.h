@@ -981,7 +981,8 @@ ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
  * @ingroup UCT_RESOURCE
  * @brief Obtain a notification file descriptor for polling.
  *
- * Only interfaces with the @ref UCT_IFACE_FLAG_EVENT_FD implement this function.
+ * Only interfaces supporting the @ref UCT_IFACE_FLAG_EVENT_FD implement this
+ * function.
  *
  * @param [in]  iface      Interface to get the notification descriptor.
  * @param [out] fd_p       Location to write the notification file descriptor.
@@ -1000,7 +1001,7 @@ ucs_status_t uct_iface_event_fd_get(uct_iface_h iface, int *fd_p);
  * event is over.
  *
  * @param [in] iface       Interface to arm.
- * @param [in] events      Events to wakeup on. See @ref uct_iface_event_types_t
+ * @param [in] events      Events to wakeup on. See @ref uct_iface_event_types
  *
  * @return ::UCS_OK        The operation completed successfully. File descriptor
  *                         will be signaled by new events.
