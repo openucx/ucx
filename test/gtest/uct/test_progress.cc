@@ -23,13 +23,13 @@ public:
 UCS_TEST_P(test_uct_progress, random_enable_disable) {
     for (int i = 0; i < 100; ++i) {
         unsigned flags = 0;
-        if (rand() % 2) {
+        if (ucs::rand() % 2) {
             flags |= UCT_PROGRESS_SEND;
         }
-        if (rand() % 2) {
+        if (ucs::rand() % 2) {
             flags |= UCT_PROGRESS_RECV;
         }
-        if (rand() % 2) {
+        if (ucs::rand() % 2) {
             uct_iface_progress_enable(ent(0).iface(), flags);
         } else {
             uct_iface_progress_disable(ent(0).iface(), flags);
