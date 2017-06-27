@@ -403,12 +403,9 @@ static void uct_mm_iface_recv_messages(uct_mm_iface_t *iface)
         ret = recvfrom(iface->signal_fd, &sig, sizeof(sig), 0, NULL, 0);
         if (ret == sizeof(sig)) {
             ucs_debug("mm_iface %p: got connect message", iface);
-            if (iface->super.prog.refcount++ == 0) {
-                uct_worker_progress_register_safe(iface->super.worker,
-                                                  uct_mm_iface_progress, iface,
-                                                  UCS_CALLBACKQ_FLAG_FAST,
-                                                  &iface->super.prog.id);
-            }
+            uct_worker_progress_add_safe(iface->super.worker,
+                                         uct_mm_iface_progress, iface,
+                                         &iface->super.prog);
         } else {
             if (ret < 0) {
                 if (errno != EAGAIN) {
@@ -570,10 +567,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
 
     ucs_async_remove_handler(self->signal_fd, 1);
 
-    if (self->super.prog.refcount) {
-        self->super.prog.refcount = 1;
-        uct_worker_progress_unregister(self->super.worker, &self->super.prog);
-    }
+    uct_worker_progress_remove_all(self->super.worker, &self->super.prog);
 
     /* return all the descriptors that are now 'assigned' to the FIFO,
      * to their mpool */

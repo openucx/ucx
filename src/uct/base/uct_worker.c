@@ -8,6 +8,7 @@
 
 #include "uct_worker.h"
 
+#include <ucs/arch/atomic.h>
 #include <ucs/type/class.h>
 #include <ucs/async/async.h>
 
@@ -43,25 +44,41 @@ void uct_worker_progress_init(uct_worker_progress_t *prog)
     prog->refcount = 0;
 }
 
-void uct_worker_progress_register(uct_worker_h worker, ucs_callback_t cb,
+void uct_worker_progress_add_safe(uct_worker_h worker, ucs_callback_t cb,
                                   void *arg, uct_worker_progress_t *prog)
 {
     UCS_ASYNC_BLOCK(worker->async);
-    if (prog->refcount++ == 0) {
-        prog->id = ucs_callbackq_add(&worker->progress_q, cb, arg,
-                                     UCS_CALLBACKQ_FLAG_FAST);
+    if (ucs_atomic_fadd32(&prog->refcount, 1) == 0) {
+        prog->id = ucs_callbackq_add_safe(&worker->progress_q, cb, arg,
+                                          UCS_CALLBACKQ_FLAG_FAST);
     }
     UCS_ASYNC_UNBLOCK(worker->async);
 }
 
-void uct_worker_progress_unregister(uct_worker_h worker,
-                                    uct_worker_progress_t *prog)
+void uct_worker_progress_remove(uct_worker_h worker, uct_worker_progress_t *prog)
 {
     UCS_ASYNC_BLOCK(worker->async);
     ucs_assert(prog->refcount > 0);
-    if (--prog->refcount == 0) {
+    if (ucs_atomic_fadd32(&prog->refcount, -1) == 1) {
         ucs_callbackq_remove(&worker->progress_q, prog->id);
         prog->id = UCS_CALLBACKQ_ID_NULL;
+    }
+    UCS_ASYNC_UNBLOCK(worker->async);
+}
+
+void uct_worker_progress_remove_all(uct_worker_h worker,
+                                    uct_worker_progress_t *prog)
+{
+    uint32_t ref;
+
+    UCS_ASYNC_BLOCK(worker->async);
+    ref = prog->refcount;
+    while (ref > 0) {
+        if (ucs_atomic_cswap32(&prog->refcount, ref, 0) == ref) {
+            ucs_callbackq_remove(&worker->progress_q, prog->id);
+            prog->id = UCS_CALLBACKQ_ID_NULL;
+        }
+        ref = prog->refcount;
     }
     UCS_ASYNC_UNBLOCK(worker->async);
 }

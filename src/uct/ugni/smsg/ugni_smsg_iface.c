@@ -216,8 +216,7 @@ static ucs_status_t uct_ugni_smsg_iface_query(uct_iface_h tl_iface, uct_iface_at
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_iface_t)
 {
-    uct_worker_progress_unregister(self->super.super.worker,
-                                   &self->super.super.prog);
+    uct_worker_progress_remove(self->super.super.worker, &self->super.super.prog);
     ucs_mpool_cleanup(&self->free_desc, 1);
     ucs_mpool_cleanup(&self->free_mbox, 1);
     uct_ugni_destroy_cq(self->remote_cq, &self->super.cdm);
@@ -340,7 +339,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
 
     /* TBD: eventually the uct_ugni_progress has to be moved to
      * udt layer so each ugni layer will have own progress */
-    uct_worker_progress_register(worker, uct_ugni_smsg_progress, self,
+    uct_worker_progress_add_safe(worker, uct_ugni_smsg_progress, self,
                                  &self->super.super.prog);
 
     return UCS_OK;
