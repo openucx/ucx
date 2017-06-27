@@ -17,6 +17,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/sys/string.h>
+#include <sys/poll.h>
 
 
 #if ENABLE_STATS
@@ -58,10 +59,6 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
     for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
         if (worker->ifaces[rsc_index].iface == NULL) {
             continue;
-        }
-
-        if (worker->wakeup.iface_wakeups[rsc_index] != NULL) {
-            uct_wakeup_close(worker->wakeup.iface_wakeups[rsc_index]);
         }
 
         if (ucp_worker_is_tl_tag_offload(worker, rsc_index)) {
@@ -147,93 +144,104 @@ static void ucp_worker_am_tracer(void *arg, uct_am_trace_type_t type,
     }
 }
 
-static ucs_status_t ucp_worker_wakeup_context_init(ucp_worker_wakeup_t *wakeup,
-                                                   ucp_rsc_index_t num_tls)
+static ucs_status_t ucp_worker_wakeup_add_fd(ucp_worker_h worker, int event_fd)
 {
-    ucs_status_t status;
-
-    wakeup->iface_wakeups = ucs_calloc(num_tls, sizeof(*wakeup->iface_wakeups),
-                                       "ucp iface_wakeups");
-    if (wakeup->iface_wakeups == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    if (pipe(wakeup->wakeup_pipe) != 0) {
-        ucs_error("Failed to create pipe: %m");
-        status = UCS_ERR_IO_ERROR;
-        goto free_handles;
-    }
-
-    status = ucs_sys_fcntl_modfl(wakeup->wakeup_pipe[0], O_NONBLOCK, 0);
-    if (status != UCS_OK) {
-        goto pipe_cleanup;
-        return status;
-    }
-
-    status = ucs_sys_fcntl_modfl(wakeup->wakeup_pipe[1], O_NONBLOCK, 0);
-    if (status != UCS_OK) {
-        goto pipe_cleanup;
-        return status;
-    }
-
-    wakeup->wakeup_efd = -1;
-    return UCS_OK;
-
-pipe_cleanup:
-    close(wakeup->wakeup_pipe[0]);
-    close(wakeup->wakeup_pipe[1]);
-free_handles:
-    ucs_free(wakeup->iface_wakeups);
-    return status;
-}
-
-static ucs_status_t ucp_worker_wakeup_add_fd(int epoll_fd, int wakeup_fd)
-{
-    int res;
     struct epoll_event event = {0};
+    int ret;
 
-    event.data.fd = wakeup_fd;
-    event.events = EPOLLIN;
+    if (!(worker->context->config.features & UCP_FEATURE_WAKEUP)) {
+        return UCS_OK;
+    }
 
-    res = epoll_ctl(epoll_fd, EPOLL_CTL_ADD, event.data.fd, &event);
-    if (res == -1) {
-        ucs_error("Failed to add descriptor to epoll: %m");
+    event.data.fd = event_fd;
+    event.events  = EPOLLIN;
+
+    ret = epoll_ctl(worker->epfd, EPOLL_CTL_ADD, event_fd, &event);
+    if (ret == -1) {
+        ucs_error("epoll_ctl(epfd=%d, ADD, fd=%d) failed: %m", worker->epfd,
+                  event_fd);
         return UCS_ERR_IO_ERROR;
     }
 
     return UCS_OK;
 }
 
-static void ucp_worker_wakeup_context_cleanup(ucp_worker_wakeup_t *wakeup)
+static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
+                                           ucp_wakeup_event_t events)
 {
-    if (wakeup->wakeup_efd != -1) {
-        close(wakeup->wakeup_efd);
-    }
-    ucs_free(wakeup->iface_wakeups);
-    close(wakeup->wakeup_pipe[0]);
-    close(wakeup->wakeup_pipe[1]);
-}
+    ucp_context_h context = worker->context;
+    ucs_status_t status;
+    int ret, i;
 
-static UCS_F_ALWAYS_INLINE unsigned
-ucp_to_uct_wakeup_events(ucp_wakeup_event_t ucp_events)
-{
-    unsigned uct_events = 0;
+    if (!(context->config.features & UCP_FEATURE_WAKEUP)) {
+        worker->epfd           = -1;
+        worker->wakeup_pipe[0] = -1;
+        worker->wakeup_pipe[1] = -1;
+        worker->uct_events     = 0;
+        status = UCS_OK;
+        goto out;
+    }
+
+    worker->epfd = epoll_create(context->num_tls);
+    if (worker->epfd == -1) {
+        ucs_error("Failed to create epoll file descriptor: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
+
+    ret = pipe(worker->wakeup_pipe);
+    if (ret != 0) {
+        ucs_error("Failed to create pipe: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto err_close_epfd;
+    }
+
+    for (i = 0; i < 2; ++i) {
+        status = ucs_sys_fcntl_modfl(worker->wakeup_pipe[i], O_NONBLOCK, 0);
+        if (status != UCS_OK) {
+            goto err_pipe_cleanup;
+        }
+    }
+
+    ucp_worker_wakeup_add_fd(worker, worker->wakeup_pipe[0]);
+
+    worker->uct_events = 0;
 
     /* FIXME: any TAG flag initializes all types of completion because of
      *        possible issues in RNDV protocol. The optimization may be
      *        implemented with using of separated UCP descriptors or manual
      *        signaling in RNDV and similar cases, see conversation in PR #1277
      */
-    if (ucp_events & (UCP_WAKEUP_TAG_SEND | UCP_WAKEUP_TAG_RECV)) {
-        uct_events |= UCT_WAKEUP_TX_COMPLETION|
-                      UCT_WAKEUP_RX_AM|UCT_WAKEUP_RX_SIGNALED_AM;
+    if (events & (UCP_WAKEUP_TAG_SEND | UCP_WAKEUP_TAG_RECV)) {
+        worker->uct_events |= UCT_EVENT_SEND_COMP | UCT_EVENT_RECV_AM;
     }
 
-    if (ucp_events & (UCP_WAKEUP_RMA | UCP_WAKEUP_AMO)) {
-        uct_events |= UCT_WAKEUP_TX_COMPLETION;
+    if (events & (UCP_WAKEUP_RMA | UCP_WAKEUP_AMO)) {
+        worker->uct_events |= UCT_EVENT_SEND_COMP;
     }
 
-    return uct_events;
+    return UCS_OK;
+
+err_pipe_cleanup:
+    close(worker->wakeup_pipe[0]);
+    close(worker->wakeup_pipe[1]);
+err_close_epfd:
+    close(worker->epfd);
+out:
+    return status;
+}
+
+static void ucp_worker_wakeup_cleanup(ucp_worker_h worker)
+{
+    if (worker->epfd != -1) {
+        close(worker->epfd);
+    }
+    if (worker->wakeup_pipe[0] != -1) {
+        close(worker->wakeup_pipe[0]);
+    }
+    if (worker->wakeup_pipe[1] != -1) {
+        close(worker->wakeup_pipe[1]);
+    }
 }
 
 static void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
@@ -321,11 +329,9 @@ found_ucp_ep:
     }
 }
 
-static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
-                                         ucp_rsc_index_t tl_id,
-                                         size_t rx_headroom,
-                                         ucs_cpu_set_t const *cpu_mask_param,
-                                         ucp_wakeup_event_t events)
+static ucs_status_t
+ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
+                     size_t rx_headroom, ucs_cpu_set_t const * cpu_mask_param)
 {
     ucp_context_h context = worker->context;
     ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
@@ -334,7 +340,7 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     uct_iface_h iface;
     uct_iface_attr_t *attr;
     uct_iface_params_t iface_params;
-    uct_wakeup_h wakeup = NULL;
+    int tl_event_fd;
 
     /* Read configuration
      * TODO pass env_prefix from context */
@@ -388,25 +394,15 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     }
 
     /* Set wake-up handlers */
-    if (attr->cap.flags & UCT_IFACE_FLAG_WAKEUP) {
-        status = uct_wakeup_open(iface, ucp_to_uct_wakeup_events(events),
-                                 &wakeup);
+    if (attr->cap.flags & UCT_IFACE_FLAG_EVENT_FD) {
+        status = uct_iface_event_fd_get(iface, &tl_event_fd);
         if (status != UCS_OK) {
             goto out_close_iface;
         }
 
-        if (worker->wakeup.wakeup_efd != -1) {
-            int wakeup_fd;
-            status = uct_wakeup_efd_get(wakeup, &wakeup_fd);
-            if (status != UCS_OK) {
-                goto out_close_wakeup;
-            }
-
-            status = ucp_worker_wakeup_add_fd(worker->wakeup.wakeup_efd,
-                                              wakeup_fd);
-            if (status != UCS_OK) {
-                goto out_close_wakeup;
-            }
+        status = ucp_worker_wakeup_add_fd(worker, tl_event_fd);
+        if (status != UCS_OK) {
+            goto out_close_iface;
         }
     }
 
@@ -419,12 +415,9 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     ucs_debug("created interface[%d] using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
               tl_id, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc), worker);
 
-    worker->wakeup.iface_wakeups[tl_id] = wakeup;
     worker->ifaces[tl_id].iface = iface;
     return UCS_OK;
 
-out_close_wakeup:
-    uct_wakeup_close(wakeup);
 out_close_iface:
     uct_iface_close(iface);
 out:
@@ -656,9 +649,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_status_t status;
     unsigned config_count;
     unsigned name_length;
-    ucs_cpu_set_t cpu_mask;
+    ucs_cpu_set_t empty_cpu_mask;
     ucs_thread_mode_t thread_mode;
     ucp_wakeup_event_t events;
+    const ucs_cpu_set_t *cpu_mask;
 
     /* Space for eager header is needed for unexpected tag offload messages */
     const size_t rx_headroom = sizeof(ucp_recv_desc_t) + sizeof(ucp_eager_sync_hdr_t);
@@ -718,14 +712,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_free_ifaces;
     }
 
-    status = ucp_worker_wakeup_context_init(&worker->wakeup, context->num_tls);
-    if (status != UCS_OK) {
-        goto err_free_stats;
-    }
-
     status = ucs_async_context_init(&worker->async, UCS_ASYNC_MODE_THREAD);
     if (status != UCS_OK) {
-        goto err_free_wakeup;
+        goto err_free_stats;
     }
 
     /* Create the underlying UCT worker */
@@ -743,12 +732,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_destroy_uct_worker;
     }
 
-    if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
-        cpu_mask = params->cpu_mask;
-    } else {
-        UCS_CPU_ZERO(&cpu_mask);
-    }
-
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_EVENTS) {
         events = params->events;
     } else {
@@ -756,10 +739,22 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                  UCP_WAKEUP_TAG_RECV;
     }
 
+    /* Create epoll set which combines events from all transports */
+    status = ucp_worker_wakeup_init(worker, events);
+    if (status != UCS_OK) {
+        goto err_req_mp_cleanup;
+    }
+
+    if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
+        cpu_mask = &params->cpu_mask;
+    } else {
+        UCS_CPU_ZERO(&empty_cpu_mask);
+        cpu_mask = &empty_cpu_mask;
+    }
+
     /* Open all resources as interfaces on this worker */
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
-        status = ucp_worker_add_iface(worker, tl_id, rx_headroom, &cpu_mask,
-                                      events);
+        status = ucp_worker_add_iface(worker, tl_id, rx_headroom, cpu_mask);
         if (status != UCS_OK) {
             goto err_close_ifaces;
         }
@@ -779,13 +774,13 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
 err_close_ifaces:
     ucp_worker_close_ifaces(worker);
+    ucp_worker_wakeup_cleanup(worker);
+err_req_mp_cleanup:
     ucs_mpool_cleanup(&worker->req_mp, 1);
 err_destroy_uct_worker:
     uct_worker_destroy(worker->uct);
 err_destroy_async:
     ucs_async_context_cleanup(&worker->async);
-err_free_wakeup:
-    ucp_worker_wakeup_context_cleanup(&worker->wakeup);
 err_free_stats:
     UCS_STATS_NODE_FREE(worker->stats);
 err_free_ifaces:
@@ -813,10 +808,10 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucp_worker_close_ifaces(worker);
+    ucp_worker_wakeup_cleanup(worker);
     ucs_mpool_cleanup(&worker->req_mp, 1);
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
-    ucp_worker_wakeup_context_cleanup(&worker->wakeup);
     ucs_free(worker->ifaces);
     kh_destroy_inplace(ucp_worker_ep_hash, &worker->ep_hash);
     kh_destroy_inplace(ucp_ep_errh_hash, &worker->ep_errh_hash);
@@ -858,57 +853,10 @@ void ucp_worker_progress(ucp_worker_h worker)
 
 ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
 {
-    int res_fd, tl_fd;
-    ucs_status_t status;
-    uct_wakeup_h wakeup;
-    ucp_rsc_index_t tl_id;
-    ucp_context_h context = worker->context;
-
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
-    if (worker->wakeup.wakeup_efd != -1) {
-        *fd = worker->wakeup.wakeup_efd;
-        status = UCS_OK;
-        goto out;
-    }
-
-    res_fd = epoll_create(context->num_tls);
-    if (res_fd == -1) {
-        ucs_error("Failed to create epoll descriptor: %m");
-        status = UCS_ERR_IO_ERROR;
-        goto out;
-    }
-
-    status = ucp_worker_wakeup_add_fd(res_fd, worker->wakeup.wakeup_pipe[0]);
-    if (status != UCS_OK) {
-        goto epoll_cleanup;
-    }
-
-    for (tl_id = 0; tl_id < context->num_tls; tl_id++) {
-        wakeup = worker->wakeup.iface_wakeups[tl_id];
-        if (wakeup != NULL) {
-            status = uct_wakeup_efd_get(wakeup, &tl_fd);
-            if (status != UCS_OK) {
-                goto epoll_cleanup;
-            }
-
-            status = ucp_worker_wakeup_add_fd(res_fd, tl_fd);
-            if (status != UCS_OK) {
-                goto epoll_cleanup;
-            }
-        }
-    }
-
-    worker->wakeup.wakeup_efd = res_fd;
-    *fd = res_fd;
-    status = UCS_OK;
-    goto out;
-
-epoll_cleanup:
-    close(res_fd);
-out:
+    *fd = worker->epfd;
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
-    return status;
+    return UCS_OK;
 }
 
 ucs_status_t ucp_worker_arm(ucp_worker_h worker)
@@ -916,14 +864,12 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     int res;
     char buf;
     ucs_status_t status;
-    uct_wakeup_h wakeup;
     ucp_rsc_index_t tl_id;
     ucp_context_h context = worker->context;
 
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
-        wakeup = worker->wakeup.iface_wakeups[tl_id];
-        if (wakeup != NULL) {
-            status = uct_wakeup_efd_arm(wakeup);
+        if (worker->ifaces[tl_id].attr.cap.flags & UCT_IFACE_FLAG_EVENT_FD) {
+            status = uct_iface_event_arm(worker->ifaces[tl_id].iface, worker->uct_events);
             if (status != UCS_OK) {
                 return status;
             }
@@ -931,10 +877,9 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     }
 
     do {
-        res = read(worker->wakeup.wakeup_pipe[0], &buf, 1);
+        res = read(worker->wakeup_pipe[0], &buf, 1);
     } while (res != -1);
-
-    if (errno != EAGAIN) {
+    if (errno != EAGAIN && errno != EINTR) {
         ucs_error("Read from internal pipe failed: %m");
         return UCS_ERR_IO_ERROR;
     }
@@ -950,7 +895,7 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address)
 ucs_status_t ucp_worker_wait(ucp_worker_h worker)
 {
     int res;
-    int epoll_fd;
+    int epoll_fd = -1;
     ucs_status_t status;
     struct epoll_event *events;
     ucp_context_h context = worker->context;
@@ -1004,7 +949,7 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker)
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
-    res = write(worker->wakeup.wakeup_pipe[1], &buf, 1);
+    res = write(worker->wakeup_pipe[1], &buf, 1);
     if ((res != 1)  && (errno != EAGAIN)) {
         ucs_error("Signaling wakeup failed: %m");
         status = UCS_ERR_IO_ERROR;

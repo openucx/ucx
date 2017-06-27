@@ -170,20 +170,11 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*iface_fence)(uct_iface_h iface, unsigned flags);
 
-    /* interface - events and progress */
+    /* interface - events */
 
-    ucs_status_t (*iface_wakeup_open)(uct_iface_h iface, unsigned events,
-                                     uct_wakeup_h wakeup);
+    ucs_status_t (*iface_event_fd_get)(uct_iface_h iface, int *fd_p);
 
-    ucs_status_t (*iface_wakeup_get_fd)(uct_wakeup_h wakeup, int *fd_p);
-
-    ucs_status_t (*iface_wakeup_arm)(uct_wakeup_h wakeup);
-
-    ucs_status_t (*iface_wakeup_wait)(uct_wakeup_h wakeup);
-
-    ucs_status_t (*iface_wakeup_signal)(uct_wakeup_h wakeup);
-
-    void         (*iface_wakeup_close)(uct_wakeup_h wakeup);
+    ucs_status_t (*iface_event_arm)(uct_iface_h iface, unsigned events);
 
     /* interface - management */
 

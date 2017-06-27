@@ -255,18 +255,9 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah **ah_p,
                                     int *is_global_p);
 
-ucs_status_t uct_ib_iface_wakeup_open(uct_iface_h iface, unsigned events,
-                                      uct_wakeup_h wakeup);
+ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h iface, int *fd_p);
 
-ucs_status_t uct_ib_iface_wakeup_get_fd(uct_wakeup_h wakeup, int *fd_p);
-
-ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup);
-
-ucs_status_t uct_ib_iface_wakeup_wait(uct_wakeup_h wakeup);
-
-ucs_status_t uct_ib_iface_wakeup_signal(uct_wakeup_h wakeup);
-
-void uct_ib_iface_wakeup_close(uct_wakeup_h wakeup);
+ucs_status_t uct_ib_iface_event_arm(uct_iface_h iface, unsigned events);
 
 ucs_status_t uct_ib_iface_arm_tx_cq(uct_ib_iface_t *iface);
 

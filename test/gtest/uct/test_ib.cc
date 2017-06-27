@@ -310,11 +310,10 @@ UCS_TEST_P(test_uct_ib, address_pack) {
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib);
 
 
-class test_uct_wakeup_ib : public test_uct_ib {
+class test_uct_event_ib : public test_uct_ib {
 public:
-    test_uct_wakeup_ib() {
+    test_uct_event_ib() {
         length            = 8;
-        wakeup_handle     = NULL;
         wakeup_fd.revents = 0;
         wakeup_fd.events  = POLLIN;
         wakeup_fd.fd      = 0;
@@ -328,16 +327,11 @@ public:
 
         test_uct_ib::initialize();
 
-        check_caps(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_WAKEUP |
+        check_caps(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_EVENT_FD |
                    UCT_IFACE_FLAG_AM_CB_SYNC);
 
         /* create receiver wakeup */
-        status = uct_wakeup_open(m_e1->iface(),
-                                 UCT_WAKEUP_RX_SIGNALED_AM | UCT_WAKEUP_TX_COMPLETION,
-                                 &wakeup_handle);
-        ASSERT_EQ(status, UCS_OK);
-
-        status = uct_wakeup_efd_get(wakeup_handle, &wakeup_fd.fd);
+        status = uct_iface_event_fd_get(m_e1->iface(), &wakeup_fd.fd);
         ASSERT_EQ(status, UCS_OK);
 
         EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
@@ -349,13 +343,13 @@ public:
         uct_iface_set_am_handler(m_e1->iface(), 0, ib_am_handler, m_buf1->ptr(),
                                  UCT_AM_CB_FLAG_SYNC);
 
-        test_uct_wakeup_ib::bcopy_pack_count = 0;
+        test_uct_event_ib::bcopy_pack_count = 0;
     }
 
     static size_t pack_cb(void *dest, void *arg) {
         const mapped_buffer *buf = (const mapped_buffer *)arg;
         memcpy(dest, buf->ptr(), buf->length());
-        ++test_uct_wakeup_ib::bcopy_pack_count;
+        ++test_uct_event_ib::bcopy_pack_count;
         return buf->length();
     }
 
@@ -407,14 +401,12 @@ public:
     void cleanup() {
         delete(m_buf1);
         delete(m_buf2);
-        if (wakeup_handle) {
-            uct_wakeup_close(wakeup_handle);
-        }
         test_uct_ib::cleanup();
     }
 
 protected:
-    uct_wakeup_h wakeup_handle;
+    static const unsigned EVENTS = UCT_EVENT_RECV_AM | UCT_EVENT_SEND_COMP;
+
     struct pollfd wakeup_fd;
     size_t length;
     uint64_t test_ib_hdr;
@@ -422,16 +414,16 @@ protected:
     static size_t bcopy_pack_count;
 };
 
-size_t test_uct_wakeup_ib::bcopy_pack_count = 0;
+size_t test_uct_event_ib::bcopy_pack_count = 0;
 
 
-UCS_TEST_P(test_uct_wakeup_ib, tx_cq)
+UCS_TEST_P(test_uct_event_ib, tx_cq)
 {
     ucs_status_t status;
 
     initialize();
 
-    status = uct_wakeup_efd_arm(wakeup_handle);
+    status = uct_iface_event_arm(m_e1->iface(), EVENTS);
     ASSERT_EQ(status, UCS_OK);
 
     /* check initial state of the fd and [send|recv]_cq */
@@ -445,7 +437,7 @@ UCS_TEST_P(test_uct_wakeup_ib, tx_cq)
     /* make sure the file descriptor is signaled once */
     ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
 
-    status = uct_wakeup_efd_arm(wakeup_handle);
+    status = uct_iface_event_arm(m_e1->iface(), EVENTS);
     ASSERT_EQ(status, UCS_ERR_BUSY);
 
     /* make sure [send|recv]_cq handled properly */
@@ -454,15 +446,15 @@ UCS_TEST_P(test_uct_wakeup_ib, tx_cq)
 }
 
 
-UCS_TEST_P(test_uct_wakeup_ib, txrx_cq)
+UCS_TEST_P(test_uct_event_ib, txrx_cq)
 {
     const size_t msg_count = 1;
     ucs_status_t status;
 
     initialize();
 
-    status = uct_wakeup_efd_arm(wakeup_handle);
-    ASSERT_EQ(status, UCS_OK);
+    status = uct_iface_event_arm(m_e1->iface(), EVENTS);
+    ASSERT_EQ(UCS_OK, status);
 
     /* check initial state of the fd and [send|recv]_cq */
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
@@ -477,7 +469,7 @@ UCS_TEST_P(test_uct_wakeup_ib, txrx_cq)
 
     /* Make sure all messages delivered */
     while ((test_uct_ib::ib_am_handler_counter   < msg_count) ||
-           (test_uct_wakeup_ib::bcopy_pack_count < msg_count)) {
+           (test_uct_event_ib::bcopy_pack_count < msg_count)) {
         progress();
     }
 
@@ -485,8 +477,9 @@ UCS_TEST_P(test_uct_wakeup_ib, txrx_cq)
     ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
 
     /* Acknowledge all the requests */
-    status = uct_wakeup_wait(wakeup_handle);
-    ASSERT_EQ(status, UCS_OK);
+    short_progress_loop();
+    status = uct_iface_event_arm(m_e1->iface(), EVENTS);
+    ASSERT_EQ(UCS_ERR_BUSY, status);
 
     /* make sure [send|recv]_cq handled properly */
     check_send_cq(m_e1->iface(), 1);
@@ -494,4 +487,4 @@ UCS_TEST_P(test_uct_wakeup_ib, txrx_cq)
 }
 
 
-UCT_INSTANTIATE_IB_TEST_CASE(test_uct_wakeup_ib);
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_event_ib);

@@ -222,7 +222,7 @@ typedef struct uct_tl_resource_desc {
                                                        is called. */
 
         /* Event notification */
-#define UCT_IFACE_FLAG_WAKEUP         UCS_BIT(46) /**< Event notification supported */
+#define UCT_IFACE_FLAG_EVENT_FD       UCS_BIT(46) /**< Event notification via file descriptor is supported */
 
         /* Tag matching operations */
 #define UCT_IFACE_FLAG_TAG_EAGER_SHORT UCS_BIT(47) /**< Hardware tag matching short eager support */
@@ -252,12 +252,11 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief  Wakeup event types.
+ * @brief  Asynchronous event types.
  */
-enum uct_wakeup_event_types {
-    UCT_WAKEUP_TX_COMPLETION   = UCS_BIT(0),
-    UCT_WAKEUP_RX_AM           = UCS_BIT(1),
-    UCT_WAKEUP_RX_SIGNALED_AM  = UCS_BIT(2)
+enum uct_iface_event_types {
+    UCT_EVENT_SEND_COMP   = UCS_BIT(0), /**< Send completion event */
+    UCT_EVENT_RECV_AM     = UCS_BIT(1)  /**< Active message received */
 };
 
 
@@ -988,38 +987,17 @@ ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Create an event handle for interrupt notification.
- *
- * @param [in]  iface       Handle to an open communication interface.
- * @param [in]  events      Requested event mask out of @ref uct_event_types.
- * @param [out] wakeup_p    Location to write the notification event handle.
- *
- * @return Error code.
- */
-ucs_status_t uct_wakeup_open(uct_iface_h iface, unsigned events,
-                             uct_wakeup_h *wakeup_p);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Close the notification event handle.
- *
- * @param [in] wakeup      Handle to the notification event.
- *
- */
-void uct_wakeup_close(uct_wakeup_h wakeup);
-
-
-/**
- * @ingroup UCT_RESOURCE
  * @brief Obtain a notification file descriptor for polling.
  *
- * @param [in]  wakeup     Handle to the notification event.
+ * Only interfaces supporting the @ref UCT_IFACE_FLAG_EVENT_FD implement this
+ * function.
+ *
+ * @param [in]  iface      Interface to get the notification descriptor.
  * @param [out] fd_p       Location to write the notification file descriptor.
  *
  * @return Error code.
  */
-ucs_status_t uct_wakeup_efd_get(uct_wakeup_h wakeup, int *fd_p);
+ucs_status_t uct_iface_event_fd_get(uct_iface_h iface, int *fd_p);
 
 
 /**
@@ -1028,9 +1006,10 @@ ucs_status_t uct_wakeup_efd_get(uct_wakeup_h wakeup, int *fd_p);
  *
  * This routine needs to be called before waiting on each notification on this
  * interface, so will typically be called once the processing of the previous
- * event is over, as part of the wake-up mechanism.
+ * event is over.
  *
- * @param [in] wakeup      Handle to the notification event.
+ * @param [in] iface       Interface to arm.
+ * @param [in] events      Events to wakeup on. See @ref uct_iface_event_types
  *
  * @return ::UCS_OK        The operation completed successfully. File descriptor
  *                         will be signaled by new events.
@@ -1040,29 +1019,7 @@ ucs_status_t uct_wakeup_efd_get(uct_wakeup_h wakeup, int *fd_p);
  *                         will not be signaled by new events.
  * @return @ref ucs_status_t "Other" different error codes in case of issues.
  */
-ucs_status_t uct_wakeup_efd_arm(uct_wakeup_h wakeup);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Wait for the next notification.
- *
- * @param [in] wakeup      Handle to the notification event.
- *
- * @return Error code.
- */
-ucs_status_t uct_wakeup_wait(uct_wakeup_h wakeup);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Cause the next notification.
- *
- * @param [in] wakeup      Handle to the notification event.
- *
- * @return Error code.
- */
-ucs_status_t uct_wakeup_signal(uct_wakeup_h wakeup);
+ucs_status_t uct_iface_event_arm(uct_iface_h iface, unsigned events);
 
 
 /**
