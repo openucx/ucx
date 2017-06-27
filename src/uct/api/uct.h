@@ -1100,7 +1100,7 @@ void uct_iface_mem_free(const uct_allocated_memory_t *mem);
  * @param [in]  id       Active message id. Must be 0..UCT_AM_ID_MAX-1.
  * @param [in]  cb       Active message callback. NULL to clear.
  * @param [in]  arg      Active message argument.
- * @param [in]  flags    Required @ref uct_am_cb_cap "active message callback capabilities"
+ * @param [in]  flags    Required @ref uct_am_cb_flags "active message callback flags"
  *
  * @return error code if the interface does not support active messages or
  *         requested callback flags
