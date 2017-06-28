@@ -835,7 +835,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)
     uct_rc_txqp_available_set(&self->super.txqp, iface->config.tx_max_wr);
     uct_rc_verbs_txcnt_init(&self->txcnt);
 
-    uct_worker_progress_register(iface->super.super.super.worker,
+    uct_worker_progress_add_safe(iface->super.super.super.worker,
                                  iface->progress, iface,
                                  &iface->super.super.super.prog);
 
@@ -846,8 +846,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
-    uct_worker_progress_unregister(iface->super.super.super.worker,
-                                   &iface->super.super.super.prog);
+    uct_worker_progress_remove(iface->super.super.super.worker,
+                               &iface->super.super.super.prog);
     uct_rc_verbs_ep_tag_qp_destroy(self);
 }
 

@@ -163,7 +163,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
 
     self->path_bits = iface->super.path_bits[0]; /* TODO multi-rail */
 
-    uct_worker_progress_register(iface->super.super.worker,
+    uct_worker_progress_add_safe(iface->super.super.worker,
                                  ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->progress,
                                  iface, &iface->super.super.prog);
 
@@ -208,8 +208,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 
     ucs_trace_func("ep=%p id=%d conn_id=%d", self, self->ep_id, self->conn_id);
 
-    uct_worker_progress_unregister(iface->super.super.worker,
-                                   &iface->super.super.prog);
+    uct_worker_progress_remove(iface->super.super.worker,
+                               &iface->super.super.prog);
 
     ucs_wtimer_remove(&self->slow_timer);
     uct_ud_iface_remove_ep(iface, self);

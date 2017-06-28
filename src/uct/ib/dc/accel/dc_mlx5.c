@@ -798,7 +798,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
                              sizeof(struct mlx5_wqe_data_seg));
 
     /* TODO: only register progress when we have a connection */
-    uct_worker_progress_register(worker, uct_dc_mlx5_iface_progress, self,
+    uct_worker_progress_add_safe(worker, uct_dc_mlx5_iface_progress, self,
                                  &self->super.super.super.super.prog);
     ucs_debug("created dc iface %p", self);
     return UCS_OK;
@@ -812,8 +812,8 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
 {
     ucs_trace_func("");
-    uct_worker_progress_unregister(self->super.super.super.super.worker,
-                                   &self->super.super.super.super.prog);
+    uct_worker_progress_remove(self->super.super.super.super.worker,
+                               &self->super.super.super.super.prog);
     uct_rc_mlx5_iface_common_cleanup(&self->mlx5_common);
 }
 

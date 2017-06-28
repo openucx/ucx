@@ -151,7 +151,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     ucs_arbiter_group_init(&self->arb_group);
 
     /* Register for send side progress */
-    uct_worker_progress_register(iface->super.worker, uct_mm_iface_progress,
+    uct_worker_progress_add_safe(iface->super.worker, uct_mm_iface_progress,
                                  iface, &iface->super.prog);
 
     ucs_debug("mm: ep connected: %p, to remote_shmid: %zu", self, addr->id);
@@ -172,7 +172,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
     /* make sure the slow path function isn't invoked after the ep's cleanup */
     uct_worker_progress_unregister_safe(iface->super.worker, &self->slow_cb_id);
 
-    uct_worker_progress_unregister(iface->super.worker, &iface->super.prog);
+    uct_worker_progress_remove(iface->super.worker, &iface->super.prog);
 
     for (remote_seg = sglib_hashed_uct_mm_remote_seg_t_it_init(&iter, self->remote_segments_hash);
          remote_seg != NULL; remote_seg = sglib_hashed_uct_mm_remote_seg_t_it_next(&iter)) {

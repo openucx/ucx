@@ -34,7 +34,7 @@ struct uct_worker {
 
 typedef struct uct_worker_progress {
     uct_worker_cb_id_t     id;
-    int                    refcount;
+    uint32_t               refcount;
 } uct_worker_progress_t;
 
 
@@ -77,10 +77,12 @@ typedef struct uct_worker_progress {
 
 void uct_worker_progress_init(uct_worker_progress_t *prog);
 
-void uct_worker_progress_register(uct_worker_h worker, ucs_callback_t cb,
+void uct_worker_progress_add_safe(uct_worker_h worker, ucs_callback_t cb,
                                   void *arg, uct_worker_progress_t *prog);
 
-void uct_worker_progress_unregister(uct_worker_h worker,
+void uct_worker_progress_remove_all(uct_worker_h worker,
                                     uct_worker_progress_t *prog);
+
+void uct_worker_progress_remove(uct_worker_h worker, uct_worker_progress_t *prog);
 
 #endif
