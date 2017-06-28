@@ -250,10 +250,15 @@ run_hello() {
 	hw_client_pid=$!
 
 	# make sure server process is not running
-	wait ${hw_server_pid} ${hw_client_pid}
-
-	# return default
-	set -Ee
+	if [[ ${test_args} == *"-e"* ]]
+	then
+		wait ${hw_client_pid}
+		# return default
+		set -Ee
+		wait ${hw_server_pid}
+	else
+		wait ${hw_client_pid} ${hw_server_pid}
+	fi
 }
 
 #
