@@ -42,7 +42,7 @@ static ucs_status_t uct_rocm_cma_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 }
 
 static ucs_status_t uct_rocm_cma_query_md_resources(uct_md_resource_desc_t **resources_p,
-                                                unsigned *num_resources_p)
+                                                    unsigned *num_resources_p)
 {
     ucs_status_t status;
 
@@ -76,7 +76,7 @@ static void uct_rocm_cma_md_close(uct_md_h md)
 }
 
 static ucs_status_t uct_rocm_cma_mem_reg(uct_md_h md, void *address, size_t length,
-                                        unsigned flags, uct_mem_h *memh_p)
+                                         unsigned flags, uct_mem_h *memh_p)
 {
     uct_rocm_cma_key_t *key;
     uct_rocm_cma_md_t *rocm_md = (uct_rocm_cma_md_t *)md;
@@ -140,7 +140,7 @@ static ucs_status_t uct_rocm_cma_mem_dereg(uct_md_h md, uct_mem_h memh)
 
         if (status != HSA_STATUS_SUCCESS) {
             ucs_warn("Failed to unlock memory (%p): 0x%x\n",
-                                        (void *)key->gpu_address, status);
+                     (void *)key->gpu_address, status);
         }
     }
 
@@ -149,7 +149,7 @@ static ucs_status_t uct_rocm_cma_mem_dereg(uct_md_h md, uct_mem_h memh)
 }
 
 static ucs_status_t uct_rocm_cma_rkey_pack(uct_md_h md, uct_mem_h memh,
-                                            void *rkey_buffer)
+                                           void *rkey_buffer)
 {
     uct_rocm_cma_key_t *packed = (uct_rocm_cma_key_t *)rkey_buffer;
     uct_rocm_cma_key_t *key    = (uct_rocm_cma_key_t *)memh;
@@ -159,14 +159,14 @@ static ucs_status_t uct_rocm_cma_rkey_pack(uct_md_h md, uct_mem_h memh,
     packed->md_address  = key->md_address;
 
     ucs_trace("packed (%p) rkey (%p): length 0x%lx gpu address %"PRIxPTR" md address %"PRIxPTR,
-                packed, key, key->length, key->gpu_address, key->md_address);
+              packed, key, key->length, key->gpu_address, key->md_address);
 
     return UCS_OK;
 }
 
 static ucs_status_t uct_rocm_cma_rkey_unpack(uct_md_component_t *mdc,
-                                        const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                        void **handle_p)
+                                             const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                             void **handle_p)
 {
     uct_rocm_cma_key_t *packed = (uct_rocm_cma_key_t *)rkey_buffer;
     uct_rocm_cma_key_t *key;
@@ -183,12 +183,12 @@ static ucs_status_t uct_rocm_cma_rkey_unpack(uct_md_component_t *mdc,
     *handle_p = NULL;
     *rkey_p   = (uintptr_t)key;
     ucs_trace("unpacked rkey: key %p length 0x%x gpu address %"PRIxPTR" md address %"PRIxPTR,
-                key, (int) key->length, key->gpu_address, key->md_address);
+              key, (int) key->length, key->gpu_address, key->md_address);
     return UCS_OK;
 }
 
 static ucs_status_t uct_rocm_cma_rkey_release(uct_md_component_t *mdc,
-                                            uct_rkey_t rkey, void *handle)
+                                              uct_rkey_t rkey, void *handle)
 {
     ucs_assert(NULL == handle);
     ucs_trace("free rkey %p", (void *)rkey);
@@ -197,8 +197,8 @@ static ucs_status_t uct_rocm_cma_rkey_release(uct_md_component_t *mdc,
 }
 
 static ucs_status_t uct_rocm_cma_md_open(const char *md_name,
-                                        const uct_md_config_t *uct_md_config,
-                                        uct_md_h *md_p)
+                                         const uct_md_config_t *uct_md_config,
+                                         uct_md_h *md_p)
 {
     uct_rocm_cma_md_t *rocm_md;
     const uct_rocm_cma_md_config_t *md_config =

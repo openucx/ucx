@@ -17,8 +17,8 @@
 
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_cma_ep_t, uct_iface_t *tl_iface,
-                            const uct_device_addr_t *dev_addr,
-                            const uct_iface_addr_t *iface_addr)
+                           const uct_device_addr_t *dev_addr,
+                           const uct_iface_addr_t *iface_addr)
 {
     uct_rocm_cma_iface_t *iface = ucs_derived_of(tl_iface, uct_rocm_cma_iface_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
@@ -37,13 +37,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rocm_cma_ep_t)
 
 UCS_CLASS_DEFINE(uct_rocm_cma_ep_t, uct_base_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_rocm_cma_ep_t, uct_ep_t, uct_iface_t*,
-                            const uct_device_addr_t *, const uct_iface_addr_t *);
+                          const uct_device_addr_t *, const uct_iface_addr_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_cma_ep_t, uct_ep_t);
 
 
 #define uct_rocm_cma_trace_data(_remote_addr, _rkey, _fmt, ...) \
     ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
-                    (_rkey))
+                   (_rkey))
 
 
 /** Convert pointer to pointer which could be used for 
@@ -85,7 +85,7 @@ static ucs_status_t uct_rocm_cma_ptr_to_gpu_ptr(void *ptr, void **gpu_address,
 
 /** Release GPU address if it was previously locked */
 static void uct_rocm_cma_unlock_ptrs(void **local_ptr, int *locked,
-                                    size_t local_iov_it)
+                                     size_t local_iov_it)
 {
     size_t index;
 
@@ -96,7 +96,7 @@ static void uct_rocm_cma_unlock_ptrs(void **local_ptr, int *locked,
 
             if (status != HSA_STATUS_SUCCESS) {
                 ucs_warn("Failed to unlock memory (%p): 0x%x\n",
-                                            local_ptr[index], status);
+                         local_ptr[index], status);
             }
         }
     }
@@ -106,17 +106,17 @@ static void uct_rocm_cma_unlock_ptrs(void **local_ptr, int *locked,
  * Typedef for thunk CMA API.
  */
 typedef HSAKMT_STATUS (*uct_rocm_hsakmt_cma_t)(HSAuint32,
-                                                HsaMemoryRange *, HSAuint64,
-                                                HsaMemoryRange *, HSAuint64,
-                                                HSAuint64 *);
+                                               HsaMemoryRange *, HSAuint64,
+                                               HsaMemoryRange *, HSAuint64,
+                                               HSAuint64 *);
 
 ucs_status_t uct_rocm_cma_ep_common_zcopy(uct_ep_h tl_ep,
-                                            const uct_iov_t *iov,
-                                            size_t iovcnt,
-                                            uint64_t remote_addr,
-                                            uct_rocm_cma_key_t *key,
-                                            uct_rocm_hsakmt_cma_t fn_p,
-                                            char *fn_name)
+                                          const uct_iov_t *iov,
+                                          size_t iovcnt,
+                                          uint64_t remote_addr,
+                                          uct_rocm_cma_key_t *key,
+                                          uct_rocm_hsakmt_cma_t fn_p,
+                                          char *fn_name)
 {
     /* The logic was copied more/less verbatim from corresponding CMA zcopy
        function.
@@ -163,17 +163,17 @@ ucs_status_t uct_rocm_cma_ep_common_zcopy(uct_ep_h tl_ep,
 
 
     ucs_trace("(%s): remote_addr: %p (gpu %p, md addr %p), key->length 0x%x",
-                fn_name, (void *)remote_addr, (void*)key->gpu_address,
-                (void*)key->md_address, (int) key->length);
+              fn_name, (void *)remote_addr, (void*)key->gpu_address,
+              (void*)key->md_address, (int) key->length);
 
     /* Remote_addr could be inside of rkey range. We need
        to calculate the correct gpu address based on the
        passed address in case if it is non-GPU ones.*/
 
-    if (remote_addr < key->md_address ||
-        remote_addr > (key->md_address + key->length)) {
+    if ((remote_addr < key->md_address) ||
+        (remote_addr > (key->md_address + key->length))) {
         ucs_error("remote_addr %p is out of range [%p, +0x%x]",
-            (void *)remote_addr, (void *)key->md_address, (int) key->length);
+                  (void *)remote_addr, (void *)key->md_address, (int) key->length);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -204,7 +204,7 @@ ucs_status_t uct_rocm_cma_ep_common_zcopy(uct_ep_h tl_ep,
             }
 
             local_ptr[local_iov_it]             = (void *)((char *)iov[iov_it].buffer +
-                                                iov_slice_delivered);
+                                                           iov_slice_delivered);
             local_iov[local_iov_it].SizeInBytes = iov_slice_length - iov_slice_delivered;
 
             /* It is possible that we get host (CPU) address as local address.
@@ -213,10 +213,10 @@ ucs_status_t uct_rocm_cma_ep_common_zcopy(uct_ep_h tl_ep,
              * flag "any_memory" is set than lock this memory.
              */
             ucs_status = uct_rocm_cma_ptr_to_gpu_ptr(local_ptr[local_iov_it],
-                                            &local_iov[local_iov_it].MemoryAddress,
-                                            local_iov[local_iov_it].SizeInBytes,
-                                            rocm_md->any_memory,
-                                            &local_ptr_locked[local_iov_it]);
+                                                     &local_iov[local_iov_it].MemoryAddress,
+                                                     local_iov[local_iov_it].SizeInBytes,
+                                                     rocm_md->any_memory,
+                                                     &local_ptr_locked[local_iov_it]);
 
             if (ucs_status != UCS_OK) {
                 uct_rocm_cma_unlock_ptrs(local_ptr, local_ptr_locked, local_iov_it);
@@ -224,10 +224,9 @@ ucs_status_t uct_rocm_cma_ep_common_zcopy(uct_ep_h tl_ep,
             }
 
             ucs_trace("[%d] Local address %p (GPU ptr %p), Local Size 0x%x",
-                                            (int) local_iov_it,
-                                            local_ptr[local_iov_it],
-                                            local_iov[local_iov_it].MemoryAddress,
-                                            (int) local_iov[local_iov_it].SizeInBytes);
+                      (int) local_iov_it, local_ptr[local_iov_it],
+                      local_iov[local_iov_it].MemoryAddress,
+                      (int) local_iov[local_iov_it].SizeInBytes);
 
             ++local_iov_it;
         }
@@ -245,18 +244,17 @@ ucs_status_t uct_rocm_cma_ep_common_zcopy(uct_ep_h tl_ep,
         remote_iov.SizeInBytes   = length - delivered;
 
         ucs_trace("remote_iov.MemoryAddress %p, remote_iov.SizeInBytes 0x%x",
-                    remote_iov.MemoryAddress, (int) remote_iov.SizeInBytes);
+                  remote_iov.MemoryAddress, (int) remote_iov.SizeInBytes);
 
         hsa_status = fn_p(ep->remote_pid, local_iov, local_iov_it,
-                            &remote_iov, 1,
-                            &size_copied);
+                          &remote_iov, 1, &size_copied);
 
         uct_rocm_cma_unlock_ptrs(local_ptr, local_ptr_locked, local_iov_it);
 
         if (hsa_status  != HSAKMT_STATUS_SUCCESS) {
             ucs_error("%s  copied  %zu instead of %zu, Status  %d. errno %d",
-                        fn_name, (ssize_t) size_copied, (ssize_t) length,
-                        hsa_status, errno);
+                      fn_name, (ssize_t) size_copied, (ssize_t) length,
+                      hsa_status, errno);
             return UCS_ERR_IO_ERROR;
         }
 
@@ -267,8 +265,8 @@ ucs_status_t uct_rocm_cma_ep_common_zcopy(uct_ep_h tl_ep,
 }
 
 ucs_status_t uct_rocm_cma_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
-                                    uint64_t remote_addr, uct_rkey_t rkey,
-                                    uct_completion_t *comp)
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp)
 {
     ucs_status_t ret;
     uct_rocm_cma_key_t *key = (uct_rocm_cma_key_t *)rkey;
@@ -278,22 +276,22 @@ ucs_status_t uct_rocm_cma_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
     UCT_CHECK_IOV_SIZE(iovcnt, uct_sm_get_max_iov(), "uct_rocm_cma_ep_put_zcopy");
 
     ret = uct_rocm_cma_ep_common_zcopy(tl_ep, iov,  iovcnt,
-                                        remote_addr, key,
-                                        hsaKmtProcessVMWrite,
-                                        "hsaKmtProcessVMWrite");
+                                       remote_addr, key,
+                                       hsaKmtProcessVMWrite,
+                                       "hsaKmtProcessVMWrite");
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY,
-                        uct_iov_total_length(iov, iovcnt));
+                      uct_iov_total_length(iov, iovcnt));
     uct_rocm_cma_trace_data(remote_addr, rkey, "PUT_ZCOPY [length %zu]",
-                        uct_iov_total_length(iov, iovcnt));
+                            uct_iov_total_length(iov, iovcnt));
 
     ucs_trace("put zcopy status: 0x%x", ret);
     return ret;
 }
 
 ucs_status_t uct_rocm_cma_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
-                                        uint64_t remote_addr, uct_rkey_t rkey,
-                                        uct_completion_t *comp)
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp)
 {
     ucs_status_t ret;
     uct_rocm_cma_key_t *key = (uct_rocm_cma_key_t *)rkey;
@@ -303,14 +301,14 @@ ucs_status_t uct_rocm_cma_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
     UCT_CHECK_IOV_SIZE(iovcnt, uct_sm_get_max_iov(), "uct_rocm_cma_ep_get_zcopy");
 
     ret = uct_rocm_cma_ep_common_zcopy(tl_ep, iov, iovcnt,
-                                        remote_addr, key,
-                                        hsaKmtProcessVMRead,
-                                        "hsaKmtProcessVMRead");
+                                       remote_addr, key,
+                                       hsaKmtProcessVMRead,
+                                       "hsaKmtProcessVMRead");
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY,
-                        uct_iov_total_length(iov, iovcnt));
+                      uct_iov_total_length(iov, iovcnt));
     uct_rocm_cma_trace_data(remote_addr, rkey, "GET_ZCOPY [length %zu]",
-                        uct_iov_total_length(iov, iovcnt));
+                            uct_iov_total_length(iov, iovcnt));
 
     ucs_trace("get zcopy status: 0x%x", ret);
     return ret;

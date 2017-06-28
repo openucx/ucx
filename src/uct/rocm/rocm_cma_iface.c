@@ -35,7 +35,7 @@ static ucs_config_field_t uct_rocm_cma_iface_config_table[] = {
 UCT_MD_REGISTER_TL(&uct_rocm_cma_md_component, &uct_rocm_cma_tl);
 
 static ucs_status_t uct_rocm_cma_iface_get_address(uct_iface_t *tl_iface,
-                                                    uct_iface_addr_t *addr)
+                                                   uct_iface_addr_t *addr)
 {
     /* Use process id as interface address */
     *(pid_t*)addr = getpid();
@@ -44,7 +44,7 @@ static ucs_status_t uct_rocm_cma_iface_get_address(uct_iface_t *tl_iface,
 
 
 static ucs_status_t uct_rocm_cma_iface_query(uct_iface_h tl_iface,
-                                         uct_iface_attr_t *iface_attr)
+                                             uct_iface_attr_t *iface_attr)
 {
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
     ucs_trace("uct_rocm_cma_iface_query");
@@ -117,13 +117,13 @@ static uct_iface_ops_t uct_rocm_cma_iface_ops = {
 
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_cma_iface_t, uct_md_h md, uct_worker_h worker,
-                            const uct_iface_params_t *params,
-                            const uct_iface_config_t *tl_config)
+                           const uct_iface_params_t *params,
+                           const uct_iface_config_t *tl_config)
 {
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_cma_iface_ops, md, worker,
-                            params, tl_config UCS_STATS_ARG(params->stats_root)
-                            UCS_STATS_ARG(UCT_ROCM_CMA_TL_NAME));
+                              params, tl_config UCS_STATS_ARG(params->stats_root)
+                              UCS_STATS_ARG(UCT_ROCM_CMA_TL_NAME));
 
     self->rocm_md = (uct_rocm_cma_md_t *)md;
 
@@ -139,14 +139,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rocm_cma_iface_t)
 UCS_CLASS_DEFINE(uct_rocm_cma_iface_t, uct_base_iface_t);
 
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_rocm_cma_iface_t, uct_iface_t, uct_md_h,
-                                uct_worker_h, const uct_iface_params_t*,
-                                const uct_iface_config_t *);
+                                 uct_worker_h, const uct_iface_params_t*,
+                                 const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_cma_iface_t, uct_iface_t);
 
 
 static ucs_status_t uct_rocm_cma_query_tl_resources(uct_md_h md,
-                                                uct_tl_resource_desc_t **resource_p,
-                                                unsigned *num_resources_p)
+                                                    uct_tl_resource_desc_t **resource_p,
+                                                    unsigned *num_resources_p)
 {
 
     /** @note Report the single device due to the complexity to deal with
@@ -162,9 +162,9 @@ static ucs_status_t uct_rocm_cma_query_tl_resources(uct_md_h md,
     }
 
     ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name), "%s",
-                        UCT_ROCM_CMA_TL_NAME);
+                      UCT_ROCM_CMA_TL_NAME);
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s",
-                        md->component->name);
+                      md->component->name);
 
     ucs_trace_func("TL %s, DEV %s", resource->tl_name, resource->dev_name);
 

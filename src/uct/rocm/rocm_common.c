@@ -42,8 +42,6 @@ static struct {
     int     num_of_gpu;
 } uct_rocm_cfg;
 
-/** Flag to specify if ROCm UCX support was initialized or not */
-static volatile bool rocm_ucx_initialized;
 
 /** Internal structure to store information about memory */
 typedef struct {
@@ -65,8 +63,8 @@ static hsa_status_t uct_rocm_hsa_amd_memory_pool_callback(
     hsa_amd_segment_t amd_segment;
 
     status = hsa_amd_memory_pool_get_info(memory_pool,
-                                            HSA_AMD_MEMORY_POOL_INFO_SEGMENT,
-                                            &amd_segment);
+                                          HSA_AMD_MEMORY_POOL_INFO_SEGMENT,
+                                          &amd_segment);
 
     if (status != HSA_STATUS_SUCCESS) {
         ucs_error("Failure to get pool info: 0x%x", status);
@@ -122,8 +120,8 @@ static hsa_status_t uct_rocm_hsa_agent_callback(hsa_agent_t agent, void* data)
         uct_rocm_cfg.agents.gpu_info[uct_rocm_cfg.num_of_gpu].pool.handle
                                                             = (uint64_t) -1;
         status = hsa_amd_agent_iterate_memory_pools(agent,
-                                    uct_rocm_hsa_amd_memory_pool_callback,
-                                    &uct_rocm_cfg.agents.gpu_info[uct_rocm_cfg.num_of_gpu].pool);
+                                                    uct_rocm_hsa_amd_memory_pool_callback,
+                                                    &uct_rocm_cfg.agents.gpu_info[uct_rocm_cfg.num_of_gpu].pool);
 
         if (status != HSA_STATUS_SUCCESS && status != HSA_STATUS_INFO_BREAK) {
             ucs_error("Failure to iterate regions: 0x%x\n", status);
@@ -163,6 +161,9 @@ static hsa_status_t uct_rocm_hsa_agent_callback(hsa_agent_t agent, void* data)
 
 hsa_status_t uct_rocm_init()
 {
+    /** Flag to specify if ROCm UCX support was initialized or not */
+    static volatile int rocm_ucx_initialized = 0;
+
     hsa_status_t status;
 
     if (pthread_mutex_lock(&rocm_init_mutex) == 0) {
@@ -192,7 +193,7 @@ hsa_status_t uct_rocm_init()
         goto end;
     }
 
-    rocm_ucx_initialized = true;
+    rocm_ucx_initialized = 1;
 
 end:
     pthread_mutex_unlock(&rocm_init_mutex);
@@ -205,7 +206,7 @@ int uct_rocm_is_ptr_gpu_accessible(void *ptr, void **gpu_ptr)
     info.size = sizeof(hsa_amd_pointer_info_t);
 
     hsa_status_t status = hsa_amd_pointer_info(ptr, &info,
-                                                NULL, NULL, NULL);
+                                               NULL, NULL, NULL);
 
     if (status == HSA_STATUS_SUCCESS) {
         if (info.type != HSA_EXT_POINTER_TYPE_UNKNOWN) {
@@ -231,7 +232,7 @@ int uct_rocm_is_ptr_gpu_accessible(void *ptr, void **gpu_ptr)
             }
 
             ucs_trace("%p is GPU accessible (agent addr %p, Host Base %p)",
-                        ptr, info.agentBaseAddress, info.hostBaseAddress);
+                      ptr, info.agentBaseAddress, info.hostBaseAddress);
             return 1;
         }
     }
@@ -246,9 +247,9 @@ hsa_status_t uct_rocm_memory_lock(void *ptr, size_t size, void **gpu_ptr)
     /* We need to lock / register memory on all GPUs because we do not know
        the location of other memory */
     hsa_status_t status = hsa_amd_memory_lock(ptr, size,
-                                                uct_rocm_cfg.agents.gpu_agent,
-                                                uct_rocm_cfg.num_of_gpu,
-                                                gpu_ptr);
+                                              uct_rocm_cfg.agents.gpu_agent,
+                                              uct_rocm_cfg.num_of_gpu,
+                                              gpu_ptr);
 
     if (status != HSA_STATUS_SUCCESS) {
         ucs_error("Failed to lock memory (%p): 0x%x\n", ptr, status);
