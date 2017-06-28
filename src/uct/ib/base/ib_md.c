@@ -957,7 +957,8 @@ static ucs_rcache_ops_t uct_ib_rcache_ops = {
 
 static void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device)
 {
-    snprintf(md_name, UCT_MD_NAME_MAX, "%s/%s", UCT_IB_MD_PREFIX, device->name);
+    snprintf(md_name, UCT_MD_NAME_MAX, "%s/", UCT_IB_MD_PREFIX);
+    strncat(md_name, device->name, UCT_MD_NAME_MAX);
 }
 
 static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources_p,
