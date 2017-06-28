@@ -259,7 +259,7 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
     status = uct_ep_tag_eager_zcopy(ep->uct_eps[req->send.lane], req->send.tag,
                                     imm_data, iov, iovcnt, &req->send.uct_comp);
     if (status == UCS_OK) {
-        complete(req);
+        complete(req, UCS_OK);
     } else if (status < 0) {
         req->send.state = saved_state; /* need to restore the offsets state */
         return status;
@@ -395,7 +395,8 @@ static ucs_status_t ucp_tag_offload_eager_sync_bcopy(uct_pending_req_t *self)
     if (status == UCS_OK) {
         ucp_tag_offload_sync_posted(worker, req);
         ucp_request_send_generic_dt_finish(req);
-        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED);
+        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
+                                      UCS_OK);
     }
     return status;
 }

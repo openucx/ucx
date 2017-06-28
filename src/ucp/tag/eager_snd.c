@@ -166,10 +166,10 @@ static ucs_status_t ucp_tag_eager_bcopy_multi(uct_pending_req_t *self)
     return status;
 }
 
-void ucp_tag_eager_zcopy_req_complete(ucp_request_t *req)
+void ucp_tag_eager_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
     ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
-    ucp_request_complete_send(req, UCS_OK);
+    ucp_request_complete_send(req, status);
 }
 
 static ucs_status_t ucp_tag_eager_zcopy_single(uct_pending_req_t *self)
@@ -202,7 +202,7 @@ void ucp_tag_eager_zcopy_completion(uct_completion_t *self,
                                     ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
-    ucp_tag_eager_zcopy_req_complete(req);
+    ucp_tag_eager_zcopy_req_complete(req, status);
 }
 
 ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self);
@@ -221,7 +221,8 @@ const ucp_proto_t ucp_tag_eager_proto = {
 
 /* eager sync */
 
-void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag)
+void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag,
+                                   ucs_status_t status)
 {
     static const uint16_t all_completed = UCP_REQUEST_FLAG_LOCAL_COMPLETED |
                                           UCP_REQUEST_FLAG_REMOTE_COMPLETED;
@@ -229,7 +230,7 @@ void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag)
     ucs_assertv(!(req->flags & flag), "req->flags=%d flag=%d", req->flags, flag);
     req->flags |= flag;
     if (ucs_test_all_flags(req->flags, all_completed)) {
-        ucp_request_complete_send(req, UCS_OK);
+        ucp_request_complete_send(req, status);
     }
 }
 
@@ -240,7 +241,8 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_single(uct_pending_req_t *self)
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
         ucp_request_send_generic_dt_finish(req);
-        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED);
+        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
+                                      UCS_OK);
     }
     return status;
 }
@@ -258,15 +260,17 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_multi(uct_pending_req_t *self)
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
         ucp_request_send_generic_dt_finish(req);
-        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED);
+        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
+                                      UCS_OK);
     }
     return status;
 }
 
-void ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req)
+void
+ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
     ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
-    ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED);
+    ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED, status);
 }
 
 static ucs_status_t ucp_tag_eager_sync_zcopy_single(uct_pending_req_t *self)
@@ -303,7 +307,7 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
 void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self, ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
-    ucp_tag_eager_sync_zcopy_req_complete(req);
+    ucp_tag_eager_sync_zcopy_req_complete(req, status);
 }
 
 const ucp_proto_t ucp_tag_eager_sync_proto = {
