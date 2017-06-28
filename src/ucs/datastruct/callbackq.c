@@ -201,6 +201,8 @@ static int ucs_callbackq_add_fast(ucs_callbackq_t *cbq, ucs_callback_t cb,
     ucs_trace_func("cbq=%p cb=%s arg=%p flags=%u", cbq,
                    ucs_debug_get_symbol_name(cb), arg, flags);
 
+    ucs_assert(!(flags & UCS_CALLBACKQ_FLAG_ONESHOT));
+
     idx = ucs_callbackq_get_fast_idx(cbq);
     id  = ucs_callbackq_get_id(cbq, idx);
     cbq->fast_elems[idx].cb    = cb;
@@ -366,12 +368,15 @@ static void ucs_callbackq_slow_proxy(void *arg)
 
         tmp_elem = *elem;
         if (elem->flags & UCS_CALLBACKQ_FLAG_FAST) {
+            ucs_assert(!(elem->flags & UCS_CALLBACKQ_FLAG_ONESHOT));
             if (priv->num_fast_elems < UCS_CALLBACKQ_FAST_MAX) {
                 fast_idx = ucs_callbackq_get_fast_idx(cbq);
                 cbq->fast_elems[fast_idx] = *elem;
                 priv->idxs[elem->id]      = fast_idx;
                 ucs_callbackq_remove_slow(cbq, slow_idx);
             }
+        } else if (elem->flags & UCS_CALLBACKQ_FLAG_ONESHOT) {
+            ucs_callbackq_remove_slow(cbq, slow_idx);
         }
 
         ucs_callbackq_leave(cbq);
