@@ -38,8 +38,8 @@ ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm)
 
     ucs_queue_head_init(&tm->offload_ifaces);
     ucs_queue_head_init(&tm->sync_reqs);
-    tm->post_thresh      = SIZE_MAX;
-    tm->post_user_thresh = SIZE_MAX;
+    tm->thresh       = SIZE_MAX;
+    tm->zcopy_thresh = SIZE_MAX;
     return UCS_OK;
 }
 

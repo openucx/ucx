@@ -36,13 +36,13 @@ typedef struct ucp_context_config {
     /** Estimation of bcopy bandwidth */
     size_t                                 bcopy_bw;
     /** Segment size in the worker pre-registered memory pool */
-    size_t                                 worker_seg_size;
+    size_t                                 seg_size;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
     /** Upper bound for posting tm offload receives with internal preregistered
      *  bounce buffers. */
-    size_t                                 max_tm_bb;
+    size_t                                 tm_max_bcopy;
     /** Maximal size of worker name for debugging */
     unsigned                               max_worker_name;
     /** Atomic mode */

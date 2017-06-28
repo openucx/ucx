@@ -45,7 +45,7 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
         ucp_tag_offload_eager_sync_send_ack(req->recv.worker, imm, stag);
     }
 
-    if (req->flags & UCP_REQUEST_FLAG_OFFLOADED_BB) {
+    if (req->recv.mp_buffer != NULL) {
         status = ucp_dt_unpack(req->recv.datatype, req->recv.buffer, req->recv.length,
                                &req->recv.state, req->recv.mp_buffer, length, 1);
         ucs_mpool_put_inline((ucp_mem_desc_t*)req->recv.mp_buffer - 1);
@@ -60,7 +60,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_tag_offload_release_buf(ucp_request_t *req, ucp_context_t *ctx,
                             ucp_rsc_index_t rsc_idx)
 {
-    if (req->flags & UCP_REQUEST_FLAG_OFFLOADED_BB) {
+    if (req->recv.mp_buffer != NULL) {
         ucs_mpool_put_inline((ucp_mem_desc_t*)req->recv.mp_buffer - 1);
     } else {
         ucp_request_memory_dereg(ctx, rsc_idx, req->recv.datatype,
@@ -185,26 +185,27 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
 
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
                                               ucp_worker_iface_t, queue);
-    if (length >= ctx->tm.post_user_thresh) {
+    if (length >= ctx->tm.zcopy_thresh) {
         status = ucp_request_memory_reg(ctx, ucp_iface->rsc_index, req->recv.buffer,
                                         req->recv.length, req->recv.datatype,
                                         &req->recv.state);
         if (status != UCS_OK) {
             return 0;
         }
-        iov.buffer = (void*)req->recv.buffer;
-        iov.memh   = req->recv.state.dt.contig.memh;
+        req->recv.mp_buffer = NULL;
+        iov.buffer          = (void*)req->recv.buffer;
+        iov.memh            = req->recv.state.dt.contig.memh;
     } else {
         rdesc = ucs_mpool_get_inline(&req->recv.worker->reg_mp);
         if (rdesc == NULL) {
             return 0;
         }
         req->recv.mp_buffer = rdesc + 1;
-        req->flags |= UCP_REQUEST_FLAG_OFFLOADED_BB;
         mdi         = ctx->tl_rscs[ucp_iface->rsc_index].md_index;
         iov.memh    = ucp_memh2uct(rdesc->memh, mdi);
         iov.buffer  = req->recv.mp_buffer;
     }
+
     iov.length = length;
     iov.count  = 1;
     iov.stride = 0;
@@ -218,22 +219,13 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
                                       &req->recv.uct_ctx);
     if (status != UCS_OK) {
         /* No more matching entries in the transport. */
-        goto err_release_mem;
+        ucp_tag_offload_release_buf(req, ctx, ucp_iface->rsc_index);
+        return 0;
     }
     req->flags |= UCP_REQUEST_FLAG_OFFLOADED;
     ucs_trace_req("recv request %p (%p) was posted to transport (rsc %d)",
                   req, req + 1, ucp_iface->rsc_index);
     return 1;
-
-err_release_mem:
-    if (length >= ctx->tm.post_user_thresh) {
-        ucp_request_memory_dereg(ctx, ucp_iface->rsc_index, req->recv.datatype,
-                                 &req->recv.state);
-    } else {
-        ucs_mpool_put(rdesc);
-        req->flags &= ~UCP_REQUEST_FLAG_OFFLOADED_BB;
-    }
-    return 0;
 }
 
 static size_t ucp_tag_offload_pack_eager(void *dest, void *arg)
