@@ -225,25 +225,25 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_iface_t)
 }
 
 static uct_iface_ops_t uct_ugni_smsg_iface_ops = {
-    .ep_am_short           = uct_ugni_smsg_ep_am_short,
-    .ep_am_bcopy           = uct_ugni_smsg_ep_am_bcopy,
-    .ep_pending_add        = uct_ugni_ep_pending_add,
-    .ep_pending_purge      = uct_ugni_ep_pending_purge,
-    .ep_flush              = uct_ugni_ep_flush,
-    .ep_fence              = uct_base_ep_fence,
-    .ep_create             = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_smsg_ep_t),
-    .ep_destroy            = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_smsg_ep_t),
-    .ep_get_address        = uct_ugni_smsg_ep_get_address,
-    .ep_connect_to_ep      = uct_ugni_smsg_ep_connect_to_ep,
-    .iface_flush           = uct_ugni_iface_flush,
-    .iface_fence           = uct_base_iface_fence,
-    .iface_progress_enable = ucs_empty_function,
-    .iface_progress_disable = ucs_empty_function,
-    .iface_close           = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_smsg_iface_t),
-    .iface_query           = uct_ugni_smsg_iface_query,
+    .ep_am_short              = uct_ugni_smsg_ep_am_short,
+    .ep_am_bcopy              = uct_ugni_smsg_ep_am_bcopy,
+    .ep_pending_add           = uct_ugni_ep_pending_add,
+    .ep_pending_purge         = uct_ugni_ep_pending_purge,
+    .ep_flush                 = uct_ugni_ep_flush,
+    .ep_fence                 = uct_base_ep_fence,
+    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_smsg_ep_t),
+    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_smsg_ep_t),
+    .ep_get_address           = uct_ugni_smsg_ep_get_address,
+    .ep_connect_to_ep         = uct_ugni_smsg_ep_connect_to_ep,
+    .iface_flush              = uct_ugni_iface_flush,
+    .iface_fence              = uct_base_iface_fence,
+    .iface_progress_enable    = ucs_empty_function,
+    .iface_progress_disable   = ucs_empty_function,
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_smsg_iface_t),
+    .iface_query              = uct_ugni_smsg_iface_query,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
-    .iface_get_address     = uct_ugni_iface_get_address,
-    .iface_is_reachable    = uct_ugni_iface_is_reachable
+    .iface_get_address        = uct_ugni_iface_get_address,
+    .iface_is_reachable       = uct_ugni_iface_is_reachable
 };
 
 static ucs_mpool_ops_t uct_ugni_smsg_desc_mpool_ops = {

@@ -2065,7 +2065,8 @@ UCT_INLINE_API ucs_status_t uct_iface_tag_recv_cancel(uct_iface_h iface,
  * When the interface is created, its progress is enabled.
  *
  * @param [in]  iface    The interface to enable progress.
- * @param [in]  flags    What kind progress to enable, see @ref uct_progress_types.
+ * @param [in]  flags    The type of progress to enable as defined by
+ *                       @ref uct_progress_types.
  *
  */
 UCT_INLINE_API void uct_iface_progress_enable(uct_iface_h iface, unsigned flags)
@@ -2085,7 +2086,8 @@ UCT_INLINE_API void uct_iface_progress_enable(uct_iface_h iface, unsigned flags)
  * By default, progress is enabled when the interface is created.
  *
  * @param [in]  iface    The interface to disable progress.
- * @param [in]  flags    What kind of progress to disable, see @ref uct_progress_types.
+ * @param [in]  flags    The type of progress to disable as defined by
+ *                       @ref uct_progress_types.
  *
  */
 UCT_INLINE_API void uct_iface_progress_disable(uct_iface_h iface, unsigned flags)
