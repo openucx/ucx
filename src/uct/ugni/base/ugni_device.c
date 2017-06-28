@@ -276,7 +276,7 @@ uct_ugni_device_t *uct_ugni_device_by_name(const char *dev_name)
         dev = &job_info.devices[dev_index];
         if ((strlen(dev_name) == strlen(dev->fname)) &&
             (0 == strncmp(dev_name, dev->fname, strlen(dev->fname)))) {
-            ucs_info("Device found: %s", dev_name);
+            ucs_debug("Device found: %s", dev_name);
             return dev;
         }
     }
