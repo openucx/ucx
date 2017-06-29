@@ -1,11 +1,8 @@
 %global rel @RPM_RELEASE@
 %global version @VERSION@
 %global pkgname @PACKAGE@
-%global prefix @prefix@
 %global __check_files %{nil}
-%global _prefix %{prefix}
-%global _libdir %{prefix}/lib
-%global  debug_package %{nil}
+%global debug_package %{nil}
 %bcond_with valgrind
 %global _binary_filedigest_algorithm 1
 %global _source_filedigest_algorithm 1
@@ -26,7 +23,6 @@ Source: %{pkgname}-%{version}.tar.gz
 
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 URL: http://www.openucx.org
-Prefix: %{prefix}
 Provides: ucx
 Packager: openucx
 Vendor: openucx
@@ -35,17 +31,21 @@ Vendor: openucx
 %description
 UCX is a communication library implementing high-performance messaging.
 
+
 %prep
 rm -rf $RPM_BUILD_ROOT
-
 %setup -q
+
 
 %build
 ./contrib/configure-release \
 	--prefix=%{_prefix} \
 	--libdir=%{_libdir} \
+	--bindir=%{_bindir} \
+	--includedir=%{_includedir} \
 	%{?configure_options}
 make %{?_smp_mflags}
+
 
 %install
 
@@ -60,10 +60,11 @@ chmod +x find-requires.sh
 %global __find_requires %{_builddir}/%{buildsubdir}/find-requires.sh
 
 make DESTDIR="$RPM_BUILD_ROOT" install
-mkdir -p $RPM_BUILD_ROOT/etc/ld.so.conf.d/
-echo %{_libdir} > $RPM_BUILD_ROOT/etc/ld.so.conf.d/ucx.conf
-mkdir -p $RPM_BUILD_ROOT/usr/lib64/pkgconfig
-cp ucx.pc $RPM_BUILD_ROOT/usr/lib64/pkgconfig
+mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ld.so.conf.d/
+echo %{_libdir} > $RPM_BUILD_ROOT%{_sysconfdir}/ld.so.conf.d/ucx.conf
+mkdir -p $RPM_BUILD_ROOT%{_libdir}/pkgconfig
+cp ucx.pc $RPM_BUILD_ROOT%{_libdir}/pkgconfig
+
 
 %clean
 # We may be in the directory that we're about to remove, so cd out of
@@ -79,21 +80,18 @@ test "x$RPM_BUILD_ROOT" != "x" && rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-, root, root)
-%{prefix}
-/etc/ld.so.conf.d/ucx.conf
-/usr/lib64/pkgconfig/ucx.pc
+%{_includedir}/uc*
+%{_bindir}/uc*
+%{_libdir}/pkgconfig/ucx.pc
+%{_libdir}/lib*.so*
+%{_sysconfdir}/ld.so.conf.d/ucx.conf
 
-# Your application file list goes here
-# %{prefix}/lib/lib*.so*
-#%doc COPYRIGHT ChangeLog README AUTHORS NEWS
-#%doc doc/*
 
-# If you install a library
 %post
 /sbin/ldconfig || exit 1
 exit 0
 
-# If you install a library
+
 %postun
 /sbin/ldconfig
 exit 0

@@ -250,7 +250,6 @@ AC_CONFIG_FILES([
                  debian/rules
                  debian/control
                  debian/changelog
-                 debian/ucx.postinst
                  src/ucs/Makefile
                  src/uct/Makefile
                  src/ucp/Makefile
