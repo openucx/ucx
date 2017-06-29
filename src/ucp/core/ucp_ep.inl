@@ -85,7 +85,7 @@ static inline uct_iface_attr_t *ucp_ep_get_iface_attr(ucp_ep_h ep, ucp_lane_inde
     return &ep->worker->ifaces[ucp_ep_get_rsc_index(ep, lane)].attr;
 }
 
-static inline ucp_rsc_index_t ucp_ep_num_lanes(ucp_ep_h ep)
+static inline ucp_lane_index_t ucp_ep_num_lanes(ucp_ep_h ep)
 {
     return ucp_ep_config(ep)->key.num_lanes;
 }

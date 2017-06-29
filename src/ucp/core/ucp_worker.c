@@ -253,7 +253,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     ucp_ep_h           ucp_ep_iter;
     khiter_t           ucp_ep_errh_iter;
     ucp_err_handler_t  err_handler;
-    ucp_rsc_index_t    lane, n_lanes, failed_lane;
+    ucp_lane_index_t   lane, n_lanes, failed_lane;
 
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
     kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep_iter, {
