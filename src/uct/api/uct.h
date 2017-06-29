@@ -279,8 +279,9 @@ enum uct_progress_types {
  */
 enum {
     UCT_AM_FLAG_SIGNALED = UCS_BIT(0)  /**< Trigger @ref UCT_EVENT_RECV_SIG_AM
-                                            event on remote side, and on best effort
-                                            avoid trigerring @ref UCT_EVENT_RECV_AM event.
+                                            event on remote side. Make best
+                                            effort attempt to avoid triggering
+                                            @ref UCT_EVENT_RECV_AM event.
                                             Ignored if not supported by interface. */
 };
 
