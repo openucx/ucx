@@ -249,7 +249,13 @@ static void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status = (uintptr_t)arg;
 
-    ucp_request_complete_send(req, status);
+    if (req->send.uct_comp.func) {
+        if (--req->send.uct_comp.count == 0) {
+            req->send.uct_comp.func(&req->send.uct_comp, status);
+        }
+    } else {
+        ucp_request_complete_send(req, status);
+    }
 }
 
 static void
