@@ -195,7 +195,7 @@ uct_dc_mlx5_iface_atomic_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
     desc->super.sn = txwq->sw_pi;
     uct_rc_mlx5_txqp_dptr_post(&iface->super.super, IBV_EXP_QPT_DC_INI, txqp, txwq,
                                opcode, desc + 1, length, &desc->lkey,
-                               0, NULL, 0, remote_addr, ib_rkey,
+                               0, desc/*dummy*/, 0, remote_addr, ib_rkey,
                                compare_mask, compare, swap_add,
                                &ep->av, uct_ib_mlx5_wqe_av_size(&ep->av),
                                MLX5_WQE_CTRL_CQ_UPDATE);
@@ -624,7 +624,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
         uct_rc_mlx5_txqp_inline_post(&iface->super.super, IBV_EXP_QPT_DC_INI,
                                      txqp, txwq, MLX5_OPCODE_SEND,
-                                     NULL, 0, op, sender_ep, 0,
+                                     &av /*dummy*/, 0, op, sender_ep, 0,
                                      0, 0,
                                      &av, uct_ib_mlx5_wqe_av_size(&av));
     } else {
@@ -637,7 +637,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
         uct_rc_mlx5_txqp_inline_post(&iface->super.super, IBV_EXP_QPT_DC_INI,
                                      txqp, txwq, MLX5_OPCODE_SEND_IMM,
-                                     NULL, 0, op, sender_ep,
+                                     &dc_mlx5_ep->av /*dummy*/, 0, op, sender_ep,
                                      iface->super.rx.dct->dct_num,
                                      0, 0,
                                      &dc_mlx5_ep->av,
