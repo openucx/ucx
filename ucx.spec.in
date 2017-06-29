@@ -41,7 +41,10 @@ rm -rf $RPM_BUILD_ROOT
 %setup -q
 
 %build
-./contrib/configure-release %{?configure_options}
+./contrib/configure-release \
+	--prefix=%{_prefix} \
+	--libdir=%{_libdir} \
+	%{?configure_options}
 make %{?_smp_mflags}
 
 %install
