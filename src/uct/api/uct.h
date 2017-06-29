@@ -2113,6 +2113,15 @@ UCT_INLINE_API void uct_iface_progress_disable(uct_iface_h iface, unsigned flags
 
 
 /**
+ * Perform a progress on an interface.
+ */
+UCT_INLINE_API void uct_iface_progress(uct_iface_h iface)
+{
+    iface->ops.iface_progress(iface);
+}
+
+
+/**
  * @example uct_hello_world.c
  * UCT hello world client / server example utility.
  */

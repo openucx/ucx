@@ -414,6 +414,7 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = ucs_empty_function,
     .iface_progress_disable   = ucs_empty_function,
+    .iface_progress           = ucs_empty_function,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_iface_t),
     .iface_query              = uct_cm_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,

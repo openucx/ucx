@@ -313,6 +313,7 @@ UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
     ucs_assert_always(ops->iface_fence              != NULL);
     ucs_assert_always(ops->iface_progress_enable    != NULL);
     ucs_assert_always(ops->iface_progress_disable   != NULL);
+    ucs_assert_always(ops->iface_progress           != NULL);
     ucs_assert_always(ops->iface_close              != NULL);
     ucs_assert_always(ops->iface_query              != NULL);
     ucs_assert_always(ops->iface_get_device_address != NULL);

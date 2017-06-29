@@ -776,6 +776,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = ucs_empty_function,
     .iface_progress_disable   = ucs_empty_function,
+    .iface_progress           = (void*)uct_rc_verbs_iface_progress,
 #if IBV_EXP_HW_TM
     .iface_tag_recv_zcopy     = uct_rc_verbs_iface_tag_recv_zcopy,
     .iface_tag_recv_cancel    = uct_rc_verbs_iface_tag_recv_cancel,

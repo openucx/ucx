@@ -95,6 +95,7 @@ static uct_iface_ops_t uct_cuda_iface_ops = {
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = ucs_empty_function,
     .iface_progress_disable   = ucs_empty_function,
+    .iface_progress           = ucs_empty_function,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_iface_t),
     .iface_query              = uct_cuda_iface_query,
     .iface_get_device_address = (void*)ucs_empty_function_return_success,
