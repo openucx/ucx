@@ -221,7 +221,8 @@ static void ucp_stub_pending_purge(uct_ep_h uct_ep,
     if (stub_ep->aux_ep != NULL) {
         ucs_queue_for_each_extract(req, &stub_ep->pending_q, priv, 1) {
             ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
-            ucs_assert_always(UCS_PTR_IS_ERR(arg));
+            ucs_assert_always(UCS_PTR_IS_ERR(arg) &&
+                              (cb == ucp_ep_err_pending_purge));
             ucp_request_complete_send(ucp_req, UCS_PTR_STATUS(arg));
         }
 
@@ -429,7 +430,13 @@ int ucp_stub_ep_test(uct_ep_h uct_ep)
     return uct_ep->iface == &ucp_stub_iface;
 }
 
-void ucp_stub_ep_aux_failed(uct_ep_h *uct_ep)
+int ucp_stub_ep_test_aux(uct_ep_h stub_ep, uct_ep_h aux_ep)
+{
+    return ucp_stub_ep_test(stub_ep) &&
+           (ucs_derived_of(stub_ep, ucp_stub_ep_t)->aux_ep == aux_ep);
+}
+
+void ucp_stub_ep_extract_aux(uct_ep_h *uct_ep)
 {
     uct_ep_h ep            = *uct_ep;
     ucp_stub_ep_t *stub_ep = ucs_derived_of(ep, ucp_stub_ep_t);
