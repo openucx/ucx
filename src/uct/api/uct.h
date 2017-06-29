@@ -1024,44 +1024,6 @@ ucs_status_t uct_iface_event_arm(uct_iface_h iface, unsigned events);
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Enable synchronous progress for the interface
- *
- * Notify the transport that it should do work 
- * during @ref uct_worker_progress(). 
- * Thus the latency of the transport may be reduced.
- *
- * The function can be called from any context or thread.
- *
- * By default, progress is enabled when the interface is created.
- *
- * @param [in]  iface    The interface to enable progress.
- * @param [in]  flags    What kind progress to enable, see @ref uct_progress_types.
- *
- */
-void uct_iface_progress_enable(uct_iface_h iface, unsigned flags);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Disable synchronous progress for the interface
- *
- * Notify the transport that it should avoid doing anything
- * during @ref uct_worker_progress(). Thus the latency of
- * other transports may be reduced.
- *
- * The function can be called from any context or thread.
- *
- * By default, progress is enabled when the interface is created.
- *
- * @param [in]  iface    The interface to disable progress.
- * @param [in]  flags    What kind of progress to disable, see @ref uct_progress_types.
- *
- */
-void uct_iface_progress_disable(uct_iface_h iface, unsigned flags);
-
-
-/**
- * @ingroup UCT_RESOURCE
  * @brief Allocate memory which can be used for zero-copy communications.
  *
  * Allocate a region of memory which can be used for zero-copy data transfer or
@@ -2090,6 +2052,47 @@ UCT_INLINE_API ucs_status_t uct_iface_tag_recv_cancel(uct_iface_h iface,
                                                       int force)
 {
     return iface->ops.iface_tag_recv_cancel(iface, ctx, force);
+}
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Enable synchronous progress for the interface
+ *
+ * Notify the transport that it should actively progress communications during
+ * @ref uct_worker_progress().
+ *
+ * When the interface is created, its progress is enabled.
+ *
+ * @param [in]  iface    The interface to enable progress.
+ * @param [in]  flags    The type of progress to enable as defined by
+ *                       @ref uct_progress_types.
+ *
+ */
+UCT_INLINE_API void uct_iface_progress_enable(uct_iface_h iface, unsigned flags)
+{
+    iface->ops.iface_progress_enable(iface, flags);
+}
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Disable synchronous progress for the interface
+ *
+ * Notify the transport that it should not progress its communications during
+ * @ref uct_worker_progress(). Thus the latency of other transports may be
+ * improved.
+ *
+ * By default, progress is enabled when the interface is created.
+ *
+ * @param [in]  iface    The interface to disable progress.
+ * @param [in]  flags    The type of progress to disable as defined by
+ *                       @ref uct_progress_types.
+ *
+ */
+UCT_INLINE_API void uct_iface_progress_disable(uct_iface_h iface, unsigned flags)
+{
+    iface->ops.iface_progress_disable(iface, flags);
 }
 
 
