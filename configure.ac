@@ -42,7 +42,7 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AM_MAINTAINER_MODE
 AC_CONFIG_MACRO_DIR([config/m4])
 
-define([ucx_prefix], [/opt/ucx])
+define([ucx_prefix], [/usr/local])
 AC_PREFIX_DEFAULT([ucx_prefix])
 
 top_top_srcdir=$srcdir
@@ -250,7 +250,6 @@ AC_CONFIG_FILES([
                  debian/rules
                  debian/control
                  debian/changelog
-                 debian/ucx.postinst
                  src/ucs/Makefile
                  src/uct/Makefile
                  src/ucp/Makefile
