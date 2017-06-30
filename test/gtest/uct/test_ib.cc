@@ -443,6 +443,8 @@ UCS_TEST_P(test_uct_event_ib, tx_cq)
     /* make sure [send|recv]_cq handled properly */
     check_send_cq(m_e1->iface(), 1);
     check_recv_cq(m_e1->iface(), 0);
+
+    m_e1->flush();
 }
 
 
@@ -484,6 +486,9 @@ UCS_TEST_P(test_uct_event_ib, txrx_cq)
     /* make sure [send|recv]_cq handled properly */
     check_send_cq(m_e1->iface(), 1);
     check_recv_cq(m_e1->iface(), 1);
+
+    m_e1->flush();
+    m_e2->flush();
 }
 
 
