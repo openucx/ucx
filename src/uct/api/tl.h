@@ -14,6 +14,7 @@
 #include "uct_def.h"
 
 #include <ucs/type/status.h>
+#include <ucs/datastruct/callbackq.h>
 #include <sys/types.h>
 #include <stddef.h>
 
@@ -201,6 +202,14 @@ typedef struct uct_iface_ops {
                                        const uct_iface_addr_t *iface_addr);
 
 } uct_iface_ops_t;
+
+
+/**
+ * Progress engine
+ */
+typedef struct uct_worker {
+    ucs_callbackq_t        progress_q;
+} uct_worker_t;
 
 
 /**

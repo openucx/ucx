@@ -454,7 +454,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 
     uct_worker_progress_remove(iface->super.super.super.worker,
                                &iface->super.super.super.prog);
-    uct_ib_mlx5_txwq_cleanup(iface->super.super.super.worker, &self->tx.wq);
+    uct_ib_mlx5_txwq_cleanup(&self->tx.wq);
 
     /* Modify QP to error to make HW generate CQEs for all in-progress SRQ
      * receives from the QP, so we clean them all before ibv_modify_qp() can

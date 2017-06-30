@@ -771,21 +771,6 @@ void uct_worker_destroy(uct_worker_h worker);
 
 /**
  * @ingroup UCT_CONTEXT
- * @brief Explicit progress for UCT worker.
- *
- * This routine explicitly progresses any outstanding communication operations
- * and active message requests.
- *
- * @note @li In the current implementation, users @b MUST call this routine
- * to receive the active message requests.
- *
- * @param [in]  worker        Handle to worker.
- */
-void uct_worker_progress(uct_worker_h worker);
-
-
-/**
- * @ingroup UCT_CONTEXT
  * @brief Add a slow path callback function to a worker progress.
  *
  * If *id_p is equal to UCS_CALLBACKQ_ID_NULL, this function will add a callback
@@ -1359,6 +1344,24 @@ ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob
  * @param [in]  rkey_ob      Remote key to release.
  */
 ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
+
+
+/**
+ * @ingroup UCT_CONTEXT
+ * @brief Explicit progress for UCT worker.
+ *
+ * This routine explicitly progresses any outstanding communication operations
+ * and active message requests.
+ *
+ * @note @li In the current implementation, users @b MUST call this routine
+ * to receive the active message requests.
+ *
+ * @param [in]  worker        Handle to worker.
+ */
+UCT_INLINE_API void uct_worker_progress(uct_worker_h worker)
+{
+    ucs_callbackq_dispatch(&worker->progress_q);
+}
 
 
 /**

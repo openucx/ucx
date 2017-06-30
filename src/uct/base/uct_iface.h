@@ -169,7 +169,7 @@ typedef struct uct_am_handler {
 typedef struct uct_base_iface {
     uct_iface_t             super;
     uct_md_h                md;               /* MD this interface is using */
-    uct_worker_h            worker;           /* Worker this interface is on */
+    uct_priv_worker_t       *worker;          /* Worker this interface is on */
     uct_am_handler_t        am[UCT_AM_ID_MAX];/* Active message table */
     uct_am_tracer_t         am_tracer;        /* Active message tracer */
     void                    *am_tracer_arg;   /* Tracer argument */

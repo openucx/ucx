@@ -289,7 +289,8 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     memset(txwq->qstart, 0, txwq->qend - txwq->qstart);
 }
 
-ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq,
+ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
+                                   uct_ib_mlx5_txwq_t *txwq,
                                    struct ibv_qp *verbs_qp)
 {
     uct_ib_mlx5_qp_info_t qp_info;
@@ -338,7 +339,7 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq
     return UCS_OK;
 }
 
-void uct_ib_mlx5_txwq_cleanup(uct_worker_h worker, uct_ib_mlx5_txwq_t* txwq)
+void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq)
 {
     uct_worker_tl_data_put(txwq->bf, uct_ib_mlx5_bf_cleanup);
 }
