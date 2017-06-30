@@ -7,6 +7,9 @@
 #include "dc_iface.h"
 #include "dc_ep.h"
 
+#include <ucs/async/async.h>
+
+
 const static char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS]           = "dcs",
     [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
@@ -233,6 +236,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
     self->tx.policy                  = config->tx_policy;
     self->tx.available_quota         = 0; /* overridden by mlx5/verbs */
     self->super.config.tx_moderation = 0; /* disable tx moderation for dcs */
+    self->progress_flags             = 0;
     ucs_list_head_init(&self->tx.gc_list);
 
     /* create DC target */
@@ -529,4 +533,48 @@ void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num)
         ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
                   iface, dci, txqp->qp->qp_num, ucs_status_string(status));
     }
+}
+
+void uct_dc_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_dc_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_iface_t);
+    uct_dc_iface_ops_t *dc_ops = ucs_derived_of(iface->super.super.ops,
+                                                uct_dc_iface_ops_t);
+    uct_worker_h worker = iface->super.super.super.worker;
+
+    UCS_ASYNC_BLOCK(worker->async);
+
+    /* Add callback only if previous flags are 0 and new flags != 0 */
+    if (!iface->progress_flags && flags) {
+        if (iface->super.super.super.prog.id == UCS_CALLBACKQ_ID_NULL) {
+            iface->super.super.super.prog.id =
+                            ucs_callbackq_add(&worker->progress_q, dc_ops->progress,
+                                              iface, UCS_CALLBACKQ_FLAG_FAST);
+        }
+    }
+    iface->progress_flags |= flags;
+
+    UCS_ASYNC_UNBLOCK(worker->async);
+}
+
+void uct_dc_iface_progress_disable(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_dc_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_iface_t);
+    uct_worker_h worker = iface->super.super.super.worker;
+
+    UCS_ASYNC_BLOCK(worker->async);
+
+    /* Remove callback only if previous flags != 0, and removing the given
+     * flags makes it become 0.
+     */
+    if (iface->progress_flags && !(iface->progress_flags & ~flags)) {
+        if (iface->super.super.super.prog.id != UCS_CALLBACKQ_ID_NULL) {
+            ucs_callbackq_remove(&worker->progress_q,
+                                 iface->super.super.super.prog.id);
+            iface->super.super.super.prog.id = UCS_CALLBACKQ_ID_NULL;
+        }
+    }
+    iface->progress_flags &= ~flags;
+
+    UCS_ASYNC_UNBLOCK(worker->async);
 }
