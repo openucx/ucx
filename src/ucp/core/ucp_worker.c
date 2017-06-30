@@ -173,6 +173,8 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
     ucs_status_t status;
     int ret, i;
 
+    worker->arm_ifaces_mask = 0;
+
     if (!(context->config.features & UCP_FEATURE_WAKEUP)) {
         worker->epfd           = -1;
         worker->wakeup_pipe[0] = -1;
@@ -404,6 +406,8 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         if (status != UCS_OK) {
             goto out_close_iface;
         }
+
+        worker->arm_ifaces_mask |= UCS_BIT(tl_id);
     }
 
     if (ucp_worker_is_tl_tag_offload(worker, tl_id)) {
@@ -861,25 +865,26 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
 
 ucs_status_t ucp_worker_arm(ucp_worker_h worker)
 {
-    int res;
-    char buf;
-    ucs_status_t status;
+    uint64_t mask = worker->arm_ifaces_mask;
     ucp_rsc_index_t tl_id;
-    ucp_context_h context = worker->context;
+    ucs_status_t status;
+    char dummy;
+    int ret;
 
-    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
-        if (worker->ifaces[tl_id].attr.cap.flags & UCT_IFACE_FLAG_EVENT_FD) {
-            status = uct_iface_event_arm(worker->ifaces[tl_id].iface, worker->uct_events);
-            if (status != UCS_OK) {
-                return status;
-            }
+    while (mask) {
+        tl_id = ucs_ffs64(mask);
+        mask &= ~UCS_BIT(tl_id);
+
+        status = uct_iface_event_arm(worker->ifaces[tl_id].iface, worker->uct_events);
+        if (status != UCS_OK) {
+            return status;
         }
     }
 
     do {
-        res = read(worker->wakeup_pipe[0], &buf, 1);
-    } while (res != -1);
-    if (errno != EAGAIN && errno != EINTR) {
+        ret = read(worker->wakeup_pipe[0], &dummy, sizeof(dummy));
+    } while (ret != -1);
+    if ((errno != EAGAIN) && (errno != EINTR)) {
         ucs_error("Read from internal pipe failed: %m");
         return UCS_ERR_IO_ERROR;
     }

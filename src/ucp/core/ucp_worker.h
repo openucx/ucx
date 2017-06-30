@@ -100,6 +100,7 @@ typedef struct ucp_worker {
     int                           epfd;          /* Allocated (on-demand) epoll fd for wakeup */
     int                           wakeup_pipe[2];/* Pipe to support signal() calls */
     unsigned                      uct_events;    /* UCT arm events */
+    uint64_t                      arm_ifaces_mask;/* Bitmap of interfaces to arm */
 
     khash_t(ucp_worker_ep_hash)   ep_hash;       /* Hash table of all endpoints */
     khash_t(ucp_ep_errh_hash)     ep_errh_hash;  /* Hash table of error handlers associated with endpoints */
