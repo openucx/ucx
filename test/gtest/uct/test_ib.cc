@@ -327,8 +327,8 @@ public:
 
         test_uct_ib::initialize();
 
-        check_caps(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_EVENT_FD |
-                   UCT_IFACE_FLAG_AM_CB_SYNC);
+        check_caps(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_AM_CB_SYNC |
+                   UCT_IFACE_FLAG_EVENT_SEND_COMP | UCT_IFACE_FLAG_EVENT_RECV_AM);
 
         /* create receiver wakeup */
         status = uct_iface_event_fd_get(m_e1->iface(), &wakeup_fd.fd);

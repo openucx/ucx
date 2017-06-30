@@ -222,13 +222,15 @@ typedef struct uct_tl_resource_desc {
                                                        is called. */
 
         /* Event notification */
-#define UCT_IFACE_FLAG_EVENT_FD       UCS_BIT(46) /**< Event notification via file descriptor is supported */
+#define UCT_IFACE_FLAG_EVENT_SEND_COMP    UCS_BIT(46) /**< Event notification of send completion is supported */
+#define UCT_IFACE_FLAG_EVENT_RECV_AM      UCS_BIT(47) /**< Event notification of active message receive is supported */
+#define UCT_IFACE_FLAG_EVENT_RECV_SIG_AM  UCS_BIT(48) /**< Event notification of signaled active message is supported */
 
         /* Tag matching operations */
-#define UCT_IFACE_FLAG_TAG_EAGER_SHORT UCS_BIT(47) /**< Hardware tag matching short eager support */
-#define UCT_IFACE_FLAG_TAG_EAGER_BCOPY UCS_BIT(48) /**< Hardware tag matching bcopy eager support */
-#define UCT_IFACE_FLAG_TAG_EAGER_ZCOPY UCS_BIT(49) /**< Hardware tag matching zcopy eager support */
-#define UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  UCS_BIT(50) /**< Hardware tag matching rendezvous zcopy support */
+#define UCT_IFACE_FLAG_TAG_EAGER_SHORT UCS_BIT(50) /**< Hardware tag matching short eager support */
+#define UCT_IFACE_FLAG_TAG_EAGER_BCOPY UCS_BIT(51) /**< Hardware tag matching bcopy eager support */
+#define UCT_IFACE_FLAG_TAG_EAGER_ZCOPY UCS_BIT(52) /**< Hardware tag matching zcopy eager support */
+#define UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  UCS_BIT(53) /**< Hardware tag matching rendezvous zcopy support */
 /**
  * @}
  */
@@ -256,7 +258,8 @@ typedef enum {
  */
 enum uct_iface_event_types {
     UCT_EVENT_SEND_COMP   = UCS_BIT(0), /**< Send completion event */
-    UCT_EVENT_RECV_AM     = UCS_BIT(1)  /**< Active message received */
+    UCT_EVENT_RECV_AM     = UCS_BIT(1), /**< Active message received */
+    UCT_EVENT_RECV_SIG_AM = UCS_BIT(2)  /**< Signaled active message received */
 };
 
 
@@ -267,6 +270,19 @@ enum uct_iface_event_types {
 enum uct_progress_types {
     UCT_PROGRESS_SEND   = UCS_BIT(0),  /**< Progress send operations */
     UCT_PROGRESS_RECV   = UCS_BIT(1)   /**< Progress receive operations */
+};
+
+
+/**
+ * @ingroup UCT_AM
+ * @brief Flags for active message send operation.
+ */
+enum {
+    UCT_AM_FLAG_SIGNALED = UCS_BIT(0)  /**< Trigger @ref UCT_EVENT_RECV_SIG_AM
+                                            event on remote side. Make best
+                                            effort attempt to avoid triggering
+                                            @ref UCT_EVENT_RECV_AM event.
+                                            Ignored if not supported by interface. */
 };
 
 

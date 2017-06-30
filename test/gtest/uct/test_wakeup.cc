@@ -65,7 +65,7 @@ UCS_TEST_P(test_uct_event_fd, am)
     ucs_status_t status;
 
     initialize();
-    check_caps(UCT_IFACE_FLAG_EVENT_FD | UCT_IFACE_FLAG_AM_CB_SYNC);
+    check_caps(UCT_IFACE_FLAG_EVENT_RECV_AM | UCT_IFACE_FLAG_AM_CB_SYNC);
 
     recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(send_data));
     recv_buffer->length = 0; /* Initialize length to 0 */
