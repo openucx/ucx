@@ -9,6 +9,7 @@
 #include "uct_md.h"
 
 #include <uct/api/uct.h>
+#include <ucs/async/async.h>
 #include <ucs/time/time.h>
 
 
@@ -181,6 +182,47 @@ void uct_iface_close(uct_iface_h iface)
     iface->ops.iface_close(iface);
 }
 
+void uct_base_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    uct_priv_worker_t *worker = iface->worker;
+
+    UCS_ASYNC_BLOCK(worker->async);
+
+    /* Add callback only if previous flags are 0 and new flags != 0 */
+    if (!iface->progress_flags && flags) {
+        if (iface->prog.id == UCS_CALLBACKQ_ID_NULL) {
+            iface->prog.id = ucs_callbackq_add(&worker->super.progress_q,
+                                               (ucs_callback_t)iface->super.ops.iface_progress,
+                                               iface, UCS_CALLBACKQ_FLAG_FAST);
+        }
+    }
+    iface->progress_flags |= flags;
+
+    UCS_ASYNC_UNBLOCK(worker->async);
+}
+
+void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    uct_priv_worker_t *worker = iface->worker;
+
+    UCS_ASYNC_BLOCK(worker->async);
+
+    /* Remove callback only if previous flags != 0, and removing the given
+     * flags makes it become 0.
+     */
+    if (iface->progress_flags && !(iface->progress_flags & ~flags)) {
+        if (iface->prog.id != UCS_CALLBACKQ_ID_NULL) {
+            ucs_callbackq_remove(&worker->super.progress_q, iface->prog.id);
+            iface->prog.id = UCS_CALLBACKQ_ID_NULL;
+        }
+    }
+    iface->progress_flags &= ~flags;
+
+    UCS_ASYNC_UNBLOCK(worker->async);
+}
+
 ucs_status_t uct_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                   uct_completion_t *comp)
 {
@@ -349,6 +391,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
     self->am_tracer_arg   = NULL;
     self->err_handler     = params->err_handler;
     self->err_handler_arg = params->err_handler_arg;
+    self->progress_flags  = 0;
     uct_worker_progress_init(&self->prog);
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {

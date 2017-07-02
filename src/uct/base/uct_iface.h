@@ -175,7 +175,9 @@ typedef struct uct_base_iface {
     void                    *am_tracer_arg;   /* Tracer argument */
     uct_error_handler_t     err_handler;      /* Error handler */
     void                    *err_handler_arg; /* Error handler argument */
-    uct_worker_progress_t   prog;
+    uct_worker_progress_t   prog;             /* Will be removed once all transports
+                                                 support progress control */
+    unsigned                progress_flags;   /* Which progress is currently enabled */
 
     struct {
         unsigned            num_alloc_methods;
@@ -476,6 +478,10 @@ ucs_status_t uct_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                   uct_completion_t *comp);
 
 ucs_status_t uct_base_iface_fence(uct_iface_h tl_iface, unsigned flags);
+
+void uct_base_iface_progress_enable(uct_iface_h tl_iface, unsigned flags);
+
+void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
 ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                uct_completion_t *comp);
