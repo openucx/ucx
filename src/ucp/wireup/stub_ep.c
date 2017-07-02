@@ -207,12 +207,25 @@ static void ucp_stub_pending_purge(uct_ep_h uct_ep,
                                    uct_pending_purge_callback_t cb,
                                    void *arg)
 {
-    ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
+    ucp_stub_ep_t                           *stub_ep;
     ucp_stub_ep_pending_release_proxy_arg_t parg;
+    uct_pending_req_t                       *req;
+    ucp_request_t                           *ucp_req;
 
-    ucs_assert_always(ucs_queue_is_empty(&stub_ep->pending_q));
+    stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
+
+    /* stub ep pending queue can be nonempty only on failure */
+    ucs_assert_always(ucs_queue_is_empty(&stub_ep->pending_q) ||
+                      UCS_PTR_IS_ERR(arg));
 
     if (stub_ep->aux_ep != NULL) {
+        ucs_queue_for_each_extract(req, &stub_ep->pending_q, priv, 1) {
+            ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
+            ucs_assert_always(UCS_PTR_IS_ERR(arg) &&
+                              (cb == ucp_ep_err_pending_purge));
+            ucp_request_complete_send(ucp_req, UCS_PTR_STATUS(arg));
+        }
+
         parg.cb  = cb;
         parg.arg = arg;
         uct_ep_pending_purge(stub_ep->aux_ep, ucp_stub_ep_pending_req_release,
@@ -415,4 +428,19 @@ void ucp_stub_ep_remote_connected(uct_ep_h uct_ep)
 int ucp_stub_ep_test(uct_ep_h uct_ep)
 {
     return uct_ep->iface == &ucp_stub_iface;
+}
+
+int ucp_stub_ep_test_aux(uct_ep_h stub_ep, uct_ep_h aux_ep)
+{
+    return ucp_stub_ep_test(stub_ep) &&
+           (ucs_derived_of(stub_ep, ucp_stub_ep_t)->aux_ep == aux_ep);
+}
+
+uct_ep_h ucp_stub_ep_extract_aux(uct_ep_h ep)
+{
+    ucp_stub_ep_t *stub_ep = ucs_derived_of(ep, ucp_stub_ep_t);
+    uct_ep_h       aux_ep  = stub_ep->aux_ep;
+
+    stub_ep->aux_ep = NULL;
+    return aux_ep;
 }

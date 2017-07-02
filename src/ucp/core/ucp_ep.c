@@ -435,6 +435,14 @@ static void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
     ucp_flush_check_completion(req);
 }
 
+void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
+{
+    ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_status_t status = UCS_PTR_STATUS(arg);
+
+    ucp_request_complete_send(req, status);
+}
+
 static void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg)
 {
     ucs_bug("pending request %p on ep %p should have been flushed", self, arg);
