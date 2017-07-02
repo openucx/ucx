@@ -436,12 +436,11 @@ int ucp_stub_ep_test_aux(uct_ep_h stub_ep, uct_ep_h aux_ep)
            (ucs_derived_of(stub_ep, ucp_stub_ep_t)->aux_ep == aux_ep);
 }
 
-void ucp_stub_ep_extract_aux(uct_ep_h *uct_ep)
+uct_ep_h ucp_stub_ep_extract_aux(uct_ep_h ep)
 {
-    uct_ep_h ep            = *uct_ep;
     ucp_stub_ep_t *stub_ep = ucs_derived_of(ep, ucp_stub_ep_t);
+    uct_ep_h       aux_ep  = stub_ep->aux_ep;
 
-    *uct_ep = stub_ep->aux_ep;
     stub_ep->aux_ep = NULL;
-    uct_ep_destroy(ep);
+    return aux_ep;
 }

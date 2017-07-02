@@ -249,6 +249,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_worker_h       worker           = (ucp_worker_h)arg;
     ucp_ep_h           ucp_ep           = NULL;
+    uct_ep_h           aux_ep           = NULL;
     uint64_t           dest_uuid UCS_V_UNUSED;
     ucp_ep_h           ucp_ep_iter;
     khiter_t           ucp_ep_errh_iter;
@@ -295,8 +296,10 @@ found_ucp_ep:
     /* NOTE: if failed ep is stub auxiliary then we need to replace the lane
      *       with failed ep and destroy stub ep
      */
-    if (ucp_stub_ep_test(ucp_ep_iter->uct_eps[0])) {
-        ucp_stub_ep_extract_aux(&ucp_ep_iter->uct_eps[0]);
+    if (ucp_stub_ep_test_aux(ucp_ep_iter->uct_eps[0], uct_ep)) {
+        aux_ep = ucp_stub_ep_extract_aux(ucp_ep_iter->uct_eps[0]);
+        uct_ep_destroy(ucp_ep_iter->uct_eps[0]);
+        ucp_ep_iter->uct_eps[0] = aux_ep;
     }
 
     /* Redirect all lanes to failed one */
