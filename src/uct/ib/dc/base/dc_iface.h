@@ -60,6 +60,7 @@ typedef struct uct_dc_fc_request {
 typedef struct uct_dc_iface_ops {
     uct_rc_iface_ops_t            super;
     ucs_status_t                  (*reset_dci)(uct_dc_iface_t *iface, int dci);
+    ucs_callback_t                progress;
 } uct_dc_iface_ops_t;
 
 
@@ -88,6 +89,8 @@ struct uct_dc_iface {
     struct {
         struct ibv_exp_dct        *dct;
     } rx;
+
+    unsigned                      progress_flags;
 };
 
 
@@ -121,6 +124,10 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
                                      uint32_t imm_data, uint16_t lid, unsigned flags);
 
 void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num);
+
+void uct_dc_iface_progress_enable(uct_iface_h tl_iface, unsigned flags);
+
+void uct_dc_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
 /* TODO:
  * use a better seach algorithm (perfect hash, bsearch, hash) ???

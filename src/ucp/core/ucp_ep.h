@@ -210,6 +210,8 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
                                 const char *message, ucp_ep_h *ep_p);
 
+void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
+
 void ucp_ep_destroy_internal(ucp_ep_h ep, const char *message);
 
 int ucp_ep_is_stub(ucp_ep_h ep);

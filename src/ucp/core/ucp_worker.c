@@ -244,40 +244,23 @@ static void ucp_worker_wakeup_cleanup(ucp_worker_h worker)
     }
 }
 
-static void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
-{
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucs_status_t status = (uintptr_t)arg;
-
-    if (req->send.uct_comp.func) {
-        if (--req->send.uct_comp.count == 0) {
-            req->send.uct_comp.func(&req->send.uct_comp, status);
-        }
-    } else {
-        ucp_request_complete_send(req, status);
-    }
-}
-
 static void
 ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_worker_h       worker           = (ucp_worker_h)arg;
     ucp_ep_h           ucp_ep           = NULL;
-    uct_ep_h           aux_ep;
+    uct_ep_h           aux_ep           = NULL;
     uint64_t           dest_uuid UCS_V_UNUSED;
     ucp_ep_h           ucp_ep_iter;
     khiter_t           ucp_ep_errh_iter;
     ucp_err_handler_t  err_handler;
-    ucp_rsc_index_t    lane, n_lanes, failed_lane;
+    ucp_lane_index_t   lane, n_lanes, failed_lane;
 
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
     kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep_iter, {
         for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep_iter); ++lane) {
-            aux_ep = ucp_stub_ep_test(ucp_ep_iter->uct_eps[lane]) ?
-                     ucs_derived_of(ucp_ep_iter->uct_eps[lane],
-                                    ucp_stub_ep_t)->aux_ep :
-                     NULL;
-            if ((uct_ep == ucp_ep_iter->uct_eps[lane]) || (uct_ep == aux_ep)) {
+            if ((uct_ep == ucp_ep_iter->uct_eps[lane]) ||
+                ucp_stub_ep_test_aux(ucp_ep_iter->uct_eps[lane], uct_ep)) {
                 ucp_ep = ucp_ep_iter;
                 failed_lane = lane;
                 goto found_ucp_ep;
@@ -292,7 +275,8 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 found_ucp_ep:
 
     /* Purge outstanding */
-    uct_ep_pending_purge(uct_ep, ucp_ep_err_pending_purge, (void*)status);
+    uct_ep_pending_purge(ucp_ep_iter->uct_eps[lane], ucp_ep_err_pending_purge,
+                         UCS_STATUS_PTR(status));
 
     /* Destroy all lanes excepting failed one since ucp_ep becomes unusable as well */
     for (lane = 0, n_lanes = ucp_ep_num_lanes(ucp_ep); lane < n_lanes; ++lane) {
@@ -307,6 +291,15 @@ found_ucp_ep:
     if (failed_lane != 0) {
         ucp_ep->uct_eps[0] = ucp_ep->uct_eps[failed_lane];
         ucp_ep->uct_eps[failed_lane] = NULL;
+    }
+
+    /* NOTE: if failed ep is stub auxiliary then we need to replace the lane
+     *       with failed ep and destroy stub ep
+     */
+    if (ucp_stub_ep_test_aux(ucp_ep_iter->uct_eps[0], uct_ep)) {
+        aux_ep = ucp_stub_ep_extract_aux(ucp_ep_iter->uct_eps[0]);
+        uct_ep_destroy(ucp_ep_iter->uct_eps[0]);
+        ucp_ep_iter->uct_eps[0] = aux_ep;
     }
 
     /* Redirect all lanes to failed one */
@@ -400,7 +393,7 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     }
 
     /* Set wake-up handlers */
-    if (attr->cap.flags & UCT_IFACE_FLAG_EVENT_FD) {
+    if (attr->cap.flags & UCP_WORKER_UCT_EVENT_CAP_FLAGS) {
         status = uct_iface_event_fd_get(iface, &tl_event_fd);
         if (status != UCS_OK) {
             goto out_close_iface;
@@ -874,7 +867,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     ucp_context_h context = worker->context;
 
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
-        if (worker->ifaces[tl_id].attr.cap.flags & UCT_IFACE_FLAG_EVENT_FD) {
+        if (worker->ifaces[tl_id].attr.cap.flags & UCP_WORKER_UCT_EVENT_CAP_FLAGS) {
             status = uct_iface_event_arm(worker->ifaces[tl_id].iface, worker->uct_events);
             if (status != UCS_OK) {
                 return status;
