@@ -168,14 +168,8 @@ static ucs_status_t ucp_tag_eager_bcopy_multi(uct_pending_req_t *self)
 
 void ucp_tag_eager_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
-    if (ucs_likely(ucp_request_is_send_buffer_reg(req))) {
-        ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
-    } else {
-        /* The request was in pending queue when endpoint has been failed */
-        ucs_assert((status != UCS_OK) && (status != UCS_INPROGRESS));
-    }
-
     ucs_assert(req->send.uct_comp.count == 0);
+    ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
     ucp_request_complete_send(req, status);
 }
 
