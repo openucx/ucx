@@ -190,26 +190,26 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
     const uct_ib_address_t *ib_addr = (const void*)dev_addr;
     union ibv_gid gid;
-    uint8_t is_global;
+    uint8_t is_global, is_local_ib = 1;
     uint16_t lid;
 
     uct_ib_address_unpack(ib_addr, &lid, &is_global, &gid);
 
-    switch (iface->addr_type) {
-    case UCT_IB_ADDRESS_TYPE_LINK_LOCAL:
-        /* IB */
-        return ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB;
-    case UCT_IB_ADDRESS_TYPE_SITE_LOCAL:
-    case UCT_IB_ADDRESS_TYPE_GLOBAL:
-        /* IB + same subnet prefix */
-        return (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB) &&
-               (gid.global.subnet_prefix == iface->gid.global.subnet_prefix);
-    case UCT_IB_ADDRESS_TYPE_ETH:
+    ucs_assert(iface->addr_type < UCT_IB_ADDRESS_TYPE_LAST);
+    if (iface->addr_type == UCT_IB_ADDRESS_TYPE_ETH) {
+        is_local_ib = 0;
+    }
+
+    if (is_local_ib && (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB)) {
+        /* same subnet prefix */
+        return (gid.global.subnet_prefix == iface->gid.global.subnet_prefix);
+    } else if (!is_local_ib && (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
         /* there shouldn't be a lid and the gid flag should be on */
-        return (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) &&
-               (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID) &&
-               !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID);
-    default:
+        ucs_assert(ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID);
+        ucs_assert(!(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID));
+        return 1;
+    } else {
+        /* local and remote have different link layers and therefore are unreachable */
         return 0;
     }
 }
