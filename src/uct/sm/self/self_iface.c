@@ -79,7 +79,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
     attr->latency.overhead        = 0;
     attr->latency.growth          = 0;
     attr->bandwidth               = 6911 * 1024.0 * 1024.0;
-    attr->overhead                = 0;
+    attr->overhead                = 10e-9;
     attr->priority                = 0;
 
     return UCS_OK;
