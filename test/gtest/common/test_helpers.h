@@ -423,18 +423,25 @@ public:
 
 
 /* UCS error check */
-#define EXPECT_UCS_OK(_error)  EXPECT_EQ(UCS_OK, _error) << "Error: " << ucs_status_string(_error)
-#define ASSERT_UCS_OK(_error, ...) \
+#define EXPECT_UCS_OK(_expr) \
     do { \
-        if ((_error) != UCS_OK) { \
-            UCS_TEST_ABORT("Error: " << ucs_status_string(_error)  __VA_ARGS__); \
+        ucs_status_t _status = (_expr); \
+        EXPECT_EQ(UCS_OK, _status) << "Error: " << ucs_status_string(_status); \
+    } while (0)
+
+#define ASSERT_UCS_OK(_expr, ...) \
+    do { \
+        ucs_status_t _status = (_expr); \
+        if ((_status) != UCS_OK) { \
+            UCS_TEST_ABORT("Error: " << ucs_status_string(_status)  __VA_ARGS__); \
         } \
     } while (0)
 
-#define ASSERT_UCS_OK_OR_INPROGRESS(_error) \
+#define ASSERT_UCS_OK_OR_INPROGRESS(_expr) \
     do { \
-        if ((_error) != UCS_OK && (_error) != UCS_INPROGRESS) { \
-            UCS_TEST_ABORT("Error: " << ucs_status_string(_error)); \
+        ucs_status_t _status = (_expr); \
+        if ((status) != UCS_OK && (_status) != UCS_INPROGRESS) { \
+            UCS_TEST_ABORT("Error: " << ucs_status_string(_status)); \
         } \
     } while (0)
 
