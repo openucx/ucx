@@ -38,10 +38,8 @@ protected:
     }
 
 protected:
-    static size_t       m_err_cntr;
-    static ucs_status_t m_err_status;
-
-private:
+    static size_t                       m_err_cntr;
+    static ucs_status_t                 m_err_status;
     ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
@@ -179,6 +177,24 @@ UCS_TEST_P(test_ucp_peer_failure_zcopy, status_after_error) {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_zcopy)
+
+
+class test_ucp_peer_failure_zcopy_multi : public test_ucp_peer_failure_zcopy
+{
+public:
+    virtual void init() {
+        /* MAX BCOPY is internally used as fragment size */
+        m_env.push_back(new ucs::scoped_setenv("UCX_MAX_BCOPY",
+                                               (ucs::to_string(m_msg_size/2) + "b").c_str()));
+        test_ucp_peer_failure_zcopy::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_peer_failure_zcopy_multi, status_after_error) {
+    test_status_after();
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_zcopy_multi)
 
 
 class test_ucp_peer_failure_with_rma : public test_ucp_peer_failure {

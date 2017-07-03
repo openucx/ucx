@@ -437,10 +437,21 @@ static void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
 {
-    ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
-    ucs_status_t status = UCS_PTR_STATUS(arg);
+    ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_status_t  status    = UCS_PTR_STATUS(arg);
 
-    ucp_request_complete_send(req, status);
+    if (req->send.uct_comp.func) {
+        /* TODO: This is a temporary solution to fix non-consistent usage of UCT
+         *       completion counter in UCP protocols. Multi fragment protocols
+         *       of tag API have +1 counter value before last fragment is posted.
+         *       This is a problem in error handling case. Issue #1669
+         */
+        if (--req->send.uct_comp.count == 0) {
+            req->send.uct_comp.func(&req->send.uct_comp, status);
+        }
+    } else {
+        ucp_request_complete_send(req, status);
+    }
 }
 
 static void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg)
