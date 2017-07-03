@@ -205,7 +205,8 @@ typedef struct uct_iface_ops {
 
 
 /**
- * Progress engine
+ *  A progress engine and a domain for allocating communication resources.
+ *  Different workers are progressed independently.
  */
 typedef struct uct_worker {
     ucs_callbackq_t        progress_q;
