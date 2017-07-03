@@ -26,6 +26,8 @@ public:
 
         m_e1->connect(0, *m_e2, 0);
         m_e2->connect(0, *m_e1, 0);
+
+        m_am_count = 0;
     }
 
     typedef struct {
@@ -33,8 +35,8 @@ public:
         /* data follows */
     } recv_desc_t;
 
-    static ucs_status_t ib_am_handler(void *arg, void *data, size_t length,
-                                      unsigned flags) {
+    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+                                   unsigned flags) {
         recv_desc_t *my_desc  = (recv_desc_t *) arg;
         uint64_t *test_ib_hdr = (uint64_t *) data;
         uint64_t *actual_data = (uint64_t *) test_ib_hdr + 1;
@@ -45,6 +47,7 @@ public:
             memcpy(my_desc + 1, actual_data , data_length);
         }
 
+        ++m_am_count;
         return UCS_OK;
     }
 
@@ -54,7 +57,10 @@ public:
 
 protected:
     entity *m_e1, *m_e2;
+    static int m_am_count;
 };
+
+int test_uct_event_fd::m_am_count = 0;
 
 UCS_TEST_P(test_uct_event_fd, am)
 {
@@ -71,7 +77,7 @@ UCS_TEST_P(test_uct_event_fd, am)
     recv_buffer->length = 0; /* Initialize length to 0 */
 
     /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler, recv_buffer,
+    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler, recv_buffer,
                              UCT_AM_CB_FLAG_SYNC);
 
     /* create receiver wakeup */
@@ -107,6 +113,10 @@ UCS_TEST_P(test_uct_event_fd, am)
 
     /* make sure the file descriptor IS signaled */
     ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
+
+    while (m_am_count < 2) {
+        progress();
+    }
 
     free(recv_buffer);
 }
