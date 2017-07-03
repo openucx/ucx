@@ -953,8 +953,8 @@ void ucp_context_tag_offload_enable(ucp_context_h context)
 
         context->tm.zcopy_thresh = ucs_max(max_bcopy, context->tm.thresh);
 
-        ucs_debug("Enable TM offload, thresh: %lu/%lu", context->tm.thresh,
-                                                        context->tm.zcopy_thresh);
+        ucs_debug("Enable TM offload: thresh %zu, zcopy_thresh %zu",
+                  context->tm.thresh, context->tm.zcopy_thresh);
     } else {
         context->tm.thresh = SIZE_MAX;
         ucs_debug("Disable TM offload, multiple offload ifaces are not supported");

@@ -45,10 +45,10 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
         ucp_tag_offload_eager_sync_send_ack(req->recv.worker, imm, stag);
     }
 
-    if (req->recv.mp_buffer != NULL) {
+    if (req->recv.rdesc != NULL) {
         status = ucp_dt_unpack(req->recv.datatype, req->recv.buffer, req->recv.length,
-                               &req->recv.state, req->recv.mp_buffer, length, 1);
-        ucs_mpool_put_inline((ucp_mem_desc_t*)req->recv.mp_buffer - 1);
+                               &req->recv.state, req->recv.rdesc + 1, length, 1);
+        ucs_mpool_put_inline(req->recv.rdesc);
     } else {
         ucp_request_memory_dereg(ctx, iface->rsc_index, req->recv.datatype,
                                  &req->recv.state);
@@ -60,8 +60,8 @@ static UCS_F_ALWAYS_INLINE void
 ucp_tag_offload_release_buf(ucp_request_t *req, ucp_context_t *ctx,
                             ucp_rsc_index_t rsc_idx)
 {
-    if (req->recv.mp_buffer != NULL) {
-        ucs_mpool_put_inline((ucp_mem_desc_t*)req->recv.mp_buffer - 1);
+    if (req->recv.rdesc != NULL) {
+        ucs_mpool_put_inline(req->recv.rdesc);
     } else {
         ucp_request_memory_dereg(ctx, rsc_idx, req->recv.datatype,
                                  &req->recv.state);
@@ -185,14 +185,15 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
 
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
                                               ucp_worker_iface_t, queue);
-    if (length >= ctx->tm.zcopy_thresh) {
+    if (ucs_unlikely(length >= ctx->tm.zcopy_thresh)) {
         status = ucp_request_memory_reg(ctx, ucp_iface->rsc_index, req->recv.buffer,
                                         req->recv.length, req->recv.datatype,
                                         &req->recv.state);
         if (status != UCS_OK) {
             return 0;
         }
-        req->recv.mp_buffer = NULL;
+
+        req->recv.rdesc     = NULL;
         iov.buffer          = (void*)req->recv.buffer;
         iov.memh            = req->recv.state.dt.contig.memh;
     } else {
@@ -200,10 +201,11 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
         if (rdesc == NULL) {
             return 0;
         }
-        req->recv.mp_buffer = rdesc + 1;
-        mdi         = ctx->tl_rscs[ucp_iface->rsc_index].md_index;
-        iov.memh    = ucp_memh2uct(rdesc->memh, mdi);
-        iov.buffer  = req->recv.mp_buffer;
+
+        mdi             = ctx->tl_rscs[ucp_iface->rsc_index].md_index;
+        iov.memh        = ucp_memh2uct(rdesc->memh, mdi);
+        iov.buffer      = rdesc + 1;
+        req->recv.rdesc = rdesc;
     }
 
     iov.length = length;
