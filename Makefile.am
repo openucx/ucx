@@ -1,7 +1,7 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
-# Copyright (C) The University of Tennessee and The University 
+# Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
@@ -57,6 +57,7 @@ EXTRA_DIST += contrib/ucx_perftest_config/test_types
 EXTRA_DIST += contrib/ucx_perftest_config/transports
 EXTRA_DIST += debian
 EXTRA_DIST += ucx.pc.in
+EXTRA_DIST += LICENSE
 endif #!DOCS_ONLY
 EXTRA_DIST += doc/uml/uct.dot
 

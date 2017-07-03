@@ -1,7 +1,7 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
-# Copyright (C) The University of Tennessee and The University 
+# Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
@@ -42,7 +42,7 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AM_MAINTAINER_MODE
 AC_CONFIG_MACRO_DIR([config/m4])
 
-define([ucx_prefix], [/opt/ucx])
+define([ucx_prefix], [/usr])
 AC_PREFIX_DEFAULT([ucx_prefix])
 
 top_top_srcdir=$srcdir
@@ -194,7 +194,7 @@ AS_IF([test "x$with_docs_only" == xyes],
                                   [Enable collecting data to ease debugging, default: NO]),
          [
           AC_DEFINE([ENABLE_DEBUG_DATA], [1], [Enable collecting data])
-          AC_DEFINE([UCT_UD_EP_DEBUG_HOOKS], [1], 
+          AC_DEFINE([UCT_UD_EP_DEBUG_HOOKS], [1],
                     [Enable packet header inspection/rewriting in UCT/UD])
          ],
          [AC_DEFINE([ENABLE_DEBUG_DATA], [0])])
