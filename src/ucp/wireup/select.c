@@ -293,9 +293,10 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
         return UCS_ERR_UNREACHABLE;
     }
 
-    ucs_trace("ep %p: selected for %s: " UCT_TL_RESOURCE_DESC_FMT
+    ucs_trace("ep %p: selected for %s: " UCT_TL_RESOURCE_DESC_FMT " md[%d]"
               " -> '%s' address[%d],md[%d] score %.2f", ep, criteria->title,
               UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[*rsc_index_p].tl_rsc),
+              context->tl_rscs[*rsc_index_p].md_index,
               ucp_ep_peer_name(ep), *dst_addr_index_p,
               address_list[*dst_addr_index_p].md_index, best_score);
     return UCS_OK;

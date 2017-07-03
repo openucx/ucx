@@ -96,30 +96,6 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     uct_dc_iface_query(&iface->super, iface_attr);
     uct_rc_mlx5_iface_common_query(&iface->super.super, iface_attr,
                                    UCT_IB_MLX5_AV_FULL_SIZE);
-
-    /*TODO: remove flags once we have a full functionality */
-    iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT|
-                                      UCT_IFACE_FLAG_AM_BCOPY|
-                                      UCT_IFACE_FLAG_AM_ZCOPY|
-                                      UCT_IFACE_FLAG_PUT_SHORT|
-                                      UCT_IFACE_FLAG_PUT_BCOPY|
-                                      UCT_IFACE_FLAG_PUT_ZCOPY|
-                                      UCT_IFACE_FLAG_GET_BCOPY|
-                                      UCT_IFACE_FLAG_GET_ZCOPY|
-                                      UCT_IFACE_FLAG_ATOMIC_ADD64|
-                                      UCT_IFACE_FLAG_ATOMIC_FADD64|
-                                      UCT_IFACE_FLAG_ATOMIC_SWAP64|
-                                      UCT_IFACE_FLAG_ATOMIC_CSWAP64|
-                                      UCT_IFACE_FLAG_ATOMIC_ADD32|
-                                      UCT_IFACE_FLAG_ATOMIC_FADD32|
-                                      UCT_IFACE_FLAG_ATOMIC_SWAP32|
-                                      UCT_IFACE_FLAG_ATOMIC_CSWAP32|
-                                      UCT_IFACE_FLAG_ATOMIC_DEVICE |
-                                      UCT_IFACE_FLAG_PENDING|
-                                      UCT_IFACE_FLAG_AM_CB_SYNC|
-                                      UCT_IFACE_FLAG_CONNECT_TO_IFACE|
-                                      UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
-
     return UCS_OK;
 }
 
@@ -716,6 +692,8 @@ static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_dc_iface_progress_enable,
     .iface_progress_disable   = uct_dc_iface_progress_disable,
+    .iface_event_fd_get       = uct_ib_iface_event_fd_get,
+    .iface_event_arm          = uct_ib_iface_event_arm,
     .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_dc_mlx5_ep_t),
     .ep_destroy               = uct_dc_mlx5_ep_destroy,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t),
