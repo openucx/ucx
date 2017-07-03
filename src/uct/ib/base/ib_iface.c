@@ -192,7 +192,7 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
     union ibv_gid gid;
     uint8_t is_global;
     uint16_t lid;
-    int is_local_ib = 0;
+    int is_local_ib;
 
     uct_ib_address_unpack(ib_addr, &lid, &is_global, &gid);
 
