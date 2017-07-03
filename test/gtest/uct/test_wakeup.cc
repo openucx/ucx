@@ -69,6 +69,7 @@ UCS_TEST_P(test_uct_event_fd, am)
     recv_desc_t *recv_buffer;
     struct pollfd wakeup_fd;
     ucs_status_t status;
+    int am_send_count = 0;
 
     initialize();
     check_caps(UCT_IFACE_FLAG_EVENT_RECV_AM | UCT_IFACE_FLAG_AM_CB_SYNC);
@@ -94,6 +95,7 @@ UCS_TEST_P(test_uct_event_fd, am)
 
     /* send the data */
     uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
+    ++am_send_count;
 
     /* make sure the file descriptor IS signaled ONCE */
     ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
@@ -110,11 +112,12 @@ UCS_TEST_P(test_uct_event_fd, am)
 
     /* send the data again */
     uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
+    ++am_send_count;
 
     /* make sure the file descriptor IS signaled */
     ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
 
-    while (m_am_count < 2) {
+    while (m_am_count < am_send_count) {
         progress();
     }
 
