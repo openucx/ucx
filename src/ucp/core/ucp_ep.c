@@ -441,6 +441,11 @@ void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
     ucs_status_t  status    = UCS_PTR_STATUS(arg);
 
     if (req->send.uct_comp.func) {
+        /* TODO: This is a temporary solution to fix non-consistent usage of UCT
+         *       completion counter in UCP protocols. Multi fragment protocols
+         *       of tag API have +1 counter value before last fragment is posted.
+         *       This is a problem in error handling case. Issue #1669
+         */
         if (--req->send.uct_comp.count == 0) {
             req->send.uct_comp.func(&req->send.uct_comp, status);
         }
