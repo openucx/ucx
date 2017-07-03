@@ -1038,8 +1038,8 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
     rsc_index = key->lanes[lane].rsc_index;
 
     rsc = &context->tl_rscs[rsc_index].tl_rsc;
-    snprintf(p, endp - p, "lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT "%-*c-> ",
-             lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc),
+    snprintf(p, endp - p, "lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT " md[%d] %-*c-> ",
+             lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc), context->tl_rscs[rsc_index].md_index,
              20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name)), ' ');
     p += strlen(p);
 
