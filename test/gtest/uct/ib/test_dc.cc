@@ -5,14 +5,16 @@
 * See file LICENSE for terms.
 */
 
+#include "test_rc.h"
+
+#include <common/test.h>
+#include <uct/uct_test.h>
+
 extern "C" {
 #include <uct/api/uct.h>
 #include <uct/ib/dc/base/dc_iface.h>
 #include <uct/ib/dc/base/dc_ep.h>
 }
-#include <common/test.h>
-#include "uct_test.h"
-#include "test_rc.h"
 
 
 #define UCT_DC_INSTANTIATE_TEST_CASE(_test_case) \

@@ -10,7 +10,7 @@ extern "C" {
 }
 #include <common/test.h>
 
-class test_pd : public testing::TestWithParam<std::string>,
+class test_md : public testing::TestWithParam<std::string>,
                 public ucs::test_base
 {
 public:
@@ -18,7 +18,7 @@ public:
 
     static std::vector<std::string> enum_mds(const std::string& mdc_name);
 
-    test_pd();
+    test_md();
 
 protected:
     virtual void init();
@@ -52,7 +52,7 @@ private:
     ucs::handle<uct_md_h>         m_pd;
 };
 
-std::vector<std::string> test_pd::enum_mds(const std::string& mdc_name) {
+std::vector<std::string> test_md::enum_mds(const std::string& mdc_name) {
     static std::vector<std::string> all_pds;
     std::vector<std::string> result;
 
@@ -81,27 +81,27 @@ std::vector<std::string> test_pd::enum_mds(const std::string& mdc_name) {
     return result;
 }
 
-test_pd::test_pd()
+test_md::test_md()
 {
     UCS_TEST_CREATE_HANDLE(uct_md_config_t*, m_md_config,
                            (void (*)(uct_md_config_t*))uct_config_release,
                            uct_md_config_read, GetParam().c_str(), NULL, NULL);
 }
 
-void test_pd::init()
+void test_md::init()
 {
     ucs::test_base::init();
     UCS_TEST_CREATE_HANDLE(uct_md_h, m_pd, uct_md_close, uct_md_open,
                            GetParam().c_str(), m_md_config);
 }
 
-void test_pd::cleanup()
+void test_md::cleanup()
 {
     m_pd.reset();
     ucs::test_base::cleanup();
 }
 
-void test_pd::modify_config(const std::string& name, const std::string& value)
+void test_md::modify_config(const std::string& name, const std::string& value)
 {
     ucs_status_t status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
     if (status == UCS_ERR_NO_ELEM) {
@@ -111,7 +111,7 @@ void test_pd::modify_config(const std::string& name, const std::string& value)
     }
 }
 
-void test_pd::check_caps(uint64_t flags, const std::string& name)
+void test_md::check_caps(uint64_t flags, const std::string& name)
 {
     uct_md_attr_t md_attr;
     ucs_status_t status = uct_md_query(pd(), &md_attr);
@@ -123,7 +123,7 @@ void test_pd::check_caps(uint64_t flags, const std::string& name)
     }
 }
 
-UCS_TEST_P(test_pd, alloc) {
+UCS_TEST_P(test_md, alloc) {
     size_t size, orig_size;
     ucs_status_t status;
     void *address;
@@ -150,7 +150,7 @@ UCS_TEST_P(test_pd, alloc) {
     }
 }
 
-UCS_TEST_P(test_pd, reg) {
+UCS_TEST_P(test_md, reg) {
     size_t size;
     ucs_status_t status;
     void *address;
@@ -183,7 +183,7 @@ UCS_TEST_P(test_pd, reg) {
     }
 }
 
-UCS_TEST_P(test_pd, reg_perf) {
+UCS_TEST_P(test_md, reg_perf) {
     static const unsigned count = 10000;
     ucs_status_t status;
 
@@ -223,7 +223,7 @@ UCS_TEST_P(test_pd, reg_perf) {
     }
 }
 
-UCS_TEST_P(test_pd, reg_advise) {
+UCS_TEST_P(test_md, reg_advise) {
     size_t size;
     ucs_status_t status;
     void *address;
@@ -247,7 +247,7 @@ UCS_TEST_P(test_pd, reg_advise) {
     free(address);
 }
 
-UCS_TEST_P(test_pd, alloc_advise) {
+UCS_TEST_P(test_md, alloc_advise) {
     size_t size, orig_size;
     ucs_status_t status;
     void *address;
@@ -274,7 +274,7 @@ UCS_TEST_P(test_pd, alloc_advise) {
  * reproduce issue #1284, main thread is registering memory while another thread
  * allocates and releases memory.
  */
-UCS_TEST_P(test_pd, reg_multi_thread) {
+UCS_TEST_P(test_md, reg_multi_thread) {
     ucs_status_t status;
 
     check_caps(UCT_MD_FLAG_REG, "registration");
@@ -322,4 +322,4 @@ UCS_TEST_P(test_pd, reg_multi_thread) {
     INSTANTIATE_TEST_CASE_P(_mdc_name, _test_case, \
                             testing::ValuesIn(_test_case::enum_mds(#_mdc_name)));
 
-UCT_PD_INSTANTIATE_TEST_CASE(test_pd)
+UCT_PD_INSTANTIATE_TEST_CASE(test_md)
