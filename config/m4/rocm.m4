@@ -20,18 +20,18 @@ AS_IF([test "x$with_rocm" != "xno"],
               with_rocm=/opt/rocm
               ],
               [:])
-        AC_CHECK_HEADERS([$with_rocm/hsa/include/hsa_ext_amd.h],
+        AC_CHECK_HEADERS([$with_rocm/include/hsa/hsa_ext_amd.h],
                        [AC_CHECK_DECLS([hsaKmtProcessVMRead,hsaKmtProcessVMWrite],
                            [rocm_happy="yes"],
                            [AC_MSG_WARN([ROCm without CMA support was detected. Disable.])
                             rocm_happy="no"],
-                            [#include <$with_rocm/libhsakmt/include/libhsakmt/hsakmt.h>])
+                            [#include <$with_rocm/include/libhsakmt/hsakmt.h>])
                            AS_IF([test "x$rocm_happy" == "xyes"],
                             [AC_DEFINE([HAVE_ROCM], 1, [Enable ROCm support])
                              transports="${transports},rocm"
-                            AC_SUBST(ROCM_CPPFLAGS, "-I$with_rocm/hsa/include -I$with_rocm/libhsakmt/include/libhsakmt -DHAVE_ROCM=1")
-                            AC_SUBST(ROCM_CFLAGS, "-I$with_rocm/hsa/include -I$with_rocm/libhsakmt/include/libhsakmt -DHAVE_ROCM=1")
-                            AC_SUBST(ROCM_LDFLAGS, "-lhsa-runtime64 -L$with_rocm/hsa/lib")
+                            AC_SUBST(ROCM_CPPFLAGS, "-I$with_rocm/include/hsa -I$with_rocm/include/libhsakmt -DHAVE_ROCM=1")
+                            AC_SUBST(ROCM_CFLAGS, "-I$with_rocm/include/hsa -I$with_rocm/include/libhsakmt -DHAVE_ROCM=1")
+                            AC_SUBST(ROCM_LDFLAGS, "-lhsa-runtime64 -L$with_rocm/lib")
                             CFLAGS="$CFLAGS $ROCM_CFLAGS"
                             CPPFLAGS="$CPPFLAGS $ROCM_CPPFLAGS"
                             LDFLAGS="$LDFLAGS $ROCM_LDFLAGS"],

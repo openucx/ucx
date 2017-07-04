@@ -111,10 +111,10 @@ static hsa_status_t uct_rocm_hsa_agent_callback(hsa_agent_t agent, void* data)
         uct_rocm_cfg.agents.gpu_info[uct_rocm_cfg.num_of_gpu].func = bdfid & 0x7;
 
         ucs_debug("Found GPU agent : 0x%lx. [ B#%02d, D#%02d, F#%02d ]",
-                uct_rocm_cfg.agents.gpu_agent[uct_rocm_cfg.num_of_gpu].handle,
-                uct_rocm_cfg.agents.gpu_info[uct_rocm_cfg.num_of_gpu].bus,
-                uct_rocm_cfg.agents.gpu_info[uct_rocm_cfg.num_of_gpu].device,
-                uct_rocm_cfg.agents.gpu_info[uct_rocm_cfg.num_of_gpu].func);
+                  uct_rocm_cfg.agents.gpu_agent[uct_rocm_cfg.num_of_gpu].handle,
+                  uct_rocm_cfg.agents.gpu_info[uct_rocm_cfg.num_of_gpu].bus,
+                  uct_rocm_cfg.agents.gpu_info[uct_rocm_cfg.num_of_gpu].device,
+                  uct_rocm_cfg.agents.gpu_info[uct_rocm_cfg.num_of_gpu].func);
 
 
         uct_rocm_cfg.agents.gpu_info[uct_rocm_cfg.num_of_gpu].pool.handle
@@ -202,10 +202,10 @@ end:
 
 int uct_rocm_is_ptr_gpu_accessible(void *ptr, void **gpu_ptr)
 {
-    hsa_amd_pointer_info_t info;
-    info.size = sizeof(hsa_amd_pointer_info_t);
+    hsa_amd_pointer_info_v1_t info;
+    info.size = sizeof(hsa_amd_pointer_info_v1_t);
 
-    hsa_status_t status = hsa_amd_pointer_info(ptr, &info,
+    hsa_status_t status = hsa_amd_pointer_info(ptr, (hsa_amd_pointer_info_t *)&info,
                                                NULL, NULL, NULL);
 
     if (status == HSA_STATUS_SUCCESS) {

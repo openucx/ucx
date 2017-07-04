@@ -60,9 +60,7 @@ static ucs_status_t uct_rocm_cma_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.get.max_zcopy       = SIZE_MAX;
     iface_attr->cap.get.opt_zcopy_align = sizeof(uint32_t);
     iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
-    /* Note: There is bug in ROCm 1.5 stack preventing using multiple ranges.
-            Temporally force it to 1 till ROCm 1.6 will be published */
-    iface_attr->cap.get.max_iov         = 1;//uct_sm_get_max_iov();
+    iface_attr->cap.get.max_iov         = uct_sm_get_max_iov();
 
     iface_attr->cap.am.max_iov          = 1;
     iface_attr->cap.am.opt_zcopy_align  = 1;
@@ -98,21 +96,23 @@ static ucs_status_t uct_rocm_cma_iface_query(uct_iface_h tl_iface,
 static UCS_CLASS_DECLARE_DELETE_FUNC(uct_rocm_cma_iface_t, uct_iface_t);
 
 static uct_iface_ops_t uct_rocm_cma_iface_ops = {
-    .ep_put_zcopy           = uct_rocm_cma_ep_put_zcopy,
-    .ep_get_zcopy           = uct_rocm_cma_ep_get_zcopy,
-    .ep_pending_add         = ucs_empty_function_return_busy,
-    .ep_pending_purge       = ucs_empty_function,
-    .ep_flush               = uct_base_ep_flush,
-    .ep_fence               = uct_sm_ep_fence,
-    .ep_create_connected    = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_cma_ep_t),
-    .ep_destroy             = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_cma_ep_t),
-    .iface_flush            = uct_base_iface_flush,
-    .iface_fence            = uct_sm_iface_fence,
-    .iface_close            = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_cma_iface_t),
-    .iface_query            = uct_rocm_cma_iface_query,
-    .iface_get_address      = uct_rocm_cma_iface_get_address,
+    .ep_put_zcopy             = uct_rocm_cma_ep_put_zcopy,
+    .ep_get_zcopy             = uct_rocm_cma_ep_get_zcopy,
+    .ep_pending_add           = ucs_empty_function_return_busy,
+    .ep_pending_purge         = ucs_empty_function,
+    .ep_flush                 = uct_base_ep_flush,
+    .ep_fence                 = uct_sm_ep_fence,
+    .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_cma_ep_t),
+    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_cma_ep_t),
+    .iface_flush              = uct_base_iface_flush,
+    .iface_fence              = uct_sm_iface_fence,
+    .iface_progress_enable    = ucs_empty_function,
+    .iface_progress_disable   = ucs_empty_function,
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_cma_iface_t),
+    .iface_query              = uct_rocm_cma_iface_query,
+    .iface_get_address        = uct_rocm_cma_iface_get_address,
     .iface_get_device_address = uct_sm_iface_get_device_address,
-    .iface_is_reachable     = uct_sm_iface_is_reachable
+    .iface_is_reachable       = uct_sm_iface_is_reachable
 };
 
 
