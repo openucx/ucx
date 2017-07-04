@@ -177,12 +177,17 @@ build_disable_numa() {
 #
 # Build single static UCX library with ibverbs and ibcm
 #
-build_static_lib() {
+build_and_check_static_lib() {
 	echo "==== Build single static UCX lib with IB verbs included ===="
-	../contrib/configure-release --disable-shared --prefix=$ucx_inst
+	../contrib/configure-release --disable-shared --disable-numa --prefix=$ucx_inst
 	$MAKE clean
 	$MAKE install
 	../contrib/build_static_lib.sh --ucx $ucx_inst
+
+    echo "==== Compile ucp_hello_world with UCX static lib ===="
+    gcc -o ucp_hello_world ${ucx_inst}/share/ucx/examples/ucp_hello_world.c \
+        -Wl,--whole-archive  ${ucx_inst}/lib/libucx.a -I${ucx_inst}/include \
+        -Wl,--no-whole-archive  -lpthread -ldl -lrt -lc -lbfd -lm -lnl
 	$MAKE distclean
 }
 
@@ -530,7 +535,7 @@ run_tests() {
 prepare
 do_distributed_task 0 4 build_docs
 do_distributed_task 0 4 build_disable_numa
-do_distributed_task 0 4 build_static_lib
+do_distributed_task 0 4 build_and_check_static_lib
 do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
 
