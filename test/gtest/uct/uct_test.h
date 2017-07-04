@@ -189,6 +189,7 @@ protected:
     virtual void init();
     virtual void cleanup();
     virtual void modify_config(const std::string& name, const std::string& value);
+    virtual void get_config(const std::string& name, std::string& value);
     void stats_activate();
     void stats_restore();
 

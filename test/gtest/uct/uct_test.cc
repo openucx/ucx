@@ -133,6 +133,29 @@ void uct_test::modify_config(const std::string& name, const std::string& value) 
     }
 }
 
+
+void uct_test::get_config(const std::string& name, std::string& value)
+{
+    ucs_status_t status;
+    const size_t max = 1024;
+
+    value.resize(max);
+    status = uct_config_get(m_iface_config, name.c_str(),
+                            const_cast<char *>(value.c_str()), max);
+
+    if (status == UCS_ERR_NO_ELEM) {
+        status = uct_config_get(m_md_config, name.c_str(),
+                                const_cast<char *>(value.c_str()), max);
+        if (status != UCS_OK) {
+            UCS_TEST_ABORT("Couldn't get parameter from pd config: "
+                           << name.c_str() << ": " << ucs_status_string(status));
+        }
+    } else if (status != UCS_OK) {
+        UCS_TEST_ABORT("Couldn't get parameter from iface config : "
+                       << name.c_str() << ": " << ucs_status_string(status));
+    }
+}
+
 void uct_test::stats_activate()
 {
     ucs_stats_cleanup();
