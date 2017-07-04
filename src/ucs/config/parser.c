@@ -933,19 +933,27 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
 ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
                                         const char *name, char *value, size_t max)
 {
-    ucs_config_field_t *field;
-    void *value_ptr;
+    ucs_config_field_t  *field;
+    ucs_config_field_t  *sub_fields;
+    void                *value_ptr;
+    ucs_status_t        status;
 
-    for (field = fields; field->name; ++field) {
-        //TODO table
-       if (!strcmp(field->name, name)) {
-           value_ptr = (char*)opts + field->offset;
-           field->parser.write(value, max, value_ptr, field->parser.arg);
-           return UCS_OK;
-       }
+    for (field = fields, status = UCS_ERR_NO_ELEM;
+         field->name && (status == UCS_ERR_NO_ELEM); ++field) {
+
+        /* TODO: prefixes */
+        if (ucs_config_is_table_field(field)) {
+            sub_fields = (ucs_config_field_t*)field->parser.arg;
+            status     = ucs_config_parser_get_value(opts, sub_fields, name,
+                                                     value, max);
+        } else if (!strcmp(field->name, name)) {
+            value_ptr = (char *)opts + field->offset;
+            field->parser.write(value, max, value_ptr, field->parser.arg);
+            status = UCS_OK;
+        }
     }
 
-    return UCS_ERR_INVALID_PARAM;
+    return status;
 }
 
 ucs_status_t ucs_config_parser_clone_opts(const void *src, void *dst,
