@@ -375,6 +375,14 @@ void uct_config_print(const void *config, FILE *stream, const char *title,
                                  bundle->table_prefix, print_flags);
 }
 
+ucs_status_t uct_config_get(void *config, const char *name, char *value,
+                            size_t max)
+{
+    uct_config_bundle_t *bundle = (uct_config_bundle_t *)config - 1;
+    return ucs_config_parser_get_value(bundle->data, bundle->table, name, value,
+                                       max);
+}
+
 ucs_status_t uct_config_modify(void *config, const char *name, const char *value)
 {
     uct_config_bundle_t *bundle = (uct_config_bundle_t *)config - 1;

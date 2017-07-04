@@ -880,6 +880,22 @@ void uct_config_print(const void *config, FILE *stream, const char *title,
 
 /**
  * @ingroup UCT_CONTEXT
+ * @brief Get value by name from interface/MD configuration.
+ *
+ * @param [in]  config        Configuration to get from.
+ * @param [in]  name          Configuration variable name.
+ * @param [out] value         Pointer to get value. Should be allocated/freed by
+ *                            caller.
+ * @param [in]  max           Available memory space at @a value pointer.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_config_get(void *config, const char *name, char *value,
+                            size_t max);
+
+
+/**
+ * @ingroup UCT_CONTEXT
  * @brief Modify interface/MD configuration.
  *
  * @param [in]  config        Configuration to modify.
