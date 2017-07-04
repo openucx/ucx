@@ -175,6 +175,18 @@ build_disable_numa() {
 }
 
 #
+# Build single static UCX library with ibverbs and ibcm
+#
+build_static_lib() {
+	echo "==== Build single static UCX lib with IB verbs included ===="
+	../contrib/configure-release --disable-shared --prefix=$ucx_inst
+	$MAKE clean
+	$MAKE install
+	../contrib/build_static_lib.sh --ucx $ucx_inst
+	$MAKE distclean
+}
+
+#
 # Build a package in release mode
 #
 build_release_pkg() {
@@ -518,6 +530,7 @@ run_tests() {
 prepare
 do_distributed_task 0 4 build_docs
 do_distributed_task 0 4 build_disable_numa
+do_distributed_task 0 4 build_static_lib
 do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
 
