@@ -65,6 +65,8 @@ protected:
 
         unsigned progress() const;
 
+        void check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+
         uct_md_h md() const;
 
         const uct_md_attr& md_attr() const;
@@ -189,15 +191,16 @@ protected:
     virtual void init();
     virtual void cleanup();
     virtual void modify_config(const std::string& name, const std::string& value);
-    virtual bool get_config(const std::string& name, std::string& value);
+    virtual bool get_config(const std::string& name, std::string& value) const;
     void stats_activate();
     void stats_restore();
 
 
     void check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+    void check_caps(const entity& e, uint64_t required_flags, uint64_t invalid_flags = 0);
     const entity& ent(unsigned index) const;
     unsigned progress() const;
-    ucs_status_t flush(ucs_time_t deadline = ULONG_MAX) const;
+    void flush(ucs_time_t deadline = ULONG_MAX) const;
     virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS) const;
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;
 

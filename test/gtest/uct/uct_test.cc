@@ -104,13 +104,7 @@ void uct_test::cleanup() {
 
 void uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
     FOR_EACH_ENTITY(iter) {
-        uint64_t iface_flags = (*iter)->iface_attr().cap.flags;
-        if (!ucs_test_all_flags(iface_flags, required_flags)) {
-            UCS_TEST_SKIP_R("unsupported");
-        }
-        if (iface_flags & invalid_flags) {
-            UCS_TEST_SKIP_R("unsupported");
-        }
+        (*iter)->check_caps(required_flags, invalid_flags);
     }
 }
 
@@ -133,7 +127,7 @@ void uct_test::modify_config(const std::string& name, const std::string& value) 
     }
 }
 
-bool uct_test::get_config(const std::string& name, std::string& value)
+bool uct_test::get_config(const std::string& name, std::string& value) const
 {
     ucs_status_t status;
     const size_t max = 1024;
@@ -195,7 +189,7 @@ unsigned uct_test::progress() const {
     return count;
 }
 
-ucs_status_t uct_test::flush(ucs_time_t deadline) const {
+void uct_test::flush(ucs_time_t deadline) const {
 
     bool flushed;
     do {
@@ -211,7 +205,7 @@ ucs_status_t uct_test::flush(ucs_time_t deadline) const {
         }
     } while (!flushed && (ucs_get_time() < deadline));
 
-    return flushed ? UCS_OK : UCS_ERR_TIMED_OUT;
+    EXPECT_TRUE(flushed) << "Timed out";
 }
 
 void uct_test::short_progress_loop(double delay_ms) const {
@@ -312,6 +306,18 @@ unsigned uct_test::entity::progress() const {
     unsigned count = uct_worker_progress(m_worker);
     m_async.check_miss();
     return count;
+}
+
+void uct_test::entity::check_caps(uint64_t required_flags,
+                                  uint64_t invalid_flags)
+{
+    uint64_t iface_flags = iface_attr().cap.flags;
+    if (!ucs_test_all_flags(iface_flags, required_flags)) {
+        UCS_TEST_SKIP_R("unsupported");
+    }
+    if (iface_flags & invalid_flags) {
+        UCS_TEST_SKIP_R("unsupported");
+    }
 }
 
 uct_md_h uct_test::entity::md() const {
