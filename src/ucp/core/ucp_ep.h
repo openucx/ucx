@@ -27,10 +27,13 @@ typedef uint16_t                   ucp_ep_cfg_index_t;
 enum {
     UCP_EP_FLAG_LOCAL_CONNECTED     = UCS_BIT(0), /* All local endpoints are connected */
     UCP_EP_FLAG_REMOTE_CONNECTED    = UCS_BIT(1), /* All remote endpoints are connected */
-    UCP_EP_FLAG_CONNECT_REQ_SENT    = UCS_BIT(2), /* Connection request was sent */
-    UCP_EP_FLAG_CONNECT_REP_SENT    = UCS_BIT(3), /* Debug: Connection reply was sent */
-    UCP_EP_FLAG_TAG_OFFLOAD_ENABLED = UCS_BIT(4),  /* Endpoint uses tl offload for tag matching */
-    UCP_EP_FLAG_FAILED              = UCS_BIT(5)  /* EP is in failed state */
+    UCP_EP_FLAG_CONNECT_REQ_QUEUED  = UCS_BIT(2), /* Connection request was queued */
+    UCP_EP_FLAG_TAG_OFFLOAD_ENABLED = UCS_BIT(3), /* Endpoint uses tl offload for tag matching */
+    UCP_EP_FLAG_FAILED              = UCS_BIT(4), /* EP is in failed state */
+
+    UCP_EP_FLAG_CONNECT_REQ_SENT    = UCS_BIT(5), /* DEBUG: Connection request was sent */
+    UCP_EP_FLAG_CONNECT_REP_SENT    = UCS_BIT(6), /* DEBUG: Connection reply was sent */
+    UCP_EP_FLAG_CONNECT_ACK_SENT    = UCS_BIT(7)  /* DEBUG: Connection ACK was sent */
 };
 
 

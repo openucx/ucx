@@ -58,6 +58,18 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
         return (ucs_status_t)packed_len;
     }
 
+    switch (req->send.wireup.type) {
+    case UCP_WIREUP_MSG_REQUEST:
+        ep->flags |= UCP_EP_FLAG_CONNECT_REQ_SENT;
+        break;
+    case UCP_WIREUP_MSG_REPLY:
+        ep->flags |= UCP_EP_FLAG_CONNECT_REP_SENT;
+        break;
+    case UCP_WIREUP_MSG_ACK:
+        ep->flags |= UCP_EP_FLAG_CONNECT_ACK_SENT;
+        break;
+    }
+
 out:
     ucs_free((void*)req->send.buffer);
     ucs_free(req);
@@ -235,8 +247,6 @@ static void ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg
         if (status != UCS_OK) {
             return;
         }
-
-        ep->flags |= UCP_EP_FLAG_CONNECT_REP_SENT;
     }
 }
 
@@ -533,7 +543,7 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
     ucp_lane_index_t lane;
     ucs_status_t status;
 
-    if (ep->flags & UCP_EP_FLAG_CONNECT_REQ_SENT) {
+    if (ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) {
         return UCS_OK;
     }
 
@@ -559,7 +569,7 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
 
     ucs_debug("ep %p: send wireup request (flags=0x%x)", ep, ep->flags);
     status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REQUEST, tl_bitmap, rsc_tli);
-    ep->flags |= UCP_EP_FLAG_CONNECT_REQ_SENT;
+    ep->flags |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
     return status;
 }
 
