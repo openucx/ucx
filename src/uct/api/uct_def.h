@@ -137,11 +137,12 @@ typedef int                      uct_worker_cb_id_t;
  *
  */
 typedef struct uct_iov {
-    void     *buffer;   /**< Data buffer */
+    void     *buffer;   /**< Data buffer (if null - stride/count reference previous) */
     size_t    length;   /**< Length of the payload in bytes */
     uct_mem_h memh;     /**< Local memory key descriptor for the data */
     size_t    stride;   /**< Stride between beginnings of payload elements in
                              the buffer in bytes */
+    size_t    ilv_ratio;/**< Interleaving ratio - Only if enabled on first iov */
     unsigned  count;    /**< Number of payload elements in the buffer */
 } uct_iov_t;
 
