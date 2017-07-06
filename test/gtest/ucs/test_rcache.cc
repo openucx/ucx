@@ -51,7 +51,7 @@ protected:
     region *get(void *address, size_t length, int prot = PROT_READ|PROT_WRITE) {
         ucs_status_t status;
         ucs_rcache_region_t *r;
-        status = ucs_rcache_get(m_rcache, address, length, prot, NULL, &r);
+        status = ucs_rcache_get(m_rcache, address, length, prot, 0, &r);
         ASSERT_UCS_OK(status);
         EXPECT_TRUE(r != NULL);
         struct region *region = ucs_derived_of(r, struct region);
@@ -123,7 +123,7 @@ protected:
 private:
 
     static ucs_status_t mem_reg_cb(void *context, ucs_rcache_t *rcache,
-                                   void *arg, ucs_rcache_region_t *r)
+                                   unsigned flags, ucs_rcache_region_t *r)
     {
         return reinterpret_cast<test_rcache*>(context)->mem_reg(
                         ucs_derived_of(r, struct region));
@@ -494,7 +494,7 @@ UCS_MT_TEST_F(test_rcache_no_register, register_failure, 10) {
 
     ucs_status_t status;
     ucs_rcache_region_t *r;
-    status = ucs_rcache_get(m_rcache, ptr, size, PROT_READ|PROT_WRITE, NULL, &r);
+    status = ucs_rcache_get(m_rcache, ptr, size, PROT_READ|PROT_WRITE, 0, &r);
     EXPECT_EQ(UCS_ERR_IO_ERROR, status);
     EXPECT_EQ(0u, m_reg_count);
 

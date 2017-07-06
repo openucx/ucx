@@ -142,22 +142,22 @@ ucp_request_start_send(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE
 void ucp_request_send_generic_dt_finish(ucp_request_t *req)
 {
-    ucp_dt_generic_t *dt;
+    ucp_dt_extended_t *dt;
     if (UCP_DT_IS_GENERIC(req->send.datatype)) {
-        dt = ucp_dt_generic(req->send.datatype);
+        dt = ucp_dt_ptr(req->send.datatype);
         ucs_assert(NULL != dt);
-        dt->ops.finish(req->send.state.dt.generic.state);
+        dt->generic.ops.finish(req->send.state.dt.generic.state);
     }
 }
 
 static UCS_F_ALWAYS_INLINE
 void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
 {
-    ucp_dt_generic_t *dt;
+    ucp_dt_extended_t *dt;
     if (UCP_DT_IS_GENERIC(req->recv.datatype)) {
-        dt = ucp_dt_generic(req->recv.datatype);
+        dt = ucp_dt_ptr(req->recv.datatype);
         ucs_assert(NULL != dt);
-        dt->ops.finish(req->recv.state.dt.generic.state);
+        dt->generic.ops.finish(req->recv.state.dt.generic.state);
     }
 }
 

@@ -136,7 +136,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 break;
             }
 
-            /* Fixed option is not supported for thp allocation*/
+            /* Fixed option is not supported for the allocation*/
             if (flags & UCT_MD_MEM_FLAG_FIXED) {
                 break;
             }

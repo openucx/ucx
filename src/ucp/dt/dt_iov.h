@@ -9,6 +9,7 @@
 #define UCP_DT_IOV_H_
 
 #include <ucp/api/ucp.h>
+#include "dt_contig.h"
 
 
 #define UCP_DT_IS_IOV(_datatype) \
@@ -23,7 +24,8 @@ static inline size_t ucp_dt_iov_length(const ucp_dt_iov_t *iov, size_t iovcnt)
     size_t iov_it, total_length = 0;
 
     for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
-        total_length += iov[iov_it].length;
+        total_length += ucp_contig_dt_length(iov[iov_it].dt, iov[iov_it].count);
+        /* Temporarily assume IOV is composed of contiguous datatypes only. */
     }
 
     return total_length;
