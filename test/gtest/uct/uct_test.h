@@ -189,7 +189,7 @@ protected:
     virtual void init();
     virtual void cleanup();
     virtual void modify_config(const std::string& name, const std::string& value);
-    virtual void get_config(const std::string& name, std::string& value);
+    virtual bool get_config(const std::string& name, std::string& value);
     void stats_activate();
     void stats_restore();
 
@@ -197,7 +197,7 @@ protected:
     void check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     const entity& ent(unsigned index) const;
     unsigned progress() const;
-    void flush() const;
+    ucs_status_t flush(ucs_time_t deadline = ULONG_MAX) const;
     virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS) const;
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;
 

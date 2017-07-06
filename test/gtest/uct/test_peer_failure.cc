@@ -12,8 +12,13 @@ extern "C" {
 #include <common/test.h>
 #include "uct_test.h"
 
+#include <queue>
+
 class test_uct_peer_failure : public uct_test {
 public:
+
+    test_uct_peer_failure() : m_nreceivers(2) {}
+
     virtual void init();
 
     virtual uct_error_handler_t get_err_handler() const {
@@ -43,19 +48,29 @@ public:
         reinterpret_cast<test_uct_peer_failure*>(arg)->m_err_count++;
     }
 
-    void kill_receiver0()
+    void kill_receiver()
     {
-        m_entities.remove(m_receiver1);
-        ucs_assert(m_entities.size() == 2);
+        ucs_assert(!m_receivers.empty());
+        m_entities.remove(m_receivers.front());
+        ucs_assert(m_entities.size() == m_receivers.size());
+        m_receivers.pop();
     }
 
     void set_am_handlers()
     {
         check_caps(UCT_IFACE_FLAG_AM_CB_SYNC);
-        uct_iface_set_am_handler(m_receiver1->iface(), 0, am_dummy_handler,
-                                 reinterpret_cast<void*>(this), UCT_AM_CB_FLAG_SYNC);
-        uct_iface_set_am_handler(m_receiver2->iface(), 0, am_dummy_handler,
-                                 reinterpret_cast<void*>(this), UCT_AM_CB_FLAG_SYNC);
+
+        std::queue<entity *> tmp;
+        entity *e;
+        while (!m_receivers.empty()) {
+            e = m_receivers.front();
+            m_receivers.pop();
+            uct_iface_set_am_handler(e->iface(), 0, am_dummy_handler,
+                                     reinterpret_cast<void*>(this), UCT_AM_CB_FLAG_SYNC);
+            tmp.push(e);
+        }
+
+        m_receivers = tmp;
     }
 
     ucs_status_t send_am(int index)
@@ -106,7 +121,9 @@ public:
     }
 
 protected:
-    entity *m_sender, *m_receiver1, *m_receiver2;
+    entity *m_sender;
+    std::queue<entity *> m_receivers;
+    size_t               m_nreceivers;
     size_t m_err_count;
     size_t m_am_count;
     static size_t m_req_count;
@@ -136,14 +153,11 @@ void test_uct_peer_failure::init()
     m_sender = uct_test::create_entity(params);
     m_entities.push_back(m_sender);
 
-    m_receiver1 = uct_test::create_entity(params);
-    m_entities.push_back(m_receiver1);
-
-    m_receiver2 = uct_test::create_entity(params);
-    m_entities.push_back(m_receiver2);
-
-    m_sender->connect(0, *m_receiver1, 0);
-    m_sender->connect(1, *m_receiver2, 0);
+    for (size_t i = 0; i < m_nreceivers; ++i) {
+        m_receivers.push(uct_test::create_entity(params));
+        m_entities.push_back(m_receivers.back());
+        m_sender->connect(i, *m_receivers.back(), 0);
+    }
 
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
 
@@ -158,7 +172,7 @@ UCS_TEST_P(test_uct_peer_failure, peer_failure)
 
     wrap_errors();
 
-    kill_receiver0();
+    kill_receiver();
     EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, 0), UCS_OK);
 
     flush();
@@ -212,7 +226,7 @@ UCS_TEST_P(test_uct_peer_failure, purge_failed_peer)
     send_recv_am(1);
 
     wrap_errors();
-    kill_receiver0();
+    kill_receiver();
 
     ucs_status_t status;
     do {
@@ -249,7 +263,7 @@ UCS_TEST_P(test_uct_peer_failure, two_pairs_send)
 
     /* kill the 1st receiver while sending on 2nd pair */
     wrap_errors();
-    kill_receiver0();
+    kill_receiver();
     send_am(0);
     send_recv_am(1);
     flush();
@@ -276,7 +290,7 @@ UCS_TEST_P(test_uct_peer_failure, two_pairs_send_after)
     set_am_handlers();
 
     wrap_errors();
-    kill_receiver0();
+    kill_receiver();
     for (int i = 0; i < 100; ++i) {
         send_am(0);
     }
@@ -314,7 +328,7 @@ UCS_TEST_P(test_uct_peer_failure_cb, desproy_ep_cb)
     check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
     wrap_errors();
-    kill_receiver0();
+    kill_receiver();
     EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, 0), UCS_OK);
     flush();
     restore_errors();

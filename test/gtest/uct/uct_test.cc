@@ -133,8 +133,7 @@ void uct_test::modify_config(const std::string& name, const std::string& value) 
     }
 }
 
-
-void uct_test::get_config(const std::string& name, std::string& value)
+bool uct_test::get_config(const std::string& name, std::string& value)
 {
     ucs_status_t status;
     const size_t max = 1024;
@@ -146,14 +145,9 @@ void uct_test::get_config(const std::string& name, std::string& value)
     if (status == UCS_ERR_NO_ELEM) {
         status = uct_config_get(m_md_config, name.c_str(),
                                 const_cast<char *>(value.c_str()), max);
-        if (status != UCS_OK) {
-            UCS_TEST_ABORT("Couldn't get parameter from pd config: "
-                           << name.c_str() << ": " << ucs_status_string(status));
-        }
-    } else if (status != UCS_OK) {
-        UCS_TEST_ABORT("Couldn't get parameter from iface config : "
-                       << name.c_str() << ": " << ucs_status_string(status));
     }
+
+    return (status == UCS_OK);
 }
 
 void uct_test::stats_activate()
@@ -201,7 +195,7 @@ unsigned uct_test::progress() const {
     return count;
 }
 
-void uct_test::flush() const {
+ucs_status_t uct_test::flush(ucs_time_t deadline) const {
 
     bool flushed;
     do {
@@ -215,7 +209,9 @@ void uct_test::flush() const {
                 ASSERT_UCS_OK(status);
             }
         }
-    } while (!flushed);
+    } while (!flushed && (ucs_get_time() < deadline));
+
+    return flushed ? UCS_OK : UCS_ERR_TIMED_OUT;
 }
 
 void uct_test::short_progress_loop(double delay_ms) const {
