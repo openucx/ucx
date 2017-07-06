@@ -97,7 +97,7 @@ ucp_dt_unpack(ucp_datatype_t datatype, void *buffer, size_t buffer_size,
         return UCS_OK;
 
     case UCP_DATATYPE_IOV:
-        UCS_PROFILE_CALL(ucp_dt_iov_scatter, buffer, state->dt.iov.iovcnt,
+        UCS_PROFILE_CALL(ucp_dt_iov_scatter, (ucp_dt_iov_t*)buffer, state->dt.iov.iovcnt,
                          recv_data, recv_length, &state->dt.iov.iov_offset,
                          &state->dt.iov.iovcnt_offset);
         return UCS_OK;

@@ -8,7 +8,6 @@
 
 #include <ucs/debug/memtrack.h>
 
-
 ucs_status_t ucp_dt_create_generic(const ucp_generic_dt_ops_t *ops, void *context,
                                    ucp_datatype_t *datatype_p)
 {
@@ -24,6 +23,7 @@ ucs_status_t ucp_dt_create_generic(const ucp_generic_dt_ops_t *ops, void *contex
     *datatype_p = ((uintptr_t)dt) | UCP_DATATYPE_GENERIC;
     return UCS_OK;
 }
+
 
 void ucp_dt_destroy(ucp_datatype_t datatype)
 {

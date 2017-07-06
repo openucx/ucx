@@ -189,8 +189,8 @@ ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req, ucp_lane_index_t la
 void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane);
 
 ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
-                                    void *buffer, size_t length,
-                                    ucp_datatype_t datatype, ucp_dt_state_t *state);
+                                    void *buffer, size_t length, ucp_datatype_t datatype,
+                                    ucp_dt_state_t *state, uct_ep_h ep);
 
 void ucp_request_memory_dereg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
                               ucp_datatype_t datatype, ucp_dt_state_t *state);

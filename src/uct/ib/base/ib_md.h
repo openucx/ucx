@@ -22,6 +22,7 @@
 enum {
     UCT_IB_MD_STAT_MEM_ALLOC,
     UCT_IB_MD_STAT_MEM_REG,
+    UCT_IB_MD_STAT_MEM_REG_NC,
     UCT_IB_MD_STAT_LAST
 };
 
@@ -39,7 +40,8 @@ typedef enum {
 
 enum {
     UCT_IB_MEM_FLAG_ODP       = UCS_BIT(0),
-    UCT_IB_MEM_FLAG_ATOMIC_MR = UCS_BIT(1)
+    UCT_IB_MEM_FLAG_ATOMIC_MR = UCS_BIT(1),
+    UCT_IB_MEM_FLAG_NC_MR     = UCS_BIT(2),
 };
 
 
@@ -60,11 +62,17 @@ typedef struct uct_ib_md_ext_config {
 } uct_ib_md_ext_config_t;
 
 
+typedef struct uct_ib_umr uct_ib_umr_t;
+
+
 typedef struct uct_ib_mem {
     uint32_t                lkey;
     uint32_t                flags;
     struct ibv_mr           *mr;
+    uct_ib_umr_t            *umr;
+    uint32_t                umr_depth;
     struct ibv_mr           *atomic_mr;
+    uct_ib_umr_t            *atomic_umr;
 } uct_ib_mem_t;
 
 /**
@@ -77,8 +85,14 @@ typedef struct uct_ib_md {
     uct_ib_device_t          dev;       /**< IB device */
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
     /* keep it in md because pd is needed to create umr_qp/cq */
-    struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
-    struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
+#if HAVE_EXP_UMR
+    struct {
+        struct ibv_qp        *qp;       /* special QP for creating UMR */
+        struct ibv_cq        *cq;       /* special CQ for creating UMR */
+        ucs_mpool_t          mp;        /* Memory pool for UMR objects */
+        struct ibv_mr*       (*get_mr)(uct_mem_h memh);
+    } umr;
+#endif
     UCS_STATS_NODE_DECLARE(stats);
     uct_ib_md_ext_config_t   config;    /* IB external configuration */
     struct {
@@ -174,5 +188,13 @@ static inline uint16_t uct_ib_md_atomic_offset(uint8_t atomic_mr_id)
 {
     return 8 * atomic_mr_id;
 }
+
+
+static inline uct_ib_mem_t *uct_ib_memh_alloc()
+{
+    return (uct_ib_mem_t*)ucs_calloc(1, sizeof(uct_ib_mem_t), "ib_memh");
+}
+
+void uct_ib_memh_free(uct_ib_mem_t *memh);
 
 #endif

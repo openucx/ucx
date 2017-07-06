@@ -4,6 +4,7 @@
  * See file LICENSE for terms.
  */
 #include "dt_iov.h"
+#include "dt.h"
 
 #include <ucs/debug/log.h>
 #include <ucs/sys/math.h>
