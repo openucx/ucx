@@ -4,6 +4,9 @@
 * See file LICENSE for terms.
 */
 
+#include <common/test.h>
+#include <uct/uct_test.h>
+
 extern "C" {
 #include <poll.h>
 #include <uct/api/uct.h>
@@ -11,8 +14,7 @@ extern "C" {
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_iface.h>
 }
-#include <common/test.h>
-#include "uct_test.h"
+
 
 class test_uct_ib : public uct_test {
 public:

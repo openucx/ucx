@@ -69,16 +69,17 @@ gtest_SOURCES = \
 	uct/test_amo_cswap.cc \
 	uct/test_amo_fadd.cc \
 	uct/test_amo_swap.cc \
+	uct/test_event.cc \
 	uct/test_fence.cc \
 	uct/test_flush.cc \
 	uct/test_many2one_am.cc \
+	uct/test_md.cc \
 	uct/test_mm.cc \
 	uct/test_mem.cc \
 	uct/test_p2p_am.cc \
 	uct/test_p2p_err.cc \
 	uct/test_p2p_mix.cc \
 	uct/test_p2p_rma.cc \
-	uct/test_pd.cc \
 	uct/test_pending.cc \
 	uct/test_progress.cc \
 	uct/test_uct_ep.cc \
@@ -88,7 +89,6 @@ gtest_SOURCES = \
 	uct/uct_test.cc \
 	uct/test_stats.cc \
 	ucs/test_stats_filter.cc \
-	uct/test_wakeup.cc \
 	uct/test_peer_failure.cc \
 	uct/test_tag.cc \
 	\
@@ -138,24 +138,24 @@ gtest_SOURCES = \
 
 if HAVE_IB
 gtest_SOURCES += \
-    uct/test_ib.cc
+    uct/ib/test_ib.cc
 gtest_CPPFLAGS += \
     $(IBVERBS_CPPFLAGS)
 if HAVE_TL_UD
 gtest_SOURCES += \
-	uct/ud_base.cc \
-	uct/test_ud.cc \
-	uct/test_ud_slow_timer.cc \
-	uct/test_ud_pending.cc \
-	uct/test_ud_ds.cc
+	uct/ib/ud_base.cc \
+	uct/ib/test_ud.cc \
+	uct/ib/test_ud_slow_timer.cc \
+	uct/ib/test_ud_pending.cc \
+	uct/ib/test_ud_ds.cc
 endif
 if HAVE_TL_RC
 gtest_SOURCES += \
-	uct/test_rc.cc
+	uct/ib/test_rc.cc
 endif	
 if HAVE_TL_DC
 gtest_SOURCES += \
-	uct/test_dc.cc
+	uct/ib/test_dc.cc
 endif
 endif
 
@@ -166,11 +166,11 @@ noinst_HEADERS = \
 	common/test_perf.h \
 	common/tap.h \
 	\
+	uct/ib/test_rc.h \
+	uct/ib/ud_base.h \
 	uct/test_amo.h \
 	uct/uct_p2p_test.h \
 	uct/uct_test.h \
-	uct/test_rc.h \
-	uct/ud_base.h \
 	\
 	ucp/test_ucp_atomic.h \
 	ucp/test_ucp_memheap.h \

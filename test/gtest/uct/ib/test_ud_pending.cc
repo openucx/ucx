@@ -5,14 +5,17 @@
 * $HEADER$
 */
 
-#include "uct_test.h"
 #include "ud_base.h"
+
+#include <uct/uct_test.h>
+
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
 #include <uct/ib/ud/base/ud_ep.h>
 #include <uct/ib/ud/base/ud_iface.h>
-};
+}
+
 
 class test_ud_pending : public ud_base_test {
 public:

@@ -204,6 +204,12 @@ ucs_status_t ucs_global_opts_set_value(const char *name, const char *value)
                                        name, value);
 }
 
+ucs_status_t ucs_global_opts_get_value(const char *name, char *value, size_t max)
+{
+    return ucs_config_parser_get_value(&ucs_global_opts, ucs_global_opts_table,
+                                       name, value, max);
+}
+
 ucs_status_t ucs_global_opts_clone(void *dst)
 {
     return ucs_config_parser_clone_opts(&ucs_global_opts, dst, ucs_global_opts_table);

@@ -104,6 +104,8 @@ extern ucs_global_opts_t ucs_global_opts;
 
 void ucs_global_opts_init();
 ucs_status_t ucs_global_opts_set_value(const char *name, const char *value);
+ucs_status_t ucs_global_opts_get_value(const char *name, char *value,
+                                       size_t max);
 ucs_status_t ucs_global_opts_clone(void *dst);
 void ucs_global_opts_release();
 void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags);

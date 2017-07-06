@@ -4,14 +4,17 @@
 * See file LICENSE for terms.
 */
 
-#include "uct_test.h"
+#include <uct/uct_test.h>
+
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
 #include <uct/ib/ud/base/ud_def.h>
 #include <uct/ib/ud/base/ud_ep.h>
 #include <uct/ib/ud/base/ud_iface.h>
-};
+}
+
+
 /* test ud connect data structures */
 class test_ud_ds : public uct_test {
 public:

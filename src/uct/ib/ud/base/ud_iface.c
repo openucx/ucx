@@ -815,3 +815,24 @@ void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg)
     uct_ud_tx_wnd_purge_outstanding(ucs_derived_of(iface, uct_ud_iface_t),
                                     (uct_ud_ep_t *)arg);
 }
+
+ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+
+    /* Check if some receives were not delivered yet */
+    if ((events & (UCT_EVENT_RECV_AM|UCT_EVENT_RECV_SIG_AM)) &&
+        !ucs_queue_is_empty(&iface->rx.pending_q))
+    {
+        return UCS_ERR_BUSY;
+    }
+
+    /* Check if some send completions were not delivered yet */
+    if ((events & UCT_EVENT_SEND_COMP) &&
+        !ucs_queue_is_empty(&iface->tx.async_comp_q))
+    {
+        return UCS_ERR_BUSY;
+    }
+
+    return uct_ib_iface_event_arm(tl_iface, events);
+}

@@ -3,6 +3,7 @@
 *
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED
+* Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -229,7 +230,8 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
     mm,                      \
     cma,                     \
     knem,                    \
-    cuda
+    cuda,                    \
+    rocm
 
 #define UCT_TEST_TLS      \
     UCT_TEST_NO_SELF_TLS, \

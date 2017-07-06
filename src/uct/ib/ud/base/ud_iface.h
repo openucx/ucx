@@ -371,6 +371,8 @@ ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
 
 void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg);
 
+ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events);
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)
 {

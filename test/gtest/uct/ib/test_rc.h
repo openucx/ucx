@@ -7,13 +7,15 @@
 #ifndef UCT_RC_TEST_H_
 #define UCT_RC_TEST_H_
 
+#include <common/test.h>
+#include <uct/uct_test.h>
+
 extern "C" {
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/rc/base/rc_iface.h>
 }
-#include <common/test.h>
-#include "uct_test.h"
+
 
 class test_rc : public uct_test {
 public:
