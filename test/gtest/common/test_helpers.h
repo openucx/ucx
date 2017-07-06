@@ -528,9 +528,11 @@ public:
         for (size_t iov_it = 0; iov_it < _name_iovcnt; ++iov_it) { \
             _name_iov[iov_it].buffer = (char *)(_buffer_ptr) + _name_iov##_length_it; \
             if (iov_it == (_name_iovcnt - 1)) { /* Last iteration */ \
-                _name_iov[iov_it].length = _buffer_length - _name_iov##_length_it; \
+                _name_iov[iov_it].count = 1; \
+                _name_iov[iov_it].dt = ucp_dt_make_contig(_buffer_length - _name_iov##_length_it); \
             } else { \
-                _name_iov[iov_it].length = _name_iov##_length; \
+                _name_iov[iov_it].count = 1; \
+                _name_iov[iov_it].dt = ucp_dt_make_contig(_name_iov##_length); \
                 _name_iov##_length_it += _name_iov##_length; \
             } \
         }
