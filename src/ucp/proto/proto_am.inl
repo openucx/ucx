@@ -94,7 +94,7 @@ size_t ucp_dt_iov_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
                            ucp_dt_state_t *state, const ucp_dt_iov_t *src_iov,
                            ucp_datatype_t datatype, size_t length_max)
 {
-    size_t iov_offset, max_src_iov, src_it, dst_it;
+    size_t iov_offset, max_src_iov, src_it, dst_it, src_len;
     const uct_mem_h *memh;
     size_t length_it = 0;
 
@@ -117,9 +117,11 @@ size_t ucp_dt_iov_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
         dst_it                      = 0;
         state->dt.iov.iov_offset    = 0;
         while ((dst_it < max_dst_iov) && (src_it < max_src_iov)) {
-            if (src_iov[src_it].length) {
+            if (src_iov[src_it].count) {
+                src_len = ucp_contig_dt_length(src_iov[src_it].dt,
+                                               src_iov[src_it].count);
                 iov[dst_it].buffer  = src_iov[src_it].buffer + iov_offset;
-                iov[dst_it].length  = src_iov[src_it].length - iov_offset;
+                iov[dst_it].length  = src_len - iov_offset;
                 iov[dst_it].memh    = memh[src_it];
                 iov[dst_it].stride  = 0;
                 iov[dst_it].count   = 1;
