@@ -238,13 +238,15 @@ enum ucp_worker_attr_field {
  * The enumeration list describes the datatypes supported by UCP.
  */
 enum ucp_dt_type {
-    UCP_DATATYPE_CONTIG  = 0,      /**< Contiguous datatype */
-    UCP_DATATYPE_STRIDED = 1,      /**< Strided datatype */
-    UCP_DATATYPE_IOV     = 2,      /**< Scatter-gather list with multiple pointers */
-    UCP_DATATYPE_GENERIC = 7,      /**< Generic datatype with
-                                        user-defined pack/unpack routines */
-    UCP_DATATYPE_SHIFT   = 3,      /**< Number of bits defining
-                                        the datatype classification */
+    UCP_DATATYPE_CONTIG   = 0,      /**< Contiguous datatype */
+    UCP_DATATYPE_IOV      = 2,      /**< Scatter-gather list with multiple pointers */
+    UCP_DATATYPE_IOV_R    = 3,      /**< Same as IOV, but reusable */
+    UCP_DATATYPE_STRIDE   = 4,      /**< Interleaving a pointers to strided data */
+    UCP_DATATYPE_STRIDE_R = 5,      /**< Strided datatype */
+    UCP_DATATYPE_GENERIC  = 7,      /**< Generic datatype with
+                                         user-defined pack/unpack routines */
+    UCP_DATATYPE_SHIFT    = 3,      /**< Number of bits defining
+                                         the datatype classification */
     UCP_DATATYPE_CLASS_MASK = UCS_MASK(UCP_DATATYPE_SHIFT) /**< Data-type class
                                                                 mask */
 };
@@ -333,6 +335,19 @@ typedef enum {
 
 /**
  * @ingroup UCP_DATATYPE
+ * @brief Generate a reusable identifier for Scatter-gather IOV data type.
+ *
+ * This macro creates an identifier for datatype of scatter-gather list
+ * with multiple pointers. The resulting reusable datatype needs to be
+ * released using @ref ucp_dt_destroy .
+ *
+ * @return Data-type identifier.
+ */
+#define ucp_dt_make_iov_reusable() (ucp_dt_create(UCP_DATATYPE_IOV_R))
+
+
+/**
+ * @ingroup UCP_DATATYPE
  * @brief Structure for scatter-gather I/O.
  *
  * This structure is used to specify a list of buffers which can be used
@@ -342,9 +357,45 @@ typedef enum {
  *       will not be accessed. Otherwise, @a buffer must point to valid memory.
  */
 typedef struct ucp_dt_iov {
-    void   *buffer;   /**< Pointer to a data buffer */
-    size_t  length;   /**< Length of the @a buffer in bytes */
+    void           *buffer; /**< Pointer to a data buffer */
+    ucp_datatype_t dt;      /**< Type of the data buffer */
+    size_t         count;   /**< Amount of items in the data buffer */
 } ucp_dt_iov_t;
+
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief Generate an identifier for strided data type.
+ *
+ * This macro creates an identifier for datatype of a items in fixed interval.
+ *
+ * @return Data-type identifier.
+ */
+#define ucp_dt_make_stride(datatype, extent, count) \
+        (ucp_dt_create(UCP_DATATYPE_STRIDE, ((ucp_datatype_t)datatype), \
+                       ((size_t)(extent * count)), ((unsigned)0), ((unsigned)1), \
+                       ((size_t)(extent)), ((size_t)(count))))
+
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief Generate a reusable identifier for strided data type.
+ *
+ * This macro creates an identifier for datatype of list of strided entries
+ * with multiple pointers.
+ *
+ * "ratio" is the quotient of this kind of items in an interleaving pattern.
+ * For example, for two entries where two items from the first entry
+ * are followed by one item from the second entry - the value for
+ * the first entry will be 2, and 1 for the second entry.
+ * Values must be either all positive or all zeros.
+ *
+ * @return Data-type identifier.
+ */
+#define ucp_dt_make_stride_reusable(datatype, extent, count) \
+        (ucp_dt_create(UCP_DATATYPE_STRIDE_R, ((ucp_datatype_t)datatype), \
+                       ((size_t)(extent * count)), ((unsigned)0), ((unsigned)1), \
+                       ((size_t)(extent)), ((size_t)(count))))
 
 
 /**
@@ -2348,6 +2399,22 @@ void ucp_request_cancel(ucp_worker_h worker, void *request);
  * would be invoked for this request.
  */
 void ucp_request_free(void *request);
+
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief Create a datatype.
+ *
+ * This routine create a datatype object, used for caching access to data.
+ * The application is responsible to release the @a datatype_p  object using
+ * @ref ucp_dt_destroy "ucp_dt_destroy()" routine.
+ *
+ * @param [in]  type         Datatype kind.
+ * @param [in]  ...          Variable parameters - depending on the kind.
+ *
+ * @return A pointer to datatype object, or NULL in case of an error.
+ */
+ucp_datatype_t ucp_dt_create(enum ucp_dt_type type, ...);
 
 
 /**

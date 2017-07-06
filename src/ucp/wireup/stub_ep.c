@@ -275,7 +275,8 @@ static uct_iface_t ucp_stub_iface = {
         .ep_atomic_add32      = (void*)ucp_stub_ep_send_func,
         .ep_atomic_fadd32     = (void*)ucp_stub_ep_send_func,
         .ep_atomic_swap32     = (void*)ucp_stub_ep_send_func,
-        .ep_atomic_cswap32    = (void*)ucp_stub_ep_send_func
+        .ep_atomic_cswap32    = (void*)ucp_stub_ep_send_func,
+        .ep_mem_reg_nc        = (void*)ucp_stub_ep_send_func,
     }
 };
 

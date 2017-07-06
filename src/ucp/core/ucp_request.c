@@ -171,7 +171,8 @@ void ucp_iov_buffer_memh_dereg(uct_md_h uct_md, uct_mem_h *memh,
 UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
                  (context, rsc_index, buffer, length, datatype, state),
                  ucp_context_t *context, ucp_rsc_index_t rsc_index, void *buffer,
-                 size_t length, ucp_datatype_t datatype, ucp_dt_state_t *state)
+                 size_t length, ucp_datatype_t datatype, ucp_dt_state_t *state,
+                 uct_ep_h ep)
 {
     ucp_rsc_index_t mdi = context->tl_rscs[rsc_index].md_index;
     uct_md_h uct_md     = context->tl_mds[mdi].md;
@@ -195,9 +196,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
             goto err;
         }
         for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
-            if (iov[iov_it].length) {
+            if (iov[iov_it].count) {
+                /* Temporarily assume IOV is composed of contiguous datatypes only. */
                 status = uct_md_mem_reg(uct_md, iov[iov_it].buffer,
-                                        iov[iov_it].length, 0, &memh[iov_it]);
+                                        ucp_contig_dt_length(iov[iov_it].dt,
+                                                             iov[iov_it].count),
+                                        0, &memh[iov_it]);
                 if (status != UCS_OK) {
                     /* unregister previously registered memory */
                     ucp_iov_buffer_memh_dereg(uct_md, memh, iov_it);
@@ -258,13 +262,14 @@ UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg,
 ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req,
                                          ucp_lane_index_t lane)
 {
+    uct_ep_h ep               = req->send.ep->uct_eps[lane];
     ucp_context_t *context    = req->send.ep->worker->context;
     req->send.reg_rsc         = ucp_ep_get_rsc_index(req->send.ep, lane);
     ucs_assert(req->send.reg_rsc != UCP_NULL_RESOURCE);
 
     return ucp_request_memory_reg(context, req->send.reg_rsc,
                                   (void*)req->send.buffer, req->send.length,
-                                  req->send.datatype, &req->send.state);
+                                  req->send.datatype, &req->send.state, ep);
 }
 
 void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane)

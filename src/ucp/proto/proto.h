@@ -13,6 +13,7 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
+#include <ucp/dt/dt.h>
 
 
 /**
@@ -62,6 +63,5 @@ static inline void ucp_ep_connect_remote(ucp_ep_h ep)
         ucp_wireup_send_request(ep);
     }
 }
-
 
 #endif

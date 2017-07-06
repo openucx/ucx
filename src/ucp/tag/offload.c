@@ -166,7 +166,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
                                               ucp_worker_iface_t, queue);
     status = ucp_request_memory_reg(ctx, ucp_iface->rsc_index, req->recv.buffer,
                                     req->recv.length, req->recv.datatype,
-                                    &req->recv.state);
+                                    &req->recv.state, NULL);
     if (status != UCS_OK) {
         return 0;
     }

@@ -4,6 +4,7 @@
  * See file LICENSE for terms.
  */
 #include "dt_iov.h"
+#include "dt.h"
 
 #include <ucs/debug/log.h>
 #include <ucs/sys/math.h>
@@ -20,7 +21,8 @@ void ucp_dt_iov_gather(void *dest, const ucp_dt_iov_t *iov, size_t length,
 
     ucs_assert(length > 0);
     while (length_it < length) {
-        item_len      = iov[*iovcnt_offset].length;
+        item_len      = ucp_contig_dt_length(iov[*iovcnt_offset].dt,
+                                             iov[*iovcnt_offset].count);
         item_reminder = item_len - *iov_offset;
 
         item_len_to_copy = item_reminder -
@@ -46,7 +48,8 @@ size_t ucp_dt_iov_scatter(ucp_dt_iov_t *iov, size_t iovcnt, const void *src,
     size_t length_it = 0;
 
     while ((length_it < length) && (*iovcnt_offset < iovcnt)) {
-        item_len         = iov[*iovcnt_offset].length;
+        item_len         = ucp_contig_dt_length(iov[*iovcnt_offset].dt,
+                                                iov[*iovcnt_offset].count);
         item_len_to_copy = ucs_min(ucs_max((ssize_t)(item_len - *iov_offset), 0),
                                    length - length_it);
         ucs_assert(*iov_offset <= item_len);

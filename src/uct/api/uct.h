@@ -231,6 +231,9 @@ typedef struct uct_tl_resource_desc {
 #define UCT_IFACE_FLAG_TAG_EAGER_BCOPY UCS_BIT(51) /**< Hardware tag matching bcopy eager support */
 #define UCT_IFACE_FLAG_TAG_EAGER_ZCOPY UCS_BIT(52) /**< Hardware tag matching zcopy eager support */
 #define UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  UCS_BIT(53) /**< Hardware tag matching rendezvous zcopy support */
+
+        /* Memory-related capabilities */
+#define UCT_IFACE_FLAG_MEM_NC UCS_BIT(54) /**< Fast memory registration support (per endpoint) */
 /**
  * @}
  */
@@ -322,8 +325,9 @@ enum {
                                               remote memory key for remote memory
                                               operations */
     UCT_MD_FLAG_ADVISE    = UCS_BIT(4),  /**< MD support memory advice */
-    UCT_MD_FLAG_FIXED     = UCS_BIT(5)   /**< MD support memory allocation with
+    UCT_MD_FLAG_FIXED     = UCS_BIT(5),  /**< MD support memory allocation with
                                               fixed address */
+    UCT_MD_FLAG_REG_NC    = UCS_BIT(6)   /**< MD support non-contig registration */
 };
 
 
@@ -337,8 +341,9 @@ enum uct_md_mem_flags {
                                                 mapping may be deferred until
                                                 it is accessed by the CPU or a
                                                 transport. */
-    UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1)  /**< Place the mapping at exactly
+    UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1), /**< Place the mapping at exactly
                                                 defined address */
+    UCT_MD_MEM_FLAG_EMPTY    = UCS_BIT(2)  /**< Create empty handle (for UMR) */
 };
 
 
@@ -1602,6 +1607,35 @@ UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *heade
 {
     return ep->iface->ops.ep_am_zcopy(ep, id, header, header_length, iov, iovcnt, comp);
 }
+
+
+/**
+ * @ingroup UCT_AM
+ * @brief Register non-contiguous memory.
+ *
+ *
+ * @param [in]  ep           Destination endpoint handle.
+ * @param [in]  iov          Points to an array of @ref ::uct_iov_t structures.
+ *                           The @a iov pointer must be valid address of an array
+ *                           of @ref ::uct_iov_t structures. A particular structure
+ *                           pointer must be valid address. NULL terminated pointer
+ *                           is not required.
+ * @param [in]  iovcnt       Size of the @a iov data @ref ::uct_iov_t structures
+ *                           array. If @a iovcnt is zero, the data is considered empty.
+ *                           @a iovcnt is limited by @ref uct_iface_attr_cap_am_max_iov
+ *                           "uct_iface_attr::cap::am::max_iov"
+ * @param [out] md_p         Filled with the memory domain handle, for destruction.
+ * @param [out] memh_p       Filled with handle for allocated region.
+ * @param [in]  comp         Completion handle as defined by @ref ::uct_completion_t.
+ *
+ */
+UCT_INLINE_API ucs_status_t uct_ep_mem_reg_nc(uct_ep_h ep, const uct_iov_t *iov,
+                                              size_t iovcnt, uct_md_h *md_p,
+                                              uct_mem_h *memh_p, uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_mem_reg_nc(ep, iov, iovcnt, md_p, memh_p, comp);
+}
+
 
 /**
  * @ingroup UCT_AMO

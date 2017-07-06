@@ -9,7 +9,9 @@
 #include <uct/api/uct.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
+#include <uct/ib/base/ib_md.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <uct/ib/base/ib_md.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/cpu.h>
