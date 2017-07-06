@@ -11,19 +11,22 @@
 ucs_status_t ucp_dt_create_generic(const ucp_generic_dt_ops_t *ops, void *context,
                                    ucp_datatype_t *datatype_p)
 {
-    ucp_dt_generic_t *dt;
-
-    dt = ucs_memalign(UCS_BIT(UCP_DATATYPE_SHIFT), sizeof(*dt), "generic_dt");
-    if (dt == NULL) {
+    ucp_datatype_t dt = ucp_dt_create(UCP_DATATYPE_GENERIC, ops, context);
+    if (!dt) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    dt->ops      = *ops;
-    dt->context  = context;
-    *datatype_p = ((uintptr_t)dt) | UCP_DATATYPE_GENERIC;
+    *datatype_p = dt;
     return UCS_OK;
 }
 
+void ucp_dt_generic_create(ucp_dt_generic_t *dt,
+                           const ucp_generic_dt_ops_t *ops,
+                           void *context)
+{
+    dt->ops      = *ops;
+    dt->context  = context;
+}
 
 void ucp_dt_destroy(ucp_datatype_t datatype)
 {
