@@ -514,11 +514,12 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         m_rkey.handle = NULL;
         m_rkey.type   = NULL;
     }
-    m_iov.buffer = ptr();
-    m_iov.length = length();
-    m_iov.count  = 1;
-    m_iov.stride = 0;
-    m_iov.memh   = memh();
+    m_iov.buffer    = ptr();
+    m_iov.length    = length();
+    m_iov.count     = 1;
+    m_iov.stride    = 0;
+    m_iov.ilv_ratio = 0;
+    m_iov.memh      = memh();
 }
 
 uct_test::mapped_buffer::~mapped_buffer() {
