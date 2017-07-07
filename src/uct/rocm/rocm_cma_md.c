@@ -56,7 +56,9 @@ static ucs_status_t uct_rocm_cma_query_md_resources(uct_md_resource_desc_t **res
     */
     if (uct_rocm_init() != HSA_STATUS_SUCCESS) {
         ucs_error("Could not initialize ROCm support");
-        return UCS_ERR_NO_DEVICE;
+        *resources_p     = NULL;
+        *num_resources_p = 0;
+        return UCS_OK;
     }
 
     status = uct_single_md_resource(&uct_rocm_cma_md_component, resources_p,
