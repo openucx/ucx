@@ -130,15 +130,16 @@ static ucs_config_field_t ucp_config_table[] = {
    "Size of a segment in the worker preregistered memory pool.",
    ucs_offsetof(ucp_config_t, ctx.seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TM_THRESH", "1024",
+  {"TM_THRESH", "1024", /* TODO: calculate automaticlly */
    "Threshold for using tag matching offload capabilities.\n"
    "Smaller buffers will not be posted to the transport.",
    ucs_offsetof(ucp_config_t, ctx.tm_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TM_MAX_BCOPY", "0",
+  {"TM_MAX_BCOPY", "1024", /* TODO: calculate automaticlly */
    "Maximal size for posting \"bounce buffer\" (UCX interal preregistered memory) for\n"
    "tag offload receives. When message arrives, it is copied into the user buffer (similar\n"
-   "to eager protocol). The size is limited by worker segment size.",
+   "to eager protocol). The size values has to be equal or less than segment size.\n"
+   "Also the value has to be bigger than UCX_TM_THRESH to take an effect." ,
    ucs_offsetof(ucp_config_t, ctx.tm_max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
 
   {NULL}
@@ -780,6 +781,25 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
+    /* Need to check MAX_BCOPY value if it is enabled only */
+    if (context->config.ext.tm_max_bcopy > context->config.ext.tm_thresh) {
+        if (context->config.ext.tm_max_bcopy < sizeof(ucp_request_hdr_t)) {
+            /* In case of expected SW RNDV message, the header (ucp_request_hdr_t) is
+             * scattered to UCP user buffer. Make sure that bounce buffer is used for
+             * messages which can not fit SW RNDV hdr. */
+            context->config.ext.tm_max_bcopy = sizeof(ucp_request_hdr_t);
+            ucs_info("UCX_TM_MAX_BCOPY value: %zu, adjusted to: %zu",
+                     context->config.ext.tm_max_bcopy, sizeof(ucp_request_hdr_t));
+        }
+
+        if (context->config.ext.tm_max_bcopy > context->config.ext.seg_size) {
+            context->config.ext.tm_max_bcopy = context->config.ext.seg_size;
+            ucs_info("Wrong UCX_TM_MAX_BCOPY value: %zu, adjusted to: %zu",
+                     context->config.ext.tm_max_bcopy,
+                     context->config.ext.seg_size);
+        }
+    }
+
     return UCS_OK;
 
 err_free:
@@ -937,21 +957,11 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
 
 void ucp_context_tag_offload_enable(ucp_context_h context)
 {
-    size_t max_bcopy;
-
     /* Enable offload, if only one tag offload capable interface is present
      * (multiple offload ifaces are not supported yet). */
     if (ucs_queue_length(&context->tm.offload_ifaces) == 1) {
-        /* Post threshold for tag offload should not be less than ucp_request_hdr_t
-         * size, because this header may be scattered to user buffer in case of
-         * expected SW RNDV protocol. */
-        context->tm.thresh = ucs_max(context->config.ext.tm_thresh,
-                                     sizeof(ucp_request_hdr_t));
-
-        max_bcopy = ucs_min(context->config.ext.tm_max_bcopy,
-                            context->config.ext.seg_size);
-
-        context->tm.zcopy_thresh = ucs_max(max_bcopy, context->tm.thresh);
+        context->tm.thresh       = context->config.ext.tm_thresh;
+        context->tm.zcopy_thresh = context->config.ext.tm_max_bcopy;
 
         ucs_debug("Enable TM offload: thresh %zu, zcopy_thresh %zu",
                   context->tm.thresh, context->tm.zcopy_thresh);
