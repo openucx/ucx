@@ -56,6 +56,15 @@ AC_ARG_WITH([cm],
 
 
 #
+# mlx5 bare-metal support
+#
+AC_ARG_WITH([mlx5-hw],
+            [AC_HELP_STRING([--with-mlx5-hw], [Compile with mlx5 bare-metal support])],
+            [],
+            [with_mlx5_hw=yes])
+
+
+#
 # TM (IB Tag Matching) Support
 #
 AC_ARG_WITH([ib-hw-tm],
@@ -123,9 +132,10 @@ AS_IF([test "x$with_ib" == xyes],
            verbs_exp=yes],
            [verbs_exp=no])
 
-       AC_CHECK_HEADERS([infiniband/mlx5_hw.h],
-                        [with_mlx5_hw=yes],
-                        [with_mlx5_hw=no])
+       AS_IF([test "x$with_mlx5_hw" != xno],
+             [AC_CHECK_HEADERS([infiniband/mlx5_hw.h],
+                               [with_mlx5_hw=yes],
+                               [with_mlx5_hw=no])])
 
        AC_CHECK_DECLS([ibv_mlx5_exp_get_qp_info,
                        ibv_mlx5_exp_get_cq_info,
