@@ -99,9 +99,14 @@ UCS_TEST_P(test_uct_event_fd, am)
 
     /* make sure the file descriptor IS signaled ONCE */
     ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
-    do {
+
+    for (;;) {
         status = uct_iface_event_arm(m_e2->iface(), UCT_EVENT_RECV_AM);
-    } while (UCS_ERR_BUSY == status);
+        if (status != UCS_ERR_BUSY) {
+            break;
+        }
+        progress();
+    }
     ASSERT_EQ(UCS_OK, status);
 
     wakeup_fd.revents = 0;
