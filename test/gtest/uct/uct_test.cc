@@ -242,12 +242,17 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 
 
 void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
-                                 uct_rkey_bundle *rkey_bundle) const {
+                                 uct_rkey_bundle *rkey_bundle, int is_nc) const {
     static const char *alloc_name = "uct_test";
     ucs_status_t status;
     void *rkey_buffer;
 
-    if (md_attr().cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
+    uint64_t required_caps = UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG;
+    if (is_nc) {
+        required_caps |= UCT_MD_FLAG_REG_NC;
+    }
+
+    if (md_attr().cap.flags & required_caps) {
         status = uct_iface_mem_alloc(m_iface, length, 0, alloc_name, mem);
         ASSERT_UCS_OK(status);
 
@@ -463,15 +468,40 @@ std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resourc
     return os << resource.tl_name << "/" << resource.dev_name;
 }
 
+static void completion_callback(uct_completion_t *comp, ucs_status_t status)
+{
+    ASSERT_UCS_OK(status);
+}
+
 uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
-                                       const entity& entity, size_t offset) :
+                                       const entity& entity, size_t offset,
+                                       size_t stride, uct_ep_h ep) :
     m_entity(entity)
 {
+    m_iov.length     = stride ? stride : size;
+    m_iov.count      = stride ? (size / stride) : 1;
+    m_iov.stride     = stride;
+    m_iov.memh       = UCT_MEM_HANDLE_NULL;
+    m_iov.ilv_ratio  = 1;
+
+    m_nc_rkey.rkey   = UCT_INVALID_RKEY;
+    m_nc_rkey.handle = NULL;
+    m_nc_rkey.type   = NULL;
+    m_nc_memh        = NULL;
+    m_nc_comp.func   = completion_callback;
+    m_nc_comp.count  = 1;
+
     if (size > 0)  {
         size_t alloc_size = size + offset;
-        m_entity.mem_alloc(alloc_size, &m_mem, &m_rkey);
-        m_buf = (char*)m_mem.address + offset;
-        m_end = (char*)m_buf         + size;
+        m_entity.mem_alloc(alloc_size, &m_mem, &m_rkey, stride != 0);
+        m_buf        = (char*)m_mem.address + offset;
+        m_end        = (char*)m_buf         + size;
+        m_iov.memh   = m_mem.memh;
+        m_iov.buffer = m_buf;
+
+        if (ep) {
+            ASSERT_UCS_OK(nc_map(ep));
+        }
         pattern_fill(seed);
     } else {
         m_mem.method  = UCT_ALLOC_METHOD_LAST;
@@ -485,14 +515,12 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         m_rkey.handle = NULL;
         m_rkey.type   = NULL;
     }
-    m_iov.buffer = ptr();
-    m_iov.length = length();
-    m_iov.count  = 1;
-    m_iov.stride = 0;
-    m_iov.memh   = memh();
 }
 
 uct_test::mapped_buffer::~mapped_buffer() {
+    if (m_nc_memh) {
+        nc_unmap();
+    }
     m_entity.mem_free(&m_mem, m_rkey);
 }
 
@@ -589,6 +617,52 @@ size_t uct_test::mapped_buffer::pack(void *dest, void *arg) {
     const mapped_buffer* buf = (const mapped_buffer*)arg;
     memcpy(dest, buf->ptr(), buf->length());
     return buf->length();
+}
+
+size_t uct_test::mapped_buffer::nc_length() const {
+    return m_iov.count * m_iov.length;
+}
+
+uct_mem_h  uct_test::mapped_buffer::nc_memh() const {
+    return m_nc_memh;
+}
+
+uct_rkey_t uct_test::mapped_buffer::nc_rkey() const {
+    return m_nc_rkey.rkey;
+}
+
+ucs_status_t uct_test::mapped_buffer::nc_map(uct_ep_h ep) {
+    void *rkey_buffer;
+    uct_md_attr_t md_attr;
+
+    ucs_status_t status = uct_ep_mem_reg_nc(ep, &m_iov, 1, &m_nc_md,
+                                            &m_nc_memh, &m_nc_comp);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("unsupported");
+    }
+
+    ASSERT_UCS_OK_OR_INPROGRESS(status);
+    status = uct_md_query(m_nc_md, &md_attr);
+    ASSERT_UCS_OK(status);
+
+    rkey_buffer = alloca(md_attr.rkey_packed_size);
+    status = uct_md_mkey_pack(m_nc_md, m_nc_memh, rkey_buffer);
+    ASSERT_UCS_OK(status);
+
+    status = uct_rkey_unpack(rkey_buffer, &m_nc_rkey);
+    ASSERT_UCS_OK(status);
+
+    return UCS_OK;
+}
+
+void uct_test::mapped_buffer::nc_unmap() {
+
+    if (m_nc_rkey.rkey != UCT_INVALID_RKEY) {
+        ucs_status_t status = uct_rkey_release(&m_nc_rkey);
+        ASSERT_UCS_OK(status);
+    }
+
+    uct_md_mem_dereg(m_nc_md, m_nc_memh);
 }
 
 std::ostream& operator<<(std::ostream& os, const resource* resource) {

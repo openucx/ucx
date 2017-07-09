@@ -59,9 +59,10 @@ static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
     init_attr.dc_key           = UCT_IB_KEY;
     init_attr.port             = iface->super.super.config.port_num;
     init_attr.mtu              = iface->super.config.path_mtu;
-    init_attr.access_flags     = IBV_EXP_ACCESS_REMOTE_WRITE |
-                                 IBV_EXP_ACCESS_REMOTE_READ |
-                                 IBV_EXP_ACCESS_REMOTE_ATOMIC;
+    init_attr.access_flags     = IBV_EXP_ACCESS_REMOTE_WRITE  |
+                                 IBV_EXP_ACCESS_REMOTE_READ   |
+                                 IBV_EXP_ACCESS_REMOTE_ATOMIC |
+                                 IBV_EXP_ACCESS_MW_BIND;
     init_attr.min_rnr_timer    = iface->super.config.min_rnr_timer;
     init_attr.hop_limit        = 1;
     init_attr.inline_size      = iface->super.config.rx_inline;

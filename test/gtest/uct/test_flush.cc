@@ -168,7 +168,7 @@ public:
         ucs_status_t status;
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
                                 sendbuf.memh(),
-                                sender().iface_attr().cap.am.max_iov);
+                                sender().iface_attr().cap.am.max_iov, 0);
         do {
             status = uct_ep_am_zcopy(sender().ep(0), AM_ID, NULL, 0, iov, iovcnt, &zcomp);
         } while (status == UCS_ERR_NO_RESOURCE);

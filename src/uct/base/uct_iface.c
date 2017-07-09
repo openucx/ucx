@@ -290,6 +290,7 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
     ops->ep_connect_to_ep   = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_destroy         = uct_ep_failed_destroy;
     ops->ep_get_address     = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_mem_reg_nc      = (void*)ucs_empty_function_return_ep_timeout;
 
     ucs_class_call_cleanup_chain(cls, tl_ep, -1);
 

@@ -58,7 +58,7 @@ protected:
                uct_iface_params_t *params, uct_md_config_t *md_config);
 
         void mem_alloc(size_t length, uct_allocated_memory_t *mem,
-                       uct_rkey_bundle *rkey_bundle) const;
+                       uct_rkey_bundle *rkey_bundle, int is_nc = 0) const;
 
         void mem_free(const uct_allocated_memory_t *mem,
                       const uct_rkey_bundle_t& rkey) const;
@@ -117,7 +117,7 @@ protected:
     class mapped_buffer {
     public:
         mapped_buffer(size_t size, uint64_t seed, const entity& entity,
-                      size_t offset = 0);
+                      size_t offset = 0, size_t stride = 0, uct_ep_h ep = NULL);
         virtual ~mapped_buffer();
 
         void *ptr() const;
@@ -134,6 +134,13 @@ protected:
         static void pattern_fill(void *buffer, size_t length, uint64_t seed);
         static void pattern_check(const void *buffer, size_t length);
         static void pattern_check(const void *buffer, size_t length, uint64_t seed);
+
+        size_t nc_length() const;
+        uct_mem_h nc_memh() const;
+        uct_rkey_t nc_rkey() const;
+        ucs_status_t nc_map(uct_ep_h ep);
+        void nc_unmap();
+
     private:
         static uint64_t pat(uint64_t prev);
 
@@ -144,6 +151,11 @@ protected:
         uct_rkey_bundle_t       m_rkey;
         uct_allocated_memory_t  m_mem;
         uct_iov_t               m_iov;
+
+        uct_md_h                m_nc_md;
+        uct_mem_h               m_nc_memh;
+        uct_rkey_bundle_t       m_nc_rkey;
+        uct_completion_t        m_nc_comp;
     };
 
     template <typename T>

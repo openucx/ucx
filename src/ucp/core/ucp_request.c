@@ -8,6 +8,7 @@
 #include "ucp_worker.h"
 #include "ucp_request.inl"
 
+#include <ucp/proto/proto.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/debug.h>
 #include <ucs/debug/log.h>
@@ -156,8 +157,7 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status)
 }
 
 static UCS_F_ALWAYS_INLINE
-void ucp_iov_buffer_memh_dereg(uct_md_h uct_md, uct_mem_h *memh,
-                               size_t count)
+void ucp_multiple_memh_dereg(uct_md_h uct_md, uct_mem_h *memh, size_t count)
 {
     size_t it;
 
@@ -169,23 +169,68 @@ void ucp_iov_buffer_memh_dereg(uct_md_h uct_md, uct_mem_h *memh,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
-                 (context, rsc_index, buffer, length, datatype, state),
+                 (context, rsc_index, buffer, length, datatype, state, ep),
                  ucp_context_t *context, ucp_rsc_index_t rsc_index, void *buffer,
-                 size_t length, ucp_datatype_t datatype, ucp_dt_state_t *state)
+                 size_t length, ucp_datatype_t datatype, ucp_dt_state_t *state,
+                 uct_ep_h ep)
 {
     ucp_rsc_index_t mdi = context->tl_rscs[rsc_index].md_index;
     uct_md_h uct_md     = context->tl_mds[mdi].md;
+    ucp_dt_reusable_t *reusable;
     uct_md_attr_t *uct_md_attr;
     size_t iov_it, iovcnt;
     const ucp_dt_iov_t *iov;
     uct_mem_h *memh;
     ucs_status_t status;
+    size_t extent;
 
     status = UCS_OK;
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
         status = uct_md_mem_reg(uct_md, buffer, length, 0, &state->dt.contig.memh);
         break;
+
+    case UCP_DATATYPE_STRIDE:
+        extent = ucp_dt_extent(datatype, state->dt.stride.count, NULL, NULL);
+        status = uct_md_mem_reg(uct_md, buffer, extent, 0, &state->dt.stride.memh);
+        break;
+
+    case UCP_DATATYPE_STRIDE_R:
+        /* If this is not the first time - just update the pointers and GO */
+        reusable = UCP_DT_GET_REUSABLE(datatype);
+        if (reusable->stride_memh != UCT_MEM_HANDLE_NULL) {
+            if (ucs_unlikely(reusable->nc_status != UCS_OK)) {
+                return status;
+            }
+
+            uct_md_attr = &context->tl_mds[mdi].attr;
+            if (uct_md_attr->cap.flags & UCT_MD_FLAG_REG_NC) {
+                status = ucp_dt_reusable_update(ep, buffer, length, datatype, state);
+                state->dt.stride.contig_memh = reusable->nc_memh;
+            }
+            state->dt.stride.memh = reusable->stride_memh;
+            break;
+        }
+
+        /* Map the entire extent of buffers potentially sent */
+        extent = ucp_dt_extent(datatype, state->dt.stride.count, NULL, NULL);
+        status = uct_md_mem_reg(uct_md, buffer, extent, 0, &state->dt.stride.memh);
+
+        /* If non-contiguous bind is not supported - use the existing mapping */
+        uct_md_attr = &context->tl_mds[mdi].attr;
+        if (!(uct_md_attr->cap.flags & UCT_MD_FLAG_REG_NC)) {
+            break;
+        }
+
+        /* make sure the call to uct_md_mem_reg() succeeded */
+        if (status != UCS_OK) {
+            break;
+        }
+
+        status = ucp_dt_reusable_create(ep, buffer, length, datatype, state);
+        state->dt.stride.contig_memh = reusable->nc_memh;
+        break;
+
     case UCP_DATATYPE_IOV:
         iovcnt = state->dt.iov.iovcnt;
         iov    = buffer;
@@ -195,12 +240,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
             goto err;
         }
         for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
-            if (iov[iov_it].length) {
-                status = uct_md_mem_reg(uct_md, iov[iov_it].buffer,
-                                        iov[iov_it].length, 0, &memh[iov_it]);
+            size_t iov_len = ucp_dt_extent(iov->dt, iov->count, NULL, NULL);
+            if (iov_len) {
+                status = uct_md_mem_reg(uct_md, iov->buffer, iov_len, 0,
+                                        &memh[iov_it]);
                 if (status != UCS_OK) {
                     /* unregister previously registered memory */
-                    ucp_iov_buffer_memh_dereg(uct_md, memh, iov_it);
+                    ucp_multiple_memh_dereg(uct_md, memh, iov_it);
                     ucs_free(memh);
                     goto err;
                 }
@@ -210,6 +256,59 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
         }
         state->dt.iov.memh = memh;
         break;
+
+    case UCP_DATATYPE_IOV_R:
+        /* If this is not the first time - just update the pointers and GO */
+        reusable = UCP_DT_GET_REUSABLE(datatype);
+        if (reusable->stride_memh != UCT_MEM_HANDLE_NULL) {
+            if (ucs_unlikely(reusable->nc_status != UCS_OK)) {
+                return status;
+            }
+
+            uct_md_attr = &context->tl_mds[mdi].attr;
+            if (uct_md_attr->cap.flags & UCT_MD_FLAG_REG_NC) {
+                status = ucp_dt_reusable_update(ep, buffer, length, datatype, state);
+                state->dt.iov.contig_memh = reusable->nc_memh;
+            }
+            state->dt.iov.memh = reusable->stride_memh;
+            break;
+        }
+
+        /* Map the entire extent of buffers potentially sent */
+        iovcnt = state->dt.iov.iovcnt;
+        iov    = buffer;
+        memh   = ucs_malloc(sizeof(*memh) * iovcnt, "IOV memh reusable");
+        if (NULL == memh) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err;
+        }
+        for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+            size_t iov_len = ucp_dt_extent(iov->dt, iov->count, NULL, NULL);
+            if (iov_len) {
+                status = uct_md_mem_reg(uct_md, iov->buffer, iov_len, 0,
+                                        &memh[iov_it]);
+                if (status != UCS_OK) {
+                    /* unregister previously registered memory */
+                    ucp_multiple_memh_dereg(uct_md, memh, iov_it);
+                    ucs_free(memh);
+                    goto err;
+                }
+            } else {
+                memh[iov_it] = UCT_MEM_HANDLE_NULL; /* Indicator for zero length */
+            }
+        }
+        state->dt.iov.memh = memh;
+
+        /* If non-contiguous bind is not supported - use the existing mapping */
+        uct_md_attr = &context->tl_mds[mdi].attr;
+        if (!(uct_md_attr->cap.flags & UCT_MD_FLAG_REG_NC)) {
+            break;
+        }
+
+        status = ucp_dt_reusable_create(ep, buffer, length, datatype, state);
+        state->dt.iov.contig_memh = reusable->nc_memh;
+        break;
+
     default:
         status = UCS_ERR_INVALID_PARAM;
         ucs_error("Invalid data type %lx", datatype);
@@ -241,6 +340,13 @@ UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg,
             uct_md_mem_dereg(uct_md, state->dt.contig.memh);
         }
         break;
+
+    case UCP_DATATYPE_STRIDE:
+        if (state->dt.stride.memh != UCT_MEM_HANDLE_NULL) {
+            uct_md_mem_dereg(uct_md, state->dt.stride.memh);
+        }
+        break;
+
     case UCP_DATATYPE_IOV:
         memh = state->dt.iov.memh;
         for (iov_it = 0; iov_it < state->dt.iov.iovcnt; ++iov_it) {
@@ -250,6 +356,11 @@ UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg,
         }
         ucs_free(state->dt.iov.memh);
         break;
+
+    case UCP_DATATYPE_IOV_R:
+    case UCP_DATATYPE_STRIDE_R:
+        break;
+
     default:
         ucs_error("Invalid data type");
     }
@@ -258,13 +369,14 @@ UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg,
 ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req,
                                          ucp_lane_index_t lane)
 {
+    uct_ep_h ep               = req->send.ep->uct_eps[lane];
     ucp_context_t *context    = req->send.ep->worker->context;
     req->send.reg_rsc         = ucp_ep_get_rsc_index(req->send.ep, lane);
     ucs_assert(req->send.reg_rsc != UCP_NULL_RESOURCE);
 
     return ucp_request_memory_reg(context, req->send.reg_rsc,
                                   (void*)req->send.buffer, req->send.length,
-                                  req->send.datatype, &req->send.state);
+                                  req->send.datatype, &req->send.state, ep);
 }
 
 void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane)

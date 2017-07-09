@@ -9,6 +9,7 @@
 
 #include <ucs/arch/bitops.h>
 #include <uct/ib/base/ib_log.h>
+#include <uct/ib/base/ib_umr.h>
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
@@ -825,6 +826,50 @@ ucs_status_t uct_rc_verbs_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
 }
 
 #endif /* IBV_EXP_HW_TM */
+
+static void uct_rc_ep_dereg_nc(uct_ep_h tl_ep, struct ibv_exp_send_wr *wr,
+                               uct_completion_t *comp)
+{
+    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
+                                                 uct_rc_verbs_iface_t);
+
+    uct_rc_verbs_exp_post_send(ep, wr, wr->exp_send_flags);
+    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, ep->txcnt.pi);
+}
+
+ucs_status_t uct_rc_ep_reg_nc(uct_ep_h tl_ep, const uct_iov_t *iov,
+                              size_t iovcnt, uct_md_h *md_p,
+                              uct_mem_h *memh_p, uct_completion_t *comp)
+{
+    uct_ib_mem_t *memh;
+    ucs_status_t status;
+    struct ibv_exp_send_wr *wr;
+    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
+                                                 uct_rc_verbs_iface_t);
+
+    uct_md_h md = iface->super.super.super.md;
+    if (*memh_p == NULL) {
+        status = md->ops->mem_reg(md, NULL, 0, UCT_MD_MEM_FLAG_EMPTY, (void**)&memh);
+        if (ucs_unlikely(status != UCS_OK)) {
+            return status;
+        }
+    }
+
+    status = uct_ib_umr_reg_nc(md, iov, iovcnt, tl_ep,
+                               uct_rc_ep_dereg_nc, memh, &wr);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    uct_rc_verbs_exp_post_send(ep, wr, wr->exp_send_flags);
+    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, ep->txcnt.pi);
+
+    *md_p = md;
+    *memh_p = memh;
+    return UCS_INPROGRESS;
+}
 
 UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)
 {

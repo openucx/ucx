@@ -29,15 +29,50 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
     unsigned flag_iov_single  = 1;
     unsigned force_sw_rndv    = 0;
     ucp_rsc_index_t rsc_index;
-    unsigned is_iov;
+    unsigned is_contig = 1;
     size_t zcopy_thresh;
     ucs_status_t status;
     size_t length;
 
-    is_iov = UCP_DT_IS_IOV(req->send.datatype);
-    if (ucs_unlikely(is_iov)) {
-        length = ucp_dt_length(req->send.datatype, count, req->send.buffer,
-                               &req->send.state);
+    ucp_datatype_t dt = req->send.datatype;
+    switch (dt & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_STRIDE_R:
+        is_contig = 0;
+        length = ucp_dt_length(dt, count, NULL, NULL);
+        req->send.state.dt.stride.contig_memh = UCT_MEM_HANDLE_NULL;
+        req->send.state.dt.stride.count       = count;
+        req->send.state.dt.stride.item_offset = 0;
+        memset(req->send.state.dt.stride.dim_index, 0,
+               UCP_DT_STRIDE_MAX_DIMS * sizeof(size_t));
+        zcopy_thresh = zcopy_thresh_arr[0];
+        break;
+
+
+    case UCP_DATATYPE_STRIDE:
+        is_contig = 0;
+        length = ucp_dt_length(dt, count, NULL, NULL);
+        req->send.state.dt.stride.contig_memh = UCT_MEM_HANDLE_NULL;
+        req->send.state.dt.stride.count       = count;
+        req->send.state.dt.stride.item_offset = 0;
+        memset(req->send.state.dt.stride.dim_index, 0,
+               UCP_DT_STRIDE_MAX_DIMS * sizeof(size_t));
+        goto adjust_zcopy;
+
+
+    case UCP_DATATYPE_IOV_R:
+        is_contig = 0;
+        length = ucp_dt_length(dt, count, req->send.buffer, NULL);
+        req->send.state.dt.iov.contig_memh   = UCT_MEM_HANDLE_NULL;
+        req->send.state.dt.iov.iovcnt_offset = 0;
+        req->send.state.dt.iov.iov_offset    = 0;
+        req->send.state.dt.iov.iovcnt        = count;
+        zcopy_thresh = zcopy_thresh_arr[0];
+        break;
+
+    case UCP_DATATYPE_IOV:
+        is_contig = 0;
+        length = ucp_dt_length(dt, count, req->send.buffer, NULL);
+        req->send.state.dt.iov.contig_memh   = UCT_MEM_HANDLE_NULL;
         req->send.state.dt.iov.iovcnt_offset = 0;
         req->send.state.dt.iov.iov_offset    = 0;
         req->send.state.dt.iov.iovcnt        = count;
@@ -49,6 +84,7 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
             force_sw_rndv = 1;
         }
 
+adjust_zcopy:
         if (0 == count) {
             /* disable zcopy */
             zcopy_thresh = SIZE_MAX;
@@ -66,9 +102,15 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
                                worker->context,
                                worker->ifaces[rsc_index].attr.bandwidth);
         }
-    } else {
-        length       = ucp_contig_dt_length(req->send.datatype, count);
+        break;
+
+    case UCP_DATATYPE_CONTIG:
+        length       = ucp_contig_dt_length(dt, count);
         zcopy_thresh = count ? zcopy_thresh_arr[0] : SIZE_MAX;
+        break;
+
+    default:
+        return UCS_ERR_INVALID_PARAM;
     }
     req->send.length = length;
 
@@ -80,7 +122,7 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
 
     req->send.uct_comp.func = NULL;
 
-    if (((ssize_t)length <= max_short) && !is_iov) {
+    if (((ssize_t)length <= max_short) && is_contig) {
         /* short */
         req->send.uct.func = proto->contig_short;
         UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
@@ -128,15 +170,16 @@ static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
                                       const ucp_proto_t *proto)
 {
     ucp_ep_config_t *config = ucp_ep_config(req->send.ep);
-    ucp_dt_generic_t *dt_gen;
+    ucp_dt_extended_t *dt_ex;
     size_t length;
     void *state;
 
-    dt_gen = ucp_dt_generic(req->send.datatype);
-    state = dt_gen->ops.start_pack(dt_gen->context, req->send.buffer, count);
+    dt_ex = ucp_dt_ptr(req->send.datatype);
+    state = dt_ex->generic.ops.start_pack(dt_ex->generic.context,
+                                          req->send.buffer, count);
 
     req->send.state.dt.generic.state = state;
-    req->send.length = length = dt_gen->ops.packed_size(state);
+    req->send.length = length = dt_ex->generic.ops.packed_size(state);
 
     if (length <= config->tag.eager.max_bcopy - proto->only_hdr_size) {
         /* bcopy single */
@@ -174,6 +217,9 @@ ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
     switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
     case UCP_DATATYPE_IOV:
+    case UCP_DATATYPE_IOV_R:
+    case UCP_DATATYPE_STRIDE:
+    case UCP_DATATYPE_STRIDE_R:
         status = ucp_tag_req_start(req, count, max_short, zcopy_thresh,
                                    rndv_rma_thresh, rndv_am_thresh, proto);
         if (status != UCS_OK) {

@@ -5,14 +5,33 @@
  */
 
 
-#ifndef UCP_DT_IOV_H_
-#define UCP_DT_IOV_H_
+#ifndef UCP_DT_STRIDED_H_
+#define UCP_DT_STRIDED_H_
 
 #include <ucp/api/ucp.h>
 
+#define UCP_DT_STRIDE_MAX_DIMS (1)
 
-#define UCP_DT_IS_IOV(_datatype) \
-    (((_datatype) & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_IOV)
+#define UCP_DT_IS_STRIDED(_datatype) \
+    (((_datatype) & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_STRIDED)
+
+typedef struct ucp_dt_stride_dim {
+    size_t extent;
+    size_t count;
+} ucp_dt_stride_dim_t;
+
+typedef struct ucp_dt_stride {
+    ucp_datatype_t dt;
+    size_t item_length;
+    size_t total_length;
+    size_t total_extent;
+    size_t ratio; /* for interleaving */
+    unsigned dim_cnt;
+    ucp_dt_stride_dim_t dims[UCP_DT_STRIDE_MAX_DIMS];
+} ucp_dt_stride_t;
+
+
+void ucp_dt_stride_create(ucp_dt_stride_t *dt, va_list ap);
 
 /**
  * Copy iov data buffers from @a src to contiguous buffer @a dest with
@@ -31,8 +50,9 @@
  *                                copying from should be selected as
  *                                iov[iovcnt_offset].buffer + iov_offset
  */
-void ucp_dt_iov_gather(void *dest, const ucp_dt_iov_t *iov, size_t length,
-                       size_t *iov_offset, size_t *iovcnt_offset);
+void ucp_dt_stride_gather(void *dest, const void *src, size_t length,
+                          const ucp_dt_stride_t *dt,
+                          size_t *item_offset, size_t *dim_indexes);
 
 /**
  * Copy contiguous buffer @a src into @ref ucp_dt_iov_t data buffers in @a iov
@@ -54,8 +74,8 @@ void ucp_dt_iov_gather(void *dest, const ucp_dt_iov_t *iov, size_t length,
  * @return Size in bytes that is actually copied from @a src to @a iov. It must
  *         be less or equal to @a length.
  */
-size_t ucp_dt_iov_scatter(const ucp_dt_iov_t *iov, size_t iovcnt, const void *src,
-                          size_t length, size_t *iov_offset, size_t *iovcnt_offset);
-
+size_t ucp_dt_stride_scatter(const ucp_dt_stride_t *dt, void *dest,
+                             const void *src, size_t length,
+                             size_t *item_offset, size_t *dim_indexes);
 
 #endif

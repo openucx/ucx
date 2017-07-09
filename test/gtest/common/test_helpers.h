@@ -487,7 +487,8 @@ public:
 /**
  * Make uct_iov_t iov[iovcnt] array with pointer elements to original buffer
  */
-#define UCS_TEST_GET_BUFFER_IOV(_name_iov, _name_iovcnt, _buffer_ptr, _buffer_length, _memh, _iovcnt) \
+#define UCS_TEST_GET_BUFFER_IOV(_name_iov, _name_iovcnt, _buffer_ptr,\
+                                _buffer_length, _memh, _iovcnt, _is_strided) \
         uct_iov_t _name_iov[_iovcnt]; \
         const size_t _name_iovcnt = _iovcnt; \
         const size_t _buffer_iov_length = _buffer_length / _name_iovcnt; \
@@ -495,7 +496,6 @@ public:
         for (size_t iov_it = 0; iov_it < _name_iovcnt; ++iov_it) { \
             _name_iov[iov_it].buffer = (char *)(_buffer_ptr) + _buffer_iov_length_it; \
             _name_iov[iov_it].count  = 1; \
-            _name_iov[iov_it].stride = 0; \
             _name_iov[iov_it].memh   = _memh; \
             if (iov_it == (_name_iovcnt - 1)) { /* Last iteration */ \
                 _name_iov[iov_it].length = _buffer_length - _buffer_iov_length_it; \
@@ -503,12 +503,15 @@ public:
                 _name_iov[iov_it].length = _buffer_iov_length; \
                 _buffer_iov_length_it += _buffer_iov_length; \
             } \
+            _name_iov[iov_it].stride = _is_strided ? _name_iov[iov_it].length : 0; \
+            _name_iov[iov_it].ilv_ratio = _is_strided; \
         }
 
 /**
  * Make ucp_dt_iov_t iov[iovcnt] array with pointer elements to original buffer
  */
-#define UCS_TEST_GET_BUFFER_DT_IOV(_name_iov, _name_iovcnt, _buffer_ptr, _buffer_length, _iovcnt) \
+#define UCS_TEST_GET_BUFFER_DT_IOV(_name_iov, _name_iovcnt, _buffer_ptr,\
+                                   _buffer_length, _iovcnt, _is_strided) \
         ucp_dt_iov_t _name_iov[_iovcnt]; \
         const size_t _name_iovcnt = _iovcnt; \
         const size_t _name_iov##_length = (_buffer_length > _name_iovcnt) ? \
@@ -517,12 +520,27 @@ public:
         for (size_t iov_it = 0; iov_it < _name_iovcnt; ++iov_it) { \
             _name_iov[iov_it].buffer = (char *)(_buffer_ptr) + _name_iov##_length_it; \
             if (iov_it == (_name_iovcnt - 1)) { /* Last iteration */ \
-                _name_iov[iov_it].length = _buffer_length - _name_iov##_length_it; \
+                if (_is_strided) { \
+                    _name_iov[iov_it].count  = 1; \
+                    _name_iov[iov_it].dt = \
+                        ucp_dt_make_stride(ucp_dt_make_contig(1), 1, \
+                                _buffer_length - _name_iov##_length_it); \
+                } else { \
+                    _name_iov[iov_it].count = _buffer_length - _name_iov##_length_it; \
+                    _name_iov[iov_it].dt = ucp_dt_make_contig(1); \
+                } \
             } else { \
-                _name_iov[iov_it].length = _name_iov##_length; \
+                if (_is_strided) { \
+                    _name_iov[iov_it].count  = 1; \
+                    _name_iov[iov_it].dt = \
+                        ucp_dt_make_stride(ucp_dt_make_contig(1), 1, \
+                                _name_iov##_length); \
+                } else { \
+                    _name_iov[iov_it].count  = _name_iov##_length; \
+                    _name_iov[iov_it].dt = ucp_dt_make_contig(1); \
+                } \
                 _name_iov##_length_it += _name_iov##_length; \
             } \
         }
-
 
 #endif
