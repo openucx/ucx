@@ -935,16 +935,23 @@ ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
 {
     ucs_config_field_t  *field;
     ucs_config_field_t  *sub_fields;
+    void                *sub_opts;
     void                *value_ptr;
+    size_t              name_len;
     ucs_status_t        status;
 
     for (field = fields, status = UCS_ERR_NO_ELEM;
          field->name && (status == UCS_ERR_NO_ELEM); ++field) {
 
-        /* TODO: prefixes */
-        if (ucs_config_is_table_field(field)) {
+        name_len = strlen(field->name);
+
+        if (ucs_config_is_table_field(field) &&
+            !strncmp(field->name, name, name_len)) {
+
             sub_fields = (ucs_config_field_t*)field->parser.arg;
-            status     = ucs_config_parser_get_value(opts, sub_fields, name,
+            sub_opts   = (char*)opts + field->offset;
+            status     = ucs_config_parser_get_value(sub_opts, sub_fields,
+                                                     name + name_len,
                                                      value, max);
         } else if (!strcmp(field->name, name)) {
             value_ptr = (char *)opts + field->offset;
