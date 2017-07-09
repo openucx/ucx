@@ -471,7 +471,7 @@ static ucs_status_t uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
          * TODO: Check that we have only outstanding sync operation at time.
          * We should stop preposting new unexp buffers if need to post SYNC and
          * the previous one is not completed yet. */
-        srq_init_attr.tm_cap.max_ops      = 2 * iface->tm.tag_available + 1;
+        srq_init_attr.tm_cap.max_ops      = 2 * iface->tm.tag_available + 256;
         srq_init_attr.comp_mask           = IBV_EXP_CREATE_SRQ_CQ |
                                             IBV_EXP_CREATE_SRQ_TM;
 
