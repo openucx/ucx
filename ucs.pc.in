@@ -1,6 +1,5 @@
 prefix = @prefix@
 exec_prefix = @exec_prefix@
-bindir = @exec_prefix@/bin
 libdir = @libdir@
 includedir = @includedir@
 
@@ -8,4 +7,5 @@ Name: @PACKAGE@
 Description:  Unified Communication X Library
 Version: @MAJOR_VERSION@.@MINOR_VERSION@
 Cflags: -I${includedir} 
-Libs: -L${libdir} -lucs -luct -lucp
+Libs: -L${libdir} -lucs
+Requires.private: ucm

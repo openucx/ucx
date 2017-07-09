@@ -248,7 +248,7 @@ AC_CONFIG_LINKS([
                  ])
 AC_CONFIG_FILES([
                  ucx.spec
-                 ucx.pc
+                 ucm.pc ucp.pc ucs.pc uct.pc
                  debian/rules
                  debian/control
                  debian/changelog
