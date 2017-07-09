@@ -175,6 +175,32 @@ build_disable_numa() {
 }
 
 #
+# Build single static UCX library with ibverbs and ibcm
+#
+build_and_check_static_lib() {
+    [ -f /usr/lib64/libibverbs.a ] && lib_suff="64"
+    libdir="/usr/lib${lib_suff}"
+
+    if [ -f ${libdir}/libibverbs.a ]; then
+        echo "==== Build single static UCX lib with IB verbs included ===="
+        ../contrib/configure-release --disable-shared --disable-numa --without-xpmem \
+        --disable-cma --prefix=$ucx_inst
+        $MAKE clean
+        $MAKE install
+        ../contrib/build_static_lib.sh --ucx $ucx_inst
+
+        echo "==== Compile ucp_hello_world with UCX static lib ===="
+        [ -f ${libdir}/libnl.so ] && libnl="-lnl"
+        [ -f ${libdir}/libnl-3.so ] && libnl="-lnl-3"
+        [ -f ${libdir}/libnl-route-3.so ] && libnl_route="-lnl-route-3"
+        gcc -o ucp_hello_world ${ucx_inst}/share/ucx/examples/ucp_hello_world.c \
+            -Wl,--whole-archive  ${ucx_inst}/lib/libucx.a -I${ucx_inst}/include \
+            -Wl,--no-whole-archive  -lpthread -ldl -lrt -lc -lbfd -lm $libnl $libnl_route
+        $MAKE distclean
+    fi
+}
+
+#
 # Build a package in release mode
 #
 build_release_pkg() {
@@ -518,6 +544,7 @@ run_tests() {
 prepare
 do_distributed_task 0 4 build_docs
 do_distributed_task 0 4 build_disable_numa
+do_distributed_task 0 4 build_and_check_static_lib
 do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
 
