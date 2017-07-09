@@ -22,6 +22,16 @@
    fun:__cache_pickup
    fun:nl_cache_pickup
    fun:rtnl_*_alloc_cache
-   obj:*/libibverbs.so*
+   ...
+   fun:ibv_create_ah
+}
+
+{
+   ibv_cmd_create_ah
+   Memcheck:Param
+   write(buf)
+   obj:*
+   fun:ibv_cmd_create_ah
+   obj:*/libmlx5-rdmav2.so
    fun:ibv_create_ah
 }

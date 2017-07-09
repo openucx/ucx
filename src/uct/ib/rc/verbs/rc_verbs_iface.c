@@ -158,7 +158,7 @@ uct_rc_verbs_iface_post_op(uct_rc_verbs_iface_t *iface, struct ibv_exp_ops_wr *w
 
     ret = ibv_exp_post_srq_ops(iface->tm.xrq.srq, wr, &bad_wr);
     if (ret) {
-        ucs_error("ibv_exp_post_srq_ops(op=%d) failed: %m (%d)", op, ret);
+        ucs_error("ibv_exp_post_srq_ops(op=%d) failed: %m", op);
         return UCS_ERR_IO_ERROR;
     }
     return UCS_OK;
@@ -293,14 +293,14 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_t *iface,
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_verbs_iface_poll_rx_tm(uct_rc_verbs_iface_t *iface)
 {
-    unsigned num_wcs    = iface->super.super.config.rx_max_poll;
+    const unsigned max_wcs = iface->super.super.config.rx_max_poll;
     ucs_status_t status = UCS_OK;
-    struct ibv_exp_wc wc[num_wcs];
+    struct ibv_exp_wc wc[max_wcs];
     uct_tag_context_t *ctx;
     uct_rc_verbs_ctx_priv_t *priv;
-    int i;
+    int num_wcs, i;
 
-    num_wcs = ibv_exp_poll_cq(iface->super.super.recv_cq, num_wcs, wc,
+    num_wcs = ibv_exp_poll_cq(iface->super.super.recv_cq, max_wcs, wc,
                               sizeof(wc[0]));
     if (num_wcs <= 0) {
         if (ucs_likely(num_wcs == 0)) {
