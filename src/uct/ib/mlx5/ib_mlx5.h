@@ -233,9 +233,9 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
 /**
  * Initialize txwq structure.
  */
-ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq,
+ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker, uct_ib_mlx5_txwq_t *txwq,
                                    struct ibv_qp *verbs_qp);
-void uct_ib_mlx5_txwq_cleanup(uct_worker_h worker, uct_ib_mlx5_txwq_t* txwq);
+void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq);
 
 /**
  * Reset txwq contents and posting indices.

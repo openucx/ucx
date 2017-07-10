@@ -540,7 +540,7 @@ void uct_dc_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
     uct_dc_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_iface_t);
     uct_dc_iface_ops_t *dc_ops = ucs_derived_of(iface->super.super.ops,
                                                 uct_dc_iface_ops_t);
-    uct_worker_h worker = iface->super.super.super.worker;
+    uct_priv_worker_t *worker = iface->super.super.super.worker;
 
     UCS_ASYNC_BLOCK(worker->async);
 
@@ -548,8 +548,9 @@ void uct_dc_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
     if (!iface->progress_flags && flags) {
         if (iface->super.super.super.prog.id == UCS_CALLBACKQ_ID_NULL) {
             iface->super.super.super.prog.id =
-                            ucs_callbackq_add(&worker->progress_q, dc_ops->progress,
-                                              iface, UCS_CALLBACKQ_FLAG_FAST);
+                            ucs_callbackq_add(&worker->super.progress_q,
+                                              dc_ops->progress, iface,
+                                              UCS_CALLBACKQ_FLAG_FAST);
         }
     }
     iface->progress_flags |= flags;
@@ -560,7 +561,7 @@ void uct_dc_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
 void uct_dc_iface_progress_disable(uct_iface_h tl_iface, unsigned flags)
 {
     uct_dc_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_iface_t);
-    uct_worker_h worker = iface->super.super.super.worker;
+    uct_priv_worker_t *worker = iface->super.super.super.worker;
 
     UCS_ASYNC_BLOCK(worker->async);
 
@@ -569,7 +570,7 @@ void uct_dc_iface_progress_disable(uct_iface_h tl_iface, unsigned flags)
      */
     if (iface->progress_flags && !(iface->progress_flags & ~flags)) {
         if (iface->super.super.super.prog.id != UCS_CALLBACKQ_ID_NULL) {
-            ucs_callbackq_remove(&worker->progress_q,
+            ucs_callbackq_remove(&worker->super.progress_q,
                                  iface->super.super.super.prog.id);
             iface->super.super.super.prog.id = UCS_CALLBACKQ_ID_NULL;
         }

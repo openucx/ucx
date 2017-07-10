@@ -344,7 +344,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
     UCS_CLASS_CALL_SUPER_INIT(uct_iface_t, ops);
 
     self->md              = md;
-    self->worker          = worker;
+    self->worker          = ucs_derived_of(worker, uct_priv_worker_t);
     self->am_tracer       = NULL;
     self->am_tracer_arg   = NULL;
     self->err_handler     = params->err_handler;

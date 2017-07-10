@@ -249,10 +249,10 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
               ntohs(bind_addr.sin_port));
 
     /* Register event handler for incoming connections */
-    status = ucs_async_set_event_handler(worker->async->mode, self->listen_fd,
-                                         POLLIN|POLLERR,
+    status = ucs_async_set_event_handler(self->super.worker->async->mode,
+                                         self->listen_fd, POLLIN|POLLERR,
                                          uct_tcp_iface_connect_handler, self,
-                                         worker->async);
+                                         self->super.worker->async);
     if (status != UCS_OK) {
         goto err_close_sock;
     }

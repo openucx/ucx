@@ -63,7 +63,7 @@ static void uct_cm_iface_progress(void *arg)
     if (ucs_queue_is_empty(&iface->outstanding_q) ||
         ucs_queue_head_elem_non_empty(&iface->outstanding_q, uct_cm_iface_op_t, queue)->is_id)
     {
-        uct_worker_progress_unregister_safe(uct_cm_iface_worker(iface),
+        uct_worker_progress_unregister_safe(&uct_cm_iface_worker(iface)->super,
                                             &iface->slow_prog_id);
     }
 
@@ -233,7 +233,7 @@ static void uct_cm_iface_event_handler(int fd, void *arg)
             }
         }
 
-        uct_worker_progress_register_safe(uct_cm_iface_worker(iface),
+        uct_worker_progress_register_safe(&uct_cm_iface_worker(iface)->super,
                                           uct_cm_iface_progress, iface, 0,
                                           &iface->slow_prog_id);
     }
@@ -262,7 +262,7 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
                               IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE, /* mss */
                               &config->super);
 
-    if (worker->async == NULL) {
+    if (self->super.super.worker->async == NULL) {
         ucs_error("cm must have async!=NULL");
         return UCS_ERR_INVALID_PARAM;
     }
@@ -326,7 +326,7 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
 
     status = ucs_async_set_event_handler(config->async_mode, self->cmdev->fd,
                                          POLLIN, uct_cm_iface_event_handler, self,
-                                         worker->async);
+                                         self->super.super.worker->async);
     if (status != UCS_OK) {
         ucs_error("failed to set event handler");
         goto err_destroy_id;
@@ -355,7 +355,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
     uct_cm_iface_outstanding_purge(self);
     ib_cm_destroy_id(self->listen_id);
     ib_cm_close_device(self->cmdev);
-    uct_worker_progress_unregister_safe(uct_cm_iface_worker(self),
+    uct_worker_progress_unregister_safe(&uct_cm_iface_worker(self)->super,
                                         &self->slow_prog_id);
     uct_cm_leave(self);
 

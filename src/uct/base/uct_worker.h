@@ -23,13 +23,12 @@ typedef struct uct_worker_tl_data {
 } uct_worker_tl_data_t;
 
 
-typedef struct uct_worker uct_worker_t;
-struct uct_worker {
+typedef struct uct_priv_worker {
+    uct_worker_t           super;
     ucs_async_context_t    *async;
-    ucs_callbackq_t        progress_q;
     ucs_thread_mode_t      thread_mode;
     ucs_list_link_t        tl_data;
-};
+} uct_priv_worker_t;
 
 
 typedef struct uct_worker_progress {
@@ -77,12 +76,12 @@ typedef struct uct_worker_progress {
 
 void uct_worker_progress_init(uct_worker_progress_t *prog);
 
-void uct_worker_progress_add_safe(uct_worker_h worker, ucs_callback_t cb,
+void uct_worker_progress_add_safe(uct_priv_worker_t *worker, ucs_callback_t cb,
                                   void *arg, uct_worker_progress_t *prog);
 
-void uct_worker_progress_remove_all(uct_worker_h worker,
+void uct_worker_progress_remove_all(uct_priv_worker_t *worker,
                                     uct_worker_progress_t *prog);
 
-void uct_worker_progress_remove(uct_worker_h worker, uct_worker_progress_t *prog);
+void uct_worker_progress_remove(uct_priv_worker_t *worker, uct_worker_progress_t *prog);
 
 #endif

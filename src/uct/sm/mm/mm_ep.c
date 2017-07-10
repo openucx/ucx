@@ -50,7 +50,8 @@ uct_mm_ep_signal_remote(uct_mm_ep_t *ep, uct_mm_iface_conn_signal_t sig)
         ucs_debug("Sent connect from socket %d to %p", iface->signal_fd,
                   (const struct sockaddr*)&ep->cached_signal_sockaddr);
 
-        uct_worker_progress_unregister_safe(iface->super.worker, &ep->slow_cb_id);
+        uct_worker_progress_unregister_safe(&iface->super.worker->super,
+                                            &ep->slow_cb_id);
 
         /* point the ep->fifo_ctl to the remote fifo */
         uct_mm_ep_connected(ep);
@@ -70,7 +71,7 @@ uct_mm_ep_signal_remote(uct_mm_ep_t *ep, uct_mm_iface_conn_signal_t sig)
          * Add the sending attempt as a callback to a slow progress.
          */
         if (sig == UCT_MM_IFACE_SIGNAL_CONNECT) {
-            uct_worker_progress_register_safe(iface->super.worker,
+            uct_worker_progress_register_safe(&iface->super.worker->super,
                                               uct_mm_ep_signal_remote_slow_path_callback,
                                               ep, 0, &ep->slow_cb_id);
         }
@@ -170,7 +171,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
      * from progressing and reading incoming messages  */
 
     /* make sure the slow path function isn't invoked after the ep's cleanup */
-    uct_worker_progress_unregister_safe(iface->super.worker, &self->slow_cb_id);
+    uct_worker_progress_unregister_safe(&iface->super.worker->super, &self->slow_cb_id);
 
     uct_worker_progress_remove(iface->super.worker, &iface->super.prog);
 

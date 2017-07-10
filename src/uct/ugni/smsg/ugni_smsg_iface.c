@@ -342,8 +342,8 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
 
     /* TBD: eventually the uct_ugni_progress has to be moved to
      * udt layer so each ugni layer will have own progress */
-    uct_worker_progress_add_safe(worker, uct_ugni_smsg_progress, self,
-                                 &self->super.super.prog);
+    uct_worker_progress_add_safe(self->super.super.worker, uct_ugni_smsg_progress,
+                                 self, &self->super.super.prog);
 
     return UCS_OK;
 

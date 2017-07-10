@@ -440,6 +440,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
 {
     uct_mm_iface_config_t *mm_config = ucs_derived_of(tl_config, uct_mm_iface_config_t);
     uct_mm_fifo_element_t* fifo_elem_p;
+    ucs_async_context_t *async;
     ucs_status_t status;
     unsigned i;
 
@@ -542,9 +543,10 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_arbiter_init(&self->arbiter);
 
-    ucs_async_set_event_handler((worker->async != NULL) ? worker->async->mode : UCS_ASYNC_MODE_THREAD,
+    async = self->super.worker->async;
+    ucs_async_set_event_handler((async != NULL) ? async->mode : UCS_ASYNC_MODE_THREAD,
                                 self->signal_fd, POLLIN, uct_mm_iface_singal_handler,
-                                self, worker->async);
+                                self, async);
 
     ucs_debug("Created an MM iface. FIFO mm id: %zu", self->fifo_mm_id);
     return UCS_OK;
