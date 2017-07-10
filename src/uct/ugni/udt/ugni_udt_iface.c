@@ -361,6 +361,7 @@ static uct_iface_ops_t uct_ugni_udt_iface_ops = {
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = ucs_empty_function,
     .iface_progress_disable   = ucs_empty_function,
+    .iface_progress        = (void*)uct_ugni_udt_progress,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_udt_iface_t),
     .iface_query              = uct_ugni_udt_iface_query,
     .iface_get_address        = uct_ugni_iface_get_address,

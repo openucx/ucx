@@ -176,6 +176,8 @@ typedef struct uct_iface_ops {
 
     void         (*iface_progress_disable)(uct_iface_h iface, unsigned flags);
 
+    void         (*iface_progress)(uct_iface_h iface);
+
     /* interface - events */
 
     ucs_status_t (*iface_event_fd_get)(uct_iface_h iface, int *fd_p);

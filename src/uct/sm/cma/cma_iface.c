@@ -80,6 +80,7 @@ static uct_iface_ops_t uct_cma_iface_ops = {
     .iface_fence              = uct_sm_iface_fence,
     .iface_progress_enable    = ucs_empty_function,
     .iface_progress_disable   = ucs_empty_function,
+    .iface_progress           = ucs_empty_function,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cma_iface_t),
     .iface_query              = uct_cma_iface_query,
     .iface_get_address        = uct_cma_iface_get_address,

@@ -484,6 +484,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = ucs_empty_function,
     .iface_progress_disable   = ucs_empty_function,
+    .iface_progress           = (void*)uct_ud_verbs_iface_progress,
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
     .iface_event_arm          = uct_ud_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t),
