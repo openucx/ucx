@@ -963,8 +963,10 @@ ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
                                                      name + name_len,
                                                      value, max);
         } else if (!strncmp(field->name, name, strlen(name))) {
-            value_ptr = (char *)opts + field->offset;
-            field->parser.write(value, max, value_ptr, field->parser.arg);
+            if (value) {
+                value_ptr = (char *)opts + field->offset;
+                field->parser.write(value, max, value_ptr, field->parser.arg);
+            }
             status = UCS_OK;
         }
     }
