@@ -20,7 +20,8 @@ define([revcount], esyscmd([git rev-list HEAD | wc -l | sed -e 's/ *//g' | xargs
 define([libucx_so_version], 0:0:0)
 
 AC_INIT([ucx], [ucx_ver_major.ucx_ver_minor])
-
+: ${CFLAGS=""}
+: ${CXXFLAGS=""}
 config_flags="$*"
 valgrind_libpath=""
 
@@ -159,7 +160,7 @@ AS_IF([test "x$with_docs_only" == xyes],
 
      AS_IF([test "x$enable_frame_pointer" == xyes],
          [AS_MESSAGE([compiling with frame pointer])
-          CFLAGS="$CFLAGS -fno-omit-frame-pointer"],
+          BASE_CFLAGS="$BASE_CFLAGS -fno-omit-frame-pointer"],
          [:])
 
 

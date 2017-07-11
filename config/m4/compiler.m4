@@ -73,8 +73,8 @@ AC_DEFUN([COMPILER_OPTION],
            CHECK_CROSS_COMP([AC_LANG_SOURCE([$5])],
                             [AC_MSG_RESULT([yes])
                              OPT_CFLAGS="$OPT_CFLAGS|$1"],
-                            [AC_MSG_RESULT([no])
-                             CFLAGS="$SAVE_CFLAGS"])])
+                            [AC_MSG_RESULT([no])])
+           CFLAGS="$SAVE_CFLAGS"])
 ])
 
 
@@ -161,8 +161,9 @@ CHECK_SPECIFIC_ATTRIBUTE([optimize], [NOOPTIMIZE],
 # Set C++ optimization/debug flags to be the same as for C
 #
 BASE_CPPFLAGS="-DCPU_FLAGS=\"$OPT_CFLAGS\""
-BASE_CXXFLAGS="$CFLAGS"
+BASE_CXXFLAGS="$BASE_CFLAGS"
 
 AC_SUBST([BASE_CPPFLAGS], [$BASE_CPPFLAGS])
 AC_SUBST([BASE_CFLAGS], [$BASE_CFLAGS]) 
 AC_SUBST([BASE_CXXFLAGS], [$BASE_CXXFLAGS])
+
