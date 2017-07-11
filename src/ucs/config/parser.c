@@ -931,7 +931,8 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
 }
 
 ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
-                                        const char *name, char *value, size_t max)
+                                         const char *name, char *value,
+                                         size_t max)
 {
     ucs_config_field_t  *field;
     ucs_config_field_t  *sub_fields;
@@ -940,10 +941,18 @@ ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
     size_t              name_len;
     ucs_status_t        status;
 
+    if (!opts || !fields || !name || (!value && (max > 0))) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     for (field = fields, status = UCS_ERR_NO_ELEM;
          field->name && (status == UCS_ERR_NO_ELEM); ++field) {
 
         name_len = strlen(field->name);
+
+        ucs_debug("compare name \"%s\" with field \"%s\" which is%s subtable",
+                  name, field->name,
+                  ucs_config_is_table_field(field) ? "" : " NOT");
 
         if (ucs_config_is_table_field(field) &&
             !strncmp(field->name, name, name_len)) {
@@ -953,7 +962,7 @@ ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
             status     = ucs_config_parser_get_value(sub_opts, sub_fields,
                                                      name + name_len,
                                                      value, max);
-        } else if (!strcmp(field->name, name)) {
+        } else if (!strncmp(field->name, name, strlen(name))) {
             value_ptr = (char *)opts + field->offset;
             field->parser.write(value, max, value_ptr, field->parser.arg);
             status = UCS_OK;
