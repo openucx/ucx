@@ -44,9 +44,14 @@ typedef struct ucp_tag_match {
     size_t                    thresh;         /* All messages above the threshold are posted
                                                  to the transport. Either UCP user buffer
                                                  itself or preregistered internal UCP buffer
-                                                 is posted. */
+                                                 is posted. Messages below the threshold are
+                                                 not posted and will be matched in SW. */
     size_t                    zcopy_thresh;   /* All UCP user buffers above the threshold
-                                                 are posted to the transport. */
+                                                 are posted to the transport. For buffers
+                                                 below the threshold either preregistered
+                                                 internal UCP buffer (aka bounce buffer)
+                                                 will be posted instead or it will not be
+                                                 posted at all (depends on "thresh" value) */
     unsigned                  sw_req_count;   /* Number of requests which need to be matched
                                                  in software. If 0 - tags can be posted to the
                                                  transport */
