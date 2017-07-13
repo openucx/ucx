@@ -138,6 +138,16 @@ typedef struct ucp_mem                   *ucp_mem_h;
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief UCP bind handle.
+ *
+ * The bind handle is an opaque object that is used for creating the binding of
+ * the worker object to a given sockaddr address.
+ */
+typedef struct ucp_bind                  *ucp_bind_h;
+
+
+/**
  * @ingroup UCP_MEM
  * @brief Attributes of the @ref ucp_mem_h "UCP Memory handle", filled by
  *        @ref ucp_mem_query function.
@@ -336,5 +346,16 @@ typedef enum ucp_wakeup_event_types {
     UCP_WAKEUP_TAG_SEND    = UCS_BIT(2), /**< Tag send completion  */
     UCP_WAKEUP_TAG_RECV    = UCS_BIT(3)  /**< Tag receive completion */
 } ucp_wakeup_event_t;
+
+
+/**
+* @ingroup UCP_WORKER
+* @brief User's callback for handling the creation of an endpoint (connection)
+*        to the remote peer after an incoming connection request on the listener.
+*
+*  @param [in]  ep_p      A handle to the created endpoint.
+*  @param [in]  ctx       User's context.
+*/
+typedef void (*ucp_worker_create_ep_callback_t)(ucp_ep_h *ep_h, void *ctx);
 
 #endif
