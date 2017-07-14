@@ -56,7 +56,6 @@ UCS_TEST_P(test_ucp_wakeup, efd)
     const uint64_t TAG = 0xdeadbeef;
     uint64_t send_data = 0x12121212;
     void *req;
-    ucs_status_t status;
 
     polled.events = POLLIN;
     sender().connect(&receiver());
@@ -193,8 +192,6 @@ test_ucp_wakeup_events::do_tx_rx_events_test(const std::vector<std::string>& tra
     uint64_t send_data = 0x12121212;
     const size_t msg_count = 1001;
     std::vector<void *> req(2*msg_count, NULL);
-
-    ucs_status_t status;
 
     /* UD based transports may cause extra events */
     const char*  ud_tls[]   = { "\\ud", "\\ud_mlx5" };
