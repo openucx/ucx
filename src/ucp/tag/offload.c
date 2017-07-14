@@ -126,14 +126,16 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
 
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
                                               ucp_worker_iface_t, queue);
-    ucp_request_memory_dereg(ctx, ucp_iface->rsc_index, req->recv.datatype,
-                             &req->recv.state);
     status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx,
                                        force);
     if (status != UCS_OK) {
         ucs_error("Failed to cancel recv in the transport: %s",
                   ucs_status_string(status));
+        return;
     }
+
+    ucp_request_memory_dereg(ctx, ucp_iface->rsc_index, req->recv.datatype,
+                             &req->recv.state);
 }
 
 int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
@@ -185,6 +187,9 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
                                       &req->recv.uct_ctx);
     if (status != UCS_OK) {
         /* No more matching entries in the transport. */
+        ucp_request_memory_dereg(ctx, ucp_iface->rsc_index,
+                                 req->recv.datatype,
+                                 &req->recv.state);
         return 0;
     }
     req->flags |= UCP_REQUEST_FLAG_OFFLOADED;

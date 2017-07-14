@@ -37,7 +37,7 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    "Enable HW tag matching",
    ucs_offsetof(uct_rc_verbs_iface_config_t, tm.enable), UCS_CONFIG_TYPE_BOOL},
 
-  {"TM_LIST_SIZE", "64",
+  {"TM_LIST_SIZE", "1024",
    "Limits the number of tags posted to the HW for matching. The actual limit \n"
    "is a minimum between this value and the maximum value supported by the HW. \n"
    "-1 means no limit.",
@@ -148,19 +148,34 @@ uct_rc_verbs_iface_wc_error(uct_rc_verbs_iface_t *iface, int status)
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_verbs_iface_post_op(uct_rc_verbs_iface_t *iface, struct ibv_exp_ops_wr *wr,
-                           struct ibv_sge *sge, size_t sge_cnt, int op,
-                           uct_tag_context_t *ctx, int flags)
+                           int op, int flags, uint64_t wr_id)
 {
     struct ibv_exp_ops_wr *bad_wr;
     int ret;
 
-    UCT_RC_VERBS_FILL_TM_OP_WR(iface, wr, sge, sge_cnt, op, ctx, flags);
+    UCT_RC_VERBS_FILL_TM_OP_WR(iface, wr, op, flags, wr_id);
 
     ret = ibv_exp_post_srq_ops(iface->tm.xrq.srq, wr, &bad_wr);
     if (ret) {
         ucs_error("ibv_exp_post_srq_ops(op=%d) failed: %m", op);
         return UCS_ERR_IO_ERROR;
     }
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_verbs_iface_post_signaled_op(uct_rc_verbs_iface_t *iface,
+                                    struct ibv_exp_ops_wr *wr, int op)
+{
+    ucs_status_t status;
+
+    status = uct_rc_verbs_iface_post_op(iface, wr, op, IBV_EXP_OPS_SIGNALED,
+                                        iface->tm.num_canceled);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    iface->tm.num_canceled = 0;
     return UCS_OK;
 }
 
@@ -186,7 +201,7 @@ uct_rc_verbs_iface_tag_handle_exp(uct_rc_verbs_iface_t *iface,
             ctx->completed_cb(ctx, priv->tag, priv->imm_data,
                               wc->byte_len, UCS_OK);
         }
-        ++iface->tm.tag_available;
+        ++iface->tm.num_tags;
     }
 }
 
@@ -194,12 +209,12 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_iface_unexp_consumed(uct_rc_verbs_iface_t *iface,
                                   uct_ib_iface_recv_desc_t *ib_desc,
                                   uct_rc_verbs_release_desc_t *release,
-                                  ucs_status_t status)
+                                  ucs_status_t comp_status)
 {
     struct ibv_exp_ops_wr wr;
     void *udesc;
 
-    if (status == UCS_OK) {
+    if (comp_status == UCS_OK) {
         ucs_mpool_put_inline(ib_desc);
     } else {
         udesc = (char*)ib_desc + release->offset;
@@ -207,8 +222,7 @@ uct_rc_verbs_iface_unexp_consumed(uct_rc_verbs_iface_t *iface,
     }
 
     if (ucs_unlikely(!(++iface->tm.unexpected_cnt % IBV_DEVICE_MAX_UNEXP_COUNT))) {
-        uct_rc_verbs_iface_post_op(iface, &wr, NULL, 0, IBV_EXP_WR_TAG_SYNC,
-                                   NULL, 0);
+        uct_rc_verbs_iface_post_signaled_op(iface, &wr, IBV_EXP_WR_TAG_SYNC);
     }
     ++iface->tm.xrq.available;
 }
@@ -294,7 +308,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_verbs_iface_poll_rx_tm(uct_rc_verbs_iface_t *iface)
 {
     const unsigned max_wcs = iface->super.super.config.rx_max_poll;
-    ucs_status_t status = UCS_OK;
+    ucs_status_t status    = UCS_OK;
     struct ibv_exp_wc wc[max_wcs];
     uct_tag_context_t *ctx;
     uct_rc_verbs_ctx_priv_t *priv;
@@ -335,11 +349,13 @@ uct_rc_verbs_iface_poll_rx_tm(uct_rc_verbs_iface_t *iface)
             priv = uct_rc_verbs_iface_ctx_priv(ctx);
             ctx->completed_cb(ctx, priv->tag, 0, priv->length,
                               UCS_ERR_CANCELED);
-            ++iface->tm.tag_available;
+            ++iface->tm.num_tags;
             break;
 
         case IBV_EXP_WC_TM_ADD:
-            ++iface->tm.num_outstanding;
+            --iface->tm.num_outstanding;
+        case IBV_EXP_WC_TM_SYNC:
+            iface->tm.num_tags += wc[i].wr_id;
             break;
 
         default:
@@ -387,19 +403,16 @@ static ucs_status_t uct_rc_verbs_iface_tag_recv_zcopy(uct_iface_h tl_iface,
     UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_rc_verbs_iface_tag_recv_zcopy");
     UCT_RC_VERBS_CHECK_TAG(iface);
 
-    sge_cnt        = uct_ib_verbs_sge_fill_iov(sge, iov, iovcnt);
-    wr.tm.add.tag  = tag;
-    wr.tm.add.mask = tag_mask;
+    sge_cnt = uct_ib_verbs_sge_fill_iov(sge, iov, iovcnt);
+    UCT_RC_VERBS_FILL_TM_ADD_WR(&wr, tag, tag_mask, sge, sge_cnt, ctx);
 
-    status = uct_rc_verbs_iface_post_op(iface, &wr, sge, sge_cnt,
-                                        IBV_EXP_WR_TAG_ADD, ctx,
-                                        IBV_EXP_OPS_SIGNALED);
+    status = uct_rc_verbs_iface_post_signaled_op(iface, &wr, IBV_EXP_WR_TAG_ADD);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
 
-    --iface->tm.tag_available;
-    --iface->tm.num_outstanding;
+    --iface->tm.num_tags;
+    ++iface->tm.num_outstanding;
 
     /* Save tag index in the device tags list returned by ibv_exp_post_srq_ops.
      * It may be needed for cancelling this posted tag. */
@@ -418,20 +431,32 @@ static ucs_status_t uct_rc_verbs_iface_tag_recv_cancel(uct_iface_h tl_iface,
    uct_rc_verbs_iface_t *iface   = ucs_derived_of(tl_iface,
                                                   uct_rc_verbs_iface_t);
    struct ibv_exp_ops_wr wr;
-   int flags;
+   ucs_status_t status;
 
    wr.tm.handle = priv->tag_handle;
 
-   if (force) {
-       flags = 0;
-       /* We will not get completion, so free one tag immediately */
-       ++iface->tm.tag_available;
-   } else {
-       flags    = IBV_EXP_OPS_SIGNALED;
-       wr.wr_id = (uint64_t)ctx; \
+   status = uct_rc_verbs_iface_post_op(iface, &wr, IBV_EXP_WR_TAG_DEL,
+                                       force ? 0 : IBV_EXP_OPS_SIGNALED,
+                                       (uint64_t)ctx);
+   if (status != UCS_OK) {
+       return status;
    }
-   return uct_rc_verbs_iface_post_op(iface, &wr, NULL, 0, IBV_EXP_WR_TAG_DEL,
-                                     ctx, flags);
+
+   if (force) {
+       if (iface->tm.num_outstanding) {
+           ++iface->tm.num_canceled;
+       } else {
+           /* No pending ADD operations, free the tag immediately */
+           ++iface->tm.num_tags;
+       }
+       if (iface->tm.num_canceled >= iface->tm.tag_sync_thresh) {
+           /* Too many pending cancels. Need to issue a signaled operation
+            * to free the canceled tags */
+           uct_rc_verbs_iface_post_signaled_op(iface, &wr, IBV_EXP_WR_TAG_SYNC);
+       }
+   }
+
+   return UCS_OK;
 }
 
 static void uct_rc_verbs_iface_release_desc(uct_recv_desc_t *self, void *desc)
@@ -450,7 +475,8 @@ static ucs_status_t uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
     struct ibv_exp_create_srq_attr srq_init_attr;
     ucs_status_t status;
     int rx_hdr_len;
-    uct_ib_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_md_t);
+    int tag_sync_factor = 2;
+    uct_ib_md_t *md     = ucs_derived_of(iface->super.super.super.md, uct_ib_md_t);
 
     if (UCT_RC_VERBS_TM_ENABLED(iface)) {
         /* Create XRQ with TM capability */
@@ -463,15 +489,12 @@ static ucs_status_t uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
         srq_init_attr.srq_type            = IBV_EXP_SRQT_TAG_MATCHING;
         srq_init_attr.pd                  = md->pd;
         srq_init_attr.cq                  = iface->super.super.recv_cq;
-        srq_init_attr.tm_cap.max_num_tags = iface->tm.tag_available;
+        srq_init_attr.tm_cap.max_num_tags = iface->tm.num_tags;
 
-        /* 2 ops for each tag (ADD + DEL) and extra tag for SYNC ops.
-         * Do not rely on max_tag_ops device capability, so that XRQ creation
-         * would fail if such # of ops is not supported (which is not expected).
-         * TODO: Check that we have only outstanding sync operation at time.
-         * We should stop preposting new unexp buffers if need to post SYNC and
-         * the previous one is not completed yet. */
-        srq_init_attr.tm_cap.max_ops      = 2 * iface->tm.tag_available + 256;
+        /* 2 ops for each tag (ADD + DEL) and extra ops for SYNC. There can be
+         * up to "tag_sync_factor" SYNC ops during cancellation. Also we assume that
+         * there can be up to two pending SYNC ops during unexpected messages flow. */
+        srq_init_attr.tm_cap.max_ops      = 2 * iface->tm.num_tags + tag_sync_factor + 2;
         srq_init_attr.comp_mask           = IBV_EXP_CREATE_SRQ_CQ |
                                             IBV_EXP_CREATE_SRQ_TM;
 
@@ -481,12 +504,8 @@ static ucs_status_t uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
             return UCS_ERR_IO_ERROR;
         }
 
-        /* Only ADD operations decrease num_outstanding counter. So, limit num_outstanding
-         * to the number of tags, DEL and SYNC operations should be always successful. */
-        iface->tm.num_outstanding = iface->tm.tag_available;
-
-        iface->tm.xrq.available = srq_init_attr.base.attr.max_wr;
-        --iface->tm.tag_available; /* 1 tag should be always available in HW match list */
+        iface->tm.tag_sync_thresh = iface->tm.num_tags / tag_sync_factor;
+        iface->tm.xrq.available   = srq_init_attr.base.attr.max_wr;
 
         /* AM (NO_TAG) and eager messages have different header sizes.
          * Receive descriptor offsets are calculated based on AM hdr length.
@@ -545,18 +564,22 @@ static void uct_rc_verbs_iface_tag_preinit(uct_rc_verbs_iface_t *iface,
         iface->tm.rndv_unexp.cb    = params->rndv_cb;
         iface->tm.rndv_unexp.arg   = params->rndv_arg;
         iface->tm.unexpected_cnt   = 0;
-        iface->tm.tag_available    = ucs_min(IBV_DEVICE_TM_CAPS(dev, max_num_tags),
+        iface->tm.num_canceled     = 0;
+        iface->tm.num_tags         = ucs_min(IBV_DEVICE_TM_CAPS(dev, max_num_tags),
                                              UCT_RC_VERBS_TM_CONFIG(config, list_size));
 
         /* There can be up to 3 CQEs for every posted tag: ADD, TM_CONSUMED
-         * and MSG_ARRIVED. */
-        *rx_cq_len     = config->super.super.rx.queue_len + iface->tm.tag_available * 2;
+         * and MSG_ARRIVED. Also there can be one SYNC CQE per every
+         * IBV_DEVICE_MAX_UNEXP_COUNT unexpected receives. */
+        ucs_assert(IBV_DEVICE_MAX_UNEXP_COUNT);
+        *rx_cq_len     = config->super.super.rx.queue_len + iface->tm.num_tags * 2 +
+                         config->super.super.rx.queue_len / IBV_DEVICE_MAX_UNEXP_COUNT;
         *srq_size      = UCT_RC_VERBS_TM_CONFIG(config, rndv_queue_len);
         /* Only opcode (rather than the whole TMH) is sent with NO_TAG protocol */
         *rx_hdr_len    = sizeof(uct_rc_hdr_t) + sizeof(tmh.opcode);
         *short_mp_size = ucs_max(*rx_hdr_len, sizeof(struct ibv_exp_tmh));
 
-        ucs_debug("Tag Matching enabled: tag list size %d", iface->tm.tag_available);
+        ucs_debug("Tag Matching enabled: tag list size %d", iface->tm.num_tags);
     } else
 #endif
     {
