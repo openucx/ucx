@@ -950,7 +950,7 @@ ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
 
         name_len = strlen(field->name);
 
-        ucs_debug("compare name \"%s\" with field \"%s\" which is%s subtable",
+        ucs_trace("compare name \"%s\" with field \"%s\" which is%s subtable",
                   name, field->name,
                   ucs_config_is_table_field(field) ? "" : " NOT");
 
