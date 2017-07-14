@@ -354,6 +354,7 @@ uct_rc_verbs_iface_poll_rx_tm(uct_rc_verbs_iface_t *iface)
 
         case IBV_EXP_WC_TM_ADD:
             --iface->tm.num_outstanding;
+            /* Fall through */
         case IBV_EXP_WC_TM_SYNC:
             iface->tm.num_tags += wc[i].wr_id;
             break;
