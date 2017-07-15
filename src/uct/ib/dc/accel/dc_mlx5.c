@@ -494,7 +494,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE unsigned
 uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
 {
     uint8_t dci;
@@ -505,7 +505,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super.super, &iface->mlx5_common.tx.cq);
     if (cqe == NULL) {
-        return;
+        return 0;
     }
     UCS_STATS_UPDATE_COUNTER(iface->super.super.stats, UCT_RC_IFACE_STAT_TX_COMPLETION, 1);
 
@@ -532,17 +532,20 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     }
     ucs_arbiter_dispatch(uct_dc_iface_tx_waitq(&iface->super), 1, 
                          uct_dc_iface_dci_do_pending_tx, NULL);
+    return 1;
 }
 
-static void uct_dc_mlx5_iface_progress(uct_iface_h tl_iface)
+static unsigned uct_dc_mlx5_iface_progress(uct_iface_h tl_iface)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
-    ucs_status_t status;
+    unsigned count;
 
-    status = uct_rc_mlx5_iface_common_poll_rx(&iface->mlx5_common, &iface->super.super);
-    if (status == UCS_ERR_NO_PROGRESS) {
-        uct_dc_mlx5_poll_tx(iface);
+    count = uct_rc_mlx5_iface_common_poll_rx(&iface->mlx5_common,
+                                             &iface->super.super);
+    if (count > 0) {
+        return count;
     }
+    return uct_dc_mlx5_poll_tx(iface);
 }
 
 static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg)

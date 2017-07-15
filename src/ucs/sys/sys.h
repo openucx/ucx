@@ -278,6 +278,7 @@ void ucs_sys_free(void *ptr, size_t length);
  * Empty function which can be casted to a no-operation callback in various situations.
  */
 void ucs_empty_function();
+unsigned ucs_empty_function_return_zero();
 ucs_status_t ucs_empty_function_return_success();
 ucs_status_t ucs_empty_function_return_unsupported();
 ucs_status_t ucs_empty_function_return_inprogress();

@@ -103,7 +103,7 @@ static inline unsigned uct_rc_verbs_iface_post_recv_common(uct_rc_iface_t *iface
 #define UCT_RC_VERBS_IFACE_FOREACH_TXWQE(_iface, _i, _wc, _num_wcs) \
       status = uct_ib_poll_cq((_iface)->super.send_cq, &_num_wcs, _wc); \
       if (status != UCS_OK) { \
-          return; \
+          return 0; \
       } \
       UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_TX_COMPLETION, _num_wcs); \
       for (_i = 0; _i < _num_wcs; ++_i)
@@ -142,7 +142,7 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr,
     }
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
 {
     uct_rc_hdr_t *hdr;
@@ -153,6 +153,7 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
 
     status = uct_ib_poll_cq(iface->super.recv_cq, &num_wcs, wc);
     if (status != UCS_OK) {
+        num_wcs = 0;
         goto out;
     }
 
@@ -167,7 +168,7 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
 
 out:
     uct_rc_verbs_iface_post_recv_common(iface, &iface->rx.srq, 0);
-    return status;
+    return num_wcs;
 }
 
 static UCS_F_ALWAYS_INLINE void

@@ -63,7 +63,7 @@ protected:
         void mem_free(const uct_allocated_memory_t *mem,
                       const uct_rkey_bundle_t& rkey) const;
 
-        void progress() const;
+        unsigned progress() const;
 
         uct_md_h md() const;
 
@@ -196,7 +196,7 @@ protected:
 
     void check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     const entity& ent(unsigned index) const;
-    void progress() const;
+    unsigned progress() const;
     void flush() const;
     virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS) const;
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;

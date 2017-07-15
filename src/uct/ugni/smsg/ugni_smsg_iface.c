@@ -161,7 +161,7 @@ ucs_status_t progress_remote_cq(uct_ugni_smsg_iface_t *iface)
 
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_smsg_iface_t, uct_iface_t);
 
-static void uct_ugni_smsg_progress(void *arg)
+static unsigned uct_ugni_smsg_progress(void *arg)
 {
     uct_ugni_smsg_iface_t *iface = (uct_ugni_smsg_iface_t *)arg;
     ucs_status_t status;
@@ -177,6 +177,7 @@ static void uct_ugni_smsg_progress(void *arg)
 
     ucs_arbiter_dispatch(&iface->super.arbiter, iface->config.smsg_max_credit,
                          uct_ugni_ep_process_pending, NULL);
+    return 0; // TODO
 }
 
 static ucs_status_t uct_ugni_smsg_query_tl_resources(uct_md_h md,

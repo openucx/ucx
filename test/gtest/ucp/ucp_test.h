@@ -59,7 +59,7 @@ public:
 
         ucp_context_h ucph() const;
 
-        void progress(int worker_index = 0);
+        unsigned progress(int worker_index = 0);
 
         int get_num_workers() const;
 
@@ -127,7 +127,7 @@ protected:
     virtual void cleanup();
     entity* create_entity(bool add_in_front = false);
 
-    void progress(int worker_index = 0) const;
+    unsigned progress(int worker_index = 0) const;
     void short_progress_loop(int worker_index = 0) const;
     void disconnect(const entity& entity);
     void wait(void *req, int worker_index = 0);

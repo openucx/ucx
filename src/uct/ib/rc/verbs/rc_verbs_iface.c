@@ -91,7 +91,7 @@ void uct_rc_verbs_ep_am_packet_dump(uct_base_iface_t *base_iface,
                              valid_length, buffer, max);
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {
     uct_rc_verbs_ep_t *ep;
@@ -119,17 +119,20 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
     }
     iface->super.tx.cq_available += num_wcs;
     ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending, NULL);
+    return num_wcs;
 }
 
-void uct_rc_verbs_iface_progress(void *arg)
+unsigned uct_rc_verbs_iface_progress(void *arg)
 {
     uct_rc_verbs_iface_t *iface = arg;
-    ucs_status_t status;
+    unsigned count;
 
-    status = uct_rc_verbs_iface_poll_rx_common(&iface->super);
-    if (status == UCS_ERR_NO_PROGRESS) {
-        uct_rc_verbs_iface_poll_tx(iface);
+    count = uct_rc_verbs_iface_poll_rx_common(&iface->super);
+    if (count > 0) {
+        return count;
     }
+
+    return uct_rc_verbs_iface_poll_tx(iface);
 }
 
 #if IBV_EXP_HW_TM
@@ -304,11 +307,10 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_t *iface,
     }
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_verbs_iface_poll_rx_tm(uct_rc_verbs_iface_t *iface)
 {
     const unsigned max_wcs = iface->super.super.config.rx_max_poll;
-    ucs_status_t status    = UCS_OK;
     struct ibv_exp_wc wc[max_wcs];
     uct_tag_context_t *ctx;
     uct_rc_verbs_ctx_priv_t *priv;
@@ -317,11 +319,10 @@ uct_rc_verbs_iface_poll_rx_tm(uct_rc_verbs_iface_t *iface)
     num_wcs = ibv_exp_poll_cq(iface->super.super.recv_cq, max_wcs, wc,
                               sizeof(wc[0]));
     if (num_wcs <= 0) {
-        if (ucs_likely(num_wcs == 0)) {
-            status = UCS_ERR_NO_PROGRESS;
-            goto out;
+        if (ucs_unlikely(num_wcs < 0)) {
+            ucs_fatal("Failed to poll receive CQ %d", num_wcs);
         }
-        ucs_fatal("Failed to poll receive CQ %d", num_wcs);
+        goto out;
     }
 
     for (i = 0; i < num_wcs; ++i) {
@@ -372,18 +373,19 @@ out:
 
     /* Only RNDV FIN messages arrive to SRQ (sent by FW) */
     uct_rc_verbs_iface_post_recv_common(&iface->super, &iface->super.rx.srq, 0);
-    return status;
+    return num_wcs;
 }
 
-void uct_rc_verbs_iface_progress_tm(void *arg)
+unsigned uct_rc_verbs_iface_progress_tm(void *arg)
 {
     uct_rc_verbs_iface_t *iface = arg;
-    ucs_status_t status;
+    unsigned count;
 
-    status = uct_rc_verbs_iface_poll_rx_tm(iface);
-    if (status == UCS_ERR_NO_PROGRESS) {
-        uct_rc_verbs_iface_poll_tx(iface);
+    count = uct_rc_verbs_iface_poll_rx_tm(iface);
+    if (count > 0) {
+        return count;
     }
+    return uct_rc_verbs_iface_poll_tx(iface);
 }
 
 static ucs_status_t uct_rc_verbs_iface_tag_recv_zcopy(uct_iface_h tl_iface,

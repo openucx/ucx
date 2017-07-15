@@ -334,7 +334,7 @@ static void ucp_ep_flush_slow_path_remove(ucp_request_t *req)
                                         &req->send.flush.slow_cb_id);
 }
 
-static void ucp_ep_flushed_slow_path_callback(void *arg)
+static unsigned ucp_ep_flushed_slow_path_callback(void *arg)
 {
     ucp_request_t *req = arg;
     ucp_ep_h ep = req->send.ep;
@@ -349,6 +349,8 @@ static void ucp_ep_flushed_slow_path_callback(void *arg)
     /* Complete send request from here, to avoid releasing the request while
      * slow-path element is still pending */
     ucp_request_complete_send(req, req->status);
+
+    return 0;
 }
 
 static int ucp_flush_check_completion(ucp_request_t *req)
@@ -368,13 +370,14 @@ static int ucp_flush_check_completion(ucp_request_t *req)
     return 1;
 }
 
-static void ucp_ep_flush_resume_slow_path_callback(void *arg)
+static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
 {
     ucp_request_t *req = arg;
 
     ucp_ep_flush_slow_path_remove(req);
     ucp_ep_flush_progress(req);
     ucp_flush_check_completion(req);
+    return 0;
 }
 
 static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)

@@ -52,7 +52,7 @@ static ucs_status_t ucp_stub_ep_connect_to_ep(uct_ep_h uct_ep,
  * We switch the endpoint in this function (instead in wireup code) since
  * this is guaranteed to run from the main thread.
  */
-static void ucp_stub_ep_progress(void *arg)
+static unsigned ucp_stub_ep_progress(void *arg)
 {
     ucp_stub_ep_t *stub_ep = arg;
     ucp_ep_h ep = stub_ep->ep;
@@ -69,8 +69,7 @@ static void ucp_stub_ep_progress(void *arg)
 
     /* If we still have pending wireup messages, send them out first */
     if (stub_ep->pending_count != 0) {
-        UCS_ASYNC_UNBLOCK(&ep->worker->async);
-        return;
+        goto out;
     }
 
     ucs_trace("ep %p: switching stub_ep %p to ready state", ep, stub_ep);
@@ -107,7 +106,9 @@ static void ucp_stub_ep_progress(void *arg)
         --ep->worker->stub_pend_count;
     }
 
+out:
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
+    return 0;
 }
 
 static ucs_status_t ucp_stub_ep_send_func(uct_ep_h uct_ep)

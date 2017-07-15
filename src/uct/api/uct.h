@@ -1374,10 +1374,12 @@ ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
  * to receive the active message requests.
  *
  * @param [in]  worker        Handle to worker.
+ *
+ * @return Non-zero if any communication was progressed, zero otherwise.
  */
-UCT_INLINE_API void uct_worker_progress(uct_worker_h worker)
+UCT_INLINE_API unsigned uct_worker_progress(uct_worker_h worker)
 {
-    ucs_callbackq_dispatch(&worker->progress_q);
+    return ucs_callbackq_dispatch(&worker->progress_q);
 }
 
 
@@ -2135,9 +2137,9 @@ UCT_INLINE_API void uct_iface_progress_disable(uct_iface_h iface, unsigned flags
 /**
  * Perform a progress on an interface.
  */
-UCT_INLINE_API void uct_iface_progress(uct_iface_h iface)
+UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
 {
-    iface->ops.iface_progress(iface);
+    return iface->ops.iface_progress(iface);
 }
 
 
