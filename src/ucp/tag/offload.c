@@ -34,7 +34,7 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
 {
     ucp_request_t *req        = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
     ucp_context_t *ctx        = req->recv.worker->context;
-    ucp_worker_iface_t *iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
+    ucp_worker_iface_t *iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                                               ucp_worker_iface_t, queue);
 
     req->recv.info.sender_tag = stag;
@@ -76,7 +76,7 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
     ucp_request_t *req        = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
     ucp_context_t *ctx        = req->recv.worker->context;
     ucp_sw_rndv_hdr_t *sreq   = (ucp_sw_rndv_hdr_t*)header;
-    ucp_worker_iface_t *iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
+    ucp_worker_iface_t *iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                                               ucp_worker_iface_t, queue);
     ucp_rndv_rts_hdr_t rts;
 
@@ -143,7 +143,7 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
         return;
     }
 
-    ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
+    ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                               ucp_worker_iface_t, queue);
     ucp_tag_offload_release_buf(req, ctx, ucp_iface->rsc_index);
 
@@ -177,15 +177,15 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
         return 0;
     }
 
-    if (ctx->tm.sw_req_count) {
+    if (ctx->tm.offload.sw_req_count) {
         /* There are some requests which must be completed in SW. Do not post
          * tags to HW until they are completed. */
         return 0;
     }
 
-    ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload_ifaces,
+    ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                               ucp_worker_iface_t, queue);
-    if (ucs_unlikely(length >= ctx->tm.zcopy_thresh)) {
+    if (ucs_unlikely(length >= ctx->tm.offload.zcopy_thresh)) {
         status = ucp_request_memory_reg(ctx, ucp_iface->rsc_index, req->recv.buffer,
                                         req->recv.length, req->recv.datatype,
                                         &req->recv.state);
@@ -418,7 +418,8 @@ static UCS_F_ALWAYS_INLINE void
 ucp_tag_offload_sync_posted(ucp_worker_t *worker, ucp_request_t *req)
 {
     req->send.tag_offload.ssend_tag = req->send.tag;
-    ucs_queue_push(&worker->context->tm.sync_reqs, &req->send.tag_offload.queue);
+    ucs_queue_push(&worker->context->tm.offload.sync_reqs,
+                   &req->send.tag_offload.queue);
 }
 
 static ucs_status_t ucp_tag_offload_eager_sync_bcopy(uct_pending_req_t *self)

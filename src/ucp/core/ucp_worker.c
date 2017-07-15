@@ -65,7 +65,7 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
         }
 
         if (ucp_worker_is_tl_tag_offload(worker, rsc_index)) {
-            ucs_queue_remove(&worker->context->tm.offload_ifaces,
+            ucs_queue_remove(&worker->context->tm.offload.ifaces,
                              &worker->ifaces[rsc_index].queue);
             ucp_context_tag_offload_enable(worker->context);
         }
@@ -412,7 +412,7 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
 
     if (ucp_worker_is_tl_tag_offload(worker, tl_id)) {
         worker->ifaces[tl_id].rsc_index = tl_id;
-        ucs_queue_push(&context->tm.offload_ifaces, &worker->ifaces[tl_id].queue);
+        ucs_queue_push(&context->tm.offload.ifaces, &worker->ifaces[tl_id].queue);
         ucp_context_tag_offload_enable(context);
     }
 

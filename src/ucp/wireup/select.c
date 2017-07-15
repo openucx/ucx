@@ -698,7 +698,7 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
     double score;
 
     if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) ||
-        ucs_queue_is_empty(&ep->worker->context->tm.offload_ifaces)) {
+        ucs_queue_is_empty(&ep->worker->context->tm.offload.ifaces)) {
         return UCS_OK;
     }
 

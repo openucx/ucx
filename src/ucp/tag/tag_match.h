@@ -28,33 +28,40 @@ typedef struct {
  * Tag-matching context
  */
 typedef struct ucp_tag_match {
+
+    /* Expected queue */
     struct {
         ucs_queue_head_t      wildcard;   /* Expected wildcard requests */
         ucs_queue_head_t      *hash;      /* Hash table of expected non-wild tags */
         uint64_t              sn;
     } expected;
+
+    /* Unexpected queue */
     struct {
         ucs_list_link_t       all;        /* Linked list of all tags */
         ucs_list_link_t       *hash;      /* Hash table of unexpected tags */
     } unexpected;
 
     /* Tag offload fields */
-    ucs_queue_head_t          offload_ifaces; /* Interfaces which support tag offload */
-    ucs_queue_head_t          sync_reqs;      /* Outgoing sync send requests */
-    size_t                    thresh;         /* All messages above the threshold are posted
-                                                 to the transport. Either UCP user buffer
-                                                 itself or preregistered internal UCP buffer
-                                                 is posted. Messages below the threshold are
-                                                 not posted and will be matched in SW. */
-    size_t                    zcopy_thresh;   /* All UCP user buffers above the threshold
-                                                 are posted to the transport. For buffers
-                                                 below the threshold either preregistered
-                                                 internal UCP buffer (aka bounce buffer)
-                                                 will be posted instead or it will not be
-                                                 posted at all (depends on "thresh" value) */
-    unsigned                  sw_req_count;   /* Number of requests which need to be matched
-                                                 in software. If 0 - tags can be posted to the
-                                                 transport */
+    struct {
+        ucs_queue_head_t      ifaces;         /* Interfaces which support tag offload */
+        ucs_queue_head_t      sync_reqs;      /* Outgoing sync send requests */
+        size_t                thresh;         /* Minimal receive buffer size to be
+                                                 used with tag-matching offload. */
+        size_t                zcopy_thresh;   /* Minimal size of user-provided
+                                                 receive buffer to be passed
+                                                 directly to tag-matching offload
+                                                 on the transport. Buffers smaller
+                                                 than this threshold would either
+                                                 bounce to UCP internal buffers,
+                                                 or not be used with tag-matching
+                                                 offload at all, according to
+                                                 'thresh' configuration. */
+        unsigned              sw_req_count;   /* Number of requests which need to
+                                                 be matched in software. If 0 - tags
+                                                 can be posted to the transport */
+    } offload;
+
 } ucp_tag_match_t;
 
 

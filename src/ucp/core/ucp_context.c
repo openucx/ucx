@@ -959,14 +959,14 @@ void ucp_context_tag_offload_enable(ucp_context_h context)
 {
     /* Enable offload, if only one tag offload capable interface is present
      * (multiple offload ifaces are not supported yet). */
-    if (ucs_queue_length(&context->tm.offload_ifaces) == 1) {
-        context->tm.thresh       = context->config.ext.tm_thresh;
-        context->tm.zcopy_thresh = context->config.ext.tm_max_bcopy;
+    if (ucs_queue_length(&context->tm.offload.ifaces) == 1) {
+        context->tm.offload.thresh       = context->config.ext.tm_thresh;
+        context->tm.offload.zcopy_thresh = context->config.ext.tm_max_bcopy;
 
         ucs_debug("Enable TM offload: thresh %zu, zcopy_thresh %zu",
-                  context->tm.thresh, context->tm.zcopy_thresh);
+                  context->tm.offload.thresh, context->tm.offload.zcopy_thresh);
     } else {
-        context->tm.thresh = SIZE_MAX;
+        context->tm.offload.thresh = SIZE_MAX;
         ucs_debug("Disable TM offload, multiple offload ifaces are not supported");
     }
 }
