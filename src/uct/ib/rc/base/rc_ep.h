@@ -223,8 +223,6 @@ ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
 
 void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
                                    int is_log);
-void uct_rc_ep_failed_purge_outstanding(uct_ep_t *ep, uct_ib_iface_t *iface,
-                                        uct_rc_txqp_t *txqp);
 
 ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available);
 
@@ -349,7 +347,9 @@ uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t 
 static UCS_F_ALWAYS_INLINE uint8_t
 uct_rc_iface_tx_moderation(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uint8_t flag)
 {
-    return (txqp->unsignaled >= iface->config.tx_moderation) ? flag : 0;
+    return ((txqp->unsignaled >= iface->config.tx_moderation) ||
+            (iface->tx.cq_available < (signed)iface->config.tx_moderation)) ?
+           flag : 0;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -358,11 +358,14 @@ uct_rc_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface, uint16_t res_coun
     if (signaled) {
         ucs_assert(uct_rc_iface_have_tx_cqe_avail(iface));
         txqp->unsignaled = 0;
-        --iface->tx.cq_available;
         UCS_STATS_UPDATE_COUNTER(txqp->stats, UCT_RC_TXQP_STAT_SIGNAL, 1);
     } else {
-        txqp->unsignaled++;
+        ++txqp->unsignaled;
     }
+
+    /* reserve cq credits for every posted operation,
+     * in case it would complete with error */
+    iface->tx.cq_available -= res_count;
     txqp->available -= res_count;
 }
 

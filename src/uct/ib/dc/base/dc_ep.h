@@ -156,10 +156,7 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
     ucs_assert(iface->tx.stack_top > 0);
 
     if (uct_dc_iface_dci_has_outstanding(iface, dci)) {
-        if (ucs_unlikely(ep == NULL)) {
-            /* ep was destroyed while holding dci */
-            return;
-        }
+        ucs_assert(ep != NULL);
         if (iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) {
             /* in tx_wait state:
              * -  if there are no eps are waiting for dci allocation
@@ -179,7 +176,6 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
     iface->tx.dcis_stack[iface->tx.stack_top] = dci;
 
     if (ucs_unlikely(ep == NULL)) {
-        /* ep was destroyed while holding dci */
         return;
     }
 
