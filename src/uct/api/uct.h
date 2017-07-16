@@ -888,7 +888,8 @@ void uct_config_print(const void *config, FILE *stream, const char *title,
  *                            caller.
  * @param [in]  max           Available memory space at @a value pointer.
  *
- * @return Error code.
+ * @return UCS_OK if found, otherwise UCS_ERR_INVALID_PARAM or UCS_ERR_NO_ELEM
+ *         if error.
  */
 ucs_status_t uct_config_get(void *config, const char *name, char *value,
                             size_t max);
