@@ -11,6 +11,7 @@
 
 #include <ucs/type/status.h>
 #include <stddef.h>
+#include <unistd.h>
 #include <stdint.h>
 
 
@@ -139,12 +140,12 @@ typedef struct ucp_mem                   *ucp_mem_h;
 
 /**
  * @ingroup UCP_WORKER
- * @brief UCP bind handle.
+ * @brief UCP listen handle.
  *
- * The bind handle is an opaque object that is used for creating the binding of
- * the worker object to a given sockaddr address.
+ * The listener handle is an opaque object that is used for creating the binding of
+ * the worker object to a given sockaddr address and start listening on it.
  */
-typedef struct ucp_bind                  *ucp_bind_h;
+typedef struct ucp_listener              *ucp_listener_h;
 
 
 /**
@@ -299,6 +300,17 @@ typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
 typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status);
 
 
+/**
+* @ingroup UCP_WORKER
+* @brief User's callback for handling the creation of an endpoint (connection)
+*        to the remote peer after an incoming connection request on the listener.
+*
+*  @param [in]  ep_h      A handle to the created endpoint.
+*  @param [in]  arg       User's argument for the callback.
+*/
+typedef void (*ucp_worker_create_ep_callback_t)(ucp_ep_h *ep_h, void *arg);
+
+
  /**
  * @ingroup UCP_COMM
  * @brief UCP endpoint error handling context.
@@ -309,6 +321,32 @@ typedef struct ucp_err_handler {
     ucp_err_handler_cb_t cb;       /**< Error handler callback */
     void                 *arg;     /**< User defined argument */
 } ucp_err_handler_t;
+
+
+/**
+ * @ingroup UCP_EP
+ * @brief UCP address description in case of a client-server connection flow.
+ *
+ * This structure should be initialized in @ref ucp_ep_params_t
+ */
+typedef struct ucp_addr_sock_addr {
+    struct sockaddr   *sock_addr;           /**< Address in the form of a sockaddr */
+    socklen_t         addr_len;             /**< Address length */
+} ucp_addr_sock_addr_t;
+
+
+/**
+* @ingroup UCP_WORKER
+* @brief UCP callback to handle the creation of an endpoint in a client-server
+* connection establishment flow.
+*
+* This structure is used for handling the creation of an endpoint
+* to the remote peer after an incoming connection request on the listener
+*/
+typedef struct ucp_worker_ep_create_handler {
+    ucp_worker_create_ep_callback_t cb;       /**< Endpoint creation callback */
+   void                             *arg;     /**< User defined argument */
+} ucp_worker_ep_create_handler_t;
 
 
 /**
@@ -346,16 +384,5 @@ typedef enum ucp_wakeup_event_types {
     UCP_WAKEUP_TAG_SEND    = UCS_BIT(2), /**< Tag send completion  */
     UCP_WAKEUP_TAG_RECV    = UCS_BIT(3)  /**< Tag receive completion */
 } ucp_wakeup_event_t;
-
-
-/**
-* @ingroup UCP_WORKER
-* @brief User's callback for handling the creation of an endpoint (connection)
-*        to the remote peer after an incoming connection request on the listener.
-*
-*  @param [in]  ep_p      A handle to the created endpoint.
-*  @param [in]  ctx       User's context.
-*/
-typedef void (*ucp_worker_create_ep_callback_t)(ucp_ep_h *ep_h, void *ctx);
 
 #endif

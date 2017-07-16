@@ -14,7 +14,6 @@
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/config/types.h>
-#include <unistd.h>
 #include <stdio.h>
 
 
@@ -159,6 +158,23 @@ enum ucp_worker_params_field {
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief UCP listener parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_worker_listener_params_t
+ * are present. It is used for the enablement of backward compatibility support.
+ */
+enum ucp_worker_listener_params_field {
+    UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR = UCS_BIT(0), /**< Sock address and
+                                                                 length */
+    UCP_WORKER_LISTENER_PARAM_FIELD_CALLBACK  = UCS_BIT(1)  /**< User's callback
+                                                                 for handling the
+                                                                 creation of an
+                                                                 endpoint */
+};
+
+
+/**
  * @ingroup UCP_ENDPOINT
  * @brief UCP endpoint parameters field mask.
  *
@@ -172,9 +188,26 @@ enum ucp_ep_params_field {
                                                             @ref ucp_err_handling_mode_t */
     UCP_EP_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(2), /**< Handler to process
                                                             transport level errors */
-    UCP_EP_PARAM_FIELD_ADDRESS_TYPE_CM   = UCS_BIT(3)  /**< Using a connection
-                                                            manager for establishing
-                                                            connection to remote peers */
+    UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(3), /**< Using a client-server
+                                                            connection establishment
+                                                            mechanism for establishing
+                                                            connections to remote peers */
+    UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(4)  /**< Endpoint flags */
+};
+
+
+/**
+ * @ingroup UCP_EP
+ * @brief UCP endpoint parameters flags.
+ *
+ * The enumeration list describes the endpoint's parameters flags supported by
+ * @ref ucp_ep_create() function.
+ */
+enum ucp_ep_params_flags_field {
+    UCP_EP_PARAMS_FLAGS_CLIENT_SERVER  = UCS_BIT(1)   /**< Using a client-server
+                                                           connection establishment
+                                                           mechanism to pass
+                                                           an AF_INET address */
 };
 
 
@@ -648,6 +681,41 @@ typedef struct ucp_worker_params {
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief Tuning parameters for the UCP listener.
+ *
+ * The structure defines the parameters that are used for the
+ * UCP worker binding and listening during the UCP ep @ref ucp_worker_listen.
+ */
+typedef struct ucp_worker_listener_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_worker_listener_params_field.
+     * Fields not specified in this mask would be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                       field_mask;
+
+    /**
+     * An address in the form of a sockaddr.
+     * This field is mandatory for filling (along with its corresponding bit
+     * in the field_mask - UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR
+     * The ucp_worker_listen routine will return with an error if the sock_addr
+     * isn't specified.
+     */
+    ucp_addr_sock_addr_t           sock_address;
+
+    /**
+     * Handler to endpoint creation in a client-server connection flow.
+     * In order for the callback inside this handler to be invoked, the
+     * UCP_WORKER_LISTENER_PARAM_FIELD_CALLBACK needs to be set in the
+     * field_mask.
+     */
+    ucp_worker_ep_create_handler_t ep_create_handler;
+} ucp_worker_listener_params_t;
+
+
+/**
  * @ingroup UCP_ENDPOINT
  * @brief Tuning parameters for the UCP endpoint.
  *
@@ -664,28 +732,39 @@ typedef struct ucp_ep_params {
     uint64_t                field_mask;
 
     /**
-     * Destination address; if a connection manager isn't used,
-     * this address must be obtained using @ref ucp_worker_get_address and
-     * this field is mandatory for filling (along with its corresponding bit
-     * in the field_mask - UCP_EP_PARAM_FIELD_REMOTE_ADDRESS).
+     * Destination address; if a client-server connection establishment
+     * mechanism isn't used, this address must be obtained using
+     * @ref ucp_worker_get_address and this field is mandatory for filling
+     * (along with its corresponding bit in the field_mask -
+     * UCP_EP_PARAM_FIELD_REMOTE_ADDRESS).
      * The ucp_ep_create routine will return with an error if the
-     * UCP_EP_PARAM_FIELD_ADDRESS_TYPE_CM flag isn't set and this address isn't
+     * UCP_EP_PARAM_FIELD_SOCK_ADDR flag isn't set and this address isn't
      * specified.
      */
     const ucp_address_t     *address;
 
     /**
-     * Destination address in the form of a sockaddr; if a connection manager
-     * is used, this address must be filled and obtained from the user.
+     * Destination address in the form of a sockaddr; if a client-server connection
+     * establishment mechanism is used, this address must be filled and obtained
+     * from the user.
      * The following flags need to be set:
      * The UCP_EP_PARAM_FIELD_REMOTE_ADDRESS bit in the field_mask
-     * and the UCP_EP_PARAM_FIELD_ADDRESS_TYPE_CM bit in the field_mask indicating
+     * and the UCP_EP_PARAM_FIELD_SOCK_ADDR bit in the field_mask indicating
      * that the type of the remote address is a sockaddr.
      * The ucp_ep_create routine will return with an error if the
-     * UCP_EP_PARAM_FIELD_ADDRESS_TYPE_CM flag is set but the sock_addr
+     * UCP_EP_PARAM_FIELD_SOCK_ADDR flag is set but the sock_addr
      * isn't specified.
      */
-    const struct sockaddr   *sock_addr;
+    ucp_addr_sock_addr_t    sock_address;
+
+    /**
+     * Endpoint flags, e.g. @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER.
+     * This value is optional.
+     * If it's not set (along with its corresponding bit in the field_mask -
+     * @ref UCP_EP_PARAM_FIELD_FLAGS), the @ref ucp_ep_create() routine will
+     * consider the flags as set to zero.
+     */
+    unsigned                flags;
 
     /**
      * Desired error handling mode, optional parameter. Default value is
@@ -1270,34 +1349,31 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker);
  * The user's call-back will be invoked once the endpoint is created.
  *
  * @param [in]  worker           Worker object that is associated with the
- *                               sock_addr object.
- * @param [in]  sock_addr        Address to bind to.
- * @param [in]  addr_len         Length of the address.
- * @param [in]  cb               Function callback upon created connections.
- * @param [in]  ctx              User-provided context for calls to the callback.
- * @param [out] bind_ctx         A handler to the listener, to be used later for
- *                               unbinding.
+ *                               params object.
+ * @param [in]  params           User defined @ref ucp_worker_listener_params_t
+ *                               configurations for the @ref ucp_listener_h.
+ * @param [out] listener         A handler to the listener, to be used later for
+ *                               destroy.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_worker_bind(ucp_worker_h worker,
-                             const struct sockaddr *sock_addr, socklen_t addr_len,
-                             ucp_worker_create_ep_callback_t cb, void *ctx,
-                             ucp_bind_h bind_ctx);
+ucs_status_t ucp_worker_listen(ucp_worker_h worker,
+                               const ucp_worker_listener_params_t params,
+                               ucp_listener_h listener);
 
 
 /**
  * @ingroup UCP_WORKER
  * @brief Stop accepting connections on a local address of the worker object.
  *
- * This routine unbinds the worker from the given binding handle and stops
+ * This routine unbinds the worker from the given handle and stops
  * listening for incoming connection requests on it.
  *
- * @param [in] bind_ctx        A handle to the bind_cxt to unbind from.
+ * @param [in] listener        A handle to the listener to stop listening on.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_worker_unbind(ucp_bind_h bind_ctx);
+ucs_status_t ucp_worker_listen_destroy(ucp_listener_h listener);
 
 
 /**
