@@ -207,6 +207,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_event_arm          = uct_ib_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
     .iface_query              = uct_rc_mlx5_iface_query,
+    .iface_get_address        = ucs_empty_function_return_success,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_ib_iface_is_reachable
     },
