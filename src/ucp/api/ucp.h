@@ -191,7 +191,16 @@ enum ucp_ep_params_field {
     UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(3), /**< Using a client-server
                                                             connection establishment
                                                             mechanism for establishing
-                                                            connections to remote peers */
+                                                            connections to remote peers.
+                                                            This field requires the
+                                                            filling of the
+                                                            sock_address in the
+                                                            endpoint parameters
+                                                            The ucp_ep_create routine
+                                                            will return with an error if
+                                                            this flag is set but
+                                                            the sock_address isn't
+                                                            specified.*/
     UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(4)  /**< Endpoint flags */
 };
 
@@ -711,7 +720,7 @@ typedef struct ucp_worker_listener_params {
      * UCP_WORKER_LISTENER_PARAM_FIELD_CALLBACK needs to be set in the
      * field_mask.
      */
-    ucp_worker_ep_create_handler_t ep_create_handler;
+    ucp_listener_accept_handler_t  ep_create_handler;
 } ucp_worker_listener_params_t;
 
 
@@ -738,24 +747,10 @@ typedef struct ucp_ep_params {
      * (along with its corresponding bit in the field_mask -
      * UCP_EP_PARAM_FIELD_REMOTE_ADDRESS).
      * The ucp_ep_create routine will return with an error if the
-     * UCP_EP_PARAM_FIELD_SOCK_ADDR flag isn't set and this address isn't
+     * UCP_EP_PARAM_FIELD_REMOTE_ADDRESS flag is set but this address isn't
      * specified.
      */
     const ucp_address_t     *address;
-
-    /**
-     * Destination address in the form of a sockaddr; if a client-server connection
-     * establishment mechanism is used, this address must be filled and obtained
-     * from the user.
-     * The following flags need to be set:
-     * The UCP_EP_PARAM_FIELD_REMOTE_ADDRESS bit in the field_mask
-     * and the UCP_EP_PARAM_FIELD_SOCK_ADDR bit in the field_mask indicating
-     * that the type of the remote address is a sockaddr.
-     * The ucp_ep_create routine will return with an error if the
-     * UCP_EP_PARAM_FIELD_SOCK_ADDR flag is set but the sock_addr
-     * isn't specified.
-     */
-    ucp_addr_sock_addr_t    sock_address;
 
     /**
      * Endpoint flags, e.g. @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER.
@@ -776,6 +771,15 @@ typedef struct ucp_ep_params {
      * Handler to process transport level failure.
      */
     ucp_err_handler_t       err_handler;
+
+    /**
+     * Destination address in the form of a sockaddr; if a client-server connection
+     * establishment mechanism is used, this address must be filled and obtained
+     * from the user.
+     * The UCP_EP_PARAM_FIELD_SOCK_ADDR bit in the field_mask should be set
+     * to indicate that the type of the remote address is a sockaddr.
+     */
+    ucp_addr_sock_addr_t    sock_address;
 } ucp_ep_params_t;
 
 
@@ -1352,14 +1356,14 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker);
  *                               params object.
  * @param [in]  params           User defined @ref ucp_worker_listener_params_t
  *                               configurations for the @ref ucp_listener_h.
- * @param [out] listener         A handler to the listener, to be used later for
- *                               destroy.
+ * @param [out] listener         A handler to the listener, can be released by
+ *                               calling @ref ucp_listener_destroy
  *
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_worker_listen(ucp_worker_h worker,
                                const ucp_worker_listener_params_t params,
-                               ucp_listener_h listener);
+                               ucp_listener_h *listener);
 
 
 /**
@@ -1373,7 +1377,7 @@ ucs_status_t ucp_worker_listen(ucp_worker_h worker,
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_worker_listen_destroy(ucp_listener_h listener);
+ucs_status_t ucp_listener_destroy(ucp_listener_h listener);
 
 
 /**

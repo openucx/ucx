@@ -308,7 +308,7 @@ typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status
 *  @param [in]  ep_h      A handle to the created endpoint.
 *  @param [in]  arg       User's argument for the callback.
 */
-typedef void (*ucp_worker_create_ep_callback_t)(ucp_ep_h *ep_h, void *arg);
+typedef void (*ucp_listener_accept_callback_t)(ucp_ep_h *ep_h, void *arg);
 
 
  /**
@@ -324,14 +324,13 @@ typedef struct ucp_err_handler {
 
 
 /**
- * @ingroup UCP_EP
- * @brief UCP address description in case of a client-server connection flow.
+ * @brief BSD socket address specification.
  *
  * This structure should be initialized in @ref ucp_ep_params_t
  */
 typedef struct ucp_addr_sock_addr {
-    struct sockaddr   *sock_addr;           /**< Address in the form of a sockaddr */
-    socklen_t         addr_len;             /**< Address length */
+    struct sockaddr   *addr;           /**< Address in the form of a sockaddr */
+    socklen_t         addrlen;         /**< Address length */
 } ucp_addr_sock_addr_t;
 
 
@@ -343,10 +342,11 @@ typedef struct ucp_addr_sock_addr {
 * This structure is used for handling the creation of an endpoint
 * to the remote peer after an incoming connection request on the listener
 */
-typedef struct ucp_worker_ep_create_handler {
-    ucp_worker_create_ep_callback_t cb;       /**< Endpoint creation callback */
-   void                             *arg;     /**< User defined argument */
-} ucp_worker_ep_create_handler_t;
+typedef struct ucp_listener_accept_handler {
+   ucp_listener_accept_callback_t  cb;       /**< Endpoint creation callback */
+   void                            *arg;     /**< User defined argument for the
+                                                  callback */
+} ucp_listener_accept_handler_t;
 
 
 /**
