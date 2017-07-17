@@ -67,7 +67,7 @@ void test_base::get_config(const std::string& name, std::string& value, size_t m
     value.resize(max, '\0');
     status = ucs_global_opts_get_value(name.c_str(),
                                        const_cast<char*>(value.c_str()),
-                                       value.max_size());
+                                       max);
     if (status != UCS_OK) {
         GTEST_FAIL() << "Invalid UCS configuration for " << name
                      << ", error message: " << ucs_status_string(status)

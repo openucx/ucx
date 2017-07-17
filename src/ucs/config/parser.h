@@ -289,7 +289,7 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *o
  *
  * @param opts       User-defined options structure.
  * @param fields     Array of fields which define how to parse.
- * @param name       Option name.
+ * @param name       Option name including subtable prefixes.
  * @param value      Filled with option value (as a string).
  * @param max        Number of bytes reserved in 'value'.
  */
