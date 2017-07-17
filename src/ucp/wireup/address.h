@@ -57,8 +57,8 @@ struct ucp_address_entry {
     ucp_rsc_index_t            md_index;       /* Memory domain index */
     uint64_t                   md_flags;       /* MD reg/alloc flags */
     ucp_address_iface_attr_t   iface_attr;     /* Interface attributes information */
-    const uct_iface_addr_t     *iface_addr;    /* Interface address */
-    const uct_ep_addr_t        *ep_addr;       /* Endpoint address */
+    const uct_iface_addr_t     *iface_addr;    /* Interface address, NULL if not available */
+    const uct_ep_addr_t        *ep_addr;       /* Endpoint address, NULL if not available */
 };
 
 
