@@ -62,7 +62,8 @@ static const char *ucp_wireup_iface_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_AM_DUP)]           = "full reliability",
     [ucs_ilog2(UCT_IFACE_FLAG_AM_CB_SYNC)]       = "sync am callback",
     [ucs_ilog2(UCT_IFACE_FLAG_AM_CB_ASYNC)]      = "async am callback",
-    [ucs_ilog2(UCT_IFACE_FLAG_WAKEUP)]           = "wakeup",
+    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_SEND_COMP)]  = "send completion event",
+    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV_AM)]    = "active message event",
     [ucs_ilog2(UCT_IFACE_FLAG_PENDING)]          = "pending",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_SHORT)]  = "tag eager short",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_BCOPY)]  = "tag eager bcopy",
@@ -292,9 +293,10 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
         return UCS_ERR_UNREACHABLE;
     }
 
-    ucs_trace("ep %p: selected for %s: " UCT_TL_RESOURCE_DESC_FMT
+    ucs_trace("ep %p: selected for %s: " UCT_TL_RESOURCE_DESC_FMT " md[%d]"
               " -> '%s' address[%d],md[%d] score %.2f", ep, criteria->title,
               UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[*rsc_index_p].tl_rsc),
+              context->tl_rscs[*rsc_index_p].md_index,
               ucp_ep_peer_name(ep), *dst_addr_index_p,
               address_list[*dst_addr_index_p].md_index, best_score);
     return UCS_OK;
@@ -626,7 +628,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_TAG |
                                                             UCP_FEATURE_WAKEUP)) {
-        criteria.remote_iface_flags |= UCT_IFACE_FLAG_WAKEUP;
+        criteria.local_iface_flags |= UCP_WORKER_UCT_EVENT_CAP_FLAGS;
     }
 
     status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
@@ -669,7 +671,7 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep,
     ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
-        criteria.remote_iface_flags |= UCT_IFACE_FLAG_WAKEUP;
+        criteria.local_iface_flags |= UCP_WORKER_UCT_EVENT_CAP_FLAGS;
     }
 
     status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
@@ -714,7 +716,7 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
     criteria.calc_score         = ucp_wireup_rma_score_func;
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
-        criteria.remote_iface_flags |= UCT_IFACE_FLAG_WAKEUP;
+        criteria.local_iface_flags |= UCP_WORKER_UCT_EVENT_CAP_FLAGS;
     }
 
     status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,

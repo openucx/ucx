@@ -81,7 +81,6 @@ enum uct_cb_flags {
  * @{
  */
 typedef struct uct_iface         *uct_iface_h;
-typedef struct uct_wakeup        *uct_wakeup_h;
 typedef struct uct_iface_config  uct_iface_config_t;
 typedef struct uct_md_config     uct_md_config_t;
 typedef struct uct_ep            *uct_ep_h;

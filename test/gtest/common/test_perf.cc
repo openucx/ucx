@@ -174,7 +174,8 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     rte_comm c0to1, c1to0;
 
     ucx_perf_params_t params;
-    params.api             = test.api;
+    memset(&params, 0, sizeof(params));
+    params.api = test.api;
     params.command         = test.command;
     params.test_type       = test.test_type;
     params.thread_mode     = UCS_THREAD_MODE_SINGLE;

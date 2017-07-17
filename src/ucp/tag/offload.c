@@ -145,14 +145,16 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
 
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                               ucp_worker_iface_t, queue);
-    ucp_tag_offload_release_buf(req, ctx, ucp_iface->rsc_index);
-
+    
     status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx,
                                        force);
     if (status != UCS_OK) {
         ucs_error("Failed to cancel recv in the transport: %s",
                   ucs_status_string(status));
+        return;
     }
+
+    ucp_tag_offload_release_buf(req, ctx, ucp_iface->rsc_index);
 }
 
 int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
@@ -296,7 +298,7 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
     status = uct_ep_tag_eager_zcopy(ep->uct_eps[req->send.lane], req->send.tag,
                                     imm_data, iov, iovcnt, &req->send.uct_comp);
     if (status == UCS_OK) {
-        complete(req);
+        complete(req, UCS_OK);
     } else if (status < 0) {
         req->send.state = saved_state; /* need to restore the offsets state */
         return status;
@@ -433,7 +435,8 @@ static ucs_status_t ucp_tag_offload_eager_sync_bcopy(uct_pending_req_t *self)
     if (status == UCS_OK) {
         ucp_tag_offload_sync_posted(worker, req);
         ucp_request_send_generic_dt_finish(req);
-        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED);
+        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
+                                      UCS_OK);
     }
     return status;
 }

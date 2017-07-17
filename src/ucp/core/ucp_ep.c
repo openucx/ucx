@@ -435,6 +435,25 @@ static void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
     ucp_flush_check_completion(req);
 }
 
+void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
+{
+    ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_status_t  status    = UCS_PTR_STATUS(arg);
+
+    if (req->send.uct_comp.func) {
+        /* TODO: This is a temporary solution to fix non-consistent usage of UCT
+         *       completion counter in UCP protocols. Multi fragment protocols
+         *       of tag API have +1 counter value before last fragment is posted.
+         *       This is a problem in error handling case. Issue #1669
+         */
+        if (--req->send.uct_comp.count == 0) {
+            req->send.uct_comp.func(&req->send.uct_comp, status);
+        }
+    } else {
+        ucp_request_complete_send(req, status);
+    }
+}
+
 static void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg)
 {
     ucs_bug("pending request %p on ep %p should have been flushed", self, arg);
@@ -1030,8 +1049,8 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
     rsc_index = key->lanes[lane].rsc_index;
 
     rsc = &context->tl_rscs[rsc_index].tl_rsc;
-    snprintf(p, endp - p, "lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT "%-*c-> ",
-             lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc),
+    snprintf(p, endp - p, "lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT " md[%d] %-*c-> ",
+             lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc), context->tl_rscs[rsc_index].md_index,
              20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name)), ' ');
     p += strlen(p);
 

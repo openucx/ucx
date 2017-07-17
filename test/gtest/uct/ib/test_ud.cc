@@ -4,14 +4,17 @@
 * See file LICENSE for terms.
 */
 
-#include "uct_test.h"
 #include "ud_base.h"
+
+#include <uct/uct_test.h>
+
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/arch/bitops.h>
 #include <uct/ib/ud/base/ud_ep.h>
-};
+}
+
 
 class test_ud : public ud_base_test {
 public:

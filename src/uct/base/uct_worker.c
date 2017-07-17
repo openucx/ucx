@@ -8,17 +8,14 @@
 
 #include "uct_worker.h"
 
+#include <ucs/arch/atomic.h>
 #include <ucs/type/class.h>
 #include <ucs/async/async.h>
 
 
-static UCS_CLASS_INIT_FUNC(uct_worker_t, ucs_async_context_t *async,
-                           ucs_thread_mode_t thread_mode)
+static UCS_CLASS_INIT_FUNC(uct_worker_t)
 {
-    self->async       = async;
-    self->thread_mode = thread_mode;
     ucs_callbackq_init(&self->progress_q);
-    ucs_list_head_init(&self->tl_data);
     return UCS_OK;
 }
 
@@ -28,14 +25,27 @@ static UCS_CLASS_CLEANUP_FUNC(uct_worker_t)
 }
 
 UCS_CLASS_DEFINE(uct_worker_t, void);
-UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_worker_create, uct_worker_t, uct_worker_t,
-                                ucs_async_context_t*, ucs_thread_mode_t)
-UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_worker_destroy, uct_worker_t, uct_worker_t)
 
-void uct_worker_progress(uct_worker_h worker)
+static UCS_CLASS_INIT_FUNC(uct_priv_worker_t, ucs_async_context_t *async,
+                           ucs_thread_mode_t thread_mode)
 {
-    ucs_callbackq_dispatch(&worker->progress_q);
+    UCS_CLASS_CALL_SUPER_INIT(uct_worker_t);
+
+    self->async       = async;
+    self->thread_mode = thread_mode;
+    ucs_list_head_init(&self->tl_data);
+    return UCS_OK;
 }
+
+static UCS_CLASS_CLEANUP_FUNC(uct_priv_worker_t)
+{
+}
+
+UCS_CLASS_DEFINE(uct_priv_worker_t, uct_worker_t);
+
+UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_worker_create, uct_priv_worker_t, uct_worker_t,
+                                ucs_async_context_t*, ucs_thread_mode_t)
+UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_worker_destroy, uct_priv_worker_t, uct_worker_t)
 
 void uct_worker_progress_init(uct_worker_progress_t *prog)
 {
@@ -43,47 +53,67 @@ void uct_worker_progress_init(uct_worker_progress_t *prog)
     prog->refcount = 0;
 }
 
-void uct_worker_progress_register(uct_worker_h worker, ucs_callback_t cb,
+void uct_worker_progress_add_safe(uct_priv_worker_t *worker, ucs_callback_t cb,
                                   void *arg, uct_worker_progress_t *prog)
 {
     UCS_ASYNC_BLOCK(worker->async);
-    if (prog->refcount++ == 0) {
-        prog->id = ucs_callbackq_add(&worker->progress_q, cb, arg,
-                                     UCS_CALLBACKQ_FLAG_FAST);
+    if (ucs_atomic_fadd32(&prog->refcount, 1) == 0) {
+        prog->id = ucs_callbackq_add_safe(&worker->super.progress_q, cb, arg,
+                                          UCS_CALLBACKQ_FLAG_FAST);
     }
     UCS_ASYNC_UNBLOCK(worker->async);
 }
 
-void uct_worker_progress_unregister(uct_worker_h worker,
-                                    uct_worker_progress_t *prog)
+void uct_worker_progress_remove(uct_priv_worker_t *worker, uct_worker_progress_t *prog)
 {
     UCS_ASYNC_BLOCK(worker->async);
     ucs_assert(prog->refcount > 0);
-    if (--prog->refcount == 0) {
-        ucs_callbackq_remove(&worker->progress_q, prog->id);
+    if (ucs_atomic_fadd32(&prog->refcount, -1) == 1) {
+        ucs_callbackq_remove(&worker->super.progress_q, prog->id);
         prog->id = UCS_CALLBACKQ_ID_NULL;
     }
     UCS_ASYNC_UNBLOCK(worker->async);
 }
 
-void uct_worker_progress_register_safe(uct_worker_h worker, ucs_callback_t func,
+void uct_worker_progress_remove_all(uct_priv_worker_t *worker,
+                                    uct_worker_progress_t *prog)
+{
+    uint32_t ref;
+
+    UCS_ASYNC_BLOCK(worker->async);
+    ref = prog->refcount;
+    while (ref > 0) {
+        if (ucs_atomic_cswap32(&prog->refcount, ref, 0) == ref) {
+            ucs_callbackq_remove(&worker->super.progress_q, prog->id);
+            prog->id = UCS_CALLBACKQ_ID_NULL;
+        }
+        ref = prog->refcount;
+    }
+    UCS_ASYNC_UNBLOCK(worker->async);
+}
+
+void uct_worker_progress_register_safe(uct_worker_h tl_worker, ucs_callback_t func,
                                        void *arg, unsigned flags,
                                        uct_worker_cb_id_t *id_p)
 {
+    uct_priv_worker_t *worker = ucs_derived_of(tl_worker, uct_priv_worker_t);
+
     if (*id_p == UCS_CALLBACKQ_ID_NULL) {
         UCS_ASYNC_BLOCK(worker->async);
-        *id_p = ucs_callbackq_add_safe(&worker->progress_q, func, arg, flags);
+        *id_p = ucs_callbackq_add_safe(&worker->super.progress_q, func, arg, flags);
         UCS_ASYNC_UNBLOCK(worker->async);
         ucs_assert(*id_p != UCS_CALLBACKQ_ID_NULL);
     }
 }
 
-void uct_worker_progress_unregister_safe(uct_worker_h worker,
+void uct_worker_progress_unregister_safe(uct_worker_h tl_worker,
                                          uct_worker_cb_id_t *id_p)
 {
+    uct_priv_worker_t *worker = ucs_derived_of(tl_worker, uct_priv_worker_t);
+
     if (*id_p != UCS_CALLBACKQ_ID_NULL) {
         UCS_ASYNC_BLOCK(worker->async);
-        ucs_callbackq_remove_safe(&worker->progress_q, *id_p);
+        ucs_callbackq_remove_safe(&worker->super.progress_q, *id_p);
         UCS_ASYNC_UNBLOCK(worker->async);
         *id_p = UCS_CALLBACKQ_ID_NULL;
     }

@@ -618,12 +618,11 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .ep_connect_to_ep         = uct_ud_mlx5_ep_connect_to_ep,
     .iface_flush              = uct_ud_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_wakeup_open        = uct_ib_iface_wakeup_open,
-    .iface_wakeup_get_fd      = uct_ib_iface_wakeup_get_fd,
-    .iface_wakeup_arm         = uct_ib_iface_wakeup_arm,
-    .iface_wakeup_wait        = uct_ib_iface_wakeup_wait,
-    .iface_wakeup_signal      = uct_ib_iface_wakeup_signal,
-    .iface_wakeup_close       = uct_ib_iface_wakeup_close,
+    .iface_progress_enable    = ucs_empty_function,
+    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress           = (void*)uct_ud_mlx5_iface_progress,
+    .iface_event_fd_get       = uct_ib_iface_event_fd_get,
+    .iface_event_arm          = uct_ud_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t),
     .iface_query              = uct_ud_mlx5_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,
@@ -711,7 +710,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_iface_t)
     uct_ud_enter(&self->super);
     UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_mlx5_ep_t);
     ucs_twheel_cleanup(&self->super.async.slow_timer);
-    uct_ib_mlx5_txwq_cleanup(self->super.super.super.worker, &self->tx.wq);
+    uct_ib_mlx5_txwq_cleanup(&self->tx.wq);
     uct_ud_leave(&self->super);
 }
 

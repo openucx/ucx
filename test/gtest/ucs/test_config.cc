@@ -111,11 +111,17 @@ protected:
     class car_opts {
     public:
         car_opts(const char *env_prefix, const char *table_prefix) :
-            m_opts(parse(env_prefix, table_prefix)) {
+            m_opts(parse(env_prefix, table_prefix)), m_max(1024), m_value(NULL)
+        {
+            m_value    = new char[m_max];
+            m_value[0] = '\0';
         }
 
-        car_opts(const car_opts& orig)
+        car_opts(const car_opts& orig) : m_max(orig.m_max)
         {
+            m_value = new char[m_max];
+            strncpy(m_value, orig.m_value, m_max);
+
             ucs_status_t status = ucs_config_parser_clone_opts(&orig.m_opts,
                                                                &m_opts,
                                                                car_opts_table);
@@ -124,10 +130,20 @@ protected:
 
         ~car_opts() {
             ucs_config_parser_release_opts(&m_opts, car_opts_table);
+            delete [] m_value;
         }
 
         void set(const char *name, const char *value) {
             ucs_config_parser_set_value(&m_opts, car_opts_table, name, value);
+        }
+
+        const char* get(const char *name) {
+            ucs_status_t status = ucs_config_parser_get_value(&m_opts,
+                                                              car_opts_table,
+                                                              name, m_value,
+                                                              m_max);
+            ASSERT_UCS_OK(status);
+            return m_value;
         }
 
         car_opts_t* operator->() {
@@ -151,7 +167,9 @@ protected:
             return tmp;
         }
 
-        car_opts_t m_opts;
+        car_opts_t   m_opts;
+        const size_t m_max;
+        char         *m_value;
     };
 };
 
@@ -187,15 +205,19 @@ UCS_TEST_F(test_config, clone) {
     delete opts_clone_ptr;
 }
 
-UCS_TEST_F(test_config, set) {
+UCS_TEST_F(test_config, set_get) {
     car_opts opts(NULL, NULL);
     EXPECT_EQ((unsigned)COLOR_RED, opts->color);
+    EXPECT_EQ(std::string(color_names[COLOR_RED]),
+              std::string(opts.get("COLOR")));
 
     opts.set("COLOR", "white");
     EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
+    EXPECT_EQ(std::string(color_names[COLOR_WHITE]),
+              std::string(opts.get("COLOR")));
 }
 
-UCS_TEST_F(test_config, set_with_table_prefix) {
+UCS_TEST_F(test_config, set_get_with_table_prefix) {
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv env1("UCX_COLOR", "black");
     /* coverity[tainted_string_argument] */
@@ -203,9 +225,11 @@ UCS_TEST_F(test_config, set_with_table_prefix) {
 
     car_opts opts(NULL, "CARS_");
     EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
+    EXPECT_EQ(std::string(color_names[COLOR_WHITE]),
+              std::string(opts.get("COLOR")));
 }
 
-UCS_TEST_F(test_config, set_with_env_prefix) {
+UCS_TEST_F(test_config, set_get_with_env_prefix) {
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv env1("UCX_COLOR", "black");
     /* coverity[tainted_string_argument] */
@@ -213,6 +237,8 @@ UCS_TEST_F(test_config, set_with_env_prefix) {
 
     car_opts opts("TEST", NULL);
     EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
+    EXPECT_EQ(std::string(color_names[COLOR_WHITE]),
+              std::string(opts.get("COLOR")));
 }
 
 UCS_TEST_F(test_config, performance) {

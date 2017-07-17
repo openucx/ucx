@@ -55,6 +55,10 @@ enum {
 };
 
 
+#define UCP_WORKER_UCT_EVENT_CAP_FLAGS (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
+                               UCT_IFACE_FLAG_EVENT_RECV_AM)
+
+
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
                              (_flags & UCP_RECV_DESC_FLAG_SYNC) ? \
@@ -82,16 +86,6 @@ typedef struct ucp_worker_iface {
 
 
 /**
- * UCP worker wake-up context.
- */
-typedef struct ucp_worker_wakeup {
-    int                           wakeup_efd;     /* Allocated (on-demand) epoll fd for wakeup */
-    int                           wakeup_pipe[2]; /* Pipe to support signal() calls */
-    uct_wakeup_h                  *iface_wakeups; /* Array of interface wake-up handles */
-} ucp_worker_wakeup_t;
-
-
-/**
  * UCP worker (thread context).
  */
 typedef struct ucp_worker {
@@ -100,13 +94,16 @@ typedef struct ucp_worker {
     uint64_t                      uuid;          /* Unique ID for wireup */
     uct_worker_h                  uct;           /* UCT worker handle */
     ucs_mpool_t                   req_mp;        /* Memory pool for requests */
-    ucp_worker_wakeup_t           wakeup;        /* Wakeup-related context */
     uint64_t                      atomic_tls;    /* Which resources can be used for atomics */
 
     int                           inprogress;
     char                          name[UCP_WORKER_NAME_MAX]; /* Worker name */
 
     unsigned                      stub_pend_count;/* Number of pending requests on stub endpoints*/
+
+    int                           epfd;          /* Allocated (on-demand) epoll fd for wakeup */
+    int                           wakeup_pipe[2];/* Pipe to support signal() calls */
+    unsigned                      uct_events;    /* UCT arm events */
 
     khash_t(ucp_worker_ep_hash)   ep_hash;       /* Hash table of all endpoints */
     khash_t(ucp_ep_errh_hash)     ep_errh_hash;  /* Hash table of error handlers associated with endpoints */

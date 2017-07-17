@@ -278,6 +278,32 @@ static ucs_status_t ucs_async_signal_init(ucs_async_context_t *async)
     return UCS_OK;
 }
 
+static ucs_status_t ucs_async_signal_modify_event_fd(ucs_async_context_t *async,
+                                                     int event_fd, int events)
+{
+    ucs_status_t status;
+    int add, remove;
+
+    UCS_ASYNC_SIGNAL_CHECK_THREAD(async);
+
+    if (events) {
+        add    = O_ASYNC; /* Enable notifications */
+        remove = 0;
+    } else {
+        add    = 0;       /* Disable notifications */
+        remove = O_ASYNC;
+    }
+
+    ucs_trace_async("fcntl(fd=%d, add=0x%x, remove=0x%x)", event_fd, add, remove);
+    status = ucs_sys_fcntl_modfl(event_fd, add, remove);
+    if (status != UCS_OK) {
+        ucs_error("fcntl F_SETFL failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
 static ucs_status_t ucs_async_signal_add_event_fd(ucs_async_context_t *async,
                                                   int event_fd, int events)
 {
@@ -307,12 +333,9 @@ static ucs_status_t ucs_async_signal_add_event_fd(ucs_async_context_t *async,
         goto err_remove_handler;
     }
 
-    /* Allow async events on the file descriptor */
-    ucs_trace_async("fcntl(O_ASYNC, fd=%d)", event_fd);
-    status = ucs_sys_fcntl_modfl(event_fd, O_ASYNC, 0);
+    /* Set async events on the file descriptor */
+    status = ucs_async_signal_modify_event_fd(async, event_fd, events);
     if (status != UCS_OK) {
-        ucs_error("fcntl F_SETFL failed: %m");
-        status = UCS_ERR_IO_ERROR;
         goto err_remove_handler;
     }
 
@@ -541,6 +564,7 @@ ucs_async_ops_t ucs_async_signal_ops = {
     .context_unblock    = ucs_async_signal_unblock,
     .add_event_fd       = ucs_async_signal_add_event_fd,
     .remove_event_fd    = ucs_async_signal_remove_event_fd,
+    .modify_event_fd    = ucs_async_signal_modify_event_fd,
     .add_timer          = ucs_async_signal_add_timer,
     .remove_timer       = ucs_async_signal_remove_timer,
 };

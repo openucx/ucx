@@ -14,8 +14,8 @@ AS_IF([test "x$with_knem" != xno],
               ],
               [:])
        AC_CHECK_HEADER([$with_knem/include/knem_io.h],
-                       [CFLAGS="$CFLAGS -I$with_knem/include"
-                        CPPFLAGS="$CPPFLAGS -I$with_knem/include"
+                       [BASE_CFLAGS="$BASE_CFLAGS -I$with_knem/include"
+                        BASE_CPPFLAGS="$BASE_CPPFLAGS -I$with_knem/include"
                         AC_DEFINE([HAVE_KNEM], [1], [Enable the use of KNEM])
                         transports="${transports},knem"
                         knem_happy="yes"],

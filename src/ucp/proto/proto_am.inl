@@ -10,7 +10,7 @@
 #include <ucp/dt/dt.h>
 #include <ucs/debug/profile.h>
 
-typedef void (*ucp_req_complete_func_t)(ucp_request_t *req);
+typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -169,7 +169,7 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
     status = uct_ep_am_zcopy(ep->uct_eps[req->send.lane], am_id, (void*)hdr,
                              hdr_size, iov, iovcnt, &req->send.uct_comp);
     if (status == UCS_OK) {
-        complete(req);
+        complete(req, UCS_OK);
     } else if (status < 0) {
         req->send.state = saved_state; /* need to restore the offsets state */
         return status;
@@ -258,7 +258,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         UCS_PROFILE_REQUEST_EVENT(req, "am_zcopy_last", iov[0].length);
         ucs_assert(req->send.length == (state->offset + length_it));
         if (status == UCS_OK) {
-            complete(req);
+            complete(req, UCS_OK);
         } else {
             ucs_assert(status == UCS_INPROGRESS);
         }

@@ -13,7 +13,7 @@
 	dh $@ 
 
 override_dh_auto_configure:
-	@top_top_srcdir@/contrib/configure-release
+	@top_top_srcdir@/contrib/configure-release --prefix=/usr
 	chmod +x debian/rules
 
 override_dh_shlibdeps:

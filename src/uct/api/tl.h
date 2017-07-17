@@ -14,6 +14,7 @@
 #include "uct_def.h"
 
 #include <ucs/type/status.h>
+#include <ucs/datastruct/callbackq.h>
 #include <sys/types.h>
 #include <stddef.h>
 
@@ -170,20 +171,19 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*iface_fence)(uct_iface_h iface, unsigned flags);
 
-    /* interface - events and progress */
+    /* interface - progress control */
 
-    ucs_status_t (*iface_wakeup_open)(uct_iface_h iface, unsigned events,
-                                     uct_wakeup_h wakeup);
+    void         (*iface_progress_enable)(uct_iface_h iface, unsigned flags);
 
-    ucs_status_t (*iface_wakeup_get_fd)(uct_wakeup_h wakeup, int *fd_p);
+    void         (*iface_progress_disable)(uct_iface_h iface, unsigned flags);
 
-    ucs_status_t (*iface_wakeup_arm)(uct_wakeup_h wakeup);
+    void         (*iface_progress)(uct_iface_h iface);
 
-    ucs_status_t (*iface_wakeup_wait)(uct_wakeup_h wakeup);
+    /* interface - events */
 
-    ucs_status_t (*iface_wakeup_signal)(uct_wakeup_h wakeup);
+    ucs_status_t (*iface_event_fd_get)(uct_iface_h iface, int *fd_p);
 
-    void         (*iface_wakeup_close)(uct_wakeup_h wakeup);
+    ucs_status_t (*iface_event_arm)(uct_iface_h iface, unsigned events);
 
     /* interface - management */
 
@@ -204,6 +204,15 @@ typedef struct uct_iface_ops {
                                        const uct_iface_addr_t *iface_addr);
 
 } uct_iface_ops_t;
+
+
+/**
+ *  A progress engine and a domain for allocating communication resources.
+ *  Different workers are progressed independently.
+ */
+typedef struct uct_worker {
+    ucs_callbackq_t        progress_q;
+} uct_worker_t;
 
 
 /**

@@ -20,7 +20,8 @@ define([revcount], esyscmd([git rev-list HEAD | wc -l | sed -e 's/ *//g' | xargs
 define([libucx_so_version], 0:0:0)
 
 AC_INIT([ucx], [ucx_ver_major.ucx_ver_minor])
-
+: ${CFLAGS=""}
+: ${CXXFLAGS=""}
 config_flags="$*"
 valgrind_libpath=""
 
@@ -42,7 +43,7 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AM_MAINTAINER_MODE
 AC_CONFIG_MACRO_DIR([config/m4])
 
-define([ucx_prefix], [/opt/ucx])
+define([ucx_prefix], [/usr/local])
 AC_PREFIX_DEFAULT([ucx_prefix])
 
 top_top_srcdir=$srcdir
@@ -119,6 +120,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      AM_CONDITIONAL([HAVE_IBV_EX_HW_TM], [false])
      AM_CONDITIONAL([HAVE_CRAY_UGNI], [false])
      AM_CONDITIONAL([HAVE_CUDA], [false])
+     AM_CONDITIONAL([HAVE_ROCM], [false])
      AM_CONDITIONAL([HAVE_XPMEM], [false])
      AM_CONDITIONAL([HAVE_CMA], [false])
      AM_CONDITIONAL([HAVE_KNEM], [false])
@@ -140,6 +142,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      m4_include([config/m4/mpi.m4])
      m4_include([config/m4/rte.m4])
      m4_include([config/m4/cuda.m4])
+     m4_include([config/m4/rocm.m4])
      m4_include([config/m4/cma.m4])
      m4_include([config/m4/knem.m4])
      m4_include([config/m4/xpmem.m4])
@@ -157,7 +160,7 @@ AS_IF([test "x$with_docs_only" == xyes],
 
      AS_IF([test "x$enable_frame_pointer" == xyes],
          [AS_MESSAGE([compiling with frame pointer])
-          CFLAGS="$CFLAGS -fno-omit-frame-pointer"],
+          BASE_CFLAGS="$BASE_CFLAGS -fno-omit-frame-pointer"],
          [:])
 
 
@@ -250,7 +253,6 @@ AC_CONFIG_FILES([
                  debian/rules
                  debian/control
                  debian/changelog
-                 debian/ucx.postinst
                  src/ucs/Makefile
                  src/uct/Makefile
                  src/ucp/Makefile

@@ -7,6 +7,9 @@
 #include "dc_iface.h"
 #include "dc_ep.h"
 
+#include <ucs/async/async.h>
+
+
 const static char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS]           = "dcs",
     [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
@@ -63,6 +66,16 @@ static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
     init_attr.hop_limit        = 1;
     init_attr.inline_size      = iface->super.config.rx_inline;
 
+#if HAVE_DECL_IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT
+    if (iface->super.config.ooo_rw &&
+        UCX_IB_DEV_IS_OOO_SUPPORTED(&uct_ib_iface_device(&iface->super.super)->dev_attr,
+                                    dc)) {
+        ucs_debug("creating DC target with out-of-order support dev %s",
+                   uct_ib_device_name(uct_ib_iface_device(&iface->super.super)));
+        init_attr.create_flags |= IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT;
+    }
+#endif
+
     iface->rx.dct = ibv_exp_create_dct(uct_ib_iface_device(&iface->super.super)->ibv_context,
                                        &init_attr);
     if (iface->rx.dct == NULL) {
@@ -78,6 +91,7 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
                                              uct_rc_txqp_t *dci)
 {
     struct ibv_exp_qp_attr attr;
+    long attr_mask;
 
     memset(&attr, 0, sizeof(attr));
     attr.qp_state        = IBV_QPS_INIT;
@@ -103,11 +117,21 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
     attr.min_rnr_timer              = 0;
     attr.max_dest_rd_atomic         = 1;
     attr.ah_attr.sl                 = iface->super.super.config.sl;
+    attr_mask                       = IBV_EXP_QP_STATE     |
+                                      IBV_EXP_QP_PATH_MTU  |
+                                      IBV_EXP_QP_AV;
 
-    if (ibv_exp_modify_qp(dci->qp, &attr,
-                         IBV_EXP_QP_STATE     |
-                         IBV_EXP_QP_PATH_MTU  |
-                         IBV_EXP_QP_AV)) {
+#if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
+    if (iface->super.config.ooo_rw &&
+        UCX_IB_DEV_IS_OOO_SUPPORTED(&uct_ib_iface_device(&iface->super.super)->dev_attr,
+                                    dc)) {
+        ucs_debug("enabling out-of-order on DCI QP 0x%x dev %s", dci->qp->qp_num,
+                   uct_ib_device_name(uct_ib_iface_device(&iface->super.super)));
+        attr_mask |= IBV_EXP_QP_OOO_RW_DATA_PLACEMENT;
+    }
+#endif
+
+    if (ibv_exp_modify_qp(dci->qp, &attr, attr_mask)) {
         ucs_error("error modifying QP to RTR: %m");
         return UCS_ERR_IO_ERROR;
     }
@@ -119,13 +143,13 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
     attr.rnr_retry      = iface->super.config.rnr_retry;
     attr.retry_cnt      = iface->super.config.retry_cnt;
     attr.max_rd_atomic  = iface->super.config.max_rd_atomic;
+    attr_mask           = IBV_EXP_QP_STATE      |
+                          IBV_EXP_QP_TIMEOUT    |
+                          IBV_EXP_QP_RETRY_CNT  |
+                          IBV_EXP_QP_RNR_RETRY  |
+                          IBV_EXP_QP_MAX_QP_RD_ATOMIC;
 
-    if (ibv_exp_modify_qp(dci->qp, &attr,
-                         IBV_EXP_QP_STATE      |
-                         IBV_EXP_QP_TIMEOUT    |
-                         IBV_EXP_QP_RETRY_CNT  |
-                         IBV_EXP_QP_RNR_RETRY  |
-                         IBV_EXP_QP_MAX_QP_RD_ATOMIC)) {
+    if (ibv_exp_modify_qp(dci->qp, &attr, attr_mask)) {
         ucs_error("error modifying QP to RTS: %m");
         return UCS_ERR_IO_ERROR;
     }
@@ -212,6 +236,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
     self->tx.policy                  = config->tx_policy;
     self->tx.available_quota         = 0; /* overridden by mlx5/verbs */
     self->super.config.tx_moderation = 0; /* disable tx moderation for dcs */
+    self->progress_flags             = 0;
     ucs_list_head_init(&self->tx.gc_list);
 
     /* create DC target */
@@ -508,4 +533,49 @@ void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num)
         ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
                   iface, dci, txqp->qp->qp_num, ucs_status_string(status));
     }
+}
+
+void uct_dc_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_dc_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_iface_t);
+    uct_dc_iface_ops_t *dc_ops = ucs_derived_of(iface->super.super.ops,
+                                                uct_dc_iface_ops_t);
+    uct_priv_worker_t *worker = iface->super.super.super.worker;
+
+    UCS_ASYNC_BLOCK(worker->async);
+
+    /* Add callback only if previous flags are 0 and new flags != 0 */
+    if (!iface->progress_flags && flags) {
+        if (iface->super.super.super.prog.id == UCS_CALLBACKQ_ID_NULL) {
+            iface->super.super.super.prog.id =
+                            ucs_callbackq_add(&worker->super.progress_q,
+                                              dc_ops->progress, iface,
+                                              UCS_CALLBACKQ_FLAG_FAST);
+        }
+    }
+    iface->progress_flags |= flags;
+
+    UCS_ASYNC_UNBLOCK(worker->async);
+}
+
+void uct_dc_iface_progress_disable(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_dc_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_iface_t);
+    uct_priv_worker_t *worker = iface->super.super.super.worker;
+
+    UCS_ASYNC_BLOCK(worker->async);
+
+    /* Remove callback only if previous flags != 0, and removing the given
+     * flags makes it become 0.
+     */
+    if (iface->progress_flags && !(iface->progress_flags & ~flags)) {
+        if (iface->super.super.super.prog.id != UCS_CALLBACKQ_ID_NULL) {
+            ucs_callbackq_remove(&worker->super.progress_q,
+                                 iface->super.super.super.prog.id);
+            iface->super.super.super.prog.id = UCS_CALLBACKQ_ID_NULL;
+        }
+    }
+    iface->progress_flags &= ~flags;
+
+    UCS_ASYNC_UNBLOCK(worker->async);
 }

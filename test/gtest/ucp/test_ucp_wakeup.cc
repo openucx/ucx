@@ -34,6 +34,14 @@ protected:
         ucp_request_release(req);
     }
 
+    void arm(ucp_worker_h worker) {
+        ucs_status_t status;
+        do {
+            status = ucp_worker_arm(worker);
+        } while (UCS_ERR_BUSY == status);
+        ASSERT_EQ(UCS_OK, status);
+    }
+
     static size_t comp_cntr;
 };
 
@@ -48,7 +56,6 @@ UCS_TEST_P(test_ucp_wakeup, efd)
     const uint64_t TAG = 0xdeadbeef;
     uint64_t send_data = 0x12121212;
     void *req;
-    ucs_status_t status;
 
     polled.events = POLLIN;
     sender().connect(&receiver());
@@ -58,10 +65,7 @@ UCS_TEST_P(test_ucp_wakeup, efd)
 
     polled.fd = recv_efd;
 
-    do {
-        status = ucp_worker_arm(recv_worker);
-    } while (UCS_ERR_BUSY == status);
-    ASSERT_EQ(UCS_OK, status);
+    arm(recv_worker);
 
     req = ucp_tag_send_nb(sender().ep(), &send_data, sizeof(send_data), DATATYPE,
                           TAG, send_completion);
@@ -72,7 +76,7 @@ UCS_TEST_P(test_ucp_wakeup, efd)
     }
 
     ASSERT_EQ(1, poll(&polled, 1, 1000*ucs::test_time_multiplier()));
-    EXPECT_EQ(ucp_worker_arm(recv_worker), UCS_ERR_BUSY);
+    EXPECT_EQ(UCS_ERR_BUSY, ucp_worker_arm(recv_worker));
 
     uint64_t recv_data = 0;
     req = ucp_tag_recv_nb(receiver().worker(), &recv_data, sizeof(recv_data),
@@ -97,16 +101,16 @@ UCS_TEST_P(test_ucp_wakeup, signal)
 
     polled.fd = efd;
     EXPECT_EQ(0, poll(&polled, 1, 0));
-    ASSERT_UCS_OK(ucp_worker_arm(worker));
+    arm(worker);
     ASSERT_UCS_OK(ucp_worker_signal(worker));
     EXPECT_EQ(1, poll(&polled, 1, 0));
-    ASSERT_UCS_OK(ucp_worker_arm(worker));
+    arm(worker);
     EXPECT_EQ(0, poll(&polled, 1, 0));
 
     ASSERT_UCS_OK(ucp_worker_signal(worker));
     ASSERT_UCS_OK(ucp_worker_signal(worker));
     EXPECT_EQ(1, poll(&polled, 1, 0));
-    ASSERT_UCS_OK(ucp_worker_arm(worker));
+    arm(worker);
     EXPECT_EQ(0, poll(&polled, 1, 0));
 
     close(efd);
@@ -189,8 +193,6 @@ test_ucp_wakeup_events::do_tx_rx_events_test(const std::vector<std::string>& tra
     const size_t msg_count = 1001;
     std::vector<void *> req(2*msg_count, NULL);
 
-    ucs_status_t status;
-
     /* UD based transports may cause extra events */
     const char*  ud_tls[]   = { "\\ud", "\\ud_mlx5" };
     const size_t ud_tls_cnt = (sizeof(ud_tls) / sizeof(ud_tls[0]));
@@ -210,15 +212,8 @@ test_ucp_wakeup_events::do_tx_rx_events_test(const std::vector<std::string>& tra
     polled[0].fd = efd[0];
     polled[1].fd = efd[1];
 
-    do {
-        status = ucp_worker_arm(p_entity[0]->worker());
-    } while (UCS_ERR_BUSY == status);
-    ASSERT_EQ(UCS_OK, status);
-
-    do {
-        status = ucp_worker_arm(p_entity[1]->worker());
-    } while (UCS_ERR_BUSY == status);
-    ASSERT_EQ(UCS_OK, status);
+    arm(p_entity[0]->worker());
+    arm(p_entity[1]->worker());
 
     uint64_t recv_data = 0;
     size_t req_cntr = 0;

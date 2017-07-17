@@ -317,6 +317,26 @@ static ucs_status_t ucs_async_thread_remove_event_fd(ucs_async_context_t *async,
     return UCS_OK;
 }
 
+static ucs_status_t ucs_async_thread_modify_event_fd(ucs_async_context_t *async,
+                                                     int event_fd, int events)
+{
+    ucs_async_thread_t *thread = ucs_async_thread_global_context.thread;
+    struct epoll_event event;
+    int ret;
+
+    memset(&event, 0, sizeof(event));
+    event.events  = events;
+    event.data.fd = event_fd;
+    ret = epoll_ctl(thread->epfd, EPOLL_CTL_MOD, event_fd, &event);
+    if (ret < 0) {
+        ucs_error("epoll_ctl(epfd=%d, ADD, fd=%d) failed: %m", thread->epfd,
+                  event_fd);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
 static int ucs_async_thread_try_block(ucs_async_context_t *async)
 {
     return
@@ -391,6 +411,7 @@ ucs_async_ops_t ucs_async_thread_ops = {
     .context_unblock    = ucs_async_thread_unblock,
     .add_event_fd       = ucs_async_thread_add_event_fd,
     .remove_event_fd    = ucs_async_thread_remove_event_fd,
+    .modify_event_fd    = ucs_async_thread_modify_event_fd,
     .add_timer          = ucs_async_thread_add_timer,
     .remove_timer       = ucs_async_thread_remove_timer,
 };

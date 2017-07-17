@@ -1,5 +1,0 @@
-#!/bin/sh
-set -e
-if [ @prefix@ != /usr/lib/pkgconfig ];then
-    install -m 755 @prefix@/lib/pkgconfig/ucx.pc /usr/lib/pkgconfig/ucx.pc
-fi

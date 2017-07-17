@@ -76,7 +76,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
         ucs_error("No device was found: %s", params->dev_name);
         return UCS_ERR_NO_DEVICE;
     }
-    status = uct_ugni_create_cdm(&self->cdm, dev, worker->thread_mode);
+    status = uct_ugni_create_cdm(&self->cdm, dev, self->super.worker->thread_mode);
     if (UCS_OK != status) {
         ucs_error("Failed to UGNI NIC, Error status: %d", status);
         return status;

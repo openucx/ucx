@@ -18,6 +18,7 @@ typedef struct ucs_async_handler ucs_async_handler_t;
 struct ucs_async_handler {
     int                        id;      /* Event/Timer ID */
     ucs_async_mode_t           mode;    /* Event delivery mode */
+    int                        events;  /* Bitmap of events */
     ucs_async_event_cb_t       cb;      /* Callback function */
     void                       *arg;    /* Callback argument */
     ucs_async_context_t        *async;  /* Async context for the handler. Can be NULL */
@@ -62,6 +63,8 @@ typedef struct ucs_async_ops {
     ucs_status_t (*add_event_fd)(ucs_async_context_t *async, int event_fd,
                                  int events);
     ucs_status_t (*remove_event_fd)(ucs_async_context_t *async, int event_fd);
+    ucs_status_t (*modify_event_fd)(ucs_async_context_t *async, int event_fd,
+                                    int events);
 
     ucs_status_t (*add_timer)(ucs_async_context_t *async, int timer_id,
                               ucs_time_t interval);

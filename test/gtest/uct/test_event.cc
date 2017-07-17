@@ -13,7 +13,7 @@ extern "C" {
 #include <common/test.h>
 #include "uct_test.h"
 
-class test_uct_wakeup : public uct_test {
+class test_uct_event_fd : public uct_test {
 public:
     void initialize() {
         uct_test::init();
@@ -26,6 +26,8 @@ public:
 
         m_e1->connect(0, *m_e2, 0);
         m_e2->connect(0, *m_e1, 0);
+
+        m_am_count = 0;
     }
 
     typedef struct {
@@ -33,8 +35,8 @@ public:
         /* data follows */
     } recv_desc_t;
 
-    static ucs_status_t ib_am_handler(void *arg, void *data, size_t length,
-                                      unsigned flags) {
+    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+                                   unsigned flags) {
         recv_desc_t *my_desc  = (recv_desc_t *) arg;
         uint64_t *test_ib_hdr = (uint64_t *) data;
         uint64_t *actual_data = (uint64_t *) test_ib_hdr + 1;
@@ -45,6 +47,7 @@ public:
             memcpy(my_desc + 1, actual_data , data_length);
         }
 
+        ++m_am_count;
         return UCS_OK;
     }
 
@@ -54,68 +57,76 @@ public:
 
 protected:
     entity *m_e1, *m_e2;
+    static int m_am_count;
 };
 
-UCS_TEST_P(test_uct_wakeup, am)
+int test_uct_event_fd::m_am_count = 0;
+
+UCS_TEST_P(test_uct_event_fd, am)
 {
     uint64_t send_data   = 0xdeadbeef;
     uint64_t test_ib_hdr = 0xbeef;
     recv_desc_t *recv_buffer;
-    ucs::handle<uct_wakeup_h> wakeup_handle;
     struct pollfd wakeup_fd;
     ucs_status_t status;
+    int am_send_count = 0;
 
     initialize();
-    check_caps(UCT_IFACE_FLAG_WAKEUP | UCT_IFACE_FLAG_AM_CB_SYNC);
+    check_caps(UCT_IFACE_FLAG_EVENT_RECV_AM | UCT_IFACE_FLAG_AM_CB_SYNC);
 
     recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(send_data));
     recv_buffer->length = 0; /* Initialize length to 0 */
 
     /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler, recv_buffer,
+    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler, recv_buffer,
                              UCT_AM_CB_FLAG_SYNC);
 
     /* create receiver wakeup */
-    UCS_TEST_CREATE_HANDLE(uct_wakeup_h, wakeup_handle, uct_wakeup_close,
-                           uct_wakeup_open, m_e2->iface(), UCT_WAKEUP_RX_SIGNALED_AM);
+    status = uct_iface_event_fd_get(m_e2->iface(), &wakeup_fd.fd);
+    ASSERT_EQ(UCS_OK, status);
 
-    ASSERT_EQ(UCS_OK, uct_wakeup_efd_get(wakeup_handle, &wakeup_fd.fd));
     wakeup_fd.events = POLLIN;
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
-    ASSERT_EQ(UCS_OK, uct_wakeup_efd_arm(wakeup_handle));
+
+    status = uct_iface_event_arm(m_e2->iface(), UCT_EVENT_RECV_AM);
+    ASSERT_EQ(UCS_OK, status);
+
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
     /* send the data */
     uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
+    ++am_send_count;
 
     /* make sure the file descriptor IS signaled ONCE */
     ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
-    do {
-        status = uct_wakeup_efd_arm(wakeup_handle);
-    } while (UCS_ERR_BUSY == status);
+
+    for (;;) {
+        status = uct_iface_event_arm(m_e2->iface(), UCT_EVENT_RECV_AM);
+        if (status != UCS_ERR_BUSY) {
+            break;
+        }
+        progress();
+    }
     ASSERT_EQ(UCS_OK, status);
 
     wakeup_fd.revents = 0;
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
-    /* re-arm before expect any messages but ud transport MAY do extra messaging */
-    if ((GetParam()->tl_name).substr(0, 2) == "ud") {
-        do {
-            status = uct_wakeup_efd_arm(wakeup_handle);
-        } while (UCS_ERR_BUSY == status);
-    } else {
-        status = uct_wakeup_efd_arm(wakeup_handle);
-    }
+    status = uct_iface_event_arm(m_e2->iface(), UCT_EVENT_RECV_AM);
     ASSERT_EQ(UCS_OK, status);
 
     /* send the data again */
     uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
+    ++am_send_count;
 
     /* make sure the file descriptor IS signaled */
     ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
-    EXPECT_EQ(UCS_OK, uct_wakeup_wait(wakeup_handle));
+
+    while (m_am_count < am_send_count) {
+        progress();
+    }
 
     free(recv_buffer);
 }
 
-UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_wakeup);
+UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_event_fd);

@@ -78,6 +78,8 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
                   req, req->send.datatype, req->send.buffer, length, max_short,
                   rndv_rma_thresh, rndv_am_thresh, zcopy_thresh);
 
+    req->send.uct_comp.func = NULL;
+
     if (((ssize_t)length <= max_short) && !is_iov) {
         /* short */
         req->send.uct.func = proto->contig_short;
@@ -218,6 +220,7 @@ static void ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.buffer       = buffer;
     req->send.datatype     = datatype;
     req->send.tag          = tag;
+    req->send.reg_rsc      = UCP_NULL_RESOURCE;
     req->send.state.offset = 0;
 #if ENABLE_ASSERT
     req->send.lane         = UCP_NULL_LANE;

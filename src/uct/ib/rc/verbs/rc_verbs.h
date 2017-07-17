@@ -62,8 +62,10 @@ typedef struct uct_rc_verbs_iface {
     struct {
         uct_rc_srq_t            xrq;       /* TM XRQ */
         ucs_ptr_array_t         rndv_comps;
-        unsigned                tag_available;
-        int                     num_outstanding;
+        unsigned                num_tags;
+        unsigned                num_outstanding;
+        unsigned                num_canceled;
+        unsigned                tag_sync_thresh;
         uint16_t                unexpected_cnt;
         uint8_t                 enabled;
         struct {
@@ -195,23 +197,27 @@ typedef struct uct_rc_verbs_ctx_priv {
            uct_rc_verbs_tag_imm_data_pack(&(_wr.imm_data), &_priv, _imm_data); \
        }
 
-#  define UCT_RC_VERBS_FILL_TM_OP_WR(_iface, _wr, _sge, _iovlen, _opcode, _ctx, _flags) \
+#  define UCT_RC_VERBS_FILL_TM_ADD_WR(_wr, _tag, _tag_mask, _sge, _sge_cnt, _ctx) \
        { \
+           (_wr)->tm.add.tag        = tag; \
+           (_wr)->tm.add.mask       = tag_mask; \
            (_wr)->tm.add.sg_list    = _sge; \
-           (_wr)->tm.add.num_sge    = _iovlen; \
+           (_wr)->tm.add.num_sge    = _sge_cnt; \
            (_wr)->tm.add.recv_wr_id = (uint64_t)_ctx; \
+       }
+
+#  define UCT_RC_VERBS_FILL_TM_OP_WR(_iface, _wr, _opcode, _flags, _wr_id) \
+       { \
            (_wr)->tm.unexpected_cnt = (_iface)->tm.unexpected_cnt; \
+           (_wr)->wr_id             = _wr_id; \
            (_wr)->opcode            = _opcode; \
            (_wr)->flags             = _flags | IBV_EXP_OPS_TM_SYNC; \
            (_wr)->next              = NULL; \
        }
 
 #  define UCT_RC_VERBS_CHECK_TAG(iface) \
-       if (!iface->tm.tag_available) {  \
+       if (!iface->tm.num_tags) {  \
            return UCS_ERR_EXCEEDS_LIMIT; \
-       } \
-       if (iface->tm.num_outstanding <= 0) { \
-           return UCS_ERR_NO_RESOURCE; \
        }
 
 static UCS_F_ALWAYS_INLINE void

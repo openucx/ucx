@@ -405,13 +405,14 @@ int ucs_is_thp_enabled()
     char buf[256];
     int rc;
 
-    rc = ucs_read_file(buf, sizeof(buf), 1, UCS_SYS_THP_ENABLED_FILE);
+    rc = ucs_read_file(buf, sizeof(buf) - 1, 1, UCS_SYS_THP_ENABLED_FILE);
     if (rc < 0) {
         ucs_debug("failed to read %s:%m", UCS_SYS_THP_ENABLED_FILE);
         return 0;
     }
 
-    return (strcmp(buf, "always madvise [never]") != 0);
+    buf[rc] = 0;
+    return (strstr(buf, "[never]") == NULL);
 }
 
 #define UCS_PROC_SYS_SHMMAX_FILE "/proc/sys/kernel/shmmax"

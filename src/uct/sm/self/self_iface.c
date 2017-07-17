@@ -79,7 +79,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
     attr->latency.overhead        = 0;
     attr->latency.growth          = 0;
     attr->bandwidth               = 6911 * 1024.0 * 1024.0;
-    attr->overhead                = 0;
+    attr->overhead                = 10e-9;
     attr->priority                = 0;
 
     return UCS_OK;
@@ -142,6 +142,9 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_self_ep_t),
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
+    .iface_progress_enable    = ucs_empty_function,
+    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress           = ucs_empty_function,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_self_iface_t),
     .iface_query              = uct_self_iface_query,
     .iface_get_device_address = ucs_empty_function_return_success,

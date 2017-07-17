@@ -191,7 +191,8 @@ static ucs_status_t ucp_eager_offload_sync_ack_handler(void *arg, void *data,
     ucs_queue_for_each_safe(sreq, iter, queue, send.tag_offload.queue) {
         if ((sreq->send.tag_offload.ssend_tag == rep_hdr->sender_tag) &&
             (worker->uuid == rep_hdr->sender_uuid)) {
-            ucp_tag_eager_sync_completion(sreq, UCP_REQUEST_FLAG_REMOTE_COMPLETED);
+            ucp_tag_eager_sync_completion(sreq, UCP_REQUEST_FLAG_REMOTE_COMPLETED,
+                                          UCS_OK);
             ucs_queue_del_iter(queue, iter);
             return UCS_OK;
         }
@@ -208,7 +209,7 @@ static ucs_status_t ucp_eager_sync_ack_handler(void *arg, void *data,
     ucp_request_t *req;
 
     req = (ucp_request_t*)rep_hdr->reqptr;
-    ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_REMOTE_COMPLETED);
+    ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_REMOTE_COMPLETED, UCS_OK);
     return UCS_OK;
 }
 

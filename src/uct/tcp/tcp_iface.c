@@ -149,6 +149,9 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_fence                 = uct_base_ep_fence,
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
+    .iface_progress_enable    = ucs_empty_function,
+    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress           = ucs_empty_function,
     .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_tcp_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_ep_t),
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_iface_t),
@@ -246,10 +249,10 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
               ntohs(bind_addr.sin_port));
 
     /* Register event handler for incoming connections */
-    status = ucs_async_set_event_handler(worker->async->mode, self->listen_fd,
-                                         POLLIN|POLLERR,
+    status = ucs_async_set_event_handler(self->super.worker->async->mode,
+                                         self->listen_fd, POLLIN|POLLERR,
                                          uct_tcp_iface_connect_handler, self,
-                                         worker->async);
+                                         self->super.worker->async);
     if (status != UCS_OK) {
         goto err_close_sock;
     }

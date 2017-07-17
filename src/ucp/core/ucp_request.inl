@@ -90,6 +90,9 @@ ucp_request_complete_recv(ucp_request_t *req, ucs_status_t status)
                   req->recv.info.sender_tag, req->recv.info.length,
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
+    if (req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD) {
+        --req->recv.worker->context->tm.sw_req_count;
+    }
     ucp_request_complete(req, recv.cb, status, &req->recv.info);
 }
 
@@ -167,4 +170,9 @@ ucp_request_wait_uct_comp(ucp_request_t *req)
     while (req->send.uct_comp.count > 0) {
         ucp_worker_progress(req->send.ep->worker);
     }
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_request_is_send_buffer_reg(ucp_request_t *req) {
+    return req->send.reg_rsc != UCP_NULL_RESOURCE;
 }
