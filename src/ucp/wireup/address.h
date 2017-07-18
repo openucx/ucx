@@ -53,17 +53,12 @@ struct ucp_address_iface_attr {
  */
 struct ucp_address_entry {
     const uct_device_addr_t    *dev_addr;      /* Points to device address */
-    size_t                     dev_addr_len;   /* Device address length */
     uint16_t                   tl_name_csum;   /* Checksum of transport name */
     ucp_rsc_index_t            md_index;       /* Memory domain index */
     uint64_t                   md_flags;       /* MD reg/alloc flags */
     ucp_address_iface_attr_t   iface_attr;     /* Interface attributes information */
-    size_t                     tl_addr_len;    /* Transport address length */
-    union {
-        const uct_iface_addr_t *iface_addr;    /* Interface address */
-        const uct_ep_addr_t    *ep_addr;       /* Endpoint address */
-        const void             *tl_addr;
-    };
+    const uct_iface_addr_t     *iface_addr;    /* Interface address, NULL if not available */
+    const uct_ep_addr_t        *ep_addr;       /* Endpoint address, NULL if not available */
 };
 
 
