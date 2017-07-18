@@ -672,7 +672,8 @@ void uct_rc_verbs_iface_tag_query(uct_rc_verbs_iface_t *iface,
 static ucs_status_t uct_rc_verbs_iface_get_address(uct_iface_h tl_iface,
                                                    uct_iface_addr_t *addr)
 {
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
+    uct_rc_verbs_iface_t UCS_V_UNUSED *iface =
+                    ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
 
     *(uint8_t*)addr = UCT_RC_VERBS_TM_ENABLED(iface) ?
                       UCT_RC_VERBS_IFACE_ADDR_TYPE_TM :
@@ -683,7 +684,8 @@ static int uct_rc_verbs_iface_is_reachable(const uct_iface_h tl_iface,
                                            const uct_device_addr_t *dev_addr,
                                            const uct_iface_addr_t *iface_addr)
 {
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
+    uct_rc_verbs_iface_t UCS_V_UNUSED *iface =
+                    ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
     uint8_t my_type = UCT_RC_VERBS_TM_ENABLED(iface) ?
                       UCT_RC_VERBS_IFACE_ADDR_TYPE_TM :
                       UCT_RC_VERBS_IFACE_ADDR_TYPE_BASIC;
