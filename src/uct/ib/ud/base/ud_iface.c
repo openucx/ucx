@@ -28,8 +28,6 @@ static void uct_ud_iface_timer(int timer_id, void *arg);
 static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface);
 static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface);
 
-static void uct_ud_iface_event(int fd, void *arg);
-
 
 void uct_ud_iface_cep_init(uct_ud_iface_t *iface)
 {
@@ -356,23 +354,10 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
         goto err_twheel_cleanup;
     }
 
-    status = ucs_async_set_event_handler(async_mode, iface->super.comp_channel->fd,
-                                         POLLIN, uct_ud_iface_event, iface, async);
-    if (status != UCS_OK) {
-        goto err_remove_timer;
-    }
-
-    status = uct_ib_iface_arm_rx_cq(&iface->super, 1);
-    if (status != UCS_OK) {
-        goto err_unset_event_handler;
-    }
-
+    uct_base_iface_progress_enable(&iface->super.super.super,
+                                   UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     return UCS_OK;
 
-err_unset_event_handler:
-    ucs_async_remove_handler(iface->super.comp_channel->fd, 1);
-err_remove_timer:
-    ucs_async_remove_handler(iface->async.timer_id, 1);
 err_twheel_cleanup:
     ucs_twheel_cleanup(&iface->async.slow_timer);
 err:
@@ -381,7 +366,8 @@ err:
 
 void uct_ud_iface_remove_async_handlers(uct_ud_iface_t *iface)
 {
-    ucs_async_remove_handler(iface->super.comp_channel->fd, 1);
+    uct_base_iface_progress_disable(&iface->super.super.super,
+                                    UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     ucs_async_remove_handler(iface->async.timer_id, 1);
 }
 
@@ -755,14 +741,6 @@ static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface)
 static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
 {
     ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->async_progress(iface);
-}
-
-static void uct_ud_iface_event(int fd, void *arg)
-{
-    uct_ud_enter(arg);
-    ucs_trace_async("iface(%p) uct_ud_iface_event", arg);
-    uct_ud_iface_async_progress(arg);
-    uct_ud_leave(arg);
 }
 
 static void uct_ud_iface_timer(int timer_id, void *arg)

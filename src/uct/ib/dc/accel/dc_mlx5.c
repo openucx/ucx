@@ -534,9 +534,9 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
                          uct_dc_iface_dci_do_pending_tx, NULL);
 }
 
-static void uct_dc_mlx5_iface_progress(void *arg)
+static void uct_dc_mlx5_iface_progress(uct_iface_h tl_iface)
 {
-    uct_dc_mlx5_iface_t *iface = arg;
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     ucs_status_t status;
 
     status = uct_rc_mlx5_iface_common_poll_rx(&iface->mlx5_common, &iface->super.super);
@@ -690,9 +690,9 @@ static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .ep_fence                 = uct_base_ep_fence,
     .iface_flush              = uct_dc_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = uct_dc_iface_progress_enable,
-    .iface_progress_disable   = uct_dc_iface_progress_disable,
-    .iface_progress           = (void*)uct_dc_mlx5_iface_progress,
+    .iface_progress_enable    = uct_base_iface_progress_enable,
+    .iface_progress_disable   = uct_base_iface_progress_disable,
+    .iface_progress           = uct_dc_mlx5_iface_progress,
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
     .iface_event_arm          = uct_ib_iface_event_arm,
     .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_dc_mlx5_ep_t),
@@ -711,8 +711,7 @@ static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_dc_iface_fc_handler,
     },
-    .reset_dci                = uct_dc_mlx5_iface_reset_dci,
-    .progress                 = uct_dc_mlx5_iface_progress
+    .reset_dci                = uct_dc_mlx5_iface_reset_dci
 };
 
 
@@ -779,8 +778,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
                              sizeof(struct mlx5_wqe_data_seg));
 
     /* TODO: only register progress when we have a connection */
-    uct_dc_iface_progress_enable(&self->super.super.super.super.super,
-                                 UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+    uct_base_iface_progress_enable(&self->super.super.super.super.super,
+                                   UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     ucs_debug("created dc iface %p", self);
     return UCS_OK;
 
@@ -793,8 +792,8 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
 {
     ucs_trace_func("");
-    uct_dc_iface_progress_disable(&self->super.super.super.super.super,
-                                  UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+    uct_base_iface_progress_disable(&self->super.super.super.super.super,
+                                    UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     uct_rc_mlx5_iface_common_cleanup(&self->mlx5_common);
 }
 

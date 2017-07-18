@@ -91,7 +91,6 @@ static inline ucs_status_t uct_ud_iface_null_hook(uct_ud_iface_t *iface,
 
 typedef struct uct_ud_iface_ops {
     uct_ib_iface_ops_t        super;
-    ucs_callback_t            progress;
     void                      (*async_progress)(uct_ud_iface_t *iface);
     void                      (*tx_skb)(uct_ud_ep_t *ep, uct_ud_send_skb_t *skb,
                                         int solicited);

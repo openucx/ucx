@@ -436,9 +436,9 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
     iface->super.tx.available = uct_ib_mlx5_txwq_update_bb(&iface->tx.wq, ntohs(cqe->wqe_counter));
 }
 
-static void uct_ud_mlx5_iface_progress(void *arg)
+static void uct_ud_mlx5_iface_progress(uct_iface_h tl_iface)
 {
-    uct_ud_mlx5_iface_t *iface = arg;
+    uct_ud_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_mlx5_iface_t);
     ucs_status_t status;
     int count;
 
@@ -618,9 +618,9 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .ep_connect_to_ep         = uct_ud_mlx5_ep_connect_to_ep,
     .iface_flush              = uct_ud_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
-    .iface_progress           = (void*)uct_ud_mlx5_iface_progress,
+    .iface_progress_enable    = uct_base_iface_progress_enable,
+    .iface_progress_disable   = uct_base_iface_progress_disable,
+    .iface_progress           = uct_ud_mlx5_iface_progress,
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
     .iface_event_arm          = uct_ud_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t),
@@ -634,7 +634,6 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .handle_failure           = uct_ud_iface_handle_failure,
     .set_ep_failed            = uct_ud_mlx5_ep_set_failed
     },
-    .progress                 = uct_ud_mlx5_iface_progress,
     .async_progress           = uct_ud_mlx5_iface_async_progress,
     .tx_skb                   = uct_ud_mlx5_ep_tx_ctl_skb,
 };
