@@ -62,7 +62,7 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
         }
 
         if (ucp_worker_is_tl_tag_offload(worker, rsc_index)) {
-            ucs_queue_remove(&worker->context->tm.offload_ifaces,
+            ucs_queue_remove(&worker->context->tm.offload.ifaces,
                              &worker->ifaces[rsc_index].queue);
             ucp_context_tag_offload_enable(worker->context);
         }
@@ -407,7 +407,7 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
     if (ucp_worker_is_tl_tag_offload(worker, tl_id)) {
         worker->ifaces[tl_id].rsc_index = tl_id;
-        ucs_queue_push(&context->tm.offload_ifaces, &worker->ifaces[tl_id].queue);
+        ucs_queue_push(&context->tm.offload.ifaces, &worker->ifaces[tl_id].queue);
         ucp_context_tag_offload_enable(context);
     }
 
@@ -564,12 +564,13 @@ static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
 static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker,
                                            size_t rx_headroom)
 {
+    size_t           max_mp_entry_size = 0;
+    ucp_context_t    *context          = worker->context;
     uct_iface_attr_t *if_attr;
     size_t           tl_id;
     ucs_status_t     status;
-    size_t           max_mp_entry_size = 0;
 
-    for (tl_id = 0; tl_id < worker->context->num_tls; ++tl_id) {
+    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
         if_attr = &worker->ifaces[tl_id].attr;
         max_mp_entry_size = ucs_max(max_mp_entry_size,
                                     if_attr->cap.am.max_short);
@@ -588,7 +589,7 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker,
     }
 
     status = ucs_mpool_init(&worker->reg_mp, 0,
-                            max_mp_entry_size + sizeof(ucp_mem_desc_t),
+                            context->config.ext.seg_size + sizeof(ucp_mem_desc_t),
                             sizeof(ucp_mem_desc_t), UCS_SYS_CACHE_LINE_SIZE,
                             128, UINT_MAX, &ucp_reg_mpool_ops, "ucp_reg_bufs");
     if (status != UCS_OK) {

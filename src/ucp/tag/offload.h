@@ -58,13 +58,13 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req);
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_offload_try_post(ucp_context_t *ctx, ucp_request_t *req)
 {
-    if (ucs_unlikely(req->recv.length >= ctx->tm.post_thresh)) {
+    if (ucs_unlikely(req->recv.length >= ctx->tm.offload.thresh)) {
         if (ucp_tag_offload_post(ctx, req)) {
             return;
         }
     }
     req->flags |= UCP_REQUEST_FLAG_BLOCK_OFFLOAD;
-    ++ctx->tm.sw_req_count;
+    ++ctx->tm.offload.sw_req_count;
 }
 
 #endif

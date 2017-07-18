@@ -184,7 +184,7 @@ static ucs_status_t ucp_eager_offload_sync_ack_handler(void *arg, void *data,
 {
     ucp_offload_ssend_hdr_t *rep_hdr = data;
     ucp_worker_t *worker             = arg;
-    ucs_queue_head_t *queue          = &worker->context->tm.sync_reqs;
+    ucs_queue_head_t *queue          = &worker->context->tm.offload.sync_reqs;
     ucp_request_t *sreq;
     ucs_queue_iter_t iter;
 

@@ -10,6 +10,7 @@
 #define UCP_REQUEST_H_
 
 #include "ucp_context.h"
+#include "ucp_mm.h"
 
 #include <ucp/api/ucp.h>
 #include <uct/api/uct.h>
@@ -158,9 +159,8 @@ struct ucp_request {
             ucp_tag_recv_info_t   info;     /* Completion info to fill */
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
-
-            /* Transport offload context */
-            uct_tag_context_t     uct_ctx;
+            ucp_mem_desc_t        *rdesc;
+            uct_tag_context_t     uct_ctx;  /* Transport offload context */
         } recv;
     };
 };
