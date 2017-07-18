@@ -126,6 +126,8 @@ UCS_TEST_P(test_uct_event_fd, am)
         progress();
     }
 
+    m_e1->flush();
+
     free(recv_buffer);
 }
 
