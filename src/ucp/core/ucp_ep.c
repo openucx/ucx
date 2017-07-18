@@ -864,13 +864,13 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                                      UCT_IFACE_FLAG_TAG_EAGER_ZCOPY, 0,
                                      iface_attr->cap.tag.eager.max_bcopy);
 
-            config->tag.offload.max_recv_iov = iface_attr->cap.tag.recv.max_iov;
-            config->tag.offload.max_rndv_iov = iface_attr->cap.tag.rndv.max_iov;
-            config->tag.sync_proto           = &ucp_tag_offload_sync_proto;
-            config->tag.proto                = &ucp_tag_offload_proto;
-            config->tag.lane                 = lane;
-            max_rndv_thresh                  = iface_attr->cap.tag.eager.max_zcopy;
-            max_am_rndv_thresh               = iface_attr->cap.tag.eager.max_bcopy;
+            config->tag.offload.max_rndv_iov   = iface_attr->cap.tag.rndv.max_iov;
+            config->tag.offload.max_rndv_zcopy = iface_attr->cap.tag.rndv.max_zcopy;
+            config->tag.sync_proto             = &ucp_tag_offload_sync_proto;
+            config->tag.proto                  = &ucp_tag_offload_proto;
+            config->tag.lane                   = lane;
+            max_rndv_thresh                    = iface_attr->cap.tag.eager.max_zcopy;
+            max_am_rndv_thresh                 = iface_attr->cap.tag.eager.max_bcopy;
 
             ucp_ep_config_set_rndv_thresh(worker, config, lane,
                                           UCT_IFACE_FLAG_TAG_RNDV_ZCOPY,

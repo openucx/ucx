@@ -188,6 +188,13 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                               ucp_worker_iface_t, queue);
     if (ucs_unlikely(length >= ctx->tm.offload.zcopy_thresh)) {
+
+        /* TODO: Add tag.RECV.max_zcopy field to iface attrs and use it here  */
+        if (length > ucp_iface->attr.cap.tag.rndv.max_zcopy) {
+            /* The message is too big to be posted to the transport */
+            return 0;
+        }
+
         status = ucp_request_memory_reg(ctx, ucp_iface->rsc_index, req->recv.buffer,
                                         req->recv.length, req->recv.datatype,
                                         &req->recv.state);
@@ -387,10 +394,12 @@ void ucp_tag_offload_cancel_rndv(ucp_request_t *req)
 ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
 {
     ucs_status_t status;
-    ucp_lane_index_t lane = ucp_ep_get_tag_lane(sreq->send.ep);
+    ucp_ep_t *ep          = sreq->send.ep;
+    ucp_lane_index_t lane = ucp_ep_get_tag_lane(ep);
 
     sreq->send.lane = lane;
-    if (UCP_DT_IS_CONTIG(sreq->send.datatype)) {
+    if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
+        (sreq->send.length <= ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) {
         status = ucp_request_send_buffer_reg(sreq, lane);
         if (status != UCS_OK) {
             return status;
