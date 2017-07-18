@@ -177,7 +177,6 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 
     uct_ib_pack_uint24(rc_addr->qp_num, ep->txqp.qp->qp_num);
     rc_addr->atomic_mr_id = uct_ib_iface_get_atomic_mr_id(iface);
-    rc_addr->type         = UCT_RC_EP_ADDR_TYPE_BASIC;
     return UCS_OK;
 }
 
@@ -190,8 +189,6 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     const uct_rc_ep_address_t *rc_addr = (const uct_rc_ep_address_t*)ep_addr;
     struct ibv_ah_attr ah_attr;
     ucs_status_t status;
-
-    ucs_assert_always(rc_addr->type == UCT_RC_EP_ADDR_TYPE_BASIC);
 
     uct_ib_iface_fill_ah_attr(&iface->super, ib_addr, ep->path_bits, &ah_attr);
 

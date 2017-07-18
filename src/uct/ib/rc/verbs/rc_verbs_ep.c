@@ -612,9 +612,6 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
         uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
         uct_ib_pack_uint24(tm_addr->tm_qp_num, ep->tm_qp->qp_num);
-
-        /* Redefine address type */
-        tm_addr->super.type = UCT_RC_EP_ADDR_TYPE_TM;
     }
 #endif
     return UCS_OK;
@@ -642,8 +639,6 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
         uct_rc_verbs_ep_tm_address_t *tm_addr = ucs_derived_of(rc_addr,
                                                 uct_rc_verbs_ep_tm_address_t);
 
-        ucs_assert_always(tm_addr->super.type == UCT_RC_EP_ADDR_TYPE_TM);
-
         status = uct_rc_iface_qp_connect(&iface->super, ep->tm_qp,
                                          uct_ib_unpack_uint24(rc_addr->qp_num),
                                          &ah_attr);
@@ -657,7 +652,6 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     } else
 #endif
     {
-        ucs_assert_always(rc_addr->type == UCT_RC_EP_ADDR_TYPE_BASIC);
         qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
     }
 

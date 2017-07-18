@@ -33,15 +33,6 @@ enum {
     UCT_RC_TXQP_STAT_LAST
 };
 
-enum {
-    UCT_RC_EP_ADDR_TYPE_BASIC,
-
-    /* Tag Matching address. It additionaly contains QP number which
-     * is used for hardware offloads. */
-    UCT_RC_EP_ADDR_TYPE_TM,
-    UCT_RC_EP_ADDR_TYPE_LAST
-};
-
 /*
  * Auxillary AM ID bits used by FC protocol.
  */
@@ -187,7 +178,6 @@ UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
 typedef struct uct_rc_ep_address {
     uct_ib_uint24_t  qp_num;
     uint8_t          atomic_mr_id;
-    uint8_t          type;
 } UCS_S_PACKED uct_rc_ep_address_t;
 
 

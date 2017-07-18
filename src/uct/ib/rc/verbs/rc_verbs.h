@@ -14,6 +14,17 @@
 
 #include "rc_verbs_common.h"
 
+
+enum {
+    UCT_RC_VERBS_IFACE_ADDR_TYPE_BASIC,
+
+    /* Tag Matching address. It additionaly contains QP number which
+     * is used for hardware offloads. */
+    UCT_RC_VERBS_IFACE_ADDR_TYPE_TM,
+    UCT_RC_VERBS_IFACE_ADDR_TYPE_LAST
+};
+
+
 #if IBV_EXP_HW_TM
 typedef struct uct_rc_verbs_release_desc {
     uct_recv_desc_t             super;

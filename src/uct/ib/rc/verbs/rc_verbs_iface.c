@@ -669,6 +669,32 @@ void uct_rc_verbs_iface_tag_query(uct_rc_verbs_iface_t *iface,
 #endif
 }
 
+static ucs_status_t uct_rc_verbs_iface_get_address(uct_iface_h tl_iface,
+                                                   uct_iface_addr_t *addr)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
+
+    *(uint8_t*)addr = UCT_RC_VERBS_TM_ENABLED(iface) ?
+                      UCT_RC_VERBS_IFACE_ADDR_TYPE_TM :
+                      UCT_RC_VERBS_IFACE_ADDR_TYPE_BASIC;
+    return UCS_OK;
+}
+static int uct_rc_verbs_iface_is_reachable(const uct_iface_h tl_iface,
+                                           const uct_device_addr_t *dev_addr,
+                                           const uct_iface_addr_t *iface_addr)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
+    uint8_t my_type = UCT_RC_VERBS_TM_ENABLED(iface) ?
+                      UCT_RC_VERBS_IFACE_ADDR_TYPE_TM :
+                      UCT_RC_VERBS_IFACE_ADDR_TYPE_BASIC;
+
+    if ((iface_addr != NULL) && (my_type != *(uint8_t*)iface_addr)) {
+        return 0;
+    }
+
+    return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
+}
+
 static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
@@ -676,6 +702,7 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     uct_rc_iface_query(&iface->super, iface_attr);
     uct_rc_verbs_iface_common_query(&iface->verbs_common, &iface->super, iface_attr);
     iface_attr->latency.growth += 3e-9; /* 3ns per each extra QP */
+    iface_attr->iface_addr_len  = sizeof(uint8_t); /* overwrite */
 
     uct_rc_verbs_iface_tag_query(iface, iface_attr);
 
@@ -815,9 +842,9 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .iface_event_arm          = uct_ib_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_iface_t),
     .iface_query              = uct_rc_verbs_iface_query,
-    .iface_get_address        = ucs_empty_function_return_success,
+    .iface_get_address        = uct_rc_verbs_iface_get_address,
     .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_ib_iface_is_reachable
+    .iface_is_reachable       = uct_rc_verbs_iface_is_reachable,
     },
     .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
     .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
