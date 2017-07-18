@@ -25,6 +25,9 @@ struct uct_md_component {
     ucs_status_t           (*rkey_unpack)(uct_md_component_t *mdc, const void *rkey_buffer,
                                           uct_rkey_t *rkey_p, void **handle_p);
 
+    ucs_status_t           (*rkey_ptr)(uct_md_component_t *mdc, uct_rkey_t rkey, void *handle,
+                                       void *raddr, void **laddr);
+
     ucs_status_t           (*rkey_release)(uct_md_component_t *mdc, uct_rkey_t rkey,
                                            void *handle);
 
@@ -81,6 +84,7 @@ typedef struct uct_md_registered_tl {
         .md_config_size  = sizeof(_cfg_struct), \
         .priv            = _priv, \
         .rkey_unpack     = _rkey_unpack, \
+        .rkey_ptr        = ucs_empty_function_return_unsupported, \
         .rkey_release    = _rkey_release, \
         .name            = _name, \
         .tl_list         = { &_mdc.tl_list, &_mdc.tl_list } \
