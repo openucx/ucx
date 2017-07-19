@@ -130,6 +130,9 @@ static ucs_config_field_t ucp_config_table[] = {
    "Size of a segment in the worker preregistered memory pool.",
    ucs_offsetof(ucp_config_t, ctx.seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"TM_OFFLOAD", "y", "Enable tag matching offload",
+   ucs_offsetof(ucp_config_t, ctx.tm_offload), UCS_CONFIG_TYPE_BOOL},
+
   {"TM_THRESH", "1024", /* TODO: calculate automaticlly */
    "Threshold for using tag matching offload capabilities.\n"
    "Smaller buffers will not be posted to the transport.",
@@ -959,7 +962,8 @@ void ucp_context_tag_offload_enable(ucp_context_h context)
 {
     /* Enable offload, if only one tag offload capable interface is present
      * (multiple offload ifaces are not supported yet). */
-    if (ucs_queue_length(&context->tm.offload.ifaces) == 1) {
+    if (context->config.ext.tm_offload &&
+        (ucs_queue_length(&context->tm.offload.ifaces) == 1)) {
         context->tm.offload.thresh       = context->config.ext.tm_thresh;
         context->tm.offload.zcopy_thresh = context->config.ext.tm_max_bcopy;
 
