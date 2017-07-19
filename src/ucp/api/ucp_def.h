@@ -11,7 +11,6 @@
 
 #include <ucs/type/status.h>
 #include <stddef.h>
-#include <unistd.h>
 #include <stdint.h>
 
 
@@ -321,17 +320,6 @@ typedef struct ucp_err_handler {
     ucp_err_handler_cb_t cb;       /**< Error handler callback */
     void                 *arg;     /**< User defined argument */
 } ucp_err_handler_t;
-
-
-/**
- * @brief BSD socket address specification.
- *
- * This structure should be initialized in @ref ucp_ep_params_t
- */
-typedef struct ucp_addr_sock_addr {
-    struct sockaddr   *addr;           /**< Address in the form of a sockaddr */
-    socklen_t         addrlen;         /**< Address length */
-} ucp_addr_sock_addr_t;
 
 
 /**

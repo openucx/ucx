@@ -712,7 +712,7 @@ typedef struct ucp_worker_listener_params {
      * The ucp_worker_listen routine will return with an error if the sock_addr
      * isn't specified.
      */
-    ucp_addr_sock_addr_t           sock_address;
+    ucs_sock_addr_t                sock_address;
 
     /**
      * Handler to endpoint creation in a client-server connection flow.
@@ -779,7 +779,7 @@ typedef struct ucp_ep_params {
      * The UCP_EP_PARAM_FIELD_SOCK_ADDR bit in the field_mask should be set
      * to indicate that the type of the remote address is a sockaddr.
      */
-    ucp_addr_sock_addr_t    sock_address;
+    ucs_sock_addr_t         sock_address;
 } ucp_ep_params_t;
 
 
