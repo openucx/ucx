@@ -163,10 +163,10 @@ typedef struct ucp_ep_config {
         } rndv;
 
         struct {
-            /* Maximal iov count for tag recv offload */
-            size_t          max_recv_iov;
             /* Maximal iov count for RNDV offload */
             size_t          max_rndv_iov;
+            /* Maximal total size for RNDV offload */
+            size_t          max_rndv_zcopy;
         } offload;
     } tag;
 
