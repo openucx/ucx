@@ -134,7 +134,7 @@ UCS_TEST_P(test_md, rkey_ptr) {
     uct_rkey_bundle_t rkey_bundle;
     unsigned i;
 
-    check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_DIRECT_ACCESS, "allocation+direct access");
+    check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_SHARE_PTR, "allocation+direct access");
     // alloc (should work with both sysv and xpmem
     size = 1024 * 1024 * sizeof(unsigned);
     status = uct_md_mem_alloc(pd(), &size, (void **)&rva, 0, "test", &memh);
@@ -153,7 +153,7 @@ UCS_TEST_P(test_md, rkey_ptr) {
     ASSERT_UCS_OK(status);
 
     // get direct ptr
-    status = uct_rkey_ptr(&rkey_bundle, rva, (void **)&lva);
+    status = uct_rkey_ptr(&rkey_bundle, (uintptr_t)rva, (void **)&lva);
     ASSERT_UCS_OK(status);
     // check direct access
     // read
@@ -170,10 +170,10 @@ UCS_TEST_P(test_md, rkey_ptr) {
 
     // check bounds
     //
-    status = uct_rkey_ptr(&rkey_bundle, rva-1, (void **)&lva);
+    status = uct_rkey_ptr(&rkey_bundle, (uintptr_t)(rva-1), (void **)&lva);
     EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
 
-    status = uct_rkey_ptr(&rkey_bundle, (char *)rva+size, (void **)&lva);
+    status = uct_rkey_ptr(&rkey_bundle, (uintptr_t)rva+size, (void **)&lva);
     EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
 
     free(rkey_buffer);

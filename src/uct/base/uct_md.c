@@ -432,12 +432,12 @@ ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob
     return UCS_ERR_UNSUPPORTED;
 }
 
-ucs_status_t uct_rkey_ptr(uct_rkey_bundle_t *rkey_ob, void *remote_addr,
-                          void **local_addr)
+ucs_status_t uct_rkey_ptr(uct_rkey_bundle_t *rkey_ob, uint64_t remote_addr,
+                          void **local_addr_p)
 {
     uct_md_component_t *mdc = rkey_ob->type;
     return mdc->rkey_ptr(mdc, rkey_ob->rkey, rkey_ob->handle, remote_addr,
-                         local_addr);
+                         local_addr_p);
 }
 
 ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob)

@@ -115,7 +115,7 @@ ucs_status_t uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
         md_attr->cap.flags |= UCT_MD_FLAG_ALLOC;
     }
     if (uct_mm_md_mapper_ops(md)->attach != NULL) {
-        md_attr->cap.flags |= UCT_MD_FLAG_DIRECT_ACCESS;
+        md_attr->cap.flags |= UCT_MD_FLAG_SHARE_PTR;
     }
     if (uct_mm_md_mapper_ops(md)->reg != NULL) {
         md_attr->cap.flags |= UCT_MD_FLAG_REG;
@@ -185,14 +185,14 @@ ucs_status_t uct_mm_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer
 }
 
 ucs_status_t uct_mm_rkey_ptr(uct_md_component_t *mdc, uct_rkey_t rkey,
-                             void *handle, void *raddr, void **laddr)
+                             void *handle, uint64_t raddr, void **laddr_p)
 {
     uct_mm_remote_seg_t *mm_desc = handle;
 
     /* rkey stores offset from the remote va */
-    *laddr = (char *)raddr + rkey;
-    if ((*laddr < mm_desc->address) ||
-        (*laddr >= mm_desc->address + mm_desc->length)) {
+    *laddr_p = (void *)(raddr + (uint64_t)rkey);
+    if ((*laddr_p < mm_desc->address) ||
+        (*laddr_p >= mm_desc->address + mm_desc->length)) {
        return UCS_ERR_INVALID_ADDR;
     }
     return UCS_OK;
