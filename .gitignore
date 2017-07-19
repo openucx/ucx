@@ -61,3 +61,4 @@ test/mpi/run_mpi.sh
 valgrind.xml
 tags
 .pydevproject
+/ucx-*.*.*
