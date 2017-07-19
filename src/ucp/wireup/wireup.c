@@ -380,6 +380,8 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
             return status;
         }
 
+        ucp_worker_iface_progress_ep(&worker->ifaces[rsc_index]);
+
         /* If ep already exists, it's a stub, and we need to update its next_ep
          * instead of replacing it.
          */
@@ -414,10 +416,16 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
         }
 
         ucs_trace("ep %p: connect stub_ep[%d]=%p", ep, lane, ep->uct_eps[lane]);
-        return ucp_stub_ep_connect(ep->uct_eps[lane],
-                                   ucp_ep_get_rsc_index(ep, lane),
-                                   lane == ucp_ep_get_wireup_msg_lane(ep),
-                                   address_count, address_list);
+        status = ucp_stub_ep_connect(ep->uct_eps[lane], rsc_index,
+                                     lane == ucp_ep_get_wireup_msg_lane(ep),
+                                     address_count, address_list);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        ucp_worker_iface_progress_ep(&worker->ifaces[rsc_index]);
+
+        return UCS_OK;
     }
 
     return UCS_ERR_UNREACHABLE;

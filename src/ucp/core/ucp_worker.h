@@ -56,7 +56,7 @@ enum {
 
 
 #define UCP_WORKER_UCT_EVENT_CAP_FLAGS (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
-                               UCT_IFACE_FLAG_EVENT_RECV_AM)
+                                        UCT_IFACE_FLAG_EVENT_RECV_AM)
 
 
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
@@ -73,16 +73,22 @@ enum {
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
                              UCP_WORKER_STAT_TAG_RX_RNDV_##_is_exp, 1);
 
+
 /**
  * UCP worker iface, which encapsulates UCT iface, its attributes and
  * some auxiliary info needed for tag matching offloads.
  */
 typedef struct ucp_worker_iface {
-    uct_iface_h                   iface;
-    uct_iface_attr_t              attr;
+    uct_iface_h                   iface;         /* UCT interface */
+    uct_iface_attr_t              attr;          /* UCT interface attributes */
     ucp_worker_h                  worker;        /* The parent worker */
-    ucs_queue_elem_t              queue;
-    ucp_rsc_index_t               rsc_index;
+    ucs_queue_elem_t              queue;         /* Element in tm.offload_ifaces */
+    ucs_list_link_t               arm_list;      /* Element in arm_ifaces list */
+    ucp_rsc_index_t               rsc_index;     /* Resource index */
+    int                           event_fd;      /* Event FD, or -1 if undefined */
+    unsigned                      activate_count;/* How times this iface has been activated */
+    int                           on_arm_list;   /* Is the interface on arm_list */
+    int                           check_events_id;/* Callback id for check_events */
     int                           proxy_am_count;/* Counts active messages on proxy handler */
 } ucp_worker_iface_t;
 
@@ -106,16 +112,19 @@ typedef struct ucp_worker {
     int                           epfd;          /* Allocated (on-demand) epoll fd for wakeup */
     int                           wakeup_pipe[2];/* Pipe to support signal() calls */
     unsigned                      uct_events;    /* UCT arm events */
+    ucs_list_link_t               arm_ifaces;    /* List of interfaces to arm */
 
     khash_t(ucp_worker_ep_hash)   ep_hash;       /* Hash table of all endpoints */
     khash_t(ucp_ep_errh_hash)     ep_errh_hash;  /* Hash table of error handlers associated with endpoints */
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
+    ucp_mt_lock_t                 mt_lock;       /* Configuration of multi-threading support */
+
     UCS_STATS_NODE_DECLARE(stats);
+
     unsigned                      ep_config_max; /* Maximal number of configurations */
-    unsigned                      ep_config_count; /* Current number of configurations */
-    ucp_mt_lock_t                 mt_lock; /* All configurations about multithreading support */
+    unsigned                      ep_config_count;/* Current number of configurations */
     ucp_ep_config_t               ep_config[0];  /* Array of transport limits and thresholds */
 } ucp_worker_t;
 
@@ -126,6 +135,12 @@ ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid
 
 unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
                                   const ucp_ep_config_key_t *key);
+
+void ucp_worker_iface_progress_ep(ucp_worker_iface_t *wiface);
+
+void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface);
+
+void ucp_worker_signal_internal(ucp_worker_h worker);
 
 static inline const char* ucp_worker_get_name(ucp_worker_h worker)
 {
