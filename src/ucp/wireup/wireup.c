@@ -623,4 +623,4 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 }
 
 UCP_DEFINE_AM(-1, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler, 
-              ucp_wireup_msg_dump, UCT_AM_CB_FLAG_ASYNC);
+              ucp_wireup_msg_dump, UCT_AM_CB_FLAG_ASYNC, 0);

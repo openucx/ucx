@@ -80,8 +80,10 @@ enum {
 typedef struct ucp_worker_iface {
     uct_iface_h                   iface;
     uct_iface_attr_t              attr;
+    ucp_worker_h                  worker;        /* The parent worker */
     ucs_queue_elem_t              queue;
     ucp_rsc_index_t               rsc_index;
+    unsigned                      proxy_am_count;/* Counts active messages on proxy handler */
 } ucp_worker_iface_t;
 
 

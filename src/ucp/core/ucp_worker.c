@@ -84,7 +84,7 @@ static ucs_status_t ucp_worker_set_am_handlers(ucp_worker_h worker,
             continue;
         }
 
-        if ((ucp_am_handlers[am_id].flags & UCT_AM_CB_FLAG_SYNC) &&
+        if ((ucp_am_handlers[am_id].cb_flags & UCT_AM_CB_FLAG_SYNC) &&
             !(iface_attr->cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC))
         {
             /* Do not register a sync callback on interface which does not
@@ -96,7 +96,7 @@ static ucs_status_t ucp_worker_set_am_handlers(ucp_worker_h worker,
 
         status = uct_iface_set_am_handler(iface, am_id, ucp_am_handlers[am_id].cb,
                                           worker,
-                                          ucp_am_handlers[am_id].flags);
+                                          ucp_am_handlers[am_id].cb_flags);
         if (status != UCS_OK) {
             return status;
         }
@@ -369,6 +369,9 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     if (status != UCS_OK) {
         goto out;
     }
+
+    worker->ifaces[tl_id].worker         = worker;
+    worker->ifaces[tl_id].proxy_am_count = 0;
 
     VALGRIND_MAKE_MEM_UNDEFINED(&worker->ifaces[tl_id].attr,
                                 sizeof(worker->ifaces[tl_id].attr));
