@@ -165,19 +165,22 @@ static unsigned uct_ugni_smsg_progress(void *arg)
 {
     uct_ugni_smsg_iface_t *iface = (uct_ugni_smsg_iface_t *)arg;
     ucs_status_t status;
+    unsigned count = 0;
 
     do {
+        ++count;
         status = progress_local_cq(iface);
     } while(status == UCS_INPROGRESS);
     do {
-         status = progress_remote_cq(iface);
+        ++count;
+        status = progress_remote_cq(iface);
     } while(status == UCS_INPROGRESS);
 
     /* have a go a processing the pending queue */
 
     ucs_arbiter_dispatch(&iface->super.arbiter, iface->config.smsg_max_credit,
                          uct_ugni_ep_process_pending, NULL);
-    return 0; // TODO
+    return count - 2;
 }
 
 static ucs_status_t uct_ugni_smsg_query_tl_resources(uct_md_h md,
