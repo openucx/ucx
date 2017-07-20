@@ -707,8 +707,13 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
     criteria.title              = "tag_offload";
     criteria.local_md_flags     = UCT_MD_FLAG_REG; /* needed for posting tags to HW */
     criteria.remote_md_flags    = UCT_MD_FLAG_REG; /* needed for posting tags to HW */
-    criteria.remote_iface_flags = UCT_IFACE_FLAG_TAG_EAGER_BCOPY;
+    criteria.remote_iface_flags = UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                                  UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  |
+                                  UCT_IFACE_FLAG_GET_ZCOPY       |
+                                  UCT_IFACE_FLAG_PENDING;
     criteria.local_iface_flags  = UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                                  UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  |
+                                  UCT_IFACE_FLAG_GET_ZCOPY       |
                                   UCT_IFACE_FLAG_PENDING;
 
     /* Use RMA score func for now (to target mid size messages).
