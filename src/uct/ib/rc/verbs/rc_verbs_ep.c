@@ -812,7 +812,7 @@ ucs_status_t uct_rc_verbs_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
     wr.next    = NULL;
 
     uct_rc_verbs_tag_imm_data_pack(&(wr.imm_data), &app_ctx, 0ul);
-    uct_rc_verbs_iface_fill_tmh(&tmh, tag, 0, IBV_EXP_TMH_EAGER);
+    uct_rc_verbs_iface_fill_tmh(&tmh, tag, app_ctx, IBV_EXP_TMH_EAGER);
     uct_rc_verbs_iface_fill_inl_sge(&iface->verbs_common, &tmh, sizeof(tmh),
                                     header, header_length);
     uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_INLINE);
