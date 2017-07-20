@@ -226,10 +226,17 @@ typedef struct uct_rc_verbs_ctx_priv {
            (_wr)->next              = NULL; \
        }
 
-#  define UCT_RC_VERBS_CHECK_TAG(iface) \
-       if (!iface->tm.num_tags) {  \
+#  define UCT_RC_VERBS_CHECK_TAG(_iface) \
+       if (!(_iface)->tm.num_tags) {  \
            return UCS_ERR_EXCEEDS_LIMIT; \
        }
+
+#  define UCT_RC_VERBS_CHECK_RNDV(_iface, _ep) \
+       UCT_RC_CHECK_CQE_RET(_iface, _ep, UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
+       UCT_RC_CHECK_TXQP_RET(_iface, _ep, &(_ep)->txqp, \
+                             UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
+
+
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_iface_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,

@@ -767,6 +767,7 @@ ucs_status_ptr_t uct_rc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                         iface->verbs_common.config.max_inline,
                         "Invalid RTS len in uct_rc_verbs_ep_tag_rndv_zcopy %u",
                         header_length + tmh_len);
+    UCT_RC_VERBS_CHECK_RNDV(&iface->super, &ep->super);
 
     op_index = uct_rc_verbs_iface_tag_get_op_id(iface, comp);
     uct_rc_verbs_iface_fill_tmh(tmh, tag, op_index, IBV_EXP_TMH_RNDV);
@@ -811,7 +812,7 @@ ucs_status_t uct_rc_verbs_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
     wr.next    = NULL;
 
     uct_rc_verbs_tag_imm_data_pack(&(wr.imm_data), &app_ctx, 0ul);
-    uct_rc_verbs_iface_fill_tmh(&tmh, tag, 0, IBV_EXP_TMH_EAGER);
+    uct_rc_verbs_iface_fill_tmh(&tmh, tag, app_ctx, IBV_EXP_TMH_EAGER);
     uct_rc_verbs_iface_fill_inl_sge(&iface->verbs_common, &tmh, sizeof(tmh),
                                     header, header_length);
     uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_INLINE);

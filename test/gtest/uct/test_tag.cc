@@ -592,6 +592,34 @@ UCS_TEST_P(test_tag, sw_rndv_expected)
     flush();
 }
 
+UCS_TEST_P(test_tag, rndv_limit)
+{
+    check_caps(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY);
+
+    mapped_buffer sendbuf(8, SEND_SEED, sender());
+    ucs::ptr_vector<send_ctx> sctxs;
+    ucs_status_t status;
+    send_ctx *sctx_p;
+    void *op;
+
+    do {
+        sctx_p = new send_ctx(&sendbuf, 0xffff, 0);
+        status = tag_rndv_zcopy(sender(), *sctx_p);
+        sctxs.push_back(sctx_p);
+    } while (status == UCS_OK);
+
+    EXPECT_EQ(status, UCS_ERR_NO_RESOURCE);
+
+    for (ucs::ptr_vector<send_ctx>::const_iterator iter = sctxs.begin();
+         iter != sctxs.end(); ++iter)
+    {
+        op = (*iter)->rndv_op;
+        if (!UCS_PTR_IS_ERR(op)) {
+            tag_rndv_cancel(sender(), op);
+        }
+    }
+}
+
 UCS_TEST_P(test_tag, sw_rndv_unexpected)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY | UCT_IFACE_FLAG_TAG_RNDV_ZCOPY);

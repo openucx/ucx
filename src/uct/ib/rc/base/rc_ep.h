@@ -74,19 +74,25 @@ enum {
 /*
  * Check for send resources
  */
-#define UCT_RC_CHECK_CQE(_iface, _ep) \
+#define UCT_RC_CHECK_CQE_RET(_iface, _ep, _ret) \
     if (!uct_rc_iface_have_tx_cqe_avail(_iface)) { \
         UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
-        return UCS_ERR_NO_RESOURCE; \
+        return _ret; \
     }
 
-#define UCT_RC_CHECK_TXQP(_iface, _ep, _txqp) \
+#define UCT_RC_CHECK_TXQP_RET(_iface, _ep, _txqp, _ret) \
     if (uct_rc_txqp_available(_txqp) <= 0) { \
         UCS_STATS_UPDATE_COUNTER((_txqp)->stats, UCT_RC_TXQP_STAT_QP_FULL, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
-        return UCS_ERR_NO_RESOURCE; \
+        return _ret; \
     }
+
+#define UCT_RC_CHECK_CQE(_iface, _ep) \
+    UCT_RC_CHECK_CQE_RET(_iface, _ep, UCS_ERR_NO_RESOURCE)
+
+#define UCT_RC_CHECK_TXQP(_iface, _ep, _txqp) \
+    UCT_RC_CHECK_TXQP_RET(_iface, _ep, _txqp, UCS_ERR_NO_RESOURCE) \
 
 /*
  * check for FC credits and add FC protocol bits (if any)
