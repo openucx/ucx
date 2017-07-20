@@ -145,7 +145,12 @@ UCS_TEST_P(test_md, rkey_ptr) {
     status = uct_md_query(pd(), &md_attr);
     ASSERT_UCS_OK(status);
     rkey_buffer = malloc(md_attr.rkey_packed_size);
-    ASSERT_TRUE(rkey_buffer != NULL);
+    if (rkey_buffer == NULL) {
+        // make coverity happy
+        uct_md_mem_free(pd(), memh);
+        GTEST_FAIL();
+    }
+
     status = uct_md_mkey_pack(pd(), memh, rkey_buffer);
 
     // unpack
