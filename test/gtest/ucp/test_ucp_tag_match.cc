@@ -203,10 +203,12 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard, "RNDV_THRESH=-1") 
 
         /* Release sends */
         if (sreq1 != NULL) {
+            wait(sreq1);
             EXPECT_TRUE(sreq1->completed);
             request_release(sreq1);
         }
         if (sreq2 != NULL) {
+            wait(sreq2);
             EXPECT_TRUE(sreq2->completed);
             request_release(sreq2);
         }
