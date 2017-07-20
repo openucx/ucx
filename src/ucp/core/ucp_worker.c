@@ -307,6 +307,7 @@ found_ucp_ep:
     key.am_lane            = 0;
     key.wireup_lane        = 0;
     key.rndv_lane          = 0;
+    key.tag_lane           = 0;
     key.amo_lanes[0]       = 0;
     key.rma_lanes[0]       = 0;
     key.lanes[0].rsc_index = UCP_NULL_RESOURCE;

@@ -186,6 +186,9 @@ public:
         /* MAX BCOPY is internally used as fragment size */
         m_env.push_back(new ucs::scoped_setenv("UCX_MAX_BCOPY",
                                                (ucs::to_string(m_msg_size/2) + "b").c_str()));
+        /* HW TM does not support multiprotocols and eager protocol for messages
+         * bigger than UCT segment size */
+        modify_config("TM_OFFLOAD", "n");
         test_ucp_peer_failure_zcopy::init();
     }
 };

@@ -183,14 +183,21 @@ UCS_TEST_P(test_ucp_tag_probe, send_2_msg_probe, "RNDV_THRESH=inf") {
     const ucp_datatype_t DT_INT = ucp_dt_make_contig(sizeof(int));
     const ucp_tag_t      TAG    = 0xaaa;
     const size_t         COUNT  = 20000;
+    std::vector<request*> reqs;
 
     /*
      * send in order: 1, 2
      */
     std::vector<int> sdata1(COUNT, 1);
     std::vector<int> sdata2(COUNT, 2);
-    send_b(&sdata1[0], COUNT, DT_INT, TAG);
-    send_b(&sdata2[0], COUNT, DT_INT, TAG);
+    request *sreq1 = send_nb(&sdata1[0], COUNT, DT_INT, TAG);
+    if (sreq1 != NULL) {
+        reqs.push_back(sreq1);
+    }
+    request *sreq2 = send_nb(&sdata2[0], COUNT, DT_INT, TAG);
+    if (sreq2 != NULL) {
+        reqs.push_back(sreq2);
+    }
 
     /*
      * probe in order: 1, 2
@@ -213,6 +220,7 @@ UCS_TEST_P(test_ucp_tag_probe, send_2_msg_probe, "RNDV_THRESH=inf") {
     request *rreq2 = (request*)ucp_tag_msg_recv_nb(receiver().worker(), &rdata2[0],
                                                    COUNT, DT_INT, message2,
                                                    recv_callback);
+    reqs.push_back(rreq2);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq2));
     wait(rreq2);
 
@@ -220,21 +228,29 @@ UCS_TEST_P(test_ucp_tag_probe, send_2_msg_probe, "RNDV_THRESH=inf") {
     request *rreq1 = (request*)ucp_tag_msg_recv_nb(receiver().worker(), &rdata1[0],
                                                    COUNT, DT_INT, message1,
                                                    recv_callback);
+    reqs.push_back(rreq1);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq1));
     wait(rreq1);
+
+    if (sreq1 != NULL) {
+        wait(sreq1);
+    }
+    if (sreq2 != NULL) {
+        wait(sreq2);
+    }
 
     /*
      * expect data to arrive in probe order (rather than recv order)
      */
-    EXPECT_TRUE(rreq1->completed);
-    EXPECT_TRUE(rreq2->completed);
-    EXPECT_EQ(UCS_OK, rreq1->status);
-    EXPECT_EQ(UCS_OK, rreq2->status);
     EXPECT_EQ(sdata1, rdata1);
     EXPECT_EQ(sdata2, rdata2);
-
-    request_release(rreq1);
-    request_release(rreq2);
+    while (!reqs.empty()) {
+        request *req = reqs.back();
+        EXPECT_TRUE(req->completed);
+        EXPECT_EQ(UCS_OK, req->status);
+        request_release(req);
+        reqs.pop_back();
+    }
 }
 
 UCS_TEST_P(test_ucp_tag_probe, limited_probe_size) {

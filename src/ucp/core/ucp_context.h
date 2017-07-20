@@ -40,6 +40,8 @@ typedef struct ucp_context_config {
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
+    /** Tag matching offload status (on or off) */
+    int                                    tm_offload;
     /** Upper bound for posting tm offload receives with internal UCP
      *  preregistered bounce buffers. */
     size_t                                 tm_max_bcopy;
