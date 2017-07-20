@@ -1084,6 +1084,11 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
         p += strlen(p);
     }
 
+    if (lane == key->tag_lane) {
+        snprintf(p, endp - p, " tag_offload");
+        p += strlen(p);
+    }
+
     if (key->wireup_lane == lane) {
         snprintf(p, endp - p, " wireup");
         p += strlen(p);
