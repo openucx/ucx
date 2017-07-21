@@ -150,6 +150,7 @@ typedef struct ucp_am_handler {
     uct_am_callback_t             cb;
     ucp_am_tracer_t               tracer;
     uint32_t                      flags;
+    uct_am_callback_t             proxy_cb;
 } ucp_am_handler_t;
 
 
@@ -162,6 +163,26 @@ typedef struct ucp_am_handler {
         ucp_am_handlers[_id].cb       = _cb; \
         ucp_am_handlers[_id].tracer   = _tracer; \
         ucp_am_handlers[_id].flags    = _flags; \
+    }
+
+
+/**
+ * Defines a proxy handler which counts received messages on ucp_worker_iface_t
+ * context. It's used to determine if there is activity on a transport interface.
+ */
+#define UCP_DEFINE_AM_PROXY(_id) \
+    \
+    static ucs_status_t \
+    ucp_am_##_id##_counting_proxy(void *arg, void *data, size_t length, \
+                                  unsigned flags) \
+    { \
+        ucp_worker_iface_t *wiface = arg; \
+        wiface->proxy_am_count++; \
+        return ucp_am_handlers[_id].cb(wiface->worker, data, length, flags); \
+    } \
+    \
+    UCS_STATIC_INIT { \
+        ucp_am_handlers[_id].proxy_cb = ucp_am_##_id##_counting_proxy; \
     }
 
 

@@ -371,6 +371,9 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         goto out;
     }
 
+    worker->ifaces[tl_id].worker         = worker;
+    worker->ifaces[tl_id].proxy_am_count = 0;
+
     VALGRIND_MAKE_MEM_UNDEFINED(&worker->ifaces[tl_id].attr,
                                 sizeof(worker->ifaces[tl_id].attr));
     status = uct_iface_query(iface, &worker->ifaces[tl_id].attr);
