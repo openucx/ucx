@@ -145,23 +145,32 @@ typedef struct ucp_context {
 
 typedef struct ucp_am_handler {
     uint64_t                      features;
-    ucp_am_tracer_t               tracer;
     uct_am_callback_t             cb;
-    uint32_t                      cb_flags;
+    ucp_am_tracer_t               tracer;
+    uint32_t                      flags;
     uct_am_callback_t             proxy_cb;
 } ucp_am_handler_t;
 
 
 /*
  * Define UCP active message handler.
- *
- * If needed, also defines a proxy handler which counts received messages on
- * ucp_worker_iface_t context. It's used to determine if there is activity on
- * a transport interface.
  */
-#define UCP_DEFINE_AM(_features, _id, _cb, _tracer, _flags, _has_proxy) \
+#define UCP_DEFINE_AM(_features, _id, _cb, _tracer, _flags) \
+    UCS_STATIC_INIT { \
+        ucp_am_handlers[_id].features = _features; \
+        ucp_am_handlers[_id].cb       = _cb; \
+        ucp_am_handlers[_id].tracer   = _tracer; \
+        ucp_am_handlers[_id].flags    = _flags; \
+    }
+
+
+/**
+ * Defines a proxy handler which counts received messages on ucp_worker_iface_t
+ * context. It's used to determine if there is activity on a transport interface.
+ */
+#define UCP_DEFINE_AM_PROXY(_id) \
     \
-    static ucs_status_t UCS_F_MAYBE_UNUSED \
+    static ucs_status_t \
     ucp_am_##_id##_counting_proxy(void *arg, void *data, size_t length, \
                                   unsigned flags) \
     { \
@@ -171,15 +180,7 @@ typedef struct ucp_am_handler {
     } \
     \
     UCS_STATIC_INIT { \
-        ucp_am_handlers[_id].features = _features; \
-        ucp_am_handlers[_id].cb       = _cb; \
-        ucp_am_handlers[_id].tracer   = _tracer; \
-        ucp_am_handlers[_id].cb_flags = _flags; \
-        if (_has_proxy) { \
-            ucp_am_handlers[_id].proxy_cb = ucp_am_##_id##_counting_proxy; \
-        } else { \
-            ucp_am_handlers[_id].proxy_cb = NULL; \
-        } \
+        ucp_am_handlers[_id].proxy_cb = ucp_am_##_id##_counting_proxy; \
     }
 
 
