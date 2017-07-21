@@ -222,11 +222,16 @@ void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                               char *buffer, size_t max)
 {
     uct_rc_hdr_t *rch = data;
-    uint8_t am_wo_fc = rch->am_id & ~UCT_RC_EP_FC_MASK; /* mask out FC bits*/
+    uint8_t fc_hdr    = uct_rc_fc_get_fc_hdr(rch->am_id);
+    uint8_t am_wo_fc;
 
-    snprintf(buffer, max, " am %d ", am_wo_fc);
-    uct_iface_dump_am(iface, type, am_wo_fc, rch + 1, length - sizeof(*rch),
-                      buffer + strlen(buffer), max - strlen(buffer));
+    /* Do not invoke AM tracer for auxiliary pure FC_GRANT message */
+    if (fc_hdr != UCT_RC_EP_FC_PURE_GRANT) {
+        am_wo_fc = rch->am_id & ~UCT_RC_EP_FC_MASK; /* mask out FC bits*/
+        snprintf(buffer, max, " am %d ", am_wo_fc);
+        uct_iface_dump_am(iface, type, am_wo_fc, rch + 1, length - sizeof(*rch),
+                          buffer + strlen(buffer), max - strlen(buffer));
+    }
 }
 
 void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
