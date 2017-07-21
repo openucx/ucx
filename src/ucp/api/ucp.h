@@ -1140,9 +1140,10 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd);
  * on the file descriptor. This can be achieved by by calling
  * @ref ucp_worker_progress repeatedly until it returns 0.
  *
- * There are two alternative ways to use the wakeup mechanism: the first is the
- * file descriptor obtained per worker using @ref ucp_worker_get_efd and the
- * second is waiting on the next event internally (this function).
+ * There are two alternative ways to use the wakeup mechanism. The first is by
+ * polling on a per-worker file descriptor obtained from @ref ucp_worker_get_efd.
+ * The second is by using this function to perform an internal wait for the next
+ * event associated with the specified worker.
  *
  * @note During the blocking call the wake-up mechanism relies on other means of
  * notification and may not progress some of the requests as it would when
