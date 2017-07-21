@@ -228,9 +228,15 @@ void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
     /* Do not invoke AM tracer for auxiliary pure FC_GRANT message */
     if (fc_hdr != UCT_RC_EP_FC_PURE_GRANT) {
         am_wo_fc = rch->am_id & ~UCT_RC_EP_FC_MASK; /* mask out FC bits*/
-        snprintf(buffer, max, " am %d ", am_wo_fc);
+        snprintf(buffer, max, " %c%c am %d ",
+                 fc_hdr & UCT_RC_EP_FC_FLAG_SOFT_REQ ? 's' :
+                 fc_hdr & UCT_RC_EP_FC_FLAG_HARD_REQ ? 'h' : '-',
+                 fc_hdr & UCT_RC_EP_FC_FLAG_GRANT    ? 'g' : '-',
+                 am_wo_fc);
         uct_iface_dump_am(iface, type, am_wo_fc, rch + 1, length - sizeof(*rch),
                           buffer + strlen(buffer), max - strlen(buffer));
+    } else {
+        snprintf(buffer, max, " FC pure grant am ");
     }
 }
 
