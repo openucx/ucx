@@ -177,7 +177,7 @@ public:
                 header_size = m_perf.params.am_hdr_size;
                 return uct_ep_am_zcopy(ep, UCT_PERF_TEST_AM_ID, buffer, header_size,
                                        m_perf.uct.iov, m_perf.params.msg_size_cnt,
-                                       comp);
+                                       0, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
             }

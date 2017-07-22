@@ -167,7 +167,7 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
                         req->send.datatype, req->send.length);
 
     status = uct_ep_am_zcopy(ep->uct_eps[req->send.lane], am_id, (void*)hdr,
-                             hdr_size, iov, iovcnt, &req->send.uct_comp);
+                             hdr_size, iov, iovcnt, 0, &req->send.uct_comp);
     if (status == UCS_OK) {
         complete(req, UCS_OK);
     } else if (status < 0) {
@@ -219,7 +219,8 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                         max_middle - hdr_size_first + hdr_size_middle);
 
         status = uct_ep_am_zcopy(uct_ep, am_id_first, (void*)hdr_first,
-                                 hdr_size_first, iov, iovcnt, &req->send.uct_comp);
+                                 hdr_size_first, iov, iovcnt, 0,
+                                 &req->send.uct_comp);
         if (status < 0) {
             goto err; /* Failed */
         }
@@ -234,7 +235,8 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                         req->send.buffer, req->send.datatype, max_middle);
 
         status = uct_ep_am_zcopy(uct_ep, am_id_middle, (void*)hdr_middle,
-                                 hdr_size_middle, iov, iovcnt, &req->send.uct_comp);
+                                 hdr_size_middle, iov, iovcnt, 0,
+                                 &req->send.uct_comp);
         if (status < 0) {
             goto err; /* Failed */
         }
@@ -250,7 +252,8 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                         req->send.length - offset);
 
         status = uct_ep_am_zcopy(uct_ep, am_id_last, (void*)hdr_middle,
-                                 hdr_size_middle, iov, iovcnt, &req->send.uct_comp);
+                                 hdr_size_middle, iov, iovcnt, 0,
+                                 &req->send.uct_comp);
         if (status < 0) {
             goto err; /* Failed */
         }

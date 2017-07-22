@@ -277,7 +277,7 @@ enum uct_progress_types {
  * @ingroup UCT_AM
  * @brief Flags for active message send operation.
  */
-enum {
+enum uct_am_flags {
     UCT_AM_FLAG_SIGNALED = UCS_BIT(0)  /**< Trigger @ref UCT_EVENT_RECV_SIG_AM
                                             event on remote side. Make best
                                             effort attempt to avoid triggering
@@ -1608,6 +1608,7 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
  *                           array. If @a iovcnt is zero, the data is considered empty.
  *                           @a iovcnt is limited by @ref uct_iface_attr_cap_am_max_iov
  *                           "uct_iface_attr::cap::am::max_iov"
+ * @param [in] flags         Active message flags, see @ref uct_am_flags.
  * @param [in] comp          Completion handle as defined by @ref ::uct_completion_t.
  *
  * @return UCS_INPROGRESS    Some communication operations are still in progress.
@@ -1615,12 +1616,15 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
  *                           upon completion of these operations.
  *
  */
-UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header,
+UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id,
+                                            const void *header,
                                             unsigned header_length,
                                             const uct_iov_t *iov, size_t iovcnt,
+                                            unsigned flags,
                                             uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_am_zcopy(ep, id, header, header_length, iov, iovcnt, comp);
+    return ep->iface->ops.ep_am_zcopy(ep, id, header, header_length, iov, iovcnt,
+                                      flags, comp);
 }
 
 /**

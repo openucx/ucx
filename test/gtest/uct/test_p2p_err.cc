@@ -82,7 +82,7 @@ public:
             {
                 UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buffer, 1, memh, 1);
                 status = uct_ep_am_zcopy(sender_ep(), am_id, buffer, length,
-                                         iov, iovcnt, NULL);
+                                         iov, iovcnt, 0, NULL);
             }
                 break;
             }
