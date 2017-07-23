@@ -18,8 +18,6 @@ doxygen_doc_files = $(noinst_HEADERS)
 
 doc_dir = $(pkgdatadir)/doc
 
-dist_doc__DATA = README
-
 if !DOCS_ONLY
 perftest_dir = $(pkgdatadir)/perftest
 dist_perftest__DATA = contrib/ucx_perftest_config/msg_pow2 contrib/ucx_perftest_config/README contrib/ucx_perftest_config/test_types contrib/ucx_perftest_config/transports
