@@ -10,9 +10,8 @@
 
 #include "address.h"
 
-#include <uct/api/uct.h>
 #include <ucp/api/ucp.h>
-#include <ucp/core/ucp_ep.h>
+#include <ucp/core/ucp_proxy_ep.h>
 #include <ucs/datastruct/queue_types.h>
 
 
@@ -31,11 +30,9 @@ enum {
  * endpoint it also contains an auxiliary endpoint which can send wireup messages.
  */
 struct ucp_wireup_ep {
-    uct_ep_t                  super;         /**< Derive from uct_ep */
-    ucp_ep_h                  ep;            /**< Pointer to the ucp_ep we're wiring */
+    ucp_proxy_ep_t            super;        /**< Derive from ucp_proxy_ep_t */
     ucs_queue_head_t          pending_q;     /**< Queue of pending operations */
     uct_ep_h                  aux_ep;        /**< Used to wireup the "real" endpoint */
-    uct_ep_h                  next_ep;       /**< Next transport being wired up */
     ucp_rsc_index_t           aux_rsc_index; /**< Index of auxiliary transport */
     volatile uint32_t         pending_count; /**< Number of pending wireup operations */
     volatile uint32_t         flags;         /**< Connection state flags */
