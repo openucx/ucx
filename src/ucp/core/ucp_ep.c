@@ -152,7 +152,7 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
     ep->cfg_index        = ucp_worker_get_ep_config(worker, &key);
     ep->am_lane          = 0;
 
-    status = ucp_stub_ep_create(ep, &ep->uct_eps[0]);
+    status = ucp_wireup_ep_create(ep, &ep->uct_eps[0]);
     if (status != UCS_OK) {
         goto err_destroy_uct_eps;
     }
@@ -1171,8 +1171,8 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
             ep->dest_uuid);
 
     wireup_ep = ep->uct_eps[ucp_ep_get_wireup_msg_lane(ep)];
-    if (ucp_stub_ep_test(wireup_ep)) {
-        aux_rsc_index = ucp_stub_ep_get_aux_rsc_index(wireup_ep);
+    if (ucp_wireup_ep_test(wireup_ep)) {
+        aux_rsc_index = ucp_wireup_ep_get_aux_rsc_index(wireup_ep);
     } else {
         aux_rsc_index = UCP_NULL_RESOURCE;
     }

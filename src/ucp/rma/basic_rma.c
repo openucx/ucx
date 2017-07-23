@@ -426,7 +426,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
-    while (worker->stub_pend_count > 0) {
+    while (worker->wireup_pend_count > 0) {
         ucp_worker_progress(worker);
     }
 

@@ -107,7 +107,7 @@ typedef struct ucp_worker {
     int                           inprogress;
     char                          name[UCP_WORKER_NAME_MAX]; /* Worker name */
 
-    unsigned                      stub_pend_count;/* Number of pending requests on stub endpoints*/
+    unsigned                      wireup_pend_count;/* Number of pending requests on wireup endpoints*/
 
     int                           epfd;          /* Allocated (on-demand) epoll fd for wakeup */
     int                           wakeup_pipe[2];/* Pipe to support signal() calls */

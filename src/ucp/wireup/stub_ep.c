@@ -19,43 +19,43 @@
 typedef struct {
     uct_pending_purge_callback_t cb;
     void                         *arg;
-} ucp_stub_ep_pending_release_proxy_arg_t;
+} ucp_wireup_ep_pending_release_arg_t;
 
 
-UCS_CLASS_DECLARE(ucp_stub_ep_t, ucp_ep_h);
+UCS_CLASS_DECLARE(ucp_wireup_ep_t, ucp_ep_h);
 
 
-static UCS_CLASS_DEFINE_DELETE_FUNC(ucp_stub_ep_t, uct_ep_t);
+static UCS_CLASS_DEFINE_DELETE_FUNC(ucp_wireup_ep_t, uct_ep_t);
 
-static inline ucs_queue_elem_t* ucp_stub_ep_req_priv(uct_pending_req_t *req)
+static inline ucs_queue_elem_t* ucp_wireup_ep_req_priv(uct_pending_req_t *req)
 {
     UCS_STATIC_ASSERT(sizeof(ucs_queue_elem_t) <= UCT_PENDING_REQ_PRIV_LEN);
     return (ucs_queue_elem_t*)req->priv;
 }
 
-static ucs_status_t ucp_stub_ep_get_address(uct_ep_h uct_ep, uct_ep_addr_t *addr)
+static ucs_status_t ucp_wireup_ep_get_address(uct_ep_h uct_ep, uct_ep_addr_t *addr)
 {
-    ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
-    return uct_ep_get_address(stub_ep->next_ep, addr);
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    return uct_ep_get_address(wireup_ep->next_ep, addr);
 }
 
-static ucs_status_t ucp_stub_ep_connect_to_ep(uct_ep_h uct_ep,
-                                              const uct_device_addr_t *dev_addr,
-                                              const uct_ep_addr_t *ep_addr)
+static ucs_status_t ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep,
+                                                const uct_device_addr_t *dev_addr,
+                                                const uct_ep_addr_t *ep_addr)
 {
-    ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
-    stub_ep->flags |= UCP_STUB_EP_FLAG_LOCAL_CONNECTED;
-    return uct_ep_connect_to_ep(stub_ep->next_ep, dev_addr, ep_addr);
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
+    return uct_ep_connect_to_ep(wireup_ep->next_ep, dev_addr, ep_addr);
 }
 
 /*
  * We switch the endpoint in this function (instead in wireup code) since
  * this is guaranteed to run from the main thread.
  */
-static unsigned ucp_stub_ep_progress(void *arg)
+static unsigned ucp_wireup_ep_progress(void *arg)
 {
-    ucp_stub_ep_t *stub_ep = arg;
-    ucp_ep_h ep = stub_ep->ep;
+    ucp_wireup_ep_t *wireup_ep = arg;
+    ucp_ep_h ep = wireup_ep->ep;
     ucs_queue_head_t tmp_pending_queue;
     uct_pending_req_t *uct_req;
     ucp_lane_index_t lane;
@@ -64,46 +64,46 @@ static unsigned ucp_stub_ep_progress(void *arg)
 
     UCS_ASYNC_BLOCK(&ep->worker->async);
 
-    ucs_assert(stub_ep->flags & UCP_STUB_EP_FLAG_READY);
-    ucs_assert(stub_ep->next_ep != NULL);
+    ucs_assert(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
+    ucs_assert(wireup_ep->next_ep != NULL);
 
     /* If we still have pending wireup messages, send them out first */
-    if (stub_ep->pending_count != 0) {
+    if (wireup_ep->pending_count != 0) {
         goto out;
     }
 
-    ucs_trace("ep %p: switching stub_ep %p to ready state", ep, stub_ep);
+    ucs_trace("ep %p: switching wireup_ep %p to ready state", ep, wireup_ep);
 
     /* Take out next_ep */
-    uct_ep = stub_ep->next_ep;
-    stub_ep->next_ep = NULL;
+    uct_ep = wireup_ep->next_ep;
+    wireup_ep->next_ep = NULL;
 
-    /* Move stub pending queue to temporary queue and remove references to
-     * the stub progress function
+    /* Move wireup pending queue to temporary queue and remove references to
+     * the wireup progress function
      */
     ucs_queue_head_init(&tmp_pending_queue);
-    ucs_queue_for_each_extract(uct_req, &stub_ep->pending_q, priv, 1) {
-        ucs_queue_push(&tmp_pending_queue, ucp_stub_ep_req_priv(uct_req));
+    ucs_queue_for_each_extract(uct_req, &wireup_ep->pending_q, priv, 1) {
+        ucs_queue_push(&tmp_pending_queue, ucp_wireup_ep_req_priv(uct_req));
     }
 
     /* Switch to real transport */
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (ep->uct_eps[lane] == &stub_ep->super) {
+        if (ep->uct_eps[lane] == &wireup_ep->super) {
             ep->uct_eps[lane] = uct_ep;
             break;
         }
     }
 
-    /* Destroy stub endpoint (destroys aux_ep as well) */
-    uct_ep_destroy(&stub_ep->super);
-    stub_ep = NULL;
+    /* Destroy wireup endpoint (destroys aux_ep as well) */
+    uct_ep_destroy(&wireup_ep->super);
+    wireup_ep = NULL;
 
     /* Replay pending requests */
     ucs_queue_for_each_extract(uct_req, &tmp_pending_queue, priv, 1) {
         req = ucs_container_of(uct_req, ucp_request_t, send.uct);
         ucs_assert(req->send.ep == ep);
         ucp_request_start_send(req);
-        --ep->worker->stub_pend_count;
+        --ep->worker->wireup_pend_count;
     }
 
 out:
@@ -111,65 +111,60 @@ out:
     return 0;
 }
 
-static ucs_status_t ucp_stub_ep_send_func(uct_ep_h uct_ep)
+static ssize_t ucp_wireup_ep_bcopy_send_func(uct_ep_h uct_ep)
 {
     return UCS_ERR_NO_RESOURCE;
 }
 
-static ssize_t ucp_stub_ep_bcopy_send_func(uct_ep_h uct_ep)
-{
-    return UCS_ERR_NO_RESOURCE;
-}
-
-static uct_ep_h ucp_stub_ep_get_wireup_msg_ep(ucp_stub_ep_t *stub_ep)
+static uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
 {
     uct_ep_h wireup_msg_ep;
 
-    if (stub_ep->flags & UCP_STUB_EP_FLAG_READY) {
-        wireup_msg_ep = stub_ep->next_ep;
+    if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
+        wireup_msg_ep = wireup_ep->next_ep;
     } else {
-        wireup_msg_ep = stub_ep->aux_ep;
+        wireup_msg_ep = wireup_ep->aux_ep;
     }
     ucs_assertv(wireup_msg_ep != NULL,
-                "ep=%p stub_ep=%p flags=%c%c next_ep=%p aux_ep=%p", stub_ep->ep,
-                stub_ep,
-                (stub_ep->flags & UCP_STUB_EP_FLAG_LOCAL_CONNECTED) ? 'c' : '-',
-                (stub_ep->flags & UCP_STUB_EP_FLAG_READY)           ? 'r' : '-',
-                stub_ep->next_ep, stub_ep->aux_ep);
+                "ucp_ep=%p wireup_ep=%p flags=%c%c next_ep=%p aux_ep=%p",
+                wireup_ep->ep, wireup_ep,
+                (wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED) ? 'c' : '-',
+                (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY)           ? 'r' : '-',
+                wireup_ep->next_ep, wireup_ep->aux_ep);
     return wireup_msg_ep;
 }
 
-static ucs_status_t ucp_stub_ep_progress_pending(uct_pending_req_t *self)
+static ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
 {
     ucp_request_t *proxy_req = ucs_container_of(self, ucp_request_t, send.uct);
     uct_pending_req_t *req = proxy_req->send.proxy.req;
-    ucp_stub_ep_t *stub_ep = proxy_req->send.proxy.stub_ep;
+    ucp_wireup_ep_t *wireup_ep = proxy_req->send.proxy.wireup_ep;
     ucs_status_t status;
 
     status = req->func(req);
     if (status == UCS_OK) {
-        ucs_atomic_add32(&stub_ep->pending_count, -1);
+        ucs_atomic_add32(&wireup_ep->pending_count, -1);
         ucp_request_put(proxy_req);
     }
     return status;
 }
 
-static void ucp_stub_ep_pending_req_release(uct_pending_req_t *self,
-                                            void *arg)
+static void ucp_wireup_ep_pending_req_release(uct_pending_req_t *self, void *arg)
 {
     ucp_request_t *proxy_req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_stub_ep_t *stub_ep = proxy_req->send.proxy.stub_ep;
-    ucp_stub_ep_pending_release_proxy_arg_t *parg = arg;
+    ucp_wireup_ep_t *wireup_ep = proxy_req->send.proxy.wireup_ep;
+    ucp_wireup_ep_pending_release_arg_t *parg = arg;
 
     parg->cb(proxy_req->send.proxy.req, parg->arg);
-    ucs_atomic_add32(&stub_ep->pending_count, -1);
+    ucs_atomic_add32(&wireup_ep->pending_count, -1);
     ucp_request_put(proxy_req);
 }
 
-static ucs_status_t ucp_stub_pending_add(uct_ep_h uct_ep, uct_pending_req_t *req)
+static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
+                                              uct_pending_req_t *req)
 {
-    ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
-    ucp_ep_h ep = stub_ep->ep;
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_ep_h ep = wireup_ep->ep;
     ucp_worker_h worker = ep->worker;
     ucp_request_t *proxy_req;
     uct_ep_h wireup_msg_ep;
@@ -183,20 +178,20 @@ static ucs_status_t ucp_stub_pending_add(uct_ep_h uct_ep, uct_pending_req_t *req
             goto out;
         }
 
-        wireup_msg_ep                 = ucp_stub_ep_get_wireup_msg_ep(stub_ep);
-        proxy_req->send.uct.func      = ucp_stub_ep_progress_pending;
+        wireup_msg_ep                 = ucp_wireup_ep_get_msg_ep(wireup_ep);
+        proxy_req->send.uct.func      = ucp_wireup_ep_progress_pending;
         proxy_req->send.proxy.req     = req;
-        proxy_req->send.proxy.stub_ep = stub_ep;
+        proxy_req->send.proxy.wireup_ep = wireup_ep;
 
         status = uct_ep_pending_add(wireup_msg_ep, &proxy_req->send.uct);
         if (status == UCS_OK) {
-            ucs_atomic_add32(&stub_ep->pending_count, +1);
+            ucs_atomic_add32(&wireup_ep->pending_count, +1);
         } else {
             ucp_request_put(proxy_req);
         }
     } else {
-        ucs_queue_push(&stub_ep->pending_q, ucp_stub_ep_req_priv(req));
-        ++ep->worker->stub_pend_count;
+        ucs_queue_push(&wireup_ep->pending_q, ucp_wireup_ep_req_priv(req));
+        ++ep->worker->wireup_pend_count;
         status = UCS_OK;
     }
 out:
@@ -204,23 +199,21 @@ out:
     return status;
 }
 
-static void ucp_stub_pending_purge(uct_ep_h uct_ep,
-                                   uct_pending_purge_callback_t cb,
-                                   void *arg)
+static void
+ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
+                            void *arg)
 {
-    ucp_stub_ep_t                           *stub_ep;
-    ucp_stub_ep_pending_release_proxy_arg_t parg;
-    uct_pending_req_t                       *req;
-    ucp_request_t                           *ucp_req;
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_pending_release_arg_t parg;
+    uct_pending_req_t *req;
+    ucp_request_t *ucp_req;
 
-    stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
-
-    /* stub ep pending queue can be nonempty only on failure */
-    ucs_assert_always(ucs_queue_is_empty(&stub_ep->pending_q) ||
+    /* wireup ep pending queue can be nonempty only on failure */
+    ucs_assert_always(ucs_queue_is_empty(&wireup_ep->pending_q) ||
                       UCS_PTR_IS_ERR(arg));
 
-    if (stub_ep->aux_ep != NULL) {
-        ucs_queue_for_each_extract(req, &stub_ep->pending_q, priv, 1) {
+    if (wireup_ep->aux_ep != NULL) {
+        ucs_queue_for_each_extract(req, &wireup_ep->pending_q, priv, 1) {
             ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
             ucs_assert_always(UCS_PTR_IS_ERR(arg) &&
                               (cb == ucp_ep_err_pending_purge));
@@ -229,66 +222,66 @@ static void ucp_stub_pending_purge(uct_ep_h uct_ep,
 
         parg.cb  = cb;
         parg.arg = arg;
-        uct_ep_pending_purge(stub_ep->aux_ep, ucp_stub_ep_pending_req_release,
+        uct_ep_pending_purge(wireup_ep->aux_ep, ucp_wireup_ep_pending_req_release,
                              &parg);
     }
 }
 
-static ssize_t ucp_stub_ep_am_bcopy(uct_ep_h uct_ep, uint8_t id,
-                                    uct_pack_callback_t pack_cb, void *arg,
-                                    unsigned flags)
+static ssize_t ucp_wireup_ep_am_bcopy(uct_ep_h uct_ep, uint8_t id,
+                                      uct_pack_callback_t pack_cb, void *arg,
+                                      unsigned flags)
 {
-    ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
 
     if (id == UCP_AM_ID_WIREUP) {
-        return uct_ep_am_bcopy(ucp_stub_ep_get_wireup_msg_ep(stub_ep),
+        return uct_ep_am_bcopy(ucp_wireup_ep_get_msg_ep(wireup_ep),
                                UCP_AM_ID_WIREUP, pack_cb, arg, flags);
     }
 
     return UCS_ERR_NO_RESOURCE;
 }
 
-static uct_iface_t ucp_stub_iface = {
+static uct_iface_t ucp_wireup_ep_iface = {
     .ops = {
-        .ep_get_address       = ucp_stub_ep_get_address,
-        .ep_connect_to_ep     = ucp_stub_ep_connect_to_ep,
+        .ep_get_address       = ucp_wireup_ep_get_address,
+        .ep_connect_to_ep     = ucp_wireup_ep_connect_to_ep,
         .ep_flush             = (void*)ucs_empty_function_return_no_resource,
-        .ep_destroy           = UCS_CLASS_DELETE_FUNC_NAME(ucp_stub_ep_t),
-        .ep_pending_add       = ucp_stub_pending_add,
-        .ep_pending_purge     = ucp_stub_pending_purge,
-        .ep_put_short         = (void*)ucp_stub_ep_send_func,
-        .ep_put_bcopy         = (void*)ucp_stub_ep_bcopy_send_func,
-        .ep_put_zcopy         = (void*)ucp_stub_ep_send_func,
-        .ep_get_bcopy         = (void*)ucp_stub_ep_send_func,
-        .ep_get_zcopy         = (void*)ucp_stub_ep_send_func,
-        .ep_am_short          = (void*)ucp_stub_ep_send_func,
-        .ep_am_bcopy          = ucp_stub_ep_am_bcopy,
-        .ep_am_zcopy          = (void*)ucp_stub_ep_send_func,
-        .ep_tag_eager_short   = (void*)ucp_stub_ep_send_func,
-        .ep_tag_eager_bcopy   = (void*)ucp_stub_ep_bcopy_send_func,
-        .ep_tag_eager_zcopy   = (void*)ucp_stub_ep_send_func,
+        .ep_destroy           = UCS_CLASS_DELETE_FUNC_NAME(ucp_wireup_ep_t),
+        .ep_pending_add       = ucp_wireup_ep_pending_add,
+        .ep_pending_purge     = ucp_wireup_ep_pending_purge,
+        .ep_put_short         = (void*)ucs_empty_function_return_no_resource,
+        .ep_put_bcopy         = (void*)ucp_wireup_ep_bcopy_send_func,
+        .ep_put_zcopy         = (void*)ucs_empty_function_return_no_resource,
+        .ep_get_bcopy         = (void*)ucs_empty_function_return_no_resource,
+        .ep_get_zcopy         = (void*)ucs_empty_function_return_no_resource,
+        .ep_am_short          = (void*)ucs_empty_function_return_no_resource,
+        .ep_am_bcopy          = ucp_wireup_ep_am_bcopy,
+        .ep_am_zcopy          = (void*)ucs_empty_function_return_no_resource,
+        .ep_tag_eager_short   = (void*)ucs_empty_function_return_no_resource,
+        .ep_tag_eager_bcopy   = (void*)ucp_wireup_ep_bcopy_send_func,
+        .ep_tag_eager_zcopy   = (void*)ucs_empty_function_return_no_resource,
         .ep_tag_rndv_zcopy    = (void*)ucs_empty_function_return_ptr_no_resource,
-        .ep_tag_rndv_request  = (void*)ucp_stub_ep_send_func,
-        .ep_atomic_add64      = (void*)ucp_stub_ep_send_func,
-        .ep_atomic_fadd64     = (void*)ucp_stub_ep_send_func,
-        .ep_atomic_swap64     = (void*)ucp_stub_ep_send_func,
-        .ep_atomic_cswap64    = (void*)ucp_stub_ep_send_func,
-        .ep_atomic_add32      = (void*)ucp_stub_ep_send_func,
-        .ep_atomic_fadd32     = (void*)ucp_stub_ep_send_func,
-        .ep_atomic_swap32     = (void*)ucp_stub_ep_send_func,
-        .ep_atomic_cswap32    = (void*)ucp_stub_ep_send_func
+        .ep_tag_rndv_request  = (void*)ucs_empty_function_return_no_resource,
+        .ep_atomic_add64      = (void*)ucs_empty_function_return_no_resource,
+        .ep_atomic_fadd64     = (void*)ucs_empty_function_return_no_resource,
+        .ep_atomic_swap64     = (void*)ucs_empty_function_return_no_resource,
+        .ep_atomic_cswap64    = (void*)ucs_empty_function_return_no_resource,
+        .ep_atomic_add32      = (void*)ucs_empty_function_return_no_resource,
+        .ep_atomic_fadd32     = (void*)ucs_empty_function_return_no_resource,
+        .ep_atomic_swap32     = (void*)ucs_empty_function_return_no_resource,
+        .ep_atomic_cswap32    = (void*)ucs_empty_function_return_no_resource
     }
 };
 
-UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_stub_ep_create, ucp_stub_ep_t, uct_ep_t,
+UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
                                 ucp_ep_h);
 
 static ucs_status_t
-ucp_stub_ep_connect_aux(ucp_stub_ep_t *stub_ep, unsigned address_count,
-                        const ucp_address_entry_t *address_list)
+ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned address_count,
+                          const ucp_address_entry_t *address_list)
 {
-    ucp_ep_h ep            = stub_ep->ep;
-    ucp_worker_h worker    = ep->worker;
+    ucp_ep_h ep         = wireup_ep->ep;
+    ucp_worker_h worker = ep->worker;
     const ucp_address_entry_t *aux_addr;
     unsigned aux_addr_index;
     ucs_status_t status;
@@ -297,7 +290,7 @@ ucp_stub_ep_connect_aux(ucp_stub_ep_t *stub_ep, unsigned address_count,
      * establishment messages.
      */
     status = ucp_wireup_select_aux_transport(ep, address_list, address_count,
-                                             &stub_ep->aux_rsc_index,
+                                             &wireup_ep->aux_rsc_index,
                                              &aux_addr_index);
     if (status != UCS_OK) {
         return status;
@@ -306,24 +299,24 @@ ucp_stub_ep_connect_aux(ucp_stub_ep_t *stub_ep, unsigned address_count,
     aux_addr = &address_list[aux_addr_index];
 
     /* create auxiliary endpoint connected to the remote iface. */
-    status = uct_ep_create_connected(worker->ifaces[stub_ep->aux_rsc_index].iface,
+    status = uct_ep_create_connected(worker->ifaces[wireup_ep->aux_rsc_index].iface,
                                      aux_addr->dev_addr, aux_addr->iface_addr,
-                                     &stub_ep->aux_ep);
+                                     &wireup_ep->aux_ep);
     if (status != UCS_OK) {
         return status;
     }
 
-    ucp_worker_iface_progress_ep(&worker->ifaces[stub_ep->aux_rsc_index]);
+    ucp_worker_iface_progress_ep(&worker->ifaces[wireup_ep->aux_rsc_index]);
 
-    ucs_debug("ep %p: stub_ep %p created aux_ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
-              ep, stub_ep, stub_ep->aux_ep, ucp_ep_peer_name(ep),
+    ucs_debug("ep %p: wireup_ep %p created aux_ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
+              ep, wireup_ep, wireup_ep->aux_ep, ucp_ep_peer_name(ep),
               UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[aux_addr_index].tl_rsc));
     return UCS_OK;
 }
 
-UCS_CLASS_INIT_FUNC(ucp_stub_ep_t, ucp_ep_h ep)
+UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ep)
 {
-    self->super.iface   = &ucp_stub_iface;
+    self->super.iface   = &ucp_wireup_ep_iface;
     self->ep            = ep;
     self->aux_ep        = NULL;
     self->next_ep       = NULL;
@@ -332,11 +325,11 @@ UCS_CLASS_INIT_FUNC(ucp_stub_ep_t, ucp_ep_h ep)
     self->flags         = 0;
     self->progress_id   = UCS_CALLBACKQ_ID_NULL;
     ucs_queue_head_init(&self->pending_q);
-    ucs_trace("ep %p: created stub ep %p to %s ", ep, self, ucp_ep_peer_name(ep));
+    ucs_trace("ep %p: created wireup_ep %p to %s ", ep, self, ucp_ep_peer_name(ep));
     return UCS_OK;
 }
 
-static UCS_CLASS_CLEANUP_FUNC(ucp_stub_ep_t)
+static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
 {
     ucp_ep_h ep         = self->ep;
     ucp_worker_h worker = ep->worker;
@@ -344,7 +337,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_stub_ep_t)
     ucs_assert(ucs_queue_is_empty(&self->pending_q));
     ucs_assert(self->pending_count == 0);
 
-    ucs_debug("ep %p: destroy stub ep %p", ep, self);
+    ucs_debug("ep %p: destroy wireup_ep %p", ep, self);
 
     uct_worker_progress_unregister_safe(worker->uct, &self->progress_id);
     if (self->aux_ep != NULL) {
@@ -356,43 +349,43 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_stub_ep_t)
     }
 }
 
-UCS_CLASS_DEFINE(ucp_stub_ep_t, void);
+UCS_CLASS_DEFINE(ucp_wireup_ep_t, void);
 
-ucp_rsc_index_t ucp_stub_ep_get_aux_rsc_index(uct_ep_h uct_ep)
+ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep)
 {
-    ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
 
-    if (!ucp_stub_ep_test(uct_ep)) {
+    if (!ucp_wireup_ep_test(uct_ep)) {
         return UCP_NULL_RESOURCE;
     }
 
-    ucs_assert(stub_ep->aux_ep != NULL);
-    return stub_ep->aux_rsc_index;
+    ucs_assert(wireup_ep->aux_ep != NULL);
+    return wireup_ep->aux_rsc_index;
 }
 
-ucs_status_t ucp_stub_ep_connect(uct_ep_h uct_ep, ucp_rsc_index_t rsc_index,
-                                 int connect_aux, unsigned address_count,
-                                 const ucp_address_entry_t *address_list)
+ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, ucp_rsc_index_t rsc_index,
+                                   int connect_aux, unsigned address_count,
+                                   const ucp_address_entry_t *address_list)
 {
-    ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
-    ucp_ep_h ep            = stub_ep->ep;
-    ucp_worker_h worker    = ep->worker;
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_ep_h ep                = wireup_ep->ep;
+    ucp_worker_h worker        = ep->worker;
     ucs_status_t status;
 
-    ucs_assert(ucp_stub_ep_test(uct_ep));
+    ucs_assert(ucp_wireup_ep_test(uct_ep));
 
-    status = uct_ep_create(worker->ifaces[rsc_index].iface, &stub_ep->next_ep);
+    status = uct_ep_create(worker->ifaces[rsc_index].iface, &wireup_ep->next_ep);
     if (status != UCS_OK) {
         goto err;
     }
 
     ucs_debug("ep %p: created next_ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
-              ep, stub_ep->next_ep, ucp_ep_peer_name(ep),
+              ep, wireup_ep->next_ep, ucp_ep_peer_name(ep),
               UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_index].tl_rsc));
 
     /* we need to create an auxiliary transport only for active messages */
     if (connect_aux) {
-        status = ucp_stub_ep_connect_aux(stub_ep, address_count, address_list);
+        status = ucp_wireup_ep_connect_aux(wireup_ep, address_count, address_list);
         if (status != UCS_OK) {
             goto err_destroy_next_ep;
         }
@@ -401,54 +394,55 @@ ucs_status_t ucp_stub_ep_connect(uct_ep_h uct_ep, ucp_rsc_index_t rsc_index,
     return UCS_OK;
 
 err_destroy_next_ep:
-    uct_ep_destroy(stub_ep->next_ep);
-    stub_ep->next_ep = NULL;
+    uct_ep_destroy(wireup_ep->next_ep);
+    wireup_ep->next_ep = NULL;
 err:
     return status;
 }
 
-void ucp_stub_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
+void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
 {
-    ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
 
-    ucs_assert(ucp_stub_ep_test(uct_ep));
-    ucs_assert(stub_ep->next_ep == NULL);
-    stub_ep->flags |= UCP_STUB_EP_FLAG_LOCAL_CONNECTED;
-    stub_ep->next_ep = next_ep;
+    ucs_assert(ucp_wireup_ep_test(uct_ep));
+    ucs_assert(wireup_ep->next_ep == NULL);
+    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
+    wireup_ep->next_ep = next_ep;
 }
 
-void ucp_stub_ep_remote_connected(uct_ep_h uct_ep)
+void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep)
 {
-    ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_ep_h ep = wireup_ep->ep;
 
-    ucs_assert(ucp_stub_ep_test(uct_ep));
-    ucs_assert(stub_ep->next_ep != NULL);
-    ucs_assert(stub_ep->flags & UCP_STUB_EP_FLAG_LOCAL_CONNECTED);
+    ucs_assert(ucp_wireup_ep_test(uct_ep));
+    ucs_assert(wireup_ep->next_ep != NULL);
+    ucs_assert(wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED);
 
-    ucs_trace("ep %p: stub ep %p is remote-connected", stub_ep->ep, stub_ep);
-    stub_ep->flags |= UCP_STUB_EP_FLAG_READY;
-    uct_worker_progress_register_safe(stub_ep->ep->worker->uct,
-                                      ucp_stub_ep_progress, stub_ep, 0,
-                                      &stub_ep->progress_id);
-    ucp_worker_signal_internal(stub_ep->ep->worker);
+    ucs_trace("ep %p: wireup_ep %p is remote-connected", ep, wireup_ep);
+    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_READY;
+    uct_worker_progress_register_safe(ep->worker->uct,
+                                      ucp_wireup_ep_progress, wireup_ep, 0,
+                                      &wireup_ep->progress_id);
+    ucp_worker_signal_internal(ep->worker);
 }
 
-int ucp_stub_ep_test(uct_ep_h uct_ep)
+int ucp_wireup_ep_test(uct_ep_h uct_ep)
 {
-    return uct_ep->iface == &ucp_stub_iface;
+    return uct_ep->iface == &ucp_wireup_ep_iface;
 }
 
-int ucp_stub_ep_test_aux(uct_ep_h stub_ep, uct_ep_h aux_ep)
+int ucp_wireup_ep_test_aux(uct_ep_h wireup_ep, uct_ep_h aux_ep)
 {
-    return ucp_stub_ep_test(stub_ep) &&
-           (ucs_derived_of(stub_ep, ucp_stub_ep_t)->aux_ep == aux_ep);
+    return ucp_wireup_ep_test(wireup_ep) &&
+           (ucs_derived_of(wireup_ep, ucp_wireup_ep_t)->aux_ep == aux_ep);
 }
 
-uct_ep_h ucp_stub_ep_extract_aux(uct_ep_h ep)
+uct_ep_h ucp_wireup_ep_extract_aux(uct_ep_h ep)
 {
-    ucp_stub_ep_t *stub_ep = ucs_derived_of(ep, ucp_stub_ep_t);
-    uct_ep_h       aux_ep  = stub_ep->aux_ep;
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(ep, ucp_wireup_ep_t);
+    uct_ep_h aux_ep = wireup_ep->aux_ep;
 
-    stub_ep->aux_ep = NULL;
+    wireup_ep->aux_ep = NULL;
     return aux_ep;
 }

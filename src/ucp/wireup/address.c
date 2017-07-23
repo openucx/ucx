@@ -213,7 +213,7 @@ ucp_address_pack_ep_address(ucp_ep_h ep, ucp_rsc_index_t tl_index,
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         if (ucp_ep_get_rsc_index(ep, lane) == tl_index) {
             /*
-             * If this is a stub endpoint, it will return the underlying next_ep
+             * If this is a wireup endpoint, it will return the underlying next_ep
              * address, and the length will be correct because the resource index
              * is of the next_ep.
              */

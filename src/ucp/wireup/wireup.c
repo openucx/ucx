@@ -167,14 +167,14 @@ static ucs_status_t ucp_wireup_connect_local(ucp_ep_h ep, const uint8_t *tli,
     return UCS_OK;
 }
 
-static void ucp_wireup_ep_remote_connected(ucp_ep_h ep)
+static void ucp_wireup_remote_connected(ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
 
     ucs_trace("ep %p: remote connected", ep);
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         if (ucp_ep_is_lane_p2p(ep, lane)) {
-            ucp_stub_ep_remote_connected(ep->uct_eps[lane]);
+            ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
         }
     }
 }
@@ -280,7 +280,7 @@ static void ucp_wireup_process_reply(ucp_worker_h worker, ucp_wireup_msg_t *msg,
     }
 
     if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
-        ucp_wireup_ep_remote_connected(ep);
+        ucp_wireup_remote_connected(ep);
         ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
     }
 
@@ -310,7 +310,7 @@ static void ucp_wireup_process_ack(ucp_worker_h worker, uint64_t uuid)
     ucs_assert(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 
     ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
-    ucp_wireup_ep_remote_connected(ep);
+    ucp_wireup_remote_connected(ep);
 }
 
 static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
@@ -368,7 +368,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
      * interface, just create a connected UCT endpoint.
      */
     if ((iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) &&
-        ((ep->uct_eps[lane] == NULL) || ucp_stub_ep_test(ep->uct_eps[lane])))
+        ((ep->uct_eps[lane] == NULL) || ucp_wireup_ep_test(ep->uct_eps[lane])))
     {
         /* create an endpoint connected to the remote interface */
         status = uct_ep_create_connected(worker->ifaces[rsc_index].iface,
@@ -389,36 +389,36 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
             ucs_trace("ep %p: assign uct_ep[%d]=%p", ep, lane, new_uct_ep);
             ep->uct_eps[lane] = new_uct_ep;
         } else {
-            ucs_trace("ep %p: assign set stub_ep[%d]=%p next to %p",
+            ucs_trace("ep %p: assign set wireup_ep[%d]=%p next to %p",
                       ep, lane, ep->uct_eps[lane], new_uct_ep);
-            ucp_stub_ep_set_next_ep(ep->uct_eps[lane], new_uct_ep);
-            ucp_stub_ep_remote_connected(ep->uct_eps[lane]);
+            ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], new_uct_ep);
+            ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
         }
 
         return UCS_OK;
     }
 
     /*
-     * create a stub endpoint which will start connection establishment
+     * create a wireup endpoint which will start connection establishment
      * protocol using an auxiliary transport.
      */
     if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
 
-        /* If ep already exists, it's a stub, and we need to start auxiliary
-         * wireup on that stub.
+        /* If ep already exists, it's a wireup proxy, and we need to start
+         * auxiliary wireup..
          */
         if (ep->uct_eps[lane] == NULL) {
-            ucs_trace("ep %p: create stub_ep[%d]=%p", ep, lane, ep->uct_eps[lane]);
-            status = ucp_stub_ep_create(ep, &ep->uct_eps[lane]);
+            ucs_trace("ep %p: create wireup_ep[%d]=%p", ep, lane, ep->uct_eps[lane]);
+            status = ucp_wireup_ep_create(ep, &ep->uct_eps[lane]);
             if (status != UCS_OK) {
                 return status;
             }
         }
 
-        ucs_trace("ep %p: connect stub_ep[%d]=%p", ep, lane, ep->uct_eps[lane]);
-        status = ucp_stub_ep_connect(ep->uct_eps[lane], rsc_index,
-                                     lane == ucp_ep_get_wireup_msg_lane(ep),
-                                     address_count, address_list);
+        ucs_trace("ep %p: connect wireup_ep[%d]=%p", ep, lane, ep->uct_eps[lane]);
+        status = ucp_wireup_ep_connect(ep->uct_eps[lane], rsc_index,
+                                       lane == ucp_ep_get_wireup_msg_lane(ep),
+                                       address_count, address_list);
         if (status != UCS_OK) {
             return status;
         }
@@ -569,7 +569,7 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
     }
 
     /* TODO make sure such lane would exist */
-    rsc_index = ucp_stub_ep_get_aux_rsc_index(
+    rsc_index = ucp_wireup_ep_get_aux_rsc_index(
                     ep->uct_eps[ucp_ep_get_wireup_msg_lane(ep)]);
     if (rsc_index != UCP_NULL_RESOURCE) {
         tl_bitmap |= UCS_BIT(rsc_index);
