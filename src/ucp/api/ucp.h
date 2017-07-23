@@ -1137,7 +1137,7 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd);
  *
  * This function is guaranteed to return only if new communication events occur
  * on the @a worker. Therefore one must drain all existing events before waiting
- * on the file descriptor. This can be achieved by by calling
+ * on the file descriptor. This can be achieved by calling
  * @ref ucp_worker_progress repeatedly until it returns 0.
  *
  * There are two alternative ways to use the wakeup mechanism. The first is by
@@ -1169,7 +1169,7 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker);
  *
  * This function is guaranteed to return only if new communication events occur
  * on the worker or @a address is modified. Therefore one must drain all existing
- * events before waiting on the file descriptor. This can be achieved by by calling
+ * events before waiting on the file descriptor. This can be achieved by calling
  * @ref ucp_worker_progress repeatedly until it returns 0.
  *
  * @note This routine can be used by an application that executes busy-waiting
@@ -1197,12 +1197,12 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
  * The events triggering a signal of the file descriptor from
  * @ref ucp_worker_get_efd depend on the interfaces used by the worker and
  * defined in the transport layer, and typically represent a request completion
- * or newly available resources. It can also be triggered
- * by calling @ref ucp_worker_signal .
+ * or newly available resources. It can also be triggered by calling
+ * @ref ucp_worker_signal .
  *
  * The file descriptor is guaranteed to become signaled only if new communication
  * events occur on the @a worker. Therefore one must drain all existing events
- * before waiting on the file descriptor. This can be achieved by by calling
+ * before waiting on the file descriptor. This can be achieved by calling
  * @ref ucp_worker_progress repeatedly until it returns 0.
  *
  * @code {.c}
