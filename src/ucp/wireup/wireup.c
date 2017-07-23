@@ -6,7 +6,7 @@
 
 #include "wireup.h"
 #include "address.h"
-#include "stub_ep.h"
+#include "wireup_ep.h"
 
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_request.inl>

@@ -5,7 +5,7 @@
  */
 
 #include "address.h"
-#include "stub_ep.h"
+#include "wireup_ep.h"
 
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_ep.inl>

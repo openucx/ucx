@@ -4,7 +4,8 @@
  * See file LICENSE for terms.
  */
 
-#include "stub_ep.h"
+#include "wireup_ep.h"
+
 #include "wireup.h"
 
 #include <ucp/core/ucp_request.h>

@@ -10,7 +10,7 @@
 #include "ucp_request.inl"
 
 #include <ucp/wireup/address.h>
-#include <ucp/wireup/stub_ep.h>
+#include <ucp/wireup/wireup_ep.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucs/datastruct/mpool.inl>
