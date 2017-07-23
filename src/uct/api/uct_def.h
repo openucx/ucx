@@ -52,6 +52,19 @@ enum uct_am_trace_type {
     UCT_AM_TRACE_TYPE_LAST
 };
 
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief List of event types for connection establishment with a client-server
+ *        flow.
+ */
+typedef enum uct_conn_event_type {
+    UCT_CONN_EVENT_TYPE_REQUEST,    /**< Connection request */
+    UCT_CONN_EVENT_TYPE_REPLY,      /**< Connection reply */
+    UCT_CONN_EVENT_TYPE_READY       /**< Connection is ready */
+} uct_conn_event_type_t;
+
+
 /**
  * @ingroup UCT_AM
  * @brief Flags for uct_am_callback.
@@ -272,6 +285,29 @@ typedef size_t (*uct_pack_callback_t)(void *dest, void *arg);
  * @note The arguments for this callback are in the same order as libc's memcpy().
  */
 typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Callback to process incoming connection establishment messages.
+ *
+ * This callback routine will be invoked upon receiving one of the @ref
+ * uct_conn_event_type_t events. It will allow the user to handle these events,
+ * read data and insert his data in a given buffer.
+ *
+ * @param [in]      event       Connection establishment event to handle.
+ * @param [in]      arg         User's argument for this callback.
+ * @param [in]      buffer_in   Points to the received data.
+ * @param [out]     buffer_out  Points to the user's data which was written in
+ *                              this callback.
+ * @param [in,out]  length      Length of the received/written data.
+ *
+ * @return  Size of the data that was actually written. Negative in case of an
+ *          error.
+ */
+typedef size_t (*uct_conn_event_callback_t)(uct_conn_event_type_t event, void *arg,
+                                            const void *buffer_in, void *buffer_out,
+                                            size_t *length);
 
 
 /**
