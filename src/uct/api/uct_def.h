@@ -27,20 +27,6 @@
 
 
 /**
- * @ingroup UCT_RESOURCE
- * @brief  List of event types for interrupt notification.
- */
-enum uct_event_types {
-    UCP_EVENT_TX_COMPLETION = UCS_BIT(0),
-    UCP_EVENT_TX_RESOURCES  = UCS_BIT(1),
-    UCP_EVENT_RX_COMPLETION = UCS_BIT(2),
-    UCP_EVENT_RX_RESOURCES  = UCS_BIT(3),
-    UCP_EVENT_TX_ERROR      = UCS_BIT(4),
-    UCP_EVENT_RX_ERROR      = UCS_BIT(5)
-};
-
-
-/**
  * @ingroup UCT_AM
  * @brief Trace types for active message tracer.
  */
