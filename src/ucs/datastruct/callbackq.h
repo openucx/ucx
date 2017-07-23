@@ -18,7 +18,7 @@
  *  - add/remove operations are O(1)
  */
 
-#define UCS_CALLBACKQ_FAST_COUNT   8     /* Max. number of fast-path callbacks */
+#define UCS_CALLBACKQ_FAST_COUNT   7     /* Max. number of fast-path callbacks */
 #define UCS_CALLBACKQ_ID_NULL      (-1)  /* Invalid callback identifier */
 
 
@@ -55,10 +55,17 @@ struct ucs_callbackq_elem {
  * A queue of callback to execute
  */
 struct ucs_callbackq {
-    ucs_callbackq_elem_t           fast_elems[UCS_CALLBACKQ_FAST_COUNT];
-    char                           priv[72];  /**< Private data, which we don't want
-                                                   to expose in API to avoid
-                                                   pulling more header files */
+    /**
+     * Array of fast-path element, the last is reserved as a sentinel to mark
+     * array end.
+     */
+    ucs_callbackq_elem_t           fast_elems[UCS_CALLBACKQ_FAST_COUNT + 1];
+
+    /**
+     * Private data, which we don't want to expose in API to avoid pulling
+     * more header files
+     */
+    char                           priv[72];
 };
 
 
