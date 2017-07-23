@@ -1356,14 +1356,14 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker);
  *                               params object.
  * @param [in]  params           User defined @ref ucp_worker_listener_params_t
  *                               configurations for the @ref ucp_listener_h.
- * @param [out] listener         A handler to the listener, can be released by
- *                               calling @ref ucp_listener_destroy
+ * @param [out] listener_p       A handler to the created listener, can be released
+ *                               by calling @ref ucp_listener_destroy
  *
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_worker_listen(ucp_worker_h worker,
-                               const ucp_worker_listener_params_t params,
-                               ucp_listener_h *listener);
+                               const ucp_worker_listener_params_t *params,
+                               ucp_listener_h *listener_p);
 
 
 /**

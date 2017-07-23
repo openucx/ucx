@@ -141,8 +141,8 @@ typedef struct ucp_mem                   *ucp_mem_h;
  * @ingroup UCP_WORKER
  * @brief UCP listen handle.
  *
- * The listener handle is an opaque object that is used for creating the binding of
- * the worker object to a given sockaddr address and start listening on it.
+ * The listener handle is an opaque object that is used for listening on a
+ * specific address and accepting connections from clients.
  */
 typedef struct ucp_listener              *ucp_listener_h;
 
@@ -301,13 +301,13 @@ typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status
 
 /**
 * @ingroup UCP_WORKER
-* @brief User's callback for handling the creation of an endpoint (connection)
+* @brief A callback for handling the creation of an endpoint (connection)
 *        to the remote peer after an incoming connection request on the listener.
 *
 *  @param [in]  ep_h      A handle to the created endpoint.
 *  @param [in]  arg       User's argument for the callback.
 */
-typedef void (*ucp_listener_accept_callback_t)(ucp_ep_h *ep_h, void *arg);
+typedef void (*ucp_listener_accept_callback_t)(ucp_ep_h ep_h, void *arg);
 
 
  /**
