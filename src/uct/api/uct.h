@@ -324,7 +324,7 @@ enum {
     UCT_MD_FLAG_ADVISE     = UCS_BIT(4),  /**< MD supports memory advice */
     UCT_MD_FLAG_FIXED      = UCS_BIT(5),  /**< MD supports memory allocation with
                                                fixed address */
-    UCT_MD_FLAG_SHARE_PTR  = UCS_BIT(6)   /**< MD supports direct access via pointer
+    UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6)   /**< MD supports direct access via pointer
                                                to the remote memory @ref uct_rkey_ptr */
 };
 

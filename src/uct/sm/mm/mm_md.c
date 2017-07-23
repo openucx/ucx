@@ -115,7 +115,7 @@ ucs_status_t uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
         md_attr->cap.flags |= UCT_MD_FLAG_ALLOC;
     }
     if (uct_mm_md_mapper_ops(md)->attach != NULL) {
-        md_attr->cap.flags |= UCT_MD_FLAG_SHARE_PTR;
+        md_attr->cap.flags |= UCT_MD_FLAG_RKEY_PTR;
     }
     if (uct_mm_md_mapper_ops(md)->reg != NULL) {
         md_attr->cap.flags |= UCT_MD_FLAG_REG;

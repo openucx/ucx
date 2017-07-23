@@ -134,7 +134,7 @@ UCS_TEST_P(test_md, rkey_ptr) {
     uct_rkey_bundle_t rkey_bundle;
     unsigned i;
 
-    check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_SHARE_PTR, "allocation+direct access");
+    check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_RKEY_PTR, "allocation+direct access");
     // alloc (should work with both sysv and xpmem
     size = 1024 * 1024 * sizeof(unsigned);
     status = uct_md_mem_alloc(pd(), &size, (void **)&rva, 0, "test", &memh);
