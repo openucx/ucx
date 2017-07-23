@@ -1,6 +1,6 @@
 %global rel @RPM_RELEASE@
 %global version @VERSION@
-%global __check_files %{nil}
+
 %bcond_with valgrind
 
 %{!?configure_options: %global configure_options %{nil}}
@@ -57,12 +57,13 @@ make %{?_smp_mflags}
 make DESTDIR=%{buildroot} install
 mkdir -p %{buildroot}%{_sysconfdir}/ld.so.conf.d/
 echo %{_libdir} > %{buildroot}%{_sysconfdir}/ld.so.conf.d/ucx.conf
+rm -f %{buildroot}%{_libdir}/*.la
 
 %clean
 rm -rf %{buildroot}
 
 %files
-%{_libdir}/lib*.so.*
+%{_libdir}/lib*.so*
 %{_bindir}/uc*
 %{_datadir}/ucx/perftest/*
 %{_sysconfdir}/ld.so.conf.d/ucx.conf
@@ -74,6 +75,7 @@ rm -rf %{buildroot}
 %{_includedir}/uc*
 %{_libdir}/lib*.a
 %{_libdir}/pkgconfig/ucx.pc
+%{_datadir}/ucx/examples
 
 %post -p /sbin/ldconfig
 %postun -p /sbin/ldconfig
