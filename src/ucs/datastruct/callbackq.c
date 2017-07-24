@@ -403,7 +403,7 @@ ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq)
     ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
     unsigned idx;
 
-    for (idx = 0; idx < UCS_CALLBACKQ_FAST_COUNT; ++idx) {
+    for (idx = 0; idx < UCS_CALLBACKQ_FAST_COUNT + 1; ++idx) {
         ucs_callbackq_elem_reset(cbq, &cbq->fast_elems[idx]);
     }
 
