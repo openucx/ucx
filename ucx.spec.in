@@ -39,14 +39,14 @@ Provides header files, static libraries and examples for developing with UCX.
 %setup -q
 
 %build
-./contrib/configure-release \
-    --disable-optimizations \
-    --prefix=%{_prefix} \
-    --libdir=%{_libdir} \
-    --bindir=%{_bindir} \
-    --includedir=%{_includedir} \
-    %{?configure_options}
-make %{?_smp_mflags}
+%configure --disable-optimizations \
+           --disable-logging \
+           --disable-debug \
+           --disable-assertions \
+           --disable-params-check \
+           CXXFLAGS="%{optflags} -fno-exceptions" \
+           %{?configure_options}
+make %{?_smp_mflags} V=1
 
 %install
 make DESTDIR=%{buildroot} install
