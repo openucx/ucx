@@ -27,9 +27,10 @@ In addition, the library can be used for intra-node communication by leveraging
 the following shared memory mechanisms: posix. sysv, cma, knem, xpmem.
 
 %package devel
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Provides: %{name}-static = %{version}-%{release}
 Summary: Header files and libraries required to develop with ucx
 Group: Development/Libraries
-Requires: %{name}%{?_isa} = %{version}-%{release}
 
 %description devel
 Provides header files, static libraries and examples for developing with UCX.
