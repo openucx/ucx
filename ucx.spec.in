@@ -6,8 +6,8 @@
 Name: ucx
 Version: %{version}
 Release: %{rel}
-Summary: Unified Communication X
-Group: Development/Libraries
+Summary: UCX is a communication library implementing high-performance messaging
+Group: System Environment/Libraries
 
 License: BSD
 URL: http://www.openucx.org
@@ -19,7 +19,12 @@ BuildRequires: numactl-devel
 BuildRequires: automake autoconf libtool
 
 %description
-UCX is a communication library implementing high-performance messaging.
+UCX stands for Unified Communication X. It requires either RDMA-capable device
+(InfiniBand, RoCE, etc), Cray Gemini or Aries, for inter-node communication.
+Future versions will support also TCP for inter-node, to lift that hardware
+dependency.
+In addition, the library can be used for intra-node communication by leveraging
+the following shared memory mechanisms: posix. sysv, cma, knem, xpmem.
 
 %package devel
 Summary: Header files and libraries required to develop with ucx
@@ -27,13 +32,7 @@ Group: Development/Libraries
 Requires: %{name}%{?_isa} = %{version}-%{release}
 
 %description devel
-UCX is a communication library implementing high-performance messaging.
-Requires either RDMA-capable device (InfiniBand, RoCE, etc), Cray Gemini or
-Aries, for inter-node communication.
-Future versions will support also TCP for inter-node, to lift that hardware
-dependency.
-In addition, the library can be used for intra-node communication by leveraging
-the following shared memory mechanisms: posix. sysv, cma, knem, xpmem.
+Provides header files, static libraries and examples for developing with UCX.
 
 %prep
 %setup -q
