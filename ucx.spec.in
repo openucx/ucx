@@ -1,8 +1,6 @@
 %global rel @RPM_RELEASE@
 %global version @VERSION@
 
-%bcond_with valgrind
-
 %{!?configure_options: %global configure_options %{nil}}
 
 Name: ucx
@@ -16,9 +14,6 @@ URL: http://www.openucx.org
 Source: %{name}-%{version}.tar.gz
 
 ExclusiveArch: aarch64 ppc64le x86_64
-
-Requires(post): /sbin/ldconfig
-Requires(postun): /sbin/ldconfig
 
 BuildRequires: numactl-devel
 BuildRequires: automake autoconf libtool
@@ -55,18 +50,12 @@ make %{?_smp_mflags}
 
 %install
 make DESTDIR=%{buildroot} install
-mkdir -p %{buildroot}%{_sysconfdir}/ld.so.conf.d/
-echo %{_libdir} > %{buildroot}%{_sysconfdir}/ld.so.conf.d/ucx.conf
 rm -f %{buildroot}%{_libdir}/*.la
-
-%clean
-rm -rf %{buildroot}
 
 %files
 %{_libdir}/lib*.so*
 %{_bindir}/uc*
 %{_datadir}/ucx/perftest/*
-%{_sysconfdir}/ld.so.conf.d/ucx.conf
 %doc README AUTHORS NEWS
 %{!?_licensedir:%global license %%doc}
 %license LICENSE
