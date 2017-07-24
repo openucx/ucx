@@ -126,21 +126,19 @@ UCS_TEST_P(test_callbackq, single) {
 }
 
 UCS_TEST_P(test_callbackq, multi) {
-    static const unsigned COUNT = 3;
+    for (unsigned count = 0; count < 20; ++count) {
+        callback_ctx ctx[count];
+        for (unsigned i = 0; i < count; ++i) {
+            init_ctx(&ctx[i]);
+            add(&ctx[i]);
+        }
 
-    callback_ctx ctx[COUNT];
+        dispatch(10);
 
-    for (unsigned i = 0; i < COUNT; ++i) {
-        init_ctx(&ctx[i]);
-        add(&ctx[i]);
-    }
-
-    dispatch();
-    dispatch();
-
-    for (unsigned i = 0; i < COUNT; ++i) {
-        remove(&ctx[i]);
-        EXPECT_EQ(2u, ctx[i].count);
+        for (unsigned i = 0; i < count; ++i) {
+            remove(&ctx[i]);
+            EXPECT_EQ(10u, ctx[i].count);
+        }
     }
 }
 
