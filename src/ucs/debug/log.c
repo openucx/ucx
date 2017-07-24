@@ -344,8 +344,8 @@ void ucs_log_init()
     ucs_log_push_handler(ucs_log_default_handler);
 
     if (strlen(ucs_global_opts.log_file) != 0) {
-         ucs_open_output_stream(ucs_global_opts.log_file, &ucs_log_file,
-                                &ucs_log_file_close, &next_token);
+         ucs_open_output_stream(ucs_global_opts.log_file, UCS_LOG_LEVEL_FATAL,
+                                &ucs_log_file, &ucs_log_file_close, &next_token);
     }
 
     ucs_debug("%s loaded at 0x%lx", ucs_debug_get_lib_path(),

@@ -16,6 +16,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/config/types.h>
 
 #include <errno.h>
 #include <sys/socket.h>
@@ -112,7 +113,8 @@ uint64_t ucs_generate_uuid(uint64_t seed);
  * of config_str.
  */
 ucs_status_t
-ucs_open_output_stream(const char *config_str, FILE **p_fstream, int *p_need_close,
+ucs_open_output_stream(const char *config_str, ucs_log_level_t err_log_level,
+                       FILE **p_fstream, int *p_need_close,
                        const char **p_next_token);
 
 
