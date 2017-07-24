@@ -50,6 +50,8 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
     ucs_status_t status;
 
     txqp->unsignaled = 0;
+    txqp->unsignaled_store = 0;
+    txqp->unsignaled_store_count = 0;
     txqp->available  = 0;
     ucs_queue_head_init(&txqp->outstanding);
 

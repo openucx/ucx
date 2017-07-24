@@ -95,7 +95,7 @@ uct_dc_verbs_iface_post_send_to_dci(uct_dc_verbs_iface_t* iface,
     send_flags |= IBV_SEND_SIGNALED;
 
     wr->exp_send_flags    = send_flags;
-    wr->wr_id             = txqp->unsignaled;
+    wr->wr_id             = uct_rc_txqp_unsignaled(txqp);
     wr->dc.ah             = ah;
     wr->dc.dct_number     = dct_num;
     wr->dc.dct_access_key = UCT_IB_KEY;
@@ -694,9 +694,10 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
                                                          &wc[i]);
             continue;
         }
-        count = uct_rc_verbs_txcq_get_comp_count(&wc[i]);
-        ucs_assert(count == 1);
         dci = uct_dc_iface_dci_find(&iface->super, wc[i].qp_num);
+        count = uct_rc_verbs_txcq_get_comp_count(&wc[i],
+                                                 &iface->super.tx.dcis[dci].txqp);
+        ucs_assert(count == 1);
         ucs_trace_poll("dc_verbs iface %p tx_wc: dci[%d] qpn 0x%x count %d",
                        iface, dci, wc[i].qp_num, count);
 

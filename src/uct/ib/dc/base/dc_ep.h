@@ -287,11 +287,12 @@ ucs_status_t uct_dc_ep_check_fc(uct_dc_iface_t *iface, uct_dc_ep_t *ep);
 #define UCT_DC_CHECK_RES(_iface, _ep) \
     { \
         ucs_status_t status; \
-        UCT_RC_CHECK_CQE(&(_iface)->super, _ep); \
         status = uct_dc_iface_dci_get(_iface, _ep); \
         if (ucs_unlikely(status != UCS_OK)) { \
             return status; \
         } \
+        UCT_RC_CHECK_CQE(&(_iface)->super, _ep, \
+                         &(_iface)->tx.dcis[(_ep)->dci].txqp); \
     }
 
 

@@ -402,6 +402,11 @@ public:
 } // ucs
 
 
+#ifndef UINT16_MAX
+#define UINT16_MAX (65535)
+#endif /* UINT16_MAX */
+
+
 /* Test output */
 #define UCS_TEST_MESSAGE \
     ucs::detail::message_stream("INFO")
