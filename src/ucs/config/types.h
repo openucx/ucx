@@ -102,7 +102,7 @@ typedef UCS_CONFIG_STRING_ARRAY_FIELD(names) ucs_config_names_array_t;
  * BSD socket address specification.
  */
 typedef struct ucs_sock_addr {
-    struct sockaddr   *addr;           /**< Address in the form of a sockaddr */
+    struct sockaddr   *addr;           /**< Pointer to socket address */
     socklen_t         addrlen;         /**< Address length */
 } ucs_sock_addr_t;
 

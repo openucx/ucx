@@ -188,19 +188,7 @@ enum ucp_ep_params_field {
                                                             @ref ucp_err_handling_mode_t */
     UCP_EP_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(2), /**< Handler to process
                                                             transport level errors */
-    UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(3), /**< Using a client-server
-                                                            connection establishment
-                                                            mechanism for establishing
-                                                            connections to remote peers.
-                                                            This field requires the
-                                                            filling of the
-                                                            sock_address in the
-                                                            endpoint parameters
-                                                            The ucp_ep_create routine
-                                                            will return with an error if
-                                                            this flag is set but
-                                                            the sock_address isn't
-                                                            specified.*/
+    UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(3), /**< Socket address field */
     UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(4)  /**< Endpoint flags */
 };
 
@@ -215,8 +203,11 @@ enum ucp_ep_params_field {
 enum ucp_ep_params_flags_field {
     UCP_EP_PARAMS_FLAGS_CLIENT_SERVER  = UCS_BIT(1)   /**< Using a client-server
                                                            connection establishment
-                                                           mechanism to pass
-                                                           an AF_INET address */
+                                                           mechanism.
+                                                           sock_address field
+                                                           must be provided and
+                                                           contain the address
+                                                           of the remote peer */
 };
 
 
@@ -691,10 +682,10 @@ typedef struct ucp_worker_params {
 
 /**
  * @ingroup UCP_WORKER
- * @brief Tuning parameters for the UCP listener.
+ * @brief Parameters for a UCP listener object.
  *
- * The structure defines the parameters that are used for the
- * UCP worker binding and listening during the UCP ep @ref ucp_worker_listen.
+ * This structure defines parameters for @ref ucp_worker_listen, which is used to
+ * listen for incoming client/server connections.
  */
 typedef struct ucp_worker_listener_params {
     /**
@@ -709,8 +700,8 @@ typedef struct ucp_worker_listener_params {
      * An address in the form of a sockaddr.
      * This field is mandatory for filling (along with its corresponding bit
      * in the field_mask - UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR
-     * The ucp_worker_listen routine will return with an error if the sock_addr
-     * isn't specified.
+     * The ucp_worker_listen routine will return with an error if sock_address
+     * is not specified.
      */
     ucs_sock_addr_t                sock_address;
 
@@ -720,7 +711,7 @@ typedef struct ucp_worker_listener_params {
      * UCP_WORKER_LISTENER_PARAM_FIELD_CALLBACK needs to be set in the
      * field_mask.
      */
-    ucp_listener_accept_handler_t  ep_create_handler;
+    ucp_listener_accept_handler_t  ep_accept_handler;
 } ucp_worker_listener_params_t;
 
 
@@ -741,25 +732,13 @@ typedef struct ucp_ep_params {
     uint64_t                field_mask;
 
     /**
-     * Destination address; if a client-server connection establishment
-     * mechanism isn't used, this address must be obtained using
-     * @ref ucp_worker_get_address and this field is mandatory for filling
+     * Destination address; if the UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag is not
+     * set, this address is mandatory for filling
      * (along with its corresponding bit in the field_mask -
-     * UCP_EP_PARAM_FIELD_REMOTE_ADDRESS).
-     * The ucp_ep_create routine will return with an error if the
-     * UCP_EP_PARAM_FIELD_REMOTE_ADDRESS flag is set but this address isn't
-     * specified.
+     * UCP_EP_PARAM_FIELD_REMOTE_ADDRESS) and must be obtained using
+     * @ref ucp_worker_get_address.
      */
     const ucp_address_t     *address;
-
-    /**
-     * Endpoint flags, e.g. @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER.
-     * This value is optional.
-     * If it's not set (along with its corresponding bit in the field_mask -
-     * @ref UCP_EP_PARAM_FIELD_FLAGS), the @ref ucp_ep_create() routine will
-     * consider the flags as set to zero.
-     */
-    unsigned                flags;
 
     /**
      * Desired error handling mode, optional parameter. Default value is
@@ -773,11 +752,23 @@ typedef struct ucp_ep_params {
     ucp_err_handler_t       err_handler;
 
     /**
+     * Endpoint flags from @ref ucp_ep_params_flags_field.
+     * This value is optional.
+     * If it's not set (along with its corresponding bit in the field_mask -
+     * @ref UCP_EP_PARAM_FIELD_FLAGS), the @ref ucp_ep_create() routine will
+     * consider the flags as set to zero.
+     */
+     unsigned               flags;
+
+    /**
      * Destination address in the form of a sockaddr; if a client-server connection
      * establishment mechanism is used, this address must be filled and obtained
      * from the user.
      * The UCP_EP_PARAM_FIELD_SOCK_ADDR bit in the field_mask should be set
      * to indicate that the type of the remote address is a sockaddr.
+     * In order for sock_address to be used for the connection establishment,
+     * the @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag needs to be set in the
+     * 'flags' field.
      */
     ucs_sock_addr_t         sock_address;
 } ucp_ep_params_t;
