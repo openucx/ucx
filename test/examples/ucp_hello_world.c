@@ -214,8 +214,20 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     }
 
     /* Receive test string from server */
-    do {
-        /* Following blocked methods used to polling internal file descriptor
+    for (;;) {
+
+        /* Probing incoming events in non-block mode */
+        msg_tag = ucp_tag_probe_nb(ucp_worker, tag, tag_mask, 1, &info_tag);
+        if (msg_tag != NULL) {
+            /* Message arrived */
+            break;
+        } else if (ucp_worker_progress(ucp_worker)) {
+            /* Some events were polled; try again without going to sleep */
+            continue;
+        }
+
+        /* If we got here, ucp_worker_progress() returned 0, so we can sleep.
+         * Following blocked methods used to polling internal file descriptor
          * to make CPU idle and don't spin loop
          */
         if (ucp_test_mode == TEST_MODE_WAIT) {
@@ -226,13 +238,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
             status = test_poll_wait(ucp_worker);
             CHKERR_JUMP(status != UCS_OK, "test_poll_wait\n", err_ep);
         }
-
-        /* Progressing before probe to update the state */
-        ucp_worker_progress(ucp_worker);
-
-        /* Probing incoming events in non-block mode */
-        msg_tag = ucp_tag_probe_nb(ucp_worker, tag, tag_mask, 1, &info_tag);
-    } while (msg_tag == NULL);
+    }
 
     msg = malloc(info_tag.length);
     CHKERR_JUMP(!msg, "allocate memory\n", err_ep);
@@ -282,17 +288,6 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
 
     /* Receive client UCX address */
     do {
-        /* Following blocked methods used to polling internal file descriptor
-         * to make CPU idle and don't spin loop
-         */
-        if (ucp_test_mode == TEST_MODE_WAIT) {
-            status = ucp_worker_wait(ucp_worker);
-            CHKERR_JUMP(status != UCS_OK, "ucp_worker_wait\n", err);
-        } else if (ucp_test_mode == TEST_MODE_EVENTFD) {
-            status = test_poll_wait(ucp_worker);
-            CHKERR_JUMP(status != UCS_OK, "test_poll_wait\n", err);
-        }
-
         /* Progressing before probe to update the state */
         ucp_worker_progress(ucp_worker);
 

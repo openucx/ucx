@@ -718,6 +718,11 @@ void ucs_empty_function()
 {
 }
 
+unsigned ucs_empty_function_return_zero()
+{
+    return 0;
+}
+
 ucs_status_t ucs_empty_function_return_success()
 {
     return UCS_OK;

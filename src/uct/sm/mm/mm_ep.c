@@ -25,10 +25,11 @@ void uct_mm_ep_connected(uct_mm_ep_t *ep)
     ep->cached_tail = ep->fifo_ctl->tail;
 }
 
-static void uct_mm_ep_signal_remote_slow_path_callback(void *arg)
+static unsigned uct_mm_ep_signal_remote_slow_path_callback(void *arg)
 {
     uct_mm_ep_t *ep = arg;
     uct_mm_ep_signal_remote(ep, UCT_MM_IFACE_SIGNAL_CONNECT);
+    return 0;
 }
 
 

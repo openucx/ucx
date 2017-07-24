@@ -27,7 +27,7 @@
  */
 typedef struct ucs_callbackq       ucs_callbackq_t;
 typedef struct ucs_callbackq_elem  ucs_callbackq_elem_t;
-typedef void                       (*ucs_callback_t)(void *arg);
+typedef unsigned                   (*ucs_callback_t)(void *arg);
 
 
 /**
@@ -149,15 +149,20 @@ void ucs_callbackq_remove_safe(ucs_callbackq_t *cbq, int id);
  * Dispatch callbacks from the callback queue.
  *
  * @param  [in] cbq      Callback queue to dispatch callbacks from.
+
+ * @return Sum of all return values from the dispatched callbacks.
  */
-static inline void ucs_callbackq_dispatch(ucs_callbackq_t *cbq)
+static inline unsigned ucs_callbackq_dispatch(ucs_callbackq_t *cbq)
 {
     ucs_callbackq_elem_t *elem;
     ucs_callback_t cb;
+    unsigned count;
 
+    count = 0;
     for (elem = cbq->fast_elems; (cb = elem->cb) != NULL; ++elem) {
-        cb(elem->arg);
+        count += cb(elem->arg);
     }
+    return count;
 }
 
 

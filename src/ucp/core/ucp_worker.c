@@ -838,21 +838,25 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
     return UCS_OK;
 }
 
-void ucp_worker_progress(ucp_worker_h worker)
+unsigned ucp_worker_progress(ucp_worker_h worker)
 {
+    unsigned count;
+
     /* worker->inprogress is used only for assertion check.
      * coverity[assert_side_effect]
      */
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     ucs_assert(worker->inprogress++ == 0);
-    uct_worker_progress(worker->uct);
+    count = uct_worker_progress(worker->uct);
     ucs_async_check_miss(&worker->async);
 
     /* coverity[assert_side_effect] */
     ucs_assert(--worker->inprogress == 0);
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+
+    return count;
 }
 
 ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)

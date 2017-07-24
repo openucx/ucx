@@ -1089,8 +1089,10 @@ void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address);
  * communication progress.
  *
  * @param [in]  worker    Worker to progress.
+ *
+ * @return Non-zero if any communication was progressed, zero otherwise.
  */
-void ucp_worker_progress(ucp_worker_h worker);
+unsigned ucp_worker_progress(ucp_worker_h worker);
 
 
 /**
@@ -1133,9 +1135,15 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd);
  * This routine waits (blocking) until an event has happened, as part of the
  * wake-up mechanism.
  *
- * There are two alternative ways to use the wakeup mechanism: the first is the
- * file descriptor obtained per worker using @ref ucp_worker_get_efd and the
- * second is waiting on the next event internally (this function).
+ * This function is guaranteed to return only if new communication events occur
+ * on the @a worker. Therefore one must drain all existing events before waiting
+ * on the file descriptor. This can be achieved by calling
+ * @ref ucp_worker_progress repeatedly until it returns 0.
+ *
+ * There are two alternative ways to use the wakeup mechanism. The first is by
+ * polling on a per-worker file descriptor obtained from @ref ucp_worker_get_efd.
+ * The second is by using this function to perform an internal wait for the next
+ * event associated with the specified worker.
  *
  * @note During the blocking call the wake-up mechanism relies on other means of
  * notification and may not progress some of the requests as it would when
@@ -1158,6 +1166,11 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker);
  * This routine waits for a memory update at the local memory @a address.  This
  * is a blocking routine. The routine returns when the memory address is
  * updated ("write") or an event occurs in the system.
+ *
+ * This function is guaranteed to return only if new communication events occur
+ * on the worker or @a address is modified. Therefore one must drain all existing
+ * events before waiting on the file descriptor. This can be achieved by calling
+ * @ref ucp_worker_progress repeatedly until it returns 0.
  *
  * @note This routine can be used by an application that executes busy-waiting
  * loop checking for a memory update. Instead of continuous busy-waiting on an
@@ -1184,8 +1197,13 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
  * The events triggering a signal of the file descriptor from
  * @ref ucp_worker_get_efd depend on the interfaces used by the worker and
  * defined in the transport layer, and typically represent a request completion
- * or newly available resources. It can also be triggered
- * by calling @ref ucp_worker_signal .
+ * or newly available resources. It can also be triggered by calling
+ * @ref ucp_worker_signal .
+ *
+ * The file descriptor is guaranteed to become signaled only if new communication
+ * events occur on the @a worker. Therefore one must drain all existing events
+ * before waiting on the file descriptor. This can be achieved by calling
+ * @ref ucp_worker_progress repeatedly until it returns 0.
  *
  * @code {.c}
  * void application_initialization() {
@@ -1193,15 +1211,22 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
  *     status = ucp_worker_get_efd(worker, &fd);
  *     ...
  * }
+ *
  * void process_comminucation() {
  *     for (;;) {
- *         ucp_worker_progress(worker);
- *         check_for_events();              // receive() operations
- *         status = ucp_worker_arm(worker); // arm the worker and clean-up fd
+ *         // check for events as long as progress is made
+ *         if (check_for_events()) {
+ *              break;                    // got something interesting, exit
+ *         } else if (ucp_worker_progress(worker)) {
+ *              continue;                 // got something uninteresting, retry
+ *         }
+ *
+ *         // arm the worker and clean-up fd
+ *         status = ucp_worker_arm(worker);
  *         if (UCS_OK == status) {
- *             poll(&fds, nfds, timeout);   // wait for events
+ *             poll(&fds, nfds, timeout);  // wait for events
  *         } else if (UCS_ERR_BUSY == status) {
- *             continue;                    // poll for more events
+ *             continue;                   // poll for more events
  *         } else {
  *             abort();
  *         }

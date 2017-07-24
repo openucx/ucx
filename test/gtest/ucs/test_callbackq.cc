@@ -46,13 +46,13 @@ protected:
 
     UCS_TEST_BASE_IMPL;
 
-    static void callback_proxy(void *arg)
+    static unsigned callback_proxy(void *arg)
     {
         callback_ctx *ctx = reinterpret_cast<callback_ctx*>(arg);
-        ctx->test->callback(ctx);
+        return ctx->test->callback(ctx);
     }
 
-    void callback(callback_ctx *ctx)
+    unsigned callback(callback_ctx *ctx)
     {
         ucs_atomic_add32(&ctx->count, 1);
 
@@ -67,6 +67,7 @@ protected:
         default:
             break;
         }
+        return 1;
     }
 
     void init_ctx(callback_ctx *ctx)
@@ -105,11 +106,13 @@ protected:
         ucs_callbackq_remove_safe(&m_cbq, ctx->callback_id);
     }
 
-    void dispatch(unsigned count = 1)
+    unsigned dispatch(unsigned count = 1)
     {
+        unsigned total = 0;
         for (unsigned i = 0; i < count; ++i) {
-            ucs_callbackq_dispatch(&m_cbq);
+            total += ucs_callbackq_dispatch(&m_cbq);
         }
+        return total;
     }
 
     ucs_callbackq_t     m_cbq;
@@ -123,6 +126,17 @@ UCS_TEST_P(test_callbackq, single) {
     dispatch();
     remove(&ctx);
     EXPECT_EQ(1u, ctx.count);
+}
+
+UCS_TEST_P(test_callbackq, count) {
+    callback_ctx ctx;
+
+    init_ctx(&ctx);
+    add(&ctx);
+    unsigned count = dispatch();
+    remove(&ctx);
+    EXPECT_EQ(1u, ctx.count);
+    EXPECT_EQ(1u, count);
 }
 
 UCS_TEST_P(test_callbackq, multi) {
