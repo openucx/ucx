@@ -194,7 +194,7 @@ enum ucp_ep_params_field {
 
 
 /**
- * @ingroup UCP_EP
+ * @ingroup UCP_ENDPOINT
  * @brief UCP endpoint parameters flags.
  *
  * The enumeration list describes the endpoint's parameters flags supported by
@@ -699,7 +699,7 @@ typedef struct ucp_worker_listener_params {
     /**
      * An address in the form of a sockaddr.
      * This field is mandatory for filling (along with its corresponding bit
-     * in the field_mask - UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR
+     * in the field_mask - @ref UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR
      * The ucp_worker_listen routine will return with an error if sock_address
      * is not specified.
      */
@@ -732,9 +732,9 @@ typedef struct ucp_ep_params {
     uint64_t                field_mask;
 
     /**
-     * Destination address; if the UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag is not
-     * set, this address is mandatory for filling
-     * (along with its corresponding bit in the field_mask -
+     * Destination address; if the @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag
+     * is not set, this address is mandatory for filling
+     * (along with its corresponding bit in the field_mask - @ref
      * UCP_EP_PARAM_FIELD_REMOTE_ADDRESS) and must be obtained using
      * @ref ucp_worker_get_address.
      */
@@ -764,7 +764,7 @@ typedef struct ucp_ep_params {
      * Destination address in the form of a sockaddr; if a client-server connection
      * establishment mechanism is used, this address must be filled and obtained
      * from the user.
-     * The UCP_EP_PARAM_FIELD_SOCK_ADDR bit in the field_mask should be set
+     * The @ref UCP_EP_PARAM_FIELD_SOCK_ADDR bit in the field_mask should be set
      * to indicate that the type of the remote address is a sockaddr.
      * In order for sock_address to be used for the connection establishment,
      * the @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag needs to be set in the
