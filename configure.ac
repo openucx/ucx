@@ -11,8 +11,8 @@ AC_PREREQ([2.63])
 define([scm_r], esyscmd([sh -c "git rev-parse --short=7 HEAD"]))
 define([ucx_ver_major], 1)
 define([ucx_ver_minor], 2)
+define([ucx_ver_patch], 0)
 define([ts], esyscmd([sh -c "date +%Y%m%d%H%M%S"]))
-define([revcount], esyscmd([git rev-list HEAD | wc -l | sed -e 's/ *//g' | xargs -n1 printf]))
 
 # This is the API version (see libtool library versioning)
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
@@ -50,14 +50,14 @@ AC_SUBST(top_top_srcdir)
 
 MAJOR_VERSION=ucx_ver_major
 MINOR_VERSION=ucx_ver_minor
+PATCH_VERSION=ucx_ver_patch
 MICRO_VERSION=scm_r
-REV_COUNT=revcount
-VERSION=$MAJOR_VERSION.$MINOR_VERSION.$REV_COUNT
+VERSION=$MAJOR_VERSION.$MINOR_VERSION.$PATCH_VERSION.$MICRO_VERSION
 SOVERSION=libucx_so_version
 AC_SUBST(MAJOR_VERSION)
 AC_SUBST(MINOR_VERSION)
+AC_SUBST(PATCH_VERSION)
 AC_SUBST(MICRO_VERSION)
-AC_SUBST(REV_COUNT)
 AC_SUBST(SOVERSION)
 
 AC_PROG_CC
