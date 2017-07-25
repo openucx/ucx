@@ -522,7 +522,9 @@ struct uct_md_attr {
     struct {
         size_t               max_alloc; /**< Maximal allocation size */
         size_t               max_reg;   /**< Maximal registration size */
-        size_t               max_private_data; /**< Max size of the md's private data */
+        size_t               max_conn_priv; /**< Max size of the md's private data.
+                                                 used for connection
+                                                 establishment with sockaddr */
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
     } cap;
 
@@ -571,16 +573,17 @@ typedef struct uct_rkey_bundle {
  * @ingroup UCT_RESOURCE
  * @brief Sockaddr with the callback and user's argument.
  *
- * This structure holds a sockaddr and a callback which is used when accepting
- * connection messages while listening or connecting to this sockaddr.
+ * This structure holds a sockaddr to listen on or to connect to.
+ * It also includes a callback, which is invoked when accepting connection messages,
+ * along with the user's argument to it.
  */
-typedef struct uct_sockaddr_bundle {
-    ucs_sock_addr_t             sock_address;   /**< sockaddr and its length */
-    uct_conn_event_callback_t   cb;             /**< Callback for incoming connection
-                                                     establishment messages*/
-    void                        *arg;           /**< User's defined argument for
-                                                     the callback */
-} uct_sockaddr_bundle_t;
+typedef struct uct_sockaddr_conn_params {
+    ucs_sock_addr_t             addr;       /**< sockaddr and its length */
+    uct_conn_event_callback_t   event_cb;   /**< Callback for incoming connection
+                                                 establishment messages*/
+    void                        *arg;       /**< User defined argument for
+                                                 the callback */
+} uct_sockaddr_conn_params_t;
 
 
 /**
@@ -1129,24 +1132,27 @@ ucs_status_t uct_iface_set_am_tracer(uct_iface_h iface, uct_am_tracer_t tracer,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief
+ * @brief Create an interface for listening on a socket address and creating
+ *        a connection to remote peer.
  *
- * This routine will create an interface which will listen to the given address.
- * The user's callback will be invoked upon connection @ref
+ * This routine will create an interface which will listen to the given socket address.
+ * The user defined callback will be invoked upon connection @ref
  * uct_conn_event_type_t events arriving while listening.
  *
  * @param [in]  worker           Handle to worker which will be associated with
  *                               the new interface.
  * @param [in]  md               Memory domain to create the interface on.
- * @param [in]  sockaddr_bundle  The sockaddr to listen on and a callback for
+ *                               This memory domain must support the @ref
+ *                               UCT_MD_FLAG_SOCK_ADDR flag.
+ * @param [in]  sockaddr_params  The sockaddr to listen on and a callback for
  *                               incoming events.
  * @param [in]  config           Interface configuration options.
- * @param [out] iface            Handle to the created interface.
+ * @param [out] iface_p          Handle to the created interface.
  */
 ucs_status_t uct_sockaddr_listen(uct_worker_h worker, uct_md_h md,
-                                 uct_sockaddr_bundle_t sockaddr_bundle,
+                                 uct_sockaddr_conn_params_t sockaddr_params,
                                  const uct_iface_config_t *config,
-                                 uct_iface_h *iface);
+                                 uct_iface_h *iface_p);
 
 
 /**
@@ -1212,26 +1218,32 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Connect endpoint to the remote peer through a sockaddr.
+ * @brief Initiate a client-server connection to a remote peer.
  *
- * This routine will create a connection to the remote peer by connecting to the
- * remote inerface's sockaddr.
+ * This routine will create an endpoint for a connection to the remote peer.
+ * The connection needs to be established by connecting to the
+ * remote inerface's sockaddr. The user may provide private data to be sent
+ * on a connection request to the remote peer.
  *
- * @param [in]  worker           Handle to worker which will be associated with
- *                               the new endpoint.
+ * @param [in]  worker           Worker on which the communication resources are
+ *                               allocated.
  * @param [in]  md               Memory domain to create the endpoint on.
- * @param [in]  sockaddr_bundle  The sockaddr to connect to and a callback for
+ *                               This memory domain must support the @ref
+ *                               UCT_MD_FLAG_SOCK_ADDR flag.
+ * @param [in]  sockaddr_params  The sockaddr to connect to and a callback for
  *                               incoming events.
  * @param [in]  config           Interface configuration options.
- * @param [out] priv_data        User's private data for connecting to the
+ *                               The interface that the new endpoint
+ *                               will point to.
+ * @param [in]  priv_data        User's private data for connecting to the
  *                               remote peer.
- * @param [out] length           Length of the proiate data.
+ * @param [in]  length           Length of the private data.
  * @param [out] ep_p             Handle to the created endpoint.
  */
 ucs_status_t uct_sockaddr_connect(uct_worker_h worker, uct_md_h md,
-                                  uct_sockaddr_bundle_t sockaddr_bundle,
+                                  uct_sockaddr_conn_params_t sockaddr_params,
                                   const uct_iface_config_t *config,
-                                  void *priv_data, size_t *length,
+                                  const void *priv_data, size_t *length,
                                   uct_ep_h *ep_p);
 
 

@@ -11,6 +11,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 
 #define UCT_TL_NAME_MAX          10
@@ -44,11 +45,14 @@ enum uct_am_trace_type {
  * @brief List of event types for connection establishment with a client-server
  *        flow.
  */
-typedef enum uct_conn_event_type {
-    UCT_CONN_EVENT_TYPE_REQUEST,    /**< Connection request */
-    UCT_CONN_EVENT_TYPE_REPLY,      /**< Connection reply */
-    UCT_CONN_EVENT_TYPE_READY       /**< Connection is ready */
-} uct_conn_event_type_t;
+typedef enum uct_sockaddr_conn_event_type {
+    UCT_CONN_EVENT_TYPE_REQUEST,    /**< Connection request.
+                                         Generated on the server side */
+    UCT_CONN_EVENT_TYPE_REPLY,      /**< Connection reply.
+                                         Generated on the client side */
+    UCT_CONN_EVENT_TYPE_READY       /**< Connection is ready.
+                                         Generated on the server side */
+} uct_sockaddr_conn_event_type_t;
 
 
 /**
@@ -278,22 +282,26 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  * @brief Callback to process incoming connection establishment messages.
  *
  * This callback routine will be invoked upon receiving one of the @ref
- * uct_conn_event_type_t events. It will allow the user to handle these events,
- * read data and insert his data in a given buffer.
+ * uct_conn_event_type_t events. Incoming data is placed inside the buffer_in
+ * buffer and outgoing data should be filled inside this function and placed in
+ * the buffer_out.
  *
- * @param [in]      event       Connection establishment event to handle.
- * @param [in]      arg         User's argument for this callback.
- * @param [in]      buffer_in   Points to the received data.
- * @param [out]     buffer_out  Points to the user's data which was written in
- *                              this callback.
- * @param [in,out]  length      Length of the received/written data.
+ * @param [in]  event       Connection establishment event to handle.
+ * @param [in]  arg         User defined argument for this callback.
+ * @param [in]  buffer_in   Points to the received data.
+ *                          This is the private data that was passed to the
+ *                          @ref uct_sockaddr_connect function.
+ * @param [in]  length      Length of the received data.
+ * @param [out] buffer_out  Points to the user's data which was written in
+ *                          this callback. It will be passed to buffer_in
+ *                          on client side upon invoking this callback.
  *
- * @return  Size of the data that was actually written. Negative in case of an
- *          error.
+ * @return  Size of the data that was written. Negative in case of an error.
+ *
  */
-typedef size_t (*uct_conn_event_callback_t)(uct_conn_event_type_t event, void *arg,
-                                            const void *buffer_in, void *buffer_out,
-                                            size_t *length);
+typedef ssize_t (*uct_conn_event_callback_t)(uct_sockaddr_conn_event_type_t event,
+                                             void *arg, const void *buffer_in,
+                                             size_t *length, void *buffer_out);
 
 
 /**
