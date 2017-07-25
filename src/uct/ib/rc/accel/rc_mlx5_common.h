@@ -108,7 +108,7 @@ uct_rc_mlx5_iface_common_rx_inline(uct_rc_mlx5_iface_common_t *mlx5_iface,
                                 byte_len);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                  uct_rc_iface_t *rc_iface)
 {
@@ -122,6 +122,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     uint16_t wqe_ctr;
     uint16_t max_batch;
     ucs_status_t status;
+    unsigned count;
     void *udesc;
     unsigned flags;
 
@@ -130,8 +131,8 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
 
     cqe = uct_ib_mlx5_poll_cq(&rc_iface->super, &mlx5_common_iface->rx.cq);
     if (cqe == NULL) {
-        /* If not CQE - post receives */
-        status = UCS_ERR_NO_PROGRESS;
+        /* If no CQE - post receives */
+        count = 0;
         goto done;
     }
 
@@ -204,14 +205,14 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     }
 
     ++rc_iface->rx.srq.available;
-    status = UCS_OK;
+    count = 1;
 
 done:
     max_batch = rc_iface->super.config.rx_max_batch;
     if (rc_iface->rx.srq.available >= max_batch) {
         uct_rc_mlx5_iface_srq_post_recv(rc_iface, &mlx5_common_iface->rx.srq);
     }
-    return status;
+    return count;
 }
 
 

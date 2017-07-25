@@ -254,7 +254,7 @@ static ssize_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 static ucs_status_t
 uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                         unsigned header_length, const uct_iov_t *iov,
-                        size_t iovcnt, uct_completion_t *comp)
+                        size_t iovcnt, unsigned flags, uct_completion_t *comp)
 {
     uct_ud_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_mlx5_ep_t);
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
@@ -371,15 +371,15 @@ uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE
-ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
+static UCS_F_ALWAYS_INLINE unsigned
+uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
 {
     struct mlx5_cqe64 *cqe;
     uint16_t ci;
     uct_ib_iface_recv_desc_t *desc;
     uint32_t len;
     void *packet;
-    ucs_status_t status;
+    unsigned count;
 
     ci     = iface->rx.wq.cq_wqe_counter & iface->rx.wq.mask;
     packet = (void *)be64toh(iface->rx.wq.wqes[ci].addr);
@@ -388,7 +388,7 @@ ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->rx.cq);
     if (cqe == NULL) {
-        status = UCS_ERR_NO_PROGRESS;
+        count = 0;
         goto out;
     }
 
@@ -409,7 +409,7 @@ ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
                          (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
                          len - UCT_IB_GRH_LEN,
                          (uct_ud_recv_skb_t *)desc, is_async);
-    status = UCS_OK;
+    count = 1;
 
 out:
     if (iface->super.rx.available >= iface->super.super.config.rx_max_batch) {
@@ -419,7 +419,7 @@ out:
          */
         uct_ud_mlx5_iface_post_recv(iface);
     }
-    return status;
+    return count;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -436,35 +436,35 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
     iface->super.tx.available = uct_ib_mlx5_txwq_update_bb(&iface->tx.wq, ntohs(cqe->wqe_counter));
 }
 
-static void uct_ud_mlx5_iface_progress(uct_iface_h tl_iface)
+static unsigned uct_ud_mlx5_iface_progress(uct_iface_h tl_iface)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_mlx5_iface_t);
     ucs_status_t status;
-    int count;
+    unsigned n, count = 0;
 
     uct_ud_enter(&iface->super);
     uct_ud_iface_dispatch_zcopy_comps(&iface->super);
     status = uct_ud_iface_dispatch_pending_rx(&iface->super);
     if (ucs_likely(status == UCS_OK)) {
-        count = 0;
         do {
-            status = uct_ud_mlx5_iface_poll_rx(iface, 0);
-            count++;
-        } while ((status == UCS_OK) && (count < iface->super.super.config.rx_max_poll));
+            n = uct_ud_mlx5_iface_poll_rx(iface, 0);
+            count += n;
+        } while ((n > 0) && (count < iface->super.super.config.rx_max_poll));
     }
     uct_ud_mlx5_iface_poll_tx(iface);
     uct_ud_iface_progress_pending(&iface->super, 0);
     uct_ud_leave(&iface->super);
+    return count;
 }
 
 static void uct_ud_mlx5_iface_async_progress(uct_ud_iface_t *ud_iface)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ud_iface, uct_ud_mlx5_iface_t);
-    ucs_status_t status;
+    unsigned count;
 
     do {
-        status = uct_ud_mlx5_iface_poll_rx(iface, 1);
-    } while (status == UCS_OK);
+        count = uct_ud_mlx5_iface_poll_rx(iface, 1);
+    } while (count > 0);
     uct_ud_mlx5_iface_poll_tx(iface);
     uct_ud_iface_progress_pending(&iface->super, 1);
 }

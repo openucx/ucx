@@ -60,7 +60,8 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*ep_am_zcopy)(uct_ep_h ep, uint8_t id, const void *header,
                                 unsigned header_length, const uct_iov_t *iov,
-                                size_t iovcnt, uct_completion_t *comp);
+                                size_t iovcnt, unsigned flags,
+                                uct_completion_t *comp);
 
     /* endpoint - atomics */
 
@@ -177,7 +178,7 @@ typedef struct uct_iface_ops {
 
     void         (*iface_progress_disable)(uct_iface_h iface, unsigned flags);
 
-    void         (*iface_progress)(uct_iface_h iface);
+    unsigned     (*iface_progress)(uct_iface_h iface);
 
     /* interface - events */
 

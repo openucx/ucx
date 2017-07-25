@@ -171,7 +171,7 @@ static inline void uct_mm_set_fifo_elems_ptr(void *mem_region, void **fifo_elems
 void uct_mm_iface_release_desc(uct_recv_desc_t *self, void *desc);
 ucs_status_t uct_mm_flush();
 
-void uct_mm_iface_progress(void *arg);
+unsigned uct_mm_iface_progress(void *arg);
 
 extern uct_tl_component_t uct_mm_tl;
 

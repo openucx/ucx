@@ -193,10 +193,12 @@ const uct_test::entity& uct_test::ent(unsigned index) const {
     return m_entities.at(index);
 }
 
-void uct_test::progress() const {
+unsigned uct_test::progress() const {
+    unsigned count = 0;
     FOR_EACH_ENTITY(iter) {
-        (*iter)->progress();
+        count += (*iter)->progress();
     }
+    return count;
 }
 
 void uct_test::flush() const {
@@ -310,9 +312,10 @@ void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
     }
 }
 
-void uct_test::entity::progress() const {
-    uct_worker_progress(m_worker);
+unsigned uct_test::entity::progress() const {
+    unsigned count = uct_worker_progress(m_worker);
     m_async.check_miss();
+    return count;
 }
 
 uct_md_h uct_test::entity::md() const {

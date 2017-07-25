@@ -316,7 +316,8 @@ ssize_t uct_dc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
 ucs_status_t uct_dc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                                       unsigned header_length, const uct_iov_t *iov,
-                                      size_t iovcnt, uct_completion_t *comp)
+                                      size_t iovcnt, unsigned flags,
+                                      uct_completion_t *comp)
 {
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_verbs_iface_t);
     uct_dc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
@@ -677,7 +678,7 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE unsigned
 uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
 {
     int i;
@@ -711,17 +712,19 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
     }
     ucs_arbiter_dispatch(uct_dc_iface_tx_waitq(&iface->super), 1, 
                          uct_dc_iface_dci_do_pending_tx, NULL);
+    return num_wcs;
 }
 
-static void uct_dc_verbs_iface_progress(uct_iface_h tl_iface)
+static unsigned uct_dc_verbs_iface_progress(uct_iface_h tl_iface)
 {
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_verbs_iface_t);
-    ucs_status_t status;
+    unsigned count;
 
-    status = uct_rc_verbs_iface_poll_rx_common(&iface->super.super);
-    if (status == UCS_ERR_NO_PROGRESS) {
-        uct_dc_verbs_poll_tx(iface);
+    count = uct_rc_verbs_iface_poll_rx_common(&iface->super.super);
+    if (count > 0) {
+        return count;
     }
+    return uct_dc_verbs_poll_tx(iface);
 }
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t)(uct_iface_t*);

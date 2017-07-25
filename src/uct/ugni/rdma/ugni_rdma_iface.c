@@ -103,13 +103,14 @@ void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h memh)
   base->desc.local_mem_hndl = *(gni_mem_handle_t *)memh;
 }
 
-void uct_ugni_progress(void *arg)
+unsigned uct_ugni_progress(void *arg)
 {
     gni_cq_entry_t  event_data = 0;
     gni_post_descriptor_t *event_post_desc_ptr;
     uct_ugni_base_desc_t *desc;
     uct_ugni_iface_t * iface = (uct_ugni_iface_t *)arg;
     gni_return_t ugni_rc;
+    unsigned count = 0;
 
     while (1) {
         uct_ugni_device_lock(&iface->cdm);
@@ -122,7 +123,7 @@ void uct_ugni_progress(void *arg)
             uct_ugni_device_unlock(&iface->cdm);
             ucs_error("GNI_CqGetEvent falied. Error status %s %d ",
                       gni_err_str[ugni_rc], ugni_rc);
-            return;
+            return count;
         }
 
         ugni_rc = GNI_GetCompleted(iface->local_cq, event_data, &event_post_desc_ptr);
@@ -130,7 +131,7 @@ void uct_ugni_progress(void *arg)
         if (GNI_RC_SUCCESS != ugni_rc && GNI_RC_TRANSACTION_ERROR != ugni_rc) {
             ucs_error("GNI_GetCompleted falied. Error status %s %d",
                       gni_err_str[ugni_rc], ugni_rc);
-            return;
+            return count;
         }
 
         desc = (uct_ugni_base_desc_t *)event_post_desc_ptr;
@@ -141,10 +142,11 @@ void uct_ugni_progress(void *arg)
         desc->free_cb(desc);
         iface->outstanding--;
         uct_ugni_check_flush(desc->flush_group);
+        ++count;
     }
     /* have a go a processing the pending queue */
     ucs_arbiter_dispatch(&iface->arbiter, 1, uct_ugni_ep_process_pending, NULL);
-    return;
+    return count;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_rdma_iface_t)
