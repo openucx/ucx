@@ -46,7 +46,7 @@ typedef struct ucs_callbackq_priv {
 } ucs_callbackq_priv_t;
 
 
-static void ucs_callbackq_slow_proxy(void *arg);
+static unsigned ucs_callbackq_slow_proxy(void *arg);
 
 static inline ucs_callbackq_priv_t* ucs_callbackq_priv(ucs_callbackq_t *cbq)
 {
@@ -348,13 +348,14 @@ static void ucs_callbackq_remove_slow(ucs_callbackq_t *cbq, unsigned idx)
     }
 }
 
-static void ucs_callbackq_slow_proxy(void *arg)
+static unsigned ucs_callbackq_slow_proxy(void *arg)
 {
     ucs_callbackq_t      *cbq  = arg;
     ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
     ucs_callbackq_elem_t *elem;
     unsigned slow_idx, fast_idx;
     ucs_callbackq_elem_t tmp_elem;
+    unsigned count = 0;
 
     ucs_trace_poll("cbq=%p", cbq);
 
@@ -381,7 +382,7 @@ static void ucs_callbackq_slow_proxy(void *arg)
 
         ucs_callbackq_leave(cbq);
 
-        tmp_elem.cb(tmp_elem.arg); /* Execute callback without lock */
+        count += tmp_elem.cb(tmp_elem.arg); /* Execute callback without lock */
 
         ucs_callbackq_enter(cbq);
     }
@@ -396,6 +397,8 @@ static void ucs_callbackq_slow_proxy(void *arg)
     }
 
     ucs_callbackq_leave(cbq);
+
+    return count;
 }
 
 ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq)
@@ -403,7 +406,7 @@ ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq)
     ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
     unsigned idx;
 
-    for (idx = 0; idx < UCS_CALLBACKQ_FAST_COUNT; ++idx) {
+    for (idx = 0; idx < UCS_CALLBACKQ_FAST_COUNT + 1; ++idx) {
         ucs_callbackq_elem_reset(cbq, &cbq->fast_elems[idx]);
     }
 

@@ -37,20 +37,23 @@ static ucs_config_field_t uct_cm_iface_config_table[] = {
 static uct_ib_iface_ops_t uct_cm_iface_ops;
 
 
-static void uct_cm_iface_progress(void *arg)
+static unsigned uct_cm_iface_progress(void *arg)
 {
     uct_cm_pending_req_priv_t *priv;
     uct_cm_iface_t *iface = arg;
     uct_cm_iface_op_t *op;
+    unsigned count;
 
     uct_cm_enter(iface);
 
     /* Invoke flush completions at the head of the queue - the sends which
      * started before them were already completed.
      */
+    count = 0;
     ucs_queue_for_each_extract(op, &iface->outstanding_q, queue, !op->is_id) {
         uct_invoke_completion(op->comp, UCS_OK);
         ucs_free(op);
+        ++count;
     }
 
     /* Dispatch pending operations */
@@ -68,6 +71,8 @@ static void uct_cm_iface_progress(void *arg)
     }
 
     uct_cm_leave(iface);
+
+    return count;
 }
 
 ucs_status_t uct_cm_iface_flush_do(uct_cm_iface_t *iface, uct_completion_t *comp)
@@ -414,7 +419,7 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = ucs_empty_function,
     .iface_progress_disable   = ucs_empty_function,
-    .iface_progress           = ucs_empty_function,
+    .iface_progress           = ucs_empty_function_return_zero,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_iface_t),
     .iface_query              = uct_cm_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,

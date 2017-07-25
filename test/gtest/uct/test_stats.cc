@@ -188,7 +188,7 @@ UCS_TEST_P(test_uct_stats, am_zcopy)
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
                             sender().iface_attr().cap.am.max_iov);
 
-    status = uct_ep_am_zcopy(sender_ep(), 0, 0, 0, iov, iovcnt, NULL);
+    status = uct_ep_am_zcopy(sender_ep(), 0, 0, 0, iov, iovcnt, 0, NULL);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
 
     check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_ZCOPY, lbuf->length());

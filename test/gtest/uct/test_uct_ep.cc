@@ -57,7 +57,8 @@ UCS_TEST_P(test_uct_ep, disconnect_after_send) {
         connect();
         count = 0;
         for (;;) {
-            status = uct_ep_am_zcopy(m_sender->ep(0), 1, NULL, 0, iov, iovcnt, NULL);
+            status = uct_ep_am_zcopy(m_sender->ep(0), 1, NULL, 0, iov, iovcnt,
+                                     0, NULL);
             if (status == UCS_ERR_NO_RESOURCE) {
                 if (count > 0) {
                     break;

@@ -161,7 +161,7 @@ ucs_status_t do_am_zcopy(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
     comp.memh           = memh;
 
     if (status == UCS_OK) {
-        status = uct_ep_am_zcopy(ep, id, NULL, 0, &iov, 1,
+        status = uct_ep_am_zcopy(ep, id, NULL, 0, &iov, 1, 0,
                                  (uct_completion_t *)&comp);
         if (status == UCS_INPROGRESS) {
             while (!desc_holder) {

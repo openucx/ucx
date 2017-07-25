@@ -227,7 +227,8 @@ uint64_t ucs_generate_uuid(uint64_t seed)
 }
 
 ucs_status_t
-ucs_open_output_stream(const char *config_str, FILE **p_fstream, int *p_need_close,
+ucs_open_output_stream(const char *config_str, ucs_log_level_t err_log_level,
+                       FILE **p_fstream, int *p_need_close,
                        const char **p_next_token)
 {
     FILE *output_stream;
@@ -236,18 +237,18 @@ ucs_open_output_stream(const char *config_str, FILE **p_fstream, int *p_need_clo
     const char *p;
     size_t len;
 
-    *p_need_close = 0;
-    *p_fstream    = NULL;
     *p_next_token = config_str;
 
     len = strcspn(config_str, ":");
     if (!strncmp(config_str, "stdout", len)) {
         *p_fstream    = stdout;
+        *p_need_close = 0;
         *p_next_token = config_str + len;
     } else if (!strncmp(config_str, "stderr", len)) {
         *p_fstream    = stderr;
+        *p_need_close = 0;
         *p_next_token = config_str + len;
-    } else {
+} else {
         if (!strncmp(config_str, "file:", 5)) {
             p = config_str + 5;
         } else {
@@ -261,7 +262,8 @@ ucs_open_output_stream(const char *config_str, FILE **p_fstream, int *p_need_clo
 
         output_stream = fopen(filename, "w");
         if (output_stream == NULL) {
-            ucs_error("failed to open '%s' for writing: %m", filename);
+            ucs_log(err_log_level, "failed to open '%s' for writing: %m",
+                    filename);
             return UCS_ERR_IO_ERROR;
         }
 
@@ -714,6 +716,11 @@ void ucs_sys_free(void *ptr, size_t length)
 
 void ucs_empty_function()
 {
+}
+
+unsigned ucs_empty_function_return_zero()
+{
+    return 0;
 }
 
 ucs_status_t ucs_empty_function_return_success()

@@ -96,7 +96,8 @@ typedef struct uct_rc_verbs_iface {
         unsigned                tx_max_wr;
     } config;
 
-    void (*progress)(void*); /* Progress function (either regular or TM aware) */
+    /* Progress function (either regular or TM aware) */
+    ucs_callback_t              progress;
 } uct_rc_verbs_iface_t;
 
 
@@ -377,7 +378,8 @@ ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
 ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                                       unsigned header_length, const uct_iov_t *iov,
-                                      size_t iovcnt, uct_completion_t *comp);
+                                      size_t iovcnt, unsigned flags,
+                                      uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
                                           uint64_t remote_addr, uct_rkey_t rkey);
@@ -418,7 +420,7 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
 
 ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
-void uct_rc_verbs_iface_progress(void *arg);
+unsigned uct_rc_verbs_iface_progress(void *arg);
 
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      uct_rc_fc_request_t *req);

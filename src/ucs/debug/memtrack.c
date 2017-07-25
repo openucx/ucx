@@ -436,8 +436,9 @@ static void ucs_memtrack_generate_report()
     const char *next_token;
     int need_close;
 
-    status = ucs_open_output_stream(ucs_global_opts.memtrack_dest, &output_stream,
-                                   &need_close, &next_token);
+    status = ucs_open_output_stream(ucs_global_opts.memtrack_dest,
+                                    UCS_LOG_LEVEL_ERROR, &output_stream,
+                                    &need_close, &next_token);
     if (status != UCS_OK) {
         return;
     }

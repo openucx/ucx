@@ -94,12 +94,14 @@ ucp_ep_params_t ucp_test::get_ep_params() {
     return params;
 }
 
-void ucp_test::progress(int worker_index) const {
+unsigned ucp_test::progress(int worker_index) const {
+    unsigned count = 0;
     for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
          iter != entities().end(); ++iter)
     {
-        (*iter)->progress(worker_index);
+        count += (*iter)->progress(worker_index);
     }
+    return count;
 }
 
 void ucp_test::short_progress_loop(int worker_index) const {
@@ -409,9 +411,9 @@ ucp_context_h ucp_test_base::entity::ucph() const {
     return m_ucph;
 }
 
-void ucp_test_base::entity::progress(int worker_index)
+unsigned ucp_test_base::entity::progress(int worker_index)
 {
-    ucp_worker_progress(m_workers.at(worker_index));
+    return ucp_worker_progress(m_workers.at(worker_index));
 }
 
 int ucp_test_base::entity::get_num_workers() const {

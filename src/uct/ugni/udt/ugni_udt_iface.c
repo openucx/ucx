@@ -133,13 +133,14 @@ static void *uct_ugni_udt_device_thread(void *arg)
     return NULL;
 }
 
-void uct_ugni_udt_progress(void *arg)
+unsigned uct_ugni_udt_progress(void *arg)
 {
     uct_ugni_udt_iface_t * iface = (uct_ugni_udt_iface_t *)arg;
 
     uct_ugni_enter_async(&iface->super);
     ucs_arbiter_dispatch(&iface->super.arbiter, 1, uct_ugni_udt_ep_process_pending, NULL);
     uct_ugni_leave_async(&iface->super);
+    return 0;
 }
 
 static void uct_ugni_udt_iface_release_desc(uct_recv_desc_t *self, void *desc)

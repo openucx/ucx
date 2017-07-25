@@ -200,7 +200,7 @@ static ssize_t uct_ud_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 static ucs_status_t
 uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                          unsigned header_length, const uct_iov_t *iov,
-                         size_t iovcnt, uct_completion_t *comp)
+                         size_t iovcnt, unsigned flags, uct_completion_t *comp)
 {
     uct_ud_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
     uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
@@ -284,7 +284,7 @@ ucs_status_t uct_ud_verbs_ep_put_short(uct_ep_h tl_ep,
 }
 
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE unsigned
 uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface)
 {
     struct ibv_wc wc;
@@ -293,23 +293,24 @@ uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface)
     ret = ibv_poll_cq(iface->super.super.send_cq, 1, &wc);
     if (ucs_unlikely(ret < 0)) {
         ucs_fatal("Failed to poll send CQ");
-        return;
+        return 0;
     }
 
     if (ret == 0) {
-        return;
+        return 0;
     }
 
     if (ucs_unlikely(wc.status != IBV_WC_SUCCESS)) {
         ucs_fatal("Send completion (wr_id=0x%0X with error: %s ",
                   (unsigned)wc.wr_id, ibv_wc_status_str(wc.status));
-        return;
+        return 0;
     }
 
     iface->super.tx.available += UCT_UD_TX_MODERATION + 1;
+    return 1;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_ALWAYS_INLINE unsigned
 uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
 {
     unsigned num_wcs = iface->super.super.config.rx_max_poll;
@@ -320,6 +321,7 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
 
     status = uct_ib_poll_cq(iface->super.super.recv_cq, &num_wcs, wc);
     if (status != UCS_OK) {
+        num_wcs = 0;
         goto out;
     }
 
@@ -336,7 +338,7 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
     iface->super.rx.available += num_wcs;
 out:
     uct_ud_verbs_iface_post_recv(iface);
-    return status;
+    return num_wcs;
 }
 
 static void uct_ud_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep)
@@ -348,31 +350,35 @@ static void uct_ud_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep)
 static void uct_ud_verbs_iface_async_progress(uct_ud_iface_t *ud_iface)
 {
     uct_ud_verbs_iface_t *iface = ucs_derived_of(ud_iface, uct_ud_verbs_iface_t);
-    ucs_status_t status;
+    unsigned count;
 
     do {
-        status = uct_ud_verbs_iface_poll_rx(iface, 1);
-    } while (status == UCS_OK);
+        count = uct_ud_verbs_iface_poll_rx(iface, 1);
+    } while (count > 0);
     uct_ud_verbs_iface_poll_tx(iface);
     uct_ud_iface_progress_pending(&iface->super, 1);
 }
 
-static void uct_ud_verbs_iface_progress(uct_iface_h tl_iface)
+static unsigned uct_ud_verbs_iface_progress(uct_iface_h tl_iface)
 {
-     uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_verbs_iface_t);
-     ucs_status_t status;
+    uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_verbs_iface_t);
+    ucs_status_t status;
+    unsigned count;
 
     uct_ud_enter(&iface->super);
     uct_ud_iface_dispatch_zcopy_comps(&iface->super);
     status = uct_ud_iface_dispatch_pending_rx(&iface->super);
     if (status == UCS_OK) {
-        status = uct_ud_verbs_iface_poll_rx(iface, 0);
-        if (status == UCS_ERR_NO_PROGRESS) {
-            uct_ud_verbs_iface_poll_tx(iface);
+        count = uct_ud_verbs_iface_poll_rx(iface, 0);
+        if (count == 0) {
+            count = uct_ud_verbs_iface_poll_tx(iface);
         }
+    } else {
+        count = 0;
     }
     uct_ud_iface_progress_pending(&iface->super, 0);
     uct_ud_leave(&iface->super);
+    return count;
 }
 
 static ucs_status_t

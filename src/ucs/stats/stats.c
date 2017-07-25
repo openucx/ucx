@@ -456,8 +456,9 @@ static void ucs_stats_open_dest()
         ucs_stats_context.flags |= UCS_STATS_FLAG_SOCKET;
     } else if (strcmp(ucs_global_opts.stats_dest, "") != 0) {
         status = ucs_open_output_stream(ucs_global_opts.stats_dest,
-                                       &ucs_stats_context.stream,
-                                       &need_close, &next_token);
+                                        UCS_LOG_LEVEL_ERROR,
+                                        &ucs_stats_context.stream,
+                                        &need_close, &next_token);
         if (status != UCS_OK) {
             return;
         }

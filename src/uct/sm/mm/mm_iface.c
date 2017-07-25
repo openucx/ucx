@@ -200,7 +200,7 @@ static inline ucs_status_t uct_mm_iface_process_recv(uct_mm_iface_t *iface,
     return status;
 }
 
-static inline void uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
+static inline unsigned uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
 {
     uint64_t read_index_loc, read_index;
     uct_mm_fifo_element_t* read_index_elem;
@@ -209,7 +209,7 @@ static inline void uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
     /* check the memory pool to make sure that there is a new descriptor available */
     if (ucs_unlikely(iface->last_recv_desc == NULL)) {
         UCT_TL_IFACE_GET_RX_DESC(&iface->super, &iface->recv_desc_mp,
-                                 iface->last_recv_desc, return);
+                                 iface->last_recv_desc, return 0);
     }
 
     read_index = iface->read_index;
@@ -233,20 +233,27 @@ static inline void uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
 
         /* raise the read_index. */
         iface->read_index++;
-    }
 
-    uct_mm_progress_fifo_tail(iface);
+        uct_mm_progress_fifo_tail(iface);
+
+        return 1;
+    } else {
+        return 0;
+    }
 }
 
-void uct_mm_iface_progress(void *arg)
+unsigned uct_mm_iface_progress(void *arg)
 {
     uct_mm_iface_t *iface = arg;
+    unsigned count;
 
     /* progress receive */
-    uct_mm_iface_poll_fifo(iface);
+    count = uct_mm_iface_poll_fifo(iface);
 
     /* progress the pending sends (if there are any) */
     ucs_arbiter_dispatch(&iface->arbiter, 1, uct_mm_ep_process_pending, NULL);
+
+    return count;
 }
 
 static UCS_CLASS_DECLARE_DELETE_FUNC(uct_mm_iface_t, uct_iface_t);

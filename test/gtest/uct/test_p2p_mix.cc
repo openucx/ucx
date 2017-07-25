@@ -119,7 +119,7 @@ public:
         iov.length = sendbuf.length() - header_length;
         iov.memh   = sendbuf.memh();
         status = uct_ep_am_zcopy(sender().ep(0), AM_ID, sendbuf.ptr(), header_length,
-                                 &iov, 1, comp);
+                                 &iov, 1, 0, comp);
         if (status == UCS_OK || status == UCS_INPROGRESS) {
             ucs_atomic_add32(&am_pending, +1);
         }

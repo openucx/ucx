@@ -46,13 +46,13 @@ protected:
 
     UCS_TEST_BASE_IMPL;
 
-    static void callback_proxy(void *arg)
+    static unsigned callback_proxy(void *arg)
     {
         callback_ctx *ctx = reinterpret_cast<callback_ctx*>(arg);
-        ctx->test->callback(ctx);
+        return ctx->test->callback(ctx);
     }
 
-    void callback(callback_ctx *ctx)
+    unsigned callback(callback_ctx *ctx)
     {
         ucs_atomic_add32(&ctx->count, 1);
 
@@ -67,6 +67,7 @@ protected:
         default:
             break;
         }
+        return 1;
     }
 
     void init_ctx(callback_ctx *ctx)
@@ -105,11 +106,13 @@ protected:
         ucs_callbackq_remove_safe(&m_cbq, ctx->callback_id);
     }
 
-    void dispatch(unsigned count = 1)
+    unsigned dispatch(unsigned count = 1)
     {
+        unsigned total = 0;
         for (unsigned i = 0; i < count; ++i) {
-            ucs_callbackq_dispatch(&m_cbq);
+            total += ucs_callbackq_dispatch(&m_cbq);
         }
+        return total;
     }
 
     ucs_callbackq_t     m_cbq;
@@ -125,22 +128,31 @@ UCS_TEST_P(test_callbackq, single) {
     EXPECT_EQ(1u, ctx.count);
 }
 
+UCS_TEST_P(test_callbackq, count) {
+    callback_ctx ctx;
+
+    init_ctx(&ctx);
+    add(&ctx);
+    unsigned count = dispatch();
+    remove(&ctx);
+    EXPECT_EQ(1u, ctx.count);
+    EXPECT_EQ(1u, count);
+}
+
 UCS_TEST_P(test_callbackq, multi) {
-    static const unsigned COUNT = 3;
+    for (unsigned count = 0; count < 20; ++count) {
+        callback_ctx ctx[count];
+        for (unsigned i = 0; i < count; ++i) {
+            init_ctx(&ctx[i]);
+            add(&ctx[i]);
+        }
 
-    callback_ctx ctx[COUNT];
+        dispatch(10);
 
-    for (unsigned i = 0; i < COUNT; ++i) {
-        init_ctx(&ctx[i]);
-        add(&ctx[i]);
-    }
-
-    dispatch();
-    dispatch();
-
-    for (unsigned i = 0; i < COUNT; ++i) {
-        remove(&ctx[i]);
-        EXPECT_EQ(2u, ctx[i].count);
+        for (unsigned i = 0; i < count; ++i) {
+            remove(&ctx[i]);
+            EXPECT_EQ(10u, ctx[i].count);
+        }
     }
 }
 
