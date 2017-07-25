@@ -62,3 +62,4 @@ valgrind.xml
 tags
 .pydevproject
 /ucx-*.*.*
+/v*.*.*
