@@ -1,15 +1,13 @@
 %global rel @RPM_RELEASE@
 %global version @VERSION@
-%global __check_files %{nil}
-%bcond_with valgrind
 
 %{!?configure_options: %global configure_options %{nil}}
 
 Name: ucx
 Version: %{version}
 Release: %{rel}
-Summary: Unified Communication X
-Group: Development/Libraries
+Summary: UCX is a communication library implementing high-performance messaging
+Group: System Environment/Libraries
 
 License: BSD
 URL: http://www.openucx.org
@@ -17,55 +15,47 @@ Source: %{name}-%{version}.tar.gz
 
 ExclusiveArch: aarch64 ppc64le x86_64
 
-Requires(post): /sbin/ldconfig
-Requires(postun): /sbin/ldconfig
-
 BuildRequires: numactl-devel
 BuildRequires: automake autoconf libtool
 
 %description
-UCX is a communication library implementing high-performance messaging.
-
-%package devel
-Summary: Header files and libraries required to develop with ucx
-Group: Development/Libraries
-Requires: %{name}%{?_isa} = %{version}-%{release}
-
-%description devel
-UCX is a communication library implementing high-performance messaging.
-Requires either RDMA-capable device (InfiniBand, RoCE, etc), Cray Gemini or
-Aries, for inter-node communication.
+UCX stands for Unified Communication X. It requires either RDMA-capable device
+(InfiniBand, RoCE, etc), Cray Gemini or Aries, for inter-node communication.
 Future versions will support also TCP for inter-node, to lift that hardware
 dependency.
 In addition, the library can be used for intra-node communication by leveraging
 the following shared memory mechanisms: posix. sysv, cma, knem, xpmem.
 
+%package devel
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Provides: %{name}-static = %{version}-%{release}
+Summary: Header files and libraries required to develop with ucx
+Group: Development/Libraries
+
+%description devel
+Provides header files, static libraries and examples for developing with UCX.
+
 %prep
 %setup -q
 
 %build
-./contrib/configure-release \
-    --disable-optimizations \
-    --prefix=%{_prefix} \
-    --libdir=%{_libdir} \
-    --bindir=%{_bindir} \
-    --includedir=%{_includedir} \
-    %{?configure_options}
-make %{?_smp_mflags}
+%configure --disable-optimizations \
+           --disable-logging \
+           --disable-debug \
+           --disable-assertions \
+           --disable-params-check \
+           CXXFLAGS="%{optflags} -fno-exceptions" \
+           %{?configure_options}
+make %{?_smp_mflags} V=1
 
 %install
 make DESTDIR=%{buildroot} install
-mkdir -p %{buildroot}%{_sysconfdir}/ld.so.conf.d/
-echo %{_libdir} > %{buildroot}%{_sysconfdir}/ld.so.conf.d/ucx.conf
-
-%clean
-rm -rf %{buildroot}
+rm -f %{buildroot}%{_libdir}/*.la
 
 %files
-%{_libdir}/lib*.so.*
+%{_libdir}/lib*.so*
 %{_bindir}/uc*
 %{_datadir}/ucx/perftest/*
-%{_sysconfdir}/ld.so.conf.d/ucx.conf
 %doc README AUTHORS NEWS
 %{!?_licensedir:%global license %%doc}
 %license LICENSE
@@ -74,6 +64,7 @@ rm -rf %{buildroot}
 %{_includedir}/uc*
 %{_libdir}/lib*.a
 %{_libdir}/pkgconfig/ucx.pc
+%{_datadir}/ucx/examples
 
 %post -p /sbin/ldconfig
 %postun -p /sbin/ldconfig
