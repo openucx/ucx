@@ -324,8 +324,9 @@ enum {
     UCT_MD_FLAG_ADVISE     = UCS_BIT(4),  /**< MD supports memory advice */
     UCT_MD_FLAG_FIXED      = UCS_BIT(5),  /**< MD supports memory allocation with
                                                fixed address */
-    UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6)   /**< MD supports direct access via pointer
-                                               to the remote memory @ref uct_rkey_ptr */
+    UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6)   /**< MD supports direct access to
+                                               remote memory via a pointer that
+                                               is returned by @ref uct_rkey_ptr */
 };
 
 
@@ -1341,18 +1342,18 @@ ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob
 /**
  * @ingroup UCT_MD
  *
- * @brief Get a pointer to a remote memory
+ * @brief Get a local pointer to remote memory.
  *
  * This routine returns a local pointer to the remote memory
  * described by the rkey bundle. The MD must support
- * @ref UCT_MD_FLAG_SHARE_PTR flag.
+ * @ref UCT_MD_FLAG_RKEY_PTR flag.
  *
- * @param [in]  rkey_ob      A remote key bundle as
- *                           returned by the @ref uct_rkey_unpack
- * @param [in]  remote_addr  A remote address within memory area described
- *                           by the rkey_ob
- * @param [out] addr_p       A pointer that can be used for the direct
- *                           access to the remote memory.
+ * @param [in]  rkey_ob      A remote key bundle as returned by
+ *                           the @ref uct_rkey_unpack function.
+ * @param [in]  remote_addr  A remote address within the memory area described
+ *                           by the rkey_ob.
+ * @param [out] addr_p       A pointer that can be used for direct access to
+ *                           the remote memory.
  *
  * @return Error code if the remote memory cannot be accessed directly or
  *         the remote address is not valid.
