@@ -314,16 +314,19 @@ enum uct_am_cb_flags {
  * @brief  Memory domain capability flags.
  */
 enum {
-    UCT_MD_FLAG_ALLOC     = UCS_BIT(0),  /**< MD support memory allocation */
-    UCT_MD_FLAG_REG       = UCS_BIT(1),  /**< MD support memory registration */
-    UCT_MD_FLAG_NEED_MEMH = UCS_BIT(2),  /**< The transport needs a valid local
-                                              memory handle for zero-copy operations */
-    UCT_MD_FLAG_NEED_RKEY = UCS_BIT(3),  /**< The transport needs a valid
-                                              remote memory key for remote memory
-                                              operations */
-    UCT_MD_FLAG_ADVISE    = UCS_BIT(4),  /**< MD support memory advice */
-    UCT_MD_FLAG_FIXED     = UCS_BIT(5)   /**< MD support memory allocation with
-                                              fixed address */
+    UCT_MD_FLAG_ALLOC      = UCS_BIT(0),  /**< MD supports memory allocation */
+    UCT_MD_FLAG_REG        = UCS_BIT(1),  /**< MD supports memory registration */
+    UCT_MD_FLAG_NEED_MEMH  = UCS_BIT(2),  /**< The transport needs a valid local
+                                               memory handle for zero-copy operations */
+    UCT_MD_FLAG_NEED_RKEY  = UCS_BIT(3),  /**< The transport needs a valid
+                                               remote memory key for remote memory
+                                               operations */
+    UCT_MD_FLAG_ADVISE     = UCS_BIT(4),  /**< MD supports memory advice */
+    UCT_MD_FLAG_FIXED      = UCS_BIT(5),  /**< MD supports memory allocation with
+                                               fixed address */
+    UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6)   /**< MD supports direct access to
+                                               remote memory via a pointer that
+                                               is returned by @ref uct_rkey_ptr */
 };
 
 
@@ -1351,6 +1354,29 @@ ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer);
  * @return Error code.
  */
 ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob);
+
+
+/**
+ * @ingroup UCT_MD
+ *
+ * @brief Get a local pointer to remote memory.
+ *
+ * This routine returns a local pointer to the remote memory
+ * described by the rkey bundle. The MD must support
+ * @ref UCT_MD_FLAG_RKEY_PTR flag.
+ *
+ * @param [in]  rkey_ob      A remote key bundle as returned by
+ *                           the @ref uct_rkey_unpack function.
+ * @param [in]  remote_addr  A remote address within the memory area described
+ *                           by the rkey_ob.
+ * @param [out] addr_p       A pointer that can be used for direct access to
+ *                           the remote memory.
+ *
+ * @return Error code if the remote memory cannot be accessed directly or
+ *         the remote address is not valid.
+ */
+ucs_status_t uct_rkey_ptr(uct_rkey_bundle_t *rkey_ob, uint64_t remote_addr,
+                          void **addr_p);
 
 
 /**
