@@ -743,7 +743,7 @@ uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num, unsigned gid_ind
     return UCS_OK;
 }
 
-size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
+size_t uct_ib_device_odp_max_size(struct ibv_exp_device_attr dev_attr)
 {
 #if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
     uint32_t required_ud_odp_caps = IBV_EXP_ODP_SUPPORT_SEND;
@@ -752,16 +752,16 @@ size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
                                     IBV_EXP_ODP_SUPPORT_READ;
 
     if (RUNNING_ON_VALGRIND ||
-        !IBV_EXP_HAVE_ODP(&dev->dev_attr) ||
-        !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev->dev_attr, rc), required_rc_odp_caps) ||
-        !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev->dev_attr, ud), required_ud_odp_caps))
+        !IBV_EXP_HAVE_ODP(&dev_attr) ||
+        !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev_attr, rc), required_rc_odp_caps) ||
+        !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev_attr, ud), required_ud_odp_caps))
     {
         return 0;
     }
 
-    if (IBV_DEVICE_HAS_DC(&dev->dev_attr)
+    if (IBV_DEVICE_HAS_DC(&dev_attr)
 #  if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS_PER_TRANSPORT_CAPS_DC_ODP_CAPS
-        && !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev->dev_attr, dc), required_rc_odp_caps)
+        && !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev_attr, dc), required_rc_odp_caps)
 #  endif
         )
     {
@@ -769,7 +769,7 @@ size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
     }
 
 #  if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_MR_MAX_SIZE
-    return dev->dev_attr.odp_mr_max_size;
+    return dev_attr.odp_mr_max_size;
 #  else
     return 1ul << 28; /* Limit ODP to 256 MB by default */
 #  endif /* HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_MR_MAX_SIZE */
