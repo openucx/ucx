@@ -205,6 +205,28 @@ err:
     return status;
 }
 
+ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p)
+{
+    unsigned num_rkeys;
+    unsigned i;
+    ucs_status_t status;
+
+    if (rkey == &ucp_mem_dummy_rkey) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    num_rkeys = ucs_count_one_bits(rkey->md_map);
+
+    for (i = 0; i < num_rkeys; ++i) {
+        status = uct_rkey_ptr(&rkey->uct[i], raddr, addr_p);
+        if ((status == UCS_OK) ||
+            (status == UCS_ERR_INVALID_ADDR)) {
+            return status;
+        }
+    }
+    return UCS_ERR_UNSUPPORTED;
+}
+
 void ucp_rkey_destroy(ucp_rkey_h rkey)
 {
     unsigned num_rkeys;

@@ -34,6 +34,7 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh, bool is_dumm
     size_t rkey_size;
     void *rkey_buffer;
     ucs_status_t status;
+    void *ptr;
 
     /* Some transports don't support memory registration, so the memory
      * can be inaccessible remotely. But it should always be possible
@@ -53,6 +54,12 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh, bool is_dumm
     }
     ASSERT_UCS_OK(status);
 
+    status = ucp_rkey_ptr(rkey, (uint64_t)memh->address, &ptr);
+    if (status == UCS_OK) {
+        EXPECT_EQ(memcmp(memh->address, ptr, memh->length), 0);
+    } else {
+        EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+    }
     ucp_rkey_destroy(rkey);
     ucp_rkey_buffer_release(rkey_buffer);
 }
