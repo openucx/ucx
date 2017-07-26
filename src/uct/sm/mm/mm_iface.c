@@ -324,6 +324,7 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
 
     /* allocate the receive FIFO */
     size_to_alloc = UCT_MM_GET_FIFO_SIZE(iface);
+    iface->shared_mem = NULL;
 
     status = uct_mm_md_mapper_ops(md)->alloc(md, &size_to_alloc, config->hugetlb_mode,
                                              &iface->shared_mem, &iface->fifo_mm_id,

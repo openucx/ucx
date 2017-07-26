@@ -34,6 +34,8 @@ ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
         return UCS_ERR_NO_MEMORY;
     }
 
+    seg->address = (flags & UCT_MD_MEM_FLAG_FIXED) ?  *address_p : NULL;
+
     status = uct_mm_md_mapper_ops(md)->alloc(md, length_p, UCS_TRY, &seg->address,
                                              &seg->mmid, &seg->path
                                              UCS_MEMTRACK_VAL);
@@ -123,6 +125,8 @@ ucs_status_t uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
         md_attr->reg_cost.growth   = 0.007e-9;
     }
     md_attr->cap.flags        |= UCT_MD_FLAG_NEED_RKEY;
+    /* all mm md(s) support fixed memory alloc */
+    md_attr->cap.flags        |= UCT_MD_FLAG_FIXED;
     md_attr->cap.max_alloc    = ULONG_MAX;
     md_attr->cap.max_reg      = 0;
     md_attr->rkey_packed_size = sizeof(uct_mm_packed_rkey_t) +

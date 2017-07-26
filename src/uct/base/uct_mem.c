@@ -36,11 +36,8 @@ const char *uct_alloc_method_names[] = {
 
 static inline unsigned uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
 {
-    unsigned mm_flags = MAP_PRIVATE | MAP_ANON;
+    unsigned mm_flags = 0;
 
-    if (uct_mmap_flags & UCT_MD_MEM_FLAG_FIXED) {
-        mm_flags |= MAP_FIXED;
-    }
     if (uct_mmap_flags & UCT_MD_MEM_FLAG_NONBLOCK) {
         mm_flags |= MAP_NONBLOCK;
     }
@@ -180,16 +177,18 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             break;
 
         case UCT_ALLOC_METHOD_MMAP:
-            map_flags = uct_mem_get_mmap_flags(flags);
             /* Request memory from operating system using mmap() */
-            alloc_length = ucs_align_up_pow2(min_length, ucs_get_page_size());
-            address = ucs_mmap(addr, alloc_length, PROT_READ | PROT_WRITE,
-                               map_flags, -1, 0 UCS_MEMTRACK_VAL);
-            if (address != MAP_FAILED) {
+            map_flags = uct_mem_get_mmap_flags(flags);
+            alloc_length = min_length;
+            address = (flags & UCT_MD_MEM_FLAG_FIXED) ? addr : NULL;
+            status = ucs_mmap_alloc(&alloc_length, &address, map_flags
+                                    UCS_MEMTRACK_VAL);
+            if (status== UCS_OK) {
                 goto allocated_without_md;
             }
 
-            ucs_debug("failed to mmap %zu bytes: %m", alloc_length);
+            ucs_debug("failed to mmap %zu bytes: %s", min_length,
+                      ucs_status_string(status));
             break;
 
         case UCT_ALLOC_METHOD_HUGE:
@@ -230,8 +229,6 @@ allocated:
 
 ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem)
 {
-    int ret;
-
     switch (mem->method) {
     case UCT_ALLOC_METHOD_MD:
         return uct_md_mem_free(mem->md, mem->memh);
@@ -242,13 +239,7 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem)
         return UCS_OK;
 
     case UCT_ALLOC_METHOD_MMAP:
-        ret = ucs_munmap(mem->address, mem->length);
-        if (ret != 0) {
-            ucs_warn("munmap(address=%p, length=%zu) failed: %m", mem->address,
-                     mem->length);
-            return UCS_ERR_INVALID_PARAM;
-        }
-        return UCS_OK;
+        return ucs_mmap_free(mem->address, mem->length);
 
     case UCT_ALLOC_METHOD_HUGE:
         return ucs_sysv_free(mem->address);
