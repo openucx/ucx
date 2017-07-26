@@ -485,7 +485,7 @@ void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface)
  * is received in the future, the interface would be activated.
  */
 static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
-                                                  unsigned *progress_count)
+                                                     unsigned *progress_count)
 {
     unsigned prev_am_count;
     ucs_status_t status;
@@ -568,6 +568,9 @@ void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force)
         uct_worker_progress_register_safe(wiface->worker->uct,
                                           ucp_worker_iface_check_events_progress,
                                           wiface, 0, &wiface->check_events_id);
+
+        /* Wake up the main loop in case it's waiting for an event */
+        ucp_worker_signal(wiface->worker);
     }
 }
 
@@ -1184,12 +1187,11 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
         }
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
-
     status = UCS_OK;
-    ucs_trace("ucp_worker_arm returning %s", ucs_status_string(status));
 
 out:
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    ucs_trace("ucp_worker_arm returning %s", ucs_status_string(status));
     return status;
 }
 
