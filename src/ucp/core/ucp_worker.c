@@ -285,6 +285,8 @@ static ucs_status_t ucp_worker_wakeup_pipe_write(ucp_worker_h worker)
     char dummy = 0;
     int ret;
 
+    ucs_trace_func("worker=%p fd=%d", worker, worker->wakeup_pipe[1]);
+
     do {
         ret = write(worker->wakeup_pipe[1], &dummy, sizeof(dummy));
         if (ret == sizeof(dummy)) {
@@ -535,6 +537,8 @@ static unsigned ucp_worker_iface_check_events_progress(void *arg)
     unsigned progress_count;
     ucs_status_t status;
 
+    ucs_trace_func("iface=%p, worker=%p", wiface->iface, worker);
+
     /* Check if we either had active messages or were able to arm the interface.
      * In these cases, the work is done and this progress callback can be removed.
      */
@@ -568,16 +572,13 @@ void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force)
         uct_worker_progress_register_safe(wiface->worker->uct,
                                           ucp_worker_iface_check_events_progress,
                                           wiface, 0, &wiface->check_events_id);
-
-        /* Wake up the main loop in case it's waiting for an event */
-        ucp_worker_signal(wiface->worker);
     }
 }
 
 void ucp_worker_iface_event(int fd, void *arg)
 {
     ucp_worker_iface_t *wiface = arg;
-    ucp_worker_h worker        = wiface->worker;
+    ucp_worker_h worker = wiface->worker;
     ucs_status_t status;
 
     ucs_trace_func("fd=%d iface=%p", fd, wiface->iface);
@@ -588,11 +589,11 @@ void ucp_worker_iface_event(int fd, void *arg)
                   wiface->event_fd, ucs_status_string(status));
     }
 
-    /* Signal user wakeup, to report the first message on the interface */
-    ucp_worker_signal_internal(worker);
-
     /* Do more work on the main thread */
     ucp_worker_iface_check_events(wiface, 0);
+
+    /* Signal user wakeup, to report the first message on the interface */
+    ucp_worker_signal_internal(worker);
 }
 
 static ucs_status_t
@@ -1163,13 +1164,15 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     do {
         ret = read(worker->wakeup_pipe[0], &dummy, sizeof(dummy));
         if (ret == sizeof(dummy)) {
-            return UCS_ERR_BUSY;
+            status = UCS_ERR_BUSY;
+            goto out;
         } else if (ret == -1) {
             if (errno == EAGAIN) {
                 break; /* Pipe empty */
             } else if (errno != EINTR) {
                 ucs_error("Read from internal pipe failed: %m");
-                return UCS_ERR_IO_ERROR;
+                status = UCS_ERR_IO_ERROR;
+                goto out;
             }
         } else {
             ucs_assert(ret == 0);
@@ -1182,15 +1185,18 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     ucs_list_for_each(wiface, &worker->arm_ifaces, arm_list) {
         ucs_assert(wiface->activate_count > 0);
         status = uct_iface_event_arm(wiface->iface, worker->uct_events);
+        ucs_trace("arm iface %p returned %s", wiface->iface,
+                  ucs_status_string(status));
         if (status != UCS_OK) {
-            goto out;
+            goto out_unlock;
         }
     }
 
     status = UCS_OK;
 
-out:
+out_unlock:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+out:
     ucs_trace("ucp_worker_arm returning %s", ucs_status_string(status));
     return status;
 }
