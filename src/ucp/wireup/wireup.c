@@ -136,6 +136,8 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
         }
     }
 
+    req->send.wireup.err_mode = ucp_ep_config(ep)->key.err_mode;
+
     ucp_request_start_send(req);
     return UCS_OK;
 }
@@ -203,11 +205,8 @@ static void ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg
         }
     }
 
-    /* Use default parameters to initialize local lanes.
-     * This might not always work - need to pass some parameters in the wireup
-     * message or support endpoint reconfiguration.
-     */
-    params.field_mask = 0;
+    params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+    params.err_mode   = msg->err_mode;
 
     /* Initialize lanes (possible destroy existing lanes) */
     status = ucp_wireup_init_lanes(ep, &params, address_count, address_list,

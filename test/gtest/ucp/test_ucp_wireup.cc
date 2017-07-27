@@ -254,7 +254,6 @@ UCS_TEST_P(test_ucp_wireup, address) {
     const ucp_address_entry_t *ae;
     std::set<uint8_t> packed_dev_priorities, unpacked_dev_priorities;
     int tl;
-    ucp_err_handling_mode_t err_mode;
 
     status = ucp_address_pack(sender().worker(), NULL, -1, order, &size, &buffer);
     ASSERT_UCS_OK(status);
@@ -271,7 +270,7 @@ UCS_TEST_P(test_ucp_wireup, address) {
     ucp_address_entry_t *address_list;
 
     ucp_address_unpack(buffer, &uuid, name, sizeof(name), &address_count,
-                       &address_list, &err_mode);
+                       &address_list);
     EXPECT_EQ(sender().worker()->uuid, uuid);
     EXPECT_EQ(std::string(ucp_worker_get_name(sender().worker())), std::string(name));
     EXPECT_LE(address_count, static_cast<unsigned>(sender().ucph()->num_tls));
@@ -293,7 +292,6 @@ UCS_TEST_P(test_ucp_wireup, empty_address) {
     size_t size;
     void *buffer;
     unsigned order[UCP_MAX_RESOURCES];
-    ucp_err_handling_mode_t err_mode;
 
     status = ucp_address_pack(sender().worker(), NULL, 0, order, &size, &buffer);
     ASSERT_UCS_OK(status);
@@ -306,7 +304,7 @@ UCS_TEST_P(test_ucp_wireup, empty_address) {
     ucp_address_entry_t *address_list;
 
     ucp_address_unpack(buffer, &uuid, name, sizeof(name), &address_count,
-                       &address_list, &err_mode);
+                       &address_list);
     EXPECT_EQ(sender().worker()->uuid, uuid);
     EXPECT_EQ(std::string(ucp_worker_get_name(sender().worker())), std::string(name));
     EXPECT_LE(address_count, sender().ucph()->num_tls);
