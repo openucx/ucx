@@ -56,10 +56,11 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh, bool is_dumm
 
     status = ucp_rkey_ptr(rkey, (uint64_t)memh->address, &ptr);
     if (status == UCS_OK) {
-        EXPECT_EQ(memcmp(memh->address, ptr, memh->length), 0);
+        EXPECT_EQ(0, memcmp(memh->address, ptr, memh->length));
     } else {
-        EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+        EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
     }
+
     ucp_rkey_destroy(rkey);
     ucp_rkey_buffer_release(rkey_buffer);
 }

@@ -212,7 +212,7 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p)
     ucs_status_t status;
 
     if (rkey == &ucp_mem_dummy_rkey) {
-        return UCS_ERR_UNSUPPORTED;
+        return UCS_ERR_UNREACHABLE;
     }
 
     num_rkeys = ucs_count_one_bits(rkey->md_map);
@@ -224,7 +224,8 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p)
             return status;
         }
     }
-    return UCS_ERR_UNSUPPORTED;
+
+    return UCS_ERR_UNREACHABLE;
 }
 
 void ucp_rkey_destroy(ucp_rkey_h rkey)
