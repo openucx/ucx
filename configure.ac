@@ -8,7 +8,6 @@
 #
 AC_PREREQ([2.63])
 
-define([scm_r], esyscmd([sh -c "git rev-parse --short=7 HEAD"]))
 define([ucx_ver_major], 1)
 define([ucx_ver_minor], 2)
 define([ucx_ver_patch], 0)
@@ -27,6 +26,11 @@ valgrind_libpath=""
 AC_USE_SYSTEM_EXTENSIONS
 AC_GNU_SOURCE
 AC_CONFIG_HEADERS([config.h])
+
+AC_CHECK_PROG(GITBIN,git,yes)
+AS_IF([test x"${GITBIN}" == x"yes"],
+      [AC_SUBST(SCM_VERSION, esyscmd([sh -c 'git rev-parse --short=7 HEAD']))],
+      [AC_SUBST(SCM_VERSION, "0000000")])
 
 AH_TOP([
 #ifndef UCX_CONFIG_H
@@ -51,7 +55,6 @@ AC_SUBST(top_top_srcdir)
 MAJOR_VERSION=ucx_ver_major
 MINOR_VERSION=ucx_ver_minor
 PATCH_VERSION=ucx_ver_patch
-SCM_VERSION=scm_r
 VERSION=$MAJOR_VERSION.$MINOR_VERSION.$PATCH_VERSION.$SCM_VERSION
 SOVERSION=libucx_so_version
 AC_SUBST(MAJOR_VERSION)
