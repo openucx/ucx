@@ -123,6 +123,69 @@ void test_md::check_caps(uint64_t flags, const std::string& name)
     }
 }
 
+UCS_TEST_P(test_md, rkey_ptr) {
+
+    size_t size;
+    uct_md_attr_t md_attr;
+    void *rkey_buffer;
+    ucs_status_t status;
+    unsigned *rva, *lva;
+    uct_mem_h memh;
+    uct_rkey_bundle_t rkey_bundle;
+    unsigned i;
+
+    check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_RKEY_PTR, "allocation+direct access");
+    // alloc (should work with both sysv and xpmem
+    size = 1024 * 1024 * sizeof(unsigned);
+    status = uct_md_mem_alloc(pd(), &size, (void **)&rva, 0, "test", &memh);
+    ASSERT_UCS_OK(status);
+    EXPECT_LE(1024 * 1024 * sizeof(unsigned), size);
+
+    // pack
+    status = uct_md_query(pd(), &md_attr);
+    ASSERT_UCS_OK(status);
+    rkey_buffer = malloc(md_attr.rkey_packed_size);
+    if (rkey_buffer == NULL) {
+        // make coverity happy
+        uct_md_mem_free(pd(), memh);
+        GTEST_FAIL();
+    }
+
+    status = uct_md_mkey_pack(pd(), memh, rkey_buffer);
+
+    // unpack
+    status = uct_rkey_unpack(rkey_buffer, &rkey_bundle);
+    ASSERT_UCS_OK(status);
+
+    // get direct ptr
+    status = uct_rkey_ptr(&rkey_bundle, (uintptr_t)rva, (void **)&lva);
+    ASSERT_UCS_OK(status);
+    // check direct access
+    // read
+    for (i = 0; i < size/sizeof(unsigned); i++) {
+        rva[i] = i;
+    }
+    EXPECT_EQ(memcmp(lva, rva, size), 0);
+
+    // write
+    for (i = 0; i < size/sizeof(unsigned); i++) {
+        lva[i] = size - i;
+    }
+    EXPECT_EQ(memcmp(lva, rva, size), 0);
+
+    // check bounds
+    //
+    status = uct_rkey_ptr(&rkey_bundle, (uintptr_t)(rva-1), (void **)&lva);
+    EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
+
+    status = uct_rkey_ptr(&rkey_bundle, (uintptr_t)rva+size, (void **)&lva);
+    EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
+
+    free(rkey_buffer);
+    uct_md_mem_free(pd(), memh);
+    uct_rkey_release(&rkey_bundle);
+}
+
 UCS_TEST_P(test_md, alloc) {
     size_t size, orig_size;
     ucs_status_t status;
