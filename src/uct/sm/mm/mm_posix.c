@@ -250,8 +250,8 @@ out:
 
 static ucs_status_t
 uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
-                void **address_p, uct_mm_id_t *mmid_p, const char **path_p
-                UCS_MEMTRACK_ARG)
+                unsigned md_map_flags, void **address_p, uct_mm_id_t *mmid_p,
+                const char **path_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t status;
     int shm_fd = -1;
@@ -330,14 +330,14 @@ uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 
     /* mmap the shared memory segment that was created by shm_open */
-    if (*address_p) {
+    addr_wanted = *address_p;
+
+    if (md_map_flags & UCT_MD_MEM_FLAG_FIXED) {
         mmap_flags = MAP_FIXED|MAP_SHARED;
-        addr_wanted = *address_p;
     } else {
         mmap_flags   = MAP_SHARED;
-        addr_wanted = NULL;
-
     }
+
 #ifdef MAP_HUGETLB
     if (hugetlb != UCS_NO) {
        (*address_p) = ucs_mmap(addr_wanted, *length_p, UCT_MM_POSIX_MMAP_PROT,

@@ -42,6 +42,10 @@ static inline unsigned uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
         mm_flags |= MAP_NONBLOCK;
     }
 
+    if (uct_mmap_flags & UCT_MD_MEM_FLAG_FIXED) {
+        mm_flags |= MAP_FIXED;
+    }
+
     return mm_flags;
 }
 
@@ -178,9 +182,10 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 
         case UCT_ALLOC_METHOD_MMAP:
             /* Request memory from operating system using mmap() */
-            map_flags = uct_mem_get_mmap_flags(flags);
+            map_flags    = uct_mem_get_mmap_flags(flags);
             alloc_length = min_length;
-            address = (flags & UCT_MD_MEM_FLAG_FIXED) ? addr : NULL;
+            address      = addr;
+
             status = ucs_mmap_alloc(&alloc_length, &address, map_flags
                                     UCS_MEMTRACK_VAL);
             if (status== UCS_OK) {

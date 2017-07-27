@@ -147,7 +147,7 @@ UCS_TEST_P(test_mem, md_fixed) {
                     EXPECT_EQ(p_addr, (uintptr_t)uct_mem.address);
                     EXPECT_GE(uct_mem.length, (size_t)1);
                     /* touch the page*/
-                    *((char *)uct_mem.address) = 'c';
+                    memset(uct_mem.address, 'c', uct_mem.length);
                     EXPECT_EQ(*(char *)p_addr, 'c');
                     status = uct_mem_free(&uct_mem);
                 } else {
@@ -185,14 +185,14 @@ UCS_TEST_P(test_mem, mmap_fixed) {
         meth = (i % 2) ? UCT_ALLOC_METHOD_MMAP : UCT_ALLOC_METHOD_HUGE;
 
         status = uct_mem_alloc((void *)p_addr, 1, UCT_MD_MEM_FLAG_FIXED,
-                &meth, 1, NULL, 0, "test", &uct_mem);
+                               &meth, 1, NULL, 0, "test", &uct_mem);
         if (status == UCS_OK) {
             ++n_success;
             EXPECT_EQ(meth, uct_mem.method);
             EXPECT_EQ(p_addr, (uintptr_t)uct_mem.address);
             EXPECT_GE(uct_mem.length, (size_t)1);
             /* touch the page*/
-            *((char *)uct_mem.address) = 'c';
+            memset(uct_mem.address, 'c', uct_mem.length);
             EXPECT_EQ(*(char *)p_addr, 'c');
             status = uct_mem_free(&uct_mem);
         } else {

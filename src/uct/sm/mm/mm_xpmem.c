@@ -146,7 +146,8 @@ static ucs_status_t uct_xpmem_detach(uct_mm_remote_seg_t *mm_desc)
 }
 
 static ucs_status_t uct_xpmem_alloc(uct_md_h md, size_t *length_p,
-                                    ucs_ternary_value_t hugetlb, void **address_p,
+                                    ucs_ternary_value_t hugetlb,
+                                    unsigned md_map_flags, void **address_p,
                                     uct_mm_id_t *mmid_p, const char **path_p
                                     UCS_MEMTRACK_ARG)
 {
@@ -159,7 +160,9 @@ static ucs_status_t uct_xpmem_alloc(uct_md_h md, size_t *length_p,
     }
 
     /* TBD: any ideas for better allocation */
-    status = ucs_mmap_alloc(length_p, address_p, 0 UCS_MEMTRACK_VAL);
+    status = ucs_mmap_alloc(length_p, address_p,
+                            md_map_flags & UCT_MD_MEM_FLAG_FIXED ? MAP_FIXED : 0
+                            UCS_MEMTRACK_VAL);
     if (status != UCS_OK) {
         ucs_error("Failed to allocate %zu bytes of memory", *length_p);
         goto out;

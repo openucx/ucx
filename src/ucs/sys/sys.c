@@ -543,9 +543,7 @@ ucs_status_t ucs_mmap_alloc(size_t *size, void **address_p,
     void *addr;
 
     alloc_length = ucs_align_up_pow2(*size, ucs_get_page_size());
-    if(*address_p != NULL) {
-        flags |= MAP_FIXED;
-    }
+
     addr = ucs_mmap(*address_p, alloc_length, PROT_READ | PROT_WRITE,
                     MAP_PRIVATE | MAP_ANON | flags, -1, 0 UCS_MEMTRACK_VAL);
     if (addr == MAP_FAILED) {

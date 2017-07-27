@@ -34,22 +34,21 @@ ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
         return UCS_ERR_NO_MEMORY;
     }
 
-    seg->address = (flags & UCT_MD_MEM_FLAG_FIXED) ?  *address_p : NULL;
 
-    status = uct_mm_md_mapper_ops(md)->alloc(md, length_p, UCS_TRY, &seg->address,
-                                             &seg->mmid, &seg->path
+    status = uct_mm_md_mapper_ops(md)->alloc(md, length_p, UCS_TRY, flags,
+                                             address_p, &seg->mmid, &seg->path
                                              UCS_MEMTRACK_VAL);
     if (status != UCS_OK) {
         ucs_free(seg);
         return status;
     }
 
-    seg->length = *length_p;
-    *address_p  = seg->address;
-    *memh_p     = seg;
+    seg->length  = *length_p;
+    seg->address = *address_p;
+    *memh_p      = seg;
 
     ucs_debug("mm allocated address %p length %zu mmid %"PRIu64,
-              *address_p, seg->length, seg->mmid);
+              seg->address, seg->length, seg->mmid);
     return UCS_OK;
 }
 
