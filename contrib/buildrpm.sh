@@ -51,7 +51,7 @@ fi
 # ucx-1.3.0.6a61458.tar.gz --> v1.3.0.tar.gz for rpmbuild
 tgz=(ucx*.tar.gz)
 tarball=${tgz[0]}
-link_tarball=$(perl -e '$fname=$ARGV[0]; ($new_name=$fname)=~s/^.+-(\d+\.\d+\.\d+)\.\w{7}/v$1/; print $new_name' $tarball)
+link_tarball=$(perl -e '$fname=$ARGV[0]; ($new_name=$fname)=~s/^.+-(\d+\.\d+\.\d+)/v$1/; print $new_name' $tarball)
 rm -f $link_tarball
 ln -s $tarball $link_tarball
 
