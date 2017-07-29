@@ -160,6 +160,12 @@ std::string to_string(const T& value) {
 }
 
 template <typename T>
+T from_string(const std::string& str) {
+    T value;
+    return (std::stringstream(str) >> value).fail() ? 0 : value;
+}
+
+template <typename T>
 class ptr_vector_base {
 public:
     typedef std::vector<T*> vec_type;
@@ -394,6 +400,11 @@ public:
 } // detail
 
 } // ucs
+
+
+#ifndef UINT16_MAX
+#define UINT16_MAX (65535)
+#endif /* UINT16_MAX */
 
 
 /* Test output */

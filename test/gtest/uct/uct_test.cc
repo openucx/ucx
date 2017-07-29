@@ -104,13 +104,7 @@ void uct_test::cleanup() {
 
 void uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
     FOR_EACH_ENTITY(iter) {
-        uint64_t iface_flags = (*iter)->iface_attr().cap.flags;
-        if (!ucs_test_all_flags(iface_flags, required_flags)) {
-            UCS_TEST_SKIP_R("unsupported");
-        }
-        if (iface_flags & invalid_flags) {
-            UCS_TEST_SKIP_R("unsupported");
-        }
+        (*iter)->check_caps(required_flags, invalid_flags);
     }
 }
 
@@ -133,8 +127,7 @@ void uct_test::modify_config(const std::string& name, const std::string& value) 
     }
 }
 
-
-void uct_test::get_config(const std::string& name, std::string& value)
+bool uct_test::get_config(const std::string& name, std::string& value) const
 {
     ucs_status_t status;
     const size_t max = 1024;
@@ -146,14 +139,9 @@ void uct_test::get_config(const std::string& name, std::string& value)
     if (status == UCS_ERR_NO_ELEM) {
         status = uct_config_get(m_md_config, name.c_str(),
                                 const_cast<char *>(value.c_str()), max);
-        if (status != UCS_OK) {
-            UCS_TEST_ABORT("Couldn't get parameter from pd config: "
-                           << name.c_str() << ": " << ucs_status_string(status));
-        }
-    } else if (status != UCS_OK) {
-        UCS_TEST_ABORT("Couldn't get parameter from iface config : "
-                       << name.c_str() << ": " << ucs_status_string(status));
     }
+
+    return (status == UCS_OK);
 }
 
 void uct_test::stats_activate()
@@ -201,7 +189,7 @@ unsigned uct_test::progress() const {
     return count;
 }
 
-void uct_test::flush() const {
+void uct_test::flush(ucs_time_t deadline) const {
 
     bool flushed;
     do {
@@ -215,7 +203,9 @@ void uct_test::flush() const {
                 ASSERT_UCS_OK(status);
             }
         }
-    } while (!flushed);
+    } while (!flushed && (ucs_get_time() < deadline));
+
+    EXPECT_TRUE(flushed) << "Timed out";
 }
 
 void uct_test::short_progress_loop(double delay_ms) const {
@@ -316,6 +306,18 @@ unsigned uct_test::entity::progress() const {
     unsigned count = uct_worker_progress(m_worker);
     m_async.check_miss();
     return count;
+}
+
+void uct_test::entity::check_caps(uint64_t required_flags,
+                                  uint64_t invalid_flags)
+{
+    uint64_t iface_flags = iface_attr().cap.flags;
+    if (!ucs_test_all_flags(iface_flags, required_flags)) {
+        UCS_TEST_SKIP_R("unsupported");
+    }
+    if (iface_flags & invalid_flags) {
+        UCS_TEST_SKIP_R("unsupported");
+    }
 }
 
 uct_md_h uct_test::entity::md() const {

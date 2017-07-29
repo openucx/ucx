@@ -167,6 +167,7 @@ void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
     memb = &(*ptr)[qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
     ucs_assert(*memb == NULL);
     *memb = ep;
+    ucs_list_add_head(&iface->ep_list, &ep->list);
 }
 
 void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, unsigned qp_num)
@@ -176,6 +177,7 @@ void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, unsigned qp_num)
     memb = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER]
                       [qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
     ucs_assert(*memb != NULL);
+    ucs_list_del(&(*memb)->list);
     *memb = NULL;
 }
 
@@ -387,7 +389,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                               rx_priv_len, rx_hdr_len, tx_cq_len, rx_cq_len,
                               SIZE_MAX, &config->super);
 
-    self->tx.cq_available           = tx_cq_len - 1; /* Reserve one for error */
+    self->tx.cq_available           = tx_cq_len - 1;
     self->rx.srq.available          = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
     self->config.tx_min_sge         = config->super.tx.min_sge;
