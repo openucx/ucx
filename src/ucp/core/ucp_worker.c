@@ -406,7 +406,7 @@ static void ucp_worker_iface_activate(ucp_worker_iface_t *wiface)
     ucs_trace("activate iface %p acount=%u", wiface->iface,
               wiface->activate_count);
 
-   if (wiface->activate_count++ > 0) {
+    if (wiface->activate_count++ > 0) {
         return; /* was already activated */
     }
 
@@ -493,6 +493,12 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
     ucs_status_t status;
 
     ucs_trace_func("iface=%p", wiface->iface);
+
+    if (wiface->activate_count > 0) {
+        ucs_trace("iface %p already activated", wiface->iface);
+        *progress_count = 0;
+        return UCS_OK;
+    }
 
     prev_am_count = wiface->proxy_am_count;
 
