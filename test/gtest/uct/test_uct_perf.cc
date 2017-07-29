@@ -128,7 +128,6 @@ UCS_TEST_P(test_uct_perf, envelope) {
     bool check_perf;
 
     if (GetParam()->tl_name == "cm" || GetParam()->tl_name == "ugni_udt") {
-        /* TODO calibrate expected performance and iterations based on transport */
         UCS_TEST_SKIP;
     }
 
@@ -143,6 +142,10 @@ UCS_TEST_P(test_uct_perf, envelope) {
                 break;
             }
         }
+    }
+
+    if (GetParam()->tl_name == "tcp") {
+        check_perf = false; /* TODO calibrate expected performance based on transport */
     }
 
     /* Run all tests */
