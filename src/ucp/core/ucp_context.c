@@ -126,6 +126,11 @@ static ucs_config_field_t ucp_config_table[] = {
    "y      - Use mutex for multithreading support in UCP.\n",
    ucs_offsetof(ucp_config_t, ctx.use_mt_mutex), UCS_CONFIG_TYPE_BOOL},
 
+  {"ADAPTIVE_PROGRESS", "y",
+   "Enable apaptive progress mechanism, which turns on polling only on active\n"
+   "transport interfaces.",
+   ucs_offsetof(ucp_config_t, ctx.adaptive_progress), UCS_CONFIG_TYPE_BOOL},
+
   {"SEG_SIZE", "8192",
    "Size of a segment in the worker preregistered memory pool.",
    ucs_offsetof(ucp_config_t, ctx.seg_size), UCS_CONFIG_TYPE_MEMUNITS},

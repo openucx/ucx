@@ -289,7 +289,7 @@ UCS_TEST_P(test_ucp_tag_probe, limited_probe_size) {
 
     /* probe should not have too many messages here because we poll once */
     recvd = probe_all(recvbuf);
-    EXPECT_LE(recvd, 32);
+    EXPECT_LE(recvd, 128);
 
     /* receive all the rest */
     while (recvd < COUNT) {

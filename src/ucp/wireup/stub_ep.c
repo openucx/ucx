@@ -313,6 +313,8 @@ ucp_stub_ep_connect_aux(ucp_stub_ep_t *stub_ep, unsigned address_count,
         return status;
     }
 
+    ucp_worker_iface_progress_ep(&worker->ifaces[stub_ep->aux_rsc_index]);
+
     ucs_debug("ep %p: stub_ep %p created aux_ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
               ep, stub_ep, stub_ep->aux_ep, ucp_ep_peer_name(ep),
               UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[aux_addr_index].tl_rsc));
@@ -336,13 +338,17 @@ UCS_CLASS_INIT_FUNC(ucp_stub_ep_t, ucp_ep_h ep)
 
 static UCS_CLASS_CLEANUP_FUNC(ucp_stub_ep_t)
 {
+    ucp_ep_h ep         = self->ep;
+    ucp_worker_h worker = ep->worker;
+
     ucs_assert(ucs_queue_is_empty(&self->pending_q));
     ucs_assert(self->pending_count == 0);
 
-    ucs_debug("ep %p: destroy stub ep %p", self->ep, self);
+    ucs_debug("ep %p: destroy stub ep %p", ep, self);
 
-    uct_worker_progress_unregister_safe(self->ep->worker->uct, &self->progress_id);
+    uct_worker_progress_unregister_safe(worker->uct, &self->progress_id);
     if (self->aux_ep != NULL) {
+        ucp_worker_iface_unprogress_ep(&worker->ifaces[self->aux_rsc_index]);
         uct_ep_destroy(self->aux_ep);
     }
     if (self->next_ep != NULL) {
@@ -424,6 +430,7 @@ void ucp_stub_ep_remote_connected(uct_ep_h uct_ep)
     uct_worker_progress_register_safe(stub_ep->ep->worker->uct,
                                       ucp_stub_ep_progress, stub_ep, 0,
                                       &stub_ep->progress_id);
+    ucp_worker_signal_internal(stub_ep->ep->worker);
 }
 
 int ucp_stub_ep_test(uct_ep_h uct_ep)
