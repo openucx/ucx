@@ -957,8 +957,7 @@ static double ucp_wireup_aux_score_func(ucp_context_h context,
 {
     /* best end-to-end latency and larger bcopy size */
     return (1e-3 / (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
-            iface_attr->overhead + remote_iface_attr->overhead)) +
-           (1e3 * ucs_max(iface_attr->cap.am.max_bcopy, iface_attr->cap.am.max_short));
+            iface_attr->overhead + remote_iface_attr->overhead));
 }
 
 ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
