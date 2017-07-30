@@ -204,6 +204,7 @@ typedef struct uct_tl_resource_desc {
         /* Connection establishment */
 #define UCT_IFACE_FLAG_CONNECT_TO_IFACE       UCS_BIT(40) /**< Supports connecting to interface */
 #define UCT_IFACE_FLAG_CONNECT_TO_EP          UCS_BIT(41) /**< Supports connecting to specific endpoint */
+#define UCT_IFACE_FLAG_CONNECT_TO_SOCK_ADDR   UCS_BIT(42) /**< Supports connecting to sockaddr */
 
         /* Special transport flags */
 #define UCT_IFACE_FLAG_AM_DUP         UCS_BIT(43) /**< Active messages may be received with duplicates
@@ -309,6 +310,13 @@ enum uct_am_cb_flags {
 };
 
 
+enum uct_sock_addr_flags {
+    UCT_SOCK_ADDR_FLAG_CONNECT  = UCS_BIT(0),   /**< Connect to the sockadrr
+                                                     on the remote side */
+    UCT_SOCK_ADDR_FLAG_BIND     = UCS_BIT(1)    /**< The sockaddr to bind to */
+};
+
+
 /**
  * @ingroup UCT_MD
  * @brief  Memory domain capability flags.
@@ -324,12 +332,9 @@ enum {
     UCT_MD_FLAG_ADVISE     = UCS_BIT(4),  /**< MD supports memory advice */
     UCT_MD_FLAG_FIXED      = UCS_BIT(5),  /**< MD supports memory allocation with
                                                fixed address */
-    UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6),  /**< MD supports direct access to
+    UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6)   /**< MD supports direct access to
                                                remote memory via a pointer that
                                                is returned by @ref uct_rkey_ptr */
-    UCT_MD_FLAG_SOCK_ADDR  = UCS_BIT(7)   /**< MD support for client-server
-                                               connection establishment via
-                                               sockaddr */
 };
 
 
@@ -468,7 +473,9 @@ struct uct_iface_attr {
     size_t                   device_addr_len;/**< Size of device address */
     size_t                   iface_addr_len; /**< Size of interface address */
     size_t                   ep_addr_len;    /**< Size of endpoint address */
-
+    size_t                   max_conn_priv;  /**< Max size of the iface's private data.
+                                                  used for connection
+                                                  establishment with sockaddr */
     /*
      * The following fields define expected performance of the communication
      * interface, this would usually be a combination of device and system
@@ -509,6 +516,18 @@ struct uct_iface_params {
     uct_tag_unexp_eager_cb_t eager_cb;    /**< Callback for tag matching unexpected eager messages */
     void                     *rndv_arg;
     uct_tag_unexp_rndv_cb_t  rndv_cb;     /**< Callback for tag matching unexpected rndv messages */
+
+    /* These callbacks and address are only relevant for client-server
+     * connection establishment with sockaddr and are needed on the server side */
+    ucs_sock_addr_t             addr;
+    void                        *request_arg;
+    uct_conn_request_callback_t request_cb;     /**< Callback for an incoming
+                                                     connection request on the server
+                                                     @ref UCT_CONN_EVENT_TYPE_REQUEST */
+    void                        *ready_arg;
+    uct_conn_ready_callback_t   ready_cb;       /**< Callback for an incoming @ref
+                                                     UCT_CONN_EVENT_TYPE_READY
+                                                     message on the server */
 };
 
 
@@ -524,9 +543,6 @@ struct uct_md_attr {
     struct {
         size_t               max_alloc; /**< Maximal allocation size */
         size_t               max_reg;   /**< Maximal registration size */
-        size_t               max_conn_priv; /**< Max size of the md's private data.
-                                                 used for connection
-                                                 establishment with sockaddr */
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
     } cap;
 
@@ -569,23 +585,6 @@ typedef struct uct_rkey_bundle {
     void                     *handle; /**< Handle, used internally for releasing the key */
     void                     *type;   /**< Remote key type */
 } uct_rkey_bundle_t;
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Sockaddr with the callback and user's argument.
- *
- * This structure holds a sockaddr to listen on or to connect to.
- * It also includes a callback, which is invoked when accepting connection messages,
- * along with the user's argument to it.
- */
-typedef struct uct_sockaddr_conn_params {
-    ucs_sock_addr_t             addr;       /**< sockaddr and its length */
-    uct_conn_event_callback_t   event_cb;   /**< Callback for incoming connection
-                                                 establishment messages*/
-    void                        *arg;       /**< User defined argument for
-                                                 the callback */
-} uct_sockaddr_conn_params_t;
 
 
 /**
@@ -1134,31 +1133,6 @@ ucs_status_t uct_iface_set_am_tracer(uct_iface_h iface, uct_am_tracer_t tracer,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Create an interface for listening on a socket address and creating
- *        a connection to remote peer.
- *
- * This routine will create an interface which will listen to the given socket address.
- * The user defined callback will be invoked upon connection @ref
- * uct_conn_event_type_t events arriving while listening.
- *
- * @param [in]  worker           Handle to worker which will be associated with
- *                               the new interface.
- * @param [in]  md               Memory domain to create the interface on.
- *                               This memory domain must support the @ref
- *                               UCT_MD_FLAG_SOCK_ADDR flag.
- * @param [in]  sockaddr_params  The sockaddr to listen on and a callback for
- *                               incoming events.
- * @param [in]  config           Interface configuration options.
- * @param [out] iface_p          Handle to the created interface.
- */
-ucs_status_t uct_sockaddr_listen(uct_worker_h worker, uct_md_h md,
-                                 uct_sockaddr_conn_params_t sockaddr_params,
-                                 const uct_iface_config_t *config,
-                                 uct_iface_h *iface_p);
-
-
-/**
- * @ingroup UCT_RESOURCE
  * @brief Create new endpoint.
  *
  * @param [in]  iface   Interface to create the endpoint on.
@@ -1222,31 +1196,29 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  * @ingroup UCT_RESOURCE
  * @brief Initiate a client-server connection to a remote peer.
  *
- * This routine will create an endpoint for a connection to the remote peer.
+ * requires @ref UCT_IFACE_FLAG_CONNECT_TO_SOCK_ADDR capability.
+ *
+ * This routine will create an endpoint for a connection to the remote peer,
+ * specified by its socket address.
  * The connection needs to be established by connecting to the
  * remote inerface's sockaddr. The user may provide private data to be sent
  * on a connection request to the remote peer.
  *
- * @param [in]  worker           Worker on which the communication resources are
- *                               allocated.
- * @param [in]  md               Memory domain to create the endpoint on.
- *                               This memory domain must support the @ref
- *                               UCT_MD_FLAG_SOCK_ADDR flag.
- * @param [in]  sockaddr_params  The sockaddr to connect to and a callback for
- *                               incoming events.
- * @param [in]  config           Interface configuration options.
- *                               The interface that the new endpoint
- *                               will point to.
+ * @param [in]  iface            Interface to create the endpoint on.
+ * @param [in]  addr             The sockaddr to connect to on the remote peer.
+ * @param [in]  cb               Callback for an incoming reply message from
+ *                               the server.
+ * @param [in]  arg              User defined argument to pass to the callback.
  * @param [in]  priv_data        User's private data for connecting to the
  *                               remote peer.
  * @param [in]  length           Length of the private data.
  * @param [out] ep_p             Handle to the created endpoint.
  */
-ucs_status_t uct_sockaddr_connect(uct_worker_h worker, uct_md_h md,
-                                  uct_sockaddr_conn_params_t sockaddr_params,
-                                  const uct_iface_config_t *config,
-                                  const void *priv_data, size_t *length,
-                                  uct_ep_h *ep_p);
+ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
+                                    const ucs_sock_addr_t addr,
+                                    uct_conn_reply_callback_t cb, void *arg,
+                                    const void *priv_data, size_t length,
+                                    uct_ep_h *ep_p);
 
 
 /**
@@ -1406,6 +1378,28 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem);
 ucs_status_t uct_md_config_read(const char *name, const char *env_prefix,
                                 const char *filename,
                                 uct_md_config_t **config_p);
+
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Check if remote sock address is reachable from the memory domain.
+ *
+ * This function checks if a remote sock address can be reached from a local
+ * memory domain or if the local sock address can be used for binding by the
+ * local memory domain.
+ *
+ * @param [in]  md         Memory domain to check reachability from.
+ * @param [in]  addr       Socket address to check reachability to.
+ * @param [in]  flag       Flag from @ref uct_sock_addr_flags to indicate if
+ *                         reachability is tested on the server side -
+ *                         for binding to the given sockaddr, or on the
+ *                         client side - for connecting to the given remote
+ *                         peer's sockaddr.
+ *
+ * @return Nonzero if reachable, 0 if not.
+ */
+int uct_md_is_reachable(uct_md_h md, const ucs_sock_addr_t addr, uint64_t flag);
 
 
 /**
