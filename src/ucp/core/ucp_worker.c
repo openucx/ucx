@@ -10,7 +10,7 @@
 #include "ucp_request.inl"
 
 #include <ucp/wireup/address.h>
-#include <ucp/wireup/stub_ep.h>
+#include <ucp/wireup/wireup_ep.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucs/datastruct/mpool.inl>
@@ -329,7 +329,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep_iter, {
         for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep_iter); ++lane) {
             if ((uct_ep == ucp_ep_iter->uct_eps[lane]) ||
-                ucp_stub_ep_test_aux(ucp_ep_iter->uct_eps[lane], uct_ep)) {
+                ucp_wireup_ep_test_aux(ucp_ep_iter->uct_eps[lane], uct_ep)) {
                 ucp_ep = ucp_ep_iter;
                 failed_lane = lane;
                 goto found_ucp_ep;
@@ -362,11 +362,11 @@ found_ucp_ep:
         ucp_ep->uct_eps[failed_lane] = NULL;
     }
 
-    /* NOTE: if failed ep is stub auxiliary then we need to replace the lane
-     *       with failed ep and destroy stub ep
+    /* NOTE: if failed ep is wireup auxiliary then we need to replace the lane
+     *       with failed ep and destroy wireup ep
      */
-    if (ucp_stub_ep_test_aux(ucp_ep_iter->uct_eps[0], uct_ep)) {
-        aux_ep = ucp_stub_ep_extract_aux(ucp_ep_iter->uct_eps[0]);
+    if (ucp_wireup_ep_test_aux(ucp_ep_iter->uct_eps[0], uct_ep)) {
+        aux_ep = ucp_wireup_ep_extract_aux(ucp_ep_iter->uct_eps[0]);
         uct_ep_destroy(ucp_ep_iter->uct_eps[0]);
         ucp_ep_iter->uct_eps[0] = aux_ep;
     }
@@ -974,12 +974,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     UCP_THREAD_LOCK_INIT(&worker->mt_lock);
 
-    worker->context         = context;
-    worker->uuid            = ucs_generate_uuid((uintptr_t)worker);
-    worker->stub_pend_count = 0;
-    worker->inprogress      = 0;
-    worker->ep_config_max   = config_count;
-    worker->ep_config_count = 0;
+    worker->context           = context;
+    worker->uuid              = ucs_generate_uuid((uintptr_t)worker);
+    worker->wireup_pend_count = 0;
+    worker->inprogress        = 0;
+    worker->ep_config_max     = config_count;
+    worker->ep_config_count   = 0;
     ucs_list_head_init(&worker->arm_ifaces);
 
     name_length = ucs_min(UCP_WORKER_NAME_MAX,

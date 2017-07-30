@@ -5,8 +5,8 @@
  */
 
 
-#ifndef UCP_WIREUP_STUB_EP_H_
-#define UCP_WIREUP_STUB_EP_H_
+#ifndef UCP_WIREUP_EP_H_
+#define UCP_WIREUP_EP_H_
 
 #include "address.h"
 
@@ -20,17 +20,17 @@
  * Stub endpoint flags
  */
 enum {
-    UCP_STUB_EP_FLAG_READY           = UCS_BIT(0), /**< next_ep is fully connected */
-    UCP_STUB_EP_FLAG_LOCAL_CONNECTED = UCS_BIT(1), /**< Debug: next_ep connected to remote */
+    UCP_WIREUP_EP_FLAG_READY           = UCS_BIT(0), /**< next_ep is fully connected */
+    UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED = UCS_BIT(1), /**< Debug: next_ep connected to remote */
 };
 
 
 /**
- * Stub endpoint, to hold off send requests until wireup process completes.
+ * Wireup proxy endpoint, to hold off send requests until wireup process completes.
  * It is placed instead UCT endpoint before it's fully connected, and for AM
  * endpoint it also contains an auxiliary endpoint which can send wireup messages.
  */
-struct ucp_stub_ep {
+struct ucp_wireup_ep {
     uct_ep_t                  super;         /**< Derive from uct_ep */
     ucp_ep_h                  ep;            /**< Pointer to the ucp_ep we're wiring */
     ucs_queue_head_t          pending_q;     /**< Queue of pending operations */
@@ -44,16 +44,16 @@ struct ucp_stub_ep {
 
 
 /**
- * Create a stub endpoint.
+ * Create a proxy endpoint for wireup.
  */
-ucs_status_t ucp_stub_ep_create(ucp_ep_h ep, uct_ep_h *ep_p);
+ucs_status_t ucp_wireup_ep_create(ucp_ep_h ep, uct_ep_h *ep_p);
 
 
 /**
- * @return Auxiliary resource index used by the stub endpoint.
- *   If the endpoint is not a stub endpoint, return UCP_NULL_RESOURCE.
+ * @return Auxiliary resource index used by the wireup endpoint.
+ *   If the endpoint is not a wireup endpoint, return UCP_NULL_RESOURCE.
  */
-ucp_rsc_index_t ucp_stub_ep_get_aux_rsc_index(uct_ep_h uct_ep);
+ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep);
 
 
 /**
@@ -66,18 +66,18 @@ ucp_rsc_index_t ucp_stub_ep_get_aux_rsc_index(uct_ep_h uct_ep);
  * @param [in]  connect_aux  Whether to connect the auxiliary transport, for
  *                          sending
  */
-ucs_status_t ucp_stub_ep_connect(uct_ep_h uct_ep, ucp_rsc_index_t rsc_index,
-                                 int connect_aux, unsigned address_count,
-                                 const ucp_address_entry_t *address_list);
+ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, ucp_rsc_index_t rsc_index,
+                                   int connect_aux, unsigned address_count,
+                                   const ucp_address_entry_t *address_list);
 
-void ucp_stub_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
+void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
 
-void ucp_stub_ep_remote_connected(uct_ep_h uct_ep);
+void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep);
 
-int ucp_stub_ep_test(uct_ep_h uct_ep);
+int ucp_wireup_ep_test(uct_ep_h uct_ep);
 
-int ucp_stub_ep_test_aux(uct_ep_h stub_ep, uct_ep_h aux_ep);
+int ucp_wireup_ep_test_aux(uct_ep_h wireup_ep, uct_ep_h aux_ep);
 
-uct_ep_h ucp_stub_ep_extract_aux(uct_ep_h uct_ep);
+uct_ep_h ucp_wireup_ep_extract_aux(uct_ep_h uct_ep);
 
 #endif
