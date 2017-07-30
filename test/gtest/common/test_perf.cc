@@ -286,8 +286,7 @@ void test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
         }
     }
 
-    // Temporarily don't fail on low performance
-    // ADD_FAILURE() << "Invalid " << test.title << " performance, expected: " <<
-    //                std::setprecision(3) << test.min << ".." << test.max;
+     ADD_FAILURE() << "Invalid " << test.title << " performance, expected: " <<
+                      std::setprecision(3) << test.min << ".." << test.max;
 }
 

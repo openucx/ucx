@@ -49,24 +49,18 @@ size_t test_ucp_wakeup::comp_cntr = 0;
 
 UCS_TEST_P(test_ucp_wakeup, efd)
 {
-    int recv_efd;
-    struct pollfd polled;
-    ucp_worker_h recv_worker;
     const ucp_datatype_t DATATYPE = ucp_dt_make_contig(1);
     const uint64_t TAG = 0xdeadbeef;
-    uint64_t send_data = 0x12121212;
+    ucp_worker_h recv_worker;
+    int recv_efd;
     void *req;
 
-    polled.events = POLLIN;
     sender().connect(&receiver());
 
     recv_worker = receiver().worker();
     ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &recv_efd));
 
-    polled.fd = recv_efd;
-
-    arm(recv_worker);
-
+    uint64_t send_data = 0x12121212;
     req = ucp_tag_send_nb(sender().ep(), &send_data, sizeof(send_data), DATATYPE,
                           TAG, send_completion);
     if (UCS_PTR_IS_PTR(req)) {
@@ -75,16 +69,74 @@ UCS_TEST_P(test_ucp_wakeup, efd)
         ASSERT_UCS_OK(UCS_PTR_STATUS(req));
     }
 
-    ASSERT_EQ(1, poll(&polled, 1, 1000*ucs::test_time_multiplier()));
-    EXPECT_EQ(UCS_ERR_BUSY, ucp_worker_arm(recv_worker));
-
     uint64_t recv_data = 0;
     req = ucp_tag_recv_nb(receiver().worker(), &recv_data, sizeof(recv_data),
                           DATATYPE, TAG, (ucp_tag_t)-1, recv_completion);
-    wait(req);
+    while (!ucp_request_is_completed(req)) {
+
+        if (ucp_worker_progress(recv_worker)) {
+            /* Got some receive events, check request */
+            continue;
+        }
+
+        ucs_status_t status = ucp_worker_arm(recv_worker);
+        if (status == UCS_ERR_BUSY) {
+            /* Could not arm, poll again */
+            ucp_worker_progress(recv_worker);
+            continue;
+        }
+        ASSERT_UCS_OK(status);
+
+        int ret;
+        do {
+            struct pollfd pollfd;
+            pollfd.events = POLLIN;
+            pollfd.fd     = recv_efd;
+            ret = poll(&pollfd, 1, -1);
+        } while ((ret < 0) && (errno == EINTR));
+        if (ret < 0) {
+            UCS_TEST_MESSAGE << "poll() failed: " << strerror(errno);
+        }
+        ASSERT_EQ(1, ret);
+        EXPECT_EQ(UCS_ERR_BUSY, ucp_worker_arm(recv_worker));
+    }
+
+    ucp_request_release(req);
 
     close(recv_efd);
     ucp_worker_flush(sender().worker());
+    EXPECT_EQ(send_data, recv_data);
+}
+
+UCS_TEST_P(test_ucp_wakeup, tx_wait, "ZCOPY_THRESH=10000")
+{
+    const ucp_datatype_t DATATYPE = ucp_dt_make_contig(1);
+    const size_t COUNT            = 20000;
+    const uint64_t TAG            = 0xdeadbeef;
+    std::string send_data(COUNT, '2'), recv_data(COUNT, '1');
+    void *sreq, *rreq;
+
+    sender().connect(&receiver());
+
+    rreq = ucp_tag_recv_nb(receiver().worker(), &recv_data[0], COUNT, DATATYPE,
+                           TAG, (ucp_tag_t)-1, recv_completion);
+
+    sreq = ucp_tag_send_nb(sender().ep(), &send_data[0], COUNT, DATATYPE, TAG,
+                           send_completion);
+
+    if (UCS_PTR_IS_PTR(sreq)) {
+        /* wait for send completion */
+        do {
+            ucp_worker_wait(sender().worker());
+            while (progress());
+        } while (!ucp_request_is_completed(sreq));
+        ucp_request_release(sreq);
+    } else {
+        ASSERT_UCS_OK(UCS_PTR_STATUS(sreq));
+    }
+
+    wait(rreq);
+
     EXPECT_EQ(send_data, recv_data);
 }
 
@@ -112,6 +164,10 @@ UCS_TEST_P(test_ucp_wakeup, signal)
     EXPECT_EQ(1, poll(&polled, 1, 0));
     arm(worker);
     EXPECT_EQ(0, poll(&polled, 1, 0));
+
+    ASSERT_UCS_OK(ucp_worker_signal(worker));
+    EXPECT_EQ(UCS_ERR_BUSY, ucp_worker_arm(worker));
+    EXPECT_EQ(UCS_OK, ucp_worker_arm(worker));
 
     close(efd);
 }

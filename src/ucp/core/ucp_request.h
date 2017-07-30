@@ -106,8 +106,8 @@ struct ucp_request {
                 } proto;
 
                 struct {
-                    uct_pending_req_t *req;
-                    ucp_stub_ep_t*    stub_ep;
+                    uct_pending_req_t    *req;
+                    ucp_wireup_ep_t      *wireup_ep;
                 } proxy;
 
                 struct {

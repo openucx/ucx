@@ -233,7 +233,8 @@ typedef struct uct_rc_verbs_ctx_priv {
        }
 
 #  define UCT_RC_VERBS_CHECK_RNDV(_iface, _ep) \
-       UCT_RC_CHECK_CQE_RET(_iface, _ep, UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
+       UCT_RC_CHECK_CQE_RET(_iface, _ep, &(_ep)->txqp, \
+                            UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
        UCT_RC_CHECK_TXQP_RET(_iface, _ep, &(_ep)->txqp, \
                              UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
 

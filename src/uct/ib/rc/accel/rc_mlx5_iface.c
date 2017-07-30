@@ -40,7 +40,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     struct mlx5_cqe64 *cqe;
     uct_rc_mlx5_ep_t *ep;
     unsigned qp_num;
-    uint16_t hw_ci;
+    uint16_t hw_ci, bb_num;
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->mlx5_common.tx.cq);
     if (cqe == NULL) {
@@ -58,8 +58,10 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface, ep,
                    qp_num, hw_ci);
 
-    uct_rc_txqp_available_set(&ep->super.txqp, uct_ib_mlx5_txwq_update_bb(&ep->tx.wq, hw_ci));
-    ++iface->super.tx.cq_available;
+    bb_num = uct_ib_mlx5_txwq_update_bb(&ep->tx.wq, hw_ci) -
+             uct_rc_txqp_available(&ep->super.txqp);
+    uct_rc_txqp_available_add(&ep->super.txqp, bb_num);
+    iface->super.tx.cq_available += bb_num;
 
     uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
 
@@ -119,8 +121,12 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
     }
 
     uct_ib_mlx5_completion_with_err(arg, ib_iface->super.config.failure_level);
-    uct_rc_ep_failed_purge_outstanding(&ep->super.super.super, ib_iface,
-                                       &ep->super.txqp);
+    uct_rc_txqp_purge_outstanding(&ep->super.txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
+    /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
+       is not updated for the error cqe and all outstanding wqes*/
+    iface->tx.cq_available += ep->tx.wq.bb_max -
+                              uct_rc_txqp_available(&ep->super.txqp);
+    ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super);
 }
 
 static void uct_rc_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep)
