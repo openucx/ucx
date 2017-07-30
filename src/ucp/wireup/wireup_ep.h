@@ -63,8 +63,9 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep);
  * @param [in]  connect_aux  Whether to connect the auxiliary transport, for
  *                          sending
  */
-ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, ucp_rsc_index_t rsc_index,
-                                   int connect_aux, unsigned address_count,
+ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *params,
+                                   ucp_rsc_index_t rsc_index, int connect_aux,
+                                   unsigned address_count,
                                    const ucp_address_entry_t *address_list);
 
 void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
