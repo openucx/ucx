@@ -159,6 +159,10 @@ static ucs_status_t uct_xpmem_alloc(uct_md_h md, size_t *length_p,
         goto out;
     }
 
+    if (!(md_map_flags & UCT_MD_MEM_FLAG_FIXED)) {
+        *address_p = NULL;
+    }
+
     /* TBD: any ideas for better allocation */
     status = ucs_mmap_alloc(length_p, address_p,
                             md_map_flags & UCT_MD_MEM_FLAG_FIXED ? MAP_FIXED : 0

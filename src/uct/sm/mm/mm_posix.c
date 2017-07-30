@@ -330,12 +330,13 @@ uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 
     /* mmap the shared memory segment that was created by shm_open */
-    addr_wanted = *address_p;
 
     if (md_map_flags & UCT_MD_MEM_FLAG_FIXED) {
-        mmap_flags = MAP_FIXED|MAP_SHARED;
+        mmap_flags  = MAP_FIXED|MAP_SHARED;
+        addr_wanted = *address_p;
     } else {
         mmap_flags   = MAP_SHARED;
+        addr_wanted  = NULL;
     }
 
 #ifdef MAP_HUGETLB

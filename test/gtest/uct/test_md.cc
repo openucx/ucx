@@ -137,7 +137,6 @@ UCS_TEST_P(test_md, rkey_ptr) {
     check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_RKEY_PTR, "allocation+direct access");
     // alloc (should work with both sysv and xpmem
     size = 1024 * 1024 * sizeof(unsigned);
-    rva  = 0;
     status = uct_md_mem_alloc(pd(), &size, (void **)&rva, 0, "test", &memh);
     ASSERT_UCS_OK(status);
     EXPECT_LE(1024 * 1024 * sizeof(unsigned), size);
