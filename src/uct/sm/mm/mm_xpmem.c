@@ -146,13 +146,13 @@ static ucs_status_t uct_xpmem_detach(uct_mm_remote_seg_t *mm_desc)
 }
 
 static ucs_status_t uct_xpmem_alloc(uct_md_h md, size_t *length_p,
-                                    ucs_ternary_value_t hugetlb, void **address_p,
+                                    ucs_ternary_value_t hugetlb,
+                                    unsigned md_map_flags, void **address_p,
                                     uct_mm_id_t *mmid_p, const char **path_p
                                     UCS_MEMTRACK_ARG)
 {
-    size_t length_aligned;
     ucs_status_t status;
-    void *address;
+    int mmap_flags;
 
     if (0 == *length_p) {
         ucs_error("Unexpected length %zu", *length_p);
@@ -160,27 +160,29 @@ static ucs_status_t uct_xpmem_alloc(uct_md_h md, size_t *length_p,
         goto out;
     }
 
+    if (md_map_flags & UCT_MD_MEM_FLAG_FIXED) {
+        mmap_flags = MAP_FIXED;
+    } else {
+        *address_p = NULL;
+        mmap_flags = 0;
+    }
+
     /* TBD: any ideas for better allocation */
-    length_aligned = ucs_align_up(*length_p, ucs_get_page_size());
-    address        = ucs_memalign(ucs_get_page_size(), length_aligned,
-                                  UCS_MEMTRACK_VAL_ALWAYS);
-    if (NULL == address) {
-        ucs_error("Failed to allocate %zu bytes of memory", length_aligned);
-        status = UCS_ERR_NO_MEMORY;
+    status = ucs_mmap_alloc(length_p, address_p, mmap_flags UCS_MEMTRACK_VAL);
+    if (status != UCS_OK) {
+        ucs_error("Failed to allocate %zu bytes of memory", *length_p);
         goto out;
     }
 
-    ucs_trace("xpmem allocated address %p length %zu", address, length_aligned);
+    ucs_trace("xpmem allocated address %p length %zu", *address_p, *length_p);
 
-    status = uct_xmpem_reg(address, length_aligned, mmid_p);
+    status = uct_xmpem_reg(*address_p, *length_p, mmid_p);
     if (UCS_OK != status) {
         ucs_free(*address_p);
         goto out;
     }
 
-    VALGRIND_MAKE_MEM_DEFINED(address, length_aligned);
-
-    *address_p = address;
+    VALGRIND_MAKE_MEM_DEFINED(*address_p, *length_p);
     status     = UCS_OK;
 
 out:
@@ -197,8 +199,7 @@ static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mmid, size_t lengt
         return status;
     }
 
-    ucs_free(address);
-    return UCS_OK;
+    return ucs_mmap_free(address, length);
 }
 
 static uct_mm_mapper_ops_t uct_xpmem_mapper_ops = {

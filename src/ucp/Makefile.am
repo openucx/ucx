@@ -25,6 +25,7 @@ noinst_HEADERS = \
 	core/ucp_ep.h \
 	core/ucp_ep.inl \
 	core/ucp_mm.h \
+	core/ucp_proxy_ep.h \
 	core/ucp_request.h \
 	core/ucp_request.inl \
 	core/ucp_worker.h \
@@ -51,6 +52,7 @@ libucp_la_SOURCES = \
 	core/ucp_context.c \
 	core/ucp_ep.c \
 	core/ucp_mm.c \
+	core/ucp_proxy_ep.c \
 	core/ucp_request.c \
 	core/ucp_rkey.c \
 	core/ucp_version.c \
