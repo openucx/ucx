@@ -32,6 +32,12 @@ uct_ud_ep_ctl_op_add_safe(uct_ud_iface_t *iface, uct_ud_ep_t *ep, int op)
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_ud_ep_tx_stop(uct_ud_ep_t *ep)
+{
+    ep->tx.max_psn = ep->tx.psn;
+}
+
 /*
  * check iface resources:tx_queue and return
  * prefetched/cached skb
