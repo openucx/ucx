@@ -536,6 +536,37 @@ ucs_status_t ucs_sysv_free(void *address)
     return UCS_OK;
 }
 
+ucs_status_t ucs_mmap_alloc(size_t *size, void **address_p,
+                            int flags UCS_MEMTRACK_ARG)
+{
+    size_t alloc_length;
+    void *addr;
+
+    alloc_length = ucs_align_up_pow2(*size, ucs_get_page_size());
+
+    addr = ucs_mmap(*address_p, alloc_length, PROT_READ | PROT_WRITE,
+                    MAP_PRIVATE | MAP_ANON | flags, -1, 0 UCS_MEMTRACK_VAL);
+    if (addr == MAP_FAILED) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    *size      = alloc_length;
+    *address_p = addr;
+    return UCS_OK;
+}
+
+ucs_status_t ucs_mmap_free(void *address, size_t length)
+{
+    int ret;
+
+    ret = ucs_munmap(address, length);
+    if (ret != 0) {
+        ucs_warn("munmap(address=%p, length=%zu) failed: %m", address, length);
+        return UCS_ERR_INVALID_PARAM;
+    }
+    return UCS_OK;
+}
+
 typedef struct {
     unsigned long start;
     unsigned long end;

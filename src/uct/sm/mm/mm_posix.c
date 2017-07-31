@@ -250,13 +250,15 @@ out:
 
 static ucs_status_t
 uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
-                void **address_p, uct_mm_id_t *mmid_p, const char **path_p
-                UCS_MEMTRACK_ARG)
+                unsigned md_map_flags, void **address_p, uct_mm_id_t *mmid_p,
+                const char **path_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t status;
     int shm_fd = -1;
     uint64_t uuid;
     char *file_name;
+    int mmap_flags;
+    void *addr_wanted;
     uct_mm_md_t *mm_md = ucs_derived_of(md, uct_mm_md_t);
     uct_posix_md_config_t *posix_config = ucs_derived_of(mm_md->config,
                                                          uct_posix_md_config_t);
@@ -328,10 +330,19 @@ uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 
     /* mmap the shared memory segment that was created by shm_open */
+
+    if (md_map_flags & UCT_MD_MEM_FLAG_FIXED) {
+        mmap_flags  = MAP_FIXED|MAP_SHARED;
+        addr_wanted = *address_p;
+    } else {
+        mmap_flags   = MAP_SHARED;
+        addr_wanted  = NULL;
+    }
+
 #ifdef MAP_HUGETLB
     if (hugetlb != UCS_NO) {
-       (*address_p) = ucs_mmap(NULL, *length_p, UCT_MM_POSIX_MMAP_PROT,
-                               MAP_SHARED | MAP_HUGETLB,
+       (*address_p) = ucs_mmap(addr_wanted, *length_p, UCT_MM_POSIX_MMAP_PROT,
+                               mmap_flags | MAP_HUGETLB,
                                shm_fd, 0 UCS_MEMTRACK_VAL);
        if ((*address_p) !=  MAP_FAILED) {
            /* indicate that the memory was mapped with hugepages */
@@ -351,8 +362,8 @@ uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
 #endif
 
     if (hugetlb != UCS_YES) {
-       (*address_p) = ucs_mmap(NULL, *length_p, UCT_MM_POSIX_MMAP_PROT,
-                               MAP_SHARED, shm_fd, 0 UCS_MEMTRACK_VAL);
+       (*address_p) = ucs_mmap(addr_wanted, *length_p, UCT_MM_POSIX_MMAP_PROT,
+                               mmap_flags, shm_fd, 0 UCS_MEMTRACK_VAL);
        if ((*address_p) != MAP_FAILED) {
            /* indicate that the memory was mapped without hugepages */
            uuid &= ~UCT_MM_POSIX_HUGETLB;
