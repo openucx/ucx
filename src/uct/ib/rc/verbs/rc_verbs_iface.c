@@ -136,6 +136,13 @@ unsigned uct_rc_verbs_iface_progress(void *arg)
     return uct_rc_verbs_iface_poll_tx(iface);
 }
 
+unsigned uct_rc_verbs_iface_do_progress(uct_iface_h tl_iface)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
+
+    return iface->progress(iface);
+}
+
 #if IBV_EXP_HW_TM
 /* This function check whether the error occured due to "MESSAGE_TRUNCATED"
  * error in Tag Matching (i.e. if posted buffer was not enough to fit the
@@ -832,7 +839,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = ucs_empty_function,
     .iface_progress_disable   = ucs_empty_function,
-    .iface_progress           = (void*)uct_rc_verbs_iface_progress,
+    .iface_progress           = uct_rc_verbs_iface_do_progress,
 #if IBV_EXP_HW_TM
     .iface_tag_recv_zcopy     = uct_rc_verbs_iface_tag_recv_zcopy,
     .iface_tag_recv_cancel    = uct_rc_verbs_iface_tag_recv_cancel,
