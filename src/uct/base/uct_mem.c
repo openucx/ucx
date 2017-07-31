@@ -34,9 +34,9 @@ const char *uct_alloc_method_names[] = {
 };
 
 
-static inline unsigned uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
+static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
 {
-    unsigned mm_flags = 0;
+    int mm_flags = 0;
 
     if (uct_mmap_flags & UCT_MD_MEM_FLAG_NONBLOCK) {
         mm_flags |= MAP_NONBLOCK;
@@ -63,7 +63,6 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
     uct_md_h md;
     void *address;
     int shmid;
-    unsigned map_flags;
 
     if (min_length == 0) {
         ucs_error("Allocation length cannot be 0");
@@ -182,11 +181,11 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 
         case UCT_ALLOC_METHOD_MMAP:
             /* Request memory from operating system using mmap() */
-            map_flags    = uct_mem_get_mmap_flags(flags);
             alloc_length = min_length;
             address      = addr;
 
-            status = ucs_mmap_alloc(&alloc_length, &address, map_flags
+            status = ucs_mmap_alloc(&alloc_length, &address,
+                                    uct_mem_get_mmap_flags(flags)
                                     UCS_MEMTRACK_VAL);
             if (status== UCS_OK) {
                 goto allocated_without_md;
