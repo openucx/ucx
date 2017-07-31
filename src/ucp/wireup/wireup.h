@@ -61,6 +61,7 @@ typedef struct ucp_wireup_msg {
     uint8_t          tli[UCP_MAX_LANES];  /* For REQUEST - which p2p lanes must be connected
                                              For REPLY - which p2p lanes have been connected
                                            */
+    ucp_err_handling_mode_t err_mode;
     /* packed addresses follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
 
