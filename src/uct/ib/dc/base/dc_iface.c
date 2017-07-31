@@ -501,23 +501,25 @@ void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num)
     uct_dc_iface_ops_t *dc_ops = ucs_derived_of(iface->super.super.ops,
                                                 uct_dc_iface_ops_t);
     ucs_status_t status;
+    int16_t      outstanding;
 
     if (!ep) {
         return;
     }
 
     uct_rc_txqp_purge_outstanding(txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
-    uct_rc_txqp_available_set(txqp, iface->super.config.tx_qp_len);
-
-    /* since we removed all outstanding ops on the dci, it should be released */
-    if (ep->dci != UCT_DC_EP_NO_DCI) {
-        uct_dc_iface_dci_put(iface, dci);
-        ucs_assert_always(ep->dci == UCT_DC_EP_NO_DCI);
-    }
 
     /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
-     * is not updated for the error cqe */
-    iface->super.tx.cq_available++;
+       is not updated for the error cqe and all outstanding wqes*/
+    outstanding = (int16_t)iface->super.config.tx_qp_len -
+                  uct_rc_txqp_available(txqp);
+    iface->super.tx.cq_available += outstanding;
+    uct_rc_txqp_available_set(txqp, (int16_t)iface->super.config.tx_qp_len);
+
+    /* since we removed all outstanding ops on the dci, it should be released */
+    ucs_assert(ep->dci != UCT_DC_EP_NO_DCI);
+    uct_dc_iface_dci_put(iface, dci);
+    ucs_assert_always(ep->dci == UCT_DC_EP_NO_DCI);
 
     iface->super.super.ops->set_ep_failed(ib_iface, &ep->super.super);
 

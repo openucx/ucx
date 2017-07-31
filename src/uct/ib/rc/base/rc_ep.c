@@ -50,6 +50,8 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
     ucs_status_t status;
 
     txqp->unsignaled = 0;
+    txqp->unsignaled_store = 0;
+    txqp->unsignaled_store_count = 0;
     txqp->available  = 0;
     ucs_queue_head_init(&txqp->outstanding);
 
@@ -145,7 +147,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
     ucs_arbiter_group_init(&self->arb_group);
 
     uct_rc_iface_add_ep(iface, self, self->txqp.qp->qp_num);
-    ucs_list_add_head(&iface->ep_list, &self->list);
     return UCS_OK;
 
 err_txqp_cleanup:
@@ -161,7 +162,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
     ucs_debug("destroy rc ep %p", self);
 
     uct_rc_iface_remove_ep(iface, self->txqp.qp->qp_num);
-    ucs_list_del(&self->list);
     uct_rc_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(&self->txqp);
@@ -408,13 +408,6 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
             ucs_mpool_put(desc);
         }
     }
-}
-
-void uct_rc_ep_failed_purge_outstanding(uct_ep_t *ep, uct_ib_iface_t *iface,
-                                        uct_rc_txqp_t *txqp)
-{
-    uct_rc_txqp_purge_outstanding(txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
-    iface->ops->set_ep_failed(iface, ep);
 }
 
 ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available)

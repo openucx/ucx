@@ -807,6 +807,8 @@ ucs_status_t uct_ib_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 
     /* avoid re-arming the interface if any events exists */
     if ((send_cq_count > 0) || (recv_cq_count > 0)) {
+        ucs_trace("arm_cq: got %d send and %d recv events, returning BUSY",
+                  send_cq_count, recv_cq_count);
         return UCS_ERR_BUSY;
     }
 

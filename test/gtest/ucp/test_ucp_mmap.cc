@@ -274,7 +274,6 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
         ASSERT_UCS_OK(status);
         EXPECT_EQ(memh->address, ptr);
         EXPECT_GE(memh->length, size);
-        EXPECT_GE(memh->alloc_method, UCT_ALLOC_METHOD_MMAP);
 
         is_dummy = (size == 0);
         test_rkey_management(&sender(), memh, is_dummy);

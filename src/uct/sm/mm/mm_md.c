@@ -34,20 +34,21 @@ ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_mm_md_mapper_ops(md)->alloc(md, length_p, UCS_TRY, &seg->address,
-                                             &seg->mmid, &seg->path
+
+    status = uct_mm_md_mapper_ops(md)->alloc(md, length_p, UCS_TRY, flags,
+                                             address_p, &seg->mmid, &seg->path
                                              UCS_MEMTRACK_VAL);
     if (status != UCS_OK) {
         ucs_free(seg);
         return status;
     }
 
-    seg->length = *length_p;
-    *address_p  = seg->address;
-    *memh_p     = seg;
+    seg->length  = *length_p;
+    seg->address = *address_p;
+    *memh_p      = seg;
 
     ucs_debug("mm allocated address %p length %zu mmid %"PRIu64,
-              *address_p, seg->length, seg->mmid);
+              seg->address, seg->length, seg->mmid);
     return UCS_OK;
 }
 
@@ -114,12 +115,17 @@ ucs_status_t uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     if (uct_mm_md_mapper_ops(md)->alloc != NULL) {
         md_attr->cap.flags |= UCT_MD_FLAG_ALLOC;
     }
+    if (uct_mm_md_mapper_ops(md)->attach != NULL) {
+        md_attr->cap.flags |= UCT_MD_FLAG_RKEY_PTR;
+    }
     if (uct_mm_md_mapper_ops(md)->reg != NULL) {
         md_attr->cap.flags |= UCT_MD_FLAG_REG;
         md_attr->reg_cost.overhead = 1000.0e-9;
         md_attr->reg_cost.growth   = 0.007e-9;
     }
     md_attr->cap.flags        |= UCT_MD_FLAG_NEED_RKEY;
+    /* all mm md(s) support fixed memory alloc */
+    md_attr->cap.flags        |= UCT_MD_FLAG_FIXED;
     md_attr->cap.max_alloc    = ULONG_MAX;
     md_attr->cap.max_reg      = 0;
     md_attr->rkey_packed_size = sizeof(uct_mm_packed_rkey_t) +
@@ -181,6 +187,20 @@ ucs_status_t uct_mm_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer
     return UCS_OK;
 }
 
+ucs_status_t uct_mm_rkey_ptr(uct_md_component_t *mdc, uct_rkey_t rkey,
+                             void *handle, uint64_t raddr, void **laddr_p)
+{
+    uct_mm_remote_seg_t *mm_desc = handle;
+
+    /* rkey stores offset from the remote va */
+    *laddr_p = (void *)(raddr + (uint64_t)rkey);
+    if ((*laddr_p < mm_desc->address) ||
+        (*laddr_p >= mm_desc->address + mm_desc->length)) {
+       return UCS_ERR_INVALID_ADDR;
+    }
+    return UCS_OK;
+}
+
 ucs_status_t uct_mm_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey, void *handle)
 {
     ucs_status_t status;
@@ -236,6 +256,8 @@ ucs_status_t uct_mm_md_open(const char *md_name, const uct_md_config_t *md_confi
         ucs_error("Failed to clone opts");
         goto err_free_mm_md_config;
     }
+
+    mdc->rkey_ptr = uct_mm_rkey_ptr;
 
     mm_md->super.ops = &uct_mm_md_ops;
     mm_md->super.component = mdc;

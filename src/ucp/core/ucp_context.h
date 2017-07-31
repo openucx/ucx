@@ -51,6 +51,8 @@ typedef struct ucp_context_config {
     ucp_atomic_mode_t                      atomic_mode;
     /** If use mutex for MT support or not */
     int                                    use_mt_mutex;
+    /** On-demand progress */
+    int                                    adaptive_progress;
 } ucp_context_config_t;
 
 

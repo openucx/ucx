@@ -25,6 +25,7 @@ noinst_HEADERS = \
 	core/ucp_ep.h \
 	core/ucp_ep.inl \
 	core/ucp_mm.h \
+	core/ucp_proxy_ep.h \
 	core/ucp_request.h \
 	core/ucp_request.inl \
 	core/ucp_worker.h \
@@ -42,7 +43,7 @@ noinst_HEADERS = \
 	tag/tag_match.inl \
 	tag/offload.h \
 	wireup/address.h \
-	wireup/stub_ep.h \
+	wireup/wireup_ep.h \
 	wireup/wireup.h
 
 libucp_la_SOURCES = \
@@ -51,6 +52,7 @@ libucp_la_SOURCES = \
 	core/ucp_context.c \
 	core/ucp_ep.c \
 	core/ucp_mm.c \
+	core/ucp_proxy_ep.c \
 	core/ucp_request.c \
 	core/ucp_rkey.c \
 	core/ucp_version.c \
@@ -71,5 +73,5 @@ libucp_la_SOURCES = \
 	tag/offload.c \
 	wireup/address.c \
 	wireup/select.c \
-	wireup/stub_ep.c \
+	wireup/wireup_ep.c \
 	wireup/wireup.c

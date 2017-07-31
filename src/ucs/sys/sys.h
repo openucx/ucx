@@ -178,12 +178,31 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shim
 
 
 /**
- * Release memory allocated via hugetlb.
+ * Release memory allocated via SystemV API.
  *
  * @param address   Memory to release (returned from @ref ucs_sysv_alloc).
  */
 ucs_status_t ucs_sysv_free(void *address);
 
+
+/**
+ * Allocate private memory using mmap API.
+ *
+ * @param size      Pointer to memory size to allocate, updated with actual size
+ *                  (rounded up to huge page size or to regular page size).
+ * @param address_p Filled with allocated memory address.
+ * @param flags     Flags to pass to the mmap() system call
+ */
+ucs_status_t ucs_mmap_alloc(size_t *size, void **address_p,
+                            int flags UCS_MEMTRACK_ARG);
+
+/**
+ * Release memory allocated via mmap API.
+ *
+ * @param address   Address of memory to release as returned from @ref ucs_mmap_alloc.
+ * @param length    Length of memory to release as returned from @ref ucs_mmap_alloc.
+ */
+ucs_status_t ucs_mmap_free(void *address, size_t length);
 
 /**
  * Retrieve memory access flags for a given region of memory.

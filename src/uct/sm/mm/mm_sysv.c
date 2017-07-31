@@ -27,18 +27,22 @@ static ucs_config_field_t uct_sysv_md_config_table[] = {
 
 static ucs_status_t
 uct_sysv_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
-               void **address_p, uct_mm_id_t *mmid_p, const char **path_p UCS_MEMTRACK_ARG)
+               unsigned md_map_flags, void **address_p, uct_mm_id_t *mmid_p,
+               const char **path_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t status = UCS_ERR_NO_MEMORY;
     int flags, shmid = 0;
 
     flags = UCT_MM_SYSV_MSTR;
-    *address_p = NULL;
 
     if (0 == *length_p) {
         ucs_error("Unexpected length %zu", *length_p);
         status = UCS_ERR_INVALID_PARAM;
         goto err;
+    }
+
+    if (!(md_map_flags & UCT_MD_MEM_FLAG_FIXED)) {
+        *address_p = NULL;
     }
 
     if (hugetlb != UCS_NO) {
