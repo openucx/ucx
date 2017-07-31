@@ -151,7 +151,7 @@ void uct_p2p_mix_test::run(unsigned count) {
     mapped_buffer sendbuf(m_send_size, 0, sender());
     mapped_buffer recvbuf(m_send_size, 0, receiver());
 
-    for (unsigned i = 0; i < 10000; ++i) {
+    for (unsigned i = 0; i < count; ++i) {
         random_op(sendbuf, recvbuf);
     }
 }
