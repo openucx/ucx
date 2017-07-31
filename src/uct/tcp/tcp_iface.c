@@ -27,6 +27,10 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Backlog size of incoming connections",
    ucs_offsetof(uct_tcp_iface_config_t, backlog), UCS_CONFIG_TYPE_UINT},
 
+  {"MAX_POLL", "16",
+   "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained",
+   ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
+
   {"TCP_NODELAY", "y",
    "Set TCP_NODELAY socket option to disable Nagle algorithm. Setting this\n"
    "option usually provides better performance",
@@ -76,7 +80,11 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     attr->iface_addr_len   = sizeof(in_port_t);
     attr->device_addr_len  = sizeof(struct in_addr);
     attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                             UCT_IFACE_FLAG_PENDING;
+                             UCT_IFACE_FLAG_AM_BCOPY         |
+                             UCT_IFACE_FLAG_PENDING          |
+                             UCT_IFACE_FLAG_AM_CB_SYNC       |
+                             UCT_IFACE_FLAG_EVENT_SEND_COMP  |
+                             UCT_IFACE_FLAG_EVENT_RECV_AM;
 
     attr->cap.am.max_bcopy = iface->config.max_bcopy;
 
@@ -100,6 +108,22 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
         attr->priority = 0;
     }
 
+    return UCS_OK;
+}
+
+static void uct_tcp_iface_release_am_desc(uct_recv_desc_t *self, void *tl_desc)
+{
+    uct_tcp_iface_t *iface = ucs_container_of(self, uct_tcp_iface_t, release_desc);
+    uct_tcp_am_desc_t *desc = tl_desc - iface->config.headroom_offset;
+
+    ucs_mpool_put(desc);
+}
+
+static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+
+    *fd_p = iface->recv_epfd;
     return UCS_OK;
 }
 
@@ -143,21 +167,24 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
 }
 
 static uct_iface_ops_t uct_tcp_iface_ops = {
+    .ep_am_bcopy              = uct_tcp_ep_am_bcopy,
     .ep_pending_add           = ucs_empty_function_return_busy,
     .ep_pending_purge         = ucs_empty_function,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .iface_flush              = uct_base_iface_flush,
-    .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
-    .iface_progress           = ucs_empty_function_return_zero,
     .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_tcp_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_ep_t),
+    .iface_flush              = uct_base_iface_flush,
+    .iface_fence              = uct_base_iface_fence,
+    .iface_progress_enable    = uct_base_iface_progress_enable,
+    .iface_progress_disable   = uct_base_iface_progress_disable,
+    .iface_progress           = uct_tcp_iface_progress,
+    .iface_event_fd_get       = uct_tcp_iface_event_fd_get,
+    .iface_event_arm          = ucs_empty_function_return_success,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_iface_t),
     .iface_query              = uct_tcp_iface_query,
-    .iface_get_device_address = uct_tcp_iface_get_device_address,
     .iface_get_address        = uct_tcp_iface_get_address,
+    .iface_get_device_address = uct_tcp_iface_get_device_address,
     .iface_is_reachable       = uct_tcp_iface_is_reachable
 };
 
@@ -174,6 +201,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
 {
     uct_tcp_iface_config_t *config = ucs_derived_of(tl_config, uct_tcp_iface_config_t);
     struct sockaddr_in bind_addr;
+    ptrdiff_t payload_offset;
     ucs_status_t status;
     socklen_t addrlen;
     int ret;
@@ -185,7 +213,22 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_strncpy_zero(self->if_name, params->dev_name, sizeof(self->if_name));
     self->config.max_bcopy       = config->super.max_bcopy;
     self->config.prefer_default  = config->prefer_default;
+
+    /*
+     * The buffer can contain the following:
+     * - header,payload
+     * - am_desc,header,payload
+     * - tl_desc,user_headroom,payload
+     */
+    payload_offset               = ucs_max(params->rx_headroom + sizeof(uct_recv_desc_t),
+                                           sizeof(uct_tcp_am_desc_t) +
+                                           sizeof(uct_tcp_am_hdr_t));
+    self->config.am_hdr_offset   = payload_offset - sizeof(uct_tcp_am_hdr_t);
+    self->config.headroom_offset = payload_offset - params->rx_headroom;
+    self->config.max_poll        = config->max_poll;
     self->sockopt.nodelay        = config->sockopt_nodelay;
+    self->recv_sock_count        = 0;
+    self->release_desc.cb        = uct_tcp_iface_release_am_desc;
 
     kh_init_inplace(uct_tcp_fd_hash, &self->fd_hash);
 
@@ -196,6 +239,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     status = ucs_mpool_init(&self->mp, 0,
+                            ucs_max(payload_offset, sizeof(uct_tcp_am_hdr_t)) +
                             self->config.max_bcopy,
                             0,                        /* alignment offset */
                             UCS_SYS_CACHE_LINE_SIZE,  /* alignment */
@@ -207,10 +251,16 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         goto err;
     }
 
+    self->recv_epfd = epoll_create(1);
+    if (self->recv_epfd < 0) {
+        ucs_error("epoll_create() failed: %m");
+        goto err_mpool_cleanup;
+    }
+
     /* Create the server socket for accepting incoming connections */
     status = uct_tcp_socket_create(&self->listen_fd);
     if (status != UCS_OK) {
-        goto err_mpool_cleanup;
+        goto err_close_epfd;
     }
 
     /* Set the server socket to non-blocking mode */
@@ -257,10 +307,14 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         goto err_close_sock;
     }
 
+    uct_base_iface_progress_enable(&self->super.super, UCT_PROGRESS_SEND|
+                                                       UCT_PROGRESS_RECV);
     return UCS_OK;
 
 err_close_sock:
     close(self->listen_fd);
+err_close_epfd:
+    close(self->recv_epfd);
 err_mpool_cleanup:
     ucs_mpool_cleanup(&self->mp, 0);
 err:
@@ -271,6 +325,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
 {
     ucs_status_t status;
 
+    uct_base_iface_progress_disable(&self->super.super, UCT_PROGRESS_SEND|
+                                                        UCT_PROGRESS_RECV);
+
     status = ucs_async_remove_handler(self->listen_fd, 1);
     if (status != UCS_OK) {
         ucs_warn("failed to remove handler for server socket fd=%d", self->listen_fd);
@@ -278,6 +335,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
 
     uct_tcp_iface_recv_cleanup(self);
     close(self->listen_fd);
+    close(self->recv_epfd);
     ucs_mpool_cleanup(&self->mp, 1);
     kh_destroy_inplace(uct_tcp_fd_hash, &self->fd_hash);
 }

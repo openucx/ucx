@@ -10,6 +10,7 @@
 #  include "config.h"
 #endif
 
+#include <uct/ib/base/ib_device.h> /* for ipoib header size */
 #include <ucs/sys/string.h>
 #include <linux/sockios.h>
 #include <linux/types.h>
@@ -149,6 +150,16 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                      ETH_FCS_LEN + /* CRC */
                      12; /* inter-packet gap */
         break;
+    case ARPHRD_INFINIBAND:
+        ll_headers = UCT_IB_LRH_LEN +
+                     UCT_IB_GRH_LEN +
+                     UCT_IB_BTH_LEN +
+                     UCT_IB_DETH_LEN + /* UD */
+                     4 + 20 +          /* IPoIB */
+                     UCT_IB_ICRC_LEN +
+                     UCT_IB_VCRC_LEN +
+                     UCT_IB_DELIM_LEN;
+        break;
     default:
         ll_headers = 0;
         break;
@@ -224,4 +235,40 @@ ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p)
     *result_p = 0;
     fclose(f);
     return UCS_OK;
+}
+
+static ucs_status_t uct_tcp_do_io(int fd, void *data, size_t *length_p,
+                                  uct_tcp_io_func_t io_func, const char *name)
+{
+    ssize_t ret;
+
+    ucs_assert(*length_p > 0);
+    ret = io_func(fd, data, *length_p, 0);
+    if (ret == 0) {
+        ucs_trace("fd %d is closed", fd);
+        return UCS_ERR_CANCELED; /* Connection closed */
+    } else if (ret < 0) {
+        if ((errno == EINTR) || (errno == EAGAIN)) {
+            *length_p = 0;
+            return UCS_OK;
+        } else {
+            ucs_error("%s(fd=%d data=%p length=%zu) failed: %m",
+                      name, fd, data, *length_p);
+            return UCS_ERR_IO_ERROR;
+        }
+    } else {
+        *length_p = ret;
+        return UCS_OK;
+    }
+}
+
+ucs_status_t uct_tcp_send(int fd, const void *data, size_t *length_p)
+{
+    return uct_tcp_do_io(fd, (void*)data, length_p, (uct_tcp_io_func_t)send,
+                         "send");
+}
+
+ucs_status_t uct_tcp_recv(int fd, void *data, size_t *length_p)
+{
+    return uct_tcp_do_io(fd, data, length_p, recv, "recv");
 }

@@ -79,6 +79,15 @@
 #define ucs_trace_poll(_message, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_POLL, _message, ## __VA_ARGS__)
 
 
+#if ENABLE_DEBUG_DATA
+#  define UCS_DEBUG_DATA(_code)       _code
+#  define UCS_DEBUG_DATA_ARG(_arg)    , _arg
+#else
+#  define UCS_DEBUG_DATA(_code)
+#  define UCS_DEBUG_DATA_ARG(_arg)
+#endif
+
+
 typedef enum {
     UCS_LOG_FUNC_RC_STOP,
     UCS_LOG_FUNC_RC_CONTINUE
