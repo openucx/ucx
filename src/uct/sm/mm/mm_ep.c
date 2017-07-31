@@ -287,7 +287,7 @@ uct_mm_ep_am_common_send(unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_t *ifa
         elem->flags &= ~UCT_MM_FIFO_ELEM_FLAG_OWNER;
     }
 
-    if (flags & UCT_AM_FLAG_SIGNALED) {
+    if (ucs_unlikely(flags & UCT_AM_FLAG_SIGNALED)) {
         uct_mm_ep_signal_remote(ep);
     }
 

@@ -17,6 +17,10 @@
 #include <sys/poll.h>
 
 
+/* Maximal number of events to clear from the signaling pipe in single call */
+#define UCT_MM_IFACE_MAX_SIG_EVENTS  32
+
+
 static ucs_config_field_t uct_mm_iface_config_table[] = {
     {"", "ALLOC=md", NULL,
      ucs_offsetof(uct_mm_iface_config_t, super),
@@ -268,7 +272,7 @@ static ucs_status_t uct_mm_iface_event_fd_arm(uct_iface_h tl_iface,
                                               unsigned events)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
-    char dummy[32]; /* pop multiple signals at once */
+    char dummy[UCT_MM_IFACE_MAX_SIG_EVENTS]; /* pop multiple signals at once */
     int ret;
 
     ret = recvfrom(iface->signal_fd, &dummy, sizeof(dummy), 0, NULL, 0);
