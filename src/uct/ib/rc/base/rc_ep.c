@@ -146,7 +146,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 
     ucs_arbiter_group_init(&self->arb_group);
 
-    uct_rc_iface_add_ep(iface, self, self->txqp.qp->qp_num);
+    uct_rc_iface_add_qp(iface, self, self->txqp.qp->qp_num);
+    ucs_list_add_head(&iface->ep_list, &self->list);
     return UCS_OK;
 
 err_txqp_cleanup:
@@ -161,7 +162,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
                                            uct_rc_iface_t);
     ucs_debug("destroy rc ep %p", self);
 
-    uct_rc_iface_remove_ep(iface, self->txqp.qp->qp_num);
+    ucs_list_del(&self->list);
+    uct_rc_iface_remove_qp(iface, self->txqp.qp->qp_num);
     uct_rc_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(&self->txqp);
