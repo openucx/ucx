@@ -203,7 +203,9 @@ void ucp_tag_eager_zcopy_completion(uct_completion_t *self,
                                     ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
-    ucp_tag_eager_zcopy_req_complete(req, status);
+    if ((req->send.state.offset == req->send.length) || (status != UCS_OK)) {
+        ucp_tag_eager_zcopy_req_complete(req, status);
+    }
 }
 
 ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self);
@@ -270,8 +272,11 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_multi(uct_pending_req_t *self)
 void
 ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
-    ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED, status);
+    if ((req->send.state.offset == req->send.length) || (status != UCS_OK)) {
+        ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
+        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
+                                      status);
+    }
 }
 
 static ucs_status_t ucp_tag_eager_sync_zcopy_single(uct_pending_req_t *self)

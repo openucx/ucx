@@ -174,6 +174,8 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
         req->send.state = saved_state; /* need to restore the offsets state */
         return status;
     } else {
+        ++req->send.uct_comp.count;
+        req->send.state.offset += req->send.length;
         ucs_assert(status == UCS_INPROGRESS);
     }
 
@@ -263,6 +265,8 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         if (status == UCS_OK) {
             complete(req, UCS_OK);
         } else {
+            state->offset += length_it;
+            ++req->send.uct_comp.count;
             ucs_assert(status == UCS_INPROGRESS);
         }
         return UCS_OK;
