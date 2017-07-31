@@ -41,21 +41,6 @@ enum uct_am_trace_type {
 
 
 /**
- * @ingroup UCT_RESOURCE
- * @brief List of event types for connection establishment with a client-server
- *        flow.
- */
-typedef enum uct_sockaddr_conn_event_type {
-    UCT_CONN_EVENT_TYPE_REQUEST,    /**< Connection request.
-                                         Generated on the server side */
-    UCT_CONN_EVENT_TYPE_REPLY,      /**< Connection reply.
-                                         Generated on the client side */
-    UCT_CONN_EVENT_TYPE_READY       /**< Connection is ready.
-                                         Generated on the server side */
-} uct_sockaddr_conn_event_type_t;
-
-
-/**
  * @ingroup UCT_AM
  * @brief Flags for uct_am_callback.
  */
@@ -282,56 +267,58 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  * @brief Callback to process an incoming connection request message on the server
  *        side.
  *
- * This callback routine will be invoked on the server side upon receiving the @ref
- * UCT_CONN_EVENT_TYPE_REQUEST event. Incoming data is placed inside the buffer_in
- * buffer and outgoing data should be filled inside this function and placed in
- * the buffer_out.
+ * This callback routine will be invoked on the server side upon receiving an
+ * incoming connection request.
+ * Incoming data is placed inside the conn_priv_data buffer and outgoing data should
+ * be filled inside this function and placed in the reply_priv_data.
  *
- * @param [in]  arg         User defined argument for this callback.
- * @param [in]  buffer_in   Points to the received data.
- *                          This is the private data that was passed to the
- *                          @ref uct_ep_create_sockaddr function.
- * @param [in]  length      Length of the received data.
- * @param [out] buffer_out  Points to the user's data which was written in
- *                          this callback. It will be passed to buffer_in
- *                          on client side upon invoking the @ref
- *                          uct_conn_reply_callback_t callback.
+ * @param [in]  arg              User defined argument for this callback.
+ * @param [in]  conn_priv_data   Points to the received data.
+ *                               This is the private data that was passed to the
+ *                               @ref uct_ep_create_sockaddr function.
+ * @param [in]  length           Length of the received data.
+ * @param [out] reply_priv_data  Points to the user's data which was written in
+ *                               this callback. It will be passed to reply_data
+ *                               on client side upon invoking the @ref
+ *                               uct_sockaddr_conn_reply_callback_t callback.
  *
  * @return  Size of the data that was written. Negative in case of an error.
  *
  */
-typedef ssize_t (*uct_conn_request_callback_t)(void *arg, const void *buffer_in,
-                                               size_t length, void *buffer_out);
+typedef ssize_t (*uct_sockaddr_conn_request_callback_t)(void *arg,
+                                                        const void *conn_priv_data,
+                                                        size_t length,
+                                                        void *reply_priv_data);
 
 
 /**
  * @ingroup UCT_RESOURCE
  * @brief Callback to process an incoming reply message from the server.
  *
- * This callback routine will be invoked on the client side upon receiving the @ref
- * UCT_CONN_EVENT_TYPE_REPLY event. Incoming data is placed inside the buffer_in
- * buffer.
+ * This callback routine will be invoked on the client side upon receiving a
+ * reply message from the server side.
+ * Incoming data is placed inside the reply_data buffer.
  *
  * @param [in]  arg         User defined argument for this callback.
- * @param [in]  buffer_in   Points to the received data.
+ * @param [in]  reply_data  Points to the received data.
  * @param [in]  length      Length of the received data.
  *
  */
-typedef void (*uct_conn_reply_callback_t)(void *arg, const void *buffer_in,
-                                          size_t length);
+typedef void (*uct_sockaddr_conn_reply_callback_t)(void *arg, const void *reply_data,
+                                                   size_t length);
 
 
 /**
  * @ingroup UCT_RESOURCE
  * @brief Callback to process an incoming 'ready' message from the client.
  *
- * This callback routine will be invoked on the server side upon receiving the @ref
- * UCT_CONN_EVENT_TYPE_READY event.
+ * This callback routine will be invoked on the server side upon receiving a
+ * message from the client indicating that the connection is ready.
  *
  * @param [in]  arg         User defined argument for this callback.
  *
  */
-typedef void (*uct_conn_ready_callback_t)(void *arg);
+typedef void (*uct_sockaddr_conn_ready_callback_t)(void *arg);
 
 
 /**

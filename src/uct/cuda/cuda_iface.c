@@ -49,6 +49,7 @@ static ucs_status_t uct_cuda_iface_query(uct_iface_h iface,
     iface_attr->iface_addr_len          = sizeof(int);
     iface_attr->device_addr_len         = 0;
     iface_attr->ep_addr_len             = 0;
+    iface_attr->max_conn_priv           = 0;
     iface_attr->cap.flags               = 0;
 
     iface_attr->cap.put.max_short       = 0;

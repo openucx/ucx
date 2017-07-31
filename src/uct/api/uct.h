@@ -310,11 +310,14 @@ enum uct_am_cb_flags {
 };
 
 
-enum uct_sock_addr_flags {
-    UCT_SOCK_ADDR_FLAG_CONNECT  = UCS_BIT(0),   /**< Connect to the sockadrr
-                                                     on the remote side */
-    UCT_SOCK_ADDR_FLAG_BIND     = UCS_BIT(1)    /**< The sockaddr to bind to */
-};
+/**
+ * @ingroup UCT_MD
+ * @brief The mode of the memory domain reachability check for the sockaddr.
+ */
+typedef enum {
+   UCT_SOCKADDR_REACHABILITY_LOCAL,  /**< Check if local address exists */
+   UCT_SOCKADDR_REACHABILITY_REMOTE  /**< Check if remote address can be reached */
+} uct_sockaddr_reachability_t;
 
 
 /**
@@ -519,15 +522,18 @@ struct uct_iface_params {
 
     /* These callbacks and address are only relevant for client-server
      * connection establishment with sockaddr and are needed on the server side */
-    ucs_sock_addr_t             addr;
-    void                        *request_arg;
-    uct_conn_request_callback_t request_cb;     /**< Callback for an incoming
-                                                     connection request on the server
-                                                     @ref UCT_CONN_EVENT_TYPE_REQUEST */
-    void                        *ready_arg;
-    uct_conn_ready_callback_t   ready_cb;       /**< Callback for an incoming @ref
-                                                     UCT_CONN_EVENT_TYPE_READY
-                                                     message on the server */
+    ucs_sock_addr_t                      listen_sockaddr;
+    void                                 *conn_request_arg;
+    uct_sockaddr_conn_request_callback_t conn_request_cb;   /**< Callback for an
+                                                                 incoming connection
+                                                                 request on the server */
+    void                                 *conn_ready_arg;
+    uct_sockaddr_conn_ready_callback_t   conn_ready_cb;     /**< Callback for an
+                                                                 incoming message
+                                                                 on the server
+                                                                 indicating that
+                                                                 the connection
+                                                                 is ready */
 };
 
 
@@ -1200,13 +1206,12 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  *
  * This routine will create an endpoint for a connection to the remote peer,
  * specified by its socket address.
- * The connection needs to be established by connecting to the
- * remote inerface's sockaddr. The user may provide private data to be sent
- * on a connection request to the remote peer.
+ * The user may provide private data to be sent on a connection request to the
+ * remote peer.
  *
  * @param [in]  iface            Interface to create the endpoint on.
- * @param [in]  addr             The sockaddr to connect to on the remote peer.
- * @param [in]  cb               Callback for an incoming reply message from
+ * @param [in]  sockaddr         The sockaddr to connect to on the remote peer.
+ * @param [in]  reply_cb         Callback for an incoming reply message from
  *                               the server.
  * @param [in]  arg              User defined argument to pass to the callback.
  * @param [in]  priv_data        User's private data for connecting to the
@@ -1215,8 +1220,9 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  * @param [out] ep_p             Handle to the created endpoint.
  */
 ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
-                                    const ucs_sock_addr_t addr,
-                                    uct_conn_reply_callback_t cb, void *arg,
+                                    const ucs_sock_addr_t *sockaddr,
+                                    uct_sockaddr_conn_reply_callback_t reply_cb,
+                                    void *arg,
                                     const void *priv_data, size_t length,
                                     uct_ep_h *ep_p);
 
@@ -1386,20 +1392,20 @@ ucs_status_t uct_md_config_read(const char *name, const char *env_prefix,
  * @brief Check if remote sock address is reachable from the memory domain.
  *
  * This function checks if a remote sock address can be reached from a local
- * memory domain or if the local sock address can be used for binding by the
- * local memory domain.
+ * memory domain. Reachability can be checked in local or remote mode.
  *
  * @param [in]  md         Memory domain to check reachability from.
- * @param [in]  addr       Socket address to check reachability to.
- * @param [in]  flag       Flag from @ref uct_sock_addr_flags to indicate if
+ * @param [in]  sockaddr   Socket address to check reachability to.
+ * @param [in]  mode       Mode from @ref uct_sockaddr_reachability_t to indicate if
  *                         reachability is tested on the server side -
  *                         for binding to the given sockaddr, or on the
  *                         client side - for connecting to the given remote
  *                         peer's sockaddr.
  *
- * @return Nonzero if reachable, 0 if not.
+ * @return Nonzero if reachable, 0 if inreachable.
  */
-int uct_md_is_reachable(uct_md_h md, const ucs_sock_addr_t addr, uint64_t flag);
+int uct_md_is_sockaddr_reachable(uct_md_h md, const ucs_sock_addr_t *sockaddr,
+                                 uct_sockaddr_reachability_t mode);
 
 
 /**

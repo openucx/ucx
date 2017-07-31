@@ -389,6 +389,7 @@ static ucs_status_t uct_cm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.max_bcopy      = mtu;
     iface_attr->iface_addr_len        = sizeof(uint32_t);
     iface_attr->ep_addr_len           = 0;
+    iface_attr->max_conn_priv         = 0;
     iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_BCOPY |
                                         UCT_IFACE_FLAG_AM_DUP |
                                         UCT_IFACE_FLAG_PENDING |

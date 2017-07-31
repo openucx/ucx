@@ -632,7 +632,8 @@ void uct_rc_verbs_iface_tag_query(uct_rc_verbs_iface_t *iface,
     unsigned eager_hdr_size  = sizeof(struct ibv_exp_tmh);
 
     if (UCT_RC_VERBS_TM_ENABLED(iface)) {
-        iface_attr->ep_addr_len = sizeof(uct_rc_verbs_ep_tm_address_t);
+        iface_attr->ep_addr_len   = sizeof(uct_rc_verbs_ep_tm_address_t);
+        iface_attr->max_conn_priv = 0;
 
         /* Redefine AM caps, because we have to send TMH (with NO_TAG
          * operation) with every AM message. */
