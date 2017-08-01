@@ -30,11 +30,6 @@
                                      (iface)->config.fifo_elem_size))
 
 
-typedef enum {
-    UCT_MM_IFACE_SIGNAL_CONNECT    = 0,
-} uct_mm_iface_conn_signal_t;
-
-
 typedef struct uct_mm_iface_config {
     uct_iface_config_t       super;
     unsigned                 fifo_size;            /* Size of the receive FIFO */
@@ -88,9 +83,6 @@ struct uct_mm_iface {
     ucs_arbiter_t           arbiter;
     const char              *path;            /* path to the backing file (for 'posix') */
     uct_recv_desc_t         release_desc;
-
-    uct_mm_fifo_ctl_t       dummy_fifo_ctl;   /* a dummy fifo_ctl to be used until
-                                               * connection is established */
 
     struct {
         unsigned fifo_size;

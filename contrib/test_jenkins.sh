@@ -231,6 +231,14 @@ run_hello() {
 		-Wl,-rpath=${ucx_inst}/lib
 	fi
 
+	# set smaller timeouts so the test will complete faster
+	if [[ ${test_args} == *"-e"* ]]
+	then
+		export UCX_UD_TIMEOUT=1s
+		export UCX_RC_TIMEOUT=1ms
+		export UCX_RC_RETRY_COUNT=4
+	fi
+	
 	# hello-world example
 	tcp_port=$((10000 + EXECUTOR_NUMBER))
 
@@ -252,6 +260,9 @@ run_hello() {
 	# make sure server process is not running
 	if [[ ${test_args} == *"-e"* ]]
 	then
+		unset UCX_UD_TIMEOUT
+		unset UCX_RC_TIMEOUT
+		unset UCX_RC_RETRY_COUNT
 		wait ${hw_client_pid}
 		# return default
 		set -Ee

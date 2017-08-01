@@ -4,82 +4,78 @@
 * See file LICENSE for terms.
 */
 
-#include "uct_p2p_test.h"
+#include "test_p2p_rma.h"
 
 #include <functional>
 
-class uct_p2p_rma_test : public uct_p2p_test {
-public:
-    static const uint64_t SEED1 = 0x1111111111111111lu;
-    static const uint64_t SEED2 = 0x2222222222222222lu;
-    static const uint64_t SEED3 = 0x3333333333333333lu;
 
-    uct_p2p_rma_test() : uct_p2p_test(0) {
+uct_p2p_rma_test::uct_p2p_rma_test() : uct_p2p_test(0) {
+}
+
+ucs_status_t uct_p2p_rma_test::put_short(uct_ep_h ep, const mapped_buffer &sendbuf,
+                       const mapped_buffer &recvbuf)
+{
+     return uct_ep_put_short(ep, sendbuf.ptr(), sendbuf.length(),
+                             recvbuf.addr(), recvbuf.rkey());
+}
+
+ucs_status_t uct_p2p_rma_test::put_bcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
+                                         const mapped_buffer &recvbuf)
+{
+    ssize_t packed_len;
+    packed_len = uct_ep_put_bcopy(ep, mapped_buffer::pack, (void*)&sendbuf,
+                                  recvbuf.addr(), recvbuf.rkey());
+    if (packed_len >= 0) {
+        EXPECT_EQ(sendbuf.length(), (size_t)packed_len);
+        return UCS_OK;
+    } else {
+        return (ucs_status_t)packed_len;
     }
+}
 
-    ucs_status_t put_short(uct_ep_h ep, const mapped_buffer &sendbuf,
-                           const mapped_buffer &recvbuf)
-    {
-         return uct_ep_put_short(ep, sendbuf.ptr(), sendbuf.length(),
-                                 recvbuf.addr(), recvbuf.rkey());
+ucs_status_t uct_p2p_rma_test::put_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
+                                         const mapped_buffer &recvbuf)
+{
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), sender().iface_attr().cap.put.max_iov);
+
+    return uct_ep_put_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
+}
+
+ucs_status_t uct_p2p_rma_test::get_bcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
+                                         const mapped_buffer &recvbuf)
+{
+    return uct_ep_get_bcopy(ep, (uct_unpack_callback_t)memcpy, sendbuf.ptr(),
+                            sendbuf.length(), recvbuf.addr(),
+                            recvbuf.rkey(), comp());
+}
+
+ucs_status_t uct_p2p_rma_test::get_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
+                                         const mapped_buffer &recvbuf)
+{
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), sender().iface_attr().cap.get.max_iov);
+
+    return uct_ep_get_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
+}
+
+void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
+                                 direction_t direction)
+{
+    mapped_buffer sendbuf(length, SEED1, sender(), 1);
+    mapped_buffer recvbuf(length, SEED2, receiver(), 3);
+
+    blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
+    if (direction == DIRECTION_SEND_TO_RECV) {
+        sendbuf.pattern_fill(SEED3);
+        wait_for_remote();
+        recvbuf.pattern_check(SEED1);
+    } else if (direction == DIRECTION_RECV_TO_SEND) {
+        recvbuf.pattern_fill(SEED3);
+        sendbuf.pattern_check(SEED2);
+        wait_for_remote();
     }
-
-    ucs_status_t put_bcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
-                           const mapped_buffer &recvbuf)
-    {
-        ssize_t packed_len;
-        packed_len = uct_ep_put_bcopy(ep, mapped_buffer::pack, (void*)&sendbuf,
-                                      recvbuf.addr(), recvbuf.rkey());
-        if (packed_len >= 0) {
-            EXPECT_EQ(sendbuf.length(), (size_t)packed_len);
-            return UCS_OK;
-        } else {
-            return (ucs_status_t)packed_len;
-        }
-    }
-
-    ucs_status_t put_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
-                           const mapped_buffer &recvbuf)
-    {
-        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                                sendbuf.memh(), sender().iface_attr().cap.put.max_iov);
-
-        return uct_ep_put_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
-    }
-
-    ucs_status_t get_bcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
-                           const mapped_buffer &recvbuf)
-    {
-        return uct_ep_get_bcopy(ep, (uct_unpack_callback_t)memcpy, sendbuf.ptr(),
-                                sendbuf.length(), recvbuf.addr(),
-                                recvbuf.rkey(), comp());
-    }
-
-    ucs_status_t get_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
-                           const mapped_buffer &recvbuf)
-    {
-        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                                sendbuf.memh(), sender().iface_attr().cap.get.max_iov);
-
-        return uct_ep_get_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
-    }
-
-    virtual void test_xfer(send_func_t send, size_t length, direction_t direction) {
-        mapped_buffer sendbuf(length, SEED1, sender(), 1);
-        mapped_buffer recvbuf(length, SEED2, receiver(), 3);
-
-        blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
-        if (direction == DIRECTION_SEND_TO_RECV) {
-            sendbuf.pattern_fill(SEED3);
-            wait_for_remote();
-            recvbuf.pattern_check(SEED1);
-        } else if (direction == DIRECTION_RECV_TO_SEND) {
-            recvbuf.pattern_fill(SEED3);
-            sendbuf.pattern_check(SEED2);
-            wait_for_remote();
-        }
-    }
-};
+}
 
 UCS_TEST_P(uct_p2p_rma_test, put_short) {
     check_caps(UCT_IFACE_FLAG_PUT_SHORT);

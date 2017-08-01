@@ -17,6 +17,10 @@
 #include <sys/poll.h>
 
 
+/* Maximal number of events to clear from the signaling pipe in single call */
+#define UCT_MM_IFACE_MAX_SIG_EVENTS  32
+
+
 static ucs_config_field_t uct_mm_iface_config_table[] = {
     {"", "ALLOC=md", NULL,
      ucs_offsetof(uct_mm_iface_config_t, super),
@@ -126,6 +130,8 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_AM_BCOPY         |
                                           UCT_IFACE_FLAG_PENDING          |
                                           UCT_IFACE_FLAG_AM_CB_SYNC       |
+                                          UCT_IFACE_FLAG_EVENT_SEND_COMP  |
+                                          UCT_IFACE_FLAG_EVENT_RECV_SIG_AM|
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
     iface_attr->latency.overhead        = 80e-9; /* 80 ns */
@@ -256,6 +262,37 @@ unsigned uct_mm_iface_progress(void *arg)
     return count;
 }
 
+static ucs_status_t uct_mm_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
+{
+    *fd_p = ucs_derived_of(tl_iface, uct_mm_iface_t)->signal_fd;
+    return UCS_OK;
+}
+
+static ucs_status_t uct_mm_iface_event_fd_arm(uct_iface_h tl_iface,
+                                              unsigned events)
+{
+    uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
+    char dummy[UCT_MM_IFACE_MAX_SIG_EVENTS]; /* pop multiple signals at once */
+    int ret;
+
+    ret = recvfrom(iface->signal_fd, &dummy, sizeof(dummy), 0, NULL, 0);
+    if (ret > 0) {
+        return UCS_ERR_BUSY;
+    } else if (ret == -1) {
+        if (errno == EAGAIN) {
+            return UCS_OK;
+        } else if (errno == EINTR) {
+            return UCS_ERR_BUSY;
+        } else {
+            ucs_error("failed to retrieve message from signal pipe: %m");
+            return UCS_ERR_IO_ERROR;
+        }
+    } else {
+        ucs_assert(ret == 0);
+        return UCS_OK;
+    }
+}
+
 static UCS_CLASS_DECLARE_DELETE_FUNC(uct_mm_iface_t, uct_iface_t);
 
 static uct_iface_ops_t uct_mm_iface_ops = {
@@ -280,9 +317,11 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_ep_t),
     .iface_flush              = uct_mm_iface_flush,
     .iface_fence              = uct_sm_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress_enable    = uct_base_iface_progress_enable,
+    .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = (void*)uct_mm_iface_progress,
+    .iface_event_fd_get       = uct_mm_iface_event_fd_get,
+    .iface_event_arm          = uct_mm_iface_event_fd_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_iface_t),
     .iface_query              = uct_mm_iface_query,
     .iface_get_device_address = uct_sm_iface_get_device_address,
@@ -404,50 +443,12 @@ err:
     return status;
 }
 
-static void uct_mm_iface_recv_messages(uct_mm_iface_t *iface)
-{
-    uct_mm_iface_conn_signal_t sig;
-    int ret;
-
-    for (;;) {
-        ret = recvfrom(iface->signal_fd, &sig, sizeof(sig), 0, NULL, 0);
-        if (ret == sizeof(sig)) {
-            ucs_debug("mm_iface %p: got connect message", iface);
-            uct_worker_progress_add_safe(iface->super.worker,
-                                         uct_mm_iface_progress, iface,
-                                         &iface->super.prog);
-        } else {
-            if (ret < 0) {
-                if (errno != EAGAIN) {
-                    ucs_error("failed to retrieve message from signal pipe: %m");
-                }
-            } else {
-                ucs_error("mm connect signal with invalid size (expected: %zu got: %d)",
-                          sizeof(sig), ret);
-            }
-            break;
-        }
-    }
-}
-
-static void uct_mm_iface_singal_handler(int fd, void *arg)
-{
-    uct_mm_iface_recv_messages(arg);
-}
-
-static void uct_mm_iface_init_dummy_fifo_ctl(uct_mm_iface_t *iface)
-{
-    iface->dummy_fifo_ctl.head = iface->config.fifo_size;
-    iface->dummy_fifo_ctl.tail = 0;
-}
-
 static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
     uct_mm_iface_config_t *mm_config = ucs_derived_of(tl_config, uct_mm_iface_config_t);
     uct_mm_fifo_element_t* fifo_elem_p;
-    ucs_async_context_t *async;
     ucs_status_t status;
     unsigned i;
 
@@ -546,14 +547,10 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
         }
     }
 
-    uct_mm_iface_init_dummy_fifo_ctl(self);
-
     ucs_arbiter_init(&self->arbiter);
 
-    async = self->super.worker->async;
-    ucs_async_set_event_handler((async != NULL) ? async->mode : UCS_ASYNC_MODE_THREAD,
-                                self->signal_fd, POLLIN, uct_mm_iface_singal_handler,
-                                self, async);
+    uct_base_iface_progress_enable(&self->super.super,
+                                   UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
     ucs_debug("Created an MM iface. FIFO mm id: %zu", self->fifo_mm_id);
     return UCS_OK;
@@ -577,9 +574,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     ucs_status_t status;
     size_t size_to_free;
 
-    ucs_async_remove_handler(self->signal_fd, 1);
-
-    uct_worker_progress_remove_all(self->super.worker, &self->super.prog);
+    uct_base_iface_progress_disable(&self->super.super,
+                                   UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
     /* return all the descriptors that are now 'assigned' to the FIFO,
      * to their mpool */

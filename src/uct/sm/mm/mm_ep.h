@@ -30,13 +30,11 @@ struct uct_mm_ep {
 
     ucs_arbiter_group_t  arb_group;   /* the group that holds this ep's pending operations */
 
-    /* The cached addrlen and sockaddr is used for a safe
-     * disconnect when other peer unmaps the memory.
-     * while this is not necessary for mmap() call, it is critical for XPMEM */
-    socklen_t            cached_signal_addrlen;   /* cached address length of signaling socket */
-    struct sockaddr_un   cached_signal_sockaddr;  /* cached address of signaling socket */
-
-    uct_worker_cb_id_t   slow_cb_id; /* Slow-path callback */
+    /* Used for signaling remote side wakeup */
+    struct {
+        struct sockaddr_un  sockaddr;  /* address of signaling socket */
+        socklen_t           addrlen;   /* address length of signaling socket */
+    } signal;
 
     /* Remote peer */
     uct_mm_remote_seg_t  mapped_desc; /* pointer to the descriptor of the destination's shared_mem (FIFO) */
