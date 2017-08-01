@@ -300,14 +300,17 @@ typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status
 
 
 /**
-* @ingroup UCP_WORKER
-* @brief A callback for accepting client/server connections on a listener
-*        @ref ucp_listener_h.
-*
-*  @param [in]  ep      Handle to a newly created endpoint which is connected
-*                       to the remote peer which has initiated the connection.
-*  @param [in]  arg     User's argument for the callback.
-*/
+ * @ingroup UCP_WORKER
+ * @brief A callback for accepting client/server connections on a listener
+ *        @ref ucp_listener_h.
+ *
+ *  This callback routine is invoked on the server side upon creating a connection
+ *  to a remote client. The user can pass an argument to this callback.
+ *
+ *  @param [in]  ep      Handle to a newly created endpoint which is connected
+ *                       to the remote peer which has initiated the connection.
+ *  @param [in]  arg     User's argument for the callback.
+ */
 typedef void (*ucp_listener_accept_callback_t)(ucp_ep_h ep, void *arg);
 
 
@@ -324,13 +327,18 @@ typedef struct ucp_err_handler {
 
 
 /**
-* @ingroup UCP_WORKER
-* @brief UCP callback to handle the creation of an endpoint in a client-server
-* connection establishment flow.
-*
-* This structure is used for handling the creation of an endpoint
-* to the remote peer after an incoming connection request on the listener
-*/
+ * @ingroup UCP_WORKER
+ * @brief UCP callback to handle the creation of an endpoint in a client-server
+ * connection establishment flow.
+ *
+ * This structure is used for handling the creation of an endpoint
+ * to the remote peer after an incoming connection request on the listener
+ * Other than communication progress routines, it is allowed to call other
+ * communication routines from the callback in the struct.
+ * The callback should be thread safe with respect to the worker in is invoked
+ * on. If the callback is called from different threads, this callback needs
+ * thread safety support.
+ */
 typedef struct ucp_listener_accept_handler {
    ucp_listener_accept_callback_t  cb;       /**< Endpoint creation callback */
    void                            *arg;     /**< User defined argument for the

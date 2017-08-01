@@ -204,7 +204,8 @@ enum ucp_ep_params_flags_field {
     UCP_EP_PARAMS_FLAGS_CLIENT_SERVER  = UCS_BIT(1)   /**< Using a client-server
                                                            connection establishment
                                                            mechanism.
-                                                           sock_address field
+                                                           @ref ucs_sock_addr_t
+                                                           sockaddr field
                                                            must be provided and
                                                            contain the address
                                                            of the remote peer */
@@ -700,10 +701,10 @@ typedef struct ucp_worker_listener_params {
      * An address in the form of a sockaddr.
      * This field is mandatory for filling (along with its corresponding bit
      * in the field_mask - @ref UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR
-     * The ucp_worker_listen routine will return with an error if sock_address
+     * The ucp_worker_listen routine will return with an error if sockaddr
      * is not specified.
      */
-    ucs_sock_addr_t                sock_address;
+    ucs_sock_addr_t                sockaddr;
 
     /**
      * Handler to endpoint creation in a client-server connection flow.
@@ -766,11 +767,11 @@ typedef struct ucp_ep_params {
      * from the user.
      * The @ref UCP_EP_PARAM_FIELD_SOCK_ADDR bit in the field_mask should be set
      * to indicate that the type of the remote address is a sockaddr.
-     * In order for sock_address to be used for the connection establishment,
+     * In order for sockaddr to be used for the connection establishment,
      * the @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag needs to be set in the
      * 'flags' field.
      */
-    ucs_sock_addr_t         sock_address;
+    ucs_sock_addr_t         sockaddr;
 } ucp_ep_params_t;
 
 
@@ -1363,7 +1364,8 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker);
  * @ingroup UCP_WORKER
  * @brief Accept connections on a local address of the worker object.
  *
- * This routine binds the worker object to a sock_addr which is set by the user.
+ * This routine binds the worker object to a @ref ucs_sock_addr_t sockaddr
+ * which is set by the user.
  * The worker will listen to incoming connection requests and upon receiving such
  * a request from the remote peer, an endpoint to it will be created.
  * The user's call-back will be invoked once the endpoint is created.
