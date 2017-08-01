@@ -1625,6 +1625,9 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
  * This routine returns a local pointer to the remote memory described
  * by the rkey.
  *
+ * @note This routine can return a valid pointer only for the endpoints
+ * that are reacheble via shared memory.
+ *
  * @param [in]  rkey          A remote key handle.
  * @param [in]  raddr         A remote address within the memory area
  *                            described by the rkey.
