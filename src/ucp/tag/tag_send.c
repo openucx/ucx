@@ -78,6 +78,8 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
                   req, req->send.datatype, req->send.buffer, length, max_short,
                   rndv_rma_thresh, rndv_am_thresh, zcopy_thresh);
 
+    req->send.uct_comp.func = NULL;
+
     if (((ssize_t)length <= max_short) && !is_iov) {
         /* short */
         req->send.uct.func = proto->contig_short;

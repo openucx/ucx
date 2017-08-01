@@ -203,8 +203,17 @@ void ucp_tag_eager_zcopy_completion(uct_completion_t *self,
                                     ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
-    if ((req->send.state.offset == req->send.length) || (status != UCS_OK)) {
+    if (req->send.state.offset == req->send.length) {
         ucp_tag_eager_zcopy_req_complete(req, status);
+    } else if (status != UCS_OK) {
+        /* NOTE: the request is in pending queue if data was not completely sent,
+         *       just dereg the buffer here and complete request on purge
+         *       pending later. The same for RNDV and SYNC protocols.
+         * TODO: add error completion in ucp_proto_t to handle failure of
+         *       complex protocols.
+         */
+        ucp_request_send_buffer_dereg(req, req->send.lane);
+        req->send.uct_comp.func = NULL;
     }
 }
 
@@ -272,10 +281,13 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_multi(uct_pending_req_t *self)
 void
 ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
-    if ((req->send.state.offset == req->send.length) || (status != UCS_OK)) {
+    if (req->send.state.offset == req->send.length) {
         ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
         ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
                                       status);
+    } else if (status != UCS_OK) {
+        ucp_request_send_buffer_dereg(req, req->send.lane);
+        req->send.uct_comp.func = NULL;
     }
 }
 
