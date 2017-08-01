@@ -55,6 +55,14 @@ public:
         uct_test::cleanup();
     }
 
+    void test_recv_am(bool signaled);
+
+    static size_t pack_u64(void *dest, void *arg)
+    {
+        *reinterpret_cast<uint64_t*>(dest) = *reinterpret_cast<uint64_t*>(arg);
+        return sizeof(uint64_t);
+    }
+
 protected:
     entity *m_e1, *m_e2;
     static int m_am_count;
@@ -62,17 +70,26 @@ protected:
 
 int test_uct_event_fd::m_am_count = 0;
 
-UCS_TEST_P(test_uct_event_fd, am)
+void test_uct_event_fd::test_recv_am(bool signaled)
 {
-    uint64_t send_data   = 0xdeadbeef;
-    uint64_t test_ib_hdr = 0xbeef;
+    uint64_t send_data = 0xdeadbeef;
     recv_desc_t *recv_buffer;
     struct pollfd wakeup_fd;
     ucs_status_t status;
     int am_send_count = 0;
+    unsigned send_flags;
+    unsigned arm_flags;
 
     initialize();
-    check_caps(UCT_IFACE_FLAG_EVENT_RECV_AM | UCT_IFACE_FLAG_AM_CB_SYNC);
+    if (signaled) {
+        check_caps(UCT_IFACE_FLAG_EVENT_RECV_SIG_AM | UCT_IFACE_FLAG_AM_CB_SYNC);
+        arm_flags  = UCT_EVENT_RECV_SIG_AM;
+        send_flags = UCT_AM_FLAG_SIGNALED;
+    } else {
+        check_caps(UCT_IFACE_FLAG_EVENT_RECV_AM | UCT_IFACE_FLAG_AM_CB_SYNC);
+        arm_flags  = UCT_EVENT_RECV_AM;
+        send_flags = 0;
+    }
 
     recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(send_data));
     recv_buffer->length = 0; /* Initialize length to 0 */
@@ -88,20 +105,20 @@ UCS_TEST_P(test_uct_event_fd, am)
     wakeup_fd.events = POLLIN;
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
-    status = uct_iface_event_arm(m_e2->iface(), UCT_EVENT_RECV_AM);
+    status = uct_iface_event_arm(m_e2->iface(), arm_flags);
     ASSERT_EQ(UCS_OK, status);
 
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
     /* send the data */
-    uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
+    uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, send_flags);
     ++am_send_count;
 
     /* make sure the file descriptor IS signaled ONCE */
     ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
 
     for (;;) {
-        status = uct_iface_event_arm(m_e2->iface(), UCT_EVENT_RECV_AM);
+        status = uct_iface_event_arm(m_e2->iface(), arm_flags);
         if (status != UCS_ERR_BUSY) {
             break;
         }
@@ -112,11 +129,11 @@ UCS_TEST_P(test_uct_event_fd, am)
     wakeup_fd.revents = 0;
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
-    status = uct_iface_event_arm(m_e2->iface(), UCT_EVENT_RECV_AM);
+    status = uct_iface_event_arm(m_e2->iface(), arm_flags);
     ASSERT_EQ(UCS_OK, status);
 
     /* send the data again */
-    uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
+    uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, send_flags);
     ++am_send_count;
 
     /* make sure the file descriptor IS signaled */
@@ -129,6 +146,16 @@ UCS_TEST_P(test_uct_event_fd, am)
     m_e1->flush();
 
     free(recv_buffer);
+}
+
+UCS_TEST_P(test_uct_event_fd, am)
+{
+    test_recv_am(false);
+}
+
+UCS_TEST_P(test_uct_event_fd, sig_am)
+{
+    test_recv_am(true);
 }
 
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_event_fd);
