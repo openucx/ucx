@@ -533,7 +533,7 @@ UCS_TEST_P(test_tag, tag_cancel_noforce)
     EXPECT_EQ(r_ctx.status, UCS_ERR_CANCELED);
 }
 
-UCS_TEST_P(test_tag, tag_limit)
+UCS_TEST_P(test_tag, tag_limit, "TM_SYNC_RATIO?=0.0")
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
 
@@ -560,8 +560,12 @@ UCS_TEST_P(test_tag, tag_limit)
     ASSERT_UCS_OK(tag_cancel(receiver(), rctxs.at(0), 1));
     short_progress_loop();
 
-    // Check we can post again
-    ASSERT_UCS_OK(tag_post(receiver(), rctxs.at(0)));
+    // Check we can post again within a reasonable time
+    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(20.0);
+    do {
+        status = tag_post(receiver(), rctxs.at(0));
+    } while ((ucs_get_time() < deadline) && (status == UCS_ERR_EXCEEDS_LIMIT));
+    ASSERT_UCS_OK(status);
 }
 
 UCS_TEST_P(test_tag, sw_rndv_expected)
