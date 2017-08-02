@@ -9,10 +9,10 @@ void ucp_get_version(unsigned *major_version, unsigned *minor_version,
 {
     *major_version  = @MAJOR_VERSION@;
     *minor_version  = @MINOR_VERSION@;
-    *release_number = @REV_COUNT@;
+    *release_number = @PATCH_VERSION@;
 }
 
 const char *ucp_get_version_string()
 {
-	return "@MAJOR_VERSION@.@MINOR_VERSION@.@REV_COUNT@";
+	return "@MAJOR_VERSION@.@MINOR_VERSION@.@PATCH_VERSION@";
 }
