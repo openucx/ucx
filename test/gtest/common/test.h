@@ -35,7 +35,8 @@ public:
     virtual void get_config(const std::string& name, std::string& value,
                             size_t max = 1024);
     virtual void set_config(const std::string& config_str);
-    virtual void modify_config(const std::string& name, const std::string& value);
+    virtual void modify_config(const std::string& name, const std::string& value,
+                               bool optional = false);
     virtual void push_config();
     virtual void pop_config();
 

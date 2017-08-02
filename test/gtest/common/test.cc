@@ -53,11 +53,24 @@ unsigned test_base::num_threads() const {
 void test_base::set_config(const std::string& config_str)
 {
     std::string::size_type pos = config_str.find("=");
+    std::string name, value;
+    bool optional;
+
     if (pos == std::string::npos) {
-        modify_config(config_str, "");
+        name  = config_str;
+        value = "";
     } else {
-        modify_config(config_str.substr(0, pos), config_str.substr(pos + 1));
+        name  = config_str.substr(0, pos);
+        value = config_str.substr(pos + 1);
     }
+
+    optional = false;
+    if ((name.length() > 0) && name.at(name.length() - 1) == '?') {
+        name = name.substr(0, name.length() - 1);
+        optional = true;
+    }
+
+    modify_config(name, value, optional);
 }
 
 void test_base::get_config(const std::string& name, std::string& value, size_t max)
@@ -75,14 +88,17 @@ void test_base::get_config(const std::string& name, std::string& value, size_t m
     }
 }
 
-void test_base::modify_config(const std::string& name, const std::string& value)
+void test_base::modify_config(const std::string& name, const std::string& value,
+                              bool optional)
 {
     ucs_status_t status = ucs_global_opts_set_value(name.c_str(), value.c_str());
-    if (status != UCS_OK) {
-        GTEST_FAIL() << "Invalid UCS configuration for " << name << " : "
-                        << value << ", error message: "
-                        << ucs_status_string(status) << "(" << status << ")";
+    if ((status == UCS_OK) || (optional && (status == UCS_ERR_NO_ELEM))) {
+        return;
     }
+
+    GTEST_FAIL() << "Invalid UCS configuration for " << name << " : "
+                    << value << ", error message: "
+                    << ucs_status_string(status) << "(" << status << ")";
 }
 
 void test_base::push_config()

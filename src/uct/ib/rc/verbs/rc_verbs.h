@@ -56,6 +56,7 @@ typedef struct uct_rc_verbs_iface_config {
         int                            enable;
         unsigned                       list_size;
         unsigned                       rndv_queue_len;
+        double                         sync_ratio;
     } tm;
 #endif
 } uct_rc_verbs_iface_config_t;

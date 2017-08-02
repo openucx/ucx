@@ -577,7 +577,7 @@ static ucs_status_t uct_rc_verbs_ep_tag_qp_create(uct_rc_verbs_iface_t *iface,
             }
             return status;
         }
-        uct_rc_iface_add_ep(&iface->super, &ep->super, ep->tm_qp->qp_num);
+        uct_rc_iface_add_qp(&iface->super, &ep->super, ep->tm_qp->qp_num);
     }
 #endif
     return UCS_OK;
@@ -592,7 +592,7 @@ static void uct_rc_verbs_ep_tag_qp_destroy(uct_rc_verbs_ep_t *ep)
         if (ibv_destroy_qp(ep->tm_qp)) {
             ucs_warn("failed to destroy TM RNDV QP: %m");
         }
-        uct_rc_iface_remove_ep(&iface->super, ep->tm_qp->qp_num);
+        uct_rc_iface_remove_qp(&iface->super, ep->tm_qp->qp_num);
     }
 #endif
 }

@@ -522,3 +522,49 @@ UCS_TEST_P(test_ucp_wireup, disconnect_nb_onesided) {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup)
+
+class test_ucp_wireup_errh_peer : public test_ucp_wireup
+{
+public:
+    static ucp_ep_params_t get_ep_params() {
+        ucp_ep_params_t params = test_ucp_wireup::get_ep_params();
+        params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER;
+        params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        params.err_handler.cb  = err_cb;
+        params.err_handler.arg = NULL;
+        return params;
+    }
+
+    virtual void init() {
+        test_ucp_wireup::init();
+        skip_loopback();
+    }
+
+    static void err_cb(void *, ucp_ep_h, ucs_status_t) {}
+};
+
+UCS_TEST_P(test_ucp_wireup_errh_peer, msg_after_ep_create) {
+    ucp_ep_params_t ep_params = get_ep_params();
+
+    receiver().connect(&sender(), &ep_params);
+
+    sender().connect(&receiver(), &ep_params);
+    send_recv(sender().ep(), receiver().worker(), 1, 1);
+    sender().flush_worker();
+}
+
+UCS_TEST_P(test_ucp_wireup_errh_peer, msg_before_ep_create) {
+    ucp_ep_params_t ep_params = get_ep_params();
+
+    sender().connect(&receiver(), &ep_params);
+    send_recv(sender().ep(), receiver().worker(), 1, 1);
+    sender().flush_worker();
+
+    receiver().connect(&sender(), &ep_params);
+
+    send_recv(receiver().ep(), sender().worker(), 1, 1);
+    receiver().flush_worker();
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)

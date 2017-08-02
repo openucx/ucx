@@ -172,6 +172,46 @@ int ucp_ep_is_stub(ucp_ep_h ep)
     return ucp_ep_get_rsc_index(ep, 0) == UCP_NULL_RESOURCE;
 }
 
+static ucs_status_t
+ucp_ep_setup_err_handler(ucp_ep_h ep, const ucp_err_handler_t *err_handler)
+{
+    khiter_t hash_it;
+    int hash_extra_status = 0;
+
+    hash_it = kh_put(ucp_ep_errh_hash, &ep->worker->ep_errh_hash, (uintptr_t)ep,
+                     &hash_extra_status);
+    if (ucs_unlikely(hash_it == kh_end(&ep->worker->ep_errh_hash))) {
+        ucs_error("Hash failed on setup error handler of endpoint %p with status %d ",
+                  ep, hash_extra_status);
+        return UCS_ERR_NO_MEMORY;
+    }
+    kh_value(&ep->worker->ep_errh_hash, hash_it) = *err_handler;
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
+{
+    ucs_status_t status = UCS_OK;
+
+    /* TODO: handle a case where the existing endpoint is incomplete */
+
+    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
+        if (ucp_ep_config(ep)->key.err_mode != params->err_mode) {
+            ucs_error("asymmetric endpoint configuration not supported, "
+                      "error handling level mismatch");
+            return UCS_ERR_UNSUPPORTED;
+        }
+    }
+
+    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER) {
+        status = ucp_ep_setup_err_handler(ep, &params->err_handler);
+    }
+
+    return status;
+}
+
 ucs_status_t ucp_ep_create(ucp_worker_h worker,
                            const ucp_ep_params_t *params,
                            ucp_ep_h *ep_p)
@@ -183,8 +223,6 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
     ucs_status_t status;
     uint64_t dest_uuid;
     ucp_ep_h ep;
-    khiter_t hash_it;
-    int hash_extra_status = 0;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
@@ -205,13 +243,10 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
 
     ep = ucp_worker_ep_find(worker, dest_uuid);
     if (ep != NULL) {
-        /* TODO: handle a case where:
-         * 1) the existing endpoint is incomplete
-         * 2) configuration (key) of existing endpoint does not match requested
-         *    parameters, for example, error handling level
-         */
-        *ep_p = ep;
-        status = UCS_OK;
+        status = ucp_ep_adjust_params(ep, params);
+        if (status == UCS_OK) {
+            *ep_p = ep;
+        }
         goto out_free_address;
     }
 
@@ -230,15 +265,10 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
 
     /* Setup error handler */
     if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER) {
-        hash_it = kh_put(ucp_ep_errh_hash, &worker->ep_errh_hash, (uintptr_t)ep,
-                         &hash_extra_status);
-        if (ucs_unlikely(hash_it == kh_end(&worker->ep_errh_hash))) {
-            ucs_error("Hash failed on setup error handler of endpoint %p with status %d ",
-                      ep, hash_extra_status);
-            status = UCS_ERR_NO_MEMORY;
+        status = ucp_ep_setup_err_handler(ep, &params->err_handler);
+        if (status != UCS_OK) {
             goto err_destroy_ep;
         }
-        kh_value(&worker->ep_errh_hash, hash_it) = params->err_handler;
     }
 
     /* send initial wireup message */
