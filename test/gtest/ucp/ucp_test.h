@@ -9,6 +9,12 @@
 extern "C" {
 #include <ucp/api/ucp.h>
 #include <ucs/time/time.h>
+
+/* ucp version compile time test */
+#if (UCP_API_VERSION != UCP_VERSION(UCP_API_MAJOR,UCP_API_MINOR))
+#error possible bug in UCP version
+#endif
+
 }
 #include <common/test.h>
 
