@@ -275,7 +275,8 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  * @param [in]  arg              User defined argument for this callback.
  * @param [in]  conn_priv_data   Points to the received data.
  *                               This is the private data that was passed to the
- *                               @ref uct_ep_create_sockaddr function.
+ *                               @ref uct_ep_create_sockaddr function on the
+ *                               client side.
  * @param [in]  length           Length of the received data.
  * @param [out] reply_priv_data  Points to the user's data which was written in
  *                               this callback. It will be passed to reply_data
@@ -297,10 +298,12 @@ typedef ssize_t (*uct_sockaddr_conn_request_callback_t)(void *arg,
  *
  * This callback routine will be invoked on the client side upon receiving a
  * reply message from the server side.
- * Incoming data is placed inside the reply_data buffer.
+ * Incoming reply data, which was filled by the server @ref
+ * uct_sockaddr_conn_request_callback_t callback, is placed inside the
+ * reply_data buffer.
  *
  * @param [in]  arg         User defined argument for this callback.
- * @param [in]  reply_data  Points to the received data.
+ * @param [in]  reply_data  Points to the received reply data from server side.
  * @param [in]  length      Length of the received data.
  *
  */

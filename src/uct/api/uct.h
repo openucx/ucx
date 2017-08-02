@@ -312,11 +312,15 @@ enum uct_am_cb_flags {
 
 /**
  * @ingroup UCT_MD
- * @brief The mode of the memory domain reachability check for the sockaddr.
+ * @brief Socket address reachability type.
  */
 typedef enum {
-   UCT_SOCKADDR_REACHABILITY_LOCAL,  /**< Check if local address exists */
-   UCT_SOCKADDR_REACHABILITY_REMOTE  /**< Check if remote address can be reached */
+   UCT_SOCKADDR_REACHABILITY_LOCAL,  /**< Check if local address exists.
+                                          Address should belong to a local
+                                          network interface */
+   UCT_SOCKADDR_REACHABILITY_REMOTE  /**< Check if remote address can be reached.
+                                          Address is routable from one of the
+                                          local network interfaces */
 } uct_sockaddr_reachability_t;
 
 
@@ -1396,13 +1400,14 @@ ucs_status_t uct_md_config_read(const char *name, const char *env_prefix,
  *
  * @param [in]  md         Memory domain to check reachability from.
  * @param [in]  sockaddr   Socket address to check reachability to.
- * @param [in]  mode       Mode from @ref uct_sockaddr_reachability_t to indicate if
- *                         reachability is tested on the server side -
+ * @param [in]  mode       Mode for checking reachability, as defined in @ref
+ *                         uct_sockaddr_reachability_t.
+ *                         Indicates if reachability is tested on the server side -
  *                         for binding to the given sockaddr, or on the
  *                         client side - for connecting to the given remote
  *                         peer's sockaddr.
  *
- * @return Nonzero if reachable, 0 if inreachable.
+ * @return Nonzero if reachable, 0 if unreachable.
  */
 int uct_md_is_sockaddr_reachable(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                  uct_sockaddr_reachability_t mode);
