@@ -436,7 +436,7 @@ size_t test_uct_peer_failure_multiple::get_tx_queue_len() const
     return tx_queue_len;
 }
 
-UCS_TEST_P(test_uct_peer_failure_multiple, test)
+UCS_TEST_P(test_uct_peer_failure_multiple, test, "TM_ENABLE?=n")
 {
     ucs_time_t timeout  = ucs_get_time() +
                           ucs_time_from_sec(200 * ucs::test_time_multiplier());

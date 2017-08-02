@@ -204,13 +204,14 @@ void ucp_test::set_ucp_config(ucp_config_t *config,
     ucp_config_modify(config, "TLS", ss.str().c_str());
 }
 
-void ucp_test::modify_config(const std::string& name, const std::string& value)
+void ucp_test::modify_config(const std::string& name, const std::string& value,
+                             bool optional)
 {
     ucs_status_t status;
 
     status = ucp_config_modify(m_ucp_config, name.c_str(), value.c_str());
     if (status == UCS_ERR_NO_ELEM) {
-        test_base::modify_config(name, value);
+        test_base::modify_config(name, value, optional);
     } else if (status != UCS_OK) {
         UCS_TEST_ABORT("Couldn't modify ucp config parameter: " <<
                         name.c_str() << " to " << value.c_str() << ": " <<

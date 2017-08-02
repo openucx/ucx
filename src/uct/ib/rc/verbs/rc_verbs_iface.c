@@ -47,6 +47,11 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    "Length of receive queue in the QP owned by the device. It is used for receiving \n"
    "RNDV Complete messages sent by the device",
    ucs_offsetof(uct_rc_verbs_iface_config_t, tm.rndv_queue_len), UCS_CONFIG_TYPE_UINT},
+
+  {"TM_SYNC_RATIO", "0.5",
+   "Maximal portion of the tag matching list which can be canceled without requesting\n"
+   "a completion.",
+   ucs_offsetof(uct_rc_verbs_iface_config_t, tm.sync_ratio), UCS_CONFIG_TYPE_DOUBLE},
 #endif
 
   {NULL}
@@ -460,7 +465,7 @@ static ucs_status_t uct_rc_verbs_iface_tag_recv_cancel(uct_iface_h tl_iface,
            /* No pending ADD operations, free the tag immediately */
            ++iface->tm.num_tags;
        }
-       if (iface->tm.num_canceled >= iface->tm.tag_sync_thresh) {
+       if (iface->tm.num_canceled > iface->tm.tag_sync_thresh) {
            /* Too many pending cancels. Need to issue a signaled operation
             * to free the canceled tags */
            uct_rc_verbs_iface_post_signaled_op(iface, &wr, IBV_EXP_WR_TAG_SYNC);
@@ -485,8 +490,8 @@ static ucs_status_t uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
 #if IBV_EXP_HW_TM
     struct ibv_exp_create_srq_attr srq_init_attr;
     ucs_status_t status;
+    int sync_ops_count;
     int rx_hdr_len;
-    int tag_sync_factor = 2;
     uct_ib_md_t *md     = ucs_derived_of(iface->super.super.super.md, uct_ib_md_t);
 
     if (UCT_RC_VERBS_TM_ENABLED(iface)) {
@@ -503,9 +508,16 @@ static ucs_status_t uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
         srq_init_attr.tm_cap.max_num_tags = iface->tm.num_tags;
 
         /* 2 ops for each tag (ADD + DEL) and extra ops for SYNC. There can be
-         * up to "tag_sync_factor" SYNC ops during cancellation. Also we assume that
+         * up to 1/"tag_sync_ratio" SYNC ops during cancellation. Also we assume that
          * there can be up to two pending SYNC ops during unexpected messages flow. */
-        srq_init_attr.tm_cap.max_ops      = 2 * iface->tm.num_tags + tag_sync_factor + 2;
+        if (config->tm.sync_ratio > 0) {
+            sync_ops_count = ceil(1.0 / config->tm.sync_ratio);
+        } else {
+            sync_ops_count = iface->tm.num_tags;
+        }
+        srq_init_attr.tm_cap.max_ops      = (2 * iface->tm.num_tags) +
+                                            sync_ops_count +
+                                            2;
         srq_init_attr.comp_mask           = IBV_EXP_CREATE_SRQ_CQ |
                                             IBV_EXP_CREATE_SRQ_TM;
 
@@ -515,7 +527,7 @@ static ucs_status_t uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
             return UCS_ERR_IO_ERROR;
         }
 
-        iface->tm.tag_sync_thresh = iface->tm.num_tags / tag_sync_factor;
+        iface->tm.tag_sync_thresh = iface->tm.num_tags * config->tm.sync_ratio;
         iface->tm.xrq.available   = srq_init_attr.base.attr.max_wr;
 
         /* AM (NO_TAG) and eager messages have different header sizes.
