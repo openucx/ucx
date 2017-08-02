@@ -108,14 +108,15 @@ void uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
     }
 }
 
-void uct_test::modify_config(const std::string& name, const std::string& value) {
+void uct_test::modify_config(const std::string& name, const std::string& value,
+                             bool optional) {
     ucs_status_t status;
-    status = uct_config_modify(m_iface_config, name.c_str(), value.c_str());
 
+    status = uct_config_modify(m_iface_config, name.c_str(), value.c_str());
     if (status == UCS_ERR_NO_ELEM) {
         status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
         if (status == UCS_ERR_NO_ELEM) {
-            test_base::modify_config(name, value);
+            test_base::modify_config(name, value, optional);
         } else if (status != UCS_OK) {
             UCS_TEST_ABORT("Couldn't modify pd config parameter: " << name.c_str() <<
                            " to " << value.c_str() << ": " << ucs_status_string(status));

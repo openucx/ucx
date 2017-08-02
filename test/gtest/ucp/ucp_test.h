@@ -118,7 +118,8 @@ public:
                                  std::vector<ucp_test_param>& test_params,
                                  int thread_type = SINGLE_THREAD);
 
-    virtual void modify_config(const std::string& name, const std::string& value);
+    virtual void modify_config(const std::string& name, const std::string& value,
+                               bool optional = false);
     void stats_activate();
     void stats_restore();
 
