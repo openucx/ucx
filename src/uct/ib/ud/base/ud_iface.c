@@ -779,6 +779,9 @@ uct_ud_tx_wnd_purge_outstanding(uct_ud_iface_t *iface, uct_ud_ep_t *ud_ep)
     ucs_queue_for_each_extract(skb, &ud_ep->tx.window, queue, 1) {
         skb->flags |= UCT_UD_SEND_SKB_FLAG_ERR;
         skb->status = UCS_ERR_ENDPOINT_TIMEOUT;
+        if (ucs_likely(!(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP))) {
+            skb->len = 0;
+        }
         cdesc = uct_ud_comp_desc(skb);
         /* don't call user completion from async context. instead, put
          * it on a queue which will be progresed from main thread.
