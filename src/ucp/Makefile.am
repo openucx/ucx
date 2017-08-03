@@ -73,5 +73,6 @@ libucp_la_SOURCES = \
 	tag/offload.c \
 	wireup/address.c \
 	wireup/select.c \
+	wireup/signaling_ep.c \
 	wireup/wireup_ep.c \
 	wireup/wireup.c

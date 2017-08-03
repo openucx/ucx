@@ -76,7 +76,7 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
             ucs_list_del(&wiface->arm_list);
         }
 
-        if (wiface->attr.cap.flags & UCP_WORKER_UCT_EVENT_CAP_FLAGS) {
+        if (wiface->attr.cap.flags & UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS) {
             status = ucs_async_remove_handler(wiface->event_fd, 1);
             if (status != UCS_OK) {
                 ucs_warn("failed to remove event handler for fd %d: %s",
@@ -101,6 +101,8 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
     ucp_context_h context = worker->context;
     ucs_status_t status;
     unsigned am_id;
+
+    ucs_trace_func("iface=%p is_proxy=%d", wiface->iface, is_proxy);
 
     for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
         if (!(context->config.features & ucp_am_handlers[am_id].features)) {
@@ -417,7 +419,7 @@ static void ucp_worker_iface_activate(ucp_worker_iface_t *wiface)
     ucp_worker_set_am_handlers(wiface, 0);
 
     /* Add to user wakeup */
-    if (wiface->attr.cap.flags & UCP_WORKER_UCT_EVENT_CAP_FLAGS) {
+    if (wiface->attr.cap.flags & UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS) {
         status = ucp_worker_wakeup_ctl_fd(worker, EPOLL_CTL_ADD, wiface->event_fd);
         ucs_assert_always(status == UCS_OK);
         wiface->on_arm_list = 1;
@@ -509,8 +511,9 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
         return UCS_OK;
     } else if (*progress_count == 0) {
         /* Arm the interface to wait for next event */
-        ucs_assert(wiface->attr.cap.flags & UCP_WORKER_UCT_EVENT_CAP_FLAGS);
-        status = uct_iface_event_arm(wiface->iface, UCT_EVENT_RECV_AM);
+        ucs_assert(wiface->attr.cap.flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS);
+        status = uct_iface_event_arm(wiface->iface,
+                                     UCP_WORKER_UCT_RECV_EVENT_ARM_FLAGS);
         if (status == UCS_OK) {
             ucs_trace("armed iface %p", wiface->iface);
 
@@ -650,10 +653,13 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         goto out;
     }
 
+    ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
+               tl_id, wiface->iface, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),
+               worker);
+
     /* Disable progress until we know better */
     uct_iface_progress_disable(wiface->iface, UCT_PROGRESS_SEND |
                                               UCT_PROGRESS_RECV);
-
 
     VALGRIND_MAKE_MEM_UNDEFINED(&wiface->attr, sizeof(wiface->attr));
     status = uct_iface_query(wiface->iface, &wiface->attr);
@@ -662,7 +668,7 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     }
 
     /* Set wake-up handlers */
-    if (wiface->attr.cap.flags & UCP_WORKER_UCT_EVENT_CAP_FLAGS) {
+    if (wiface->attr.cap.flags & UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS) {
         status = uct_iface_event_fd_get(wiface->iface, &wiface->event_fd);
         if (status != UCS_OK) {
             goto out_close_iface;
@@ -690,7 +696,7 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         }
 
         if (context->config.ext.adaptive_progress &&
-            (wiface->attr.cap.flags & UCT_IFACE_FLAG_EVENT_RECV_AM))
+            (wiface->attr.cap.flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS))
         {
             ucp_worker_iface_deactivate(wiface, 1);
         } else {
@@ -704,8 +710,6 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         ucp_context_tag_offload_enable(context);
     }
 
-    ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
-              tl_id, wiface->iface, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc), worker);
     return UCS_OK;
 
 out_close_iface:

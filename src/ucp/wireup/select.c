@@ -27,6 +27,7 @@ enum {
 typedef struct {
     ucp_rsc_index_t   rsc_index;
     unsigned          addr_index;
+    ucp_lane_index_t  proxy_lane;
     ucp_rsc_index_t   dst_md_index;
     uint32_t          usage;
     double            rma_score;
@@ -314,31 +315,58 @@ static UCS_F_NOINLINE void
 ucp_wireup_add_lane_desc(ucp_wireup_lane_desc_t *lane_descs,
                          ucp_lane_index_t *num_lanes_p, ucp_rsc_index_t rsc_index,
                          unsigned addr_index, ucp_rsc_index_t dst_md_index,
-                         double score, uint32_t usage)
+                         double score, uint32_t usage, int is_proxy)
 {
     ucp_wireup_lane_desc_t *lane_desc;
+    ucp_lane_index_t lane, proxy_lane;
+    int proxy_changed;
 
+    /* Add a new lane, but try to reuse already added lanes which are selected
+     * on the same transport resources.
+     */
+    proxy_changed = 0;
     for (lane_desc = lane_descs; lane_desc < lane_descs + (*num_lanes_p); ++lane_desc) {
         if ((lane_desc->rsc_index == rsc_index) &&
             (lane_desc->addr_index == addr_index))
         {
+            lane = lane_desc - lane_descs;
             ucs_assertv_always(dst_md_index == lane_desc->dst_md_index,
                                "lane[%d].dst_md_index=%d, dst_md_index=%d",
-                               (int)(lane_desc - lane_descs), lane_desc->dst_md_index,
-                               dst_md_index);
+                               lane, lane_desc->dst_md_index, dst_md_index);
             ucs_assertv_always(!(lane_desc->usage & usage), "lane[%d]=0x%x |= 0x%x",
-                               (int)(lane_desc - lane_descs), lane_desc->usage,
-                               usage);
-            lane_desc->usage |= usage;
-            goto out_update_score;
+                               lane, lane_desc->usage, usage);
+            if (is_proxy && (lane_desc->proxy_lane == UCP_NULL_LANE)) {
+                /* New lane is a proxy, and found existing non-proxy lane with
+                 * same resource. So that lane should be used by the proxy.
+                 */
+                proxy_lane = lane;
+                goto out_add_lane;
+            } else if (!is_proxy && (lane_desc->proxy_lane == lane)) {
+                /* New lane is not a proxy, but found existing proxy lane which
+                 * could use the new lane. It also means we should be able to
+                 * add our new lane.
+                 */
+                lane_desc->proxy_lane = *num_lanes_p;
+                proxy_changed = 1;
+            } else if (!is_proxy && (lane_desc->proxy_lane == UCP_NULL_LANE)) {
+                /* Found non-proxy lane with same resource - don't add */
+                ucs_assert_always(!proxy_changed);
+                lane_desc->usage |= usage;
+                goto out_update_score;
+            }
         }
     }
 
+    /* If a proxy cannot find other lane with same resource, proxy to self */
+    proxy_lane = is_proxy ? (*num_lanes_p) : UCP_NULL_LANE;
+
+out_add_lane:
     lane_desc = &lane_descs[*num_lanes_p];
     ++(*num_lanes_p);
 
     lane_desc->rsc_index    = rsc_index;
     lane_desc->addr_index   = addr_index;
+    lane_desc->proxy_lane   = proxy_lane;
     lane_desc->dst_md_index = dst_md_index;
     lane_desc->usage        = usage;
     lane_desc->rma_score    = 0.0;
@@ -425,7 +453,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
     /* Add to the list of lanes and remove all occurrences of the remote md
      * from the address list, to avoid selecting the same remote md again.*/
     ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
-                             dst_md_index, score, usage);
+                             dst_md_index, score, usage, 0);
     remote_md_map &= ~UCS_BIT(dst_md_index);
 
     /* Select additional transports which can access allocated memory, but only
@@ -448,7 +476,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
         /* Add lane description and remove all occurrences of the remote md */
         dst_md_index = address_list_copy[addr_index].md_index;
         ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
-                                 dst_md_index, score, usage);
+                                 dst_md_index, score, usage, 0);
         remote_md_map &= ~UCS_BIT(dst_md_index);
     }
 
@@ -597,10 +625,12 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
                                            ucp_lane_index_t *num_lanes_p)
 {
     ucp_wireup_criteria_t criteria;
+    uint64_t remote_cap_flags;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
     unsigned addr_index;
+    int is_proxy;
     double score;
     int need_am;
 
@@ -628,7 +658,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_TAG |
                                                             UCP_FEATURE_WAKEUP)) {
-        criteria.local_iface_flags |= UCP_WORKER_UCT_EVENT_CAP_FLAGS;
+        criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
     }
 
     status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
@@ -637,9 +667,19 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
         return status;
     }
 
+    /* If the remote side is not p2p and has only signaled-am wakeup, it may
+     * deactivate its interface and wait for signaled active message to wake up.
+     * Use a proxy lane which would send the first active message as signaled to
+     * make sure the remote interface will indeed wake up.
+     */
+    remote_cap_flags = address_list[addr_index].iface_attr.cap_flags;
+    is_proxy = !ucp_worker_is_tl_p2p(ep->worker, rsc_index) &&
+               ((remote_cap_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS) ==
+                    UCT_IFACE_FLAG_EVENT_RECV_SIG_AM);
+
     ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                              address_list[addr_index].md_index, score,
-                             UCP_WIREUP_LANE_USAGE_AM);
+                             UCP_WIREUP_LANE_USAGE_AM, is_proxy);
     return UCS_OK;
 }
 
@@ -671,7 +711,7 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep,
     ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
-        criteria.local_iface_flags |= UCP_WORKER_UCT_EVENT_CAP_FLAGS;
+        criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
     }
 
     status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
@@ -681,7 +721,7 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep,
         (strstr(ep->worker->context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni") == NULL)) {
          ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                                  address_list[addr_index].md_index, score,
-                                 UCP_WIREUP_LANE_USAGE_RNDV);
+                                 UCP_WIREUP_LANE_USAGE_RNDV, 0);
     }
 
     return UCS_OK;
@@ -723,7 +763,7 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
     criteria.calc_score         = ucp_wireup_rma_score_func;
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
-        criteria.local_iface_flags |= UCP_WORKER_UCT_EVENT_CAP_FLAGS;
+        criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
     }
 
     status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
@@ -731,7 +771,7 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
     if (status == UCS_OK) {
          ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                                   address_list[addr_index].md_index, score,
-                                  UCP_WIREUP_LANE_USAGE_TAG);
+                                  UCP_WIREUP_LANE_USAGE_TAG, 0);
     }
 
     return UCS_OK;
@@ -860,6 +900,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     for (lane = 0; lane < key->num_lanes; ++lane) {
         ucs_assert(lane_descs[lane].usage != 0);
         key->lanes[lane].rsc_index    = lane_descs[lane].rsc_index;
+        key->lanes[lane].proxy_lane   = lane_descs[lane].proxy_lane;
         key->lanes[lane].dst_md_index = lane_descs[lane].dst_md_index;
         addr_indices[lane]            = lane_descs[lane].addr_index;
 
