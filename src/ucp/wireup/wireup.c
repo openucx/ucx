@@ -352,7 +352,9 @@ out:
     return UCS_OK;
 }
 
-static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
+static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
+                                            const ucp_ep_params_t *params,
+                                            ucp_lane_index_t lane,
                                             unsigned address_count,
                                             const ucp_address_entry_t *address_list,
                                             unsigned addr_index)
@@ -438,7 +440,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
 
         ucs_trace("ep %p: connect uct_ep[%d]=%p to addr[%d] wireup", ep, lane,
                   uct_ep, addr_index);
-        status = ucp_wireup_ep_connect(uct_ep, rsc_index,
+        status = ucp_wireup_ep_connect(ep->uct_eps[lane], params, rsc_index,
                                        lane == ucp_ep_get_wireup_msg_lane(ep),
                                        address_count, address_list);
         if (status != UCS_OK) {
@@ -575,8 +577,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 
     /* establish connections on all underlying endpoints */
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        status = ucp_wireup_connect_lane(ep, lane, address_count, address_list,
-                                         addr_indices[lane]);
+        status = ucp_wireup_connect_lane(ep, params, lane, address_count,
+                                         address_list, addr_indices[lane]);
         if (status != UCS_OK) {
             goto err;
         }
