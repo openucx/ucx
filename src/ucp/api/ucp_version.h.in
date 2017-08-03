@@ -9,7 +9,7 @@
  */
 #define UCP_VERSION(_major, _minor) \
 	(((_major) << UCP_VERSION_MAJOR_SHIFT) | \
-	(((_minor) << UCP_VERSION_MINOR_SHIFT)
+	 ((_minor) << UCP_VERSION_MINOR_SHIFT))
 #define UCP_VERSION_MAJOR_SHIFT    24
 #define UCP_VERSION_MINOR_SHIFT    16
 
