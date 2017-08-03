@@ -211,7 +211,7 @@ struct uct_ud_ep {
          uct_ud_psn_t           psn;          /* Next PSN to send */
          uct_ud_psn_t           max_psn;      /* Largest PSN that can be sent */
          uct_ud_psn_t           acked_psn;    /* last psn that was acked by remote side */
-         uct_ud_psn_t           err_skb_count;/* number of failed SKBs on the ep */
+         uint16_t               err_skb_count;/* number of failed SKBs on the ep */
          ucs_queue_head_t       window;       /* send window: [acked_psn+1, psn-1] */
          uct_ud_ep_pending_op_t pending;      /* pending ops */
          ucs_time_t             send_time;    /* tx time of last packet */
