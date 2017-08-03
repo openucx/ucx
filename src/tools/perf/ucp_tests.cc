@@ -44,8 +44,8 @@ public:
         iov_length_it = 0;
         for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
             iov[iov_it].buffer = (char *)buffer + iov_length_it;
-            iov[iov_it].dt     = ucp_dt_make_contig(m_perf.params.msg_size_list[iov_it]);
-            iov[iov_it].count  = 1;
+            iov[iov_it].dt     = ucp_dt_make_contig(1);
+            iov[iov_it].count  = m_perf.params.msg_size_list[iov_it];
 
             if (m_perf.params.iov_stride) {
                 iov_length_it += m_perf.params.iov_stride;

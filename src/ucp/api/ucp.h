@@ -238,15 +238,15 @@ enum ucp_worker_attr_field {
  * The enumeration list describes the datatypes supported by UCP.
  */
 enum ucp_dt_type {
-    UCP_DATATYPE_CONTIG   = 0,      /**< Contiguous datatype */
-    UCP_DATATYPE_IOV      = 2,      /**< Scatter-gather list with multiple pointers */
-    UCP_DATATYPE_IOV_R    = 3,      /**< Same as IOV, but reusable */
-    UCP_DATATYPE_STRIDE   = 4,      /**< Interleaving a pointers to strided data */
-    UCP_DATATYPE_STRIDE_R = 5,      /**< Strided datatype */
-    UCP_DATATYPE_GENERIC  = 7,      /**< Generic datatype with
-                                         user-defined pack/unpack routines */
-    UCP_DATATYPE_SHIFT    = 3,      /**< Number of bits defining
-                                         the datatype classification */
+    UCP_DATATYPE_CONTIG    = 0,      /**< Contiguous datatype */
+    UCP_DATATYPE_STRIDED   = 1,      /**< Interleaving pointers at fixed intervals */
+    UCP_DATATYPE_IOV       = 2,      /**< Scatter-gather list with multiple pointers */
+    UCP_DATATYPE_STRIDED_R = 3,      /**< Same as Strided, only reusable */
+    UCP_DATATYPE_IOV_R     = 4,      /**< Same as IOV, only reusable */
+    UCP_DATATYPE_GENERIC   = 7,      /**< Generic datatype with
+                                          user-defined pack/unpack routines */
+    UCP_DATATYPE_SHIFT     = 3,      /**< Number of bits defining
+                                          the datatype classification */
     UCP_DATATYPE_CLASS_MASK = UCS_MASK(UCP_DATATYPE_SHIFT) /**< Data-type class
                                                                 mask */
 };
@@ -338,8 +338,15 @@ typedef enum {
  * @brief Generate a reusable identifier for Scatter-gather IOV data type.
  *
  * This macro creates an identifier for datatype of scatter-gather list
- * with multiple pointers. The resulting reusable datatype needs to be
- * released using @ref ucp_dt_destroy .
+ * with multiple pointers. The resulting identifier needs to be released
+ * using @ref ucp_dt_destroy .
+ *
+ * A "Reusable" identifier means that the user can apply this identifier to
+ * multiple calls requiring datatypes, to benefit from optimizations on
+ * recurring access. For example, it can prevent multiple memory registrations
+ * and lookups.
+ * Limitations apply: after the first use of a reusable identifier - it can
+ * only be used with pointers to the same memory regions - in the same order.
  *
  * @return Data-type identifier.
  */
@@ -351,9 +358,24 @@ typedef enum {
  * @brief Structure for scatter-gather I/O.
  *
  * This structure is used to specify a list of buffers which can be used
- * within a single data transfer function call.
+ * within a single data transfer function call. Each buffer is described by
+ * the data type of a single element and the amount of consecutive elements.
+ * A data type can be a simple contiguous buffer, or a complex layout such as
+ * a strided data type - which also allows for interleaving of items from
+ * multiple such data types.
  *
- * @note If @a length is zero, the memory pointed to by @a buffer
+ * For example, a simple IOV can be two disjoint buffers, of arbitrary length:
+ *
+ * iov[0].buffer = ptr1;
+ * iov[0].dt = ucp_dt_make_contig(4);
+ * iov[0].count = 1;
+ * iov[1].buffer = ptr2;
+ * iov[1].dt = ucp_dt_make_contig(1);
+ * iov[1].count = 4;
+ *
+ * - In this case, both buffers are of size 4.
+ *
+ * @note If @a count is zero, the memory pointed to by @a buffer
  *       will not be accessed. Otherwise, @a buffer must point to valid memory.
  */
 typedef struct ucp_dt_iov {
@@ -365,37 +387,46 @@ typedef struct ucp_dt_iov {
 
 /**
  * @ingroup UCP_DATATYPE
- * @brief Generate an identifier for strided data type.
+ * @brief Structure for a single dimension of a strided data type.
  *
- * This macro creates an identifier for datatype of a items in fixed interval.
- *
- * @return Data-type identifier.
+ * This structure is used to specify an item in a list of dimensions, used to
+ * describe the requested layout of a strided data type.
  */
-#define ucp_dt_make_stride(datatype, extent, count) \
-        (ucp_dt_create(UCP_DATATYPE_STRIDE, ((ucp_datatype_t)datatype), \
-                       ((size_t)(extent * count)), ((unsigned)0), ((unsigned)1), \
-                       ((size_t)(extent)), ((size_t)(count))))
+typedef struct ucp_dt_strided_dim {
+    size_t extent;
+    size_t count;
+} ucp_dt_strided_dim_t;
 
 
 /**
  * @ingroup UCP_DATATYPE
- * @brief Generate a reusable identifier for strided data type.
+ * @brief Generate a reusable identifier for a strided data type.
  *
- * This macro creates an identifier for datatype of list of strided entries
- * with multiple pointers.
+ * This macro creates an identifier for a data type consisting of multiple
+ * identical items with a fixed interval between each two adjacent ones.
+ * The resulting identifier needs to be released using @ref ucp_dt_destroy .
  *
- * "ratio" is the quotient of this kind of items in an interleaving pattern.
- * For example, for two entries where two items from the first entry
- * are followed by one item from the second entry - the value for
- * the first entry will be 2, and 1 for the second entry.
- * Values must be either all positive or all zeros.
+ * @param [in]  datatype          Datatype descriptor for a single element.
+ * @param [in]  dimensions        Layout description per dimension of striding.
+ * @param [in]  dimension_count   Amount of dimensions describing the layout.
+ * @param [in]  interleave_ratio  For interleaving - amount of elements used in
+ *                                each cycle from this datatype (0 otherwise).
+ * @param [in]  is_reusable       Whether the datatype stores extra meta-data.
+ *
+ * A "Reusable" identifier means that the user can apply this identifier to
+ * multiple calls requiring datatypes, to benefit from optimizations on
+ * recurring access. This is done by storing additional meta-data, such as
+ * memory mapping info, to be used in subsequent calls.
+ * Limitations apply: after the first use of a reusable identifier - it can
+ * only be used with pointers to the same memory regions - in the same order.
  *
  * @return Data-type identifier.
  */
-#define ucp_dt_make_stride_reusable(datatype, extent, count) \
-        (ucp_dt_create(UCP_DATATYPE_STRIDE_R, ((ucp_datatype_t)datatype), \
-                       ((size_t)(extent * count)), ((unsigned)0), ((unsigned)1), \
-                       ((size_t)(extent)), ((size_t)(count))))
+ucp_datatype_t ucp_dt_make_strided(ucp_datatype_t datatype,
+                                   ucp_dt_strided_dim_t* dimensions,
+                                   unsigned dimension_count,
+                                   unsigned interleave_ratio,
+                                   int is_reusable);
 
 
 /**
@@ -2446,22 +2477,6 @@ void ucp_request_cancel(ucp_worker_h worker, void *request);
  * would be invoked for this request.
  */
 void ucp_request_free(void *request);
-
-
-/**
- * @ingroup UCP_DATATYPE
- * @brief Create a datatype.
- *
- * This routine create a datatype object, used for caching access to data.
- * The application is responsible to release the @a datatype_p  object using
- * @ref ucp_dt_destroy "ucp_dt_destroy()" routine.
- *
- * @param [in]  type         Datatype kind.
- * @param [in]  ...          Variable parameters - depending on the kind.
- *
- * @return A pointer to datatype object, or NULL in case of an error.
- */
-ucp_datatype_t ucp_dt_create(enum ucp_dt_type type, ...);
 
 
 /**
