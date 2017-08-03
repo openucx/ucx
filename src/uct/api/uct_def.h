@@ -99,7 +99,13 @@ typedef int                      uct_worker_cb_id_t;
  * @brief Structure for scatter-gather I/O.
  *
  * Specifies a list of buffers which can be used within a single data transfer
- * function call.
+ * function call, or to be registered as a memory layout with @ref uct_ep_mem_reg .
+ *
+ * A single entry of this data structure represents either a contiguous array of
+ * items or a simple strided vector of items. An X-dimensional strided vector would
+ * consist of X consecutive structures, where only the first has a non-zero buffer
+ * pointer, and each contains the stride and count of the i-th dimension.
+ * Below is a chart depicting the difference between length and stride of a vector:
  *
    @verbatim
     buffer
@@ -110,6 +116,13 @@ typedef int                      uct_worker_cb_id_t;
     |<-length-->|       |<-length-->|       |<-length-->|
     |<---- stride ----->|<---- stride ----->|
    @endverbatim
+ *
+ * In order to describe an interleaved memory layout, each structure contains
+ * an "interleaving ratio", representing the amount of items to be used from this
+ * vector before turning to the next one. For example, for a 3-vector pattern like
+ * ABBBCCABBBCCABBBCC... the ratio should be 1 for vector A, 3 for B and 2 for C.
+ * Interleaving ratios in the same invocation must be either all zeros or all
+ * non-zero.
  *
  * @note The sum of lengths in all iov list must be less or equal to max_zcopy
  *       of the respective communication operation.
@@ -128,7 +141,10 @@ typedef struct uct_iov {
     uct_mem_h memh;     /**< Local memory key descriptor for the data */
     size_t    stride;   /**< Stride between beginnings of payload elements in
                              the buffer in bytes */
-    size_t    ilv_ratio;/**< Interleaving ratio - Only if enabled on first iov */
+    size_t    ilv_ratio;/**< Interleaving ratio - item count for this vector.
+                             This applies only to strided types, where stride is
+                             nonzero, and only if all the ratios are nonzero
+                             on the same function invocation. */
     unsigned  count;    /**< Number of payload elements in the buffer */
 } uct_iov_t;
 

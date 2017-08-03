@@ -167,9 +167,9 @@ typedef struct uct_iface_ops {
 
     /* endpoint - memory registration */
 
-    ucs_status_t (*ep_mem_reg_nc)(uct_ep_h ep, const uct_iov_t *iov,
-                                  size_t iovcnt, uct_md_h *md_p,
-                                  uct_mem_h *memh_p, uct_completion_t *comp);
+    ucs_status_t (*ep_mem_reg)(uct_ep_h ep, const uct_iov_t *iov,
+                               size_t iovcnt, uct_md_h *md_p,
+                               uct_mem_h *memh_p, uct_completion_t *comp);
 
     /* interface - synchronization */
 
