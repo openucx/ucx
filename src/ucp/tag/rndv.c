@@ -590,8 +590,7 @@ static void ucp_rndv_contig_zcopy_completion(uct_completion_t *self,
     if (sreq->send.state.offset == sreq->send.length) {
         ucp_rndv_zcopy_req_complete(sreq, status);
     } else if (status != UCS_OK) {
-        ucp_request_send_buffer_dereg(sreq, sreq->send.lane);
-        sreq->send.uct_comp.func = NULL;
+        ucp_tag_zcopy_failure(sreq, status);
     }
 }
 

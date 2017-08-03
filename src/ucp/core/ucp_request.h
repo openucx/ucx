@@ -140,6 +140,9 @@ struct ucp_request {
 
             };
 
+            /* TODO: to unite state and uct_comp in single req_state and
+             *       implement common functions to work with it,
+             *       See conversation to PR #1737 */
             ucp_lane_index_t      lane;     /* Lane on which this request is being sent */
             ucp_rsc_index_t       reg_rsc;  /* Resource on which memory is registered */
             ucp_dt_state_t        state;    /* Position in the send buffer */

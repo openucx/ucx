@@ -109,6 +109,7 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
         }
 
         req->send.uct_comp.func  = proto->zcopy_completion;
+        req->send.uct_comp.count = 0;
 
         if ((length <= (config->tag.eager.max_zcopy - only_hdr_size)) &&
             flag_iov_single) {
@@ -221,7 +222,8 @@ static void ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.tag          = tag;
     req->send.reg_rsc      = UCP_NULL_RESOURCE;
     req->send.state.offset = 0;
-    req->send.uct_comp.count = 0;
+    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.uct_comp.count,
+                                sizeof(req->send.uct_comp.count));
 
 #if ENABLE_ASSERT
     req->send.lane         = UCP_NULL_LANE;

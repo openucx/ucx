@@ -173,6 +173,20 @@ void ucp_tag_eager_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
     ucp_request_complete_send(req, status);
 }
 
+void ucp_tag_zcopy_failure(ucp_request_t *req, ucs_status_t status)
+{
+    ucs_assert(req->send.uct_comp.count == 0);
+    ucs_assert(req->send.state.offset != req->send.length);
+    ucs_assert((status != UCS_OK) && (status != UCS_INPROGRESS));
+
+    /* NOTE: the request is in pending queue if data was not completely sent,
+     *       just dereg the buffer here and complete request on purge
+     *       pending later. The same for RNDV and SYNC protocols.
+     */
+    ucp_request_send_buffer_dereg(req, req->send.lane);
+    req->send.uct_comp.func = NULL;
+}
+
 static ucs_status_t ucp_tag_eager_zcopy_single(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
@@ -206,14 +220,7 @@ void ucp_tag_eager_zcopy_completion(uct_completion_t *self,
     if (req->send.state.offset == req->send.length) {
         ucp_tag_eager_zcopy_req_complete(req, status);
     } else if (status != UCS_OK) {
-        /* NOTE: the request is in pending queue if data was not completely sent,
-         *       just dereg the buffer here and complete request on purge
-         *       pending later. The same for RNDV and SYNC protocols.
-         * TODO: add error completion in ucp_proto_t to handle failure of
-         *       complex protocols.
-         */
-        ucp_request_send_buffer_dereg(req, req->send.lane);
-        req->send.uct_comp.func = NULL;
+        ucp_tag_zcopy_failure(req, status);
     }
 }
 
@@ -286,8 +293,7 @@ ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
         ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
                                       status);
     } else if (status != UCS_OK) {
-        ucp_request_send_buffer_dereg(req, req->send.lane);
-        req->send.uct_comp.func = NULL;
+        ucp_tag_zcopy_failure(req, status);
     }
 }
 
