@@ -467,10 +467,7 @@ struct uct_iface_attr {
                                               @ref uct_ep_mem_reg */
             size_t           max_dim;    /**< Maximal dimension for a strided memory
                                               layout with @ref uct_iov_t */
-            size_t           max_short;  /**< Maximal @a iovcnt parameter in
-                                              @ref uct_ep_mem_reg to fit in a single
-                                              key (for latency optimization) */
-            size_t           max_nested; /**< Maximal nesting level of memory keys */
+            size_t           max_indirect; /**< Maximal nesting level of memory keys */
         } mem;
 
         uint64_t             flags;      /**< Flags from @ref UCT_RESOURCE_IFACE_CAP */
@@ -1690,7 +1687,7 @@ UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id,
  * how many of items from a vector to put before moving to the next vector (for
  * a pattern of AABAABAAB... the interleaving ratio is 2 for vector A and 1 for B).
  *
- * The user must destroy the handle by calling @ref uct_md_mem_free with @a md_p ,
+ * The user must destroy the handle by calling @ref uct_md_mem_free ,
  * which can be done regardless of completion of the registration (this call must
  * return, but there is no need to wait for or even specify a completion callback).
  *
@@ -1704,16 +1701,15 @@ UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id,
  *                           array. If @a iovcnt is zero, the data is considered empty.
  *                           @a iovcnt is limited by @ref uct_iface_attr_cap_am_max_iov
  *                           "uct_iface_attr::cap::mem::max_iov"
- * @param [out] md_p         Filled with the memory domain handle, for destruction.
  * @param [out] memh_p       Filled with handle for allocated region.
  * @param [in]  comp         Completion handle as defined by @ref ::uct_completion_t.
  *
  */
 UCT_INLINE_API ucs_status_t uct_ep_mem_reg(uct_ep_h ep, const uct_iov_t *iov,
-                                           size_t iovcnt, uct_md_h *md_p,
-                                           uct_mem_h *memh_p, uct_completion_t *comp)
+                                           size_t iovcnt, uct_mem_h *memh_p,
+                                           uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_mem_reg(ep, iov, iovcnt, md_p, memh_p, comp);
+    return ep->iface->ops.ep_mem_reg(ep, iov, iovcnt, memh_p, comp);
 }
 
 
