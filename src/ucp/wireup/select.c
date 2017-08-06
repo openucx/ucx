@@ -642,7 +642,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
     int need_am;
 
     /* Check if we need active messages, for wireup */
-    if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG)) {
+    if (!(ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | UCP_FEATURE_STREAM))) {
         need_am = 0;
         for (lane = 0; lane < *num_lanes_p; ++lane) {
             need_am = need_am || ucp_worker_is_tl_p2p(ep->worker,
