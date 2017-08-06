@@ -587,6 +587,7 @@ static void uct_rc_verbs_iface_tag_preinit(uct_rc_verbs_iface_t *iface,
         iface->tm.rndv_unexp.cb    = params->rndv_cb;
         iface->tm.rndv_unexp.arg   = params->rndv_arg;
         iface->tm.unexpected_cnt   = 0;
+        iface->tm.num_outstanding  = 0;
         iface->tm.num_canceled     = 0;
         iface->tm.num_tags         = ucs_min(IBV_DEVICE_TM_CAPS(dev, max_num_tags),
                                              UCT_RC_VERBS_TM_CONFIG(config, list_size));
