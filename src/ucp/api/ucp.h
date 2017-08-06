@@ -15,6 +15,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/config/types.h>
 #include <stdio.h>
+#include <sys/types.h>
 
 
 /**
