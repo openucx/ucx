@@ -180,8 +180,10 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     int ret = -1;
 
     /* Send client UCX address to server */
-    ep_params.field_mask      = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.field_mask      = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS |
+                                UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     ep_params.address         = peer_addr;
+    ep_params.err_mode        = err_handling_opt.ucp_err_mode;
 
     status = ucp_ep_create(ucp_worker, &ep_params, &server_ep);
     CHKERR_JUMP(status != UCS_OK, "ucp_ep_create\n", err);
