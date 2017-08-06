@@ -1,97 +1,71 @@
-%global rel @RPM_RELEASE@
-%global version @VERSION@
-%global pkgname @PACKAGE@
-%global prefix @prefix@
-%global __check_files %{nil}
-%global _prefix %{prefix}
-%global _libdir %{prefix}/lib
-%global  debug_package %{nil}
-%bcond_with valgrind
-%global _binary_filedigest_algorithm 1
-%global _source_filedigest_algorithm 1
+%{!?configure_options: %global configure_options %{nil}}
 
-%global lt_release @LT_RELEASE@
-%global lt_version @LT_CURRENT@.@LT_REVISION@.@LT_AGE@
+Name: ucx
+Version: @VERSION@
+Release: 1%{?dist}
+Summary: UCX is a communication library implementing high-performance messaging
+Group: System Environment/Libraries
 
-%{!?configure_options: %define configure_options %{nil}}
-
-Name: %{pkgname}
-Summary: Unified Communication X
-Version: %{version}
-Release: %{rel}
-
-License: BSDv3
-Group: Applications
-Source: %{pkgname}-%{version}.tar.gz
-
-BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
+License: BSD
 URL: http://www.openucx.org
-Prefix: %{prefix}
-Provides: ucx
-Packager: openucx
-Vendor: openucx
+Source: https://github.com/openucx/%{name}/archive/v@MAJOR_VERSION@.@MINOR_VERSION@.@PATCH_VERSION@.tar.gz
 
+ExclusiveArch: aarch64 ppc64le x86_64
+
+BuildRequires: numactl-devel
+BuildRequires: automake autoconf libtool
 
 %description
-UCX is a communication library implementing high-performance messaging.
+UCX stands for Unified Communication X. It requires either RDMA-capable device
+(InfiniBand, RoCE, etc), Cray Gemini or Aries, for inter-node communication.
+Future versions will support also TCP for inter-node, to lift that hardware
+dependency.
+In addition, the library can be used for intra-node communication by leveraging
+the following shared memory mechanisms: posix. sysv, cma, knem, xpmem.
+
+%package devel
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Provides: %{name}-static = %{version}-%{release}
+Summary: Header files and libraries required to develop with ucx
+Group: Development/Libraries
+
+%description devel
+Provides header files, static libraries and examples for developing with UCX.
 
 %prep
-rm -rf $RPM_BUILD_ROOT
-
 %setup -q
 
 %build
-./contrib/configure-release %{?configure_options}
-make %{?_smp_mflags}
+%configure --disable-optimizations \
+           --disable-logging \
+           --disable-debug \
+           --disable-assertions \
+           --disable-params-check \
+           CXXFLAGS="%{optflags} -fno-exceptions" \
+           %{?configure_options}
+make %{?_smp_mflags} V=1
 
 %install
-
-rm -rf "$RPM_BUILD_ROOT"
-
-# Strip out some dependencies
-cat > find-requires.sh <<'EOF'
-exec %{__find_requires} "$@" | egrep -v '^perl'
-EOF
-chmod +x find-requires.sh
-%global _use_internal_dependency_generator 0
-%global __find_requires %{_builddir}/%{buildsubdir}/find-requires.sh
-
-make DESTDIR="$RPM_BUILD_ROOT" install
-mkdir -p $RPM_BUILD_ROOT/etc/ld.so.conf.d/
-echo %{_libdir} > $RPM_BUILD_ROOT/etc/ld.so.conf.d/ucx.conf
-mkdir -p $RPM_BUILD_ROOT/usr/lib64/pkgconfig
-cp ucx.pc $RPM_BUILD_ROOT/usr/lib64/pkgconfig
-
-%clean
-# We may be in the directory that we're about to remove, so cd out of
-# there before we remove it
-cd /tmp
-
-# Remove installed driver after rpm build finished
-chmod -R o+w $RPM_BUILD_DIR/%{name}-%{version}
-rm -rf $RPM_BUILD_DIR/%{name}-%{version}
-
-test "x$RPM_BUILD_ROOT" != "x" && rm -rf $RPM_BUILD_ROOT
-
+make DESTDIR=%{buildroot} install
+rm -f %{buildroot}%{_libdir}/*.la
 
 %files
-%defattr(-, root, root)
-%{prefix}
-/etc/ld.so.conf.d/ucx.conf
-/usr/lib64/pkgconfig/ucx.pc
+%{_libdir}/lib*.so*
+%{_bindir}/uc*
+%{_datadir}/ucx/perftest/*
+%doc README AUTHORS NEWS
+%{!?_licensedir:%global license %%doc}
+%license LICENSE
 
-# Your application file list goes here
-# %{prefix}/lib/lib*.so*
-#%doc COPYRIGHT ChangeLog README AUTHORS NEWS
-#%doc doc/*
+%files devel
+%{_includedir}/uc*
+%{_libdir}/lib*.a
+%{_libdir}/pkgconfig/ucx.pc
+%{_datadir}/ucx/examples
 
-# If you install a library
-%post
-/sbin/ldconfig || exit 1
-exit 0
+%post -p /sbin/ldconfig
+%postun -p /sbin/ldconfig
 
-# If you install a library
-%postun
-/sbin/ldconfig
-exit 0
-
+%changelog
+* Mon Jul 3 2017 Andrey Maslennikov <andreyma@mellanox.com> 1.3
+- Fedora package created

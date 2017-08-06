@@ -1,4 +1,4 @@
-ucx (@MAJOR_VERSION@.@MINOR_VERSION@.@MICRO_VERSION@) unstable; urgency=low
+ucx (@MAJOR_VERSION@.@MINOR_VERSION@.@SCM_VERSION@) unstable; urgency=low
 
   * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
 

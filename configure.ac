@@ -1,18 +1,17 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
-# Copyright (C) The University of Tennessee and The University 
+# Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 AC_PREREQ([2.63])
 
-define([scm_r], esyscmd([sh -c "git rev-parse --short=7 HEAD"]))
 define([ucx_ver_major], 1)
 define([ucx_ver_minor], 2)
+define([ucx_ver_patch], 0)
 define([ts], esyscmd([sh -c "date +%Y%m%d%H%M%S"]))
-define([revcount], esyscmd([git rev-list HEAD | wc -l | sed -e 's/ *//g' | xargs -n1 printf]))
 
 # This is the API version (see libtool library versioning)
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
@@ -28,6 +27,11 @@ AC_USE_SYSTEM_EXTENSIONS
 AC_GNU_SOURCE
 AC_CONFIG_HEADERS([config.h])
 
+AC_CHECK_PROG(GITBIN,git,yes)
+AS_IF([test x"${GITBIN}" == x"yes"],
+      [AC_SUBST(SCM_VERSION, esyscmd([sh -c 'git rev-parse --short=7 HEAD']))],
+      [AC_SUBST(SCM_VERSION, "0000000")])
+
 AH_TOP([
 #ifndef UCX_CONFIG_H
 #define UCX_CONFIG_H
@@ -42,27 +46,22 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AM_MAINTAINER_MODE
 AC_CONFIG_MACRO_DIR([config/m4])
 
-define([ucx_prefix], [/opt/ucx])
+define([ucx_prefix], [/usr])
 AC_PREFIX_DEFAULT([ucx_prefix])
 
 top_top_srcdir=$srcdir
 AC_SUBST(top_top_srcdir)
 
-RPM_RELEASE=1
-BUILD_TS=ts
 MAJOR_VERSION=ucx_ver_major
 MINOR_VERSION=ucx_ver_minor
-MICRO_VERSION=scm_r
-REV_COUNT=revcount
-VERSION=$MAJOR_VERSION.$MINOR_VERSION.$REV_COUNT
+PATCH_VERSION=ucx_ver_patch
+VERSION=$MAJOR_VERSION.$MINOR_VERSION.$PATCH_VERSION
 SOVERSION=libucx_so_version
 AC_SUBST(MAJOR_VERSION)
 AC_SUBST(MINOR_VERSION)
-AC_SUBST(MICRO_VERSION)
-AC_SUBST(REV_COUNT)
-AC_SUBST(RPM_RELEASE)
+AC_SUBST(PATCH_VERSION)
+AC_SUBST(SCM_VERSION)
 AC_SUBST(SOVERSION)
-AC_SUBST(BUILD_TS)
 
 AC_PROG_CC
 AC_PROG_CXX
@@ -194,7 +193,7 @@ AS_IF([test "x$with_docs_only" == xyes],
                                   [Enable collecting data to ease debugging, default: NO]),
          [
           AC_DEFINE([ENABLE_DEBUG_DATA], [1], [Enable collecting data])
-          AC_DEFINE([UCT_UD_EP_DEBUG_HOOKS], [1], 
+          AC_DEFINE([UCT_UD_EP_DEBUG_HOOKS], [1],
                     [Enable packet header inspection/rewriting in UCT/UD])
          ],
          [AC_DEFINE([ENABLE_DEBUG_DATA], [0])])
