@@ -138,8 +138,9 @@ enum ucp_feature {
                                            operations support */
     UCP_FEATURE_AMO64  = UCS_BIT(3),  /**< Request 64-bit atomic
                                            operations support */
-    UCP_FEATURE_WAKEUP = UCS_BIT(4)   /**< Request interrupt notification
+    UCP_FEATURE_WAKEUP = UCS_BIT(4),  /**< Request interrupt notification
                                            support */
+    UCP_FEATURE_STREAM = UCS_BIT(5)   /**< Request stream support */
 };
 
 
