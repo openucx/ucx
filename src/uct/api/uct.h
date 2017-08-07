@@ -1699,7 +1699,7 @@ UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id,
  *                           is not required.
  * @param [in]  iovcnt       Size of the @a iov data @ref ::uct_iov_t structures
  *                           array. If @a iovcnt is zero, the data is considered empty.
- *                           @a iovcnt is limited by @ref uct_iface_attr_cap_am_max_iov
+ *                           @a iovcnt is limited by @ref uct_iface_attr_cap_mem_max_iov
  *                           "uct_iface_attr::cap::mem::max_iov"
  * @param [out] memh_p       Filled with handle for allocated region.
  * @param [in]  comp         Completion handle as defined by @ref ::uct_completion_t.

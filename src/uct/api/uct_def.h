@@ -102,10 +102,8 @@ typedef int                      uct_worker_cb_id_t;
  * function call, or to be registered as a memory layout with @ref uct_ep_mem_reg .
  *
  * A single entry of this data structure represents either a contiguous array of
- * items or a simple strided vector of items. An X-dimensional strided vector would
- * consist of X consecutive structures, where only the first has a non-zero buffer
- * pointer, and each contains the stride and count of the i-th dimension.
- * Below is a chart depicting the difference between length and stride of a vector:
+ * items or a simple strided vector of items. Below is a chart depicting the
+ * difference between length and stride of a vector:
    @verbatim
     buffer
     |
@@ -161,7 +159,7 @@ typedef int                      uct_worker_cb_id_t;
  *
  */
 typedef struct uct_iov {
-    void     *buffer;   /**< Data buffer (if null - stride/count reference previous) */
+    void     *buffer;   /**< Data buffer */
     size_t    length;   /**< Length of the payload in bytes */
     uct_mem_h memh;     /**< Local memory key descriptor for the data */
     size_t    stride;   /**< Stride between beginnings of payload elements in
