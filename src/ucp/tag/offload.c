@@ -361,7 +361,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     };
     void *rndv_op;
 
-    req->send.uct_comp.count = 1;
+    req->send.uct_comp.count = 0;
     req->send.uct_comp.func  = ucp_tag_eager_zcopy_completion;
 
     ucs_assert_always(UCP_DT_IS_CONTIG(req->send.datatype));
@@ -374,6 +374,8 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     if (UCS_PTR_IS_ERR(rndv_op)) {
         return UCS_PTR_STATUS(rndv_op);
     }
+    ++req->send.uct_comp.count;
+
     req->flags |= UCP_REQUEST_FLAG_OFFLOADED;
     req->send.tag_offload.rndv_op = rndv_op;
     return UCS_OK;

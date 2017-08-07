@@ -299,7 +299,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_get_zcopy, (self),
                                   iov[0].length);
         rndv_req->send.state.offset += length;
         if (rndv_req->send.state.offset == rndv_req->send.length) {
-            rndv_req->send.uct_comp.count--; /* sent all fragments */
             if (status == UCS_OK) {
                 /* if the zcopy operation was locally-completed, the uct_comp callback
                  * won't be called, so do the completion procedure here */
@@ -352,8 +351,7 @@ static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *
         rndv_req->send.buffer       = rreq->recv.buffer;
         rndv_req->send.length         = rndv_rts_hdr->size;
         rndv_req->send.uct_comp.func  = ucp_rndv_get_completion;
-        rndv_req->send.uct_comp.count = 1; /* start from 1 for avoid completion
-                                              until all fragments are sent */
+        rndv_req->send.uct_comp.count = 0;
         rndv_req->send.state.offset   = 0;
         if (rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_OFFLOAD) {
             rndv_req->send.lane       = ucp_ep_get_tag_lane(rndv_req->send.ep);
@@ -589,7 +587,11 @@ static void ucp_rndv_contig_zcopy_completion(uct_completion_t *self,
                                              ucs_status_t status)
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct_comp);
-    ucp_rndv_zcopy_req_complete(sreq, status);
+    if (sreq->send.state.offset == sreq->send.length) {
+        ucp_rndv_zcopy_req_complete(sreq, status);
+    } else if (status != UCS_OK) {
+        ucp_tag_zcopy_failure(sreq, status);
+    }
 }
 
 static ucs_status_t ucp_rndv_zcopy_single(uct_pending_req_t *self)
@@ -650,7 +652,7 @@ static void ucp_rndv_prepare_zcopy(ucp_request_t *sreq, ucp_ep_h ep)
     ucp_rndv_prepare_zcopy_send_buffer(sreq, ep);
 
     sreq->send.uct_comp.func  = ucp_rndv_contig_zcopy_completion;
-    sreq->send.uct_comp.count = 1;
+    sreq->send.uct_comp.count = 0;
 
     if (sreq->send.length <= ucp_ep_config(ep)->am.max_zcopy -
         sizeof(ucp_rndv_data_hdr_t)) {
