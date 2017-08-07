@@ -188,6 +188,9 @@ typedef struct ucp_ep {
 
     uint64_t                      dest_uuid;     /* Destination worker uuid */
 
+    ucs_list_link_t               stream_data;  /* List of receive descriptors
+                                                  * with data */
+
     UCS_STATS_NODE_DECLARE(stats);
 
 #if ENABLE_DEBUG_DATA
