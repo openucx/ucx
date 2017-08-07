@@ -106,7 +106,6 @@ typedef int                      uct_worker_cb_id_t;
  * consist of X consecutive structures, where only the first has a non-zero buffer
  * pointer, and each contains the stride and count of the i-th dimension.
  * Below is a chart depicting the difference between length and stride of a vector:
- *
    @verbatim
     buffer
     |
@@ -120,7 +119,33 @@ typedef int                      uct_worker_cb_id_t;
  * In order to describe an interleaved memory layout, each structure contains
  * an "interleaving ratio", representing the amount of items to be used from this
  * vector before turning to the next one. For example, for a 3-vector pattern like
- * ABBBCCABBBCCABBBCC... the ratio should be 1 for vector A, 3 for B and 2 for C.
+ * ABBBCCABBBCCABBBCC... the ratio should be 1 for vector A, 3 for B and 2 for C:
+   @verbatim
+    Vector A (length=5, count=2, ilv_ratio=1)
+    |
+    +-----+-----+
+    |xxAxx|xxAxx|
+    +-----+-----+
+
+    Vector B (length=3, count=6, ilv_ratio=3)
+    |
+    +---+---+---+---+---+---+
+    |xBx|xBx|xBx|xBx|xBx|xBx|
+    +---+---+---+---+---+---+
+
+    Vector C (length=5, count=4, ilv_ratio=2)
+    |
+    +-----+-----+-----+-----+
+    |xxCxx|xxCxx|xxCxx|xxCxx|
+    +-----+-----+-----+-----+
+
+    Result
+    |
+    +-----+---+---+---+-----+-----+-----+---+---+---+-----+-----+
+    |xxAxx|xBx|xBx|xBx|xxCxx|xxCxx|xxAxx|xBx|xBx|xBx|xxCxx|xxCxx|
+    +-----+---+---+---+-----+-----+-----+---+---+---+-----+-----+
+
+   @endverbatim
  * Interleaving ratios in the same invocation must be either all zeros or all
  * non-zero.
  *
