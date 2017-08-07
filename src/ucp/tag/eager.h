@@ -54,6 +54,7 @@ typedef struct {
 
 extern const ucp_proto_t ucp_tag_eager_proto;
 extern const ucp_proto_t ucp_tag_eager_sync_proto;
+extern const ucp_proto_t ucp_stream_eager_proto;
 
 
 void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, uint64_t sender_uuid,

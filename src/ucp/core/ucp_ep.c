@@ -879,6 +879,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     config->tag.rndv.rma_thresh         = SIZE_MAX;
     config->tag.rndv.max_get_zcopy      = SIZE_MAX;
     config->tag.rndv.am_thresh          = SIZE_MAX;
+    config->stream.proto                = &ucp_stream_eager_proto;
     max_rndv_thresh                     = SIZE_MAX;
     max_am_rndv_thresh                  = SIZE_MAX;
 

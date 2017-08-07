@@ -173,6 +173,11 @@ typedef struct ucp_ep_config {
         } offload;
     } tag;
 
+    struct {
+        /* Protocols used for stream operations
+         * (currently it's only AM based). */
+        const ucp_proto_t   *proto;
+    } stream;
 } ucp_ep_config_t;
 
 
