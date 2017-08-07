@@ -310,12 +310,8 @@ typedef struct ucp_err_handler {
  *
  * @param [in]  request   The completed receive request.
  * @param [in]  status    Completion status. If the send operation was completed
- *                        successfully UCX_OK is returned. If send operation was
- *                        canceled UCS_ERR_CANCELED is returned. If the data can
- *                        not fit into the receive buffer the
- *                        @ref UCS_ERR_MESSAGE_TRUNCATED error code is returned.
- *                        Otherwise, an @ref ucs_status_t "error status" is
- *                        returned.
+ *                        successfully UCX_OK is returned. Otherwise,
+ *                        an @ref ucs_status_t "error status" is returned.
  * @param [in]  count     How many elements actually arrived to original buffer.
  *                        The value is valid only if the status is UCS_OK.
  */

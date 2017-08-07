@@ -279,65 +279,6 @@ enum {
 
 /**
  * @ingroup UCP_COMM
- * @brief Modificators for @ref ucp_stream_send_nb function.
- *
- * This enumeration defines changes of @ref ucp_stream_send_nb function behavior.
- */
-enum {
-    UCP_STREAM_SEND_FLAG_MSG_MORE = UCS_BIT(0) /**< Hint for coaleasing inside of
-                                                    the UCP library if the
-                                                    application will continue
-                                                    sending at the same endpoint
-                                                    */
-};
-
-
-/**
- * @ingroup UCP_COMM
- * @brief Modificators for @ref ucp_stream_recv_nb function.
- *
- * This enumeration defines changes of @ref ucp_stream_recv_nb function behavior.
- */
-enum {
-    UCP_STREAM_RECV_FLAG_WAITALL = UCS_BIT(0) /**< This flag defines that
-                                                   request should be completed
-                                                   then whole data is arrived.
-                                                   Otherwise, in case if data is
-                                                   sending fragmented, every
-                                                   fragment of data may trigger
-                                                   completion. Not supported in
-                                                   initial implementation. */
-};
-
-
-/**
- * @ingroup UCP_COMM
- * @brief Modificators for @ref ucp_stream_worker_poll function.
- *
- * This enumeration defines changes of @ref ucp_stream_worker_poll function
- * behavior.
- */
-enum {
-    UCS_STREAM_POLL_FLAG_EDGE  = UCS_BIT(0),  /**< If set, ucp_stream_worker_poll
-                                                   will return an endpoint
-                                                   once untill it has no new
-                                                   events. Otherwise, the
-                                                   endpoint will be returned by
-                                                   following calls while it has
-                                                   the data. */
-    UCS_STREAM_POLL_FLAG_REWIND = UCS_BIT(1)  /**< @ref ucp_stream_worker_poll
-                                                   will return the same endpoints
-                                                   in following calls if events
-                                                   are not processed. Not
-                                                   applicable with
-                                                   UCS_STREAM_POLL_FLAG_EDGE.
-                                                   Not supported in initital
-                                                   implementation. */
-};
-
-
-/**
- * @ingroup UCP_COMM
  * @brief Atomic operation requested for ucp_atomic_post
  *
  * This enumeration defines which atomic memory operation should be
@@ -758,20 +699,21 @@ typedef struct ucp_ep_params {
  */
 typedef struct {
     /**
-     * Endpoint handler.
+     * Endpoint handle.
      */
     ucp_ep_h    ep;
 
     /**
-     * User data associated with an endpoint.
+     * User data associated with an endpoint passed in
+     * @ref ucp_ep_params_t::user_data.
      */
     void        *user_data;
 
     /**
-     * Reserved for future.
+     * Reserved for future use.
      */
     unsigned    flags;
-} ucp_ep_poll_t;
+} ucp_stream_poll_ep_t;
 
 /**
  * @ingroup UCP_MEM
@@ -1188,25 +1130,27 @@ unsigned ucp_worker_progress(ucp_worker_h worker);
 
 /**
  * @ingroup UCP_WORKER
- * @brief Poll stream oriented events on a specific worker.
+ * @brief Poll for endpoints with ready streaming data.
  *
- * This non-blocking routine returns number of endpoints where requested events
- * are raised. Endpoints will be filled at @a poll_eps array.
+ * This non-blocking routine returns endpoints on a worker which have ready
+ * streaming data. The ready endpoints are placed in @poll_eps array, and the
+ * function return value indicates how many are there.
  *
  * @param [in]   worker    Worker to poll.
  * @param [out]  poll_eps  Pointer to array of endpoints, should be
  *                         allocated by user.
- * @param [in]   max_eps   Number of endpoints fits to available memory
- *                         space at @a poll_eps.
- * @param [in]   flags     Modificators from UCS_STREAM_POLL_FLAG_* enum or 0.
+ * @param [in]   max_eps   Maximal number of endpoints which should be filled
+ *                         in @a poll_eps.
+ * @param [in]   flags     Reserved for future use.
  *
- * @return Negative value indicates error according to @ref ucp_status_t.
+ * @return Negative value indicates an error according to @ref ucp_status_t.
  *         On success, non-negative value (less or equal @a n) indicates actual
  *         number of endpoints filled in @a eps array.
  *
  */
-ssize_t ucp_stream_worker_poll(ucp_worker_h worker, ucp_ep_poll_t *poll_eps,
-                               size_t max_eps, unsigned flags);
+ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
+                               ucp_stream_poll_ep_t *poll_eps, size_t max_eps,
+                               unsigned flags);
 
 
 /**
@@ -1777,7 +1721,7 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
 
 /**
  * @ingroup UCP_COMM
- * @brief Non-blocking stream oriented send operations
+ * @brief Non-blocking stream send operations
  *
  * This routine sends a data that is described by the local address @a
  * buffer, size @a count, and @a datatype object to the destination endpoint
@@ -1796,13 +1740,13 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  *
  * @param [in]  ep          Destination endpoint handle.
  * @param [in]  buffer      Pointer to the message buffer (payload).
- * @param [in]  count       Number of elements to send
+ * @param [in]  count       Number of elements to send.
  * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
  * @param [in]  cb          Callback function that is invoked whenever the
  *                          send operation is completed. It is important to note
  *                          that the call-back is only invoked in a case when
  *                          the operation cannot be completed in place.
- * @param [in]  flags       Modificators from UCP_SEND_FLAG_* enum or 0.
+ * @param [in]  flags       Reserved for future use.
  *
  * @return UCS_OK           - The send operation was completed immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
@@ -1812,9 +1756,6 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  *                          progress of the message. The application is
  *                          responsible to release the handle using
  *                          @ref ucp_request_free routine.
- * @todo
- * @li Describe the thread safety requirement for the call-back.
- * @li What happens if the request is released before the call-back is invoked.
  */
 ucs_status_ptr_t ucp_stream_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
                                     ucp_datatype_t datatype, ucp_send_callback_t cb,
@@ -1860,9 +1801,6 @@ ucs_status_ptr_t ucp_stream_send_nb(ucp_ep_h ep, const void *buffer, size_t coun
  *                          progress of the message. The application is
  *                          responsible to released the handle using
  *                          @ref ucp_request_free "ucp_request_free()" routine.
- * @todo
- * @li Describe the thread safety requirement for the call-back.
- * @li What happens if the request is released before the call-back is invoked.
  */
 ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
                                  ucp_datatype_t datatype, ucp_tag_t tag,
@@ -1923,12 +1861,14 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  *
  * @param [in]     ep       UCP endpoint that is used for the receive operation.
  * @param [in]     buffer   Pointer to the buffer to receive the data to.
- * @param [in/out] count    Number of elements to receive.
+ * @param [in/out] count    Number of elements to receive into @a buffer as
+ *                          in-parameter and number of actual elements received.
+ *                          I.e. output value can be less or equal input value.
  * @param [in]     datatype Datatype descriptor for the elements in the buffer.
  * @param [in]     cb       Callback function that is invoked whenever the
  *                          receive operation is completed and the data is ready
  *                          in the receive @a buffer.
- * @param [in]     flags    Modificators form UCP_STREAM_RECV_FLAG_* enum or 0
+ * @param [in]     flags    Reserved for future use.
  *
  * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
  * @return otherwise            - Operation was scheduled for receive. The
@@ -1957,7 +1897,7 @@ ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,
  *                                operation.
  * @param [out]  length           Length of received data.
  *
- * @return UCS_OK               - No data.
+ * @return UCS_OK               - No received data available on the @a ep.
  * @return UCS_PTR_IS_ERR(_ptr) - the receive operation failed and
  *                                UCS_PTR_STATUS(_ptr) indicates an error.
  * @return otherwise            - The pointer to the data UCS_STATUS_PTR(_ptr)
