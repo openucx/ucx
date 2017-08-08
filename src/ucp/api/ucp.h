@@ -373,7 +373,22 @@ typedef enum {
  * iov[1].dt = ucp_dt_make_contig(1);
  * iov[1].count = 4;
  *
- * - In this case, both buffers are of size 4.
+   @verbatim
+    ptr1 (one buffer of 4 bytes)
+    |
+    +----+
+    |xxxx|
+    +----+
+
+    ptr2 (4 buffers of one byte each)
+    |
+    +-+-+-+-+
+    |x|x|x|x|
+    +-+-+-+-+
+   @endverbatim
+ *
+ * - In this case, both buffers are of size 4, and effectively describes the
+ * same layout in two different locations.
  *
  * @note If @a count is zero, the memory pointed to by @a buffer
  *       will not be accessed. Otherwise, @a buffer must point to valid memory.
