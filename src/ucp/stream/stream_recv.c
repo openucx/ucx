@@ -12,6 +12,7 @@
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/profile.h>
 
+#include <ucp/stream/stream.h>
 #include <ucp/tag/eager.h> /* TODO: remove ucp_eager_sync_hdr_t usage */
 
 
@@ -20,10 +21,6 @@
 
 #define ucp_stream_rdesc_from_data(data) \
     ((ucp_recv_desc_t *)((uintptr_t)(data) - sizeof(ucp_stream_am_hdr_t)) - 1)
-
-typedef struct {
-    uint64_t    uuid;
-} UCS_S_PACKED ucp_stream_am_hdr_t;
 
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb,
                  (ep, length), ucp_ep_h ep, size_t *length)

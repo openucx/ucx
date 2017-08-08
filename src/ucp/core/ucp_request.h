@@ -46,6 +46,18 @@ enum {
 
 
 /**
+ * Protocols enumerator to work with send request state
+ */
+enum {
+    UCP_REQUEST_SEND_STATE_SHORT = 0,
+    UCP_REQUEST_SEND_STATE_BCOPY,
+    UCP_REQUEST_SEND_STATE_ZCOPY,
+    UCP_REQUEST_SEND_STATE_PUT,
+    UCP_REQUEST_SEND_STATE_GET,
+};
+
+
+ /**
  * Receive descriptor flags.
  */
 enum {

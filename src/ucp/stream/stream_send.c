@@ -10,6 +10,8 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucp/proto/proto.h>
+#include <ucp/proto/proto_am.inl>
+#include <ucp/stream/stream.h>
 #include <ucp/dt/dt.h>
 
 
@@ -46,8 +48,9 @@ static ucs_status_t ucp_stream_req_start(ucp_request_t *req, size_t count,
                                          size_t rndv_am_thresh,
                                          const ucp_proto_t *proto)
 {
-    size_t zcopy_thresh = 0;
-    size_t length;
+    ucp_ep_config_t *config      = ucp_ep_config(req->send.ep);
+    size_t          zcopy_thresh = SIZE_MAX;
+    size_t          length;
 
     ucs_assertv_always(UCP_DT_IS_CONTIG(req->send.datatype),
                        "stream supports only contiguous types");
@@ -66,6 +69,17 @@ static ucs_status_t ucp_stream_req_start(ucp_request_t *req, size_t count,
         /* short */
         req->send.uct.func = proto->contig_short;
         UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
+    } else if (length < zcopy_thresh) {
+        /* bcopy */
+        if (length <= config->am.max_bcopy - proto->only_hdr_size) {
+            ucp_request_send_state_set(req, 0, 0,
+                                       UCP_REQUEST_SEND_STATE_BCOPY);
+            req->send.uct.func = proto->bcopy_single;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_egr_bcopy_single", req->send.length);
+        } else {
+            ucs_error("bcopy-multi is not implemented");
+            return UCS_ERR_NOT_IMPLEMENTED;
+        }
     } else {
         ucs_error("Not implemented");
         return UCS_ERR_NOT_IMPLEMENTED;
@@ -161,8 +175,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
     ret = ucp_stream_send_req(req, count,
                               ucp_ep_config(ep)->am.max_short,
                               ucp_ep_config(ep)->am.zcopy_thresh,
-                              SIZE_MAX, /* NOTE: disable, not implemented */
-                              SIZE_MAX, /* NOTE: disable, not implemented */
+                              SIZE_MAX, /* NOTE: disable rndv_rma, not implemented */
+                              SIZE_MAX, /* NOTE: disable rndv_am, not implemented */
                               cb, ucp_ep_config(ep)->stream.proto);
 
 out:
@@ -182,9 +196,40 @@ static ucs_status_t ucp_stream_contig_am_short(uct_pending_req_t *self)
     return status;
 }
 
+static size_t ucp_stream_pack_single_dt(void *dest, void *arg)
+{
+    ucp_stream_am_hdr_t *hdr = dest;
+    ucp_request_t       *req = arg;
+    size_t              length;
+
+    hdr->uuid = req->send.ep->worker->uuid;
+
+    ucs_assert(req->send.state.offset == 0);
+    ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
+
+    length = ucp_dt_pack(req->send.datatype, hdr + 1, req->send.buffer,
+                         &req->send.state, req->send.length);
+    ucs_assert(length == req->send.length);
+    return sizeof(*hdr) + length;
+}
+
+static ucs_status_t ucp_stream_bcopy_single(uct_pending_req_t *self)
+{
+    ucs_status_t status;
+
+    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_STREAM_DATA,
+                                    ucp_stream_pack_single_dt);
+    if (status == UCS_OK) {
+        ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+        ucp_request_send_generic_dt_finish(req);
+        ucp_request_complete_send(req, UCS_OK);
+    }
+    return status;
+}
+
 const ucp_proto_t ucp_stream_am_proto = {
     .contig_short            = ucp_stream_contig_am_short,
-    .bcopy_single            = NULL,
+    .bcopy_single            = ucp_stream_bcopy_single,
     .bcopy_multi             = NULL,
     .zcopy_single            = NULL,
     .zcopy_multi             = NULL,

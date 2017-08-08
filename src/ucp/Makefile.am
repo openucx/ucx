@@ -44,7 +44,8 @@ noinst_HEADERS = \
 	tag/offload.h \
 	wireup/address.h \
 	wireup/wireup_ep.h \
-	wireup/wireup.h
+	wireup/wireup.h \
+	stream/stream.h
 
 libucp_la_SOURCES = \
 	amo/basic_amo.c \
