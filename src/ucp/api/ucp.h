@@ -1721,7 +1721,7 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
 
 /**
  * @ingroup UCP_COMM
- * @brief Non-blocking stream send operations
+ * @brief Non-blocking stream send operation.
  *
  * This routine sends a data that is described by the local address @a
  * buffer, size @a count, and @a datatype object to the destination endpoint
@@ -1845,7 +1845,7 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
 
 /**
  * @ingroup UCP_COMM
- * @brief Non-blocking stream oriented receive operation.
+ * @brief Non-blocking stream receive operation.
  *
  * This routine receives a data that is described by the local address @a
  * buffer, size @a count, and @a datatype object on the endpoint @a ep. The
@@ -1886,7 +1886,7 @@ ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,
 
 /**
  * @ingroup UCP_COMM
- * @brief Non-blocking stream oriented receive operation.
+ * @brief Non-blocking stream receive data.
  *
  * This routine receives a raw data on endpoint @ref ep if available that is
  * described by UCS_STATUS_PTR(_ptr) in return value as a pointer to the data
@@ -1905,8 +1905,8 @@ ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,
  *                                capture internal UCP resources until received
  *                                data is processed. When data is processed,
  *                                application is responsible to release the
- *                                handle using @ref ucp_data_release
- *                                "ucp_data_release()" routine.
+ *                                handle using @ref ucp_stream_data_release
+ *                                "ucp_stream_data_release()" routine.
  */
 ucs_status_ptr_t ucp_stream_recv_data_nb(ucp_ep_h ep, size_t *length);
 
@@ -2554,13 +2554,14 @@ void ucp_request_cancel(ucp_worker_h worker, void *request);
  * @brief Release UCP data buffer returned by @ref ucp_stream_recv_data_nb.
  *
  * @param [in]  ep        Endpoint @a data received from.
- * @param [in]  data      Data pointer to release.
+ * @param [in]  data      Data pointer to release, which was returned from
+ *                        @ref ucp_stream_recv_data_nb.
  *
  * This routine releases internal UCP data buffer returned by
  * @ref ucp_stream_recv_data_nb when @a data is processed, the application can't
  * use this buffer after calling this function.
  */
-void ucp_data_release(ucp_ep_h ep, void *data);
+void ucp_stream_data_release(ucp_ep_h ep, void *data);
 
 
 /**
