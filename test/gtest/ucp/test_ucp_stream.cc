@@ -29,20 +29,21 @@ public:
 };
 
 UCS_TEST_P(test_ucp_stream, send_recv_data) {
-    std::vector<char> sbuf(1024, 's');
-    size_t            ssize = 1;
-    std::vector<char> rbuf(1024, 'r');
+    std::vector<char> sbuf(size_t(16)*1024*1024, 's');
+    size_t            ssize = 0; /* total send size */
+
+    /* send all msg sizes*/
+    for (size_t i = 3; i < sbuf.size(); i *= 2) {
+        ucs_status_ptr_t sstatus = ucp_stream_send_nb(sender().ep(), sbuf.data(),
+                                                      i, ucp_dt_make_contig(1),
+                                                      ucp_send_cb, 0);
+        EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
+        wait(sstatus);
+        ssize += i;
+    }
+
+    std::vector<char> rbuf(ssize, 'r');
     size_t            roffset = 0;
-
-    ASSERT_LE(ssize, sbuf.size());
-    ASSERT_LE(ssize, rbuf.size());
-
-    ucs_status_ptr_t sstatus = ucp_stream_send_nb(sender().ep(), sbuf.data(),
-                                                  ssize, ucp_dt_make_contig(1),
-                                                  ucp_send_cb, 0);
-    EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
-    wait(sstatus);
-
     ucs_status_ptr_t rdata;
     size_t length;
     do {
@@ -58,8 +59,8 @@ UCS_TEST_P(test_ucp_stream, send_recv_data) {
     } while (roffset < ssize);
 
     EXPECT_EQ(roffset, ssize);
-    EXPECT_EQ(std::vector<char>(sbuf.begin(), sbuf.begin() + ssize),
-              std::vector<char>(rbuf.begin(), rbuf.begin() + roffset));
+    sbuf.resize(ssize, 's');
+    EXPECT_EQ(sbuf, rbuf);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_stream)
