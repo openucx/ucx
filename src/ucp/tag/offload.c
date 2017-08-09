@@ -190,7 +190,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
     if (ucs_unlikely(length >= ctx->tm.offload.zcopy_thresh)) {
 
         /* TODO: Add tag.RECV.max_zcopy field to iface attrs and use it here  */
-        if (length > ucp_iface->attr.cap.tag.rndv.max_zcopy) {
+        if (length > ucp_iface->attr.cap.tag.recv.max_zcopy) {
             /* The message is too big to be posted to the transport */
             return 0;
         }
