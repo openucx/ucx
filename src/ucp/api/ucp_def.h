@@ -332,7 +332,7 @@ typedef struct ucp_err_handler {
  * connection establishment flow.
  *
  * This structure is used for handling the creation of an endpoint
- * to the remote peer after an incoming connection request on the listener
+ * to the remote peer after an incoming connection request on the listener.
  * Other than communication progress routines, it is allowed to call other
  * communication routines from the callback in the struct.
  * The callback should be thread safe with respect to the worker in is invoked

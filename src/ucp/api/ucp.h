@@ -700,8 +700,8 @@ typedef struct ucp_worker_listener_params {
     /**
      * An address in the form of a sockaddr.
      * This field is mandatory for filling (along with its corresponding bit
-     * in the field_mask - @ref UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR
-     * The ucp_worker_listen routine will return with an error if sockaddr
+     * in the field_mask - @ref UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR).
+     * The @ref ucp_worker_listen routine will return with an error if sockaddr
      * is not specified.
      */
     ucs_sock_addr_t                sockaddr;
@@ -1374,7 +1374,7 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker);
  *                               params object.
  * @param [in]  params           User defined @ref ucp_worker_listener_params_t
  *                               configurations for the @ref ucp_listener_h.
- * @param [out] listener_p       A handler to the created listener, can be released
+ * @param [out] listener_p       A handle to the created listener, can be released
  *                               by calling @ref ucp_listener_destroy
  *
  * @return Error code as defined by @ref ucs_status_t
