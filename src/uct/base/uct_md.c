@@ -470,9 +470,25 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     return UCS_OK;
 }
 
+static ucs_status_t uct_mem_check_flags(unsigned flags)
+{
+    if (!(flags & UCT_MD_MEM_ACCESS_DEFAULT)) {
+        ucs_warn("no memory access flags set");
+        return UCS_ERR_INVALID_PARAM;
+    }
+    return UCS_OK;
+}
+
+
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
                               unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
 {
+    ucs_status_t status;
+
+    status = uct_mem_check_flags(flags);
+    if (status != UCS_OK) {
+        return status;
+    }
     return md->ops->mem_alloc(md, length_p, address_p, flags, memh_p UCS_MEMTRACK_VAL);
 }
 
@@ -495,8 +511,15 @@ uct_md_mem_advise(uct_md_h md, uct_mem_h memh, void *addr, size_t length,
 ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
                             unsigned flags, uct_mem_h *memh_p)
 {
+    ucs_status_t status;
+
     if ((length == 0) || (address == NULL)) {
         return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = uct_mem_check_flags(flags);
+    if (status != UCS_OK) {
+        return status;
     }
 
     return md->ops->mem_reg(md, address, length, flags, memh_p);

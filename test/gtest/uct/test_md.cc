@@ -48,6 +48,8 @@ protected:
         return NULL;
     }
 
+    void ib_md_umr_check(void *rkey_buffer, bool amo_access);
+
 private:
     ucs::handle<uct_md_config_t*> m_md_config;
     ucs::handle<uct_md_h>         m_pd;
@@ -139,7 +141,9 @@ UCS_TEST_P(test_md, rkey_ptr) {
     check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_RKEY_PTR, "allocation+direct access");
     // alloc (should work with both sysv and xpmem
     size = 1024 * 1024 * sizeof(unsigned);
-    status = uct_md_mem_alloc(pd(), &size, (void **)&rva, 0, "test", &memh);
+    status = uct_md_mem_alloc(pd(), &size, (void **)&rva,
+                              UCT_MD_MEM_ACCESS_DEFAULT,
+                              "test", &memh);
     ASSERT_UCS_OK(status);
     EXPECT_LE(1024 * 1024 * sizeof(unsigned), size);
 
@@ -202,7 +206,8 @@ UCS_TEST_P(test_md, alloc) {
             continue;
         }
 
-        status = uct_md_mem_alloc(pd(), &size, &address, 0, "test", &memh);
+        status = uct_md_mem_alloc(pd(), &size, &address,
+                                  UCT_MD_MEM_ACCESS_DEFAULT, "test", &memh);
         EXPECT_GT(size, 0ul);
 
         ASSERT_UCS_OK(status);
@@ -234,7 +239,8 @@ UCS_TEST_P(test_md, reg) {
 
         memset(address, 0xBB, size);
 
-        status = uct_md_mem_reg(pd(), address, size, 0, &memh);
+        status = uct_md_mem_reg(pd(), address, size, UCT_MD_MEM_ACCESS_DEFAULT,
+                                &memh);
 
         ASSERT_UCS_OK(status);
         ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
@@ -265,7 +271,8 @@ UCS_TEST_P(test_md, reg_perf) {
         unsigned n = 0;
         while (n < count) {
             uct_mem_h memh;
-            status = uct_md_mem_reg(pd(), ptr, size, 0, &memh);
+            status = uct_md_mem_reg(pd(), ptr, size, UCT_MD_MEM_ACCESS_DEFAULT,
+                                    &memh);
             ASSERT_UCS_OK(status);
             ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
@@ -300,7 +307,9 @@ UCS_TEST_P(test_md, reg_advise) {
     address = malloc(size);
     ASSERT_TRUE(address != NULL);
 
-    status = uct_md_mem_reg(pd(), address, size, UCT_MD_MEM_FLAG_NONBLOCK, &memh);
+    status = uct_md_mem_reg(pd(), address, size,
+                            UCT_MD_MEM_FLAG_NONBLOCK|UCT_MD_MEM_ACCESS_DEFAULT,
+                            &memh);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
@@ -322,7 +331,10 @@ UCS_TEST_P(test_md, alloc_advise) {
 
     orig_size = size = 128 * 1024 * 1024;
 
-    status = uct_md_mem_alloc(pd(), &size, &address, UCT_MD_MEM_FLAG_NONBLOCK, "test", &memh);
+    status = uct_md_mem_alloc(pd(), &size, &address,
+                              UCT_MD_MEM_FLAG_NONBLOCK|
+                              UCT_MD_MEM_ACCESS_DEFAULT,
+                              "test", &memh);
     ASSERT_UCS_OK(status);
     EXPECT_GE(size, orig_size);
     EXPECT_TRUE(address != NULL);
@@ -356,7 +368,10 @@ UCS_TEST_P(test_md, reg_multi_thread) {
         ASSERT_TRUE(buffer != NULL);
 
         uct_mem_h memh;
-        status = uct_md_mem_reg(pd(), buffer, size, UCT_MD_MEM_FLAG_NONBLOCK, &memh);
+        status = uct_md_mem_reg(pd(), buffer, size,
+                                UCT_MD_MEM_FLAG_NONBLOCK|
+                                UCT_MD_MEM_ACCESS_DEFAULT,
+                                &memh);
         ASSERT_UCS_OK(status, << " buffer=" << buffer << " size=" << size);
         ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
@@ -369,6 +384,113 @@ UCS_TEST_P(test_md, reg_multi_thread) {
 
     stop_flag = 1;
     pthread_join(thread_id, NULL);
+}
+
+/*
+ * Test that ib md does not create umr region if 
+ * UCT_MD_MEM_ACCESS_REMOTE_ATOMIC is not set
+ */
+#include "src/uct/ib/base/ib_md.h"
+
+void test_md::ib_md_umr_check(void *rkey_buffer, bool amo_access) {
+
+    ucs_status_t status;
+    size_t size = 8192;
+    void *buffer = malloc(size);
+    ASSERT_TRUE(buffer != NULL);
+
+    uct_mem_h memh;
+    status = uct_md_mem_reg(pd(), buffer, size, 
+                            amo_access ? UCT_MD_MEM_ACCESS_ALL :  UCT_MD_MEM_ACCESS_RMA,
+                            &memh);
+    ASSERT_UCS_OK(status, << " buffer=" << buffer << " size=" << size);
+    ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
+
+    uct_ib_mem_t *ib_memh = (uct_ib_mem_t *)memh;
+    uct_ib_md_t  *ib_md = (uct_ib_md_t *)pd();
+
+    if (amo_access) {
+        EXPECT_TRUE(ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC);
+        EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
+    } else {
+        EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC);
+        EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
+    }
+
+    status = uct_md_mkey_pack(pd(), memh, rkey_buffer);
+    EXPECT_UCS_OK(status);
+
+    if (amo_access) {
+        if (ib_md->umr_qp != NULL) {
+            EXPECT_TRUE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
+            EXPECT_TRUE(ib_memh->atomic_mr != NULL);
+        } else {
+            EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
+            EXPECT_TRUE(ib_memh->atomic_mr == NULL);
+        }
+    } else {
+        EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
+        EXPECT_TRUE(ib_memh->atomic_mr == NULL);
+    }
+
+    status = uct_md_mem_dereg(pd(), memh);
+    EXPECT_UCS_OK(status);
+    free(buffer);
+}
+
+class test_md_rcache_on : public test_md {
+    virtual void init() {
+        modify_config("RCACHE", "yes", false);
+        test_md::init();
+    }
+};
+
+UCS_TEST_P(test_md_rcache_on, ib_md_umr) {
+
+    ucs_status_t status;
+    uct_md_attr_t md_attr;
+    void *rkey_buffer;
+
+    status = uct_md_query(pd(), &md_attr);
+    ASSERT_UCS_OK(status);
+    rkey_buffer = malloc(md_attr.rkey_packed_size);
+    ASSERT_TRUE(rkey_buffer != NULL);
+
+    /* The order is important here because
+     * of registration cache. A cached region will
+     * be promoted to atomic access but it will never be demoted 
+     */
+    ib_md_umr_check(rkey_buffer, false);
+    ib_md_umr_check(rkey_buffer, true);
+
+    free(rkey_buffer);
+}
+
+class test_md_rcache_off : public test_md {
+    virtual void init() {
+        modify_config("RCACHE", "no", false);
+        test_md::init();
+    }
+};
+
+UCS_TEST_P(test_md_rcache_off, ib_md_umr) {
+
+    ucs_status_t status;
+    uct_md_attr_t md_attr;
+    void *rkey_buffer;
+
+    status = uct_md_query(pd(), &md_attr);
+    ASSERT_UCS_OK(status);
+    rkey_buffer = malloc(md_attr.rkey_packed_size);
+    ASSERT_TRUE(rkey_buffer != NULL);
+
+    /* without rcache the order is not really important */
+    ib_md_umr_check(rkey_buffer, true);
+    ib_md_umr_check(rkey_buffer, false);
+    ib_md_umr_check(rkey_buffer, true);
+    ib_md_umr_check(rkey_buffer, false);
+
+    free(rkey_buffer);
 }
 
 
@@ -384,8 +506,18 @@ UCS_TEST_P(test_md, reg_multi_thread) {
                    ib, \
                    ugni \
                    )
+
+#define UCT_PD_INSTANTIATE_IB_TEST_CASE(_ib_test_case) \
+    UCS_PP_FOREACH(_UCT_PD_INSTANTIATE_TEST_CASE, _ib_test_case, \
+                   ib \
+                   )
+
 #define _UCT_PD_INSTANTIATE_TEST_CASE(_test_case, _mdc_name) \
     INSTANTIATE_TEST_CASE_P(_mdc_name, _test_case, \
                             testing::ValuesIn(_test_case::enum_mds(#_mdc_name)));
 
 UCT_PD_INSTANTIATE_TEST_CASE(test_md)
+
+UCT_PD_INSTANTIATE_IB_TEST_CASE(test_md_rcache_on)
+UCT_PD_INSTANTIATE_IB_TEST_CASE(test_md_rcache_off)
+

@@ -643,7 +643,8 @@ uct_ib_mem_prefetch_internal(uct_ib_md_t *md, uct_ib_mem_t *memh, void *addr, si
     return UCS_OK;
 }
 
-static void uct_ib_mem_init(uct_ib_mem_t *memh, uint64_t exp_access)
+static void uct_ib_mem_init(uct_ib_mem_t *memh, unsigned uct_flags,
+                            uint64_t exp_access)
 {
     memh->lkey  = memh->mr->lkey;
     memh->flags = 0;
@@ -651,6 +652,10 @@ static void uct_ib_mem_init(uct_ib_mem_t *memh, uint64_t exp_access)
     /* coverity[dead_error_condition] */
     if (exp_access & IBV_EXP_ACCESS_ON_DEMAND) {
         memh->flags |= UCT_IB_MEM_FLAG_ODP;
+    }
+
+    if (uct_flags & UCT_MD_MEM_ACCESS_REMOTE_ATOMIC) {
+        memh->flags |= UCT_IB_MEM_ACCESS_REMOTE_ATOMIC;
     }
 }
 
@@ -687,7 +692,7 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
               memh->mr->addr, memh->mr->addr + memh->mr->length, uct_ib_device_name(&md->dev),
               memh->mr->lkey, memh->mr->rkey);
 
-    uct_ib_mem_init(memh, exp_access);
+    uct_ib_mem_init(memh, flags, exp_access);
     uct_ib_mem_set_numa_policy(md, memh);
 
     if (md->config.odp.prefetch) {
@@ -744,7 +749,7 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
               address, address + length, uct_ib_device_name(&md->dev),
               memh->mr->lkey, memh->mr->rkey);
 
-    uct_ib_mem_init(memh, exp_access);
+    uct_ib_mem_init(memh, flags, exp_access);
     uct_ib_mem_set_numa_policy(md, memh);
     if (md->config.odp.prefetch) {
         uct_ib_mem_prefetch_internal(md, memh, memh->mr->addr, memh->mr->length);
@@ -812,7 +817,8 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     uint16_t umr_offset;
     ucs_status_t status;
 
-    if (!(memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR)) {
+    if ((memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) &&
+         !(memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR)) {
         /* create UMR on-demand */
         ucs_assert(memh->atomic_mr == NULL);
         umr_offset = uct_ib_md_atomic_offset(uct_ib_md_get_atomic_mr_id(md));
@@ -874,6 +880,7 @@ static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     ucs_rcache_region_t *rregion;
     ucs_status_t status;
+    uct_ib_mem_t *memh;
 
     status = ucs_rcache_get(md->rcache, address, length, PROT_READ|PROT_WRITE,
                             &flags, &rregion);
@@ -882,7 +889,14 @@ static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
     }
 
     ucs_assert(rregion->refcount > 0);
-    *memh_p = &ucs_derived_of(rregion, uct_ib_rcache_region_t)->memh;
+    memh = &ucs_derived_of(rregion, uct_ib_rcache_region_t)->memh;
+    /* The original region was registered without atomic access
+     * so update the access flags.  
+     */
+    if (flags & UCT_MD_MEM_ACCESS_REMOTE_ATOMIC) {
+        memh->flags |= UCT_IB_MEM_ACCESS_REMOTE_ATOMIC;
+    }
+    *memh_p = memh;
     return UCS_OK;
 }
 

@@ -184,7 +184,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     status = UCS_OK;
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        status = uct_md_mem_reg(uct_md, buffer, length, 0, &state->dt.contig.memh);
+        status = uct_md_mem_reg(uct_md, buffer, length, UCT_MD_MEM_ACCESS_RMA,
+                                &state->dt.contig.memh);
         break;
     case UCP_DATATYPE_IOV:
         iovcnt = state->dt.iov.iovcnt;
@@ -197,7 +198,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
         for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
             if (iov[iov_it].length) {
                 status = uct_md_mem_reg(uct_md, iov[iov_it].buffer,
-                                        iov[iov_it].length, 0, &memh[iov_it]);
+                                        iov[iov_it].length,
+                                        UCT_MD_MEM_ACCESS_RMA, &memh[iov_it]);
                 if (status != UCS_OK) {
                     /* unregister previously registered memory */
                     ucp_iov_buffer_memh_dereg(uct_md, memh, iov_it);
