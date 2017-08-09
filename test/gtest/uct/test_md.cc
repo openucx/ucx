@@ -7,6 +7,7 @@
 extern "C" {
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
+#include <uct/ib/base/ib_md.h>
 }
 #include <common/test.h>
 
@@ -390,7 +391,6 @@ UCS_TEST_P(test_md, reg_multi_thread) {
  * Test that ib md does not create umr region if 
  * UCT_MD_MEM_ACCESS_REMOTE_ATOMIC is not set
  */
-#include "src/uct/ib/base/ib_md.h"
 
 void test_md::ib_md_umr_check(void *rkey_buffer, bool amo_access) {
 
