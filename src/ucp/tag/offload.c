@@ -378,7 +378,8 @@ static ucs_status_t ucp_tag_offload_eager_bcopy(uct_pending_req_t *self)
 
 static ucs_status_t ucp_tag_offload_eager_zcopy(uct_pending_req_t *self)
 {
-    return ucp_do_tag_offload_zcopy(self, 0ul, ucp_tag_eager_zcopy_req_complete);
+    return ucp_do_tag_offload_zcopy(self, 0ul,
+                                    ucp_proto_am_zcopy_req_complete);
 }
 
 ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
@@ -416,7 +417,7 @@ static void ucp_tag_rndv_zcopy_completion(uct_completion_t *self,
                                           ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
-    ucp_tag_eager_zcopy_req_complete(req, status);
+    ucp_proto_am_zcopy_req_complete(req, status);
 }
 
 ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
@@ -490,7 +491,7 @@ const ucp_proto_t ucp_tag_offload_proto = {
     .bcopy_multi      = NULL,
     .zcopy_single     = ucp_tag_offload_eager_zcopy,
     .zcopy_multi      = NULL,
-    .zcopy_completion = ucp_tag_eager_zcopy_completion,
+    .zcopy_completion = ucp_proto_am_zcopy_completion,
     .only_hdr_size    = 0,
     .first_hdr_size   = 0,
     .mid_hdr_size     = 0

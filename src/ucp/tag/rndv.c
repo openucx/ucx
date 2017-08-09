@@ -8,6 +8,7 @@
 #include "tag_match.inl"
 
 #include "offload.h"
+#include <ucp/proto/proto.h>
 #include <ucp/proto/proto_am.inl>
 #include <ucp/core/ucp_request.inl>
 #include <ucs/datastruct/queue.h>

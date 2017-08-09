@@ -51,6 +51,9 @@ struct ucp_proto {
 
 ucs_status_t ucp_proto_progress_am_bcopy_single(uct_pending_req_t *self);
 
+void ucp_proto_am_zcopy_completion(uct_completion_t *self, ucs_status_t status);
+
+void ucp_proto_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
 
 /*
  * Make sure the remote worker would be able to send replies to our endpoint.
