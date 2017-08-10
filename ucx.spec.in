@@ -26,12 +26,19 @@ the following shared memory mechanisms: posix. sysv, cma, knem, xpmem.
 
 %package devel
 Requires: %{name}%{?_isa} = %{version}-%{release}
-Provides: %{name}-static = %{version}-%{release}
-Summary: Header files and libraries required to develop with ucx
+Summary: Header files required to develop with UCX
+Group: Development/Libraries
+
+%package static
+Requires: %{name}-devel = %{version}-%{release}
+Summary: Static libraries required to develop with UCX
 Group: Development/Libraries
 
 %description devel
-Provides header files, static libraries and examples for developing with UCX.
+Provides header files and examples for developing with UCX.
+
+%description static
+Provides static libraries required for development with UCX.
 
 %prep
 %setup -q
@@ -61,10 +68,12 @@ rm -f %{buildroot}%{_libdir}/*.la
 
 %files devel
 %{_includedir}/uc*
-%{_libdir}/lib*.a
 %{_libdir}/lib*.so
 %{_libdir}/pkgconfig/ucx.pc
 %{_datadir}/ucx/examples
+
+%files static
+%{_libdir}/lib*.a
 
 %post -p /sbin/ldconfig
 %postun -p /sbin/ldconfig
