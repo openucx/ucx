@@ -53,7 +53,8 @@ rm -f %{buildroot}%{_libdir}/*.la
 %files
 %{_libdir}/lib*.so.*
 %{_bindir}/uc*
-%{_datadir}/ucx/perftest/*
+%{_datadir}/ucx
+%exclude %{_datadir}/ucx/examples
 %doc README AUTHORS NEWS
 %{!?_licensedir:%global license %%doc}
 %license LICENSE
