@@ -409,9 +409,6 @@ bool test_ucp_tag::is_external_request()
     return false;
 }
 
-const ucp_datatype_t test_ucp_tag::DATATYPE     = ucp_dt_make_contig(1);
-const ucp_datatype_t test_ucp_tag::DATATYPE_IOV = ucp_dt_make_iov();
-
 ucp_generic_dt_ops test_ucp_tag::test_dt_uint32_ops = {
     test_ucp_tag::dt_common_start_pack,
     test_ucp_tag::dt_common_start_unpack,
