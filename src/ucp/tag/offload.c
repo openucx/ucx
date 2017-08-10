@@ -311,7 +311,10 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
         return status;
     } else {
         ucs_assert(status == UCS_INPROGRESS);
+        ++req->send.uct_comp.count;
     }
+
+    req->send.state.offset = req->send.length;
 
     return UCS_OK;
 }
@@ -375,8 +378,9 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
         return UCS_PTR_STATUS(rndv_op);
     }
     ++req->send.uct_comp.count;
-
-    req->flags |= UCP_REQUEST_FLAG_OFFLOADED;
+    
+    req->send.state.offset        = req->send.length;
+    req->flags                   |= UCP_REQUEST_FLAG_OFFLOADED;
     req->send.tag_offload.rndv_op = rndv_op;
     return UCS_OK;
 }
