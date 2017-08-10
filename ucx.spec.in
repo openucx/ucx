@@ -51,7 +51,7 @@ make DESTDIR=%{buildroot} install
 rm -f %{buildroot}%{_libdir}/*.la
 
 %files
-%{_libdir}/lib*.so*
+%{_libdir}/lib*.so.*
 %{_bindir}/uc*
 %{_datadir}/ucx/perftest/*
 %doc README AUTHORS NEWS
@@ -61,6 +61,7 @@ rm -f %{buildroot}%{_libdir}/*.la
 %files devel
 %{_includedir}/uc*
 %{_libdir}/lib*.a
+%{_libdir}/lib*.so
 %{_libdir}/pkgconfig/ucx.pc
 %{_datadir}/ucx/examples
 
