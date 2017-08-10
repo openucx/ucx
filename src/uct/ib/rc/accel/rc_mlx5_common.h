@@ -100,12 +100,6 @@ uct_rc_mlx5_iface_common_rx_inline(uct_rc_mlx5_iface_common_t *mlx5_iface,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_srq_prefetch_first(uct_rc_mlx5_iface_common_t *mlx5_common_iface)
-{
-    ucs_prefetch(mlx5_common_iface->rx.pref_ptr);
-}
-
-static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_srq_prefetch_setup(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                uct_rc_iface_t *rc_iface)
 {
@@ -115,6 +109,98 @@ uct_rc_mlx5_srq_prefetch_setup(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     seg = uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq, wqe_ctr);
     mlx5_common_iface->rx.pref_ptr =
             uct_ib_iface_recv_desc_hdr(&rc_iface->super, seg->srq.desc);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
+                                  uct_rc_iface_t *rc_iface,
+                                  uct_ib_mlx5_srq_seg_t *seg, uint16_t wqe_ctr,
+                                  ucs_status_t am_status)
+{
+    void *udesc;
+
+    if (ucs_likely((am_status == UCS_OK) &&
+         (wqe_ctr == ((mlx5_common_iface->rx.srq.ready_idx + 1) &
+                       mlx5_common_iface->rx.srq.mask)))) {
+         /* If the descriptor was not used - if there are no "holes", we can just
+          * reuse it on the receive queue. Otherwise, ready pointer will stay behind
+          * until post_recv allocated more descriptors from the memory pool, fills
+          * the holes, and moves it forward.
+          */
+         ucs_assert(wqe_ctr == ((mlx5_common_iface->rx.srq.free_idx + 1) &
+                                 mlx5_common_iface->rx.srq.mask));
+         ++mlx5_common_iface->rx.srq.ready_idx;
+         ++mlx5_common_iface->rx.srq.free_idx;
+    } else {
+         if (am_status != UCS_OK) {
+             udesc                = (char*)seg->srq.desc +
+                                    rc_iface->super.config.rx_headroom_offset;
+             uct_recv_desc(udesc) = &rc_iface->super.release_desc;
+             seg->srq.desc        = NULL;
+         }
+         if (wqe_ctr == ((mlx5_common_iface->rx.srq.free_idx + 1) & mlx5_common_iface->rx.srq.mask)) {
+             ++mlx5_common_iface->rx.srq.free_idx;
+         } else {
+             /* Mark the segment as out-of-order, post_recv will advance free */
+             seg->srq.free = 1;
+         }
+    }
+
+    ++rc_iface->rx.srq.available;
+}
+
+static UCS_F_NOINLINE void
+uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
+                                      uct_rc_iface_t *rc_iface,
+                                      struct mlx5_cqe64 *cqe)
+{
+    uct_ib_mlx5_cq_t *cq = &mlx5_common_iface->rx.cq;
+    struct mlx5_err_cqe *ecqe = (void*)cqe;
+    uct_ib_mlx5_srq_seg_t *seg;
+    uint16_t wqe_ctr;
+
+    ucs_memory_cpu_load_fence();
+
+    if (((ecqe->op_own >> 4) == MLX5_CQE_RESP_ERR) &&
+        (ecqe->syndrome == MLX5_CQE_SYNDROME_REMOTE_ABORTED_ERR) &&
+        (ecqe->vendor_err_synd == UCT_IB_MLX5_CQE_VENDOR_SYND_ODP))
+    {
+        /* Release the aborted segment */
+        wqe_ctr = ntohs(ecqe->wqe_counter);
+        seg     = uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq, wqe_ctr);
+        ++cq->cq_ci;
+        uct_rc_mlx5_iface_release_srq_seg(mlx5_common_iface, rc_iface, seg,
+                                          wqe_ctr, UCS_OK);
+    } else if ((ecqe->op_own >> 4) != MLX5_CQE_INVALID) {
+        uct_ib_mlx5_check_completion(&rc_iface->super, cq, cqe);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
+uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
+                             uct_rc_iface_t *rc_iface)
+{
+    uct_ib_mlx5_cq_t *cq = &mlx5_common_iface->rx.cq;
+    struct mlx5_cqe64 *cqe;
+    unsigned index;
+    uint8_t op_own;
+
+    /* Prefetch the descriptor if it was scheduled */
+    ucs_prefetch(mlx5_common_iface->rx.pref_ptr);
+
+    index  = cq->cq_ci;
+    cqe    = uct_ib_mlx5_get_cqe(cq, index);
+    op_own = cqe->op_own;
+
+    if (ucs_unlikely((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length))) {
+        return NULL;
+    } else if (ucs_unlikely(op_own & 0x80)) {
+        uct_rc_mlx5_iface_check_rx_completion(mlx5_common_iface, rc_iface, cqe);
+        return NULL;
+    }
+
+    cq->cq_ci = index + 1;
+    return cqe; /* TODO optimize - let complier know cqe is not null */
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
@@ -132,16 +218,12 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     uint16_t max_batch;
     ucs_status_t status;
     unsigned count;
-    void *udesc;
     unsigned flags;
 
     ucs_assert(uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq,
                                        mlx5_common_iface->rx.srq.mask)->srq.next_wqe_index == 0);
 
-    /* Prefetch the descriptor if it was scheduled */
-    uct_rc_mlx5_srq_prefetch_first(mlx5_common_iface);
-
-    cqe = uct_ib_mlx5_poll_cq(&rc_iface->super, &mlx5_common_iface->rx.cq);
+    cqe = uct_rc_mlx5_iface_poll_rx_cq(mlx5_common_iface, rc_iface);
     if (cqe == NULL) {
         /* If no CQE - post receives */
         count = 0;
@@ -194,33 +276,8 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                      flags);
     }
 
-    if (ucs_likely((status == UCS_OK) &&
-        (wqe_ctr == ((mlx5_common_iface->rx.srq.ready_idx + 1) &
-                      mlx5_common_iface->rx.srq.mask)))) {
-        /* If the descriptor was not used - if there are no "holes", we can just
-         * reuse it on the receive queue. Otherwise, ready pointer will stay behind
-         * until post_recv allocated more descriptors from the memory pool, fills
-         * the holes, and moves it forward.
-         */
-        ucs_assert(wqe_ctr == ((mlx5_common_iface->rx.srq.free_idx + 1) &
-                                mlx5_common_iface->rx.srq.mask));
-        ++mlx5_common_iface->rx.srq.ready_idx;
-        ++mlx5_common_iface->rx.srq.free_idx;
-   } else {
-        if (status != UCS_OK) {
-            udesc = (char*)desc + rc_iface->super.config.rx_headroom_offset;
-            uct_recv_desc(udesc) = &rc_iface->super.release_desc;
-            seg->srq.desc        = NULL;
-        }
-        if (wqe_ctr == ((mlx5_common_iface->rx.srq.free_idx + 1) & mlx5_common_iface->rx.srq.mask)) {
-            ++mlx5_common_iface->rx.srq.free_idx;
-        } else {
-            /* Mark the segment as out-of-order, post_recv will advance free */
-            seg->srq.free = 1;
-        }
-    }
-
-    ++rc_iface->rx.srq.available;
+    uct_rc_mlx5_iface_release_srq_seg(mlx5_common_iface, rc_iface, seg, wqe_ctr,
+                                      status);
     count = 1;
 
 done:

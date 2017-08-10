@@ -26,9 +26,6 @@ ucs_config_field_t uct_md_config_table[] = {
 };
 
 ucs_config_field_t uct_md_config_rcache_table[] = {
-    {"RCACHE", "try", "Enable using memory registration cache",
-     ucs_offsetof(uct_md_rcache_config_t, enable), UCS_CONFIG_TYPE_TERNARY},
-
     {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
      ucs_offsetof(uct_md_rcache_config_t, event_prio), UCS_CONFIG_TYPE_UINT},
 

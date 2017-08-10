@@ -248,31 +248,28 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 }
 
 
-struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
-                                                uct_ib_mlx5_cq_t *cq,
-                                                struct mlx5_cqe64 *cqe)
+void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
+                                  struct mlx5_cqe64 *cqe)
 {
     ucs_status_t status;
 
     switch (cqe->op_own >> 4) {
-    case MLX5_CQE_INVALID:
-        return NULL; /* No CQE */
     case MLX5_CQE_REQ_ERR:
         /* update ci before invoking error callback, since it can poll on cq */
         ++cq->cq_ci;
         status = uct_ib_mlx5_completion_with_err((void*)cqe,
                                                  UCS_LOG_LEVEL_DEBUG);
         iface->ops->handle_failure(iface, cqe, status);
-        return NULL;
+        return;
     case MLX5_CQE_RESP_ERR:
         /* Local side failure - treat as fatal */
         ++cq->cq_ci;
         uct_ib_mlx5_completion_with_err((void*)cqe, UCS_LOG_LEVEL_FATAL);
-        return NULL;
+        return;
     default:
         /* CQE might have been updated by HW. Skip it now, and it would be handled
          * in next polling. */
-        return NULL;
+        return;
     }
 }
 

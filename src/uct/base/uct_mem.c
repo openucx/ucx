@@ -331,8 +331,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_iface_mp_chunk_alloc, (mp, size_p, chunk_p),
 
     length = sizeof(*hdr) + *size_p;
     status = uct_iface_mem_alloc(&iface->super, length,
-                                 UCT_MD_MEM_ACCESS_ALL, ucs_mpool_name(mp),
-                                 &mem);
+                                 UCT_MD_MEM_ACCESS_ALL | UCT_MD_MEM_FLAG_PIN,
+                                 ucs_mpool_name(mp), &mem);
     if (status != UCS_OK) {
         return status;
     }
