@@ -163,8 +163,8 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_trace_func("Creating a loop-back transport self=%p rxh=%lu",
                    self, params->rx_headroom);
 
-    if (strcmp(params->dev_name, UCT_SELF_NAME) != 0) {
-        ucs_error("No device was found: %s", params->dev_name);
+    if (strcmp(params->mode.device.dev_name, UCT_SELF_NAME) != 0) {
+        ucs_error("No device was found: %s", params->mode.device.dev_name);
         return UCS_ERR_NO_DEVICE;
     }
 

@@ -630,16 +630,16 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     }
 
     memset(&iface_params, 0, sizeof(iface_params));
-    iface_params.tl_name         = resource->tl_rsc.tl_name;
-    iface_params.dev_name        = resource->tl_rsc.dev_name;
-    iface_params.stats_root      = UCS_STATS_RVAL(worker->stats);
-    iface_params.rx_headroom     = rx_headroom;
-    iface_params.cpu_mask        = *cpu_mask_param;
-    iface_params.err_handler_arg = worker;
-    iface_params.err_handler     = ucp_worker_iface_error_handler;
-    iface_params.eager_arg       = iface_params.rndv_arg = worker;
-    iface_params.eager_cb        = ucp_tag_offload_unexp_eager;
-    iface_params.rndv_cb         = ucp_tag_offload_unexp_rndv;
+    iface_params.mode.device.tl_name  = resource->tl_rsc.tl_name;
+    iface_params.mode.device.dev_name = resource->tl_rsc.dev_name;
+    iface_params.stats_root           = UCS_STATS_RVAL(worker->stats);
+    iface_params.rx_headroom          = rx_headroom;
+    iface_params.cpu_mask             = *cpu_mask_param;
+    iface_params.err_handler_arg      = worker;
+    iface_params.err_handler          = ucp_worker_iface_error_handler;
+    iface_params.eager_arg            = iface_params.rndv_arg = worker;
+    iface_params.eager_cb             = ucp_tag_offload_unexp_eager;
+    iface_params.rndv_cb              = ucp_tag_offload_unexp_rndv;
 
     /* Open UCT interface */
     status = uct_iface_open(context->tl_mds[resource->md_index].md, worker->uct,

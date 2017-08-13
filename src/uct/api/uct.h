@@ -311,17 +311,28 @@ enum uct_am_cb_flags {
 
 
 /**
- * @ingroup UCT_MD
- * @brief Socket address reachability type.
+ * @ingroup UCT_RESOURCE
+ * @brief Interface opening mode.
  */
 typedef enum {
-   UCT_SOCKADDR_REACHABILITY_LOCAL,  /**< Check if local address exists.
-                                          Address should belong to a local
-                                          network interface */
-   UCT_SOCKADDR_REACHABILITY_REMOTE  /**< Check if remote address can be reached.
-                                          Address is routable from one of the
-                                          local network interfaces */
-} uct_sockaddr_reachability_t;
+   UCT_IFACE_OPEN_MODE_DEVICE,   /**< Interface is opened per device */
+   UCT_IFACE_OPEN_MODE_SOCKADDR  /**< Interface is opened to be associated with
+                                      a sockaddr */
+} uct_iface_open_mode_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Socket address accessibility type.
+ */
+typedef enum {
+   UCT_SOCKADDR_ACCESSIBILITY_LOCAL,  /**< Check if local address exists.
+                                           Address should belong to a local
+                                           network interface */
+   UCT_SOCKADDR_ACCESSIBILITY_REMOTE  /**< Check if remote address can be reached.
+                                           Address is routable from one of the
+                                           local network interfaces */
+} uct_sockaddr_accessibility_t;
 
 
 /**
@@ -339,9 +350,12 @@ enum {
     UCT_MD_FLAG_ADVISE     = UCS_BIT(4),  /**< MD supports memory advice */
     UCT_MD_FLAG_FIXED      = UCS_BIT(5),  /**< MD supports memory allocation with
                                                fixed address */
-    UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6)   /**< MD supports direct access to
+    UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6),  /**< MD supports direct access to
                                                remote memory via a pointer that
                                                is returned by @ref uct_rkey_ptr */
+    UCT_MD_FLAG_SOCK_ADDR  = UCS_BIT(7)   /**< MD support for client-server
+                                               connection establishment via
+                                               sockaddr */
 };
 
 
@@ -504,8 +518,30 @@ struct uct_iface_attr {
  */
 struct uct_iface_params {
     ucs_cpu_set_t            cpu_mask;    /**< Mask of CPUs to use for resources */
-    const char               *tl_name;    /**< Transport name */
-    const char               *dev_name;   /**< Device Name */
+
+    union {
+        struct {
+            const char *tl_name;  /**< Transport name */
+            const char *dev_name; /**< Device Name */
+        } device;
+        struct {
+            /* These callbacks and address are only relevant for client-server
+             * connection establishment with sockaddr and are needed on the server side */
+            ucs_sock_addr_t listen_sockaddr;
+            void *conn_request_arg;
+            uct_sockaddr_conn_request_callback_t conn_request_cb; /**< Callback for an
+                                                                       incoming connection
+                                                                       request on the server */
+            void *conn_ready_arg;
+            uct_sockaddr_conn_ready_callback_t conn_ready_cb;     /**< Callback for an
+                                                                       incoming message
+                                                                       on the server
+                                                                       indicating that
+                                                                       the connection
+                                                                       is ready */
+        } sockaddr;
+    } mode;
+
     ucs_stats_node_t         *stats_root; /**< Root in the statistics tree.
                                                Can be NULL. If non NULL, it will be
                                                a root of @a uct_iface object in the
@@ -523,21 +559,8 @@ struct uct_iface_params {
     uct_tag_unexp_eager_cb_t eager_cb;    /**< Callback for tag matching unexpected eager messages */
     void                     *rndv_arg;
     uct_tag_unexp_rndv_cb_t  rndv_cb;     /**< Callback for tag matching unexpected rndv messages */
-
-    /* These callbacks and address are only relevant for client-server
-     * connection establishment with sockaddr and are needed on the server side */
-    ucs_sock_addr_t                      listen_sockaddr;
-    void                                 *conn_request_arg;
-    uct_sockaddr_conn_request_callback_t conn_request_cb;   /**< Callback for an
-                                                                 incoming connection
-                                                                 request on the server */
-    void                                 *conn_ready_arg;
-    uct_sockaddr_conn_ready_callback_t   conn_ready_cb;     /**< Callback for an
-                                                                 incoming message
-                                                                 on the server
-                                                                 indicating that
-                                                                 the connection
-                                                                 is ready */
+    uint64_t                 open_mode;   /**< Interface opening mode. @ref
+                                               uct_iface_open_mode_t */
 };
 
 
@@ -1393,24 +1416,27 @@ ucs_status_t uct_md_config_read(const char *name, const char *env_prefix,
 
 /**
  * @ingroup UCT_MD
- * @brief Check if remote sock address is reachable from the memory domain.
+ * @brief Check if remote sock address is accessible from the memory domain.
  *
- * This function checks if a remote sock address can be reached from a local
- * memory domain. Reachability can be checked in local or remote mode.
+ * This function checks if a remote sock address can be accessed from a local
+ * memory domain. Accessibility can be checked in local or remote mode.
  *
- * @param [in]  md         Memory domain to check reachability from.
- * @param [in]  sockaddr   Socket address to check reachability to.
- * @param [in]  mode       Mode for checking reachability, as defined in @ref
- *                         uct_sockaddr_reachability_t.
- *                         Indicates if reachability is tested on the server side -
+ * @param [in]  md         Memory domain to check accessibility from.
+ *                         This memory domain must support the @ref
+ *                         UCT_MD_FLAG_SOCK_ADDR flag.
+ * @param [in]  sockaddr   Socket address to check accessibility to.
+ * @param [in]  mode       Mode for checking accessibility, as defined in @ref
+ *                         uct_sockaddr_accessibility_t.
+ *                         Indicates if accessibility is tested on the server side -
+ *
  *                         for binding to the given sockaddr, or on the
  *                         client side - for connecting to the given remote
  *                         peer's sockaddr.
  *
- * @return Nonzero if reachable, 0 if unreachable.
+ * @return Nonzero if accessible, 0 if inaccessible.
  */
-int uct_md_is_sockaddr_reachable(uct_md_h md, const ucs_sock_addr_t *sockaddr,
-                                 uct_sockaddr_reachability_t mode);
+int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
+                                  uct_sockaddr_accessibility_t mode);
 
 
 /**

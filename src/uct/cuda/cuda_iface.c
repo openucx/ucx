@@ -112,8 +112,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_md_h md, uct_worker_h worker,
                               params, tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_CUDA_TL_NAME));
 
-    if (strcmp(params->dev_name, UCT_CUDA_DEV_NAME) != 0) {
-        ucs_error("No device was found: %s", params->dev_name);
+    if (strcmp(params->mode.device.dev_name, UCT_CUDA_DEV_NAME) != 0) {
+        ucs_error("No device was found: %s", params->mode.device.dev_name);
         return UCS_ERR_NO_DEVICE;
     }
 
