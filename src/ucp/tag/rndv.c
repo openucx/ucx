@@ -322,8 +322,10 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self, status),
 {
     ucp_request_t *rndv_req = ucs_container_of(self, ucp_request_t, send.uct_comp);
 
-    ucs_trace_req("completed rndv get operation rndv_req: %p", rndv_req);
-    ucp_rndv_complete_rndv_get(rndv_req);
+    if (rndv_req->send.state.offset == rndv_req->send.length) {
+        ucs_trace_req("completed rndv get operation rndv_req: %p", rndv_req);
+        ucp_rndv_complete_rndv_get(rndv_req);
+    }
 }
 
 static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *rreq,
