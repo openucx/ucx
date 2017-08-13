@@ -81,6 +81,10 @@
  * \b Tag \b Matching: This interface supports tag-matching for send-receive semantics which is a key
  * communication semantic defined by the MPI specification.  
  *
+ * \b Stream : This interface supports endpoint to endpoint send-receive semantics with strict
+ * ordering in scope of the stream. The API is designed to match widely used socket based
+ * programming models.
+ *
  * \b Active \b Message: A subset of functionality where the incoming packet invokes a
  * sender-specified callback in order to be processed by the receiving process.
  * As an example, the two-sided MPI interface can easily be implemented on top

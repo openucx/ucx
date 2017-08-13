@@ -685,7 +685,7 @@ typedef struct ucp_ep_params {
 
     /**
      * User data associated with an endpoint. See @ref ucp_ep_poll_t.
-     * @a user_data redefines @ref ucp_err_handler_t::arg if set both
+     * @a user_data must be equal to @ref ucp_err_handler_t::arg if set both.
      */
     void                    *user_data;
 } ucp_ep_params_t;
@@ -713,6 +713,11 @@ typedef struct {
      * Reserved for future use.
      */
     unsigned    flags;
+
+    /**
+     * Reserved for future use.
+     */
+    uint8_t     reserved[16];
 } ucp_stream_poll_ep_t;
 
 /**
@@ -1130,11 +1135,11 @@ unsigned ucp_worker_progress(ucp_worker_h worker);
 
 /**
  * @ingroup UCP_WORKER
- * @brief Poll for endpoints with ready streaming data.
+ * @brief Poll for endpoints with ready to consume streaming data.
  *
  * This non-blocking routine returns endpoints on a worker which have ready
- * streaming data. The ready endpoints are placed in @poll_eps array, and the
- * function return value indicates how many are there.
+ * to consume streaming data. The ready endpoints are placed in @poll_eps array,
+ * and the function return value indicates how many are there.
  *
  * @param [in]   worker    Worker to poll.
  * @param [out]  poll_eps  Pointer to array of endpoints, should be
