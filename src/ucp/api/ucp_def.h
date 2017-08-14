@@ -138,6 +138,16 @@ typedef struct ucp_mem                   *ucp_mem_h;
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief UCP listen handle.
+ *
+ * The listener handle is an opaque object that is used for listening on a
+ * specific address and accepting connections from clients.
+ */
+typedef struct ucp_listener              *ucp_listener_h;
+
+
+/**
  * @ingroup UCP_MEM
  * @brief Attributes of the @ref ucp_mem_h "UCP Memory handle", filled by
  *        @ref ucp_mem_query function.
@@ -289,6 +299,21 @@ typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
 typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status);
 
 
+/**
+ * @ingroup UCP_WORKER
+ * @brief A callback for accepting client/server connections on a listener
+ *        @ref ucp_listener_h.
+ *
+ *  This callback routine is invoked on the server side upon creating a connection
+ *  to a remote client. The user can pass an argument to this callback.
+ *
+ *  @param [in]  ep      Handle to a newly created endpoint which is connected
+ *                       to the remote peer which has initiated the connection.
+ *  @param [in]  arg     User's argument for the callback.
+ */
+typedef void (*ucp_listener_accept_callback_t)(ucp_ep_h ep, void *arg);
+
+
  /**
  * @ingroup UCP_COMM
  * @brief UCP endpoint error handling context.
@@ -299,6 +324,26 @@ typedef struct ucp_err_handler {
     ucp_err_handler_cb_t cb;       /**< Error handler callback */
     void                 *arg;     /**< User defined argument */
 } ucp_err_handler_t;
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief UCP callback to handle the creation of an endpoint in a client-server
+ * connection establishment flow.
+ *
+ * This structure is used for handling the creation of an endpoint
+ * to the remote peer after an incoming connection request on the listener.
+ * Other than communication progress routines, it is allowed to call other
+ * communication routines from the callback in the struct.
+ * The callback should be thread safe with respect to the worker it is invoked
+ * on. If the callback is called from different threads, this callback needs
+ * thread safety support.
+ */
+typedef struct ucp_listener_accept_handler {
+   ucp_listener_accept_callback_t  cb;       /**< Endpoint creation callback */
+   void                            *arg;     /**< User defined argument for the
+                                                  callback */
+} ucp_listener_accept_handler_t;
 
 
 /**

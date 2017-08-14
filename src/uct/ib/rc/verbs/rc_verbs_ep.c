@@ -589,10 +589,10 @@ static void uct_rc_verbs_ep_tag_qp_destroy(uct_rc_verbs_ep_t *ep)
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
     if (UCT_RC_VERBS_TM_ENABLED(iface)) {
+        uct_rc_iface_remove_qp(&iface->super, ep->tm_qp->qp_num);
         if (ibv_destroy_qp(ep->tm_qp)) {
             ucs_warn("failed to destroy TM RNDV QP: %m");
         }
-        uct_rc_iface_remove_qp(&iface->super, ep->tm_qp->qp_num);
     }
 #endif
 }

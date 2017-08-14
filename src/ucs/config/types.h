@@ -9,6 +9,7 @@
 
 
 #include <ucs/sys/compiler_def.h>
+#include <sys/socket.h>
 
 /**
  * Logging levels.
@@ -96,5 +97,13 @@ typedef enum {
     UCS_CONFIG_ARRAY_FIELD(char*, _array_name)
 
 typedef UCS_CONFIG_STRING_ARRAY_FIELD(names) ucs_config_names_array_t;
+
+/**
+ * BSD socket address specification.
+ */
+typedef struct ucs_sock_addr {
+    const struct sockaddr   *addr;      /**< Pointer to socket address */
+    socklen_t                addrlen;   /**< Address length */
+} ucs_sock_addr_t;
 
 #endif /* TYPES_H_ */

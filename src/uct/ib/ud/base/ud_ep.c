@@ -74,7 +74,7 @@ static void uct_ud_ep_ca_drop(uct_ud_ep_t *ep)
     ep->tx.max_psn    = ep->tx.acked_psn + ep->ca.cwnd;
     if (UCT_UD_PSN_COMPARE(ep->tx.max_psn, >, ep->tx.psn)) {
         /* do not send more until we get acks going */
-        ep->tx.max_psn = ep->tx.psn;
+        uct_ud_ep_tx_stop(ep);
     }
 }
 
