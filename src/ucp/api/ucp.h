@@ -158,6 +158,23 @@ enum ucp_worker_params_field {
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief UCP listener parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_worker_listener_params_t
+ * are present. It is used for the enablement of backward compatibility support.
+ */
+enum ucp_worker_listener_params_field {
+    UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR = UCS_BIT(0), /**< Sock address and
+                                                                 length */
+    UCP_WORKER_LISTENER_PARAM_FIELD_CALLBACK  = UCS_BIT(1)  /**< User's callback
+                                                                 for handling the
+                                                                 creation of an
+                                                                 endpoint */
+};
+
+
+/**
  * @ingroup UCP_ENDPOINT
  * @brief UCP endpoint parameters field mask.
  *
@@ -169,8 +186,29 @@ enum ucp_ep_params_field {
                                                             peer */
     UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE = UCS_BIT(1), /**< Error handling mode.
                                                             @ref ucp_err_handling_mode_t */
-    UCP_EP_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(2)  /**< Handler to process
+    UCP_EP_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(2), /**< Handler to process
                                                             transport level errors */
+    UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(3), /**< Socket address field */
+    UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(4)  /**< Endpoint flags */
+};
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP endpoint parameters flags.
+ *
+ * The enumeration list describes the endpoint's parameters flags supported by
+ * @ref ucp_ep_create() function.
+ */
+enum ucp_ep_params_flags_field {
+    UCP_EP_PARAMS_FLAGS_CLIENT_SERVER  = UCS_BIT(1)   /**< Using a client-server
+                                                           connection establishment
+                                                           mechanism.
+                                                           @ref ucs_sock_addr_t
+                                                           sockaddr field
+                                                           must be provided and
+                                                           contain the address
+                                                           of the remote peer */
 };
 
 
@@ -644,6 +682,41 @@ typedef struct ucp_worker_params {
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief Parameters for a UCP listener object.
+ *
+ * This structure defines parameters for @ref ucp_worker_listen, which is used to
+ * listen for incoming client/server connections.
+ */
+typedef struct ucp_worker_listener_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_worker_listener_params_field.
+     * Fields not specified in this mask would be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                       field_mask;
+
+    /**
+     * An address in the form of a sockaddr.
+     * This field is mandatory for filling (along with its corresponding bit
+     * in the field_mask - @ref UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR).
+     * The @ref ucp_worker_listen routine will return with an error if sockaddr
+     * is not specified.
+     */
+    ucs_sock_addr_t                sockaddr;
+
+    /**
+     * Handler to endpoint creation in a client-server connection flow.
+     * In order for the callback inside this handler to be invoked, the
+     * UCP_WORKER_LISTENER_PARAM_FIELD_CALLBACK needs to be set in the
+     * field_mask.
+     */
+    ucp_listener_accept_handler_t  ep_accept_handler;
+} ucp_worker_listener_params_t;
+
+
+/**
  * @ingroup UCP_ENDPOINT
  * @brief Tuning parameters for the UCP endpoint.
  *
@@ -660,12 +733,11 @@ typedef struct ucp_ep_params {
     uint64_t                field_mask;
 
     /**
-     * Destination address; the address must be obtained using
+     * Destination address; if the @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag
+     * is not set, this address is mandatory for filling
+     * (along with its corresponding bit in the field_mask - @ref
+     * UCP_EP_PARAM_FIELD_REMOTE_ADDRESS) and must be obtained using
      * @ref ucp_worker_get_address.
-     * This field is mandatory for filling (along with its corresponding bit
-     * in the field_mask - UCP_EP_PARAM_FIELD_REMOTE_ADDRESS).
-     * The ucp_ep_create routine will return with an error if the address isn't
-     * specified.
      */
     const ucp_address_t     *address;
 
@@ -679,6 +751,27 @@ typedef struct ucp_ep_params {
      * Handler to process transport level failure.
      */
     ucp_err_handler_t       err_handler;
+
+    /**
+     * Endpoint flags from @ref ucp_ep_params_flags_field.
+     * This value is optional.
+     * If it's not set (along with its corresponding bit in the field_mask -
+     * @ref UCP_EP_PARAM_FIELD_FLAGS), the @ref ucp_ep_create() routine will
+     * consider the flags as set to zero.
+     */
+     unsigned               flags;
+
+    /**
+     * Destination address in the form of a sockaddr; if a client-server connection
+     * establishment mechanism is used, this address must be filled and obtained
+     * from the user.
+     * The @ref UCP_EP_PARAM_FIELD_SOCK_ADDR bit in the field_mask should be set
+     * to indicate that the type of the remote address is a sockaddr.
+     * In order for sockaddr to be used for the connection establishment,
+     * the @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag needs to be set in the
+     * 'flags' field.
+     */
+    ucs_sock_addr_t         sockaddr;
 } ucp_ep_params_t;
 
 
@@ -1265,6 +1358,44 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_worker_signal(ucp_worker_h worker);
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief Accept connections on a local address of the worker object.
+ *
+ * This routine binds the worker object to a @ref ucs_sock_addr_t sockaddr
+ * which is set by the user.
+ * The worker will listen to incoming connection requests and upon receiving such
+ * a request from the remote peer, an endpoint to it will be created.
+ * The user's call-back will be invoked once the endpoint is created.
+ *
+ * @param [in]  worker           Worker object that is associated with the
+ *                               params object.
+ * @param [in]  params           User defined @ref ucp_worker_listener_params_t
+ *                               configurations for the @ref ucp_listener_h.
+ * @param [out] listener_p       A handle to the created listener, can be released
+ *                               by calling @ref ucp_listener_destroy
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_worker_listen(ucp_worker_h worker,
+                               const ucp_worker_listener_params_t *params,
+                               ucp_listener_h *listener_p);
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief Stop accepting connections on a local address of the worker object.
+ *
+ * This routine unbinds the worker from the given handle and stops
+ * listening for incoming connection requests on it.
+ *
+ * @param [in] listener        A handle to the listener to stop listening on.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_listener_destroy(ucp_listener_h listener);
 
 
 /**

@@ -68,6 +68,8 @@ void ucp_tag_eager_zcopy_completion(uct_completion_t *self, ucs_status_t status)
 
 void ucp_tag_eager_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
 
+void ucp_tag_zcopy_failure(ucp_request_t *req, ucs_status_t status);
+
 void ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
 
 void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self, ucs_status_t status);

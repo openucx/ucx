@@ -226,41 +226,44 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
                                 ucp_ep_h);
 
 static ucs_status_t
-ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned address_count,
+ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
+                          const ucp_ep_params_t *params, unsigned address_count,
                           const ucp_address_entry_t *address_list)
 {
     ucp_ep_h ucp_ep     = wireup_ep->super.ucp_ep;
     ucp_worker_h worker = ucp_ep->worker;
     const ucp_address_entry_t *aux_addr;
+    ucp_rsc_index_t rsc_index;
     unsigned aux_addr_index;
     ucs_status_t status;
 
     /* select an auxiliary transport which would be used to pass connection
      * establishment messages.
      */
-    status = ucp_wireup_select_aux_transport(ucp_ep, address_list, address_count,
-                                             &wireup_ep->aux_rsc_index,
+    status = ucp_wireup_select_aux_transport(ucp_ep, params, address_list,
+                                             address_count, &rsc_index,
                                              &aux_addr_index);
     if (status != UCS_OK) {
         return status;
     }
 
+    wireup_ep->aux_rsc_index = rsc_index;
     aux_addr = &address_list[aux_addr_index];
 
     /* create auxiliary endpoint connected to the remote iface. */
-    status = uct_ep_create_connected(worker->ifaces[wireup_ep->aux_rsc_index].iface,
+    status = uct_ep_create_connected(worker->ifaces[rsc_index].iface,
                                      aux_addr->dev_addr, aux_addr->iface_addr,
                                      &wireup_ep->aux_ep);
     if (status != UCS_OK) {
         return status;
     }
 
-    ucp_worker_iface_progress_ep(&worker->ifaces[wireup_ep->aux_rsc_index]);
+    ucp_worker_iface_progress_ep(&worker->ifaces[rsc_index]);
 
     ucs_debug("ep %p: wireup_ep %p created aux_ep %p to %s using "
               UCT_TL_RESOURCE_DESC_FMT, ucp_ep, wireup_ep, wireup_ep->aux_ep,
               ucp_ep_peer_name(ucp_ep),
-              UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[aux_addr_index].tl_rsc));
+              UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_index].tl_rsc));
     return UCS_OK;
 }
 
@@ -340,8 +343,9 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep)
     return wireup_ep->aux_rsc_index;
 }
 
-ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, ucp_rsc_index_t rsc_index,
-                                   int connect_aux, unsigned address_count,
+ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *params,
+                                   ucp_rsc_index_t rsc_index, int connect_aux,
+                                   unsigned address_count,
                                    const ucp_address_entry_t *address_list)
 {
     ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
@@ -365,7 +369,8 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, ucp_rsc_index_t rsc_index,
 
     /* we need to create an auxiliary transport only for active messages */
     if (connect_aux) {
-        status = ucp_wireup_ep_connect_aux(wireup_ep, address_count, address_list);
+        status = ucp_wireup_ep_connect_aux(wireup_ep, params, address_count,
+                                           address_list);
         if (status != UCS_OK) {
             goto err_destroy_next_ep;
         }

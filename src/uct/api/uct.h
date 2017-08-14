@@ -460,9 +460,13 @@ struct uct_iface_attr {
         struct {
             struct {
                 size_t       min_recv;   /**< Minimal allowed length of posted receive buffer */
+                size_t       max_zcopy;  /**< Maximal allowed data length in
+                                              @ref uct_iface_tag_recv_zcopy */
                 size_t       max_iov;    /**< Maximal @a iovcnt parameter in
                                               @ref uct_iface_tag_recv_zcopy
                                               @anchor uct_iface_attr_cap_tag_recv_iov */
+                size_t       max_outstanding; /**< Maximal number of simultaneous
+                                                   receive operations */
             } recv;
 
             struct {

@@ -673,12 +673,14 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
         cdesc = uct_ud_comp_desc(skb);
 
         if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_ERR)) {
+            ucs_assert(cdesc->ep->tx.err_skb_count > 0);
+
             if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
                 uct_invoke_completion(cdesc->comp, skb->status);
             }
 
-            if (!(cdesc->ep->flags & UCT_UD_EP_FLAG_FAILED)) {
-                cdesc->ep->flags |= UCT_UD_EP_FLAG_FAILED;
+            --cdesc->ep->tx.err_skb_count;
+            if (cdesc->ep->tx.err_skb_count == 0) {
                 iface->super.ops->set_ep_failed(&iface->super,
                                                 &cdesc->ep->super.super);
             }
@@ -773,6 +775,8 @@ uct_ud_tx_wnd_purge_outstanding(uct_ud_iface_t *iface, uct_ud_ep_t *ud_ep)
     uct_ud_comp_desc_t *cdesc;
     uct_ud_send_skb_t  *skb;
 
+    uct_ud_ep_tx_stop(ud_ep);
+
     ucs_queue_for_each_extract(skb, &ud_ep->tx.window, queue, 1) {
         skb->flags |= UCT_UD_SEND_SKB_FLAG_ERR;
         skb->status = UCS_ERR_ENDPOINT_TIMEOUT;
@@ -785,6 +789,7 @@ uct_ud_tx_wnd_purge_outstanding(uct_ud_iface_t *iface, uct_ud_ep_t *ud_ep)
          */
         ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
         ud_ep->flags |= UCT_UD_EP_FLAG_ASYNC_COMPS;
+        ++ud_ep->tx.err_skb_count;
         cdesc->ep = ud_ep;
     }
 }

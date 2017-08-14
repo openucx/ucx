@@ -587,6 +587,7 @@ static void uct_rc_verbs_iface_tag_preinit(uct_rc_verbs_iface_t *iface,
         iface->tm.rndv_unexp.cb    = params->rndv_cb;
         iface->tm.rndv_unexp.arg   = params->rndv_arg;
         iface->tm.unexpected_cnt   = 0;
+        iface->tm.num_outstanding  = 0;
         iface->tm.num_canceled     = 0;
         iface->tm.num_tags         = ucs_min(IBV_DEVICE_TM_CAPS(dev, max_num_tags),
                                              UCT_RC_VERBS_TM_CONFIG(config, list_size));
@@ -681,11 +682,13 @@ void uct_rc_verbs_iface_tag_query(uct_rc_verbs_iface_t *iface,
 
         iface_attr->cap.tag.eager.max_bcopy = ib_iface->config.seg_size - eager_hdr_size;
         iface_attr->cap.tag.eager.max_zcopy = ib_iface->config.seg_size - eager_hdr_size;
+        iface_attr->cap.tag.eager.max_iov   = 1;
+
         iface_attr->cap.tag.rndv.max_zcopy  = uct_ib_iface_port_attr(ib_iface)->max_msg_sz;
         iface_attr->cap.tag.rndv.max_hdr    = IBV_DEVICE_TM_CAPS(dev, max_rndv_hdr_size);
-
-        iface_attr->cap.tag.eager.max_iov   = 1;
         iface_attr->cap.tag.rndv.max_iov    = 1;
+
+        iface_attr->cap.tag.recv.max_zcopy  = uct_ib_iface_port_attr(ib_iface)->max_msg_sz;
         iface_attr->cap.tag.recv.max_iov    = 1;
         iface_attr->cap.tag.recv.min_recv   = 0;
     }

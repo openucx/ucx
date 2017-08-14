@@ -42,6 +42,11 @@ test_perf::test_spec test_uct_perf::tests[] =
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.8, 80.0,
     0 },
 
+  { "am bcopy latency", "usec",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCT_PERF_DATA_LAYOUT_BCOPY, 0, 1, { 8 }, 1, 100000l,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 2.5},
+
   { "am bcopy bw", "MB/sec",
     UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_BCOPY, 0, 1, { 1000 }, 1, 100000l,

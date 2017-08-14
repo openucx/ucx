@@ -474,14 +474,7 @@ void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
     ucs_status_t  status    = UCS_PTR_STATUS(arg);
 
     if (req->send.uct_comp.func) {
-        /* TODO: This is a temporary solution to fix non-consistent usage of UCT
-         *       completion counter in UCP protocols. Multi fragment protocols
-         *       of tag API have +1 counter value before last fragment is posted.
-         *       This is a problem in error handling case. Issue #1669
-         */
-        if (--req->send.uct_comp.count == 0) {
-            req->send.uct_comp.func(&req->send.uct_comp, status);
-        }
+        req->send.uct_comp.func(&req->send.uct_comp, status);
     } else {
         ucp_request_complete_send(req, status);
     }
@@ -494,10 +487,18 @@ static void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg)
 
 void ucp_ep_destroy_internal(ucp_ep_h ep, const char *message)
 {
-    ucp_lane_index_t lane;
+    ucp_lane_index_t lane, proxy_lane;
     uct_ep_h uct_ep;
 
     ucs_debug("destroy ep %p%s", ep, message);
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        uct_ep = ep->uct_eps[lane];
+        if (uct_ep != NULL) {
+            ucs_debug("ep %p: purge uct_ep[%d]=%p", ep, lane, uct_ep);
+            uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ep);
+        }
+    }
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         uct_ep = ep->uct_eps[lane];
@@ -505,8 +506,15 @@ void ucp_ep_destroy_internal(ucp_ep_h ep, const char *message)
             continue;
         }
 
-        uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ep);
-        ucs_debug("destroy ep %p lane[%d]=%p", ep, lane, uct_ep);
+        proxy_lane = ucp_ep_get_proxy_lane(ep, lane);
+        if ((proxy_lane != UCP_NULL_LANE) && (proxy_lane != lane) &&
+            (ep->uct_eps[lane] == ep->uct_eps[proxy_lane]))
+        {
+            /* duplicate of another lane */
+            continue;
+        }
+
+        ucs_debug("ep %p: destroy uct_ep[%d]=%p", ep, lane, uct_ep);
         uct_ep_destroy(uct_ep);
     }
 
@@ -655,6 +663,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
 
     for (lane = 0; lane < key1->num_lanes; ++lane) {
         if ((key1->lanes[lane].rsc_index != key2->lanes[lane].rsc_index) ||
+            (key1->lanes[lane].proxy_lane != key2->lanes[lane].proxy_lane) ||
             (key1->lanes[lane].dst_md_index != key2->lanes[lane].dst_md_index))
         {
             return 0;
@@ -1074,21 +1083,38 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
 {
     uct_tl_resource_desc_t *rsc;
     ucp_rsc_index_t rsc_index;
+    ucp_lane_index_t proxy_lane;
     char *p, *endp;
+    char *desc_str;
     int prio;
 
-    p         = buf;
-    endp      = buf + max;
-    rsc_index = key->lanes[lane].rsc_index;
+    p          = buf;
+    endp       = buf + max;
+    rsc_index  = key->lanes[lane].rsc_index;
+    proxy_lane = key->lanes[lane].proxy_lane;
+    rsc        = &context->tl_rscs[rsc_index].tl_rsc;
 
-    rsc = &context->tl_rscs[rsc_index].tl_rsc;
-    snprintf(p, endp - p, "lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT " md[%d] %-*c-> ",
-             lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc), context->tl_rscs[rsc_index].md_index,
-             20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name)), ' ');
-    p += strlen(p);
+    if ((proxy_lane == lane) || (proxy_lane == UCP_NULL_LANE)) {
+        if (key->lanes[lane].proxy_lane == lane) {
+            desc_str = " <proxy>";
+        } else {
+            desc_str = "";
+        }
+        snprintf(p, endp - p, "lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT " md[%d]%s %-*c-> ",
+                 lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc),
+                 context->tl_rscs[rsc_index].md_index, desc_str,
+                 20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name) + strlen(desc_str)),
+                 ' ');
+        p += strlen(p);
 
-    if (addr_indices != NULL) {
-        snprintf(p, endp - p, "addr[%d].", addr_indices[lane]);
+        if (addr_indices != NULL) {
+            snprintf(p, endp - p, "addr[%d].", addr_indices[lane]);
+            p += strlen(p);
+        }
+
+    } else {
+        snprintf(p, endp - p, "lane[%d]: proxy to lane[%d] %12c -> ", lane,
+                 proxy_lane, ' ');
         p += strlen(p);
     }
 

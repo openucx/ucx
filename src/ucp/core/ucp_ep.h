@@ -63,6 +63,9 @@ typedef struct ucp_ep_config_key {
 
     struct {
         ucp_rsc_index_t    rsc_index;    /* Resource index */
+        ucp_lane_index_t   proxy_lane;   /* UCP_NULL_LANE - no proxy
+                                            otherwise - in which lane the real
+                                            transport endpoint is stored */
         ucp_md_index_t     dst_md_index; /* Destination memory domain index */
     } lanes[UCP_MAX_LANES];
 

@@ -37,23 +37,28 @@ test_perf::test_spec test_ucp_perf::tests[] =
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     0 },
 
-  { "tag mr", "usec",
+  { "tag mr", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000l,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.5, 100.0,
     0 },
 
-  { "tag sync mr", "usec",
+  { "tag sync mr", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000l,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.5, 100.0,
     UCX_PERF_TEST_FLAG_TAG_SYNC },
 
-  { "tag wild mr", "usec",
+  { "tag wild mr", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000l,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.5, 100.0,
     UCX_PERF_TEST_FLAG_TAG_WILDCARD },
+
+  { "tag bw", "MB/sec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 2048 }, 1, 100000l,
+    ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 100.0, 100000.0 },
 
   { "put latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,

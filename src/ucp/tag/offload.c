@@ -190,7 +190,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
     if (ucs_unlikely(length >= ctx->tm.offload.zcopy_thresh)) {
 
         /* TODO: Add tag.RECV.max_zcopy field to iface attrs and use it here  */
-        if (length > ucp_iface->attr.cap.tag.rndv.max_zcopy) {
+        if (length > ucp_iface->attr.cap.tag.recv.max_zcopy) {
             /* The message is too big to be posted to the transport */
             return 0;
         }
@@ -311,7 +311,10 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
         return status;
     } else {
         ucs_assert(status == UCS_INPROGRESS);
+        ++req->send.uct_comp.count;
     }
+
+    req->send.state.offset = req->send.length;
 
     return UCS_OK;
 }
@@ -361,7 +364,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     };
     void *rndv_op;
 
-    req->send.uct_comp.count = 1;
+    req->send.uct_comp.count = 0;
     req->send.uct_comp.func  = ucp_tag_eager_zcopy_completion;
 
     ucs_assert_always(UCP_DT_IS_CONTIG(req->send.datatype));
@@ -374,7 +377,10 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     if (UCS_PTR_IS_ERR(rndv_op)) {
         return UCS_PTR_STATUS(rndv_op);
     }
-    req->flags |= UCP_REQUEST_FLAG_OFFLOADED;
+    ++req->send.uct_comp.count;
+    
+    req->send.state.offset        = req->send.length;
+    req->flags                   |= UCP_REQUEST_FLAG_OFFLOADED;
     req->send.tag_offload.rndv_op = rndv_op;
     return UCS_OK;
 }

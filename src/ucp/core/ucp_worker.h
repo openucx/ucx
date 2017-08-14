@@ -55,8 +55,15 @@ enum {
 };
 
 
-#define UCP_WORKER_UCT_EVENT_CAP_FLAGS (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
-                                        UCT_IFACE_FLAG_EVENT_RECV_AM)
+#define UCP_WORKER_UCT_RECV_EVENT_ARM_FLAGS  (UCT_EVENT_RECV_AM | \
+                                              UCT_EVENT_RECV_SIG_AM)
+#define UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS  (UCT_IFACE_FLAG_EVENT_RECV_AM | \
+                                              UCT_IFACE_FLAG_EVENT_RECV_SIG_AM)
+#define UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS   (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
+                                              UCT_IFACE_FLAG_EVENT_RECV_AM | \
+                                              UCT_IFACE_FLAG_EVENT_RECV_SIG_AM)
+#define UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
+                                              UCT_IFACE_FLAG_EVENT_RECV_AM)
 
 
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
