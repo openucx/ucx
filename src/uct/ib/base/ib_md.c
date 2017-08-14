@@ -817,6 +817,9 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     uint16_t umr_offset;
     ucs_status_t status;
 
+    /* create umr only if a user requested atomic access to the
+     * memory region and the hardware supports it.
+     */
     if ((memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) &&
          !(memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR)) {
         /* create UMR on-demand */
@@ -891,7 +894,8 @@ static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
     ucs_assert(rregion->refcount > 0);
     memh = &ucs_derived_of(rregion, uct_ib_rcache_region_t)->memh;
     /* The original region was registered without atomic access
-     * so update the access flags.  
+     * so update the access flags. Actual umr creation will happen
+     * when uct_ib_mkey_pack() is called.
      */
     if (flags & UCT_MD_MEM_ACCESS_REMOTE_ATOMIC) {
         memh->flags |= UCT_IB_MEM_ACCESS_REMOTE_ATOMIC;

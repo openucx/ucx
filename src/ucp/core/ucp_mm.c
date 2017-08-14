@@ -194,7 +194,7 @@ ucp_mem_map_params2uct_flags(ucp_mem_map_params_t *params)
         }
     }
 
-    flags |= UCT_MD_MEM_ACCESS_DEFAULT;
+    flags |= UCT_MD_MEM_ACCESS_ALL;
     /* TODO: disable atomic if ucp context does not have it */
 
     return flags;

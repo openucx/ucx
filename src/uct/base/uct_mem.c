@@ -261,7 +261,7 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned f
     uct_md_attr_t md_attr;
     ucs_status_t status;
 
-    status = uct_mem_alloc(NULL, length, UCT_MD_MEM_ACCESS_DEFAULT, 
+    status = uct_mem_alloc(NULL, length, UCT_MD_MEM_ACCESS_ALL,
                            iface->config.alloc_methods,
                            iface->config.num_alloc_methods, &iface->md, 1,
                            name, mem);
@@ -327,7 +327,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_iface_mp_chunk_alloc, (mp, size_p, chunk_p),
 
     length = sizeof(*hdr) + *size_p;
     status = uct_iface_mem_alloc(&iface->super, length,
-                                 UCT_MD_MEM_ACCESS_DEFAULT, ucs_mpool_name(mp),
+                                 UCT_MD_MEM_ACCESS_ALL, ucs_mpool_name(mp),
                                  &mem);
     if (status != UCS_OK) {
         return status;

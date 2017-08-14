@@ -41,7 +41,7 @@ UCS_TEST_P(test_mem, nopd_alloc) {
     methods[0] = GetParam();
     methods[1] = UCT_ALLOC_METHOD_HEAP;
 
-    status = uct_mem_alloc(NULL, min_length, UCT_MD_MEM_ACCESS_DEFAULT, methods,
+    status = uct_mem_alloc(NULL, min_length, UCT_MD_MEM_ACCESS_ALL, methods,
                            2, NULL, 0, "test", &mem);
     ASSERT_UCS_OK(status);
 
@@ -82,7 +82,7 @@ UCS_TEST_P(test_mem, pd_alloc) {
 
         for (nonblock = 0; nonblock <= 1; ++nonblock) {
             int flags = nonblock ? UCT_MD_MEM_FLAG_NONBLOCK : 0;
-            flags |= UCT_MD_MEM_ACCESS_DEFAULT;
+            flags |= UCT_MD_MEM_ACCESS_ALL;
             status = uct_mem_alloc(NULL, min_length, flags, methods, 3, &pd, 1,
                                    "test", &mem);
             ASSERT_UCS_OK(status);
@@ -143,7 +143,7 @@ UCS_TEST_P(test_mem, md_fixed) {
 
                 status = uct_mem_alloc((void *)p_addr, 1,
                                        UCT_MD_MEM_FLAG_FIXED|
-                                       UCT_MD_MEM_ACCESS_DEFAULT,
+                                       UCT_MD_MEM_ACCESS_ALL,
                                        &meth, 1, &pd, 1, "test", &uct_mem);
                 if (status == UCS_OK) {
                     ++n_success;
@@ -189,7 +189,7 @@ UCS_TEST_P(test_mem, mmap_fixed) {
         meth = (i % 2) ? UCT_ALLOC_METHOD_MMAP : UCT_ALLOC_METHOD_HUGE;
 
         status = uct_mem_alloc((void *)p_addr, 1,
-                               UCT_MD_MEM_FLAG_FIXED|UCT_MD_MEM_ACCESS_DEFAULT,
+                               UCT_MD_MEM_FLAG_FIXED|UCT_MD_MEM_ACCESS_ALL,
                                &meth, 1, NULL, 0, "test", &uct_mem);
         if (status == UCS_OK) {
             ++n_success;

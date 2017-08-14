@@ -138,7 +138,8 @@ gtest_SOURCES = \
 
 if HAVE_IB
 gtest_SOURCES += \
-    uct/ib/test_ib.cc
+    uct/ib/test_ib.cc \
+	uct/ib/test_ib_md.cc
 gtest_CPPFLAGS += \
     $(IBVERBS_CPPFLAGS)
 if HAVE_TL_UD
@@ -173,6 +174,7 @@ noinst_HEADERS = \
 	uct/test_p2p_rma.h \
 	uct/uct_p2p_test.h \
 	uct/uct_test.h \
+	uct/test_md.h \
 	\
 	ucp/test_ucp_atomic.h \
 	ucp/test_ucp_memheap.h \
