@@ -520,46 +520,48 @@ struct uct_iface_attr {
  * @ref uct_iface_open. User has to initialize all fields of this structure.
  */
 struct uct_iface_params {
-    ucs_cpu_set_t            cpu_mask;    /**< Mask of CPUs to use for resources */
+    /** Mask of CPUs to use for resources */
+    ucs_cpu_set_t                                cpu_mask;
+    /** Interface opening mode. @ref uct_iface_open_mode_t */
+    uct_iface_open_mode_t                        open_mode;
 
     union {
         struct {
-            const char *tl_name;  /**< Transport name */
-            const char *dev_name; /**< Device Name */
+            const char                           *tl_name;  /**< Transport name */
+            const char                           *dev_name; /**< Device Name */
         } device;
         struct {
             /* These callbacks and address are only relevant for client-server
              * connection establishment with sockaddr and are needed on the server side */
             ucs_sock_addr_t                      listen_sockaddr;
             void                                 *conn_request_arg;
-            /**< Callback for an incoming connection request on the server */
+            /** Callback for an incoming connection request on the server */
             uct_sockaddr_conn_request_callback_t conn_request_cb;
             void                                 *conn_ready_arg;
-            /**< Callback for an incoming message on the server indicating that
-                 the connection is ready */
+            /** Callback for an incoming message on the server indicating that
+                the connection is ready */
             uct_sockaddr_conn_ready_callback_t   conn_ready_cb;
         } sockaddr;
     } mode;
 
-    ucs_stats_node_t         *stats_root; /**< Root in the statistics tree.
-                                               Can be NULL. If non NULL, it will be
-                                               a root of @a uct_iface object in the
-                                               statistics tree. */
-    size_t                   rx_headroom; /**< How much bytes to reserve before
-                                               the receive segment.*/
+    /** Root in the statistics tree. Can be NULL. If non NULL, it will be
+        a root of @a uct_iface object in the statistics tree. */
+    ucs_stats_node_t                             *stats_root;
+    /** How much bytes to reserve before the receive segment.*/
+    size_t                                       rx_headroom;
 
-    void                     *err_handler_arg; /**< Custom argument of
-                                                   @a err_handler. */
-    uct_error_handler_t      err_handler;      /**< The callback to handle
-                                                    transport level error.*/
+    /** Custom argument of @a err_handler. */
+    void                                         *err_handler_arg;
+    /** The callback to handle transport level error.*/
+    uct_error_handler_t                          err_handler;
 
-    /* These callbacks are only relevant for HW Tag Matching */
-    void                     *eager_arg;
-    uct_tag_unexp_eager_cb_t eager_cb;    /**< Callback for tag matching unexpected eager messages */
-    void                     *rndv_arg;
-    uct_tag_unexp_rndv_cb_t  rndv_cb;     /**< Callback for tag matching unexpected rndv messages */
-    uct_iface_open_mode_t    open_mode;   /**< Interface opening mode. @ref
-                                               uct_iface_open_mode_t */
+    /** These callbacks are only relevant for HW Tag Matching */
+    void                                         *eager_arg;
+    /** Callback for tag matching unexpected eager messages */
+    uct_tag_unexp_eager_cb_t                     eager_cb;
+    void                                         *rndv_arg;
+    /** Callback for tag matching unexpected rndv messages */
+    uct_tag_unexp_rndv_cb_t                      rndv_cb;
 };
 
 
