@@ -13,7 +13,7 @@ Source: https://github.com/openucx/%{name}/archive/v@MAJOR_VERSION@.@MINOR_VERSI
 # UCX currently supports only the following architectures
 ExclusiveArch: aarch64 ppc64le x86_64
 
-BuildRequires: numactl-devel
+BuildRequires: numactl-devel libibverbs-devel
 BuildRequires: automake autoconf libtool
 
 %description
