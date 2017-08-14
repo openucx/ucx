@@ -315,9 +315,8 @@ enum uct_am_cb_flags {
  * @brief Interface opening mode.
  */
 typedef enum {
-   UCT_IFACE_OPEN_MODE_DEVICE,   /**< Interface is opened per device */
-   UCT_IFACE_OPEN_MODE_SOCKADDR  /**< Interface is opened to be associated with
-                                      a sockaddr */
+   UCT_IFACE_OPEN_MODE_DEVICE,   /**< Interface is opened on a specific device */
+   UCT_IFACE_OPEN_MODE_SOCKADDR  /**< Interface is opened on a specific address */
 } uct_iface_open_mode_t;
 
 
@@ -326,12 +325,12 @@ typedef enum {
  * @brief Socket address accessibility type.
  */
 typedef enum {
-   UCT_SOCKADDR_ACCESSIBILITY_LOCAL,  /**< Check if local address exists.
-                                           Address should belong to a local
-                                           network interface */
-   UCT_SOCKADDR_ACCESSIBILITY_REMOTE  /**< Check if remote address can be reached.
-                                           Address is routable from one of the
-                                           local network interfaces */
+   UCT_SOCKADDR_ACC_LOCAL,  /**< Check if local address exists.
+                                 Address should belong to a local
+                                 network interface */
+   UCT_SOCKADDR_ACC_REMOTE  /**< Check if remote address can be reached.
+                                 Address is routable from one of the
+                                 local network interfaces */
 } uct_sockaddr_accessibility_t;
 
 
@@ -353,7 +352,7 @@ enum {
     UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6),  /**< MD supports direct access to
                                                remote memory via a pointer that
                                                is returned by @ref uct_rkey_ptr */
-    UCT_MD_FLAG_SOCK_ADDR  = UCS_BIT(7)   /**< MD support for client-server
+    UCT_MD_FLAG_SOCKADDR   = UCS_BIT(7)   /**< MD support for client-server
                                                connection establishment via
                                                sockaddr */
 };
@@ -527,18 +526,14 @@ struct uct_iface_params {
         struct {
             /* These callbacks and address are only relevant for client-server
              * connection establishment with sockaddr and are needed on the server side */
-            ucs_sock_addr_t listen_sockaddr;
-            void *conn_request_arg;
-            uct_sockaddr_conn_request_callback_t conn_request_cb; /**< Callback for an
-                                                                       incoming connection
-                                                                       request on the server */
-            void *conn_ready_arg;
-            uct_sockaddr_conn_ready_callback_t conn_ready_cb;     /**< Callback for an
-                                                                       incoming message
-                                                                       on the server
-                                                                       indicating that
-                                                                       the connection
-                                                                       is ready */
+            ucs_sock_addr_t                      listen_sockaddr;
+            void                                 *conn_request_arg;
+            /**< Callback for an incoming connection request on the server */
+            uct_sockaddr_conn_request_callback_t conn_request_cb;
+            void                                 *conn_ready_arg;
+            /**< Callback for an incoming message on the server indicating that
+                 the connection is ready */
+            uct_sockaddr_conn_ready_callback_t   conn_ready_cb;
         } sockaddr;
     } mode;
 
@@ -559,7 +554,7 @@ struct uct_iface_params {
     uct_tag_unexp_eager_cb_t eager_cb;    /**< Callback for tag matching unexpected eager messages */
     void                     *rndv_arg;
     uct_tag_unexp_rndv_cb_t  rndv_cb;     /**< Callback for tag matching unexpected rndv messages */
-    uint64_t                 open_mode;   /**< Interface opening mode. @ref
+    uct_iface_open_mode_t    open_mode;   /**< Interface opening mode. @ref
                                                uct_iface_open_mode_t */
 };
 
@@ -1423,7 +1418,7 @@ ucs_status_t uct_md_config_read(const char *name, const char *env_prefix,
  *
  * @param [in]  md         Memory domain to check accessibility from.
  *                         This memory domain must support the @ref
- *                         UCT_MD_FLAG_SOCK_ADDR flag.
+ *                         UCT_MD_FLAG_SOCKADDR flag.
  * @param [in]  sockaddr   Socket address to check accessibility to.
  * @param [in]  mode       Mode for checking accessibility, as defined in @ref
  *                         uct_sockaddr_accessibility_t.
