@@ -439,8 +439,12 @@ UCS_TEST_P(test_uct_event_ib, tx_cq)
     /* make sure the file descriptor is signaled once */
     ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
 
+    /* Clear the events*/
+    uct_iface_event_clear(m_e1->iface());
+
+    short_progress_loop(100);
     status = uct_iface_event_arm(m_e1->iface(), EVENTS);
-    ASSERT_EQ(status, UCS_ERR_BUSY);
+    ASSERT_EQ(UCS_OK, status);
 
     /* make sure [send|recv]_cq handled properly */
     check_send_cq(m_e1->iface(), 1);
@@ -481,9 +485,12 @@ UCS_TEST_P(test_uct_event_ib, txrx_cq)
     ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
 
     /* Acknowledge all the requests */
-    short_progress_loop();
+    uct_iface_event_clear(m_e1->iface());
+
+    /* Arm should be successful */
+    short_progress_loop(100);
     status = uct_iface_event_arm(m_e1->iface(), EVENTS);
-    ASSERT_EQ(UCS_ERR_BUSY, status);
+    ASSERT_EQ(UCS_OK, status);
 
     /* make sure [send|recv]_cq handled properly */
     check_send_cq(m_e1->iface(), 1);

@@ -148,7 +148,7 @@ static ucs_status_t test_poll_wait(ucp_worker_h ucp_worker)
 
     /* Need to prepare ucp_worker before epoll_wait */
     status = ucp_worker_arm(ucp_worker);
-    if (status == UCS_ERR_BUSY) { /* some events are arrived already */
+    if (status == UCS_ERR_BUSY) { /* cannot arm, need to progress again */
         ret = UCS_OK;
         goto err_fd;
     }
@@ -158,11 +158,17 @@ static ucs_status_t test_poll_wait(ucp_worker_h ucp_worker)
         ret = epoll_wait(epoll_fd_local, &ev, 1, -1);
     } while ((ret == -1) && (errno == EINTR));
 
+    /* Need to clear events from the file descriptor */
+    status = ucp_worker_clear_efd(ucp_worker);
+    if (status != UCS_OK) {
+        ret = status;
+        goto err_fd;
+    }
+
     ret = UCS_OK;
 
 err_fd:
     close(epoll_fd_local);
-
 err:
     return ret;
 }

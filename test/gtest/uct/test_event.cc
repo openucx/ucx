@@ -126,6 +126,8 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     }
     ASSERT_EQ(UCS_OK, status);
 
+    ASSERT_EQ(UCS_OK, uct_iface_event_clear(m_e2->iface()));
+
     wakeup_fd.revents = 0;
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 

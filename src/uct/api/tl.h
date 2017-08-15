@@ -186,6 +186,8 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*iface_event_arm)(uct_iface_h iface, unsigned events);
 
+    ucs_status_t (*iface_event_clear)(uct_iface_h iface);
+
     /* interface - management */
 
     void         (*iface_close)(uct_iface_h iface);

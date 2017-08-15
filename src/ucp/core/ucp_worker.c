@@ -1163,7 +1163,35 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
 {
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
-    char dummy;
+
+    ucs_trace_func("worker=%p", worker);
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+
+    /* Go over arm_list of active interfaces which support events and arm them */
+    ucs_list_for_each(wiface, &worker->arm_ifaces, arm_list) {
+        ucs_assert(wiface->activate_count > 0);
+        status = uct_iface_event_arm(wiface->iface, worker->uct_events);
+        ucs_trace("arm iface %p returned %s", wiface->iface,
+                  ucs_status_string(status));
+        if (status != UCS_OK) {
+            goto out_unlock;
+        }
+    }
+
+    status = UCS_OK;
+
+out_unlock:
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    ucs_trace("ucp_worker_arm returning %s", ucs_status_string(status));
+    return status;
+}
+
+ucs_status_t ucp_worker_clear_efd(ucp_worker_h worker)
+{
+    ucp_worker_iface_t *wiface;
+    ucs_status_t status;
+    char dummy[32];
     int ret;
 
     ucs_trace_func("worker=%p", worker);
@@ -1173,10 +1201,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
      */
     do {
         ret = read(worker->wakeup_pipe[0], &dummy, sizeof(dummy));
-        if (ret == sizeof(dummy)) {
-            status = UCS_ERR_BUSY;
-            goto out;
-        } else if (ret == -1) {
+        if (ret == -1) {
             if (errno == EAGAIN) {
                 break; /* Pipe empty */
             } else if (errno != EINTR) {
@@ -1185,7 +1210,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
                 goto out;
             }
         } else {
-            ucs_assert(ret == 0);
+            ucs_assert(ret <= sizeof(dummy));
         }
     } while (ret != 0);
 
@@ -1194,8 +1219,8 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     /* Go over arm_list of active interfaces which support events and arm them */
     ucs_list_for_each(wiface, &worker->arm_ifaces, arm_list) {
         ucs_assert(wiface->activate_count > 0);
-        status = uct_iface_event_arm(wiface->iface, worker->uct_events);
-        ucs_trace("arm iface %p returned %s", wiface->iface,
+        status = uct_iface_event_clear(wiface->iface);
+        ucs_trace("even_ack iface %p returned %s", wiface->iface,
                   ucs_status_string(status));
         if (status != UCS_OK) {
             goto out_unlock;

@@ -867,6 +867,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
 #endif
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
     .iface_event_arm          = uct_ib_iface_event_arm,
+    .iface_event_clear        = uct_ib_iface_event_clear,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_iface_t),
     .iface_query              = uct_rc_verbs_iface_query,
     .iface_get_address        = uct_rc_verbs_iface_get_address,

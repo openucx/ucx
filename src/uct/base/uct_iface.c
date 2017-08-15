@@ -177,6 +177,11 @@ ucs_status_t uct_iface_event_arm(uct_iface_h iface, unsigned events)
     return iface->ops.iface_event_arm(iface, events);
 }
 
+ucs_status_t uct_iface_event_clear(uct_iface_h iface)
+{
+    return iface->ops.iface_event_clear(iface);
+}
+
 void uct_iface_close(uct_iface_h iface)
 {
     iface->ops.iface_close(iface);

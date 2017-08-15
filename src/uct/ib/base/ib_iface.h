@@ -259,6 +259,8 @@ ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h iface, int *fd_p);
 
 ucs_status_t uct_ib_iface_event_arm(uct_iface_h iface, unsigned events);
 
+ucs_status_t uct_ib_iface_event_clear(uct_iface_h tl_iface);
+
 ucs_status_t uct_ib_iface_arm_tx_cq(uct_ib_iface_t *iface);
 
 ucs_status_t uct_ib_iface_arm_rx_cq(uct_ib_iface_t *iface, int solicited);

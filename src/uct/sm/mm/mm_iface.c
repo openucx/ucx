@@ -268,29 +268,26 @@ static ucs_status_t uct_mm_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
     return UCS_OK;
 }
 
-static ucs_status_t uct_mm_iface_event_fd_arm(uct_iface_h tl_iface,
-                                              unsigned events)
+static ucs_status_t uct_mm_iface_event_clear(uct_iface_h tl_iface)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
     char dummy[UCT_MM_IFACE_MAX_SIG_EVENTS]; /* pop multiple signals at once */
-    int ret;
+    ssize_t ret;
 
-    ret = recvfrom(iface->signal_fd, &dummy, sizeof(dummy), 0, NULL, 0);
-    if (ret > 0) {
-        return UCS_ERR_BUSY;
-    } else if (ret == -1) {
-        if (errno == EAGAIN) {
-            return UCS_OK;
-        } else if (errno == EINTR) {
-            return UCS_ERR_BUSY;
+    for (;;) {
+        ret = recvfrom(iface->signal_fd, &dummy, sizeof(dummy), 0, NULL, 0);
+        if (ret == -1) {
+            if (errno == EAGAIN) {
+                break;
+            } else if (errno != EINTR) {
+                ucs_error("failed to retrieve message from signal pipe: %m");
+                return UCS_ERR_IO_ERROR;
+            }
         } else {
-            ucs_error("failed to retrieve message from signal pipe: %m");
-            return UCS_ERR_IO_ERROR;
+            ucs_assert(ret <= UCT_MM_IFACE_MAX_SIG_EVENTS);
         }
-    } else {
-        ucs_assert(ret == 0);
-        return UCS_OK;
     }
+    return UCS_OK;
 }
 
 static UCS_CLASS_DECLARE_DELETE_FUNC(uct_mm_iface_t, uct_iface_t);
@@ -321,7 +318,8 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = (void*)uct_mm_iface_progress,
     .iface_event_fd_get       = uct_mm_iface_event_fd_get,
-    .iface_event_arm          = uct_mm_iface_event_fd_arm,
+    .iface_event_arm          = ucs_empty_function_return_success,
+    .iface_event_clear        = uct_mm_iface_event_clear,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_iface_t),
     .iface_query              = uct_mm_iface_query,
     .iface_get_device_address = uct_sm_iface_get_device_address,
