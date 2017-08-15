@@ -806,6 +806,9 @@ ucs_status_t uct_ib_iface_event_clear(uct_iface_h tl_iface)
     recv_cq_count = 0;
     do {
         ret = ibv_get_cq_event(iface->comp_channel, &cq, &cq_context);
+        ucs_trace("iface %p ibv_get_cq_event(fd=%d) returned %d",
+                  iface, iface->comp_channel->fd, ret);
+
         if (0 == ret) {
             if (iface->send_cq == cq) {
                 ++send_cq_count;

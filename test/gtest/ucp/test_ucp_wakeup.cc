@@ -100,8 +100,13 @@ UCS_TEST_P(test_ucp_wakeup, efd)
             UCS_TEST_MESSAGE << "poll() failed: " << strerror(errno);
         }
         ASSERT_EQ(1, ret);
-        EXPECT_EQ(UCS_OK, ucp_worker_clear_efd(recv_worker));
-        EXPECT_EQ(0, poll(&pollfd, 1, 0));
+
+        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(10.0);
+        do {
+            EXPECT_EQ(UCS_OK, ucp_worker_clear_efd(recv_worker));
+            ret = poll(&pollfd, 1, 0);
+        } while ((ret != 0) && (ucs_get_time() < deadline));
+        ASSERT_EQ(0, ret);
     }
 
     ucp_request_release(req);

@@ -20,6 +20,10 @@
 #include <sys/poll.h>
 
 
+/* Maximal number of events to read at once from the internal signaling pipe */
+#define UCP_WORKER_MAX_SIG_EVENTS  32
+
+
 #if ENABLE_STATS
 static ucs_stats_class_t ucp_worker_stats_class = {
     .name           = "ucp_worker",
@@ -1172,7 +1176,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     ucs_list_for_each(wiface, &worker->arm_ifaces, arm_list) {
         ucs_assert(wiface->activate_count > 0);
         status = uct_iface_event_arm(wiface->iface, worker->uct_events);
-        ucs_trace("arm iface %p returned %s", wiface->iface,
+        ucs_trace("worker %p arm iface %p returned %s", worker, wiface->iface,
                   ucs_status_string(status));
         if (status != UCS_OK) {
             goto out_unlock;
@@ -1191,7 +1195,7 @@ ucs_status_t ucp_worker_clear_efd(ucp_worker_h worker)
 {
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
-    char dummy[32];
+    char dummy[UCP_WORKER_MAX_SIG_EVENTS];
     int ret;
 
     ucs_trace_func("worker=%p", worker);
@@ -1220,7 +1224,7 @@ ucs_status_t ucp_worker_clear_efd(ucp_worker_h worker)
     ucs_list_for_each(wiface, &worker->arm_ifaces, arm_list) {
         ucs_assert(wiface->activate_count > 0);
         status = uct_iface_event_clear(wiface->iface);
-        ucs_trace("even_ack iface %p returned %s", wiface->iface,
+        ucs_trace("worker %p clear iface %p returned %s", worker, wiface->iface,
                   ucs_status_string(status));
         if (status != UCS_OK) {
             goto out_unlock;

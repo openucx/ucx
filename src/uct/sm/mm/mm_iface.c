@@ -276,6 +276,8 @@ static ucs_status_t uct_mm_iface_event_clear(uct_iface_h tl_iface)
 
     for (;;) {
         ret = recvfrom(iface->signal_fd, &dummy, sizeof(dummy), 0, NULL, 0);
+        ucs_trace("recvfrom(fd=%d, size=%zu) returned %zd", iface->signal_fd,
+                  sizeof(dummy), ret);
         if (ret == -1) {
             if (errno == EAGAIN) {
                 break;
