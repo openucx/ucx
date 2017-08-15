@@ -343,21 +343,17 @@ enum uct_md_mem_flags {
     UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1), /**< Place the mapping at exactly
                                                 defined address */
     /* memory access flags */
-    UCT_MD_MEM_ACCESS_LOCAL       = UCS_BIT(2),   /**< enable local get/put/atomic
-                                                       access */ 
-    UCT_MD_MEM_ACCESS_REMOTE_PUT  = UCS_BIT(3),   /**< enable remote put access */
-    UCT_MD_MEM_ACCESS_REMOTE_GET  = UCS_BIT(4),   /**< enable remote get access */
-    UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(5), /**< enable remote atomic access */
+    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(2), /**< enable remote put access */
+    UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(3), /**< enable remote get access */
+    UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(4), /**< enable remote atomic access */
 
     /**< enable local and remote access for all operations */
-    UCT_MD_MEM_ACCESS_ALL =  (UCT_MD_MEM_ACCESS_LOCAL|
-                              UCT_MD_MEM_ACCESS_REMOTE_PUT|
+    UCT_MD_MEM_ACCESS_ALL =  (UCT_MD_MEM_ACCESS_REMOTE_PUT|
                               UCT_MD_MEM_ACCESS_REMOTE_GET|
                               UCT_MD_MEM_ACCESS_REMOTE_ATOMIC),
 
     /**< enable local and remote access for the put and get */
-    UCT_MD_MEM_ACCESS_RMA = (UCT_MD_MEM_ACCESS_LOCAL|
-                             UCT_MD_MEM_ACCESS_REMOTE_PUT|
+    UCT_MD_MEM_ACCESS_RMA = (UCT_MD_MEM_ACCESS_REMOTE_PUT|
                              UCT_MD_MEM_ACCESS_REMOTE_GET)
 };
 
