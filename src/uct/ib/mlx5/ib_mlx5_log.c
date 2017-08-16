@@ -120,6 +120,9 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
     void *addr;
     int ds;
 
+    if (*dseg_p == qend) {
+        *dseg_p = qstart;
+    }
     inl = *dseg_p;
     if (inl->byte_count & htonl(MLX5_INLINE_SEG)) {
         addr       = inl + 1;
@@ -156,14 +159,14 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
     return ds;
 }
 
-static uint64_t network_to_host(uint64_t value, int size)
+static uint64_t network_to_host(void *ptr, int size)
 {
     if (size == 4) {
-        return ntohl(value);
+        return ntohl(*(uint32_t*)ptr);
     } else if (size == 8) {
-        return be64toh(value);
+        return be64toh(*(uint64_t*)ptr);
     } else {
-        return value;
+        return *(uint64_t*)ptr;
     }
 }
 static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg)
@@ -274,23 +277,23 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
         int size = 1 << ((opmod & 7) + 2);
 
         if (opcode == MLX5_OPCODE_ATOMIC_MASKED_FA) {
-            add      = network_to_host(*(uint64_t*)(seg + 0), size);
-            boundary = network_to_host(*(uint64_t*)(seg + size), size);
+            add      = network_to_host(seg,        size);
+            boundary = network_to_host(seg + size, size);
             seg     += ucs_align_up_pow2(size * 2, UCT_IB_MLX5_WQE_SEG_SIZE);
             ds      -= ucs_div_round_up(2 * size, UCT_IB_MLX5_WQE_SEG_SIZE);
 
             uct_ib_log_dump_atomic_masked_fadd(size, add, boundary, s, ends - s);
         } else if (opcode == MLX5_OPCODE_ATOMIC_MASKED_CS) {
-            swap    = network_to_host(*(uint64_t*)(seg + 0 * size), size);
-            compare = network_to_host(*(uint64_t*)(seg + 1 * size), size);
+            swap    = network_to_host(seg,        size);
+            compare = network_to_host(seg + size, size);
 
             seg += size * 2;
             if (seg == qend) {
                 seg = qstart;
             }
 
-            swap_mask    = network_to_host(*(uint64_t*)(seg + 0 * size), size);
-            compare_mask = network_to_host(*(uint64_t*)(seg + 1 * size), size);
+            swap_mask    = network_to_host(seg,        size);
+            compare_mask = network_to_host(seg + size, size);
             seg += size * 2;
             if (seg == qend) {
                 seg = qstart;
