@@ -358,8 +358,8 @@ UCS_TEST_P(test_md, reg_multi_thread) {
     pthread_join(thread_id, NULL);
 }
 
-#define UCT_PD_INSTANTIATE_TEST_CASE(_test_case) \
-    UCS_PP_FOREACH(_UCT_PD_INSTANTIATE_TEST_CASE, _test_case, \
+#define UCT_MD_INSTANTIATE_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, \
                    knem, \
                    cma, \
                    posix, \
@@ -371,9 +371,5 @@ UCS_TEST_P(test_md, reg_multi_thread) {
                    ugni \
                    )
 
-#define _UCT_PD_INSTANTIATE_TEST_CASE(_test_case, _mdc_name) \
-    INSTANTIATE_TEST_CASE_P(_mdc_name, _test_case, \
-                            testing::ValuesIn(_test_case::enum_mds(#_mdc_name)));
-
-UCT_PD_INSTANTIATE_TEST_CASE(test_md)
+UCT_MD_INSTANTIATE_TEST_CASE(test_md)
 

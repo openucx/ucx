@@ -72,14 +72,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access) {
     free(buffer);
 }
 
-class test_ib_md_rcache_on : public test_ib_md {
-    virtual void init() {
-        modify_config("RCACHE", "yes", false);
-        test_md::init();
-    }
-};
-
-UCS_TEST_P(test_ib_md_rcache_on, ib_md_umr) {
+UCS_TEST_P(test_ib_md, ib_md_umr_rcache_on, "RCACHE=yes") {
 
     ucs_status_t status;
     uct_md_attr_t md_attr;
@@ -100,14 +93,7 @@ UCS_TEST_P(test_ib_md_rcache_on, ib_md_umr) {
     free(rkey_buffer);
 }
 
-class test_ib_md_rcache_off : public test_ib_md {
-    virtual void init() {
-        modify_config("RCACHE", "no", false);
-        test_md::init();
-    }
-};
-
-UCS_TEST_P(test_ib_md_rcache_off, ib_md_umr) {
+UCS_TEST_P(test_ib_md, ib_md_umr_rcache_off, "RCACHE=no") {
 
     ucs_status_t status;
     uct_md_attr_t md_attr;
@@ -128,16 +114,6 @@ UCS_TEST_P(test_ib_md_rcache_off, ib_md_umr) {
 }
 
 
-#define UCT_PD_INSTANTIATE_IB_TEST_CASE(_ib_test_case) \
-    UCS_PP_FOREACH(_UCT_PD_INSTANTIATE_TEST_CASE, _ib_test_case, \
-                   ib \
-                   )
-
-#define _UCT_PD_INSTANTIATE_TEST_CASE(_test_case, _mdc_name) \
-    INSTANTIATE_TEST_CASE_P(_mdc_name, _test_case, \
-                            testing::ValuesIn(_test_case::enum_mds(#_mdc_name)));
-
-UCT_PD_INSTANTIATE_IB_TEST_CASE(test_ib_md_rcache_on)
-UCT_PD_INSTANTIATE_IB_TEST_CASE(test_ib_md_rcache_off)
+_UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md, ib)
 
 

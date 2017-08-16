@@ -38,4 +38,8 @@ private:
     ucs::handle<uct_md_h>         m_pd;
 };
 
+
+#define _UCT_MD_INSTANTIATE_TEST_CASE(_test_case, _mdc_name) \
+    INSTANTIATE_TEST_CASE_P(_mdc_name, _test_case, \
+                            testing::ValuesIn(_test_case::enum_mds(#_mdc_name)));
 #endif
