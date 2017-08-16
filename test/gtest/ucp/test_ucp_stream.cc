@@ -64,3 +64,73 @@ UCS_TEST_P(test_ucp_stream, send_recv_data) {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_stream)
+
+class test_ucp_stream_many2one : public ucp_test {
+public:
+    test_ucp_stream_many2one() : m_receiver_idx(3), m_nsenders(3) {}
+
+    static ucp_params_t get_ctx_params() {
+        return test_ucp_stream::get_ctx_params();
+    }
+
+    virtual void init() {
+        /* Skip entities creation */
+        test_base::init();
+
+        if (is_self()) {
+            UCS_TEST_SKIP_R("self");
+        }
+
+        for (size_t i = 0; i < m_nsenders + 1; ++i) {
+            create_entity();
+        }
+
+        for (size_t i = 0; i < m_nsenders; ++i) {
+            e(i).connect(&e(m_receiver_idx), get_ep_params(), i);
+            e(m_receiver_idx).connect(&e(i), get_ep_params(), i);
+        }
+
+        for (size_t i = 0; i < m_nsenders; ++i) {
+            msgs.push_back(std::string("sender_") + ucs::to_string(i));
+        }
+    }
+
+    static void ucp_send_cb(void *request, ucs_status_t status) {}
+
+protected:
+    ucs_status_ptr_t stream_send_nb(size_t sender_idx, const void *buf,
+                                    size_t count, ucp_datatype_t datatype);
+
+    std::vector<std::string>    msgs;
+    const size_t                m_receiver_idx;
+    const size_t                m_nsenders;
+};
+
+ucs_status_ptr_t
+test_ucp_stream_many2one::stream_send_nb(size_t sender_idx, const void *buf,
+                                         size_t count, ucp_datatype_t datatype)
+{
+    return ucp_stream_send_nb(m_entities.at(sender_idx).ep(),
+                              buf, count, datatype, ucp_send_cb, 0);
+}
+
+UCS_TEST_P(test_ucp_stream_many2one, drop_data) {
+    for (size_t sender_idx = 0; sender_idx < m_nsenders; ++sender_idx) {
+        const void  *buf = reinterpret_cast<const void *>(msgs[sender_idx].c_str());
+        size_t      len  = msgs[sender_idx].length() + 1;
+
+        ucs_status_ptr_t sstatus = stream_send_nb(sender_idx, buf, len,
+                                                  ucp_dt_make_contig(1));
+        EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
+        wait(sstatus);
+    }
+
+    for (size_t i = 0; i < m_nsenders + 1; ++i) {
+        e(i).flush_worker();
+    }
+
+    /* Need to poll out all incoming data from transport layer */
+    while (progress() > 0);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_stream_many2one)

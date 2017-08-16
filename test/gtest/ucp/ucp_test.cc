@@ -55,12 +55,14 @@ void ucp_test::cleanup() {
 void ucp_test::init() {
     test_base::init();
 
-    const ucp_test_param &test_param = GetParam();
-
     create_entity();
-    if ("\\self" != test_param.transports.front()) {
+    if (!is_self()) {
         create_entity();
     }
+}
+
+bool ucp_test::is_self() const {
+    return "\\self" == GetParam().transports.front();
 }
 
 ucp_test_base::entity* ucp_test::create_entity(bool add_in_front) {
@@ -342,8 +344,6 @@ void ucp_test_base::entity::connect(const entity* other,
         }
 
         ASSERT_UCS_OK(status);
-
-        EXPECT_GE(m_workers[i].second.size(), size_t(ep_idx));
 
         if (size_t(ep_idx) < m_workers[i].second.size()) {
             m_workers[i].second[ep_idx].reset(ep, ep_destructor, this);
