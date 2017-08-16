@@ -38,28 +38,33 @@ public:
     };
 
     class entity {
+        typedef std::map<ucp_worker_h, std::vector<ucs::handle<ucp_ep_h> > > ep_map_t;
+        typedef ep_map_t::const_iterator ep_const_iter;
+
     public:
         entity(const ucp_test_param& test_param, ucp_config_t* ucp_config);
 
         ~entity();
 
-        void connect(const entity* other, const ucp_ep_params_t* ep_params_cmn = NULL);
+        void connect(const entity* other,
+                     const ucp_ep_params_t* ep_params_cmn = NULL,
+                     bool reuse_worker_idx = true);
 
-        void flush_ep(int ep_index = 0) const;
+        void flush_ep(int worker_index = 0, int ep_index = 0) const;
 
         void flush_worker(int worker_index = 0) const;
 
         void fence(int worker_index = 0) const;
 
-        void disconnect(int ep_index = 0);
+        void disconnect(int worker_index = 0, int ep_index = 0);
 
-        void* disconnect_nb(int ep_index = 0) const;
+        void* disconnect_nb(int worker_index = 0, int ep_index = 0) const;
 
         void destroy_worker(int worker_index = 0);
 
-        ucp_ep_h ep(int ep_index = 0) const;
+        ucp_ep_h ep(int worker_index = 0, int ep_index = 0) const;
 
-        ucp_ep_h revoke_ep(int ep_index = 0) const;
+        ucp_ep_h revoke_ep(int worker_index = 0, int ep_index = 0) const;
 
         ucp_worker_h worker(int worker_index = 0) const;
 
@@ -74,7 +79,7 @@ public:
     protected:
         ucs::handle<ucp_context_h> m_ucph;
         std::vector<ucs::handle<ucp_worker_h> >  m_workers;
-        std::vector<ucs::handle<ucp_ep_h> >      m_eps;
+        ep_map_t m_eps;
 
         int num_workers;
     };
