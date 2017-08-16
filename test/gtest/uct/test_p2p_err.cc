@@ -115,6 +115,17 @@ public:
                         "Unexpected error(s) occurred during the test";
     }
 
+    static void* get_unused_address(size_t length)
+    {
+        void *address = NULL;
+        ucs_status_t status = ucs_mmap_alloc(&length, &address, 0, "test_dummy");
+        ASSERT_UCS_OK(status, << "length = " << length);
+        status = ucs_mmap_free(address, length);
+        ASSERT_UCS_OK(status);
+        /* coverity[use_after_free] */
+        return address;
+    }
+
     static ucs_status_t last_error;
 
 };
@@ -127,9 +138,8 @@ UCS_TEST_P(uct_p2p_err_test, local_access_error) {
     mapped_buffer sendbuf(16, 1, sender());
     mapped_buffer recvbuf(16, 2, receiver());
 
-    const size_t offset = 4 * 1024 * 1024;
     test_error_run(OP_PUT_ZCOPY, 0,
-                   (char*)sendbuf.ptr() + offset, sendbuf.length() + offset,
+                   get_unused_address(sendbuf.length()), sendbuf.length(),
                    sendbuf.memh(), recvbuf.addr(), recvbuf.rkey(),
                    "");
 
@@ -141,10 +151,9 @@ UCS_TEST_P(uct_p2p_err_test, remote_access_error) {
     mapped_buffer sendbuf(16, 1, sender());
     mapped_buffer recvbuf(16, 2, receiver());
 
-    const size_t offset = 4 * 1024 * 1024;
     test_error_run(OP_PUT_ZCOPY, 0,
-                   (char*)sendbuf.ptr() + offset, sendbuf.length() + offset,
-                   sendbuf.memh(), recvbuf.addr() + 4, recvbuf.rkey(),
+                   sendbuf.ptr(), sendbuf.length(), sendbuf.memh(),
+                   (uintptr_t)get_unused_address(recvbuf.length()), recvbuf.rkey(),
                    "");
 
     recvbuf.pattern_check(2);
