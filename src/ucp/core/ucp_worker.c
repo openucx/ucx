@@ -506,6 +506,9 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
         return UCS_OK;
     }
 
+    /* clear events on interface which is not on arm_list */
+    uct_iface_event_clear(wiface->iface);
+
     prev_am_count = wiface->proxy_am_count;
 
     *progress_count = uct_iface_progress(wiface->iface);
