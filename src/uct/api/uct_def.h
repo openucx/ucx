@@ -44,7 +44,7 @@ enum uct_am_trace_type {
  * @ingroup UCT_AM
  * @brief Flags for uct_am_callback.
  */
-enum uct_cb_flags {
+enum uct_am_cb_flags {
 
     /**
      * If this flag is enabled, then data is part of a descriptor which includes
@@ -147,7 +147,7 @@ typedef struct uct_iov {
  * @param [in]  data     Points to the received data. This may be a part of
  *                       a descriptor which may be released later.
  * @param [in]  length   Length of data.
- * @param [in]  flags    Mask with @ref uct_cb_flags
+ * @param [in]  flags    Mask with @ref uct_am_cb_flags
  *
  * @note This callback could be set and released
  *       by @ref uct_iface_set_am_handler function.
@@ -268,9 +268,13 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  *        side.
  *
  * This callback routine will be invoked on the server side upon receiving an
- * incoming connection request.
+ * incoming connection request. It should be set by the server side while
+ * initializing an interface.
  * Incoming data is placed inside the conn_priv_data buffer and outgoing data should
  * be filled inside this function and placed in the reply_priv_data.
+ * This callback has to be thread safe.
+ * Other than communication progress routines, it is allowed to call other UCT
+ * communication routines from this callback.
  *
  * @param [in]  arg              User defined argument for this callback.
  * @param [in]  conn_priv_data   Points to the received data.
@@ -297,10 +301,14 @@ typedef ssize_t (*uct_sockaddr_conn_request_callback_t)(void *arg,
  * @brief Callback to process an incoming reply message from the server.
  *
  * This callback routine will be invoked on the client side upon receiving a
- * reply message from the server side.
+ * reply message from the server side. It should be set by the client side while
+ * creating an endpoint to the remote server.
  * Incoming reply data, which was filled by the server @ref
  * uct_sockaddr_conn_request_callback_t callback, is placed inside the
  * reply_data buffer.
+ * This callback has to be thread safe.
+ * Other than communication progress routines, it is allowed to call other UCT
+ * communication routines from this callback.
  *
  * @param [in]  arg         User defined argument for this callback.
  * @param [in]  reply_data  Points to the received reply data from server side.
@@ -317,6 +325,10 @@ typedef void (*uct_sockaddr_conn_reply_callback_t)(void *arg, const void *reply_
  *
  * This callback routine will be invoked on the server side upon receiving a
  * message from the client indicating that the connection is ready.
+ * It should be set by the server side while initializing an interface.
+ * This callback has to be thread safe.
+ * Other than communication progress routines, it is allowed to call other UCT
+ * communication routines from this callback.
  *
  * @param [in]  arg         User defined argument for this callback.
  *
@@ -371,7 +383,7 @@ typedef ucs_status_t (*uct_tag_unexp_eager_cb_t)(void *arg, void *data,
  * @note It is allowed to call other communication routines from the callback.
  *
  * @param [in]  arg           User-defined argument
- * @param [in]  flags         Mask with @ref uct_cb_flags
+ * @param [in]  flags         Mask with @ref uct_am_cb_flags
  * @param [in]  stag          Tag from sender.
  * @param [in]  header        User defined header.
  * @param [in]  header_length User defined header length in bytes.

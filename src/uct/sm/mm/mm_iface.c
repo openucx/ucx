@@ -130,7 +130,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_AM_SHORT         |
                                           UCT_IFACE_FLAG_AM_BCOPY         |
                                           UCT_IFACE_FLAG_PENDING          |
-                                          UCT_IFACE_FLAG_AM_CB_SYNC       |
+                                          UCT_IFACE_FLAG_CB_SYNC          |
                                           UCT_IFACE_FLAG_EVENT_SEND_COMP  |
                                           UCT_IFACE_FLAG_EVENT_RECV_SIG_AM|
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;

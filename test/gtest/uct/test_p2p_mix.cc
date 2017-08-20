@@ -160,7 +160,7 @@ void uct_p2p_mix_test::init() {
     uct_p2p_test::init();
     ucs_status_t status = uct_iface_set_am_handler(receiver().iface(), AM_ID,
                                                    am_callback, NULL,
-                                                   UCT_AM_CB_FLAG_ASYNC);
+                                                   UCT_CB_FLAG_ASYNC);
     ASSERT_UCS_OK(status);
 
     m_send_size = MAX_SIZE;

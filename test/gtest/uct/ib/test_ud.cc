@@ -429,7 +429,7 @@ UCS_TEST_P(test_ud, crep_ack_drop) {
 
     status = uct_iface_set_am_handler(m_e2->iface(), 0,
                                       (uct_am_callback_t)ucs_empty_function_return_success,
-                                      NULL, UCT_AM_CB_FLAG_ASYNC);
+                                      NULL, UCT_CB_FLAG_ASYNC);
     ASSERT_UCS_OK(status);
 
     status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);

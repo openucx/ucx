@@ -526,8 +526,8 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
                                          UCT_IFACE_FLAG_CONNECT_TO_EP    |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                          UCT_IFACE_FLAG_PENDING          |
-                                         UCT_IFACE_FLAG_AM_CB_SYNC       |
-                                         UCT_IFACE_FLAG_AM_CB_ASYNC      |
+                                         UCT_IFACE_FLAG_CB_SYNC          |
+                                         UCT_IFACE_FLAG_CB_ASYNC         |
                                          UCT_IFACE_FLAG_EVENT_SEND_COMP  |
                                          UCT_IFACE_FLAG_EVENT_RECV_AM    |
                                          UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;

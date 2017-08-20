@@ -204,18 +204,18 @@ typedef struct uct_tl_resource_desc {
         /* Connection establishment */
 #define UCT_IFACE_FLAG_CONNECT_TO_IFACE       UCS_BIT(40) /**< Supports connecting to interface */
 #define UCT_IFACE_FLAG_CONNECT_TO_EP          UCS_BIT(41) /**< Supports connecting to specific endpoint */
-#define UCT_IFACE_FLAG_CONNECT_TO_SOCK_ADDR   UCS_BIT(42) /**< Supports connecting to sockaddr */
+#define UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR    UCS_BIT(42) /**< Supports connecting to sockaddr */
 
         /* Special transport flags */
 #define UCT_IFACE_FLAG_AM_DUP         UCS_BIT(43) /**< Active messages may be received with duplicates
                                                        This happens if the transport does not keep enough
                                                        information to detect retransmissions */
 
-        /* Active message callback invocation */
-#define UCT_IFACE_FLAG_AM_CB_SYNC     UCS_BIT(44) /**< Interface supports setting active message callback
+        /* Callback invocation */
+#define UCT_IFACE_FLAG_CB_SYNC        UCS_BIT(44) /**< Interface supports setting a callback
                                                        which is invoked only from the calling context of
                                                        uct_worker_progress() */
-#define UCT_IFACE_FLAG_AM_CB_ASYNC    UCS_BIT(45) /**< Interface supports setting active message callback
+#define UCT_IFACE_FLAG_CB_ASYNC       UCS_BIT(45) /**< Interface supports setting a callback
                                                        which will be invoked within a reasonable amount of
                                                        time if uct_worker_progress() is not being called.
                                                        The callback can be invoked from any progress context
@@ -288,25 +288,25 @@ enum uct_am_flags {
 
 
 /**
- * @ingroup UCT_AM
- * @brief Active message callback flags.
+ * @ingroup UCT_RESOURCE
+ * @brief Callback flags.
  *
- * List of flags for active message callback
+ * List of flags for a callback
  * A callback must have either SYNC or ASYNC flags.
  */
-enum uct_am_cb_flags {
-    UCT_AM_CB_FLAG_SYNC  = UCS_BIT(1), /**< Callback is always invoked from the context (thread, process)
-                                            that called uct_iface_progress(). An interface must
-                                            have @ref UCT_IFACE_FLAG_AM_CB_SYNC flag set to support sync
-                                            callback invocation */
+enum uct_cb_flags {
+    UCT_CB_FLAG_SYNC  = UCS_BIT(1), /**< Callback is always invoked from the context (thread, process)
+                                         that called uct_iface_progress(). An interface must
+                                         have @ref UCT_IFACE_FLAG_CB_SYNC flag set to support sync
+                                         callback invocation */
 
-    UCT_AM_CB_FLAG_ASYNC = UCS_BIT(2)  /**< Callback may be invoked from any context. For example,
-                                            it may be called from transport async progress thread. To guarantee
-                                            async invocation, interface must have @ref UCT_IFACE_FLAG_AM_CB_ASYNC
-                                            flag set.
-                                            If async callback is set on interface with only @ref
-                                            UCT_IFACE_FLAG_AM_CB_SYNC flags, it will behave exactly like a
-                                            sync callback  */
+    UCT_CB_FLAG_ASYNC = UCS_BIT(2)  /**< Callback may be invoked from any context. For example,
+                                         it may be called from transport async progress thread. To guarantee
+                                         async invocation, interface must have @ref UCT_IFACE_FLAG_CB_ASYNC
+                                         flag set.
+                                         If async callback is set on interface with only @ref
+                                         UCT_IFACE_FLAG_CB_SYNC flags, it will behave exactly like a
+                                         sync callback  */
 };
 
 
@@ -531,8 +531,8 @@ struct uct_iface_params {
             const char                           *dev_name; /**< Device Name */
         } device;
         struct {
-            /* These callbacks and address are only relevant for client-server
-             * connection establishment with sockaddr and are needed on the server side */
+            /** These callbacks and address are only relevant for client-server
+             *  connection establishment with sockaddr and are needed on the server side */
             ucs_sock_addr_t                      listen_sockaddr;
             void                                 *conn_request_arg;
             /** Callback for an incoming connection request on the server */
@@ -541,6 +541,9 @@ struct uct_iface_params {
             /** Callback for an incoming message on the server indicating that
                 the connection is ready */
             uct_sockaddr_conn_ready_callback_t   conn_ready_cb;
+            /** Callback flags to indicate where the callback can be invoked from.
+             * @ref uct_cb_flags */
+            uint32_t                             cb_flags;
         } sockaddr;
     } mode;
 
@@ -1139,7 +1142,7 @@ void uct_iface_mem_free(const uct_allocated_memory_t *mem);
  * @param [in]  id       Active message id. Must be 0..UCT_AM_ID_MAX-1.
  * @param [in]  cb       Active message callback. NULL to clear.
  * @param [in]  arg      Active message argument.
- * @param [in]  flags    Required @ref uct_am_cb_flags "active message callback flags"
+ * @param [in]  flags    Required @ref uct_cb_flags "callback flags"
  *
  * @return error code if the interface does not support active messages or
  *         requested callback flags
@@ -1230,7 +1233,7 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  * @ingroup UCT_RESOURCE
  * @brief Initiate a client-server connection to a remote peer.
  *
- * requires @ref UCT_IFACE_FLAG_CONNECT_TO_SOCK_ADDR capability.
+ * requires @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
  *
  * This routine will create an endpoint for a connection to the remote peer,
  * specified by its socket address.
@@ -1242,6 +1245,9 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  * @param [in]  reply_cb         Callback for an incoming reply message from
  *                               the server.
  * @param [in]  arg              User defined argument to pass to the callback.
+ * @param [in]  cb_flags         Required @ref uct_cb_flags "callback flags" to
+ *                               indicate where the @ref uct_sockaddr_conn_reply_callback_t
+ *                               reply callback can be invoked from.
  * @param [in]  priv_data        User's private data for connecting to the
  *                               remote peer.
  * @param [in]  length           Length of the private data.
@@ -1250,7 +1256,7 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
 ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
                                     const ucs_sock_addr_t *sockaddr,
                                     uct_sockaddr_conn_reply_callback_t reply_cb,
-                                    void *arg,
+                                    void *arg, uint32_t cb_flags,
                                     const void *priv_data, size_t length,
                                     uct_ep_h *ep_p);
 
@@ -1429,7 +1435,6 @@ ucs_status_t uct_md_config_read(const char *name, const char *env_prefix,
  * @param [in]  mode       Mode for checking accessibility, as defined in @ref
  *                         uct_sockaddr_accessibility_t.
  *                         Indicates if accessibility is tested on the server side -
- *
  *                         for binding to the given sockaddr, or on the
  *                         client side - for connecting to the given remote
  *                         peer's sockaddr.

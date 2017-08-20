@@ -59,7 +59,7 @@ static void uct_iface_set_stub_am_handler(uct_base_iface_t *iface, uint8_t id)
 {
     iface->am[id].cb    = uct_iface_stub_am_handler;
     iface->am[id].arg   = (void*)(uintptr_t)id;
-    iface->am[id].flags = UCT_AM_CB_FLAG_ASYNC;
+    iface->am[id].flags = UCT_CB_FLAG_ASYNC;
 }
 
 ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
@@ -81,7 +81,7 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
         return UCS_OK;
     }
 
-    if (!(flags & (UCT_AM_CB_FLAG_SYNC|UCT_AM_CB_FLAG_ASYNC))) {
+    if (!(flags & (UCT_CB_FLAG_SYNC|UCT_CB_FLAG_ASYNC))) {
         ucs_error("invalid active message flags 0x%x", flags);
         return UCS_ERR_INVALID_PARAM;
     }
@@ -94,8 +94,8 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
     /* If user wants a synchronous callback, it must be supported, or the
      * callback could be called from another thread.
      */
-    if ((flags & UCT_AM_CB_FLAG_SYNC) && !(attr.cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC)) {
-        ucs_error("Synchronous active message callback requested, but not supported");
+    if ((flags & UCT_CB_FLAG_SYNC) && !(attr.cap.flags & UCT_IFACE_FLAG_CB_SYNC)) {
+        ucs_error("Synchronous callback requested, but not supported");
         return UCS_ERR_INVALID_PARAM;
     }
 

@@ -495,7 +495,7 @@ ucs_status_t uct_base_ep_fence(uct_ep_h tl_ep, unsigned flags);
  * @param id       Active message ID.
  * @param data     Received data.
  * @param length   Length of received data.
- * @param flags    Mask with @ref uct_cb_flags
+ * @param flags    Mask with @ref uct_am_cb_flags
  */
 static inline ucs_status_t
 uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,

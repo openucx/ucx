@@ -159,7 +159,7 @@ public:
         sendbuf.pattern_fill(SEED3);
 
         uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, &recvbuf,
-                                 UCT_AM_CB_FLAG_ASYNC);
+                                 UCT_CB_FLAG_ASYNC);
 
         uct_completion_t zcomp;
         zcomp.count = 2;
@@ -200,7 +200,7 @@ public:
         sendbuf.pattern_fill(SEED3);
 
         uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, &recvbuf,
-                                 UCT_AM_CB_FLAG_ASYNC);
+                                 UCT_CB_FLAG_ASYNC);
         blocking_am_bcopy(sendbuf);
         (this->*flush)();
         sender().destroy_ep(0);
@@ -306,7 +306,7 @@ UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
      sendbuf.pattern_fill(SEED3);
 
      uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, &recvbuf,
-                              UCT_AM_CB_FLAG_ASYNC);
+                              UCT_CB_FLAG_ASYNC);
 
      /* Send until resources are exhausted or timeout in 1sec*/
      unsigned count = 0;
