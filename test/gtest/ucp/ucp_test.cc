@@ -309,8 +309,9 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param, ucp_config_t* uc
 
     m_workers.resize(num_workers);
     for (int i = 0; i < num_workers; i++) {
-        UCS_TEST_CREATE_HANDLE(ucp_worker_h, m_workers.at(i), ucp_worker_destroy,
-                               ucp_worker_create, m_ucph, &entity_param.worker_params);
+        UCS_TEST_CREATE_HANDLE(ucp_worker_h, m_workers[i].first,
+                               ucp_worker_destroy, ucp_worker_create, m_ucph,
+                               &entity_param.worker_params);
     }
 }
 
@@ -320,7 +321,7 @@ ucp_test_base::entity::~entity() {
 
 void ucp_test_base::entity::connect(const entity* other,
                                     const ucp_ep_params_t* ep_params_cmn,
-                                    bool reuse_worker_idx) {
+                                    int ep_idx) {
     assert(num_workers == other->get_num_workers());
     for (unsigned i = 0; i < unsigned(num_workers); i++) {
         ucs_status_t status;
@@ -342,7 +343,7 @@ void ucp_test_base::entity::connect(const entity* other,
         ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
         ep_params.address     = address;
 
-        status = ucp_ep_create(m_workers.at(i), &ep_params, &ep);
+        status = ucp_ep_create(m_workers[i].first, &ep_params, &ep);
         ucp_test::restore_errors();
 
         if (status == UCS_ERR_UNREACHABLE) {
@@ -352,10 +353,12 @@ void ucp_test_base::entity::connect(const entity* other,
 
         ASSERT_UCS_OK(status);
 
-        if (reuse_worker_idx && (i < m_eps[worker(i)].size())) {
-            m_eps[worker(i)][i].reset(ep, ucp_ep_destroy);
+        EXPECT_GE(m_workers[i].second.size(), ep_idx);
+
+        if (size_t(ep_idx) < m_workers[i].second.size()) {
+            m_workers[i].second[ep_idx].reset(ep, ucp_ep_destroy);
         } else {
-            m_eps[worker(i)].push_back(ucs::handle<ucp_ep_h>(ep, ucp_ep_destroy));
+            m_workers[i].second.push_back(ucs::handle<ucp_ep_h>(ep, ucp_ep_destroy));
         }
 
         ucp_worker_release_address(other->worker(i), address);
@@ -382,7 +385,7 @@ void ucp_test_base::entity::fence(int worker_index) const {
 
 void ucp_test_base::entity::disconnect(int worker_index, int ep_index) {
     flush_ep(worker_index, ep_index);
-    m_eps[worker(worker_index)][ep_index].reset();
+    m_workers[worker_index].second[ep_index].reset();
 }
 
 void* ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index) const {
@@ -394,29 +397,33 @@ void* ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index) const
 }
 
 void ucp_test_base::entity::destroy_worker(int worker_index) {
-    for (size_t i = 0; i < m_eps[worker(worker_index)].size(); ++i) {
-        m_eps[worker(worker_index)][i].revoke();
+    for (size_t i = 0; i < m_workers[worker_index].second.size(); ++i) {
+        m_workers[worker_index].second[i].revoke();
     }
-    m_workers.at(worker_index).reset();
+    m_workers[worker_index].first.reset();
 }
 
 ucp_ep_h ucp_test_base::entity::ep(int worker_index, int ep_index) const {
-    ep_const_iter i = m_eps.find(worker(worker_index));
-
-    return (i == m_eps.end()) ? NULL :  i->second[ep_index].get();
+    if (size_t(worker_index) < m_workers.size()) {
+        if (size_t(ep_index) < m_workers[worker_index].second.size()) {
+            return m_workers[worker_index].second[ep_index];
+        }
+    }
+    return NULL;
 }
 
 ucp_ep_h ucp_test_base::entity::revoke_ep(int worker_index, int ep_index) const {
     ucp_ep_h ucp_ep = ep(worker_index, ep_index);
-    ep_const_iter i = m_eps.find(worker(worker_index));
-    if (i != m_eps.end()) {
-        i->second[ep_index].revoke();
+
+    if (ucp_ep) {
+        m_workers[worker_index].second[ep_index].revoke();
     }
+
     return ucp_ep;
 }
 
 ucp_worker_h ucp_test_base::entity::worker(int worker_index) const {
-    return m_workers.at(worker_index);
+    return m_workers[worker_index].first;
 }
 
 ucp_context_h ucp_test_base::entity::ucph() const {
@@ -425,7 +432,7 @@ ucp_context_h ucp_test_base::entity::ucph() const {
 
 unsigned ucp_test_base::entity::progress(int worker_index)
 {
-    return ucp_worker_progress(m_workers.at(worker_index));
+    return ucp_worker_progress(worker(worker_index));
 }
 
 int ucp_test_base::entity::get_num_workers() const {
@@ -434,6 +441,5 @@ int ucp_test_base::entity::get_num_workers() const {
 }
 
 void ucp_test_base::entity::cleanup() {
-    m_eps.clear();
     m_workers.clear();
 }

@@ -38,8 +38,9 @@ public:
     };
 
     class entity {
-        typedef std::map<ucp_worker_h, std::vector<ucs::handle<ucp_ep_h> > > ep_map_t;
-        typedef ep_map_t::const_iterator ep_const_iter;
+        typedef std::vector<ucs::handle<ucp_ep_h> > ep_vec_t;
+        typedef std::vector<std::pair<ucs::handle<ucp_worker_h>,
+                                      ep_vec_t> > worker_vec_t;
 
     public:
         entity(const ucp_test_param& test_param, ucp_config_t* ucp_config);
@@ -48,7 +49,7 @@ public:
 
         void connect(const entity* other,
                      const ucp_ep_params_t* ep_params_cmn = NULL,
-                     bool reuse_worker_idx = true);
+                     int ep_idx = 0);
 
         void flush_ep(int worker_index = 0, int ep_index = 0) const;
 
@@ -78,8 +79,7 @@ public:
 
     protected:
         ucs::handle<ucp_context_h> m_ucph;
-        std::vector<ucs::handle<ucp_worker_h> >  m_workers;
-        ep_map_t m_eps;
+        worker_vec_t               m_workers;
 
         int num_workers;
     };
