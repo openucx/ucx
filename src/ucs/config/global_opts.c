@@ -14,6 +14,7 @@
 
 ucs_global_opts_t ucs_global_opts = {
     .log_level             = UCS_LOG_LEVEL_WARN,
+    .log_prints            = 0,
     .log_file              = "",
     .log_buffer_size       = 1024,
     .log_data_size         = 0,
@@ -72,6 +73,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
  {"LOG_DATA_SIZE", "0",
   "How much packet payload to print, at most, in data mode.",
   ucs_offsetof(ucs_global_opts_t, log_data_size), UCS_CONFIG_TYPE_ULONG},
+
+ {"LOG_ENABLE_PRINTS", "n",
+  "Enable output of ucs_print(). This option is intended for use by the library evelopers.\n",
+  ucs_offsetof(ucs_global_opts_t, log_prints), UCS_CONFIG_TYPE_BOOL},
 
 #if ENABLE_DEBUG_DATA
  {"MPOOL_FIFO", "n",

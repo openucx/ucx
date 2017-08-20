@@ -78,6 +78,27 @@
 #define ucs_trace_func(_message, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_FUNC, "%s(" _message ")", __FUNCTION__, ## __VA_ARGS__)
 #define ucs_trace_poll(_message, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_POLL, _message, ## __VA_ARGS__)
 
+/**
+ * Print a message regardless of current log level. Output can be
+ * enabled/disabled via environment variable/configuration settings.
+ *
+ * During debugging it can be useful to add a few prints to the code
+ * without changing a current log level. Also it is useful to be able
+ * to see messages only from specific processes. For example, one may
+ * want to see prints only from rank 0 when debugging MPI.
+ *
+ * The function is intended for debugging only. It should not be used
+ * in the real code.
+ */
+
+#define ucs_print(_message, ...) \
+    do { \
+        if (ucs_global_opts.log_prints) { \
+            __ucs_log(__FILE__, __LINE__, __FUNCTION__, UCS_LOG_LEVEL_PRINT, \
+                      _message, ## __VA_ARGS__); \
+        } \
+    } while(0)
+
 
 typedef enum {
     UCS_LOG_FUNC_RC_STOP,

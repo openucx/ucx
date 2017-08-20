@@ -26,7 +26,8 @@ typedef enum {
     UCS_LOG_LEVEL_TRACE_ASYNC,  /* Asynchronous progress engine */
     UCS_LOG_LEVEL_TRACE_FUNC,   /* Function calls */
     UCS_LOG_LEVEL_TRACE_POLL,   /* Polling functions */
-    UCS_LOG_LEVEL_LAST
+    UCS_LOG_LEVEL_LAST,
+    UCS_LOG_LEVEL_PRINT         /* Temporary output */
 } ucs_log_level_t;
 
 

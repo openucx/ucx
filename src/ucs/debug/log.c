@@ -27,7 +27,8 @@ const char *ucs_log_level_names[] = {
     [UCS_LOG_LEVEL_TRACE_ASYNC]  = "ASYNC",
     [UCS_LOG_LEVEL_TRACE_FUNC]   = "FUNC",
     [UCS_LOG_LEVEL_TRACE_POLL]   = "POLL",
-    [UCS_LOG_LEVEL_LAST]         = NULL
+    [UCS_LOG_LEVEL_LAST]         = NULL,
+    [UCS_LOG_LEVEL_PRINT]        = "PRINT"
 };
 
 static unsigned ucs_log_num_handlers   = 0;
@@ -96,7 +97,7 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     char *buf;
     char *valg_buf;
 
-    if (!ucs_log_enabled(level)) {
+    if (!ucs_log_enabled(level) && (level != UCS_LOG_LEVEL_PRINT)) {
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
