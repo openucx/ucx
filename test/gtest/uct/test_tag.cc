@@ -359,7 +359,7 @@ protected:
         return **(m_entities.end() - 1);
     }
 
-    ucs::ptr_vector<void> m_uct_descs;
+    std::vector<void*> m_uct_descs;
 
     static bool is_am_received;
 };

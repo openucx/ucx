@@ -276,10 +276,16 @@ static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
     uct_ib_device_name(uct_ib_iface_device(_iface)), (_iface)->config.port_num
 
 
+#define UCT_IB_IFACE_VERBS_COMPLETION_ERR(_type, _iface, _i,  _wc) \
+    ucs_fatal("%s completion[%d] with error on %s/%p: %s, vendor_err 0x%x wr_id 0x%lx", \
+              _type, _i, uct_ib_device_name(uct_ib_iface_device(_iface)), _iface, \
+              ibv_wc_status_str(_wc[i].status), _wc[i].vendor_err, \
+              _wc[i].wr_id);
+
 #define UCT_IB_IFACE_VERBS_FOREACH_RXWQE(_iface, _i, _hdr, _wc, _wc_count) \
     for (_i = 0; _i < _wc_count && ({ \
         if (ucs_unlikely(_wc[i].status != IBV_WC_SUCCESS)) { \
-            ucs_fatal("Receive completion with error: %s", ibv_wc_status_str(_wc[i].status)); \
+            UCT_IB_IFACE_VERBS_COMPLETION_ERR("receive", _iface, _i, _wc); \
         } \
         _hdr = (typeof(_hdr))uct_ib_iface_recv_desc_hdr(_iface, \
                                                       (uct_ib_iface_recv_desc_t *)(uintptr_t)_wc[i].wr_id); \
@@ -289,9 +295,7 @@ static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
 #define UCT_IB_IFACE_VERBS_FOREACH_TXWQE(_iface, _i, _wc, _wc_count) \
     for (_i = 0; _i < _wc_count && ({ \
         if (ucs_unlikely(_wc[i].status != IBV_WC_SUCCESS)) { \
-            ucs_fatal("iface=%p: send completion %d with error: %s wqe: %p wr_id: %llu", \
-                      _iface, _i, ibv_wc_status_str(_wc[i].status), \
-                      &_wc[i], (unsigned long long)_wc[i].wr_id); \
+            UCT_IB_IFACE_VERBS_COMPLETION_ERR("send", _iface, _i, _wc); \
         } \
                1; }); ++_i)
 
