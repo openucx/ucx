@@ -8,6 +8,7 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/datastruct/khash.h>
+#include <ucs/sys/sys.h>
 #include <net/if.h>
 
 #define UCT_TCP_NAME "tcp"
@@ -72,8 +73,6 @@ struct uct_tcp_recv_sock {
 
 extern uct_md_component_t uct_tcp_md;
 extern const char *uct_tcp_address_type_names[];
-
-ucs_status_t uct_tcp_socket_create(int *fd_p);
 
 ucs_status_t uct_tcp_socket_connect(int fd, const struct sockaddr_in *dest_addr);
 

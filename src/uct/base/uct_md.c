@@ -71,7 +71,9 @@ ucs_status_t uct_query_md_resources(uct_md_resource_desc_t **resources_p,
         for (i = 0; i < num_md_resources; ++i) {
             ucs_assertv_always(!strncmp(mdc->name, md_resources[i].md_name,
                                        strlen(mdc->name)),
-                               "MD name must begin with MD component name");
+                               "MD name must begin with MD component name."
+                               "MD name: %s MD component name: %s ",
+                               md_resources[i].md_name, mdc->name);
         }
         resources = tmp;
         memcpy(resources + num_resources, md_resources,
@@ -527,4 +529,10 @@ ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
 ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh)
 {
     return md->ops->mem_dereg(md, memh);
+}
+
+int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
+                                  uct_sockaddr_accessibility_t mode)
+{
+    return md->ops->is_sockaddr_accessible(md, sockaddr, mode);
 }
