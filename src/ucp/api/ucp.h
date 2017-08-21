@@ -2003,9 +2003,13 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  * @param [in]     datatype Datatype descriptor for the elements in the buffer.
  * @param [in]     cb       Callback function that is invoked whenever the
  *                          receive operation is completed and the data is ready
- *                          in the receive @a buffer.
+ *                          in the receive @a buffer. It is important to note
+ *                          that the call-back is only invoked in a case when
+ *                          the operation cannot be completed in place.
  * @param [in]     flags    Reserved for future use.
  *
+ * @return UCS_OK               - The receive operation was completed
+ *                                immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
  * @return otherwise            - Operation was scheduled for receive. The
  *                                request handle is returned to the application
