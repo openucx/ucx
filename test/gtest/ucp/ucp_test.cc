@@ -353,7 +353,7 @@ void ucp_test_base::entity::connect(const entity* other,
 
         ASSERT_UCS_OK(status);
 
-        EXPECT_GE(m_workers[i].second.size(), ep_idx);
+        EXPECT_GE(m_workers[i].second.size(), size_t(ep_idx));
 
         if (size_t(ep_idx) < m_workers[i].second.size()) {
             m_workers[i].second[ep_idx].reset(ep, ucp_ep_destroy);
