@@ -134,7 +134,8 @@ gtest_SOURCES = \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc \
 	ucs/test_hash_perf.cc \
-	ucs/test_type.cc
+	ucs/test_type.cc \
+	ucs/test_log.cc
 
 if HAVE_IB
 gtest_SOURCES += \

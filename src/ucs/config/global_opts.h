@@ -34,7 +34,7 @@ typedef struct {
     size_t                   log_data_size;
 
     /* Enable ucs_print() output */
-    int                      log_prints;
+    int                      log_print_enable;
 
     /* Enable FIFO behavior for memory pool, instead of LIFO. Useful for
      * debugging because object pointers are not recycled. */

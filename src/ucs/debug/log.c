@@ -360,4 +360,6 @@ void ucs_log_cleanup()
         fclose(ucs_log_file);
     }
     ucs_log_file = NULL;
+    ucs_log_initialized  = 0;
+    ucs_log_num_handlers = 0;
 }

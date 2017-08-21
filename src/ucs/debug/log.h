@@ -93,7 +93,7 @@
 
 #define ucs_print(_message, ...) \
     do { \
-        if (ucs_global_opts.log_prints) { \
+        if (ucs_global_opts.log_print_enable) { \
             __ucs_log(__FILE__, __LINE__, __FUNCTION__, UCS_LOG_LEVEL_PRINT, \
                       _message, ## __VA_ARGS__); \
         } \
