@@ -46,8 +46,8 @@ ucs_status_t uct_tcp_socket_connect(int fd, const struct sockaddr_in *dest_addr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_tcp_netif_ioctl(const char *if_name, unsigned long request,
-                                        struct ifreq *if_req)
+ucs_status_t uct_tcp_netif_ioctl(const char *if_name, unsigned long request,
+                                 struct ifreq *if_req)
 {
     ucs_status_t status;
     int fd, ret;
