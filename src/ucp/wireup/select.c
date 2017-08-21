@@ -62,8 +62,8 @@ static const char *ucp_wireup_iface_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_CONNECT_TO_IFACE)] = "connect to iface",
     [ucs_ilog2(UCT_IFACE_FLAG_CONNECT_TO_EP)]    = "connect to ep",
     [ucs_ilog2(UCT_IFACE_FLAG_AM_DUP)]           = "full reliability",
-    [ucs_ilog2(UCT_IFACE_FLAG_AM_CB_SYNC)]       = "sync am callback",
-    [ucs_ilog2(UCT_IFACE_FLAG_AM_CB_ASYNC)]      = "async am callback",
+    [ucs_ilog2(UCT_IFACE_FLAG_CB_SYNC)]          = "sync callback",
+    [ucs_ilog2(UCT_IFACE_FLAG_CB_ASYNC)]         = "async callback",
     [ucs_ilog2(UCT_IFACE_FLAG_EVENT_SEND_COMP)]  = "send completion event",
     [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV_AM)]    = "active message event",
     [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV_SIG_AM)]= "signaled message event",
@@ -513,7 +513,7 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
                                    UCT_IFACE_FLAG_PENDING;
     criteria->remote_iface_flags = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                    UCT_IFACE_FLAG_AM_BCOPY |
-                                   UCT_IFACE_FLAG_AM_CB_ASYNC;
+                                   UCT_IFACE_FLAG_CB_ASYNC;
     criteria->calc_score         = ucp_wireup_aux_score_func;
 
     ucp_wireup_fill_ep_params_criteria(criteria, params);
@@ -657,7 +657,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
     criteria.local_md_flags     = 0;
     criteria.remote_md_flags    = 0;
     criteria.remote_iface_flags = UCT_IFACE_FLAG_AM_BCOPY |
-                                  UCT_IFACE_FLAG_AM_CB_SYNC;
+                                  UCT_IFACE_FLAG_CB_SYNC;
     criteria.local_iface_flags  = UCT_IFACE_FLAG_AM_BCOPY;
     criteria.calc_score         = ucp_wireup_am_score_func;
     ucp_wireup_fill_ep_params_criteria(&criteria, params);

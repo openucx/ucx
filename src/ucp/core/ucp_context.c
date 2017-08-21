@@ -636,8 +636,10 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
             goto err_free_context_resources;
         }
 
-        /* If the MD does not have transport resources, don't use it */
-        if (num_tl_resources > 0) {
+        /* If the MD does not have transport resources, and if md does not support
+         * client-server connection establishment via sockaddr, don't use it */
+        if ((num_tl_resources > 0) ||
+            (context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) {
             ++md_index;
             ++context->num_mds;
         } else {

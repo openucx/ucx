@@ -206,11 +206,11 @@ public:
 
     virtual void test_xfer(send_func_t send, size_t length, direction_t direction) {
 
-        if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC) {
-            test_xfer_do(send, length, direction, UCT_AM_CB_FLAG_SYNC);
+        if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_CB_SYNC) {
+            test_xfer_do(send, length, direction, UCT_CB_FLAG_SYNC);
         }
-        if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_CB_ASYNC) {
-            test_xfer_do(send, length, direction, UCT_AM_CB_FLAG_ASYNC);
+        if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_CB_ASYNC) {
+            test_xfer_do(send, length, direction, UCT_CB_FLAG_ASYNC);
         }
     }
 
@@ -256,13 +256,13 @@ UCS_TEST_P(uct_p2p_am_test, am_sync) {
         UCS_TEST_SKIP_R("SELF doesn't use progress");
     }
 
-    check_caps(UCT_IFACE_FLAG_AM_CB_SYNC, UCT_IFACE_FLAG_AM_DUP);
+    check_caps(UCT_IFACE_FLAG_CB_SYNC, UCT_IFACE_FLAG_AM_DUP);
 
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     unsigned am_count = m_am_count = 0;
 
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
-                                      this, UCT_AM_CB_FLAG_SYNC);
+                                      this, UCT_CB_FLAG_SYNC);
     ASSERT_UCS_OK(status);
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
@@ -299,13 +299,13 @@ UCS_TEST_P(uct_p2p_am_test, am_sync) {
 UCS_TEST_P(uct_p2p_am_test, am_async) {
     ucs_status_t status;
 
-    check_caps(UCT_IFACE_FLAG_AM_CB_ASYNC, UCT_IFACE_FLAG_AM_DUP);
+    check_caps(UCT_IFACE_FLAG_CB_ASYNC, UCT_IFACE_FLAG_AM_DUP);
 
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     unsigned am_count = m_am_count = 0;
 
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
-                                      this, UCT_AM_CB_FLAG_ASYNC);
+                                      this, UCT_CB_FLAG_ASYNC);
     ASSERT_UCS_OK(status);
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
@@ -336,7 +336,7 @@ UCS_TEST_P(uct_p2p_am_test, am_async) {
     }
 
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL,
-                                      UCT_AM_CB_FLAG_ASYNC);
+                                      UCT_CB_FLAG_ASYNC);
     ASSERT_UCS_OK(status);
 }
 
@@ -473,11 +473,11 @@ UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
         UCS_TEST_SKIP_R("Current transport doesn't have rx memory pool");
     }
 
-    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_AM_CB_SYNC);
+    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_CB_SYNC);
 
     /* set a callback for the uct to invoke for receiving the data */
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
-                                      (void*)this, UCT_AM_CB_FLAG_SYNC);
+                                      (void*)this, UCT_CB_FLAG_SYNC);
     ASSERT_UCS_OK(status);
 
     /* send many messages and progress the receiver. the receiver will keep getting
@@ -509,7 +509,7 @@ UCS_TEST_P(uct_p2p_am_misc, am_max_short_multi) {
     set_keep_data(false);
 
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
-                                      this, UCT_AM_CB_FLAG_ASYNC);
+                                      this, UCT_CB_FLAG_ASYNC);
     ASSERT_UCS_OK(status);
 
     size_t size = ucs_min(sender().iface_attr().cap.am.max_short, 8192ul);
@@ -571,7 +571,7 @@ UCS_TEST_P(uct_p2p_am_tx_bufs, am_tx_max_bufs) {
             SEED1, sender());
 
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
-                                      this, UCT_AM_CB_FLAG_ASYNC);
+                                      this, UCT_CB_FLAG_ASYNC);
     ASSERT_UCS_OK(status);
     /* skip on cm, ud */
     if (!m_inited) { 

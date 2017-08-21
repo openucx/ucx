@@ -204,17 +204,18 @@ typedef struct uct_tl_resource_desc {
         /* Connection establishment */
 #define UCT_IFACE_FLAG_CONNECT_TO_IFACE       UCS_BIT(40) /**< Supports connecting to interface */
 #define UCT_IFACE_FLAG_CONNECT_TO_EP          UCS_BIT(41) /**< Supports connecting to specific endpoint */
+#define UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR    UCS_BIT(42) /**< Supports connecting to sockaddr */
 
         /* Special transport flags */
 #define UCT_IFACE_FLAG_AM_DUP         UCS_BIT(43) /**< Active messages may be received with duplicates
                                                        This happens if the transport does not keep enough
                                                        information to detect retransmissions */
 
-        /* Active message callback invocation */
-#define UCT_IFACE_FLAG_AM_CB_SYNC     UCS_BIT(44) /**< Interface supports setting active message callback
+        /* Callback invocation */
+#define UCT_IFACE_FLAG_CB_SYNC        UCS_BIT(44) /**< Interface supports setting a callback
                                                        which is invoked only from the calling context of
                                                        uct_worker_progress() */
-#define UCT_IFACE_FLAG_AM_CB_ASYNC    UCS_BIT(45) /**< Interface supports setting active message callback
+#define UCT_IFACE_FLAG_CB_ASYNC       UCS_BIT(45) /**< Interface supports setting a callback
                                                        which will be invoked within a reasonable amount of
                                                        time if uct_worker_progress() is not being called.
                                                        The callback can be invoked from any progress context
@@ -287,26 +288,50 @@ enum uct_am_flags {
 
 
 /**
- * @ingroup UCT_AM
- * @brief Active message callback flags.
+ * @ingroup UCT_RESOURCE
+ * @brief Callback flags.
  *
- * List of flags for active message callback
+ * List of flags for a callback
  * A callback must have either SYNC or ASYNC flags.
  */
-enum uct_am_cb_flags {
-    UCT_AM_CB_FLAG_SYNC  = UCS_BIT(1), /**< Callback is always invoked from the context (thread, process)
-                                            that called uct_iface_progress(). An interface must
-                                            have @ref UCT_IFACE_FLAG_AM_CB_SYNC flag set to support sync
-                                            callback invocation */
+enum uct_cb_flags {
+    UCT_CB_FLAG_SYNC  = UCS_BIT(1), /**< Callback is always invoked from the context (thread, process)
+                                         that called uct_iface_progress(). An interface must
+                                         have @ref UCT_IFACE_FLAG_CB_SYNC flag set to support sync
+                                         callback invocation */
 
-    UCT_AM_CB_FLAG_ASYNC = UCS_BIT(2)  /**< Callback may be invoked from any context. For example,
-                                            it may be called from transport async progress thread. To guarantee
-                                            async invocation, interface must have @ref UCT_IFACE_FLAG_AM_CB_ASYNC
-                                            flag set.
-                                            If async callback is set on interface with only @ref
-                                            UCT_IFACE_FLAG_AM_CB_SYNC flags, it will behave exactly like a
-                                            sync callback  */
+    UCT_CB_FLAG_ASYNC = UCS_BIT(2)  /**< Callback may be invoked from any context. For example,
+                                         it may be called from transport async progress thread. To guarantee
+                                         async invocation, interface must have @ref UCT_IFACE_FLAG_CB_ASYNC
+                                         flag set.
+                                         If async callback is set on interface with only @ref
+                                         UCT_IFACE_FLAG_CB_SYNC flags, it will behave exactly like a
+                                         sync callback  */
 };
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Interface opening mode.
+ */
+typedef enum {
+   UCT_IFACE_OPEN_MODE_DEVICE,   /**< Interface is opened on a specific device */
+   UCT_IFACE_OPEN_MODE_SOCKADDR  /**< Interface is opened on a specific address */
+} uct_iface_open_mode_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Socket address accessibility type.
+ */
+typedef enum {
+   UCT_SOCKADDR_ACC_LOCAL,  /**< Check if local address exists.
+                                 Address should belong to a local
+                                 network interface */
+   UCT_SOCKADDR_ACC_REMOTE  /**< Check if remote address can be reached.
+                                 Address is routable from one of the
+                                 local network interfaces */
+} uct_sockaddr_accessibility_t;
 
 
 /**
@@ -324,9 +349,12 @@ enum {
     UCT_MD_FLAG_ADVISE     = UCS_BIT(4),  /**< MD supports memory advice */
     UCT_MD_FLAG_FIXED      = UCS_BIT(5),  /**< MD supports memory allocation with
                                                fixed address */
-    UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6)   /**< MD supports direct access to
+    UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6),  /**< MD supports direct access to
                                                remote memory via a pointer that
                                                is returned by @ref uct_rkey_ptr */
+    UCT_MD_FLAG_SOCKADDR   = UCS_BIT(7)   /**< MD support for client-server
+                                               connection establishment via
+                                               sockaddr */
 };
 
 
@@ -469,7 +497,9 @@ struct uct_iface_attr {
     size_t                   device_addr_len;/**< Size of device address */
     size_t                   iface_addr_len; /**< Size of interface address */
     size_t                   ep_addr_len;    /**< Size of endpoint address */
-
+    size_t                   max_conn_priv;  /**< Max size of the iface's private data.
+                                                  used for connection
+                                                  establishment with sockaddr */
     /*
      * The following fields define expected performance of the communication
      * interface, this would usually be a combination of device and system
@@ -490,26 +520,51 @@ struct uct_iface_attr {
  * @ref uct_iface_open. User has to initialize all fields of this structure.
  */
 struct uct_iface_params {
-    ucs_cpu_set_t            cpu_mask;    /**< Mask of CPUs to use for resources */
-    const char               *tl_name;    /**< Transport name */
-    const char               *dev_name;   /**< Device Name */
-    ucs_stats_node_t         *stats_root; /**< Root in the statistics tree.
-                                               Can be NULL. If non NULL, it will be
-                                               a root of @a uct_iface object in the
-                                               statistics tree. */
-    size_t                   rx_headroom; /**< How much bytes to reserve before
-                                               the receive segment.*/
+    /** Mask of CPUs to use for resources */
+    ucs_cpu_set_t                                cpu_mask;
+    /** Interface opening mode. @ref uct_iface_open_mode_t */
+    uct_iface_open_mode_t                        open_mode;
 
-    void                     *err_handler_arg; /**< Custom argument of
-                                                   @a err_handler. */
-    uct_error_handler_t      err_handler;      /**< The callback to handle
-                                                    transport level error.*/
+    union {
+        struct {
+            const char                           *tl_name;  /**< Transport name */
+            const char                           *dev_name; /**< Device Name */
+        } device;
+        struct {
+            /** These callbacks and address are only relevant for client-server
+             *  connection establishment with sockaddr and are needed on the server side */
+            ucs_sock_addr_t                      listen_sockaddr;
+            void                                 *conn_request_arg;
+            /** Callback for an incoming connection request on the server */
+            uct_sockaddr_conn_request_callback_t conn_request_cb;
+            void                                 *conn_ready_arg;
+            /** Callback for an incoming message on the server indicating that
+                the connection is ready */
+            uct_sockaddr_conn_ready_callback_t   conn_ready_cb;
+            /** Callback flags to indicate where the callback can be invoked from.
+             * @ref uct_cb_flags */
+            uint32_t                             cb_flags;
+        } sockaddr;
+    } mode;
 
-    /* These callbacks are only relevant for HW Tag Matching */
-    void                     *eager_arg;
-    uct_tag_unexp_eager_cb_t eager_cb;    /**< Callback for tag matching unexpected eager messages */
-    void                     *rndv_arg;
-    uct_tag_unexp_rndv_cb_t  rndv_cb;     /**< Callback for tag matching unexpected rndv messages */
+    /** Root in the statistics tree. Can be NULL. If non NULL, it will be
+        a root of @a uct_iface object in the statistics tree. */
+    ucs_stats_node_t                             *stats_root;
+    /** How much bytes to reserve before the receive segment.*/
+    size_t                                       rx_headroom;
+
+    /** Custom argument of @a err_handler. */
+    void                                         *err_handler_arg;
+    /** The callback to handle transport level error.*/
+    uct_error_handler_t                          err_handler;
+
+    /** These callbacks are only relevant for HW Tag Matching */
+    void                                         *eager_arg;
+    /** Callback for tag matching unexpected eager messages */
+    uct_tag_unexp_eager_cb_t                     eager_cb;
+    void                                         *rndv_arg;
+    /** Callback for tag matching unexpected rndv messages */
+    uct_tag_unexp_rndv_cb_t                      rndv_cb;
 };
 
 
@@ -1087,7 +1142,7 @@ void uct_iface_mem_free(const uct_allocated_memory_t *mem);
  * @param [in]  id       Active message id. Must be 0..UCT_AM_ID_MAX-1.
  * @param [in]  cb       Active message callback. NULL to clear.
  * @param [in]  arg      Active message argument.
- * @param [in]  flags    Required @ref uct_am_cb_flags "active message callback flags"
+ * @param [in]  flags    Required @ref uct_cb_flags "callback flags"
  *
  * @return error code if the interface does not support active messages or
  *         requested callback flags
@@ -1172,6 +1227,38 @@ ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr);
  */
 ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr,
                                   const uct_ep_addr_t *ep_addr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Initiate a client-server connection to a remote peer.
+ *
+ * requires @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
+ *
+ * This routine will create an endpoint for a connection to the remote peer,
+ * specified by its socket address.
+ * The user may provide private data to be sent on a connection request to the
+ * remote peer.
+ *
+ * @param [in]  iface            Interface to create the endpoint on.
+ * @param [in]  sockaddr         The sockaddr to connect to on the remote peer.
+ * @param [in]  reply_cb         Callback for an incoming reply message from
+ *                               the server.
+ * @param [in]  arg              User defined argument to pass to the callback.
+ * @param [in]  cb_flags         Required @ref uct_cb_flags "callback flags" to
+ *                               indicate where the @ref uct_sockaddr_conn_reply_callback_t
+ *                               reply callback can be invoked from.
+ * @param [in]  priv_data        User's private data for connecting to the
+ *                               remote peer.
+ * @param [in]  length           Length of the private data.
+ * @param [out] ep_p             Handle to the created endpoint.
+ */
+ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
+                                    const ucs_sock_addr_t *sockaddr,
+                                    uct_sockaddr_conn_reply_callback_t reply_cb,
+                                    void *arg, uint32_t cb_flags,
+                                    const void *priv_data, size_t length,
+                                    uct_ep_h *ep_p);
 
 
 /**
@@ -1331,6 +1418,31 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem);
 ucs_status_t uct_md_config_read(const char *name, const char *env_prefix,
                                 const char *filename,
                                 uct_md_config_t **config_p);
+
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Check if remote sock address is accessible from the memory domain.
+ *
+ * This function checks if a remote sock address can be accessed from a local
+ * memory domain. Accessibility can be checked in local or remote mode.
+ *
+ * @param [in]  md         Memory domain to check accessibility from.
+ *                         This memory domain must support the @ref
+ *                         UCT_MD_FLAG_SOCKADDR flag.
+ * @param [in]  sockaddr   Socket address to check accessibility to.
+ * @param [in]  mode       Mode for checking accessibility, as defined in @ref
+ *                         uct_sockaddr_accessibility_t.
+ *                         Indicates if accessibility is tested on the server side -
+ *                         for binding to the given sockaddr, or on the
+ *                         client side - for connecting to the given remote
+ *                         peer's sockaddr.
+ *
+ * @return Nonzero if accessible, 0 if inaccessible.
+ */
+int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
+                                  uct_sockaddr_accessibility_t mode);
 
 
 /**

@@ -798,15 +798,15 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 }
 
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_RNDV_RTS, ucp_rndv_rts_handler,
-              ucp_rndv_dump, UCT_AM_CB_FLAG_SYNC);
+              ucp_rndv_dump, UCT_CB_FLAG_SYNC);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_RNDV_ATS, ucp_rndv_ats_handler,
-              ucp_rndv_dump, UCT_AM_CB_FLAG_SYNC);
+              ucp_rndv_dump, UCT_CB_FLAG_SYNC);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_RNDV_RTR, ucp_rndv_rtr_handler,
-              ucp_rndv_dump, UCT_AM_CB_FLAG_SYNC);
+              ucp_rndv_dump, UCT_CB_FLAG_SYNC);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_RNDV_DATA, ucp_rndv_data_handler,
-              ucp_rndv_dump, UCT_AM_CB_FLAG_SYNC);
+              ucp_rndv_dump, UCT_CB_FLAG_SYNC);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_RNDV_DATA_LAST, ucp_rndv_data_last_handler,
-              ucp_rndv_dump, UCT_AM_CB_FLAG_SYNC);
+              ucp_rndv_dump, UCT_CB_FLAG_SYNC);
 
 UCP_DEFINE_AM_PROXY(UCP_AM_ID_RNDV_RTS);
 UCP_DEFINE_AM_PROXY(UCP_AM_ID_RNDV_ATS);

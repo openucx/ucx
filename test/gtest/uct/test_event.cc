@@ -82,11 +82,11 @@ void test_uct_event_fd::test_recv_am(bool signaled)
 
     initialize();
     if (signaled) {
-        check_caps(UCT_IFACE_FLAG_EVENT_RECV_SIG_AM | UCT_IFACE_FLAG_AM_CB_SYNC);
+        check_caps(UCT_IFACE_FLAG_EVENT_RECV_SIG_AM | UCT_IFACE_FLAG_CB_SYNC);
         arm_flags  = UCT_EVENT_RECV_SIG_AM;
         send_flags = UCT_AM_FLAG_SIGNALED;
     } else {
-        check_caps(UCT_IFACE_FLAG_EVENT_RECV_AM | UCT_IFACE_FLAG_AM_CB_SYNC);
+        check_caps(UCT_IFACE_FLAG_EVENT_RECV_AM | UCT_IFACE_FLAG_CB_SYNC);
         arm_flags  = UCT_EVENT_RECV_AM;
         send_flags = 0;
     }
@@ -96,7 +96,7 @@ void test_uct_event_fd::test_recv_am(bool signaled)
 
     /* set a callback for the uct to invoke for receiving the data */
     uct_iface_set_am_handler(m_e2->iface(), 0, am_handler, recv_buffer,
-                             UCT_AM_CB_FLAG_SYNC);
+                             UCT_CB_FLAG_SYNC);
 
     /* create receiver wakeup */
     status = uct_iface_event_fd_get(m_e2->iface(), &wakeup_fd.fd);

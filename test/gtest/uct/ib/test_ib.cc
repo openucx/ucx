@@ -217,7 +217,7 @@ out:
         recv_buffer->length = 0; /* Initialize length to 0 */
 
         /* set a callback for the uct to invoke for receiving the data */
-        uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler , recv_buffer, UCT_AM_CB_FLAG_SYNC);
+        uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler , recv_buffer, UCT_CB_FLAG_SYNC);
 
         /* send the data */
         uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
@@ -329,7 +329,7 @@ public:
 
         test_uct_ib::initialize();
 
-        check_caps(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_AM_CB_SYNC |
+        check_caps(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_CB_SYNC |
                    UCT_IFACE_FLAG_EVENT_SEND_COMP | UCT_IFACE_FLAG_EVENT_RECV_AM);
 
         /* create receiver wakeup */
@@ -343,7 +343,7 @@ public:
 
         /* set a callback for the uct to invoke for receiving the data */
         uct_iface_set_am_handler(m_e1->iface(), 0, ib_am_handler, m_buf1->ptr(),
-                                 UCT_AM_CB_FLAG_SYNC);
+                                 UCT_CB_FLAG_SYNC);
 
         test_uct_event_ib::bcopy_pack_count = 0;
     }

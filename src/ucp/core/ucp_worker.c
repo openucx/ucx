@@ -109,8 +109,8 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
             continue;
         }
 
-        if ((ucp_am_handlers[am_id].flags & UCT_AM_CB_FLAG_SYNC) &&
-            !(wiface->attr.cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC))
+        if ((ucp_am_handlers[am_id].flags & UCT_CB_FLAG_SYNC) &&
+            !(wiface->attr.cap.flags & UCT_IFACE_FLAG_CB_SYNC))
         {
             /* Do not register a sync callback on interface which does not
              * support it. The transport selection logic should not use async
@@ -123,7 +123,7 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
             /* we care only about sync active messages, and this also makes sure
              * the counter is not accessed from another thread.
              */
-            ucs_assert(ucp_am_handlers[am_id].flags & UCT_AM_CB_FLAG_SYNC);
+            ucs_assert(ucp_am_handlers[am_id].flags & UCT_CB_FLAG_SYNC);
             status = uct_iface_set_am_handler(wiface->iface, am_id,
                                               ucp_am_handlers[am_id].proxy_cb,
                                               wiface,
@@ -162,7 +162,7 @@ static void ucp_worker_remove_am_handlers(ucp_worker_h worker)
             if (context->config.features & ucp_am_handlers[am_id].features) {
                 (void)uct_iface_set_am_handler(worker->ifaces[tl_id].iface,
                                                am_id, ucp_stub_am_handler,
-                                               worker, UCT_AM_CB_FLAG_ASYNC);
+                                               worker, UCT_CB_FLAG_ASYNC);
             }
         }
     }
@@ -633,16 +633,17 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     }
 
     memset(&iface_params, 0, sizeof(iface_params));
-    iface_params.tl_name         = resource->tl_rsc.tl_name;
-    iface_params.dev_name        = resource->tl_rsc.dev_name;
-    iface_params.stats_root      = UCS_STATS_RVAL(worker->stats);
-    iface_params.rx_headroom     = rx_headroom;
-    iface_params.cpu_mask        = *cpu_mask_param;
-    iface_params.err_handler_arg = worker;
-    iface_params.err_handler     = ucp_worker_iface_error_handler;
-    iface_params.eager_arg       = iface_params.rndv_arg = worker;
-    iface_params.eager_cb        = ucp_tag_offload_unexp_eager;
-    iface_params.rndv_cb         = ucp_tag_offload_unexp_rndv;
+    iface_params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
+    iface_params.mode.device.tl_name  = resource->tl_rsc.tl_name;
+    iface_params.mode.device.dev_name = resource->tl_rsc.dev_name;
+    iface_params.stats_root           = UCS_STATS_RVAL(worker->stats);
+    iface_params.rx_headroom          = rx_headroom;
+    iface_params.cpu_mask             = *cpu_mask_param;
+    iface_params.err_handler_arg      = worker;
+    iface_params.err_handler          = ucp_worker_iface_error_handler;
+    iface_params.eager_arg            = iface_params.rndv_arg = worker;
+    iface_params.eager_cb             = ucp_tag_offload_unexp_eager;
+    iface_params.rndv_cb              = ucp_tag_offload_unexp_rndv;
 
     /* Open UCT interface */
     status = uct_iface_open(context->tl_mds[resource->md_index].md, worker->uct,

@@ -85,6 +85,9 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
 ucs_status_t uct_tcp_netif_inaddr(const char *if_name, struct sockaddr_in *ifaddr,
                                   struct sockaddr_in *netmask);
 
+ucs_status_t uct_tcp_netif_ioctl(const char *if_name, unsigned long request,
+                                 struct ifreq *if_req);
+
 ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p);
 
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd);

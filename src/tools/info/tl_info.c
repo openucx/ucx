@@ -96,10 +96,10 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
     uct_iface_h iface;
     char buf[200] = {0};
     uct_iface_params_t iface_params = {
-        .tl_name     = resource->tl_name,
-        .dev_name    = resource->dev_name,
-        .stats_root  = ucs_stats_get_root(),
-        .rx_headroom = 0
+        .mode.device.tl_name   = resource->tl_name,
+        .mode.device.dev_name  = resource->dev_name,
+        .stats_root            = ucs_stats_get_root(),
+        .rx_headroom           = 0
     };
 
     UCS_CPU_ZERO(&iface_params.cpu_mask);
@@ -355,6 +355,9 @@ static void print_md_info(const char *md_name, int print_opts,
         }
         if (md_attr.cap.flags & UCT_MD_FLAG_NEED_MEMH) {
             printf("#           local memory handle is required for zcopy\n");
+        }
+        if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
+            printf("#           supports client-server connection establishment via sockaddr\n");
         }
     }
 

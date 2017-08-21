@@ -203,10 +203,11 @@ static ucs_status_t uct_ugni_smsg_iface_query(uct_iface_h tl_iface, uct_iface_at
     iface_attr->device_addr_len        = sizeof(uct_devaddr_ugni_t);
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_ugni_t);
     iface_attr->ep_addr_len            = sizeof(uct_sockaddr_smsg_ugni_t);
+    iface_attr->max_conn_priv          = 0;
     iface_attr->cap.flags              = UCT_IFACE_FLAG_AM_SHORT |
                                          UCT_IFACE_FLAG_AM_BCOPY |
                                          UCT_IFACE_FLAG_CONNECT_TO_EP |
-                                         UCT_IFACE_FLAG_AM_CB_SYNC |
+                                         UCT_IFACE_FLAG_CB_SYNC  |
                                          UCT_IFACE_FLAG_PENDING;
 
     iface_attr->overhead               = 1e-6;  /* 1 usec */

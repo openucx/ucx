@@ -114,6 +114,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->iface_addr_len          = sizeof(uct_mm_iface_addr_t);
     iface_attr->device_addr_len         = UCT_SM_IFACE_DEVICE_ADDR_LEN;
     iface_attr->ep_addr_len             = 0;
+    iface_attr->max_conn_priv           = 0;
     iface_attr->cap.flags               = UCT_IFACE_FLAG_PUT_SHORT        |
                                           UCT_IFACE_FLAG_PUT_BCOPY        |
                                           UCT_IFACE_FLAG_ATOMIC_ADD32     |
@@ -129,7 +130,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_AM_SHORT         |
                                           UCT_IFACE_FLAG_AM_BCOPY         |
                                           UCT_IFACE_FLAG_PENDING          |
-                                          UCT_IFACE_FLAG_AM_CB_SYNC       |
+                                          UCT_IFACE_FLAG_CB_SYNC          |
                                           UCT_IFACE_FLAG_EVENT_SEND_COMP  |
                                           UCT_IFACE_FLAG_EVENT_RECV_SIG_AM|
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;

@@ -33,6 +33,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
     attr->iface_addr_len         = sizeof(uct_self_iface_addr_t);
     attr->device_addr_len        = 0;
     attr->ep_addr_len            = 0; /* No UCT_IFACE_FLAG_CONNECT_TO_EP supported */
+    attr->max_conn_priv          = 0;
     attr->cap.flags              = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                    UCT_IFACE_FLAG_AM_SHORT         |
                                    UCT_IFACE_FLAG_AM_BCOPY         |
@@ -49,7 +50,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
                                    UCT_IFACE_FLAG_ATOMIC_CSWAP32   |
                                    UCT_IFACE_FLAG_ATOMIC_CPU       |
                                    UCT_IFACE_FLAG_PENDING          |
-                                   UCT_IFACE_FLAG_AM_CB_SYNC       |
+                                   UCT_IFACE_FLAG_CB_SYNC          |
                                    UCT_IFACE_FLAG_EP_CHECK;
 
     attr->cap.put.max_short       = UINT_MAX;
@@ -162,8 +163,8 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_trace_func("Creating a loop-back transport self=%p rxh=%lu",
                    self, params->rx_headroom);
 
-    if (strcmp(params->dev_name, UCT_SELF_NAME) != 0) {
-        ucs_error("No device was found: %s", params->dev_name);
+    if (strcmp(params->mode.device.dev_name, UCT_SELF_NAME) != 0) {
+        ucs_error("No device was found: %s", params->mode.device.dev_name);
         return UCS_ERR_NO_DEVICE;
     }
 
