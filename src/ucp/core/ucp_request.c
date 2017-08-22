@@ -19,18 +19,29 @@ int ucp_request_is_completed(void *request)
     return !!(req->flags & UCP_REQUEST_FLAG_COMPLETED);
 }
 
-ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info)
+ucs_status_t ucp_request_test(void *request)
 {
     ucp_request_t *req = (ucp_request_t*)request - 1;
 
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
-        if (req->flags & UCP_REQUEST_FLAG_RECV) {
-            *info = req->recv.info;
-        }
         ucs_assert(req->status != UCS_INPROGRESS);
         return req->status;
     }
     return UCS_INPROGRESS;
+}
+
+ucs_status_t ucp_tag_request_test(void *request, ucp_tag_info_t *info)
+{
+    ucp_request_t *req = (ucp_request_t*)request - 1;
+
+    if (req->flags & UCP_REQUEST_FLAG_RECV) {
+        *info = req->recv.info;
+    } else {
+        info->length     = req->send.state.offset;
+        info->sender_tag = req->send.tag;
+    }
+
+    return ucp_request_test(request);
 }
 
 static UCS_F_ALWAYS_INLINE void

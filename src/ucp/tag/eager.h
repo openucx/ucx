@@ -103,7 +103,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_eager_unexp_match(ucp_worker_h worker, ucp_recv_desc_t *rdesc, ucp_tag_t tag,
                       unsigned flags, void *buffer, size_t count,
                       ucp_datatype_t datatype, ucp_dt_state_t *state,
-                      ucp_tag_recv_info_t *info)
+                      ucp_tag_info_t *info)
 {
     size_t recv_len, hdr_len;
     ucs_status_t status;

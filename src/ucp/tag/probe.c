@@ -15,7 +15,7 @@
 
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t*
 ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
-                     ucp_tag_recv_info_t *info, int remove)
+                     ucp_tag_info_t *info, int remove)
 {
     ucp_recv_desc_t *rdesc;
     ucp_tag_hdr_t *hdr;
@@ -57,7 +57,7 @@ ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
 
 ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
                                    ucp_tag_t tag_mask, int remove,
-                                   ucp_tag_recv_info_t *info)
+                                   ucp_tag_info_t *info)
 {
     ucp_context_h context = worker->context;
     ucp_recv_desc_t *ret;
