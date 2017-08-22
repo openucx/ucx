@@ -23,7 +23,7 @@ protected:
     }
 
     static void recv_completion(void *request, ucs_status_t status,
-                                ucp_tag_recv_info_t *info) {
+                                ucp_tag_info_t *info) {
         ++comp_cntr;
     }
 

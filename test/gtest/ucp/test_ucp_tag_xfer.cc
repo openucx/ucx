@@ -222,11 +222,12 @@ void test_ucp_tag_xfer::test_xfer_probe(bool send_contig, bool recv_contig,
                                         bool expected, bool sync)
 {
     static const size_t count = 1148544 / ucs::test_time_multiplier();
-    uint8_t *sendbuf = NULL, *recvbuf = NULL;
-    ucp_datatype_t send_dt, recv_dt;
-    ucp_tag_message_h message;
-    ucp_tag_recv_info info;
-    request *rreq, *sreq;
+    uint8_t             *sendbuf = NULL;
+    uint8_t             *recvbuf = NULL;
+    ucp_datatype_t      send_dt, recv_dt;
+    ucp_tag_message_h   message;
+    ucp_tag_info        info;
+    request             *rreq, *sreq;
 
     if (&sender() == &receiver()) {
         /* the self transport doesn't do rndv and completes the send immediately */

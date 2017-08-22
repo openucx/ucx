@@ -69,7 +69,7 @@ private:
     static void send_completion(void *request, ucs_status_t status);
 
     static void recv_completion(void *request, ucs_status_t status,
-                                ucp_tag_recv_info_t *info);
+                                ucp_tag_info_t *info);
 };
 
 std::vector<ucp_test_param>
@@ -217,7 +217,7 @@ void test_ucp_wireup::send_completion(void *request, ucs_status_t status)
 }
 
 void test_ucp_wireup::recv_completion(void *request, ucs_status_t status,
-                                      ucp_tag_recv_info_t *info)
+                                      ucp_tag_info_t *info)
 {
 }
 
