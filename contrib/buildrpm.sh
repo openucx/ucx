@@ -12,6 +12,7 @@ rpmopts="--nodeps --buildroot='${WS}/_rpm'"
 opt_tarball=0
 opt_srcrpm=0
 opt_binrpm=0
+opt_no_dist=0
 defines=""
 
 while test "$1" != ""; do
@@ -19,6 +20,7 @@ while test "$1" != ""; do
         --tarball|-t) opt_tarball=1 ;;
         --srcrpm|-s)  opt_srcrpm=1 ;;
         --binrpm|-b)  opt_binrpm=1 ;;
+        --no-dist)    opt_no_dist=1 ;;
         --define|-d)  defines="$defines --define '$2'"; shift ;;
         *)
             cat <<EOF
@@ -29,6 +31,7 @@ Valid arguments:
 --tarball|-t        Create tarball
 --srcrpm|-s         Create src.rpm
 --binrpm|-b         Create bin.rpm
+--no-dist           Undefine %{dist} tag
 --define|-d <arg>   Add a define to rpmbuild
 
 
@@ -39,6 +42,9 @@ EOF
     shift
 done
 
+if [ $opt_no_dist -eq 1 ]; then
+    rpmmacros="$rpmmacros '--undefine=dist'"
+fi
 
 mkdir -p rpm-dist
 
