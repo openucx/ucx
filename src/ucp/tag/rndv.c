@@ -42,47 +42,50 @@ static void ucp_rndv_rma_request_send_buffer_dereg(ucp_request_t *sreq)
     }
 }
 
-static size_t ucp_tag_rndv_pack_rkey(ucp_request_t *sreq,
-                                     ucp_rndv_rts_hdr_t *rndv_rts_hdr)
+size_t ucp_tag_rndv_pack_rkey(ucp_request_t *sreq, ucp_lane_index_t lane,
+                              void *rkey_buf, uint16_t *flags)
 {
     ucp_ep_h ep = sreq->send.ep;
-    size_t packed_rkey = 0;
     ucs_status_t status;
 
     ucs_assert(UCP_DT_IS_CONTIG(sreq->send.datatype));
 
     /* Check if the sender needs to register the send buffer -
      * is its datatype contiguous and does the receive side need it */
-    if ((ucp_ep_is_rndv_lane_present(ep)) &&
-        (ucp_ep_rndv_md_flags(ep) & UCT_MD_FLAG_NEED_RKEY)) {
-        status = ucp_request_send_buffer_reg(sreq, ucp_ep_get_rndv_get_lane(ep));
+    if (ucp_ep_rndv_md_flags(ep) & UCT_MD_FLAG_NEED_RKEY) {
+        status = ucp_request_send_buffer_reg(sreq, lane);
         ucs_assert_always(status == UCS_OK);
 
         /* if the send buffer was registered, send the rkey */
-        UCS_PROFILE_CALL(uct_md_mkey_pack, ucp_ep_md(ep, ucp_ep_get_rndv_get_lane(ep)),
-                         sreq->send.state.dt.contig.memh, rndv_rts_hdr + 1);
-        rndv_rts_hdr->flags |= UCP_RNDV_RTS_FLAG_PACKED_RKEY;
-        packed_rkey = ucp_ep_md_attr(ep, ucp_ep_get_rndv_get_lane(ep))->rkey_packed_size;
+        UCS_PROFILE_CALL(uct_md_mkey_pack, ucp_ep_md(ep, lane),
+                         sreq->send.state.dt.contig.memh, rkey_buf);
+        *flags |= UCP_RNDV_RTS_FLAG_PACKED_RKEY;
+        return ucp_ep_md_attr(ep, lane)->rkey_packed_size;
     }
 
-    return packed_rkey;
+    return 0;
 }
 
 static size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
 {
     ucp_request_t *sreq = arg;   /* the sender's request */
     ucp_rndv_rts_hdr_t *rndv_rts_hdr = dest;
-    size_t packed_len = sizeof(*rndv_rts_hdr);;
+    size_t packed_len = sizeof(*rndv_rts_hdr);
+    ucp_ep_t *ep = sreq->send.ep;
 
     rndv_rts_hdr->flags            = 0;
     rndv_rts_hdr->super.tag        = sreq->send.tag;
     /* reqptr holds the original sreq */
     rndv_rts_hdr->sreq.reqptr      = (uintptr_t)sreq;
-    rndv_rts_hdr->sreq.sender_uuid = sreq->send.ep->worker->uuid;
+    rndv_rts_hdr->sreq.sender_uuid = ep->worker->uuid;
     rndv_rts_hdr->size             = sreq->send.length;
     if (UCP_DT_IS_CONTIG(sreq->send.datatype)) {
         rndv_rts_hdr->address = (uintptr_t) sreq->send.buffer;
-        packed_len += ucp_tag_rndv_pack_rkey(sreq, rndv_rts_hdr);
+        if (ucp_ep_is_rndv_lane_present(ep)) {
+            packed_len += ucp_tag_rndv_pack_rkey(sreq, ucp_ep_get_rndv_get_lane(ep),
+                                                 rndv_rts_hdr + 1,
+                                                 &rndv_rts_hdr->flags);
+        }
     } else if (UCP_DT_IS_GENERIC(sreq->send.datatype) ||
                UCP_DT_IS_IOV(sreq->send.datatype)) {
         rndv_rts_hdr->address = 0;

@@ -68,6 +68,27 @@ ucp_tag_offload_release_buf(ucp_request_t *req, ucp_context_t *ctx,
     }
 }
 
+static size_t ucp_tag_offload_fetch_rkey(ucp_ep_t *ep, ucp_sw_rndv_hdr_t *sw_hdr,
+                                         ucp_rndv_rts_hdr_t *rts)
+{
+    uint64_t *addr;
+    size_t rkey_size;
+
+    if (sw_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) {
+        /* SW RNDV with valid remote addr and key. Must be large message which
+         * does not fit offload RNDV proto. */
+        rkey_size    = ucp_ep_md_attr(ep, ucp_ep_get_tag_lane(ep))->rkey_packed_size;
+        addr         = (uint64_t*)(sw_hdr + 1);
+        rts->address = *addr;
+        rts->flags  |= sw_hdr->flags | UCP_RNDV_RTS_FLAG_OFFLOAD;
+        memcpy(rts + 1, addr + 1, rkey_size);
+        return rkey_size;
+    }
+
+    rts->address = 0;
+    return 0;
+}
+
 /* RNDV request matched by the transport. Need to proceed with AM based RNDV */
 void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
                              const void *header, unsigned header_length,
@@ -76,19 +97,26 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
     ucp_request_t *req        = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
     ucp_context_t *ctx        = req->recv.worker->context;
     ucp_sw_rndv_hdr_t *sreq   = (ucp_sw_rndv_hdr_t*)header;
+    ucp_ep_t *ep              = ucp_worker_get_reply_ep(req->recv.worker,
+                                                        sreq->super.sender_uuid);
     ucp_worker_iface_t *iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                                               ucp_worker_iface_t, queue);
-    ucp_rndv_rts_hdr_t rts;
+    unsigned length           = sizeof(ucp_rndv_rts_hdr_t);
+    ucp_rndv_rts_hdr_t *rts;
+
+    if (sreq->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) {
+        length += ucp_ep_md_attr(ep, req->send.lane)->rkey_packed_size;
+    }
+    rts = alloca(length);
 
     /* Emulate RTS without rkey (to be handled as AM-based RNDV). */
-    rts.sreq      = sreq->super;
-    rts.super.tag = stag;
-    rts.flags     = 0;
-    rts.address   = 0; /* RNDV needs to be completed in SW */
-    rts.size      = sreq->length;
+    rts->sreq      = sreq->super;
+    rts->super.tag = stag;
+    rts->flags     = 0;
+    rts->size      = sreq->length;
+    ucp_tag_offload_fetch_rkey(ep, sreq, rts);
 
-    /* coverity[address_of] */
-    ucp_rndv_matched(req->recv.worker, req, &rts);
+    ucp_rndv_matched(req->recv.worker, req, rts);
     ucp_tag_offload_release_buf(req, ctx, iface->rsc_index);
 }
 
@@ -125,6 +153,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         sw_rndv_hdr = ucs_derived_of(hdr, ucp_sw_rndv_hdr_t);
         rts->size   = sw_rndv_hdr->length;
         rts->flags  = 0;
+        len        += ucp_tag_offload_fetch_rkey(ep, sw_rndv_hdr, rts);
     }
 
     /* Pass 0 as tl flags, because RTS needs to be stored in UCP pool. */
@@ -188,15 +217,18 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                               ucp_worker_iface_t, queue);
     if (ucs_unlikely(length >= ctx->tm.offload.zcopy_thresh)) {
-
-        /* TODO: Add tag.RECV.max_zcopy field to iface attrs and use it here  */
         if (length > ucp_iface->attr.cap.tag.recv.max_zcopy) {
-            /* The message is too big to be posted to the transport */
-            return 0;
+            /* Post maximum allowed length. If sender sends smaller message
+             * (which is allowed per MPI standard), max recv should fit it.
+             * Otherwise sender will send SW RNDV req, which is small enough. */
+            ucs_assert(ucp_iface->attr.cap.tag.rndv.max_zcopy <=
+                       ucp_iface->attr.cap.tag.recv.max_zcopy);
+
+            length = ucp_iface->attr.cap.tag.recv.max_zcopy;
         }
 
         status = ucp_request_memory_reg(ctx, ucp_iface->rsc_index, req->recv.buffer,
-                                        req->recv.length, req->recv.datatype,
+                                        length, req->recv.datatype,
                                         &req->recv.state);
         if (status != UCS_OK) {
             return 0;
@@ -341,14 +373,31 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
-    ucp_sw_rndv_hdr_t rndv_hdr = {
-        .super.sender_uuid = req->send.ep->worker->uuid,
-        .super.reqptr      = (uintptr_t)req,
-        .length            = req->send.length
-    };
+    ucp_sw_rndv_hdr_t *rndv_hdr;
+    unsigned rndv_hdr_len;
+    size_t packed_rkey;
+    uintptr_t *addr;
+
+    if (UCP_DT_IS_CONTIG(req->send.datatype) &&
+        (req->send.length > ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) {
+        packed_rkey  = ucp_ep_md_attr(ep, req->send.lane)->rkey_packed_size;
+        rndv_hdr_len = sizeof(ucp_sw_rndv_hdr_t) + packed_rkey + sizeof(uintptr_t);
+        rndv_hdr     = ucs_alloca(rndv_hdr_len);
+        addr         = (uintptr_t*)(rndv_hdr + 1);
+        *addr        = (uintptr_t)req->send.buffer;
+        rndv_hdr->flags = 0;
+        ucp_tag_rndv_pack_rkey(req, req->send.lane, addr + 1, &rndv_hdr->flags);
+    } else {
+        rndv_hdr_len = sizeof(ucp_sw_rndv_hdr_t);
+        rndv_hdr     = ucs_alloca(rndv_hdr_len);
+        rndv_hdr->flags = 0;
+    }
+    rndv_hdr->super.sender_uuid = ep->worker->uuid;
+    rndv_hdr->super.reqptr      = (uintptr_t)req;
+    rndv_hdr->length            = req->send.length;
 
     return uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane], req->send.tag,
-                                   &rndv_hdr, sizeof(rndv_hdr));
+                                   rndv_hdr, rndv_hdr_len);
 }
 
 ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
