@@ -14,6 +14,14 @@ public:
     virtual void init() {
         char ucs_log_spec[64];
         ucs::test::init();
+
+        /* skip because logger does not support file
+         * output on valgrind
+         */
+        if (RUNNING_ON_VALGRIND) {
+            UCS_TEST_SKIP_R("skipping on valgrind");
+        }
+
         ucs_log_cleanup();
         push_config();
         snprintf(logfile, sizeof(logfile), "/tmp/gtest_ucs_log.%d", getpid()); 
