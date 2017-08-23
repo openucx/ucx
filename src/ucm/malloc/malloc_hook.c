@@ -600,6 +600,26 @@ static void ucm_malloc_install_optional_symbols()
     }
 }
 
+static void ucm_malloc_install_mallopt()
+{
+    /* copy values of M_MMAP_THRESHOLD and M_TRIM_THRESHOLD
+     * if they were overriden by the user
+     */
+    char *p;
+
+    p = getenv("MALLOC_TRIM_THRESHOLD_");
+    if (p) {
+        ucs_debug("set trim_thresh to %d", atoi(p));
+        ucm_dlmallopt(M_TRIM_THRESHOLD, atoi(p));
+    }
+
+    p = getenv("MALLOC_MMAP_THRESHOLD_");
+    if (p) {
+        ucs_debug("set mmap_thresh to %d", atoi(p));
+        ucm_dlmallopt(M_MMAP_THRESHOLD, atoi(p));
+    }
+}
+
 ucs_status_t ucm_malloc_install(int events)
 {
     ucs_status_t status;
@@ -683,6 +703,7 @@ ucs_status_t ucm_malloc_install(int events)
 
 out_install_opt_syms:
     ucm_malloc_install_optional_symbols();
+    ucm_malloc_install_mallopt();
 out_succ:
     status = UCS_OK;
 out_unlock:

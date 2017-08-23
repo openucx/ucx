@@ -387,3 +387,43 @@ UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
     ucm_unset_event_handler(UCM_EVENT_VM_UNMAPPED, mem_event_callback,
                             reinterpret_cast<void*>(this));
 }
+
+extern "C" { int ucm_dlmallopt_get(int); };
+UCS_TEST_F(malloc_hook_cplusplus, mallopt) {
+
+    int v;
+    char *p;
+
+    /* This test can not be run with the other
+     * tests because it assumes that malloc hooks
+     * are not initialized
+     */
+    if (getenv("UCX_GTEST_MALLOPT") == NULL) {
+        UCS_TEST_SKIP;
+    }
+
+    /* make sure that rcache is explicitly disabled so
+     * that the malloc hooks are installed after the setenv()
+     */
+    p = getenv("UCX_IB_RCACHE");
+    if (p == NULL || p[0] != 'n') {
+        UCS_TEST_SKIP_R("rcache must be disabled");
+    }
+
+    setenv("MALLOC_TRIM_THRESHOLD_", "12345", 1);
+    setenv("MALLOC_MMAP_THRESHOLD_", "425364", 1);
+
+    ucs_status_t result = ucm_set_event_handler(UCM_EVENT_VM_UNMAPPED,
+                                                0, mem_event_callback,
+                                                reinterpret_cast<void*>(this));
+    ASSERT_UCS_OK(result);
+
+    v = ucm_dlmallopt_get(M_TRIM_THRESHOLD);
+    EXPECT_EQ(12345, v);
+
+    v = ucm_dlmallopt_get(M_MMAP_THRESHOLD);
+    EXPECT_EQ(425364, v);
+
+    ucm_unset_event_handler(UCM_EVENT_VM_UNMAPPED, mem_event_callback,
+                            reinterpret_cast<void*>(this));
+}
