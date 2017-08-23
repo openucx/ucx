@@ -135,6 +135,10 @@ public:
         return *m_entities.back();
     }
 
+    T& e(size_t idx) {
+        return m_entities.at(idx);
+    }
+
     bool is_loopback() {
         return &sender() == &receiver();
     }

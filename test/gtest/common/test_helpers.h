@@ -267,7 +267,7 @@ public:
     }
 
     handle(const T& value, dtor_t dtor) : m_initialized(true), m_value(value), m_dtor(dtor) {
-        ucs_assert(value != NULL);
+        EXPECT_TRUE(value != NULL);
     }
 
     handle(const handle& other) : m_initialized(false), m_value(NULL), m_dtor(NULL) {

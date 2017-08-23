@@ -428,6 +428,7 @@ UCS_TEST_P(test_ucp_wireup, connect_disconnect) {
 }
 
 UCS_TEST_P(test_ucp_wireup, disconnect_nonexistent) {
+    skip_loopback();
     sender().connect(&receiver());
     sender().disconnect();
     receiver().destroy_worker();
