@@ -131,7 +131,7 @@ void ucp_test::wait(void *req, int worker_index)
     ucs_status_t status;
     do {
         progress(worker_index);
-        status = ucp_request_test(req);
+        status = ucp_request_check_status(req);
     } while (status == UCS_INPROGRESS);
     ASSERT_UCS_OK(status);
     ucp_request_release(req);

@@ -159,7 +159,7 @@ struct ucp_request {
             ucp_tag_t             tag_mask; /* Expected tag mask */
             uint64_t              sn;       /* Tag match sequence */
             ucp_tag_recv_callback_t cb;     /* Completion callback */
-            ucp_tag_info_t        info;     /* Completion info to fill */
+            ucp_tag_recv_info_t   info;     /* Completion info to fill */
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
             ucp_mem_desc_t        *rdesc;

@@ -25,10 +25,10 @@ public:
      * */
     void test_send_probe (size_t s_size, size_t r_size, bool is_sync,
                           int is_recv_msg) {
-        ucp_tag_info      info;
-        ucp_tag_message_h message;
-        request           *send_req = NULL;
-        request           *recv_req = NULL;
+        ucp_tag_recv_info_t info;
+        ucp_tag_message_h   message;
+        request             *send_req = NULL;
+        request             *recv_req = NULL;
 
         std::vector<char> sendbuf(s_size, 0);
         std::vector<char> recvbuf(r_size, 0);
@@ -91,7 +91,7 @@ public:
     int probe_all(std::string &recvbuf)
     {
         ucp_tag_message_h   message;
-        ucp_tag_info_t      info;
+        ucp_tag_recv_info_t info;
         request             *req;
 
         int count = 0;
@@ -130,7 +130,7 @@ UCS_TEST_P(test_ucp_tag_probe, send_medium_msg_probe_truncated, "RNDV_THRESH=104
 
 UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
     static const size_t size = 1148576;
-    ucp_tag_info_t      info;
+    ucp_tag_recv_info_t info;
     ucp_tag_message_h   message;
     request             *my_send_req, *my_recv_req;
 
@@ -203,8 +203,8 @@ UCS_TEST_P(test_ucp_tag_probe, send_2_msg_probe, "RNDV_THRESH=inf") {
     /*
      * probe in order: 1, 2
      */
-    ucp_tag_message_h message1, message2;
-    ucp_tag_info      info;
+    ucp_tag_message_h   message1, message2;
+    ucp_tag_recv_info_t info;
     do {
         progress();
         message1 = ucp_tag_probe_nb(receiver().worker(), TAG, 0xffff, 1, &info);
@@ -258,7 +258,7 @@ UCS_TEST_P(test_ucp_tag_probe, limited_probe_size) {
     static const int COUNT = 1000;
     std::string sendbuf, recvbuf;
     std::vector<request*> reqs;
-    ucp_tag_info_t info;
+    ucp_tag_recv_info_t info;
     request *req;
     int recvd;
 

@@ -226,7 +226,7 @@ void test_ucp_tag_xfer::test_xfer_probe(bool send_contig, bool recv_contig,
     uint8_t             *recvbuf = NULL;
     ucp_datatype_t      send_dt, recv_dt;
     ucp_tag_message_h   message;
-    ucp_tag_info        info;
+    ucp_tag_recv_info_t info;
     request             *rreq, *sreq;
 
     if (&sender() == &receiver()) {

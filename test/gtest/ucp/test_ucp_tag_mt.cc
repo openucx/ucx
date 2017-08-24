@@ -53,9 +53,9 @@ public:
 
 UCS_TEST_P(test_ucp_tag_mt, send_recv) {
     int i;
-    uint64_t       send_data[MT_TEST_NUM_THREADS] GTEST_ATTRIBUTE_UNUSED_;
-    uint64_t       recv_data[MT_TEST_NUM_THREADS] GTEST_ATTRIBUTE_UNUSED_;
-    ucp_tag_info_t info[MT_TEST_NUM_THREADS] GTEST_ATTRIBUTE_UNUSED_;
+    uint64_t            send_data[MT_TEST_NUM_THREADS] GTEST_ATTRIBUTE_UNUSED_;
+    uint64_t            recv_data[MT_TEST_NUM_THREADS] GTEST_ATTRIBUTE_UNUSED_;
+    ucp_tag_recv_info_t info[MT_TEST_NUM_THREADS] GTEST_ATTRIBUTE_UNUSED_;
 
     for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
         send_data[i] = 0xdeadbeefdeadbeef + 10 * i;

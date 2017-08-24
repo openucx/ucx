@@ -289,7 +289,7 @@ protected:
     void wait_err();
     ucs_status_t wait_req(void *req);
     static void rcomplete_cb(void *req, ucs_status_t status,
-                             ucp_tag_info_t *info);
+                             ucp_tag_recv_info_t *info);
     static void scomplete_cb(void *req, ucs_status_t status);
     void smoke_test(size_t idx);
 
@@ -406,14 +406,14 @@ ucs_status_t test_ucp_peer_failure_2pairs::wait_req(void *req)
     ucs_status_t status;
     do {
         progress();
-        status = ucp_request_test(req);
+        status = ucp_request_check_status(req);
     } while (status == UCS_INPROGRESS);
     ucp_request_release(req);
     return status;
 }
 
 void test_ucp_peer_failure_2pairs::rcomplete_cb(void *req, ucs_status_t status,
-                                                ucp_tag_info_t *info)
+                                                ucp_tag_recv_info_t *info)
 {
 }
 

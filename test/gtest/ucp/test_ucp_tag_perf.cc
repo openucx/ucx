@@ -49,7 +49,7 @@ double test_ucp_tag_perf::check_perf(size_t count, bool is_exp)
             wait_and_validate(rreq);
         }
     } else {
-        ucp_tag_info_t info;
+        ucp_tag_recv_info_t info;
 
         send_b(NULL, 0, DATATYPE, 0xdeadbeef);
         do_sends(count);

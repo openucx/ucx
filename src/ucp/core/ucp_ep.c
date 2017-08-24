@@ -631,7 +631,7 @@ void ucp_ep_destroy(ucp_ep_h ep)
     } else {
         do {
             ucp_worker_progress(worker);
-            status = ucp_request_test(request);
+            status = ucp_request_check_status(request);
         } while (status == UCS_INPROGRESS);
         ucp_request_release(request);
     }

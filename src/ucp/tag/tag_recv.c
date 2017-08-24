@@ -24,7 +24,7 @@ ucp_tag_unexp_list_next(ucp_recv_desc_t *rdesc, int i_list)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
                      ucp_datatype_t datatype, ucp_tag_t tag, uint64_t tag_mask,
-                     ucp_request_t *req, ucp_tag_info_t *info,
+                     ucp_request_t *req, ucp_tag_recv_info_t *info,
                      ucp_tag_recv_callback_t cb, ucp_recv_desc_t *first_rdesc,
                      unsigned *save_rreq)
 {
@@ -155,7 +155,7 @@ ucp_tag_recv_request_init(ucp_request_t *req, ucp_worker_h worker, void* buffer,
 
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
-                               ucp_tag_info_t *info, const char *function)
+                               ucp_tag_recv_info_t *info, const char *function)
 {
     ucs_trace_req("%s returning completed request %p (%p) stag 0x%"PRIx64" len %zu, %s",
                   function, req, req + 1, info->sender_tag, info->length,

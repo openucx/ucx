@@ -86,7 +86,7 @@ void test_ucp_tag::send_callback(void *request, ucs_status_t status)
 }
 
 void test_ucp_tag::recv_callback(void *request, ucs_status_t status,
-                                 ucp_tag_info_t *info)
+                                 ucp_tag_recv_info_t *info)
 {
     struct request *req = (struct request *)request;
     ucs_assert(req->completed == false);
@@ -107,12 +107,12 @@ void test_ucp_tag::wait(request *req, int buf_index)
     }
 
     if (GetParam().variant == RECV_REQ_EXTERNAL) {
-        ucp_tag_info_t  tag_info;
-        ucs_status_t    status = ucp_tag_request_test(req, &tag_info);
+        ucp_tag_recv_info_t tag_info;
+        ucs_status_t        status = ucp_request_test(req, &tag_info);
 
         while (status == UCS_INPROGRESS) {
             progress(worker_index);
-            status = ucp_tag_request_test(req, &tag_info);
+            status = ucp_request_test(req, &tag_info);
         }
         if (req->external) {
             recv_callback(req, status, &tag_info);
@@ -252,7 +252,7 @@ test_ucp_tag::recv_cb_nb(void *buffer, size_t count, ucp_datatype_t dt,
 
 ucs_status_t
 test_ucp_tag::recv_b(void *buffer, size_t count, ucp_datatype_t dt, ucp_tag_t tag,
-                     ucp_tag_t tag_mask, ucp_tag_info_t *info, int buf_index)
+                     ucp_tag_t tag_mask, ucp_tag_recv_info_t *info, int buf_index)
 {
     return (GetParam().variant == RECV_REQ_EXTERNAL) ?
                     recv_req_b(buffer, count, dt, tag, tag_mask, info, buf_index) :
@@ -261,7 +261,7 @@ test_ucp_tag::recv_b(void *buffer, size_t count, ucp_datatype_t dt, ucp_tag_t ta
 
 ucs_status_t test_ucp_tag::recv_cb_b(void *buffer, size_t count, ucp_datatype_t datatype,
                                      ucp_tag_t tag, ucp_tag_t tag_mask,
-                                     ucp_tag_info_t *info, int buf_index)
+                                     ucp_tag_recv_info_t *info, int buf_index)
 {
     ucs_status_t status;
     request *req;
@@ -290,7 +290,7 @@ ucs_status_t test_ucp_tag::recv_cb_b(void *buffer, size_t count, ucp_datatype_t 
 
 ucs_status_t test_ucp_tag::recv_req_b(void *buffer, size_t count, ucp_datatype_t datatype,
                                       ucp_tag_t tag, ucp_tag_t tag_mask,
-                                      ucp_tag_info_t *info, int buf_index)
+                                      ucp_tag_recv_info_t *info, int buf_index)
 {
     int worker_index = 0;
     if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {

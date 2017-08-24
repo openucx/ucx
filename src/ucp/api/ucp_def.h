@@ -18,7 +18,7 @@
  * @ingroup UCP_CONTEXT
  * @brief Forward declarations
  */
-typedef struct ucp_tag_info             ucp_tag_info_t;
+typedef struct ucp_tag_recv_info             ucp_tag_recv_info_t;
 
 
 /**
@@ -384,7 +384,7 @@ typedef void (*ucp_stream_recv_callback_t)(void *request, ucs_status_t status,
  *                        UCS_OK.
  */
 typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
-                                        ucp_tag_info_t *info);
+                                        ucp_tag_recv_info_t *info);
 
 /**
  * @ingroup UCP_WORKER
