@@ -248,7 +248,7 @@ ucs_open_output_stream(const char *config_str, ucs_log_level_t err_log_level,
         *p_fstream    = stderr;
         *p_need_close = 0;
         *p_next_token = config_str + len;
-} else {
+    } else {
         if (!strncmp(config_str, "file:", 5)) {
             p = config_str + 5;
         } else {
