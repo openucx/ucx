@@ -2047,6 +2047,11 @@ ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,
  *                                application is responsible to release the
  *                                handle using @ref ucp_stream_data_release
  *                                "ucp_stream_data_release()" routine.
+ *
+ * @note In some cases, this function allows to avoid extra memory coping
+ *       (in comparison with @ref ucp_stream_recv_nb) when received data may be
+ *       processed directly from returned buffer without placement to user
+ *       buffer.
  */
 ucs_status_ptr_t ucp_stream_recv_data_nb(ucp_ep_h ep, size_t *length);
 
