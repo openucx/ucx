@@ -42,6 +42,7 @@ libucxperf_la_LDFLAGS = \
 	$(OPENMP_CFLAGS)
 libucxperf_la_CXXFLAGS = \
 	-nostdlib -fno-exceptions -fno-rtti \
+	$(BASE_CXXFLAGS) \
 	$(OPENMP_CFLAGS)
 libucxperf_la_CFLAGS = \
 	$(BASE_CFLAGS) \
