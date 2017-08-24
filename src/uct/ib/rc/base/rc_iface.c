@@ -751,3 +751,41 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
 
     return UCS_OK;
 }
+
+ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    int arm_rx_solicited, arm_rx_all;
+    ucs_status_t status;
+
+    status = uct_ib_iface_pre_arm(&iface->super);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (events & UCT_EVENT_SEND_COMP) {
+        status = iface->super.ops->arm_tx_cq(&iface->super);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    arm_rx_solicited = 0;
+    arm_rx_all       = 0;
+    if (events & UCT_EVENT_RECV_AM) {
+        arm_rx_solicited = 1; /* to wake up on active messages */
+    }
+    if ((events & UCT_EVENT_SEND_COMP) && iface->config.fc_enabled) {
+        arm_rx_all       = 1; /* to  wake up on FC grants */
+    }
+
+    if (arm_rx_solicited || arm_rx_all) {
+        status = iface->super.ops->arm_rx_cq(&iface->super,
+                                             arm_rx_solicited && !arm_rx_all);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
+}

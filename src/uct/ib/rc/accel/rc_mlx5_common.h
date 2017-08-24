@@ -219,7 +219,7 @@ done:
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                              uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
-                             uint8_t opcode, uint8_t opmod, unsigned sig_flag,
+                             uint8_t opcode, uint8_t opmod, uint8_t fm_ce_se,
                              size_t wqe_size, uct_ib_mlx5_base_av_t *av,
                              uint32_t imm)
 {
@@ -230,10 +230,11 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
 
     if (opcode == MLX5_OPCODE_SEND_IMM) {
         uct_ib_mlx5_set_ctrl_seg_with_imm(ctrl, txwq->sw_pi, opcode, opmod,
-                                          txqp->qp->qp_num, sig_flag, wqe_size, imm);
+                                          txqp->qp->qp_num, fm_ce_se, wqe_size,
+                                          imm);
     } else {
-        uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, opcode, opmod, txqp->qp->qp_num,
-                                 sig_flag, wqe_size);
+        uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, opcode, opmod,
+                                 txqp->qp->qp_num, fm_ce_se, wqe_size);
     }
 
     if (qp_type == IBV_EXP_QPT_DC_INI) {
@@ -245,11 +246,11 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                        uct_rc_ep_am_packet_dump : NULL);
 
     posted = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size);
-    if (sig_flag & MLX5_WQE_CTRL_CQ_UPDATE) {
+    if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
         txwq->sig_pi = txwq->sw_pi - posted;
     }
 
-    uct_rc_txqp_posted(txqp, iface, posted, sig_flag & MLX5_WQE_CTRL_CQ_UPDATE);
+    uct_rc_txqp_posted(txqp, iface, posted, fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE);
 }
 
 
@@ -275,8 +276,8 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                              unsigned opcode, const void *buffer, unsigned length,
                   /* SEND */ uint8_t am_id, uint64_t am_hdr, uint32_t imm_val_be,
                   /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
-                  /* AV   */ uct_ib_mlx5_base_av_t *av, size_t av_size
-                             )
+                  /* AV   */ uct_ib_mlx5_base_av_t *av, size_t av_size,
+                             unsigned fm_ce_se)
 {
     struct mlx5_wqe_ctrl_seg     *ctrl;
     struct mlx5_wqe_raddr_seg    *raddr;
@@ -284,7 +285,6 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     uct_rc_am_short_hdr_t        *am;
     uct_rc_hdr_t                 *rc_hdr;
     size_t wqe_size, ctrl_av_size;
-    unsigned sig_flag;
     void *next_seg;
 
     ctrl         = txwq->curr;
@@ -303,7 +303,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
         am->rc_hdr.am_id = am_id;
         am->am_hdr       = am_hdr;
         uct_ib_mlx5_inline_copy(am + 1, buffer, length, txwq);
-        sig_flag         = uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
+        fm_ce_se        |= uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
         break;
 
     case MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_RAW:
@@ -313,7 +313,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
         inl->byte_count  = htonl(sizeof(*rc_hdr) | MLX5_INLINE_SEG);
         rc_hdr           = (void*)(inl + 1);
         rc_hdr->am_id    = am_id;
-        sig_flag         = uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
+        fm_ce_se        |= uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
         break;
 
     case MLX5_OPCODE_RDMA_WRITE:
@@ -328,7 +328,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
         inl              = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
         inl->byte_count  = htonl(length | MLX5_INLINE_SEG);
         uct_ib_mlx5_inline_copy(inl + 1, buffer, length, txwq);
-        sig_flag         = MLX5_WQE_CTRL_CQ_UPDATE;
+        fm_ce_se        |= MLX5_WQE_CTRL_CQ_UPDATE;
         break;
 
     case MLX5_OPCODE_NOP:
@@ -336,14 +336,14 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
         wqe_size         = sizeof(*ctrl) + av_size;
         inl              = next_seg;
         inl->byte_count  = htonl(MLX5_INLINE_SEG);
-        sig_flag         = MLX5_WQE_CTRL_CQ_UPDATE | MLX5_WQE_CTRL_FENCE;
+        fm_ce_se        |= MLX5_WQE_CTRL_CQ_UPDATE | MLX5_WQE_CTRL_FENCE;
         break;
 
     default:
         ucs_fatal("invalid send opcode");
     }
 
-    uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq, opcode, 0, sig_flag,
+    uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq, opcode, 0, fm_ce_se,
                                  wqe_size, av, imm_val_be);
 }
 
@@ -375,7 +375,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                            /* RDMA/ATOMIC */ uint64_t remote_addr, uct_rkey_t rkey,
                            /* ATOMIC */ uint64_t compare_mask, uint64_t compare, uint64_t swap_add,
                            /* AV   */ uct_ib_mlx5_base_av_t *av, size_t av_size,
-                           int signal)
+                           uint8_t fm_ce_se)
 {
     struct mlx5_wqe_ctrl_seg                     *ctrl;
     struct mlx5_wqe_raddr_seg                    *raddr;
@@ -390,10 +390,8 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     uint8_t opmod;
     void *next_seg;
 
-    if (!signal) {
-        signal = uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
-    } else {
-        ucs_assert(signal == MLX5_WQE_CTRL_CQ_UPDATE);
+    if (!(fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE)) {
+        fm_ce_se |= uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
     }
 
     opmod         = 0;
@@ -535,7 +533,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq,
                                  (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
-                                 opmod, signal, wqe_size, av, 0);
+                                 opmod, fm_ce_se, wqe_size, av, 0);
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -546,7 +544,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, enum ibv_qp_type qp_t
                          /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
                          /* RDMA */ uint64_t remote_addr, uct_rkey_t rkey,
                          /* AV   */ uct_ib_mlx5_base_av_t *av, size_t av_size,
-                                    int signal)
+                                    uint8_t fm_ce_se)
 {
     struct mlx5_wqe_ctrl_seg     *ctrl;
     struct mlx5_wqe_raddr_seg    *raddr;
@@ -556,10 +554,8 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, enum ibv_qp_type qp_t
     unsigned                      wqe_size, inl_seg_size, ctrl_av_size;
     void                         *next_seg;
 
-    if (!signal) {
-        signal = uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
-    } else {
-        ucs_assert(signal == MLX5_WQE_CTRL_CQ_UPDATE);
+    if (!(fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE)) {
+        fm_ce_se |= uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
     }
 
     ctrl         = txwq->curr;
@@ -609,8 +605,8 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, enum ibv_qp_type qp_t
     }
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq,
-                                 (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
-                                 0, signal, wqe_size, av, 0);
+                                 opcode_flags & UCT_RC_MLX5_OPCODE_MASK,
+                                 0, fm_ce_se, wqe_size, av, 0);
 }
 
 #endif

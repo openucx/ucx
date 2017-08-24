@@ -21,7 +21,7 @@ uct_rc_mlx5_txqp_bcopy_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_m
                             unsigned opcode, unsigned length,
                             /* SEND */ uint8_t am_id, void *am_hdr, unsigned am_hdr_len,
                             /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
-                            int force_sig, uct_rc_iface_send_desc_t *desc)
+                            uint8_t fm_ce_se, uct_rc_iface_send_desc_t *desc)
 {
     desc->super.sn = txwq->sw_pi;
     uct_rc_mlx5_txqp_dptr_post(iface, IBV_QPT_RC, txqp, txwq,
@@ -29,7 +29,8 @@ uct_rc_mlx5_txqp_bcopy_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_m
                                am_id, am_hdr, am_hdr_len,
                                rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
                                0, 0, 0,
-                               NULL, 0, force_sig);
+                               NULL, 0,
+                               fm_ce_se);
     uct_rc_txqp_add_send_op(txqp, &desc->super);
 }
 
@@ -137,7 +138,7 @@ ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsign
                                  MLX5_OPCODE_RDMA_WRITE,
                                  buffer, length, 0, 0, 0,
                                  remote_addr, uct_ib_md_direct_rkey(rkey),
-                                 NULL, 0);
+                                 NULL, 0, 0);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     return UCS_OK;
 }
@@ -242,8 +243,8 @@ ucs_status_t uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                  MLX5_OPCODE_SEND,
                                  payload, length,
                                  id, hdr, 0,
-                                 0, 0,
-                                 NULL, 0);
+                                 0, 0, NULL, 0,
+                                 MLX5_WQE_CTRL_SOLICITED);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     UCT_RC_UPDATE_FC(iface, &ep->super, id);
     return UCS_OK;
@@ -267,7 +268,7 @@ ssize_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     uct_rc_mlx5_txqp_bcopy_post(iface, &ep->super.txqp, &ep->tx.wq,
                                 MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_RAW,
                                 sizeof(uct_rc_hdr_t) + length, 0, NULL, 0, 0, 0,
-                                0, desc);
+                                MLX5_WQE_CTRL_SOLICITED, desc);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     UCT_RC_UPDATE_FC(iface, &ep->super, id);
     return length;
@@ -289,7 +290,8 @@ ucs_status_t uct_rc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
     UCT_RC_CHECK_FC(iface, &ep->super, id);
 
     status = uct_rc_mlx5_ep_zcopy_post(ep, MLX5_OPCODE_SEND, iov, iovcnt,
-                                       id, header, header_length, 0, 0, 0, comp);
+                                       id, header, header_length, 0, 0,
+                                       MLX5_WQE_CTRL_SOLICITED, comp);
     if (ucs_likely(status >= 0)) {
         UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY,
                           header_length + uct_iov_total_length(iov, iovcnt));
@@ -392,8 +394,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                      &ep->super.txqp, &ep->tx.wq,
                                      MLX5_OPCODE_NOP, NULL, 0,
                                      0, 0, 0,
-                                     0, 0,
-                                     NULL, 0);
+                                     0, 0, NULL, 0, 0);
     } else {
         sn = ep->tx.wq.sig_pi;
     }
@@ -419,8 +420,7 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                  MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_RAW,
                                  NULL, 0,
                                  UCT_RC_EP_FC_PURE_GRANT, 0, 0,
-                                 0, 0,
-                                 NULL, 0);
+                                 0, 0, NULL, 0, 0);
     return UCS_OK;
 }
 
