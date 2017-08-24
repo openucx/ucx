@@ -670,8 +670,9 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
         wr.ex.imm_data                        = iface->super.rx.dct->dct_num;
 
         dc_verbs_ep = ucs_derived_of(dc_ep, uct_dc_verbs_ep_t);
-        uct_dc_verbs_iface_post_send(iface, dc_verbs_ep, &wr, IBV_SEND_INLINE |
-                                     IBV_SEND_SIGNALED);
+        uct_dc_verbs_iface_post_send(iface, dc_verbs_ep, &wr,
+                                     IBV_SEND_INLINE | IBV_SEND_SIGNALED |
+                                     IBV_SEND_SOLICITED) ;
         UCS_STATS_UPDATE_COUNTER(dc_ep->fc.stats,
                                  UCT_RC_FC_STAT_TX_HARD_REQ, 1);
     }
@@ -762,7 +763,7 @@ static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_dc_verbs_iface_progress,
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
-    .iface_event_arm          = uct_ib_iface_event_arm,
+    .iface_event_arm          = uct_rc_iface_event_arm,
     .iface_event_clear        = uct_ib_iface_event_clear,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t),
     .iface_query              = uct_dc_verbs_iface_query,

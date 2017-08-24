@@ -866,7 +866,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_tag_rndv_request      = uct_rc_verbs_ep_tag_rndv_request,
 #endif
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
-    .iface_event_arm          = uct_ib_iface_event_arm,
+    .iface_event_arm          = uct_rc_iface_event_arm,
     .iface_event_clear        = uct_ib_iface_event_clear,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_iface_t),
     .iface_query              = uct_rc_verbs_iface_query,
