@@ -257,16 +257,26 @@ class ptr_vector<void> : public ptr_vector_base<void> {
 /**
  * Safely wraps C handles
  */
-template <typename T>
+template <typename T, typename ArgT = void *>
 class handle {
 public:
     typedef T handle_type;
     typedef void (*dtor_t)(T handle);
+    typedef void (*dtor2_t)(T handle, ArgT arg);
 
     handle() : m_initialized(false), m_value(NULL), m_dtor(NULL) {
     }
 
-    handle(const T& value, dtor_t dtor) : m_initialized(true), m_value(value), m_dtor(dtor) {
+    handle(const T& value, dtor_t dtor) : m_initialized(true), m_value(value),
+                                          m_dtor(dtor), m_dtor_with_arg(NULL),
+                                          m_dtor_arg(NULL) {
+        EXPECT_TRUE(value != NULL);
+    }
+
+    handle(const T& value, dtor2_t dtor, ArgT *arg) :
+        m_initialized(true), m_value(value), m_dtor(NULL),
+        m_dtor_with_arg(dtor), m_dtor_arg(arg)
+    {
         EXPECT_TRUE(value != NULL);
     }
 
@@ -295,7 +305,21 @@ public:
         }
         m_value = value;
         m_dtor  = dtor;
-        m_initialized = true;
+        m_dtor_with_arg = NULL;
+        m_dtor_arg      = NULL;
+        m_initialized   = true;
+    }
+
+    void reset(const T& value, dtor2_t dtor, ArgT arg) {
+        reset();
+        if (value == NULL) {
+            throw std::invalid_argument("value cannot be NULL");
+        }
+        m_value = value;
+        m_dtor  = NULL;
+        m_dtor_with_arg = dtor;
+        m_dtor_arg      = arg;
+        m_initialized   = true;
     }
 
     const handle& operator=(const handle& other) {
@@ -322,13 +346,20 @@ public:
 private:
 
     void release() {
-        m_dtor(m_value);
+        if (m_dtor) {
+            m_dtor(m_value);
+        } else {
+            m_dtor_with_arg(m_value, m_dtor_arg);
+        }
+
         m_initialized = false;
     }
 
     mutable bool   m_initialized;
     T              m_value;
     dtor_t         m_dtor;
+    dtor2_t        m_dtor_with_arg;
+    ArgT           m_dtor_arg;
 };
 
 #define UCS_TEST_CREATE_HANDLE(_t, _handle, _dtor, _ctor, ...) \

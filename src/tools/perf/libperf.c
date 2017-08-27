@@ -853,16 +853,35 @@ static void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
 static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf,
                                       unsigned group_size)
 {
+    ucs_status_ptr_t    *reqs;
+    ucp_tag_recv_info_t info;
+    ucs_status_t        status;
     unsigned i;
+
+    reqs = calloc(sizeof(reqs), group_size);
 
     for (i = 0; i < group_size; ++i) {
         if (perf->ucp.peers[i].rkey != NULL) {
             ucp_rkey_destroy(perf->ucp.peers[i].rkey);
         }
         if (perf->ucp.peers[i].ep != NULL) {
-            ucp_ep_destroy(perf->ucp.peers[i].ep);
+            reqs[i] = ucp_disconnect_nb(perf->ucp.peers[i].ep);
         }
     }
+
+    for (i = 0; i < group_size; ++i) {
+        if (!UCS_PTR_IS_PTR(reqs[i])) {
+            continue;
+        }
+
+        do {
+            ucp_worker_progress(perf->ucp.worker);
+            status = ucp_request_test(reqs[i], &info);
+        } while (status == UCS_INPROGRESS);
+        ucp_request_release(reqs[i]);
+    }
+
+    free(reqs);
     free(perf->ucp.peers);
 }
 
