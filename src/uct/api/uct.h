@@ -1233,12 +1233,13 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  * @ingroup UCT_RESOURCE
  * @brief Initiate a client-server connection to a remote peer.
  *
- * requires @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
- *
  * This routine will create an endpoint for a connection to the remote peer,
  * specified by its socket address.
  * The user may provide private data to be sent on a connection request to the
  * remote peer.
+ *
+ * @note The interface in this routine requires the
+ * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
  *
  * @param [in]  iface            Interface to create the endpoint on.
  * @param [in]  sockaddr         The sockaddr to connect to on the remote peer.
