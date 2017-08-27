@@ -56,6 +56,8 @@ ucs_status_t ucp_proto_progress_rndv_get_zcopy(uct_pending_req_t *self);
 ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
                                   unsigned tl_flags);
 
+size_t ucp_tag_rndv_pack_rkey(ucp_request_t *sreq, ucp_lane_index_t lane,
+                              void *rkey_buf, uint16_t *flag);
 
 static inline size_t ucp_rndv_total_len(ucp_rndv_rts_hdr_t *hdr)
 {

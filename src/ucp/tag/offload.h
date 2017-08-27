@@ -17,6 +17,7 @@
 typedef struct ucp_sw_rndv_hdr {
     ucp_request_hdr_t super;
     size_t            length;
+    uint16_t          flags;
 } UCS_S_PACKED ucp_sw_rndv_hdr_t;
 
 /**
