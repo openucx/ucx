@@ -79,5 +79,7 @@ rm -f %{buildroot}%{_libdir}/*.la
 %postun -p /sbin/ldconfig
 
 %changelog
+* Mon Aug 21 2017 Andrey Maslennikov <andreyma@mellanox.com> 1.2.1-1
+- Spec file now complies with Fedora guidelines
 * Mon Jul 3 2017 Andrey Maslennikov <andreyma@mellanox.com> 1.2.0-1
 - Fedora package created
