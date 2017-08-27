@@ -7,51 +7,25 @@
 extern "C" {
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
+#include <uct/ib/base/ib_md.h>
 }
 #include <common/test.h>
+#include "test_md.h"
 
-class test_md : public testing::TestWithParam<std::string>,
-                public ucs::test_base
+void* test_md::alloc_thread(void *arg)
 {
-public:
-    UCS_TEST_BASE_IMPL;
+    volatile int *stop_flag = (int*)arg;
 
-    static std::vector<std::string> enum_mds(const std::string& mdc_name);
-
-    test_md();
-
-protected:
-    virtual void init();
-    virtual void cleanup();
-    virtual void modify_config(const std::string& name, const std::string& value,
-                               bool optional);
-    void check_caps(uint64_t flags, const std::string& name);
-
-    void test_registration();
-
-    uct_md_h pd() {
-        return m_pd;
-    }
-
-    static void* alloc_thread(void *arg)
-    {
-        volatile int *stop_flag = (int*)arg;
-
-        while (!*stop_flag) {
-            int count = ucs::rand() % 100;
-            std::vector<void*> buffers;
-            for (int i = 0; i < count; ++i) {
-                buffers.push_back(malloc(ucs::rand() % (256*1024)));
-            }
-            std::for_each(buffers.begin(), buffers.end(), free);
+    while (!*stop_flag) {
+        int count = ucs::rand() % 100;
+        std::vector<void*> buffers;
+        for (int i = 0; i < count; ++i) {
+            buffers.push_back(malloc(ucs::rand() % (256*1024)));
         }
-        return NULL;
+        std::for_each(buffers.begin(), buffers.end(), free);
     }
-
-private:
-    ucs::handle<uct_md_config_t*> m_md_config;
-    ucs::handle<uct_md_h>         m_pd;
-};
+    return NULL;
+}
 
 std::vector<std::string> test_md::enum_mds(const std::string& mdc_name) {
     static std::vector<std::string> all_pds;
@@ -139,7 +113,9 @@ UCS_TEST_P(test_md, rkey_ptr) {
     check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_RKEY_PTR, "allocation+direct access");
     // alloc (should work with both sysv and xpmem
     size = 1024 * 1024 * sizeof(unsigned);
-    status = uct_md_mem_alloc(pd(), &size, (void **)&rva, 0, "test", &memh);
+    status = uct_md_mem_alloc(pd(), &size, (void **)&rva,
+                              UCT_MD_MEM_ACCESS_ALL,
+                              "test", &memh);
     ASSERT_UCS_OK(status);
     EXPECT_LE(1024 * 1024 * sizeof(unsigned), size);
 
@@ -202,7 +178,8 @@ UCS_TEST_P(test_md, alloc) {
             continue;
         }
 
-        status = uct_md_mem_alloc(pd(), &size, &address, 0, "test", &memh);
+        status = uct_md_mem_alloc(pd(), &size, &address,
+                                  UCT_MD_MEM_ACCESS_ALL, "test", &memh);
         EXPECT_GT(size, 0ul);
 
         ASSERT_UCS_OK(status);
@@ -234,7 +211,8 @@ UCS_TEST_P(test_md, reg) {
 
         memset(address, 0xBB, size);
 
-        status = uct_md_mem_reg(pd(), address, size, 0, &memh);
+        status = uct_md_mem_reg(pd(), address, size, UCT_MD_MEM_ACCESS_ALL,
+                                &memh);
 
         ASSERT_UCS_OK(status);
         ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
@@ -265,7 +243,8 @@ UCS_TEST_P(test_md, reg_perf) {
         unsigned n = 0;
         while (n < count) {
             uct_mem_h memh;
-            status = uct_md_mem_reg(pd(), ptr, size, 0, &memh);
+            status = uct_md_mem_reg(pd(), ptr, size, UCT_MD_MEM_ACCESS_ALL,
+                                    &memh);
             ASSERT_UCS_OK(status);
             ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
@@ -300,7 +279,9 @@ UCS_TEST_P(test_md, reg_advise) {
     address = malloc(size);
     ASSERT_TRUE(address != NULL);
 
-    status = uct_md_mem_reg(pd(), address, size, UCT_MD_MEM_FLAG_NONBLOCK, &memh);
+    status = uct_md_mem_reg(pd(), address, size,
+                            UCT_MD_MEM_FLAG_NONBLOCK|UCT_MD_MEM_ACCESS_ALL,
+                            &memh);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
@@ -322,7 +303,10 @@ UCS_TEST_P(test_md, alloc_advise) {
 
     orig_size = size = 128 * 1024 * 1024;
 
-    status = uct_md_mem_alloc(pd(), &size, &address, UCT_MD_MEM_FLAG_NONBLOCK, "test", &memh);
+    status = uct_md_mem_alloc(pd(), &size, &address,
+                              UCT_MD_MEM_FLAG_NONBLOCK|
+                              UCT_MD_MEM_ACCESS_ALL,
+                              "test", &memh);
     ASSERT_UCS_OK(status);
     EXPECT_GE(size, orig_size);
     EXPECT_TRUE(address != NULL);
@@ -356,7 +340,10 @@ UCS_TEST_P(test_md, reg_multi_thread) {
         ASSERT_TRUE(buffer != NULL);
 
         uct_mem_h memh;
-        status = uct_md_mem_reg(pd(), buffer, size, UCT_MD_MEM_FLAG_NONBLOCK, &memh);
+        status = uct_md_mem_reg(pd(), buffer, size,
+                                UCT_MD_MEM_FLAG_NONBLOCK|
+                                UCT_MD_MEM_ACCESS_ALL,
+                                &memh);
         ASSERT_UCS_OK(status, << " buffer=" << buffer << " size=" << size);
         ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
@@ -371,9 +358,8 @@ UCS_TEST_P(test_md, reg_multi_thread) {
     pthread_join(thread_id, NULL);
 }
 
-
-#define UCT_PD_INSTANTIATE_TEST_CASE(_test_case) \
-    UCS_PP_FOREACH(_UCT_PD_INSTANTIATE_TEST_CASE, _test_case, \
+#define UCT_MD_INSTANTIATE_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, \
                    knem, \
                    cma, \
                    posix, \
@@ -384,8 +370,6 @@ UCS_TEST_P(test_md, reg_multi_thread) {
                    ib, \
                    ugni \
                    )
-#define _UCT_PD_INSTANTIATE_TEST_CASE(_test_case, _mdc_name) \
-    INSTANTIATE_TEST_CASE_P(_mdc_name, _test_case, \
-                            testing::ValuesIn(_test_case::enum_mds(#_mdc_name)));
 
-UCT_PD_INSTANTIATE_TEST_CASE(test_md)
+UCT_MD_INSTANTIATE_TEST_CASE(test_md)
+

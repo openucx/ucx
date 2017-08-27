@@ -106,6 +106,7 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
 
     flags = (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
                     UCT_MD_MEM_FLAG_NONBLOCK : 0;
+    flags |= UCT_MD_MEM_ACCESS_ALL;
 
     /* Allocate send buffer memory */
     status = uct_iface_mem_alloc(perf->uct.iface, 

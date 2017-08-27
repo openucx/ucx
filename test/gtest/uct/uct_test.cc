@@ -264,7 +264,8 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
     void *rkey_buffer;
 
     if (md_attr().cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
-        status = uct_iface_mem_alloc(m_iface, length, 0, alloc_name, mem);
+        status = uct_iface_mem_alloc(m_iface, length, UCT_MD_MEM_ACCESS_ALL,
+                                     alloc_name, mem);
         ASSERT_UCS_OK(status);
 
         rkey_buffer = malloc(md_attr().rkey_packed_size);
@@ -278,7 +279,8 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
         free(rkey_buffer);
     } else {
         uct_alloc_method_t method = UCT_ALLOC_METHOD_MMAP;
-        status = uct_mem_alloc(NULL, length, 0, &method, 1, NULL, 0, alloc_name,
+        status = uct_mem_alloc(NULL, length, UCT_MD_MEM_ACCESS_ALL,
+                               &method, 1, NULL, 0, alloc_name,
                                mem);
         ASSERT_UCS_OK(status);
 

@@ -38,8 +38,13 @@ typedef enum {
 
 
 enum {
-    UCT_IB_MEM_FLAG_ODP       = UCS_BIT(0),
-    UCT_IB_MEM_FLAG_ATOMIC_MR = UCS_BIT(1)
+    UCT_IB_MEM_FLAG_ODP             = UCS_BIT(0), /**< The memory region has on
+                                                       demand paging enabled */
+    UCT_IB_MEM_FLAG_ATOMIC_MR       = UCS_BIT(1), /**< The memory region has UMR
+                                                       for the atomic access */
+    UCT_IB_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(2)  /**< An atomic access was 
+                                                       requested for the memory
+                                                       region */
 };
 
 
