@@ -763,6 +763,7 @@ static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
     .iface_progress           = uct_dc_verbs_iface_progress,
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
     .iface_event_arm          = uct_ib_iface_event_arm,
+    .iface_event_clear        = uct_ib_iface_event_clear,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t),
     .iface_query              = uct_dc_verbs_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,

@@ -42,6 +42,10 @@ protected:
         ASSERT_EQ(UCS_OK, status);
     }
 
+    void clear(ucp_worker_h worker) {
+        ASSERT_EQ(UCS_OK, ucp_worker_clear_efd(worker));
+    }
+
     static size_t comp_cntr;
 };
 
@@ -87,18 +91,22 @@ UCS_TEST_P(test_ucp_wakeup, efd)
         }
         ASSERT_UCS_OK(status);
 
+        struct pollfd pollfd = { recv_efd, POLLIN };
         int ret;
         do {
-            struct pollfd pollfd;
-            pollfd.events = POLLIN;
-            pollfd.fd     = recv_efd;
             ret = poll(&pollfd, 1, -1);
         } while ((ret < 0) && (errno == EINTR));
         if (ret < 0) {
             UCS_TEST_MESSAGE << "poll() failed: " << strerror(errno);
         }
         ASSERT_EQ(1, ret);
-        EXPECT_EQ(UCS_ERR_BUSY, ucp_worker_arm(recv_worker));
+
+        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(10.0);
+        do {
+            EXPECT_EQ(UCS_OK, ucp_worker_clear_efd(recv_worker));
+            ret = poll(&pollfd, 1, 0);
+        } while ((ret != 0) && (ucs_get_time() < deadline));
+        ASSERT_EQ(0, ret);
     }
 
     ucp_request_release(req);
@@ -153,20 +161,23 @@ UCS_TEST_P(test_ucp_wakeup, signal)
 
     polled.fd = efd;
     EXPECT_EQ(0, poll(&polled, 1, 0));
+    clear(worker);
     arm(worker);
     ASSERT_UCS_OK(ucp_worker_signal(worker));
     EXPECT_EQ(1, poll(&polled, 1, 0));
+    clear(worker);
     arm(worker);
     EXPECT_EQ(0, poll(&polled, 1, 0));
 
     ASSERT_UCS_OK(ucp_worker_signal(worker));
     ASSERT_UCS_OK(ucp_worker_signal(worker));
     EXPECT_EQ(1, poll(&polled, 1, 0));
-    arm(worker);
+    clear(worker);
     EXPECT_EQ(0, poll(&polled, 1, 0));
+    arm(worker);
 
     ASSERT_UCS_OK(ucp_worker_signal(worker));
-    EXPECT_EQ(UCS_ERR_BUSY, ucp_worker_arm(worker));
+    clear(worker);
     EXPECT_EQ(UCS_OK, ucp_worker_arm(worker));
 
     close(efd);

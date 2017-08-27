@@ -1314,7 +1314,7 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
  *              continue;                 // got something uninteresting, retry
  *         }
  *
- *         // arm the worker and clean-up fd
+ *         // arm the worker
  *         status = ucp_worker_arm(worker);
  *         if (UCS_OK == status) {
  *             poll(&fds, nfds, timeout);  // wait for events
@@ -1323,6 +1323,9 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
  *         } else {
  *             abort();
  *         }
+ *
+ *         // clean-up fd
+ *         ucp_worker_clear_efd(worker);
  *     }
  * }
  * @endcode
@@ -1342,6 +1345,21 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
  * @return @ref ucs_status_t "Other" different error codes in case of issues.
  */
 ucs_status_t ucp_worker_arm(ucp_worker_h worker);
+
+
+/**
+ * @ingroup UCP_WAKEUP
+ * @brief Clear events from the worker file descriptor.
+ *
+ * This routine removes events from the worker file descriptor, so it will not
+ * be signaled any more. If this function is not called, the file descriptor
+ * remains in signaled state.
+ *
+ * @param [in]  worker    Worker to clear events on.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_worker_clear_efd(ucp_worker_h worker);
 
 
 /**

@@ -1062,6 +1062,22 @@ ucs_status_t uct_iface_event_arm(uct_iface_h iface, unsigned events);
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Clear queued events from the interface event file descriptor.
+ *
+ * This routine will remote queued events from the interface file descriptor.
+ * If this function is not called, a file descriptor which got an event will
+ * remain in signaled state.
+ *
+ * @param [in] iface       Interface to clear events from.
+ *
+ * @return ::UCS_OK        The operation completed successfully.
+ * @return @ref ucs_status_t "Other" different error codes in case of issues.
+ */
+ucs_status_t uct_iface_event_clear(uct_iface_h iface);
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Allocate memory which can be used for zero-copy communications.
  *
  * Allocate a region of memory which can be used for zero-copy data transfer or

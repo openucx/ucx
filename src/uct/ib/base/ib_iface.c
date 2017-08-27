@@ -601,6 +601,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 {
     int ret;
 
+    uct_ib_iface_event_clear(&self->super.super);
+
     ret = ibv_destroy_cq(self->recv_cq);
     if (ret != 0) {
         ucs_warn("ibv_destroy_cq(recv_cq) returned %d: %m", ret);
@@ -774,43 +776,7 @@ ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 ucs_status_t uct_ib_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
-    int res, send_cq_count, recv_cq_count;
     ucs_status_t status;
-    struct ibv_cq *cq;
-    void *cq_context;
-
-    send_cq_count = 0;
-    recv_cq_count = 0;
-    do {
-        res = ibv_get_cq_event(iface->comp_channel, &cq, &cq_context);
-        if (0 == res) {
-            if (iface->send_cq == cq) {
-                ++send_cq_count;
-            }
-            if (iface->recv_cq == cq) {
-                ++recv_cq_count;
-            }
-        }
-    } while (res == 0);
-
-    if (errno != EAGAIN) {
-        return UCS_ERR_IO_ERROR;
-    }
-
-    if (send_cq_count > 0) {
-        ibv_ack_cq_events(iface->send_cq, send_cq_count);
-    }
-
-    if (recv_cq_count > 0) {
-        ibv_ack_cq_events(iface->recv_cq, recv_cq_count);
-    }
-
-    /* avoid re-arming the interface if any events exists */
-    if ((send_cq_count > 0) || (recv_cq_count > 0)) {
-        ucs_trace("arm_cq: got %d send and %d recv events, returning BUSY",
-                  send_cq_count, recv_cq_count);
-        return UCS_ERR_BUSY;
-    }
 
     if (events & UCT_EVENT_SEND_COMP) {
         status = iface->ops->arm_tx_cq(iface);
@@ -824,6 +790,45 @@ ucs_status_t uct_ib_iface_event_arm(uct_iface_h tl_iface, unsigned events)
         if (status != UCS_OK) {
             return status;
         }
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_ib_iface_event_clear(uct_iface_h tl_iface)
+{
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    int ret, send_cq_count, recv_cq_count;
+    struct ibv_cq *cq;
+    void *cq_context;
+
+    send_cq_count = 0;
+    recv_cq_count = 0;
+    do {
+        ret = ibv_get_cq_event(iface->comp_channel, &cq, &cq_context);
+        ucs_trace("iface %p ibv_get_cq_event(fd=%d) returned %d",
+                  iface, iface->comp_channel->fd, ret);
+
+        if (0 == ret) {
+            if (iface->send_cq == cq) {
+                ++send_cq_count;
+            }
+            if (iface->recv_cq == cq) {
+                ++recv_cq_count;
+            }
+        }
+    } while (ret == 0);
+
+    if (errno != EAGAIN) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (send_cq_count > 0) {
+        ibv_ack_cq_events(iface->send_cq, send_cq_count);
+    }
+
+    if (recv_cq_count > 0) {
+        ibv_ack_cq_events(iface->recv_cq, recv_cq_count);
     }
 
     return UCS_OK;
