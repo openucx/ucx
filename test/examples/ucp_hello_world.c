@@ -109,7 +109,7 @@ static void failure_handler(void *arg, ucp_ep_h ep, ucs_status_t status)
 }
 
 static void recv_handle(void *request, ucs_status_t status,
-                        ucp_tag_info_t *info)
+                        ucp_tag_recv_info_t *info)
 {
     struct ucx_context *context = (struct ucx_context *) request;
 
@@ -169,7 +169,7 @@ err:
 
 static int run_ucx_client(ucp_worker_h ucp_worker)
 {
-    ucp_tag_info_t info_tag;
+    ucp_tag_recv_info_t info_tag;
     ucp_tag_message_h msg_tag;
     ucs_status_t status;
     ucp_ep_h server_ep;
@@ -278,7 +278,7 @@ err:
 
 static int run_ucx_server(ucp_worker_h ucp_worker)
 {
-    ucp_tag_info_t info_tag;
+    ucp_tag_recv_info_t info_tag;
     ucp_tag_message_h msg_tag;
     ucs_status_t status;
     ucp_ep_h client_ep;
