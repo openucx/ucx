@@ -195,9 +195,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
             goto err;
         }
         for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
-            if (iov[iov_it].length) {
+            if (iov[iov_it].count) {
+                /* Temporarily assume IOV is composed of contiguous datatypes only. */
                 status = uct_md_mem_reg(uct_md, iov[iov_it].buffer,
-                                        iov[iov_it].length, 0, &memh[iov_it]);
+                                        ucp_contig_dt_length(iov[iov_it].dt,
+                                                             iov[iov_it].count),
+                                        0, &memh[iov_it]);
                 if (status != UCS_OK) {
                     /* unregister previously registered memory */
                     ucp_iov_buffer_memh_dereg(uct_md, memh, iov_it);
