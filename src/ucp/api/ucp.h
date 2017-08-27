@@ -2048,10 +2048,12 @@ ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,
  *                                handle using @ref ucp_stream_data_release
  *                                "ucp_stream_data_release()" routine.
  *
- * @note In some cases, this function allows to avoid extra memory coping
- *       (in comparison with @ref ucp_stream_recv_nb) when received data may be
- *       processed directly from returned buffer without placement to user
- *       buffer.
+ * @note This function returns packed data (equivalent to ucp_dt_make_contig(1)).
+ * @note This function returns a pointer to a UCP internal buffer, whereas
+ *       @ref ucp_stream_recv_nb places the data into a user-provided buffer.
+ *       In some cases, retrieving the internal buffer can be more optimal,
+         for example by processing the incoming data in-place and thus avoiding
+ *       extra memory copy operations.
  */
 ucs_status_ptr_t ucp_stream_recv_data_nb(ucp_ep_h ep, size_t *length);
 
