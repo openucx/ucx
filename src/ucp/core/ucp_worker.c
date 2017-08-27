@@ -633,7 +633,7 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     }
 
     memset(&iface_params, 0, sizeof(iface_params));
-    iface_params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
+    iface_params.open_mode           |= UCT_IFACE_OPEN_MODE_DEVICE;
     iface_params.mode.device.tl_name  = resource->tl_rsc.tl_name;
     iface_params.mode.device.dev_name = resource->tl_rsc.dev_name;
     iface_params.stats_root           = UCS_STATS_RVAL(worker->stats);

@@ -314,10 +314,13 @@ enum uct_cb_flags {
  * @ingroup UCT_RESOURCE
  * @brief Interface opening mode.
  */
-typedef enum {
-   UCT_IFACE_OPEN_MODE_DEVICE,   /**< Interface is opened on a specific device */
-   UCT_IFACE_OPEN_MODE_SOCKADDR  /**< Interface is opened on a specific address */
-} uct_iface_open_mode_t;
+enum uct_iface_open_mode {
+   UCT_IFACE_OPEN_MODE_DEVICE          = UCS_BIT(0),  /**< Interface is opened on a specific device */
+   UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER = UCS_BIT(1),  /**< Interface is opened on a specific address
+                                                           on the server side */
+   UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT = UCS_BIT(2)   /**< Interface is opened on a specific address
+                                                           on the client side */
+};
 
 
 /**
@@ -522,8 +525,8 @@ struct uct_iface_attr {
 struct uct_iface_params {
     /** Mask of CPUs to use for resources */
     ucs_cpu_set_t                                cpu_mask;
-    /** Interface opening mode. @ref uct_iface_open_mode_t */
-    uct_iface_open_mode_t                        open_mode;
+    /** Interface opening mode bitmap. @ref uct_iface_open_mode */
+    uint64_t                                     open_mode;
 
     union {
         struct {
