@@ -66,6 +66,14 @@ protected:
 
     virtual ucs_status_t mem_reg(region *region)
     {
+        int mem_prot = ucs_get_mem_prot(region->super.super.start, region->super.super.end);
+        if (!ucs_test_all_flags(mem_prot, region->super.prot)) {
+            ucs_debug("protection error mem_prot " UCS_RCACHE_PROT_FMT " wanted " UCS_RCACHE_PROT_FMT,
+                      UCS_RCACHE_PROT_ARG(mem_prot),
+                      UCS_RCACHE_PROT_ARG(region->super.prot));
+            return UCS_ERR_IO_ERROR;
+        }
+
         mlock((const void*)region->super.super.start,
               region->super.super.end - region->super.super.start);
         EXPECT_NE(uint32_t(MAGIC), region->magic);
@@ -431,6 +439,45 @@ UCS_MT_TEST_F(test_rcache, merge_expand_prot, 6) {
     put(region1);
     put(region2);
     munmap(mem, size1 + size2);
+}
+
+/*
+ * Test flow:
+ * +---------------------+
+ * |       r+w           |  1. memory allocated with R+W prot
+ * +---------+-----------+
+ * | region1 |           |  2. region1 is created in part of the memory
+ * +-----+---+-----------+
+ * | r   |     r+w       |  3. region1 is freed, some of the region memory changed to R
+ * +-----+---------------+
+ * |     |    region2    |  4. region2 is created. region1 must be invalidated and
+ * +-----+---------------+     kicked out of pagetable.
+ */
+UCS_MT_TEST_F(test_rcache, merge_invalid_prot, 6)
+{
+    static const size_t size1 = 10 * ucs_get_page_size();
+    static const size_t size2 =  8 * ucs_get_page_size();
+    int ret;
+
+    void *mem = alloc_pages(size1+size2, PROT_READ|PROT_WRITE);
+    void *ptr1 = mem;
+
+    region *region1 = get(ptr1, size1, PROT_READ|PROT_WRITE);
+    EXPECT_EQ(PROT_READ|PROT_WRITE, region1->super.prot);
+    put(region1);
+
+    ret = mprotect(ptr1, ucs_get_page_size(), PROT_READ);
+    ASSERT_EQ(0, ret) << strerror(errno);
+
+    void *ptr2 = (char*)mem+size1 - 1024 ;
+    region *region2 = get(ptr2, size2, PROT_READ|PROT_WRITE);
+
+    /* check permissions and that the region is not merged */
+    EXPECT_EQ(PROT_READ|PROT_WRITE, region2->super.prot);
+    EXPECT_EQ(region2->super.super.start, (uintptr_t)ptr2);
+
+    put(region2);
+    munmap(mem, size1+size2);
 }
 
 UCS_MT_TEST_F(test_rcache, shared_region, 6) {

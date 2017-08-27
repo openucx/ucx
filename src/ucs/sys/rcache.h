@@ -19,6 +19,13 @@
 #include <ucs/stats/stats.h>
 #include <sys/mman.h>
 
+
+#define UCS_RCACHE_PROT_FMT "%c%c"
+#define UCS_RCACHE_PROT_ARG(_prot) \
+    ((_prot) & PROT_READ)  ? 'r' : '-', \
+    ((_prot) & PROT_WRITE) ? 'w' : '-'
+
+
 typedef struct ucs_rcache         ucs_rcache_t;
 typedef struct ucs_rcache_ops     ucs_rcache_ops_t;
 typedef struct ucs_rcache_params  ucs_rcache_params_t;
