@@ -224,6 +224,8 @@ static void ucp_rndv_recv_am(ucp_request_t *rndv_req, ucp_request_t *rreq,
                       "expected %zu on rreq: %p ",
                       rndv_req, total_size, rreq->recv.length, rreq);
         rndv_req->send.uct.func = ucp_rndv_truncated;
+    } else {
+        rreq->status = UCS_OK;
     }
 }
 
@@ -710,11 +712,20 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
     ucs_status_t status;
     uint8_t hdr_len = sizeof(*rndv_data_hdr);
 
-    ucs_trace_data("recv segment for rreq %p. offset %zu ",
-                   rreq, rreq->recv.state.offset);
-
     ucs_assert(length >= hdr_len);
     recv_len = length - hdr_len;
+
+    if (rreq->status == UCS_OK) {
+        ucs_trace_data("recv segment for rreq %p, offset %zu, length %zu",
+                       rreq, rreq->recv.state.offset, recv_len);
+    } else {
+        ucs_trace_data("drop segment for rreq %p, length %zu, status %s",
+                       rreq, recv_len, ucs_status_string(rreq->status));
+        /* Drop the packet and return ok, so that the transport
+         * would release the descriptor */
+        return UCS_OK;
+    }
+
     UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_data_recv", recv_len);
     status = ucp_dt_unpack(rreq->recv.datatype, rreq->recv.buffer,
                            rreq->recv.length, &rreq->recv.state,
@@ -723,11 +734,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
         rreq->recv.state.offset += recv_len;
         return status;
     } else {
-        /* in case of an error, return an ok status so that the transport
-         * would release the descriptor */
-
-        /* TODO In case an error status is returned from ucp_tag_process_recv,
-         * need to discard the rest of the messages */
+        rreq->status = status;
         return UCS_OK;
     }
 }
@@ -743,14 +750,25 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_last_handler,
     ucs_status_t status;
     uint8_t hdr_len = sizeof(*rndv_data_hdr);
 
-    ucs_trace_data("recv last segment for rreq %p ", rreq);
-
     ucs_assert(length >= hdr_len);
     recv_len = length - hdr_len;
-    UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_data_last_recv", recv_len);
-    status = ucp_dt_unpack(rreq->recv.datatype, rreq->recv.buffer,
-                           rreq->recv.length, &rreq->recv.state,
-                           data + hdr_len, recv_len, 1);
+
+    if (rreq->status == UCS_OK) {
+        ucs_trace_data("recv last segment for rreq %p, length %zu",
+                       rreq, recv_len);
+
+        /* Check that total received length matches RTS->length */
+        ucs_assert(rreq->recv.info.length == rreq->recv.state.offset + recv_len);
+        UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_data_last_recv", recv_len);
+        status = ucp_dt_unpack(rreq->recv.datatype, rreq->recv.buffer,
+                               rreq->recv.length, &rreq->recv.state,
+                               data + hdr_len, recv_len, 1);
+    } else {
+        ucs_trace_data("drop last segment for rreq %p, length %zu, status %s",
+                       rreq, recv_len, ucs_status_string(rreq->status));
+        status = rreq->status;
+        ucp_request_recv_generic_dt_finish(rreq);
+    }
 
     ucp_request_complete_recv(rreq, status);
 
