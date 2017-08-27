@@ -18,11 +18,24 @@ extern "C" {
 class stats_filter_test : public ucs::test {
 public:
 
-    template <unsigned N>
-    struct stats_class {
-        ucs_stats_class_t cls;
-        const char        *counter_names[N];
-    };
+    stats_filter_test() {
+        size_t size = sizeof(ucs_stats_class_t) +
+                      NUM_COUNTERS * sizeof(m_data_stats_class->counter_names[0]);
+        m_data_stats_class                   = (ucs_stats_class_t*)malloc(size);
+        m_data_stats_class->name             = "data";
+        m_data_stats_class->num_counters     = NUM_COUNTERS;
+        m_data_stats_class->counter_names[0] = "counter0";
+        m_data_stats_class->counter_names[1] = "counter1";
+        m_data_stats_class->counter_names[2] = "counter2";
+        m_data_stats_class->counter_names[3] = "counter3";
+
+        cat_node = NULL;
+        data_nodes[0] = data_nodes[1] = data_nodes[2] = NULL;
+    }
+
+    ~stats_filter_test() {
+        free(m_data_stats_class);
+    }
 
     virtual void init() {
         ucs::test::init();
@@ -47,19 +60,15 @@ public:
     virtual std::string stats_format_config() = 0;
 
     void prepare_nodes() {
-        static stats_class<0> category_stats_class = {
-            {"category", 0, {}}
+        static ucs_stats_class_t category_stats_class = {
+            "category", 0, {}
         };
 
-        static stats_class<4> data_stats_class = {
-            { "data", NUM_COUNTERS, {} },
-            { "counter0","counter1","counter2","counter3" }
-        };
-
-        ucs_status_t status = UCS_STATS_NODE_ALLOC(&cat_node, &category_stats_class.cls, ucs_stats_get_root());
+        ucs_status_t status = UCS_STATS_NODE_ALLOC(&cat_node, &category_stats_class,
+                                                   ucs_stats_get_root());
         ASSERT_UCS_OK(status);
         for (unsigned i = 0; i < NUM_DATA_NODES; ++i) {
-            status = UCS_STATS_NODE_ALLOC(&data_nodes[i], &data_stats_class.cls,
+            status = UCS_STATS_NODE_ALLOC(&data_nodes[i], m_data_stats_class,
                                          cat_node, "-%d", i);
             ASSERT_UCS_OK(status);
 
@@ -81,6 +90,7 @@ protected:
     static const unsigned NUM_DATA_NODES = 3;
     static const unsigned NUM_COUNTERS   = 4;
 
+    ucs_stats_class_t      *m_data_stats_class;
     ucs_stats_node_t       *cat_node;
     ucs_stats_node_t       *data_nodes[NUM_DATA_NODES];
 };
