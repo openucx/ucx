@@ -214,19 +214,19 @@ enum ucp_ep_params_flags_field {
 
 /**
  * @ingroup UCP_ENDPOINT
- * @brief @anchor ucp_ep_close_flags Close UCP endpoint flags.
+ * @brief @anchor ucp_ep_close_mode Close UCP endpoint modes.
  *
  * The enumeration allows specifying behavior of @ref ucp_ep_close routine.
  */
 enum {
-    UCP_EP_CLOSE_FLAG_ONE_SIDED          = 0, /**< @ref ucp_ep_close releases
-                                                   the endpoint without any
-                                                   confirmation from the peer.
-                                                   All outstanding requests will
-                                                   be completed with
-                                                   @ref UCS_ERR_CANCELED error. */
-    UCP_EP_CLOSE_FLAG_FLUSH              = 1, /**< @ref ucp_ep_close flushes all
-                                                   outstanding operations. */
+    UCP_EP_CLOSE_MODE_FORCE         = 0, /**< @ref ucp_ep_close releases
+                                              the endpoint without any
+                                              confirmation from the peer. All
+                                              outstanding requests will be
+                                              completed with
+                                              @ref UCS_ERR_CANCELED error. */
+    UCP_EP_CLOSE_MODE_FLUSH         = 1, /**< @ref ucp_ep_close flushes all
+                                              outstanding operations. */
 };
 
 
@@ -1477,12 +1477,12 @@ ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
  * process depends on set @a flags.
  *
  * @param [in]  ep      Handle to the endpoint to close.
- * @param [in]  flags   One from @ref ucp_ep_close_flags "enumerator" value.
+ * @param [in]  mode    One from @ref ucp_ep_close_mode "enumerator" value.
  *
  * @return Error code as defined by @ref ucs_status_t
  *
  */
-ucs_status_t ucp_ep_close(ucp_ep_h ep, unsigned flags);
+ucs_status_t ucp_ep_close(ucp_ep_h ep, unsigned mode);
 
 
 /**
