@@ -545,7 +545,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     key.reachable_md_map |= ucp_ep_config(ep)->key.reachable_md_map;
 
     new_cfg_index = ucp_worker_get_ep_config(worker, &key);
-    if ((ep->cfg_index == new_cfg_index)) {
+    if (ep->cfg_index == new_cfg_index) {
         return UCS_OK; /* No change */
     }
 
