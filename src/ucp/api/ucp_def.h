@@ -379,7 +379,8 @@ typedef enum ucp_wakeup_event_types {
     UCP_WAKEUP_RMA         = UCS_BIT(0), /**< Remote memory access send completion */
     UCP_WAKEUP_AMO         = UCS_BIT(1), /**< Atomic operation send completion */
     UCP_WAKEUP_TAG_SEND    = UCS_BIT(2), /**< Tag send completion  */
-    UCP_WAKEUP_TAG_RECV    = UCS_BIT(3)  /**< Tag receive completion */
+    UCP_WAKEUP_TAG_RECV    = UCS_BIT(3), /**< Tag receive completion */
+    UCP_WAKEUP_EDGE        = UCS_BIT(16) /**< Use edge-triggered wakeup */
 } ucp_wakeup_event_t;
 
 #endif

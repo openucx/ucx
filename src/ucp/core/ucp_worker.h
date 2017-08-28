@@ -38,7 +38,8 @@ enum {
  * UCP worker flags
  */
 enum {
-    UCP_WORKER_FLAG_EXTERNAL_EPOLL = UCS_BIT(0)  /**< epoll fd is external */
+    UCP_WORKER_FLAG_EXTERNAL_EPOLL = UCS_BIT(0), /**< epoll fd is external */
+    UCP_WORKER_FLAG_EDGE_TRIGGERED = UCS_BIT(1)  /**< events are edge-triggered */
 };
 
 
