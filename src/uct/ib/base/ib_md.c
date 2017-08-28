@@ -346,7 +346,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
 
         mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &in);
         if (mr == NULL) {
-            ucs_log(level, "ibv_exp_reg_mr(address=%p, length=%Zu, exp_access=0x%lx) failed: %m",
+            ucs_log(level, "ibv_exp_reg_mr(address=%p, length=%zu, exp_access=0x%lx) failed: %m",
                     in.addr, in.length, in.exp_access);
             return UCS_ERR_IO_ERROR;
         }
@@ -357,7 +357,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
         mr = UCS_PROFILE_CALL(ibv_reg_mr, md->pd, address, length,
                               UCT_IB_MEM_ACCESS_FLAGS);
         if (mr == NULL) {
-            ucs_log(level, "ibv_reg_mr(address=%p, length=%Zu, access=0x%x) failed: %m",
+            ucs_log(level, "ibv_reg_mr(address=%p, length=%zu, access=0x%x) failed: %m",
                       address, length, UCT_IB_MEM_ACCESS_FLAGS);
             return UCS_ERR_IO_ERROR;
         }

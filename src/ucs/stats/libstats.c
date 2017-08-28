@@ -21,13 +21,13 @@ static ucs_status_t ucs_stats_name_check(const char *name)
 
     length = strlen(name);
     if (length > UCS_STAT_NAME_MAX) {
-        ucs_error("stats name '%s' is too long (%Zu)", name, length);
+        ucs_error("stats name '%s' is too long (%zu)", name, length);
         return UCS_ERR_INVALID_PARAM;
     }
 
     valid_length = strspn(name, UCS_STATS_NAME_VALID_CHARS);
     if (valid_length != length) {
-        ucs_error("stats name '%s' contains invalid character at offset %Zu",
+        ucs_error("stats name '%s' contains invalid character at offset %zu",
                   name, valid_length);
         return UCS_ERR_INVALID_PARAM;
     }

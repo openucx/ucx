@@ -178,7 +178,8 @@ static ucs_status_t ucs_stats_node_new(ucs_stats_class_t *cls, ucs_stats_node_t 
     ucs_stats_node_t *node;
 
     node = ucs_malloc(sizeof(ucs_stats_node_t) +
-                      sizeof(ucs_stats_counter_t) * cls->num_counters,
+                      sizeof(ucs_stats_counter_t) *
+                      (cls->num_counters > 0 ? cls->num_counters - 1 : 0),
                       "stats node");
     if (node == NULL) {
         ucs_error("Failed to allocate stats node for %s", cls->name);

@@ -45,6 +45,9 @@ struct uct_md_component {
  * Specific MDs extend this structure.
  */
 struct uct_md_config {
+#ifdef __cplusplus
+    char __dummy;
+#endif
 };
 
 
