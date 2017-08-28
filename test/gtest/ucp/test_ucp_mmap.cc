@@ -70,7 +70,7 @@ UCS_TEST_P(test_ucp_mmap, alloc) {
     ucs_status_t status;
     bool is_dummy;
 
-    sender().connect(&sender());
+    sender().connect(&sender(), get_ep_params());
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
         size_t size = ucs::rand() % (1024 * 1024);
@@ -101,7 +101,7 @@ UCS_TEST_P(test_ucp_mmap, reg) {
     ucs_status_t status;
     bool is_dummy;
 
-    sender().connect(&sender());
+    sender().connect(&sender(), get_ep_params());
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
         size_t size = ucs::rand() % (1024 * 1024);
@@ -140,7 +140,7 @@ UCS_TEST_P(test_ucp_mmap, dummy_mem) {
     ucp_mem_map_params_t params;
     int i;
 
-    sender().connect(&sender());
+    sender().connect(&sender(), get_ep_params());
 
     /* Check that ucp_mem_map accepts any value for buffer if size is 0 and
      * UCP_MEM_FLAG_ZERO_REG flag is passed to it. */
@@ -170,7 +170,7 @@ UCS_TEST_P(test_ucp_mmap, alloc_advise) {
     ucs_status_t status;
     bool is_dummy;
 
-    sender().connect(&sender());
+    sender().connect(&sender(), get_ep_params());
 
     size_t size = 128 * (1024 * 1024);
 
@@ -215,7 +215,7 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     ucs_status_t status;
     bool is_dummy;
 
-    sender().connect(&sender());
+    sender().connect(&sender(), get_ep_params());
 
     size_t size = 128 * 1024 * 1024;
 
@@ -261,7 +261,7 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
     ucs_status_t status;
     bool         is_dummy;
 
-    sender().connect(&sender());
+    sender().connect(&sender(), get_ep_params());
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
         size_t size = (i + 1) * ((i % 2) ? 1000 : 1);

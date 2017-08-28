@@ -23,17 +23,15 @@ public:
     }
 
     static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
-                                                        const ucp_worker_params_t& worker_params,
-                                                        const ucp_ep_params_t& ep_params,
                                                         const std::string& name,
                                                         const std::string& test_case_name,
                                                         const std::string& tls)
     {
         std::vector<ucp_test_param> result;
-        generate_test_params_variant(ctx_params, worker_params, ep_params, name,
-                                     test_case_name, tls, RECV_REQ_INTERNAL, result);
-        generate_test_params_variant(ctx_params, worker_params, ep_params, name,
-                                     test_case_name, tls, RECV_REQ_EXTERNAL, result);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     RECV_REQ_INTERNAL, result);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     RECV_REQ_EXTERNAL, result);
         return result;
     }
 };
@@ -151,7 +149,7 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard, "RNDV_THRESH=-1") 
 
     entity &sender2 = sender();
     create_entity(true);
-    sender().connect(&receiver());
+    sender().connect(&receiver(), get_ep_params());
 
     for (int is_exp = 0; is_exp <= 1; ++is_exp) {
 
