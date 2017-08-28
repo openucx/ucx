@@ -67,6 +67,9 @@ static ucs_status_t ucp_worker_wakeup_ctl_fd(ucp_worker_h worker, int op,
 
     event.data    = worker->epoll_data;
     event.events  = EPOLLIN;
+    if (worker->flags & UCP_WORKER_FLAG_EDGE_TRIGGERED) {
+        event.events |= EPOLLET;
+    }
 
     ret = epoll_ctl(worker->epfd, op, event_fd, &event);
     if (ret == -1) {
@@ -239,6 +242,10 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
             goto out;
         }
         memset(&worker->epoll_data, 0, sizeof(worker->epoll_data));
+    }
+
+    if (events & UCP_WAKEUP_EDGE) {
+        worker->flags |= UCP_WORKER_FLAG_EDGE_TRIGGERED;
     }
 
     worker->eventfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
