@@ -213,6 +213,24 @@ enum ucp_ep_params_flags_field {
 
 
 /**
+ * @ingroup UCP_ENDPOINT
+ * @brief @anchor ucp_ep_close_flags Close UCP endpoint flags.
+ *
+ * The enumeration allows specifying behavior of @ref ucp_ep_close routine.
+ */
+enum {
+    UCP_EP_CLOSE_FLAG_ONE_SIDED          = 0, /**< @ref ucp_ep_close releases
+                                                   the endpoint without any
+                                                   confirmation from the peer.
+                                                   All outstanding requests will
+                                                   be completed with
+                                                   @ref UCS_ERR_CANCELED error. */
+    UCP_EP_CLOSE_FLAG_FLUSH              = 1, /**< @ref ucp_ep_close flushes all
+                                                   outstanding operations. */
+};
+
+
+/**
  * @ingroup UCP_MEM
  * @brief UCP memory mapping parameters field mask.
  *
@@ -1448,6 +1466,23 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  *                          routine.
  */
 ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ *
+ * @brief Blocking @ref ucp_ep_h "endpoint" closure.
+ *
+ * This routine releases the @ref ucp_ep_h "endpoint". The endpoint closure
+ * process depends on set @a flags.
+ *
+ * @param [in]  ep      Handle to the endpoint to close.
+ * @param [in]  flags   One from @ref ucp_ep_close_flags "enumerator" value.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ *
+ */
+ucs_status_t ucp_ep_close(ucp_ep_h ep, unsigned flags);
 
 
 /**
