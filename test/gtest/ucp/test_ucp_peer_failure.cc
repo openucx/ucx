@@ -294,7 +294,7 @@ protected:
     void smoke_test(size_t idx);
 
     static void ep_destructor(ucp_ep_h ep, test_ucp_peer_failure_2pairs* test) {
-        test->wait(ucp_disconnect_nb(ep));
+        test->wait_req(ucp_disconnect_nb(ep));
     }
 
     ucs::handle<ucp_context_h>               m_ucph;
@@ -344,7 +344,7 @@ void test_ucp_peer_failure_2pairs::init()
             UCS_TEST_SKIP_R(m_errors.empty() ? "" : m_errors.back());
         }
 
-        m_eps[i].reset(ep, ep_destructor, static_cast<test_ucp_peer_failure_2pairs *>(this));
+        m_eps[i].reset(ep, ep_destructor, this);
     }
 
     /* Make sure wire up is done*/
