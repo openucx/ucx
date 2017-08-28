@@ -14,6 +14,7 @@
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/config/types.h>
+#include <sys/epoll.h>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -155,7 +156,9 @@ enum ucp_feature {
 enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_THREAD_MODE  = UCS_BIT(0), /**< UCP thread mode */
     UCP_WORKER_PARAM_FIELD_CPU_MASK     = UCS_BIT(1), /**< Worker's CPU bitmap */
-    UCP_WORKER_PARAM_FIELD_EVENTS       = UCS_BIT(2)  /**< Worker's events bitmap */
+    UCP_WORKER_PARAM_FIELD_EVENTS       = UCS_BIT(2), /**< Worker's events bitmap */
+    UCP_WORKER_PARAM_FIELD_EPOLL        = UCS_BIT(3)  /**< External epoll file
+                                                           descriptor */
 };
 
 
@@ -707,6 +710,23 @@ typedef struct ucp_worker_params {
      * wakeup.
      */
     unsigned                events;
+
+    /**
+     * External epoll file descriptor and associated data. This value is optional.
+     * If it's not set (along with its corresponding bit in the field_mask -
+     * UCP_WORKER_PARAM_FIELD_EPOLL), events on the worker will be reported on
+     * the file descriptor returned from @ref ucp_worker_get_efd().
+     * Otherwise, events on the worker will be added to the provided epoll set
+     * with the provided epoll data. In this case, calling the function
+     * @ref ucp_worker_get_efd() will result in an error
+     */
+    struct {
+        int                 epoll_fd;    /**< epoll file descriptor */
+        epoll_data_t        epoll_data;  /**< data associated with events on
+                                              the current worker. Will be
+                                              returned from epoll_wait(). */
+    } epoll;
+
 } ucp_worker_params_t;
 
 
