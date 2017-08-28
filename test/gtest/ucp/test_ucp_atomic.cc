@@ -12,18 +12,16 @@ extern "C" {
 
 std::vector<ucp_test_param>
 test_ucp_atomic::enum_test_params(const ucp_params_t& ctx_params,
-                                  const ucp_worker_params_t& worker_params,
-                                  const ucp_ep_params_t& ep_params,
                                   const std::string& name,
                                   const std::string& test_case_name,
                                   const std::string& tls)
 {
     std::vector<ucp_test_param> result;
-    generate_test_params_variant(ctx_params, worker_params, ep_params, name,
+    generate_test_params_variant(ctx_params, name,
                                  test_case_name, tls, UCP_ATOMIC_MODE_CPU, result);
-    generate_test_params_variant(ctx_params, worker_params, ep_params, name,
+    generate_test_params_variant(ctx_params, name,
                                  test_case_name, tls, UCP_ATOMIC_MODE_DEVICE, result);
-    generate_test_params_variant(ctx_params, worker_params, ep_params, name,
+    generate_test_params_variant(ctx_params, name,
                                  test_case_name, tls, UCP_ATOMIC_MODE_GUESS, result);
     return result;
 }

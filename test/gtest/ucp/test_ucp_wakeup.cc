@@ -55,7 +55,7 @@ UCS_TEST_P(test_ucp_wakeup, efd)
     int recv_efd;
     void *req;
 
-    sender().connect(&receiver());
+    sender().connect(&receiver(), get_ep_params());
 
     recv_worker = receiver().worker();
     ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &recv_efd));
@@ -116,7 +116,7 @@ UCS_TEST_P(test_ucp_wakeup, tx_wait, "ZCOPY_THRESH=10000")
     std::string send_data(COUNT, '2'), recv_data(COUNT, '1');
     void *sreq, *rreq;
 
-    sender().connect(&receiver());
+    sender().connect(&receiver(), get_ep_params());
 
     rreq = ucp_tag_recv_nb(receiver().worker(), &recv_data[0], COUNT, DATATYPE,
                            TAG, (ucp_tag_t)-1, recv_completion);
@@ -179,45 +179,43 @@ class test_ucp_wakeup_events : public test_ucp_wakeup
 public:
     static std::vector<ucp_test_param>
     enum_test_params(const ucp_params_t& ctx_params,
-                     const ucp_worker_params_t& worker_params,
-                     const ucp_ep_params_t& ep_params,
                      const std::string& name,
                      const std::string& test_case_name,
                      const std::string& tls);
 
+    virtual ucp_worker_params_t get_worker_params();
+
     void do_tx_rx_events_test(const std::vector<std::string>& transports,
                               unsigned events);
-
-private:
-    static void setup_worker_param_events(ucp_worker_params_t& params,
-                                          unsigned events);
 };
 
 std::vector<ucp_test_param>
 test_ucp_wakeup_events::enum_test_params(const ucp_params_t& ctx_params,
-                                         const ucp_worker_params_t& worker_params,
-                                         const ucp_ep_params_t& ep_params,
                                          const std::string& name,
                                          const std::string& test_case_name,
                                          const std::string& tls)
 {
     std::vector<ucp_test_param> result;
-    ucp_worker_params_t worker_params_tmp = worker_params;
 
     /* TODO: add RMA and AMO after required optimizations */
-    setup_worker_param_events(worker_params_tmp, UCP_WAKEUP_TAG_SEND);
-    generate_test_params_variant(ctx_params, worker_params_tmp, ep_params, name,
-                                 test_case_name + "/tag_send", tls, 0, result);
+    generate_test_params_variant(ctx_params, name, test_case_name + "/tag_send",
+                                 tls, UCP_WAKEUP_TAG_SEND, result);
 
-    setup_worker_param_events(worker_params_tmp, UCP_WAKEUP_TAG_RECV);
-    generate_test_params_variant(ctx_params, worker_params_tmp, ep_params, name,
-                                 test_case_name + "/tag_recv", tls, 0, result);
+    generate_test_params_variant(ctx_params, name, test_case_name + "/tag_recv",
+                                 tls, UCP_WAKEUP_TAG_RECV, result);
 
-    setup_worker_param_events(worker_params_tmp,
-                              UCP_WAKEUP_TAG_SEND | UCP_WAKEUP_TAG_RECV);
-    generate_test_params_variant(ctx_params, worker_params_tmp, ep_params, name,
-                                 test_case_name + "/all", tls, 0, result);
+    generate_test_params_variant(ctx_params, name, test_case_name + "/all",
+                                 tls, UCP_WAKEUP_TAG_SEND | UCP_WAKEUP_TAG_RECV,
+                                 result);
     return result;
+}
+
+ucp_worker_params_t test_ucp_wakeup_events::get_worker_params()
+{
+    ucp_worker_params_t params = test_ucp_wakeup::get_worker_params();
+    params.field_mask |= UCP_WORKER_PARAM_FIELD_EVENTS;
+    params.events      = GetParam().variant;
+    return params;
 }
 
 static inline bool is_any_tl_inuse(const std::vector<std::string>& transports,
@@ -259,8 +257,8 @@ test_ucp_wakeup_events::do_tx_rx_events_test(const std::vector<std::string>& tra
 
     polled[0].events = polled[1].events = POLLIN;
 
-    p_entity[0]->connect(p_entity[1]);
-    p_entity[1]->connect(p_entity[0]);
+    p_entity[0]->connect(p_entity[1], get_ep_params());
+    p_entity[1]->connect(p_entity[0], get_ep_params());
 
     ASSERT_UCS_OK(ucp_worker_get_efd(p_entity[0]->worker(), &efd[0]));
     ASSERT_UCS_OK(ucp_worker_get_efd(p_entity[1]->worker(), &efd[1]));
@@ -346,22 +344,10 @@ test_ucp_wakeup_events::do_tx_rx_events_test(const std::vector<std::string>& tra
     ucp_worker_flush(p_entity[1]->worker());
 }
 
-void
-test_ucp_wakeup_events::setup_worker_param_events(ucp_worker_params_t& params,
-                                                  unsigned events)
-{
-    params.field_mask |= UCP_WORKER_PARAM_FIELD_EVENTS;
-    params.events = events;
-}
-
 UCS_TEST_P(test_ucp_wakeup_events, events)
 {
     UCS_TEST_SKIP_R("Functionality is not implemented yet");
-
-    EXPECT_TRUE(GetParam().worker_params.field_mask &
-                UCP_WORKER_PARAM_FIELD_EVENTS);
-    do_tx_rx_events_test(GetParam().transports,
-                         GetParam().worker_params.events);
+    do_tx_rx_events_test(GetParam().transports, GetParam().variant);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wakeup_events)
