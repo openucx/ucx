@@ -7,8 +7,86 @@
 #include "ucx_info.h"
 
 #include <ucp/api/ucp.h>
+#include <ucs/time/time.h>
+#include <sys/resource.h>
+#include <dirent.h>
 #include <string.h>
+#include <errno.h>
 
+
+typedef struct {
+    ucs_time_t       time;
+    long             memory;
+    int              num_fds;
+} resource_usage_t;
+
+
+static int get_num_fds()
+{
+    static const char *fds_dir = "/proc/self/fd";
+    struct dirent *entry;
+    int num_fds;
+    DIR *dir;
+
+    dir = opendir(fds_dir);
+    if (dir == NULL) {
+        return -1;
+    }
+
+    num_fds = 0;
+    for (;;) {
+        errno = 0;
+        entry = readdir(dir);
+        if (entry == NULL) {
+            closedir(dir);
+            if (errno == 0) {
+                return num_fds;
+            } else {
+                return -1;
+            }
+        }
+
+        if (strncmp(entry->d_name, ".", 1)) {
+            ++num_fds;
+        }
+    }
+}
+
+static void get_resource_usage(resource_usage_t *usage)
+{
+    struct rusage rusage;
+    int ret;
+
+    usage->time = ucs_get_time();
+
+    ret = getrusage(RUSAGE_SELF, &rusage);
+    if (ret == 0) {
+        usage->memory = rusage.ru_maxrss * 1024;
+    } else {
+        usage->memory = -1;
+    }
+
+    usage->num_fds = get_num_fds();
+}
+
+static void print_resource_usage(const resource_usage_t *usage_before,
+                                 const char *title)
+{
+    resource_usage_t usage_after;
+
+    get_resource_usage(&usage_after);
+
+    if ((usage_after.memory != -1) && (usage_before->memory != -1) &&
+        (usage_after.num_fds != -1) && (usage_before->num_fds != -1))
+    {
+        printf("# memory: %.2fMB, file descriptors: %d\n",
+               (usage_after.memory - usage_before->memory) / (1024.0 * 1024.0),
+               (usage_after.num_fds - usage_before->num_fds));
+    }
+    printf("# create time: %.3f ms\n",
+           ucs_time_to_msec(usage_after.time - usage_before->time));
+    printf("#\n");
+}
 
 void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
                     uint64_t features, size_t estimated_num_eps)
@@ -22,6 +100,7 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     ucp_ep_params_t ep_params;
     ucp_address_t *address;
     size_t address_length;
+    resource_usage_t usage;
     ucp_ep_h ep;
 
     status = ucp_config_read(NULL, NULL, &config);
@@ -35,6 +114,8 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     params.features          = features;
     params.estimated_num_eps = estimated_num_eps;
 
+    get_resource_usage(&usage);
+
     status = ucp_init(&params, config, &context);
     if (status != UCS_OK) {
         printf("<Failed to create UCP context>\n");
@@ -43,6 +124,7 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
 
     if (print_opts & PRINT_UCP_CONTEXT) {
         ucp_context_print_info(context, stdout);
+        print_resource_usage(&usage, "UCP context");
     }
 
     if (!(print_opts & (PRINT_UCP_WORKER|PRINT_UCP_EP))) {
@@ -52,6 +134,8 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
     worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
 
+    get_resource_usage(&usage);
+
     status = ucp_worker_create(context, &worker_params, &worker);
     if (status != UCS_OK) {
         printf("<Failed to create UCP worker>\n");
@@ -60,6 +144,7 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
 
     if (print_opts & PRINT_UCP_WORKER) {
         ucp_worker_print_info(worker, stdout);
+        print_resource_usage(&usage, "UCP worker");
     }
 
     if (print_opts & PRINT_UCP_EP) {
