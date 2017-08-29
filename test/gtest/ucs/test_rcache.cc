@@ -476,6 +476,9 @@ UCS_MT_TEST_F(test_rcache, merge_invalid_prot, 6)
     EXPECT_EQ(PROT_READ|PROT_WRITE, region2->super.prot);
     EXPECT_EQ(region2->super.super.start, (uintptr_t)ptr2);
 
+    barrier();
+    EXPECT_EQ(6u, m_reg_count);
+    barrier();
     put(region2);
     munmap(mem, size1+size2);
 }
@@ -504,13 +507,18 @@ UCS_MT_TEST_F(test_rcache, shared_region, 6) {
 
 class test_rcache_no_register : public test_rcache {
 protected:
+    bool m_fail_reg;
     virtual ucs_status_t mem_reg(region *region) {
-        return UCS_ERR_IO_ERROR;
+        if (m_fail_reg) {
+            return UCS_ERR_IO_ERROR;
+        }
+        return test_rcache::mem_reg(region);
     }
 
     virtual void init() {
         test_rcache::init();
         ucs_log_push_handler(log_handler);
+        m_fail_reg = true;
     }
 
     virtual void cleanup() {
@@ -546,4 +554,52 @@ UCS_MT_TEST_F(test_rcache_no_register, register_failure, 10) {
     EXPECT_EQ(0u, m_reg_count);
 
     free(ptr);
+}
+
+/* The region overlaps an old region with different
+ * protection and memory protection does not fit one of
+ * the region.
+ * This should trigger an error during merge.
+ *
+ * Test flow:
+ * +---------------------+
+ * |       r+w           |  1. memory allocated with R+W prot
+ * +---------+-----------+
+ * | region1 |           |  2. region1 is created in part of the memory
+ * +-----+---+-----------+
+ * | r                   |  3. region1 is freed, all memory changed to R
+ * +-----+---------------+
+ * |     |    region2(w) |  4. region2 is created. region1 must be invalidated and
+ * +-----+---------------+     kicked out of pagetable. Creation of region2
+ *                             must fail.
+ */
+UCS_MT_TEST_F(test_rcache_no_register, merge_invalid_prot_slow, 5)
+{
+    static const size_t size1 = 10 * ucs_get_page_size();
+    static const size_t size2 =  8 * ucs_get_page_size();
+    int ret;
+
+    void *mem = alloc_pages(size1+size2, PROT_READ|PROT_WRITE);
+    void *ptr1 = mem;
+
+    m_fail_reg = false;
+    region *region1 = get(ptr1, size1, PROT_READ|PROT_WRITE);
+    EXPECT_EQ(PROT_READ|PROT_WRITE, region1->super.prot);
+    put(region1);
+
+    void *ptr2 = (char*)mem+size1 - 1024 ;
+    ret = mprotect(mem, size1, PROT_READ);
+    ASSERT_EQ(0, ret) << strerror(errno);
+
+
+    ucs_status_t status;
+    ucs_rcache_region_t *r;
+
+    status = ucs_rcache_get(m_rcache, ptr2, size2, PROT_WRITE, NULL, &r);
+    EXPECT_EQ(UCS_ERR_IO_ERROR, status);
+
+    barrier();
+    EXPECT_EQ(0u, m_reg_count);
+
+    munmap(mem, size1+size2);
 }

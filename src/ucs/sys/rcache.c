@@ -331,20 +331,22 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
             /* A slow path because searching /proc/maps in order to
              * check memory protection is very expensive.
              *
-             * NOTE: currently ib_md which is the only user of rcache creates
-             * all regions with the same (r|w) protection so this code is
-             * never reached.
+             * TODO: currently rcache is optimized for the case where most of
+             * the regions have same protection.
              */
             mem_prot = UCS_PROFILE_CALL(ucs_get_mem_prot, *start, *end);
             if (!ucs_test_all_flags(mem_prot, *prot)) {
                 ucs_rcache_region_trace(rcache, region,
-                        "do not merge "UCS_RCACHE_PROT_FMT
-                        " with mem "UCS_RCACHE_PROT_FMT,
-                        UCS_RCACHE_PROT_ARG(*prot),
-                        UCS_RCACHE_PROT_ARG(mem_prot));
+                                        "do not merge "UCS_RCACHE_PROT_FMT
+                                        " with mem "UCS_RCACHE_PROT_FMT,
+                                        UCS_RCACHE_PROT_ARG(*prot),
+                                        UCS_RCACHE_PROT_ARG(mem_prot));
+                /* The memory protection can not satisfy that of the
+                 * region. However mem_reg still may be able to deal with it.
+                 * Do the safest thing: invalidate cached region
+                 */
                 ucs_rcache_region_invalidate(rcache, region, 1, 0);
                 continue;
-
             } else if (ucs_test_all_flags(mem_prot, region->prot)) {
                 *prot |= region->prot;
             } else {
