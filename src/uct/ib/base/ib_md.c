@@ -464,7 +464,7 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
     return UCS_OK;
 
 err_free_umr:
-    ibv_dereg_mr(umr);
+    UCS_PROFILE_CALL(ibv_dereg_mr, umr);
 err:
     return status;
 #else
@@ -476,7 +476,7 @@ static ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
 {
     int ret;
 
-    ret = ibv_dereg_mr(mr);
+    ret = UCS_PROFILE_CALL(ibv_dereg_mr, mr);
     if (ret != 0) {
         ucs_error("ibv_dereg_mr() failed: %m");
         return UCS_ERR_IO_ERROR;
