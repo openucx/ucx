@@ -18,7 +18,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/sys/string.h>
 #include <sys/poll.h>
-
+#include <sys/eventfd.h>
 
 #if ENABLE_STATS
 static ucs_stats_class_t ucp_worker_stats_class = {
@@ -209,13 +209,11 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
 {
     ucp_context_h context = worker->context;
     ucs_status_t status;
-    int ret, i;
 
     if (!(context->config.features & UCP_FEATURE_WAKEUP)) {
-        worker->epfd           = -1;
-        worker->wakeup_pipe[0] = -1;
-        worker->wakeup_pipe[1] = -1;
-        worker->uct_events     = 0;
+        worker->epfd       = -1;
+        worker->eventfd    = -1;
+        worker->uct_events = 0;
         status = UCS_OK;
         goto out;
     }
@@ -227,21 +225,14 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
         goto out;
     }
 
-    ret = pipe(worker->wakeup_pipe);
-    if (ret != 0) {
-        ucs_error("Failed to create pipe: %m");
+    worker->eventfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    if (worker->eventfd == -1) {
+        ucs_error("Failed to create event fd: %m");
         status = UCS_ERR_IO_ERROR;
         goto err_close_epfd;
     }
 
-    for (i = 0; i < 2; ++i) {
-        status = ucs_sys_fcntl_modfl(worker->wakeup_pipe[i], O_NONBLOCK, 0);
-        if (status != UCS_OK) {
-            goto err_pipe_cleanup;
-        }
-    }
-
-    ucp_worker_wakeup_ctl_fd(worker, EPOLL_CTL_ADD, worker->wakeup_pipe[0]);
+    ucp_worker_wakeup_ctl_fd(worker, EPOLL_CTL_ADD, worker->eventfd);
 
     worker->uct_events = 0;
 
@@ -260,9 +251,6 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
 
     return UCS_OK;
 
-err_pipe_cleanup:
-    close(worker->wakeup_pipe[0]);
-    close(worker->wakeup_pipe[1]);
 err_close_epfd:
     close(worker->epfd);
 out:
@@ -274,23 +262,20 @@ static void ucp_worker_wakeup_cleanup(ucp_worker_h worker)
     if (worker->epfd != -1) {
         close(worker->epfd);
     }
-    if (worker->wakeup_pipe[0] != -1) {
-        close(worker->wakeup_pipe[0]);
-    }
-    if (worker->wakeup_pipe[1] != -1) {
-        close(worker->wakeup_pipe[1]);
+    if (worker->eventfd != -1) {
+        close(worker->eventfd);
     }
 }
 
 static ucs_status_t ucp_worker_wakeup_pipe_write(ucp_worker_h worker)
 {
-    char dummy = 0;
+    uint64_t dummy = 1;
     int ret;
 
-    ucs_trace_func("worker=%p fd=%d", worker, worker->wakeup_pipe[1]);
+    ucs_trace_func("worker=%p fd=%d", worker, worker->eventfd);
 
     do {
-        ret = write(worker->wakeup_pipe[1], &dummy, sizeof(dummy));
+        ret = write(worker->eventfd, &dummy, sizeof(dummy));
         if (ret == sizeof(dummy)) {
             return UCS_OK;
         } else if (ret == -1) {
@@ -1163,7 +1148,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
 {
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
-    char dummy;
+    uint64_t dummy;
     int ret;
 
     ucs_trace_func("worker=%p", worker);
@@ -1172,15 +1157,15 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
      * Otherwise, continue to arm the transport interfaces.
      */
     do {
-        ret = read(worker->wakeup_pipe[0], &dummy, sizeof(dummy));
+        ret = read(worker->eventfd, &dummy, sizeof(dummy));
         if (ret == sizeof(dummy)) {
             status = UCS_ERR_BUSY;
             goto out;
         } else if (ret == -1) {
             if (errno == EAGAIN) {
-                break; /* Pipe empty */
+                break; /* No more events */
             } else if (errno != EINTR) {
-                ucs_error("Read from internal pipe failed: %m");
+                ucs_error("Read from internal event fd failed: %m");
                 status = UCS_ERR_IO_ERROR;
                 goto out;
             }

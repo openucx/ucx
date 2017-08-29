@@ -117,7 +117,7 @@ typedef struct ucp_worker {
     unsigned                      wireup_pend_count;/* Number of pending requests on wireup endpoints*/
 
     int                           epfd;          /* Allocated (on-demand) epoll fd for wakeup */
-    int                           wakeup_pipe[2];/* Pipe to support signal() calls */
+    int                           eventfd;       /* Event fd to support signal() calls */
     unsigned                      uct_events;    /* UCT arm events */
     ucs_list_link_t               arm_ifaces;    /* List of interfaces to arm */
 
