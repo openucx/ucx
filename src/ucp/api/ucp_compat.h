@@ -28,9 +28,15 @@ void ucp_request_release(void *request);
 
 /**
  * @ingroup UCP_ENDPOINT
- * @deprecated Replaced by @ref ucp_disconnect_nb.
+ * @deprecated Replaced by @ref ucp_ep_close_nb.
  */
 void ucp_ep_destroy(ucp_ep_h ep);
 
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @deprecated Replaced by @ref ucp_ep_close_nb.
+ */
+ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
 
 #endif

@@ -214,18 +214,18 @@ enum ucp_ep_params_flags_field {
 
 /**
  * @ingroup UCP_ENDPOINT
- * @brief @anchor ucp_ep_close_mode Close UCP endpoint modes.
+ * @brief @anchor ucp_ep_close_nb_mode Close UCP endpoint modes.
  *
- * The enumeration allows specifying behavior of @ref ucp_ep_close routine.
+ * The enumeration allows specifying behavior of @ref ucp_ep_close_nb routine.
  */
 enum {
-    UCP_EP_CLOSE_MODE_FORCE         = 0, /**< @ref ucp_ep_close releases
+    UCP_EP_CLOSE_MODE_FORCE         = 0, /**< @ref ucp_ep_close_nb releases
                                               the endpoint without any
                                               confirmation from the peer. All
                                               outstanding requests will be
                                               completed with
                                               @ref UCS_ERR_CANCELED error. */
-    UCP_EP_CLOSE_MODE_FLUSH         = 1, /**< @ref ucp_ep_close flushes all
+    UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb flushes all
                                               outstanding operations. */
 };
 
@@ -1443,46 +1443,30 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
 /**
  * @ingroup UCP_ENDPOINT
  *
- * @brief Initiate non-blocking disconnect.
- *
- *   This routine starts a disconnect process which would eventually release the
- * @ref ucp_ep_h "endpoint". The disconnect process flushes, locally, all
- * outstanding communications, and releases all memory contexts associated with
- * the endpoint. After calling this function, the endpoint cannot be used anymore.
- *   Nevertheless, if the application is interested to re-initiate communication
- * with a particular remote worker, it can use @ref ucp_ep_create "endpoints
- * create routine" to re-open a new endpoint.
- *
- * @param [in]  ep   Handle to the endpoint to disconnect.
- *
- * @return UCS_OK           - The endpoint is flushed and destroyed.
- * @return UCS_PTR_IS_ERR(_ptr) - The disconnect operation failed.
- * @return otherwise        - The disconnect process started, and can be
- *                          completed in any point in time. The request handle
- *                          is returned to the application in order to track
- *                          progress of the disconnect. The application is
- *                          responsible to release the handle using
- *                          @ref ucp_request_free "ucp_request_free()"
- *                          routine.
- */
-ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
-
-
-/**
- * @ingroup UCP_ENDPOINT
- *
- * @brief Blocking @ref ucp_ep_h "endpoint" closure.
+ * @brief Non-blocking @ref ucp_ep_h "endpoint" closure.
  *
  * This routine releases the @ref ucp_ep_h "endpoint". The endpoint closure
  * process depends on set @a flags.
  *
  * @param [in]  ep      Handle to the endpoint to close.
- * @param [in]  mode    One from @ref ucp_ep_close_mode "enumerator" value.
+ * @param [in]  mode    One from @ref ucp_ep_close_nb_mode "enumerator" value.
  *
- * @return Error code as defined by @ref ucs_status_t
+ * @return UCS_OK           - The endpoint is closed successfully.
+ * @return UCS_PTR_IS_ERR(_ptr) - The closure failed, error code indicates
+ *                                transport level status. Resources are released,
+ *                                so the endpoint can't be used.
+ * @return otherwise        - The closure process started, and can be
+ *                          completed in any point in time. The request handle
+ *                          is returned to the application in order to track
+ *                          progress of the endpoint closure. The application is
+ *                          responsible to release the handle using
+ *                          @ref ucp_request_free "ucp_request_free()"
+ *                          routine.
  *
+ * @note @ref ucp_ep_close_nb replaces deprecated @ref ucp_disconnect_nb and 
+ *       @ref ucp_ep_destroy
  */
-ucs_status_t ucp_ep_close(ucp_ep_h ep, unsigned mode);
+ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode);
 
 
 /**
