@@ -247,7 +247,8 @@ ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
 void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
                                    int is_log);
 
-ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available);
+ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
+                             unsigned flags);
 
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 0)(uct_rc_iface_send_op_t *op,
                                                    const void *resp);

@@ -333,10 +333,10 @@ static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
                                                           void *arg)
 {
     uct_rc_fc_request_t *freq;
-    uct_purge_cb_args_t  *cb_args   = arg;
+    uct_purge_cb_args_t *cb_args    = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;
     uct_pending_req_t *req    = ucs_container_of(elem, uct_pending_req_t, priv);
-    uct_rc_ep_t *ep           = ucs_container_of(ucs_arbiter_elem_group(elem),
+    uct_rc_ep_t       *ep     = ucs_container_of(ucs_arbiter_elem_group(elem),
                                                  uct_rc_ep_t, arb_group);
 
     /* Invoke user's callback only if it is not internal FC message */
@@ -344,7 +344,7 @@ static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
         if (cb != NULL) {
             cb(req, cb_args->arg);
         } else {
-            ucs_warn("ep=%p cancelling user pending request %p", ep, req);
+            ucs_debug("ep=%p cancelling user pending request %p", ep, req);
         }
     } else {
         freq = ucs_derived_of(req, uct_rc_fc_request_t);
@@ -412,9 +412,16 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
     }
 }
 
-ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available)
+ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
+                             unsigned flags)
 {
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
+
+    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+        uct_rc_txqp_purge_outstanding(&ep->txqp, UCS_ERR_CANCELED, 0);
+        uct_ep_pending_purge(&ep->super.super, NULL, 0);
+        return UCS_OK;
+    }
 
     if (!uct_rc_iface_has_tx_resources(iface) || !uct_rc_ep_has_tx_resources(ep)) {
         return UCS_ERR_NO_RESOURCE;

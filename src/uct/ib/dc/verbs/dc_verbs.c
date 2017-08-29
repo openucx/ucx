@@ -544,9 +544,10 @@ ucs_status_t uct_dc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, ui
 
 ucs_status_t uct_dc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
-    uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_verbs_iface_t);
-    uct_dc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
-    ucs_status_t status;
+    uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_dc_verbs_iface_t);
+    uct_dc_verbs_ep_t    *ep    = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
+    ucs_status_t         status;
 
     status = uct_dc_ep_flush(tl_ep, flags, comp);
     if (status == UCS_OK) {

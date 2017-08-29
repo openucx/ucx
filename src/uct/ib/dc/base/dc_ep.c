@@ -39,11 +39,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_ep_t)
                        self, self->dci);
 
     /* we can handle it but well behaving app should not do this */
-    ucs_warn("ep (%p) is destroyed with %d outstanding ops",
-             self, (int16_t)iface->super.config.tx_qp_len -
-             uct_rc_txqp_available(&iface->tx.dcis[self->dci].txqp));
+    ucs_debug("ep (%p) is destroyed with %d outstanding ops",
+              self, (int16_t)iface->super.config.tx_qp_len -
+              uct_rc_txqp_available(&iface->tx.dcis[self->dci].txqp));
     uct_rc_txqp_purge_outstanding(&iface->tx.dcis[self->dci].txqp, UCS_ERR_CANCELED, 1);
-    iface->tx.dcis[self->dci].ep = NULL;
+    iface->tx.dcis[self->dci].ep     = NULL;
+#if ENABLE_ASSERT
+    iface->tx.dcis[self->dci].flags |= UCT_DC_DCI_FLAG_EP_DESTROYED;
+#endif
 }
 
 void uct_dc_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls)
@@ -237,6 +240,19 @@ ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
     uct_dc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_iface_t);
     uct_dc_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_ep_t);
     ucs_status_t status;
+
+    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+        if (ep->dci != UCT_DC_EP_NO_DCI) {
+            uct_rc_txqp_purge_outstanding(&iface->tx.dcis[ep->dci].txqp,
+                                          UCS_ERR_CANCELED, 0);
+#if ENABLE_ASSERT
+            iface->tx.dcis[ep->dci].flags |= UCT_DC_DCI_FLAG_EP_CANCELED;
+#endif
+        }
+
+        uct_ep_pending_purge(tl_ep, NULL, 0);
+        return UCS_OK;
+    }
 
     /* If waiting for FC grant, return NO_RESOURCE to prevent ep destruction.
      * Otherwise grant for destroyed ep will arrive and there will be a

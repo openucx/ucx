@@ -352,10 +352,34 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
 }
 
 static UCS_F_ALWAYS_INLINE void
+uct_ud_iface_add_async_comp(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                            uct_ud_send_skb_t *skb, ucs_status_t status)
+{
+    uct_ud_comp_desc_t *cdesc;
+
+    skb->status = status;
+    if (status != UCS_OK) {
+        if (!(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP)) {
+            skb->len = 0;
+        }
+        skb->flags |= UCT_UD_SEND_SKB_FLAG_ERR;
+        ++ep->tx.err_skb_count;
+    }
+
+    cdesc = uct_ud_comp_desc(skb);
+
+    /* don't call user completion from async context. instead, put
+     * it on a queue which will be progressed from main thread.
+     */
+    ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
+    cdesc->ep  = ep;
+    ep->flags |= UCT_UD_EP_FLAG_ASYNC_COMPS;
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                       uct_ud_psn_t ack_psn, int is_async)
 {
-    uct_ud_comp_desc_t *cdesc;
     uct_ud_send_skb_t *skb;
     if (ucs_unlikely(UCT_UD_PSN_COMPARE(ack_psn, <=, ep->tx.acked_psn))) {
         return;
@@ -367,18 +391,12 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     ucs_queue_for_each_extract(skb, &ep->tx.window, queue,
                                UCT_UD_PSN_COMPARE(skb->neth->psn, <=, ack_psn)) {
         if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP)) {
-            cdesc = uct_ud_comp_desc(skb);
             if (ucs_unlikely(is_async)) {
-                /* don't call user completion from async context. instead, put
-                 * it on a queue which will be progresed from main thread.
-                 */
-                ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
-                ep->flags |= UCT_UD_EP_FLAG_ASYNC_COMPS;
-                cdesc->ep = ep;
+                uct_ud_iface_add_async_comp(iface, ep, skb, UCS_OK);
                 continue;
             }
 
-            uct_invoke_completion(cdesc->comp, UCS_OK);
+            uct_invoke_completion(uct_ud_comp_desc(skb)->comp, UCS_OK);
         }
 
         skb->flags = 0; /* reset also ACK_REQ flag */
@@ -722,6 +740,18 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     return UCS_INPROGRESS;
 }
 
+void uct_ud_tx_wnd_purge_outstanding(uct_ud_iface_t *iface, uct_ud_ep_t *ud_ep,
+                                     ucs_status_t status)
+{
+    uct_ud_send_skb_t  *skb;
+
+    uct_ud_ep_tx_stop(ud_ep);
+
+    ucs_queue_for_each_extract(skb, &ud_ep->tx.window, queue, 1) {
+        uct_ud_iface_add_async_comp(iface, ud_ep, skb, status);
+    }
+}
+
 ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
                              uct_completion_t *comp)
 {
@@ -731,6 +761,15 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
                                            uct_ud_iface_t);
 
     uct_ud_enter(iface);
+
+    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+        uct_ud_tx_wnd_purge_outstanding(iface, ep, UCS_ERR_CANCELED);
+        uct_ud_iface_dispatch_zcopy_comps(iface);
+        uct_ep_pending_purge(ep_h, NULL, 0);
+        uct_ud_leave(iface);
+        return UCS_OK;
+    }
+
     uct_ud_iface_progress_pending_tx(iface);
     status = uct_ud_ep_flush_nolock(iface, ep, comp);
     if (status == UCS_OK) {

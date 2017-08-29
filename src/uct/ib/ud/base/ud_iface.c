@@ -672,21 +672,19 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
                                             uct_ud_send_skb_t, queue);
         cdesc = uct_ud_comp_desc(skb);
 
+        if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
+            uct_invoke_completion(cdesc->comp, skb->status);
+        }
+
         if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_ERR)) {
             ucs_assert(cdesc->ep->tx.err_skb_count > 0);
-
-            if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
-                uct_invoke_completion(cdesc->comp, skb->status);
-            }
-
             --cdesc->ep->tx.err_skb_count;
             if (cdesc->ep->tx.err_skb_count == 0) {
                 iface->super.ops->set_ep_failed(&iface->super,
                                                 &cdesc->ep->super.super);
             }
-        } else {
-            uct_invoke_completion(cdesc->comp, UCS_OK);
         }
+
         cdesc->ep->flags &= ~UCT_UD_EP_FLAG_ASYNC_COMPS;
         skb->flags = 0;
         ucs_mpool_put(skb);
@@ -769,35 +767,11 @@ void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc)
     uct_ud_leave(iface);
 }
 
-static void
-uct_ud_tx_wnd_purge_outstanding(uct_ud_iface_t *iface, uct_ud_ep_t *ud_ep)
-{
-    uct_ud_comp_desc_t *cdesc;
-    uct_ud_send_skb_t  *skb;
-
-    uct_ud_ep_tx_stop(ud_ep);
-
-    ucs_queue_for_each_extract(skb, &ud_ep->tx.window, queue, 1) {
-        skb->flags |= UCT_UD_SEND_SKB_FLAG_ERR;
-        skb->status = UCS_ERR_ENDPOINT_TIMEOUT;
-        if (ucs_likely(!(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP))) {
-            skb->len = 0;
-        }
-        cdesc = uct_ud_comp_desc(skb);
-        /* don't call user completion from async context. instead, put
-         * it on a queue which will be progresed from main thread.
-         */
-        ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
-        ud_ep->flags |= UCT_UD_EP_FLAG_ASYNC_COMPS;
-        ++ud_ep->tx.err_skb_count;
-        cdesc->ep = ud_ep;
-    }
-}
-
 void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg)
 {
     uct_ud_tx_wnd_purge_outstanding(ucs_derived_of(iface, uct_ud_iface_t),
-                                    (uct_ud_ep_t *)arg);
+                                    (uct_ud_ep_t *)arg,
+                                    UCS_ERR_ENDPOINT_TIMEOUT);
 }
 
 ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)

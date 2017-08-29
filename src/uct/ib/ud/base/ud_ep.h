@@ -249,6 +249,9 @@ struct uct_ud_ep {
 
 UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
 
+void uct_ud_tx_wnd_purge_outstanding(uct_ud_iface_t *iface, uct_ud_ep_t *ud_ep,
+                                     ucs_status_t status);
+
 ucs_status_t uct_ud_ep_flush(uct_ep_h ep, unsigned flags,
                              uct_completion_t *comp);
 /* internal flush */
