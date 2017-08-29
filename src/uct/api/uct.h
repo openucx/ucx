@@ -265,6 +265,25 @@ enum uct_iface_event_types {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief  Flush modifiers.
+ */
+enum uct_flush_flags {
+    UCT_FLUSH_FLAG_LOCAL    = 0,            /**< Guarantees that the data
+                                                 transfer is completed but the
+                                                 target buffer may not be
+                                                 updated yet.*/
+    UCT_FLUSH_FLAG_CANCEL   = UCS_BIT(1)    /**< Cancel all outstanding and
+                                                 pending operations.
+                                                 @note Outstanding operation may
+                                                 be and may not to be completed
+                                                 on target side> This is user's
+                                                 responsibility to handle this
+                                                 situation */
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief UCT progress types
  */
 enum uct_progress_types {
@@ -1439,7 +1458,7 @@ UCT_INLINE_API unsigned uct_worker_progress(uct_worker_h worker)
  *
  * @param [in]    iface  Interface to flush communications from.
  * @param [in]    flags  Flags that control completion semantic (currently
- *                        unsupported - set to 0).
+ *                        supported only @ref UCT_FLUSH_FLAG_LOCAL).
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
  *                        Can be NULL, which means that the call will return the
  *                        current state of the interface and no completion will
@@ -1822,8 +1841,8 @@ UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep,
  * the data transfer is completed but the target buffer may not be updated yet.
  *
  * @param [in]    ep     Endpoint to flush communications from.
- * @param [in]    flags  Flags that control completion semantic (currently
- *                        unsupported - set to 0).
+ * @param [in]    flags  Flags @ref uct_flush_flags that control completion
+ *                       semantic.
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
  *                        Can be NULL, which means that the call will return the
  *                        current state of the endpoint and no completion will
