@@ -16,7 +16,6 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     ucp_config_t *config;
     ucs_status_t status;
     ucs_status_ptr_t status_ptr;
-    ucp_tag_recv_info_t info;
     ucp_context_h context;
     ucp_worker_h worker;
     ucp_params_t params;
@@ -86,8 +85,8 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
         status_ptr = ucp_disconnect_nb(ep);
         if (UCS_PTR_IS_PTR(status_ptr)) {
             do {
-                status = ucp_worker_progress(worker);
-                ucp_request_test(status_ptr, &info);
+                ucp_worker_progress(worker);
+                status = ucp_request_test(status_ptr, NULL);
             } while (status == UCS_INPROGRESS);
             ucp_request_release(status_ptr);
         }
