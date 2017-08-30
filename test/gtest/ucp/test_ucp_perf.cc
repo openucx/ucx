@@ -18,7 +18,26 @@ public:
 protected:
     virtual void init() {
         test_base::init(); /* Skip entities creation in ucp_test */
+        ucs_log_push_handler(log_handler);
     }
+
+    virtual void cleanup() {
+        ucs_log_pop_handler();
+        test_base::cleanup();
+    }
+
+    static ucs_log_func_rc_t
+    log_handler(const char *file, unsigned line, const char *function,
+                ucs_log_level_t level, const char *prefix, const char *message,
+                va_list ap) {
+        // Ignore errors that transport cannot reach peer
+        if ((level == UCS_LOG_LEVEL_ERROR) && strstr(message, "transport to")) {
+            UCS_TEST_MESSAGE << format_message(message, ap);
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
     static test_spec tests[];
 };
 

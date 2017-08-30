@@ -55,6 +55,7 @@ protected:
     void SetUpProxy();
     void TearDownProxy();
     void TestBodyProxy();
+    static std::string format_message(const char *message, va_list ap);
 
     virtual void cleanup();
     virtual void init();
@@ -85,7 +86,6 @@ private:
                        const char *message,
                        va_list ap);
 
-    static std::string format_message(const char *message, va_list ap);
 
     static ucs_log_func_rc_t
     hide_errors_logger(const char *file, unsigned line, const char *function,

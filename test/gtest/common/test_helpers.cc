@@ -89,13 +89,14 @@ message_stream::message_stream(const std::string& title) {
     static const char PADDING[] = "          ";
     static const size_t WIDTH = strlen(PADDING);
 
-    std::cout <<  "[";
-    std::cout.write(PADDING, ucs_max(WIDTH - 1, title.length()) - title.length());
-    std::cout << title << " ] ";
+    msg <<  "[";
+    msg.write(PADDING, ucs_max(WIDTH - 1, title.length()) - title.length());
+    msg << title << " ] ";
 }
 
 message_stream::~message_stream() {
-    std::cout << std::endl;
+    msg << std::endl;
+    std::cout << msg.str() << std::flush;
 }
 
 } // detail
