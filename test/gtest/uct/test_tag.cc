@@ -273,7 +273,7 @@ public:
 
     ucs_status_t unexpected_handler(recv_ctx *ctx, void *data, unsigned flags)
     {
-        if (ctx->take_uct_desc && (flags & UCT_CB_FLAG_DESC)) {
+        if (ctx->take_uct_desc && (flags & UCT_AM_CB_FLAG_DESC)) {
             m_uct_descs.push_back(data);
             return UCS_INPROGRESS;
         } else {

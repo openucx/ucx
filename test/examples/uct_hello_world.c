@@ -189,7 +189,7 @@ static ucs_status_t hello_world(void *arg, void *data, size_t length, unsigned f
     func_am_t func_am_type = *(func_am_t *)arg;
     print_strings("callback", func_am_t_str(func_am_type), data);
 
-    if (flags & UCT_CB_FLAG_DESC) {
+    if (flags & UCT_AM_CB_FLAG_DESC) {
         rdesc = (recv_desc_t *)data - 1;
         /* Hold descriptor to release later and return UCS_INPROGRESS */
         rdesc->is_uct_desc = 1;

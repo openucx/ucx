@@ -61,7 +61,7 @@ enum uct_am_cb_flags {
        @endverbatim
      *
      */
-    UCT_CB_FLAG_DESC = UCS_BIT(0)
+    UCT_AM_CB_FLAG_DESC = UCS_BIT(0)
 };
 
 /**

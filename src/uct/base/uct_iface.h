@@ -509,7 +509,7 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM_BYTES, length);
     status = handler->cb(handler->arg, data, length, flags);
     ucs_assert((status == UCS_OK) ||
-               ((status == UCS_INPROGRESS) && (flags & UCT_CB_FLAG_DESC)));
+               ((status == UCS_INPROGRESS) && (flags & UCT_AM_CB_FLAG_DESC)));
     return status;
 }
 

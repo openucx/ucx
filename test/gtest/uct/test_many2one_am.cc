@@ -33,7 +33,7 @@ public:
     ucs_status_t am_handler(void *data, size_t length, unsigned flags) {
         if (ucs::rand() % 4 == 0) {
             receive_desc_t *my_desc;
-            if (flags & UCT_CB_FLAG_DESC) {
+            if (flags & UCT_AM_CB_FLAG_DESC) {
                 my_desc = (receive_desc_t *)data - 1;
                 my_desc->magic  = MAGIC_DESC;
             } else {
@@ -47,7 +47,7 @@ public:
             }
             m_backlog.push_back(my_desc);
             ucs_atomic_add32(&m_am_count, 1);
-            return (flags & UCT_CB_FLAG_DESC) ? UCS_INPROGRESS : UCS_OK;
+            return (flags & UCT_AM_CB_FLAG_DESC) ? UCS_INPROGRESS : UCS_OK;
         }
         mapped_buffer::pattern_check(data, length);
         ucs_atomic_add32(&m_am_count, 1);

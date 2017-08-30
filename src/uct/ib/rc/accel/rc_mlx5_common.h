@@ -160,7 +160,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     } else {
         hdr = uct_ib_iface_recv_desc_hdr(&rc_iface->super, desc);
         VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
-        flags = UCT_CB_FLAG_DESC;
+        flags = UCT_AM_CB_FLAG_DESC;
     }
 
     uct_ib_mlx5_log_rx(&rc_iface->super, IBV_QPT_RC, cqe, hdr,
