@@ -264,7 +264,8 @@ public:
     typedef void (*dtor_t)(T handle);
     typedef void (*dtor2_t)(T handle, ArgT arg);
 
-    handle() : m_initialized(false), m_value(NULL), m_dtor(NULL) {
+    handle() : m_initialized(false), m_value(NULL), m_dtor(NULL),
+               m_dtor_with_arg(NULL), m_dtor_arg(NULL) {
     }
 
     handle(const T& value, dtor_t dtor) : m_initialized(true), m_value(value),
@@ -280,7 +281,8 @@ public:
         EXPECT_TRUE(value != NULL);
     }
 
-    handle(const handle& other) : m_initialized(false), m_value(NULL), m_dtor(NULL) {
+    handle(const handle& other) : m_initialized(false), m_value(NULL), m_dtor(NULL),
+                                  m_dtor_with_arg(NULL), m_dtor_arg(NULL) {
         *this = other;
     }
 
@@ -325,7 +327,11 @@ public:
     const handle& operator=(const handle& other) {
         reset();
         if (other.m_initialized) {
-            reset(other.m_value, other.m_dtor);
+            if (other.m_dtor) {
+                reset(other.m_value, other.m_dtor);
+            } else {
+                reset(other.m_value, other.m_dtor_with_arg, other.m_dtor_arg);
+            }
             other.revoke();
         }
         return *this;

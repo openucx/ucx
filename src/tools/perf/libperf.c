@@ -858,7 +858,7 @@ static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf,
     ucs_status_t        status;
     unsigned i;
 
-    reqs = calloc(sizeof(reqs), group_size);
+    reqs = calloc(sizeof(*reqs), group_size);
 
     for (i = 0; i < group_size; ++i) {
         if (perf->ucp.peers[i].rkey != NULL) {
