@@ -67,8 +67,10 @@ protected:
     unsigned             m_num_threads;
     config_stack_t       m_config_stack;
     int                  m_num_valgrind_errors_before;
+    unsigned             m_num_errors_before;
     unsigned             m_num_warnings_before;
 
+    static unsigned                 m_total_errors;
     static unsigned                 m_total_warnings;
     static std::vector<std::string> m_errors;
 

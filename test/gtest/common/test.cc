@@ -15,6 +15,7 @@ extern "C" {
 namespace ucs {
 
 unsigned test_base::m_total_warnings = 0;
+unsigned test_base::m_total_errors   = 0;
 std::vector<std::string> test_base::m_errors;
 
 test_base::test_base() :
@@ -22,6 +23,7 @@ test_base::test_base() :
                 m_initialized(false),
                 m_num_threads(1),
                 m_num_valgrind_errors_before(0),
+                m_num_errors_before(0),
                 m_num_warnings_before(0)
 {
     push_config();
@@ -140,7 +142,9 @@ test_base::count_warns_logger(const char *file, unsigned line, const char *funct
                               ucs_log_level_t level, const char *prefix,
                               const char *message, va_list ap)
 {
-    if (level == UCS_LOG_LEVEL_WARN) {
+    if (level == UCS_LOG_LEVEL_ERROR) {
+        ++m_total_errors;
+    } else if (level == UCS_LOG_LEVEL_WARN) {
         ++m_total_warnings;
     }
     return UCS_LOG_FUNC_RC_CONTINUE;
@@ -190,6 +194,7 @@ void test_base::SetUpProxy() {
     ucs_assert(m_state == NEW);
     m_num_valgrind_errors_before = VALGRIND_COUNT_ERRORS;
     m_num_warnings_before        = m_total_warnings;
+    m_num_errors_before          = m_total_errors;
 
     m_errors.clear();
     ucs_log_push_handler(count_warns_logger);
@@ -222,6 +227,10 @@ void test_base::TearDownProxy() {
     int num_valgrind_errors = VALGRIND_COUNT_ERRORS - m_num_valgrind_errors_before;
     if (num_valgrind_errors > 0) {
         ADD_FAILURE() << "Got " << num_valgrind_errors << " valgrind errors during the test";
+    }
+    int num_errors = m_total_errors - m_num_errors_before;
+    if (num_errors > 0) {
+        ADD_FAILURE() << "Got " << num_errors << " errors during the test";
     }
     int num_warnings = m_total_warnings - m_num_warnings_before;
     if (num_warnings > 0) {
