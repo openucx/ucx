@@ -477,10 +477,14 @@ ucs_status_t ucp_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
     ucp_mem_desc_t *chunk_hdr;
     ucp_mem_h memh;
     ucs_status_t status;
+    ucp_mem_map_params_t mem_params;
 
-
-    status = ucp_mem_map_common(worker->context, NULL, *size_p + sizeof(*chunk_hdr),
-                                0, 1, &memh);
+    /* Need to get default flags from ucp_mem_map_params2uct_flags() */
+    mem_params.field_mask = 0;
+    status = ucp_mem_map_common(worker->context, NULL,
+                                *size_p + sizeof(*chunk_hdr),
+                                ucp_mem_map_params2uct_flags(&mem_params),
+                                1, &memh);
     if (status != UCS_OK) {
         goto out;
     }
