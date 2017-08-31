@@ -81,6 +81,16 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Number of send WQEs for which completion is requested.",
    ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation), UCS_CONFIG_TYPE_UINT},
 
+#if HAVE_DECL_IBV_EXP_CQ_MODERATION
+  {"TX_CQ_MODERATION_COUNT", "-1",
+   "Number of send WQEs for which event is requested.",
+   ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation_count), UCS_CONFIG_TYPE_INT},
+
+  {"TX_CQ_MODERATION_PERIOD", "-1",
+   "Time period to generate event.",
+   ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation_period), UCS_CONFIG_TYPE_INT},
+#endif /* HAVE_DECL_IBV_EXP_CQ_MODERATION */
+
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 1024, "send",
                                 ucs_offsetof(uct_ib_iface_config_t, tx.mp),
       "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
@@ -559,6 +569,21 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     }
     ucs_assert_always(inl <= UINT8_MAX);
     self->config.max_inl_resp = inl;
+
+#if HAVE_DECL_IBV_EXP_CQ_MODERATION
+    if (config->tx.cq_moderation_count >= 0 || config->tx.cq_moderation_period >= 0) {
+        struct ibv_exp_cq_attr cq_attr = {
+            .comp_mask            = IBV_EXP_CQ_ATTR_MODERATION,
+            .moderation.cq_count  = (uint16_t)ucs_max(config->tx.cq_moderation_count, 0),
+            .moderation.cq_period = (uint16_t)ucs_max(config->tx.cq_moderation_period, 0)
+        };
+        if (ibv_exp_modify_cq(self->send_cq, &cq_attr, IBV_EXP_CQ_MODERATION)) {
+            ucs_error("ibv_exp_modify_cq() failed: %m");
+            status = UCS_ERR_IO_ERROR;
+            goto err_destroy_send_cq;
+        }
+    }
+#endif /* HAVE_DECL_IBV_EXP_CQ_MODERATION */
 
     inl = config->rx.inl;
     status = uct_ib_iface_create_cq(self, rx_cq_len, &inl,
