@@ -78,7 +78,7 @@ public:
 
         if (m_keep_data) {
             receive_desc_t *my_desc;
-            if (flags & UCT_AM_CB_FLAG_DESC) {
+            if (flags & UCT_CB_PARAM_FLAG_DESC) {
                 my_desc = (receive_desc_t *)data - 1;
                 my_desc->magic  = MAGIC_DESC;
             } else {

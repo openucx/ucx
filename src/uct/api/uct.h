@@ -291,28 +291,29 @@ enum uct_am_flags {
  * @ingroup UCT_RESOURCE
  * @brief Callback flags.
  *
- * List of flags for a callback
- * A callback must have either SYNC or ASYNC flags.
+ * List of flags for a callback.
+ * A callback must have either the SYNC or ASYNC flag set.
  */
 enum uct_cb_flags {
     UCT_CB_FLAG_SYNC  = UCS_BIT(1), /**< Callback is always invoked from the context (thread, process)
                                          that called uct_iface_progress(). An interface must
-                                         have @ref UCT_IFACE_FLAG_CB_SYNC flag set to support sync
-                                         callback invocation */
+                                         have the @ref UCT_IFACE_FLAG_CB_SYNC flag set to support sync
+                                         callback invocation. */
 
     UCT_CB_FLAG_ASYNC = UCS_BIT(2)  /**< Callback may be invoked from any context. For example,
-                                         it may be called from transport async progress thread. To guarantee
-                                         async invocation, interface must have @ref UCT_IFACE_FLAG_CB_ASYNC
+                                         it may be called from a transport async progress thread. To guarantee
+                                         async invocation, the interface must have the @ref UCT_IFACE_FLAG_CB_ASYNC
                                          flag set.
-                                         If async callback is set on interface with only @ref
-                                         UCT_IFACE_FLAG_CB_SYNC flags, it will behave exactly like a
-                                         sync callback  */
+                                         If async callback is requested on an interface
+                                         which only supports sync callback
+                                         (i.e., only the @ref UCT_IFACE_FLAG_CB_SYNC flag is set),
+                                         it will behave exactly like a sync callback.  */
 };
 
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Interface opening mode.
+ * @brief Mode in which to open the interface.
  */
 enum uct_iface_open_mode {
    UCT_IFACE_OPEN_MODE_DEVICE          = UCS_BIT(0),  /**< Interface is opened on a specific device */
@@ -525,9 +526,9 @@ struct uct_iface_attr {
 struct uct_iface_params {
     /** Mask of CPUs to use for resources */
     ucs_cpu_set_t                                cpu_mask;
-    /** Interface opening mode bitmap. @ref uct_iface_open_mode */
+    /** Interface open mode bitmap. @ref uct_iface_open_mode */
     uint64_t                                     open_mode;
-
+    /** Mode-specific parameters */
     union {
         struct {
             const char                           *tl_name;  /**< Transport name */
@@ -537,9 +538,11 @@ struct uct_iface_params {
             /** These callbacks and address are only relevant for client-server
              *  connection establishment with sockaddr and are needed on the server side */
             ucs_sock_addr_t                      listen_sockaddr;
+            /** Argument for connection request callback */
             void                                 *conn_request_arg;
             /** Callback for an incoming connection request on the server */
             uct_sockaddr_conn_request_callback_t conn_request_cb;
+            /** Argument for connection ready callback */
             void                                 *conn_ready_arg;
             /** Callback for an incoming message on the server indicating that
                 the connection is ready */

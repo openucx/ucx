@@ -145,7 +145,7 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr,
     if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
         rc_ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
         status = rc_ops->fc_handler(iface, qp_num, hdr, length - sizeof(*hdr),
-                                    imm_data, slid, UCT_AM_CB_FLAG_DESC);
+                                    imm_data, slid, UCT_CB_PARAM_FLAG_DESC);
         if (status == UCS_OK) {
             ucs_mpool_put_inline(desc);
         } else {

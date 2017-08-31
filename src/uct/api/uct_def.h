@@ -41,10 +41,10 @@ enum uct_am_trace_type {
 
 
 /**
- * @ingroup UCT_AM
- * @brief Flags for uct_am_callback.
+ * @ingroup UCT_RESOURCE
+ * @brief Flags for active message and tag-matching offload callbacks (callback's parameters).
  */
-enum uct_am_cb_flags {
+enum uct_cb_param_flags {
 
     /**
      * If this flag is enabled, then data is part of a descriptor which includes
@@ -61,7 +61,7 @@ enum uct_am_cb_flags {
        @endverbatim
      *
      */
-    UCT_AM_CB_FLAG_DESC = UCS_BIT(0)
+    UCT_CB_PARAM_FLAG_DESC = UCS_BIT(0)
 };
 
 /**
@@ -147,7 +147,7 @@ typedef struct uct_iov {
  * @param [in]  data     Points to the received data. This may be a part of
  *                       a descriptor which may be released later.
  * @param [in]  length   Length of data.
- * @param [in]  flags    Mask with @ref uct_am_cb_flags
+ * @param [in]  flags    Mask with @ref uct_cb_param_flags
  *
  * @note This callback could be set and released
  *       by @ref uct_iface_set_am_handler function.
@@ -383,7 +383,7 @@ typedef ucs_status_t (*uct_tag_unexp_eager_cb_t)(void *arg, void *data,
  * @note It is allowed to call other communication routines from the callback.
  *
  * @param [in]  arg           User-defined argument
- * @param [in]  flags         Mask with @ref uct_am_cb_flags
+ * @param [in]  flags         Mask with @ref uct_cb_param_flags
  * @param [in]  stag          Tag from sender.
  * @param [in]  header        User defined header.
  * @param [in]  header_length User defined header length in bytes.
