@@ -400,6 +400,13 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
                                    rndv_hdr, rndv_hdr_len);
 }
 
+static void ucp_tag_rndv_zcopy_completion(uct_completion_t *self,
+                                          ucs_status_t status)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
+    ucp_tag_eager_zcopy_req_complete(req, status);
+}
+
 ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
@@ -414,7 +421,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     void *rndv_op;
 
     req->send.uct_comp.count = 0;
-    req->send.uct_comp.func  = ucp_tag_eager_zcopy_completion;
+    req->send.uct_comp.func  = ucp_tag_rndv_zcopy_completion;
 
     ucs_assert_always(UCP_DT_IS_CONTIG(req->send.datatype));
     ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, &req->send.state, req->send.buffer,
@@ -427,8 +434,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
         return UCS_PTR_STATUS(rndv_op);
     }
     ++req->send.uct_comp.count;
-    
-    req->send.state.offset        = req->send.length;
+
     req->flags                   |= UCP_REQUEST_FLAG_OFFLOADED;
     req->send.tag_offload.rndv_op = rndv_op;
     return UCS_OK;
