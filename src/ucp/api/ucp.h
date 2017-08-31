@@ -777,8 +777,8 @@ typedef struct ucp_ep_params {
     ucs_sock_addr_t         sockaddr;
 
     /**
-     * User data associated with an endpoint. See @ref ucp_ep_poll_t.
-     * @a user_data must be equal to @ref ucp_err_handler_t::arg if set both.
+     * User data associated with an endpoint. See @ref ucp_stream_poll_ep_t.
+     * @a user_data must be equal to @ref ucp_err_handler_t::arg if both are set.
      */
     void                    *user_data;
 } ucp_ep_params_t;
@@ -1228,9 +1228,9 @@ unsigned ucp_worker_progress(ucp_worker_h worker);
 
 /**
  * @ingroup UCP_WORKER
- * @brief Poll for endpoints with ready to consume streaming data.
+ * @brief Poll for endpoints that are ready to consume streaming data.
  *
- * This non-blocking routine returns endpoints on a worker which have ready
+ * This non-blocking routine returns endpoints on a worker which are ready
  * to consume streaming data. The ready endpoints are placed in @poll_eps array,
  * and the function return value indicates how many are there.
  *
@@ -1242,8 +1242,8 @@ unsigned ucp_worker_progress(ucp_worker_h worker);
  * @param [in]   flags     Reserved for future use.
  *
  * @return Negative value indicates an error according to @ref ucp_status_t.
- *         On success, non-negative value (less or equal @a n) indicates actual
- *         number of endpoints filled in @a eps array.
+ *         On success, non-negative value (less or equal @a max_eps) indicates
+ *         actual number of endpoints filled in @a poll_eps array.
  *
  */
 ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
@@ -1859,17 +1859,17 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  * @ingroup UCP_COMM
  * @brief Non-blocking stream send operation.
  *
- * This routine sends a data that is described by the local address @a
- * buffer, size @a count, and @a datatype object to the destination endpoint
- * @a ep. The routine is non-blocking and therefore returns immediately, however
+ * This routine sends data that is described by the local address @a buffer,
+ * size @a count, and @a datatype object to the destination endpoint @a ep.
+ * The routine is non-blocking and therefore returns immediately, however
  * the actual send operation may be delayed. The send operation is considered
  * completed when it is safe to reuse the source @e buffer. If the send
- * operation is completed immediately the routine return UCS_OK and the call-back
- * function @a cb is @b not invoked. If the operation is @b not completed
- * immediately and no error reported then the UCP library will schedule to
- * invoke the call-back @a cb whenever the send operation will be completed. In
- * other words, the completion of a operation can be signaled by the return code
- * or the call-back.
+ * operation is completed immediately the routine returns UCS_OK and the
+ * call-back function @a cb is @b not invoked. If the operation is
+ * @b not completed immediately and no error reported, then the UCP library will
+ * schedule invocation of the call-back @a cb upon completion of the send
+ * operation. In other words, the completion of the operation will be signaled
+ * either by the return code or by the call-back.
  *
  * @note The user should not modify any part of the @a buffer after this
  *       operation is called, until the operation completes.
@@ -1990,14 +1990,14 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  * buffer. In order to notify the application about completion of the receive
  * operation the UCP library will invoke the call-back @a cb when the received
  * data is in the receive buffer and ready for application access. If the
- * receive operation cannot be stated the routine returns an error.
+ * receive operation cannot be started the routine returns an error.
  *
  * @note This routine cannot return UCS_OK. It always returns a request
  *       handle or an error.
  *
  * @param [in]     ep       UCP endpoint that is used for the receive operation.
  * @param [in]     buffer   Pointer to the buffer to receive the data to.
- * @param [in/out] count    Number of elements to receive into @a buffer as
+ * @param [inout] count     Number of elements to receive into @a buffer as
  *                          in-parameter and number of actual elements received.
  *                          I.e. output value can be less or equal input value.
  * @param [in]     datatype Datatype descriptor for the elements in the buffer.
@@ -2005,7 +2005,7 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  *                          receive operation is completed and the data is ready
  *                          in the receive @a buffer. It is important to note
  *                          that the call-back is only invoked in a case when
- *                          the operation cannot be completed in place.
+ *                          the operation cannot be completed immediately.
  * @param [in]     flags    Reserved for future use.
  *
  * @return UCS_OK               - The receive operation was completed
