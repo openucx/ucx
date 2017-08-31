@@ -130,6 +130,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      AM_CONDITIONAL([HAVE_PROFILING], [false])
      AM_CONDITIONAL([HAVE_UCM_PTMALLOC283], [false])
      AM_CONDITIONAL([HAVE_UCM_PTMALLOC286], [false])
+     AM_CONDITIONAL([HAVE_JAVA], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
@@ -142,6 +143,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      m4_include([config/m4/cray_ugni.m4])
      m4_include([config/m4/mpi.m4])
      m4_include([config/m4/rte.m4])
+     m4_include([config/m4/java.m4])
      m4_include([config/m4/cuda.m4])
      m4_include([config/m4/rocm.m4])
      m4_include([config/m4/cma.m4])
@@ -267,6 +269,7 @@ AC_CONFIG_FILES([
                  test/examples/Makefile
                  test/gtest/Makefile
                  test/mpi/Makefile
+                 bindings/java/src/main/native/Makefile
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])
