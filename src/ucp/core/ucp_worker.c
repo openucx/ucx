@@ -241,8 +241,15 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
      *        implemented with using of separated UCP descriptors or manual
      *        signaling in RNDV and similar cases, see conversation in PR #1277
      */
-    if (events & (UCP_WAKEUP_TAG_SEND | UCP_WAKEUP_TAG_RECV)) {
-        worker->uct_events |= UCT_EVENT_SEND_COMP | UCT_EVENT_RECV_AM;
+    if ((events & UCP_WAKEUP_TAG_SEND) ||
+        ((events & UCP_WAKEUP_TAG_RECV) &&
+         (context->config.ext.rndv_thresh != UCS_CONFIG_MEMUNITS_INF)))
+    {
+        worker->uct_events |= UCT_EVENT_SEND_COMP;
+    }
+
+    if (events & UCP_WAKEUP_TAG_RECV) {
+        worker->uct_events |= UCT_EVENT_RECV_AM;
     }
 
     if (events & (UCP_WAKEUP_RMA | UCP_WAKEUP_AMO)) {
