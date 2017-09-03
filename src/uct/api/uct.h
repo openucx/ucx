@@ -1837,19 +1837,16 @@ UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep,
  * this call. The operations are completed at the origin or at the target
  * as well. The exact completion semantic depends on @a flags parameter.
  *
- * @note Currently only one completion type is supported. It guarantees that
- * the data transfer is completed but the target buffer may not be updated yet.
- *
  * @param [in]    ep     Endpoint to flush communications from.
  * @param [in]    flags  Flags @ref uct_flush_flags that control completion
  *                       semantic.
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
- *                        Can be NULL, which means that the call will return the
- *                        current state of the endpoint and no completion will
- *                        be generated in case of outstanding communications.
- *                        If it is not NULL completion counter is decremented
- *                        by 1 when the call completes. Completion callback is
- *                        called when the counter reaches 0.
+ *                       Can be NULL, which means that the call will return the
+ *                       current state of the endpoint and no completion will
+ *                       be generated in case of outstanding communications.
+ *                       If it is not NULL completion counter is decremented
+ *                       by 1 when the call completes. Completion callback is
+ *                       called when the counter reaches 0.
  *
  * @return UCS_OK              - No outstanding communications left.
  *         UCS_ERR_NO_RESOURCE - Flush operation could not be initiated. A subsequent
