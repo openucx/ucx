@@ -190,9 +190,9 @@ class test_ucp_wakeup_external_epollfd : public test_ucp_wakeup {
 public:
     virtual ucp_worker_params_t get_worker_params() {
         ucp_worker_params_t params = test_ucp_wakeup::get_worker_params();
-        params.field_mask |= UCP_WORKER_PARAM_FIELD_EPOLL_FD;
-        params.epfd        = m_epfd;
-        params.ep_data.u32 = EP_DATA32;
+        params.field_mask |= UCP_WORKER_PARAM_FIELD_EPOLL;
+        params.epoll.epoll_fd       = m_epfd;
+        params.epoll.epoll_data.u32 = EP_DATA32;
         return params;
     }
 
