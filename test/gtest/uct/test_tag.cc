@@ -273,7 +273,7 @@ public:
 
     ucs_status_t unexpected_handler(recv_ctx *ctx, void *data, unsigned flags)
     {
-        if (ctx->take_uct_desc && (flags & UCT_CB_FLAG_DESC)) {
+        if (ctx->take_uct_desc && (flags & UCT_CB_PARAM_FLAG_DESC)) {
             m_uct_descs.push_back(data);
             return UCS_INPROGRESS;
         } else {
@@ -478,7 +478,7 @@ UCS_TEST_P(test_tag, tag_send_no_tag)
   check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
 
   uct_iface_set_am_handler(receiver().iface(), 0, am_handler,
-                           NULL, UCT_AM_CB_FLAG_SYNC);
+                           NULL, UCT_CB_FLAG_SYNC);
   mapped_buffer lbuf(200, SEND_SEED, sender());
   ssize_t len = uct_ep_am_bcopy(sender().ep(0), 0, mapped_buffer::pack,
                                 reinterpret_cast<void*>(&lbuf), 0);

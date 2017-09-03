@@ -189,7 +189,7 @@ static ucs_status_t hello_world(void *arg, void *data, size_t length, unsigned f
     func_am_t func_am_type = *(func_am_t *)arg;
     print_strings("callback", func_am_t_str(func_am_type), data);
 
-    if (flags & UCT_CB_FLAG_DESC) {
+    if (flags & UCT_CB_PARAM_FLAG_DESC) {
         rdesc = (recv_desc_t *)data - 1;
         /* Hold descriptor to release later and return UCS_INPROGRESS */
         rdesc->is_uct_desc = 1;
@@ -215,10 +215,10 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name,
     uct_iface_config_t  *config; /* Defines interface configuration options */
     uct_iface_params_t  params;
 
-    params.tl_name     = tl_name;
-    params.dev_name    = dev_name;
-    params.stats_root  = NULL;
-    params.rx_headroom = sizeof(recv_desc_t);
+    params.mode.device.tl_name  = tl_name;
+    params.mode.device.dev_name = dev_name;
+    params.stats_root           = NULL;
+    params.rx_headroom          = sizeof(recv_desc_t);
 
     UCS_CPU_ZERO(&params.cpu_mask);
     /* Read transport-specific interface configuration */
@@ -582,7 +582,7 @@ int main(int argc, char **argv)
     /*Set active message handler */
     status = uct_iface_set_am_handler(if_info.iface, id, hello_world,
                                       &cmd_args.func_am_type,
-                                      UCT_AM_CB_FLAG_SYNC);
+                                      UCT_CB_FLAG_SYNC);
     CHKERR_JUMP(UCS_OK != status, "set callback", out_free_ep);
 
     if (cmd_args.server_name) {

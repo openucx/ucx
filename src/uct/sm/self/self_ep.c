@@ -73,7 +73,7 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     uct_iface_trace_am(&self_iface->super, UCT_AM_TRACE_TYPE_RECV, id, p_data,
                        total_length, "RX: AM_SHORT");
     status = uct_iface_invoke_am(&self_iface->super, id, p_data, total_length,
-                                 UCT_CB_FLAG_DESC);
+                                 UCT_CB_PARAM_FLAG_DESC);
 
     if (ucs_unlikely(UCS_INPROGRESS == status)) {
         uct_self_ep_am_reserve_buffer(self_iface, desc);
@@ -122,7 +122,7 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     uct_iface_trace_am(&self_iface->super, UCT_AM_TRACE_TYPE_RECV, id, payload,
                        length, "RX: AM_BCOPY");
     status = uct_iface_invoke_am(&self_iface->super, id, payload, length,
-                                 UCT_CB_FLAG_DESC);
+                                 UCT_CB_PARAM_FLAG_DESC);
 
     if (ucs_unlikely(UCS_INPROGRESS == status)) {
         uct_self_ep_am_reserve_buffer(self_iface, desc);

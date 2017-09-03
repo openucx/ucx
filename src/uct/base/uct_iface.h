@@ -495,7 +495,7 @@ ucs_status_t uct_base_ep_fence(uct_ep_h tl_ep, unsigned flags);
  * @param id       Active message ID.
  * @param data     Received data.
  * @param length   Length of received data.
- * @param flags    Mask with @ref uct_cb_flags
+ * @param flags    Mask with @ref uct_cb_param_flags
  */
 static inline ucs_status_t
 uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
@@ -509,7 +509,7 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM_BYTES, length);
     status = handler->cb(handler->arg, data, length, flags);
     ucs_assert((status == UCS_OK) ||
-               ((status == UCS_INPROGRESS) && (flags & UCT_CB_FLAG_DESC)));
+               ((status == UCS_INPROGRESS) && (flags & UCT_CB_PARAM_FLAG_DESC)));
     return status;
 }
 

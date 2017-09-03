@@ -21,7 +21,7 @@ protected:
 
         uct_iface_set_am_handler(m_receiver->iface(), 1,
                                  (uct_am_callback_t)ucs_empty_function_return_success,
-                                 NULL, UCT_AM_CB_FLAG_ASYNC);
+                                 NULL, UCT_CB_FLAG_ASYNC);
     }
 
     void connect() {

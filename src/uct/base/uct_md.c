@@ -309,7 +309,7 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
 {
     uct_tl_component_t *tlc;
 
-    tlc = uct_find_tl_on_md(md->component, params->tl_name);
+    tlc = uct_find_tl_on_md(md->component, params->mode.device.tl_name);
     if (tlc == NULL) {
         /* Non-existing transport */
         return UCS_ERR_NO_DEVICE;

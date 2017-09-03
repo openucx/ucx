@@ -235,8 +235,8 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 
     ucs_status_t status;
 
-    params->tl_name    = const_cast<char*>(resource.tl_name.c_str());
-    params->dev_name   = const_cast<char*>(resource.dev_name.c_str());
+    params->mode.device.tl_name    = const_cast<char*>(resource.tl_name.c_str());
+    params->mode.device.dev_name   = const_cast<char*>(resource.dev_name.c_str());
     params->stats_root = ucs_stats_get_root();
     UCS_CPU_ZERO(&params->cpu_mask);
 

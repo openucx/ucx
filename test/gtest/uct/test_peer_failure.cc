@@ -23,7 +23,7 @@ private:
             uct_iface_set_am_handler(e->iface(), 0,
                                      am_dummy_handler,
                                      reinterpret_cast<void*>(m_test),
-                                     UCT_AM_CB_FLAG_SYNC);
+                                     UCT_CB_FLAG_SYNC);
         }
 
         test_uct_peer_failure* m_test;
@@ -89,7 +89,7 @@ public:
 
         m_entities.back()->check_caps(UCT_IFACE_FLAG_AM_SHORT   |
                                       UCT_IFACE_FLAG_PENDING    |
-                                      UCT_IFACE_FLAG_AM_CB_SYNC |
+                                      UCT_IFACE_FLAG_CB_SYNC    |
                                       UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
 
         am_handler_setter(this)(m_receivers.back());
@@ -99,7 +99,7 @@ public:
 
     void set_am_handlers()
     {
-        check_caps(UCT_IFACE_FLAG_AM_CB_SYNC);
+        check_caps(UCT_IFACE_FLAG_CB_SYNC);
         std::for_each(m_receivers.begin(), m_receivers.end(),
                       am_handler_setter(this));
     }

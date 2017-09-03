@@ -350,7 +350,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
     case UCX_PERF_CMD_AM:
         required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_AM_SHORT,
                                     UCT_IFACE_FLAG_AM_BCOPY, UCT_IFACE_FLAG_AM_ZCOPY);
-        required_flags |= UCT_IFACE_FLAG_AM_CB_SYNC;
+        required_flags |= UCT_IFACE_FLAG_CB_SYNC;
         min_size = __get_max_size(params->uct.data_layout, 0, 0,
                                   attr.cap.am.min_zcopy);
         max_size = __get_max_size(params->uct.data_layout, attr.cap.am.max_short,
@@ -672,7 +672,7 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 
     rte_call(perf, barrier);
 
-    uct_iface_set_am_handler(perf->uct.iface, UCT_PERF_TEST_AM_ID, NULL, NULL, UCT_AM_CB_FLAG_SYNC);
+    uct_iface_set_am_handler(perf->uct.iface, UCT_PERF_TEST_AM_ID, NULL, NULL, UCT_CB_FLAG_SYNC);
 
     group_size  = rte_call(perf, group_size);
     group_index = rte_call(perf, group_index);
@@ -1093,10 +1093,10 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
     uct_iface_config_t *iface_config;
     ucs_status_t status;
     uct_iface_params_t iface_params = {
-        .tl_name     = params->uct.tl_name,
-        .dev_name    = params->uct.dev_name,
-        .stats_root  = ucs_stats_get_root(),
-        .rx_headroom = 0
+        .mode.device.tl_name  = params->uct.tl_name,
+        .mode.device.dev_name = params->uct.dev_name,
+        .stats_root           = ucs_stats_get_root(),
+        .rx_headroom          = 0
     };
     UCS_CPU_ZERO(&iface_params.cpu_mask);
 

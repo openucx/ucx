@@ -615,7 +615,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     }
 
     if (ucs_unlikely(is_async &&
-                     (iface->super.super.am[am_id].flags & UCT_AM_CB_FLAG_SYNC))) {
+                     (iface->super.super.am[am_id].flags & UCT_CB_FLAG_SYNC))) {
         skb->u.am.len = byte_len - sizeof(*neth);
         ucs_queue_push(&iface->rx.pending_q, &skb->u.am.queue);
     } else {

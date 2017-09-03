@@ -266,13 +266,13 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_t *iface,
 
         if (UCT_RC_VERBS_TM_IS_SW_RNDV(wc->exp_wc_flags, imm_data)) {
             status = iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg,
-                                             UCT_CB_FLAG_DESC, be64toh(tmh->tag), tmh + 1,
+                                             UCT_CB_PARAM_FLAG_DESC, be64toh(tmh->tag), tmh + 1,
                                              wc->byte_len - sizeof(*tmh), 0ul, 0,
                                              NULL);
         } else {
             status = iface->tm.eager_unexp.cb(iface->tm.eager_unexp.arg,
                                               tmh + 1, wc->byte_len - sizeof(*tmh),
-                                              UCT_CB_FLAG_DESC, be64toh(tmh->tag), imm_data);
+                                              UCT_CB_PARAM_FLAG_DESC, be64toh(tmh->tag), imm_data);
         }
         uct_rc_verbs_iface_unexp_consumed(iface, ib_desc,
                                           &iface->tm.eager_desc, status);
@@ -295,7 +295,7 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_t *iface,
         rb = uct_md_fill_md_name(&ib_md->super, (char*)tmh + wc->byte_len);
         uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, rb);
 
-        status = iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, UCT_CB_FLAG_DESC,
+        status = iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, UCT_CB_PARAM_FLAG_DESC,
                                          be64toh(tmh->tag), rvh + 1, wc->byte_len -
                                          (sizeof(*tmh) + sizeof(*rvh)), be64toh(rvh->va),
                                          ntohl(rvh->len), (char*)tmh + wc->byte_len);
@@ -652,7 +652,8 @@ void uct_rc_verbs_iface_tag_query(uct_rc_verbs_iface_t *iface,
     unsigned eager_hdr_size  = sizeof(struct ibv_exp_tmh);
 
     if (UCT_RC_VERBS_TM_ENABLED(iface)) {
-        iface_attr->ep_addr_len = sizeof(uct_rc_verbs_ep_tm_address_t);
+        iface_attr->ep_addr_len   = sizeof(uct_rc_verbs_ep_tm_address_t);
+        iface_attr->max_conn_priv = 0;
 
         /* Redefine AM caps, because we have to send TMH (with NO_TAG
          * operation) with every AM message. */

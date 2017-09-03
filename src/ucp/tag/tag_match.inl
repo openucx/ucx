@@ -160,7 +160,7 @@ ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_worker_h worker, void *data,
     ucs_list_link_t *hash_list;
     ucs_status_t status;
 
-    if (ucs_unlikely(am_flags & UCT_CB_FLAG_DESC)) {
+    if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
         /* slowpath */
         rdesc        = (ucp_recv_desc_t *)data - 1;
         rdesc->flags = flags | UCP_RECV_DESC_FLAG_UCT_DESC;

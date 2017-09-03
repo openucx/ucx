@@ -382,17 +382,17 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     int mtu;
 
     ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%zu ud_rx_priv_len=%u",
-                   params->dev_name, self, ops, worker,
+                   params->mode.device.dev_name, self, ops, worker,
                    params->rx_headroom, ud_rx_priv_len);
 
     if (config->super.tx.queue_len <= UCT_UD_TX_MODERATION) {
         ucs_error("%s ud iface tx queue is too short (%d <= %d)",
-                  params->dev_name,
+                  params->mode.device.dev_name,
                   config->super.tx.queue_len, UCT_UD_TX_MODERATION);
         return UCS_ERR_INVALID_PARAM;
     }
 
-    status = uct_ib_device_mtu(params->dev_name, md, &mtu);
+    status = uct_ib_device_mtu(params->mode.device.dev_name, md, &mtu);
     if (status != UCS_OK) {
         return status;
     }
@@ -408,7 +408,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
                               mtu, &config->super);
 
     if (self->super.super.worker->async == NULL) {
-        ucs_error("%s ud iface must have valid async context", params->dev_name);
+        ucs_error("%s ud iface must have valid async context", params->mode.device.dev_name);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -526,8 +526,8 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
                                          UCT_IFACE_FLAG_CONNECT_TO_EP    |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                          UCT_IFACE_FLAG_PENDING          |
-                                         UCT_IFACE_FLAG_AM_CB_SYNC       |
-                                         UCT_IFACE_FLAG_AM_CB_ASYNC      |
+                                         UCT_IFACE_FLAG_CB_SYNC          |
+                                         UCT_IFACE_FLAG_CB_ASYNC         |
                                          UCT_IFACE_FLAG_EVENT_SEND_COMP  |
                                          UCT_IFACE_FLAG_EVENT_RECV_AM    |
                                          UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
@@ -547,6 +547,7 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 
     iface_attr->iface_addr_len         = sizeof(uct_ud_iface_addr_t);
     iface_attr->ep_addr_len            = sizeof(uct_ud_ep_addr_t);
+    iface_attr->max_conn_priv          = 0;
 
     /* Software overhead */
     iface_attr->overhead               = 80e-9;
