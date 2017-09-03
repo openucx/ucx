@@ -1981,19 +1981,19 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
 
 /**
  * @ingroup UCP_COMM
- * @brief Non-blocking stream receive operation.
+ * @brief Non-blocking stream receive operation of structured data into a 
+ *        user-supplied buffer.
  *
- * This routine receives a data that is described by the local address @a
- * buffer, size @a count, and @a datatype object on the endpoint @a ep. The
- * routine is a non-blocking and therefore returns immediately. The receive
- * operation is considered completed when the message is delivered to the @a
- * buffer. In order to notify the application about completion of the receive
- * operation the UCP library will invoke the call-back @a cb when the received
- * data is in the receive buffer and ready for application access. If the
- * receive operation cannot be started the routine returns an error.
- *
- * @note This routine cannot return UCS_OK. It always returns a request
- *       handle or an error.
+ * This routine receives data that is described by the local address @a buffer,
+ * size @a count, and @a datatype object on the endpoint @a ep. The routine is
+ * non-blocking and therefore returns immediately. The receive operation is
+ * considered complete when the message is delivered to the buffer. If data is
+ * not immediately available, the operation will be scheduled for receive and
+ * a request handle will be returned. In order to notify the application about
+ * completion of a scheduled receive operation, the UCP library will invoke
+ * the call-back @a cb when data is in the receive buffer and ready for
+ * application access. If the receive operation cannot be started, the routine
+ * returns an error.
  *
  * @param [in]     ep       UCP endpoint that is used for the receive operation.
  * @param [in]     buffer   Pointer to the buffer to receive the data to.
@@ -2011,12 +2011,12 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  * @return UCS_OK               - The receive operation was completed
  *                                immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
- * @return otherwise            - Operation was scheduled for receive. The
- *                                request handle is returned to the application
- *                                in order to track progress of the operation.
- *                                The application is responsible to released the
- *                                handle using @ref ucp_request_free
- *                                "ucp_request_free()" routine.
+ * @return otherwise            - Operation was scheduled for receive. A request
+ *                                handle is returned to the application in order
+ *                                to track progress of the operation.
+ *                                The application is responsible for releasing
+ *                                the handle by calling the
+ *                                @ref ucp_request_free routine.
  */
 ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,
                                     ucp_datatype_t datatype,
@@ -2026,12 +2026,15 @@ ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,
 
 /**
  * @ingroup UCP_COMM
- * @brief Non-blocking stream receive data.
+ * @brief Non-blocking stream receive operation of unstructured data into
+ *        a UCP-supplied buffer.
  *
- * This routine receives a raw data on endpoint @ref ep if available that is
- * described by UCS_STATUS_PTR(_ptr) in return value as a pointer to the data
- * and @a length. The routine is a non-blocking and therefore returns
- * immediately.
+ * This routine receives any available data from endpoint @a ep.
+ * Unlike @ref ucp_stream_recv_nb, the returned data is unstructured and is
+ * treated as an array of bytes. If data is immediately available,
+ * UCS_STATUS_PTR(_ptr) is returned as a pointer to the data, and @a length
+ * is set to the size of the returned data buffer. The routine is non-blocking
+ * and therefore returns immediately.
  *
  * @param [in]   ep               UCP endpoint that is used for the receive
  *                                operation.
@@ -2041,19 +2044,17 @@ ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,
  * @return UCS_PTR_IS_ERR(_ptr) - the receive operation failed and
  *                                UCS_PTR_STATUS(_ptr) indicates an error.
  * @return otherwise            - The pointer to the data UCS_STATUS_PTR(_ptr)
- *                                is returned to the application in order to
- *                                capture internal UCP resources until received
- *                                data is processed. When data is processed,
- *                                application is responsible to release the
- *                                handle using @ref ucp_stream_data_release
- *                                "ucp_stream_data_release()" routine.
+ *                                is returned to the application. After the data
+ *                                is processed, the application is responsible
+ *                                for releasing the data buffer by calling the
+ *                                @ref ucp_stream_data_release routine.
  *
  * @note This function returns packed data (equivalent to ucp_dt_make_contig(1)).
- * @note This function returns a pointer to a UCP internal buffer, whereas
+ * @note This function returns a pointer to a UCP-supplied buffer, whereas
  *       @ref ucp_stream_recv_nb places the data into a user-provided buffer.
- *       In some cases, retrieving the internal buffer can be more optimal,
-         for example by processing the incoming data in-place and thus avoiding
- *       extra memory copy operations.
+ *       In some cases, receiving data directly into a UCP-supplied buffer can
+ *       be more optimal, for example by processing the incoming data in-place
+ *       and thus avoiding extra memory copy operations.
  */
 ucs_status_ptr_t ucp_stream_recv_data_nb(ucp_ep_h ep, size_t *length);
 
