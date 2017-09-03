@@ -274,7 +274,7 @@ static void ucp_worker_wakeup_cleanup(ucp_worker_h worker)
     }
 }
 
-static ucs_status_t ucp_worker_wakeup_pipe_write(ucp_worker_h worker)
+static ucs_status_t ucp_worker_wakeup_signal_fd(ucp_worker_h worker)
 {
     uint64_t dummy = 1;
     int ret;
@@ -303,7 +303,7 @@ static ucs_status_t ucp_worker_wakeup_pipe_write(ucp_worker_h worker)
 void ucp_worker_signal_internal(ucp_worker_h worker)
 {
     if (worker->context->config.features & UCP_FEATURE_WAKEUP) {
-        ucp_worker_wakeup_pipe_write(worker);
+        ucp_worker_wakeup_signal_fd(worker);
     }
 }
 
@@ -1257,7 +1257,7 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker)
     ucs_trace_func("worker %p", worker);
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-    status = ucp_worker_wakeup_pipe_write(worker);
+    status = ucp_worker_wakeup_signal_fd(worker);
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
 
     return status;
