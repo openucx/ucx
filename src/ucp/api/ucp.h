@@ -216,7 +216,7 @@ enum ucp_ep_params_flags_field {
  * @ingroup UCP_ENDPOINT
  * @brief @anchor ucp_ep_close_nb_mode Close UCP endpoint modes.
  *
- * The enumeration allows specifying behavior of @ref ucp_ep_close_nb routine.
+ * The enumeration is used to specify the behavior of @ref ucp_ep_close_nb.
  */
 enum {
     UCP_EP_CLOSE_MODE_FORCE         = 0, /**< @ref ucp_ep_close_nb releases
