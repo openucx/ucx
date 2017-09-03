@@ -225,8 +225,9 @@ enum {
                                               outstanding requests will be
                                               completed with
                                               @ref UCS_ERR_CANCELED error. */
-    UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb flushes all
-                                              outstanding operations. */
+    UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
+                                              flushes on all outstanding
+                                              operations. */
 };
 
 
@@ -1446,22 +1447,22 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  * @brief Non-blocking @ref ucp_ep_h "endpoint" closure.
  *
  * This routine releases the @ref ucp_ep_h "endpoint". The endpoint closure
- * process depends on set @a flags.
+ * process depends on the selected @a mode.
  *
  * @param [in]  ep      Handle to the endpoint to close.
  * @param [in]  mode    One from @ref ucp_ep_close_nb_mode "enumerator" value.
  *
  * @return UCS_OK           - The endpoint is closed successfully.
- * @return UCS_PTR_IS_ERR(_ptr) - The closure failed, error code indicates
- *                                transport level status. Resources are released,
- *                                so the endpoint can't be used.
- * @return otherwise        - The closure process started, and can be
- *                          completed in any point in time. The request handle
- *                          is returned to the application in order to track
- *                          progress of the endpoint closure. The application is
- *                          responsible to release the handle using
- *                          @ref ucp_request_free "ucp_request_free()"
- *                          routine.
+ * @return UCS_PTR_IS_ERR(_ptr) - The closure failed and an error code indicates
+ *                                the transport level status. However, resources
+ *                                are released and the @a endpoint can no longer
+ *                                be used.
+ * @return otherwise        - The closure process is started, and can be
+ *                            completed at any point in time. A request handle
+ *                            is returned to the application in order to track
+ *                            progress of the endpoint closure. The application
+ *                            is responsible for releasing the handle using the
+ *                            @ref ucp_request_free routine.
  *
  * @note @ref ucp_ep_close_nb replaces deprecated @ref ucp_disconnect_nb and 
  *       @ref ucp_ep_destroy
