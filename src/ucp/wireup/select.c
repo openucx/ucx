@@ -188,7 +188,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     }
 
     if (!addr_index_map) {
-         snprintf(p, endp - p, "not supported by peer  ");
+         snprintf(p, endp - p, "%s  ", ucs_status_string(UCS_ERR_UNSUPPORTED));
          p += strlen(p);
     }
 
@@ -265,8 +265,9 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
          * debug message.
          */
         if (!reachable) {
-            snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT" - cannot reach peer, ",
-                     UCT_TL_RESOURCE_DESC_ARG(resource));
+            snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT" - %s, ",
+                     UCT_TL_RESOURCE_DESC_ARG(resource),
+                     ucs_status_string(UCS_ERR_UNREACHABLE));
             p += strlen(p);
         }
     }

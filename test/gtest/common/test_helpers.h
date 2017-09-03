@@ -394,11 +394,10 @@ public:
             std::string s = msg.str();
             if (!s.empty()) {
                 std::cout << s << std::flush;
+                msg.str("");
             }
-            msg.str("");
             msg.clear();
-        }
-        else {
+        } else {
             msg << f;
         }
         return *this;

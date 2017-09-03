@@ -31,9 +31,13 @@ protected:
                 ucs_log_level_t level, const char *prefix, const char *message,
                 va_list ap) {
         // Ignore errors that transport cannot reach peer
-        if ((level == UCS_LOG_LEVEL_ERROR) && strstr(message, "transport to")) {
-            UCS_TEST_MESSAGE << format_message(message, ap);
-            return UCS_LOG_FUNC_RC_STOP;
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            std::string err_str = format_message(message, ap);
+            if (strstr(err_str.c_str(), ucs_status_string(UCS_ERR_UNREACHABLE)) || 
+                strstr(err_str.c_str(), ucs_status_string(UCS_ERR_UNSUPPORTED))) {
+                UCS_TEST_MESSAGE << err_str;
+                return UCS_LOG_FUNC_RC_STOP;
+            }
         }
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
