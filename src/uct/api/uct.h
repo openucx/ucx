@@ -272,13 +272,14 @@ enum uct_flush_flags {
                                                  transfer is completed but the
                                                  target buffer may not be
                                                  updated yet.*/
-    UCT_FLUSH_FLAG_CANCEL   = UCS_BIT(1)    /**< Cancel all outstanding and
-                                                 pending operations.
-                                                 @note Outstanding operation may
-                                                 be and may not to be completed
-                                                 on target side> This is user's
-                                                 responsibility to handle this
-                                                 situation */
+    UCT_FLUSH_FLAG_CANCEL   = UCS_BIT(0)    /**< The library will do the best
+                                                 effort to cancel all
+                                                 incompleted operations. User
+                                                 should be aware about the fact
+                                                 there is a chance that some
+                                                 operation will not be completed
+                                                 and been ready to handle all
+                                                 the relevant callbacks. */
 };
 
 
