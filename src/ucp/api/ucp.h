@@ -2855,30 +2855,4 @@ ucs_status_t ucp_worker_flush(ucp_worker_h worker);
  */
 
 
-/**
- * @ingroup UCP_COMM
- * @brief Check the status of non-blocking request.
- *
- * This routine checks the state of the request and returns its current status.
- * Any value different from UCS_INPROGRESS means that request is in a completed
- * state.
- *
- * @param [in]  request     Non-blocking request to check.
- *
- * @param [out] info        If request is in completed state, it is
- *                          filled with the details about the message.
- *
- * @note The @p info parameter is relevant for receive operations only. It is
- * left uninitialized in case of send operation.
- *
- * @return Error code as defined by @ref ucs_status_t
- * 
- * @note This function is deprecated. Please, use @ref ucp_request_check_status
- *       in cases then only check status is needed for any type of request and
- *       @ref ucp_tag_recv_request_test for request returned from
- *       @ref ucp_tag_recv_nb routine and return parameter @a info if required.
- */
-ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info);
-
-
 #endif

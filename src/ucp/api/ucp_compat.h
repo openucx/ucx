@@ -39,4 +39,18 @@ void ucp_ep_destroy(ucp_ep_h ep);
  */
 ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
 
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @deprecated Replaced by @ref ucp_tag_recv_request_test and
+ *             @ref ucp_request_check_status depends on use case.
+ *
+ * @note Please, use @ref ucp_request_check_status in cases then only check
+ *       status is needed for any type of request and
+ *       @ref ucp_tag_recv_request_test for request returned from
+ *       @ref ucp_tag_recv_nb routine and out-parameter @a info is required.
+ */
+ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info);
+
+
 #endif
