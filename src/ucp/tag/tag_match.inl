@@ -22,6 +22,8 @@
  * and small enough to fit L1 cache. */
 #define UCP_TAG_MATCH_HASH_SIZE     1021
 
+#define UCP_TAG_MATCH_QUEUES_NUM    ucs_roundup_pow2(UCP_TAG_MATCH_HASH_SIZE)
+
 
 
 #define ucp_tag_log_match(_recv_tag, _recv_len,_req, _exp_tag, _exp_tag_mask, \

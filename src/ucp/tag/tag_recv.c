@@ -163,9 +163,10 @@ ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
 
     req->status = status;
     req->flags |= UCP_REQUEST_FLAG_COMPLETED;
-    if (req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD) {
-        --req->recv.worker->context->tm.offload.sw_req_count;
-    }
+    /* This func is called when some unexpected message is matched
+     * immediately. Thus, this request could not be offloaded.
+     * TODO: add some check that sw_req_count does not need to be decremented. */
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_OFFLOADED));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
 }
 
@@ -214,6 +215,9 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         ucp_tag_offload_try_post(worker->context, req);
         ucs_trace_req("%s returning expected request %p (%p)", debug_name, req,
                       req + 1);
+    } else {
+        context = worker->context;
+        ++context->tm.offload.sw_req_count;
     }
 
     return status;
