@@ -384,17 +384,34 @@ public:
     ~message_stream();
 
     template <typename T>
-    std::ostream& operator<<(const T& value) const {
-        return std::cout << value;
+    message_stream& operator<<(const T& value) {
+        msg << value;
+        return *this;
+    }
+
+    message_stream& operator<< (std::ostream&(*f)(std::ostream&)) {
+        if (f == (std::basic_ostream<char>& (*)(std::basic_ostream<char>&)) &std::flush) {
+            std::string s = msg.str();
+            if (!s.empty()) {
+                std::cout << s << std::flush;
+                msg.str("");
+            }
+            msg.clear();
+        } else {
+            msg << f;
+        }
+        return *this;
     }
 
     std::iostream::fmtflags flags() {
-        return std::cout.flags();
+        return msg.flags();
     }
 
     void flags(std::iostream::fmtflags f) {
-        std::cout.flags(f);
+        msg.flags(f);
     }
+private:
+    std::ostringstream msg;
 };
 
 } // detail

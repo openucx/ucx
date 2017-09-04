@@ -478,9 +478,7 @@ protected:
     {
         /* Ignore warnings about empty memory pool */
         if ((level == UCS_LOG_LEVEL_WARN) && strstr(message, "failed to register")) {
-            char buf[ucs_global_opts.log_buffer_size];
-            vsnprintf(buf, sizeof(buf), message, ap);
-            UCS_TEST_MESSAGE << "" << buf;
+            UCS_TEST_MESSAGE << format_message(message, ap);
             return UCS_LOG_FUNC_RC_STOP;
         }
 

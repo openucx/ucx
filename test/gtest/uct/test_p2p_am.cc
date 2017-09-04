@@ -394,9 +394,8 @@ public:
         if ((level == UCS_LOG_LEVEL_WARN) &&
             !strcmp(function, UCS_PP_QUOTE(uct_iface_mpool_empty_warn)))
         {
-            char buf[200];
-            vsnprintf(buf, sizeof(buf), message, ap);
-            UCS_TEST_MESSAGE << file << ":" << line << ": " << buf;
+            UCS_TEST_MESSAGE << file << ":" << line << ": "
+                             << format_message(message, ap);
             return UCS_LOG_FUNC_RC_STOP;
         }
 
