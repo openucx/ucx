@@ -910,6 +910,8 @@ void uct_worker_progress_unregister_safe(uct_worker_h worker,
  * @param [in]  env_prefix    If non-NULL, search for environment variables
  *                            starting with this UCT_<prefix>_. Otherwise, search
  *                            for environment variables starting with just UCT_.
+ * @param [in]  md            Memory domain on which the transport's interface
+ *                            was registered on.
  * @param [in]  filename      If non-NULL, read configuration from this file. If
  *                            the file does not exist, it will be ignored.
  * @param [out] config_p      Filled with a pointer to configuration.
@@ -917,7 +919,7 @@ void uct_worker_progress_unregister_safe(uct_worker_h worker,
  * @return Error code.
  */
 ucs_status_t uct_iface_config_read(const char *tl_name, const char *env_prefix,
-                                   const char *filename,
+                                   uct_md_h md, const char *filename,
                                    uct_iface_config_t **config_p);
 
 

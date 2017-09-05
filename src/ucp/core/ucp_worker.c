@@ -618,7 +618,8 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
     /* Read configuration
      * TODO pass env_prefix from context */
-    status = uct_iface_config_read(resource->tl_rsc.tl_name, NULL, NULL,
+    status = uct_iface_config_read(resource->tl_rsc.tl_name, NULL,
+                                   context->tl_mds[resource->md_index].md, NULL,
                                    &iface_config);
     if (status != UCS_OK) {
         goto out;

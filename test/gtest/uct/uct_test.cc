@@ -27,8 +27,8 @@ std::string resource::name() const {
 
 uct_test::uct_test() {
     ucs_status_t status;
-    status = uct_iface_config_read(GetParam()->tl_name.c_str(), NULL, NULL,
-                                   &m_iface_config);
+    status = uct_iface_config_read(GetParam()->tl_name.c_str(), NULL,
+                                   NULL, NULL, &m_iface_config);
     ASSERT_UCS_OK(status);
     status = uct_md_config_read(GetParam()->md_name.c_str(), NULL, NULL,
                                 &m_md_config);

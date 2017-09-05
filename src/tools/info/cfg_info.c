@@ -98,7 +98,7 @@ void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name)
     for (i = 0; i < num_tls; ++i) {
         snprintf(cfg_title, sizeof(cfg_title), "%s transport configuration",
                  tl_names[i]);
-        status = uct_iface_config_read(tl_names[i], NULL, NULL, &config);
+        status = uct_iface_config_read(tl_names[i], NULL, NULL, NULL, &config);
         if (status != UCS_OK) {
             printf("# < Failed to read configuration >\n");
             continue;

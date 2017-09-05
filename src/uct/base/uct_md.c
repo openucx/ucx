@@ -277,7 +277,7 @@ static uct_tl_component_t *uct_find_tl(const char *tl_name)
 }
 
 ucs_status_t uct_iface_config_read(const char *tl_name, const char *env_prefix,
-                                   const char *filename,
+                                   uct_md_h md, const char *filename,
                                    uct_iface_config_t **config_p)
 {
     uct_config_bundle_t *bundle = NULL;
