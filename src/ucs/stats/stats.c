@@ -50,6 +50,7 @@ typedef struct {
 
     ucs_time_t           start_time;
     ucs_stats_filter_node_t  root_filter_node;
+    ucs_stats_node_t     root_node;
     ucs_stats_counter_t  root_counters[UCS_ROOT_STATS_LAST];
 
     union {
@@ -64,7 +65,6 @@ typedef struct {
 
     pthread_mutex_t      lock;
     pthread_t            thread;
-    ucs_stats_node_t     root_node;
 } ucs_stats_context_t;
 
 static ucs_stats_context_t ucs_stats_context = {
@@ -178,7 +178,8 @@ static ucs_status_t ucs_stats_node_new(ucs_stats_class_t *cls, ucs_stats_node_t 
     ucs_stats_node_t *node;
 
     node = ucs_malloc(sizeof(ucs_stats_node_t) +
-                      sizeof(ucs_stats_counter_t) * cls->num_counters,
+                      sizeof(ucs_stats_counter_t) *
+                      (cls->num_counters > 0 ? cls->num_counters - 1 : 0),
                       "stats node");
     if (node == NULL) {
         ucs_error("Failed to allocate stats node for %s", cls->name);
