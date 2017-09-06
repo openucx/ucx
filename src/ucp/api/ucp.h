@@ -2133,8 +2133,9 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  * where the @a tag_mask indicates what bits of the tag have to be matched. The
  * routine is a non-blocking and therefore returns immediately. The receive
  * operation is considered completed when the message is delivered to the @a
- * buffer. In order to monitor completion of the operation @ref ucp_request_test
- * should be used.
+ * buffer. In order to monitor completion of the operation
+ * @ref ucp_request_check_status or @ref ucp_tag_recv_request_test should be
+ * used.
  *
  * @param [in]  worker      UCP worker that is used for the receive operation.
  * @param [in]  buffer      Pointer to the buffer to receive the data to.
