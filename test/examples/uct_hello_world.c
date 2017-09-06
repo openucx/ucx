@@ -287,6 +287,8 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
 
         /* Go through each available transport and find the proper name */
         for (j = 0; j < num_tl_resources; ++j) {
+            /* uncomment string below to see available dev/tl pairs */
+            /* fprintf(stderr, "dev: %s, tl: %s\n", tl_resources[j].dev_name, tl_resources[j].tl_name); */
             if (!strcmp(cmd_args->dev_name, tl_resources[j].dev_name) &&
                 !strcmp(cmd_args->tl_name, tl_resources[j].tl_name)) {
                 status = init_iface(tl_resources[j].dev_name,
@@ -542,10 +544,10 @@ int main(int argc, char **argv)
         CHKERR_JUMP(0 != status, "ifaces exchange", out_free_if_addrs);
     }
 
-    own_ep = (uct_ep_addr_t*)calloc(1, if_info.attr.ep_addr_len);
-    CHKERR_JUMP(NULL == own_ep, "allocate memory for ep addrs", out_free_if_addrs);
-
     if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+        own_ep = (uct_ep_addr_t*)calloc(1, if_info.attr.ep_addr_len);
+        CHKERR_JUMP(NULL == own_ep, "allocate memory for ep addrs", out_free_if_addrs);
+
         /* Create new endpoint */
         status = uct_ep_create(if_info.iface, &ep);
         CHKERR_JUMP(UCS_OK != status, "create endpoint", out_free_ep_addrs);
@@ -553,13 +555,11 @@ int main(int argc, char **argv)
         /* Get endpoint address */
         status = uct_ep_get_address(ep, own_ep);
         CHKERR_JUMP(UCS_OK != status, "get endpoint address", out_free_ep);
-    }
 
-    status = sendrecv(oob_sock, own_ep, if_info.attr.ep_addr_len,
-                      (void **)&peer_ep);
-    CHKERR_JUMP(0 != status, "EPs exchange", out_free_ep);
+        status = sendrecv(oob_sock, own_ep, if_info.attr.ep_addr_len,
+                          (void **)&peer_ep);
+        CHKERR_JUMP(0 != status, "EPs exchange", out_free_ep);
 
-    if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         /* Connect endpoint to a remote endpoint */
         status = uct_ep_connect_to_ep(ep, peer_dev, peer_ep);
         barrier(oob_sock);
