@@ -886,7 +886,8 @@ typedef struct ucp_mem_map_params {
  *
  * The UCP receive information descriptor is allocated by application and filled
  * in with the information about the received message by @ref ucp_tag_probe_nb
- * "ucp_tag_probe_nb" routine.
+ * or @ref ucp_tag_recv_request_test routines or
+ * @ref ucp_tag_recv_callback_t callback argument.
  */
 struct ucp_tag_recv_info {
     /** Sender tag */
@@ -2695,8 +2696,9 @@ ucs_status_t ucp_request_check_status(void *request);
  *        returned from @ref ucp_tag_recv_nb routine.
  *
  * This routine checks the state and returns current status of the request
- *      returned from @ref ucp_tag_recv_nb routine. Any value different from
- *      UCS_INPROGRESS means that request is in a completed state.
+ *      returned from @ref ucp_tag_recv_nb routine or the user allocated request
+ *      for @ref ucp_tag_recv_nbr. Any value different from UCS_INPROGRESS means
+ *      that the request is in a completed state.
  *
  * @param [in]  request     Non-blocking request to check.
  * @param [out] info        It is filled with the details about the message
