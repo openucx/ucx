@@ -13,21 +13,11 @@
 #include <ucs/debug/profile.h>
 
 #include "../tag/eager.h"
-/*
- * EAGER_ONLY, EAGER_MIDDLE, EAGER_LAST
- */
+
+
 typedef struct {
-    uint64_t             uuid;
+    uint64_t    uuid;
 } UCS_S_PACKED ucp_stream_eager_hdr_t;
-
-/*
- * EAGER_FIRST
- */
-typedef struct {
-    ucp_stream_eager_hdr_t    super;
-    size_t                    total_len;
-} UCS_S_PACKED ucp_stream_eager_first_hdr_t;
-
 
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb,
                  (ep, length), ucp_ep_h ep, size_t *length)
@@ -128,10 +118,7 @@ out:
 static ucs_status_t ucp_eager_only_handler(void *arg, void *data, size_t length,
                                            unsigned am_flags)
 {
-    return ucp_eager_handler(arg, data, length, am_flags,
-                             UCP_RECV_DESC_FLAG_STREAM_EAGER|
-                             UCP_RECV_DESC_FLAG_STREAM_FIRST|
-                             UCP_RECV_DESC_FLAG_STREAM_LAST,
+    return ucp_eager_handler(arg, data, length, am_flags, 0,
                              sizeof(ucp_stream_eager_hdr_t));
 }
 
@@ -142,5 +129,5 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     /* TODO: */
 }
 
-UCP_DEFINE_AM(UCP_FEATURE_STREAM, UCP_AM_ID_STREAM_EAGER_ONLY, ucp_eager_only_handler,
+UCP_DEFINE_AM(UCP_FEATURE_STREAM, UCP_AM_ID_EAGER_STREAM, ucp_eager_only_handler,
               ucp_eager_dump, UCT_CB_FLAG_SYNC);

@@ -18,7 +18,7 @@ ucp_stream_send_eager_short(ucp_ep_t *ep, const void *buffer, size_t length)
 {
     UCS_STATIC_ASSERT(sizeof(ep->dest_uuid) == sizeof(uint64_t));
 
-    return uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_STREAM_EAGER_ONLY,
+    return uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_EAGER_STREAM,
                            ep->worker->uuid, buffer, length);
 }
 
@@ -31,7 +31,8 @@ static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.buffer       = buffer;
     req->send.datatype     = datatype;
     req->send.reg_rsc      = UCP_NULL_RESOURCE;
-    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.lane, sizeof(req->send.lane));
+    req->send.lane         = ep->am_lane;
+
     VALGRIND_MAKE_MEM_UNDEFINED(&req->send.tag, sizeof(req->send.tag));
     VALGRIND_MAKE_MEM_UNDEFINED(&req->send.uct_comp, sizeof(req->send.uct_comp));
     VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.offset,
@@ -50,16 +51,15 @@ static ucs_status_t ucp_stream_req_start(ucp_request_t *req, size_t count,
 
     ucs_assertv_always(!UCP_DT_IS_IOV(req->send.datatype), "Not implemented");
 
-    length       = ucp_contig_dt_length(req->send.datatype, count);
-    req->send.length = length;
+    length                  = ucp_contig_dt_length(req->send.datatype, count);
+    req->send.length        = length;
+    req->send.uct_comp.func = NULL;
 
     ucs_trace_req("select request(%p) progress algorithm datatype=%lx buffer=%p "
                   " length=%zu max_short=%zd rndv_rma_thresh=%zu rndv_am_thresh=%zu "
                   "zcopy_thresh=%zu",
                   req, req->send.datatype, req->send.buffer, length, max_short,
                   rndv_rma_thresh, rndv_am_thresh, zcopy_thresh);
-
-    req->send.uct_comp.func = NULL;
 
     if ((ssize_t)length <= max_short) {
         /* short */
@@ -122,9 +122,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
                  ucp_ep_h ep, const void *buffer, size_t count,
                  uintptr_t datatype, ucp_send_callback_t cb, unsigned flags)
 {
-    ucs_status_t status;
-    ucp_request_t *req;
-    size_t length;
+    ucp_request_t    *req;
+    size_t           length;
+    ucs_status_t     status;
     ucs_status_ptr_t ret = UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
@@ -171,17 +171,14 @@ out:
 
 static ucs_status_t ucp_stream_eager_contig_short(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t  *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status = ucp_stream_send_eager_short(req->send.ep,
                                                       req->send.buffer,
                                                       req->send.length);
-    if (status != UCS_OK) {
-        req->send.lane = req->send.ep->am_lane;
-        return status;
+    if (status == UCS_OK) {
+        ucp_request_complete_send(req, UCS_OK);
     }
-
-    ucp_request_complete_send(req, UCS_OK);
-    return UCS_OK;
+    return status;
 }
 
 const ucp_proto_t ucp_stream_eager_proto = {
@@ -191,7 +188,7 @@ const ucp_proto_t ucp_stream_eager_proto = {
     .zcopy_single            = NULL,
     .zcopy_multi             = NULL,
     .zcopy_completion        = NULL,
-    .only_hdr_size           = 0, // sizeof(ucp_stream_eager_hdr_t),
-    .first_hdr_size          = 0, // sizeof(ucp_stream_eager_first_hdr_t),
-    .mid_hdr_size            = 0  // sizeof(ucp_stream_eager_hdr_t)
+    .only_hdr_size           = 0, /* sizeof(ucp_stream_eager_hdr_t) */
+    .first_hdr_size          = 0, /* sizeof(ucp_stream_eager_hdr_t) */
+    .mid_hdr_size            = 0  /* sizeof(ucp_stream_eager_hdr_t) */
 };
