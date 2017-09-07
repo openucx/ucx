@@ -1460,7 +1460,7 @@ UCT_INLINE_API unsigned uct_worker_progress(uct_worker_h worker)
  *
  * @param [in]    iface  Interface to flush communications from.
  * @param [in]    flags  Flags that control completion semantic (currently only
- *                       @ref UCT_FLASH_FLAG_LOCAL is supported).
+ *                       @ref UCT_FLUSH_FLAG_LOCAL is supported).
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
  *                        Can be NULL, which means that the call will return the
  *                        current state of the interface and no completion will
