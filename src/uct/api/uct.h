@@ -272,13 +272,14 @@ enum uct_flush_flags {
                                                  transfer is completed but the
                                                  target buffer may not be
                                                  updated yet.*/
-    UCT_FLUSH_FLAG_CANCEL   = UCS_BIT(0)    /**< The library will do the best
-                                                 effort to cancel all
-                                                 incompleted operations. User
-                                                 should be aware about the fact
-                                                 there is a chance that some
-                                                 operation will not be completed
-                                                 and been ready to handle all
+    UCT_FLUSH_FLAG_CANCEL   = UCS_BIT(0)    /**< The library will make a best
+                                                 effort attempt to cancel all
+                                                 uncompleted operations.
+                                                 However, there is a chance that
+                                                 some operations will not be
+                                                 canceled in which case the user
+                                                 will need to handle their
+                                                 completions through
                                                  the relevant callbacks. */
 };
 
@@ -1458,8 +1459,8 @@ UCT_INLINE_API unsigned uct_worker_progress(uct_worker_h worker)
  * the data transfer is completed but the target buffer may not be updated yet.
  *
  * @param [in]    iface  Interface to flush communications from.
- * @param [in]    flags  Flags that control completion semantic (currently
- *                        supported only @ref UCT_FLUSH_FLAG_LOCAL).
+ * @param [in]    flags  Flags that control completion semantic (currently only
+ *                       @ref UCT_FLASH_FLAG_LOCAL is supported).
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
  *                        Can be NULL, which means that the call will return the
  *                        current state of the interface and no completion will
