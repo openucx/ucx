@@ -287,8 +287,6 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
 
         /* Go through each available transport and find the proper name */
         for (j = 0; j < num_tl_resources; ++j) {
-            /* uncomment string below to see available dev/tl pairs */
-            /* fprintf(stderr, "dev: %s, tl: %s\n", tl_resources[j].dev_name, tl_resources[j].tl_name); */
             if (!strcmp(cmd_args->dev_name, tl_resources[j].dev_name) &&
                 !strcmp(cmd_args->tl_name, tl_resources[j].tl_name)) {
                 status = init_iface(tl_resources[j].dev_name,
