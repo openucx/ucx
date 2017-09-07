@@ -59,7 +59,7 @@ void fill_random(void *data, size_t size)
 
 scoped_setenv::scoped_setenv(const char *name, const char *value) : m_name(name) {
     if (getenv(name)) {
-        m_old_value = getenv(m_name.c_str());
+        m_old_value = getenv(name);
     }
     setenv(m_name.c_str(), value, 1);
 }

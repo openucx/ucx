@@ -404,22 +404,24 @@ UCS_TEST_F(malloc_hook_cplusplus, mallopt) {
      * are not initialized
      */
     p = getenv("MALLOC_TRIM_THRESHOLD_");
-    if (!p) {
+    if (p == NULL) {
         UCS_TEST_SKIP_R("MALLOC_TRIM_THRESHOLD_ is not set");
     }
+    ASSERT_TRUE(p != NULL);
     trim_thresh = atoi(p);
 
     p = getenv("MALLOC_MMAP_THRESHOLD_");
-    if (!p) {
+    if (p == NULL) {
         UCS_TEST_SKIP_R("MALLOC_MMAP_THRESHOLD_ is not set");
     }
+    ASSERT_TRUE(p != NULL);
     mmap_thresh = atoi(p);
 
     /* make sure that rcache is explicitly disabled so
      * that the malloc hooks are installed after the setenv()
      */
     p = getenv("UCX_IB_RCACHE");
-    if (p == NULL || p[0] != 'n') {
+    if ((p == NULL) || (p[0] != 'n')) {
         UCS_TEST_SKIP_R("rcache must be disabled");
     }
 
@@ -448,6 +450,7 @@ UCS_TEST_F(malloc_hook_cplusplus, mallopt) {
     UCS_TEST_MESSAGE << "trim_thresh=" << trim_thresh << " mmap_thresh=" << mmap_thresh <<
                         " allocating=" << size;
     p = new char [size];
+    ASSERT_TRUE(p != NULL);
     delete [] p;
 
     EXPECT_EQ(m_unmapped_size, 0);
