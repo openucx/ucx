@@ -13,7 +13,7 @@
 #include <ucp/dt/dt.h>
 
 
-static inline ucs_status_t
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_stream_send_eager_short(ucp_ep_t *ep, const void *buffer, size_t length)
 {
     UCS_STATIC_ASSERT(sizeof(ep->dest_uuid) == sizeof(uint64_t));
@@ -49,7 +49,8 @@ static ucs_status_t ucp_stream_req_start(ucp_request_t *req, size_t count,
     size_t zcopy_thresh = 0;
     size_t length;
 
-    ucs_assertv_always(!UCP_DT_IS_IOV(req->send.datatype), "Not implemented");
+    ucs_assertv_always(UCP_DT_IS_CONTIG(req->send.datatype),
+                       "Only UCP_DATATYPE_CONTIG type is implemented");
 
     length                  = ucp_contig_dt_length(req->send.datatype, count);
     req->send.length        = length;
@@ -73,7 +74,7 @@ static ucs_status_t ucp_stream_req_start(ucp_request_t *req, size_t count,
     return UCS_OK;
 }
 
-static inline ucs_status_ptr_t
+static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_stream_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
                     size_t *zcopy_thresh, size_t rndv_rma_thresh, size_t rndv_am_thresh,
                     ucp_send_callback_t cb, const ucp_proto_t *proto)

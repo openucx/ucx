@@ -63,10 +63,10 @@ UCS_PROFILE_FUNC_VOID(ucp_stream_data_release, (ep, data),
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
-                  uint16_t flags, uint16_t hdr_len)
+static ucs_status_t ucp_stream_eager_handler(void *arg, void *data,
+                                             size_t length, unsigned am_flags)
 {
+    const size_t            hdr_len = sizeof(ucp_stream_eager_hdr_t);
     ucp_worker_h            worker  = arg;
     ucp_ep_h                ep;
     ucp_stream_eager_hdr_t  *eager_hdr;
@@ -84,7 +84,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
     if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
         /* slowpath */
         rdesc        = (ucp_recv_desc_t *)data - 1;
-        rdesc->flags = flags | UCP_RECV_DESC_FLAG_UCT_DESC;
+        rdesc->flags = UCP_RECV_DESC_FLAG_UCT_DESC;
         status       = UCS_INPROGRESS;
     } else {
         rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
@@ -94,19 +94,20 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
             goto out;
         }
 
-        rdesc->flags = flags;
+        rdesc->flags = 0;
         memcpy(rdesc + 1, data, length);
         status = UCS_OK;
     }
     rdesc->length  = recv_len;
     rdesc->hdr_len = hdr_len;
-    eager_hdr = data;
+    eager_hdr      = data;
 
     hash_it = kh_get(ucp_worker_ep_hash, &worker->ep_hash, eager_hdr->uuid);
     if (hash_it != kh_end(&worker->ep_hash)) {
         ep = kh_value(&worker->ep_hash, hash_it);
         ucs_list_add_tail(&ep->stream_data, &rdesc->list[UCP_RDESC_HASH_LIST]);
     } else {
+        ucs_error("ep is not found by uuid: %lu", eager_hdr->uuid);
         status = UCS_ERR_SOME_CONNECTS_FAILED;
     }
 
@@ -115,19 +116,13 @@ out:
     return status;
 }
 
-static ucs_status_t ucp_eager_only_handler(void *arg, void *data, size_t length,
-                                           unsigned am_flags)
-{
-    return ucp_eager_handler(arg, data, length, am_flags, 0,
-                             sizeof(ucp_stream_eager_hdr_t));
-}
-
-static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
-                           uint8_t id, const void *data, size_t length,
-                           char *buffer, size_t max)
+static void ucp_stream_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
+                                  uint8_t id, const void *data, size_t length,
+                                  char *buffer, size_t max)
 {
     /* TODO: */
 }
 
-UCP_DEFINE_AM(UCP_FEATURE_STREAM, UCP_AM_ID_EAGER_STREAM, ucp_eager_only_handler,
-              ucp_eager_dump, UCT_CB_FLAG_SYNC);
+UCP_DEFINE_AM(UCP_FEATURE_STREAM, UCP_AM_ID_EAGER_STREAM,
+              ucp_stream_eager_handler, ucp_stream_eager_dump,
+              UCT_CB_FLAG_SYNC);

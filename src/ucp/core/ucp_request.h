@@ -46,18 +46,6 @@ enum {
 
 
 /**
- * Request send proto flags
- */
-enum {
-    UCP_REQUEST_SEND_PROTO_FLAG_SHORT = 0,
-    UCP_REQUEST_SEND_PROTO_FLAG_BCOPY,
-    UCP_REQUEST_SEND_PROTO_FLAG_ZCOPY,
-    UCP_REQUEST_SEND_PROTO_FLAG_PUT,
-    UCP_REQUEST_SEND_PROTO_FLAG_GET,
-};
-
-
-/**
  * Receive descriptor flags.
  */
 enum {

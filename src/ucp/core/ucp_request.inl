@@ -164,50 +164,6 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
     }
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_request_send_state_set(ucp_request_t *req, size_t data_offset,
-                           int comp_count, unsigned proto)
-{
-    req->send.state.offset = data_offset;
-    ucs_assert(req->send.state.offset <= req->send.length);
-
-    switch (proto) {
-    case UCP_REQUEST_SEND_PROTO_FLAG_SHORT:
-    case UCP_REQUEST_SEND_PROTO_FLAG_BCOPY:
-        break;
-    case UCP_REQUEST_SEND_PROTO_FLAG_ZCOPY:
-        req->send.uct_comp.count = comp_count;
-        break;
-    case UCP_REQUEST_SEND_PROTO_FLAG_PUT:
-    case UCP_REQUEST_SEND_PROTO_FLAG_GET:
-        ucs_assertv_always(0, "TODO: Not implemented");
-    default:
-        ucs_fatal("unknown protocol");
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_request_send_state_advance(ucp_request_t *req, size_t data_offset,
-                               unsigned proto)
-{
-    req->send.state.offset += data_offset;
-    ucs_assert(req->send.state.offset <= req->send.length);
-
-    switch (proto) {
-    case UCP_REQUEST_SEND_PROTO_FLAG_SHORT:
-    case UCP_REQUEST_SEND_PROTO_FLAG_BCOPY:
-        break;
-    case UCP_REQUEST_SEND_PROTO_FLAG_ZCOPY:
-        ++req->send.uct_comp.count;
-        break;
-    case UCP_REQUEST_SEND_PROTO_FLAG_PUT:
-    case UCP_REQUEST_SEND_PROTO_FLAG_GET:
-        ucs_assertv_always(0, "TODO: Not implemented");
-    default:
-        ucs_fatal("unknown protocol");
-    }
-}
-
 static UCS_F_ALWAYS_INLINE void 
 ucp_request_wait_uct_comp(ucp_request_t *req)
 {
