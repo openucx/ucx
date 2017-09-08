@@ -81,6 +81,7 @@ static ucs_status_t ucp_stream_eager_handler(void *arg, void *data,
     ucs_assert(length >= hdr_len);
     recv_len = length - hdr_len;
 
+    /* TODO: merge common code with TAG unexpected */
     if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
         /* slowpath */
         rdesc        = (ucp_recv_desc_t *)data - 1;

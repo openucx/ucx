@@ -161,8 +161,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
     ret = ucp_stream_send_req(req, count,
                               ucp_ep_config(ep)->am.max_short,
                               ucp_ep_config(ep)->am.zcopy_thresh,
-                              ucp_ep_config(ep)->tag.rndv.rma_thresh, /* TODO: */
-                              ucp_ep_config(ep)->tag.rndv.am_thresh,  /* TODO: */
+                              SIZE_MAX, /* NOTE: disable, not implemented */
+                              SIZE_MAX, /* NOTE: disable, not implemented */
                               cb, ucp_ep_config(ep)->stream.proto);
 
 out:
@@ -176,7 +176,7 @@ static ucs_status_t ucp_stream_eager_contig_short(uct_pending_req_t *self)
     ucs_status_t status = ucp_stream_send_eager_short(req->send.ep,
                                                       req->send.buffer,
                                                       req->send.length);
-    if (status == UCS_OK) {
+    if (ucs_likely(status == UCS_OK)) {
         ucp_request_complete_send(req, UCS_OK);
     }
     return status;
