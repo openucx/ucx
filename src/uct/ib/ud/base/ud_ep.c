@@ -587,7 +587,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     }
 
     if (ucs_unlikely(!is_am)) {
-        if ((byte_len == sizeof(*neth))) {
+        if ((size_t)byte_len == sizeof(*neth)) {
             goto out;
         }
         if (neth->packet_type & UCT_UD_PACKET_FLAG_CTL) {

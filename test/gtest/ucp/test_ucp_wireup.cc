@@ -58,7 +58,6 @@ protected:
 private:
     vec_type   m_send_data;
     vec_type   m_recv_data;
-    size_t     m_max_send;
     ucp_mem_h  m_memh1, m_memh2;
     ucp_rkey_h m_rkey1, m_rkey2;
 

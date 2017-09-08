@@ -182,8 +182,8 @@ ucs_status_t uct_dc_verbs_ep_get_bcopy(uct_ep_h tl_ep,
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_GET_BCOPY_DESC(&iface->super.super, &iface->super.super.tx.mp,
                                        desc, unpack_cb, comp, arg, length);
-    UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.exp_opcode, IBV_WR_RDMA_READ, sge, length, remote_addr,
-                              rkey);
+    UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.exp_opcode, IBV_EXP_WR_RDMA_READ, sge,
+                              length, remote_addr, rkey);
     UCT_TL_EP_STAT_OP(&ep->super.super, GET, BCOPY, length);
     uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, IBV_SEND_SIGNALED);
 
@@ -244,7 +244,7 @@ ssize_t uct_dc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(&iface->super.super, &iface->super.super.tx.mp,
                                        desc, pack_cb, arg, length);
-    UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.exp_opcode, IBV_WR_RDMA_WRITE, sge,
+    UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.exp_opcode, IBV_EXP_WR_RDMA_WRITE, sge,
                               length, remote_addr, rkey);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, BCOPY, length);
     uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, IBV_SEND_SIGNALED);
@@ -652,7 +652,7 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
         if (status != UCS_OK) {
             return status;
         }
-        wr.exp_opcode                         = IBV_WR_SEND;
+        wr.exp_opcode                         = IBV_EXP_WR_SEND;
         iface->verbs_common.inl_sge[1].addr   = (uintptr_t)&dc_req->sender_ep;
         iface->verbs_common.inl_sge[1].length = sizeof(dc_req->sender_ep);
         uct_dc_verbs_iface_post_send_to_dci(iface, &wr, dc_ep->dci, ah,
@@ -663,7 +663,7 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
         ucs_assert(op == UCT_RC_EP_FC_FLAG_HARD_REQ);
         iface->verbs_common.inl_sge[1].addr   = (uintptr_t)&dc_ep;
         iface->verbs_common.inl_sge[1].length = sizeof(dc_ep);
-        wr.exp_opcode                         = IBV_WR_SEND_WITH_IMM;
+        wr.exp_opcode                         = IBV_EXP_WR_SEND_WITH_IMM;
 
         /* Send out DCT number to the peer, so it will be able
          * to send grants back */
@@ -787,14 +787,14 @@ void uct_dc_verbs_iface_init_wrs(uct_dc_verbs_iface_t *self)
     memset(&self->inl_am_wr, 0, sizeof(self->inl_am_wr));
     self->inl_am_wr.sg_list                 = self->verbs_common.inl_sge;
     self->inl_am_wr.num_sge                 = 2;
-    self->inl_am_wr.exp_opcode              = IBV_WR_SEND;
+    self->inl_am_wr.exp_opcode              = IBV_EXP_WR_SEND;
     self->inl_am_wr.exp_send_flags          = IBV_SEND_INLINE;
     self->inl_am_wr.dc.dct_access_key       = UCT_IB_KEY;
 
     memset(&self->inl_rwrite_wr, 0, sizeof(self->inl_rwrite_wr));
     self->inl_rwrite_wr.sg_list             = self->verbs_common.inl_sge;
     self->inl_rwrite_wr.num_sge             = 1;
-    self->inl_rwrite_wr.exp_opcode          = IBV_WR_RDMA_WRITE;
+    self->inl_rwrite_wr.exp_opcode          = IBV_EXP_WR_RDMA_WRITE;
     self->inl_rwrite_wr.exp_send_flags      = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
     self->inl_rwrite_wr.dc.dct_access_key   = UCT_IB_KEY;
 }

@@ -32,9 +32,9 @@ static void ucs_profile_file_write_data(int fd, void *data, size_t size)
 {
     ssize_t written = write(fd, data, size);
     if (written < 0) {
-        ucs_warn("failed to write %Zu bytes to profiling file: %m", size);
+        ucs_warn("failed to write %zu bytes to profiling file: %m", size);
     } else if (size != written) {
-        ucs_warn("wrote only %Zd of %Zu bytes to profiling file: %m",
+        ucs_warn("wrote only %zd of %zu bytes to profiling file: %m",
                  written, size);
     }
 }
