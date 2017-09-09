@@ -266,6 +266,27 @@ enum uct_iface_event_types {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief  Flush modifiers.
+ */
+enum uct_flush_flags {
+    UCT_FLUSH_FLAG_LOCAL    = 0,            /**< Guarantees that the data
+                                                 transfer is completed but the
+                                                 target buffer may not be
+                                                 updated yet.*/
+    UCT_FLUSH_FLAG_CANCEL   = UCS_BIT(0)    /**< The library will make a best
+                                                 effort attempt to cancel all
+                                                 uncompleted operations.
+                                                 However, there is a chance that
+                                                 some operations will not be
+                                                 canceled in which case the user
+                                                 will need to handle their
+                                                 completions through
+                                                 the relevant callbacks. */
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief UCT progress types
  */
 enum uct_progress_types {
@@ -1557,8 +1578,8 @@ UCT_INLINE_API unsigned uct_worker_progress(uct_worker_h worker)
  * the data transfer is completed but the target buffer may not be updated yet.
  *
  * @param [in]    iface  Interface to flush communications from.
- * @param [in]    flags  Flags that control completion semantic (currently
- *                        unsupported - set to 0).
+ * @param [in]    flags  Flags that control completion semantic (currently only
+ *                       @ref UCT_FLUSH_FLAG_LOCAL is supported).
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
  *                        Can be NULL, which means that the call will return the
  *                        current state of the interface and no completion will
@@ -1937,19 +1958,16 @@ UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep,
  * this call. The operations are completed at the origin or at the target
  * as well. The exact completion semantic depends on @a flags parameter.
  *
- * @note Currently only one completion type is supported. It guarantees that
- * the data transfer is completed but the target buffer may not be updated yet.
- *
  * @param [in]    ep     Endpoint to flush communications from.
- * @param [in]    flags  Flags that control completion semantic (currently
- *                        unsupported - set to 0).
+ * @param [in]    flags  Flags @ref uct_flush_flags that control completion
+ *                       semantic.
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
- *                        Can be NULL, which means that the call will return the
- *                        current state of the endpoint and no completion will
- *                        be generated in case of outstanding communications.
- *                        If it is not NULL completion counter is decremented
- *                        by 1 when the call completes. Completion callback is
- *                        called when the counter reaches 0.
+ *                       Can be NULL, which means that the call will return the
+ *                       current state of the endpoint and no completion will
+ *                       be generated in case of outstanding communications.
+ *                       If it is not NULL completion counter is decremented
+ *                       by 1 when the call completes. Completion callback is
+ *                       called when the counter reaches 0.
  *
  * @return UCS_OK              - No outstanding communications left.
  *         UCS_ERR_NO_RESOURCE - Flush operation could not be initiated. A subsequent
