@@ -403,11 +403,10 @@ ucs_status_t test_ucp_peer_failure_2pairs::wait_req(void *req)
         return UCS_PTR_STATUS(req);
     }
 
-    ucp_tag_recv_info info;
     ucs_status_t status;
     do {
         progress();
-        status = ucp_request_test(req, &info);
+        status = ucp_request_check_status(req);
     } while (status == UCS_INPROGRESS);
     ucp_request_release(req);
     return status;

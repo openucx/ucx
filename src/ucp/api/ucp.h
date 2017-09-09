@@ -886,7 +886,8 @@ typedef struct ucp_mem_map_params {
  *
  * The UCP receive information descriptor is allocated by application and filled
  * in with the information about the received message by @ref ucp_tag_probe_nb
- * "ucp_tag_probe_nb" routine.
+ * or @ref ucp_tag_recv_request_test routines or
+ * @ref ucp_tag_recv_callback_t callback argument.
  */
 struct ucp_tag_recv_info {
     /** Sender tag */
@@ -2132,8 +2133,9 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  * where the @a tag_mask indicates what bits of the tag have to be matched. The
  * routine is a non-blocking and therefore returns immediately. The receive
  * operation is considered completed when the message is delivered to the @a
- * buffer. In order to monitor completion of the operation @ref ucp_request_test
- * should be used.
+ * buffer. In order to monitor completion of the operation
+ * @ref ucp_request_check_status or @ref ucp_tag_recv_request_test should be
+ * used.
  *
  * @param [in]  worker      UCP worker that is used for the receive operation.
  * @param [in]  buffer      Pointer to the buffer to receive the data to.
@@ -2684,15 +2686,28 @@ ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
  *
  * @param [in]  request     Non-blocking request to check.
  *
- * @param [out] info        If request is in completed state, it is
- *                          filled with the details about the message.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_request_check_status(void *request);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Check the status and currently available state of non-blocking request
+ *        returned from @ref ucp_tag_recv_nb routine.
  *
- * @note The @p info parameter is relevant for receive operations only. It is
- * left uninitialized in case of send operation.
+ * This routine checks the state and returns current status of the request
+ *      returned from @ref ucp_tag_recv_nb routine or the user allocated request
+ *      for @ref ucp_tag_recv_nbr. Any value different from UCS_INPROGRESS means
+ *      that the request is in a completed state.
+ *
+ * @param [in]  request     Non-blocking request to check.
+ * @param [out] info        It is filled with the details about the message
+ *                          available at the moment of calling.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info);
+ucs_status_t ucp_tag_recv_request_test(void *request, ucp_tag_recv_info_t *info);
 
 
 /**

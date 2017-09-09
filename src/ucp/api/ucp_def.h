@@ -16,9 +16,14 @@
 
 /**
  * @ingroup UCP_CONTEXT
- * @brief Forward declarations
+ * @brief UCP receive information descriptor
+ *
+ * The UCP receive information descriptor is allocated by application and filled
+ * in with the information about the received message by @ref ucp_tag_probe_nb
+ * or @ref ucp_tag_recv_request_test routines or
+ * @ref ucp_tag_recv_callback_t callback argument.
  */
-typedef struct ucp_tag_recv_info         ucp_tag_recv_info_t;
+typedef struct ucp_tag_recv_info             ucp_tag_recv_info_t;
 
 
 /**
