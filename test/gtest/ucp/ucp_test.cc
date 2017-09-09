@@ -355,9 +355,9 @@ void ucp_test_base::entity::connect(const entity* other,
         EXPECT_GE(m_workers[i].second.size(), size_t(ep_idx));
 
         if (size_t(ep_idx) < m_workers[i].second.size()) {
-            m_workers[i].second[ep_idx].reset(ep, ucp_ep_destroy);
+            m_workers[i].second[ep_idx].reset(ep, ep_destructor, this);
         } else {
-            m_workers[i].second.push_back(ucs::handle<ucp_ep_h>(ep, ucp_ep_destroy));
+            m_workers[i].second.push_back(ucs::handle<ucp_ep_h, entity *>(ep, ucp_ep_destroy));
         }
 
         ucp_worker_release_address(other->worker(i), address);
@@ -441,4 +441,21 @@ int ucp_test_base::entity::get_num_workers() const {
 
 void ucp_test_base::entity::cleanup() {
     m_workers.clear();
+}
+
+void ucp_test_base::entity::ep_destructor(ucp_ep_h ep, entity *e)
+{
+    ucs_status_ptr_t req = ucp_disconnect_nb(ep);
+    if (!UCS_PTR_IS_PTR(req)) {
+        return;
+    }
+
+    ucs_status_t        status;
+    ucp_tag_recv_info_t info;
+    do {
+        e->progress();
+        status = ucp_request_test(req, &info);
+    } while (status == UCS_INPROGRESS);
+    EXPECT_EQ(UCS_OK, status);
+    ucp_request_release(req);
 }

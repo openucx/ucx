@@ -358,7 +358,7 @@ UCS_TEST_P(test_ucp_wireup, reply_ep_send_before) {
         send_recv(ep, sender().worker(), 1, 1);
         sender().flush_worker();
 
-        ucp_ep_destroy(ep);
+        disconnect(ep);
     }
 }
 
@@ -380,7 +380,7 @@ UCS_TEST_P(test_ucp_wireup, reply_ep_send_after) {
 
         sender().flush_worker();
 
-        ucp_ep_destroy(ep);
+        disconnect(ep);
     }
 }
 

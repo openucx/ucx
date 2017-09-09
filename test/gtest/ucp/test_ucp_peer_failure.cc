@@ -293,9 +293,13 @@ protected:
     static void scomplete_cb(void *req, ucs_status_t status);
     void smoke_test(size_t idx);
 
+    static void ep_destructor(ucp_ep_h ep, test_ucp_peer_failure_2pairs* test) {
+        test->wait_req(ucp_disconnect_nb(ep));
+    }
+
     ucs::handle<ucp_context_h>               m_ucph;
     std::vector<ucs::handle<ucp_worker_h> >  m_workers;
-    std::vector<ucs::handle<ucp_ep_h> >      m_eps;
+    std::vector<ucs::handle<ucp_ep_h, test_ucp_peer_failure_2pairs*> > m_eps;
     ucs::ptr_vector<ucs::scoped_setenv>      m_env;
 };
 
@@ -340,7 +344,7 @@ void test_ucp_peer_failure_2pairs::init()
             UCS_TEST_SKIP_R(m_errors.empty() ? "" : m_errors.back());
         }
 
-        m_eps[i].reset(ep, ucp_ep_destroy);
+        m_eps[i].reset(ep, ep_destructor, this);
     }
 
     /* Make sure wire up is done*/
