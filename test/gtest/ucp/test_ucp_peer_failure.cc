@@ -18,6 +18,7 @@ protected:
 
     virtual ucp_ep_params_t get_ep_params() {
         ucp_ep_params_t params;
+        memset(&params, 0, sizeof(params));
         params.field_mask      = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
                                  UCP_EP_PARAM_FIELD_ERR_HANDLER;
         params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;

@@ -347,7 +347,7 @@ test_ucp_wakeup_events::do_tx_rx_events_test(const std::vector<std::string>& tra
 UCS_TEST_P(test_ucp_wakeup_events, events)
 {
     UCS_TEST_SKIP_R("Functionality is not implemented yet");
-    do_tx_rx_events_test(GetParam().transports, GetParam().variant);
+    // do_tx_rx_events_test(GetParam().transports, GetParam().variant);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wakeup_events)
