@@ -19,9 +19,6 @@ AC_ARG_ENABLE(debug,
 AS_IF([test "x$enable_debug" == xyes],
         [BASE_CFLAGS="-D_DEBUG $BASE_CFLAGS"],
         [])
-AS_IF([test "x$enable_debug" == xyes],
-        [AS_IF([test "$enable_compiler_opt" == none], [enable_compiler_opt="0"], [])],
-        [])
 
 #
 # Optimization level
