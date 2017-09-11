@@ -324,16 +324,16 @@ void ucp_test_base::entity::connect(const entity* other,
         ucp_address_t *address;
         size_t address_length;
         ucp_ep_h ep;
-        ucp_ep_params_t ep_params;
+        ucp_ep_params_t local_ep_params = ep_params;
 
         status = ucp_worker_get_address(other->worker(i), &address, &address_length);
         ASSERT_UCS_OK(status);
 
         ucp_test::hide_errors();
-        ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-        ep_params.address     = address;
+        local_ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+        local_ep_params.address     = address;
 
-        status = ucp_ep_create(m_workers[i].first, &ep_params, &ep);
+        status = ucp_ep_create(m_workers[i].first, &local_ep_params, &ep);
         ucp_test::restore_errors();
 
         if (status == UCS_ERR_UNREACHABLE) {
