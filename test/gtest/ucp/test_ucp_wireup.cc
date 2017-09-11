@@ -525,7 +525,7 @@ public:
     virtual ucp_ep_params_t get_ep_params() {
         ucp_ep_params_t params = test_ucp_wireup::get_ep_params();
         params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
-                                 UCP_EP_PARAM_FIELD_ERR_HANDLER;
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER_CB;
         params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
         params.err_handler_cb  = err_cb;
         return params;

@@ -209,7 +209,7 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
         }
     }
 
-    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER) {
+    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER_CB) {
         status = ucp_ep_setup_err_handler(ep, params->err_handler_cb);
     }
 
@@ -271,7 +271,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
     }
 
     /* Setup error handler */
-    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER) {
+    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER_CB) {
         status = ucp_ep_setup_err_handler(ep, params->err_handler_cb);
         if (status != UCS_OK) {
             goto err_destroy_ep;

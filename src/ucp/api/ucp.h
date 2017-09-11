@@ -188,11 +188,11 @@ enum ucp_ep_params_field {
                                                             peer */
     UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE = UCS_BIT(1), /**< Error handling mode.
                                                             @ref ucp_err_handling_mode_t */
-    UCP_EP_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(2), /**< Handler to process
+    UCP_EP_PARAM_FIELD_ERR_HANDLER_CB    = UCS_BIT(2), /**< Handler to process
                                                             transport level errors */
-    UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(3), /**< Socket address field */
-    UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(4), /**< Endpoint flags */
-    UCP_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(5)  /**< User data pointer */
+    UCP_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(3), /**< User data pointer */
+    UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(4), /**< Socket address field */
+    UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(5)  /**< Endpoint flags */
 };
 
 
