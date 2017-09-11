@@ -20,24 +20,23 @@ AS_IF([test "x$enable_debug" == xyes],
         [BASE_CFLAGS="-D_DEBUG $BASE_CFLAGS"],
         [])
 AS_IF([test "x$enable_debug" == xyes],
-        [AS_IF([test "$enable_fast" == none], [enable_fast="0"], [])],
+        [AS_IF([test "$enable_compiler_opt" == none], [enable_compiler_opt="0"], [])],
         [])
 
 #
 # Optimization level
 #
-AC_ARG_ENABLE(fast,
-        AC_HELP_STRING([--enable-fast], [Set optimization level [0-3]]),
+AC_ARG_ENABLE(compiler-opt,
+        AC_HELP_STRING([--enable-compiler-opt], [Set optimization level [0-3]]),
         [],
-        [enable_fast="none"])
-AS_IF([test -z "$enable_fast"], [],
-      [test "$enable_fast" == "yes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
-      [test "$enable_fast" == "none"],
+        [enable_compiler_opt="none"])
+AS_IF([test "$enable_compiler_opt" == "yes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
+      [test "$enable_compiler_opt" == "none"],
           [AS_IF([test "x$enable_debug" == xyes],
                  [BASE_CFLAGS="-O0 $BASE_CFLAGS"],
                  [BASE_CFLAGS="-O3 $BASE_CFLAGS"])],
-      [test "$enable_fast" == "no"], [],
-      [BASE_CFLAGS="-O$enable_fast $BASE_CFLAGS"])
+      [test "$enable_compiler_opt" == "no"], [],
+      [BASE_CFLAGS="-O$enable_compiler_opt $BASE_CFLAGS"])
 
 
 #
