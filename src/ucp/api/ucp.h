@@ -777,9 +777,16 @@ typedef struct ucp_ep_params {
     ucp_err_handling_mode_t err_mode;
 
     /**
-     * Handler to process transport level failure.
+     * Error handler callback, will be called with @ref user_data as an argument
+     * if set.
      */
-    ucp_err_handler_t       err_handler;
+    ucp_err_handler_cb_t    err_handler_cb;
+
+    /**
+     * User data associated with an endpoint. See @ref ucp_stream_poll_ep_t and
+     * @ref err_handler_cb
+     */
+    void                    *user_data;
 
     /**
      * Endpoint flags from @ref ucp_ep_params_flags_field.
@@ -802,11 +809,6 @@ typedef struct ucp_ep_params {
      */
     ucs_sock_addr_t         sockaddr;
 
-    /**
-     * User data associated with an endpoint. See @ref ucp_stream_poll_ep_t.
-     * @a user_data must be equal to @ref ucp_err_handler_t::arg if both are set.
-     */
-    void                    *user_data;
 } ucp_ep_params_t;
 
 

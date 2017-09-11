@@ -12,6 +12,17 @@
 #include <ucp/api/ucp_def.h>
 
 
+ /**
+ * @ingroup UCP_COMM
+ * @deprecated Replaced by @ref ucp_ep_params_t::err_handler_cb and
+ *            @ref ucp_ep_params_t::user_data.
+ */
+typedef struct ucp_err_handler {
+    ucp_err_handler_cb_t cb;       /**< Error handler callback */
+    void                 *arg;     /**< User defined argument */
+} ucp_err_handler_t;
+
+
 /**
  * @ingroup UCP_COMM
  * @deprecated Replaced by @ref ucp_request_test.

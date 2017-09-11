@@ -527,8 +527,7 @@ public:
         params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
                                  UCP_EP_PARAM_FIELD_ERR_HANDLER;
         params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
-        params.err_handler.cb  = err_cb;
-        params.err_handler.arg = NULL;
+        params.err_handler_cb  = err_cb;
         return params;
     }
 
