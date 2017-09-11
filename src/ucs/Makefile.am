@@ -38,6 +38,11 @@ nobase_dist_libucs_la_HEADERS = \
 	config/types.h \
 	datastruct/callbackq.h \
 	datastruct/list_types.h \
+	datastruct/list.h \
+	datastruct/queue.h \
+	datastruct/queue_types.h \
+	datastruct/mpool.h \
+	datastruct/pgtable.h \
 	debug/check.h \
 	debug/debug.h \
 	debug/log.h \
@@ -46,7 +51,11 @@ nobase_dist_libucs_la_HEADERS = \
 	stats/stats_fwd.h \
 	stats/libstats.h \
 	stats/stats.h \
+	sys/compiler.h \
 	sys/compiler_def.h\
+	sys/math.h \
+	sys/preprocessor.h \
+	sys/rcache.h \
 	sys/string.h \
 	time/time_def.h \
 	type/class.h \
@@ -60,22 +69,13 @@ noinst_HEADERS = \
 	datastruct/arbiter.h \
 	datastruct/frag_list.h \
 	datastruct/hash.h \
-	datastruct/list.h \
 	datastruct/mpmc.h \
-	datastruct/mpool.h \
 	datastruct/mpool.inl \
-	datastruct/pgtable.h \
 	datastruct/ptr_array.h \
-	datastruct/queue_types.h \
-	datastruct/queue.h \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
 	datastruct/khash.h \
 	sys/checker.h \
-	sys/compiler.h \
-	sys/math.h \
-	sys/preprocessor.h \
-	sys/rcache.h \
 	sys/sys.h \
 	time/time.h \
 	time/timerq.h \
