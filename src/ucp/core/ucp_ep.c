@@ -19,6 +19,8 @@
 #include <string.h>
 
 
+extern const ucp_proto_t ucp_stream_am_proto;
+
 #if ENABLE_STATS
 static ucs_stats_class_t ucp_ep_stats_class = {
     .name           = "ucp_ep",
@@ -70,7 +72,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ep->cfg_index        = ucp_worker_get_ep_config(worker, &key);
     ep->am_lane          = UCP_NULL_LANE;
     ep->flags            = 0;
-    ucs_list_head_init(&ep->stream_data);
+    ucs_queue_head_init(&ep->stream_data);
 
 #if ENABLE_DEBUG_DATA
     ucs_snprintf_zero(ep->peer_name, UCP_WORKER_NAME_MAX, "%s", peer_name);
@@ -879,7 +881,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     config->tag.rndv.rma_thresh         = SIZE_MAX;
     config->tag.rndv.max_get_zcopy      = SIZE_MAX;
     config->tag.rndv.am_thresh          = SIZE_MAX;
-    config->stream.proto                = &ucp_stream_eager_proto;
+    config->stream.proto                = &ucp_stream_am_proto;
     max_rndv_thresh                     = SIZE_MAX;
     max_am_rndv_thresh                  = SIZE_MAX;
 

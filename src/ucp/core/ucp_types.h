@@ -68,7 +68,7 @@ enum {
                                           software rndv (bcopy) */
     UCP_AM_ID_OFFLOAD_SYNC_ACK  =  14, /* Eager sync ack for tag offload proto */
 
-    UCP_AM_ID_EAGER_STREAM      =  15, /* Eager STREAM packet */
+    UCP_AM_ID_STREAM_DATA       =  15, /* Eager STREAM packet */
 
     UCP_AM_ID_LAST
 };

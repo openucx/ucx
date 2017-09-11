@@ -10,6 +10,7 @@
 #include "ucp_types.h"
 
 #include <uct/api/uct.h>
+#include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
 #include <ucs/stats/stats.h>
 #include <limits.h>
@@ -193,8 +194,8 @@ typedef struct ucp_ep {
 
     uint64_t                      dest_uuid;     /* Destination worker uuid */
 
-    ucs_list_link_t               stream_data;  /* List of receive descriptors
-                                                  * with data */
+    ucs_queue_head_t              stream_data;  /* Queue of receive descriptors
+                                                   with data */
 
     UCS_STATS_NODE_DECLARE(stats);
 

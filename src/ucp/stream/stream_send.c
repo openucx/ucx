@@ -14,11 +14,11 @@
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_stream_send_eager_short(ucp_ep_t *ep, const void *buffer, size_t length)
+ucp_stream_send_am_short(ucp_ep_t *ep, const void *buffer, size_t length)
 {
     UCS_STATIC_ASSERT(sizeof(ep->dest_uuid) == sizeof(uint64_t));
 
-    return uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_EAGER_STREAM,
+    return uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_STREAM_DATA,
                            ep->worker->uuid, buffer, length);
 }
 
@@ -140,7 +140,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
     if (ucs_likely(UCP_DT_IS_CONTIG(datatype))) {
         length = ucp_contig_dt_length(datatype, count);
         if (ucs_likely((ssize_t)length <= ucp_ep_config(ep)->am.max_short)) {
-            status = UCS_PROFILE_CALL(ucp_stream_send_eager_short, ep, buffer,
+            status = UCS_PROFILE_CALL(ucp_stream_send_am_short, ep, buffer,
                                       length);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
                 UCP_EP_STAT_TAG_OP(ep, EAGER);
@@ -170,26 +170,26 @@ out:
     return ret;
 }
 
-static ucs_status_t ucp_stream_eager_contig_short(uct_pending_req_t *self)
+static ucs_status_t ucp_stream_contig_am_short(uct_pending_req_t *self)
 {
-    ucp_request_t  *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucs_status_t status = ucp_stream_send_eager_short(req->send.ep,
-                                                      req->send.buffer,
-                                                      req->send.length);
+    ucp_request_t  *req   = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_status_t   status = ucp_stream_send_am_short(req->send.ep,
+                                                     req->send.buffer,
+                                                     req->send.length);
     if (ucs_likely(status == UCS_OK)) {
         ucp_request_complete_send(req, UCS_OK);
     }
     return status;
 }
 
-const ucp_proto_t ucp_stream_eager_proto = {
-    .contig_short            = ucp_stream_eager_contig_short,
+const ucp_proto_t ucp_stream_am_proto = {
+    .contig_short            = ucp_stream_contig_am_short,
     .bcopy_single            = NULL,
     .bcopy_multi             = NULL,
     .zcopy_single            = NULL,
     .zcopy_multi             = NULL,
     .zcopy_completion        = NULL,
-    .only_hdr_size           = 0, /* sizeof(ucp_stream_eager_hdr_t) */
-    .first_hdr_size          = 0, /* sizeof(ucp_stream_eager_hdr_t) */
-    .mid_hdr_size            = 0  /* sizeof(ucp_stream_eager_hdr_t) */
+    .only_hdr_size           = 0, /* sizeof(ucp_stream_am_hdr_t) */
+    .first_hdr_size          = 0, /* sizeof(ucp_stream_am_hdr_t) */
+    .mid_hdr_size            = 0  /* sizeof(ucp_stream_am_hdr_t) */
 };

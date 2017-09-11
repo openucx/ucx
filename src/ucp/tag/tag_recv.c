@@ -18,7 +18,8 @@
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t*
 ucp_tag_unexp_list_next(ucp_recv_desc_t *rdesc, int i_list)
 {
-    return ucs_list_next(&rdesc->list[i_list], ucp_recv_desc_t, list[i_list]);
+    return ucs_list_next(&rdesc->tag_list[i_list], ucp_recv_desc_t,
+                         tag_list[i_list]);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -53,7 +54,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
             list   = &context->tm.unexpected.all;
             i_list = UCP_RDESC_ALL_LIST;
         }
-        rdesc = ucs_list_head(list, ucp_recv_desc_t, list[i_list]);
+        rdesc = ucs_list_head(list, ucp_recv_desc_t, tag_list[i_list]);
     } else {
         ucs_assert(tag_mask == UCP_TAG_MASK_FULL);
         list   = ucp_tag_unexp_get_list_for_tag(&context->tm, tag);
@@ -108,7 +109,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
         } else {
             rdesc = ucp_tag_unexp_list_next(rdesc, i_list);
         }
-    } while (&rdesc->list[i_list] != list);
+    } while (&rdesc->tag_list[i_list] != list);
     return UCS_INPROGRESS;
 
 out_release_desc:
