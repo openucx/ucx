@@ -217,17 +217,24 @@ enum ucp_ep_params_flags_field {
 
 /**
  * @ingroup UCP_ENDPOINT
- * @brief @anchor ucp_ep_close_nb_mode Close UCP endpoint modes.
+ * @brief Close UCP endpoint modes.
  *
  * The enumeration is used to specify the behavior of @ref ucp_ep_close_nb.
  */
-enum {
+enum ucp_ep_close_mode {
     UCP_EP_CLOSE_MODE_FORCE         = 0, /**< @ref ucp_ep_close_nb releases
                                               the endpoint without any
                                               confirmation from the peer. All
                                               outstanding requests will be
                                               completed with
-                                              @ref UCS_ERR_CANCELED error. */
+                                              @ref UCS_ERR_CANCELED error.
+                                              @note This mode may cause
+                                              transport level errors on remote
+                                              side, so it requires set
+                                              @ref UCP_ERR_HANDLING_MODE_PEER
+                                              for all endpoints created on
+                                              both (local and remote) sides to
+                                              avoid undefined behaviour */
     UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
                                               flushes on all outstanding
                                               operations. */
@@ -1514,7 +1521,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  * process depends on the selected @a mode.
  *
  * @param [in]  ep      Handle to the endpoint to close.
- * @param [in]  mode    One from @ref ucp_ep_close_nb_mode "enumerator" value.
+ * @param [in]  mode    One from @ref ucp_ep_close_mode value.
  *
  * @return UCS_OK           - The endpoint is closed successfully.
  * @return UCS_PTR_IS_ERR(_ptr) - The closure failed and an error code indicates
