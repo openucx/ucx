@@ -22,6 +22,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 
     index  = cq->cq_ci;
     cqe    = uct_ib_mlx5_get_cqe(cq, index);
+    ucs_prefetch(cqe-1);
     op_own = cqe->op_own;
 
     if (ucs_unlikely((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length))) {
