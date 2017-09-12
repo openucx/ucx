@@ -40,7 +40,7 @@ public:
 
 UCS_TEST_P(test_ucp_tag_match, send_recv_unexp) {
     ucp_tag_recv_info_t info;
-    ucs_status_t status;
+    ucs_status_t        status;
 
     uint64_t send_data = 0xdeadbeefdeadbeef;
     uint64_t recv_data = 0;
@@ -265,7 +265,7 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_nb_partial_exp_medium) {
 
 UCS_TEST_P(test_ucp_tag_match, send_nb_recv_unexp) {
     ucp_tag_recv_info_t info;
-    ucs_status_t status;
+    ucs_status_t        status;
 
     uint64_t send_data = 0xdeadbeefdeadbeef;
     uint64_t recv_data = 0;
@@ -292,7 +292,7 @@ UCS_TEST_P(test_ucp_tag_match, send_nb_recv_unexp) {
 
 UCS_TEST_P(test_ucp_tag_match, send_recv_truncated) {
     ucp_tag_recv_info_t info;
-    ucs_status_t status;
+    ucs_status_t        status;
 
     uint64_t send_data = 0xdeadbeefdeadbeef;
 
@@ -328,9 +328,9 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_nb_exp) {
 }
 
 UCS_TEST_P(test_ucp_tag_match, send_nb_multiple_recv_unexp) {
-    const unsigned num_requests = 1000;
+    const unsigned      num_requests = 1000;
     ucp_tag_recv_info_t info;
-    ucs_status_t status;
+    ucs_status_t        status;
 
     uint64_t send_data = 0xdeadbeefdeadbeef;
     uint64_t recv_data = 0;
@@ -368,7 +368,7 @@ UCS_TEST_P(test_ucp_tag_match, send_nb_multiple_recv_unexp) {
 
 UCS_TEST_P(test_ucp_tag_match, sync_send_unexp) {
     ucp_tag_recv_info_t info;
-    ucs_status_t status;
+    ucs_status_t        status;
 
     uint64_t send_data = 0x0102030405060708;
     uint64_t recv_data = 0;
@@ -398,9 +398,9 @@ UCS_TEST_P(test_ucp_tag_match, sync_send_unexp) {
 
 UCS_TEST_P(test_ucp_tag_match, sync_send_unexp_rndv, "RNDV_THRESH=1048576") {
     static const size_t size = 1148576;
-    request *my_send_req;
+    request             *my_send_req;
     ucp_tag_recv_info_t info;
-    ucs_status_t status;
+    ucs_status_t        status;
 
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
@@ -467,9 +467,9 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp, "RNDV_THRESH=1048576") {
 
 UCS_TEST_P(test_ucp_tag_match, rndv_rts_unexp, "RNDV_THRESH=1048576") {
     static const size_t size = 1148576;
-    request *my_send_req;
+    request             *my_send_req;
     ucp_tag_recv_info_t info;
-    ucs_status_t status;
+    ucs_status_t        status;
 
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);

@@ -419,7 +419,7 @@ UCS_TEST_F(test_datatype, ptr_array_random) {
             std::advance(iter, to_remove);
             unsigned index = iter->first;
 
-            void *ptr;
+            void *ptr = NULL;
             EXPECT_TRUE(ucs_ptr_array_lookup(&pa, index, ptr));
             EXPECT_EQ(ptr, map[index]);
             free(ptr);

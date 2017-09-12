@@ -16,9 +16,14 @@
 
 /**
  * @ingroup UCP_CONTEXT
- * @brief Forward declarations
+ * @brief UCP receive information descriptor
+ *
+ * The UCP receive information descriptor is allocated by application and filled
+ * in with the information about the received message by @ref ucp_tag_probe_nb
+ * or @ref ucp_tag_recv_request_test routines or
+ * @ref ucp_tag_recv_callback_t callback argument.
  */
-typedef struct ucp_tag_recv_info         ucp_tag_recv_info_t;
+typedef struct ucp_tag_recv_info             ucp_tag_recv_info_t;
 
 
 /**
@@ -344,6 +349,24 @@ typedef struct ucp_listener_accept_handler {
    void                            *arg;     /**< User defined argument for the
                                                   callback */
 } ucp_listener_accept_handler_t;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Completion callback for non-blocking stream oriented receives.
+ *
+ * This callback routine is invoked whenever the @ref ucp_stream_recv_nb
+ * "receive operation" is completed and the data is ready in the receive buffer.
+ *
+ * @param [in]  request   The completed receive request.
+ * @param [in]  status    Completion status. If the send operation was completed
+ *                        successfully UCX_OK is returned. Otherwise,
+ *                        an @ref ucs_status_t "error status" is returned.
+ * @param [in]  count     How many elements actually arrived to original buffer.
+ *                        The value is valid only if the status is UCS_OK.
+ */
+typedef void (*ucp_stream_recv_callback_t)(void *request, ucs_status_t status,
+                                           size_t count);
 
 
 /**

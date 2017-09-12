@@ -19,18 +19,28 @@ int ucp_request_is_completed(void *request)
     return !!(req->flags & UCP_REQUEST_FLAG_COMPLETED);
 }
 
-ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info)
+ucs_status_t ucp_request_check_status(void *request)
 {
     ucp_request_t *req = (ucp_request_t*)request - 1;
 
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
-        if (req->flags & UCP_REQUEST_FLAG_RECV) {
-            *info = req->recv.info;
-        }
         ucs_assert(req->status != UCS_INPROGRESS);
         return req->status;
     }
     return UCS_INPROGRESS;
+}
+
+ucs_status_t ucp_tag_recv_request_test(void *request, ucp_tag_recv_info_t *info)
+{
+    ucp_request_t *req   = (ucp_request_t*)request - 1;
+    ucs_status_t  status = ucp_request_check_status(request);
+
+    if (status != UCS_INPROGRESS) {
+        ucs_assert(req->flags & UCP_REQUEST_FLAG_RECV);
+        *info = req->recv.info;
+    }
+
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -276,4 +286,19 @@ void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane)
     ucp_request_memory_dereg(context, req->send.reg_rsc, req->send.datatype,
                              &req->send.state);
     req->send.reg_rsc = UCP_NULL_RESOURCE;
+}
+
+/* NOTE: deprecated */
+ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info)
+{
+    ucp_request_t *req = (ucp_request_t*)request - 1;
+
+    if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
+        if (req->flags & UCP_REQUEST_FLAG_RECV) {
+            *info = req->recv.info;
+        }
+        ucs_assert(req->status != UCS_INPROGRESS);
+        return req->status;
+    }
+    return UCS_INPROGRESS;
 }

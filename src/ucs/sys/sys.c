@@ -314,12 +314,22 @@ out:
     return read_bytes;
 }
 
+static unsigned long ucs_sysconf(int name)
+{
+    long rc;
+
+    rc = sysconf(name);
+    ucs_assert_always(rc >= 0);
+
+    return (unsigned long)rc;
+}
+
 size_t ucs_get_max_iov()
 {
     static size_t max_iov = 1;
 
     if (1 == max_iov) {
-        max_iov = ucs_max(sysconf(_SC_IOV_MAX), 1); /* max_iov shouldn't be zero */
+        max_iov = ucs_max(ucs_sysconf(_SC_IOV_MAX), 1); /* max_iov shouldn't be zero */
     }
     return max_iov;
 }
@@ -329,7 +339,7 @@ size_t ucs_get_page_size()
     static size_t page_size = 0;
 
     if (page_size == 0) {
-        page_size = sysconf(_SC_PAGESIZE);
+        page_size = ucs_sysconf(_SC_PAGESIZE);
     }
     return page_size;
 }
@@ -396,7 +406,7 @@ size_t ucs_get_phys_mem_size()
     static size_t phys_pages = 0;
 
     if (phys_pages == 0) {
-        phys_pages = sysconf(_SC_PHYS_PAGES);
+        phys_pages = ucs_sysconf(_SC_PHYS_PAGES);
     }
     return phys_pages * ucs_get_page_size();
 }

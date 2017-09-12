@@ -32,8 +32,8 @@ public:
     void set_num_threads(unsigned num_threads);
     unsigned num_threads() const;
 
-    virtual void get_config(const std::string& name, std::string& value,
-                            size_t max = 1024);
+    void get_config(const std::string& name, std::string& value,
+                            size_t max);
     virtual void set_config(const std::string& config_str);
     virtual void modify_config(const std::string& name, const std::string& value,
                                bool optional = false);

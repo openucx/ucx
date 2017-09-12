@@ -250,7 +250,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
 {
     uct_ugni_rdma_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_rdma_iface_config_t);
     ucs_status_t status;
-    uct_ugni_device_t *dev = uct_ugni_device_by_name(params->dev_name);
+    uct_ugni_device_t *dev = uct_ugni_device_by_name(params->mode.device.dev_name);
     uct_iface_ops_t *ops;
 
     ops = uct_ugni_rdma_choose_ops_by_device(dev);

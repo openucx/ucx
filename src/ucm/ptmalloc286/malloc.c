@@ -843,6 +843,7 @@ extern "C" {
 #define dlindependent_calloc         UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, independent_calloc)
 #define dlindependent_comalloc       UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, independent_comalloc)
 #define dlbulk_free                  UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, bulk_free)
+#define dlmallopt_get                UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, mallopt_get)
 #endif /* UCM_MALLOC_PREFIX */
 
 /*
@@ -5384,6 +5385,22 @@ void dlmalloc_stats() {
 
 int dlmallopt(int param_number, int value) {
   return change_mparam(param_number, value);
+}
+
+/* extension to use in testing */
+int dlmallopt_get(int param_number) {
+
+  ensure_initialization();
+  switch(param_number) {
+  case M_TRIM_THRESHOLD:
+    return mparams.trim_threshold;
+  case M_GRANULARITY:
+      return mparams.granularity;
+  case M_MMAP_THRESHOLD:
+    return mparams.mmap_threshold;
+  default:
+    return 0;
+  }
 }
 
 size_t dlmalloc_usable_size(void* mem) {

@@ -38,7 +38,7 @@ public:
     };
 
     class entity {
-        typedef std::vector<ucs::handle<ucp_ep_h> > ep_vec_t;
+        typedef std::vector<ucs::handle<ucp_ep_h, entity *> > ep_vec_t;
         typedef std::vector<std::pair<ucs::handle<ucp_worker_h>,
                                       ep_vec_t> > worker_vec_t;
 
@@ -77,6 +77,7 @@ public:
 
         void cleanup();
 
+        static void ep_destructor(ucp_ep_h ep, entity *e);
     protected:
         ucs::handle<ucp_context_h> m_ucph;
         worker_vec_t               m_workers;
