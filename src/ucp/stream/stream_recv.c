@@ -12,8 +12,6 @@
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/profile.h>
 
-#include <ucp/tag/eager.h> /* TODO: move ucp_eager_sync_hdr_t to common file */
-
 
 #define ucp_stream_rdesc_data(rdesc) \
     (ucs_status_ptr_t)((uintptr_t)((rdesc) + 1) + (rdesc)->hdr_len)
@@ -49,6 +47,13 @@ out:
     return ret;
 }
 
+static UCS_F_ALWAYS_INLINE void *
+ucp_stream_am_desc2uct(ucp_recv_desc_t *rdesc)
+{
+    return ucs_container_of((rdesc), ucp_am_unexp_rdesc_t,
+                            rdesc)->headroom.am.uct_desc;
+}
+
 UCS_PROFILE_FUNC_VOID(ucp_stream_data_release, (ep, data),
                       ucp_ep_h ep, void *data)
 {
@@ -57,7 +62,7 @@ UCS_PROFILE_FUNC_VOID(ucp_stream_data_release, (ep, data),
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
-        uct_iface_release_desc((char*)rdesc - sizeof(ucp_eager_sync_hdr_t));
+        uct_iface_release_desc(ucp_stream_am_desc2uct(rdesc));
     } else {
         ucs_mpool_put_inline(rdesc);
     }
