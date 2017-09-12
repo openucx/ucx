@@ -209,17 +209,15 @@ void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config
 
 UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
-                    unsigned rx_priv_len, uct_dc_iface_config_t *config)
+                    unsigned rx_priv_len, uct_dc_iface_config_t *config,
+                    unsigned rx_cq_len, unsigned rx_hdr_len, unsigned srq_size)
 {
     ucs_status_t status;
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &ops->super, md, worker, params,
-                              &config->super, rx_priv_len,
-                              config->super.super.rx.queue_len,
-                              sizeof(uct_rc_hdr_t),
-                              config->super.super.rx.queue_len,
-                              sizeof(uct_dc_fc_request_t));
+                              &config->super, rx_priv_len, rx_cq_len,
+                              rx_hdr_len, srq_size, sizeof(uct_dc_fc_request_t));
     if (config->ndci < 1) {
         ucs_error("dc interface must have at least 1 dci (requested: %d)",
                   config->ndci);

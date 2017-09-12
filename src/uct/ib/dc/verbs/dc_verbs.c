@@ -808,19 +808,31 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     struct ibv_qp_init_attr dci_init_attr;
     struct ibv_qp_attr dci_attr;
     ucs_status_t status;
-    size_t am_hdr_size;
     int i, ret;
+    unsigned rx_cq_len;
+    unsigned rx_hdr_len;
+    unsigned short_mp_size;
+    unsigned srq_size;
 
     ucs_trace_func("");
+
+    uct_rc_verbs_iface_common_preinit(&self->verbs_common, md,
+                                      &config->super.super,
+                                      &config->verbs_common, params, 1,
+                                      &rx_cq_len, &srq_size, &rx_hdr_len,
+                                      &short_mp_size);
+
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_verbs_iface_ops, md,
-                              worker, params, 0, &config->super);
+                              worker, params, 0, &config->super,
+                              rx_cq_len, rx_hdr_len, srq_size);
 
     uct_dc_verbs_iface_init_wrs(self);
 
-    am_hdr_size = ucs_max(config->verbs_common.max_am_hdr, sizeof(uct_rc_hdr_t));
-    status = uct_rc_verbs_iface_common_init(&self->verbs_common, &self->super.super,
-                                            &config->verbs_common, &config->super.super,
-                                            am_hdr_size);
+    status = uct_rc_verbs_iface_common_init(&self->verbs_common,
+                                            &self->super.super,
+                                            &config->verbs_common,
+                                            &config->super.super,
+                                            short_mp_size);
     if (status != UCS_OK) {
         goto err;
     }
@@ -840,12 +852,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                                   self->super.super.config.tx_qp_len);
     }
     uct_dc_iface_set_quota(&self->super, &config->super);
-
-    status = uct_rc_verbs_iface_prepost_recvs_common(&self->super.super,
-                                                     &self->super.super.rx.srq);
-    if (status != UCS_OK) {
-        goto err_common_cleanup;
-    }
 
     uct_base_iface_progress_enable(&self->super.super.super.super.super,
                                    UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
