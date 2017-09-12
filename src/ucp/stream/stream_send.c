@@ -50,7 +50,7 @@ static ucs_status_t ucp_stream_req_start(ucp_request_t *req, size_t count,
     size_t length;
 
     ucs_assertv_always(UCP_DT_IS_CONTIG(req->send.datatype),
-                       "Only UCP_DATATYPE_CONTIG type is implemented");
+                       "stream supports only contiguous types");
 
     length                  = ucp_contig_dt_length(req->send.datatype, count);
     req->send.length        = length;

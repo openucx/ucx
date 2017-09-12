@@ -5,7 +5,7 @@
 */
 
 #include "ucp_test.h"
-#include "ucp/api/ucp.h"
+
 
 class test_ucp_stream : public ucp_test {
 public:

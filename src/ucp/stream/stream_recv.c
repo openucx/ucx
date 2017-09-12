@@ -15,6 +15,12 @@
 #include <ucp/tag/eager.h> /* TODO: move ucp_eager_sync_hdr_t to common file */
 
 
+#define ucp_stream_rdesc_data(rdesc) \
+    (ucs_status_ptr_t)((uintptr_t)((rdesc) + 1) + (rdesc)->hdr_len)
+
+#define ucp_stream_rdesc_from_data(data) \
+    ((ucp_recv_desc_t *)((uintptr_t)(data) - sizeof(ucp_stream_am_hdr_t)) - 1)
+
 typedef struct {
     uint64_t    uuid;
 } UCS_S_PACKED ucp_stream_am_hdr_t;
@@ -35,7 +41,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb,
     rdesc = ucs_queue_pull_elem_non_empty(&ep->stream_data, ucp_recv_desc_t,
                                           stream_queue);
     *length = rdesc->length;
-    ret = (ucs_status_ptr_t)((uintptr_t)(rdesc + 1) + rdesc->hdr_len);
+    ret = ucp_stream_rdesc_data(rdesc);
 
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
@@ -46,11 +52,7 @@ out:
 UCS_PROFILE_FUNC_VOID(ucp_stream_data_release, (ep, data),
                       ucp_ep_h ep, void *data)
 {
-    ucp_recv_desc_t *rdesc;
-
-    /* TODO: make const header offset */
-    rdesc = (ucp_recv_desc_t *)((uintptr_t)(data -
-                                            sizeof(ucp_stream_am_hdr_t))) - 1;
+    ucp_recv_desc_t *rdesc = ucp_stream_rdesc_from_data(data);
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
@@ -80,23 +82,21 @@ static ucs_status_t ucp_stream_am_handler(void *arg, void *data, size_t length,
     ucs_assert(length >= hdr_len);
     recv_len = length - hdr_len;
 
-    /* TODO: merge common code with TAG unexpected */
     if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
         /* slowpath */
         rdesc        = (ucp_recv_desc_t *)data - 1;
         rdesc->flags = UCP_RECV_DESC_FLAG_UCT_DESC;
         status       = UCS_INPROGRESS;
     } else {
+        status = UCS_OK;
         rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
-        if (rdesc == NULL) {
+        if (ucs_likely(rdesc != NULL)) {
+            rdesc->flags = 0;
+            memcpy(rdesc + 1, data, length);
+        } else {
             ucs_error("ucp recv descriptor is not allocated");
-            status = UCS_ERR_NO_MEMORY;
             goto out;
         }
-
-        rdesc->flags = 0;
-        memcpy(rdesc + 1, data, length);
-        status = UCS_OK;
     }
 
     rdesc->length  = recv_len;
@@ -104,12 +104,12 @@ static ucs_status_t ucp_stream_am_handler(void *arg, void *data, size_t length,
     hdr            = data;
 
     hash_it = kh_get(ucp_worker_ep_hash, &worker->ep_hash, hdr->uuid);
-    if (hash_it != kh_end(&worker->ep_hash)) {
+    if (ucs_likely(hash_it != kh_end(&worker->ep_hash))) {
         ep = kh_value(&worker->ep_hash, hash_it);
         ucs_queue_push(&ep->stream_data, &rdesc->stream_queue);
     } else {
         ucs_error("ep is not found by uuid: %lu", hdr->uuid);
-        status = UCS_ERR_SOME_CONNECTS_FAILED;
+        status = UCS_OK;
     }
 
 out:
