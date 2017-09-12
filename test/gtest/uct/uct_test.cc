@@ -8,6 +8,7 @@
 
 extern "C" {
 #include <ucs/stats/stats.h>
+#include <ucs/sys/string.h>
 }
 #include <common/test_helpers.h>
 #include <algorithm>
@@ -27,12 +28,19 @@ std::string resource::name() const {
 
 uct_test::uct_test() {
     ucs_status_t status;
-    status = uct_iface_config_read(GetParam()->tl_name.c_str(), NULL,
-                                   NULL, NULL, &m_iface_config);
-    ASSERT_UCS_OK(status);
+    uct_md_h pd;
+
     status = uct_md_config_read(GetParam()->md_name.c_str(), NULL, NULL,
                                 &m_md_config);
     ASSERT_UCS_OK(status);
+
+    status = uct_md_open(GetParam()->md_name.c_str(), m_md_config, &pd);
+    ASSERT_UCS_OK(status);
+
+    status = uct_md_iface_config_read(pd, GetParam()->tl_name.c_str(), NULL,
+                                      NULL, &m_iface_config);
+    ASSERT_UCS_OK(status);
+    uct_md_close(pd);
 }
 
 uct_test::~uct_test() {

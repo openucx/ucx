@@ -249,6 +249,15 @@ err:
     return status;
 }
 
+uct_tl_component_t* uct_md_get_single_tlc(uct_md_h md)
+{
+    uct_md_registered_tl_t *tlr;
+
+    ucs_assert_always(ucs_list_length(&md->component->tl_list) == 1);
+    tlr = ucs_list_head(&md->component->tl_list, uct_md_registered_tl_t, list);
+    return tlr->tl;
+}
+
 static uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
                                              const char *tl_name)
 {
@@ -262,33 +271,25 @@ static uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
     return NULL;
 }
 
-static uct_tl_component_t *uct_find_tl(const char *tl_name)
-{
-    uct_md_component_t *mdc;
-    uct_tl_component_t *tlc;
-
-    ucs_list_for_each(mdc, &uct_md_components_list, list) {
-        tlc = uct_find_tl_on_md(mdc, tl_name);
-        if (tlc != NULL) {
-            return tlc;
-        }
-    }
-    return NULL;
-}
-
-ucs_status_t uct_iface_config_read(const char *tl_name, const char *env_prefix,
-                                   uct_md_h md, const char *filename,
-                                   uct_iface_config_t **config_p)
+ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
+                                      const char *env_prefix, const char *filename,
+                                      uct_iface_config_t **config_p)
 {
     uct_config_bundle_t *bundle = NULL;
     uct_tl_component_t *tlc;
+    uct_md_attr_t md_attr;
     ucs_status_t status;
 
-    tlc = uct_find_tl(tl_name);
-    if (tlc == NULL) {
-        ucs_error("Transport '%s' does not exist", tl_name);
-        status = UCS_ERR_NO_DEVICE; /* Non-existing transport */
-        return status;
+    md->ops->query(md, &md_attr);
+    if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
+        tlc = uct_md_get_single_tlc(md);
+    } else {
+        tlc = uct_find_tl_on_md(md->component, tl_name);
+        if (tlc == NULL) {
+            ucs_error("Transport '%s' does not exist", tl_name);
+            status = UCS_ERR_NO_DEVICE; /* Non-existing transport */
+            return status;
+        }
     }
 
     status = uct_config_read(&bundle, tlc->iface_config_table,

@@ -103,7 +103,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
     };
 
     UCS_CPU_ZERO(&iface_params.cpu_mask);
-    status = uct_iface_config_read(resource->tl_name, NULL, md, NULL, &iface_config);
+    status = uct_md_iface_config_read(md, resource->tl_name, NULL, NULL, &iface_config);
     if (status != UCS_OK) {
         return;
     }
