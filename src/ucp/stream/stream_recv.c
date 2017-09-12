@@ -121,7 +121,15 @@ static void ucp_stream_am_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                                uint8_t id, const void *data, size_t length,
                                char *buffer, size_t max)
 {
-    /* TODO: */
+    const ucp_stream_am_hdr_t *hdr    = data;
+    size_t                    hdr_len = sizeof(*hdr);
+    char                      *p;
+
+    snprintf(buffer, max, "STREAM ep uuid %"PRIx64, hdr->uuid);
+    p = buffer + strlen(buffer);
+
+    ucp_dump_payload(worker->context, p, buffer + max - p, data + hdr_len,
+                     length - hdr_len);
 }
 
 UCP_DEFINE_AM(UCP_FEATURE_STREAM, UCP_AM_ID_STREAM_DATA,
