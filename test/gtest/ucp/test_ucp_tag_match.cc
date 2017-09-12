@@ -34,6 +34,12 @@ public:
                                      RECV_REQ_EXTERNAL, result);
         return result;
     }
+
+    virtual bool is_external_request()
+    {
+        return GetParam().variant == RECV_REQ_EXTERNAL;
+    }
+
 };
 
 UCS_TEST_P(test_ucp_tag_match, send_recv_unexp) {

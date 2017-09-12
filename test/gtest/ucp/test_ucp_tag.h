@@ -108,6 +108,8 @@ protected:
 
     static void dt_common_finish(void *state);
 
+    virtual bool is_external_request();
+
     static const uint32_t MAGIC = 0xd7d7d7d7U;
     static const ucp_datatype_t DATATYPE;
     static const ucp_datatype_t DATATYPE_IOV;

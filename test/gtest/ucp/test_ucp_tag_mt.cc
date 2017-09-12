@@ -47,6 +47,11 @@ public:
                                      result, MULTI_THREAD_WORKER);
         return result;
     }
+
+    virtual bool is_external_request()
+    {
+        return GetParam().variant == RECV_REQ_EXTERNAL;
+    }
 };
 
 UCS_TEST_P(test_ucp_tag_mt, send_recv) {
@@ -66,8 +71,9 @@ UCS_TEST_P(test_ucp_tag_mt, send_recv) {
         ucs_status_t status;
         int worker_index = 0;
 
-        if (GetParam().thread_type == MULTI_THREAD_CONTEXT)
+        if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
             worker_index = i;
+        }
 
         send_b(&(send_data[i]), sizeof(send_data[i]), DATATYPE, 0x111337+i, i);
 

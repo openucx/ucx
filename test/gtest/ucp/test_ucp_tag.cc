@@ -106,7 +106,7 @@ void test_ucp_tag::wait(request *req, int buf_index)
         ucs_assert((buf_index == 0) && (worker_index == 0));
     }
 
-    if (GetParam().variant == RECV_REQ_EXTERNAL) {
+    if (is_external_request()) {
         ucp_tag_recv_info_t tag_info;
         ucs_status_t        status = ucp_request_test(req, &tag_info);
 
@@ -202,7 +202,7 @@ test_ucp_tag::request*
 test_ucp_tag::recv_nb(void *buffer, size_t count, ucp_datatype_t dt,
                       ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index)
 {
-    return (GetParam().variant == RECV_REQ_EXTERNAL) ?
+    return is_external_request() ?
                     recv_req_nb(buffer, count, dt, tag, tag_mask, buf_index) :
                     recv_cb_nb(buffer, count, dt, tag, tag_mask, buf_index);
 }
@@ -254,7 +254,7 @@ ucs_status_t
 test_ucp_tag::recv_b(void *buffer, size_t count, ucp_datatype_t dt, ucp_tag_t tag,
                      ucp_tag_t tag_mask, ucp_tag_recv_info_t *info, int buf_index)
 {
-    return (GetParam().variant == RECV_REQ_EXTERNAL) ?
+    return is_external_request() ?
                     recv_req_b(buffer, count, dt, tag, tag_mask, info, buf_index) :
                     recv_cb_b(buffer, count, dt, tag, tag_mask, info, buf_index);
 }
@@ -402,6 +402,11 @@ void test_ucp_tag::dt_common_finish(void *state)
     EXPECT_EQ(0, dt_state->started);
     dt_gen_finish_count++;
     delete dt_state;
+}
+
+bool test_ucp_tag::is_external_request()
+{
+    return false;
 }
 
 const ucp_datatype_t test_ucp_tag::DATATYPE     = ucp_dt_make_contig(1);
