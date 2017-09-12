@@ -221,9 +221,9 @@ test_ucp_tag::recv_req_nb(void *buffer, size_t count, ucp_datatype_t dt,
 
     ucs_status_t status = ucp_tag_recv_nbr(receiver().worker(worker_index), buffer, count,
                                            dt, tag, tag_mask, req);
-    if (status != UCS_OK && status != UCS_INPROGRESS) {
+    if ((status != UCS_OK) && (status != UCS_INPROGRESS)) {
         UCS_TEST_ABORT("ucp_tag_recv_nb returned status " <<
-                       ucs_status_string(UCS_PTR_STATUS(req)));
+                       ucs_status_string(status));
     }
     return req;
 }
