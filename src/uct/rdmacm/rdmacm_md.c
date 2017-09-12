@@ -89,6 +89,18 @@ out:
 static ucs_status_t uct_rdmacm_query_md_resources(uct_md_resource_desc_t **resources_p,
                                                   unsigned *num_resources_p)
 {
+    struct rdma_event_channel *event_ch = NULL;
+
+    /* Create a dummy event channel to check if RDMACM can be used */
+    event_ch = rdma_create_event_channel();
+    if (event_ch == NULL) {
+        ucs_debug("Could not create an RDMACM event channel. %m. "
+                  "Disabling the RDMACM resource");
+        *resources_p     = NULL;
+        *num_resources_p = 0;
+        return UCS_OK;
+    }
+    rdma_destroy_event_channel(event_ch);
     return uct_single_md_resource(&uct_rdmacm_mdc, resources_p, num_resources_p);
 }
 
