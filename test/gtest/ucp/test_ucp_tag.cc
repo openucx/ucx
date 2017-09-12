@@ -107,15 +107,15 @@ void test_ucp_tag::wait(request *req, int buf_index)
     }
 
     if (GetParam().variant == RECV_REQ_EXTERNAL) {
-        ucp_tag_recv_info_t recv_info;
-        ucs_status_t status = ucp_request_test(req, &recv_info);
+        ucp_tag_recv_info_t tag_info;
+        ucs_status_t        status = ucp_request_test(req, &tag_info);
 
         while (status == UCS_INPROGRESS) {
             progress(worker_index);
-            status =  ucp_request_test(req, &recv_info);
+            status = ucp_request_test(req, &tag_info);
         }
         if (req->external) {
-            recv_callback(req, status, &recv_info);
+            recv_callback(req, status, &tag_info);
         }
     } else {
         while (!req->completed) {

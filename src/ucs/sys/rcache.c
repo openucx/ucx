@@ -32,11 +32,6 @@
 #define ucs_rcache_region_trace(_message, ...) \
     ucs_rcache_region_log(UCS_LOG_LEVEL_TRACE, _message, ## __VA_ARGS__)
 
-#define UCS_RCACHE_PROT_FMT "%c%c"
-#define UCS_RCACHE_PROT_ARG(_prot) \
-    ((_prot) & PROT_READ)  ? 'r' : '-', \
-    ((_prot) & PROT_WRITE) ? 'w' : '-'
-
 
 typedef struct ucs_rcache_inv_entry {
     ucs_queue_elem_t         queue;
@@ -208,7 +203,8 @@ static void ucs_rcache_invalidate_range(ucs_rcache_t *rcache, ucs_pgt_addr_t sta
 
     ucs_rcache_find_regions(rcache, start, end - 1, &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
-        ucs_rcache_region_invalidate(rcache, region, 0, 0);
+        /* all regions on the list are in the page table */
+        ucs_rcache_region_invalidate(rcache, region, 1, 0);
     }
 }
 
@@ -324,22 +320,6 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
             return UCS_ERR_ALREADY_EXISTS;
         }
 
-        /* No point to expand the region to pages which are not accessible
-         * the way we want. If somebody will want to use them, it will be
-         * by another region (with appropriate permissions).
-         */
-        mem_prot = UCS_PROFILE_CALL(ucs_get_mem_prot, region->super.start,
-                                    region->super.end);
-        if (!ucs_test_all_flags(mem_prot, *prot)) {
-            ucs_rcache_region_trace(rcache, region,
-                                    "do not merge "UCS_RCACHE_PROT_FMT
-                                    " with mem "UCS_RCACHE_PROT_FMT,
-                                    UCS_RCACHE_PROT_ARG(*prot),
-                                    UCS_RCACHE_PROT_ARG(mem_prot));
-            ucs_rcache_region_invalidate(rcache, region, 1, 0);
-            continue;
-        }
-
         /*
          * If we don't provide some of the permissions the other region had,
          * we might want to expand our permissions to support them. We can
@@ -348,9 +328,26 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
          * the next time.
          */
         if (!ucs_test_all_flags(*prot, region->prot)) {
+            /* A slow path because searching /proc/maps in order to
+             * check memory protection is very expensive.
+             *
+             * TODO: currently rcache is optimized for the case where most of
+             * the regions have same protection.
+             */
             mem_prot = UCS_PROFILE_CALL(ucs_get_mem_prot, *start, *end);
-            ucs_assert(ucs_test_all_flags(mem_prot, *prot));
-            if (ucs_test_all_flags(mem_prot, region->prot)) {
+            if (!ucs_test_all_flags(mem_prot, *prot)) {
+                ucs_rcache_region_trace(rcache, region,
+                                        "do not merge "UCS_RCACHE_PROT_FMT
+                                        " with mem "UCS_RCACHE_PROT_FMT,
+                                        UCS_RCACHE_PROT_ARG(*prot),
+                                        UCS_RCACHE_PROT_ARG(mem_prot));
+                /* The memory protection can not satisfy that of the
+                 * region. However mem_reg still may be able to deal with it.
+                 * Do the safest thing: invalidate cached region
+                 */
+                ucs_rcache_region_invalidate(rcache, region, 1, 0);
+                continue;
+            } else if (ucs_test_all_flags(mem_prot, region->prot)) {
                 *prot |= region->prot;
             } else {
                 /* Could not support other region's permissions - so do not merge
@@ -448,7 +445,12 @@ retry:
                                rcache->params.context, rcache, arg, region);
     if (status != UCS_OK) {
         if (merged) {
-            /* failure may be due to merge, retry with original address */
+            /* failure may be due to merge, because memory of the merged
+             * regions has different access permission.
+             * Retry with original address: there will be no merge because
+             * all merged regions has been invalidated and registration will
+             * succeed.
+             */
             ucs_debug("failed to register merged region " UCS_PGT_REGION_FMT ": %s, retrying",
                       UCS_PGT_REGION_ARG(&region->super), ucs_status_string(status));
             status = ucs_pgtable_remove(&rcache->pgtable, &region->super);
@@ -492,7 +494,8 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
 
     pthread_rwlock_rdlock(&rcache->lock);
     if (ucs_queue_is_empty(&rcache->inv_q)) {
-        pgt_region = ucs_pgtable_lookup(&rcache->pgtable, start);
+        pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &rcache->pgtable,
+                                      start);
         if (ucs_likely(pgt_region != NULL)) {
             region = ucs_derived_of(pgt_region, ucs_rcache_region_t);
             if (((start + length) <= region->super.end) &&

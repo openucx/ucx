@@ -127,7 +127,7 @@ struct ucs_stats_node {
     ucs_list_link_t          type_list;          /* nodes with same class/es
                                                     hierarchy */
     ucs_stats_filter_node_t  *filter_node;       /* ptr to type list head */
-    ucs_stats_counter_t      counters[];         /* instance counters */
+    ucs_stats_counter_t      counters[1];        /* instance counters */
 };
 
 struct ucs_stats_filter_node {

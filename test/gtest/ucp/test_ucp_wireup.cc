@@ -58,7 +58,6 @@ protected:
 private:
     vec_type   m_send_data;
     vec_type   m_recv_data;
-    size_t     m_max_send;
     ucp_mem_h  m_memh1, m_memh2;
     ucp_rkey_h m_rkey1, m_rkey2;
 
@@ -359,7 +358,7 @@ UCS_TEST_P(test_ucp_wireup, reply_ep_send_before) {
         send_recv(ep, sender().worker(), 1, 1);
         sender().flush_worker();
 
-        ucp_ep_destroy(ep);
+        disconnect(ep);
     }
 }
 
@@ -381,7 +380,7 @@ UCS_TEST_P(test_ucp_wireup, reply_ep_send_after) {
 
         sender().flush_worker();
 
-        ucp_ep_destroy(ep);
+        disconnect(ep);
     }
 }
 

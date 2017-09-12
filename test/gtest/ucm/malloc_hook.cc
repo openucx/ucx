@@ -387,3 +387,73 @@ UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
     ucm_unset_event_handler(UCM_EVENT_VM_UNMAPPED, mem_event_callback,
                             reinterpret_cast<void*>(this));
 }
+
+extern "C" {
+    int ucm_dlmallopt_get(int);
+};
+
+UCS_TEST_F(malloc_hook_cplusplus, mallopt) {
+
+    int v;
+    int trim_thresh, mmap_thresh;
+    char *p;
+    size_t size;
+
+    /* This test can not be run with the other
+     * tests because it assumes that malloc hooks
+     * are not initialized
+     */
+    p = getenv("MALLOC_TRIM_THRESHOLD_");
+    if (p == NULL) {
+        UCS_TEST_SKIP_R("MALLOC_TRIM_THRESHOLD_ is not set");
+    }
+    ASSERT_TRUE(p != NULL);
+    trim_thresh = atoi(p);
+
+    p = getenv("MALLOC_MMAP_THRESHOLD_");
+    if (p == NULL) {
+        UCS_TEST_SKIP_R("MALLOC_MMAP_THRESHOLD_ is not set");
+    }
+    ASSERT_TRUE(p != NULL);
+    mmap_thresh = atoi(p);
+
+    /* make sure that rcache is explicitly disabled so
+     * that the malloc hooks are installed after the setenv()
+     */
+    p = getenv("UCX_IB_RCACHE");
+    if ((p == NULL) || (p[0] != 'n')) {
+        UCS_TEST_SKIP_R("rcache must be disabled");
+    }
+
+    ucs_status_t result = ucm_set_event_handler(UCM_EVENT_VM_UNMAPPED,
+                                                0, mem_event_callback,
+                                                reinterpret_cast<void*>(this));
+    ASSERT_UCS_OK(result);
+
+    v = ucm_dlmallopt_get(M_TRIM_THRESHOLD);
+    EXPECT_EQ(trim_thresh, v);
+
+    v = ucm_dlmallopt_get(M_MMAP_THRESHOLD);
+    EXPECT_EQ(mmap_thresh, v);
+
+    /* give a lot of extra space since the same block
+     * can be also used by other allocations
+     */
+    if (trim_thresh > 0) {
+        size = trim_thresh/2;
+    } else if (mmap_thresh > 0) {
+        size = mmap_thresh/2;
+    } else {
+        size = 10 * 1024 * 1024;
+    }
+
+    UCS_TEST_MESSAGE << "trim_thresh=" << trim_thresh << " mmap_thresh=" << mmap_thresh <<
+                        " allocating=" << size;
+    p = new char [size];
+    ASSERT_TRUE(p != NULL);
+    delete [] p;
+
+    EXPECT_EQ(m_unmapped_size, size_t(0));
+    ucm_unset_event_handler(UCM_EVENT_VM_UNMAPPED, mem_event_callback,
+                            reinterpret_cast<void*>(this));
+}

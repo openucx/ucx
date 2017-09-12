@@ -342,7 +342,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
 
         mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &in);
         if (mr == NULL) {
-            ucs_log(level, "ibv_exp_reg_mr(address=%p, length=%Zu, exp_access=0x%lx) failed: %m",
+            ucs_log(level, "ibv_exp_reg_mr(address=%p, length=%zu, exp_access=0x%lx) failed: %m",
                     in.addr, in.length, in.exp_access);
             return UCS_ERR_IO_ERROR;
         }
@@ -353,7 +353,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
         mr = UCS_PROFILE_CALL(ibv_reg_mr, md->pd, address, length,
                               UCT_IB_MEM_ACCESS_FLAGS);
         if (mr == NULL) {
-            ucs_log(level, "ibv_reg_mr(address=%p, length=%Zu, access=0x%x) failed: %m",
+            ucs_log(level, "ibv_reg_mr(address=%p, length=%zu, access=0x%x) failed: %m",
                       address, length, UCT_IB_MEM_ACCESS_FLAGS);
             return UCS_ERR_IO_ERROR;
         }
@@ -464,7 +464,7 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
     return UCS_OK;
 
 err_free_umr:
-    ibv_dereg_mr(umr);
+    UCS_PROFILE_CALL(ibv_dereg_mr, umr);
 err:
     return status;
 #else
@@ -476,7 +476,7 @@ static ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
 {
     int ret;
 
-    ret = ibv_dereg_mr(mr);
+    ret = UCS_PROFILE_CALL(ibv_dereg_mr, mr);
     if (ret != 0) {
         ucs_error("ibv_dereg_mr() failed: %m");
         return UCS_ERR_IO_ERROR;

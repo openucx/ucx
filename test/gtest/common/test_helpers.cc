@@ -59,7 +59,7 @@ void fill_random(void *data, size_t size)
 
 scoped_setenv::scoped_setenv(const char *name, const char *value) : m_name(name) {
     if (getenv(name)) {
-        m_old_value = getenv(m_name.c_str());
+        m_old_value = getenv(name);
     }
     setenv(m_name.c_str(), value, 1);
 }
@@ -89,13 +89,14 @@ message_stream::message_stream(const std::string& title) {
     static const char PADDING[] = "          ";
     static const size_t WIDTH = strlen(PADDING);
 
-    std::cout <<  "[";
-    std::cout.write(PADDING, ucs_max(WIDTH - 1, title.length()) - title.length());
-    std::cout << title << " ] ";
+    msg <<  "[";
+    msg.write(PADDING, ucs_max(WIDTH - 1, title.length()) - title.length());
+    msg << title << " ] ";
 }
 
 message_stream::~message_stream() {
-    std::cout << std::endl;
+    msg << std::endl;
+    std::cout << msg.str() << std::flush;
 }
 
 } // detail

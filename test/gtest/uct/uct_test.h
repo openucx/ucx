@@ -192,7 +192,7 @@ protected:
     virtual void cleanup();
     virtual void modify_config(const std::string& name, const std::string& value,
                                bool optional = false);
-    virtual bool get_config(const std::string& name, std::string& value) const;
+    bool get_config(const std::string& name, std::string& value) const;
     void stats_activate();
     void stats_restore();
 

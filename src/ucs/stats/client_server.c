@@ -332,7 +332,7 @@ ucs_stats_server_entity_update(ucs_stats_server_h server, stats_entity_t *entity
     frag_hole_t *hole, *new_hole;
     void *frag_start, *frag_end, *hole_end;
 
-    ucs_debug("From %s:%d - timestamp %"PRIu64", %Zu..%Zu / %Zu",
+    ucs_debug("From %s:%d - timestamp %"PRIu64", %zu..%zu / %zu",
               inet_ntoa(entity->in_addr.sin_addr), ntohs(entity->in_addr.sin_port),
               timestamp, frag_offset, frag_offset + frag_size, total_size);
 
@@ -340,20 +340,20 @@ ucs_stats_server_entity_update(ucs_stats_server_h server, stats_entity_t *entity
         ucs_debug("Dropping - old timestamp");
         return 0;
     } else if (timestamp > entity->timestamp) {
-        ucs_debug("New timestamp, resetting buffer with size %Zu", total_size);
+        ucs_debug("New timestamp, resetting buffer with size %zu", total_size);
         entity->timestamp = timestamp;
         ucs_stats_server_entity_reset_buffer(entity, total_size);
     } else {
         /* Make sure all packets in this timestamp have the same 'total_size' */
         if (entity->buffer_size != total_size) {
-            ucs_error("Total size in the packet is %Zu, but expected is %Zu",
+            ucs_error("Total size in the packet is %zu, but expected is %zu",
                       total_size, entity->buffer_size);
         }
     }
 
     hole = find_frag_hole(entity, frag_size, frag_offset);
     if (hole == NULL) {
-        ucs_error("cannot fill fragment (offset %Zu size %Zu)", frag_offset, frag_size);
+        ucs_error("cannot fill fragment (offset %zu size %zu)", frag_offset, frag_size);
         return UCS_ERR_MESSAGE_TRUNCATED;
     }
 
@@ -361,7 +361,7 @@ ucs_stats_server_entity_update(ucs_stats_server_h server, stats_entity_t *entity
     frag_end   = entity->inprogress_buffer + frag_offset + frag_size;
     hole_end   = (void*)hole + hole->size;
 
-    ucs_debug("inserting into a hole of %Zu..%Zu",
+    ucs_debug("inserting into a hole of %zu..%zu",
               (void*)hole - entity->inprogress_buffer,
               hole_end    - entity->inprogress_buffer);
 
@@ -413,7 +413,7 @@ ucs_stats_server_update_context(ucs_stats_server_h server, struct sockaddr_in *s
 
     /* Validate fragment size */
     if (pkt_len != pkt->frag_size + sizeof(ucs_stats_packet_hdr_t)) {
-        ucs_error("Invalid receive size: expected %Zu, got %Zu",
+        ucs_error("Invalid receive size: expected %zu, got %zu",
                   pkt->frag_size + sizeof(ucs_stats_packet_hdr_t), pkt_len);
         return UCS_ERR_MESSAGE_TRUNCATED;
     }

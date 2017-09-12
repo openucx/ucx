@@ -32,8 +32,8 @@ public:
     void set_num_threads(unsigned num_threads);
     unsigned num_threads() const;
 
-    virtual void get_config(const std::string& name, std::string& value,
-                            size_t max = 1024);
+    void get_config(const std::string& name, std::string& value,
+                            size_t max);
     virtual void set_config(const std::string& config_str);
     virtual void modify_config(const std::string& name, const std::string& value,
                                bool optional = false);
@@ -55,6 +55,7 @@ protected:
     void SetUpProxy();
     void TearDownProxy();
     void TestBodyProxy();
+    static std::string format_message(const char *message, va_list ap);
 
     virtual void cleanup();
     virtual void init();
@@ -67,8 +68,10 @@ protected:
     unsigned             m_num_threads;
     config_stack_t       m_config_stack;
     int                  m_num_valgrind_errors_before;
+    unsigned             m_num_errors_before;
     unsigned             m_num_warnings_before;
 
+    static unsigned                 m_total_errors;
     static unsigned                 m_total_warnings;
     static std::vector<std::string> m_errors;
 
@@ -83,7 +86,6 @@ private:
                        const char *message,
                        va_list ap);
 
-    static std::string format_message(const char *message, va_list ap);
 
     static ucs_log_func_rc_t
     hide_errors_logger(const char *file, unsigned line, const char *function,

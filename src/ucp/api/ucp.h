@@ -15,6 +15,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/config/types.h>
 #include <stdio.h>
+#include <sys/types.h>
 
 
 /**
@@ -138,8 +139,9 @@ enum ucp_feature {
                                            operations support */
     UCP_FEATURE_AMO64  = UCS_BIT(3),  /**< Request 64-bit atomic
                                            operations support */
-    UCP_FEATURE_WAKEUP = UCS_BIT(4)   /**< Request interrupt notification
+    UCP_FEATURE_WAKEUP = UCS_BIT(4),  /**< Request interrupt notification
                                            support */
+    UCP_FEATURE_STREAM = UCS_BIT(5)   /**< Request stream support */
 };
 
 
@@ -189,7 +191,8 @@ enum ucp_ep_params_field {
     UCP_EP_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(2), /**< Handler to process
                                                             transport level errors */
     UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(3), /**< Socket address field */
-    UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(4)  /**< Endpoint flags */
+    UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(4), /**< Endpoint flags */
+    UCP_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(5)  /**< User data pointer */
 };
 
 
@@ -209,6 +212,25 @@ enum ucp_ep_params_flags_field {
                                                            must be provided and
                                                            contain the address
                                                            of the remote peer */
+};
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief @anchor ucp_ep_close_nb_mode Close UCP endpoint modes.
+ *
+ * The enumeration is used to specify the behavior of @ref ucp_ep_close_nb.
+ */
+enum {
+    UCP_EP_CLOSE_MODE_FORCE         = 0, /**< @ref ucp_ep_close_nb releases
+                                              the endpoint without any
+                                              confirmation from the peer. All
+                                              outstanding requests will be
+                                              completed with
+                                              @ref UCS_ERR_CANCELED error. */
+    UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
+                                              flushes on all outstanding
+                                              operations. */
 };
 
 
@@ -772,8 +794,43 @@ typedef struct ucp_ep_params {
      * 'flags' field.
      */
     ucs_sock_addr_t         sockaddr;
+
+    /**
+     * User data associated with an endpoint. See @ref ucp_stream_poll_ep_t.
+     * @a user_data must be equal to @ref ucp_err_handler_t::arg if both are set.
+     */
+    void                    *user_data;
 } ucp_ep_params_t;
 
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Output parameter of @ref ucp_stream_worker_poll function.
+ *
+ * The structure defines the endpoint and its user data.
+ */
+typedef struct {
+    /**
+     * Endpoint handle.
+     */
+    ucp_ep_h    ep;
+
+    /**
+     * User data associated with an endpoint passed in
+     * @ref ucp_ep_params_t::user_data.
+     */
+    void        *user_data;
+
+    /**
+     * Reserved for future use.
+     */
+    unsigned    flags;
+
+    /**
+     * Reserved for future use.
+     */
+    uint8_t     reserved[16];
+} ucp_stream_poll_ep_t;
 
 /**
  * @ingroup UCP_MEM
@@ -829,7 +886,8 @@ typedef struct ucp_mem_map_params {
  *
  * The UCP receive information descriptor is allocated by application and filled
  * in with the information about the received message by @ref ucp_tag_probe_nb
- * "ucp_tag_probe_nb" routine.
+ * or @ref ucp_tag_recv_request_test routines or
+ * @ref ucp_tag_recv_callback_t callback argument.
  */
 struct ucp_tag_recv_info {
     /** Sender tag */
@@ -1189,6 +1247,31 @@ unsigned ucp_worker_progress(ucp_worker_h worker);
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief Poll for endpoints that are ready to consume streaming data.
+ *
+ * This non-blocking routine returns endpoints on a worker which are ready
+ * to consume streaming data. The ready endpoints are placed in @poll_eps array,
+ * and the function return value indicates how many are there.
+ *
+ * @param [in]   worker    Worker to poll.
+ * @param [out]  poll_eps  Pointer to array of endpoints, should be
+ *                         allocated by user.
+ * @param [in]   max_eps   Maximal number of endpoints which should be filled
+ *                         in @a poll_eps.
+ * @param [in]   flags     Reserved for future use.
+ *
+ * @return Negative value indicates an error according to @ref ucp_status_t.
+ *         On success, non-negative value (less or equal @a max_eps) indicates
+ *         actual number of endpoints filled in @a poll_eps array.
+ *
+ */
+ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
+                               ucp_stream_poll_ep_t *poll_eps, size_t max_eps,
+                               unsigned flags);
+
+
+/**
  * @ingroup UCP_WAKEUP
  * @brief Obtain an event file descriptor for event notification.
  *
@@ -1425,29 +1508,30 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
 /**
  * @ingroup UCP_ENDPOINT
  *
- * @brief Initiate non-blocking disconnect.
+ * @brief Non-blocking @ref ucp_ep_h "endpoint" closure.
  *
- *   This routine starts a disconnect process which would eventually release the
- * @ref ucp_ep_h "endpoint". The disconnect process flushes, locally, all
- * outstanding communications, and releases all memory contexts associated with
- * the endpoint. After calling this function, the endpoint cannot be used anymore.
- *   Nevertheless, if the application is interested to re-initiate communication
- * with a particular remote worker, it can use @ref ucp_ep_create "endpoints
- * create routine" to re-open a new endpoint.
+ * This routine releases the @ref ucp_ep_h "endpoint". The endpoint closure
+ * process depends on the selected @a mode.
  *
- * @param [in]  ep   Handle to the endpoint to disconnect.
+ * @param [in]  ep      Handle to the endpoint to close.
+ * @param [in]  mode    One from @ref ucp_ep_close_nb_mode "enumerator" value.
  *
- * @return UCS_OK           - The endpoint is flushed and destroyed.
- * @return UCS_PTR_IS_ERR(_ptr) - The disconnect operation failed.
- * @return otherwise        - The disconnect process started, and can be
- *                          completed in any point in time. The request handle
- *                          is returned to the application in order to track
- *                          progress of the disconnect. The application is
- *                          responsible to release the handle using
- *                          @ref ucp_request_free "ucp_request_free()"
- *                          routine.
+ * @return UCS_OK           - The endpoint is closed successfully.
+ * @return UCS_PTR_IS_ERR(_ptr) - The closure failed and an error code indicates
+ *                                the transport level status. However, resources
+ *                                are released and the @a endpoint can no longer
+ *                                be used.
+ * @return otherwise        - The closure process is started, and can be
+ *                            completed at any point in time. A request handle
+ *                            is returned to the application in order to track
+ *                            progress of the endpoint closure. The application
+ *                            is responsible for releasing the handle using the
+ *                            @ref ucp_request_free routine.
+ *
+ * @note @ref ucp_ep_close_nb replaces deprecated @ref ucp_disconnect_nb and 
+ *       @ref ucp_ep_destroy
  */
-ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
+ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode);
 
 
 /**
@@ -1794,6 +1878,49 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
 
 /**
  * @ingroup UCP_COMM
+ * @brief Non-blocking stream send operation.
+ *
+ * This routine sends data that is described by the local address @a buffer,
+ * size @a count, and @a datatype object to the destination endpoint @a ep.
+ * The routine is non-blocking and therefore returns immediately, however
+ * the actual send operation may be delayed. The send operation is considered
+ * completed when it is safe to reuse the source @e buffer. If the send
+ * operation is completed immediately the routine returns UCS_OK and the
+ * call-back function @a cb is @b not invoked. If the operation is
+ * @b not completed immediately and no error reported, then the UCP library will
+ * schedule invocation of the call-back @a cb upon completion of the send
+ * operation. In other words, the completion of the operation will be signaled
+ * either by the return code or by the call-back.
+ *
+ * @note The user should not modify any part of the @a buffer after this
+ *       operation is called, until the operation completes.
+ *
+ * @param [in]  ep          Destination endpoint handle.
+ * @param [in]  buffer      Pointer to the message buffer (payload).
+ * @param [in]  count       Number of elements to send.
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
+ * @param [in]  cb          Callback function that is invoked whenever the
+ *                          send operation is completed. It is important to note
+ *                          that the call-back is only invoked in a case when
+ *                          the operation cannot be completed in place.
+ * @param [in]  flags       Reserved for future use.
+ *
+ * @return UCS_OK           - The send operation was completed immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
+ * @return otherwise        - Operation was scheduled for send and can be
+ *                          completed in any point in time. The request handle
+ *                          is returned to the application in order to track
+ *                          progress of the message. The application is
+ *                          responsible to release the handle using
+ *                          @ref ucp_request_free routine.
+ */
+ucs_status_ptr_t ucp_stream_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
+                                    ucp_datatype_t datatype, ucp_send_callback_t cb,
+                                    unsigned flags);
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Non-blocking tagged-send operations
  *
  * This routine sends a messages that is described by the local address @a
@@ -1831,9 +1958,6 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  *                          progress of the message. The application is
  *                          responsible to released the handle using
  *                          @ref ucp_request_free "ucp_request_free()" routine.
- * @todo
- * @li Describe the thread safety requirement for the call-back.
- * @li What happens if the request is released before the call-back is invoked.
  */
 ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
                                  ucp_datatype_t datatype, ucp_tag_t tag,
@@ -1874,6 +1998,86 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
 ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t count,
                                       ucp_datatype_t datatype, ucp_tag_t tag,
                                       ucp_send_callback_t cb);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Non-blocking stream receive operation of structured data into a 
+ *        user-supplied buffer.
+ *
+ * This routine receives data that is described by the local address @a buffer,
+ * size @a count, and @a datatype object on the endpoint @a ep. The routine is
+ * non-blocking and therefore returns immediately. The receive operation is
+ * considered complete when the message is delivered to the buffer. If data is
+ * not immediately available, the operation will be scheduled for receive and
+ * a request handle will be returned. In order to notify the application about
+ * completion of a scheduled receive operation, the UCP library will invoke
+ * the call-back @a cb when data is in the receive buffer and ready for
+ * application access. If the receive operation cannot be started, the routine
+ * returns an error.
+ *
+ * @param [in]     ep       UCP endpoint that is used for the receive operation.
+ * @param [in]     buffer   Pointer to the buffer to receive the data to.
+ * @param [inout] count     Number of elements to receive into @a buffer as
+ *                          in-parameter and number of actual elements received.
+ *                          I.e. output value can be less or equal input value.
+ * @param [in]     datatype Datatype descriptor for the elements in the buffer.
+ * @param [in]     cb       Callback function that is invoked whenever the
+ *                          receive operation is completed and the data is ready
+ *                          in the receive @a buffer. It is important to note
+ *                          that the call-back is only invoked in a case when
+ *                          the operation cannot be completed immediately.
+ * @param [in]     flags    Reserved for future use.
+ *
+ * @return UCS_OK               - The receive operation was completed
+ *                                immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
+ * @return otherwise            - Operation was scheduled for receive. A request
+ *                                handle is returned to the application in order
+ *                                to track progress of the operation.
+ *                                The application is responsible for releasing
+ *                                the handle by calling the
+ *                                @ref ucp_request_free routine.
+ */
+ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,
+                                    ucp_datatype_t datatype,
+                                    ucp_stream_recv_callback_t cb,
+                                    unsigned flags);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Non-blocking stream receive operation of unstructured data into
+ *        a UCP-supplied buffer.
+ *
+ * This routine receives any available data from endpoint @a ep.
+ * Unlike @ref ucp_stream_recv_nb, the returned data is unstructured and is
+ * treated as an array of bytes. If data is immediately available,
+ * UCS_STATUS_PTR(_ptr) is returned as a pointer to the data, and @a length
+ * is set to the size of the returned data buffer. The routine is non-blocking
+ * and therefore returns immediately.
+ *
+ * @param [in]   ep               UCP endpoint that is used for the receive
+ *                                operation.
+ * @param [out]  length           Length of received data.
+ *
+ * @return UCS_OK               - No received data available on the @a ep.
+ * @return UCS_PTR_IS_ERR(_ptr) - the receive operation failed and
+ *                                UCS_PTR_STATUS(_ptr) indicates an error.
+ * @return otherwise            - The pointer to the data UCS_STATUS_PTR(_ptr)
+ *                                is returned to the application. After the data
+ *                                is processed, the application is responsible
+ *                                for releasing the data buffer by calling the
+ *                                @ref ucp_stream_data_release routine.
+ *
+ * @note This function returns packed data (equivalent to ucp_dt_make_contig(1)).
+ * @note This function returns a pointer to a UCP-supplied buffer, whereas
+ *       @ref ucp_stream_recv_nb places the data into a user-provided buffer.
+ *       In some cases, receiving data directly into a UCP-supplied buffer can
+ *       be more optimal, for example by processing the incoming data in-place
+ *       and thus avoiding extra memory copy operations.
+ */
+ucs_status_ptr_t ucp_stream_recv_data_nb(ucp_ep_h ep, size_t *length);
 
 
 /**
@@ -1929,8 +2133,9 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  * where the @a tag_mask indicates what bits of the tag have to be matched. The
  * routine is a non-blocking and therefore returns immediately. The receive
  * operation is considered completed when the message is delivered to the @a
- * buffer. In order to monitor completion of the operation @ref ucp_request_test
- * should be used.
+ * buffer. In order to monitor completion of the operation
+ * @ref ucp_request_check_status or @ref ucp_tag_recv_request_test should be
+ * used.
  *
  * @param [in]  worker      UCP worker that is used for the receive operation.
  * @param [in]  buffer      Pointer to the buffer to receive the data to.
@@ -2481,15 +2686,28 @@ ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
  *
  * @param [in]  request     Non-blocking request to check.
  *
- * @param [out] info        If request is in completed state, it is
- *                          filled with the details about the message.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_request_check_status(void *request);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Check the status and currently available state of non-blocking request
+ *        returned from @ref ucp_tag_recv_nb routine.
  *
- * @note The @p info parameter is relevant for receive operations only. It is
- * left uninitialized in case of send operation.
+ * This routine checks the state and returns current status of the request
+ *      returned from @ref ucp_tag_recv_nb routine or the user allocated request
+ *      for @ref ucp_tag_recv_nbr. Any value different from UCS_INPROGRESS means
+ *      that the request is in a completed state.
+ *
+ * @param [in]  request     Non-blocking request to check.
+ * @param [out] info        It is filled with the details about the message
+ *                          available at the moment of calling.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info);
+ucs_status_t ucp_tag_recv_request_test(void *request, ucp_tag_recv_info_t *info);
 
 
 /**
@@ -2512,6 +2730,21 @@ ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info);
  * "ucp_request_free()".
  */
 void ucp_request_cancel(ucp_worker_h worker, void *request);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Release UCP data buffer returned by @ref ucp_stream_recv_data_nb.
+ *
+ * @param [in]  ep        Endpoint @a data received from.
+ * @param [in]  data      Data pointer to release, which was returned from
+ *                        @ref ucp_stream_recv_data_nb.
+ *
+ * This routine releases internal UCP data buffer returned by
+ * @ref ucp_stream_recv_data_nb when @a data is processed, the application can't
+ * use this buffer after calling this function.
+ */
+void ucp_stream_data_release(ucp_ep_h ep, void *data);
 
 
 /**
