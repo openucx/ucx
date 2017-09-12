@@ -6,9 +6,13 @@
 
 #include "status.h"
 
+#include <stdio.h>
+
 
 const char *ucs_status_string(ucs_status_t status)
 {
+    static char error_str[128] = {0};
+
     switch (status) {
     case UCS_OK:
         return "Success";
@@ -61,6 +65,7 @@ const char *ucs_status_string(ucs_status_t status)
     case UCS_ERR_ENDPOINT_TIMEOUT:
         return "Endpoint timeout";
     default:
-        return "Unknown error";
+        snprintf(error_str, sizeof(error_str) - 1, "Unknown error %d", status);
+        return error_str;
     };
 }
