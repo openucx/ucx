@@ -234,7 +234,7 @@ enum ucp_ep_close_mode {
                                               @ref UCP_ERR_HANDLING_MODE_PEER
                                               for all endpoints created on
                                               both (local and remote) sides to
-                                              avoid undefined behaviour */
+                                              avoid undefined behavior. */
     UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
                                               flushes on all outstanding
                                               operations. */
