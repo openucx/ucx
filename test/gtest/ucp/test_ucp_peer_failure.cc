@@ -124,7 +124,7 @@ void test_ucp_peer_failure::test_status_after()
     }
 
     ucs_status_ptr_t status_ptr = ucp_tag_send_nb(sender().ep(), NULL, 0, DATATYPE,
-                                           0x111337, NULL);
+                                                  0x111337, NULL);
     EXPECT_FALSE(UCS_PTR_IS_PTR(status_ptr));
     EXPECT_EQ(m_err_status, UCS_PTR_STATUS(status_ptr));
 
