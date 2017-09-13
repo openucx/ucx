@@ -199,8 +199,7 @@ static UCS_F_ALWAYS_INLINE void *
 ucp_tag_unexp_desc_offload2uct(ucp_recv_desc_t *rdesc)
 {
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_SYNC)) {
-        return ucs_container_of((rdesc), ucp_am_unexp_rdesc_t,
-                                rdesc)->headroom.am.uct_desc;
+        return rdesc;
     } else {
         UCS_STATIC_ASSERT(sizeof(ucp_eager_hdr_t) ==
                           ucs_offsetof(ucp_am_unexp_rdesc_t,
