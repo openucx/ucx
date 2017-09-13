@@ -64,7 +64,6 @@ ucp_tag_offload_try_post(ucp_context_t *ctx, ucp_request_t *req)
             return;
         }
     }
-    req->flags |= UCP_REQUEST_FLAG_BLOCK_OFFLOAD;
     ++ctx->tm.offload.sw_req_count;
 }
 

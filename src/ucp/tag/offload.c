@@ -53,6 +53,7 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
         ucp_request_memory_dereg(ctx, iface->rsc_index, req->recv.datatype,
                                  &req->recv.state);
     }
+    --ctx->tm.offload.post_count;
     ucp_request_complete_recv(req, status);
 }
 
@@ -174,7 +175,7 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
 
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                               ucp_worker_iface_t, queue);
-    
+
     status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx,
                                        force);
     if (status != UCS_OK) {
@@ -183,10 +184,12 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
         return;
     }
 
+    --ctx->tm.offload.post_count;
     ucp_tag_offload_release_buf(req, ctx, ucp_iface->rsc_index);
 }
 
-int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_tag_offload_post_single(ucp_context_t *ctx, ucp_request_t *req)
 {
     size_t length         = req->recv.length;
     ucp_mem_desc_t *rdesc = NULL;
@@ -194,28 +197,9 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
     ucs_status_t status;
     ucp_rsc_index_t mdi;
     uct_iov_t iov;
-
-    if (!UCP_DT_IS_CONTIG(req->recv.datatype)) {
-        /* Non-contig buffers not supported yet. */
-        return 0;
-    }
-
-    if ((ctx->config.tag_sender_mask & req->recv.tag_mask) !=
-         ctx->config.tag_sender_mask) {
-        /* Wildcard.
-         * TODO add check that only offload capable iface present. In
-         * this case can post tag as well. */
-        return 0;
-    }
-
-    if (ctx->tm.offload.sw_req_count) {
-        /* There are some requests which must be completed in SW. Do not post
-         * tags to HW until they are completed. */
-        return 0;
-    }
-
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                               ucp_worker_iface_t, queue);
+
     if (ucs_unlikely(length >= ctx->tm.offload.zcopy_thresh)) {
         if (length > ucp_iface->attr.cap.tag.recv.max_zcopy) {
             /* Post maximum allowed length. If sender sends smaller message
@@ -231,7 +215,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
                                         length, req->recv.datatype,
                                         &req->recv.state);
         if (status != UCS_OK) {
-            return 0;
+            return status;
         }
 
         req->recv.rdesc     = NULL;
@@ -240,7 +224,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
     } else {
         rdesc = ucs_mpool_get_inline(&req->recv.worker->reg_mp);
         if (rdesc == NULL) {
-            return 0;
+            return UCS_ERR_NO_MEMORY;
         }
 
         mdi             = ctx->tl_rscs[ucp_iface->rsc_index].md_index;
@@ -263,12 +247,75 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
     if (status != UCS_OK) {
         /* No more matching entries in the transport. */
         ucp_tag_offload_release_buf(req, ctx, ucp_iface->rsc_index);
-        return 0;
+        return status;
     }
     req->flags |= UCP_REQUEST_FLAG_OFFLOADED;
-    ucs_trace_req("recv request %p (%p) was posted to transport (rsc %d)",
-                  req, req + 1, ucp_iface->rsc_index);
+    ++ctx->tm.offload.post_count;
+
+    return UCS_OK;
+}
+
+
+int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
+{
+    size_t length = req->recv.length;
+    ucp_worker_iface_t *ucp_iface;
+    ucs_queue_head_t *exp_queue;
+    ucp_request_t *req_e;
+    ucs_status_t status;
+    size_t bucket, max_post;
+
+    if (!UCP_DT_IS_CONTIG(req->recv.datatype)) {
+        /* Non-contig buffers not supported yet. */
+        goto out_offload_blocked;
+    }
+
+    if ((ctx->config.tag_sender_mask & req->recv.tag_mask) !=
+         ctx->config.tag_sender_mask) {
+        /* Wildcard.
+         * TODO add check that only offload capable iface present. In
+         * this case can post tag as well. */
+        goto out_offload_blocked;
+    }
+
+
+    if (ctx->tm.offload.sw_req_count) {
+        ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
+                    ucp_worker_iface_t, queue);
+        max_post = ucp_iface->attr.cap.tag.recv.max_outstanding -
+                   ctx->tm.offload.post_count;
+        if ((length >= ctx->config.ext.tm_force_thresh) && !ctx->tm.offload.block_count &&
+            (ctx->tm.offload.sw_req_count < max_post)) {
+            for (bucket = 0; bucket < UCP_TAG_MATCH_QUEUES_NUM; ++bucket) {
+                exp_queue = &ctx->tm.expected.hash[bucket];
+                ucs_queue_for_each(req_e, exp_queue, recv.queue) {
+                    if (!(req_e->flags & UCP_REQUEST_FLAG_OFFLOADED) && (req_e != req)) {
+                        status = ucp_tag_offload_post_single(ctx, req_e);
+                        if (status != UCS_OK) {
+                            return 0;
+                        }
+                        --ctx->tm.offload.sw_req_count;
+                    }
+                }
+            }
+        } else {
+            /* There are some requests which must be completed in SW. Do not post
+             * tags to HW until they are completed. */
+            return 0;
+        }
+    }
+
+    status = ucp_tag_offload_post_single(ctx, req);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
     return 1;
+
+out_offload_blocked:
+    req->flags |= UCP_REQUEST_FLAG_BLOCK_OFFLOAD;
+    ++ctx->tm.offload.block_count;
+    return 0;
 }
 
 static size_t ucp_tag_offload_pack_eager(void *dest, void *arg)

@@ -10,28 +10,27 @@
 
 ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm)
 {
-    size_t hash_size, bucket;
-
-    hash_size = ucs_roundup_pow2(UCP_TAG_MATCH_HASH_SIZE);
+    size_t bucket;
 
     tm->expected.sn   = 0;
     ucs_queue_head_init(&tm->expected.wildcard);
     ucs_list_head_init(&tm->unexpected.all);
 
-    tm->expected.hash = ucs_malloc(sizeof(*tm->expected.hash) * hash_size,
-                                   "ucp_tm_exp_hash");
+    tm->expected.hash = ucs_malloc(sizeof(*tm->expected.hash) *
+                        UCP_TAG_MATCH_QUEUES_NUM, "ucp_tm_exp_hash");
     if (tm->expected.hash == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    tm->unexpected.hash = ucs_malloc(sizeof(*tm->unexpected.hash) * hash_size,
+    tm->unexpected.hash = ucs_malloc(sizeof(*tm->unexpected.hash) *
+                                     UCP_TAG_MATCH_QUEUES_NUM,
                                      "ucp_tm_unexp_hash");
     if (tm->unexpected.hash == NULL) {
         ucs_free(tm->expected.hash);
         return UCS_ERR_NO_MEMORY;
     }
 
-    for (bucket = 0; bucket < hash_size; ++bucket) {
+    for (bucket = 0; bucket < UCP_TAG_MATCH_QUEUES_NUM; ++bucket) {
         ucs_queue_head_init(&tm->expected.hash[bucket]);
         ucs_list_head_init(&tm->unexpected.hash[bucket]);
     }

@@ -60,6 +60,11 @@ typedef struct ucp_tag_match {
         unsigned              sw_req_count;   /* Number of requests which need to
                                                  be matched in software. If 0 - tags
                                                  can be posted to the transport */
+        unsigned              post_count;     /* Number of uncompleted requests posted to
+                                                 tag-matching offload on the transport. */
+        unsigned              block_count;    /* Number of requests which cannot be posted
+                                                 to the transport. If not 0, tag-matching
+                                                 offload can't be forced. */
     } offload;
 
 } ucp_tag_match_t;
