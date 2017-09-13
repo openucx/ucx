@@ -21,6 +21,11 @@ extern "C" {
 #include <malloc.h>
 }
 
+#if HAVE_MALLOC_SET_STATE && HAVE_MALLOC_GET_STATE
+#  define HAVE_MALLOC_STATES 1
+#endif /* HAVE_MALLOC_SET_STATE && HAVE_MALLOC_GET_STATE */
+
+
 class malloc_hook : public ucs::test {
 protected:
     virtual void init() {
@@ -56,6 +61,7 @@ public:
 
 int malloc_hook::small_alloc_count = 1000 / ucs::test_time_multiplier();
 
+#if HAVE_MALLOC_STATES
 class test_thread {
 public:
     test_thread(const std::string& name, int num_threads, pthread_barrier_t *barrier,
@@ -288,17 +294,23 @@ void test_thread::test() {
                             mem_event_callback,
                             reinterpret_cast<void*>(this));
 }
+#endif /* HAVE_MALLOC_STATES */
 
 UCS_TEST_F(malloc_hook, single_thread) {
+#if HAVE_MALLOC_STATES
     pthread_barrier_t barrier;
     pthread_barrier_init(&barrier, NULL, 1);
     {
         test_thread thread("single-thread", 1, &barrier, this);
     }
     pthread_barrier_destroy(&barrier);
+#else /* HAVE_MALLOC_STATES */
+    UCS_TEST_SKIP_R("malloc states API is not defined");
+#endif /* HAVE_MALLOC_STATES */
 }
 
 UCS_TEST_F(malloc_hook, multi_threads) {
+#if HAVE_MALLOC_STATES
     static const int num_threads = 8;
     ucs::ptr_vector<test_thread> threads;
     pthread_barrier_t barrier;
@@ -314,9 +326,13 @@ UCS_TEST_F(malloc_hook, multi_threads) {
 
     threads.clear();
     pthread_barrier_destroy(&barrier);
+#else /* HAVE_MALLOC_STATES */
+    UCS_TEST_SKIP_R("malloc states API is not defined");
+#endif /* HAVE_MALLOC_STATES */
 }
 
 UCS_TEST_F(malloc_hook, fork) {
+#if HAVE_MALLOC_STATES
     static const int num_processes = 4;
     pthread_barrier_t barrier;
     std::vector<pid_t> pids;
@@ -342,6 +358,9 @@ UCS_TEST_F(malloc_hook, fork) {
         waitpid(pids[i], &status, 0);
         EXPECT_EQ(0, WEXITSTATUS(status)) << "Process " << i << " failed";
     }
+#else /* HAVE_MALLOC_STATES */
+    UCS_TEST_SKIP_R("malloc states API is not defined");
+#endif /* HAVE_MALLOC_STATES */
 }
 
 class malloc_hook_cplusplus : public malloc_hook {

@@ -12,7 +12,7 @@ class log_test : public ucs::test {
 
 public:
     virtual void init() {
-        char ucs_log_spec[64];
+        char ucs_log_spec[70];
         ucs::test::init();
 
         /* skip because logger does not support file

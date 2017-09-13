@@ -48,3 +48,8 @@ esac
 AM_CONDITIONAL([HAVE_UCM_PTMALLOC283],[test "x$HAVE_UCM_PTMALLOC283" = "xyes"])
 AM_CONDITIONAL([HAVE_UCM_PTMALLOC286],[test "x$HAVE_UCM_PTMALLOC286" = "xyes"])
 
+AC_CHECK_FUNCS([malloc_get_state malloc_set_state],
+               [],
+               [],
+               [#include <stdlib.h>])
+
