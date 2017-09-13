@@ -11,6 +11,7 @@
 
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_ep.h>
+#include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
@@ -942,7 +943,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     const ucs_cpu_set_t *cpu_mask;
 
     /* Space for eager header is needed for unexpected tag offload messages */
-    const size_t rx_headroom = sizeof(ucp_am_unexp_rdesc_t);
+    const size_t rx_headroom = sizeof(ucp_recv_desc_t) + sizeof(ucp_eager_sync_hdr_t);
 
     config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
                            UINT8_MAX);

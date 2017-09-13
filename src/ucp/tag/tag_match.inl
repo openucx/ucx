@@ -195,29 +195,6 @@ ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_worker_h worker, void *data,
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE void *
-ucp_tag_unexp_desc_offload2uct(ucp_recv_desc_t *rdesc)
-{
-    if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_SYNC)) {
-        return rdesc;
-    } else {
-        UCS_STATIC_ASSERT(sizeof(ucp_eager_hdr_t) ==
-                          ucs_offsetof(ucp_am_unexp_rdesc_t,
-                                       headroom.tag_offload.uct_desc));
-        return ucs_container_of((rdesc), ucp_am_unexp_rdesc_t,
-                                rdesc)->headroom.tag_offload.uct_desc;
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void *
-ucp_tag_unexp_desc_am2uct(ucp_recv_desc_t *rdesc)
-{
-    UCS_STATIC_ASSERT(sizeof(ucp_am_unexp_rdesc_t) ==
-                      (sizeof(ucp_recv_desc_t) + sizeof(ucp_eager_sync_hdr_t)));
-    return ucs_container_of((rdesc), ucp_am_unexp_rdesc_t,
-                            rdesc)->headroom.am.uct_desc;
-}
-
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_unexp_desc_release(ucp_recv_desc_t *rdesc)
 {
@@ -225,9 +202,14 @@ ucp_tag_unexp_desc_release(ucp_recv_desc_t *rdesc)
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
         /* uct desc is slowpath */
         if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_OFFLOAD)) {
-            uct_iface_release_desc(ucp_tag_unexp_desc_offload2uct(rdesc));
+            if (rdesc->flags & UCP_RECV_DESC_FLAG_SYNC) {
+                uct_iface_release_desc(rdesc);
+            } else {
+                uct_iface_release_desc( (char*)rdesc -
+                  (sizeof(ucp_eager_sync_hdr_t) - sizeof(ucp_eager_hdr_t)) );
+            }
         } else {
-            uct_iface_release_desc(ucp_tag_unexp_desc_am2uct(rdesc));
+            uct_iface_release_desc((char*)rdesc - sizeof(ucp_eager_sync_hdr_t));
         }
     } else {
         ucs_mpool_put_inline(rdesc);

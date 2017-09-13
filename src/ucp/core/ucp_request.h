@@ -183,30 +183,6 @@ typedef struct ucp_recv_desc {
 } ucp_recv_desc_t;
 
 
-/**
- * Dummy structure for calculation of UCT descriptor offset in different
- * protocols.
- */
-typedef struct UCS_S_PACKED ucp_am_unexp_rdesc {
-    union {
-        /* Total size of headroom */
-        uint8_t         total[sizeof(uint64_t) * 2 + sizeof(uintptr_t)];
-
-        struct UCS_S_PACKED {
-            uint8_t     uct_desc[0];
-        } am;
-
-        struct UCS_S_PACKED {
-            uint64_t    padding;
-            uint8_t     uct_desc[0];
-        } tag_offload;
-
-    } headroom;
-
-    ucp_recv_desc_t     rdesc;
-} ucp_am_unexp_rdesc_t;
-
-
 extern ucs_mpool_ops_t ucp_request_mpool_ops;
 
 
