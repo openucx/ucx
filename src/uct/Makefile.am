@@ -153,10 +153,10 @@ if HAVE_RDMACM
 libuct_la_CPPFLAGS += $(RDMACM_CPPFLAGS)
 libuct_la_LDFLAGS  += $(RDMACM_LDFLAGS) $(RDMACM_LIBS)
 libuct_la_SOURCES  += \
-	rdmacm/rdmacm_md.c
+	ib/rdmacm/rdmacm_md.c
 
 noinst_HEADERS += \
-	rdmacm/rdmacm_md.h
+	ib/rdmacm/rdmacm_md.h
 endif
 
 endif

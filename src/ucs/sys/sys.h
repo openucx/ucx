@@ -318,7 +318,7 @@ ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
  *
  * @param [out]  fd_p       Pointer to created fd.
  */
-ucs_status_t ucs_socket_create(int *fd_p);
+ucs_status_t ucs_tcpip_socket_create(int *fd_p);
 
 
 /**

@@ -15,6 +15,7 @@
  */
 typedef struct uct_rdmacm_md {
     uct_md_t                 super;
+    double                   addr_resolve_timeout;
 } uct_rdmacm_md_t;
 
 /**
@@ -22,6 +23,7 @@ typedef struct uct_rdmacm_md {
  */
 typedef struct uct_rdmacm_md_config {
     uct_md_config_t          super;
+    double                   addr_resolve_timeout;
 } uct_rdmacm_md_config_t;
 
 extern uct_md_component_t uct_rdmacm_mdc;
@@ -32,11 +34,5 @@ ucs_status_t uct_rdmacm_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 
 int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                        uct_sockaddr_accessibility_t mode);
-
-static uct_md_ops_t uct_rdmacm_md_ops = {
-    .close                  = uct_rdmacm_md_close,
-    .query                  = uct_rdmacm_md_query,
-    .is_sockaddr_accessible = uct_rdmacm_is_sockaddr_accessible,
-};
 
 #endif

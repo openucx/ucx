@@ -6,13 +6,22 @@
 #include "rdmacm_md.h"
 
 #define UCT_RDMACM_MD_PREFIX              "rdmacm"
-#define UCT_RDMACM_ADDR_RESOLVE_TIMEOUT    500    /* ms */
 
 static ucs_config_field_t uct_rdmacm_md_config_table[] = {
   {"", "", NULL,
    ucs_offsetof(uct_rdmacm_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
+  {"ADDR_RESOLVE_TIMEOUT", "500ms",
+   "Time to wait for address resolution to complete",
+    ucs_offsetof(uct_rdmacm_md_config_t, addr_resolve_timeout), UCS_CONFIG_TYPE_TIME},
+
   {NULL}
+};
+
+static uct_md_ops_t uct_rdmacm_md_ops = {
+    .close                  = uct_rdmacm_md_close,
+    .query                  = uct_rdmacm_md_query,
+    .is_sockaddr_accessible = uct_rdmacm_is_sockaddr_accessible,
 };
 
 static void uct_rdmacm_md_close(uct_md_h md)
@@ -39,48 +48,50 @@ int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
     struct rdma_event_channel *event_ch = NULL;
     struct rdma_cm_id *cm_id = NULL;
     int is_accessible;
+    uct_rdmacm_md_t *rdmacm_md = ucs_derived_of(md, uct_rdmacm_md_t);
 
     if ((mode != UCT_SOCKADDR_ACC_LOCAL) && (mode != UCT_SOCKADDR_ACC_REMOTE)) {
-        ucs_fatal("Unknown sockaddr accessibility mode %d", mode);
+        ucs_error("Unknown sockaddr accessibility mode %d", mode);
         return 0;
     }
 
     event_ch = rdma_create_event_channel();
     if (event_ch == NULL) {
-        ucs_error("Failed to create an rdmacm event channel: %m");
+        ucs_debug("rdma_create_event_channel() failed: %m");
         is_accessible = 0;
         goto out;
     }
+
     if (rdma_create_id(event_ch, &cm_id, NULL, RDMA_PS_UDP)) {
-        ucs_error("Failed to create an rdmacm ID: %m");
+        ucs_debug("rdma_create_id() failed: %m");
         is_accessible = 0;
-        goto err_destroy_event_channel;
+        goto out_destroy_event_channel;
     }
 
     if (mode == UCT_SOCKADDR_ACC_LOCAL) {
         /* Server side to check if can bind to the given sockaddr */
-        if (rdma_bind_addr(cm_id, (struct sockaddr *)(sockaddr->addr))) {
-            ucs_error("Failed to bind to sockaddr: %m");
+        if (rdma_bind_addr(cm_id, (struct sockaddr *)sockaddr->addr)) {
+            ucs_debug("rdma_bind_addr() failed: %m");
             is_accessible = 0;
-            goto err_destroy_id;
+            goto out_destroy_id;
         }
 
         is_accessible = 1;
     } else {
         /* Client side to check if can access the remote given sockaddr */
-        if (rdma_resolve_addr(cm_id, NULL, (struct sockaddr *)(sockaddr->addr),
-                              UCT_RDMACM_ADDR_RESOLVE_TIMEOUT)) {
-            ucs_error("Failed to resolve address: %m");
+        if (rdma_resolve_addr(cm_id, NULL, (struct sockaddr *)sockaddr->addr,
+                              rdmacm_md->addr_resolve_timeout)) {
+            ucs_debug("rdma_resolve_addr() failed: %m");
             is_accessible = 0;
-            goto err_destroy_id;
+            goto out_destroy_id;
         }
 
         is_accessible = 1;
     }
 
-err_destroy_id:
+out_destroy_id:
     rdma_destroy_id(cm_id);
-err_destroy_event_channel:
+out_destroy_event_channel:
     rdma_destroy_event_channel(event_ch);
 out:
     return is_accessible;
@@ -100,7 +111,9 @@ static ucs_status_t uct_rdmacm_query_md_resources(uct_md_resource_desc_t **resou
         *num_resources_p = 0;
         return UCS_OK;
     }
+
     rdma_destroy_event_channel(event_ch);
+
     return uct_single_md_resource(&uct_rdmacm_mdc, resources_p, num_resources_p);
 }
 
@@ -108,6 +121,7 @@ static ucs_status_t
 uct_rdmacm_md_open(const char *md_name, const uct_md_config_t *uct_md_config,
                    uct_md_h *md_p)
 {
+    uct_rdmacm_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_rdmacm_md_config_t);
     uct_rdmacm_md_t *md;
     ucs_status_t status;
 
@@ -117,8 +131,9 @@ uct_rdmacm_md_open(const char *md_name, const uct_md_config_t *uct_md_config,
         goto out;
     }
 
-    md->super.ops       = &uct_rdmacm_md_ops;
-    md->super.component = &uct_rdmacm_mdc;
+    md->super.ops            = &uct_rdmacm_md_ops;
+    md->super.component      = &uct_rdmacm_mdc;
+    md->addr_resolve_timeout = md_config->addr_resolve_timeout;
 
     *md_p = &md->super;
     status = UCS_OK;

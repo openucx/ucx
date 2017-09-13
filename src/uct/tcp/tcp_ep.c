@@ -18,7 +18,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_iface_t *tl_iface,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super)
 
-    status = ucs_socket_create(&self->fd);
+    status = ucs_tcpip_socket_create(&self->fd);
     if (status != UCS_OK) {
         goto err;
     }

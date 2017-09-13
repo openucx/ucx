@@ -546,7 +546,7 @@ ucs_status_t ucs_sysv_free(void *address)
     return UCS_OK;
 }
 
-ucs_status_t ucs_socket_create(int *fd_p)
+ucs_status_t ucs_tcpip_socket_create(int *fd_p)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
@@ -566,7 +566,7 @@ ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
 
     ucs_strncpy_zero(if_req->ifr_name, if_name, sizeof(if_req->ifr_name));
 
-    status = ucs_socket_create(&fd);
+    status = ucs_tcpip_socket_create(&fd);
     if (status != UCS_OK) {
         goto out;
     }
