@@ -75,4 +75,7 @@ libucp_la_SOURCES = \
 	wireup/select.c \
 	wireup/signaling_ep.c \
 	wireup/wireup_ep.c \
-	wireup/wireup.c
+	wireup/wireup.c \
+	stream/stream_send.c \
+	stream/stream_recv.c
+

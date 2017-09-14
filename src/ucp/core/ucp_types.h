@@ -49,7 +49,7 @@ typedef struct ucp_proto                ucp_proto_t;
 enum {
     UCP_AM_ID_WIREUP            =  1, /* Connection establishment */
 
-    UCP_AM_ID_EAGER_ONLY        =  2, /* Single packet eager */
+    UCP_AM_ID_EAGER_ONLY        =  2, /* Single packet eager TAG */
     UCP_AM_ID_EAGER_FIRST       =  3, /* First eager fragment */
     UCP_AM_ID_EAGER_MIDDLE      =  4, /* Middle eager fragment */
     UCP_AM_ID_EAGER_LAST        =  5, /* Last eager fragment */
@@ -67,6 +67,9 @@ enum {
     UCP_AM_ID_RNDV_DATA_LAST    =  13, /* The last rndv data fragment when using
                                           software rndv (bcopy) */
     UCP_AM_ID_OFFLOAD_SYNC_ACK  =  14, /* Eager sync ack for tag offload proto */
+
+    UCP_AM_ID_STREAM_DATA       =  15, /* Eager STREAM packet */
+
     UCP_AM_ID_LAST
 };
 

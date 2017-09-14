@@ -153,17 +153,6 @@ static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
     }
 }
 
-static void ucp_send_req_stat(ucp_request_t *req)
-{
-    if (req->flags & UCP_REQUEST_FLAG_RNDV) {
-        UCP_EP_STAT_TAG_OP(req->send.ep, RNDV);
-    } else if (req->flags & UCP_REQUEST_FLAG_SYNC) {
-        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);
-    } else {
-        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
-    }
-}
-
 static inline ucs_status_ptr_t
 ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
                  size_t *zcopy_thresh, size_t rndv_rma_thresh, size_t rndv_am_thresh,
@@ -191,7 +180,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
-    ucp_send_req_stat(req);
+    ucp_request_send_stat(req);
 
     /*
      * Start the request.

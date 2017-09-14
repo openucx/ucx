@@ -147,8 +147,8 @@ ucp_tag_unexp_get_list_for_tag(ucp_tag_match_t *tm, ucp_tag_t tag)
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_unexp_remove(ucp_recv_desc_t *rdesc)
 {
-    ucs_list_del(&rdesc->list[UCP_RDESC_HASH_LIST]);
-    ucs_list_del(&rdesc->list[UCP_RDESC_ALL_LIST] );
+    ucs_list_del(&rdesc->tag_list[UCP_RDESC_HASH_LIST]);
+    ucs_list_del(&rdesc->tag_list[UCP_RDESC_ALL_LIST] );
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -188,8 +188,10 @@ ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_worker_h worker, void *data,
     rdesc->length  = length;
     rdesc->hdr_len = hdr_len;
     hash_list = ucp_tag_unexp_get_list_for_tag(tm, ucp_rdesc_get_tag(rdesc));
-    ucs_list_add_tail(hash_list,           &rdesc->list[UCP_RDESC_HASH_LIST]);
-    ucs_list_add_tail(&tm->unexpected.all, &rdesc->list[UCP_RDESC_ALL_LIST]);
+    ucs_list_add_tail(hash_list,
+                      &rdesc->tag_list[UCP_RDESC_HASH_LIST]);
+    ucs_list_add_tail(&tm->unexpected.all,
+                      &rdesc->tag_list[UCP_RDESC_ALL_LIST]);
     return status;
 }
 

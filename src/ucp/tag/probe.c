@@ -22,7 +22,8 @@ ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
     ucp_tag_t recv_tag;
     unsigned flags;
 
-    ucs_list_for_each(rdesc, &context->tm.unexpected.all, list[UCP_RDESC_ALL_LIST]) {
+    ucs_list_for_each(rdesc, &context->tm.unexpected.all,
+                      tag_list[UCP_RDESC_ALL_LIST]) {
         hdr      = (void*)(rdesc + 1);
         recv_tag = hdr->tag;
         flags    = rdesc->flags;

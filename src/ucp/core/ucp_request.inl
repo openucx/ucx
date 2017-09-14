@@ -176,3 +176,14 @@ static UCS_F_ALWAYS_INLINE int
 ucp_request_is_send_buffer_reg(ucp_request_t *req) {
     return req->send.reg_rsc != UCP_NULL_RESOURCE;
 }
+
+static UCS_F_ALWAYS_INLINE void ucp_request_send_stat(ucp_request_t *req)
+{
+    if (req->flags & UCP_REQUEST_FLAG_RNDV) {
+        UCP_EP_STAT_TAG_OP(req->send.ep, RNDV);
+    } else if (req->flags & UCP_REQUEST_FLAG_SYNC) {
+        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);
+    } else {
+        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
+    }
+}

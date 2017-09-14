@@ -10,6 +10,7 @@
 #include "ucp_types.h"
 
 #include <uct/api/uct.h>
+#include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
 #include <ucs/stats/stats.h>
 #include <limits.h>
@@ -173,6 +174,11 @@ typedef struct ucp_ep_config {
         } offload;
     } tag;
 
+    struct {
+        /* Protocols used for stream operations
+         * (currently it's only AM based). */
+        const ucp_proto_t   *proto;
+    } stream;
 } ucp_ep_config_t;
 
 
@@ -187,6 +193,9 @@ typedef struct ucp_ep {
     uint8_t                       flags;         /* Endpoint flags */
 
     uint64_t                      dest_uuid;     /* Destination worker uuid */
+
+    ucs_queue_head_t              stream_data;  /* Queue of receive descriptors
+                                                   with data */
 
     UCS_STATS_NODE_DECLARE(stats);
 
