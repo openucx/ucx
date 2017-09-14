@@ -187,7 +187,16 @@ build_release_pkg() {
 	# Show UCX info
 	./src/tools/info/ucx_info -f -c -v -y -d -b -p -w -e -uart
 
-	if [ -x /usr/bin/dpkg-buildpackage ]; then
+	set +e
+	out=$(rpm -q rpm 2>/dev/null)
+	rc=$?
+	set -e
+	rpm_based=yes
+	if [[ $rc != 0 || "$out" == *"not installed"* ]]; then
+		rpm_based=no
+	fi
+
+	if [[ "$rpm_based" == "no" && -x /usr/bin/dpkg-buildpackage ]]; then
 		echo "==== Build debian package ===="
 		dpkg-buildpackage -us -uc
 	else
