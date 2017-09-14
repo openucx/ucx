@@ -21,6 +21,11 @@ extern "C" {
 #include <malloc.h>
 }
 
+#if HAVE_MALLOC_SET_STATE && HAVE_MALLOC_GET_STATE
+#  define HAVE_MALLOC_STATES 1
+#endif /* HAVE_MALLOC_SET_STATE && HAVE_MALLOC_GET_STATE */
+
+
 class malloc_hook : public ucs::test {
 protected:
     virtual void init() {
@@ -256,10 +261,13 @@ void test_thread::test() {
     malloc_trim(0);
 
     ptr = malloc(large_alloc_size);
+
+#if HAVE_MALLOC_STATES
     if (!RUNNING_ON_VALGRIND) {
         void *state = malloc_get_state();
         malloc_set_state(state);
     }
+#endif /* HAVE_MALLOC_STATES */
     free(ptr);
 
     /* shmat/shmdt */
@@ -453,7 +461,7 @@ UCS_TEST_F(malloc_hook_cplusplus, mallopt) {
     ASSERT_TRUE(p != NULL);
     delete [] p;
 
-    EXPECT_EQ(m_unmapped_size, 0);
+    EXPECT_EQ(m_unmapped_size, size_t(0));
     ucm_unset_event_handler(UCM_EVENT_VM_UNMAPPED, mem_event_callback,
                             reinterpret_cast<void*>(this));
 }

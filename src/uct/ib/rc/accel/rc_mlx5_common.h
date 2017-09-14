@@ -221,7 +221,7 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                              uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                              uint8_t opcode, uint8_t opmod, uint8_t fm_ce_se,
                              size_t wqe_size, uct_ib_mlx5_base_av_t *av,
-                             uint32_t imm)
+                             struct mlx5_grh_av *grh_av, uint32_t imm)
 {
     struct mlx5_wqe_ctrl_seg *ctrl;
     uint16_t posted;
@@ -238,7 +238,7 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     }
 
     if (qp_type == IBV_EXP_QPT_DC_INI) {
-        uct_ib_mlx5_set_dgram_seg((void*)(ctrl + 1), av, NULL, qp_type);
+        uct_ib_mlx5_set_dgram_seg((void*)(ctrl + 1), av, grh_av, qp_type);
     }
 
     uct_ib_mlx5_log_tx(&iface->super, qp_type, ctrl, txwq->qstart, txwq->qend,
@@ -276,8 +276,8 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                              unsigned opcode, const void *buffer, unsigned length,
                   /* SEND */ uint8_t am_id, uint64_t am_hdr, uint32_t imm_val_be,
                   /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
-                  /* AV   */ uct_ib_mlx5_base_av_t *av, size_t av_size,
-                             unsigned fm_ce_se)
+                  /* AV   */ uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
+                             size_t av_size, unsigned fm_ce_se)
 {
     struct mlx5_wqe_ctrl_seg     *ctrl;
     struct mlx5_wqe_raddr_seg    *raddr;
@@ -344,7 +344,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     }
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq, opcode, 0, fm_ce_se,
-                                 wqe_size, av, imm_val_be);
+                                 wqe_size, av, grh_av, imm_val_be);
 }
 
 
@@ -371,11 +371,11 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                            uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                            unsigned opcode_flags, const void *buffer,
                            unsigned length, uint32_t *lkey_p,
-                           /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
-                           /* RDMA/ATOMIC */ uint64_t remote_addr, uct_rkey_t rkey,
-                           /* ATOMIC */ uint64_t compare_mask, uint64_t compare, uint64_t swap_add,
-                           /* AV   */ uct_ib_mlx5_base_av_t *av, size_t av_size,
-                           uint8_t fm_ce_se)
+         /* SEND        */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
+         /* RDMA/ATOMIC */ uint64_t remote_addr, uct_rkey_t rkey,
+         /* ATOMIC      */ uint64_t compare_mask, uint64_t compare, uint64_t swap_add,
+         /* AV          */ uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
+                           size_t av_size, uint8_t fm_ce_se)
 {
     struct mlx5_wqe_ctrl_seg                     *ctrl;
     struct mlx5_wqe_raddr_seg                    *raddr;
@@ -533,7 +533,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq,
                                  (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
-                                 opmod, fm_ce_se, wqe_size, av, 0);
+                                 opmod, fm_ce_se, wqe_size, av, grh_av, 0);
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -543,8 +543,8 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, enum ibv_qp_type qp_t
                          /* IOV  */ const uct_iov_t *iov, size_t iovcnt,
                          /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
                          /* RDMA */ uint64_t remote_addr, uct_rkey_t rkey,
-                         /* AV   */ uct_ib_mlx5_base_av_t *av, size_t av_size,
-                                    uint8_t fm_ce_se)
+                         /* AV   */ uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
+                                    size_t av_size, uint8_t fm_ce_se)
 {
     struct mlx5_wqe_ctrl_seg     *ctrl;
     struct mlx5_wqe_raddr_seg    *raddr;
@@ -606,7 +606,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, enum ibv_qp_type qp_t
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq,
                                  opcode_flags & UCT_RC_MLX5_OPCODE_MASK,
-                                 0, fm_ce_se, wqe_size, av, 0);
+                                 0, fm_ce_se, wqe_size, av, grh_av, 0);
 }
 
 #endif

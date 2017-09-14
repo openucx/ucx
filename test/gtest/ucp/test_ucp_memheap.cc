@@ -10,16 +10,14 @@
 
 std::vector<ucp_test_param>
 test_ucp_memheap::enum_test_params(const ucp_params_t& ctx_params,
-                                   const ucp_worker_params_t& worker_params,
-                                   const ucp_ep_params_t& ep_params,
                                    const std::string& name,
                                    const std::string& test_case_name,
                                    const std::string& tls)
 {
     std::vector<ucp_test_param> result;
-    generate_test_params_variant(ctx_params, worker_params, ep_params, name,
+    generate_test_params_variant(ctx_params, name,
                                  test_case_name, tls, 0, result);
-    generate_test_params_variant(ctx_params, worker_params, ep_params, name,
+    generate_test_params_variant(ctx_params, name,
                                  test_case_name + "/map_nb",
                                  tls, UCP_MEM_MAP_NONBLOCK, result);
     return result;
@@ -49,9 +47,9 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     }
     memheap_size = max_iter * size + alignment;
 
-    sender().connect(&receiver());
+    sender().connect(&receiver(), get_ep_params());
     if (&sender() != &receiver()) {
-        receiver().connect(&sender());
+        receiver().connect(&sender(), get_ep_params());
     }
 
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
@@ -161,9 +159,9 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
         zero_offset = 1;
     }
 
-    sender().connect(&receiver());
+    sender().connect(&receiver(), get_ep_params());
     if (&sender() != &receiver()) {
-        receiver().connect(&sender());
+        receiver().connect(&sender(), get_ep_params());
     }
 
     ucp_mem_h memh;

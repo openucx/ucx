@@ -14,8 +14,6 @@
 class test_ucp_atomic : public test_ucp_memheap {
 public:
     static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
-                                                        const ucp_worker_params_t& worker_params,
-                                                        const ucp_ep_params_t& ep_params,
                                                         const std::string& name,
                                                         const std::string& test_case_name,
                                                         const std::string& tls);

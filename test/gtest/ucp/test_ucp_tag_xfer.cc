@@ -20,32 +20,37 @@ class test_ucp_tag_xfer : public test_ucp_tag {
 public:
     using test_ucp_tag::get_ctx_params;
 
+    enum {
+        VARIANT_DEFAULT,
+        VARIANT_ERR_HANDLING
+    };
+
     std::vector<ucp_test_param>
     static enum_test_params(const ucp_params_t& ctx_params,
-                    const ucp_worker_params_t& worker_params,
-                    const ucp_ep_params_t& ep_params,
-                    const std::string& name,
-                    const std::string& test_case_name,
-                    const std::string& tls)
+                            const std::string& name,
+                            const std::string& test_case_name,
+                            const std::string& tls)
     {
         std::vector<ucp_test_param> result;
-        generate_test_params_variant(ctx_params, worker_params, ep_params, name,
-                                     test_case_name, tls, 0, result);
-
-        ucp_ep_params_t ep_params_err_handling = ep_params;
-        ep_params_err_handling.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-        ep_params_err_handling.err_mode    = UCP_ERR_HANDLING_MODE_PEER;
-        generate_test_params_variant(ctx_params, worker_params, ep_params_err_handling,
-                                     name,
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     VARIANT_DEFAULT, result);
+        generate_test_params_variant(ctx_params, name,
                                      test_case_name + "/err_handling_mode_peer",
-                                     tls, 0, result);
+                                     tls, VARIANT_ERR_HANDLING, result);
         return result;
     }
 
+    virtual ucp_ep_params_t get_ep_params() {
+        ucp_ep_params_t ep_params = test_ucp_tag::get_ep_params();
+        if (GetParam().variant == VARIANT_ERR_HANDLING) {
+            ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+            ep_params.err_mode    = UCP_ERR_HANDLING_MODE_PEER;
+        }
+        return ep_params;
+    }
+
     bool is_err_handling() const {
-        const ucp_ep_params_t& ep_params = GetParam().ep_params_cmn;
-        return ((ep_params.field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) &&
-                (ep_params.err_mode == UCP_ERR_HANDLING_MODE_PEER));
+        return GetParam().variant == VARIANT_ERR_HANDLING;
     }
 
     void skip_err_handling() const {

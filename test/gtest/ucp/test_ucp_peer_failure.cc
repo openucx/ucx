@@ -16,9 +16,10 @@ protected:
         m_env.push_back(new ucs::scoped_setenv("UCX_UD_TIMEOUT", ud_timeout.c_str()));
     }
 
-    static ucp_ep_params_t get_ep_params() {
-        ucp_ep_params_t params = test_ucp_tag::get_ep_params();
-        params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+    virtual ucp_ep_params_t get_ep_params() {
+        ucp_ep_params_t params;
+        memset(&params, 0, sizeof(params));
+        params.field_mask      = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
                                  UCP_EP_PARAM_FIELD_ERR_HANDLER;
         params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
         params.err_handler.cb  = err_cb;
@@ -98,7 +99,7 @@ void test_ucp_peer_failure::init() {
     /* Make second pair */
     create_entity(true);
     create_entity(false);
-    sender().connect(&receiver(), &GetParam().ep_params_cmn);
+    sender().connect(&receiver(), get_ep_params());
     smoke_test();
     wrap_errors();
 }
@@ -124,7 +125,7 @@ void test_ucp_peer_failure::test_status_after()
     }
 
     ucs_status_ptr_t status_ptr = ucp_tag_send_nb(sender().ep(), NULL, 0, DATATYPE,
-                                           0x111337, NULL);
+                                                  0x111337, NULL);
     EXPECT_FALSE(UCS_PTR_IS_PTR(status_ptr));
     EXPECT_EQ(m_err_status, UCS_PTR_STATUS(status_ptr));
 

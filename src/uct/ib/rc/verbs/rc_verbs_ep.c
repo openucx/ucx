@@ -565,7 +565,7 @@ static ucs_status_t uct_rc_verbs_ep_tag_qp_create(uct_rc_verbs_iface_t *iface,
         /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
          * such a QP to be initialized with zero send queue length. */
         status = uct_rc_iface_qp_create(&iface->super, IBV_QPT_RC, &ep->tm_qp,
-                                        &cap, iface->tm.xrq.srq, 0);
+                                        &cap, iface->verbs_common.tm.xrq.srq, 0);
         if (status != UCS_OK) {
             return status;
         }
@@ -787,7 +787,7 @@ ucs_status_t uct_rc_verbs_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op)
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
 
     uint32_t op_index = (uint32_t)((uint64_t)op);
-    ucs_ptr_array_remove(&iface->tm.rndv_comps, op_index, 0);
+    ucs_ptr_array_remove(&iface->verbs_common.tm.rndv_comps, op_index, 0);
     return UCS_OK;
 }
 
