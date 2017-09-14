@@ -23,12 +23,18 @@
 
 #define UCT_UD_MIN_INLINE   48
 
+enum {
+    UCT_UD_IFACE_STAT_RX_DROP,
+    UCT_UD_IFACE_STAT_LAST
+};
+
 /* TODO: maybe tx_moderation can be defined at compile-time since tx completions are used only to know how much space is there in tx qp */
 
 typedef struct uct_ud_iface_config {
     uct_ib_iface_config_t    super;
     double                   peer_timeout;
     double                   slow_timer_backoff;
+    int                      dgid_check;
 } uct_ud_iface_config_t;
 
 struct uct_ud_iface_peer {
@@ -123,7 +129,12 @@ struct uct_ud_iface {
         double               slow_timer_backoff;
         unsigned             tx_qp_len;
         unsigned             max_inline;
+        int                  check_grh_dgid;
+        unsigned             gid_len;
     } config;
+
+    UCS_STATS_NODE_DECLARE(stats);
+
     ucs_ptr_array_t       eps;
     uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE];
     struct {
@@ -213,6 +224,32 @@ static UCS_F_ALWAYS_INLINE void uct_ud_enter(uct_ud_iface_t *iface)
 static UCS_F_ALWAYS_INLINE void uct_ud_leave(uct_ud_iface_t *iface)
 {
     UCS_ASYNC_UNBLOCK(iface->super.super.worker->async);
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *grh_end, int is_grh_present)
+{
+    void *dest_gid, *local_gid;
+
+    if (!iface->config.check_grh_dgid) {
+        return 1;
+    }
+
+    if (ucs_unlikely(!is_grh_present)) {
+        ucs_warn("RoCE packet does not contain GRH");
+        return 1;
+    }
+
+    local_gid = (char*)iface->super.gid.raw + (16 - iface->config.gid_len);
+    dest_gid  = (char*)grh_end - iface->config.gid_len;
+
+    if (memcmp(local_gid, dest_gid, iface->config.gid_len)) {
+        UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_UD_IFACE_STAT_RX_DROP, 1);
+        ucs_trace_data("Drop packet with wrong dgid");
+        return 0;
+    }
+
+    return 1;
 }
 
 /*
