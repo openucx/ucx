@@ -929,11 +929,13 @@ void uct_worker_progress_unregister_safe(uct_worker_h worker,
  *
  * @param [in]  md            Memory domain on which the transport's interface
  *                            was registered.
- * @param [in]  tl_name       Transport name in case the given md does not
- *                            have the @ref UCT_MD_FLAG_SOCKADDR flag set.
- *                            If it does, tl_name must be set to NULL and
- *                            the configuration will be read for the only transport
- *                            that was registered on the md.
+ * @param [in]  tl_name       Transport name. If @e md supports
+ *                            @ref UCT_MD_FLAG_SOCKADDR, the transport name
+ *                            can be NULL, which indicates that the configuration
+ *                            for sockaddr open mode
+ *                            (@ref UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER
+ *                            or @ref UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT)
+ *                            of @ref uct_iface_open is returned.
  * @param [in]  env_prefix    If non-NULL, search for environment variables
  *                            starting with this UCT_<prefix>_. Otherwise, search
  *                            for environment variables starting with just UCT_.

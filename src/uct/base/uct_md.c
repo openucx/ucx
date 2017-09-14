@@ -250,13 +250,16 @@ err:
 }
 
 static uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
+                                             uint64_t md_flags,
                                              const char *tl_name)
 {
     uct_md_registered_tl_t *tlr;
 
-    if (tl_name == NULL) {
-        ucs_assert_always(ucs_list_length(&mdc->tl_list) == 1);
+    if ((tl_name == NULL) && (md_flags & UCT_MD_FLAG_SOCKADDR)) {
         tlr = ucs_list_head(&mdc->tl_list, uct_md_registered_tl_t, list);
+        if (tlr == NULL) {
+            return NULL;
+        }
         return tlr->tl;
     } else {
         ucs_list_for_each(tlr, &mdc->tl_list, list) {
@@ -278,14 +281,16 @@ ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
     ucs_status_t status;
 
     md->ops->query(md, &md_attr);
-    tlc = uct_find_tl_on_md(md->component, tl_name);
+    tlc = uct_find_tl_on_md(md->component, md_attr.cap.flags, tl_name);
 
-    if (!(md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) {
-        if (tlc == NULL) {
+    if (tlc == NULL) {
+        if ((tl_name == NULL) && (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) {
+            ucs_error("There is no sockaddr transport registered on the md");
+        } else {
             ucs_error("Transport '%s' does not exist", tl_name);
-            status = UCS_ERR_NO_DEVICE; /* Non-existing transport */
-            return status;
         }
+        status = UCS_ERR_NO_DEVICE; /* Non-existing transport */
+        return status;
     }
 
     status = uct_config_read(&bundle, tlc->iface_config_table,
@@ -305,8 +310,10 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
                             uct_iface_h *iface_p)
 {
     uct_tl_component_t *tlc;
+    uct_md_attr_t md_attr;
 
-    tlc = uct_find_tl_on_md(md->component, params->mode.device.tl_name);
+    md->ops->query(md, &md_attr);
+    tlc = uct_find_tl_on_md(md->component, md_attr.cap.flags, params->mode.device.tl_name);
     if (tlc == NULL) {
         /* Non-existing transport */
         return UCS_ERR_NO_DEVICE;
