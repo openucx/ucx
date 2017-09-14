@@ -14,6 +14,7 @@
 #include <ucs/type/class.h>
 #include <ucs/datastruct/queue.h>
 #include <sys/poll.h>
+#include <linux/ip.h>
 
 
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
@@ -371,6 +372,40 @@ void uct_ud_iface_remove_async_handlers(uct_ud_iface_t *iface)
     ucs_async_remove_handler(iface->async.timer_id, 1);
 }
 
+/* Calculate real GIDs len. Can be either 16 (RoCEv1 or RoCEv2/IPv6)
+ * or 4 (RoCEv2/IPv4). This len is used for packets filtering by DGIDs.
+ *
+ * According to Annex17_RoCEv2 (A17.4.5.2):
+ * "The first 40 bytes of user posted UD Receive Buffers are reserved for the L3
+ * header of the incoming packet (as per the InfiniBand Spec Section 11.4.1.2).
+ * In RoCEv2, this area is filled up with the IP header. IPv6 header uses the
+ * entire 40 bytes. IPv4 headers use the 20 bytes in the second half of the
+ * reserved 40 bytes area (i.e. offset 20 from the beginning of the receive
+ * buffer). In this case, the content of the first 20 bytes is undefined." */
+static void uct_ud_iface_parse_gid_format(uct_ud_iface_t *iface)
+{
+    const int ipv4_len = 4;
+    const int ipv6_len = 16;
+    uint16_t *first    = (uint16_t*)iface->super.gid.raw;
+    uint16_t *filled   = (uint16_t*)iface->super.gid.raw + 5;
+
+    /* Make sure that daddr in IPv4 takes last 4 bytes in GRH */
+    UCS_STATIC_ASSERT((UCT_IB_GRH_LEN - (20 + offsetof(struct iphdr, daddr))) == ipv4_len);
+
+    /* Make sure that dgid takes last 16 bytes in GRH */
+    UCS_STATIC_ASSERT(UCT_IB_GRH_LEN - offsetof(struct ibv_grh, dgid) == ipv6_len);
+
+    /* IPv4 mapped to IPv6 looks like: 0000:0000:0000:0000:0000:ffff:ac10:6510,
+     * so check for leading zeroes and verify that 11-12 bytes are 0xff.
+     * Otherwise either RoCEv1 or RoCEv2/IPv6 are used. */
+    if (!(*first)) {
+        ucs_assert_always((*filled) == 0xffff);
+        iface->config.dgid_len = ipv4_len;
+    } else {
+        iface->config.dgid_len = ipv6_len;
+    }
+}
+
 UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     unsigned ud_rx_priv_len,
@@ -418,6 +453,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->rx.available           = config->super.rx.queue_len;
     self->config.tx_qp_len       = config->super.tx.queue_len;
     self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
+    self->config.filter_enabled  = (config->filter_enable &&
+                                    (self->super.addr_type == UCT_IB_ADDRESS_TYPE_ETH));
 
     if (config->slow_timer_backoff <= 0.) {
         ucs_error("The slow timer back off should be > 0 (%lf)",
@@ -469,6 +506,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     ucs_queue_head_init(&self->rx.pending_q);
 
+    uct_ud_iface_parse_gid_format(self);
+
     return UCS_OK;
 
 err_mpool:
@@ -511,6 +550,9 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
     {"SLOW_TIMER_BACKOFF", "2.0", "Timeout multiplier for resending trigger",
      ucs_offsetof(uct_ud_iface_config_t, slow_timer_backoff),
                   UCS_CONFIG_TYPE_DOUBLE},
+    {"ETH_GID_FILTER_ENABLE", "y",
+     "Enable packets filtering by destination GIDs on an Ethernet network",
+     ucs_offsetof(uct_ud_iface_config_t, filter_enable), UCS_CONFIG_TYPE_BOOL},
     {NULL}
 };
 
