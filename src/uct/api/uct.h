@@ -928,8 +928,12 @@ void uct_worker_progress_unregister_safe(uct_worker_h worker,
  * @brief Read transport-specific interface configuration.
  *
  * @param [in]  md            Memory domain on which the transport's interface
- *                            was registered on.
- * @param [in]  tl_name       Transport name.
+ *                            was registered.
+ * @param [in]  tl_name       Transport name in case the given md does not
+ *                            have the @ref UCT_MD_FLAG_SOCKADDR flag set.
+ *                            If it does, tl_name must be set to NULL and
+ *                            the configuration will be read for the only transport
+ *                            that was registered on the md.
  * @param [in]  env_prefix    If non-NULL, search for environment variables
  *                            starting with this UCT_<prefix>_. Otherwise, search
  *                            for environment variables starting with just UCT_.

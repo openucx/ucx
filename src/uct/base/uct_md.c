@@ -249,26 +249,23 @@ err:
     return status;
 }
 
-uct_tl_component_t* uct_md_get_single_tlc(uct_md_h md)
-{
-    uct_md_registered_tl_t *tlr;
-
-    ucs_assert_always(ucs_list_length(&md->component->tl_list) == 1);
-    tlr = ucs_list_head(&md->component->tl_list, uct_md_registered_tl_t, list);
-    return tlr->tl;
-}
-
 static uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
                                              const char *tl_name)
 {
     uct_md_registered_tl_t *tlr;
 
-    ucs_list_for_each(tlr, &mdc->tl_list, list) {
-        if (!strcmp(tl_name, tlr->tl->name)) {
-            return tlr->tl;
+    if (tl_name == NULL) {
+        ucs_assert_always(ucs_list_length(&mdc->tl_list) == 1);
+        tlr = ucs_list_head(&mdc->tl_list, uct_md_registered_tl_t, list);
+        return tlr->tl;
+    } else {
+        ucs_list_for_each(tlr, &mdc->tl_list, list) {
+            if (!strcmp(tl_name, tlr->tl->name)) {
+                return tlr->tl;
+            }
         }
+        return NULL;
     }
-    return NULL;
 }
 
 ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
@@ -281,10 +278,9 @@ ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
     ucs_status_t status;
 
     md->ops->query(md, &md_attr);
-    if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-        tlc = uct_md_get_single_tlc(md);
-    } else {
-        tlc = uct_find_tl_on_md(md->component, tl_name);
+    tlc = uct_find_tl_on_md(md->component, tl_name);
+
+    if (!(md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) {
         if (tlc == NULL) {
             ucs_error("Transport '%s' does not exist", tl_name);
             status = UCS_ERR_NO_DEVICE; /* Non-existing transport */

@@ -10,7 +10,9 @@
 #include <ucs/sys/string.h>
 #include <string.h>
 
-void print_tl_config(uct_md_h md, const char *tl_name, ucs_config_print_flags_t print_flags)
+
+static void print_tl_config(uct_md_h md, const char *tl_name,
+                            ucs_config_print_flags_t print_flags)
 {
     char cfg_title[UCT_TL_NAME_MAX + 128];
     uct_iface_config_t *config;
