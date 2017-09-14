@@ -10,7 +10,6 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <ucs/type/class.h>
-#include <ucs/datastruct/ptr_array.h>
 
 #include "rc_verbs_common.h"
 
@@ -24,13 +23,6 @@ enum {
     UCT_RC_VERBS_IFACE_ADDR_TYPE_LAST
 };
 
-
-#if IBV_EXP_HW_TM
-typedef struct uct_rc_verbs_release_desc {
-    uct_recv_desc_t             super;
-    unsigned                    offset;
-} uct_rc_verbs_release_desc_t;
-#endif
 
 /**
  * RC verbs communication context.
@@ -51,14 +43,6 @@ typedef struct uct_rc_verbs_iface_config {
     uct_rc_iface_config_t              super;
     uct_rc_verbs_iface_common_config_t verbs_common;
     uct_rc_fc_config_t                 fc;
-#if IBV_EXP_HW_TM
-    struct {
-        int                            enable;
-        unsigned                       list_size;
-        unsigned                       rndv_queue_len;
-        double                         sync_ratio;
-    } tm;
-#endif
 } uct_rc_verbs_iface_config_t;
 
 
@@ -70,29 +54,6 @@ typedef struct uct_rc_verbs_iface {
     struct ibv_send_wr          inl_am_wr;
     struct ibv_send_wr          inl_rwrite_wr;
     uct_rc_verbs_iface_common_t verbs_common;
-#if IBV_EXP_HW_TM
-    struct {
-        uct_rc_srq_t            xrq;       /* TM XRQ */
-        ucs_ptr_array_t         rndv_comps;
-        unsigned                num_tags;
-        unsigned                num_outstanding;
-        unsigned                num_canceled;
-        unsigned                tag_sync_thresh;
-        uint16_t                unexpected_cnt;
-        uint8_t                 enabled;
-        struct {
-            void                     *arg; /* User defined arg */
-            uct_tag_unexp_eager_cb_t cb;   /* Callback for unexpected eager messages */
-        } eager_unexp;
-
-        struct {
-            void                     *arg; /* User defined arg */
-            uct_tag_unexp_rndv_cb_t  cb;   /* Callback for unexpected rndv messages */
-        } rndv_unexp;
-        uct_rc_verbs_release_desc_t  eager_desc;
-        uct_rc_verbs_release_desc_t  rndv_desc;
-    } tm;
-#endif
     struct {
         unsigned                tx_max_wr;
     } config;
@@ -155,21 +116,7 @@ typedef struct uct_rc_verbs_ep_tm_address {
     uct_ib_uint24_t             tm_qp_num;
 } UCS_S_PACKED uct_rc_verbs_ep_tm_address_t;
 
-typedef struct uct_rc_verbs_ctx_priv {
-    uint64_t                    tag;
-    uint64_t                    imm_data;
-    void                        *buffer;
-    uint32_t                    length;
-    uint32_t                    tag_handle;
-} uct_rc_verbs_ctx_priv_t;
-
-#  define UCT_RC_VERBS_TAG_MIN_POSTED  33
-
-#  define UCT_RC_VERBS_TM_ENABLED(_iface) \
-       (IBV_DEVICE_TM_CAPS(uct_ib_iface_device(&(_iface)->super.super), max_num_tags) && \
-        (_iface)->tm.enabled)
-
-#  define UCT_RC_VERBS_TM_CONFIG(_config, _field)  (_config)->tm._field
+#  define UCT_RC_VERBS_TM_ENABLED(_iface) (_iface)->verbs_common.tm.enabled
 
 /* If message arrived with imm_data = 0 - it is SW RNDV request */
 #  define UCT_RC_VERBS_TM_IS_SW_RNDV(_flags, _imm_data) \
@@ -229,7 +176,7 @@ typedef struct uct_rc_verbs_ctx_priv {
        }
 
 #  define UCT_RC_VERBS_CHECK_TAG(_iface) \
-       if (!(_iface)->tm.num_tags) {  \
+       if (!(_iface)->verbs_common.tm.num_tags) {  \
            return UCS_ERR_EXCEEDS_LIMIT; \
        }
 
@@ -288,7 +235,7 @@ uct_rc_verbs_iface_tag_get_op_id(uct_rc_verbs_iface_t *iface,
                                  uct_completion_t *comp)
 {
     uint32_t prev_ph;
-    return ucs_ptr_array_insert(&iface->tm.rndv_comps, comp, &prev_ph);
+    return ucs_ptr_array_insert(&iface->verbs_common.tm.rndv_comps, comp, &prev_ph);
 }
 
 ucs_status_t uct_rc_verbs_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,

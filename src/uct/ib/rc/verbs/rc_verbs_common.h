@@ -8,6 +8,7 @@
 #define UCT_RC_VERBS_COMMON_H
 
 #include <ucs/arch/bitops.h>
+#include <ucs/datastruct/ptr_array.h>
 
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
@@ -21,12 +22,39 @@ typedef struct uct_rc_verbs_txcnt {
 } uct_rc_verbs_txcnt_t;
 
 
+#if IBV_EXP_HW_TM
+typedef struct uct_rc_verbs_release_desc {
+    uct_recv_desc_t             super;
+    unsigned                    offset;
+} uct_rc_verbs_release_desc_t;
+
+typedef struct uct_rc_verbs_ctx_priv {
+    uint64_t                    tag;
+    uint64_t                    imm_data;
+    void                        *buffer;
+    uint32_t                    length;
+    uint32_t                    tag_handle;
+} uct_rc_verbs_ctx_priv_t;
+
+#  define UCT_RC_VERBS_TAG_MIN_POSTED  33
+
+#endif
+
+
 /**
  * RC/DC verbs interface configuration
  */
 typedef struct uct_rc_verbs_iface_common_config {
     size_t                 max_am_hdr;
     unsigned               tx_max_wr;
+#if IBV_EXP_HW_TM
+    struct {
+        int                            enable;
+        unsigned                       list_size;
+        unsigned                       rndv_queue_len;
+        double                         sync_ratio;
+    } tm;
+#endif
     /* TODO flags for exp APIs */
 } uct_rc_verbs_iface_common_config_t;
 
@@ -35,8 +63,29 @@ typedef struct uct_rc_verbs_iface_common {
     struct ibv_sge         inl_sge[2];
     void                   *am_inl_hdr;
     ucs_mpool_t            short_desc_mp;
+#if IBV_EXP_HW_TM
+    struct {
+        uct_rc_srq_t            xrq;       /* TM XRQ */
+        ucs_ptr_array_t         rndv_comps;
+        unsigned                num_tags;
+        unsigned                num_outstanding;
+        unsigned                num_canceled;
+        unsigned                tag_sync_thresh;
+        uint16_t                unexpected_cnt;
+        uint8_t                 enabled;
+        struct {
+            void                     *arg; /* User defined arg */
+            uct_tag_unexp_eager_cb_t cb;   /* Callback for unexpected eager messages */
+        } eager_unexp;
 
-
+        struct {
+            void                     *arg; /* User defined arg */
+            uct_tag_unexp_rndv_cb_t  cb;   /* Callback for unexpected rndv messages */
+        } rndv_unexp;
+        uct_rc_verbs_release_desc_t  eager_desc;
+        uct_rc_verbs_release_desc_t  rndv_desc;
+    } tm;
+#endif
     /* TODO: make a separate datatype */
     struct {
         size_t             notag_hdr_size;
@@ -44,6 +93,7 @@ typedef struct uct_rc_verbs_iface_common {
         size_t             max_inline;
     } config;
 } uct_rc_verbs_iface_common_t;
+
 
 extern ucs_config_field_t uct_rc_verbs_iface_common_config_table[];
 
@@ -64,11 +114,21 @@ uct_rc_verbs_txqp_completed(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt, ui
     uct_rc_txqp_available_add(txqp, count);
 }
 
+void uct_rc_verbs_iface_common_preinit(uct_rc_verbs_iface_common_t *iface,
+                                       uct_md_h md,
+                                       uct_rc_iface_config_t *rc_config,
+                                       uct_rc_verbs_iface_common_config_t *config,
+                                       const uct_iface_params_t *params,
+                                       int is_dc, unsigned *rx_cq_len,
+                                       unsigned *srq_size,
+                                       unsigned *rx_hdr_len,
+                                       unsigned *short_mp_size);
+
 ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
                                             uct_rc_iface_t *rc_iface,
                                             uct_rc_verbs_iface_common_config_t *config,
                                             uct_rc_iface_config_t *rc_config,
-                                            size_t am_hdr_size);
+                                            unsigned short_mp_size);
 
 void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *iface);
 
@@ -210,6 +270,8 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
                                     sizeof(*am) + iface->config.notag_hdr_size,
                                     buffer, length);
 }
+
+
 
 #define UCT_RC_VERBS_FILL_SGE(_wr, _sge, _length) \
     _wr.sg_list = &_sge; \
