@@ -101,11 +101,11 @@ static ucs_status_t uct_rc_mlx5_iface_arm_tx_cq(uct_ib_iface_t *ib_iface)
 }
 
 static ucs_status_t uct_rc_mlx5_iface_arm_rx_cq(uct_ib_iface_t *ib_iface,
-                                                int solicited)
+                                                int solicited_only)
 {
     uct_rc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_t);
     uct_ib_mlx5_update_cq_ci(iface->super.super.recv_cq, iface->mlx5_common.rx.cq.cq_ci);
-    return uct_ib_iface_arm_rx_cq(ib_iface, solicited);
+    return uct_ib_iface_arm_rx_cq(ib_iface, solicited_only);
 }
 
 static void
@@ -213,7 +213,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_progress_disable   = ucs_empty_function,
     .iface_progress           = (void*)uct_rc_mlx5_iface_progress,
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
-    .iface_event_arm          = uct_ib_iface_event_arm,
+    .iface_event_arm          = uct_rc_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
     .iface_query              = uct_rc_mlx5_iface_query,
     .iface_get_address        = ucs_empty_function_return_success,

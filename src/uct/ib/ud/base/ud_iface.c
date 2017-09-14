@@ -803,6 +803,12 @@ void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg)
 ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 {
     uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+    ucs_status_t status;
+
+    status = uct_ib_iface_pre_arm(&iface->super);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     /* Check if some receives were not delivered yet */
     if ((events & (UCT_EVENT_RECV_AM|UCT_EVENT_RECV_SIG_AM)) &&
@@ -818,5 +824,20 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
         return UCS_ERR_BUSY;
     }
 
-    return uct_ib_iface_event_arm(tl_iface, events);
+    if (events & UCT_EVENT_SEND_COMP) {
+        status = iface->super.ops->arm_tx_cq(&iface->super);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    if (events & (UCT_EVENT_SEND_COMP|UCT_EVENT_RECV_AM)) {
+        /* we may get send completion through ACKs as well */
+        status = iface->super.ops->arm_rx_cq(&iface->super, 0);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
 }

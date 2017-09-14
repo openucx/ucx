@@ -81,7 +81,7 @@ struct uct_ib_iface_config {
 struct uct_ib_iface_ops {
     uct_iface_ops_t         super;
     ucs_status_t            (*arm_tx_cq)(uct_ib_iface_t *iface);
-    ucs_status_t            (*arm_rx_cq)(uct_ib_iface_t *iface, int solicited);
+    ucs_status_t            (*arm_rx_cq)(uct_ib_iface_t *iface, int solicited_only);
     void                    (*handle_failure)(uct_ib_iface_t *iface, void *arg);
     void                    (*set_ep_failed)(uct_ib_iface_t *iface, uct_ep_h ep);
 };
@@ -257,13 +257,13 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah **ah_p,
                                     int *is_global_p);
 
-ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h iface, int *fd_p);
+ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 
-ucs_status_t uct_ib_iface_event_arm(uct_iface_h iface, unsigned events);
+ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h iface, int *fd_p);
 
 ucs_status_t uct_ib_iface_arm_tx_cq(uct_ib_iface_t *iface);
 
-ucs_status_t uct_ib_iface_arm_rx_cq(uct_ib_iface_t *iface, int solicited);
+ucs_status_t uct_ib_iface_arm_rx_cq(uct_ib_iface_t *iface, int solicited_only);
 
 
 static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
