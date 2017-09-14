@@ -31,7 +31,12 @@ typedef struct uct_dc_mlx5_iface {
 typedef struct uct_dc_mlx5_ep {
     uct_dc_ep_t                         super;
     uct_ib_mlx5_base_av_t               av;
+    int                                 is_global;
+    struct mlx5_grh_av                  grh_av;
 } uct_dc_mlx5_ep_t;
 
+
+#define UCT_DC_MLX5_EP_GET_GRH(_ep) \
+    ((_ep)->is_global ? &(_ep)->grh_av : NULL)
 
 #endif
