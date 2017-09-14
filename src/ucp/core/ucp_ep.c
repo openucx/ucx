@@ -474,6 +474,7 @@ void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
     ucs_status_t  status    = UCS_PTR_STATUS(arg);
 
     if (req->send.uct_comp.func) {
+        req->send.state.offset = req->send.length; /* fast-forward to data end */
         req->send.uct_comp.func(&req->send.uct_comp, status);
     } else {
         ucp_request_complete_send(req, status);
