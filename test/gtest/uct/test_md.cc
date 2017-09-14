@@ -43,21 +43,21 @@ void* test_md::alloc_thread(void *arg)
         UCS_TEST_MESSAGE << "Testing " << if_name << " with " << ip_str ;
     }
 
-    unsigned is_iface_ipoib(struct ifaddrs *ifa)
+    bool is_iface_ipoib(struct ifaddrs *ifa)
     {
         struct ifreq if_req;
         ucs_status_t status;
 
         status = ucs_netif_ioctl(ifa->ifa_name, SIOCGIFHWADDR, &if_req);
         ASSERT_UCS_OK(status);
-        /* look for an Infiniband interface */
+        /* check if this is an Infiniband interface */
         if (if_req.ifr_addr.sa_family == ARPHRD_INFINIBAND) {
-            /* try to find an IPv4 address on the interface */
+            /* check if there is an IPv4 address on this interface */
             if (ifa->ifa_addr->sa_family == AF_INET) {
-                return 1;
+                return true;
             }
         }
-        return 0;
+        return false;
     }
 
 std::vector<std::string> test_md::enum_mds(const std::string& mdc_name) {
@@ -410,14 +410,14 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
         if (!strcmp(GetParam().c_str(), "rdmacm")) {
             if (is_iface_ipoib(ifa)) {
                 print_ip(ifa->ifa_name, ifa->ifa_addr);
-                ASSERT_TRUE(rc_local  != 0);
-                ASSERT_TRUE(rc_remote != 0);
+                ASSERT_TRUE(rc_local);
+                ASSERT_TRUE(rc_remote);
                 found_ipoib = 1;
             }
         } else {
             print_ip(ifa->ifa_name, ifa->ifa_addr);
-            ASSERT_TRUE(rc_local  != 0);
-            ASSERT_TRUE(rc_remote != 0);
+            ASSERT_TRUE(rc_local);
+            ASSERT_TRUE(rc_remote);
         }
     }
 
