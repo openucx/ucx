@@ -238,7 +238,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
         iov.buffer          = (void*)req->recv.buffer;
         iov.memh            = req->recv.state.dt.contig.memh;
     } else {
-        rdesc = ucs_mpool_get_inline(&req->recv.worker->reg_mp);
+        rdesc = ucp_worker_mpool_get(req->recv.worker);
         if (rdesc == NULL) {
             return 0;
         }

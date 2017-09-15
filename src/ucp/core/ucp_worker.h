@@ -80,6 +80,15 @@ enum {
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
                              UCP_WORKER_STAT_TAG_RX_RNDV_##_is_exp, 1);
 
+#define ucp_worker_mpool_get(_worker) \
+    ({ \
+        ucp_mem_desc_t *rdesc = ucs_mpool_get_inline(&(_worker)->reg_mp); \
+        if (rdesc != NULL) { \
+            VALGRIND_MAKE_MEM_DEFINED(rdesc, sizeof(*rdesc)); \
+        } \
+        rdesc; \
+    })
+
 
 /**
  * UCP worker iface, which encapsulates UCT iface, its attributes and
