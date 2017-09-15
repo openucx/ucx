@@ -181,10 +181,6 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
     ucp_worker_iface_t *ucp_iface;
     ucs_status_t status;
 
-    if (!(req->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
-        return;
-    }
-
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                               ucp_worker_iface_t, queue);
 

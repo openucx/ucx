@@ -82,12 +82,10 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
             req->recv.info.sender_tag = recv_tag;
 
             /* Cancel req in transport if it was offloaded,
-             * because it arrived as unexpected */
-            if (flags & UCP_RECV_DESC_FLAG_OFFLOAD) {
-                ucp_tag_offload_cancel(context, req, 1);
-            } else {
-                ucs_assert(!(req->flags & UCP_REQUEST_FLAG_OFFLOADED));
-            }
+             * because it arrived either:
+             * 1) via SW TM (e. g. peer doesn't support offload)
+             * 2) as unexpected via HW TM */
+            ucp_tag_offload_try_cancel(context, req, 1);
 
             if (flags & UCP_RECV_DESC_FLAG_LAST) {
                 req->recv.info.length = recv_len;
