@@ -290,8 +290,7 @@ out:
 static void ucp_worker_wakeup_cleanup(ucp_worker_h worker)
 {
     if ((worker->epfd != -1) &&
-        !(worker->flags & UCP_WORKER_FLAG_EXTERNAL_EPOLL))
-    {
+        !(worker->flags & UCP_WORKER_FLAG_EXTERNAL_EPOLL)) {
         close(worker->epfd);
     }
     if (worker->eventfd != -1) {
@@ -1270,7 +1269,6 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
     }
 
     for (;;) {
-        // TODO use epoll_wait
         ret = poll(pfd, nfds, -1);
         if (ret >= 0) {
             ucs_assertv(ret == 1, "ret=%d", ret);
