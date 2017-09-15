@@ -18,6 +18,7 @@ public:
 
     virtual void init()
     {
+        modify_config("TM_THRESH", "1");
         test_ucp_tag::init();
         ucp_test_param param = GetParam();
     }

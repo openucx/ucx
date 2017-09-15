@@ -463,7 +463,7 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
 
         /* Cancel req in transport if it was offloaded, because it arrived
            as unexpected */
-        ucp_tag_offload_cancel(context, rreq, 1);
+        ucp_tag_offload_try_cancel(context, rreq, 1);
 
         UCP_WORKER_STAT_RNDV(worker, EXP);
         status = UCS_OK;

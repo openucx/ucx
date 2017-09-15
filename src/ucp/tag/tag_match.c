@@ -63,9 +63,7 @@ void ucp_tag_exp_remove(ucp_tag_match_t *tm, ucp_request_t *req)
 
     ucs_queue_for_each_safe(qreq, iter, queue, recv.queue) {
         if (qreq == req) {
-            if (req->flags & UCP_REQUEST_FLAG_OFFLOADED) {
-                ucp_tag_offload_cancel(ctx, req, 0);
-            }
+            ucp_tag_offload_try_cancel(ctx, req, 0);
             ucs_queue_del_iter(queue, iter);
             return;
         }

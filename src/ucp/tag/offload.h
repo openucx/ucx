@@ -68,4 +68,12 @@ ucp_tag_offload_try_post(ucp_context_t *ctx, ucp_request_t *req)
     ++ctx->tm.offload.sw_req_count;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_offload_try_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
+{
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
+        ucp_tag_offload_cancel(ctx, req, force);
+    }
+}
+
 #endif
