@@ -140,8 +140,9 @@ gtest_SOURCES = \
 
 if HAVE_IB
 gtest_SOURCES += \
-    uct/ib/test_ib.cc \
-	uct/ib/test_ib_md.cc
+	uct/ib/test_ib.cc \
+	uct/ib/test_ib_md.cc \
+	uct/ib/test_cq_moderation.cc
 gtest_CPPFLAGS += \
     $(IBVERBS_CPPFLAGS)
 if HAVE_TL_UD
