@@ -19,9 +19,9 @@ public:
     virtual void init() {
         ucp_test::init();
 
-        sender().connect(&receiver());
+        sender().connect(&receiver(), get_ep_params());
         if (!is_loopback()) {
-            receiver().connect(&sender());
+            receiver().connect(&sender(), get_ep_params());
         }
     }
 
