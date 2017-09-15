@@ -239,7 +239,6 @@ build_clang() {
 		$MAKE clean
 		$MAKE
 		$MAKE distclean
-		module unload intel/ics
 		echo "ok 1 - build successful " >> build_clang.tap
 	else
 		echo "==== Not building with clang compiler ===="
