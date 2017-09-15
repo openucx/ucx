@@ -17,6 +17,19 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/sys/sys.h>
 
+
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_offload_release_buf(ucp_request_t *req, ucp_context_t *ctx,
+                            ucp_rsc_index_t rsc_idx)
+{
+    if (req->recv.rdesc != NULL) {
+        ucs_mpool_put_inline(req->recv.rdesc);
+    } else {
+        ucp_request_memory_dereg(ctx, rsc_idx, req->recv.datatype,
+                                 &req->recv.state);
+    }
+}
+
 /* Tag consumed by the transport - need to remove it from expected queue */
 void ucp_tag_offload_tag_consumed(uct_tag_context_t *self)
 {
@@ -40,6 +53,11 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
     req->recv.info.sender_tag = stag;
     req->recv.info.length     = length;
 
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucp_tag_offload_release_buf(req, ctx, iface->rsc_index);
+        goto out;
+    }
+
     if (ucs_unlikely(imm)) {
         /* Sync send - need to send a reply */
         ucp_tag_offload_eager_sync_send_ack(req->recv.worker, imm, stag);
@@ -53,19 +71,9 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
         ucp_request_memory_dereg(ctx, iface->rsc_index, req->recv.datatype,
                                  &req->recv.state);
     }
-    ucp_request_complete_recv(req, status);
-}
 
-static UCS_F_ALWAYS_INLINE void
-ucp_tag_offload_release_buf(ucp_request_t *req, ucp_context_t *ctx,
-                            ucp_rsc_index_t rsc_idx)
-{
-    if (req->recv.rdesc != NULL) {
-        ucs_mpool_put_inline(req->recv.rdesc);
-    } else {
-        ucp_request_memory_dereg(ctx, rsc_idx, req->recv.datatype,
-                                 &req->recv.state);
-    }
+out:
+    ucp_request_complete_recv(req, status);
 }
 
 static size_t ucp_tag_offload_fetch_rkey(ucp_ep_t *ep, ucp_sw_rndv_hdr_t *sw_hdr,
@@ -103,6 +111,11 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
                                                               ucp_worker_iface_t, queue);
     unsigned length           = sizeof(ucp_rndv_rts_hdr_t);
     ucp_rndv_rts_hdr_t *rts;
+
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucp_tag_offload_release_buf(req, ctx, iface->rsc_index);
+        ucp_request_complete_recv(req, status);
+    }
 
     if (sreq->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) {
         length += ucp_ep_md_attr(ep, req->send.lane)->rkey_packed_size;
@@ -174,7 +187,7 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
 
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                               ucp_worker_iface_t, queue);
-    
+
     status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx,
                                        force);
     if (status != UCS_OK) {
@@ -183,7 +196,10 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
         return;
     }
 
-    ucp_tag_offload_release_buf(req, ctx, ucp_iface->rsc_index);
+    /* if cancel is not forced, need to wait its completion */
+    if (force) {
+        ucp_tag_offload_release_buf(req, ctx, ucp_iface->rsc_index);
+    }
 }
 
 int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
