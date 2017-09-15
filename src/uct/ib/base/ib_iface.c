@@ -13,6 +13,7 @@
 #include <ucs/type/class.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/debug/log.h>
+#include <ucs/time/time.h>
 #include <string.h>
 #include <stdlib.h>
 #include <poll.h>
@@ -82,13 +83,21 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation), UCS_CONFIG_TYPE_UINT},
 
 #if HAVE_DECL_IBV_EXP_CQ_MODERATION
-  {"TX_CQ_MODERATION_COUNT", "-1",
-   "Number of send WQEs for which event is requested.",
-   ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation_count), UCS_CONFIG_TYPE_INT},
+  {"TX_EVENT_MOD_COUNT", "0",
+   "Number of send completions for which an event would be generated (0 - disabled).",
+   ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation_count), UCS_CONFIG_TYPE_UINT},
 
-  {"TX_CQ_MODERATION_PERIOD", "-1",
-   "Time period to generate event.",
-   ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation_period), UCS_CONFIG_TYPE_INT},
+  {"TX_EVENT_MOD_PERIOD", "0us",
+   "Time period to generate send event (0 - disabled).",
+   ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation_period), UCS_CONFIG_TYPE_TIME},
+
+  {"RX_EVENT_MOD_COUNT", "0",
+   "Number of received messages for which an event would be generated (0 - disabled).",
+   ucs_offsetof(uct_ib_iface_config_t, rx.cq_moderation_count), UCS_CONFIG_TYPE_UINT},
+
+  {"RX_EVENT_MOD_PERIOD", "0us",
+   "Time period to generate receive event (0 - disabled).",
+   ucs_offsetof(uct_ib_iface_config_t, rx.cq_moderation_period), UCS_CONFIG_TYPE_TIME},
 #endif /* HAVE_DECL_IBV_EXP_CQ_MODERATION */
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 1024, "send",
@@ -480,6 +489,48 @@ out:
     return status;
 }
 
+
+static ucs_status_t uct_ib_iface_set_moderation(struct ibv_cq *cq,
+                                                unsigned count, double period_usec)
+{
+#if HAVE_DECL_IBV_EXP_CQ_MODERATION
+    unsigned period = (unsigned)(period_usec * UCS_USEC_PER_SEC);
+
+    if (count > UINT16_MAX) {
+        ucs_error("CQ moderation count is too high: %u, max value: %u", count, UINT16_MAX);
+        return UCS_ERR_INVALID_PARAM;
+    } else if (count == 0) {
+        /* in case if count value is 0 (unchanged default value) - set it to maximum
+         * possible value */
+        count = UINT16_MAX;
+    }
+
+    if (period > UINT16_MAX) {
+        ucs_error("CQ moderation period is too high: %u, max value: %uus", period, UINT16_MAX);
+        return UCS_ERR_INVALID_PARAM;
+    } else if (period == 0) {
+        /* in case if count value is 0 (unchanged default value) - set it to maximum
+         * possible value, the same behavior as counter */
+        period = UINT16_MAX;
+    }
+
+    if ((count < UINT16_MAX) || (period < UINT16_MAX)) {
+        struct ibv_exp_cq_attr cq_attr = {
+            .comp_mask            = IBV_EXP_CQ_ATTR_MODERATION,
+            .moderation.cq_count  = (uint16_t)(count),
+            .moderation.cq_period = (uint16_t)(period),
+            .cq_cap_flags         = 0
+        };
+        if (ibv_exp_modify_cq(cq, &cq_attr, IBV_EXP_CQ_MODERATION)) {
+            ucs_error("ibv_exp_modify_cq(count=%d, period=%d) failed: %m", count, period);
+            return UCS_ERR_IO_ERROR;
+        }
+    }
+#endif /* HAVE_DECL_IBV_EXP_CQ_MODERATION */
+
+    return UCS_OK;
+}
+
 /**
  * @param rx_headroom   Headroom requested by the user.
  * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
@@ -571,26 +622,25 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     ucs_assert_always(inl <= UINT8_MAX);
     self->config.max_inl_resp = inl;
 
-#if HAVE_DECL_IBV_EXP_CQ_MODERATION
-    if (config->tx.cq_moderation_count >= 0 || config->tx.cq_moderation_period >= 0) {
-        struct ibv_exp_cq_attr cq_attr = {
-            .comp_mask            = IBV_EXP_CQ_ATTR_MODERATION,
-            .moderation.cq_count  = (uint16_t)ucs_max(config->tx.cq_moderation_count, 0),
-            .moderation.cq_period = (uint16_t)ucs_max(config->tx.cq_moderation_period, 0)
-        };
-        if (ibv_exp_modify_cq(self->send_cq, &cq_attr, IBV_EXP_CQ_MODERATION)) {
-            ucs_error("ibv_exp_modify_cq() failed: %m");
-            status = UCS_ERR_IO_ERROR;
-            goto err_destroy_send_cq;
-        }
+    status = uct_ib_iface_set_moderation(self->send_cq,
+                                         config->tx.cq_moderation_count,
+                                         config->tx.cq_moderation_period);
+    if (status != UCS_OK) {
+        goto err_destroy_send_cq;
     }
-#endif /* HAVE_DECL_IBV_EXP_CQ_MODERATION */
 
     inl = config->rx.inl;
     status = uct_ib_iface_create_cq(self, rx_cq_len, &inl,
                                     preferred_cpu, &self->recv_cq);
     if (status != UCS_OK) {
         goto err_destroy_send_cq;
+    }
+
+    status = uct_ib_iface_set_moderation(self->recv_cq,
+                                         config->rx.cq_moderation_count,
+                                         config->rx.cq_moderation_period);
+    if (status != UCS_OK) {
+        goto err_destroy_recv_cq;
     }
 
     /* Address scope and size */
@@ -613,6 +663,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     return UCS_OK;
 
+err_destroy_recv_cq:
+    ibv_destroy_cq(self->recv_cq);
 err_destroy_send_cq:
     ibv_destroy_cq(self->send_cq);
 err_destroy_comp_channel:
