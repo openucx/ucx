@@ -227,6 +227,25 @@ build_icc() {
 	fi
 }
 
+#
+# Build with clang compiler
+#
+build_clang() {
+	echo 1..1 > build_clang.tap
+	if which clang > /dev/null 2>&1
+	then
+		echo "==== Build with clang compiler ===="
+		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
+		$MAKE clean
+		$MAKE
+		$MAKE distclean
+		echo "ok 1 - build successful " >> build_clang.tap
+	else
+		echo "==== Not building with clang compiler ===="
+		echo "ok 1 - # SKIP because clang not installed" >> build_clang.tap
+	fi
+}
+
 run_hello() {
 	api=$1
 	shift
@@ -527,6 +546,7 @@ run_tests() {
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 
 	do_distributed_task 0 4 build_icc
+	do_distributed_task 3 4 build_clang
 
 	# all are running mpi tests
 	run_mpi_tests
