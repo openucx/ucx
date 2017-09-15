@@ -232,7 +232,7 @@ build_icc() {
 #
 build_clang() {
 	echo 1..1 > build_clang.tap
-    if which clang > /dev/null 2>&1
+	if which clang > /dev/null 2>&1
 	then
 		echo "==== Build with clang compiler ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
@@ -546,7 +546,7 @@ run_tests() {
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 
 	do_distributed_task 0 4 build_icc
-	do_distributed_task 0 4 build_clang
+	do_distributed_task 3 4 build_clang
 
 	# all are running mpi tests
 	run_mpi_tests
