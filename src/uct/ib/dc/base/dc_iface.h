@@ -55,9 +55,17 @@ typedef struct uct_dc_dci {
 } uct_dc_dci_t;
 
 
+typedef struct uct_dc_fc_sender_data {
+    uint64_t                      ep;
+    struct {
+        int                       is_global;
+        union ibv_gid             gid;
+    } UCS_S_PACKED global;
+} UCS_S_PACKED uct_dc_fc_sender_data_t;
+
 typedef struct uct_dc_fc_request {
     uct_rc_fc_request_t           super;
-    uintptr_t                     sender_ep;
+    uct_dc_fc_sender_data_t       sender;
     uint32_t                      dct_num;
 
     /* Lid can be stored either in BE or in LE order. The endianess depends

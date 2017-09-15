@@ -444,7 +444,7 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
         dc_req->super.ep         = &ep->super.super;
         dc_req->dct_num          = imm_data;
         dc_req->lid              = lid;
-        dc_req->sender_ep        = *((uintptr_t*)(hdr + 1));
+        dc_req->sender           = *((uct_dc_fc_sender_data_t*)(hdr + 1));
 
         status = uct_dc_iface_fc_grant(&dc_req->super.super);
         if (status == UCS_ERR_NO_RESOURCE){

@@ -45,7 +45,9 @@
 #else
 
 #  define mlx5_av_base(_av)         (_av)
-#  define mlx5_av_grh(_av)          (_av)
+/* do not use direct cast from address of reserved0 to avoid compilation warnings */
+#  define mlx5_av_grh(_av)          ((struct mlx5_grh_av *)(((char*)(_av)) + \
+                                     ucs_offsetof(struct mlx5_wqe_av, reserved0[0])))
 #  define UCT_IB_MLX5_AV_BASE_SIZE  sizeof(struct mlx5_wqe_av)
 #  define UCT_IB_MLX5_AV_FULL_SIZE  sizeof(struct mlx5_wqe_av)
 
