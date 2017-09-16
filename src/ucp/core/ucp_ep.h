@@ -193,10 +193,11 @@ typedef struct ucp_ep {
     uint8_t                       flags;         /* Endpoint flags */
 
     uint64_t                      dest_uuid;     /* Destination worker uuid */
+    void                          *user_data;    /* user data associated with
+                                                    the endpoint */
 
     ucs_queue_head_t              stream_data;  /* Queue of receive descriptors
                                                    with data */
-
     UCS_STATS_NODE_DECLARE(stats);
 
 #if ENABLE_DEBUG_DATA

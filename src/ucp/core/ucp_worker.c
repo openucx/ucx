@@ -310,14 +310,14 @@ void ucp_worker_signal_internal(ucp_worker_h worker)
 static void
 ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
-    ucp_worker_h       worker           = (ucp_worker_h)arg;
-    ucp_ep_h           ucp_ep           = NULL;
-    uct_ep_h           aux_ep           = NULL;
-    uint64_t           dest_uuid UCS_V_UNUSED;
-    ucp_ep_h           ucp_ep_iter;
-    khiter_t           ucp_ep_errh_iter;
-    ucp_err_handler_t  err_handler;
-    ucp_lane_index_t   lane, n_lanes, failed_lane;
+    ucp_worker_h         worker           = (ucp_worker_h)arg;
+    ucp_ep_h             ucp_ep           = NULL;
+    uct_ep_h             aux_ep           = NULL;
+    uint64_t             dest_uuid UCS_V_UNUSED;
+    ucp_ep_h             ucp_ep_iter;
+    khiter_t             ucp_ep_errh_iter;
+    ucp_err_handler_cb_t err_cb;
+    ucp_lane_index_t     lane, n_lanes, failed_lane;
 
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
     kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep_iter, {
@@ -384,8 +384,8 @@ found_ucp_ep:
     ucp_ep_errh_iter = kh_get(ucp_ep_errh_hash, &worker->ep_errh_hash,
                               (uintptr_t)ucp_ep);
     if (ucp_ep_errh_iter != kh_end(&worker->ep_errh_hash)) {
-        err_handler = kh_val(&worker->ep_errh_hash, ucp_ep_errh_iter);
-        err_handler.cb(err_handler.arg, ucp_ep, status);
+        err_cb = kh_val(&worker->ep_errh_hash, ucp_ep_errh_iter);
+        err_cb(ucp_ep->user_data, ucp_ep, status);
     } else {
         ucs_error("Error %s was not handled for ep %p",
                   ucs_status_string(status), ucp_ep);

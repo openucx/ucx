@@ -188,11 +188,11 @@ enum ucp_ep_params_field {
                                                             peer */
     UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE = UCS_BIT(1), /**< Error handling mode.
                                                             @ref ucp_err_handling_mode_t */
-    UCP_EP_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(2), /**< Handler to process
+    UCP_EP_PARAM_FIELD_ERR_HANDLER_CB    = UCS_BIT(2), /**< Handler to process
                                                             transport level errors */
-    UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(3), /**< Socket address field */
-    UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(4), /**< Endpoint flags */
-    UCP_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(5)  /**< User data pointer */
+    UCP_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(3), /**< User data pointer */
+    UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(4), /**< Socket address field */
+    UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(5)  /**< Endpoint flags */
 };
 
 
@@ -777,9 +777,16 @@ typedef struct ucp_ep_params {
     ucp_err_handling_mode_t err_mode;
 
     /**
-     * Handler to process transport level failure.
+     * Error handler callback, will be called with @ref user_data as an argument
+     * if set.
      */
-    ucp_err_handler_t       err_handler;
+    ucp_err_handler_cb_t    err_handler_cb;
+
+    /**
+     * User data associated with an endpoint. See @ref ucp_stream_poll_ep_t and
+     * @ref err_handler_cb
+     */
+    void                    *user_data;
 
     /**
      * Endpoint flags from @ref ucp_ep_params_flags_field.
@@ -802,11 +809,6 @@ typedef struct ucp_ep_params {
      */
     ucs_sock_addr_t         sockaddr;
 
-    /**
-     * User data associated with an endpoint. See @ref ucp_stream_poll_ep_t.
-     * @a user_data must be equal to @ref ucp_err_handler_t::arg if both are set.
-     */
-    void                    *user_data;
 } ucp_ep_params_t;
 
 

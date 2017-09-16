@@ -17,7 +17,7 @@
 #include <ucs/async/async.h>
 
 KHASH_MAP_INIT_INT64(ucp_worker_ep_hash, ucp_ep_t *);
-KHASH_MAP_INIT_INT64(ucp_ep_errh_hash,   ucp_err_handler_t);
+KHASH_MAP_INIT_INT64(ucp_ep_errh_hash,   ucp_err_handler_cb_t);
 
 
 enum {

@@ -329,11 +329,12 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     /* Send test string to client */
     ep_params.field_mask      = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS |
                                 UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
-                                UCP_EP_PARAM_FIELD_ERR_HANDLER;
+                                UCP_EP_PARAM_FIELD_ERR_HANDLER_CB |
+                                UCP_EP_PARAM_FIELD_USER_DATA;
     ep_params.address         = peer_addr;
     ep_params.err_mode        = err_handling_opt.ucp_err_mode;
-    ep_params.err_handler.cb  = failure_handler;
-    ep_params.err_handler.arg = &client_status;
+    ep_params.err_handler_cb  = failure_handler;
+    ep_params.user_data       = &client_status;
 
     status = ucp_ep_create(ucp_worker, &ep_params, &client_ep);
     CHKERR_JUMP(status != UCS_OK, "ucp_ep_create\n", err);

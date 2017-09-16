@@ -177,7 +177,7 @@ int ucp_ep_is_stub(ucp_ep_h ep)
 }
 
 static ucs_status_t
-ucp_ep_setup_err_handler(ucp_ep_h ep, const ucp_err_handler_t *err_handler)
+ucp_ep_setup_err_handler(ucp_ep_h ep, ucp_err_handler_cb_t err_handler_cb)
 {
     khiter_t hash_it;
     int hash_extra_status = 0;
@@ -189,7 +189,7 @@ ucp_ep_setup_err_handler(ucp_ep_h ep, const ucp_err_handler_t *err_handler)
                   ep, hash_extra_status);
         return UCS_ERR_NO_MEMORY;
     }
-    kh_value(&ep->worker->ep_errh_hash, hash_it) = *err_handler;
+    kh_value(&ep->worker->ep_errh_hash, hash_it) = err_handler_cb;
 
     return UCS_OK;
 }
@@ -209,9 +209,12 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
         }
     }
 
-    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER) {
-        status = ucp_ep_setup_err_handler(ep, &params->err_handler);
+    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER_CB) {
+        status = ucp_ep_setup_err_handler(ep, params->err_handler_cb);
     }
+
+    ep->user_data = (params->field_mask & UCP_EP_PARAM_FIELD_USER_DATA) ?
+                    params->user_data : NULL;
 
     return status;
 }
@@ -268,12 +271,15 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
     }
 
     /* Setup error handler */
-    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER) {
-        status = ucp_ep_setup_err_handler(ep, &params->err_handler);
+    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER_CB) {
+        status = ucp_ep_setup_err_handler(ep, params->err_handler_cb);
         if (status != UCS_OK) {
             goto err_destroy_ep;
         }
     }
+
+    ep->user_data = (params->field_mask & UCP_EP_PARAM_FIELD_USER_DATA) ?
+                    params->user_data : NULL;
 
     /* send initial wireup message */
     if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {

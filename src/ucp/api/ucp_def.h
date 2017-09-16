@@ -319,18 +319,6 @@ typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status
 typedef void (*ucp_listener_accept_callback_t)(ucp_ep_h ep, void *arg);
 
 
- /**
- * @ingroup UCP_COMM
- * @brief UCP endpoint error handling context.
- * 
- * This structure should be initialized in @ref ucp_ep_params_t to handle peer failure
- */
-typedef struct ucp_err_handler {
-    ucp_err_handler_cb_t cb;       /**< Error handler callback */
-    void                 *arg;     /**< User defined argument */
-} ucp_err_handler_t;
-
-
 /**
  * @ingroup UCP_WORKER
  * @brief UCP callback to handle the creation of an endpoint in a client-server
