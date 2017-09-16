@@ -283,8 +283,7 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
-    UCT_RC_VERBS_CHECK_AM_SHORT(iface, id, length,
-                                iface->verbs_common.config.max_inline);
+    UCT_RC_VERBS_CHECK_AM_SHORT(&iface->verbs_common, id, length);
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
@@ -313,8 +312,9 @@ ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
-    UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(iface, &iface->super.tx.mp, desc, id,
-                                      pack_cb, arg, length, data_length);
+    UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(&iface->verbs_common, &iface->super,
+                                      &iface->super.tx.mp, desc, id, pack_cb,
+                                      arg, length, data_length);
     UCT_RC_VERBS_FILL_AM_BCOPY_WR(wr, sge, length, wr.opcode);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, data_length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, IBV_SEND_SOLICITED);
@@ -338,14 +338,14 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
 
     UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super) - 1,
                        "uct_rc_verbs_ep_am_zcopy");
-    UCT_RC_VERBS_CHECK_AM_ZCOPY(iface, id, header_length,
+    UCT_RC_VERBS_CHECK_AM_ZCOPY(&iface->verbs_common, id, header_length,
                                 uct_iov_total_length(iov, iovcnt),
-                                iface->verbs_common.config.short_desc_size,
                                 iface->super.super.config.seg_size);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
-    UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(iface, &iface->verbs_common.short_desc_mp,
-                                      desc, id, header, header_length, comp,
+    UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(&iface->verbs_common, &iface->super,
+                                      &iface->verbs_common.short_desc_mp, desc,
+                                      id, header, header_length, comp,
                                       &send_flags, sge[0]);
 
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge + 1, iov, iovcnt);
@@ -705,8 +705,8 @@ ssize_t uct_rc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
     UCT_RC_VERBS_FILL_TM_IMM(wr, imm, app_ctx);
-    UCT_RC_VERBS_GET_TM_BCOPY_DESC(iface, &iface->super.tx.mp, desc, tag,
-                                   app_ctx, pack_cb, arg, length);
+    UCT_RC_VERBS_GET_TM_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
+                                   tag, app_ctx, pack_cb, arg, length);
     UCT_RC_VERBS_FILL_SGE(wr, sge, length + sizeof(struct ibv_exp_tmh));
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, 0);
     return length;
@@ -734,8 +734,10 @@ ucs_status_t uct_rc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge + 1, iov, iovcnt);
 
     UCT_RC_VERBS_FILL_TM_IMM(wr, imm, app_ctx);
-    UCT_RC_VERBS_GET_TM_ZCOPY_DESC(iface, &iface->verbs_common.short_desc_mp,
-                                   desc, tag, app_ctx, comp, &send_flags, sge[0]);
+    UCT_RC_VERBS_GET_TM_ZCOPY_DESC(&iface->super,
+                                   &iface->verbs_common.short_desc_mp,
+                                   desc, tag, app_ctx, comp, &send_flags,
+                                   sge[0]);
     wr.num_sge = sge_cnt + 1;
     wr.sg_list = sge;
 
@@ -771,7 +773,7 @@ ucs_status_ptr_t uct_rc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                         header_length + tmh_len);
     UCT_RC_VERBS_CHECK_RNDV(&iface->super, &ep->super);
 
-    op_index = uct_rc_verbs_iface_tag_get_op_id(iface, comp);
+    op_index = uct_rc_verbs_iface_tag_get_op_id(&iface->verbs_common, comp);
     uct_rc_verbs_iface_fill_tmh(tmh, tag, op_index, IBV_EXP_TMH_RNDV);
     uct_rc_verbs_iface_fill_rvh(tmh + sizeof(struct ibv_exp_tmh), iov->buffer,
                                 ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
