@@ -231,9 +231,9 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
     }
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_EPOLL) {
-        worker->epfd        = params->epoll.epoll_fd;
-        worker->epoll_data  = params->epoll.epoll_data;
-        worker->flags      |= UCP_WORKER_FLAG_EXTERNAL_EPOLL;
+        worker->epfd            = params->epoll.epoll_fd;
+        worker->epoll_data.u64  = params->epoll.epoll_data;
+        worker->flags          |= UCP_WORKER_FLAG_EXTERNAL_EPOLL;
     } else {
         worker->epfd = epoll_create(context->num_tls);
         if (worker->epfd == -1) {

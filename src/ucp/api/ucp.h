@@ -14,7 +14,6 @@
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/config/types.h>
-#include <sys/epoll.h>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -722,9 +721,10 @@ typedef struct ucp_worker_params {
      */
     struct {
         int                 epoll_fd;    /**< epoll file descriptor */
-        epoll_data_t        epoll_data;  /**< data associated with events on
+        uint64_t            epoll_data;  /**< data associated with events on
                                               the current worker. Will be
-                                              returned from epoll_wait(). */
+                                              returned from epoll_wait() in the
+                                              u64 field of struct epoll_data.*/
     } epoll;
 
 } ucp_worker_params_t;

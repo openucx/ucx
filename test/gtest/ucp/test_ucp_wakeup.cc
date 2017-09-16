@@ -180,15 +180,13 @@ public:
     virtual ucp_worker_params_t get_worker_params() {
         ucp_worker_params_t params = test_ucp_wakeup::get_worker_params();
         params.field_mask |= UCP_WORKER_PARAM_FIELD_EPOLL;
-        params.epoll.epoll_fd        = m_epfd;
-        params.epoll.epoll_data.u32 = EP_DATA32;
+        params.epoll.epoll_fd   = m_epfd;
+        params.epoll.epoll_data = EP_DATA;
         return params;
     }
 
 protected:
-    enum {
-        EP_DATA32 = 0x1337
-    };
+    static const uint64_t EP_DATA = 0x1337;
 
     virtual void init() {
         m_epfd = epoll_create(1);
@@ -250,7 +248,7 @@ UCS_TEST_P(test_ucp_wakeup_external_epollfd, epoll_wait)
             UCS_TEST_MESSAGE << "epoll_wait() failed: " << strerror(errno);
         }
         ASSERT_EQ(1, ret);
-        EXPECT_EQ((int)EP_DATA32, (int)event.data.u32);
+        EXPECT_EQ(uint64_t(EP_DATA), event.data.u64);
     }
 
     ucp_request_release(req);
