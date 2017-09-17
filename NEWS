@@ -7,6 +7,16 @@
 ##
 #
 
+## 1.2.2 (September, 19, 2017)
+
+- Update spec file with new Source0 link and default BuildRoot
+
+## 1.2.1 (August 28, 2017)
+
+- Compilation fixes for gcc 7.1
+- Spec file cleanups
+- Versioning cleanups
+
 ## 1.2.0 (June 15, 2017)
 
 Supported platforms
