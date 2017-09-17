@@ -124,3 +124,23 @@ void ucs_memunits_to_str(size_t value, char *buf, size_t max)
     }
 }
 
+char* ucs_sockaddr_str(struct sockaddr *sock_addr, char *ip_str)
+{
+    struct sockaddr_in6 *addr_in6;
+    struct sockaddr_in *addr_in;
+
+    switch (sock_addr->sa_family) {
+    case AF_INET:
+        addr_in = (struct sockaddr_in *) sock_addr;
+        inet_ntop(AF_INET, &(addr_in->sin_addr), ip_str, INET_ADDRSTRLEN);
+        break;
+    case AF_INET6:
+        addr_in6 = (struct sockaddr_in6 *)sock_addr;
+        inet_ntop(AF_INET6, &(addr_in6->sin6_addr), ip_str, INET6_ADDRSTRLEN);
+        break;
+    default:
+        break;
+    }
+
+    return ip_str;
+}

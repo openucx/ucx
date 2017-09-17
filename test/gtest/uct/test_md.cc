@@ -50,12 +50,11 @@ void* test_md::alloc_thread(void *arg)
 
         status = ucs_netif_ioctl(ifa->ifa_name, SIOCGIFHWADDR, &if_req);
         ASSERT_UCS_OK(status);
-        /* check if this is an Infiniband interface */
-        if (if_req.ifr_addr.sa_family == ARPHRD_INFINIBAND) {
-            /* check if there is an IPv4 address on this interface */
-            if (ifa->ifa_addr->sa_family == AF_INET) {
-                return true;
-            }
+        /* check if this is an Infiniband interface and if there is an
+         * IPv4 address on it */
+        if ((if_req.ifr_addr.sa_family == ARPHRD_INFINIBAND) &&
+            (ifa->ifa_addr->sa_family == AF_INET)) {
+            return true;
         }
         return false;
     }

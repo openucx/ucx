@@ -24,33 +24,6 @@ static uct_md_ops_t uct_rdmacm_md_ops = {
     .is_sockaddr_accessible = uct_rdmacm_is_sockaddr_accessible,
 };
 
-static void uct_rdmacm_print_ip(struct sockaddr *sock_addr)
-{
-    struct sockaddr_in6 *addr_in6;
-    struct sockaddr_in *addr_in;
-    char *ip = NULL;
-
-    switch(sock_addr->sa_family) {
-        case AF_INET:
-            addr_in = (struct sockaddr_in *) sock_addr;
-            ip = ucs_malloc(INET_ADDRSTRLEN, "ipv4 address");
-            inet_ntop(AF_INET, &(addr_in->sin_addr), ip, INET_ADDRSTRLEN);
-            break;
-
-        case AF_INET6:
-            addr_in6 = (struct sockaddr_in6 *)sock_addr;
-            ip = ucs_malloc(INET6_ADDRSTRLEN, "ipv6 address");
-            inet_ntop(AF_INET6, &(addr_in6->sin6_addr), ip, INET6_ADDRSTRLEN);
-            break;
-
-        default:
-            break;
-    }
-
-    ucs_debug("IP address: %s", ip);
-    ucs_free(ip);
-}
-
 static void uct_rdmacm_md_close(uct_md_h md)
 {
     uct_rdmacm_md_t *rdmacm_md = ucs_derived_of(md, uct_rdmacm_md_t);
@@ -72,10 +45,11 @@ ucs_status_t uct_rdmacm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                       uct_sockaddr_accessibility_t mode)
 {
+    uct_rdmacm_md_t *rdmacm_md = ucs_derived_of(md, uct_rdmacm_md_t);
     struct rdma_event_channel *event_ch = NULL;
     struct rdma_cm_id *cm_id = NULL;
     int is_accessible;
-    uct_rdmacm_md_t *rdmacm_md = ucs_derived_of(md, uct_rdmacm_md_t);
+    char *ip_str = ucs_alloca(ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN));
 
     if ((mode != UCT_SOCKADDR_ACC_LOCAL) && (mode != UCT_SOCKADDR_ACC_REMOTE)) {
         ucs_error("Unknown sockaddr accessibility mode %d", mode);
@@ -98,8 +72,8 @@ int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
     if (mode == UCT_SOCKADDR_ACC_LOCAL) {
         /* Server side to check if can bind to the given sockaddr */
         if (rdma_bind_addr(cm_id, (struct sockaddr *)sockaddr->addr)) {
-            ucs_debug("rdma_bind_addr() failed: %m");
-            uct_rdmacm_print_ip((struct sockaddr *)sockaddr->addr);
+            ucs_debug("rdma_bind_addr(addr = %s) failed: %m",
+                      ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_str));
             is_accessible = 0;
             goto out_destroy_id;
         }
@@ -109,14 +83,18 @@ int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
         /* Client side to check if can access the remote given sockaddr */
         if (rdma_resolve_addr(cm_id, NULL, (struct sockaddr *)sockaddr->addr,
                               rdmacm_md->addr_resolve_timeout)) {
-            ucs_debug("rdma_resolve_addr() failed: %m");
-            uct_rdmacm_print_ip((struct sockaddr *)sockaddr->addr);
+            ucs_debug("rdma_bind_addr(addr = %s) failed: %m",
+                      ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_str));
             is_accessible = 0;
             goto out_destroy_id;
         }
 
         is_accessible = 1;
     }
+
+    ucs_debug("Address %s is accessible from rdmacm_md %p. mode: %d",
+              ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_str),
+              rdmacm_md, mode);
 
 out_destroy_id:
     rdma_destroy_id(cm_id);
