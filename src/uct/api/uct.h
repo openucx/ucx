@@ -931,11 +931,16 @@ void uct_worker_progress_unregister_safe(uct_worker_h worker,
  *                            was registered.
  * @param [in]  tl_name       Transport name. If @e md supports
  *                            @ref UCT_MD_FLAG_SOCKADDR, the transport name
- *                            can be NULL, which indicates that the configuration
- *                            for sockaddr open mode
- *                            (@ref UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER
- *                            or @ref UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT)
- *                            of @ref uct_iface_open is returned.
+ *                            is allowed to be NULL. In this case, the configuration
+ *                            returned from this routine should be passed to
+ *                            @ref uct_iface_open with
+ *                            @ref UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER or
+ *                            @ref UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT set in
+ *                            @ref uct_iface_params_t.open_mode.
+ *                            In addition, if tl_name is not NULL, the configuration
+ *                            returned from this routine should be passed to
+ *                            @ref uct_iface_open with @ref UCT_IFACE_OPEN_MODE_DEVICE
+ *                            set in @ref uct_iface_params_t.open_mode.
  * @param [in]  env_prefix    If non-NULL, search for environment variables
  *                            starting with this UCT_<prefix>_. Otherwise, search
  *                            for environment variables starting with just UCT_.

@@ -262,9 +262,11 @@ static uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
         }
         return tlr->tl;
     } else {
-        ucs_list_for_each(tlr, &mdc->tl_list, list) {
-            if (!strcmp(tl_name, tlr->tl->name)) {
-                return tlr->tl;
+        if (tl_name != NULL) {
+            ucs_list_for_each(tlr, &mdc->tl_list, list) {
+                if (!strcmp(tl_name, tlr->tl->name)) {
+                    return tlr->tl;
+                }
             }
         }
         return NULL;
