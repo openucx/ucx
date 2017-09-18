@@ -63,15 +63,17 @@ typedef struct uct_rc_mlx5_iface_common {
 } uct_rc_mlx5_iface_common_t;
 
 
-#define UCT_RC_MLX5_SRQ_PREFETCH_FIRST(iface)                         \
-{                                                                           \
-    unsigned wqe_ctr = (iface->rx.srq.free_idx + 1) & iface->rx.srq.mask;   \
-    uct_ib_mlx5_srq_seg_t *seg;                                             \
-    void *ptr;                                                              \
-    seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);                 \
-    uct_ib_iface_recv_desc_t *desc = seg->srq.desc;                         \
-    ptr = (void*)uct_ib_iface_recv_desc_hdr(&rc_iface->super, desc);        \
-    ucs_prefetch(ptr);                                                      \
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_srq_prefetch_first(uct_rc_mlx5_iface_common_t *iface,
+                               uct_rc_iface_t *rc_iface)
+{
+    unsigned wqe_ctr = (iface->rx.srq.free_idx + 1) & iface->rx.srq.mask;
+    uct_ib_mlx5_srq_seg_t *seg;
+    void *ptr;
+    seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
+    uct_ib_iface_recv_desc_t *desc = seg->srq.desc;
+    ptr = (void*)uct_ib_iface_recv_desc_hdr(&rc_iface->super, desc);
+    ucs_prefetch(ptr);
 }
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq);
@@ -139,7 +141,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     ucs_assert(uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq,
                                        mlx5_common_iface->rx.srq.mask)->srq.next_wqe_index == 0);
 
-    UCT_RC_MLX5_SRQ_PREFETCH_FIRST(mlx5_common_iface);
+    uct_rc_mlx5_srq_prefetch_first(mlx5_common_iface, rc_iface);
 
     cqe = uct_ib_mlx5_poll_cq(&rc_iface->super, &mlx5_common_iface->rx.cq);
     if (cqe == NULL) {
