@@ -41,7 +41,7 @@ static inline uint64_t ucs_arch_read_hres_clock(void)
 
 static inline double ucs_arch_get_clocks_per_sec()
 {
-    uint32_t freq;
+    uint64_t freq;
     asm volatile("mrs %0, cntfrq_el0" : "=r" (freq));
     return (double) freq;
 }
