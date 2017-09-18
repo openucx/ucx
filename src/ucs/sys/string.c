@@ -124,7 +124,7 @@ void ucs_memunits_to_str(size_t value, char *buf, size_t max)
     }
 }
 
-char* ucs_sockaddr_str(struct sockaddr *sock_addr, char *ip_str)
+char* ucs_sockaddr_str(struct sockaddr *sock_addr, char *str, size_t max_size)
 {
     struct sockaddr_in6 *addr_in6;
     struct sockaddr_in *addr_in;
@@ -132,15 +132,14 @@ char* ucs_sockaddr_str(struct sockaddr *sock_addr, char *ip_str)
     switch (sock_addr->sa_family) {
     case AF_INET:
         addr_in = (struct sockaddr_in *) sock_addr;
-        inet_ntop(AF_INET, &(addr_in->sin_addr), ip_str, INET_ADDRSTRLEN);
-        break;
+        inet_ntop(AF_INET, &addr_in->sin_addr, str, max_size);
+        return str;
     case AF_INET6:
         addr_in6 = (struct sockaddr_in6 *)sock_addr;
-        inet_ntop(AF_INET6, &(addr_in6->sin6_addr), ip_str, INET6_ADDRSTRLEN);
-        break;
+        inet_ntop(AF_INET6, &addr_in6->sin6_addr, str, max_size);
+        return str;
     default:
+        return "Invalid string";
         break;
     }
-
-    return ip_str;
 }

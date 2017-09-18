@@ -49,7 +49,8 @@ int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
     struct rdma_event_channel *event_ch = NULL;
     struct rdma_cm_id *cm_id = NULL;
     int is_accessible;
-    char *ip_str = ucs_alloca(ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN));
+    size_t ip_len = ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN);
+    char *ip_str = ucs_alloca(ip_len);
 
     if ((mode != UCT_SOCKADDR_ACC_LOCAL) && (mode != UCT_SOCKADDR_ACC_REMOTE)) {
         ucs_error("Unknown sockaddr accessibility mode %d", mode);
@@ -73,7 +74,8 @@ int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
         /* Server side to check if can bind to the given sockaddr */
         if (rdma_bind_addr(cm_id, (struct sockaddr *)sockaddr->addr)) {
             ucs_debug("rdma_bind_addr(addr = %s) failed: %m",
-                      ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_str));
+                      ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
+                                       ip_str, ip_len));
             is_accessible = 0;
             goto out_destroy_id;
         }
@@ -83,8 +85,9 @@ int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
         /* Client side to check if can access the remote given sockaddr */
         if (rdma_resolve_addr(cm_id, NULL, (struct sockaddr *)sockaddr->addr,
                               rdmacm_md->addr_resolve_timeout)) {
-            ucs_debug("rdma_bind_addr(addr = %s) failed: %m",
-                      ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_str));
+            ucs_debug("rdma_resolve_addr(addr = %s) failed: %m",
+                      ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
+                                       ip_str, ip_len));
             is_accessible = 0;
             goto out_destroy_id;
         }
@@ -93,7 +96,7 @@ int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
     }
 
     ucs_debug("Address %s is accessible from rdmacm_md %p. mode: %d",
-              ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_str),
+              ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_str, ip_len),
               rdmacm_md, mode);
 
 out_destroy_id:

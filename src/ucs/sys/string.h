@@ -78,9 +78,10 @@ void ucs_memunits_to_str(size_t value, char *buf, size_t max);
  * @param sock_addr Sockaddr to take IP address from.
  * @param ip_str    A string filled with the IP address.
  *
- * @return ip_str.
+ * @return ip_str if the sock_addr has a valid IP address or 'Invalid address'
+ *         otherwise.
  */
-char* ucs_sockaddr_str(struct sockaddr *sock_addr, char *ip_str);
+char* ucs_sockaddr_str(struct sockaddr *sock_addr, char *ip_str, size_t max_size);
 
 
 #endif
