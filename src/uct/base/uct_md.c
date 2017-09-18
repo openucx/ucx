@@ -255,22 +255,13 @@ static uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
 {
     uct_md_registered_tl_t *tlr;
 
-    if ((tl_name == NULL) && (md_flags & UCT_MD_FLAG_SOCKADDR)) {
-        tlr = ucs_list_head(&mdc->tl_list, uct_md_registered_tl_t, list);
-        if (tlr == NULL) {
-            return NULL;
+    ucs_list_for_each(tlr, &mdc->tl_list, list) {
+        if (((tl_name != NULL) && !strcmp(tl_name, tlr->tl->name)) ||
+            ((tl_name == NULL) && (md_flags & UCT_MD_FLAG_SOCKADDR))) {
+            return tlr->tl;
         }
-        return tlr->tl;
-    } else {
-        if (tl_name != NULL) {
-            ucs_list_for_each(tlr, &mdc->tl_list, list) {
-                if (!strcmp(tl_name, tlr->tl->name)) {
-                    return tlr->tl;
-                }
-            }
-        }
-        return NULL;
     }
+    return NULL;
 }
 
 ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
@@ -282,11 +273,15 @@ ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
     uct_md_attr_t md_attr;
     ucs_status_t status;
 
-    md->ops->query(md, &md_attr);
-    tlc = uct_find_tl_on_md(md->component, md_attr.cap.flags, tl_name);
+    status = uct_md_query(md, &md_attr);
+    if (status != UCS_OK) {
+        ucs_error("Failed to query MD");
+        return status;
+    }
 
+    tlc = uct_find_tl_on_md(md->component, md_attr.cap.flags, tl_name);
     if (tlc == NULL) {
-        if ((tl_name == NULL) && (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) {
+        if (tl_name == NULL) {
             ucs_error("There is no sockaddr transport registered on the md");
         } else {
             ucs_error("Transport '%s' does not exist", tl_name);
@@ -313,8 +308,14 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
 {
     uct_tl_component_t *tlc;
     uct_md_attr_t md_attr;
+    ucs_status_t status;
 
-    md->ops->query(md, &md_attr);
+    status = uct_md_query(md, &md_attr);
+    if (status != UCS_OK) {
+        ucs_error("Failed to query MD");
+        return status;
+    }
+
     tlc = uct_find_tl_on_md(md->component, md_attr.cap.flags, params->mode.device.tl_name);
     if (tlc == NULL) {
         /* Non-existing transport */

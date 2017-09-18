@@ -167,9 +167,6 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_md_component_t *mdc,
                                      void **handle_p);
 
 
-uct_tl_component_t* uct_md_get_single_tlc(uct_md_h md);
-
-
 extern ucs_list_link_t uct_md_components_list;
 extern ucs_config_field_t uct_md_config_table[];
 
