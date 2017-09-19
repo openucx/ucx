@@ -11,6 +11,24 @@
 #include <string.h>
 
 
+static void print_tl_config(uct_md_h md, const char *tl_name,
+                            ucs_config_print_flags_t print_flags)
+{
+    char cfg_title[UCT_TL_NAME_MAX + 128];
+    uct_iface_config_t *config;
+    ucs_status_t status;
+
+    snprintf(cfg_title, sizeof(cfg_title), "%s transport configuration", tl_name);
+    status = uct_md_iface_config_read(md, tl_name, NULL, NULL, &config);
+    if (status != UCS_OK) {
+        printf("# < Failed to read configuration >\n");
+        return;
+    }
+
+    uct_config_print(config, stdout, cfg_title, print_flags);
+    uct_config_release(config);
+}
+
 void print_ucp_config(ucs_config_print_flags_t print_flags)
 {
     ucp_config_t *config;
@@ -32,9 +50,7 @@ void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name)
     unsigned md_rsc_index, num_md_resources;
     uct_tl_resource_desc_t *tl_resources;
     unsigned tl_rsc_index, num_tl_resources;
-    uct_iface_config_t *config;
     char tl_names[UINT8_MAX][UCT_TL_NAME_MAX];
-    char cfg_title[UCT_TL_NAME_MAX + 128];
     unsigned i, num_tls;
     ucs_status_t status;
     uct_md_h md;
@@ -85,6 +101,9 @@ void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name)
             {
                 ucs_strncpy_zero(tl_names[num_tls], tl_resources[tl_rsc_index].tl_name,
                                  UCT_TL_NAME_MAX);
+
+                print_tl_config(md, tl_names[num_tls], print_flags);
+
                 ++num_tls;
             }
         }
@@ -94,20 +113,6 @@ void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name)
     }
 
     uct_release_md_resource_list(md_resources);
-
-    for (i = 0; i < num_tls; ++i) {
-        snprintf(cfg_title, sizeof(cfg_title), "%s transport configuration",
-                 tl_names[i]);
-        status = uct_iface_config_read(tl_names[i], NULL, NULL, &config);
-        if (status != UCS_OK) {
-            printf("# < Failed to read configuration >\n");
-            continue;
-        }
-
-        uct_config_print(config, stdout, cfg_title, print_flags);
-        uct_config_release(config);
-    }
-
 }
 
 

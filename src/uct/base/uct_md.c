@@ -250,43 +250,42 @@ err:
 }
 
 static uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
+                                             uint64_t md_flags,
                                              const char *tl_name)
 {
     uct_md_registered_tl_t *tlr;
 
     ucs_list_for_each(tlr, &mdc->tl_list, list) {
-        if (!strcmp(tl_name, tlr->tl->name)) {
+        if (((tl_name != NULL) && !strcmp(tl_name, tlr->tl->name)) ||
+            ((tl_name == NULL) && (md_flags & UCT_MD_FLAG_SOCKADDR))) {
             return tlr->tl;
         }
     }
     return NULL;
 }
 
-static uct_tl_component_t *uct_find_tl(const char *tl_name)
-{
-    uct_md_component_t *mdc;
-    uct_tl_component_t *tlc;
-
-    ucs_list_for_each(mdc, &uct_md_components_list, list) {
-        tlc = uct_find_tl_on_md(mdc, tl_name);
-        if (tlc != NULL) {
-            return tlc;
-        }
-    }
-    return NULL;
-}
-
-ucs_status_t uct_iface_config_read(const char *tl_name, const char *env_prefix,
-                                   const char *filename,
-                                   uct_iface_config_t **config_p)
+ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
+                                      const char *env_prefix, const char *filename,
+                                      uct_iface_config_t **config_p)
 {
     uct_config_bundle_t *bundle = NULL;
     uct_tl_component_t *tlc;
+    uct_md_attr_t md_attr;
     ucs_status_t status;
 
-    tlc = uct_find_tl(tl_name);
+    status = uct_md_query(md, &md_attr);
+    if (status != UCS_OK) {
+        ucs_error("Failed to query MD");
+        return status;
+    }
+
+    tlc = uct_find_tl_on_md(md->component, md_attr.cap.flags, tl_name);
     if (tlc == NULL) {
-        ucs_error("Transport '%s' does not exist", tl_name);
+        if (tl_name == NULL) {
+            ucs_error("There is no sockaddr transport registered on the md");
+        } else {
+            ucs_error("Transport '%s' does not exist", tl_name);
+        }
         status = UCS_ERR_NO_DEVICE; /* Non-existing transport */
         return status;
     }
@@ -308,8 +307,16 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
                             uct_iface_h *iface_p)
 {
     uct_tl_component_t *tlc;
+    uct_md_attr_t md_attr;
+    ucs_status_t status;
 
-    tlc = uct_find_tl_on_md(md->component, params->mode.device.tl_name);
+    status = uct_md_query(md, &md_attr);
+    if (status != UCS_OK) {
+        ucs_error("Failed to query MD");
+        return status;
+    }
+
+    tlc = uct_find_tl_on_md(md->component, md_attr.cap.flags, params->mode.device.tl_name);
     if (tlc == NULL) {
         /* Non-existing transport */
         return UCS_ERR_NO_DEVICE;

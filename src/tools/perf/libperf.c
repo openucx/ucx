@@ -1135,7 +1135,8 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         goto out_destroy_worker;
     }
 
-    status = uct_iface_config_read(params->uct.tl_name, NULL, NULL, &iface_config);
+    status = uct_md_iface_config_read(perf->uct.md, params->uct.tl_name, NULL,
+                                      NULL, &iface_config);
     if (status != UCS_OK) {
         goto out_destroy_md;
     }
