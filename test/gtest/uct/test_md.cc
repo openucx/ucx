@@ -9,6 +9,7 @@ extern "C" {
 #include <ucs/time/time.h>
 #include <uct/ib/base/ib_md.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/string.h>
 }
 #include <common/test.h>
 #include "test_md.h"
@@ -35,12 +36,11 @@ void* test_md::alloc_thread(void *arg)
 
     static void print_ip(char *if_name, struct sockaddr *ifa_addr)
     {
-        struct sockaddr_in *addr_in;
-        char ip_str[INET_ADDRSTRLEN];
+        size_t ip_len = ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN);
+        char ip_str[ip_len];
 
-        addr_in = (struct sockaddr_in *)ifa_addr;
-        inet_ntop(AF_INET, &(addr_in->sin_addr), ip_str, INET_ADDRSTRLEN);
-        UCS_TEST_MESSAGE << "Testing " << if_name << " with " << ip_str ;
+        UCS_TEST_MESSAGE << "Testing " << if_name << " with " <<
+                            ucs_sockaddr_str(ifa_addr, ip_str, ip_len);
     }
 
     bool is_iface_ipoib(struct ifaddrs *ifa)

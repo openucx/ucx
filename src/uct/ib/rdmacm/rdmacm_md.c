@@ -95,7 +95,7 @@ int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
         is_accessible = 1;
     }
 
-    ucs_debug("Address %s is accessible from rdmacm_md %p. mode: %d",
+    ucs_debug("address %s is accessible from rdmacm_md %p with mode: %d",
               ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_str, ip_len),
               rdmacm_md, mode);
 

@@ -81,7 +81,7 @@ void ucs_memunits_to_str(size_t value, char *buf, size_t max);
  * @return ip_str if the sock_addr has a valid IP address or 'Invalid address'
  *         otherwise.
  */
-char* ucs_sockaddr_str(struct sockaddr *sock_addr, char *ip_str, size_t max_size);
+const char* ucs_sockaddr_str(struct sockaddr *sock_addr, char *ip_str, size_t max_size);
 
 
 #endif
