@@ -13,6 +13,8 @@ class log_test : public ucs::test {
 public:
     virtual void init() {
         char ucs_log_spec[70];
+        char *default_tmp_dir = "/tmp";
+        char *tmp_dir;
         ucs::test::init();
 
         /* skip because logger does not support file
@@ -24,7 +26,11 @@ public:
 
         ucs_log_cleanup();
         push_config();
-        snprintf(logfile, sizeof(logfile), "/tmp/gtest_ucs_log.%d", getpid()); 
+        tmp_dir = getenv("TMPDIR");
+        if (tmp_dir == NULL) {
+            tmp_dir = default_tmp_dir;
+        }
+        snprintf(logfile, sizeof(logfile), "%s/gtest_ucs_log.%d", tmp_dir, getpid()); 
         unlink(logfile);
         snprintf(ucs_log_spec, sizeof(ucs_log_spec), "file:%s", logfile);
         modify_config("LOG_FILE", ucs_log_spec);
