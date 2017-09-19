@@ -108,6 +108,27 @@ public:
         return UCS_OK;
     }
 
+    void send_tag_complete()
+    {
+        m_outstanding--;
+    }
+
+    static void send_tag_cb(void *request, ucs_status_t status)
+    {
+        ucx_perf_request_t *r = (ucx_perf_request_t *)request;
+        ucp_perf_test_runner *sender = (ucp_perf_test_runner *)r->context;
+
+        sender->send_tag_complete();
+        ucp_request_release(request);
+    }
+
+    void UCS_F_ALWAYS_INLINE wait_window()
+    {
+        while (m_outstanding >= m_max_outstanding) {
+            progress_responder();
+        }
+    }
+
     ucs_status_t UCS_F_ALWAYS_INLINE
     send(ucp_ep_h ep, void *buffer, unsigned length, ucp_datatype_t datatype,
          uint8_t sn, uint64_t remote_addr, ucp_rkey_h rkey)
@@ -117,14 +138,22 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
+            wait_window();
+
             if (FLAGS & UCX_PERF_TEST_FLAG_TAG_SYNC) {
                 request = ucp_tag_send_sync_nb(ep, buffer, length, datatype, TAG,
-                                               (ucp_send_callback_t)ucs_empty_function);
+                                               send_tag_cb);
             } else {
                 request = ucp_tag_send_nb(ep, buffer, length, datatype, TAG,
-                                          (ucp_send_callback_t)ucs_empty_function);
+                                          send_tag_cb);
             }
-            return wait(request, true);
+            if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
+                return UCS_PTR_STATUS(request);
+            }
+            ((ucx_perf_request_t *)request)->context = this;
+            m_outstanding++;
+            return UCS_OK;
+
         case UCX_PERF_CMD_PUT:
             *((uint8_t*)buffer + length - 1) = sn;
             return ucp_put(ep, buffer, length, remote_addr, rkey);

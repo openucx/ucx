@@ -691,6 +691,7 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 }
 
 static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params,
+                                               ucp_params_t *ucp_params,
                                                uint64_t *features)
 {
     ucs_status_t status, message_size;
@@ -718,7 +719,8 @@ static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params,
 
         break;
     case UCX_PERF_CMD_TAG:
-        *features = UCP_FEATURE_TAG;
+        *features = UCP_FEATURE_TAG|UCP_PARAM_FIELD_REQUEST_SIZE;
+        ucp_params->request_size = sizeof(ucx_perf_request_t);
         break;
     default:
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
@@ -1198,7 +1200,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
     ucs_status_t status;
     uint64_t features;
 
-    status = ucp_perf_test_check_params(params, &features);
+    status = ucp_perf_test_check_params(params, &ucp_params, &features);
     if (status != UCS_OK) {
         goto err;
     }
