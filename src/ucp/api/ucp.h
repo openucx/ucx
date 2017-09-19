@@ -156,7 +156,8 @@ enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_THREAD_MODE  = UCS_BIT(0), /**< UCP thread mode */
     UCP_WORKER_PARAM_FIELD_CPU_MASK     = UCS_BIT(1), /**< Worker's CPU bitmap */
     UCP_WORKER_PARAM_FIELD_EVENTS       = UCS_BIT(2), /**< Worker's events bitmap */
-    UCP_WORKER_PARAM_FIELD_EPOLL        = UCS_BIT(3)  /**< External epoll file
+    UCP_WORKER_PARAM_FIELD_USER_DATA    = UCS_BIT(3), /**< User data */
+    UCP_WORKER_PARAM_FIELD_EVENT_FD     = UCS_BIT(4)  /**< External event file
                                                            descriptor */
 };
 
@@ -711,21 +712,29 @@ typedef struct ucp_worker_params {
     unsigned                events;
 
     /**
-     * External epoll file descriptor and associated data. This value is optional.
+     * User data associated with the current worker.
+     * This value is optional.
      * If it's not set (along with its corresponding bit in the field_mask -
-     * UCP_WORKER_PARAM_FIELD_EPOLL), events on the worker will be reported on
-     * the file descriptor returned from @ref ucp_worker_get_efd().
-     * Otherwise, events on the worker will be added to the provided epoll set
-     * with the provided epoll data. In this case, calling the function
-     * @ref ucp_worker_get_efd() will result in an error
+     * UCP_WORKER_PARAM_FIELD_USER_DATA), it will default to NULL.
      */
-    struct {
-        int                 epoll_fd;    /**< epoll file descriptor */
-        uint64_t            epoll_data;  /**< data associated with events on
-                                              the current worker. Will be
-                                              returned from epoll_wait() in the
-                                              u64 field of struct epoll_data.*/
-    } epoll;
+    void                    *user_data;
+
+    /**
+     * External event file descriptor.
+     * This value is optional.
+     * If @ref UCP_WORKER_PARAM_FIELD_EVENT_FD is set in the field_mask, events
+     * on the worker will be reported on the provided event file descriptor. In
+     * this case, calling @ref ucp_worker_get_efd() will result in an error.
+     * The provided file descriptor must be capable of aggregating notifications
+     * for arbitrary events, for example @c epoll(7) on Linux systems.
+     * @ref user_data will be used as the event user-data on systems which
+     * support it. For example, on Linux, it will be placed in
+     * @ref epoll_data_t::ptr, when returned from @ref epoll_wait().
+     *
+     * Otherwise, events would be reported to the event file descriptor returned
+     * from @ref ucp_worker_get_efd().
+     */
+    int                     event_fd;
 
 } ucp_worker_params_t;
 

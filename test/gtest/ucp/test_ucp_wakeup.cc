@@ -179,14 +179,15 @@ class test_ucp_wakeup_external_epollfd : public test_ucp_wakeup {
 public:
     virtual ucp_worker_params_t get_worker_params() {
         ucp_worker_params_t params = test_ucp_wakeup::get_worker_params();
-        params.field_mask |= UCP_WORKER_PARAM_FIELD_EPOLL;
-        params.epoll.epoll_fd   = m_epfd;
-        params.epoll.epoll_data = EP_DATA;
+        params.field_mask |= UCP_WORKER_PARAM_FIELD_EVENT_FD |
+                             UCP_WORKER_PARAM_FIELD_USER_DATA;
+        params.event_fd  = m_epfd;
+        params.user_data = USER_DATA;
         return params;
     }
 
 protected:
-    static const uint64_t EP_DATA = 0x1337;
+    static void* const USER_DATA;
 
     virtual void init() {
         m_epfd = epoll_create(1);
@@ -201,6 +202,9 @@ protected:
 
     int m_epfd;
 };
+
+void* const test_ucp_wakeup_external_epollfd::USER_DATA = (void*)0x1337abcdef;
+
 
 UCS_TEST_P(test_ucp_wakeup_external_epollfd, epoll_wait)
 {
@@ -248,7 +252,7 @@ UCS_TEST_P(test_ucp_wakeup_external_epollfd, epoll_wait)
             UCS_TEST_MESSAGE << "epoll_wait() failed: " << strerror(errno);
         }
         ASSERT_EQ(1, ret);
-        EXPECT_EQ(uint64_t(EP_DATA), event.data.u64);
+        EXPECT_EQ(USER_DATA, event.data.ptr);
     }
 
     ucp_request_release(req);

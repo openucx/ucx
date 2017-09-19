@@ -65,8 +65,9 @@ static ucs_status_t ucp_worker_wakeup_ctl_fd(ucp_worker_h worker, int op,
         return UCS_OK;
     }
 
-    event.data    = worker->epoll_data;
-    event.events  = EPOLLIN;
+    memset(&event.data, 0, sizeof(event.data));
+    event.data.ptr = worker->user_data;
+    event.events   = EPOLLIN;
     if (worker->flags & UCP_WORKER_FLAG_EDGE_TRIGGERED) {
         event.events |= EPOLLET;
     }
@@ -230,10 +231,9 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
                  UCP_WAKEUP_TAG_RECV;
     }
 
-    if (params->field_mask & UCP_WORKER_PARAM_FIELD_EPOLL) {
-        worker->epfd            = params->epoll.epoll_fd;
-        worker->epoll_data.u64  = params->epoll.epoll_data;
-        worker->flags          |= UCP_WORKER_FLAG_EXTERNAL_EPOLL;
+    if (params->field_mask & UCP_WORKER_PARAM_FIELD_EVENT_FD) {
+        worker->epfd            = params->event_fd;
+        worker->flags          |= UCP_WORKER_FLAG_EXTERNAL_EVENT_FD;
     } else {
         worker->epfd = epoll_create(context->num_tls);
         if (worker->epfd == -1) {
@@ -241,7 +241,6 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
             status = UCS_ERR_IO_ERROR;
             goto out;
         }
-        memset(&worker->epoll_data, 0, sizeof(worker->epoll_data));
     }
 
     if (events & UCP_WAKEUP_EDGE) {
@@ -290,7 +289,7 @@ out:
 static void ucp_worker_wakeup_cleanup(ucp_worker_h worker)
 {
     if ((worker->epfd != -1) &&
-        !(worker->flags & UCP_WORKER_FLAG_EXTERNAL_EPOLL)) {
+        !(worker->flags & UCP_WORKER_FLAG_EXTERNAL_EVENT_FD)) {
         close(worker->epfd);
     }
     if (worker->eventfd != -1) {
@@ -1003,6 +1002,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->ep_config_count   = 0;
     ucs_list_head_init(&worker->arm_ifaces);
 
+    if (params->field_mask & UCP_WORKER_PARAM_FIELD_USER_DATA) {
+        worker->user_data = params->user_data;
+    } else {
+        worker->user_data = NULL;
+    }
+
     name_length = ucs_min(UCP_WORKER_NAME_MAX,
                           context->config.ext.max_worker_name + 1);
     ucs_snprintf_zero(worker->name, name_length, "%s:%d", ucs_get_host_name(),
@@ -1166,7 +1171,7 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
     ucs_status_t status;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-    if (worker->flags & UCP_WORKER_FLAG_EXTERNAL_EPOLL) {
+    if (worker->flags & UCP_WORKER_FLAG_EXTERNAL_EVENT_FD) {
         status = UCS_ERR_UNSUPPORTED;
     } else {
         *fd = worker->epfd;
@@ -1253,7 +1258,7 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
         goto out;
     }
 
-    if (worker->flags & UCP_WORKER_FLAG_EXTERNAL_EPOLL) {
+    if (worker->flags & UCP_WORKER_FLAG_EXTERNAL_EVENT_FD) {
         pfd = ucs_alloca(sizeof(*pfd) * worker->context->num_tls);
         nfds = 0;
         ucs_list_for_each(wiface, &worker->arm_ifaces, arm_list) {

@@ -38,8 +38,8 @@ enum {
  * UCP worker flags
  */
 enum {
-    UCP_WORKER_FLAG_EXTERNAL_EPOLL = UCS_BIT(0), /**< epoll fd is external */
-    UCP_WORKER_FLAG_EDGE_TRIGGERED = UCS_BIT(1)  /**< events are edge-triggered */
+    UCP_WORKER_FLAG_EXTERNAL_EVENT_FD = UCS_BIT(0), /**< epoll fd is external */
+    UCP_WORKER_FLAG_EDGE_TRIGGERED    = UCS_BIT(1)  /**< events are edge-triggered */
 };
 
 
@@ -127,11 +127,11 @@ typedef struct ucp_worker {
 
     unsigned                      flags;         /* Worker flags */
     int                           epfd;          /* Allocated (on-demand) epoll fd for wakeup */
-    epoll_data_t                  epoll_data;    /* User-data for external epoll */
     int                           eventfd;       /* Event fd to support signal() calls */
     unsigned                      uct_events;    /* UCT arm events */
     ucs_list_link_t               arm_ifaces;    /* List of interfaces to arm */
 
+    void                          *user_data;    /* User-defined data */
     khash_t(ucp_worker_ep_hash)   ep_hash;       /* Hash table of all endpoints */
     khash_t(ucp_ep_errh_hash)     ep_errh_hash;  /* Hash table of error handlers associated with endpoints */
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
