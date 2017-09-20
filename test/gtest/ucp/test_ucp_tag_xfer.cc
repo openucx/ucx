@@ -25,6 +25,25 @@ public:
         VARIANT_ERR_HANDLING
     };
 
+    void init() {
+        if (is_err_handling()) {
+            /* FIXME: There is a bug HW TM + ERR handling which is
+             *        reproducible with tests listed below. One from them should
+             *        be executed after test_ucp_ep_force_disconnect in single
+             *        tests run. Reproducibility is floating, need to run many
+             *        times.
+             *       [  FAILED  ] shm/test_ucp_tag_xfer.send_generic_recv_contig_unexp_sync_rndv_truncated/1, where GetParam() = \mm,\knem,\cma,\xpmem,ib
+             *       [  FAILED  ] shm/test_ucp_tag_xfer.send_generic_recv_contig_unexp_rndv_truncated/1, where GetParam() = \mm,\knem,\cma,\xpmem,ib
+             *       [  FAILED  ] shm/test_ucp_tag_xfer.send_generic_recv_contig_unexp/1, where GetParam() = \mm,\knem,\cma,\xpmem,ib
+             *       Symptom:
+             *       rcache.c:280  UCX  WARN  mlx5_0: destroying inuse region 0x2ee7630 [0x3318010..0x33a4350] gt- rw ref 1 lkey 0x12399c rkey 0x12399c atomic: lkey 0xffffffff rkey 0xffff
+             */
+
+            modify_config("TM_OFFLOAD", "n");
+        }
+        test_ucp_tag::init();
+    }
+
     std::vector<ucp_test_param>
     static enum_test_params(const ucp_params_t& ctx_params,
                             const std::string& name,
