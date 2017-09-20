@@ -16,12 +16,6 @@
 #include <ucp/core/ucp_request.inl>
 
 
-typedef struct {
-    uct_pending_purge_callback_t cb;
-    void                         *arg;
-} ucp_wireup_ep_pending_release_arg_t;
-
-
 UCS_CLASS_DECLARE(ucp_wireup_ep_t, ucp_ep_h);
 
 
@@ -129,14 +123,23 @@ static ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
     return status;
 }
 
-static void ucp_wireup_ep_pending_req_release(uct_pending_req_t *self, void *arg)
+static void
+ucp_wireup_ep_pending_req_release(uct_pending_req_t *self, void *arg)
 {
-    ucp_request_t *proxy_req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t   *proxy_req = ucs_container_of(self, ucp_request_t,
+                                                  send.uct);
     ucp_wireup_ep_t *wireup_ep = proxy_req->send.proxy.wireup_ep;
-    ucp_wireup_ep_pending_release_arg_t *parg = arg;
+    ucp_request_t   *req;
 
-    parg->cb(proxy_req->send.proxy.req, parg->arg);
     ucs_atomic_add32(&wireup_ep->pending_count, -1);
+ 
+    if (proxy_req->send.proxy.req->func == ucp_wireup_msg_progress) {
+        req = ucs_container_of(proxy_req->send.proxy.req, ucp_request_t,
+                               send.uct);
+        ucs_free((void*)req->send.buffer);
+        ucs_free(req);
+    }
+
     ucp_request_put(proxy_req);
 }
 
@@ -160,6 +163,7 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
 
         wireup_msg_ep                 = ucp_wireup_ep_get_msg_ep(wireup_ep);
         proxy_req->send.uct.func      = ucp_wireup_ep_progress_pending;
+        proxy_req->send.uct_comp.func = NULL;
         proxy_req->send.proxy.req     = req;
         proxy_req->send.proxy.wireup_ep = wireup_ep;
 
@@ -184,26 +188,17 @@ ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
                             void *arg)
 {
     ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
-    ucp_wireup_ep_pending_release_arg_t parg;
     uct_pending_req_t *req;
     ucp_request_t *ucp_req;
-
-    /* wireup ep pending queue can be nonempty only on failure */
-    ucs_assert_always(ucs_queue_is_empty(&wireup_ep->pending_q) ||
-                      UCS_PTR_IS_ERR(arg));
 
     if (wireup_ep->aux_ep != NULL) {
         ucs_queue_for_each_extract(req, &wireup_ep->pending_q, priv, 1) {
             ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
-            ucs_assert_always(UCS_PTR_IS_ERR(arg) &&
-                              (cb == ucp_ep_err_pending_purge));
-            ucp_request_complete_send(ucp_req, UCS_PTR_STATUS(arg));
+            cb(&ucp_req->send.uct, arg);
         }
 
-        parg.cb  = cb;
-        parg.arg = arg;
         uct_ep_pending_purge(wireup_ep->aux_ep, ucp_wireup_ep_pending_req_release,
-                             &parg);
+                             arg);
     }
 }
 
@@ -267,11 +262,26 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
     return UCS_OK;
 }
 
+static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
+                                        uct_completion_t *comp)
+{
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+
+    if (flags & UCT_FLUSH_FLAG_CANCEL) {
+        if (wireup_ep->aux_ep) {
+            return uct_ep_flush(wireup_ep->aux_ep, flags, comp);
+        }
+        return UCS_OK;
+    }
+    return UCS_ERR_NO_RESOURCE;
+}
+
+
 UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
 {
     static uct_iface_ops_t ops = {
         .ep_connect_to_ep     = ucp_wireup_ep_connect_to_ep,
-        .ep_flush             = (void*)ucs_empty_function_return_no_resource,
+        .ep_flush             = ucp_wireup_ep_flush,
         .ep_destroy           = UCS_CLASS_DELETE_FUNC_NAME(ucp_wireup_ep_t),
         .ep_pending_add       = ucp_wireup_ep_pending_add,
         .ep_pending_purge     = ucp_wireup_ep_pending_purge,
