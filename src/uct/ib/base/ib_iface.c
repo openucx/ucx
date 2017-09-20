@@ -253,6 +253,7 @@ void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib
      */
     if (is_global &&
         ((iface->addr_type == UCT_IB_ADDRESS_TYPE_ETH) ||
+         (iface->addr_type == UCT_IB_ADDRESS_TYPE_GLOBAL) ||
          (iface->gid.global.subnet_prefix != ah_attr->grh.dgid.global.subnet_prefix)))
     {
         ah_attr->is_global      = 1;
