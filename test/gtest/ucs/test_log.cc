@@ -13,8 +13,8 @@ class log_test : public ucs::test {
 public:
     virtual void init() {
         char ucs_log_spec[70];
-        char *default_tmp_dir = "/tmp";
-        char *tmp_dir;
+        const char *default_tmp_dir = "/tmp";
+        const char *tmp_dir;
         ucs::test::init();
 
         /* skip because logger does not support file
