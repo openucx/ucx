@@ -401,14 +401,15 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     iface->super.rx.available++;
     iface->rx.wq.cq_wqe_counter++;
     count = 1;
+    len   = ntohl(cqe->byte_cnt);
+    VALGRIND_MAKE_MEM_DEFINED(packet, len);
 
-    if (uct_ud_iface_filter_dgid(&iface->super, packet + UCT_IB_GRH_LEN, desc,
-                                 (ntohl(cqe->flags_rqpn) >> 28) & 3)) {
+    if (!uct_ud_iface_check_grh(&iface->super, packet + UCT_IB_GRH_LEN,
+                                (ntohl(cqe->flags_rqpn) >> 28) & 3)) {
+        ucs_mpool_put_inline(desc);
         goto out;
     }
 
-    len = ntohl(cqe->byte_cnt);
-    VALGRIND_MAKE_MEM_DEFINED(packet, len);
     uct_ib_mlx5_log_rx(&iface->super.super, IBV_QPT_UD, cqe, packet,
                        uct_ud_dump_packet);
     uct_ud_ep_process_rx(&iface->super,

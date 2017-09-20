@@ -30,7 +30,7 @@ typedef struct uct_ud_iface_config {
     uct_ib_iface_config_t    super;
     double                   peer_timeout;
     double                   slow_timer_backoff;
-    int                      filter_enable;
+    int                      dgid_check;
 } uct_ud_iface_config_t;
 
 struct uct_ud_iface_peer {
@@ -124,8 +124,8 @@ struct uct_ud_iface {
         double               slow_timer_backoff;
         unsigned             tx_qp_len;
         unsigned             max_inline;
-        int                  filter_enabled;
-        unsigned             dgid_len;
+        int                  check_grh_dgid;
+        unsigned             gid_len;
     } config;
     ucs_ptr_array_t       eps;
     uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE];
@@ -219,30 +219,28 @@ static UCS_F_ALWAYS_INLINE void uct_ud_leave(uct_ud_iface_t *iface)
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_ud_iface_filter_dgid(uct_ud_iface_t *iface,void *grh_end,
-                         void *desc, int is_grh_present)
+uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *grh_end, int is_grh_present)
 {
-    void *dgid, *sgid;
+    void *dest_gid, *local_gid;
 
-    if (!iface->config.filter_enabled) {
-        return 0;
-    }
-
-    if (ucs_unlikely(!is_grh_present)) {
-        ucs_error("RoCE packet does not contain GRH");
-        return 0;
-    }
-
-    sgid = (char*)iface->super.gid.raw + (16 - iface->config.dgid_len);
-    dgid = (char*)grh_end - iface->config.dgid_len;
-
-    if (memcmp(sgid, dgid, iface->config.dgid_len)) {
-        ucs_mpool_put_inline(desc);
-        ucs_trace_data("Drop packet with wrong dgid");
+    if (!iface->config.check_grh_dgid) {
         return 1;
     }
 
-    return 0;
+    if (ucs_unlikely(!is_grh_present)) {
+        ucs_warn("RoCE packet does not contain GRH");
+        return 1;
+    }
+
+    local_gid = (char*)iface->super.gid.raw + (16 - iface->config.gid_len);
+    dest_gid  = (char*)grh_end - iface->config.gid_len;
+
+    if (memcmp(local_gid, dest_gid, iface->config.gid_len)) {
+        ucs_trace_data("Drop packet with wrong dgid");
+        return 0;
+    }
+
+    return 1;
 }
 
 /*
