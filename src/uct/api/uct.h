@@ -564,13 +564,22 @@ struct uct_iface_params {
     uint64_t                                     open_mode;
     /** Mode-specific parameters */
     union {
+        /** The fields in this structure (tl_name and dev_name) need to be set only when
+         *  the @ref UCT_IFACE_OPEN_MODE_DEVICE bit is set in @ref
+         *  uct_iface_params_t.open_mode This will make @ref uct_iface_open
+         *  open the interface on the specified device.
+         */
         struct {
             const char                           *tl_name;  /**< Transport name */
             const char                           *dev_name; /**< Device Name */
         } device;
+        /** These callbacks and address are only relevant for client-server
+         *  connection establishment with sockaddr and are needed on the server side.
+         *  The callbacks and address need to be set when the @ref
+         *  UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER bit is set in @ref
+         *  uct_iface_params_t.open_mode. This will make @ref uct_iface_open
+         *  open the interface on the specified address as a server. */
         struct {
-            /** These callbacks and address are only relevant for client-server
-             *  connection establishment with sockaddr and are needed on the server side */
             ucs_sock_addr_t                      listen_sockaddr;
             /** Argument for connection request callback */
             void                                 *conn_request_arg;
@@ -1014,7 +1023,7 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
  *
  * @param [in]  md            Memory domain to create the interface on.
  * @param [in]  worker        Handle to worker which will be used to progress
- *                             communications on this interface.
+ *                            communications on this interface.
  * @param [in]  params        User defined @ref uct_iface_params_t parameters.
  * @param [in]  config        Interface configuration options. Should be obtained
  *                            from uct_iface_config_read() function, or point to
@@ -1057,7 +1066,7 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr);
  *
  * @param [in]  iface       Interface to query.
  * @param [out] addr        Filled with device address. The size of the buffer
- *                           provided must be at least @ref uct_iface_attr_t::device_addr_len.
+ *                          provided must be at least @ref uct_iface_attr_t::device_addr_len.
  */
 ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *addr);
 
@@ -1070,7 +1079,7 @@ ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *
  *
  * @param [in]  iface       Interface to query.
  * @param [out] addr        Filled with interface address. The size of the buffer
- *                           provided must be at least @ref uct_iface_attr_t::iface_addr_len.
+ *                          provided must be at least @ref uct_iface_attr_t::iface_addr_len.
  */
 ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr);
 
@@ -1263,7 +1272,7 @@ void uct_ep_destroy(uct_ep_h ep);
  *
  * @param [in]  ep       Endpoint to query.
  * @param [out] addr     Filled with endpoint address. The size of the buffer
- *                        provided must be at least @ref uct_iface_attr_t::ep_addr_len.
+ *                       provided must be at least @ref uct_iface_attr_t::ep_addr_len.
  */
 ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr);
 
@@ -1317,7 +1326,7 @@ ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
 
 /**
  * @ingroup UCT_MD
- * @brief Query for memory domain attributes. *
+ * @brief Query for memory domain attributes.
  *
  * @param [in]  md       Memory domain to query.
  * @param [out] md_attr  Filled with memory domain attributes.
@@ -1334,12 +1343,12 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr);
  *
  * @param [in]     md          Memory domain to allocate memory on.
  * @param [in,out] length_p    Points to the size of memory to allocate. Upon successful
- *                              return, filled with the actual size that was allocated,
- *                              which may be larger than the one requested. Must be >0.
+ *                             return, filled with the actual size that was allocated,
+ *                             which may be larger than the one requested. Must be >0.
  * @param [in,out] address_p   The address
  * @param [in]     flags       Memory allocation flags, see @ref uct_md_mem_flags.
  * @param [in]     name        Name of the allocated region, used to track memory
- *                              usage for debugging and profiling.
+ *                             usage for debugging and profiling.
  * @param [out]    memh_p      Filled with handle for allocated region.
  */
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
@@ -1587,25 +1596,25 @@ UCT_INLINE_API unsigned uct_worker_progress(uct_worker_h worker)
  * this call. The operations are completed at the origin or at the target
  * as well. The exact completion semantic depends on @a flags parameter.
  *
- * @note Currently only one completion type is supported. It guaranties that
+ * @note Currently only one completion type is supported. It guarantees that
  * the data transfer is completed but the target buffer may not be updated yet.
  *
  * @param [in]    iface  Interface to flush communications from.
  * @param [in]    flags  Flags that control completion semantic (currently only
  *                       @ref UCT_FLUSH_FLAG_LOCAL is supported).
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
- *                        Can be NULL, which means that the call will return the
- *                        current state of the interface and no completion will
- *                        be generated in case of outstanding communications.
- *                        If it is not NULL completion counter is decremented
- *                        by 1 when the call completes. Completion callback is
- *                        called when the counter reaches 0.
+ *                       Can be NULL, which means that the call will return the
+ *                       current state of the interface and no completion will
+ *                       be generated in case of outstanding communications.
+ *                       If it is not NULL completion counter is decremented
+ *                       by 1 when the call completes. Completion callback is
+ *                       called when the counter reaches 0.
  *
  *
  * @return UCS_OK         - No outstanding communications left.
  *         UCS_INPROGRESS - Some communication operations are still in progress.
- *                           If non-NULL 'comp' is provided, it will be updated
- *                           upon completion of these operations.
+ *                          If non-NULL 'comp' is provided, it will be updated
+ *                          upon completion of these operations.
  */
 UCT_INLINE_API ucs_status_t uct_iface_flush(uct_iface_h iface, unsigned flags,
                                             uct_completion_t *comp)
@@ -1622,7 +1631,7 @@ UCT_INLINE_API ucs_status_t uct_iface_flush(uct_iface_h iface, unsigned flags,
  *
  * @param [in]    iface  Interface to issue communications from.
  * @param [in]    flags  Flags that control ordering semantic (currently
- *                        unsupported - set to 0).
+ *                       unsupported - set to 0).
  * @return UCS_OK         - Ordering is inserted.
  */
 
@@ -2007,7 +2016,7 @@ UCT_INLINE_API ucs_status_t uct_ep_flush(uct_ep_h ep, unsigned flags,
  *
  * @param [in]    ep     Endpoint to issue communications from.
  * @param [in]    flags  Flags that control ordering semantic (currently
- *                        unsupported - set to 0).
+ *                       unsupported - set to 0).
  * @return UCS_OK         - Ordering is inserted.
  */
 UCT_INLINE_API ucs_status_t uct_ep_fence(uct_ep_h ep, unsigned flags)
