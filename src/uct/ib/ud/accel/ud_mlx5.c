@@ -400,17 +400,22 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
 
     iface->super.rx.available++;
     iface->rx.wq.cq_wqe_counter++;
-
-    len = ntohl(cqe->byte_cnt);
+    count = 1;
+    len   = ntohl(cqe->byte_cnt);
     VALGRIND_MAKE_MEM_DEFINED(packet, len);
+
+    if (!uct_ud_iface_check_grh(&iface->super, packet + UCT_IB_GRH_LEN,
+                                (ntohl(cqe->flags_rqpn) >> 28) & 3)) {
+        ucs_mpool_put_inline(desc);
+        goto out;
+    }
+
     uct_ib_mlx5_log_rx(&iface->super.super, IBV_QPT_UD, cqe, packet,
                        uct_ud_dump_packet);
     uct_ud_ep_process_rx(&iface->super,
                          (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
                          len - UCT_IB_GRH_LEN,
                          (uct_ud_recv_skb_t *)desc, is_async);
-    count = 1;
-
 out:
     if (iface->super.rx.available >= iface->super.super.config.rx_max_batch) {
         /* we need to try to post buffers always. Otherwise it is possible
