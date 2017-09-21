@@ -30,7 +30,8 @@ public:
         if (tmp_dir == NULL) {
             tmp_dir = default_tmp_dir;
         }
-        snprintf(logfile, sizeof(logfile), "%s/gtest_ucs_log.%d", tmp_dir, getpid()); 
+        snprintf(logfile, sizeof(logfile), "%s/gtest_ucs_log.%d", tmp_dir, getpid());
+        /* coverity[tainted_string] */
         unlink(logfile);
         snprintf(ucs_log_spec, sizeof(ucs_log_spec), "file:%s", logfile);
         modify_config("LOG_FILE", ucs_log_spec);
