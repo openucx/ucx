@@ -389,10 +389,10 @@ static void uct_ud_iface_calc_gid_len(uct_ud_iface_t *iface)
     uint16_t *local_gid_u16 = (uint16_t*)iface->super.gid.raw;
 
     /* Make sure that daddr in IPv4 resides in the last 4 bytes in GRH */
-    UCS_STATIC_ASSERT((UCT_IB_GRH_LEN - (20 + offsetof(struct iphdr, daddr))) == ipv4_len);
+    ucs_assert_always((UCT_IB_GRH_LEN - (20 + offsetof(struct iphdr, daddr))) == ipv4_len);
 
     /* Make sure that dgid resides in the last 16 bytes in GRH */
-    UCS_STATIC_ASSERT(UCT_IB_GRH_LEN - offsetof(struct ibv_grh, dgid) == ipv6_len);
+    ucs_assert_always((UCT_IB_GRH_LEN - offsetof(struct ibv_grh, dgid)) == ipv6_len);
 
     /* IPv4 mapped to IPv6 looks like: 0000:0000:0000:0000:0000:ffff:????:????,
      * so check for leading zeroes and verify that 11-12 bytes are 0xff.
