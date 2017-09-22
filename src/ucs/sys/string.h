@@ -11,6 +11,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/socket.h>
 
 
 /**
@@ -69,6 +70,18 @@ uint64_t ucs_string_to_id(const char *str);
  * @param max    Maximal length of the buffer.
  */
 void ucs_memunits_to_str(size_t value, char *buf, size_t max);
+
+
+/**
+ * Extract the IP address from the given sockaddr and return it.
+ *
+ * @param sock_addr Sockaddr to take IP address from.
+ * @param ip_str    A string filled with the IP address.
+ *
+ * @return ip_str if the sock_addr has a valid IP address or 'Invalid address'
+ *         otherwise.
+ */
+const char* ucs_sockaddr_str(struct sockaddr *sock_addr, char *ip_str, size_t max_size);
 
 
 #endif

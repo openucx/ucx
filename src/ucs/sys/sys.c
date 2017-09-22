@@ -546,6 +546,46 @@ ucs_status_t ucs_sysv_free(void *address)
     return UCS_OK;
 }
 
+ucs_status_t ucs_tcpip_socket_create(int *fd_p)
+{
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        ucs_error("socket create failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *fd_p = fd;
+    return UCS_OK;
+}
+
+ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
+                             struct ifreq *if_req)
+{
+    ucs_status_t status;
+    int fd, ret;
+
+    ucs_strncpy_zero(if_req->ifr_name, if_name, sizeof(if_req->ifr_name));
+
+    status = ucs_tcpip_socket_create(&fd);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    ret = ioctl(fd, request, if_req);
+    if (ret < 0) {
+        ucs_debug("ioctl(req=%lu, ifr_name=%s) failed: %m", request, if_name);
+        status = UCS_ERR_IO_ERROR;
+        goto out_close_fd;
+    }
+
+    status = UCS_OK;
+
+out_close_fd:
+    close(fd);
+out:
+    return status;
+}
+
 ucs_status_t ucs_mmap_alloc(size_t *size, void **address_p,
                             int flags UCS_MEMTRACK_ARG)
 {

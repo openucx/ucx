@@ -24,18 +24,6 @@
 typedef ssize_t (*uct_tcp_io_func_t)(int fd, void *data, size_t size, int flags);
 
 
-ucs_status_t uct_tcp_socket_create(int *fd_p)
-{
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) {
-        ucs_error("socket create failed: %m");
-        return UCS_ERR_IO_ERROR;
-    }
-
-    *fd_p = fd;
-    return UCS_OK;
-}
-
 ucs_status_t uct_tcp_socket_connect(int fd, const struct sockaddr_in *dest_addr)
 {
     int ret = connect(fd, (struct sockaddr*)dest_addr, sizeof(*dest_addr));
@@ -46,45 +34,17 @@ ucs_status_t uct_tcp_socket_connect(int fd, const struct sockaddr_in *dest_addr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_tcp_netif_ioctl(const char *if_name, unsigned long request,
-                                        struct ifreq *if_req)
-{
-    ucs_status_t status;
-    int fd, ret;
-
-    ucs_strncpy_zero(if_req->ifr_name, if_name, sizeof(if_req->ifr_name));
-
-    status = uct_tcp_socket_create(&fd);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    ret = ioctl(fd, request, if_req);
-    if (ret < 0) {
-        ucs_debug("ioctl(req=%lu, ifr_name=%s) failed: %m", request, if_name);
-        status = UCS_ERR_IO_ERROR;
-        goto out_close_fd;
-    }
-
-    status = UCS_OK;
-
-out_close_fd:
-    close(fd);
-out:
-    return status;
-}
-
 int uct_tcp_netif_check(const char *if_name)
 {
     ucs_status_t status;
     struct ifreq ifr;
 
-    status = uct_tcp_netif_ioctl(if_name, SIOCGIFADDR, &ifr);
+    status = ucs_netif_ioctl(if_name, SIOCGIFADDR, &ifr);
     if (status != UCS_OK) {
         return 0;
     }
 
-    status = uct_tcp_netif_ioctl(if_name, SIOCGIFFLAGS, &ifr);
+    status = ucs_netif_ioctl(if_name, SIOCGIFFLAGS, &ifr);
     if (status != UCS_OK) {
         return 0;
     }
@@ -107,7 +67,7 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
 
     edata.cmd    = ETHTOOL_GSET;
     ifr.ifr_data = (void*)&edata;
-    status = uct_tcp_netif_ioctl(if_name, SIOCETHTOOL, &ifr);
+    status = ucs_netif_ioctl(if_name, SIOCETHTOOL, &ifr);
     if (status == UCS_OK) {
 #if HAVE_DECL_ETHTOOL_CMD_SPEED
         speed_mbps = ethtool_cmd_speed(&edata);
@@ -126,14 +86,14 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
         speed_mbps = 100; /* Default value if SIOCETHTOOL is not supported */
     }
 
-    status = uct_tcp_netif_ioctl(if_name, SIOCGIFHWADDR, &ifr);
+    status = ucs_netif_ioctl(if_name, SIOCGIFHWADDR, &ifr);
     if (status == UCS_OK) {
         ether_type = ifr.ifr_addr.sa_family;
     } else {
         ether_type = ARPHRD_ETHER;
     }
 
-    status = uct_tcp_netif_ioctl(if_name, SIOCGIFMTU, &ifr);
+    status = ucs_netif_ioctl(if_name, SIOCGIFMTU, &ifr);
     if (status == UCS_OK) {
         mtu = ifr.ifr_mtu;
     } else {
@@ -167,13 +127,13 @@ ucs_status_t uct_tcp_netif_inaddr(const char *if_name, struct sockaddr_in *ifadd
     ucs_status_t status;
     struct ifreq ifra, ifrnm;
 
-    status = uct_tcp_netif_ioctl(if_name, SIOCGIFADDR, &ifra);
+    status = ucs_netif_ioctl(if_name, SIOCGIFADDR, &ifra);
     if (status != UCS_OK) {
         return status;
     }
 
     if (netmask != NULL) {
-        status = uct_tcp_netif_ioctl(if_name, SIOCGIFNETMASK, &ifrnm);
+        status = ucs_netif_ioctl(if_name, SIOCGIFNETMASK, &ifrnm);
         if (status != UCS_OK) {
             return status;
         }

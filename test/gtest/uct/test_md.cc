@@ -8,9 +8,16 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
 #include <uct/ib/base/ib_md.h>
+#include <ucs/sys/sys.h>
+#include <ucs/sys/string.h>
 }
 #include <common/test.h>
 #include "test_md.h"
+#include <netdb.h>
+#include <ifaddrs.h>
+#include <net/if_arp.h>
+#include <net/if.h>
+#include <linux/sockios.h>
 
 void* test_md::alloc_thread(void *arg)
 {
@@ -26,6 +33,28 @@ void* test_md::alloc_thread(void *arg)
     }
     return NULL;
 }
+
+    static void print_ip(char *if_name, struct sockaddr *ifa_addr)
+    {
+        size_t ip_len = ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN);
+        char ip_str[ip_len];
+
+        UCS_TEST_MESSAGE << "Testing " << if_name << " with " <<
+                            ucs_sockaddr_str(ifa_addr, ip_str, ip_len);
+    }
+
+    bool is_iface_ipoib(struct ifaddrs *ifa)
+    {
+        struct ifreq if_req;
+        ucs_status_t status;
+
+        status = ucs_netif_ioctl(ifa->ifa_name, SIOCGIFHWADDR, &if_req);
+        ASSERT_UCS_OK(status);
+        /* check if this is an Infiniband interface and if there is an
+         * IPv4 address on it */
+        return (if_req.ifr_addr.sa_family == ARPHRD_INFINIBAND) &&
+               (ifa->ifa_addr->sa_family == AF_INET);
+    }
 
 std::vector<std::string> test_md::enum_mds(const std::string& mdc_name) {
     static std::vector<std::string> all_pds;
@@ -358,6 +387,43 @@ UCS_TEST_P(test_md, reg_multi_thread) {
     pthread_join(thread_id, NULL);
 }
 
+UCS_TEST_P(test_md, sockaddr_accessibility) {
+    ucs_sock_addr_t sock_addr;
+    struct ifaddrs *ifaddr, *ifa;
+    int rc_local, rc_remote, found_ipoib = 0;
+
+    check_caps(UCT_MD_FLAG_SOCKADDR, "sockaddr");
+
+    ASSERT_TRUE(getifaddrs(&ifaddr) != -1);
+
+    /* go through a linked list of available interfaces */
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        sock_addr.addr = ifa->ifa_addr;
+
+        rc_local  = uct_md_is_sockaddr_accessible(pd(), &sock_addr, UCT_SOCKADDR_ACC_LOCAL);
+        rc_remote = uct_md_is_sockaddr_accessible(pd(), &sock_addr, UCT_SOCKADDR_ACC_REMOTE);
+
+        if (!strcmp(GetParam().c_str(), "rdmacm")) {
+            if (is_iface_ipoib(ifa)) {
+                print_ip(ifa->ifa_name, ifa->ifa_addr);
+                ASSERT_TRUE(rc_local);
+                ASSERT_TRUE(rc_remote);
+                found_ipoib = 1;
+            }
+        } else {
+            print_ip(ifa->ifa_name, ifa->ifa_addr);
+            ASSERT_TRUE(rc_local);
+            ASSERT_TRUE(rc_remote);
+        }
+    }
+
+    if ((!strcmp(GetParam().c_str(), "rdmacm")) && (!found_ipoib)) {
+        UCS_TEST_MESSAGE << "Cannot find an IPoIB interface with an IPv4 address on the host";
+    }
+
+    freeifaddrs(ifaddr);
+}
+
 #define UCT_MD_INSTANTIATE_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, \
                    knem, \
@@ -368,7 +434,8 @@ UCS_TEST_P(test_md, reg_multi_thread) {
                    cuda, \
                    rocm, \
                    ib, \
-                   ugni \
+                   ugni, \
+                   rdmacm \
                    )
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_md)

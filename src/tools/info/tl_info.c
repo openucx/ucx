@@ -356,6 +356,9 @@ static void print_md_info(const char *md_name, int print_opts,
         if (md_attr.cap.flags & UCT_MD_FLAG_NEED_MEMH) {
             printf("#           local memory handle is required for zcopy\n");
         }
+        if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
+            printf("#           supports client-server connection establishment via sockaddr\n");
+        }
     }
 
     if (num_resources == 0) {
