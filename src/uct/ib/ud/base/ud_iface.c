@@ -17,6 +17,10 @@
 #include <linux/ip.h>
 
 
+#define UCT_UD_IPV4_ADDR_LEN sizeof(struct in_addr)
+#define UCT_UD_IPV6_ADDR_LEN sizeof(struct in6_addr)
+
+
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ud_iface_peer_t,
                                         UCT_UD_HASH_SIZE,
@@ -384,24 +388,24 @@ void uct_ud_iface_remove_async_handlers(uct_ud_iface_t *iface)
  * buffer). In this case, the content of the first 20 bytes is undefined." */
 static void uct_ud_iface_calc_gid_len(uct_ud_iface_t *iface)
 {
-    const int ipv4_len      = sizeof(struct in_addr);
-    const int ipv6_len      = sizeof(struct in6_addr);
     uint16_t *local_gid_u16 = (uint16_t*)iface->super.gid.raw;
 
     /* Make sure that daddr in IPv4 resides in the last 4 bytes in GRH */
-    UCS_STATIC_ASSERT((UCT_IB_GRH_LEN - (20 + offsetof(struct iphdr, daddr))) == ipv4_len);
+    UCS_STATIC_ASSERT((UCT_IB_GRH_LEN - (20 + offsetof(struct iphdr, daddr))) ==
+                      UCT_UD_IPV4_ADDR_LEN);
 
     /* Make sure that dgid resides in the last 16 bytes in GRH */
-    UCS_STATIC_ASSERT(UCT_IB_GRH_LEN - offsetof(struct ibv_grh, dgid) == ipv6_len);
+    UCS_STATIC_ASSERT((UCT_IB_GRH_LEN - offsetof(struct ibv_grh, dgid)) ==
+                      UCT_UD_IPV6_ADDR_LEN);
 
     /* IPv4 mapped to IPv6 looks like: 0000:0000:0000:0000:0000:ffff:????:????,
      * so check for leading zeroes and verify that 11-12 bytes are 0xff.
      * Otherwise either RoCEv1 or RoCEv2/IPv6 are used. */
     if (local_gid_u16[0] == 0x0000) {
         ucs_assert_always(local_gid_u16[5] == 0xffff);
-        iface->config.gid_len = ipv4_len;
+        iface->config.gid_len = UCT_UD_IPV4_ADDR_LEN;
     } else {
-        iface->config.gid_len = ipv6_len;
+        iface->config.gid_len = UCT_UD_IPV6_ADDR_LEN;
     }
 }
 
