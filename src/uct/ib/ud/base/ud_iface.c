@@ -20,6 +20,15 @@
 #define UCT_UD_IPV4_ADDR_LEN sizeof(struct in_addr)
 #define UCT_UD_IPV6_ADDR_LEN sizeof(struct in6_addr)
 
+#if ENABLE_STATS
+static ucs_stats_class_t uct_ud_iface_stats_class = {
+    .name = "ud_iface",
+    .num_counters = UCT_UD_IFACE_STAT_LAST,
+    .counter_names = {
+        [UCT_UD_IFACE_STAT_RX_DROP] = "rx_drop"
+    }
+};
+#endif
 
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ud_iface_peer_t,
@@ -496,7 +505,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
                                   &config->super.tx.mp, self->config.tx_qp_len,
                                   uct_ud_iface_send_skb_init, "ud_tx_skb");
     if (status != UCS_OK) {
-        goto err_mpool;
+        goto err_rx_mpool;
     }
     self->tx.skb = ucs_mpool_get(&self->tx.mp);
     self->tx.skb_inl.super.len = sizeof(uct_ud_neth_t);
@@ -511,9 +520,17 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     uct_ud_iface_calc_gid_len(self);
 
+    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_ud_iface_stats_class,
+                                  self->super.super.stats);
+    if (status != UCS_OK) {
+        goto err_tx_mpool;
+    }
+
     return UCS_OK;
 
-err_mpool:
+err_tx_mpool:
+    ucs_mpool_cleanup(&self->tx.mp, 1);
+err_rx_mpool:
     ucs_mpool_cleanup(&self->rx.mp, 1);
 err_qp:
     ibv_destroy_qp(self->qp);
@@ -540,6 +557,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_ptr_array_cleanup(&self->eps);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     ucs_assert(self->tx.pending_q_len == 0);
+    UCS_STATS_NODE_FREE(self->stats);
     uct_ud_leave(self);
 }
 

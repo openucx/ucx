@@ -24,6 +24,11 @@
 
 #define UCT_UD_MIN_INLINE   48
 
+enum {
+    UCT_UD_IFACE_STAT_RX_DROP,
+    UCT_UD_IFACE_STAT_LAST
+};
+
 /* TODO: maybe tx_moderation can be defined at compile-time since tx completions are used only to know how much space is there in tx qp */
 
 typedef struct uct_ud_iface_config {
@@ -127,6 +132,9 @@ struct uct_ud_iface {
         int                  check_grh_dgid;
         unsigned             gid_len;
     } config;
+
+    UCS_STATS_NODE_DECLARE(stats);
+
     ucs_ptr_array_t       eps;
     uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE];
     struct {
@@ -236,6 +244,7 @@ uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *grh_end, int is_grh_present)
     dest_gid  = (char*)grh_end - iface->config.gid_len;
 
     if (memcmp(local_gid, dest_gid, iface->config.gid_len)) {
+        UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_UD_IFACE_STAT_RX_DROP, 1);
         ucs_trace_data("Drop packet with wrong dgid");
         return 0;
     }
