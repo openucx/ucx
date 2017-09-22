@@ -45,13 +45,13 @@ typedef enum {
 
 
 typedef struct uct_dc_dci {
-#if ENABLE_ASSERT
-    uint8_t                       flags; /* debug state, @ref uct_dc_dci_state_t */
-#endif
     uct_rc_txqp_t                 txqp; /* DCI qp */
     uct_dc_ep_t                   *ep;  /* points to an endpoint that currently
                                            owns the dci. Relevant only for dcs
                                            and dcs quota policies. */
+#if ENABLE_ASSERT
+    uint8_t                       flags; /* debug state, @ref uct_dc_dci_state_t */
+#endif
 } uct_dc_dci_t;
 
 

@@ -158,11 +158,9 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
     if (uct_dc_iface_dci_has_outstanding(iface, dci)) {
         if (ep == NULL) {
             /* The EP was destroyed after flush cancel */
-#if ENABLE_ASSERT
             ucs_assert(ucs_test_all_flags(iface->tx.dcis[dci].flags,
                                           (UCT_DC_DCI_FLAG_EP_CANCELED |
                                            UCT_DC_DCI_FLAG_EP_DESTROYED)));
-#endif
             return;
         }
         if (iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) {
@@ -215,11 +213,9 @@ static inline void uct_dc_iface_dci_alloc_dcs(uct_dc_iface_t *iface, uct_dc_ep_t
      * dci must have resources to transmit.
      */
     ep->dci = iface->tx.dcis_stack[iface->tx.stack_top];
-#if ENABLE_ASSERT
     ucs_assert(ep->dci < iface->tx.ndci);
     ucs_assert(iface->tx.dcis[ep->dci].ep == NULL);
     ucs_assert(iface->tx.dcis[ep->dci].flags == 0);
-#endif
     iface->tx.dcis[ep->dci].ep = ep;
     iface->tx.stack_top++;
 }
