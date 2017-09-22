@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -203,7 +203,7 @@ static size_t ucp_stream_pack_am_single_dt(void *dest, void *arg)
     ucp_request_t       *req = arg;
     size_t              length;
 
-    hdr->uuid = req->send.ep->worker->uuid;
+    hdr->sender_uuid = req->send.ep->worker->uuid;
 
     ucs_assert(req->send.state.offset == 0);
     ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
@@ -234,8 +234,8 @@ static size_t ucp_stream_pack_am_first_dt(void *dest, void *arg)
     ucp_request_t       *req = arg;
     size_t              length;
 
-    hdr->uuid   = req->send.ep->worker->uuid;
-    length      = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
+    hdr->sender_uuid = req->send.ep->worker->uuid;
+    length           = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
 
     ucs_debug("pack stream_am_first paylen %zu", length);
     ucs_assert(req->send.state.offset == 0);
@@ -251,8 +251,8 @@ static size_t ucp_stream_pack_am_middle_dt(void *dest, void *arg)
     ucp_request_t       *req = arg;
     size_t              length;
 
-    hdr->uuid = req->send.ep->worker->uuid;
-    length    = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
+    hdr->sender_uuid = req->send.ep->worker->uuid;
+    length           = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
     ucs_debug("pack stream_am_middle paylen %zu offset %zu", length,
               req->send.state.offset);
     return sizeof(*hdr) + ucp_dt_pack(req->send.datatype, hdr + 1,
@@ -267,9 +267,9 @@ static size_t ucp_stream_pack_am_last_dt(void *dest, void *arg)
     ucp_request_t       *req   = arg;
     size_t              length = req->send.length - req->send.state.offset;
 
-    hdr->uuid   = req->send.ep->worker->uuid;
-    ret_length  = ucp_dt_pack(req->send.datatype, hdr + 1, req->send.buffer,
-                                 &req->send.state, length);
+    hdr->sender_uuid = req->send.ep->worker->uuid;
+    ret_length       = ucp_dt_pack(req->send.datatype, hdr + 1,
+                                   req->send.buffer, &req->send.state, length);
     ucs_debug("pack stream_am_last paylen %zu offset %zu", length,
               req->send.state.offset);
     ucs_assertv(ret_length == length, "length=%zu, max_length=%zu",

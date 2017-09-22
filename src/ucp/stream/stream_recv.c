@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -100,12 +100,12 @@ static ucs_status_t ucp_stream_am_handler(void *arg, void *data, size_t length,
     rdesc->hdr_len = hdr_len;
     hdr            = data;
 
-    hash_it = kh_get(ucp_worker_ep_hash, &worker->ep_hash, hdr->uuid);
+    hash_it = kh_get(ucp_worker_ep_hash, &worker->ep_hash, hdr->sender_uuid);
     if (ucs_likely(hash_it != kh_end(&worker->ep_hash))) {
         ep = kh_value(&worker->ep_hash, hash_it);
         ucs_queue_push(&ep->stream_data, &rdesc->stream_queue);
     } else {
-        ucs_error("ep is not found by uuid: %lu", hdr->uuid);
+        ucs_error("ep is not found by uuid: %lu", hdr->sender_uuid);
         status = UCS_OK;
     }
 
@@ -122,7 +122,7 @@ static void ucp_stream_am_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     size_t                    hdr_len = sizeof(*hdr);
     char                      *p;
 
-    snprintf(buffer, max, "STREAM ep uuid %"PRIx64, hdr->uuid);
+    snprintf(buffer, max, "STREAM ep uuid %"PRIx64, hdr->sender_uuid);
     p = buffer + strlen(buffer);
 
     ucp_dump_payload(worker->context, p, buffer + max - p, data + hdr_len,

@@ -172,14 +172,12 @@ ucp_request_send_state_set(ucp_request_t *req, size_t data_offset,
     ucs_assert(req->send.state.offset <= req->send.length);
 
     switch (proto) {
-    case UCP_REQUEST_SEND_STATE_SHORT:
     case UCP_REQUEST_SEND_STATE_BCOPY:
         break;
     case UCP_REQUEST_SEND_STATE_ZCOPY:
         req->send.uct_comp.count = comp_count;
         break;
-    case UCP_REQUEST_SEND_STATE_PUT:
-    case UCP_REQUEST_SEND_STATE_GET:
+    case UCP_REQUEST_SEND_STATE_RMA:
         ucs_assertv_always(0, "TODO: Not implemented");
     default:
         ucs_fatal("unknown protocol");
