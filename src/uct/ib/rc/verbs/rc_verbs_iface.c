@@ -52,6 +52,8 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
             ibv_wc_status_str(wc->status));
 
     iface->tx.cq_available += ep->txcnt.pi - ep->txcnt.ci;
+    /* Reset CI to prevent cq_available overrun on ep_destoroy */
+    ep->txcnt.ci = ep->txcnt.pi;
     uct_rc_txqp_purge_outstanding(&ep->super.txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
     ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super);
 }

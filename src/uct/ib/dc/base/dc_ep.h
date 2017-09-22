@@ -156,7 +156,13 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
     ucs_assert(iface->tx.stack_top > 0);
 
     if (uct_dc_iface_dci_has_outstanding(iface, dci)) {
-        ucs_assert(ep != NULL);
+        if (ep == NULL) {
+            /* The EP was destroyed after flush cancel */
+            ucs_assert(ucs_test_all_flags(iface->tx.dcis[dci].flags,
+                                          (UCT_DC_DCI_FLAG_EP_CANCELED |
+                                           UCT_DC_DCI_FLAG_EP_DESTROYED)));
+            return;
+        }
         if (iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) {
             /* in tx_wait state:
              * -  if there are no eps are waiting for dci allocation
@@ -183,7 +189,9 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
     ep->dci   = UCT_DC_EP_NO_DCI;
     ep->state = UCT_DC_EP_TX_OK;
     iface->tx.dcis[dci].ep = NULL;
-
+#if ENABLE_ASSERT
+    iface->tx.dcis[dci].flags = 0;
+#endif
     /* it is possible that dci is released while ep still has scheduled pending ops.
      * move the group to the 'wait for dci alloc' state
      */
@@ -207,6 +215,7 @@ static inline void uct_dc_iface_dci_alloc_dcs(uct_dc_iface_t *iface, uct_dc_ep_t
     ep->dci = iface->tx.dcis_stack[iface->tx.stack_top];
     ucs_assert(ep->dci < iface->tx.ndci);
     ucs_assert(iface->tx.dcis[ep->dci].ep == NULL);
+    ucs_assert(iface->tx.dcis[ep->dci].flags == 0);
     iface->tx.dcis[ep->dci].ep = ep;
     iface->tx.stack_top++;
 }
@@ -225,6 +234,9 @@ static inline void uct_dc_iface_dci_free_dcs(uct_dc_iface_t *iface, uct_dc_ep_t 
     iface->tx.stack_top--;
     iface->tx.dcis_stack[iface->tx.stack_top] = dci;
     iface->tx.dcis[dci].ep                    = NULL;
+#if ENABLE_ASSERT
+    iface->tx.dcis[ep->dci].flags             = 0;
+#endif
 
     ep->dci   = UCT_DC_EP_NO_DCI;
     ep->state = UCT_DC_EP_TX_OK;

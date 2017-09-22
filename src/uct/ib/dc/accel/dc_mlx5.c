@@ -466,9 +466,10 @@ ucs_status_t uct_dc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
 
 ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
-    uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
-    ucs_status_t status;
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                uct_dc_mlx5_iface_t);
+    uct_dc_mlx5_ep_t    *ep    = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    ucs_status_t        status;
 
     status = uct_dc_ep_flush(tl_ep, flags, comp);
     if (status == UCS_OK) {

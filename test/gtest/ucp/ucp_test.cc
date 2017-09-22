@@ -175,7 +175,7 @@ void ucp_test::generate_test_params_variant(const ucp_params_t& ctx_params,
                                             std::vector<ucp_test_param>& test_params,
                                             int thread_type)
 {
-    std::vector<ucp_test_param> tmp_test_params, result;
+    std::vector<ucp_test_param> tmp_test_params;
 
     tmp_test_params = ucp_test::enum_test_params(ctx_params,name,
                                                  test_case_name, tls);
@@ -422,7 +422,8 @@ ucp_context_h ucp_test_base::entity::ucph() const {
 
 unsigned ucp_test_base::entity::progress(int worker_index)
 {
-    return ucp_worker_progress(worker(worker_index));
+    ucp_worker_h ucp_worker = worker(worker_index);
+    return ucp_worker ? ucp_worker_progress(ucp_worker) : 0;
 }
 
 int ucp_test_base::entity::get_num_workers() const {

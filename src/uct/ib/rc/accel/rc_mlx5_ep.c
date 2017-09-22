@@ -382,7 +382,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     ucs_status_t status;
     uint16_t sn;
 
-    status = uct_rc_ep_flush(&ep->super, ep->tx.wq.bb_max);
+    status = uct_rc_ep_flush(&ep->super, ep->tx.wq.bb_max, flags);
     if (status != UCS_INPROGRESS) {
         return status;
     }
@@ -473,6 +473,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     uct_rc_mlx5_iface_common_update_cqs_ci(&iface->mlx5_common, &iface->super.super);
     (void)uct_rc_modify_qp(&self->super.txqp, IBV_QPS_RESET);
     uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->mlx5_common, &iface->super.super);
+
+    /* Return all credits if user do flush(UCT_FLUSH_FLAG_CANCEL) before
+     * ep_destroy.
+     */
+    uct_rc_txqp_available_add(&self->super.txqp,
+                              self->tx.wq.bb_max -
+                              uct_rc_txqp_available(&self->super.txqp));
 
     uct_ib_mlx5_srq_cleanup(&iface->mlx5_common.rx.srq, iface->super.rx.srq.srq);
 }

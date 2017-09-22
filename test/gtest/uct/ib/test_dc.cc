@@ -215,7 +215,6 @@ UCS_TEST_P(test_dc, dcs_multi) {
 
 /** 
  * send message, destroy ep while it is still holding dci.
- * This is against the rules so there should be a warning. 
  * Do not crash.
  */ 
 UCS_TEST_P(test_dc, dcs_ep_destroy) {
@@ -242,7 +241,6 @@ UCS_TEST_P(test_dc, dcs_ep_destroy) {
 
     m_e1->destroy_eps();
     EXPECT_EQ(1, iface->tx.stack_top);
-    EXPECT_EQ(1, n_warnings);
 
     flush();
     EXPECT_EQ(0, iface->tx.stack_top);

@@ -334,7 +334,12 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
         }
 
         /* Start flush operation on UCT endpoint */
-        status = uct_ep_flush(uct_ep, 0, &req->send.uct_comp);
+        if (req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL) {
+            uct_ep_pending_purge(uct_ep, ucp_ep_err_pending_purge,
+                                 UCS_STATUS_PTR(UCS_ERR_CANCELED));
+        }
+        status = uct_ep_flush(uct_ep, req->send.flush.uct_flags,
+                              &req->send.uct_comp);
         ucs_trace("flushing ep %p lane[%d]: %s", ep, lane,
                   ucs_status_string(status));
         if (status == UCS_OK) {
@@ -430,7 +435,8 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
-    status = uct_ep_flush(ep->uct_eps[lane], 0, &req->send.uct_comp);
+    status = uct_ep_flush(ep->uct_eps[lane], req->send.flush.uct_flags,
+                          &req->send.uct_comp);
     ucs_trace("flushing ep %p lane[%d]: %s", ep, lane,
               ucs_status_string(status));
     if (status == UCS_OK) {
@@ -485,6 +491,9 @@ void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
 
     if (req->send.uct_comp.func) {
         req->send.state.offset = req->send.length; /* fast-forward to data end */
+        if (status == UCS_ERR_CANCELED) {
+            req->send.uct_comp.count = 0;
+        }
         req->send.uct_comp.func(&req->send.uct_comp, status);
     } else {
         ucp_request_complete_send(req, status);
@@ -553,7 +562,7 @@ static void ucp_ep_flushed_callback(ucp_request_t *req)
     ucp_ep_disconnected(req->send.ep);
 }
 
-static ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep)
+static ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep, unsigned mode)
 {
     ucs_status_t status;
     ucp_request_t *req;
@@ -587,6 +596,9 @@ static ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep)
     req->send.flush.flushed_cb  = ucp_ep_flushed_callback;
     req->send.flush.lanes       = UCS_MASK(ucp_ep_num_lanes(ep));
     req->send.flush.slow_cb_id  = UCS_CALLBACKQ_ID_NULL;
+    req->send.flush.uct_flags   = (mode == UCP_EP_CLOSE_MODE_FLUSH) ?
+                                  UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL;
+
     req->send.lane              = UCP_NULL_LANE;
     req->send.uct.func          = ucp_ep_flush_progress_pending;
     req->send.uct_comp.func     = ucp_ep_flush_completion;
@@ -608,20 +620,30 @@ static ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep)
     return req + 1;
 }
 
-ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep)
+ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 {
     ucp_worker_h worker = ep->worker;
     void *request;
 
+    if ((mode == UCP_EP_CLOSE_MODE_FORCE) &&
+        (ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER)) {
+        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+    }
+
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     UCS_ASYNC_BLOCK(&worker->async);
-    request = ucp_disconnect_nb_internal(ep);
+    request = ucp_disconnect_nb_internal(ep, mode);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
 
     return request;
+}
+
+ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep)
+{
+    return ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FLUSH);
 }
 
 void ucp_ep_destroy(ucp_ep_h ep)

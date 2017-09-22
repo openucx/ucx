@@ -738,7 +738,8 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep,
 static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
                                             const ucp_address_entry_t *address_list,
                                             ucp_wireup_lane_desc_t *lane_descs,
-                                            ucp_lane_index_t *num_lanes_p)
+                                            ucp_lane_index_t *num_lanes_p,
+                                            ucp_err_handling_mode_t err_mode)
 {
     ucp_wireup_criteria_t criteria;
     ucp_rsc_index_t rsc_index;
@@ -748,7 +749,11 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
 
     if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) ||
         !ep->worker->context->config.ext.tm_offload ||
-        ucs_queue_is_empty(&ep->worker->context->tm.offload.ifaces))
+        ucs_queue_is_empty(&ep->worker->context->tm.offload.ifaces) ||
+        /* TODO: remove check below when UCP_ERR_HANDLING_MODE_PEER supports
+         *       RNDV-protocol or HW TM supports fragmented protocols
+         */
+        err_mode == UCP_ERR_HANDLING_MODE_PEER)
     {
         return UCS_OK;
     }
@@ -888,7 +893,8 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     }
 
     status = ucp_wireup_add_tag_lane(ep, address_count, address_list,
-                                     lane_descs, &key->num_lanes);
+                                     lane_descs, &key->num_lanes,
+                                     params->err_mode);
     if (status != UCS_OK) {
         return status;
     }
