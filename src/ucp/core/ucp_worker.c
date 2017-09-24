@@ -82,47 +82,6 @@ static ucs_status_t ucp_worker_wakeup_ctl_fd(ucp_worker_h worker, int op,
     return UCS_OK;
 }
 
-static void ucp_worker_close_ifaces(ucp_worker_h worker)
-{
-    ucp_rsc_index_t rsc_index;
-    ucp_worker_iface_t *wiface;
-    ucs_status_t status;
-
-    UCS_ASYNC_BLOCK(&worker->async);
-
-    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
-        wiface = &worker->ifaces[rsc_index];
-        if (wiface->iface == NULL) {
-            continue;
-        }
-
-        uct_worker_progress_unregister_safe(worker->uct,
-                                            &wiface->check_events_id);
-
-        if (wiface->on_arm_list) {
-            ucp_worker_wakeup_ctl_fd(worker, EPOLL_CTL_DEL, wiface->event_fd);
-            ucs_list_del(&wiface->arm_list);
-        }
-
-        if (wiface->attr.cap.flags & UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS) {
-            status = ucs_async_remove_handler(wiface->event_fd, 1);
-            if (status != UCS_OK) {
-                ucs_warn("failed to remove event handler for fd %d: %s",
-                         wiface->event_fd, ucs_status_string(status));
-            }
-        }
-
-        if (ucp_worker_is_tl_tag_offload(worker, rsc_index)) {
-            ucs_queue_remove(&worker->context->tm.offload.ifaces, &wiface->queue);
-            ucp_context_tag_offload_enable(worker->context);
-        }
-
-        uct_iface_close(wiface->iface);
-    }
-
-    UCS_ASYNC_UNBLOCK(&worker->async);
-}
-
 static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
 {
     ucp_worker_h worker   = wiface->worker;
@@ -620,6 +579,53 @@ void ucp_worker_iface_event(int fd, void *arg)
     ucp_worker_signal_internal(worker);
 }
 
+static void ucp_worker_close_ifaces(ucp_worker_h worker)
+{
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
+    ucp_worker_iface_t *offload_iface;
+    ucs_status_t status;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
+        wiface = &worker->ifaces[rsc_index];
+        if (wiface->iface == NULL) {
+            continue;
+        }
+
+        uct_worker_progress_unregister_safe(worker->uct,
+                                            &wiface->check_events_id);
+
+        if (wiface->on_arm_list) {
+            ucp_worker_wakeup_ctl_fd(worker, EPOLL_CTL_DEL, wiface->event_fd);
+            ucs_list_del(&wiface->arm_list);
+        }
+
+        if (wiface->attr.cap.flags & UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS) {
+            status = ucs_async_remove_handler(wiface->event_fd, 1);
+            if (status != UCS_OK) {
+                ucs_warn("failed to remove event handler for fd %d: %s",
+                         wiface->event_fd, ucs_status_string(status));
+            }
+        }
+
+        if (ucp_worker_is_tl_tag_offload(worker, rsc_index)) {
+            ucs_queue_remove(&worker->context->tm.offload.ifaces, &wiface->queue);
+            if (ucp_context_tag_offload_enable(worker->context)) {
+                offload_iface = ucs_queue_head_elem_non_empty(&worker->context->tm.offload.ifaces,
+                                                              ucp_worker_iface_t, queue);
+                ucp_worker_iface_activate(offload_iface);
+            }
+        }
+
+        uct_iface_close(wiface->iface);
+    }
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+
 static ucs_status_t
 ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                      size_t rx_headroom, ucs_cpu_set_t const * cpu_mask_param)
@@ -724,7 +730,9 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     if (ucp_worker_is_tl_tag_offload(worker, tl_id)) {
         worker->ifaces[tl_id].rsc_index = tl_id;
         ucs_queue_push(&context->tm.offload.ifaces, &wiface->queue);
-        ucp_context_tag_offload_enable(context);
+        if (ucp_context_tag_offload_enable(context)) {
+            ucp_worker_iface_activate(wiface);
+        }
     }
 
     return UCS_OK;

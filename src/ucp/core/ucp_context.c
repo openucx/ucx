@@ -965,7 +965,7 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
     fprintf(stream, "#\n");
 }
 
-void ucp_context_tag_offload_enable(ucp_context_h context)
+int ucp_context_tag_offload_enable(ucp_context_h context)
 {
     /* Enable offload, if only one tag offload capable interface is present
      * (multiple offload ifaces are not supported yet). */
@@ -976,9 +976,11 @@ void ucp_context_tag_offload_enable(ucp_context_h context)
 
         ucs_debug("Enable TM offload: thresh %zu, zcopy_thresh %zu",
                   context->tm.offload.thresh, context->tm.offload.zcopy_thresh);
+        return 1;
     } else {
         context->tm.offload.thresh = SIZE_MAX;
         ucs_debug("Disable TM offload, multiple offload ifaces are not supported");
+        return 0;
     }
 }
 
