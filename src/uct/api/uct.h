@@ -1465,7 +1465,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem);
 
 /**
- * @ingroup RESOURCE
+ * @ingroup UCT_MD
  * @brief Read the configuration of the MD component.
  *
  * @param [in]  name          Name of the MD or the MD component.
