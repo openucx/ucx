@@ -71,7 +71,7 @@ static ucs_status_t ucp_stream_req_start(ucp_request_t *req, size_t count,
         UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
     } else if (length < zcopy_thresh) {
         /* bcopy */
-        ucp_request_send_state_set(req, 0, 0, UCP_REQUEST_SEND_STATE_BCOPY);
+        req->send.state.offset = 0;
         if (length <= config->am.max_bcopy - proto->only_hdr_size) {
             req->send.uct.func   = proto->bcopy_single;
             UCS_PROFILE_REQUEST_EVENT(req, "start_stream_bcopy_single",
