@@ -362,8 +362,13 @@ uct_ud_iface_add_async_comp(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
         if (!(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP)) {
             skb->len = 0;
         }
-        skb->flags |= UCT_UD_SEND_SKB_FLAG_ERR;
-        ++ep->tx.err_skb_count;
+
+        if (status == UCS_ERR_ENDPOINT_TIMEOUT) {
+            skb->flags |= UCT_UD_SEND_SKB_FLAG_ERR;
+            ++ep->tx.err_skb_count;
+        } else if (status == UCS_ERR_CANCELED) {
+            skb->flags |= UCT_UD_SEND_SKB_FLAG_CANCEL;
+        }
     }
 
     cdesc = uct_ud_comp_desc(skb);
@@ -766,6 +771,8 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
         uct_ud_tx_wnd_purge_outstanding(iface, ep, UCS_ERR_CANCELED);
         uct_ud_iface_dispatch_zcopy_comps(iface);
         uct_ep_pending_purge(ep_h, NULL, 0);
+        uct_ud_ep_ca_ack(ep);
+
         uct_ud_leave(iface);
         return UCS_OK;
     }
@@ -1101,7 +1108,7 @@ uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
     if (cb) {
         cb(req, cb_args->arg);
     } else {
-        ucs_warn("ep=%p cancelling user pending request %p", ep, req);
+        ucs_debug("ep=%p cancelling user pending request %p", ep, req);
     }
     iface->tx.pending_q_len--;
 
