@@ -282,12 +282,13 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_iface_common_t *verbs_common = &iface->verbs_common;
 
-    UCT_RC_VERBS_CHECK_AM_SHORT(&iface->verbs_common, id, length);
-
+    UCT_RC_CHECK_AM_SHORT(id, length + verbs_common->config.notag_hdr_size,
+                          verbs_common->config.max_inline);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
-    uct_rc_verbs_iface_fill_inl_am_sge(&iface->verbs_common, id, hdr, buffer, length);
+    uct_rc_verbs_iface_fill_inl_am_sge(verbs_common, id, hdr, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr,
                               IBV_SEND_INLINE | IBV_SEND_SOLICITED);
@@ -331,6 +332,7 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     uct_rc_verbs_iface_t     *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t        *ep    = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_rc_iface_send_desc_t *desc  = NULL;
+    uct_rc_verbs_iface_common_t *verbs_common = &iface->verbs_common;
     struct ibv_sge sge[UCT_IB_MAX_IOV]; /* First sge is reserved for the header */
     struct ibv_send_wr wr;
     int send_flags;
@@ -338,16 +340,18 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
 
     UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super) - 1,
                        "uct_rc_verbs_ep_am_zcopy");
-    UCT_RC_VERBS_CHECK_AM_ZCOPY(&iface->verbs_common, id, header_length,
-                                uct_iov_total_length(iov, iovcnt),
-                                iface->super.super.config.seg_size);
+    UCT_RC_CHECK_AM_ZCOPY(id,
+                          header_length + verbs_common->config.notag_hdr_size,
+                          uct_iov_total_length(iov, iovcnt),
+                          verbs_common->config.short_desc_size,
+                          iface->super.super.config.seg_size);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
-    UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(&iface->verbs_common, &iface->super,
-                                      &iface->verbs_common.short_desc_mp, desc,
-                                      id, header, header_length, comp,
-                                      &send_flags, sge[0]);
 
+    UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(verbs_common, &iface->super,
+                                      &verbs_common->short_desc_mp, desc, id,
+                                      header, header_length, comp, &send_flags,
+                                      sge[0]);
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge + 1, iov, iovcnt);
     UCT_RC_VERBS_FILL_AM_ZCOPY_WR_IOV(wr, sge, (sge_cnt + 1), wr.opcode);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY,
@@ -561,7 +565,7 @@ static ucs_status_t uct_rc_verbs_ep_tag_qp_create(uct_rc_verbs_iface_t *iface,
     ucs_status_t status;
     int ret;
 
-    if (UCT_RC_VERBS_TM_ENABLED(iface)) {
+    if (iface->verbs_common.tm.enabled) {
         /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
          * such a QP to be initialized with zero send queue length. */
         status = uct_rc_iface_qp_create(&iface->super, IBV_QPT_RC, &ep->tm_qp,
@@ -589,7 +593,7 @@ static void uct_rc_verbs_ep_tag_qp_destroy(uct_rc_verbs_ep_t *ep)
 #if IBV_EXP_HW_TM
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
-    if (UCT_RC_VERBS_TM_ENABLED(iface)) {
+    if (iface->verbs_common.tm.enabled) {
         uct_rc_iface_remove_qp(&iface->super, ep->tm_qp->qp_num);
         if (ibv_destroy_qp(ep->tm_qp)) {
             ucs_warn("failed to destroy TM RNDV QP: %m");
@@ -609,7 +613,7 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     }
 #if IBV_EXP_HW_TM
     iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
-    if (UCT_RC_VERBS_TM_ENABLED(iface)) {
+    if (iface->verbs_common.tm.enabled) {
         uct_rc_verbs_ep_tm_address_t *tm_addr = (uct_rc_verbs_ep_tm_address_t*)addr;
         uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
@@ -634,7 +638,7 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     uct_ib_iface_fill_ah_attr(&iface->super.super, ib_addr, ep->super.path_bits,
                               &ah_attr);
 #if IBV_EXP_HW_TM
-    if(UCT_RC_VERBS_TM_ENABLED(iface)) {
+    if (iface->verbs_common.tm.enabled) {
         /* For HW TM we need 2 QPs, one of which will be used by the device for
          * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
          * should be posted to the send side of the QP which is owned by device. */
@@ -704,7 +708,7 @@ ssize_t uct_rc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
-    UCT_RC_VERBS_FILL_TM_IMM(wr, imm, app_ctx);
+    UCT_RC_VERBS_FILL_TM_IMM(wr, imm, app_ctx, wr.opcode, wr.imm_data, IBV);
     UCT_RC_VERBS_GET_TM_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
                                    tag, app_ctx, pack_cb, arg, length);
     UCT_RC_VERBS_FILL_SGE(wr, sge, length + sizeof(struct ibv_exp_tmh));
@@ -733,7 +737,7 @@ ucs_status_t uct_rc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge + 1, iov, iovcnt);
 
-    UCT_RC_VERBS_FILL_TM_IMM(wr, imm, app_ctx);
+    UCT_RC_VERBS_FILL_TM_IMM(wr, imm, app_ctx, wr.opcode, wr.imm_data, IBV);
     UCT_RC_VERBS_GET_TM_ZCOPY_DESC(&iface->super,
                                    &iface->verbs_common.short_desc_mp,
                                    desc, tag, app_ctx, comp, &send_flags,
@@ -761,17 +765,10 @@ ucs_status_ptr_t uct_rc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super);
     uint32_t op_index;
 
-    UCT_CHECK_PARAM_PTR(iovcnt <= 1ul,
-                        "Wrong iovcnt in uct_rc_verbs_ep_tag_rndv_zcopy %lu",
-                        iovcnt);
-    UCT_CHECK_PARAM_PTR(header_length <= IBV_DEVICE_TM_CAPS(dev, max_rndv_hdr_size),
-                        "Invalid hdr len in uct_rc_verbs_ep_tag_rndv_zcopy %u",
-                        header_length);
-    UCT_CHECK_PARAM_PTR((header_length + tmh_len) <=
-                        iface->verbs_common.config.max_inline,
-                        "Invalid RTS len in uct_rc_verbs_ep_tag_rndv_zcopy %u",
-                        header_length + tmh_len);
-    UCT_RC_VERBS_CHECK_RNDV(&iface->super, &ep->super);
+    UCT_RC_VERBS_CHECK_RNDV_PARAMS(iovcnt, header_length, tmh_len,
+                                   iface->verbs_common.config.max_inline,
+                                   IBV_DEVICE_TM_CAPS(dev, max_rndv_hdr_size));
+    UCT_RC_VERBS_CHECK_RES_PTR(&iface->super, &ep->super);
 
     op_index = uct_rc_verbs_iface_tag_get_op_id(&iface->verbs_common, comp);
     uct_rc_verbs_iface_fill_tmh(tmh, tag, op_index, IBV_EXP_TMH_RNDV);

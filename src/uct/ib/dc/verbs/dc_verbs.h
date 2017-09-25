@@ -12,6 +12,24 @@
 #include <uct/ib/rc/verbs/rc_verbs_common.h>
 
 
+#define UCT_DC_VERBS_CHECK_RES_PTR(_iface, _ep) \
+    { \
+        ucs_status_t status; \
+        status = uct_dc_iface_dci_get(_iface, _ep); \
+        if (ucs_unlikely(status != UCS_OK)) { \
+            return UCS_STATUS_PTR(status); \
+        } \
+        UCT_RC_CHECK_CQE_RET(&(_iface)->super, _ep, \
+                             &(_iface)->tx.dcis[(_ep)->dci].txqp, \
+                             UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)); \
+    }
+
+
+typedef struct uct_dc_verbs_iface_addr {
+    uct_dc_iface_addr_t            super;
+    uint8_t                        addr_type;
+} UCS_S_PACKED uct_dc_verbs_iface_addr_t;
+
 typedef struct uct_dc_verbs_iface_config {
     uct_dc_iface_config_t              super;
     uct_rc_verbs_iface_common_config_t verbs_common;

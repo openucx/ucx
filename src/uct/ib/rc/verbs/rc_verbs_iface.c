@@ -189,10 +189,6 @@ static void uct_rc_verbs_iface_set_progress(uct_rc_verbs_iface_t *iface)
 
 static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
 {
-    iface->verbs_common.config.notag_hdr_size =
-        uct_rc_verbs_notag_header_fill(&iface->verbs_common,
-                                       iface->verbs_common.am_inl_hdr);
-
     memset(&iface->inl_am_wr, 0, sizeof(iface->inl_am_wr));
     iface->inl_am_wr.sg_list        = iface->verbs_common.inl_sge;
     iface->inl_am_wr.num_sge        = 2;
@@ -212,7 +208,7 @@ static ucs_status_t uct_rc_verbs_iface_get_address(uct_iface_h tl_iface,
     uct_rc_verbs_iface_t UCS_V_UNUSED *iface =
                     ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
 
-    *(uint8_t*)addr = UCT_RC_VERBS_TM_ENABLED(iface) ?
+    *(uint8_t*)addr = UCT_RC_VERBS_TM_ENABLED(&iface->verbs_common) ?
                       UCT_RC_VERBS_IFACE_ADDR_TYPE_TM :
                       UCT_RC_VERBS_IFACE_ADDR_TYPE_BASIC;
     return UCS_OK;
@@ -223,7 +219,7 @@ static int uct_rc_verbs_iface_is_reachable(const uct_iface_h tl_iface,
 {
     uct_rc_verbs_iface_t UCS_V_UNUSED *iface =
                     ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
-    uint8_t my_type = UCT_RC_VERBS_TM_ENABLED(iface) ?
+    uint8_t my_type = UCT_RC_VERBS_TM_ENABLED(&iface->verbs_common) ?
                       UCT_RC_VERBS_IFACE_ADDR_TYPE_TM :
                       UCT_RC_VERBS_IFACE_ADDR_TYPE_BASIC;
 
@@ -278,7 +274,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
 
     status = uct_rc_verbs_iface_common_init(&self->verbs_common, &self->super,
                                             &config->verbs_common, &config->super,
-                                            short_mp_size);
+                                            short_mp_size, 0);
     if (status != UCS_OK) {
         goto err;
     }

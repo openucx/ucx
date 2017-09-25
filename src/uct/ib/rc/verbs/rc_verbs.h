@@ -14,16 +14,6 @@
 #include "rc_verbs_common.h"
 
 
-enum {
-    UCT_RC_VERBS_IFACE_ADDR_TYPE_BASIC,
-
-    /* Tag Matching address. It additionaly contains QP number which
-     * is used for hardware offloads. */
-    UCT_RC_VERBS_IFACE_ADDR_TYPE_TM,
-    UCT_RC_VERBS_IFACE_ADDR_TYPE_LAST
-};
-
-
 /**
  * RC verbs communication context.
  */
@@ -73,9 +63,7 @@ typedef struct uct_rc_verbs_ep_tm_address {
     uct_ib_uint24_t             tm_qp_num;
 } UCS_S_PACKED uct_rc_verbs_ep_tm_address_t;
 
-#  define UCT_RC_VERBS_TM_ENABLED(_iface) (_iface)->verbs_common.tm.enabled
-
-#  define UCT_RC_VERBS_CHECK_RNDV(_iface, _ep) \
+#  define UCT_RC_VERBS_CHECK_RES_PTR(_iface, _ep) \
        UCT_RC_CHECK_CQE_RET(_iface, _ep, &(_ep)->txqp, \
                             UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
        UCT_RC_CHECK_TXQP_RET(_iface, _ep, &(_ep)->txqp, \

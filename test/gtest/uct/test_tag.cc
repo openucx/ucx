@@ -631,3 +631,4 @@ UCS_TEST_P(test_tag, sw_rndv_unexpected)
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_tag, rc)
+_UCT_INSTANTIATE_TEST_CASE(test_tag, dc)

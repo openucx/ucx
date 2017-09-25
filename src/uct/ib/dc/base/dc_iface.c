@@ -47,7 +47,7 @@ ucs_config_field_t uct_dc_iface_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
+ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface, uct_rc_srq_t *srq)
 {
     struct ibv_exp_dct_init_attr init_attr;
 
@@ -55,7 +55,7 @@ static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
 
     init_attr.pd               = uct_ib_iface_md(&iface->super.super)->pd;
     init_attr.cq               = iface->super.super.recv_cq;
-    init_attr.srq              = iface->super.rx.srq.srq;
+    init_attr.srq              = srq->srq;
     init_attr.dc_key           = UCT_IB_KEY;
     init_attr.port             = iface->super.super.config.port_num;
     init_attr.mtu              = iface->super.config.path_mtu;
@@ -240,9 +240,11 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
     ucs_list_head_init(&self->tx.gc_list);
 
     /* create DC target */
-    status = uct_dc_iface_create_dct(self);
-    if (status != UCS_OK) {
-        goto err;
+    if (srq_size > 0) {
+        status = uct_dc_iface_create_dct(self, &self->super.rx.srq);
+        if (status != UCS_OK) {
+            goto err;
+        }
     }
 
     /* create DC initiators */
@@ -253,7 +255,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
 
     ucs_debug("dc iface %p: using '%s' policy with %d dcis, dct 0x%x", self,
               uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci,
-              self->rx.dct->dct_num);
+              srq_size ? self->rx.dct->dct_num : 0);
 
     /* Create fake endpoint which will be used for sending FC grants */
     uct_dc_iface_init_fc_ep(self);
@@ -262,7 +264,9 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
     return UCS_OK;
 
 err_destroy_dct:
-    ibv_exp_destroy_dct(self->rx.dct);
+    if (srq_size > 0) {
+        ibv_exp_destroy_dct(self->rx.dct);
+    }
 err:
     return status;
 }
@@ -272,7 +276,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
     uct_dc_ep_t *ep, *tmp;
 
     ucs_trace_func("");
-    ibv_exp_destroy_dct(self->rx.dct);
+    if (self->rx.dct != NULL) {
+        ibv_exp_destroy_dct(self->rx.dct);
+    }
     ucs_list_for_each_safe(ep, tmp, &self->tx.gc_list, list) {
         uct_dc_ep_release(ep);
     }

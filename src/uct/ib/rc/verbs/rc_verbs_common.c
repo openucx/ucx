@@ -34,6 +34,7 @@ ucs_config_field_t uct_rc_verbs_iface_common_config_table[] = {
    "-1 means no limit.",
    ucs_offsetof(uct_rc_verbs_iface_common_config_t, tm.list_size), UCS_CONFIG_TYPE_UINT},
 
+  /* TODO: Not applicable for DC */
   {"TM_RX_RNDV_QUEUE_LEN", "128",
    "Length of receive queue in the QP owned by the device. It is used for receiving \n"
    "RNDV Complete messages sent by the device",
@@ -59,7 +60,6 @@ static void uct_rc_verbs_iface_common_tag_query(uct_rc_verbs_iface_common_t *ifa
     if (!iface->tm.enabled) {
         return;
     }
-    iface_attr->max_conn_priv = 0;
 
     /* Redefine AM caps, because we have to send TMH (with NO_TAG
      * operation) with every AM message. */
@@ -201,8 +201,15 @@ void uct_rc_verbs_iface_common_preinit(uct_rc_verbs_iface_common_t *iface,
     struct ibv_exp_tmh tmh;
     int tm_supported;
 
-    /* DC is not supported yet */
-    tm_supported = is_dc ? 0 : (cap_flags & IBV_EXP_TM_CAP_RC);
+    if (is_dc) {
+#if IBV_EXP_HW_TM_DC
+        tm_supported = (cap_flags & IBV_EXP_TM_CAP_DC);
+#else
+        tm_supported = 0;
+#endif
+    } else {
+        tm_supported = (cap_flags & IBV_EXP_TM_CAP_RC);
+    }
 
     iface->tm.enabled = (config->tm.enable && tm_supported);
 
@@ -249,7 +256,7 @@ static ucs_status_t
 uct_rc_verbs_iface_common_tag_init(uct_rc_verbs_iface_common_t *iface,
                                    uct_rc_iface_t *rc_iface,
                                    uct_rc_verbs_iface_common_config_t *config,
-                                   uct_rc_iface_config_t *rc_config)
+                                   uct_rc_iface_config_t *rc_config, int is_dc)
 {
 #if IBV_EXP_HW_TM
     struct ibv_exp_create_srq_attr srq_init_attr;
@@ -257,6 +264,9 @@ uct_rc_verbs_iface_common_tag_init(uct_rc_verbs_iface_common_t *iface,
     int sync_ops_count;
     int rx_hdr_len;
     uct_ib_md_t *md = ucs_derived_of(rc_iface->super.super.md, uct_ib_md_t);
+#if IBV_EXP_HW_TM_DC
+    struct ibv_exp_srq_dc_offload_params dc_op = {};
+#endif
 
     if (!iface->tm.enabled) {
         goto out;
@@ -286,6 +296,18 @@ uct_rc_verbs_iface_common_tag_init(uct_rc_verbs_iface_common_t *iface,
     srq_init_attr.tm_cap.max_ops = (2 * iface->tm.num_tags) + sync_ops_count + 2;
     srq_init_attr.comp_mask      = IBV_EXP_CREATE_SRQ_CQ | IBV_EXP_CREATE_SRQ_TM;
 
+#if IBV_EXP_HW_TM_DC
+    if (is_dc) {
+        dc_op.timeout    = rc_iface->config.timeout;
+        dc_op.path_mtu   = rc_iface->config.path_mtu;
+        dc_op.pkey_index = 0;
+        dc_op.sl         = rc_iface->super.config.sl;
+        dc_op.dct_key    = UCT_IB_KEY;
+        srq_init_attr.comp_mask        |= IBV_EXP_CREATE_SRQ_DC_OFFLOAD_PARAMS;
+        srq_init_attr.dc_offload_params = &dc_op;
+    }
+#endif
+
     iface->tm.xrq.srq = ibv_exp_create_srq(md->dev.ibv_context, &srq_init_attr);
     if (iface->tm.xrq.srq == NULL) {
         ucs_error("Failed to create TM XRQ: %m");
@@ -310,6 +332,16 @@ uct_rc_verbs_iface_common_tag_init(uct_rc_verbs_iface_common_t *iface,
     iface->tm.rndv_desc.super.cb  = uct_rc_verbs_iface_release_desc;
     iface->tm.rndv_desc.offset    = iface->tm.eager_desc.offset +
                                     sizeof(struct ibv_exp_tmh_rvh);
+#if IBV_EXP_HW_TM_DC
+    if (is_dc) {
+        /* DC sends additional header (RAVH) in RTS */
+        iface->tm.rndv_desc.offset += sizeof(struct ibv_exp_tmh_ravh);
+        iface->tm.fin_srq = &iface->tm.xrq;
+    } else
+#endif
+    {
+        iface->tm.fin_srq = &rc_iface->rx.srq;
+    }
 
     status = uct_rc_verbs_iface_prepost_recvs_common(rc_iface, &iface->tm.xrq);
     if (status != UCS_OK) {
@@ -343,7 +375,7 @@ ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
                                             uct_rc_iface_t *rc_iface,
                                             uct_rc_verbs_iface_common_config_t *config,
                                             uct_rc_iface_config_t *rc_config,
-                                            unsigned short_mp_size)
+                                            unsigned short_mp_size, int is_dc)
 {
     memset(iface->inl_sge, 0, sizeof(iface->inl_sge));
     ucs_status_t status;
@@ -368,17 +400,17 @@ ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
         goto err;
     }
 
-    iface->config.notag_hdr_size = 0;
-
     iface->am_inl_hdr = ucs_mpool_get(&iface->short_desc_mp);
     if (iface->am_inl_hdr == NULL) {
         ucs_error("Failed to allocate AM short header");
         status = UCS_ERR_NO_MEMORY;
         goto err_mpool_cleanup;
     }
+    iface->config.notag_hdr_size = uct_rc_verbs_notag_header_fill(iface,
+                                                                  iface->am_inl_hdr);
 
     status = uct_rc_verbs_iface_common_tag_init(iface, rc_iface, config,
-                                                rc_config);
+                                                rc_config, is_dc);
     if (status != UCS_OK) {
         goto err_am_inl_hdr_put;
     }
