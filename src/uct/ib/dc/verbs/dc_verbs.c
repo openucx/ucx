@@ -562,19 +562,27 @@ ucs_status_t uct_dc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completio
 }
 
 ucs_status_t uct_dc_verbs_iface_create_ah(uct_dc_iface_t *dc_iface, uint16_t lid,
-                                          struct ibv_ah **ah_p)
+                                          union ibv_gid *gid, struct ibv_ah **ah_p)
 {
-    struct ibv_ah_attr ah_attr;
+    struct ibv_ah_attr ah_attr = {};
     struct ibv_ah *ah;
     uct_ib_iface_t *iface = &dc_iface->super.super;
 
-    /* TODO: GRH, path_bits, etc */
     ah_attr.sl            = iface->config.sl;
     ah_attr.src_path_bits = iface->path_bits[0];
     ah_attr.dlid          = lid | ah_attr.src_path_bits;
     ah_attr.port_num      = iface->config.port_num;
-    ah_attr.is_global     = 0;
     ah_attr.static_rate   = 0;
+
+    if ((gid == NULL) ||
+       ((iface->addr_type != UCT_IB_ADDRESS_TYPE_GLOBAL) &&
+        (iface->gid.global.subnet_prefix == gid->global.subnet_prefix))) {
+        ah_attr.is_global = 0;
+    } else {
+        ah_attr.is_global = 1;
+        ah_attr.grh.sgid_index = iface->config.gid_index;
+        ah_attr.grh.dgid = *gid;
+    }
 
     ah = ibv_create_ah(uct_ib_iface_md(iface)->pd, &ah_attr);
     if (ucs_unlikely(ah == NULL)) {
@@ -632,6 +640,11 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
     uct_dc_ep_t *dc_ep          = ucs_derived_of(tl_ep, uct_dc_ep_t);
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_dc_verbs_iface_t);
+    uct_ib_iface_t *ib_iface = &iface->super.super.super;
+    uct_dc_fc_sender_data_t sender = {
+        .ep                = (uintptr_t)dc_ep,
+        .global.gid       = ib_iface->gid,
+        .global.is_global = ib_iface->addr_type != UCT_IB_ADDRESS_TYPE_LINK_LOCAL};
 
     ucs_assert((sizeof(hdr) + sizeof(dc_ep)) <=
                iface->verbs_common.config.max_inline);
@@ -647,26 +660,30 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
     iface->verbs_common.inl_sge[0].addr       = (uintptr_t)&hdr;
     iface->verbs_common.inl_sge[0].length     = sizeof(hdr);
 
+    dc_req = ucs_derived_of(req, uct_dc_fc_request_t);
+
     if (op == UCT_RC_EP_FC_PURE_GRANT) {
         ucs_assert(req != NULL);
-        dc_req = ucs_derived_of(req, uct_dc_fc_request_t);
 
-        status = uct_dc_verbs_iface_create_ah(&iface->super, dc_req->lid, &ah);
+        status = uct_dc_verbs_iface_create_ah(
+                    &iface->super, dc_req->lid,
+                    dc_req->sender.global.is_global ? &dc_req->sender.global.gid : NULL,
+                    &ah);
         if (status != UCS_OK) {
             return status;
         }
         wr.exp_opcode                         = IBV_EXP_WR_SEND;
-        iface->verbs_common.inl_sge[1].addr   = (uintptr_t)&dc_req->sender_ep;
-        iface->verbs_common.inl_sge[1].length = sizeof(dc_req->sender_ep);
+        iface->verbs_common.inl_sge[1].addr   = (uintptr_t)&dc_req->sender.ep;
+        iface->verbs_common.inl_sge[1].length = sizeof(dc_req->sender.ep);
         uct_dc_verbs_iface_post_send_to_dci(iface, &wr, dc_ep->dci, ah,
                                             dc_req->dct_num,
                                             IBV_SEND_INLINE | IBV_SEND_SIGNALED);
         ibv_destroy_ah(ah);
     } else {
         ucs_assert(op == UCT_RC_EP_FC_FLAG_HARD_REQ);
-        iface->verbs_common.inl_sge[1].addr   = (uintptr_t)&dc_ep;
-        iface->verbs_common.inl_sge[1].length = sizeof(dc_ep);
         wr.exp_opcode                         = IBV_EXP_WR_SEND_WITH_IMM;
+        iface->verbs_common.inl_sge[1].addr   = (uintptr_t)&sender;
+        iface->verbs_common.inl_sge[1].length = sizeof(sender);
 
         /* Send out DCT number to the peer, so it will be able
          * to send grants back */

@@ -557,13 +557,18 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                     uct_rc_fc_request_t *req)
 {
     uintptr_t sender_ep;
-    uct_ib_iface_t *ib_iface;
+    uct_dc_fc_sender_data_t sender;
     uct_ib_mlx5_base_av_t av;
     uct_dc_fc_request_t *dc_req;
     uct_dc_mlx5_ep_t *dc_mlx5_ep;
     uct_dc_ep_t *dc_ep         = ucs_derived_of(tl_ep, uct_dc_ep_t);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                 uct_dc_mlx5_iface_t);
+    uct_ib_iface_t *ib_iface = &iface->super.super.super;
+    struct ibv_ah_attr ah_attr = {.is_global = 0};
+    struct ibv_ah *ah;
+    struct mlx5_wqe_av mlx5_av;
+
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     ucs_assert((sizeof(uint8_t) + sizeof(sender_ep)) <=
@@ -572,11 +577,34 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     UCT_DC_CHECK_RES(&iface->super, dc_ep);
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, dc_ep, txqp, txwq);
 
+    dc_req = ucs_derived_of(req, uct_dc_fc_request_t);
+
     if (op == UCT_RC_EP_FC_PURE_GRANT) {
         ucs_assert(req != NULL);
-        dc_req    = ucs_derived_of(req, uct_dc_fc_request_t);
-        sender_ep = (uintptr_t)dc_req->sender_ep;
-        ib_iface  = &iface->super.super.super;
+
+        sender_ep = (uintptr_t)dc_req->sender.ep;
+
+        /* TODO: look at common code with uct_ud_mlx5_iface_get_av */
+        if (dc_req->sender.global.is_global) {
+            ah_attr.sl             = ib_iface->config.sl;
+            ah_attr.src_path_bits  = ib_iface->path_bits[0];
+            ah_attr.dlid           = dc_req->lid | ib_iface->path_bits[0];
+            ah_attr.port_num       = ib_iface->config.port_num;
+            ah_attr.is_global      = 1;
+            ah_attr.grh.dgid       = dc_req->sender.global.gid;
+            ah_attr.grh.sgid_index = ib_iface->config.gid_index;
+
+            ah = ibv_create_ah(uct_ib_iface_md(ib_iface)->pd, &ah_attr);
+
+            if (ah == NULL) {
+                ucs_error("ibv_create_ah failed: %m");
+                return UCS_ERR_INVALID_ADDR;
+            }
+
+            uct_ib_mlx5_get_av(ah, &mlx5_av);
+
+            ibv_destroy_ah(ah);
+        }
 
         /* Note av initialization is copied from exp verbs */
         av.stat_rate_sl = ib_iface->config.sl; /* (attr->static_rate << 4) | attr->sl */
@@ -586,28 +614,29 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         av.rlid         = dc_req->lid | htons(ib_iface->path_bits[0]);
         av.dqp_dct      = htonl(dc_req->dct_num);
 
-        if (!iface->ud_common.config.compact_av) {
+        if (!iface->ud_common.config.compact_av || ah_attr.is_global) {
             av.dqp_dct |= UCT_IB_MLX5_EXTENDED_UD_AV;
         }
 
-        /* TODO: add GRH processing here */
         uct_rc_mlx5_txqp_inline_post(&iface->super.super, IBV_EXP_QPT_DC_INI,
                                      txqp, txwq, MLX5_OPCODE_SEND,
                                      &av /*dummy*/, 0, op, sender_ep, 0,
                                      0, 0,
-                                     &av, NULL, uct_ib_mlx5_wqe_av_size(&av),
-                                     0);
+                                     &av, ah_attr.is_global ? mlx5_av_grh(&mlx5_av) : NULL,
+                                     uct_ib_mlx5_wqe_av_size(&av), 0);
     } else {
         ucs_assert(op == UCT_RC_EP_FC_FLAG_HARD_REQ);
-        sender_ep    = (uintptr_t)dc_ep;
-        dc_mlx5_ep   = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+        dc_mlx5_ep              = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+        sender.ep               = (uint64_t)dc_ep;
+        sender.global.gid       = ib_iface->gid;
+        sender.global.is_global = dc_mlx5_ep->is_global;
 
         UCS_STATS_UPDATE_COUNTER(dc_ep->fc.stats,
                                  UCT_RC_FC_STAT_TX_HARD_REQ, 1);
 
         uct_rc_mlx5_txqp_inline_post(&iface->super.super, IBV_EXP_QPT_DC_INI,
                                      txqp, txwq, MLX5_OPCODE_SEND_IMM,
-                                     &dc_mlx5_ep->av /*dummy*/, 0, op, sender_ep,
+                                     &sender.global, sizeof(sender.global), op, sender.ep,
                                      iface->super.rx.dct->dct_num,
                                      0, 0,
                                      &dc_mlx5_ep->av,
