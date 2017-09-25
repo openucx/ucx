@@ -208,7 +208,7 @@ static ucs_arbiter_cb_result_t uct_dc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
         if (cb != NULL) {
             cb(req, cb_args->arg);
         } else {
-            ucs_warn("ep=%p cancelling user pending request %p", ep, req);
+            ucs_debug("ep=%p cancelling user pending request %p", ep, req);
         }
     } else {
         /* User callback should not be called for FC messages.
