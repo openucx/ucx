@@ -966,7 +966,7 @@ ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Release configuration memory returned from uct_iface_config_read() or
+ * @brief Release configuration memory returned from uct_md_iface_config_read() or
  * from uct_md_config_read().
  *
  * @param [in]  config        Configuration to release.
@@ -1026,7 +1026,7 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
  *                            communications on this interface.
  * @param [in]  params        User defined @ref uct_iface_params_t parameters.
  * @param [in]  config        Interface configuration options. Should be obtained
- *                            from uct_iface_config_read() function, or point to
+ *                            from uct_md_iface_config_read() function, or point to
  *                            transport-specific structure which extends uct_iface_config_t.
  * @param [out] iface_p       Filled with a handle to opened communication interface.
  *
