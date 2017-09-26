@@ -609,13 +609,13 @@ static void ucm_malloc_install_mallopt()
 
     p = getenv("MALLOC_TRIM_THRESHOLD_");
     if (p) {
-        ucs_debug("set trim_thresh to %d", atoi(p));
+        ucm_debug("set trim_thresh to %d", atoi(p));
         ucm_dlmallopt(M_TRIM_THRESHOLD, atoi(p));
     }
 
     p = getenv("MALLOC_MMAP_THRESHOLD_");
     if (p) {
-        ucs_debug("set mmap_thresh to %d", atoi(p));
+        ucm_debug("set mmap_thresh to %d", atoi(p));
         ucm_dlmallopt(M_MMAP_THRESHOLD, atoi(p));
     }
 }
