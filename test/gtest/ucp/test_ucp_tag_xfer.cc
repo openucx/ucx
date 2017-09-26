@@ -25,14 +25,6 @@ public:
         VARIANT_ERR_HANDLING
     };
 
-    void init() {
-        if (is_err_handling()) {
-            /* FIXME: GH Issue #1862 */
-            modify_config("TM_OFFLOAD", "n");
-        }
-        test_ucp_tag::init();
-    }
-
     std::vector<ucp_test_param>
     static enum_test_params(const ucp_params_t& ctx_params,
                             const std::string& name,
