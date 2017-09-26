@@ -20,6 +20,7 @@
 #define UCM_EN_MMAP_RELOC_VAR    "MMAP_RELOC"
 #define UCM_EN_MALLOC_HOOKS_VAR  "MALLOC_HOOKS"
 #define UCM_EN_MALLOC_RELOC_VAR  "MALLOC_RELOC"
+#define UCM_EN_CUDA_HOOKS_VAR    "CUDA_HOOKS"
 
 
 ucm_config_t ucm_global_config = {
@@ -28,7 +29,10 @@ ucm_config_t ucm_global_config = {
     .enable_events        = 1,
     .enable_mmap_reloc    = 1,
     .enable_malloc_hooks  = 1,
-    .enable_malloc_reloc  = 0
+    .enable_malloc_reloc  = 0,
+#if HAVE_CUDA
+    .enable_cuda_hooks    = 1
+#endif
 };
 
 static const char *ucm_config_bool_to_string(int value)
@@ -107,6 +111,10 @@ void ucm_config_print(FILE *stream, ucs_config_print_flags_t print_flags)
                               print_flags);
     fprintf(stream, "%s%s=%s\n", UCM_ENV_PREFIX, UCM_EN_MALLOC_RELOC_VAR,
             ucm_config_bool_to_string(ucm_global_config.enable_malloc_reloc));
+#if HAVE_CUDA
+    fprintf(stream, "%s%s=%s\n", UCM_ENV_PREFIX, UCM_EN_CUDA_HOOKS_VAR,
+            ucm_config_bool_to_string(ucm_global_config.enable_cuda_hooks));
+#endif
 }
 
 static void ucm_config_set_value_table(const char *str_value, const char **table,
@@ -157,6 +165,10 @@ ucs_status_t ucm_config_modify(const char *name, const char *value)
         ucm_config_set_value_bool(value, &ucm_global_config.enable_malloc_hooks);
     } else if (!strcmp(name, UCM_EN_MALLOC_RELOC_VAR)) {
         ucm_config_set_value_bool(value, &ucm_global_config.enable_malloc_reloc);
+#if HAVE_CUDA
+    } else if (!strcmp(name, UCM_EN_CUDA_HOOKS_VAR)) {
+        ucm_config_set_value_bool(value, &ucm_global_config.enable_cuda_hooks);
+#endif
     } else {
         return UCS_ERR_INVALID_PARAM;
     }

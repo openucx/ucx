@@ -18,6 +18,9 @@ typedef struct ucm_config {
     int             enable_mmap_reloc;
     int             enable_malloc_hooks;
     int             enable_malloc_reloc;
+#if HAVE_CUDA
+    int             enable_cuda_hooks;
+#endif
     size_t          alloc_alignment;
 } ucm_config_t;
 

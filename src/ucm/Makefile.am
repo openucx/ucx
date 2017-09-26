@@ -33,6 +33,7 @@ noinst_HEADERS = \
 	malloc/allocator.h \
 	mmap/mmap.h \
 	util/ucm_config.h \
+	util/replace.h \
 	util/log.h \
 	util/reloc.h \
 	util/sys.h
@@ -41,11 +42,16 @@ libucm_la_SOURCES = \
 	event/event.c \
 	malloc/malloc_hook.c \
 	mmap/install.c \
-	mmap/replace.c \
+	util/replace.c \
 	util/ucm_config.c \
 	util/log.c \
 	util/reloc.c \
 	util/sys.c
+
+if HAVE_CUDA
+libucm_la_SOURCES += \
+    cuda/install.c
+endif
 
 if HAVE_UCM_PTMALLOC286
 libucm_la_CPPFLAGS += \

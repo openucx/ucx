@@ -13,6 +13,9 @@
 #include <ucm/api/ucm.h>
 #include <ucm/mmap/mmap.h>
 #include <ucm/malloc/malloc_hook.h>
+#if HAVE_CUDA
+#include <ucm/cuda/cudamem.h>
+#endif
 #include <ucm/util/ucm_config.h>
 #include <ucm/util/log.h>
 #include <ucm/util/sys.h>
@@ -334,6 +337,24 @@ void *ucm_sbrk(intptr_t increment)
     return event.sbrk.result;
 }
 
+#if HAVE_CUDA
+cudaError_t ucm_cudaFree(void *addr)
+{
+    cudaError_t ret;
+
+    ucm_event_enter();
+
+    ucm_trace("ucm_cudaFree(addr=%p )", addr);
+
+    ucm_dispatch_vm_munmap(addr, 0);
+    ret = ucm_orig_cudaFree(addr);
+
+    ucm_event_leave();
+
+    return ret;
+}
+#endif
+
 void ucm_event_handler_add(ucm_event_handler_t *handler)
 {
     ucm_event_handler_t *elem;
@@ -390,6 +411,16 @@ static ucs_status_t ucm_event_install(int events)
     }
 
     ucm_debug("malloc hooks are ready");
+
+#if HAVE_CUDA
+    status = ucm_cudamem_install();
+    if (status != UCS_OK) {
+        ucm_debug("failed to install cudamem events");
+        goto out_unlock;
+    }
+    ucm_debug("cudaFree hooks are ready");
+#endif
+
     status = UCS_OK;
 
 out_unlock:
