@@ -1317,8 +1317,8 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
  * The file descriptor will get signaled when an event occurs, as part of the
  * wake-up mechanism. Signaling means a call to poll() or select() with this
  * file descriptor will return at this point, with this descriptor marked as the
- * reason (or one of the reasons) the function has returned. The user is
- * responsible to release the file descriptor by invoking close().
+ * reason (or one of the reasons) the function has returned. The user does not
+ * need to release the obtained file descriptor.
  *
  * The wake-up mechanism exists to allow for the user process to register for
  * notifications on events of the underlying interfaces, and wait until such
