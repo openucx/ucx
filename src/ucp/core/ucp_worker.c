@@ -374,7 +374,7 @@ found_ucp_ep:
     }
 }
 
-static void ucp_worker_iface_activate(ucp_worker_iface_t *wiface)
+void ucp_worker_iface_activate(ucp_worker_iface_t *wiface)
 {
     ucp_worker_h worker = wiface->worker;
     ucs_status_t status;
@@ -583,7 +583,6 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
 {
     ucp_rsc_index_t rsc_index;
     ucp_worker_iface_t *wiface;
-    ucp_worker_iface_t *offload_iface;
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -612,11 +611,7 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
 
         if (ucp_worker_is_tl_tag_offload(worker, rsc_index)) {
             ucs_queue_remove(&worker->context->tm.offload.ifaces, &wiface->queue);
-            if (ucp_context_tag_offload_enable(worker->context)) {
-                offload_iface = ucs_queue_head_elem_non_empty(&worker->context->tm.offload.ifaces,
-                                                              ucp_worker_iface_t, queue);
-                ucp_worker_iface_activate(offload_iface);
-            }
+            ucp_context_tag_offload_enable(worker->context);
         }
 
         uct_iface_close(wiface->iface);
@@ -730,9 +725,7 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     if (ucp_worker_is_tl_tag_offload(worker, tl_id)) {
         worker->ifaces[tl_id].rsc_index = tl_id;
         ucs_queue_push(&context->tm.offload.ifaces, &wiface->queue);
-        if (ucp_context_tag_offload_enable(context)) {
-            ucp_worker_iface_activate(wiface);
-        }
+        ucp_context_tag_offload_enable(context);
     }
 
     return UCS_OK;

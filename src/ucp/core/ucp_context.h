@@ -194,7 +194,7 @@ extern ucp_am_handler_t ucp_am_handlers[];
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
                       const void *data, size_t length);
 
-int ucp_context_tag_offload_enable(ucp_context_h context);
+void ucp_context_tag_offload_enable(ucp_context_h context);
 
 uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context);
 
