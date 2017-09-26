@@ -10,6 +10,7 @@ static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
     attr->cap.flags         = UCT_MD_FLAG_REG;
+    attr->cap.mem_type      = UCT_MD_MEM_TYPE_DEFAULT;
     attr->cap.max_alloc     = 0;
     attr->cap.max_reg       = ULONG_MAX;
     attr->rkey_packed_size  = 0; /* uct_md_query adds UCT_MD_COMPONENT_NAME_MAX to this */
@@ -41,7 +42,8 @@ static ucs_status_t uct_self_md_open(const char *md_name, const uct_md_config_t 
         .query        = uct_self_md_query,
         .mkey_pack    = ucs_empty_function_return_success,
         .mem_reg      = uct_self_mem_reg,
-        .mem_dereg    = ucs_empty_function_return_success
+        .mem_dereg    = ucs_empty_function_return_success,
+        .mem_type_detect   = ucs_empty_function_return_unsupported,
     };
     static uct_md_t md = {
         .ops          = &md_ops,

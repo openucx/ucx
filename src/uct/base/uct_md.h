@@ -136,6 +136,7 @@ struct uct_md_ops {
 
     int          (*is_sockaddr_accessible)(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                            uct_sockaddr_accessibility_t mode);
+    ucs_status_t (*mem_type_detect)(uct_md_h md, void *addr);
 };
 
 

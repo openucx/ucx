@@ -59,7 +59,8 @@ static ucs_status_t uct_cma_md_open(const char *md_name, const uct_md_config_t *
         .mem_free     = (void*)ucs_empty_function_return_success,
         .mkey_pack    = (void*)ucs_empty_function_return_success,
         .mem_reg      = uct_cma_mem_reg,
-        .mem_dereg    = (void*)ucs_empty_function_return_success
+        .mem_dereg    = (void*)ucs_empty_function_return_success,
+        .mem_type_detect   = ucs_empty_function_return_unsupported,
     };
     static uct_md_t md = {
         .ops          = &md_ops,
@@ -80,6 +81,7 @@ ucs_status_t uct_cma_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->rkey_packed_size  = 0;
     md_attr->cap.flags         = UCT_MD_FLAG_REG;
+    md_attr->cap.mem_type      = UCT_MD_MEM_TYPE_DEFAULT;
     md_attr->cap.max_alloc     = 0;
     md_attr->cap.max_reg       = ULONG_MAX;
     md_attr->reg_cost.overhead = 9e-9;

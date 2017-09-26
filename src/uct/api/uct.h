@@ -385,6 +385,16 @@ enum {
                                                sockaddr */
 };
 
+/*
+ * @ingroup UCT_MD
+ * @brief  Memory types
+ */
+typedef enum {
+    UCT_MD_MEM_TYPE_DEFAULT = 0,   /**< Default system memory */
+    UCT_MD_MEM_TYPE_CUDA,          /**< NVIDIA CUDA memory */
+    UCT_MD_MEM_TYPE_LAST
+} uct_memory_type_t;
+
 
 /**
  * @ingroup UCT_MD
@@ -633,6 +643,7 @@ struct uct_md_attr {
         size_t               max_alloc; /**< Maximal allocation size */
         size_t               max_reg;   /**< Maximal registration size */
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
+        uct_memory_type_t    mem_type;  /**< Supported memory type */
     } cap;
 
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost estimation
@@ -1415,6 +1426,18 @@ ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
  */
 ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
 
+
+/**
+ * @ingroup UCT_MD
+ * @brief Detect memory type.
+ *
+ *  Detect memory type.
+ *  Return UCS_OK if address belongs to MD's supported memory type
+ *
+ * @param [in]     md        Memory domain to detect if memory belongs to.
+ * @param [in]     address   Memory address to detect.
+ */
+ucs_status_t uct_md_mem_type_detect(uct_md_h md, void *addr);
 
 /**
  * @ingroup UCT_MD
