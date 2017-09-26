@@ -86,8 +86,13 @@ unsigned uct_rc_mlx5_iface_progress(void *arg)
 static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    ucs_status_t status;
 
-    uct_rc_iface_query(iface, iface_attr);
+    status = uct_rc_iface_query(iface, iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     uct_rc_mlx5_iface_common_query(iface, iface_attr, 0);
     iface_attr->latency.growth += 3e-9; /* 3ns per each extra QP */
     return UCS_OK;

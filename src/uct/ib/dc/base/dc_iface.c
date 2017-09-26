@@ -280,9 +280,15 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
 
 UCS_CLASS_DEFINE(uct_dc_iface_t, uct_rc_iface_t);
 
-void uct_dc_iface_query(uct_dc_iface_t *iface, uct_iface_attr_t *iface_attr)
+ucs_status_t uct_dc_iface_query(uct_dc_iface_t *iface,
+                                uct_iface_attr_t *iface_attr)
 {
-    uct_rc_iface_query(&iface->super, iface_attr);
+    ucs_status_t status;
+
+    status = uct_rc_iface_query(&iface->super, iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     /* fixup flags and address lengths */
     iface_attr->cap.flags &= ~UCT_IFACE_FLAG_CONNECT_TO_EP;
@@ -291,6 +297,8 @@ void uct_dc_iface_query(uct_dc_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->max_conn_priv     = 0;
     iface_attr->iface_addr_len    = sizeof(uct_dc_iface_addr_t);
     iface_attr->latency.overhead += 60e-9; /* connect packet + cqe */
+
+    return UCS_OK;
 }
 
 ucs_status_t

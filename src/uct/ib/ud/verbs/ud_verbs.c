@@ -390,9 +390,13 @@ static ucs_status_t
 uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+    ucs_status_t status;
 
     ucs_trace_func("");
-    uct_ud_iface_query(iface, iface_attr);
+    status = uct_ud_iface_query(iface, iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     return UCS_OK;
 }
