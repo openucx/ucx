@@ -45,7 +45,7 @@ enum {
 };
 
 
-/**
+ /**
  * Receive descriptor flags.
  */
 enum {
