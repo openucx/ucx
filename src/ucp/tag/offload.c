@@ -235,6 +235,10 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
         return 0;
     }
 
+    /* Request which was already matched in SW should not be
+     * posted to the transport */
+    ucs_assert(req->recv.state.offset == 0);
+
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                               ucp_worker_iface_t, queue);
     if (ucs_unlikely(length >= ctx->tm.offload.zcopy_thresh)) {
