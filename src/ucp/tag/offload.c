@@ -82,19 +82,19 @@ static size_t ucp_tag_offload_fetch_rkey(ucp_ep_t *ep, ucp_sw_rndv_hdr_t *sw_hdr
     uint64_t *addr;
     size_t rkey_size;
 
-    if (sw_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) {
-        /* SW RNDV with valid remote addr and key. Must be large message which
-         * does not fit offload RNDV proto. */
-        rkey_size    = ucp_ep_md_attr(ep, ucp_ep_get_tag_lane(ep))->rkey_packed_size;
-        addr         = (uint64_t*)(sw_hdr + 1);
-        rts->address = *addr;
-        rts->flags  |= sw_hdr->flags | UCP_RNDV_RTS_FLAG_OFFLOAD;
-        memcpy(rts + 1, addr + 1, rkey_size);
-        return rkey_size;
+    if (!(sw_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) || ucp_ep_is_stub(ep)) {
+        rts->address = 0;
+        return 0;
     }
 
-    rts->address = 0;
-    return 0;
+    /* SW RNDV with valid remote addr and key. Must be large message which
+     * does not fit offload RNDV proto. */
+    rkey_size    = ucp_ep_md_attr(ep, ucp_ep_get_tag_lane(ep))->rkey_packed_size;
+    addr         = (uint64_t*)(sw_hdr + 1);
+    rts->address = *addr;
+    rts->flags  |= sw_hdr->flags | UCP_RNDV_RTS_FLAG_OFFLOAD;
+    memcpy(rts + 1, addr + 1, rkey_size);
+    return rkey_size;
 }
 
 /* RNDV request matched by the transport. Need to proceed with AM based RNDV */
@@ -117,12 +117,11 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
         ucp_request_complete_recv(req, status);
     }
 
-    if (sreq->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) {
-        length += ucp_ep_md_attr(ep, req->send.lane)->rkey_packed_size;
+    if ((sreq->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) && !ucp_ep_is_stub(ep)) {
+        length += ucp_ep_md_attr(ep, ucp_ep_get_tag_lane(ep))->rkey_packed_size;
     }
     rts = alloca(length);
 
-    /* Emulate RTS without rkey (to be handled as AM-based RNDV). */
     rts->sreq      = sreq->super;
     rts->super.tag = stag;
     rts->flags     = 0;
@@ -139,14 +138,25 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
                  unsigned hdr_length, uint64_t remote_addr, size_t length,
                  const void *rkey_buf)
 {
-    ucp_worker_t *worker          = arg;
-    ucp_request_hdr_t *rndv_hdr   = (ucp_request_hdr_t*)hdr;
-    ucp_ep_t *ep                  = ucp_worker_get_reply_ep(worker, rndv_hdr->sender_uuid);
-    const uct_md_attr_t *md_attr  = ucp_ep_md_attr(ep, ucp_ep_get_tag_lane(ep));
-    size_t rkey_size        = rkey_buf ? md_attr->rkey_packed_size : 0;
-    size_t len              = sizeof(ucp_rndv_rts_hdr_t) + rkey_size;
-    ucp_rndv_rts_hdr_t *rts = ucs_alloca(len);
+    ucp_worker_t *worker        = arg;
+    ucp_request_hdr_t *rndv_hdr = (ucp_request_hdr_t*)hdr;
+    ucp_ep_t *ep                = ucp_worker_get_reply_ep(worker, rndv_hdr->sender_uuid);
+    size_t len                  = sizeof(ucp_rndv_rts_hdr_t);
+    ucp_rndv_rts_hdr_t *rts;
     ucp_sw_rndv_hdr_t  *sw_rndv_hdr;
+    const uct_md_attr_t *md_attr;
+    size_t rkey_size;
+
+    if (!ucp_ep_is_stub(ep) && rkey_buf) {
+        md_attr   = ucp_ep_md_attr(ep, ucp_ep_get_tag_lane(ep));
+        rkey_size = md_attr->rkey_packed_size;
+        len += rkey_size;
+    } else {
+        rkey_size = 0;
+    }
+
+    rts = ucs_alloca(len);
+
 
     /* Fill RTS to emulate SW RNDV flow. */
     rts->super.tag = stag;
@@ -156,9 +166,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
     if (remote_addr) {
         rts->size  = length;
         rts->flags = UCP_RNDV_RTS_FLAG_OFFLOAD;
-        if (rkey_buf) {
+        if (rkey_size) {
             memcpy(rts + 1, rkey_buf, rkey_size);
-            len        += rkey_size;
             rts->flags |= UCP_RNDV_RTS_FLAG_PACKED_RKEY;
         }
     } else {
@@ -225,6 +234,10 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
          * tags to HW until they are completed. */
         return 0;
     }
+
+    /* Request which was already matched in SW should not be
+     * posted to the transport */
+    ucs_assert(req->recv.state.offset == 0);
 
     ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                               ucp_worker_iface_t, queue);

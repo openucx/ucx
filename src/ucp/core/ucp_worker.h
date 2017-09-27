@@ -169,6 +169,8 @@ void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface);
 
 void ucp_worker_signal_internal(ucp_worker_h worker);
 
+void ucp_worker_iface_activate(ucp_worker_iface_t *wiface);
+
 static inline const char* ucp_worker_get_name(ucp_worker_h worker)
 {
     return worker->name;
