@@ -128,7 +128,8 @@ enum {
     UCT_UD_SEND_SKB_FLAG_ACK_REQ = UCS_BIT(1), /* ACK was requested for this skb */
     UCT_UD_SEND_SKB_FLAG_COMP    = UCS_BIT(2), /* This skb contains a completion */
     UCT_UD_SEND_SKB_FLAG_ZCOPY   = UCS_BIT(3), /* This skb contains a zero-copy segment */
-    UCT_UD_SEND_SKB_FLAG_ERR     = UCS_BIT(4)  /* This skb contains a status after failure */
+    UCT_UD_SEND_SKB_FLAG_ERR     = UCS_BIT(4), /* This skb contains a status after failure */
+    UCT_UD_SEND_SKB_FLAG_CANCEL  = UCS_BIT(5)  /* This skb contains a UCS_ERR_CANCEL status */
 };
 
 
@@ -233,7 +234,9 @@ static inline void uct_ud_neth_set_am_id(uct_ud_neth_t *neth, uint8_t id)
 
 static inline uct_ud_comp_desc_t *uct_ud_comp_desc(uct_ud_send_skb_t *skb)
 {
-    ucs_assert(skb->flags & (UCT_UD_SEND_SKB_FLAG_COMP|UCT_UD_SEND_SKB_FLAG_ERR));
+    ucs_assert(skb->flags & (UCT_UD_SEND_SKB_FLAG_COMP  |
+                             UCT_UD_SEND_SKB_FLAG_ERR   |
+                             UCT_UD_SEND_SKB_FLAG_CANCEL));
     return (uct_ud_comp_desc_t*)((char *)skb->neth + skb->len);
 }
 
