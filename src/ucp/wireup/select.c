@@ -894,7 +894,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 
     status = ucp_wireup_add_tag_lane(ep, address_count, address_list,
                                      lane_descs, &key->num_lanes,
-                                     params->err_mode);
+                                     key->err_mode);
     if (status != UCS_OK) {
         return status;
     }
