@@ -771,6 +771,7 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
         uct_ud_tx_wnd_purge_outstanding(iface, ep, UCS_ERR_CANCELED);
         uct_ud_iface_dispatch_zcopy_comps(iface);
         uct_ep_pending_purge(ep_h, NULL, 0);
+        /* Open window after cancellation for next sending */
         uct_ud_ep_ca_ack(ep);
 
         uct_ud_leave(iface);
