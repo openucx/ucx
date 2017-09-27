@@ -8,6 +8,7 @@
 
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_request.inl>
+#include <ucp/proto/proto.h>
 #include <ucp/proto/proto_am.inl>
 
 
@@ -166,13 +167,6 @@ static ucs_status_t ucp_tag_eager_bcopy_multi(uct_pending_req_t *self)
     return status;
 }
 
-void ucp_tag_eager_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
-{
-    ucs_assert(req->send.uct_comp.count == 0);
-    ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
-    ucp_request_complete_send(req, status);
-}
-
 static ucs_status_t ucp_tag_eager_zcopy_single(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
@@ -180,7 +174,7 @@ static ucs_status_t ucp_tag_eager_zcopy_single(uct_pending_req_t *self)
 
     hdr.super.tag = req->send.tag;
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_EAGER_ONLY, &hdr, sizeof(hdr),
-                                  ucp_tag_eager_zcopy_req_complete);
+                                  ucp_proto_am_zcopy_req_complete);
 }
 
 static ucs_status_t ucp_tag_eager_zcopy_multi(uct_pending_req_t *self)
@@ -196,26 +190,7 @@ static ucs_status_t ucp_tag_eager_zcopy_multi(uct_pending_req_t *self)
                                  UCP_AM_ID_EAGER_LAST,
                                  &first_hdr, sizeof(first_hdr),
                                  &first_hdr.super, sizeof(first_hdr.super),
-                                 ucp_tag_eager_zcopy_req_complete);
-}
-
-void ucp_tag_eager_zcopy_completion(uct_completion_t *self,
-                                    ucs_status_t status)
-{
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
-    if (req->send.state.offset == req->send.length) {
-        ucp_tag_eager_zcopy_req_complete(req, status);
-    } else if (status != UCS_OK) {
-        ucs_assert(req->send.uct_comp.count == 0);
-        ucs_assert(status != UCS_INPROGRESS);
-
-        /* NOTE: the request is in pending queue if data was not completely sent,
-         *       just dereg the buffer here and complete request on purge
-         *       pending later.
-         */
-        ucp_request_send_buffer_dereg(req, req->send.lane);
-        req->send.uct_comp.func = NULL;
-    }
+                                 ucp_proto_am_zcopy_req_complete);
 }
 
 ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self);
@@ -226,7 +201,7 @@ const ucp_proto_t ucp_tag_eager_proto = {
     .bcopy_multi             = ucp_tag_eager_bcopy_multi,
     .zcopy_single            = ucp_tag_eager_zcopy_single,
     .zcopy_multi             = ucp_tag_eager_zcopy_multi,
-    .zcopy_completion        = ucp_tag_eager_zcopy_completion,
+    .zcopy_completion        = ucp_proto_am_zcopy_completion,
     .only_hdr_size           = sizeof(ucp_eager_hdr_t),
     .first_hdr_size          = sizeof(ucp_eager_first_hdr_t),
     .mid_hdr_size            = sizeof(ucp_eager_hdr_t)

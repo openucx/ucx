@@ -49,13 +49,13 @@ static ucs_status_t ucp_stream_req_start(ucp_request_t *req, size_t count,
                                          const ucp_proto_t *proto)
 {
     ucp_ep_config_t *config      = ucp_ep_config(req->send.ep);
-    size_t          zcopy_thresh = SIZE_MAX;
-    size_t          length;
+    size_t          zcopy_thresh = count ? zcopy_thresh_arr[0] : SIZE_MAX;
+    size_t          length       = ucp_contig_dt_length(req->send.datatype, count);
+    ucs_status_t    status;
 
     ucs_assertv_always(UCP_DT_IS_CONTIG(req->send.datatype),
                        "stream supports only contiguous types");
 
-    length                  = ucp_contig_dt_length(req->send.datatype, count);
     req->send.length        = length;
     req->send.uct_comp.func = NULL;
 
@@ -82,8 +82,25 @@ static ucs_status_t ucp_stream_req_start(ucp_request_t *req, size_t count,
                                       req->send.length);
         }
     } else {
-        ucs_error("Not implemented");
-        return UCS_ERR_NOT_IMPLEMENTED;
+        /* zcopy */
+        status = ucp_request_send_buffer_reg(req, req->send.lane);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        req->send.state.offset   = 0;
+        req->send.uct_comp.count = 0;
+        req->send.uct_comp.func  = proto->zcopy_completion;
+
+        if (length <= (config->am.max_zcopy - proto->only_hdr_size)) {
+            req->send.uct.func = proto->zcopy_single;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_stream_egr_zcopy_single",
+                                      req->send.length);
+        } else {
+            req->send.uct.func = proto->zcopy_multi;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_stream_egr_zcopy_multi",
+                                      req->send.length);
+        }
     }
 
     return UCS_OK;
@@ -141,7 +158,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
     ucp_request_t    *req;
     size_t           length;
     ucs_status_t     status;
-    ucs_status_ptr_t ret = UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+    ucs_status_ptr_t ret;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
@@ -149,6 +166,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
                   buffer, count, ucp_ep_peer_name(ep), cb, flags);
 
     if (ucs_unlikely(flags != 0)) {
+        ret = UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
         goto out;
     }
 
@@ -295,13 +313,37 @@ static ucs_status_t ucp_stream_bcopy_multi(uct_pending_req_t *self)
     return status;
 }
 
+static ucs_status_t ucp_stream_eager_zcopy_single(uct_pending_req_t *self)
+{
+    ucp_request_t       *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_stream_am_hdr_t hdr;
+
+    hdr.sender_uuid = req->send.ep->worker->uuid;
+    return ucp_do_am_zcopy_single(self, UCP_AM_ID_STREAM_DATA, &hdr,
+                                  sizeof(hdr), ucp_proto_am_zcopy_req_complete);
+}
+
+static ucs_status_t ucp_stream_eager_zcopy_multi(uct_pending_req_t *self)
+{
+    ucp_request_t       *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_stream_am_hdr_t hdr;
+
+    hdr.sender_uuid = req->send.ep->worker->uuid;
+    return ucp_do_am_zcopy_multi(self,
+                                 UCP_AM_ID_STREAM_DATA,
+                                 UCP_AM_ID_STREAM_DATA,
+                                 UCP_AM_ID_STREAM_DATA,
+                                 &hdr, sizeof(hdr), &hdr, sizeof(hdr),
+                                 ucp_proto_am_zcopy_req_complete);
+}
+
 const ucp_proto_t ucp_stream_am_proto = {
     .contig_short            = ucp_stream_contig_am_short,
     .bcopy_single            = ucp_stream_bcopy_single,
     .bcopy_multi             = ucp_stream_bcopy_multi,
-    .zcopy_single            = NULL,
-    .zcopy_multi             = NULL,
-    .zcopy_completion        = NULL,
+    .zcopy_single            = ucp_stream_eager_zcopy_single,
+    .zcopy_multi             = ucp_stream_eager_zcopy_multi,
+    .zcopy_completion        = ucp_proto_am_zcopy_completion,
     .only_hdr_size           = sizeof(ucp_stream_am_hdr_t),
     .first_hdr_size          = sizeof(ucp_stream_am_hdr_t),
     .mid_hdr_size            = sizeof(ucp_stream_am_hdr_t)
