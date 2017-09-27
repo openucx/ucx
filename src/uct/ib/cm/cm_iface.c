@@ -378,9 +378,14 @@ static ucs_status_t uct_cm_iface_query(uct_iface_h tl_iface,
                                        uct_iface_attr_t *iface_attr)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
+    ucs_status_t status;
     size_t mtu;
 
-    uct_ib_iface_query(&iface->super, 32 /* TODO */, iface_attr);
+    status = uct_ib_iface_query(&iface->super, 32 /* TODO */, iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     iface_attr->overhead = 1200e-9;
 
     mtu = ucs_min(IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE - sizeof(uct_cm_hdr_t),

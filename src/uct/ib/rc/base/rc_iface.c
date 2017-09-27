@@ -101,13 +101,18 @@ static ucs_mpool_ops_t uct_rc_fc_pending_mpool_ops = {
 };
 
 
-void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
+ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
+                                uct_iface_attr_t *iface_attr)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+    ucs_status_t status;
 
-    uct_ib_iface_query(&iface->super,
-                       ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
-                       iface_attr);
+    status = uct_ib_iface_query(&iface->super,
+                                ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
+                                iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     iface_attr->iface_addr_len  = 0;
     iface_attr->ep_addr_len     = sizeof(uct_rc_ep_address_t);
@@ -152,6 +157,8 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
     iface_attr->cap.get.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
     iface_attr->cap.am.align_mtu  = uct_ib_mtu_value(iface->config.path_mtu);
+
+    return UCS_OK;
 }
 
 void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
