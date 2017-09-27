@@ -305,6 +305,9 @@ ucs_status_t uct_rc_init_fc_thresh(uct_rc_fc_config_t *fc_cfg,
 
 ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events);
 
+ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
+                                           unsigned events, int force_rx_all);
+
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_fc_ctrl(uct_ep_t *ep, unsigned op, uct_rc_fc_request_t *req)

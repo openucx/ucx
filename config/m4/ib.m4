@@ -268,7 +268,11 @@ AS_IF([test "x$with_ib" == xyes],
                             [[#include <infiniband/verbs_exp.h>]])
            ])
        AS_IF([test "x$with_ib_hw_tm" != xno],
-           [AC_DEFINE([IBV_EXP_HW_TM], 1, [IB Tag Matching support])])
+           [AC_DEFINE([IBV_EXP_HW_TM], 1, [IB Tag Matching support])
+            AC_CHECK_MEMBERS([struct ibv_exp_create_srq_attr.dc_offload_params],
+                             [AC_DEFINE([IBV_EXP_HW_TM_DC], 1, [DC Tag Matching support])],
+                             [], [#include <infiniband/verbs_exp.h>])
+           ])
 
        mlnx_valg_libdir=$with_verbs/lib${libsuff}/mlnx_ofed/valgrind
        AC_MSG_NOTICE([Checking OFED valgrind libs $mlnx_valg_libdir])

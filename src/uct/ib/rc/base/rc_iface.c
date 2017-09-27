@@ -468,6 +468,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         self->rx.srq.available       = srq_init_attr.attr.max_wr;
     } else {
         self->rx.srq.srq             = NULL;
+        self->rx.srq.available       = 0;
     }
 
     /* Set atomic handlers according to atomic reply endianness */
@@ -759,7 +760,8 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events)
+ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
+                                           unsigned events, int force_rx_all)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
     int arm_rx_solicited, arm_rx_all;
@@ -782,8 +784,9 @@ ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     if (events & UCT_EVENT_RECV_AM) {
         arm_rx_solicited = 1; /* to wake up on active messages */
     }
-    if ((events & UCT_EVENT_SEND_COMP) && iface->config.fc_enabled) {
-        arm_rx_all       = 1; /* to  wake up on FC grants */
+    if (((events & UCT_EVENT_SEND_COMP) && iface->config.fc_enabled) ||
+        force_rx_all) {
+        arm_rx_all       = 1; /* to wake up on FC grants (or if forced) */
     }
 
     if (arm_rx_solicited || arm_rx_all) {
@@ -795,4 +798,10 @@ ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     }
 
     return UCS_OK;
+
+}
+
+ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events)
+{
+    return uct_rc_iface_common_event_arm(tl_iface, events, 0);
 }
