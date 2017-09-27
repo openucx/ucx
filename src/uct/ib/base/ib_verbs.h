@@ -191,6 +191,12 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_DEVICE_MAX_UNEXP_COUNT        UCS_BIT(14)
 #else
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
+#  define IBV_EXP_TM_CAP_RC                 0
+#endif
+
+
+#ifndef IBV_EXP_HW_TM_DC
+#  define IBV_EXP_TM_CAP_DC                 0
 #endif
 
 

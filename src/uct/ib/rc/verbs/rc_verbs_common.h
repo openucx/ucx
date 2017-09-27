@@ -16,15 +16,6 @@
 
 /* definitions common to rc_verbs and dc_verbs go here */
 
-enum {
-    UCT_RC_VERBS_IFACE_ADDR_TYPE_BASIC,
-
-    /* Tag Matching address. It additionaly contains QP number which
-     * is used for hardware offloads. */
-    UCT_RC_VERBS_IFACE_ADDR_TYPE_TM,
-    UCT_RC_VERBS_IFACE_ADDR_TYPE_LAST
-};
-
 
 #define UCT_RC_VERBS_GET_TX_DESC(_iface, _rc_iface, _mp, _desc, _hdr, _len) \
      { \
@@ -100,7 +91,6 @@ typedef struct uct_rc_verbs_iface_common_config {
     struct {
         int                            enable;
         unsigned                       list_size;
-        unsigned                       rndv_queue_len;
         double                         sync_ratio;
     } tm;
 #endif
@@ -164,23 +154,19 @@ uct_rc_verbs_txqp_completed(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt, ui
     uct_rc_txqp_available_add(txqp, count);
 }
 
-void uct_rc_verbs_iface_common_preinit(uct_rc_verbs_iface_common_t *iface,
-                                       uct_md_h md,
-                                       uct_rc_iface_config_t *rc_config,
-                                       uct_rc_verbs_iface_common_config_t *config,
-                                       const uct_iface_params_t *params,
-                                       int is_dc, unsigned *rx_cq_len,
-                                       unsigned *srq_size,
-                                       unsigned *rx_hdr_len,
+void uct_rc_verbs_iface_common_preinit(uct_rc_verbs_iface_common_config_t *config,
+                                       int tm_supported, unsigned *rx_hdr_len,
                                        unsigned *short_mp_size);
 
 ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
                                             uct_rc_iface_t *rc_iface,
                                             uct_rc_verbs_iface_common_config_t *config,
                                             uct_rc_iface_config_t *rc_config,
-                                            unsigned short_mp_size, int is_dc);
+                                            unsigned short_mp_size);
 
 void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *iface);
+
+void uct_rc_verbs_iface_common_tag_cleanup(uct_rc_verbs_iface_common_t *iface);
 
 ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface,
                                                      uct_rc_srq_t *srq);
@@ -393,6 +379,14 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
            return UCS_ERR_EXCEEDS_LIMIT; \
        }
 
+ucs_status_t
+uct_rc_verbs_iface_common_tag_init(uct_rc_verbs_iface_common_t *iface,
+                                   uct_rc_iface_t *rc_iface,
+                                   uct_rc_verbs_iface_common_config_t *config,
+                                   uct_rc_iface_config_t *rc_config,
+                                   const uct_iface_params_t *params,
+                                   struct ibv_exp_create_srq_attr *srq_init_attr,
+                                   size_t rndv_hdr_len);
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_iface_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,
