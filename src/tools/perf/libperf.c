@@ -719,7 +719,7 @@ static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params,
 
         break;
     case UCX_PERF_CMD_TAG:
-        *features = UCP_FEATURE_TAG|UCP_PARAM_FIELD_REQUEST_SIZE;
+        *features = UCP_FEATURE_TAG | UCP_PARAM_FIELD_REQUEST_SIZE;
         ucp_params->request_size = sizeof(ucx_perf_request_t);
         break;
     default:
