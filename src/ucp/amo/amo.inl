@@ -42,8 +42,10 @@ ucs_status_t ucp_amo_check_send_status(ucp_request_t *req, ucs_status_t status);
         } \
         \
         req->send.lane = rkey->cache.amo_lane; \
-        status = _function(ep->uct_eps[req->send.lane], UCS_PP_TUPLE_BREAK _params, \
-                           remote_addr, rkey->cache.amo_rkey, result, &req->send.uct_comp); \
+        status = _function(ep->uct_eps[req->send.lane], \
+                           UCS_PP_TUPLE_BREAK _params, \
+                           remote_addr, rkey->cache.amo_rkey, result, \
+                           &req->send.uct_comp); \
         return ucp_amo_check_send_status(req, status); \
     }
 
@@ -160,7 +162,7 @@ static inline ucs_status_t ucp_rma_check_atomic(uint64_t remote_addr, size_t siz
 static inline ucs_status_ptr_t 
 ucp_amo_send_request(ucp_request_t *req, ucp_send_callback_t cb)
 {
-    ucs_status_t status = ucp_request_start_send(req);
+    ucs_status_t status = ucp_request_send(req);
 
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucs_trace_req("releasing send request %p, returning status %s", req,

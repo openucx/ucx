@@ -76,7 +76,7 @@ static unsigned ucp_wireup_ep_progress(void *arg)
     ucs_queue_for_each_extract(uct_req, &tmp_pending_queue, priv, 1) {
         req = ucs_container_of(uct_req, ucp_request_t, send.uct);
         ucs_assert(req->send.ep == ucp_ep);
-        ucp_request_start_send(req);
+        ucp_request_send(req);
         --ucp_ep->worker->wireup_pend_count;
     }
 

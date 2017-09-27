@@ -13,10 +13,8 @@
 #include <ucp/dt/dt_contig.h>
 #include <ucs/debug/profile.h>
 
-#include <ucp/core/ucp_request.inl>
+#include <ucp/proto/proto_am.inl>
 #include <ucs/datastruct/mpool.inl>
-#include <ucp/core/ucp_ep.inl>
-
 
 
 #define UCP_RMA_CHECK_PARAMS(_buffer, _length) \
@@ -49,7 +47,7 @@ ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
         if (req->send.length == 0) {
             /* bcopy is the fast path */
             if (ucs_likely(req->send.uct_comp.count == 0)) {
-                if (ucs_unlikely(req->send.state.dt.contig.memh != 
+                if (ucs_unlikely(req->send.state.dt.contig.memh !=
                                  UCT_MEM_HANDLE_NULL)) {
                     ucp_request_send_buffer_dereg(req, req->send.lane);
                 }
@@ -100,18 +98,19 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     req->send.rma.rkey        = rkey;
     req->send.uct.func        = cb;
     req->send.lane            = rkey->cache.rma_lane;
-    req->send.uct_comp.count  = 0; 
+    ucp_request_send_state_reset(req,
+                                 (length < zcopy_thresh) ?
+                                 ucp_rma_request_bcopy_completion :
+                                 ucp_rma_request_zcopy_completion,
+                                 UCP_REQUEST_SEND_PROTO_RMA);
 #if ENABLE_ASSERT
     req->send.cb              = NULL;
 #endif
     if (length < zcopy_thresh) {
-        req->send.uct_comp.func        = ucp_rma_request_bcopy_completion;
-        req->send.state.dt.contig.memh = UCT_MEM_HANDLE_NULL;
         return UCS_OK;
-    } else {
-        req->send.uct_comp.func        = ucp_rma_request_zcopy_completion;
-        return ucp_request_send_buffer_reg(req, req->send.lane);
     }
+
+    return ucp_request_send_buffer_reg(req, req->send.lane);
 }
 
 static ucs_status_t ucp_progress_put(uct_pending_req_t *self)
@@ -151,11 +150,11 @@ static ucs_status_t ucp_progress_put(uct_pending_req_t *self)
 
         /* TODO: leave last fragment for bcopy */
         packed_len = ucs_min(req->send.length, rma_config->max_put_zcopy);
+        /* TODO: use ucp_dt_iov_copy_uct */
         iov.buffer = (void *)req->send.buffer;
         iov.length = packed_len;
         iov.count  = 1;
         iov.memh   = req->send.state.dt.contig.memh;
-        ++req->send.uct_comp.count;
 
         status = UCS_PROFILE_CALL(uct_ep_put_zcopy,
                                   ep->uct_eps[lane],
@@ -163,12 +162,11 @@ static ucs_status_t ucp_progress_put(uct_pending_req_t *self)
                                   req->send.rma.remote_addr,
                                   rkey->cache.rma_rkey,
                                   &req->send.uct_comp);
-        if (status <= 0) {
-            --req->send.uct_comp.count;
-        }
+        ucp_request_send_state_advance(req, NULL, UCP_REQUEST_SEND_PROTO_RMA,
+                                       status);
     }
 
-    return ucp_rma_request_advance(req, packed_len, status);    
+    return ucp_rma_request_advance(req, packed_len, status);
 }
 
 static ucs_status_t ucp_progress_get(uct_pending_req_t *self)
@@ -184,7 +182,6 @@ static ucs_status_t ucp_progress_get(uct_pending_req_t *self)
     ucs_assert(rkey->cache.ep_cfg_index == ep->cfg_index);
     ucs_assert(rkey->cache.rma_lane == lane);
 
-    ++req->send.uct_comp.count;
     if (ucs_likely(req->send.length < rma_config->get_zcopy_thresh)) {
         frag_length = ucs_min(rma_config->max_get_bcopy, req->send.length);
         status = UCS_PROFILE_CALL(uct_ep_get_bcopy,
@@ -210,11 +207,13 @@ static ucs_status_t ucp_progress_get(uct_pending_req_t *self)
                                   rkey->cache.rma_rkey,
                                   &req->send.uct_comp);
     }
-    if (status <= 0) {
-        --req->send.uct_comp.count;
+
+    if (status == UCS_INPROGRESS) {
+        ucp_request_send_state_advance(req, 0, UCP_REQUEST_SEND_PROTO_RMA,
+                                       UCS_INPROGRESS);
     }
 
-    return ucp_rma_request_advance(req, frag_length, status);    
+    return ucp_rma_request_advance(req, frag_length, status);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -273,7 +272,7 @@ ucp_rma_nonblocking(ucp_ep_h ep, const void *buffer, size_t length,
         return status;
     }
 
-    return ucp_request_start_send(req);
+    return ucp_request_send(req);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),

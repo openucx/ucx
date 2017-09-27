@@ -6,6 +6,7 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_request.h>
+#include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/dt.h>
 #include <ucs/debug/profile.h>
@@ -45,9 +46,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     ssize_t packed_len;
     uct_ep_h uct_ep;
     size_t offset;
-    ucp_dt_state_t saved_state;
 
-    saved_state    = req->send.state;
     offset         = req->send.state.offset;
     req->send.lane = ucp_ep_get_am_lane(ep);
     uct_ep         = ep->uct_eps[req->send.lane];
@@ -55,42 +54,29 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     if (offset == 0) {
         /* First */
         packed_len = uct_ep_am_bcopy(uct_ep, am_id_first, pack_first, req, 0);
-        if (packed_len < 0) {
-            goto err; /* Failed */
-        }
-
-        UCS_PROFILE_REQUEST_EVENT(req, "am_bcopy_first", packed_len);
-        return UCS_INPROGRESS;
+        UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_bcopy_first", packed_len,
+                                               packed_len);
     } else if (offset + max_middle < req->send.length) {
         /* Middle */
         packed_len = uct_ep_am_bcopy(uct_ep, am_id_middle, pack_middle, req, 0);
-        if (packed_len < 0) {
-            goto err; /* Failed */
-        }
-
         ucs_assertv((packed_len < 0) || (packed_len <= max_middle + hdr_size_middle),
                     "packed_len=%zd max_middle=%zu hdr_size_middle=%zu",
                     packed_len, max_middle, hdr_size_middle);
-        UCS_PROFILE_REQUEST_EVENT(req, "am_bcopy_middle", packed_len);
-        return UCS_INPROGRESS;
+        UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_bcopy_middle",
+                                               packed_len, packed_len);
     } else {
         /* Last */
         packed_len = uct_ep_am_bcopy(uct_ep, am_id_last, pack_last, req, 0);
-        if (packed_len < 0) {
-            goto err; /* Failed */
-        }
-
-        UCS_PROFILE_REQUEST_EVENT(req, "am_bcopy_last", packed_len);
-        return UCS_OK;
+        UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_bcopy_last", packed_len,
+                                               packed_len);
+        return (packed_len < 0) ? packed_len : UCS_OK;
     }
 
-err:
-    req->send.state = saved_state; /* need to restore the offsets state */
-    return packed_len;
+    return (packed_len < 0) ? packed_len : UCS_INPROGRESS;
 }
 
 static UCS_F_ALWAYS_INLINE
-size_t ucp_dt_iov_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
+void ucp_dt_iov_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
                            ucp_dt_state_t *state, const ucp_dt_iov_t *src_iov,
                            ucp_datatype_t datatype, size_t length_max)
 {
@@ -144,7 +130,7 @@ size_t ucp_dt_iov_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
         ucs_error("Invalid data type");
     }
 
-    return length_it;
+    state->offset += length_it;
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -152,34 +138,29 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
                                     const void *hdr, size_t hdr_size,
                                     ucp_req_complete_func_t complete)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep       = req->send.ep;
-    size_t max_iov     = ucp_ep_config(ep)->am.max_iov;
-    uct_iov_t *iov     = ucs_alloca(max_iov * sizeof(uct_iov_t));
-    size_t iovcnt      = 0;
-    ucp_dt_state_t saved_state;
+    ucp_request_t  *req    = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_ep_t *ep           = req->send.ep;
+    size_t max_iov         = ucp_ep_config(ep)->am.max_iov;
+    uct_iov_t *iov         = ucs_alloca(max_iov * sizeof(uct_iov_t));
+    size_t iovcnt          = 0;
+    ucp_dt_state_t state   = req->send.state;
     ucs_status_t status;
 
-    saved_state    = req->send.state;
     req->send.lane = ucp_ep_get_am_lane(ep);
 
-    ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, &req->send.state, req->send.buffer,
+    ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, &state, req->send.buffer,
                         req->send.datatype, req->send.length);
 
     status = uct_ep_am_zcopy(ep->uct_eps[req->send.lane], am_id, (void*)hdr,
                              hdr_size, iov, iovcnt, 0, &req->send.uct_comp);
     if (status == UCS_OK) {
         complete(req, UCS_OK);
-    } else if (status < 0) {
-        req->send.state = saved_state; /* need to restore the offsets state */
-        return status;
     } else {
-        ++req->send.uct_comp.count;
-        req->send.state.offset += req->send.length;
-        ucs_assert(status == UCS_INPROGRESS);
+        ucp_request_send_state_advance(req, &state,
+                                       UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
+                                       status);
     }
-
-    return UCS_OK;
+    return UCS_STATUS_IS_ERR(status) ? status : UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -194,85 +175,125 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     const size_t max_middle = ucp_ep_config(ep)->am.max_zcopy - hdr_size_middle;
     const size_t max_iov    = ucp_ep_config(ep)->am.max_iov;
     uct_iov_t *iov          = ucs_alloca(max_iov * sizeof(uct_iov_t));
-    ucp_dt_state_t *state = &req->send.state;
+    ucp_dt_state_t state    = req->send.state;
     unsigned flag_iov_mid   = 0;
     size_t iovcnt           = 0;
-    ucp_dt_state_t saved_state;
-    size_t offset, length_it;
+    size_t offset;
     ucs_status_t status;
     uct_ep_h uct_ep;
 
-    saved_state             = req->send.state;
-    offset                  = state->offset;
+    offset                  = state.offset;
     req->send.lane          = ucp_ep_get_am_lane(ep);
     uct_ep                  = ep->uct_eps[req->send.lane];
 
     ucs_assert(max_iov > 0);
     if (UCP_DT_IS_IOV(req->send.datatype)) {
         /* This flag should guarantee middle stage usage if iovcnt exceeded */
-        flag_iov_mid = ((state->dt.iov.iovcnt_offset + max_iov) <
-                        state->dt.iov.iovcnt);
+        flag_iov_mid = ((state.dt.iov.iovcnt_offset + max_iov) <
+                        state.dt.iov.iovcnt);
     }
 
     if (offset == 0) {
         /* First stage */
-        length_it = ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, state,
+        ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, &state,
                                         req->send.buffer,  req->send.datatype,
                                         max_middle - hdr_size_first + hdr_size_middle);
 
         status = uct_ep_am_zcopy(uct_ep, am_id_first, (void*)hdr_first,
                                  hdr_size_first, iov, iovcnt, 0,
                                  &req->send.uct_comp);
-        if (status < 0) {
-            goto err; /* Failed */
-        }
 
-        UCS_PROFILE_REQUEST_EVENT(req, "am_zcopy_first", iov[0].length);
-        state->offset      += length_it;
-        ++req->send.uct_comp.count;
-        return UCS_INPROGRESS;
+        UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_zcopy_first",
+                                               iov[0].length, status);
     } else if ((offset + max_middle < req->send.length) || flag_iov_mid) {
         /* Middle stage */
-        length_it = ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, state,
-                                        req->send.buffer, req->send.datatype, max_middle);
+        ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, &state, req->send.buffer,
+                            req->send.datatype, max_middle);
 
         status = uct_ep_am_zcopy(uct_ep, am_id_middle, (void*)hdr_middle,
                                  hdr_size_middle, iov, iovcnt, 0,
                                  &req->send.uct_comp);
-        if (status < 0) {
-            goto err; /* Failed */
-        }
 
-        UCS_PROFILE_REQUEST_EVENT(req, "am_zcopy_middle", iov[0].length);
-        state->offset      += length_it;
-        ++req->send.uct_comp.count;
-        return UCS_INPROGRESS;
+        UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_zcopy_middle",
+                                               iov[0].length, status);
     } else {
         /* Last stage */
-        length_it = ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, state,
-                                        req->send.buffer, req->send.datatype,
-                                        req->send.length - offset);
+        ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, &state, req->send.buffer,
+                            req->send.datatype, req->send.length - offset);
 
         status = uct_ep_am_zcopy(uct_ep, am_id_last, (void*)hdr_middle,
                                  hdr_size_middle, iov, iovcnt, 0,
                                  &req->send.uct_comp);
-        if (status < 0) {
-            goto err; /* Failed */
-        }
-
-        UCS_PROFILE_REQUEST_EVENT(req, "am_zcopy_last", iov[0].length);
-        ucs_assert(req->send.length == (state->offset + length_it));
+        UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_zcopy_last",
+                                               iov[0].length, status);
         if (status == UCS_OK) {
             complete(req, UCS_OK);
-        } else {
-            state->offset += length_it;
-            ++req->send.uct_comp.count;
-            ucs_assert(status == UCS_INPROGRESS);
+            return UCS_OK;
         }
-        return UCS_OK;
+        ucp_request_send_state_advance(req, &state,
+                                       UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
+                                       status);
+        return UCS_STATUS_IS_ERR(status) ? status : UCS_OK;
     }
 
-err:
-    req->send.state = saved_state; /* need to restore the offsets state */
-    return status;
+    ucp_request_send_state_advance(req, &state,
+                                   UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
+                                   status);
+
+    return UCS_STATUS_IS_ERR(status) ? status : UCS_INPROGRESS;
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_get_zcopy_threshold(const ucp_request_t *req,
+                              const ucp_ep_msg_config_t *msg_config,
+                              size_t count, size_t max_zcopy)
+{
+    ucp_worker_h     worker;
+    ucp_lane_index_t lane;
+    ucp_rsc_index_t  rsc_index;
+    size_t           zcopy_thresh;
+
+    if (ucs_unlikely(msg_config->max_zcopy == 0)) {
+        return max_zcopy;
+    }
+
+    if (ucs_likely(UCP_DT_IS_CONTIG(req->send.datatype))) {
+        return ucs_min(max_zcopy, msg_config->zcopy_thresh[0]);
+    } else if (UCP_DT_IS_IOV(req->send.datatype)) {
+        if (0 == count) {
+            /* disable zcopy */
+            zcopy_thresh = max_zcopy;
+        } else if (!msg_config->zcopy_auto_thresh) {
+            /* The user defined threshold or no zcopy enabled */
+            zcopy_thresh = msg_config->zcopy_thresh[0];
+        } else if (count <= UCP_MAX_IOV) {
+            /* Using pre-calculated thresholds */
+            zcopy_thresh = msg_config->zcopy_thresh[count - 1];
+        } else {
+            /* Calculate threshold */
+            lane      = req->send.lane;
+            rsc_index = ucp_ep_config(req->send.ep)->key.lanes[lane].rsc_index;
+            worker    = req->send.ep->worker;
+            zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(count,
+                               &ucp_ep_md_attr(req->send.ep, lane)->reg_cost,
+                               worker->context,
+                               worker->ifaces[rsc_index].attr.bandwidth);
+        }
+        return ucs_min(max_zcopy, zcopy_thresh);
+    } else if (UCP_DT_IS_GENERIC(req->send.datatype)) {
+        return max_zcopy;
+    }
+
+    ucs_error("Unsupported datatype");
+
+    return max_zcopy;
+}
+
+static UCS_F_ALWAYS_INLINE ssize_t
+ucp_proto_get_short_max(const ucp_request_t *req,
+                        const ucp_ep_msg_config_t *msg_config)
+{
+    return (!UCP_DT_IS_CONTIG(req->send.datatype) ||
+            (req->flags & UCP_REQUEST_FLAG_SYNC)) ?
+           -1 : msg_config->max_short;
 }

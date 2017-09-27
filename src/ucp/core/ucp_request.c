@@ -8,6 +8,8 @@
 #include "ucp_worker.h"
 #include "ucp_request.inl"
 
+#include <ucp/proto/proto.h>
+
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/debug.h>
 #include <ucs/debug/log.h>
@@ -295,4 +297,50 @@ ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info)
         return req->status;
     }
     return UCS_INPROGRESS;
+}
+
+ucs_status_t
+ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
+                       size_t zcopy_thresh, size_t seg_size,
+                       size_t zcopy_max, const ucp_proto_t *proto)
+{
+    size_t       length = req->send.length;
+    ucs_status_t status;
+
+    if ((ssize_t)length <= max_short) {
+        /* short */
+        req->send.uct.func = proto->contig_short;
+        UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
+        return UCS_OK;
+    } else if (length < zcopy_thresh) {
+        /* bcopy */
+        ucp_request_send_state_reset(req, NULL, UCP_REQUEST_SEND_PROTO_BCOPY_AM);
+        if (length < seg_size) {
+            req->send.uct.func   = proto->bcopy_single;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_single", req->send.length);
+        } else {
+            req->send.uct.func   = proto->bcopy_multi;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_multi", req->send.length);
+        }
+        return UCS_OK;
+    } else if (length < zcopy_max) {
+        /* zcopy */
+        ucp_request_send_state_reset(req, proto->zcopy_completion,
+                                     UCP_REQUEST_SEND_PROTO_ZCOPY_AM);
+        status = ucp_request_send_buffer_reg(req, req->send.lane);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        if (length < seg_size) {
+            req->send.uct.func   = proto->zcopy_single;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_single", req->send.length);
+        } else {
+            req->send.uct.func   = proto->zcopy_multi;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_multi", req->send.length);
+        }
+        return UCS_OK;
+    }
+
+    return UCS_ERR_NO_PROGRESS;
 }

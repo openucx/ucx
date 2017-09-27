@@ -45,7 +45,17 @@ enum {
 };
 
 
- /**
+/**
+ * Protocols enumerator to work with send request state
+ */
+enum {
+    UCP_REQUEST_SEND_PROTO_BCOPY_AM = 0,
+    UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
+    UCP_REQUEST_SEND_PROTO_RNDV_GET,
+    UCP_REQUEST_SEND_PROTO_RMA
+};
+
+/**
  * Receive descriptor flags.
  */
 enum {
@@ -142,9 +152,6 @@ struct ucp_request {
 
             };
 
-            /* TODO: to unite state and uct_comp in single req_state and
-             *       implement common functions to work with it,
-             *       See conversation to PR #1737 */
             ucp_lane_index_t      lane;     /* Lane on which this request is being sent */
             ucp_rsc_index_t       reg_rsc;  /* Resource on which memory is registered */
             ucp_dt_state_t        state;    /* Position in the send buffer */
@@ -200,5 +207,9 @@ ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_rsc_index_t rsc_
 
 void ucp_request_memory_dereg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
                               ucp_datatype_t datatype, ucp_dt_state_t *state);
+
+ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
+                                    size_t zcopy_thresh, size_t multi_thresh,
+                                    size_t rndv_thresh, const ucp_proto_t *proto);
 
 #endif

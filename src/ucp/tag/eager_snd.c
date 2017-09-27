@@ -7,7 +7,6 @@
 #include "eager.h"
 
 #include <ucp/core/ucp_worker.h>
-#include <ucp/core/ucp_request.inl>
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_am.inl>
 
@@ -299,7 +298,9 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
 
 void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self, ucs_status_t status)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
+    ucp_request_t *req;
+
+    req = ucs_container_of(self, ucp_request_t, send.uct_comp);
     ucp_tag_eager_sync_zcopy_req_complete(req, status);
 }
 

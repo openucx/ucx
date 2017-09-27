@@ -426,6 +426,20 @@ retry:
 
 
 /*
+ * Profile a request progress event with status check.
+ *
+ * @param _req      Request pointer.
+ * @param _name     Event name.
+ * @param _param32  Custom 32-bit parameter.
+ * @param _status   Status of the last progress event.
+ */
+#define UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(_req, _name, _param32, _status) \
+    if (!UCS_STATUS_IS_ERR(_status)) { \
+        UCS_PROFILE_REQUEST_EVENT((_req), (_name), (_param32)); \
+    }
+
+
+/*
  * Profile a request release.
  *
  * @param _req      Request pointer.
@@ -449,6 +463,7 @@ retry:
 #define UCS_PROFILE_CALL_VOID(_func, ...)                   _func(__VA_ARGS__)
 #define UCS_PROFILE_REQUEST_NEW(...)                        UCS_EMPTY_STATEMENT
 #define UCS_PROFILE_REQUEST_EVENT(...)                      UCS_EMPTY_STATEMENT
+#define UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(...)         UCS_EMPTY_STATEMENT
 #define UCS_PROFILE_REQUEST_FREE(...)                       UCS_EMPTY_STATEMENT
 
 #endif
