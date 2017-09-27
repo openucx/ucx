@@ -115,6 +115,7 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
     if (ucs_unlikely(status != UCS_OK)) {
         ucp_tag_offload_release_buf(req, ctx, iface->rsc_index);
         ucp_request_complete_recv(req, status);
+        return;
     }
 
     if ((sreq->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) && !ucp_ep_is_stub(ep)) {
