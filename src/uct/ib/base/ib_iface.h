@@ -47,9 +47,11 @@ struct uct_ib_iface_config {
         size_t              inl_resp;        /* Inline space to reserve for responses */
         unsigned            min_sge;         /* How many SG entries to support */
         unsigned            cq_moderation;   /* How many TX messages are batched to one CQE */
-        int                 cq_moderation_count;
-        int                 cq_moderation_period;
         uct_iface_mpool_config_t mp;
+
+        /* Event moderation parameters */
+        unsigned            cq_moderation_count;
+        double              cq_moderation_period;
     } tx;
 
     struct {
@@ -58,6 +60,10 @@ struct uct_ib_iface_config {
         unsigned            max_poll;        /* How many wcs can be picked when polling rx cq */
         size_t              inl;             /* Inline space to reserve in CQ/QP */
         uct_iface_mpool_config_t mp;
+
+        /* Event moderation parameters */
+        unsigned            cq_moderation_count;
+        double              cq_moderation_period;
     } rx;
 
     /* Change the address type */
@@ -74,7 +80,6 @@ struct uct_ib_iface_config {
 
     /* IB PKEY to use */
     unsigned                pkey_value;
-
 };
 
 
