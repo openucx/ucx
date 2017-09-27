@@ -65,6 +65,7 @@ protected:
 
         unsigned progress() const;
 
+        bool is_caps_supported(uint64_t required_flags);
         void check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
 
         uct_md_h md() const;
@@ -196,7 +197,7 @@ protected:
     void stats_activate();
     void stats_restore();
 
-
+    bool is_caps_supported(uint64_t required_flags);
     void check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     void check_caps(const entity& e, uint64_t required_flags, uint64_t invalid_flags = 0);
     const entity& ent(unsigned index) const;

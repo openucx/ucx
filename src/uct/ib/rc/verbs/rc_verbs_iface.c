@@ -296,8 +296,13 @@ static int uct_rc_verbs_iface_is_reachable(const uct_iface_h tl_iface,
 static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
+    ucs_status_t status;
 
-    uct_rc_iface_query(&iface->super, iface_attr);
+    status = uct_rc_iface_query(&iface->super, iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     uct_rc_verbs_iface_common_query(&iface->verbs_common, &iface->super, iface_attr);
     iface_attr->latency.growth += 3e-9; /* 3ns per each extra QP */
     iface_attr->iface_addr_len  = sizeof(uint8_t); /* overwrite */

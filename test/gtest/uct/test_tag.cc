@@ -350,6 +350,18 @@ public:
         return UCS_OK;
     }
 
+    static ucs_log_func_rc_t
+    log_ep_destroy(const char *file, unsigned line, const char *function,
+                   ucs_log_level_t level, const char *prefix, const char *message,
+                   va_list ap)
+    {
+        if (level == UCS_LOG_LEVEL_WARN) {
+            // Ignore warnings about uncompleted operations during ep destroy
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
 protected:
     uct_test::entity& sender() {
         return **m_entities.begin();
@@ -622,6 +634,10 @@ UCS_TEST_P(test_tag, rndv_limit)
             tag_rndv_cancel(sender(), op);
         }
     }
+
+    ucs_log_push_handler(log_ep_destroy);
+    sender().destroy_eps();
+    ucs_log_pop_handler();
 }
 
 UCS_TEST_P(test_tag, sw_rndv_unexpected)

@@ -579,10 +579,16 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
 };
 
 
-void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
+ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
-    uct_ib_iface_query(&iface->super, UCT_IB_DETH_LEN + sizeof(uct_ud_neth_t),
-                       iface_attr);
+    ucs_status_t status;
+
+    status = uct_ib_iface_query(&iface->super,
+                                UCT_IB_DETH_LEN + sizeof(uct_ud_neth_t),
+                                iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     iface_attr->cap.flags              = UCT_IFACE_FLAG_AM_SHORT         |
                                          UCT_IFACE_FLAG_AM_BCOPY         |
@@ -615,6 +621,8 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 
     /* Software overhead */
     iface_attr->overhead               = 80e-9;
+
+    return UCS_OK;
 }
 
 ucs_status_t

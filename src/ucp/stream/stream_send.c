@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -10,6 +10,8 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucp/proto/proto.h>
+#include <ucp/proto/proto_am.inl>
+#include <ucp/stream/stream.h>
 #include <ucp/dt/dt.h>
 
 
@@ -46,13 +48,14 @@ static ucs_status_t ucp_stream_req_start(ucp_request_t *req, size_t count,
                                          size_t rndv_am_thresh,
                                          const ucp_proto_t *proto)
 {
-    size_t zcopy_thresh = 0;
-    size_t length;
+    ucp_ep_config_t *config      = ucp_ep_config(req->send.ep);
+    size_t          zcopy_thresh = count ? zcopy_thresh_arr[0] : SIZE_MAX;
+    size_t          length       = ucp_contig_dt_length(req->send.datatype, count);
+    ucs_status_t    status;
 
     ucs_assertv_always(UCP_DT_IS_CONTIG(req->send.datatype),
                        "stream supports only contiguous types");
 
-    length                  = ucp_contig_dt_length(req->send.datatype, count);
     req->send.length        = length;
     req->send.uct_comp.func = NULL;
 
@@ -66,9 +69,38 @@ static ucs_status_t ucp_stream_req_start(ucp_request_t *req, size_t count,
         /* short */
         req->send.uct.func = proto->contig_short;
         UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
+    } else if (length < zcopy_thresh) {
+        /* bcopy */
+        req->send.state.offset = 0;
+        if (length <= config->am.max_bcopy - proto->only_hdr_size) {
+            req->send.uct.func   = proto->bcopy_single;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_stream_bcopy_single",
+                                      req->send.length);
+        } else {
+            req->send.uct.func   = proto->bcopy_multi;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_stream_bcopy_multi",
+                                      req->send.length);
+        }
     } else {
-        ucs_error("Not implemented");
-        return UCS_ERR_NOT_IMPLEMENTED;
+        /* zcopy */
+        status = ucp_request_send_buffer_reg(req, req->send.lane);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        req->send.state.offset   = 0;
+        req->send.uct_comp.count = 0;
+        req->send.uct_comp.func  = proto->zcopy_completion;
+
+        if (length <= (config->am.max_zcopy - proto->only_hdr_size)) {
+            req->send.uct.func = proto->zcopy_single;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_stream_egr_zcopy_single",
+                                      req->send.length);
+        } else {
+            req->send.uct.func = proto->zcopy_multi;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_stream_egr_zcopy_multi",
+                                      req->send.length);
+        }
     }
 
     return UCS_OK;
@@ -126,7 +158,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
     ucp_request_t    *req;
     size_t           length;
     ucs_status_t     status;
-    ucs_status_ptr_t ret = UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+    ucs_status_ptr_t ret;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
@@ -134,6 +166,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
                   buffer, count, ucp_ep_peer_name(ep), cb, flags);
 
     if (ucs_unlikely(flags != 0)) {
+        ret = UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
         goto out;
     }
 
@@ -161,8 +194,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
     ret = ucp_stream_send_req(req, count,
                               ucp_ep_config(ep)->am.max_short,
                               ucp_ep_config(ep)->am.zcopy_thresh,
-                              SIZE_MAX, /* NOTE: disable, not implemented */
-                              SIZE_MAX, /* NOTE: disable, not implemented */
+                              SIZE_MAX, /* NOTE: disable rndv_rma, not implemented */
+                              SIZE_MAX, /* NOTE: disable rndv_am, not implemented */
                               cb, ucp_ep_config(ep)->stream.proto);
 
 out:
@@ -182,14 +215,136 @@ static ucs_status_t ucp_stream_contig_am_short(uct_pending_req_t *self)
     return status;
 }
 
+static size_t ucp_stream_pack_am_single_dt(void *dest, void *arg)
+{
+    ucp_stream_am_hdr_t *hdr = dest;
+    ucp_request_t       *req = arg;
+    size_t              length;
+
+    hdr->sender_uuid = req->send.ep->worker->uuid;
+
+    ucs_assert(req->send.state.offset == 0);
+    ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
+
+    length = ucp_dt_pack(req->send.datatype, hdr + 1, req->send.buffer,
+                         &req->send.state, req->send.length);
+    ucs_assert(length == req->send.length);
+    return sizeof(*hdr) + length;
+}
+
+static ucs_status_t ucp_stream_bcopy_single(uct_pending_req_t *self)
+{
+    ucs_status_t status;
+
+    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_STREAM_DATA,
+                                    ucp_stream_pack_am_single_dt);
+    if (status == UCS_OK) {
+        ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+        ucp_request_send_generic_dt_finish(req);
+        ucp_request_complete_send(req, UCS_OK);
+    }
+    return status;
+}
+
+static size_t ucp_stream_pack_am_first_dt(void *dest, void *arg)
+{
+    ucp_stream_am_hdr_t *hdr = dest;
+    ucp_request_t       *req = arg;
+    size_t              length;
+
+    hdr->sender_uuid = req->send.ep->worker->uuid;
+    length           = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
+
+    ucs_debug("pack stream_am_first paylen %zu", length);
+    ucs_assert(req->send.state.offset == 0);
+    ucs_assert(req->send.length > length);
+    return sizeof(*hdr) + ucp_dt_pack(req->send.datatype, hdr + 1,
+                                      req->send.buffer, &req->send.state,
+                                      length);
+}
+
+static size_t ucp_stream_pack_am_middle_dt(void *dest, void *arg)
+{
+    ucp_stream_am_hdr_t *hdr = dest;
+    ucp_request_t       *req = arg;
+    size_t              length;
+
+    hdr->sender_uuid = req->send.ep->worker->uuid;
+    length           = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
+    ucs_debug("pack stream_am_middle paylen %zu offset %zu", length,
+              req->send.state.offset);
+    return sizeof(*hdr) + ucp_dt_pack(req->send.datatype, hdr + 1,
+                                      req->send.buffer, &req->send.state,
+                                      length);
+}
+
+static size_t ucp_stream_pack_am_last_dt(void *dest, void *arg)
+{
+    size_t              ret_length;
+    ucp_stream_am_hdr_t *hdr   = dest;
+    ucp_request_t       *req   = arg;
+    size_t              length = req->send.length - req->send.state.offset;
+
+    hdr->sender_uuid = req->send.ep->worker->uuid;
+    ret_length       = ucp_dt_pack(req->send.datatype, hdr + 1,
+                                   req->send.buffer, &req->send.state, length);
+    ucs_debug("pack stream_am_last paylen %zu offset %zu", length,
+              req->send.state.offset);
+    ucs_assertv(ret_length == length, "length=%zu, max_length=%zu",
+                ret_length, length);
+    return sizeof(*hdr) + ret_length;
+}
+
+static ucs_status_t ucp_stream_bcopy_multi(uct_pending_req_t *self)
+{
+    ucs_status_t status = ucp_do_am_bcopy_multi(self,
+                                                UCP_AM_ID_STREAM_DATA,
+                                                UCP_AM_ID_STREAM_DATA,
+                                                UCP_AM_ID_STREAM_DATA,
+                                                sizeof(ucp_stream_am_hdr_t),
+                                                ucp_stream_pack_am_first_dt,
+                                                ucp_stream_pack_am_middle_dt,
+                                                ucp_stream_pack_am_last_dt);
+    if (status == UCS_OK) {
+        ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+        ucp_request_send_generic_dt_finish(req);
+        ucp_request_complete_send(req, UCS_OK);
+    }
+    return status;
+}
+
+static ucs_status_t ucp_stream_eager_zcopy_single(uct_pending_req_t *self)
+{
+    ucp_request_t       *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_stream_am_hdr_t hdr;
+
+    hdr.sender_uuid = req->send.ep->worker->uuid;
+    return ucp_do_am_zcopy_single(self, UCP_AM_ID_STREAM_DATA, &hdr,
+                                  sizeof(hdr), ucp_proto_am_zcopy_req_complete);
+}
+
+static ucs_status_t ucp_stream_eager_zcopy_multi(uct_pending_req_t *self)
+{
+    ucp_request_t       *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_stream_am_hdr_t hdr;
+
+    hdr.sender_uuid = req->send.ep->worker->uuid;
+    return ucp_do_am_zcopy_multi(self,
+                                 UCP_AM_ID_STREAM_DATA,
+                                 UCP_AM_ID_STREAM_DATA,
+                                 UCP_AM_ID_STREAM_DATA,
+                                 &hdr, sizeof(hdr), &hdr, sizeof(hdr),
+                                 ucp_proto_am_zcopy_req_complete);
+}
+
 const ucp_proto_t ucp_stream_am_proto = {
     .contig_short            = ucp_stream_contig_am_short,
-    .bcopy_single            = NULL,
-    .bcopy_multi             = NULL,
-    .zcopy_single            = NULL,
-    .zcopy_multi             = NULL,
-    .zcopy_completion        = NULL,
-    .only_hdr_size           = 0, /* sizeof(ucp_stream_am_hdr_t) */
-    .first_hdr_size          = 0, /* sizeof(ucp_stream_am_hdr_t) */
-    .mid_hdr_size            = 0  /* sizeof(ucp_stream_am_hdr_t) */
+    .bcopy_single            = ucp_stream_bcopy_single,
+    .bcopy_multi             = ucp_stream_bcopy_multi,
+    .zcopy_single            = ucp_stream_eager_zcopy_single,
+    .zcopy_multi             = ucp_stream_eager_zcopy_multi,
+    .zcopy_completion        = ucp_proto_am_zcopy_completion,
+    .only_hdr_size           = sizeof(ucp_stream_am_hdr_t),
+    .first_hdr_size          = sizeof(ucp_stream_am_hdr_t),
+    .mid_hdr_size            = sizeof(ucp_stream_am_hdr_t)
 };

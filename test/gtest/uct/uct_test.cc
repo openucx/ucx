@@ -110,6 +110,16 @@ void uct_test::cleanup() {
     m_entities.clear();
 }
 
+bool uct_test::is_caps_supported(uint64_t required_flags) {
+    bool ret = true;
+
+    FOR_EACH_ENTITY(iter) {
+        ret &= (*iter)->is_caps_supported(required_flags);
+    }
+
+    return ret;
+}
+
 void uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
     FOR_EACH_ENTITY(iter) {
         (*iter)->check_caps(required_flags, invalid_flags);
@@ -317,6 +327,11 @@ unsigned uct_test::entity::progress() const {
     unsigned count = uct_worker_progress(m_worker);
     m_async.check_miss();
     return count;
+}
+
+bool uct_test::entity::is_caps_supported(uint64_t required_flags) {
+    uint64_t iface_flags = iface_attr().cap.flags;
+    return ucs_test_all_flags(iface_flags, required_flags);
 }
 
 void uct_test::entity::check_caps(uint64_t required_flags,

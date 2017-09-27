@@ -116,7 +116,7 @@ extern ucs_config_field_t uct_dc_iface_config_table[];
 
 ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface, uct_rc_srq_t *srq);
 
-void uct_dc_iface_query(uct_dc_iface_t *iface, uct_iface_attr_t *iface_attr);
+ucs_status_t uct_dc_iface_query(uct_dc_iface_t *iface, uct_iface_attr_t *iface_attr);
 
 ucs_status_t uct_dc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr);
 

@@ -73,8 +73,13 @@ static void uct_dc_verbs_ep_destroy(uct_ep_h tl_ep)
 static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_verbs_iface_t);
+    ucs_status_t status;
 
-    uct_dc_iface_query(&iface->super, iface_attr);
+    status = uct_dc_iface_query(&iface->super, iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     uct_rc_verbs_iface_common_query(&iface->verbs_common,
                                     &iface->super.super, iface_attr);
     iface_attr->iface_addr_len = sizeof(uct_dc_verbs_iface_addr_t);

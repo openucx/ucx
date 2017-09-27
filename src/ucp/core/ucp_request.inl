@@ -164,7 +164,7 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
     }
 }
 
-static UCS_F_ALWAYS_INLINE void 
+static UCS_F_ALWAYS_INLINE void
 ucp_request_wait_uct_comp(ucp_request_t *req)
 {
     while (req->send.uct_comp.count > 0) {

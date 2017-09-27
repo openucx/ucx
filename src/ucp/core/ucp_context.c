@@ -967,12 +967,18 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
 
 void ucp_context_tag_offload_enable(ucp_context_h context)
 {
+    ucp_worker_iface_t *offload_iface;
+
     /* Enable offload, if only one tag offload capable interface is present
      * (multiple offload ifaces are not supported yet). */
     if (context->config.ext.tm_offload &&
         (ucs_queue_length(&context->tm.offload.ifaces) == 1)) {
         context->tm.offload.thresh       = context->config.ext.tm_thresh;
         context->tm.offload.zcopy_thresh = context->config.ext.tm_max_bcopy;
+
+        offload_iface = ucs_queue_head_elem_non_empty(&context->tm.offload.ifaces,
+                                                      ucp_worker_iface_t, queue);
+        ucp_worker_iface_activate(offload_iface);
 
         ucs_debug("Enable TM offload: thresh %zu, zcopy_thresh %zu",
                   context->tm.offload.thresh, context->tm.offload.zcopy_thresh);

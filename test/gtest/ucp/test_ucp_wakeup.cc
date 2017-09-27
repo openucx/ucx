@@ -169,8 +169,6 @@ UCS_TEST_P(test_ucp_wakeup, signal)
     ASSERT_UCS_OK(ucp_worker_signal(worker));
     EXPECT_EQ(UCS_ERR_BUSY, ucp_worker_arm(worker));
     EXPECT_EQ(UCS_OK, ucp_worker_arm(worker));
-
-    close(efd);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wakeup)
