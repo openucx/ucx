@@ -115,17 +115,17 @@ public:
 
     static void send_tag_cb(void *request, ucs_status_t status)
     {
-        ucx_perf_request_t *r = (ucx_perf_request_t *)request;
-        ucp_perf_test_runner *sender = (ucp_perf_test_runner *)r->context;
+        ucp_perf_request_t *r = (ucp_perf_request_t*)request;
+        ucp_perf_test_runner *sender = (ucp_perf_test_runner*)r->context;
 
         sender->send_tag_complete();
         ucp_request_release(request);
     }
 
-    void UCS_F_ALWAYS_INLINE wait_window()
+    void UCS_F_ALWAYS_INLINE wait_window(unsigned n)
     {
-        while (m_outstanding >= m_max_outstanding) {
-            progress_responder();
+        while (m_outstanding >= (m_max_outstanding - n + 1)) {
+            progress_requestor();
         }
     }
 
@@ -138,7 +138,7 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
-            wait_window();
+            wait_window(1);
 
             if (FLAGS & UCX_PERF_TEST_FLAG_TAG_SYNC) {
                 request = ucp_tag_send_sync_nb(ep, buffer, length, datatype, TAG,
@@ -150,7 +150,7 @@ public:
             if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
                 return UCS_PTR_STATUS(request);
             }
-            ((ucx_perf_request_t *)request)->context = this;
+            ((ucp_perf_request_t*)request)->context = this;
             m_outstanding++;
             return UCS_OK;
 
@@ -298,6 +298,7 @@ public:
             }
         }
 
+        wait_window(m_max_outstanding);
         ucp_worker_flush(m_perf.ucp.worker);
         rte_call(&m_perf, barrier);
         return UCS_OK;
@@ -356,6 +357,7 @@ public:
             }
         }
 
+        wait_window(m_max_outstanding);
         ucp_worker_flush(m_perf.ucp.worker);
         rte_call(&m_perf, barrier);
         return UCS_OK;
