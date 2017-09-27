@@ -1132,7 +1132,8 @@ static ucs_status_t uct_dc_verbs_iface_get_address(uct_iface_h tl_iface,
 static ucs_status_t
 uct_dc_verbs_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 {
-    uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_verbs_iface_t);
+    uct_dc_verbs_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_iface,
+                                                              uct_dc_verbs_iface_t);
 
     return uct_rc_iface_common_event_arm(tl_iface, events,
                                          UCT_RC_VERBS_TM_ENABLED(&iface->verbs_common));
