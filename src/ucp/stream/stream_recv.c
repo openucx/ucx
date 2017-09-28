@@ -114,6 +114,14 @@ out:
     return status;
 }
 
+ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,
+                                    ucp_datatype_t datatype,
+                                    ucp_stream_recv_callback_t cb,
+                                    unsigned flags)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+}
+
 static void ucp_stream_am_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                                uint8_t id, const void *data, size_t length,
                                char *buffer, size_t max)

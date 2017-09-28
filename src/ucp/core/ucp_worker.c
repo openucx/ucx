@@ -1183,6 +1183,13 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
     return status;
 }
 
+ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
+                               ucp_stream_poll_ep_t *poll_eps, size_t max_eps,
+                               unsigned flags)
+{
+    return UCS_ERR_NOT_IMPLEMENTED;
+}
+
 ucs_status_t ucp_worker_arm(ucp_worker_h worker)
 {
     ucp_worker_iface_t *wiface;
