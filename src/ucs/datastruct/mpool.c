@@ -60,17 +60,16 @@ ucs_status_t ucs_mpool_init(ucs_mpool_t *mp, size_t priv_size,
         return UCS_ERR_NO_MEMORY;
     }
 
-    mp->freelist           = NULL;
-    mp->data->elem_size    = sizeof(ucs_mpool_elem_t) + elem_size;
-    mp->data->alignment    = alignment;
-    mp->data->align_offset = sizeof(ucs_mpool_elem_t) + align_offset;
-    mp->data->quota        = max_elems;
-    mp->data->tail         = NULL;
-    mp->data->chunk_size   = sizeof(ucs_mpool_chunk_t) + alignment +
-                             elems_per_chunk * ucs_mpool_elem_total_size(mp->data);
-    mp->data->chunks       = NULL;
-    mp->data->ops          = ops;
-    mp->data->name         = strdup(name);
+    mp->freelist              = NULL;
+    mp->data->elem_size       = sizeof(ucs_mpool_elem_t) + elem_size;
+    mp->data->alignment       = alignment;
+    mp->data->align_offset    = sizeof(ucs_mpool_elem_t) + align_offset;
+    mp->data->elems_per_chunk = elems_per_chunk;
+    mp->data->quota           = max_elems;
+    mp->data->tail            = NULL;
+    mp->data->chunks          = NULL;
+    mp->data->ops             = ops;
+    mp->data->name            = strdup(name);
 
     VALGRIND_CREATE_MEMPOOL(mp, 0, 0);
 
@@ -155,10 +154,10 @@ void ucs_mpool_put(void *obj)
     ucs_mpool_put_inline(obj);
 }
 
-void *ucs_mpool_get_grow(ucs_mpool_t *mp)
+void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
 {
-    size_t chunk_size, chunk_padding;
     ucs_mpool_data_t *data = mp->data;
+    size_t chunk_size, chunk_padding;
     ucs_mpool_chunk_t *chunk;
     ucs_mpool_elem_t *elem;
     ucs_status_t status;
@@ -166,14 +165,16 @@ void *ucs_mpool_get_grow(ucs_mpool_t *mp)
     void *ptr;
 
     if (data->quota == 0) {
-        return NULL;
+        return;
     }
 
-    chunk_size = data->chunk_size;
+    chunk_size = sizeof(ucs_mpool_chunk_t) + data->alignment +
+                 (num_elems * ucs_mpool_elem_total_size(data));
     status = data->ops->chunk_alloc(mp, &chunk_size, &ptr);
     if (status != UCS_OK) {
-        ucs_error("Failed to allocate memory pool chunk: %s", ucs_status_string(status));
-        return NULL;
+        ucs_error("Failed to allocate memory pool chunk: %s",
+                  ucs_status_string(status));
+        return;
     }
 
     /* Calculate padding, and update element count according to allocated size */
@@ -194,11 +195,10 @@ void *ucs_mpool_get_grow(ucs_mpool_t *mp)
         }
 
         ucs_mpool_add_to_freelist(mp, elem, 0);
-        if (mp->data->tail == NULL) {
-            mp->data->tail = elem;
+        if (data->tail == NULL) {
+            data->tail = elem;
         }
     }
-
 
     chunk->next  = data->chunks;
     data->chunks = chunk;
@@ -212,8 +212,17 @@ void *ucs_mpool_get_grow(ucs_mpool_t *mp)
     }
 
     VALGRIND_MAKE_MEM_NOACCESS(chunk + 1, chunk_size - sizeof(*chunk));
+}
 
-    ucs_assert(mp->freelist != NULL); /* Should not recurse */
+void *ucs_mpool_get_grow(ucs_mpool_t *mp)
+{
+    ucs_mpool_data_t *data = mp->data;
+
+    ucs_mpool_grow(mp, data->elems_per_chunk);
+    if (mp->freelist == NULL) {
+        return NULL;
+    }
+
     return ucs_mpool_get(mp);
 }
 

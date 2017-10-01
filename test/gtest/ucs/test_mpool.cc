@@ -118,6 +118,31 @@ UCS_TEST_F(test_mpool, custom_alloc) {
     ucs_mpool_cleanup(&mp, 1);
 }
 
+UCS_TEST_F(test_mpool, grow) {
+    ucs_status_t status;
+    ucs_mpool_t mp;
+
+    ucs_mpool_ops_t ops = {
+       ucs_mpool_chunk_malloc,
+       ucs_mpool_chunk_free,
+       NULL,
+       NULL
+    };
+
+    status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
+                            1000, 2000, &ops, "test");
+    ASSERT_UCS_OK(status);
+
+    ucs_mpool_grow(&mp, 1);
+
+    void *obj = ucs_mpool_get(&mp);
+    EXPECT_TRUE(obj != NULL);
+
+    ucs_mpool_put(obj);
+
+    ucs_mpool_cleanup(&mp, 1);
+}
+
 UCS_TEST_F(test_mpool, infinite) {
     const unsigned NUM_ELEMS = 1000000 / ucs::test_time_multiplier();
     ucs_status_t status;
