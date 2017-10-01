@@ -41,6 +41,11 @@ if HAVE_MPICC
 SUBDIRS += test/mpi
 endif
 
+if HAVE_JAVA
+SUBDIRS += bindings/java/src/main/native
+endif
+
+EXTRA_DIST += config/m4/java.m4
 EXTRA_DIST += config/m4/gtest.m4
 EXTRA_DIST += config/m4/ucs.m4
 EXTRA_DIST += config/m4/ib.m4
