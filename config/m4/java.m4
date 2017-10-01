@@ -20,9 +20,17 @@ AS_IF([test "x$with_java" != xno],
              [AS_IF([test -n "$JAVA_HOME"],
                     [],
                     [
-                     AC_SUBST([JAVA], [$(readlink -f $(which java))])
-                     AC_SUBST([JAVA_HOME], [${JAVA%*/jre*}])
-                     AC_MSG_WARN([Please set JAVA_HOME=$JAVA_HOME])
+                     READLINK_FKNOWN=$(readlink -f xxx 1>/dev/null 2>&1 && echo yes)
+                     AS_IF([test "x${READLINK_FKNOWN}" == xyes],
+                           [
+                            AC_SUBST([JAVA], [$(readlink -f $(type java | awk '{print $3;}'))])
+                            AC_SUBST([JAVA_HOME], [${JAVA%*/jre*}])
+                            AC_MSG_WARN([Please set JAVA_HOME=$JAVA_HOME])
+                           ],
+                           [
+                            AC_MSG_ERROR([Plesae install readlink or set JAVA_HOME=<path-to-java>])
+                           ]
+                          )
                     ]
                    )
               with_java=$JAVA_HOME
