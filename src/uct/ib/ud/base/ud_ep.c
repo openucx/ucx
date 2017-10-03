@@ -852,7 +852,7 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
                        !(sent_skb->neth->packet_type & UCT_UD_PACKET_FLAG_AM)),
                        "ep(%p): CREQ resend on endpoint which is already connected", ep);
 
-    skb = uct_ud_iface_res_skb_get(iface);
+    skb = uct_ud_iface_resend_skb_get(iface);
     ucs_assert_always(skb != NULL);
 
     ep->resend.pos = ucs_queue_iter_next(ep->resend.pos);
@@ -947,7 +947,7 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
          */
         uct_ud_iface_complete_tx_skb(iface, ep, skb);
     } else {
-        uct_ud_iface_res_skb_put(iface, skb);
+        uct_ud_iface_resend_skb_put(iface, skb);
     }
 }
 

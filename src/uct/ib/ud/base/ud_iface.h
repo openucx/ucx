@@ -117,8 +117,9 @@ struct uct_ud_iface {
         ucs_mpool_t            mp;
         int16_t                available;
         unsigned               unsignaled;
-        /* pool of skbs that are reserved for retransmissions/ctl packects */
-        ucs_queue_head_t       res_skbs;
+        /* pool of skbs that are reserved for retransmissions */
+        ucs_queue_head_t       resend_skbs;
+        unsigned               resend_skbs_quota;
         ucs_arbiter_t          pending_q;
         int                    pending_q_len;
         int                    in_pending;
@@ -200,13 +201,13 @@ static UCS_F_ALWAYS_INLINE int uct_ud_iface_has_skbs(uct_ud_iface_t *iface)
 }
 
 
-uct_ud_send_skb_t *uct_ud_iface_res_skb_get(uct_ud_iface_t *iface);
+uct_ud_send_skb_t *uct_ud_iface_resend_skb_get(uct_ud_iface_t *iface);
 
 static inline void
-uct_ud_iface_res_skb_put(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb)
+uct_ud_iface_resend_skb_put(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb)
 {
     if (skb != &iface->tx.skb_inl.super) {
-        ucs_queue_push(&iface->tx.res_skbs, &skb->queue);
+        ucs_queue_push(&iface->tx.resend_skbs, &skb->queue);
     }
 }
 

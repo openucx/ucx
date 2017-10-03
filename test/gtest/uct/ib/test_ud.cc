@@ -803,13 +803,13 @@ UCS_TEST_P(test_ud, res_skb_basic) {
     uct_ud_send_skb_t *used_skbs[tx_qlen];
 
     for (i = 0; i < tx_qlen; i++) {
-        skb = uct_ud_iface_res_skb_get(ud_if);
+        skb = uct_ud_iface_resend_skb_get(ud_if);
         ASSERT_TRUE(skb);
         used_skbs[i] = skb;
     }
 
     for (i = 0; i < tx_qlen; i++) {
-        uct_ud_iface_res_skb_put(ud_if, used_skbs[i]);
+        uct_ud_iface_resend_skb_put(ud_if, used_skbs[i]);
     }
 }
 
@@ -836,7 +836,7 @@ UCS_TEST_P(test_ud, res_skb_tx) {
             uct_ud_put_hdr_t *put_hdr;
             uct_ud_neth_t *neth;
 
-            skb = uct_ud_iface_res_skb_get(ud_if);
+            skb = uct_ud_iface_resend_skb_get(ud_if);
             ASSERT_TRUE(skb);
             VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
             ASSERT_LT(skb->flags, poll_sn);
@@ -855,7 +855,7 @@ UCS_TEST_P(test_ud, res_skb_tx) {
 
             ucs_derived_of(ud_if->super.ops, uct_ud_iface_ops_t)->tx_skb(ep(m_e1),
                                                                          skb, 0);
-            uct_ud_iface_res_skb_put(ud_if, skb);
+            uct_ud_iface_resend_skb_put(ud_if, skb);
             tx_count++;
         }
         short_progress_loop(1);
