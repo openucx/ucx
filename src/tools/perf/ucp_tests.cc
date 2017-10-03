@@ -108,17 +108,12 @@ public:
         return UCS_OK;
     }
 
-    void send_tag_complete()
+    static void send_cb(void *request, ucs_status_t status)
     {
-        m_outstanding--;
-    }
-
-    static void send_tag_cb(void *request, ucs_status_t status)
-    {
-        ucp_perf_request_t *r = (ucp_perf_request_t*)request;
+        ucp_perf_request_t *r = reinterpret_cast<ucp_perf_request_t*>(request);
         ucp_perf_test_runner *sender = (ucp_perf_test_runner*)r->context;
 
-        sender->send_tag_complete();
+        sender->send_completed();
         ucp_request_release(request);
     }
 
@@ -142,16 +137,16 @@ public:
 
             if (FLAGS & UCX_PERF_TEST_FLAG_TAG_SYNC) {
                 request = ucp_tag_send_sync_nb(ep, buffer, length, datatype, TAG,
-                                               send_tag_cb);
+                                               send_cb);
             } else {
                 request = ucp_tag_send_nb(ep, buffer, length, datatype, TAG,
-                                          send_tag_cb);
+                                          send_cb);
             }
             if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
                 return UCS_PTR_STATUS(request);
             }
-            ((ucp_perf_request_t*)request)->context = this;
-            m_outstanding++;
+            reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
+            send_started();
             return UCS_OK;
 
         case UCX_PERF_CMD_PUT:
@@ -378,6 +373,16 @@ public:
     }
 
 private:
+    void UCS_F_ALWAYS_INLINE send_started()
+    {
+        ++m_outstanding;
+    }
+
+    void UCS_F_ALWAYS_INLINE send_completed()
+    {
+        --m_outstanding;
+    }
+
     ucx_perf_context_t &m_perf;
     unsigned           m_outstanding;
     const unsigned     m_max_outstanding;
