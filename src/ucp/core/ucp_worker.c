@@ -292,14 +292,16 @@ void ucp_worker_signal_internal(ucp_worker_h worker)
 static void
 ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
-    ucp_worker_h         worker           = (ucp_worker_h)arg;
-    ucp_ep_h             ucp_ep           = NULL;
-    uct_ep_h             aux_ep           = NULL;
-    uint64_t             dest_uuid UCS_V_UNUSED;
-    ucp_ep_h             ucp_ep_iter;
-    khiter_t             ucp_ep_errh_iter;
-    ucp_err_handler_cb_t err_cb;
-    ucp_lane_index_t     lane, n_lanes, failed_lane;
+    ucp_worker_h            worker           = (ucp_worker_h)arg;
+    ucp_ep_h                ucp_ep           = NULL;
+    uct_ep_h                aux_ep           = NULL;
+    uct_tl_resource_desc_t* tl_rsc;
+    uint64_t                dest_uuid UCS_V_UNUSED;
+    ucp_ep_h                ucp_ep_iter;
+    khiter_t                ucp_ep_errh_iter;
+    ucp_err_handler_cb_t    err_cb;
+    ucp_lane_index_t        lane, n_lanes, failed_lane;
+    ucp_rsc_index_t         rsc_index;
 
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
     kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep_iter, {
@@ -318,6 +320,9 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     return;
 
 found_ucp_ep:
+
+    rsc_index   = ucp_ep_get_rsc_index(ucp_ep, lane);
+    tl_rsc      = &worker->context->tl_rscs[rsc_index].tl_rsc;
 
     /* Purge outstanding */
     uct_ep_pending_purge(ucp_ep_iter->uct_eps[lane], ucp_ep_err_pending_purge,
@@ -369,8 +374,10 @@ found_ucp_ep:
         err_cb = kh_val(&worker->ep_errh_hash, ucp_ep_errh_iter);
         err_cb(ucp_ep->user_data, ucp_ep, status);
     } else {
-        ucs_error("Error %s was not handled for ep %p",
-                  ucs_status_string(status), ucp_ep);
+        ucs_error("Error %s was not handled for ep %p - "
+                  UCT_TL_RESOURCE_DESC_FMT,
+                  ucs_status_string(status), ucp_ep,
+                  UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
     }
 }
 
