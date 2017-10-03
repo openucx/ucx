@@ -108,6 +108,22 @@ public:
         return UCS_OK;
     }
 
+    static void send_cb(void *request, ucs_status_t status)
+    {
+        ucp_perf_request_t *r = reinterpret_cast<ucp_perf_request_t*>(request);
+        ucp_perf_test_runner *sender = (ucp_perf_test_runner*)r->context;
+
+        sender->send_completed();
+        ucp_request_release(request);
+    }
+
+    void UCS_F_ALWAYS_INLINE wait_window(unsigned n)
+    {
+        while (m_outstanding >= (m_max_outstanding - n + 1)) {
+            progress_requestor();
+        }
+    }
+
     ucs_status_t UCS_F_ALWAYS_INLINE
     send(ucp_ep_h ep, void *buffer, unsigned length, ucp_datatype_t datatype,
          uint8_t sn, uint64_t remote_addr, ucp_rkey_h rkey)
@@ -117,14 +133,22 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
+            wait_window(1);
+
             if (FLAGS & UCX_PERF_TEST_FLAG_TAG_SYNC) {
                 request = ucp_tag_send_sync_nb(ep, buffer, length, datatype, TAG,
-                                               (ucp_send_callback_t)ucs_empty_function);
+                                               send_cb);
             } else {
                 request = ucp_tag_send_nb(ep, buffer, length, datatype, TAG,
-                                          (ucp_send_callback_t)ucs_empty_function);
+                                          send_cb);
             }
-            return wait(request, true);
+            if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
+                return UCS_PTR_STATUS(request);
+            }
+            reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
+            send_started();
+            return UCS_OK;
+
         case UCX_PERF_CMD_PUT:
             *((uint8_t*)buffer + length - 1) = sn;
             return ucp_put(ep, buffer, length, remote_addr, rkey);
@@ -269,6 +293,7 @@ public:
             }
         }
 
+        wait_window(m_max_outstanding);
         ucp_worker_flush(m_perf.ucp.worker);
         rte_call(&m_perf, barrier);
         return UCS_OK;
@@ -327,6 +352,7 @@ public:
             }
         }
 
+        wait_window(m_max_outstanding);
         ucp_worker_flush(m_perf.ucp.worker);
         rte_call(&m_perf, barrier);
         return UCS_OK;
@@ -347,6 +373,16 @@ public:
     }
 
 private:
+    void UCS_F_ALWAYS_INLINE send_started()
+    {
+        ++m_outstanding;
+    }
+
+    void UCS_F_ALWAYS_INLINE send_completed()
+    {
+        --m_outstanding;
+    }
+
     ucx_perf_context_t &m_perf;
     unsigned           m_outstanding;
     const unsigned     m_max_outstanding;

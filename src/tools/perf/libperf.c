@@ -696,8 +696,8 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
     free(perf->uct.peers);
 }
 
-static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params,
-                                               uint64_t *features)
+static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
+                                               ucp_params_t *ucp_params)
 {
     ucs_status_t status, message_size;
 
@@ -705,16 +705,16 @@ static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params,
     switch (params->command) {
     case UCX_PERF_CMD_PUT:
     case UCX_PERF_CMD_GET:
-        *features = UCP_FEATURE_RMA;
+        ucp_params->features |= UCP_FEATURE_RMA;
         break;
     case UCX_PERF_CMD_ADD:
     case UCX_PERF_CMD_FADD:
     case UCX_PERF_CMD_SWAP:
     case UCX_PERF_CMD_CSWAP:
         if (message_size == sizeof(uint32_t)) {
-            *features = UCP_FEATURE_AMO32;
+            ucp_params->features |= UCP_FEATURE_AMO32;
         } else if (message_size == sizeof(uint64_t)) {
-            *features = UCP_FEATURE_AMO64;
+            ucp_params->features |= UCP_FEATURE_AMO64;
         } else {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                 ucs_error("Atomic size should be either 32 or 64 bit");
@@ -724,7 +724,9 @@ static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params,
 
         break;
     case UCX_PERF_CMD_TAG:
-        *features = UCP_FEATURE_TAG;
+        ucp_params->features    |= UCP_FEATURE_TAG;
+        ucp_params->field_mask  |= UCP_PARAM_FIELD_REQUEST_SIZE;
+        ucp_params->request_size = sizeof(ucp_perf_request_t);
         break;
     default:
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
@@ -1197,15 +1199,18 @@ static void uct_perf_cleanup(ucx_perf_context_t *perf)
     ucs_async_context_cleanup(&perf->uct.async);
 }
 
-static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *params)
+static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf,
+                                   ucx_perf_params_t *params)
 {
     ucp_params_t ucp_params;
     ucp_worker_params_t worker_params;
     ucp_config_t *config;
     ucs_status_t status;
-    uint64_t features;
 
-    status = ucp_perf_test_check_params(params, &features);
+    ucp_params.field_mask = UCP_PARAM_FIELD_FEATURES;
+    ucp_params.features   = 0;
+
+    status = ucp_perf_test_fill_params(params, &ucp_params);
     if (status != UCS_OK) {
         goto err;
     }
@@ -1214,9 +1219,6 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
     if (status != UCS_OK) {
         goto err;
     }
-
-    ucp_params.field_mask      = UCP_PARAM_FIELD_FEATURES;
-    ucp_params.features        = features;
 
     status = ucp_init(&ucp_params, config, &perf->ucp.context);
     ucp_config_release(config);
@@ -1239,7 +1241,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         goto err_destroy_worker;
     }
 
-    status = ucp_perf_test_setup_endpoints(perf, features);
+    status = ucp_perf_test_setup_endpoints(perf, ucp_params.features);
     if (status != UCS_OK) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Failed to setup endpoints: %s", ucs_status_string(status));

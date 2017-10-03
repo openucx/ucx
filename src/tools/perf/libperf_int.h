@@ -24,7 +24,7 @@ BEGIN_C_DECLS
 typedef struct ucx_perf_context  ucx_perf_context_t;
 typedef struct uct_peer          uct_peer_t;
 typedef struct ucp_peer          ucp_peer_t;
-
+typedef struct ucp_perf_request  ucp_perf_request_t;
 
 struct ucx_perf_context {
     ucx_perf_params_t            params;
@@ -88,6 +88,9 @@ struct ucp_peer {
     ucp_rkey_h                   rkey;
 };
 
+struct ucp_perf_request {
+    void                         *context;
+};
 
 #define UCX_PERF_TEST_FOREACH(perf) \
     while (!ucx_perf_context_done(perf))
