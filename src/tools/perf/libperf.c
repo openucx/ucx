@@ -553,12 +553,10 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         goto err_free;
     }
 
-    if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
-        status = uct_iface_get_address(perf->uct.iface, iface_addr);
-        if (status != UCS_OK) {
-            ucs_error("Failed to uct_iface_get_address: %s", ucs_status_string(status));
-            goto err_free;
-        }
+    status = uct_iface_get_address(perf->uct.iface, iface_addr);
+    if (status != UCS_OK) {
+        ucs_error("Failed to uct_iface_get_address: %s", ucs_status_string(status));
+        goto err_free;
     }
 
     if (info.rkey_size > 0) {
@@ -618,6 +616,14 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         iface_addr  = (void*)dev_addr    + remote_info->uct.dev_addr_len;
         ep_addr     = (void*)iface_addr  + remote_info->uct.iface_addr_len;
         perf->uct.peers[i].remote_addr = remote_info->recv_buffer;
+
+        if (!uct_iface_is_reachable(perf->uct.iface, dev_addr,
+                                    remote_info->uct.iface_addr_len ?
+                                    iface_addr : NULL)) {
+            ucs_error("Destination is unreachable");
+            status = UCS_ERR_UNREACHABLE;
+            goto err_destroy_eps;
+        }
 
         if (remote_info->rkey_size > 0) {
             status = uct_rkey_unpack(rkey_buffer, &perf->uct.peers[i].rkey);
