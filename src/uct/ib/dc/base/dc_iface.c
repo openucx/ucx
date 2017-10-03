@@ -21,6 +21,10 @@ ucs_config_field_t uct_dc_iface_config_table[] = {
      ucs_offsetof(uct_dc_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
+    {"", "", NULL,
+     ucs_offsetof(uct_dc_iface_config_t, ud_common),
+     UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
+
     {"NUM_DCI", "8",
      "Number of DC initiator QPs (DCI) used by the interface "
      "(up to " UCS_PP_QUOTE(UCT_DC_IFACE_MAX_DCIS) ").",

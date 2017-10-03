@@ -460,6 +460,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->tx.available           = config->super.tx.queue_len;
 
     self->rx.available           = config->super.rx.queue_len;
+    self->rx.reserved            = 0;
     self->config.tx_qp_len       = config->super.tx.queue_len;
     self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
     self->config.check_grh_dgid  = (config->dgid_check &&
@@ -490,6 +491,11 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     if (status != UCS_OK) {
         goto err_qp;
     }
+
+    self->rx.available = ucs_min(config->ud_common.rx_queue_len_init,
+                                 config->super.rx.queue_len);
+    self->rx.reserved  = config->super.rx.queue_len - self->rx.available;
+    ucs_mpool_grow(&self->rx.mp, self->rx.available);
 
     data_size = sizeof(uct_ud_ctl_hdr_t) + self->super.addr_size;
     data_size = ucs_max(data_size, self->super.config.seg_size);
@@ -567,6 +573,11 @@ UCS_CLASS_DEFINE(uct_ud_iface_t, uct_ib_iface_t);
 ucs_config_field_t uct_ud_iface_config_table[] = {
     {"IB_", "", NULL,
      ucs_offsetof(uct_ud_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
+
+    {"", "", NULL,
+     ucs_offsetof(uct_ud_iface_config_t, ud_common),
+     UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
+
     {"TIMEOUT", "5.0m", "Transport timeout",
      ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
     {"SLOW_TIMER_BACKOFF", "2.0", "Timeout multiplier for resending trigger",
@@ -883,4 +894,19 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     }
 
     return UCS_OK;
+}
+
+void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+
+    if (flags & UCT_PROGRESS_RECV) {
+        uct_ud_enter(iface);
+        iface->rx.available += iface->rx.reserved;
+        iface->rx.reserved   = 0;
+        /* let progress (possibly async) post the missing receives */
+        uct_ud_leave(iface);
+    }
+
+    uct_base_iface_progress_enable(tl_iface, flags);
 }

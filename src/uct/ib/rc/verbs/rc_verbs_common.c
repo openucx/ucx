@@ -154,8 +154,14 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface, unsigned max
     return count;
 }
 
-ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface)
+ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface,
+                                                     unsigned max)
 {
+    unsigned count;
+
+    count = ucs_min(max, iface->rx.srq.reserved);
+    iface->rx.srq.available += count;
+    iface->rx.srq.reserved  -= count;
     while (iface->rx.srq.available > 0) {
         if (uct_rc_verbs_iface_post_recv_common(iface, 1) == 0) {
             ucs_error("failed to post receives");
@@ -169,6 +175,14 @@ void uct_rc_verbs_iface_common_progress_enable(uct_rc_verbs_iface_common_t *ifac
                                                uct_rc_iface_t *rc_iface,
                                                unsigned flags)
 {
+    if (flags & UCT_PROGRESS_RECV) {
+        /* ignore return value from prepost_recv, since it's not really possible
+         * to handle here, and some receives were already pre-posted during iface
+         * creation anyway.
+         */
+        uct_rc_verbs_iface_prepost_recvs_common(rc_iface, UINT_MAX);
+    }
+
     uct_base_iface_progress_enable_cb(&rc_iface->super.super, iface->progress,
                                       flags);
 }
@@ -352,16 +366,8 @@ ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
     }
     iface->config.notag_hdr_size = uct_rc_verbs_notag_header_fill(iface,
                                                                   iface->am_inl_hdr);
-
-    status = uct_rc_verbs_iface_prepost_recvs_common(rc_iface);
-    if (status != UCS_OK) {
-        goto err_am_inl_hdr_put;
-    }
-
     return UCS_OK;
 
-err_am_inl_hdr_put:
-    ucs_mpool_put(iface->am_inl_hdr);
 err_mpool_cleanup:
     ucs_mpool_cleanup(&iface->short_desc_mp, 1);
 err:

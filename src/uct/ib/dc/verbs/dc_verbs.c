@@ -1201,6 +1201,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     int i, ret;
     unsigned rx_cq_len;
     unsigned rc_hdr_len;
+    unsigned rx_qlen_init;
 
     ucs_trace_func("");
 
@@ -1245,6 +1246,16 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                                   self->super.super.config.tx_qp_len);
     }
     uct_dc_iface_set_quota(&self->super, &config->super);
+
+    rx_qlen_init = config->super.ud_common.rx_queue_len_init;
+    ucs_mpool_grow(&self->super.super.rx.mp,
+                   ucs_min(rx_qlen_init, self->super.super.rx.srq.reserved));
+
+    status = uct_rc_verbs_iface_prepost_recvs_common(&self->super.super,
+                                                     rx_qlen_init);
+    if (status != UCS_OK) {
+        goto err_common_cleanup;
+    }
 
     ucs_debug("created dc iface %p", self);
     return UCS_OK;

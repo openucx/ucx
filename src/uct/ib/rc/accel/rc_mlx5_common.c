@@ -78,6 +78,14 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
     return count;
 }
 
+void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_iface_t *iface,
+                                            uct_rc_mlx5_iface_common_t *mlx5_common)
+{
+    iface->rx.srq.available = iface->rx.srq.reserved;
+    iface->rx.srq.reserved  = 0;
+    uct_rc_mlx5_iface_srq_post_recv(iface, &mlx5_common->rx.srq);
+}
+
 #define UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(_bits) \
     static void \
     uct_rc_mlx5_common_atomic##_bits##_le_handler(uct_rc_iface_send_op_t *op, \
@@ -125,11 +133,7 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
         return status;
     }
 
-    rc_iface->rx.srq.available = iface->rx.srq.mask + 1;
-    if (uct_rc_mlx5_iface_srq_post_recv(rc_iface, &iface->rx.srq) == 0) {
-        ucs_error("Failed to post receives");
-        return UCS_ERR_NO_MEMORY;
-    }
+    rc_iface->rx.srq.reserved = iface->rx.srq.mask + 1;
 
     status = UCS_STATS_NODE_ALLOC(&iface->stats, &uct_rc_mlx5_iface_stats_class,
                                   rc_iface->stats);
