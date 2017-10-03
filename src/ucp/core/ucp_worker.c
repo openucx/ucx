@@ -33,6 +33,24 @@ static ucs_stats_class_t ucp_worker_stats_class = {
         [UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP]        = "rx_rndv_rts_unexp"
     }
 };
+
+static ucs_stats_class_t ucp_worker_offload_stats_class = {
+    .name           = "tag_offload",
+    .num_counters   = UCP_WORKER_STAT_TAG_OFFLOAD_LAST,
+    .counter_names  = {
+        [UCP_WORKER_STAT_TAG_OFFLOAD_POSTED]           = "posted",
+        [UCP_WORKER_STAT_TAG_OFFLOAD_CANCELED]         = "canceled",
+        [UCP_WORKER_STAT_TAG_OFFLOAD_TAG_EXCEED]       = "no_tag",
+        [UCP_WORKER_STAT_TAG_OFFLOAD_NON_CONTIG]       = "non_contig",
+        [UCP_WORKER_STAT_TAG_OFFLOAD_WILDCARD]         = "wildcard",
+        [UCP_WORKER_STAT_TAG_OFFLOAD_SW_REQ]           = "sw_pend",
+        [UCP_WORKER_STAT_TAG_OFFLOAD_RX]               = "completed",
+        [UCP_WORKER_STAT_TAG_OFFLOAD_RX_SW_RNDV]       = "completed_sw_rndv",
+        [UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_EGR]     = "unexp_egr",
+        [UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_RNDV]    = "unexp_rndv",
+        [UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV] = "unexp_sw_rndv",
+    }
+};
 #endif
 
 
@@ -1052,9 +1070,16 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_free_ifaces;
     }
 
-    status = ucs_async_context_init(&worker->async, UCS_ASYNC_MODE_THREAD);
+    status = UCS_STATS_NODE_ALLOC(&worker->offload_stats,
+                                  &ucp_worker_offload_stats_class,
+                                  worker->stats);
     if (status != UCS_OK) {
         goto err_free_stats;
+    }
+
+    status = ucs_async_context_init(&worker->async, UCS_ASYNC_MODE_THREAD);
+    if (status != UCS_OK) {
+        goto err_free_offload_stats;
     }
 
     /* Create the underlying UCT worker */
@@ -1114,6 +1139,8 @@ err_destroy_uct_worker:
     uct_worker_destroy(worker->uct);
 err_destroy_async:
     ucs_async_context_cleanup(&worker->async);
+err_free_offload_stats:
+    UCS_STATS_NODE_FREE(worker->offload_stats);
 err_free_stats:
     UCS_STATS_NODE_FREE(worker->stats);
 err_free_ifaces:
@@ -1149,6 +1176,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     kh_destroy_inplace(ucp_worker_ep_hash, &worker->ep_hash);
     kh_destroy_inplace(ucp_ep_errh_hash, &worker->ep_errh_hash);
     UCP_THREAD_LOCK_FINALIZE(&worker->mt_lock);
+    UCS_STATS_NODE_FREE(worker->offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);
     ucs_free(worker);
 }

@@ -16,7 +16,6 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/sys/sys.h>
 
-
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_offload_release_buf(ucp_request_t *req, ucp_context_t *ctx,
                             ucp_rsc_index_t rsc_idx)
@@ -71,6 +70,7 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
                                  &req->recv.state);
     }
 
+    UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, RX);
 out:
     ucp_request_complete_recv(req, status);
 }
@@ -111,6 +111,7 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
     unsigned length           = sizeof(ucp_rndv_rts_hdr_t);
     ucp_rndv_rts_hdr_t *rts;
 
+    UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, RX_SW_RNDV);
     if (ucs_unlikely(status != UCS_OK)) {
         ucp_tag_offload_release_buf(req, ctx, iface->rsc_index);
         ucp_request_complete_recv(req, status);
@@ -170,12 +171,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
             memcpy(rts + 1, rkey_buf, rkey_size);
             rts->flags |= UCP_RNDV_RTS_FLAG_PACKED_RKEY;
         }
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_RNDV);
     } else {
         /* This must be SW RNDV request. Take length from its header. */
         sw_rndv_hdr = ucs_derived_of(hdr, ucp_sw_rndv_hdr_t);
         rts->size   = sw_rndv_hdr->length;
         rts->flags  = 0;
         len        += ucp_tag_offload_fetch_rkey(ep, sw_rndv_hdr, rts);
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_SW_RNDV);
     }
 
     /* Pass 0 as tl flags, because RTS needs to be stored in UCP pool. */
@@ -200,6 +203,7 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
                   ucs_status_string(status));
         return;
     }
+    UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, CANCELED);
 
     /* if cancel is not forced, need to wait its completion */
     if (force) {
@@ -211,6 +215,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
 {
     size_t length         = req->recv.length;
     ucp_mem_desc_t *rdesc = NULL;
+    ucp_worker_t *worker  = req->recv.worker;
     ucp_worker_iface_t *ucp_iface;
     ucs_status_t status;
     ucp_rsc_index_t mdi;
@@ -218,6 +223,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
 
     if (!UCP_DT_IS_CONTIG(req->recv.datatype)) {
         /* Non-contig buffers not supported yet. */
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, NON_CONTIG);
         return 0;
     }
 
@@ -226,12 +232,14 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
         /* Wildcard.
          * TODO add check that only offload capable iface present. In
          * this case can post tag as well. */
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, WILDCARD);
         return 0;
     }
 
     if (ctx->tm.offload.sw_req_count) {
         /* There are some requests which must be completed in SW. Do not post
          * tags to HW until they are completed. */
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, SW_REQ);
         return 0;
     }
 
@@ -263,7 +271,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
         iov.buffer          = (void*)req->recv.buffer;
         iov.memh            = req->recv.state.dt.contig.memh;
     } else {
-        rdesc = ucp_worker_mpool_get(req->recv.worker);
+        rdesc = ucp_worker_mpool_get(worker);
         if (rdesc == NULL) {
             return 0;
         }
@@ -288,8 +296,10 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
     if (status != UCS_OK) {
         /* No more matching entries in the transport. */
         ucp_tag_offload_release_buf(req, ctx, ucp_iface->rsc_index);
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, TAG_EXCEED);
         return 0;
     }
+    UCP_WORKER_STAT_TAG_OFFLOAD(worker, POSTED);
     req->flags |= UCP_REQUEST_FLAG_OFFLOADED;
     ucs_trace_req("recv request %p (%p) was posted to transport (rsc %d)",
                   req, req + 1, ucp_iface->rsc_index);
