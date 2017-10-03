@@ -272,6 +272,8 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 
     status = uct_iface_query(m_iface, &m_iface_attr);
     ASSERT_UCS_OK(status);
+
+    uct_iface_progress_enable(m_iface, UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 }
 
 

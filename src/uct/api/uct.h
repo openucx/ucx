@@ -2306,7 +2306,7 @@ UCT_INLINE_API ucs_status_t uct_iface_tag_recv_cancel(uct_iface_h iface,
  * Notify the transport that it should actively progress communications during
  * @ref uct_worker_progress().
  *
- * When the interface is created, its progress is enabled.
+ * When the interface is created, its progress is initially disabled.
  *
  * @param [in]  iface    The interface to enable progress.
  * @param [in]  flags    The type of progress to enable as defined by

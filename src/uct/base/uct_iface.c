@@ -185,6 +185,14 @@ void uct_iface_close(uct_iface_h iface)
 void uct_base_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    uct_base_iface_progress_enable_cb(iface,
+                                      (ucs_callback_t)iface->super.ops.iface_progress,
+                                      flags);
+}
+
+void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,
+                                       ucs_callback_t cb, unsigned flags)
+{
     uct_priv_worker_t *worker = iface->worker;
 
     UCS_ASYNC_BLOCK(worker->async);
@@ -192,8 +200,7 @@ void uct_base_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
     /* Add callback only if previous flags are 0 and new flags != 0 */
     if (!iface->progress_flags && flags) {
         if (iface->prog.id == UCS_CALLBACKQ_ID_NULL) {
-            iface->prog.id = ucs_callbackq_add(&worker->super.progress_q,
-                                               (ucs_callback_t)iface->super.ops.iface_progress,
+            iface->prog.id = ucs_callbackq_add(&worker->super.progress_q, cb,
                                                iface, UCS_CALLBACKQ_FLAG_FAST);
         }
     }

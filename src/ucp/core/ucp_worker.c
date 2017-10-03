@@ -682,10 +682,6 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                tl_id, wiface->iface, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),
                worker);
 
-    /* Disable progress until we know better */
-    uct_iface_progress_disable(wiface->iface, UCT_PROGRESS_SEND |
-                                              UCT_PROGRESS_RECV);
-
     VALGRIND_MAKE_MEM_UNDEFINED(&wiface->attr, sizeof(wiface->attr));
     status = uct_iface_query(wiface->iface, &wiface->attr);
     if (status != UCS_OK) {

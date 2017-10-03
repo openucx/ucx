@@ -481,6 +481,9 @@ ucs_status_t uct_base_iface_fence(uct_iface_h tl_iface, unsigned flags);
 
 void uct_base_iface_progress_enable(uct_iface_h tl_iface, unsigned flags);
 
+void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,
+                                       ucs_callback_t cb, unsigned flags);
+
 void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
 ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
