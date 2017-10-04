@@ -131,6 +131,7 @@ public:
 
 protected:
     virtual void init();
+    bool is_self() const;
     virtual void cleanup();
     entity* create_entity(bool add_in_front = false);
 
