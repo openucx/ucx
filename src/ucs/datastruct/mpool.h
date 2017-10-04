@@ -69,15 +69,15 @@ struct ucs_mpool {
  * Memory pool slow-path data.
  */
 struct ucs_mpool_data {
-    unsigned               elem_size;    /* Size of element in the chunk */
-    unsigned               alignment;    /* Element alignment */
-    unsigned               align_offset; /* Offset to alignment point */
-    unsigned               quota;        /* How many more elements can be allocated */
-    ucs_mpool_elem_t       *tail;        /* Free list tail */
-    size_t                 chunk_size;   /* Size of each chunk */
-    ucs_mpool_chunk_t      *chunks;      /* List of allocated chunks */
-    ucs_mpool_ops_t        *ops;         /* Memory pool operations */
-    char                   *name;        /* Name - used for debugging */
+    unsigned               elem_size;       /* Size of element in the chunk */
+    unsigned               alignment;       /* Element alignment */
+    unsigned               align_offset;    /* Offset to alignment point */
+    unsigned               elems_per_chunk; /* Number of elements per chunk */
+    unsigned               quota;           /* How many more elements can be allocated */
+    ucs_mpool_elem_t       *tail;           /* Free list tail */
+    ucs_mpool_chunk_t      *chunks;         /* List of allocated chunks */
+    ucs_mpool_ops_t        *ops;            /* Memory pool operations */
+    char                   *name;           /* Name - used for debugging */
 };
 
 
@@ -202,6 +202,15 @@ void *ucs_mpool_get(ucs_mpool_t *mp);
  * @param obj              Object to return.
  */
 void ucs_mpool_put(void *obj);
+
+
+/**
+ * Grow the memory pool by a specified amount of elements.
+ *
+ * @param mp               Memory pool structure.
+ * @param num_elems        By how many elements to grow.
+ */
+void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems);
 
 
 /**
