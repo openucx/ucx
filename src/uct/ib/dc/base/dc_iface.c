@@ -47,7 +47,7 @@ ucs_config_field_t uct_dc_iface_config_table[] = {
     {NULL}
 };
 
-ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface, uct_rc_srq_t *srq)
+ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
 {
     struct ibv_exp_dct_init_attr init_attr;
 
@@ -55,7 +55,7 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface, uct_rc_srq_t *srq)
 
     init_attr.pd               = uct_ib_iface_md(&iface->super.super)->pd;
     init_attr.cq               = iface->super.super.recv_cq;
-    init_attr.srq              = srq->srq;
+    init_attr.srq              = iface->super.rx.srq.srq;
     init_attr.dc_key           = UCT_IB_KEY;
     init_attr.port             = iface->super.super.config.port_num;
     init_attr.mtu              = iface->super.config.path_mtu;
@@ -177,8 +177,7 @@ static ucs_status_t uct_dc_iface_create_dcis(uct_dc_iface_t *iface,
     iface->tx.stack_top = 0;
     for (i = 0; i < iface->tx.ndci; i++) {
         status = uct_rc_txqp_init(&iface->tx.dcis[i].txqp, &iface->super,
-                                  IBV_EXP_QPT_DC_INI, &cap,
-                                  iface->super.rx.srq.srq
+                                  IBV_EXP_QPT_DC_INI, &cap
                                   UCS_STATS_ARG(iface->super.stats));
         if (status != UCS_OK) {
             goto err;
@@ -213,14 +212,14 @@ void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config
 UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     unsigned rx_priv_len, uct_dc_iface_config_t *config,
-                    unsigned rx_cq_len, unsigned rx_hdr_len, unsigned srq_size)
+                    unsigned rx_cq_len, unsigned rx_hdr_len, int create_srq)
 {
     ucs_status_t status;
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &ops->super, md, worker, params,
                               &config->super, rx_priv_len, rx_cq_len,
-                              rx_hdr_len, srq_size, sizeof(uct_dc_fc_request_t));
+                              rx_hdr_len, sizeof(uct_dc_fc_request_t), create_srq);
     if (config->ndci < 1) {
         ucs_error("dc interface must have at least 1 dci (requested: %d)",
                   config->ndci);
@@ -240,8 +239,8 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
     ucs_list_head_init(&self->tx.gc_list);
 
     /* create DC target */
-    if (srq_size > 0) {
-        status = uct_dc_iface_create_dct(self, &self->super.rx.srq);
+    if (create_srq) {
+        status = uct_dc_iface_create_dct(self);
         if (status != UCS_OK) {
             goto err;
         }
@@ -255,7 +254,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
 
     ucs_debug("dc iface %p: using '%s' policy with %d dcis, dct 0x%x", self,
               uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci,
-              srq_size ? self->rx.dct->dct_num : 0);
+              create_srq ? self->rx.dct->dct_num : 0);
 
     /* Create fake endpoint which will be used for sending FC grants */
     uct_dc_iface_init_fc_ep(self);
@@ -264,7 +263,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
     return UCS_OK;
 
 err_destroy_dct:
-    if (srq_size > 0) {
+    if (create_srq) {
         ibv_exp_destroy_dct(self->rx.dct);
     }
 err:

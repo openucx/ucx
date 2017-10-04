@@ -569,7 +569,7 @@ static ucs_status_t uct_rc_verbs_ep_tag_qp_create(uct_rc_verbs_iface_t *iface,
         /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
          * such a QP to be initialized with zero send queue length. */
         status = uct_rc_iface_qp_create(&iface->super, IBV_QPT_RC, &ep->tm_qp,
-                                        &cap, iface->verbs_common.tm.xrq.srq, 0);
+                                        &cap, 0);
         if (status != UCS_OK) {
             return status;
         }

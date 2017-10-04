@@ -43,9 +43,6 @@ typedef struct uct_rc_verbs_iface_config {
     uct_rc_iface_config_t              super;
     uct_rc_verbs_iface_common_config_t verbs_common;
     uct_rc_fc_config_t                 fc;
-#if IBV_EXP_HW_TM
-    unsigned                           tm_rndv_queue_len;
-#endif
 } uct_rc_verbs_iface_config_t;
 
 

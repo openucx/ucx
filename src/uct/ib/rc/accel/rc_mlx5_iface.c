@@ -150,8 +150,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
                               params, &config->super, 0,
                               config->super.super.rx.queue_len,
                               sizeof(uct_rc_hdr_t),
-                              config->super.super.rx.queue_len,
-                              sizeof(uct_rc_fc_request_t));
+                              sizeof(uct_rc_fc_request_t), 1);
 
 
     self->tx.bb_max                  = ucs_min(config->tx_max_bb, UINT16_MAX);

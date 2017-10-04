@@ -227,7 +227,7 @@ struct uct_rc_iface {
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h,
                   uct_worker_h, const uct_iface_params_t*,
                   const uct_rc_iface_config_t*, unsigned, unsigned,
-                  unsigned, unsigned, unsigned)
+                  unsigned, unsigned, int)
 
 
 struct uct_rc_iface_send_op {
@@ -287,7 +287,7 @@ void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
  */
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
                                     struct ibv_qp **qp_p, struct ibv_qp_cap *cap,
-                                    struct ibv_srq *srq, unsigned max_send_wr);
+                                    unsigned max_send_wr);
 
 ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp);
 

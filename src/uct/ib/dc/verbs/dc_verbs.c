@@ -961,7 +961,8 @@ static ucs_status_t uct_dc_verbs_iface_tag_recv_zcopy(uct_iface_h tl_iface,
 {
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_iface,
                                                  uct_dc_verbs_iface_t);
-    return uct_rc_verbs_iface_common_tag_recv(&iface->verbs_common, tag,
+    return uct_rc_verbs_iface_common_tag_recv(&iface->verbs_common,
+                                              &iface->super.super, tag,
                                               tag_mask, iov, iovcnt, ctx);
 }
 
@@ -973,6 +974,7 @@ static ucs_status_t uct_dc_verbs_iface_tag_recv_cancel(uct_iface_h tl_iface,
                                                 uct_dc_verbs_iface_t);
 
    return uct_rc_verbs_iface_common_tag_recv_cancel(&iface->verbs_common,
+                                                    &iface->super.super,
                                                     ctx, force);
 }
 
@@ -991,52 +993,9 @@ static unsigned uct_dc_verbs_iface_progress_tm(uct_iface_h tl_iface)
 }
 #endif /* IBV_EXP_HW_TM_DC */
 
-
-static void uct_dc_verbs_iface_preinit(uct_rc_verbs_iface_common_t *iface,
-                                       uct_md_h md,
-                                       uct_dc_verbs_iface_config_t *config,
-                                       unsigned *rx_cq_len,
-                                       unsigned *rx_hdr_len,
-                                       unsigned *srq_size,
-                                       unsigned *short_mp_size)
-{
-    uct_rc_verbs_iface_common_config_t *common_config = &config->verbs_common;
-    uct_ib_device_t UCS_V_UNUSED *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
-    uint32_t cap_flags                = IBV_DEVICE_TM_CAPS(dev, capability_flags);
-    int tm_supported                  = (cap_flags & IBV_EXP_TM_CAP_DC);
-
-    uct_rc_verbs_iface_common_preinit(common_config, tm_supported,
-                                      rx_hdr_len, short_mp_size);
-#if IBV_EXP_HW_TM
-    iface->tm.enabled = (common_config->tm.enable && tm_supported);
-    if (!iface->tm.enabled) {
-        goto out_tm_disabled;
-    }
-
-    iface->tm.num_tags = ucs_min(IBV_DEVICE_TM_CAPS(dev, max_num_tags),
-                                 common_config->tm.list_size);
-
-    /* There can be:
-     * - up to rx.queue_len RX CQEs
-     * - up to 3 CQEs for every posted tag: ADD, TM_CONSUMED and MSG_ARRIVED
-     * - one SYNC CQE per every IBV_DEVICE_MAX_UNEXP_COUNT unexpected receives */
-    UCS_STATIC_ASSERT(IBV_DEVICE_MAX_UNEXP_COUNT);
-    *rx_cq_len     = config->super.super.super.rx.queue_len + iface->tm.num_tags * 2 +
-                     config->super.super.super.rx.queue_len / IBV_DEVICE_MAX_UNEXP_COUNT;
-    *srq_size = 0; /* in DC with enabled TM everything arrive to XRQ */
-
-    return;
-
-out_tm_disabled:
-#endif
-    *rx_cq_len  = *srq_size = config->super.super.super.rx.queue_len;
-}
-
-
 static ucs_status_t
 uct_dc_verbs_iface_tag_init(uct_dc_verbs_iface_t *iface,
-                            uct_dc_verbs_iface_config_t *config,
-                            const uct_iface_params_t *params)
+                            uct_dc_verbs_iface_config_t *config)
 {
     uct_iface_t *tl_iface = &iface->super.super.super.super.super;
 
@@ -1058,7 +1017,7 @@ uct_dc_verbs_iface_tag_init(uct_dc_verbs_iface_t *iface,
         status = uct_rc_verbs_iface_common_tag_init(&iface->verbs_common,
                                                     &iface->super.super,
                                                     &config->verbs_common,
-                                                    &config->super.super, params,
+                                                    &config->super.super,
                                                     &srq_init_attr,
                                                     sizeof(struct ibv_exp_tmh_rvh) +
                                                     sizeof(struct ibv_exp_tmh_ravh));
@@ -1067,15 +1026,13 @@ uct_dc_verbs_iface_tag_init(uct_dc_verbs_iface_t *iface,
         }
 
         /* TM XRQ is ready, can create DCT now */
-        status = uct_dc_iface_create_dct(&iface->super, &iface->verbs_common.tm.xrq);
+        status = uct_dc_iface_create_dct(&iface->super);
         if (status != UCS_OK) {
             uct_rc_verbs_iface_common_tag_cleanup(&iface->verbs_common);
             return status;
         }
 
 
-        /* In DC RNDV FINs arrive to common XRQ */
-        iface->verbs_common.tm.fin_srq = &iface->verbs_common.tm.xrq;
         tl_iface->ops.iface_progress   = uct_dc_verbs_iface_progress_tm;
     }
 #endif
@@ -1231,28 +1188,35 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     ucs_status_t status;
     int i, ret;
     unsigned rx_cq_len;
-    unsigned rx_hdr_len;
-    unsigned short_mp_size;
-    unsigned srq_size;
+    unsigned rc_hdr_len;
 
     ucs_trace_func("");
 
-    uct_dc_verbs_iface_preinit(&self->verbs_common, md, config, &rx_cq_len,
-                               &rx_hdr_len, &srq_size, &short_mp_size);
+    uct_rc_verbs_iface_common_preinit(&self->verbs_common, md,
+                                      &config->verbs_common,
+                                      &config->super.super, params,
+                                      IBV_EXP_TM_CAP_DC, &rc_hdr_len,
+                                      &rx_cq_len);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_verbs_iface_ops, md,
                               worker, params, 0, &config->super,
-                              rx_cq_len, rx_hdr_len, srq_size);
+                              rx_cq_len, rc_hdr_len,
+                              !UCT_RC_VERBS_TM_ENABLED(&self->verbs_common));
 
     uct_dc_verbs_iface_init_wrs(self);
+
+    status = uct_dc_verbs_iface_tag_init(self, config);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     status = uct_rc_verbs_iface_common_init(&self->verbs_common,
                                             &self->super.super,
                                             &config->verbs_common,
                                             &config->super.super,
-                                            short_mp_size);
+                                            rc_hdr_len);
     if (status != UCS_OK) {
-        goto err;
+        goto err_tag_cleanup;
     }
 
     ret = ibv_query_qp(self->super.tx.dcis[0].txqp.qp, &dci_attr, 0,
@@ -1270,16 +1234,13 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     }
     uct_dc_iface_set_quota(&self->super, &config->super);
 
-    status = uct_dc_verbs_iface_tag_init(self, config, params);
-    if (status != UCS_OK) {
-        goto err_common_cleanup;
-    }
-
     ucs_debug("created dc iface %p", self);
     return UCS_OK;
 
 err_common_cleanup:
     uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
+err_tag_cleanup:
+    uct_rc_verbs_iface_common_tag_cleanup(&self->verbs_common);
 err:
     return status;
 }
