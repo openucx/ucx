@@ -14,6 +14,7 @@ extern "C" {
 
 namespace ucs {
 
+pthread_mutex_t test_base::m_logger_mutex = PTHREAD_MUTEX_INITIALIZER;
 unsigned test_base::m_total_warnings = 0;
 unsigned test_base::m_total_errors   = 0;
 std::vector<std::string> test_base::m_errors;
@@ -142,11 +143,13 @@ test_base::count_warns_logger(const char *file, unsigned line, const char *funct
                               ucs_log_level_t level, const char *prefix,
                               const char *message, va_list ap)
 {
+    pthread_mutex_lock(&m_logger_mutex);
     if (level == UCS_LOG_LEVEL_ERROR) {
         ++m_total_errors;
     } else if (level == UCS_LOG_LEVEL_WARN) {
         ++m_total_warnings;
     }
+    pthread_mutex_unlock(&m_logger_mutex);
     return UCS_LOG_FUNC_RC_CONTINUE;
 }
 
@@ -163,11 +166,13 @@ test_base::hide_errors_logger(const char *file, unsigned line, const char *funct
                               const char *message, va_list ap)
 {
     if (level == UCS_LOG_LEVEL_ERROR) {
+        pthread_mutex_lock(&m_logger_mutex);
         va_list ap2;
         va_copy(ap2, ap);
         m_errors.push_back(format_message(message, ap2));
         va_end(ap2);
         level = UCS_LOG_LEVEL_DEBUG;
+        pthread_mutex_unlock(&m_logger_mutex);
     }
 
     ucs_log_default_handler(file, line, function, level, prefix, message, ap);
@@ -181,9 +186,11 @@ test_base::wrap_errors_logger(const char *file, unsigned line, const char *funct
 {
     /* Ignore warnings about empty memory pool */
     if (level == UCS_LOG_LEVEL_ERROR) {
+        pthread_mutex_lock(&m_logger_mutex);
         std::string text = format_message(message, ap);
         m_errors.push_back(text);
         UCS_TEST_MESSAGE << "< " << text << " >";
+        pthread_mutex_unlock(&m_logger_mutex);
         return UCS_LOG_FUNC_RC_STOP;
     }
 

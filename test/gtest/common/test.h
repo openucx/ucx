@@ -71,6 +71,7 @@ protected:
     unsigned             m_num_errors_before;
     unsigned             m_num_warnings_before;
 
+    static pthread_mutex_t          m_logger_mutex;
     static unsigned                 m_total_errors;
     static unsigned                 m_total_warnings;
     static std::vector<std::string> m_errors;
