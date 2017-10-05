@@ -384,7 +384,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_rc_iface_config_t *config, unsigned rx_priv_len,
                     unsigned rx_cq_len, unsigned rx_hdr_len,
-                    unsigned srq_size, unsigned fc_req_size)
+                    unsigned fc_req_size, int create_srq)
 {
     struct ibv_srq_init_attr srq_init_attr;
     ucs_status_t status;
@@ -454,9 +454,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     }
 
     /* Create SRQ */
-    if (srq_size > 0) {
+    if (create_srq) {
         srq_init_attr.attr.max_sge   = 1;
-        srq_init_attr.attr.max_wr    = srq_size;
+        srq_init_attr.attr.max_wr    = config->super.rx.queue_len;
         srq_init_attr.attr.srq_limit = 0;
         srq_init_attr.srq_context    = self;
         self->rx.srq.srq = ibv_create_srq(uct_ib_iface_md(&self->super)->pd, &srq_init_attr);
@@ -574,7 +574,7 @@ UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
                                     struct ibv_qp **qp_p, struct ibv_qp_cap *cap,
-                                    struct ibv_srq *srq, unsigned max_send_wr)
+                                    unsigned max_send_wr)
 {
     uct_ib_device_t *dev UCS_V_UNUSED = uct_ib_iface_device(&iface->super);
     struct ibv_exp_qp_init_attr qp_init_attr;
@@ -598,7 +598,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
     qp_init_attr.send_cq             = iface->super.send_cq;
     qp_init_attr.recv_cq             = iface->super.recv_cq;
     if (qp_type == IBV_QPT_RC) {
-        qp_init_attr.srq             = srq;
+        qp_init_attr.srq             = iface->rx.srq.srq;
     }
     qp_init_attr.cap.max_send_wr     = max_send_wr;
     qp_init_attr.cap.max_recv_wr     = 0;

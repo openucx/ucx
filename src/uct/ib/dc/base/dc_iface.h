@@ -110,11 +110,11 @@ struct uct_dc_iface {
 
 UCS_CLASS_DECLARE(uct_dc_iface_t, uct_dc_iface_ops_t*, uct_md_h,
                   uct_worker_h, const uct_iface_params_t*, unsigned,
-                  uct_dc_iface_config_t*, unsigned, unsigned, unsigned)
+                  uct_dc_iface_config_t*, unsigned, unsigned, int)
 
 extern ucs_config_field_t uct_dc_iface_config_table[];
 
-ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface, uct_rc_srq_t *srq);
+ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface);
 
 ucs_status_t uct_dc_iface_query(uct_dc_iface_t *iface, uct_iface_attr_t *iface_attr);
 

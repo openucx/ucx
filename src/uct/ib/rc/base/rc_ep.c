@@ -43,8 +43,7 @@ static ucs_stats_class_t uct_rc_txqp_stats_class = {
 #endif
 
 ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
-                              int qp_type, struct ibv_qp_cap *cap,
-                              struct ibv_srq *srq
+                              int qp_type, struct ibv_qp_cap *cap
                               UCS_STATS_ARG(ucs_stats_node_t* stats_parent))
 {
     ucs_status_t status;
@@ -55,7 +54,7 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
     txqp->available  = 0;
     ucs_queue_head_init(&txqp->outstanding);
 
-    status = uct_rc_iface_qp_create(iface, qp_type, &txqp->qp, cap, srq,
+    status = uct_rc_iface_qp_create(iface, qp_type, &txqp->qp, cap,
                                     iface->config.tx_qp_len);
     if (status != UCS_OK) {
         goto err;
@@ -119,8 +118,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    status = uct_rc_txqp_init(&self->txqp, iface, IBV_QPT_RC, &cap,
-                              iface->rx.srq.srq
+    status = uct_rc_txqp_init(&self->txqp, iface, IBV_QPT_RC, &cap
                               UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {
         goto err;
