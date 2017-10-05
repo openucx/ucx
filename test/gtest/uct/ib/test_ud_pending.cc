@@ -126,7 +126,7 @@ UCS_TEST_P(test_ud_pending, sync_progress) {
         r[i].func = pending_cb;
         EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r[i]));
     }
-    short_progress_loop();
+    wait_for_value(&req_count, N, true);
     /* requests must be dispatched from progress */
     EXPECT_EQ(N, req_count);
     uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
@@ -185,7 +185,7 @@ UCS_TEST_P(test_ud_pending, window)
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
     r.func = pending_cb_dispatch;
     EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r));
-    short_progress_loop();
+    wait_for_value(&req_count, 1, true);
     EXPECT_EQ(1, req_count);
     uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
 }
@@ -210,7 +210,7 @@ UCS_TEST_P(test_ud_pending, tx_wqe)
 
     r.func = pending_cb_dispatch;
     EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r));
-    short_progress_loop();
+    wait_for_value(&req_count, 1, true);
     EXPECT_EQ(1, req_count);
     short_progress_loop();
     uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);

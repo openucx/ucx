@@ -432,7 +432,10 @@ UCS_TEST_P(test_ud, crep_ack_drop) {
                                       NULL, UCT_CB_FLAG_ASYNC);
     ASSERT_UCS_OK(status);
 
-    status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
+    do {
+        status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
+        progress();
+    } while (status == UCS_ERR_NO_RESOURCE);
     ASSERT_UCS_OK(status);
 
     validate_recv(ep(m_e2), 3U);
