@@ -11,7 +11,7 @@
 
 
 typedef struct uct_ud_mlx5_iface_common_config {
-    int                         enable_compact_av;
+    int                          enable_compact_av;
 } uct_ud_mlx5_iface_common_config_t;
 
 

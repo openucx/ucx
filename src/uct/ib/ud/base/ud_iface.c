@@ -35,8 +35,7 @@ SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ud_iface_peer_t,
                                         UCT_UD_HASH_SIZE,
                                         uct_ud_iface_peer_hash)
 
-static void uct_ud_iface_reserve_skbs(uct_ud_iface_t *iface, int count);
-static void uct_ud_iface_free_res_skbs(uct_ud_iface_t *iface);
+static void uct_ud_iface_free_resend_skbs(uct_ud_iface_t *iface);
 static void uct_ud_iface_timer(int timer_id, void *arg);
 
 static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface);
@@ -350,7 +349,7 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
     ucs_async_mode_t async_mode = async->mode;
     ucs_status_t status;
 
-    uct_ud_iface_reserve_skbs(iface, iface->tx.available);
+    iface->tx.resend_skbs_quota = iface->tx.available;
 
     /* TODO: make tick configurable */
     iface->async.slow_tick = ucs_time_from_msec(100);
@@ -507,13 +506,17 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     if (status != UCS_OK) {
         goto err_rx_mpool;
     }
-    self->tx.skb = ucs_mpool_get(&self->tx.mp);
+
+    self->tx.skb = NULL;
     self->tx.skb_inl.super.len = sizeof(uct_ud_neth_t);
-    ucs_queue_head_init(&self->tx.res_skbs);
-    ucs_queue_head_init(&self->tx.async_comp_q);
+
+    ucs_queue_head_init(&self->tx.resend_skbs);
+    self->tx.resend_skbs_quota = 0;
 
     ucs_arbiter_init(&self->tx.pending_q);
     self->tx.pending_q_len = 0;
+
+    ucs_queue_head_init(&self->tx.async_comp_q);
     self->tx.in_pending = 0;
 
     ucs_queue_head_init(&self->rx.pending_q);
@@ -546,7 +549,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     uct_ud_enter(self);
     ucs_debug("iface(%p): cep cleanup", self);
     uct_ud_iface_cep_cleanup(self);
-    uct_ud_iface_free_res_skbs(self);
+    uct_ud_iface_free_resend_skbs(self);
     uct_ud_iface_free_async_comps(self);
     ucs_mpool_cleanup(&self->tx.mp, 0);
     /* TODO: qp to error state and cleanup all wqes */
@@ -699,37 +702,33 @@ void uct_ud_iface_replace_ep(uct_ud_iface_t *iface,
 }
 
 
-static void uct_ud_iface_reserve_skbs(uct_ud_iface_t *iface, int count)
+uct_ud_send_skb_t *uct_ud_iface_resend_skb_get(uct_ud_iface_t *iface)
 {
-    int i;
+    ucs_queue_elem_t *elem;
     uct_ud_send_skb_t *skb;
 
-    for (i = 0; i < count; i++) {
+    /* grow reserved skb's queue on-demand */
+    if (iface->tx.resend_skbs_quota > 0) {
         skb = ucs_mpool_get(&iface->tx.mp);
         if (skb == NULL) {
-            ucs_fatal("failed to reserve %d tx skbs", count);
+            ucs_fatal("failed to allocate control skb");
         }
-        ucs_queue_push(&iface->tx.res_skbs, &skb->queue);
+        --iface->tx.resend_skbs_quota;
+        return skb;
+    } else {
+        elem = ucs_queue_pull(&iface->tx.resend_skbs);
+        ucs_assert(elem != NULL);
+        return ucs_container_of(elem, uct_ud_send_skb_t, queue);
     }
 }
 
-uct_ud_send_skb_t *uct_ud_iface_res_skb_get(uct_ud_iface_t *iface)
-{
-    ucs_queue_elem_t *elem;
 
-    elem = ucs_queue_pull(&iface->tx.res_skbs);
-    return  ucs_container_of(elem, uct_ud_send_skb_t, queue);
-}
-
-
-static void uct_ud_iface_free_res_skbs(uct_ud_iface_t *iface)
+static void uct_ud_iface_free_resend_skbs(uct_ud_iface_t *iface)
 {
     uct_ud_send_skb_t *skb;
 
-    /* Release acknowledged skb's */
-    for (skb = uct_ud_iface_res_skb_get(iface);
-         skb != NULL;
-         skb = uct_ud_iface_res_skb_get(iface)) {
+    iface->tx.resend_skbs_quota = 0;
+    ucs_queue_for_each_extract(skb, &iface->tx.resend_skbs, queue, 1) {
         ucs_mpool_put(skb);
     }
 }
