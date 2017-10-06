@@ -374,7 +374,7 @@ found_ucp_ep:
     ucp_ep_config_key_t key = ucp_ep_config(ucp_ep)->key;
     key.am_lane            = 0;
     key.wireup_lane        = 0;
-    key.rndv_lane          = 0;
+    key.rndv_lanes[0]      = 0;
     key.tag_lane           = 0;
     key.amo_lanes[0]       = 0;
     key.rma_lanes[0]       = 0;
@@ -1097,10 +1097,19 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_destroy_uct_worker;
     }
 
+    /* Create memory pool for multirail info */
+    status = ucs_mpool_init(&worker->mrail_mp, 0,
+                            sizeof(ucp_rndv_get_mrail_t),
+                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                            &ucp_mrail_mpool_ops, "ucp_multirail");
+    if (status != UCS_OK) {
+        goto err_req_mp_cleanup;
+    }
+
     /* Create epoll set which combines events from all transports */
     status = ucp_worker_wakeup_init(worker, params);
     if (status != UCS_OK) {
-        goto err_req_mp_cleanup;
+        goto err_mrail_mp_cleanup;
     }
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
@@ -1133,6 +1142,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 err_close_ifaces:
     ucp_worker_close_ifaces(worker);
     ucp_worker_wakeup_cleanup(worker);
+err_mrail_mp_cleanup:
+    ucs_mpool_cleanup(&worker->mrail_mp, 1);
 err_req_mp_cleanup:
     ucs_mpool_cleanup(&worker->req_mp, 1);
 err_destroy_uct_worker:
@@ -1169,6 +1180,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucp_worker_close_ifaces(worker);
     ucp_worker_wakeup_cleanup(worker);
+    ucs_mpool_cleanup(&worker->mrail_mp, 1);
     ucs_mpool_cleanup(&worker->req_mp, 1);
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);

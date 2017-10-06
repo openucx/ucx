@@ -11,6 +11,7 @@
 #include "dt_contig.h"
 #include "dt_iov.h"
 #include "dt_generic.h"
+#include "ucp/core/ucp_types.h"
 
 #include <uct/api/uct.h>
 #include <ucs/debug/profile.h>
@@ -24,8 +25,14 @@ typedef struct ucp_dt_state {
     size_t                        offset;  /* Total offset in overall payload. */
     union {
         struct {
-            uct_mem_h             memh;
-        } contig;
+            struct {
+                uct_mem_h         memh;
+            } contig;
+            struct {
+                ucp_lane_index_t  lane;
+                uct_mem_h         memh;
+            } mrail[UCP_MAX_RAILS];
+        };
         struct {
             size_t                iov_offset;     /* Offset in the IOV item */
             size_t                iovcnt_offset;  /* The IOV item to start copy */

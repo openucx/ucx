@@ -95,6 +95,12 @@
 
 /**
  * Size of statically-declared array
+ * May be used for arrays in structure values
+ */
+#define ucs_countof(_array) (sizeof(_array) / sizeof((_array)[0]))
+
+/**
+ * Size of statically-declared array
  */
 #define ucs_static_array_size(_array) \
     ({ \

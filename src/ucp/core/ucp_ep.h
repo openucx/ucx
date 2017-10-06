@@ -61,6 +61,8 @@ enum {
 typedef struct ucp_ep_config_key {
 
     ucp_lane_index_t       num_lanes;    /* Number of active lanes */
+    /* Number of rendezvous lanes */
+    ucp_lane_index_t       num_rndv_lanes;
 
     struct {
         ucp_rsc_index_t    rsc_index;    /* Resource index */
@@ -71,9 +73,11 @@ typedef struct ucp_ep_config_key {
     } lanes[UCP_MAX_LANES];
 
     ucp_lane_index_t       am_lane;      /* Lane for AM (can be NULL) */
-    ucp_lane_index_t       rndv_lane;    /* Lane for zcopy Rendezvous (can be NULL) */
     ucp_lane_index_t       tag_lane;     /* Lane for tag matching offload (can be NULL) */
     ucp_lane_index_t       wireup_lane;  /* Lane for wireup messages (can be NULL) */
+
+    /* Lane for zcopy Rendezvous (can be NULL), sorted by priority, highest first */
+    ucp_lane_index_t       rndv_lanes[UCP_MAX_LANES];
 
     /* Lanes for remote memory access, sorted by priority, highest first */
     ucp_lane_index_t       rma_lanes[UCP_MAX_LANES];

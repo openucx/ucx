@@ -32,10 +32,10 @@ static inline ucp_lane_index_t ucp_ep_get_wireup_msg_lane(ucp_ep_h ep)
     return (lane == UCP_NULL_LANE) ? ucp_ep_get_am_lane(ep) : lane;
 }
 
-static inline ucp_lane_index_t ucp_ep_get_rndv_get_lane(ucp_ep_h ep)
+static inline ucp_lane_index_t ucp_ep_get_rndv_get_lane(ucp_ep_h ep, ucp_lane_index_t idx)
 {
-    ucs_assert(ucp_ep_config(ep)->key.rndv_lane != UCP_NULL_LANE);
-    return ucp_ep_config(ep)->key.rndv_lane;
+    ucs_assert(ucp_ep_config(ep)->key.rndv_lanes[idx] != UCP_NULL_LANE);
+    return ucp_ep_config(ep)->key.rndv_lanes[idx];
 }
 
 static inline ucp_lane_index_t ucp_ep_get_tag_lane(ucp_ep_h ep)
@@ -44,9 +44,14 @@ static inline ucp_lane_index_t ucp_ep_get_tag_lane(ucp_ep_h ep)
     return ucp_ep_config(ep)->key.tag_lane;
 }
 
-static inline int ucp_ep_is_rndv_lane_present(ucp_ep_h ep)
+static inline int ucp_ep_is_rndv_lane_present(ucp_ep_h ep, ucp_lane_index_t idx)
 {
-    return ucp_ep_config(ep)->key.rndv_lane != UCP_NULL_LANE;
+    return ucp_ep_config(ep)->key.rndv_lanes[idx] != UCP_NULL_LANE;
+}
+
+static inline int ucp_ep_is_rndv_mrail_present(ucp_ep_h ep)
+{
+    return ucp_ep_config(ep)->key.rndv_lanes[1] != UCP_NULL_LANE;
 }
 
 static inline int ucp_ep_is_tag_offload_enabled(ucp_ep_config_t *config)
@@ -65,9 +70,9 @@ static inline uct_ep_h ucp_ep_get_am_uct_ep(ucp_ep_h ep)
     return ep->uct_eps[ucp_ep_get_am_lane(ep)];
 }
 
-static inline uct_ep_h ucp_ep_get_rndv_data_uct_ep(ucp_ep_h ep)
+static inline uct_ep_h ucp_ep_get_rndv_data_uct_ep(ucp_ep_h ep, ucp_lane_index_t idx)
 {
-    return ep->uct_eps[ucp_ep_get_rndv_get_lane(ep)];
+    return ep->uct_eps[ucp_ep_get_rndv_get_lane(ep, idx)];
 }
 
 static inline uct_ep_h ucp_ep_get_tag_uct_ep(ucp_ep_h ep)
@@ -120,9 +125,9 @@ static inline const uct_md_attr_t* ucp_ep_md_attr(ucp_ep_h ep, ucp_lane_index_t 
     return &context->tl_mds[ucp_ep_md_index(ep, lane)].attr;
 }
 
-static inline uint64_t ucp_ep_rndv_md_flags(ucp_ep_h ep)
+static inline uint64_t ucp_ep_rndv_md_flags(ucp_ep_h ep, ucp_lane_index_t idx)
 {
-    return ucp_ep_md_attr(ep, ucp_ep_get_rndv_get_lane(ep))->cap.flags;
+    return ucp_ep_md_attr(ep, ucp_ep_get_rndv_get_lane(ep, idx))->cap.flags;
 }
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)

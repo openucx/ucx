@@ -53,6 +53,8 @@ typedef struct ucp_context_config {
     int                                    use_mt_mutex;
     /** On-demand progress */
     int                                    adaptive_progress;
+    /** Rendezvous multirail support */
+    unsigned                               rndv_rails;
 } ucp_context_config_t;
 
 
