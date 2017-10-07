@@ -173,6 +173,8 @@ void uct_rc_verbs_iface_common_progress_enable(uct_rc_verbs_iface_common_t *ifac
                                       flags);
 }
 
+#if IBV_EXP_HW_TM
+
 static void uct_rc_verbs_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
     uct_rc_verbs_release_desc_t *release = ucs_derived_of(self,
@@ -180,8 +182,6 @@ static void uct_rc_verbs_iface_release_desc(uct_recv_desc_t *self, void *desc)
     void *ib_desc = desc - release->offset;
     ucs_mpool_put_inline(ib_desc);
 }
-
-#if IBV_EXP_HW_TM
 
 ucs_status_t
 uct_rc_verbs_iface_common_tag_init(uct_rc_verbs_iface_common_t *iface,
