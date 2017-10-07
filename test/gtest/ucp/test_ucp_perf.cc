@@ -83,6 +83,11 @@ test_perf::test_spec test_ucp_perf::tests[] =
     UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 2048 }, 1, 100000l,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 100.0, 100000.0 },
 
+  { "tag bw_zcopy_multi", "MB/sec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 2048 }, 16, 100000l,
+    ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 100.0, 100000.0 },
+
   { "put latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000l,
