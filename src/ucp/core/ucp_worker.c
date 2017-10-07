@@ -381,7 +381,7 @@ found_ucp_ep:
     }
 }
 
-void ucp_worker_iface_activate(ucp_worker_iface_t *wiface)
+void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
 {
     ucp_worker_h worker = wiface->worker;
     ucs_status_t status;
@@ -408,7 +408,7 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface)
     }
 
     uct_iface_progress_enable(wiface->iface,
-                              UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+                              UCT_PROGRESS_SEND | UCT_PROGRESS_RECV | uct_flags);
 }
 
 static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
@@ -451,7 +451,12 @@ void ucp_worker_iface_progress_ep(ucp_worker_iface_t *wiface)
     ucs_trace_func("iface=%p", wiface->iface);
 
     UCS_ASYNC_BLOCK(&wiface->worker->async);
-    ucp_worker_iface_activate(wiface);
+
+    /* This function may be called from progress thread (such as when processing
+     * wireup messages), so ask UCT to be thread-safe.
+     */
+    ucp_worker_iface_activate(wiface, UCT_PROGRESS_THREAD_SAFE);
+
     UCS_ASYNC_UNBLOCK(&wiface->worker->async);
 }
 
@@ -488,7 +493,7 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
     *progress_count = uct_iface_progress(wiface->iface);
     if (prev_am_count != wiface->proxy_am_count) {
         /* Received relevant active messages, activate the interface */
-        ucp_worker_iface_activate(wiface);
+        ucp_worker_iface_activate(wiface, 0);
         return UCS_OK;
     } else if (*progress_count == 0) {
         /* Arm the interface to wait for next event */
@@ -721,7 +726,7 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         {
             ucp_worker_iface_deactivate(wiface, 1);
         } else {
-            ucp_worker_iface_activate(wiface);
+            ucp_worker_iface_activate(wiface, 0);
         }
     }
 

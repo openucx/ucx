@@ -290,8 +290,11 @@ enum uct_flush_flags {
  * @brief UCT progress types
  */
 enum uct_progress_types {
-    UCT_PROGRESS_SEND   = UCS_BIT(0),  /**< Progress send operations */
-    UCT_PROGRESS_RECV   = UCS_BIT(1)   /**< Progress receive operations */
+    UCT_PROGRESS_SEND        = UCS_BIT(0),  /**< Progress send operations */
+    UCT_PROGRESS_RECV        = UCS_BIT(1),  /**< Progress receive operations */
+    UCT_PROGRESS_THREAD_SAFE = UCS_BIT(7)   /**< Enable/disable progress while
+                                                 another thread may be calling
+                                                 @ref ucp_worker_progress(). */
 };
 
 
@@ -2310,7 +2313,11 @@ UCT_INLINE_API ucs_status_t uct_iface_tag_recv_cancel(uct_iface_h iface,
  *
  * @param [in]  iface    The interface to enable progress.
  * @param [in]  flags    The type of progress to enable as defined by
- *                       @ref uct_progress_types.
+ *                       @ref uct_progress_types
+ *
+ * @note This function is not thread safe with respect to
+ *       @ref ucp_worker_progress(), unless the flag
+ *       @ref UCT_PROGRESS_THREAD_SAFE is specified.
  *
  */
 UCT_INLINE_API void uct_iface_progress_enable(uct_iface_h iface, unsigned flags)
@@ -2332,6 +2339,10 @@ UCT_INLINE_API void uct_iface_progress_enable(uct_iface_h iface, unsigned flags)
  * @param [in]  iface    The interface to disable progress.
  * @param [in]  flags    The type of progress to disable as defined by
  *                       @ref uct_progress_types.
+ *
+ * @note This function is not thread safe with respect to
+ *       @ref ucp_worker_progress(), unless the flag
+ *       @ref UCT_PROGRESS_THREAD_SAFE is specified.
  *
  */
 UCT_INLINE_API void uct_iface_progress_disable(uct_iface_h iface, unsigned flags)
