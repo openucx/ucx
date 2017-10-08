@@ -35,7 +35,7 @@ static ucs_config_field_t uct_mm_iface_config_table[] = {
      "This value refers to the percentage of the FIFO size. (must be >= 0 and < 1)",
      ucs_offsetof(uct_mm_iface_config_t, release_fifo_factor), UCS_CONFIG_TYPE_DOUBLE},
 
-    UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 256, "receive",
+    UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 0, "receive",
                                   ucs_offsetof(uct_mm_iface_config_t, mp), ""),
 
     {"FIFO_HUGETLB", "no",
@@ -518,7 +518,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
                                   sizeof(uct_mm_recv_desc_t),
                                   UCS_SYS_CACHE_LINE_SIZE,
                                   &mm_config->mp,
-                                  256,
+                                  mm_config->fifo_size * 2,
                                   uct_mm_iface_recv_desc_init,
                                   "mm_recv_desc");
     if (status != UCS_OK) {
