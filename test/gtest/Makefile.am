@@ -8,12 +8,13 @@
 
 
 # Set default configuration for running tests
-UCX_HANDLE_ERRORS   ?= freeze
-UCX_LOG_LEVEL       ?= info
-GTEST_FILTER        ?= *
-GTEST_EXTRA_ARGS    ?=
-LAUNCHER            ?=
-VALGRIND_EXTRA_ARGS ?=
+UCX_HANDLE_ERRORS        ?= freeze
+UCX_LOG_LEVEL            ?= info
+UCX_LOG_PRINT_ENABLE     ?= y
+GTEST_FILTER             ?= *
+GTEST_EXTRA_ARGS         ?=
+LAUNCHER                 ?=
+VALGRIND_EXTRA_ARGS      ?=
 
 export UCX_HANDLE_ERRORS
 export UCX_LOG_LEVEL
