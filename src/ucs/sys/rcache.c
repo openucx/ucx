@@ -523,16 +523,15 @@ void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
     ucs_rcache_region_trace(rcache, region, "put");
 
+    pthread_rwlock_wrlock(&rcache->lock);
+
     ucs_assert(region->refcount > 0);
     ucs_atomic_add32(&region->refcount, -1);
 
-    if (ucs_unlikely(region->flags & UCS_RCACHE_REGION_FLAG_INVALID) &&
-        (region->refcount == 0))
-    {
-        pthread_rwlock_wrlock(&rcache->lock);
+    if (region->refcount == 0) {
         ucs_rcache_region_invalidate(rcache, region, 0, 1);
-        pthread_rwlock_unlock(&rcache->lock);
     }
+    pthread_rwlock_unlock(&rcache->lock);
 }
 
 static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
