@@ -80,7 +80,7 @@ public:
     virtual void init();
     virtual void cleanup();
 
-    void test_status_after();
+    void test_status_after(bool request_must_fail);
     void test_force_close();
 
 protected:
@@ -134,7 +134,7 @@ void test_ucp_peer_failure::cleanup() {
     test_ucp_tag::cleanup();
 }
 
-void test_ucp_peer_failure::test_status_after()
+void test_ucp_peer_failure::test_status_after(bool request_must_fail)
 {
     fail_receiver();
 
@@ -144,8 +144,17 @@ void test_ucp_peer_failure::test_status_after()
     wait_err();
     EXPECT_NE(UCS_OK, m_err_status);
     if (UCS_PTR_IS_PTR(req)) {
+        /* The request may either succeed or fail, even though the data is not
+         * delivered - depends on when the error is detected on sender side and
+         * if zcopy/bcopy protocol is used. In any case, the request must
+         * complete, and all resources have to be released.
+         */
         EXPECT_TRUE(req->completed);
-        EXPECT_EQ(m_err_status, req->status);
+        if (request_must_fail) {
+            EXPECT_EQ(m_err_status, req->status);
+        } else {
+            EXPECT_TRUE((m_err_status == req->status) || (UCS_OK == req->status));
+        }
         request_release(req);
     }
 
@@ -231,7 +240,7 @@ UCS_TEST_P(test_ucp_peer_failure, disable_sync_send) {
 }
 
 UCS_TEST_P(test_ucp_peer_failure, status_after_error) {
-    test_status_after();
+    test_status_after(false);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure)
@@ -247,7 +256,7 @@ public:
 };
 
 UCS_TEST_P(test_ucp_peer_failure_zcopy, status_after_error) {
-    test_status_after();
+    test_status_after(true);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_zcopy)
@@ -268,7 +277,7 @@ public:
 };
 
 UCS_TEST_P(test_ucp_peer_failure_zcopy_multi, status_after_error) {
-    test_status_after();
+    test_status_after(true);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_zcopy_multi)
