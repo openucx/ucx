@@ -64,6 +64,7 @@ libucp_la_SOURCES = \
 	dt/dt.c \
 	proto/proto_am.c \
 	rma/basic_rma.c \
+	rma/flush.c \
 	tag/eager_rcv.c \
 	tag/eager_snd.c \
 	tag/probe.c \
