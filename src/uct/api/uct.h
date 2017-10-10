@@ -2334,7 +2334,7 @@ UCT_INLINE_API void uct_iface_progress_enable(uct_iface_h iface, unsigned flags)
  * @ref uct_worker_progress(). Thus the latency of other transports may be
  * improved.
  *
- * By default, progress is enabled when the interface is created.
+ * By default, progress is disabled when the interface is created.
  *
  * @param [in]  iface    The interface to disable progress.
  * @param [in]  flags    The type of progress to disable as defined by
