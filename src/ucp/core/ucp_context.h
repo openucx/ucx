@@ -115,6 +115,10 @@ typedef struct ucp_context {
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
     ucp_rsc_index_t               num_mds;    /* Number of memory domains */
 
+    /* List of MDs which detect non host memory type */
+    ucp_rsc_index_t               mem_type_tl_mds[UCT_MD_MEM_TYPE_LAST];
+    ucp_rsc_index_t               num_mem_type_mds;  /* Number of mem type MDs */
+
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/
 
