@@ -38,6 +38,7 @@ nobase_dist_libucs_la_HEADERS = \
 	config/types.h \
 	datastruct/callbackq.h \
 	datastruct/list_types.h \
+	datastruct/mpool.h \
 	debug/check.h \
 	debug/debug.h \
 	debug/log.h \
@@ -62,7 +63,6 @@ noinst_HEADERS = \
 	datastruct/hash.h \
 	datastruct/list.h \
 	datastruct/mpmc.h \
-	datastruct/mpool.h \
 	datastruct/mpool.inl \
 	datastruct/pgtable.h \
 	datastruct/ptr_array.h \

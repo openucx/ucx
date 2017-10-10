@@ -9,6 +9,7 @@
 
 #include "mpool.h"
 
+#include <ucs/debug/log.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/sys.h>
 
