@@ -51,11 +51,11 @@ public:
 
         void flush_ep(int worker_index = 0, int ep_index = 0) const;
 
+        void *flush_ep_nb(int worker_index = 0, int ep_index = 0) const;
+
         void flush_worker(int worker_index = 0) const;
 
         void fence(int worker_index = 0) const;
-
-        void disconnect(int worker_index = 0, int ep_index = 0);
 
         void* disconnect_nb(int worker_index = 0, int ep_index = 0) const;
 
@@ -76,11 +76,15 @@ public:
         void cleanup();
 
         static void ep_destructor(ucp_ep_h ep, entity *e);
+
     protected:
         ucs::handle<ucp_context_h> m_ucph;
         worker_vec_t               m_workers;
 
         int num_workers;
+
+    private:
+        static void empty_send_completion(void *r, ucs_status_t status);
     };
 };
 

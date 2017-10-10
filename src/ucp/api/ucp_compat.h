@@ -56,4 +56,11 @@ ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
 ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info);
 
 
+/**
+ * @ingroup UCP_ENDPOINT
+ * @deprecated Replaced by @ref ucp_ep_flush_nb.
+ */
+ucs_status_t ucp_ep_flush(ucp_ep_h ep);
+
+
 #endif

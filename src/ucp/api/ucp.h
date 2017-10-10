@@ -1588,8 +1588,8 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream);
 /**
  * @ingroup UCP_ENDPOINT
  *
- * @brief Flush outstanding AMO and RMA operations on the @ref ucp_ep_h
- * "endpoint".
+ * @brief Non-blocking flush of outstanding AMO and RMA operations on the
+ * @ref ucp_ep_h "endpoint".
  *
  * This routine flushes all outstanding AMO and RMA communications on the
  * @ref ucp_ep_h "endpoint". All the AMO and RMA operations issued on the
@@ -1597,10 +1597,21 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream);
  * @ref ucp_ep_h "endpoint" when this call returns.
  *
  * @param [in] ep        UCP endpoint.
+ * @param [in] flags     Flags for flush operation. Reserved for future use.
+ * @param [in] cb        Callback which will be called when the flush operation
+ *                       completes.
  *
- * @return Error code as defined by @ref ucs_status_t
+ * @return UCS_OK           - The flush operation was completed immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The flush operation failed.
+ * @return otherwise        - Flush operation was scheduled and can be completed
+ *                          in any point in time. The request handle is returned
+ *                          to the application in order to track progress. The
+ *                          application is responsible to release the handle
+ *                          using @ref ucp_request_free "ucp_request_free()"
+ *                          routine.
  */
-ucs_status_t ucp_ep_flush(ucp_ep_h ep);
+ucs_status_ptr_t ucp_ep_flush_nb(ucp_ep_h ep, unsigned flags,
+                                 ucp_send_callback_t cb);
 
 
 /**
@@ -2645,8 +2656,8 @@ ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
  * memory address @a remote_addr and the @ref ucp_rkey_h "remote memory handle"
  * @a rkey.
  * Return from the function does not guarantee completion. A user must
- * call @ref ucp_ep_flush or @ref ucp_worker_flush to guarentee that the remote
- * value has been updated.
+ * call @ref ucp_ep_flush_nb or @ref ucp_worker_flush to guarantee that the
+ * remote value has been updated.
  *
  * @param [in] ep          UCP endpoint.
  * @param [in] opcode      One of @ref ucp_atomic_post_op_t.

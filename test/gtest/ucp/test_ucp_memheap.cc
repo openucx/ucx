@@ -47,10 +47,7 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     }
     memheap_size = max_iter * size + alignment;
 
-    sender().connect(&receiver(), get_ep_params());
-    if (&sender() != &receiver()) {
-        receiver().connect(&sender(), get_ep_params());
-    }
+    connect(is_ep_flush);
 
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                         UCP_MEM_MAP_PARAM_FIELD_LENGTH |
@@ -111,7 +108,7 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     }
 
     if (is_ep_flush) {
-        sender().flush_ep();
+        flush_ep(sender());
     } else {
         sender().flush_worker();
     }
@@ -123,10 +120,8 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     }
 
     ucp_rkey_destroy(rkey);
-    receiver().flush_worker();
 
     disconnect(sender());
-    disconnect(receiver());
 
     ucp_rkey_buffer_release(rkey_buffer);
     status = ucp_mem_unmap(receiver().ucph(), memh);
@@ -159,10 +154,7 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
         zero_offset = 1;
     }
 
-    sender().connect(&receiver(), get_ep_params());
-    if (&sender() != &receiver()) {
-        receiver().connect(&sender(), get_ep_params());
-    }
+    connect(is_ep_flush);
 
     ucp_mem_h memh;
     void *memheap = NULL;
@@ -233,7 +225,7 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
                       rkey, expected_data);
 
         if (is_ep_flush) {
-            sender().flush_ep();
+            flush_ep(sender());
         } else {
             sender().flush_worker();
         }
@@ -245,15 +237,33 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
     }
 
     ucp_rkey_destroy(rkey);
-    receiver().flush_worker();
+
+    disconnect(sender());
 
     status = ucp_mem_unmap(receiver().ucph(), memh);
     ASSERT_UCS_OK(status);
 
-    disconnect(sender());
-    disconnect(receiver());
-
     if (malloc_allocate) {
         free(memheap);
     }
+}
+
+void test_ucp_memheap::connect(bool is_ep_flush)
+{
+    sender().connect(&receiver(), get_ep_params());
+    if (!is_ep_flush) {
+        /* If we're going to flush the worker during the test, need to flush
+         * the endpoint now to make sure the connection establishment is
+         * complete. This is because worker flush is a blocking call which may
+         * hang while waiting for the connection establishment, while endpoint
+         * flush is non-blocking so does not have this problem.
+         */
+        flush_ep(sender());
+    }
+}
+
+void test_ucp_memheap::flush_ep(const entity &e)
+{
+    void *request = e.flush_ep_nb();
+    wait(request);
 }
