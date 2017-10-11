@@ -7,9 +7,7 @@
 #ifndef UCS_MPOOL_H_
 #define UCS_MPOOL_H_
 
-
-#include <ucs/debug/log.h>
-#include <ucs/debug/memtrack.h>
+#include <stddef.h>
 #include <ucs/type/status.h>
 
 
