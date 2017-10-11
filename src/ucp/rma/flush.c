@@ -83,42 +83,18 @@ static void ucp_ep_flush_slow_path_remove(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
     uct_worker_progress_unregister_safe(ep->worker->uct,
-                                        &req->send.flush.slow_cb_id);
-}
-
-static unsigned ucp_ep_flushed_slow_path_callback(void *arg)
-{
-    ucp_request_t *req = arg;
-    ucp_ep_h ep = req->send.ep;
-
-    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
-
-    ucs_trace("flush req %p ep %p remove from uct_worker %p", req, ep,
-              ep->worker->uct);
-    ucp_ep_flush_slow_path_remove(req);
-    req->send.flush.flushed_cb(req);
-
-    /* Complete send request from here, to avoid releasing the request while
-     * slow-path element is still pending */
-    ucp_request_complete_send(req, req->status);
-
-    return 0;
+                                        &req->send.flush.prog_id);
 }
 
 static int ucp_flush_check_completion(ucp_request_t *req)
 {
-    ucp_ep_h ep = req->send.ep;
-
     /* Check if flushed all lanes */
     if (req->send.uct_comp.count != 0) {
         return 0;
     }
 
-    ucs_trace("adding slow-path callback to destroy ep %p", ep);
     ucp_ep_flush_slow_path_remove(req);
-    uct_worker_progress_register_safe(ep->worker->uct,
-                                      ucp_ep_flushed_slow_path_callback, req, 0,
-                                      &req->send.flush.slow_cb_id);
+    req->send.flush.flushed_cb(req);
     return 1;
 }
 
@@ -161,7 +137,7 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
         ucs_trace("ep %p: adding slow-path callback to resume flush", ep);
         uct_worker_progress_register_safe(ep->worker->uct,
                                           ucp_ep_flush_resume_slow_path_callback,
-                                          req, 0, &req->send.flush.slow_cb_id);
+                                          req, 0, &req->send.flush.prog_id);
     }
 
     if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
@@ -191,12 +167,10 @@ static void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
     ucp_flush_check_completion(req);
 }
 
-static void ucp_ep_flushed_callback(ucp_request_t *req)
-{
-    ucp_ep_disconnected(req->send.ep);
-}
-
-ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep, unsigned mode)
+ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
+                                       ucp_send_callback_t req_cb,
+                                       unsigned req_flags,
+                                       ucp_request_callback_t flushed_cb)
 {
     ucs_status_t status;
     ucp_request_t *req;
@@ -204,7 +178,6 @@ ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep, unsigned mode)
     ucs_debug("disconnect ep %p", ep);
 
     if (ep->flags & UCP_EP_FLAG_FAILED) {
-        ucp_ep_disconnected(ep);
         return NULL;
     }
 
@@ -220,18 +193,15 @@ ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep, unsigned mode)
      * are not flushed yet, and when it reaches zero, it means all lanes are
      * flushed. req->send.flush.lanes keeps track of which lanes we still have
      * to start flush on.
-     *  If a flush is completed from a pending/completion callback, we need to
-     * schedule slow-path callback to release the endpoint later, since a UCT
-     * endpoint cannot be released from pending/completion callback context.
-     */
-    req->flags                  = 0;
+      */
+    req->flags                  = req_flags;
     req->status                 = UCS_OK;
     req->send.ep                = ep;
-    req->send.flush.flushed_cb  = ucp_ep_flushed_callback;
+    req->send.cb                = req_cb;
+    req->send.flush.flushed_cb  = flushed_cb;
     req->send.flush.lanes       = UCS_MASK(ucp_ep_num_lanes(ep));
-    req->send.flush.slow_cb_id  = UCS_CALLBACKQ_ID_NULL;
-    req->send.flush.uct_flags   = (mode == UCP_EP_CLOSE_MODE_FLUSH) ?
-                                  UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL;
+    req->send.flush.prog_id     = UCS_CALLBACKQ_ID_NULL;
+    req->send.flush.uct_flags   = uct_flags;
 
     req->send.lane              = UCP_NULL_LANE;
     req->send.uct.func          = ucp_ep_flush_progress_pending;
@@ -245,7 +215,6 @@ ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep, unsigned mode)
         ucs_trace_req("ep %p: releasing flush request %p, returning status %s",
                       ep, req, ucs_status_string(status));
         ucs_mpool_put(req);
-        ucp_ep_disconnected(ep);
         return UCS_STATUS_PTR(status);
     }
 
@@ -254,53 +223,154 @@ ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep, unsigned mode)
     return req + 1;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
+static void ucp_ep_flushed_callback(ucp_request_t *req)
 {
+    ucp_request_complete_send(req, req->status);
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nb, (ep, flags, cb),
+                 ucp_ep_h ep, unsigned flags, ucp_send_callback_t cb)
+{
+    void *request;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+
+    request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL,
+                                    cb, UCP_REQUEST_FLAG_CALLBACK,
+                                    ucp_ep_flushed_callback);
+
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+
+    return request;
+}
+
+static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
+{
+    ucs_status_t status;
     unsigned rsc_index;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
-    while (worker->wireup_pend_count > 0) {
-        ucp_worker_progress(worker);
+    if (worker->wireup_pend_count > 0) {
+        return UCS_INPROGRESS;
     }
 
-    /* TODO flush in parallel */
     for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
         if (worker->ifaces[rsc_index].iface == NULL) {
             continue;
         }
 
-        while (uct_iface_flush(worker->ifaces[rsc_index].iface, 0, NULL) != UCS_OK) {
-            ucp_worker_progress(worker);
+        status = uct_iface_flush(worker->ifaces[rsc_index].iface, 0, NULL);
+        if (status != UCS_OK) {
+            return status;
         }
     }
-
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
 
     return UCS_OK;
 }
 
+static unsigned ucp_worker_flush_progress(void *arg)
+{
+    ucp_request_t *req  = arg;
+    ucp_worker_h worker = req->flush_worker.worker;
+    ucs_status_t status;
+
+    status = ucp_worker_flush_check(worker);
+    if ((status == UCS_INPROGRESS) || (status == UCS_ERR_NO_RESOURCE)) {
+        return 0;
+    }
+
+    uct_worker_progress_unregister_safe(worker->uct, &req->flush_worker.prog_id);
+    ucp_request_complete(req, flush_worker.cb, status);
+    return 0;
+}
+
+static ucs_status_ptr_t ucp_worker_flush_nb_internal(ucp_worker_h worker,
+                                                     ucp_send_callback_t cb,
+                                                     unsigned req_flags)
+{
+    ucs_status_t status;
+    ucp_request_t *req;
+
+    status = ucp_worker_flush_check(worker);
+    if (status != UCS_INPROGRESS) {
+        return UCS_STATUS_PTR(status);
+    }
+
+    req = ucs_mpool_get(&worker->req_mp);
+    if (req == NULL) {
+        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+    }
+
+    req->flags                = req_flags;
+    req->status               = UCS_OK;
+    req->flush_worker.worker  = worker;
+    req->flush_worker.cb      = cb;
+    req->flush_worker.prog_id = UCS_CALLBACKQ_ID_NULL;
+
+    uct_worker_progress_register_safe(worker->uct, ucp_worker_flush_progress,
+                                      req, 0, &req->flush_worker.prog_id);
+    return req + 1;
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_worker_flush_nb, (worker, flags, cb),
+                 ucp_worker_h worker, unsigned flags, ucp_send_callback_t cb)
+{
+    void *request;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+
+    request = ucp_worker_flush_nb_internal(worker, cb,
+                                           UCP_REQUEST_FLAG_CALLBACK);
+
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+
+    return request;
+}
+
+static ucs_status_t ucp_flush_wait(ucp_worker_h worker, void *request)
+{
+    ucs_status_t status;
+
+    if (request == NULL) {
+        return UCS_OK;
+    } else if (UCS_PTR_IS_ERR(request)) {
+        ucs_warn("flush failed: %s", ucs_status_string(UCS_PTR_STATUS(request)));
+        return UCS_PTR_STATUS(request);
+    } else {
+        do {
+            ucp_worker_progress(worker);
+            status = ucp_request_check_status(request);
+        } while (status == UCS_INPROGRESS);
+        ucp_request_release(request);
+        return UCS_OK;
+    }
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
+{
+    ucs_status_t status;
+    void *request;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+
+    request = ucp_worker_flush_nb_internal(worker, NULL, 0);
+    status = ucp_flush_wait(worker, request);
+
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+
+    return status;
+}
+
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)
 {
-    ucp_lane_index_t lane;
-    ucs_status_t     status;
+    ucs_status_t status;
+    void *request;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        for (;;) {
-            status = uct_ep_flush(ep->uct_eps[lane], 0, NULL);
-            if (status == UCS_OK) {
-                break;
-            } else if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {
-                goto out;
-            }
-            ucp_worker_progress(ep->worker);
-        }
-    }
+    request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0,
+                                    ucp_ep_flushed_callback);
+    status = ucp_flush_wait(ep->worker, request);
 
-    status = UCS_OK;
-out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return status;
 }

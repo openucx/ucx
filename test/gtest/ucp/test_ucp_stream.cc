@@ -126,7 +126,7 @@ UCS_TEST_P(test_ucp_stream_many2one, drop_data) {
     }
 
     for (size_t i = 0; i < m_nsenders + 1; ++i) {
-        e(i).flush_worker();
+        flush_worker(e(i));
     }
 
     /* Need to poll out all incoming data from transport layer */

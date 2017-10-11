@@ -91,7 +91,7 @@ protected:
          *                 self, self->ep_id, self->conn_id,
          *                 (int)ucs_queue_length(&self->tx.window));
          */
-        receiver().flush_worker();
+        flush_worker(receiver());
         m_entities.remove(&receiver());
     }
 

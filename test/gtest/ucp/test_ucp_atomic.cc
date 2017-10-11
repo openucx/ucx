@@ -185,7 +185,7 @@ void test_ucp_atomic::nb_add(entity *e,  size_t max_size, void *memheap_addr,
                                                  memheap_addr, rkey);
 
     if (status == UCS_INPROGRESS) {
-        e->flush_worker();
+        flush_worker(*e);
     } else {
         ASSERT_UCS_OK(status);
     }
