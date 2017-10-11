@@ -7,6 +7,23 @@
 ##
 #
 
+## 1.2.2 (November 11, 2017)
+
+Packaging:
+- Move `examples/` and `perftest/` into doc
+- Update spec to work on old distros while complaint with Fedora guidelines
+
+Cleanup:
+- Removed unused ptmalloc version (2.83)
+- Fixup license headers
+
+
+## 1.2.1 (August 28, 2017)
+
+- Compilation fixes for gcc 7.1
+- Spec file cleanups
+- Versioning cleanups
+
 ## 1.2.0 (June 15, 2017)
 
 Supported platforms

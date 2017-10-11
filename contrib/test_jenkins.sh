@@ -226,7 +226,7 @@ run_hello() {
 
 	if [ ! -x ${test_name} ]
 	then
-		gcc -o ${test_name} ${ucx_inst}/share/ucx/examples/${test_name}.c \
+		gcc -o ${test_name} ${ucx_inst}/share/doc/ucx/examples/${test_name}.c \
 		-l${api} -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
 		-Wl,-rpath=${ucx_inst}/lib
 	fi
@@ -278,7 +278,7 @@ run_uct_hello() {
 # Run UCX performance test with MPI
 #
 run_ucx_perftest_mpi() {
-	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
+	ucx_inst_ptest=$ucx_inst/share/doc/ucx/perftest
 
 	# hack for perftest, no way to override params used in batch
 	# todo: fix in perftest
