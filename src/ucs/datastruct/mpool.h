@@ -7,7 +7,7 @@
 #ifndef UCS_MPOOL_H_
 #define UCS_MPOOL_H_
 
-#include <stdlib.h>
+#include <stddef.h>
 #include <ucs/type/status.h>
 
 
