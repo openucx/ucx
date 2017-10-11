@@ -368,14 +368,21 @@ void ucp_test_base::entity::flush_ep(int worker_index, int ep_index) const {
     ASSERT_UCS_OK(status);
 }
 
+void ucp_test_base::entity::empty_send_completion(void *r, ucs_status_t status) {
+}
+
+void* ucp_test_base::entity::flush_ep_nb(int worker_index, int ep_index) const {
+    void *request = ucp_ep_flush_nb(ep(worker_index, ep_index), 0,
+                                    empty_send_completion);
+    if (!UCS_PTR_IS_PTR(request)) {
+        ASSERT_UCS_OK(UCS_PTR_STATUS(request));
+    }
+    return request;
+}
+
 void ucp_test_base::entity::fence(int worker_index) const {
     ucs_status_t status = ucp_worker_fence(worker(worker_index));
     ASSERT_UCS_OK(status);
-}
-
-void ucp_test_base::entity::disconnect(int worker_index, int ep_index) {
-    flush_ep(worker_index, ep_index);
-    m_workers[worker_index].second[ep_index].reset();
 }
 
 void* ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index) const {

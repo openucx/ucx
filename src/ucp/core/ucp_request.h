@@ -68,10 +68,6 @@ enum {
 };
 
 
-/* Callback for UCP requests */
-typedef void (*ucp_request_callback_t)(ucp_request_t *req);
-
-
 /**
  * Request in progress.
  */
@@ -124,6 +120,10 @@ struct ucp_request {
                     unsigned                  uct_flags; /* Flags to pass to
                                                             @ref uct_ep_flush */
                 } flush;
+
+                struct {
+                    uct_worker_cb_id_t        slow_cb_id;/* Slow-path callback */
+                } disconnect;
 
                 struct {
                     uint64_t              remote_addr; /* Remote address */
