@@ -978,7 +978,7 @@ void ucp_context_tag_offload_enable(ucp_context_h context)
 
         offload_iface = ucs_queue_head_elem_non_empty(&context->tm.offload.ifaces,
                                                       ucp_worker_iface_t, queue);
-        ucp_worker_iface_activate(offload_iface);
+        ucp_worker_iface_activate(offload_iface, 0);
 
         ucs_debug("Enable TM offload: thresh %zu, zcopy_thresh %zu",
                   context->tm.offload.thresh, context->tm.offload.zcopy_thresh);

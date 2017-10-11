@@ -1173,6 +1173,9 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         goto out_free_mem;
     }
 
+    uct_iface_progress_enable(perf->uct.iface,
+                              UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+
     return UCS_OK;
 
 out_free_mem:

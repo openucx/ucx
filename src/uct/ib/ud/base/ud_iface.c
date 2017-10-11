@@ -367,8 +367,6 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
         goto err_twheel_cleanup;
     }
 
-    uct_base_iface_progress_enable(&iface->super.super.super,
-                                   UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     return UCS_OK;
 
 err_twheel_cleanup:

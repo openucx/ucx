@@ -165,8 +165,15 @@ ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface)
     return UCS_OK;
 }
 
-#if IBV_EXP_HW_TM
+void uct_rc_verbs_iface_common_progress_enable(uct_rc_verbs_iface_common_t *iface,
+                                               uct_rc_iface_t *rc_iface,
+                                               unsigned flags)
+{
+    uct_base_iface_progress_enable_cb(&rc_iface->super.super, iface->progress,
+                                      flags);
+}
 
+#if IBV_EXP_HW_TM
 
 static void uct_rc_verbs_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {

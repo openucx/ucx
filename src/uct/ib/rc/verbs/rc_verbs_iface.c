@@ -108,7 +108,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
     return num_wcs;
 }
 
-unsigned uct_rc_verbs_iface_progress(void *arg)
+static unsigned uct_rc_verbs_iface_progress(void *arg)
 {
     uct_rc_verbs_iface_t *iface = arg;
     unsigned count;
@@ -121,11 +121,10 @@ unsigned uct_rc_verbs_iface_progress(void *arg)
     return uct_rc_verbs_iface_poll_tx(iface);
 }
 
-unsigned uct_rc_verbs_iface_do_progress(uct_iface_h tl_iface)
+static unsigned uct_rc_verbs_iface_do_progress(uct_iface_h tl_iface)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
-
-    return iface->progress(iface);
+    return iface->verbs_common.progress(iface);
 }
 
 #if IBV_EXP_HW_TM
@@ -185,7 +184,7 @@ uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
     if (UCT_RC_VERBS_TM_ENABLED(&iface->verbs_common)) {
         struct ibv_exp_create_srq_attr srq_init_attr = {};
 
-        iface->progress                = uct_rc_verbs_iface_progress_tm;
+        iface->verbs_common.progress   = uct_rc_verbs_iface_progress_tm;
 
         return uct_rc_verbs_iface_common_tag_init(&iface->verbs_common,
                                                   &iface->super,
@@ -195,7 +194,7 @@ uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
                                                   sizeof(struct ibv_exp_tmh_rvh));
     }
 #endif
-    iface->progress = uct_rc_verbs_iface_progress;
+    iface->verbs_common.progress = uct_rc_verbs_iface_progress;
     return UCS_OK;
 }
 
@@ -259,6 +258,13 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     /* Redefine ep addr len (needed for TM offload) */
     iface_attr->ep_addr_len     = uct_rc_verbs_get_ep_addr_len(iface);
     return UCS_OK;
+}
+
+static void uct_rc_verbs_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
+    uct_rc_verbs_iface_common_progress_enable(&iface->verbs_common, &iface->super,
+                                              flags);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worker,
@@ -334,6 +340,8 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
+    uct_base_iface_progress_disable(&self->super.super.super.super,
+                                    UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     uct_rc_verbs_iface_common_tag_cleanup(&self->verbs_common);
     uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
 }
@@ -373,8 +381,8 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_connect_to_ep         = uct_rc_verbs_ep_connect_to_ep,
     .iface_flush              = uct_rc_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress_enable    = uct_rc_verbs_iface_progress_enable,
+    .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_verbs_iface_do_progress,
 #if IBV_EXP_HW_TM
     .iface_tag_recv_zcopy     = uct_rc_verbs_iface_tag_recv_zcopy,

@@ -231,6 +231,10 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name,
     uct_config_release(config);
     CHKERR_JUMP(UCS_OK != status, "open temporary interface", error_ret);
 
+    /* Enable progress on the interface */
+    uct_iface_progress_enable(iface_p->iface,
+                              UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+
     /* Get interface attributes */
     status = uct_iface_query(iface_p->iface, &iface_p->attr);
     CHKERR_JUMP(UCS_OK != status, "query iface", error_iface);

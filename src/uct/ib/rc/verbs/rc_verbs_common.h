@@ -124,6 +124,10 @@ typedef struct uct_rc_verbs_iface_common {
         uct_rc_verbs_release_desc_t  rndv_desc;
     } tm;
 #endif
+
+    /* Progress function (either regular or TM aware) */
+    ucs_callback_t              progress;
+
     /* TODO: make a separate datatype */
     struct {
         size_t             notag_hdr_size;
@@ -171,6 +175,10 @@ void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *iface);
 void uct_rc_verbs_iface_common_tag_cleanup(uct_rc_verbs_iface_common_t *iface);
 
 ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface);
+
+void uct_rc_verbs_iface_common_progress_enable(uct_rc_verbs_iface_common_t *iface,
+                                               uct_rc_iface_t *rc_iface,
+                                               unsigned flags);
 
 void uct_rc_verbs_iface_common_query(uct_rc_verbs_iface_common_t *verbs_iface,
                                      uct_rc_iface_t *rc_iface, uct_iface_attr_t *iface_attr);

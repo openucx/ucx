@@ -185,15 +185,31 @@ void uct_iface_close(uct_iface_h iface)
 void uct_base_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    uct_base_iface_progress_enable_cb(iface,
+                                      (ucs_callback_t)iface->super.ops.iface_progress,
+                                      flags);
+}
+
+void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,
+                                       ucs_callback_t cb, unsigned flags)
+{
     uct_priv_worker_t *worker = iface->worker;
+    unsigned thread_safe;
 
     UCS_ASYNC_BLOCK(worker->async);
 
+    thread_safe = flags & UCT_PROGRESS_THREAD_SAFE;
+    flags      &= ~UCT_PROGRESS_THREAD_SAFE;
+
     /* Add callback only if previous flags are 0 and new flags != 0 */
-    if (!iface->progress_flags && flags) {
-        if (iface->prog.id == UCS_CALLBACKQ_ID_NULL) {
-            iface->prog.id = ucs_callbackq_add(&worker->super.progress_q,
-                                               (ucs_callback_t)iface->super.ops.iface_progress,
+    if ((!iface->progress_flags && flags) &&
+        (iface->prog.id == UCS_CALLBACKQ_ID_NULL)) {
+        if (thread_safe) {
+            iface->prog.id = ucs_callbackq_add_safe(&worker->super.progress_q,
+                                                    cb, iface,
+                                                    UCS_CALLBACKQ_FLAG_FAST);
+        } else {
+            iface->prog.id = ucs_callbackq_add(&worker->super.progress_q, cb,
                                                iface, UCS_CALLBACKQ_FLAG_FAST);
         }
     }
@@ -206,17 +222,24 @@ void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
     uct_priv_worker_t *worker = iface->worker;
+    unsigned thread_safe;
 
     UCS_ASYNC_BLOCK(worker->async);
+
+    thread_safe = flags & UCT_PROGRESS_THREAD_SAFE;
+    flags      &= ~UCT_PROGRESS_THREAD_SAFE;
 
     /* Remove callback only if previous flags != 0, and removing the given
      * flags makes it become 0.
      */
-    if (iface->progress_flags && !(iface->progress_flags & ~flags)) {
-        if (iface->prog.id != UCS_CALLBACKQ_ID_NULL) {
+    if ((iface->progress_flags && !(iface->progress_flags & ~flags)) &&
+        (iface->prog.id != UCS_CALLBACKQ_ID_NULL)) {
+        if (thread_safe) {
+            ucs_callbackq_remove_safe(&worker->super.progress_q, iface->prog.id);
+        } else {
             ucs_callbackq_remove(&worker->super.progress_q, iface->prog.id);
-            iface->prog.id = UCS_CALLBACKQ_ID_NULL;
         }
+        iface->prog.id = UCS_CALLBACKQ_ID_NULL;
     }
     iface->progress_flags &= ~flags;
 

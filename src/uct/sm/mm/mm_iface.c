@@ -550,9 +550,6 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_arbiter_init(&self->arbiter);
 
-    uct_base_iface_progress_enable(&self->super.super,
-                                   UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-
     ucs_debug("Created an MM iface. FIFO mm id: %zu", self->fifo_mm_id);
     return UCS_OK;
 
