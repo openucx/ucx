@@ -151,8 +151,13 @@ static void uct_ib_async_event_handler(int fd, void *arg)
         level = UCS_LOG_LEVEL_ERROR;
         break;
     case IBV_EXP_EVENT_DCT_ACCESS_ERR:
-        snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
-                 "DCT access error", event.element.dct->dct_num);
+        if (event.element.dct) {
+            snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
+                     "DCT access error", event.element.dct->dct_num);
+        } else {
+            snprintf(event_info, sizeof(event_info), "%s on DCTN UNKNOWN",
+                     "DCT access error");
+        }
         level = UCS_LOG_LEVEL_ERROR;
         break;
     case IBV_EXP_EVENT_DCT_REQ_ERR:
