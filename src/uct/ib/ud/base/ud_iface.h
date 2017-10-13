@@ -112,7 +112,7 @@ struct uct_ud_iface {
     struct {
         ucs_mpool_t          mp;
         unsigned             available;
-        unsigned             reserved;
+        unsigned             quota;
         ucs_queue_head_t     pending_q;
         UCT_UD_IFACE_HOOK_DECLARE(hook);
     } rx;

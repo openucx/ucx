@@ -154,14 +154,14 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface, unsigned max
     return count;
 }
 
-ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface,
+ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_iface_t *iface,
                                                      unsigned max)
 {
     unsigned count;
 
-    count = ucs_min(max, iface->rx.srq.reserved);
+    count = ucs_min(max, iface->rx.srq.quota);
     iface->rx.srq.available += count;
-    iface->rx.srq.reserved  -= count;
+    iface->rx.srq.quota     -= count;
     while (iface->rx.srq.available > 0) {
         if (uct_rc_verbs_iface_post_recv_common(iface, 1) == 0) {
             ucs_error("failed to post receives");
@@ -180,7 +180,7 @@ void uct_rc_verbs_iface_common_progress_enable(uct_rc_verbs_iface_common_t *ifac
          * to handle here, and some receives were already pre-posted during iface
          * creation anyway.
          */
-        uct_rc_verbs_iface_prepost_recvs_common(rc_iface, UINT_MAX);
+        uct_rc_verbs_iface_common_prepost_recvs(rc_iface, UINT_MAX);
     }
 
     uct_base_iface_progress_enable_cb(&rc_iface->super.super, iface->progress,

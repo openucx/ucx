@@ -1249,9 +1249,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
 
     rx_qlen_init = config->super.ud_common.rx_queue_len_init;
     ucs_mpool_grow(&self->super.super.rx.mp,
-                   ucs_min(rx_qlen_init, self->super.super.rx.srq.reserved));
+                   ucs_min(rx_qlen_init, self->super.super.rx.srq.quota));
 
-    status = uct_rc_verbs_iface_prepost_recvs_common(&self->super.super,
+    status = uct_rc_verbs_iface_common_prepost_recvs(&self->super.super,
                                                      rx_qlen_init);
     if (status != UCS_OK) {
         goto err_common_cleanup;

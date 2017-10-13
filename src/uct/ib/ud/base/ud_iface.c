@@ -460,7 +460,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->tx.available           = config->super.tx.queue_len;
 
     self->rx.available           = config->super.rx.queue_len;
-    self->rx.reserved            = 0;
+    self->rx.quota               = 0;
     self->config.tx_qp_len       = config->super.tx.queue_len;
     self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
     self->config.check_grh_dgid  = (config->dgid_check &&
@@ -494,7 +494,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     self->rx.available = ucs_min(config->ud_common.rx_queue_len_init,
                                  config->super.rx.queue_len);
-    self->rx.reserved  = config->super.rx.queue_len - self->rx.available;
+    self->rx.quota     = config->super.rx.queue_len - self->rx.available;
     ucs_mpool_grow(&self->rx.mp, self->rx.available);
 
     data_size = sizeof(uct_ud_ctl_hdr_t) + self->super.addr_size;
@@ -902,8 +902,8 @@ void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
 
     if (flags & UCT_PROGRESS_RECV) {
         uct_ud_enter(iface);
-        iface->rx.available += iface->rx.reserved;
-        iface->rx.reserved   = 0;
+        iface->rx.available += iface->rx.quota;
+        iface->rx.quota      = 0;
         /* let progress (possibly async) post the missing receives */
         uct_ud_leave(iface);
     }

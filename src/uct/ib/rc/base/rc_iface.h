@@ -160,7 +160,7 @@ typedef struct uct_rc_iface_ops {
 typedef struct uct_rc_srq {
     struct ibv_srq           *srq;
     unsigned                 available;
-    unsigned                 reserved;
+    unsigned                 quota;
 } uct_rc_srq_t;
 
 

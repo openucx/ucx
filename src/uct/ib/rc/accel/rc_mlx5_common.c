@@ -81,8 +81,8 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
 void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_iface_t *iface,
                                             uct_rc_mlx5_iface_common_t *mlx5_common)
 {
-    iface->rx.srq.available = iface->rx.srq.reserved;
-    iface->rx.srq.reserved  = 0;
+    iface->rx.srq.available = iface->rx.srq.quota;
+    iface->rx.srq.quota     = 0;
     uct_rc_mlx5_iface_srq_post_recv(iface, &mlx5_common->rx.srq);
 }
 
@@ -133,7 +133,7 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
         return status;
     }
 
-    rc_iface->rx.srq.reserved = iface->rx.srq.mask + 1;
+    rc_iface->rx.srq.quota = iface->rx.srq.mask + 1;
 
     status = UCS_STATS_NODE_ALLOC(&iface->stats, &uct_rc_mlx5_iface_stats_class,
                                   rc_iface->stats);

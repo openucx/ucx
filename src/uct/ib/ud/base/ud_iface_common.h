@@ -10,8 +10,11 @@
 #include <ucs/config/parser.h>
 
 
+/**
+ * Common configuration for IB non peer-to-peer transports (UD and DC).
+ */
 typedef struct uct_ud_iface_common_config {
-    unsigned                     rx_queue_len_init;
+    unsigned      rx_queue_len_init;
 } uct_ud_iface_common_config_t;
 
 

@@ -175,7 +175,7 @@ void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *iface);
 
 void uct_rc_verbs_iface_common_tag_cleanup(uct_rc_verbs_iface_common_t *iface);
 
-ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface,
+ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_iface_t *iface,
                                                      unsigned max);
 
 void uct_rc_verbs_iface_common_progress_enable(uct_rc_verbs_iface_common_t *iface,
