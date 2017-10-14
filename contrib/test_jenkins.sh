@@ -239,6 +239,36 @@ build_debug() {
 }
 
 #
+# Build CUDA
+#
+
+build_cuda() {
+    echo 1..1 > build_cuda.tap
+    if module_load dev/cuda
+    then
+        if module_load dev/gdrcopy
+        then
+            echo "==== Build with enable cuda ===="
+            ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
+            $MAKE clean
+            $MAKE
+            $MAKE distclean
+            module unload dev/gdrcopy
+        else
+            ../contrib/configure-devel --prefix=$ucx_inst --with-cuda
+            $MAKE clean
+            $MAKE
+            $MAKE distclean
+        fi
+        module unload dev/cuda
+        echo "ok 1 - build successful " >> build_cuda.tap
+    else
+        echo "==== Not building with cuda flags ===="
+        echo "ok 1 - # SKIP because cuda not installed" >> build_cuda.tap
+    fi
+}
+
+#
 # Build with clang compiler
 #
 build_clang() {
@@ -558,6 +588,7 @@ run_tests() {
 
 	do_distributed_task 0 4 build_icc
 	do_distributed_task 1 4 build_debug
+	do_distributed_task 2 4 build_cuda
 	do_distributed_task 3 4 build_clang
 
 	# all are running mpi tests
