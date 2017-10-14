@@ -116,12 +116,14 @@ endif
 
 if HAVE_TL_UD
 libuct_la_SOURCES += \
+	ib/ud/base/ud_iface_common.c \
 	ib/ud/base/ud_iface.c \
 	ib/ud/base/ud_ep.c \
 	ib/ud/base/ud_log.c \
 	ib/ud/verbs/ud_verbs.c
 
 noinst_HEADERS += \
+	ib/ud/base/ud_iface_common.h \
 	ib/ud/base/ud_iface.h \
 	ib/ud/base/ud_ep.h \
 	ib/ud/base/ud_def.h \

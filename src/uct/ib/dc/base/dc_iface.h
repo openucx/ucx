@@ -10,6 +10,8 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/rc/verbs/rc_verbs_common.h>
+#include <uct/ib/ud/base/ud_iface_common.h>
+
 
 #define UCT_DC_IFACE_MAX_DCIS   16
 
@@ -32,6 +34,7 @@ typedef enum {
 
 typedef struct uct_dc_iface_config {
     uct_rc_iface_config_t         super;
+    uct_ud_iface_common_config_t  ud_common;
     int                           ndci;
     int                           tx_policy;
     unsigned                      quota;

@@ -102,6 +102,7 @@ typedef struct uct_rc_verbs_iface_common {
     struct ibv_sge         inl_sge[2];
     void                   *am_inl_hdr;
     ucs_mpool_t            short_desc_mp;
+
 #if IBV_EXP_HW_TM
     struct {
         ucs_ptr_array_t         rndv_comps;
@@ -174,7 +175,8 @@ void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *iface);
 
 void uct_rc_verbs_iface_common_tag_cleanup(uct_rc_verbs_iface_common_t *iface);
 
-ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface);
+ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_iface_t *iface,
+                                                     unsigned max);
 
 void uct_rc_verbs_iface_common_progress_enable(uct_rc_verbs_iface_common_t *iface,
                                                uct_rc_iface_t *rc_iface,

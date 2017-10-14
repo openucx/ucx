@@ -397,6 +397,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 
     self->tx.cq_available           = tx_cq_len - 1;
     self->rx.srq.available          = 0;
+    self->rx.srq.quota              = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
     self->config.tx_min_sge         = config->super.tx.min_sge;
     self->config.tx_min_inline      = config->super.tx.min_inline;
@@ -465,10 +466,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
             status = UCS_ERR_IO_ERROR;
             goto err_free_tx_ops;
         }
-        self->rx.srq.available       = srq_init_attr.attr.max_wr;
+        self->rx.srq.quota           = srq_init_attr.attr.max_wr;
     } else {
         self->rx.srq.srq             = NULL;
-        self->rx.srq.available       = 0;
     }
 
     /* Set atomic handlers according to atomic reply endianness */

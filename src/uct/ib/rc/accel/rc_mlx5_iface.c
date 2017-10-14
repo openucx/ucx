@@ -139,6 +139,17 @@ static void uct_rc_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep)
     uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_mlx5_ep_t), ep, &iface->super.super);
 }
 
+static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_rc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_t);
+
+    if (flags & UCT_PROGRESS_RECV) {
+        uct_rc_mlx5_iface_common_prepost_recvs(&iface->super, &iface->mlx5_common);
+    }
+
+    uct_base_iface_progress_enable(&iface->super.super.super.super, flags);
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -215,7 +226,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_connect_to_ep         = uct_rc_ep_connect_to_ep,
     .iface_flush              = uct_rc_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = uct_base_iface_progress_enable,
+    .iface_progress_enable    = uct_rc_mlx5_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = (void*)uct_rc_mlx5_iface_progress,
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,

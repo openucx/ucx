@@ -20,6 +20,7 @@
 
 #include "ud_def.h"
 #include "ud_ep.h"
+#include "ud_iface_common.h"
 
 
 #define UCT_UD_MIN_INLINE   48
@@ -32,11 +33,13 @@ enum {
 /* TODO: maybe tx_moderation can be defined at compile-time since tx completions are used only to know how much space is there in tx qp */
 
 typedef struct uct_ud_iface_config {
-    uct_ib_iface_config_t    super;
-    double                   peer_timeout;
-    double                   slow_timer_backoff;
-    int                      dgid_check;
+    uct_ib_iface_config_t         super;
+    uct_ud_iface_common_config_t  ud_common;
+    double                        peer_timeout;
+    double                        slow_timer_backoff;
+    int                           dgid_check;
 } uct_ud_iface_config_t;
+
 
 struct uct_ud_iface_peer {
     uct_ud_iface_peer_t   *next;
@@ -46,6 +49,7 @@ struct uct_ud_iface_peer {
     uint32_t               conn_id_last;
     ucs_list_link_t        ep_list; /* ep list ordered by connection id */
 };
+
 
 static inline int uct_ud_iface_peer_cmp(uct_ud_iface_peer_t *a, uct_ud_iface_peer_t *b) {
     return (int)a->dst_qpn - (int)b->dst_qpn ||
@@ -108,6 +112,7 @@ struct uct_ud_iface {
     struct {
         ucs_mpool_t          mp;
         unsigned             available;
+        unsigned             quota;
         ucs_queue_head_t     pending_q;
         UCT_UD_IFACE_HOOK_DECLARE(hook);
     } rx;
@@ -409,6 +414,8 @@ ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
 void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg);
 
 ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events);
+
+void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)

@@ -66,6 +66,9 @@ typedef struct uct_rc_mlx5_iface_common {
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq);
 
+void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_iface_t *iface,
+                                            uct_rc_mlx5_iface_common_t *mlx5_common);
+
 ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                            uct_rc_iface_t *rc_iface,
                                            uct_rc_iface_config_t *config);
