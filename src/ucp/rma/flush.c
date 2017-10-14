@@ -291,7 +291,7 @@ static ucs_status_ptr_t ucp_worker_flush_nb_internal(ucp_worker_h worker,
     ucp_request_t *req;
 
     status = ucp_worker_flush_check(worker);
-    if (status != UCS_INPROGRESS) {
+    if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {
         return UCS_STATUS_PTR(status);
     }
 
