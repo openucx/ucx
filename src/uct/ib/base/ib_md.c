@@ -1017,7 +1017,8 @@ out:
 
 static void uct_ib_fork_warn()
 {
-    ucs_warn("ibv_fork_init() was not successful, yet a fork() has been issued.");
+    ucs_warn("IB: ibv_fork_init() was disabled or failed, yet a fork() has been issued.");
+    ucs_warn("IB: data corruption might occur when using registered memory.");
 }
 
 static void uct_ib_fork_warn_enable()
@@ -1031,7 +1032,7 @@ static void uct_ib_fork_warn_enable()
 
     ret = pthread_atfork(uct_ib_fork_warn, NULL, NULL);
     if (ret) {
-        ucs_warn("ibv_fork_init failed, and registering atfork warning failed too: %m");
+        ucs_warn("registering fork() warning failed: %m");
     }
 }
 
@@ -1175,6 +1176,8 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
             ucs_debug("ibv_fork_init() failed: %m, continuing, but fork may be unsafe.");
             uct_ib_fork_warn_enable();
         }
+    } else {
+        uct_ib_fork_warn_enable();
     }
 
     status = uct_ib_device_init(&md->dev, ib_device UCS_STATS_ARG(md->stats));
