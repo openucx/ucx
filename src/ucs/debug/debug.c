@@ -256,7 +256,7 @@ static void find_address_in_section(bfd *abfd, asection *section, void *data)
                                                        UCS_DEBUG_UNKNOWN_SYM);
         search->lines[search->count].function = function ?
                                                 ucs_debug_demangle(function) :
-                                                UCS_DEBUG_UNKNOWN_SYM;
+                                                strdup(UCS_DEBUG_UNKNOWN_SYM);
         search->lines[search->count].lineno   = lineno;
         if (search->count == 0) {
             /* To get the inliner info, search at the original address */
