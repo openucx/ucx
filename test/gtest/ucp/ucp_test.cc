@@ -32,6 +32,12 @@ ucp_test::ucp_test() {
 }
 
 ucp_test::~ucp_test() {
+
+    for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
+         iter != entities().end(); ++iter)
+    {
+        (*iter)->warn_existing_eps();
+    }
     ucp_config_release(m_ucp_config);
 }
 
@@ -429,6 +435,17 @@ unsigned ucp_test_base::entity::progress(int worker_index)
 int ucp_test_base::entity::get_num_workers() const {
     ucs_assert(m_workers.size() == size_t(num_workers));
     return num_workers;
+}
+
+void ucp_test_base::entity::warn_existing_eps() const {
+    for (size_t worker_index = 0; worker_index < m_workers.size(); ++worker_index) {
+        for (size_t ep_index = 0; ep_index < m_workers[worker_index].second.size();
+             ++ep_index) {
+            ADD_FAILURE() << "ep(" << worker_index << "," << ep_index <<
+                             ")=" << m_workers[worker_index].second[ep_index].get() <<
+                             " was not destroyed during test cleanup()";
+        }
+    }
 }
 
 void ucp_test_base::entity::cleanup() {

@@ -59,8 +59,6 @@ public:
     test_ucp_peer_failure() : m_msg_size(1024) {
     }
 
-    using test_ucp_peer_failure_base::get_ep_params;
-
     static std::vector<ucp_test_param>
     enum_test_params(const ucp_params_t& ctx_params,
                      const std::string& name,
@@ -84,6 +82,10 @@ public:
     void test_force_close();
 
 protected:
+    virtual ucp_ep_params_t get_ep_params() {
+        return test_ucp_peer_failure_base::get_ep_params();
+    }
+
     void fail_receiver() {
         /* TODO: need to handle non-empty TX window in UD EP destructor",
          *       see debug message (ud_ep.c:220)
@@ -353,8 +355,6 @@ class test_ucp_peer_failure_2pairs :
                     protected test_ucp_peer_failure_base
 {
 public:
-    using test_ucp_peer_failure_base::get_ep_params;
-
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
         params.features     = UCP_FEATURE_TAG;
@@ -378,6 +378,10 @@ protected:
 
     static void ep_destructor(ucp_ep_h ep, test_ucp_peer_failure_2pairs* test) {
         test->wait_req(ucp_disconnect_nb(ep));
+    }
+
+    virtual ucp_ep_params_t get_ep_params() {
+        return test_ucp_peer_failure_base::get_ep_params();
     }
 
     ucs::handle<ucp_context_h>               m_ucph;
