@@ -135,10 +135,12 @@ AS_IF([test "x$enable_logging" != xno],
 #
 AC_ARG_ENABLE([assertions],
 	AS_HELP_STRING([--disable-assertions], 
-	               [Disable code assertions, default: NO]),
-	[],
-	[AC_DEFINE([ENABLE_ASSERT], [1], [Enable assertions])])
+	               [Disable code assertions, default: NO])
+	)
 
+AS_IF([test "x$enable_assertions" != xno],
+		AC_DEFINE([ENABLE_ASSERT], [1], [Enable assertions])
+	)
 
 #
 # Check if __attribute__((constructor)) works
