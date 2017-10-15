@@ -18,8 +18,6 @@ using namespace ucs; /* For vector<char> serialization */
 
 class test_ucp_tag_mt : public test_ucp_tag {
 public:
-    using test_ucp_tag::get_ctx_params;
-
     virtual void init()
     {
         test_ucp_tag::init();

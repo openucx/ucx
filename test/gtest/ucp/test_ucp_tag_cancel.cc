@@ -11,8 +11,6 @@
 
 
 class test_ucp_tag_cancel : public test_ucp_tag {
-public:
-    using test_ucp_tag::get_ctx_params;
 };
 
 UCS_TEST_P(test_ucp_tag_cancel, cancel_exp) {

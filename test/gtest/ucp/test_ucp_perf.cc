@@ -13,8 +13,6 @@
 #define MB   pow(1024.0, -2)
 #define UCP_ARM_PERF_TEST_MULTIPLIER 2
 class test_ucp_perf : public ucp_test, public test_perf {
-public:
-    using ucp_test::get_ctx_params;
 protected:
     virtual void init() {
         test_base::init(); /* Skip entities creation in ucp_test */

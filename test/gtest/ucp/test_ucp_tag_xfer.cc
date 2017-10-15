@@ -18,8 +18,6 @@ extern "C" {
 
 class test_ucp_tag_xfer : public test_ucp_tag {
 public:
-    using test_ucp_tag::get_ctx_params;
-
     enum {
         VARIANT_DEFAULT,
         VARIANT_ERR_HANDLING

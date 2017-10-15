@@ -12,8 +12,6 @@
 
 class test_ucp_tag_probe : public test_ucp_tag {
 public:
-    using test_ucp_tag::get_ctx_params;
-
     /* The parameters mean the following:
      *  - s_size and r_size: send and recv buffer sizes.
      *    Can be different for checking message transaction error
