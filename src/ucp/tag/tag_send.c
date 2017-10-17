@@ -11,183 +11,79 @@
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
-#include <ucp/core/ucp_request.inl>
+#include <ucp/proto/proto_am.inl>
 #include <ucs/datastruct/mpool.inl>
 #include <string.h>
 
 
-static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
-                                      ssize_t max_short, size_t *zcopy_thresh_arr,
-                                      size_t rndv_rma_thresh,
-                                      size_t rndv_am_thresh,
-                                      const ucp_proto_t *proto)
+static UCS_F_ALWAYS_INLINE size_t
+ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t count,
+                           size_t max_iov, size_t rndv_rma_thresh,
+                           size_t rndv_am_thresh, size_t seg_size)
 {
-    ucp_ep_config_t *config   = ucp_ep_config(req->send.ep);
-    ucp_lane_index_t lane     = config->tag.lane;
-    ucp_worker_h worker       = req->send.ep->worker;
-    size_t only_hdr_size      = proto->only_hdr_size;
-    unsigned flag_iov_single  = 1;
-    unsigned force_sw_rndv    = 0;
-    ucp_rsc_index_t rsc_index;
-    unsigned is_iov;
-    size_t zcopy_thresh;
-    ucs_status_t status;
-    size_t length;
-
-    is_iov = UCP_DT_IS_IOV(req->send.datatype);
-    if (ucs_unlikely(is_iov)) {
-        length = ucp_dt_length(req->send.datatype, count, req->send.buffer,
-                               &req->send.state);
-        req->send.state.dt.iov.iovcnt_offset = 0;
-        req->send.state.dt.iov.iov_offset    = 0;
-        req->send.state.dt.iov.iovcnt        = count;
-        flag_iov_single                      = (count <= config->tag.eager.max_iov);
-
-        if (!flag_iov_single && ucp_ep_is_tag_offload_enabled(config)) {
+    switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_IOV: 
+        if ((count > max_iov) &&
+            ucp_ep_is_tag_offload_enabled(ucp_ep_config(req->send.ep))) {
             /* Make sure SW RNDV will be used, because tag offload does
              * not support multi-packet eager protocols. */
-            force_sw_rndv = 1;
+            return seg_size;
         }
-
-        if (0 == count) {
-            /* disable zcopy */
-            zcopy_thresh = SIZE_MAX;
-        } else if (!config->tag.eager.zcopy_auto_thresh) {
-            /* The user defined threshold or no zcopy enabled */
-            zcopy_thresh = zcopy_thresh_arr[0];
-        } else if (count <= UCP_MAX_IOV) {
-            /* Using pre-calculated thresholds */
-            zcopy_thresh = zcopy_thresh_arr[count - 1];
-        } else {
-            /* Calculate threshold */
-            rsc_index    = config->key.lanes[lane].rsc_index;
-            zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(count,
-                               &ucp_ep_md_attr(req->send.ep, lane)->reg_cost,
-                               worker->context,
-                               worker->ifaces[rsc_index].attr.bandwidth);
-        }
-    } else {
-        length       = ucp_contig_dt_length(req->send.datatype, count);
-        zcopy_thresh = count ? zcopy_thresh_arr[0] : SIZE_MAX;
+        /* Fall through */
+    case UCP_DATATYPE_CONTIG: 
+        return ucs_min(rndv_rma_thresh, rndv_am_thresh);
+    case UCP_DATATYPE_GENERIC:
+        return rndv_am_thresh;
+    default:
+        ucs_error("Invalid data type %lx", req->send.datatype);
     }
-    req->send.length = length;
-
-    ucs_trace_req("select request(%p) progress algorithm datatype=%lx buffer=%p "
-                  " length=%zu max_short=%zd rndv_rma_thresh=%zu rndv_am_thresh=%zu "
-                  "zcopy_thresh=%zu",
-                  req, req->send.datatype, req->send.buffer, length, max_short,
-                  rndv_rma_thresh, rndv_am_thresh, zcopy_thresh);
-
-    req->send.uct_comp.func = NULL;
-
-    if (((ssize_t)length <= max_short) && !is_iov) {
-        /* short */
-        req->send.uct.func = proto->contig_short;
-        UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
-    } else if ((length >= rndv_rma_thresh) || (length >= rndv_am_thresh) ||
-               force_sw_rndv) {
-        /* RMA/AM rendezvous */
-        status = ucp_tag_send_start_rndv(req);
-        if (status != UCS_OK) {
-            return status;
-        }
-        UCS_PROFILE_REQUEST_EVENT(req, "start_rndv", req->send.length);
-    } else if (length < zcopy_thresh) {
-        /* bcopy */
-        if (length <= (config->tag.eager.max_bcopy - only_hdr_size)) {
-            req->send.uct.func   = proto->bcopy_single;
-            UCS_PROFILE_REQUEST_EVENT(req, "start_egr_bcopy_single", req->send.length);
-        } else {
-            req->send.uct.func   = proto->bcopy_multi;
-            UCS_PROFILE_REQUEST_EVENT(req, "start_egr_bcopy_multi", req->send.length);
-        }
-    } else {
-        /* eager zcopy */
-        status = ucp_request_send_buffer_reg(req, lane);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        req->send.uct_comp.func  = proto->zcopy_completion;
-        req->send.uct_comp.count = 0;
-
-        if ((length <= (config->tag.eager.max_zcopy - only_hdr_size)) &&
-            flag_iov_single) {
-            req->send.uct.func   = proto->zcopy_single;
-            UCS_PROFILE_REQUEST_EVENT(req, "start_egr_zcopy_single", req->send.length);
-        } else {
-            req->send.uct.func   = proto->zcopy_multi;
-            UCS_PROFILE_REQUEST_EVENT(req, "start_egr_zcopy_multi", req->send.length);
-        }
-    }
-    return UCS_OK;
+ 
+    return SIZE_MAX;
 }
 
-static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
-                                      size_t rndv_rma_thresh, size_t rndv_am_thresh,
-                                      const ucp_proto_t *proto)
-{
-    ucp_ep_config_t *config = ucp_ep_config(req->send.ep);
-    ucp_dt_generic_t *dt_gen;
-    size_t length;
-    void *state;
-
-    dt_gen = ucp_dt_generic(req->send.datatype);
-    state = dt_gen->ops.start_pack(dt_gen->context, req->send.buffer, count);
-
-    req->send.state.dt.generic.state = state;
-    req->send.length = length = dt_gen->ops.packed_size(state);
-
-    if (length <= config->tag.eager.max_bcopy - proto->only_hdr_size) {
-        /* bcopy single */
-        req->send.uct.func = proto->bcopy_single;
-        UCS_PROFILE_REQUEST_EVENT(req, "start_gen_bcopy_single", req->send.length);
-    } else if (length >= rndv_am_thresh) {
-        /* rendezvous */
-        ucp_tag_send_start_rndv(req);
-        UCS_PROFILE_REQUEST_EVENT(req, "start_rndv", req->send.length);
-    } else {
-        /* bcopy multi */
-        req->send.uct.func = proto->bcopy_multi;
-        UCS_PROFILE_REQUEST_EVENT(req, "start_gen_bcopy_multi", req->send.length);
-    }
-}
-
-static inline ucs_status_ptr_t
-ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
-                 size_t *zcopy_thresh, size_t rndv_rma_thresh, size_t rndv_am_thresh,
+static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
+ucp_tag_send_req(ucp_request_t *req, size_t count,
+                 const ucp_ep_msg_config_t* msg_config,
+                 size_t rndv_rma_thresh, size_t rndv_am_thresh,
                  ucp_send_callback_t cb, const ucp_proto_t *proto)
 {
+    size_t seg_size     = (msg_config->max_bcopy - proto->only_hdr_size);
+    size_t rndv_thresh  = ucp_tag_get_rndv_threshold(req, count,
+                                                     msg_config->max_iov,
+                                                     rndv_rma_thresh,
+                                                     rndv_am_thresh, seg_size);
+    size_t zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, count,
+                                                        rndv_thresh);
+    ssize_t max_short   = ucp_proto_get_short_max(req, msg_config);
     ucs_status_t status;
 
-    switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
-    case UCP_DATATYPE_CONTIG:
-    case UCP_DATATYPE_IOV:
-        status = ucp_tag_req_start(req, count, max_short, zcopy_thresh,
-                                   rndv_rma_thresh, rndv_am_thresh, proto);
+    ucs_trace_req("select tag request(%p) progress algorithm datatype=%lx "
+                  "buffer=%p length=%zu max_short=%zd rndv_thresh=%zu "
+                  "zcopy_thresh=%zu",
+                  req, req->send.datatype, req->send.buffer, req->send.length,
+                  max_short, rndv_thresh, zcopy_thresh);
+
+    status = ucp_request_send_start(req, max_short, zcopy_thresh, seg_size,
+                                    rndv_thresh, proto);
+    if (ucs_unlikely(status != UCS_OK)) {
+        if (status == UCS_ERR_NO_PROGRESS) {
+             ucs_assert(req->send.length >= rndv_thresh);
+            /* RMA/AM rendezvous */
+            status = ucp_tag_send_start_rndv(req);
+        }
         if (status != UCS_OK) {
             return UCS_STATUS_PTR(status);
         }
-        break;
-
-    case UCP_DATATYPE_GENERIC:
-        ucp_tag_req_start_generic(req, count, rndv_rma_thresh,
-                                  rndv_am_thresh, proto);
-        break;
-
-    default:
-        ucs_error("Invalid data type");
-        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
-    ucp_request_send_stat(req);
+    ucp_request_send_tag_stat(req);
 
     /*
      * Start the request.
      * If it is completed immediately, release the request and return the status.
      * Otherwise, return the request.
      */
-    status = ucp_request_start_send(req);
+    status = ucp_request_send(req);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucs_trace_req("releasing send request %p, returning status %s", req,
                       ucs_status_string(status));
@@ -200,9 +96,10 @@ ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
     return req + 1;
 }
 
-static void ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
                                   const void* buffer, uintptr_t datatype,
-                                  ucp_tag_t tag, uint16_t flags)
+                                  size_t count, ucp_tag_t tag, uint16_t flags)
 {
     req->flags             = flags;
     req->send.ep           = ep;
@@ -210,13 +107,11 @@ static void ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.datatype     = datatype;
     req->send.tag          = tag;
     req->send.reg_rsc      = UCP_NULL_RESOURCE;
-    req->send.state.offset = 0;
-    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.uct_comp.count,
-                                sizeof(req->send.uct_comp.count));
-
-#if ENABLE_ASSERT
-    req->send.lane         = UCP_NULL_LANE;
-#endif
+    ucp_request_send_state_init(req, count);
+    req->send.length       = ucp_dt_length(req->send.datatype, count,
+                                           req->send.buffer,
+                                           &req->send.state);
+    req->send.lane         = ucp_ep_config(ep)->tag.lane;
 }
 
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
@@ -253,11 +148,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
         goto out;
     }
 
-    ucp_tag_send_req_init(req, ep, buffer, datatype, tag, 0);
+    ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag, 0);
 
-    ret = ucp_tag_send_req(req, count,
-                           ucp_ep_config(ep)->tag.eager.max_short,
-                           ucp_ep_config(ep)->tag.eager.zcopy_thresh,
+    ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
                            ucp_ep_config(ep)->tag.rndv.rma_thresh,
                            ucp_ep_config(ep)->tag.rndv.am_thresh,
                            cb, ucp_ep_config(ep)->tag.proto);
@@ -293,11 +186,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
     /* Remote side needs to send reply, so have it connect to us */
     ucp_ep_connect_remote(ep);
 
-    ucp_tag_send_req_init(req, ep, buffer, datatype, tag, UCP_REQUEST_FLAG_SYNC);
+    ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag,
+                          UCP_REQUEST_FLAG_SYNC);
 
-    ret = ucp_tag_send_req(req, count,
-                           -1, /* disable short method */
-                           ucp_ep_config(ep)->tag.eager.sync_zcopy_thresh,
+    ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
                            ucp_ep_config(ep)->tag.rndv.rma_thresh,
                            ucp_ep_config(ep)->tag.rndv.am_thresh,
                            cb, ucp_ep_config(ep)->tag.sync_proto);
@@ -319,5 +211,5 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, uint64_t sender_uuid,
     req->send.proto.am_id          = UCP_AM_ID_EAGER_SYNC_ACK;
     req->send.proto.remote_request = remote_request;
     req->send.proto.status         = UCS_OK;
-    ucp_request_start_send(req);
+    ucp_request_send(req);
 }

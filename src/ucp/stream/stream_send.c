@@ -8,7 +8,6 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
-#include <ucp/core/ucp_request.inl>
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_am.inl>
 #include <ucp/stream/stream.h>
@@ -26,7 +25,7 @@ ucp_stream_send_am_short(ucp_ep_t *ep, const void *buffer, size_t length)
 
 static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
                                      const void* buffer, uintptr_t datatype,
-                                     uint16_t flags)
+                                     size_t count, uint16_t flags)
 {
     req->flags             = flags;
     req->send.ep           = ep;
@@ -34,110 +33,34 @@ static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.datatype     = datatype;
     req->send.reg_rsc      = UCP_NULL_RESOURCE;
     req->send.lane         = ep->am_lane;
-
+    ucp_request_send_state_init(req, count);
+    req->send.length       = ucp_dt_length(req->send.datatype, count,
+                                           req->send.buffer,
+                                           &req->send.state);
     VALGRIND_MAKE_MEM_UNDEFINED(&req->send.tag, sizeof(req->send.tag));
-    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.uct_comp, sizeof(req->send.uct_comp));
-    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.offset,
-                                sizeof(req->send.state.offset));
-}
-
-static ucs_status_t ucp_stream_req_start(ucp_request_t *req, size_t count,
-                                         ssize_t max_short,
-                                         size_t *zcopy_thresh_arr,
-                                         size_t rndv_rma_thresh,
-                                         size_t rndv_am_thresh,
-                                         const ucp_proto_t *proto)
-{
-    ucp_ep_config_t *config      = ucp_ep_config(req->send.ep);
-    size_t          zcopy_thresh = count ? zcopy_thresh_arr[0] : SIZE_MAX;
-    size_t          length       = ucp_contig_dt_length(req->send.datatype, count);
-    ucs_status_t    status;
-
-    ucs_assertv_always(UCP_DT_IS_CONTIG(req->send.datatype),
-                       "stream supports only contiguous types");
-
-    req->send.length        = length;
-    req->send.uct_comp.func = NULL;
-
-    ucs_trace_req("select request(%p) progress algorithm datatype=%lx buffer=%p "
-                  " length=%zu max_short=%zd rndv_rma_thresh=%zu rndv_am_thresh=%zu "
-                  "zcopy_thresh=%zu",
-                  req, req->send.datatype, req->send.buffer, length, max_short,
-                  rndv_rma_thresh, rndv_am_thresh, zcopy_thresh);
-
-    if ((ssize_t)length <= max_short) {
-        /* short */
-        req->send.uct.func = proto->contig_short;
-        UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
-    } else if (length < zcopy_thresh) {
-        /* bcopy */
-        req->send.state.offset = 0;
-        if (length <= config->am.max_bcopy - proto->only_hdr_size) {
-            req->send.uct.func   = proto->bcopy_single;
-            UCS_PROFILE_REQUEST_EVENT(req, "start_stream_bcopy_single",
-                                      req->send.length);
-        } else {
-            req->send.uct.func   = proto->bcopy_multi;
-            UCS_PROFILE_REQUEST_EVENT(req, "start_stream_bcopy_multi",
-                                      req->send.length);
-        }
-    } else {
-        /* zcopy */
-        status = ucp_request_send_buffer_reg(req, req->send.lane);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        req->send.state.offset   = 0;
-        req->send.uct_comp.count = 0;
-        req->send.uct_comp.func  = proto->zcopy_completion;
-
-        if (length <= (config->am.max_zcopy - proto->only_hdr_size)) {
-            req->send.uct.func = proto->zcopy_single;
-            UCS_PROFILE_REQUEST_EVENT(req, "start_stream_egr_zcopy_single",
-                                      req->send.length);
-        } else {
-            req->send.uct.func = proto->zcopy_multi;
-            UCS_PROFILE_REQUEST_EVENT(req, "start_stream_egr_zcopy_multi",
-                                      req->send.length);
-        }
-    }
-
-    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
-ucp_stream_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
-                    size_t *zcopy_thresh, size_t rndv_rma_thresh, size_t rndv_am_thresh,
+ucp_stream_send_req(ucp_request_t *req, size_t count,
+                    const ucp_ep_msg_config_t* msg_config,
                     ucp_send_callback_t cb, const ucp_proto_t *proto)
 {
-    ucs_status_t status;
-
-    switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
-    case UCP_DATATYPE_CONTIG:
-        status = ucp_stream_req_start(req, count, max_short, zcopy_thresh,
-                                      rndv_rma_thresh, rndv_am_thresh, proto);
-        if (status != UCS_OK) {
-            return UCS_STATUS_PTR(status);
-        }
-        break;
-    case UCP_DATATYPE_IOV:
-    case UCP_DATATYPE_GENERIC:
-        ucs_error("Not implemented datatype");
-        return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
-    default:
-        ucs_error("Invalid data type");
-        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+    size_t zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config,
+                                                        count, SIZE_MAX);
+    size_t seg_size     = msg_config->max_bcopy - proto->only_hdr_size;
+    ucs_status_t status = ucp_request_send_start(req, msg_config->max_short,
+                                                 zcopy_thresh, seg_size,
+                                                 SIZE_MAX, proto);
+    if (status != UCS_OK) {
+        return UCS_STATUS_PTR(status);
     }
-
-    ucp_request_send_stat(req);
 
     /*
      * Start the request.
      * If it is completed immediately, release the request and return the status.
      * Otherwise, return the request.
      */
-    status = ucp_request_start_send(req);
+    status = ucp_request_send(req);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucs_trace_req("releasing send request %p, returning status %s", req,
                       ucs_status_string(status));
@@ -189,14 +112,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
         goto out;
     }
 
-    ucp_stream_send_req_init(req, ep, buffer, datatype, flags);
+    ucp_stream_send_req_init(req, ep, buffer, datatype, count, flags);
 
-    ret = ucp_stream_send_req(req, count,
-                              ucp_ep_config(ep)->am.max_short,
-                              ucp_ep_config(ep)->am.zcopy_thresh,
-                              SIZE_MAX, /* NOTE: disable rndv_rma, not implemented */
-                              SIZE_MAX, /* NOTE: disable rndv_am, not implemented */
-                              cb, ucp_ep_config(ep)->stream.proto);
+    ret = ucp_stream_send_req(req, count, &ucp_ep_config(ep)->am, cb,
+                              ucp_ep_config(ep)->stream.proto);
 
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
@@ -224,7 +143,6 @@ static size_t ucp_stream_pack_am_single_dt(void *dest, void *arg)
     hdr->sender_uuid = req->send.ep->worker->uuid;
 
     ucs_assert(req->send.state.offset == 0);
-    ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
 
     length = ucp_dt_pack(req->send.datatype, hdr + 1, req->send.buffer,
                          &req->send.state, req->send.length);
@@ -287,7 +205,9 @@ static size_t ucp_stream_pack_am_last_dt(void *dest, void *arg)
 
     hdr->sender_uuid = req->send.ep->worker->uuid;
     ret_length       = ucp_dt_pack(req->send.datatype, hdr + 1,
-                                   req->send.buffer, &req->send.state, length);
+                                   req->send.buffer, &req->send.state,
+                                   length);
+
     ucs_debug("pack stream_am_last paylen %zu offset %zu", length,
               req->send.state.offset);
     ucs_assertv(ret_length == length, "length=%zu, max_length=%zu",

@@ -8,7 +8,6 @@
 #include "proto_am.inl"
 
 #include <ucp/tag/offload.h>
-#include <ucp/core/ucp_request.inl>
 
 
 static size_t ucp_proto_pack(void *dest, void *arg)
@@ -72,4 +71,3 @@ void ucp_proto_am_zcopy_completion(uct_completion_t *self,
         req->send.uct_comp.func = NULL;
     }
 }
-

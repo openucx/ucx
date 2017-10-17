@@ -62,11 +62,11 @@ UCS_PROFILE_FUNC_VOID(ucp_stream_data_release, (ep, data),
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
 }
 
-static ucs_status_t ucp_stream_am_handler(void *arg, void *data, size_t length,
-                                          unsigned am_flags)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_stream_am_handler(void *arg, void *data, size_t length, unsigned am_flags)
 {
-    const size_t            hdr_len = sizeof(ucp_stream_am_hdr_t);
-    ucp_worker_h            worker  = arg;
+    const size_t            hdr_len         = sizeof(ucp_stream_am_hdr_t);
+    ucp_worker_h            worker          = arg;
     ucp_ep_h                ep;
     ucp_stream_am_hdr_t     *hdr;
     ucp_recv_desc_t         *rdesc;
