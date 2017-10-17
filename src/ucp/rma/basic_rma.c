@@ -46,8 +46,8 @@ ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
         req->send.length -= frag_length;
         if (req->send.length == 0) {
             /* bcopy is the fast path */
-            if (ucs_likely(req->send.uct_comp.count == 0)) {
-                if (ucs_unlikely(req->send.state.dt.contig.memh !=
+            if (ucs_likely(req->send.state.uct_comp.count == 0)) {
+                if (ucs_unlikely(req->send.state.dt.dt.contig.memh !=
                                  UCT_MEM_HANDLE_NULL)) {
                     ucp_request_send_buffer_dereg(req, req->send.lane);
                 }
@@ -66,7 +66,8 @@ ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
 static void ucp_rma_request_bcopy_completion(uct_completion_t *self,
                                              ucs_status_t status)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
 
     if (ucs_likely(req->send.length == 0)) {
         ucp_request_complete_send(req, UCS_OK);
@@ -76,7 +77,8 @@ static void ucp_rma_request_bcopy_completion(uct_completion_t *self,
 static void ucp_rma_request_zcopy_completion(uct_completion_t *self,
                                              ucs_status_t status)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
 
     if (ucs_likely(req->send.length == 0)) {
         ucp_request_send_buffer_dereg(req, req->send.lane);
@@ -154,14 +156,14 @@ static ucs_status_t ucp_progress_put(uct_pending_req_t *self)
         iov.buffer = (void *)req->send.buffer;
         iov.length = packed_len;
         iov.count  = 1;
-        iov.memh   = req->send.state.dt.contig.memh;
+        iov.memh   = req->send.state.dt.dt.contig.memh;
 
         status = UCS_PROFILE_CALL(uct_ep_put_zcopy,
                                   ep->uct_eps[lane],
                                   &iov, 1, 
                                   req->send.rma.remote_addr,
                                   rkey->cache.rma_rkey,
-                                  &req->send.uct_comp);
+                                  &req->send.state.uct_comp);
         ucp_request_send_state_advance(req, NULL, UCP_REQUEST_SEND_PROTO_RMA,
                                        status);
     }
@@ -191,21 +193,21 @@ static ucs_status_t ucp_progress_get(uct_pending_req_t *self)
                                   frag_length,
                                   req->send.rma.remote_addr,
                                   rkey->cache.rma_rkey,
-                                  &req->send.uct_comp);
+                                  &req->send.state.uct_comp);
     } else {
         uct_iov_t iov;
         frag_length = ucs_min(req->send.length, rma_config->max_get_zcopy);
         iov.buffer  = (void *)req->send.buffer;
         iov.length  = frag_length;
         iov.count   = 1;
-        iov.memh    = req->send.state.dt.contig.memh;
+        iov.memh    = req->send.state.dt.dt.contig.memh;
 
         status = UCS_PROFILE_CALL(uct_ep_get_zcopy,
                                   ep->uct_eps[lane],
                                   &iov, 1, 
                                   req->send.rma.remote_addr,
                                   rkey->cache.rma_rkey,
-                                  &req->send.uct_comp);
+                                  &req->send.state.uct_comp);
     }
 
     if (status == UCS_INPROGRESS) {

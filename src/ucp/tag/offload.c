@@ -302,7 +302,7 @@ static size_t ucp_tag_offload_pack_eager(void *dest, void *arg)
     size_t length;
 
     length = ucp_dt_pack(req->send.datatype, dest, req->send.buffer,
-                         &req->send.state, req->send.length);
+                         &req->send.state.dt, req->send.length);
     ucs_assert(length == req->send.length);
     return length;
 }
@@ -347,7 +347,7 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
 {
     ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t      *ep       = req->send.ep;
-    ucp_dt_state_t dt_state = req->send.state;
+    ucp_dt_state_t dt_state = req->send.state.dt;
     size_t         max_iov  = ucp_ep_config(ep)->tag.eager.max_iov;
     uct_iov_t      *iov     = ucs_alloca(max_iov * sizeof(uct_iov_t));
     size_t         iovcnt   = 0;
@@ -360,7 +360,7 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
 
     status = uct_ep_tag_eager_zcopy(ep->uct_eps[req->send.lane], req->send.tag,
                                     imm_data, iov, iovcnt,
-                                    &req->send.uct_comp);
+                                    &req->send.state.uct_comp);
     if (status == UCS_OK) {
         complete(req, UCS_OK);
     } else if (status == UCS_INPROGRESS) {
@@ -425,7 +425,7 @@ static void ucp_tag_rndv_zcopy_completion(uct_completion_t *self,
                                           ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
-                                          send.uct_comp);
+                                          send.state.uct_comp);
     ucp_proto_am_zcopy_req_complete(req, status);
 }
 
@@ -444,7 +444,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
         .reqptr      = (uintptr_t)req
     };
 
-    dt_state = req->send.state;
+    dt_state = req->send.state.dt;
 
     ucs_assert_always(UCP_DT_IS_CONTIG(req->send.datatype));
     ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, &dt_state, req->send.buffer,
@@ -452,7 +452,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
 
     rndv_op = uct_ep_tag_rndv_zcopy(ep->uct_eps[req->send.lane], req->send.tag,
                                     &rndv_hdr, sizeof(rndv_hdr), iov, iovcnt,
-                                    &req->send.uct_comp);
+                                    &req->send.state.uct_comp);
     if (UCS_PTR_IS_ERR(rndv_op)) {
         return UCS_PTR_STATUS(rndv_op);
     }

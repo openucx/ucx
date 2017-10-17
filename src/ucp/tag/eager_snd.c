@@ -21,9 +21,9 @@ static size_t ucp_tag_pack_eager_single_dt(void *dest, void *arg)
 
     hdr->super.tag = req->send.tag;
 
-    ucs_assert(req->send.state.offset == 0);
+    ucs_assert(req->send.state.dt.offset == 0);
     length = ucp_dt_pack(req->send.datatype, hdr + 1, req->send.buffer,
-                         &req->send.state, req->send.length);
+                         &req->send.state.dt, req->send.length);
     ucs_assert(length == req->send.length);
     return sizeof(*hdr) + length;
 }
@@ -38,9 +38,9 @@ static size_t ucp_tag_pack_eager_sync_single_dt(void *dest, void *arg)
     hdr->req.sender_uuid = req->send.ep->worker->uuid;
     hdr->req.reqptr      = (uintptr_t)req;
 
-    ucs_assert(req->send.state.offset == 0);
+    ucs_assert(req->send.state.dt.offset == 0);
     length = ucp_dt_pack(req->send.datatype, hdr + 1, req->send.buffer,
-                         &req->send.state, req->send.length);
+                         &req->send.state.dt, req->send.length);
     ucs_assert(length == req->send.length);
     return sizeof(*hdr) + length;
 }
@@ -57,10 +57,10 @@ static size_t ucp_tag_pack_eager_first_dt(void *dest, void *arg)
     hdr->total_len       = req->send.length;
 
     ucs_debug("pack eager_first paylen %zu", length);
-    ucs_assert(req->send.state.offset == 0);
+    ucs_assert(req->send.state.dt.offset == 0);
     ucs_assert(req->send.length > length);
     return sizeof(*hdr) + ucp_dt_pack(req->send.datatype, hdr + 1,
-                                      req->send.buffer, &req->send.state,
+                                      req->send.buffer, &req->send.state.dt,
                                       length);
 }
 
@@ -78,10 +78,10 @@ static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
     hdr->req.reqptr            = (uintptr_t)req;
 
     ucs_debug("pack eager_sync_first paylen %zu", length);
-    ucs_assert(req->send.state.offset == 0);
+    ucs_assert(req->send.state.dt.offset == 0);
     ucs_assert(req->send.length > length);
     return sizeof(*hdr) + ucp_dt_pack(req->send.datatype, hdr + 1,
-                                      req->send.buffer, &req->send.state,
+                                      req->send.buffer, &req->send.state.dt,
                                       length);
 }
 
@@ -93,10 +93,10 @@ static size_t ucp_tag_pack_eager_middle_dt(void *dest, void *arg)
 
     length         = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
     ucs_debug("pack eager_middle paylen %zu offset %zu", length,
-              req->send.state.offset);
+              req->send.state.dt.offset);
     hdr->super.tag = req->send.tag;
     return sizeof(*hdr) + ucp_dt_pack(req->send.datatype, hdr + 1,
-                                      req->send.buffer, &req->send.state,
+                                      req->send.buffer, &req->send.state.dt,
                                       length);
 }
 
@@ -106,12 +106,12 @@ static size_t ucp_tag_pack_eager_last_dt(void *dest, void *arg)
     ucp_request_t *req = arg;
     size_t length, ret_length;
 
-    length         = req->send.length - req->send.state.offset;
+    length         = req->send.length - req->send.state.dt.offset;
     hdr->super.tag = req->send.tag;
     ret_length     = ucp_dt_pack(req->send.datatype, hdr + 1, req->send.buffer,
-                                 &req->send.state, length);
+                                 &req->send.state.dt, length);
     ucs_debug("pack eager_last paylen %zu offset %zu", length,
-              req->send.state.offset);
+              req->send.state.dt.offset);
     ucs_assertv(ret_length == length, "length=%zu, max_length=%zu",
                 ret_length, length);
     return sizeof(*hdr) + ret_length;
@@ -256,7 +256,7 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_multi(uct_pending_req_t *self)
 void
 ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
-    if (req->send.state.offset == req->send.length) {
+    if (req->send.state.dt.offset == req->send.length) {
         ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
         ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
                                       status);
@@ -300,7 +300,7 @@ void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self, ucs_status_t st
 {
     ucp_request_t *req;
 
-    req = ucs_container_of(self, ucp_request_t, send.uct_comp);
+    req = ucs_container_of(self, ucp_request_t, send.state.uct_comp);
     ucp_tag_eager_sync_zcopy_req_complete(req, status);
 }
 

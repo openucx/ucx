@@ -36,7 +36,7 @@ static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     ucp_request_send_state_init(req, count);
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
-                                           &req->send.state);
+                                           &req->send.state.dt);
     VALGRIND_MAKE_MEM_UNDEFINED(&req->send.tag, sizeof(req->send.tag));
 }
 
@@ -142,10 +142,10 @@ static size_t ucp_stream_pack_am_single_dt(void *dest, void *arg)
 
     hdr->sender_uuid = req->send.ep->worker->uuid;
 
-    ucs_assert(req->send.state.offset == 0);
+    ucs_assert(req->send.state.dt.offset == 0);
 
     length = ucp_dt_pack(req->send.datatype, hdr + 1, req->send.buffer,
-                         &req->send.state, req->send.length);
+                         &req->send.state.dt, req->send.length);
     ucs_assert(length == req->send.length);
     return sizeof(*hdr) + length;
 }
@@ -174,10 +174,10 @@ static size_t ucp_stream_pack_am_first_dt(void *dest, void *arg)
     length           = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
 
     ucs_debug("pack stream_am_first paylen %zu", length);
-    ucs_assert(req->send.state.offset == 0);
+    ucs_assert(req->send.state.dt.offset == 0);
     ucs_assert(req->send.length > length);
     return sizeof(*hdr) + ucp_dt_pack(req->send.datatype, hdr + 1,
-                                      req->send.buffer, &req->send.state,
+                                      req->send.buffer, &req->send.state.dt,
                                       length);
 }
 
@@ -190,9 +190,9 @@ static size_t ucp_stream_pack_am_middle_dt(void *dest, void *arg)
     hdr->sender_uuid = req->send.ep->worker->uuid;
     length           = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
     ucs_debug("pack stream_am_middle paylen %zu offset %zu", length,
-              req->send.state.offset);
+              req->send.state.dt.offset);
     return sizeof(*hdr) + ucp_dt_pack(req->send.datatype, hdr + 1,
-                                      req->send.buffer, &req->send.state,
+                                      req->send.buffer, &req->send.state.dt,
                                       length);
 }
 
@@ -201,15 +201,15 @@ static size_t ucp_stream_pack_am_last_dt(void *dest, void *arg)
     size_t              ret_length;
     ucp_stream_am_hdr_t *hdr   = dest;
     ucp_request_t       *req   = arg;
-    size_t              length = req->send.length - req->send.state.offset;
+    size_t              length = req->send.length - req->send.state.dt.offset;
 
     hdr->sender_uuid = req->send.ep->worker->uuid;
     ret_length       = ucp_dt_pack(req->send.datatype, hdr + 1,
-                                   req->send.buffer, &req->send.state,
+                                   req->send.buffer, &req->send.state.dt,
                                    length);
 
     ucs_debug("pack stream_am_last paylen %zu offset %zu", length,
-              req->send.state.offset);
+              req->send.state.dt.offset);
     ucs_assertv(ret_length == length, "length=%zu, max_length=%zu",
                 ret_length, length);
     return sizeof(*hdr) + ret_length;
