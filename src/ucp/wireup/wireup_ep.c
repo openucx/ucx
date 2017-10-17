@@ -161,9 +161,10 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
             goto out;
         }
 
-        wireup_msg_ep                 = ucp_wireup_ep_get_msg_ep(wireup_ep);
-        proxy_req->send.uct.func      = ucp_wireup_ep_progress_pending;
-        proxy_req->send.proxy.req     = req;
+        wireup_msg_ep = ucp_wireup_ep_get_msg_ep(wireup_ep);
+
+        proxy_req->send.uct.func            = ucp_wireup_ep_progress_pending;
+        proxy_req->send.proxy.req           = req;
         proxy_req->send.proxy.wireup_ep     = wireup_ep;
         proxy_req->send.state.uct_comp.func = NULL;
 
