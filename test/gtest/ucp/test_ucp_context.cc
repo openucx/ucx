@@ -52,8 +52,6 @@ UCS_TEST_P(test_ucp_context, minimal_field_mask) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_context, all, "all")
 
 class test_ucp_aliases : public test_ucp_context {
-public:
-    using test_ucp_context::get_ctx_params;
 };
 
 UCS_TEST_P(test_ucp_aliases, aliases) {
@@ -69,8 +67,6 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, shm, "shm")
 
 
 class test_ucp_version : public test_ucp_context {
-public:
-    using test_ucp_context::get_ctx_params;
 };
 
 UCS_TEST_P(test_ucp_version, wrong_api_version) {

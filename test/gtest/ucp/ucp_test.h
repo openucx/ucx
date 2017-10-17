@@ -73,6 +73,8 @@ public:
 
         int get_num_workers() const;
 
+        void warn_existing_eps() const;
+
         void cleanup();
 
         static void ep_destructor(ucp_ep_h ep, entity *e);
