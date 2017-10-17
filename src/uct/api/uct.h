@@ -232,6 +232,9 @@ typedef struct uct_tl_resource_desc {
 #define UCT_IFACE_FLAG_TAG_EAGER_BCOPY UCS_BIT(51) /**< Hardware tag matching bcopy eager support */
 #define UCT_IFACE_FLAG_TAG_EAGER_ZCOPY UCS_BIT(52) /**< Hardware tag matching zcopy eager support */
 #define UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  UCS_BIT(53) /**< Hardware tag matching rendezvous zcopy support */
+
+        /* Memory-related capabilities */
+#define UCT_IFACE_FLAG_REG        UCS_BIT(54) /**< Per-endpoint memory layout registration support */
 /**
  * @}
  */
@@ -531,6 +534,14 @@ struct uct_iface_attr {
                                               @ref uct_ep_tag_rndv_zcopy */
             } rndv;                      /**< Attributes related to rendezvous protocol */
         } tag;                           /**< Attributes for TAG operations */
+
+        struct {
+            size_t           max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref uct_ep_mem_reg */
+            size_t           max_dim;    /**< Maximal dimension for a strided memory
+                                              layout with @ref uct_iov_t */
+            size_t           max_indirect; /**< Maximal nesting level of memory keys */
+        } mem;
 
         uint64_t             flags;      /**< Flags from @ref UCT_RESOURCE_IFACE_CAP */
     } cap;                               /**< Interface capabilities */
@@ -1836,6 +1847,53 @@ UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id,
     return ep->iface->ops.ep_am_zcopy(ep, id, header, header_length, iov, iovcnt,
                                       flags, comp);
 }
+
+
+/**
+ * @ingroup UCT_AM
+ * @brief Register a memory layout for transfers over this endpoint.
+ *
+ * The input data in @a iov array of @ref ::uct_iov_t structures describes a
+ * memory layout to be registered with this endpoint. Unless the function returns
+ * with an error, subsequent calls to send or recieve operations with this endpoint
+ * may use the resulting handle in @a memh_p to operate on data with that layout.
+ * This function requires @ref UCT_IFACE_FLAG_REG . Once the registration
+ * is complete - any endpoint in the same domain can use the resulting memory handle.
+ *
+ * The layout is composed of one or more @ref ::uct_iov_t objects. For example,
+ * a simple contiguous buffer would be a single object containing a pointer to
+ * the buffer and its length (count is 1, and the rest of the fields are zero).
+ * For a complex memory layout, such as two interleaved vectors, the function
+ * should accept two objects, one for each vector, each set with the stride between
+ * two items, the length of an item, their amount and the interleaving ratio:
+ * how many of items from a vector to put before moving to the next vector (for
+ * a pattern of AABAABAAB... the interleaving ratio is 2 for vector A and 1 for B).
+ *
+ * The user must destroy the handle by calling @ref uct_md_mem_free ,
+ * which can be done regardless of completion of the registration (this call must
+ * return, but there is no need to wait for or even specify a completion callback).
+ *
+ * @param [in]  ep           Destination endpoint handle.
+ * @param [in]  iov          Points to an array of @ref ::uct_iov_t structures.
+ *                           The @a iov pointer must be valid address of an array
+ *                           of @ref ::uct_iov_t structures. A particular structure
+ *                           pointer must be valid address. NULL terminated pointer
+ *                           is not required.
+ * @param [in]  iovcnt       Size of the @a iov data @ref ::uct_iov_t structures
+ *                           array. If @a iovcnt is zero, the data is considered empty.
+ *                           @a iovcnt is limited by @ref uct_iface_attr_cap_mem_max_iov
+ *                           "uct_iface_attr::cap::mem::max_iov"
+ * @param [out] memh_p       Filled with handle for allocated region.
+ * @param [in]  comp         Completion handle as defined by @ref ::uct_completion_t.
+ *
+ */
+UCT_INLINE_API ucs_status_t uct_ep_mem_reg(uct_ep_h ep, const uct_iov_t *iov,
+                                           size_t iovcnt, uct_mem_h *memh_p,
+                                           uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_mem_reg(ep, iov, iovcnt, memh_p, comp);
+}
+
 
 /**
  * @ingroup UCT_AMO
