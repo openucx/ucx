@@ -48,9 +48,10 @@ ucp_stream_send_req(ucp_request_t *req, size_t count,
     size_t zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config,
                                                         count, SIZE_MAX);
     size_t seg_size     = msg_config->max_bcopy - proto->only_hdr_size;
-    ucs_status_t status = ucp_request_send_start(req, msg_config->max_short,
-                                                 zcopy_thresh, seg_size,
-                                                 SIZE_MAX, proto);
+    ssize_t max_short   = ucp_proto_get_short_max(req, msg_config);
+
+    ucs_status_t status = ucp_request_send_start(req, max_short, zcopy_thresh,
+                                                 seg_size, SIZE_MAX, proto);
     if (status != UCS_OK) {
         return UCS_STATUS_PTR(status);
     }
