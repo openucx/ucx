@@ -36,6 +36,7 @@ typedef enum {
     UCX_PERF_CMD_SWAP,
     UCX_PERF_CMD_CSWAP,
     UCX_PERF_CMD_TAG,
+    UCX_PERF_CMD_STREAM,
     UCX_PERF_CMD_LAST
 } ucx_perf_cmd_t;
 
@@ -77,7 +78,8 @@ enum ucx_perf_test_flags {
     UCX_PERF_TEST_FLAG_MAP_NONBLOCK = UCS_BIT(3), /* Map memory in non-blocking mode */
     UCX_PERF_TEST_FLAG_TAG_WILDCARD = UCS_BIT(4), /* For tag tests, use wildcard mask */
     UCX_PERF_TEST_FLAG_TAG_SYNC     = UCS_BIT(5), /* For tag tests, use sync send */
-    UCX_PERF_TEST_FLAG_VERBOSE      = UCS_BIT(7)  /* Print error messages */
+    UCX_PERF_TEST_FLAG_VERBOSE      = UCS_BIT(7), /* Print error messages */
+    UCX_PERF_TEST_FLAG_STREAM_RECV_DATA = UCS_BIT(8)  /* For stream tests, use recv data API */
 };
 
 enum {
