@@ -152,6 +152,10 @@ struct ucp_request {
 
             };
 
+            /* This structure holds all mutable fields, and everything else
+             * except common send/recv fields 'status' and 'flags' is
+             * immutable
+             * TODO: rework RMA case where length is used instead of dt.offset */
             struct {
                 ucp_dt_state_t    dt;       /* Position in the send buffer */
                 uct_completion_t  uct_comp; /* UCT completion */
