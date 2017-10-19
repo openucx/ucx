@@ -314,6 +314,8 @@ UCS_TEST_P(test_ud, tx_window2) {
 UCS_TEST_P(test_ud, ack_req_single) {
 
     connect();
+    disable_async(m_e1);
+    disable_async(m_e2);
     set_tx_win(m_e1, 2);
     ack_req_tx_cnt = 0;
     tx_ack_psn = 0;
