@@ -195,18 +195,6 @@ libuct_la_SOURCES += \
     ugni/smsg/ugni_smsg_ep.c
 endif
 
-if HAVE_CUDA
-noinst_HEADERS += \
-    cuda/cuda_md.h \
-    cuda/cuda_iface.h \
-    cuda/cuda_ep.h
-
-libuct_la_SOURCES += \
-    cuda/cuda_md.c \
-    cuda/cuda_iface.c \
-    cuda/cuda_ep.c
-endif
-
 if HAVE_ROCM
 noinst_HEADERS += \
     rocm/rocm_cma_md.h \
