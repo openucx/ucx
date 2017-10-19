@@ -129,7 +129,6 @@ AS_IF([test "x$with_docs_only" == xyes],
      AM_CONDITIONAL([HAVE_MPIRUN], [false])
      AM_CONDITIONAL([HAVE_MPICC], [false])
      AM_CONDITIONAL([HAVE_PROFILING], [false])
-     AM_CONDITIONAL([HAVE_UCM_PTMALLOC283], [false])
      AM_CONDITIONAL([HAVE_UCM_PTMALLOC286], [false])
     ],
     [
