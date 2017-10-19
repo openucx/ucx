@@ -142,6 +142,9 @@ test_type_t tests[] = {
     {"stream_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "UCP stream bandwidth"},
 
+    {"stream_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_PINGPONG,
+     "UCP stream latency"},
+
      {NULL}
 };
 

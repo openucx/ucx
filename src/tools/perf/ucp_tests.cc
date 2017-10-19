@@ -267,22 +267,7 @@ public:
             }
         case UCX_PERF_CMD_STREAM:
             if (FLAGS & UCX_PERF_TEST_FLAG_STREAM_RECV_DATA) {
-                void *data;
-                size_t data_length;
-                size_t total = 0;
-                do {
-                    progress_responder();
-                    data = ucp_stream_recv_data_nb(hndl.get_ep(),
-                                                   &data_length);
-                    if (ucs_likely(UCS_PTR_IS_PTR(data))) {
-                        if (m_perf.params.flags & UCX_PERF_TEST_FLAG_VALIDATE) {
-                            memcpy((uint8_t *)buffer + total, data, data_length);
-                        }
-                        total += data_length;
-                        ucp_stream_data_release(hndl.get_ep(), data);
-                    }
-                } while ((total < length) && !UCS_PTR_IS_ERR(data));
-                return UCS_PTR_IS_PTR(data) ? UCS_OK : UCS_PTR_STATUS(data);
+                return recv_stream_data(hndl.get_ep(), length, datatype, sn);
             }
             return UCS_ERR_INVALID_PARAM;
         default:
@@ -430,6 +415,26 @@ public:
     }
 
 private:
+    ucs_status_t UCS_F_ALWAYS_INLINE
+    recv_stream_data(ucp_ep_h ep, unsigned length, ucp_datatype_t datatype,
+                     uint8_t sn)
+    {
+        void *data;
+        size_t data_length;
+        size_t total = 0;
+
+        do {
+            progress_responder();
+            data = ucp_stream_recv_data_nb(ep, &data_length);
+            if (ucs_likely(UCS_PTR_IS_PTR(data))) {
+                total += data_length;
+                ucp_stream_data_release(ep, data);
+            }
+        } while ((total < length) && !UCS_PTR_IS_ERR(data));
+
+        return UCS_PTR_IS_PTR(data) ? UCS_OK : UCS_PTR_STATUS(data);
+    }
+
     void UCS_F_ALWAYS_INLINE send_started()
     {
         ++m_outstanding;
@@ -497,7 +502,8 @@ ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
         );
 
     UCS_PP_FOREACH(TEST_CASE_ALL_STREAM, perf,
-        (UCX_PERF_CMD_STREAM,   UCX_PERF_TEST_TYPE_STREAM_UNI)
+        (UCX_PERF_CMD_STREAM,   UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_STREAM,   UCX_PERF_TEST_TYPE_PINGPONG)
         );
 
     ucs_error("Invalid test case");
