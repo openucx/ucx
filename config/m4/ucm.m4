@@ -24,16 +24,11 @@ AS_IF([test "x$enable_symbol_override" == xyes],
 AC_ARG_WITH([allocator],
     [AC_HELP_STRING([--with-allocator=NAME],
         [Build UCX with predefined memory allocator. The supported values are:
-         ptmalloc283, ptmalloc286. Default: ptmalloc286])],
+         ptmalloc286. Default: ptmalloc286])],
         [],
         [with_allocator=ptmalloc286])
 
 case ${with_allocator} in
-    ptmalloc283)
-        AC_MSG_NOTICE(Memory allocator is ptmalloc-2.8.3 version)
-        AC_DEFINE([HAVE_UCM_PTMALLOC283], 1, [Use ptmalloc-2.8.3 version])
-        HAVE_UCM_PTMALLOC283=yes
-        ;;
     ptmalloc286)
         AC_MSG_NOTICE(Memory allocator is ptmalloc-2.8.6 version)
         AC_DEFINE([HAVE_UCM_PTMALLOC286], 1, [Use ptmalloc-2.8.6 version])
@@ -45,6 +40,5 @@ case ${with_allocator} in
         ;;
 esac
 
-AM_CONDITIONAL([HAVE_UCM_PTMALLOC283],[test "x$HAVE_UCM_PTMALLOC283" = "xyes"])
 AM_CONDITIONAL([HAVE_UCM_PTMALLOC286],[test "x$HAVE_UCM_PTMALLOC286" = "xyes"])
 
