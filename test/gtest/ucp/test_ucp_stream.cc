@@ -56,16 +56,18 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 
         switch (datatype & UCP_DATATYPE_CLASS_MASK) {
         case UCP_DATATYPE_CONTIG:
-            buf = tmp;
+            buf   = tmp;
             count = i;
             break;
         case UCP_DATATYPE_IOV:
-            buf = iov_;
+            buf   = iov_;
             count = iov_cnt_;
             break;
         }
 
-        ASSERT_TRUE(buf && count);
+        ASSERT_TRUE(buf   != NULL);
+        ASSERT_TRUE(count != 0);
+
         sstatus = stream_send_nb(buf, count, datatype);
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
         wait(sstatus);
