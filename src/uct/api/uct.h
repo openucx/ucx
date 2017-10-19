@@ -390,7 +390,7 @@ enum {
  * @brief  Memory types
  */
 typedef enum {
-    UCT_MD_MEM_TYPE_DEFAULT = 0,   /**< Default system memory */
+    UCT_MD_MEM_TYPE_HOST = 0,      /**< Default system memory */
     UCT_MD_MEM_TYPE_CUDA,          /**< NVIDIA CUDA memory */
     UCT_MD_MEM_TYPE_LAST
 } uct_memory_type_t;
@@ -643,7 +643,8 @@ struct uct_md_attr {
         size_t               max_alloc; /**< Maximal allocation size */
         size_t               max_reg;   /**< Maximal registration size */
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
-        uct_memory_type_t    mem_type;  /**< Supported memory type */
+        uint64_t             mem_type_reg_flags; /** UCS_BIT(uct_memory_type_t) */
+        uct_memory_type_t    mem_type;  /**< Supported(owned) memory type */
     } cap;
 
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost estimation
@@ -1429,15 +1430,16 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
 
 /**
  * @ingroup UCT_MD
- * @brief Detect memory type.
+ * @brief Check if memory type is owned by MD
  *
- *  Detect memory type.
+ *  Check memory type.
  *  Return UCS_OK if address belongs to MD's supported memory type
  *
  * @param [in]     md        Memory domain to detect if memory belongs to.
  * @param [in]     address   Memory address to detect.
+ * @param [in]     length    Size of memory
  */
-ucs_status_t uct_md_mem_type_detect(uct_md_h md, void *addr);
+ucs_status_t uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length);
 
 /**
  * @ingroup UCT_MD

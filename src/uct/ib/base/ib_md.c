@@ -158,7 +158,9 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
                              UCT_MD_FLAG_NEED_MEMH |
                              UCT_MD_FLAG_NEED_RKEY |
                              UCT_MD_FLAG_ADVISE;
-    md_attr->cap.mem_type   = UCT_MD_MEM_TYPE_DEFAULT;
+    md_attr->cap.mem_type_reg_flags = UCS_BIT(UCT_MD_MEM_TYPE_HOST) |
+                                      UCS_BIT(UCT_MD_MEM_TYPE_CUDA);
+    md_attr->cap.mem_type  = UCT_MD_MEM_TYPE_HOST;
     md_attr->rkey_packed_size = sizeof(uint64_t);
 
     if (md->config.enable_contig_pages &&
@@ -870,7 +872,7 @@ static uct_md_ops_t uct_ib_md_ops = {
     .mem_dereg    = uct_ib_mem_dereg,
     .mem_advise   = uct_ib_mem_advise,
     .mkey_pack    = uct_ib_mkey_pack,
-    .mem_type_detect   = ucs_empty_function_return_unsupported,
+    .is_mem_type_owned   = ucs_empty_function_return_unsupported,
 };
 
 static inline uct_ib_rcache_region_t* uct_ib_rache_region_from_memh(uct_mem_h memh)
