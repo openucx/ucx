@@ -4,6 +4,7 @@
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015-2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -13,6 +14,10 @@
 #include <string.h>
 #include <malloc.h>
 #include <unistd.h>
+
+#ifdef HAVE_ROCM
+#include "libperf_rocm.h"
+#endif
 
 
 typedef struct {
@@ -108,6 +113,94 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
                     UCT_MD_MEM_FLAG_NONBLOCK : 0;
     flags |= UCT_MD_MEM_ACCESS_ALL;
 
+#if HAVE_ROCM
+    if (params->use_rocm) {
+        uct_md_attr_t md_attr;
+        perf->use_rocm = 0;
+
+        status = rocm_init(params);
+
+        if (status != UCS_OK)
+            goto err;
+
+        status = uct_md_query(perf->uct.md, &md_attr);
+
+        if (status != UCS_OK)
+            goto err;
+
+        if (!(md_attr.cap.flags & UCT_MD_FLAG_REG)) {
+            ucs_error("ROCm md does not support registration");
+            status = UCS_ERR_NO_MEMORY;
+            goto err;
+        }
+
+        perf->uct.send_mem.method = UCT_ALLOC_METHOD_LAST;
+        perf->uct.recv_mem.method = UCT_ALLOC_METHOD_LAST;
+
+        perf->send_buffer = rocm_allocate_transfer_buffer(params, buffer_size);
+
+        if (NULL == perf->send_buffer) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err;
+        }
+
+        /* Register allocated send buffer memory  */
+        status = uct_md_mem_reg(perf->uct.md, perf->send_buffer,
+                                buffer_size,
+                                flags, &perf->uct.send_mem.memh);
+
+        if (status != UCS_OK) {
+            rocm_free_transfer_buffer(perf->send_buffer);
+            goto err;
+        }
+
+        perf->recv_buffer = rocm_allocate_transfer_buffer(params, buffer_size);
+
+        if (NULL == perf->recv_buffer) {
+            status = UCS_ERR_NO_MEMORY;
+            uct_md_mem_dereg(perf->uct.md, perf->uct.send_mem.memh);
+            rocm_free_transfer_buffer(perf->send_buffer);
+            goto err;
+        }
+
+        /* Register allocated receiver buffer memory */
+        status = uct_md_mem_reg(perf->uct.md, perf->recv_buffer,
+                                buffer_size,
+                                flags, &perf->uct.recv_mem.memh);
+
+        if (status != UCS_OK) {
+            uct_md_mem_dereg(perf->uct.md, perf->uct.send_mem.memh);
+            rocm_free_transfer_buffer(perf->send_buffer);
+            rocm_free_transfer_buffer(perf->recv_buffer);
+            goto err;
+        }
+
+        /* Allocate IOV datatype memory */
+        perf->params.msg_size_cnt = params->msg_size_cnt;
+        perf->uct.iov             = malloc(sizeof(*perf->uct.iov) *
+                                           perf->params.msg_size_cnt *
+                                           params->thread_count);
+        if (NULL == perf->uct.iov) {
+            status = UCS_ERR_NO_MEMORY;
+            ucs_error("Failed allocate send IOV(%lu) buffer: %s",
+                      perf->params.msg_size_cnt, ucs_status_string(status));
+
+            uct_md_mem_dereg(perf->uct.md, perf->uct.send_mem.memh);
+            uct_md_mem_dereg(perf->uct.md, perf->uct.recv_mem.memh);
+            rocm_free_transfer_buffer(perf->send_buffer);
+            rocm_free_transfer_buffer(perf->recv_buffer);
+            goto err;
+        }
+
+        perf->offset   = 0;
+        /* Set flag that all allocations were done via ROCm */
+        perf->use_rocm = 1;
+        return UCS_OK;
+    }
+    else
+        perf->use_rocm = 0;
+#endif
+
     /* Allocate send buffer memory */
     status = uct_iface_mem_alloc(perf->uct.iface, 
                                  buffer_size * params->thread_count,
@@ -158,6 +251,16 @@ err:
 
 static void uct_perf_test_free_mem(ucx_perf_context_t *perf)
 {
+#if HAVE_ROCM
+    if (perf->use_rocm) {
+        rocm_free_transfer_buffer(perf->send_buffer);
+        rocm_free_transfer_buffer(perf->recv_buffer);
+        free(perf->uct.iov);
+        rocm_shutdown();
+        return;
+    }
+#endif
+
     uct_iface_mem_free(&perf->uct.send_mem);
     uct_iface_mem_free(&perf->uct.recv_mem);
     free(perf->uct.iov);

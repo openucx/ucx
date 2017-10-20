@@ -2,6 +2,7 @@
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -72,6 +73,10 @@ struct ucx_perf_context {
             ucp_dt_iov_t         *recv_iov;
         } ucp;
     };
+
+#if HAVE_ROCM
+    int                          use_rocm;
+#endif    
 };
 
 

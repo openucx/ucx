@@ -4,6 +4,7 @@
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2017. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -35,18 +36,22 @@ noinst_HEADERS = \
 	libperf_int.h
 libucxperf_la_SOURCES = \
 	libperf.c \
+	libperf_rocm.c \
 	uct_tests.cc \
 	ucp_tests.cc
+
 libucxperf_la_LDFLAGS = \
 	$(RTE_LDFLAGS) \
-	$(OPENMP_CFLAGS)
+	$(OPENMP_CFLAGS) \
+	$(ROCM_LDFLAGS)
 libucxperf_la_CXXFLAGS = \
 	-nostdlib -fno-exceptions -fno-rtti \
 	$(BASE_CXXFLAGS) \
 	$(OPENMP_CFLAGS)
 libucxperf_la_CFLAGS = \
 	$(BASE_CFLAGS) \
-	$(OPENMP_CFLAGS)
+	$(OPENMP_CFLAGS) \
+	$(ROCM_LDFLAGS)
 libucxperf_la_LIBADD = \
 	$(abs_top_builddir)/src/uct/libuct.la \
 	$(abs_top_builddir)/src/ucp/libucp.la \
@@ -56,9 +61,11 @@ libucxperf_la_LIBADD = \
 ucx_perftest_SOURCES  = perftest.c
 ucx_perftest_LDFLAGS    = \
      $(RTE_LDFLAGS) \
-     $(OPENMP_CFLAGS)
+     $(OPENMP_CFLAGS) \
+     $(ROCM_LDFLAGS)
 ucx_perftest_CFLAGS   = \
-     $(OPENMP_CFLAGS)
+     $(OPENMP_CFLAGS) \
+     $(ROCM_CFLAGS)
 ucx_perftest_LDADD    = \
      $(abs_top_builddir)/src/uct/libuct.la \
      $(abs_top_builddir)/src/ucp/libucp.la \

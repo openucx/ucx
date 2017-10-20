@@ -3,6 +3,7 @@
 * Copyright (C) The University of Tennessee and The University 
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -78,7 +79,11 @@ struct perftest_context {
     sock_rte_group_t             sock_rte_group;
 };
 
+#if HAVE_ROCM
+#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oSCqM:T:d:x:A:BR:"
+#else
 #define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oSCqM:T:d:x:A:B"
+#endif
 
 
 test_type_t tests[] = {
@@ -375,6 +380,9 @@ static void usage(struct perftest_context *ctx, const char *program)
 #if HAVE_MPI
     printf("     -P <0|1>       Disable/enable MPI mode (%d)\n", ctx->mpi);
 #endif
+#if HAVE_ROCM
+    printf("     -R <agent,pool> Use HSA global memory pool for agent (0-based)\n");
+#endif
     printf("     -h             Show this help message.\n");
     printf("\n");
 }
@@ -474,6 +482,13 @@ static void init_test_params(ucx_perf_params_t *params)
     params->msg_size_list    = malloc(sizeof(*params->msg_size_list) *
                                       params->msg_size_cnt);
     params->msg_size_list[0] = 8;
+
+#ifdef HAVE_ROCM
+    params->hsa_agent_index = -1;
+    params->hsa_pool_index  = -1;
+    params->use_rocm        = 0;
+#endif
+
 }
 
 static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const char *optarg)
@@ -593,6 +608,35 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
             ucs_error("Invalid option argument for -A");
             return UCS_ERR_INVALID_PARAM;
         }
+#ifdef HAVE_ROCM
+    case 'R': {
+        char *pt;
+        char *s = strdup(optarg);
+        if (!s) {
+            ucs_error("Out of memory");
+            return UCS_ERR_NO_MEMORY;
+        }
+        pt = strtok(s,",");
+        if (!pt) {
+            ucs_error("Invalid agent/region information");
+            free(s);
+            return UCS_ERR_INVALID_PARAM;
+        }
+        params->hsa_agent_index = strtoul(pt,NULL,0);
+
+        pt = strtok(NULL, ",");
+        if (!pt) {
+            ucs_error("Invalid agent/region information");
+            free(s);
+            return UCS_ERR_INVALID_PARAM;
+        }
+        params->hsa_pool_index = strtoul(pt,NULL,0);
+        free(s);
+        params->use_rocm = 1;
+
+        return UCS_OK;
+    }
+#endif
     default:
        return UCS_ERR_INVALID_PARAM;
     }
