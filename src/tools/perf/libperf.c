@@ -728,6 +728,11 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
         ucp_params->field_mask  |= UCP_PARAM_FIELD_REQUEST_SIZE;
         ucp_params->request_size = sizeof(ucp_perf_request_t);
         break;
+    case UCX_PERF_CMD_STREAM:
+        ucp_params->features    |= UCP_FEATURE_STREAM;
+        ucp_params->field_mask  |= UCP_PARAM_FIELD_REQUEST_SIZE;
+        ucp_params->request_size = sizeof(ucp_perf_request_t);
+        break;
     default:
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Invalid test command");

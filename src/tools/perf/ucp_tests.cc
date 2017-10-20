@@ -18,6 +18,29 @@ extern "C" {
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
 class ucp_perf_test_runner {
+
+    struct recv_handle {
+        recv_handle(ucp_worker_h worker, ucp_ep_h ep) :
+            m_worker(worker),
+            m_ep(ep)
+        {
+        }
+
+        ucp_worker_h get_worker() const
+        {
+            return m_worker;
+        }
+
+        ucp_ep_h get_ep() const
+        {
+            return m_ep;
+        }
+
+    private:
+        ucp_worker_h    m_worker;
+        ucp_ep_h        m_ep;
+    };
+
 public:
     static const ucp_tag_t TAG      = 0x1337a880u;
     static const ucp_tag_t TAG_MASK = (FLAGS & UCX_PERF_TEST_FLAG_TAG_WILDCARD) ? 0 : -1;
@@ -186,14 +209,24 @@ public:
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
+        case UCX_PERF_CMD_STREAM:
+            wait_window(1);
+            request = ucp_stream_send_nb(ep, buffer, length, datatype,
+                                         send_cb, 0);
+            if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
+                return UCS_PTR_STATUS(request);
+            }
+            reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
+            send_started();
+            return UCS_OK;
         default:
             return UCS_ERR_INVALID_PARAM;
         }
     }
 
     ucs_status_t UCS_F_ALWAYS_INLINE
-    recv(ucp_worker_h worker, void *buffer, unsigned length, ucp_datatype_t datatype,
-         uint8_t sn)
+    recv(const recv_handle &hndl, void *buffer, unsigned length,
+         ucp_datatype_t datatype, uint8_t sn)
     {
         volatile uint8_t *ptr;
         void *request;
@@ -201,7 +234,8 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
-            request = ucp_tag_recv_nb(worker, buffer, length, datatype, TAG, TAG_MASK,
+            request = ucp_tag_recv_nb(hndl.get_worker(), buffer, length,
+                                      datatype, TAG, TAG_MASK,
                                       (ucp_tag_recv_callback_t)ucs_empty_function);
             return wait(request, false);
         case UCX_PERF_CMD_PUT:
@@ -231,6 +265,11 @@ public:
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
+        case UCX_PERF_CMD_STREAM:
+            if (FLAGS & UCX_PERF_TEST_FLAG_STREAM_RECV_DATA) {
+                return recv_stream_data(hndl.get_ep(), length, datatype, sn);
+            }
+            return UCS_ERR_INVALID_PARAM;
         default:
             return UCS_ERR_INVALID_PARAM;
         }
@@ -276,17 +315,18 @@ public:
         recv_datatype = ucp_perf_test_get_datatype(m_perf.params.ucp.recv_datatype,
                                                    m_perf.ucp.recv_iov, &recv_length,
                                                    &recv_buffer);
+        recv_handle recv_hndl(worker, ep);
 
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 send(ep, send_buffer, send_length, send_datatype, sn, remote_addr, rkey);
-                recv(worker, recv_buffer, recv_length, recv_datatype, sn);
+                recv(recv_hndl, recv_buffer, recv_length, recv_datatype, sn);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                recv(worker, recv_buffer, recv_length, recv_datatype, sn);
+                recv(recv_hndl, recv_buffer, recv_length, recv_datatype, sn);
                 send(ep, send_buffer, send_length, send_datatype, sn, remote_addr, rkey);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
@@ -339,14 +379,16 @@ public:
                                                    &recv_buffer);
 
         if (my_index == 0) {
+            recv_handle recv_hndl(worker, ep);
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                recv(worker, recv_buffer, recv_length, recv_datatype, sn);
+                recv(recv_hndl, recv_buffer, recv_length, recv_datatype, sn);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                send(ep, send_buffer, send_length, send_datatype, sn, remote_addr, rkey);
+                send(ep, send_buffer, send_length, send_datatype, sn,
+                     remote_addr, rkey);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
@@ -373,6 +415,26 @@ public:
     }
 
 private:
+    ucs_status_t UCS_F_ALWAYS_INLINE
+    recv_stream_data(ucp_ep_h ep, unsigned length, ucp_datatype_t datatype,
+                     uint8_t sn)
+    {
+        void *data;
+        size_t data_length;
+        size_t total = 0;
+
+        do {
+            progress_responder();
+            data = ucp_stream_recv_data_nb(ep, &data_length);
+            if (ucs_likely(UCS_PTR_IS_PTR(data))) {
+                total += data_length;
+                ucp_stream_data_release(ep, data);
+            }
+        } while ((total < length) && !UCS_PTR_IS_ERR(data));
+
+        return UCS_PTR_IS_PTR(data) ? UCS_OK : UCS_PTR_STATUS(data);
+    }
+
     void UCS_F_ALWAYS_INLINE send_started()
     {
         ++m_outstanding;
@@ -397,6 +459,11 @@ private:
         ucp_perf_test_runner<_cmd, _type, _flags> r(*_perf); \
         return r.run(); \
     }
+
+#define TEST_CASE_ALL_STREAM(_perf, _case) \
+    TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
+              UCX_PERF_TEST_FLAG_STREAM_RECV_DATA, \
+              UCX_PERF_TEST_FLAG_STREAM_RECV_DATA)
 
 #define TEST_CASE_ALL_TAG(_perf, _case) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
@@ -432,6 +499,11 @@ ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
     UCS_PP_FOREACH(TEST_CASE_ALL_TAG, perf,
         (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_PINGPONG),
         (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_STREAM_UNI)
+        );
+
+    UCS_PP_FOREACH(TEST_CASE_ALL_STREAM, perf,
+        (UCX_PERF_CMD_STREAM,   UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_STREAM,   UCX_PERF_TEST_TYPE_PINGPONG)
         );
 
     ucs_error("Invalid test case");

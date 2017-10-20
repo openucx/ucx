@@ -139,7 +139,13 @@ test_type_t tests[] = {
     {"ucp_cswap", UCX_PERF_API_UCP, UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "UCP atomic compare-and-swap latency / bandwidth / message rate"},
 
-    {NULL}
+    {"stream_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "UCP stream bandwidth"},
+
+    {"stream_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_PINGPONG,
+     "UCP stream latency"},
+
+     {NULL}
 };
 
 static int safe_send(int sock, void *data, size_t size)
@@ -474,6 +480,10 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
 {
     test_type_t *test;
     char *optarg2 = NULL;
+
+    /* TODO: currently, UCP supports only ucp_stream_recv_data_nb path,
+     *       add option when ucp_stream_recv_nb is implemented */
+    params->flags |= UCX_PERF_TEST_FLAG_STREAM_RECV_DATA;
 
     switch (opt) {
     case 'd':
