@@ -30,12 +30,12 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb,
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
-    if (ucs_queue_is_empty(&ep->stream_data)) {
+    if (ucs_queue_is_empty(&ep->ext.stream->data)) {
         ret = UCS_STATUS_PTR(UCS_OK);
         goto out;
     }
 
-    rdesc = ucs_queue_pull_elem_non_empty(&ep->stream_data, ucp_recv_desc_t,
+    rdesc = ucs_queue_pull_elem_non_empty(&ep->ext.stream->data, ucp_recv_desc_t,
                                           stream_queue);
     *length = rdesc->length;
     ret = ucp_stream_rdesc_data(rdesc);
@@ -103,7 +103,7 @@ ucp_stream_am_handler(void *arg, void *data, size_t length, unsigned am_flags)
     hash_it = kh_get(ucp_worker_ep_hash, &worker->ep_hash, hdr->sender_uuid);
     if (ucs_likely(hash_it != kh_end(&worker->ep_hash))) {
         ep = kh_value(&worker->ep_hash, hash_it);
-        ucs_queue_push(&ep->stream_data, &rdesc->stream_queue);
+        ucs_queue_push(&ep->ext.stream->data, &rdesc->stream_queue);
     } else {
         ucs_error("ep is not found by uuid: %lu", hdr->sender_uuid);
         status = UCS_OK;

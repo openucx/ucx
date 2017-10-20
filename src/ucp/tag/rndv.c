@@ -183,7 +183,7 @@ static void ucp_rndv_complete_rndv_get(ucp_request_t *rndv_req)
     ucs_trace_data("ep: %p rndv get completed", rndv_req->send.ep);
 
     UCS_PROFILE_REQUEST_EVENT(rreq, "complete_rndv_get", 0); // TODO
-    ucp_request_complete_recv(rreq, UCS_OK);
+    ucp_request_complete_tag_recv(rreq, UCS_OK);
 
     if (rndv_req->send.rndv_get.rkey_bundle.rkey != UCT_INVALID_RKEY) {
         uct_rkey_release(&rndv_req->send.rndv_get.rkey_bundle);
@@ -202,7 +202,7 @@ static ucs_status_t ucp_rndv_truncated(uct_pending_req_t *self)
     /* if the recv request has a generic datatype, need to finish it */
     ucp_request_recv_generic_dt_finish(rreq);
 
-    ucp_request_complete_recv(rreq, UCS_ERR_MESSAGE_TRUNCATED);
+    ucp_request_complete_tag_recv(rreq, UCS_ERR_MESSAGE_TRUNCATED);
     ucp_rndv_send_ats(rndv_req, rndv_req->send.proto.remote_request);
 
     return UCS_OK;
@@ -385,8 +385,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_match", 0);
 
     /* rreq is the receive request on the receiver's side */
-    rreq->recv.info.sender_tag = rndv_rts_hdr->super.tag;
-    rreq->recv.info.length     = rndv_rts_hdr->size;
+    rreq->recv.tag.info.sender_tag = rndv_rts_hdr->super.tag;
+    rreq->recv.tag.info.length     = rndv_rts_hdr->size;
 
     /* the internal send request allocated on receiver side (to perform a "get"
      * operation, send "ATS" and "RTR") */
@@ -753,11 +753,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_last_handler,
                        rreq, recv_len);
 
         /* Check that total received length matches RTS->length */
-        ucs_assert(rreq->recv.info.length == rreq->recv.state.offset + recv_len);
+        ucs_assert(rreq->recv.tag.info.length ==
+                   rreq->recv.state.offset + recv_len);
         UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_data_last_recv", recv_len);
         status = ucp_dt_unpack(rreq->recv.datatype, rreq->recv.buffer,
                                rreq->recv.length, &rreq->recv.state,
-                               data + hdr_len, recv_len, 1);
+                               data + hdr_len, recv_len,
+                               UCP_RECV_DESC_FLAG_LAST);
     } else {
         ucs_trace_data("drop last segment for rreq %p, length %zu, status %s",
                        rreq, recv_len, ucs_status_string(rreq->status));
@@ -765,7 +767,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_last_handler,
         ucp_request_recv_generic_dt_finish(rreq);
     }
 
-    ucp_request_complete_recv(rreq, status);
+    ucp_request_complete_tag_recv(rreq, status);
 
     return UCS_OK;
 }

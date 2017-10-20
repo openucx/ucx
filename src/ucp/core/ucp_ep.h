@@ -31,10 +31,12 @@ enum {
     UCP_EP_FLAG_CONNECT_REQ_QUEUED  = UCS_BIT(2), /* Connection request was queued */
     UCP_EP_FLAG_TAG_OFFLOAD_ENABLED = UCS_BIT(3), /* Endpoint uses tl offload for tag matching */
     UCP_EP_FLAG_FAILED              = UCS_BIT(4), /* EP is in failed state */
+    UCP_EP_FLAG_STREAM_IS_QUEUED    = UCS_BIT(5), /* EP is queued in stream list of worker */
 
-    UCP_EP_FLAG_CONNECT_REQ_SENT    = UCS_BIT(5), /* DEBUG: Connection request was sent */
-    UCP_EP_FLAG_CONNECT_REP_SENT    = UCS_BIT(6), /* DEBUG: Connection reply was sent */
-    UCP_EP_FLAG_CONNECT_ACK_SENT    = UCS_BIT(7)  /* DEBUG: Connection ACK was sent */
+    /* DEBUG bits */
+    UCP_EP_FLAG_CONNECT_REQ_SENT    = UCS_BIT(8), /* DEBUG: Connection request was sent */
+    UCP_EP_FLAG_CONNECT_REP_SENT    = UCS_BIT(9), /* DEBUG: Connection reply was sent */
+    UCP_EP_FLAG_CONNECT_ACK_SENT    = UCS_BIT(10) /* DEBUG: Connection ACK was sent */
 };
 
 
@@ -183,6 +185,25 @@ typedef struct ucp_ep_config {
 
 
 /**
+ * UCP_FEATURE_STREAM specific extention of the remote protocol layer endpoint
+ */
+typedef struct ucp_ep_ext_stream {
+    /* ep which owns the extension */
+    ucp_ep_h                      ucp_ep;
+    /* List entry in worker's EP list */
+    ucs_list_link_t               list;
+    /* Queue of receive requests posted on the EP */
+    ucs_queue_head_t              reqs;
+    /* Queue of receive descriptors with data */
+    ucs_queue_head_t              data;
+    /* Partially handled desc */
+    void                          *rdesc;
+    size_t                        rdesc_len;
+    size_t                        rdesc_offset;
+} ucp_ep_ext_stream_t;
+
+
+/**
  * Remote protocol layer endpoint
  */
 typedef struct ucp_ep {
@@ -190,14 +211,16 @@ typedef struct ucp_ep {
 
     ucp_ep_cfg_index_t            cfg_index;     /* Configuration index */
     ucp_lane_index_t              am_lane;       /* Cached value */
+#if ENABLE_DEBUG_DATA
+    uint16_t                      flags;         /* Endpoint flags */
+#else
     uint8_t                       flags;         /* Endpoint flags */
+#endif
 
     uint64_t                      dest_uuid;     /* Destination worker uuid */
     void                          *user_data;    /* user data associated with
                                                     the endpoint */
 
-    ucs_queue_head_t              stream_data;  /* Queue of receive descriptors
-                                                   with data */
     UCS_STATS_NODE_DECLARE(stats);
 
 #if ENABLE_DEBUG_DATA
@@ -207,6 +230,10 @@ typedef struct ucp_ep {
     /* TODO allocate ep dynamically according to number of lanes */
     uct_ep_h                      uct_eps[UCP_MAX_LANES]; /* Transports for every lane */
 
+    /* Feature specific extentions allocated on demand */
+    struct {
+        ucp_ep_ext_stream_t       *stream;      /* UCP_FEATURE_STREAM */
+    } ext;
 } ucp_ep_t;
 
 

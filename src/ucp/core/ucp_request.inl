@@ -82,18 +82,31 @@ ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_request_complete_recv(ucp_request_t *req, ucs_status_t status)
+ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
 {
     ucs_trace_req("completing receive request %p (%p) "UCP_REQUEST_FLAGS_FMT
                   " stag 0x%"PRIx64" len %zu, %s",
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
-                  req->recv.info.sender_tag, req->recv.info.length,
+                  req->recv.tag.info.sender_tag, req->recv.tag.info.length,
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
     if (req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD) {
         --req->recv.worker->context->tm.offload.sw_req_count;
     }
-    ucp_request_complete(req, recv.cb, status, &req->recv.info);
+    ucp_request_complete(req, recv.tag.cb, status, &req->recv.tag.info);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_complete_stream_recv(ucp_request_t *req, ucs_status_t status)
+{
+    ucs_assert(req->recv.state.offset > 0);
+    req->recv.stream.count = req->recv.state.offset;
+    ucs_trace_req("completing receive request %p (%p) "UCP_REQUEST_FLAGS_FMT
+                  " count %zu, %s",
+                  req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
+                  req->recv.stream.count, ucs_status_string(status));
+    UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
+    ucp_request_complete(req, recv.stream.cb, status, req->recv.stream.count);
 }
 
 /*

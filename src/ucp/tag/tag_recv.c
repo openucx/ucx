@@ -100,7 +100,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
                 req->recv.buffer   = buffer;
                 req->recv.length   = buffer_size;
                 req->recv.datatype = datatype;
-                req->recv.cb       = cb;
+                req->recv.tag.cb   = cb;
                 ucp_rndv_matched(worker, req, (void*)(rdesc + 1));
                 UCP_WORKER_STAT_RNDV(worker, UNEXP);
                 status = UCS_INPROGRESS;
@@ -150,7 +150,7 @@ ucp_tag_recv_request_init(ucp_request_t *req, ucp_worker_h worker, void* buffer,
     }
 
     if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
-        req->recv.info.sender_tag = 0;
+        req->recv.tag.info.sender_tag = 0;
     }
 }
 
@@ -190,13 +190,14 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 
     /* First, search in unexpected list */
     status = ucp_tag_search_unexp(worker, buffer, buffer_size, datatype, tag,
-                                  tag_mask, req, &req->recv.info, cb, rdesc,
+                                  tag_mask, req, &req->recv.tag.info, cb, rdesc,
                                   &save_rreq);
     if (status != UCS_INPROGRESS) {
         if (req_flags & UCP_REQUEST_FLAG_CALLBACK) {
-            cb(req + 1, status, &req->recv.info);
+            cb(req + 1, status, &req->recv.tag.info);
         }
-        ucp_tag_recv_request_completed(req, status, &req->recv.info, debug_name);
+        ucp_tag_recv_request_completed(req, status, &req->recv.tag.info,
+                                       debug_name);
     } else if (save_rreq) {
         /* If not found on unexpected, wait until it arrives.
          * If was found but need this receive request for later completion, save it */
@@ -205,9 +206,9 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->recv.buffer   = buffer;
         req->recv.length   = buffer_size;
         req->recv.datatype = datatype;
-        req->recv.tag      = tag;
-        req->recv.tag_mask = tag_mask;
-        req->recv.cb       = cb;
+        req->recv.tag.tag      = tag;
+        req->recv.tag.tag_mask = tag_mask;
+        req->recv.tag.cb       = cb;
         ucp_tag_exp_push(&context->tm, queue, req);
 
         /* If offload supported, post this tag to transport as well.

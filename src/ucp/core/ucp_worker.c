@@ -1023,6 +1023,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->ep_config_max     = config_count;
     worker->ep_config_count   = 0;
     ucs_list_head_init(&worker->arm_ifaces);
+    ucs_list_head_init(&worker->stream_eps);
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_USER_DATA) {
         worker->user_data = params->user_data;
@@ -1188,6 +1189,31 @@ unsigned ucp_worker_progress(ucp_worker_h worker)
     return count;
 }
 
+ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
+                               ucp_stream_poll_ep_t *poll_eps,
+                               size_t max_eps, unsigned flags)
+{
+    ssize_t count = 0;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+
+    while ((count < max_eps) && !ucs_list_is_empty(&worker->stream_eps)) {
+        struct ucp_ep_ext_stream *ep_stream =
+            ucs_list_extract_head(&worker->stream_eps,
+                                  struct ucp_ep_ext_stream, list);
+        ucp_ep_h ep = ep_stream->ucp_ep;
+        ep->flags &= ~UCP_EP_FLAG_STREAM_IS_QUEUED;
+        poll_eps[count].ep        = ep;
+        poll_eps[count].user_data = ep->user_data;
+        ++count;
+    }
+
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+
+    return count;
+}
+
+
 ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
 {
     ucs_status_t status;
@@ -1201,13 +1227,6 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
     }
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return status;
-}
-
-ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
-                               ucp_stream_poll_ep_t *poll_eps, size_t max_eps,
-                               unsigned flags)
-{
-    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ucs_status_t ucp_worker_arm(ucp_worker_h worker)

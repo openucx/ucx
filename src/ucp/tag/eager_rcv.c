@@ -79,7 +79,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
         /* First fragment fills the receive information */
         if (flags & UCP_RECV_DESC_FLAG_FIRST) {
             UCP_WORKER_STAT_EAGER_MSG(worker, flags);
-            req->recv.info.sender_tag = recv_tag;
+            req->recv.tag.info.sender_tag = recv_tag;
 
             /* Cancel req in transport if it was offloaded,
              * because it arrived either:
@@ -88,15 +88,15 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
             ucp_tag_offload_try_cancel(context, req, 1);
 
             if (flags & UCP_RECV_DESC_FLAG_LAST) {
-                req->recv.info.length = recv_len;
+                req->recv.tag.info.length = recv_len;
             } else {
-                req->recv.info.length = eager_first_hdr->total_len;
+                req->recv.tag.info.length = eager_first_hdr->total_len;
             }
         }
 
         /* Last fragment completes the request */
         if (flags & UCP_RECV_DESC_FLAG_LAST) {
-            ucp_request_complete_recv(req, status);
+            ucp_request_complete_tag_recv(req, status);
         } else {
             req->recv.state.offset += recv_len;
         }

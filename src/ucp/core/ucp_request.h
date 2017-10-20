@@ -36,6 +36,7 @@ enum {
     UCP_REQUEST_FLAG_RNDV                 = UCS_BIT(9),
     UCP_REQUEST_FLAG_OFFLOADED            = UCS_BIT(10),
     UCP_REQUEST_FLAG_BLOCK_OFFLOAD        = UCS_BIT(11),
+    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(12),
 
 #if ENABLE_ASSERT
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(15)
@@ -171,15 +172,25 @@ struct ucp_request {
             void                  *buffer;  /* Buffer to receive data to */
             ucp_datatype_t        datatype; /* Receive type */
             size_t                length;   /* Total length, in bytes */
-            ucp_tag_t             tag;      /* Expected tag */
-            ucp_tag_t             tag_mask; /* Expected tag mask */
-            uint64_t              sn;       /* Tag match sequence */
-            ucp_tag_recv_callback_t cb;     /* Completion callback */
-            ucp_tag_recv_info_t   info;     /* Completion info to fill */
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
             ucp_mem_desc_t        *rdesc;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
+
+            union {
+                struct {
+                    ucp_tag_t             tag;      /* Expected tag */
+                    ucp_tag_t             tag_mask; /* Expected tag mask */
+                    uint64_t              sn;       /* Tag match sequence */
+                    ucp_tag_recv_callback_t cb;     /* Completion callback */
+                    ucp_tag_recv_info_t   info;     /* Completion info to fill */
+                } tag;
+
+                struct {
+                    ucp_stream_recv_callback_t cb;     /* Completion callback */
+                    size_t                     count;  /* Completion info to fill */
+                } stream;
+            };
         } recv;
     };
 };
