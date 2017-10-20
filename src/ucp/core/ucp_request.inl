@@ -149,7 +149,7 @@ void ucp_request_send_generic_dt_finish(ucp_request_t *req)
     if (UCP_DT_IS_GENERIC(req->send.datatype)) {
         dt = ucp_dt_generic(req->send.datatype);
         ucs_assert(NULL != dt);
-        dt->ops.finish(req->send.state.dt.generic.state);
+        dt->ops.finish(req->send.state.dt.dt.generic.state);
     }
 }
 
@@ -170,26 +170,26 @@ ucp_request_send_state_init(ucp_request_t *req, size_t dt_count)
     ucp_dt_generic_t *dt_gen;
     void             *state_gen;
 
-    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.uct_comp.count,
-                                sizeof(req->send.uct_comp.count));
-    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.offset,
-                                sizeof(req->send.state.offset));
+    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.uct_comp.count,
+                                sizeof(req->send.state.uct_comp.count));
+    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.dt.offset,
+                                sizeof(req->send.state.dt.offset));
 
-    req->send.uct_comp.func = NULL;
+    req->send.state.uct_comp.func = NULL;
 
     switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
         return;
     case UCP_DATATYPE_IOV:
-        req->send.state.dt.iov.iovcnt_offset = 0;
-        req->send.state.dt.iov.iov_offset    = 0;
-        req->send.state.dt.iov.iovcnt        = dt_count;
+        req->send.state.dt.dt.iov.iovcnt_offset = 0;
+        req->send.state.dt.dt.iov.iov_offset    = 0;
+        req->send.state.dt.dt.iov.iovcnt        = dt_count;
         return;
     case UCP_DATATYPE_GENERIC:
         dt_gen    = ucp_dt_generic(req->send.datatype);
         state_gen = dt_gen->ops.start_pack(dt_gen->context, req->send.buffer,
                                            dt_count);
-        req->send.state.dt.generic.state = state_gen;
+        req->send.state.dt.dt.generic.state = state_gen;
         return;
     default:
         ucs_fatal("Invalid data type");
@@ -206,15 +206,15 @@ ucp_request_send_state_reset(ucp_request_t *req,
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
         if (UCP_DT_IS_CONTIG(req->send.datatype)) {
-            req->send.state.dt.contig.memh = UCT_MEM_HANDLE_NULL;
+            req->send.state.dt.dt.contig.memh = UCT_MEM_HANDLE_NULL;
         }
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
-        req->send.uct_comp.func       = comp_cb;
-        req->send.uct_comp.count      = 0;
+        req->send.state.uct_comp.func       = comp_cb;
+        req->send.state.uct_comp.count      = 0;
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
-        req->send.state.offset           = 0;
+        req->send.state.dt.offset           = 0;
         break;
     default:
         ucs_fatal("unknown protocol");
@@ -222,7 +222,7 @@ ucp_request_send_state_reset(ucp_request_t *req,
 
     /* offset is not used for RMA */
     ucs_assert((proto == UCP_REQUEST_SEND_PROTO_RMA) ||
-               (req->send.state.offset <= req->send.length));
+               (req->send.state.dt.offset <= req->send.length));
 }
 
 /**
@@ -253,22 +253,22 @@ ucp_request_send_state_advance(ucp_request_t *req,
     switch (proto) {
     case UCP_REQUEST_SEND_PROTO_RMA:
         if (status == UCS_INPROGRESS) {
-            ++req->send.uct_comp.count;
+            ++req->send.state.uct_comp.count;
         }
         break;
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
         if (status == UCS_INPROGRESS) {
-            ++req->send.uct_comp.count;
+            ++req->send.state.uct_comp.count;
         }
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
         ucs_assert(new_dt_state != NULL);
         if (UCP_DT_IS_CONTIG(req->send.datatype)) {
-            req->send.state.offset = new_dt_state->offset;
+            req->send.state.dt.offset = new_dt_state->offset;
         } else {
-            req->send.state        = *new_dt_state;
+            req->send.state.dt        = *new_dt_state;
         }
         break;
     default:
@@ -277,19 +277,19 @@ ucp_request_send_state_advance(ucp_request_t *req,
 
     /* offset is not used for RMA */
     ucs_assert((proto == UCP_REQUEST_SEND_PROTO_RMA) ||
-               (req->send.state.offset <= req->send.length));
+               (req->send.state.dt.offset <= req->send.length));
 }
 
 /* Fast-forward to data end */
 static UCS_F_ALWAYS_INLINE void
 ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
 {
-    if (req->send.uct_comp.func) {
-        req->send.state.offset = req->send.length;
+    if (req->send.state.uct_comp.func) {
+        req->send.state.dt.offset = req->send.length;
         if (status == UCS_ERR_CANCELED) {
-            req->send.uct_comp.count = 0;
+            req->send.state.uct_comp.count = 0;
         }
-        req->send.uct_comp.func(&req->send.uct_comp, status);
+        req->send.state.uct_comp.func(&req->send.state.uct_comp, status);
     } else {
         ucp_request_complete_send(req, status);
     }
@@ -298,7 +298,7 @@ ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
 static UCS_F_ALWAYS_INLINE void
 ucp_request_wait_uct_comp(ucp_request_t *req)
 {
-    while (req->send.uct_comp.count > 0) {
+    while (req->send.state.uct_comp.count > 0) {
         ucp_worker_progress(req->send.ep->worker);
     }
 }

@@ -45,7 +45,7 @@ ucs_status_t ucp_amo_check_send_status(ucp_request_t *req, ucs_status_t status);
         status = _function(ep->uct_eps[req->send.lane], \
                            UCS_PP_TUPLE_BREAK _params, \
                            remote_addr, rkey->cache.amo_rkey, result, \
-                           &req->send.uct_comp); \
+                           &req->send.state.uct_comp); \
         return ucp_amo_check_send_status(req, status); \
     }
 
@@ -143,7 +143,8 @@ ucs_status_t ucp_amo_check_send_status(ucp_request_t *req, ucs_status_t status)
 static void ucp_amo_completed_single(uct_completion_t *self,
                                      ucs_status_t status)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
     ucs_trace("Invoking completion on AMO request %p", req);
     ucp_request_complete_send(req, status);
 }
@@ -253,10 +254,10 @@ static inline void init_amo_req(ucp_request_t *req, ucp_ep_h ep, void *buffer,
                                 ucp_rkey_h rkey, uint64_t value)
 {
     init_amo_common(req, ep, remote_addr, rkey, value);
-    req->send.uct_comp.count  = 1;
-    req->send.uct_comp.func   = ucp_amo_completed_single;
-    req->send.amo.result = buffer;
-    req->send.uct.func   = ucp_amo_select_uct_func(op, op_size);
+    req->send.state.uct_comp.count  = 1;
+    req->send.state.uct_comp.func   = ucp_amo_completed_single;
+    req->send.amo.result            = buffer;
+    req->send.uct.func              = ucp_amo_select_uct_func(op, op_size);
 }
 
 static inline void init_amo_post(ucp_request_t *req, ucp_ep_h ep, ucp_atomic_post_op_t op,

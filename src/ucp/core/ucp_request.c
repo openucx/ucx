@@ -272,7 +272,7 @@ ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req,
 
     return ucp_request_memory_reg(context, req->send.reg_rsc,
                                   (void*)req->send.buffer, req->send.length,
-                                  req->send.datatype, &req->send.state);
+                                  req->send.datatype, &req->send.state.dt);
 }
 
 void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane)
@@ -280,7 +280,7 @@ void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane)
     ucp_context_t *context    = req->send.ep->worker->context;
     ucs_assert(req->send.reg_rsc != UCP_NULL_RESOURCE);
     ucp_request_memory_dereg(context, req->send.reg_rsc, req->send.datatype,
-                             &req->send.state);
+                             &req->send.state.dt);
     req->send.reg_rsc = UCP_NULL_RESOURCE;
 }
 

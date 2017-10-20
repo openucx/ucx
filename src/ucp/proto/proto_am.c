@@ -48,7 +48,7 @@ ucs_status_t ucp_proto_progress_am_bcopy_single(uct_pending_req_t *self)
 
 void ucp_proto_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
-    ucs_assert(req->send.uct_comp.count == 0);
+    ucs_assert(req->send.state.uct_comp.count == 0);
     ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
     ucp_request_complete_send(req, status);
 }
@@ -56,11 +56,12 @@ void ucp_proto_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 void ucp_proto_am_zcopy_completion(uct_completion_t *self,
                                     ucs_status_t status)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
-    if (req->send.state.offset == req->send.length) {
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
+    if (req->send.state.dt.offset == req->send.length) {
         ucp_proto_am_zcopy_req_complete(req, status);
     } else if (status != UCS_OK) {
-        ucs_assert(req->send.uct_comp.count == 0);
+        ucs_assert(req->send.state.uct_comp.count == 0);
         ucs_assert(status != UCS_INPROGRESS);
 
         /* NOTE: the request is in pending queue if data was not completely sent,
@@ -68,6 +69,6 @@ void ucp_proto_am_zcopy_completion(uct_completion_t *self,
          *       pending later.
          */
         ucp_request_send_buffer_dereg(req, req->send.lane);
-        req->send.uct_comp.func = NULL;
+        req->send.state.uct_comp.func = NULL;
     }
 }

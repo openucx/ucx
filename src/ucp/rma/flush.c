@@ -16,7 +16,7 @@ static void ucp_ep_flush_error(ucp_request_t *req, ucs_status_t status)
     }
 
     req->status = status;
-    --req->send.uct_comp.count;
+    --req->send.state.uct_comp.count;
 }
 
 static void ucp_ep_flush_progress(ucp_request_t *req)
@@ -27,7 +27,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     uct_ep_h uct_ep;
 
     ucs_trace("ep %p: progress flush req %p, lanes 0x%x count %d", ep, req,
-              req->send.flush.lanes, req->send.uct_comp.count);
+              req->send.flush.lanes, req->send.state.uct_comp.count);
 
     while (req->send.flush.lanes) {
 
@@ -36,7 +36,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
         uct_ep = ep->uct_eps[lane];
         if (uct_ep == NULL) {
             req->send.flush.lanes &= ~UCS_BIT(lane);
-            --req->send.uct_comp.count;
+            --req->send.state.uct_comp.count;
             continue;
         }
 
@@ -46,12 +46,12 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                                  UCS_STATUS_PTR(UCS_ERR_CANCELED));
         }
         status = uct_ep_flush(uct_ep, req->send.flush.uct_flags,
-                              &req->send.uct_comp);
+                              &req->send.state.uct_comp);
         ucs_trace("flushing ep %p lane[%d]: %s", ep, lane,
                   ucs_status_string(status));
         if (status == UCS_OK) {
             req->send.flush.lanes &= ~UCS_BIT(lane);
-            --req->send.uct_comp.count;
+            --req->send.state.uct_comp.count;
         } else if (status == UCS_INPROGRESS) {
             req->send.flush.lanes &= ~UCS_BIT(lane);
         } else if (status == UCS_ERR_NO_RESOURCE) {
@@ -110,7 +110,7 @@ static int ucp_flush_check_completion(ucp_request_t *req)
     ucp_ep_h ep = req->send.ep;
 
     /* Check if flushed all lanes */
-    if (req->send.uct_comp.count != 0) {
+    if (req->send.state.uct_comp.count != 0) {
         return 0;
     }
 
@@ -143,11 +143,11 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
     status = uct_ep_flush(ep->uct_eps[lane], req->send.flush.uct_flags,
-                          &req->send.uct_comp);
+                          &req->send.state.uct_comp);
     ucs_trace("flushing ep %p lane[%d]: %s", ep, lane,
               ucs_status_string(status));
     if (status == UCS_OK) {
-        --req->send.uct_comp.count; /* UCT endpoint is flushed */
+        --req->send.state.uct_comp.count; /* UCT endpoint is flushed */
     }
 
     /* since req->flush.pend.lane is still non-NULL, this function will not
@@ -177,7 +177,8 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 
 static void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
 
     ucs_trace("flush completion req=%p status=%d", req, status);
 
@@ -235,12 +236,12 @@ ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep, unsigned mode)
 
     req->send.lane              = UCP_NULL_LANE;
     req->send.uct.func          = ucp_ep_flush_progress_pending;
-    req->send.uct_comp.func     = ucp_ep_flush_completion;
-    req->send.uct_comp.count    = ucp_ep_num_lanes(ep);
+    req->send.state.uct_comp.func   = ucp_ep_flush_completion;
+    req->send.state.uct_comp.count  = ucp_ep_num_lanes(ep);
 
     ucp_ep_flush_progress(req);
 
-    if (req->send.uct_comp.count == 0) {
+    if (req->send.state.uct_comp.count == 0) {
         status = req->status;
         ucs_trace_req("ep %p: releasing flush request %p, returning status %s",
                       ep, req, ucs_status_string(status));

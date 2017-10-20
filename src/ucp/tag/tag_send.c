@@ -110,7 +110,7 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     ucp_request_send_state_init(req, count);
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
-                                           &req->send.state);
+                                           &req->send.state.dt);
     req->send.lane         = ucp_ep_config(ep)->tag.lane;
 }
 
