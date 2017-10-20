@@ -871,7 +871,7 @@ static uct_md_ops_t uct_ib_md_ops = {
     .mkey_pack    = uct_ib_mkey_pack,
 };
 
-static inline uct_ib_rcache_region_t* uct_ib_rache_region_from_memh(uct_mem_h memh)
+static inline uct_ib_rcache_region_t* uct_ib_rcache_region_from_memh(uct_mem_h memh)
 {
     return ucs_container_of(memh, uct_ib_rcache_region_t, memh);
 }
@@ -907,7 +907,7 @@ static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
 static ucs_status_t uct_ib_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
-    uct_ib_rcache_region_t *region = uct_ib_rache_region_from_memh(memh);
+    uct_ib_rcache_region_t *region = uct_ib_rcache_region_from_memh(memh);
 
     ucs_rcache_region_put(md->rcache, &region->super);
     return UCS_OK;
