@@ -157,6 +157,10 @@ private:
     static bool check_test_param(const std::string& name,
                                  const std::string& test_case_name,
                                  const ucp_test_param& test_param);
+
+protected:
+    static const ucp_datatype_t DATATYPE;
+    static const ucp_datatype_t DATATYPE_IOV;
 };
 
 

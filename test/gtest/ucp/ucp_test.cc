@@ -25,6 +25,9 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
     return os;
 }
 
+const ucp_datatype_t ucp_test::DATATYPE     = ucp_dt_make_contig(1);
+const ucp_datatype_t ucp_test::DATATYPE_IOV = ucp_dt_make_iov();
+
 ucp_test::ucp_test() {
     ucs_status_t status;
     status = ucp_config_read(NULL, NULL, &m_ucp_config);

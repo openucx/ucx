@@ -111,8 +111,6 @@ protected:
     virtual bool is_external_request();
 
     static const uint32_t MAGIC = 0xd7d7d7d7U;
-    static const ucp_datatype_t DATATYPE;
-    static const ucp_datatype_t DATATYPE_IOV;
     static ucp_generic_dt_ops test_dt_uint32_ops;
     static ucp_generic_dt_ops test_dt_uint32_err_ops;
     static ucp_generic_dt_ops test_dt_uint8_ops;

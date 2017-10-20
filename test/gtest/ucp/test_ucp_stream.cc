@@ -26,17 +26,49 @@ public:
     }
 
     static void ucp_send_cb(void *request, ucs_status_t status) {}
+
+protected:
+    ucs_status_ptr_t stream_send_nb(void *buf, size_t count,
+                                    ucp_datatype_t datatype);
+
+    void do_send_recv_data_test(ucp_datatype_t datatype);
 };
 
-UCS_TEST_P(test_ucp_stream, send_recv_data) {
+ucs_status_ptr_t test_ucp_stream::stream_send_nb(void *buf, size_t count,
+                                                 ucp_datatype_t datatype)
+{
+    return ucp_stream_send_nb(sender().ep(), buf, count, datatype, ucp_send_cb, 0);
+}
+
+void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
+{
     std::vector<char> sbuf(size_t(16)*1024*1024, 's');
     size_t            ssize = 0; /* total send size */
 
     /* send all msg sizes*/
     for (size_t i = 3; i < sbuf.size(); i *= 2) {
-        ucs_status_ptr_t sstatus = ucp_stream_send_nb(sender().ep(), sbuf.data(),
-                                                      i, ucp_dt_make_contig(1),
-                                                      ucp_send_cb, 0);
+        ucs_status_ptr_t sstatus;
+        void *tmp    = reinterpret_cast<void *>(sbuf.data());
+        void *buf    = NULL;
+        size_t count = 0;
+
+        UCS_TEST_GET_BUFFER_DT_IOV(iov_, iov_cnt_, tmp, i, 40ul);
+
+        switch (datatype & UCP_DATATYPE_CLASS_MASK) {
+        case UCP_DATATYPE_CONTIG:
+            buf   = tmp;
+            count = i;
+            break;
+        case UCP_DATATYPE_IOV:
+            buf   = iov_;
+            count = iov_cnt_;
+            break;
+        }
+
+        ASSERT_TRUE(buf   != NULL);
+        ASSERT_TRUE(count != 0);
+
+        sstatus = stream_send_nb(buf, count, datatype);
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
         wait(sstatus);
         ssize += i;
@@ -61,6 +93,15 @@ UCS_TEST_P(test_ucp_stream, send_recv_data) {
     EXPECT_EQ(roffset, ssize);
     sbuf.resize(ssize, 's');
     EXPECT_EQ(sbuf, rbuf);
+}
+
+
+UCS_TEST_P(test_ucp_stream, send_recv_data) {
+    do_send_recv_data_test(DATATYPE);
+}
+
+UCS_TEST_P(test_ucp_stream, send_iov_recv_data) {
+    do_send_recv_data_test(DATATYPE_IOV);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_stream)
