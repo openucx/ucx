@@ -36,9 +36,7 @@ typedef struct ucs_rcache_region  ucs_rcache_region_t;
  */
 enum {
     UCS_RCACHE_REGION_FLAG_REGISTERED = UCS_BIT(0), /**< Memory registered */
-    UCS_RCACHE_REGION_FLAG_PGTABLE    = UCS_BIT(1), /**< In the page table */
-    UCS_RCACHE_REGION_FLAG_INVALID    = UCS_BIT(2), /**< Should be removed when
-                                                         refcount drops to 0 */
+    UCS_RCACHE_REGION_FLAG_PGTABLE    = UCS_BIT(1)  /**< In the page table */
 };
 
 
@@ -109,7 +107,8 @@ struct ucs_rcache_params {
 struct ucs_rcache_region {
     ucs_pgt_region_t       super;    /**< Base class - page table region */
     ucs_list_link_t        list;     /**< List element */
-    volatile uint32_t      refcount; /**< Usage count */
+    volatile uint32_t      refcount; /**< Reference count, including +1 if it's
+                                          in the page table */
     ucs_status_t           status;   /**< Current status code */
     uint8_t                prot;     /**< Protection bits */
     uint16_t               flags;    /**< Status flags. Protected by page table lock. */

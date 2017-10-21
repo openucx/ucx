@@ -61,12 +61,11 @@ static void __ucs_rcache_region_log(const char *file, int line, const char *func
     }
 
     __ucs_log(file, line, function, level,
-              "%s: %s region " UCS_PGT_REGION_FMT " %c%c%c "UCS_RCACHE_PROT_FMT" ref %u %s",
+              "%s: %s region " UCS_PGT_REGION_FMT " %c%c "UCS_RCACHE_PROT_FMT" ref %u %s",
               rcache->name, message,
               UCS_PGT_REGION_ARG(&region->super),
               (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) ? 'g' : '-',
               (region->flags & UCS_RCACHE_REGION_FLAG_PGTABLE)    ? 't' : '-',
-              (region->flags & UCS_RCACHE_REGION_FLAG_INVALID)    ? 'i' : '-',
               UCS_RCACHE_PROT_ARG(region->prot),
               region->refcount,
               region_desc);
@@ -150,12 +149,38 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
                                             ucs_rcache_region_t *region)
 {
     ucs_rcache_region_trace(rcache, region, "destroy");
+
+    ucs_assert(region->refcount == 0);
+    ucs_assert(!(region->flags & UCS_RCACHE_REGION_FLAG_PGTABLE));
+
     if (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) {
         UCS_PROFILE_CODE("mem_dereg") {
             rcache->params.ops->mem_dereg(rcache->params.context, rcache, region);
         }
     }
+
     ucs_free(region);
+}
+
+static inline void ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
+                                                  ucs_rcache_region_t *region,
+                                                  int lock,
+                                                  int must_be_destroyed)
+{
+    ucs_rcache_region_trace(rcache, region, lock ? "put" : "put_nolock");
+
+    ucs_assert(region->refcount > 0);
+    if (ucs_unlikely(ucs_atomic_fadd32(&region->refcount, -1) == 1)) {
+        if (lock) {
+            pthread_rwlock_wrlock(&rcache->lock);
+        }
+        ucs_mem_region_destroy_internal(rcache, region);
+        if (lock) {
+            pthread_rwlock_unlock(&rcache->lock);
+        }
+    } else {
+        ucs_assert(!must_be_destroyed);
+    }
 }
 
 /* Lock must be held in write mode */
@@ -180,16 +205,7 @@ static void ucs_rcache_region_invalidate(ucs_rcache_t *rcache,
         ucs_assert(!must_be_in_pgt);
     }
 
-    /* If no one is using the region, we can completely destroy it.
-     * Otherwise, just mark it as invalid, and it would be destroyed when the
-     * reference count drops to 0.
-     */
-    if (region->refcount == 0) {
-        ucs_mem_region_destroy_internal(rcache, region);
-    } else {
-        ucs_assert(!must_be_destroyed);
-        region->flags |= UCS_RCACHE_REGION_FLAG_INVALID;
-    }
+     ucs_rcache_region_put_internal(rcache, region, 0, must_be_destroyed);
 }
 
 /* Lock must be held in write mode */
@@ -276,10 +292,13 @@ static void ucs_rcache_purge(ucs_rcache_t *rcache)
     ucs_pgtable_purge(&rcache->pgtable, ucs_rcache_region_collect_callback,
                       &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
+        if (region->flags & UCS_RCACHE_REGION_FLAG_PGTABLE) {
+            region->flags &= ~UCS_RCACHE_REGION_FLAG_PGTABLE;
+            ucs_atomic_add32(&region->refcount, -1);
+        }
         if (region->refcount > 0) {
             ucs_rcache_region_warn(rcache, region, "destroying inuse");
         }
-        region->flags &= ~UCS_RCACHE_REGION_FLAG_PGTABLE;
         ucs_mem_region_destroy_internal(rcache, region);
     }
 }
@@ -439,7 +458,7 @@ retry:
      */
     region->prot     = prot;
     region->flags    = UCS_RCACHE_REGION_FLAG_PGTABLE;
-    region->refcount = 0;
+    region->refcount = 1;
     region->status = status =
         UCS_PROFILE_NAMED_CALL("mem_reg", rcache->params.ops->mem_reg,
                                rcache->params.context, rcache, arg, region);
@@ -453,9 +472,7 @@ retry:
              */
             ucs_debug("failed to register merged region " UCS_PGT_REGION_FMT ": %s, retrying",
                       UCS_PGT_REGION_ARG(&region->super), ucs_status_string(status));
-            status = ucs_pgtable_remove(&rcache->pgtable, &region->super);
-            ucs_assert_always(status == UCS_OK);
-            ucs_mem_region_destroy_internal(rcache, region);
+            ucs_rcache_region_invalidate(rcache, region, 1, 1);
             goto retry;
         } else {
             ucs_warn("failed to register region " UCS_PGT_REGION_FMT ": %s",
@@ -465,7 +482,7 @@ retry:
     }
 
     region->flags   |= UCS_RCACHE_REGION_FLAG_REGISTERED;
-    region->refcount = 1;
+    region->refcount = 2; /* Page-table + user */
 
     ucs_rcache_region_trace(rcache, region, "created");
 
@@ -521,17 +538,7 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
 
 void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
-    ucs_rcache_region_trace(rcache, region, "put");
-
-    pthread_rwlock_wrlock(&rcache->lock);
-
-    ucs_assert(region->refcount > 0);
-    ucs_atomic_add32(&region->refcount, -1);
-
-    if (region->refcount == 0) {
-        ucs_rcache_region_invalidate(rcache, region, 0, 1);
-    }
-    pthread_rwlock_unlock(&rcache->lock);
+    ucs_rcache_region_put_internal(rcache, region, 1, 0);
 }
 
 static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
