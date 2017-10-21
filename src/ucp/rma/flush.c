@@ -341,7 +341,7 @@ static ucs_status_t ucp_flush_wait(ucp_worker_h worker, void *request)
             status = ucp_request_check_status(request);
         } while (status == UCS_INPROGRESS);
         ucp_request_release(request);
-        return UCS_OK;
+        return status;
     }
 }
 

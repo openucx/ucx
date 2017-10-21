@@ -1609,7 +1609,35 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream);
  *                          application is responsible to release the handle
  *                          using @ref ucp_request_free "ucp_request_free()"
  *                          routine.
- */
+ *
+ *
+ * The following example demonstrates how blocking flush can be implemented
+ * using non-blocking flush:
+ * @code {.c}
+ * void empty_function(void *request, ucs_status_t status)
+ * {
+ * }
+ *
+ * ucs_status_t blocking_ep_flush(ucp_ep_h ep, ucp_worker_h worker)
+ * {
+ *     void *request;
+ *
+ *     request = ucp_ep_flush_nb(ep, 0, empty_function);
+ *     if (request == NULL) {
+ *         return UCS_OK;
+ *     } else if (UCS_PTR_IS_ERR(request)) {
+ *         return UCS_PTR_STATUS(request);
+ *     } else {
+ *         ucs_status_t status;
+ *         do {
+ *             ucp_worker_progress(worker);
+ *             status = ucp_request_check_status(request);
+ *         } while (status == UCS_INPROGRESS);
+ *         ucp_request_release(request);
+ *         return status;
+ *     }
+ * }
+ * @endcode */
 ucs_status_ptr_t ucp_ep_flush_nb(ucp_ep_h ep, unsigned flags,
                                  ucp_send_callback_t cb);
 
