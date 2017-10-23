@@ -20,15 +20,15 @@ AS_IF([test "x$with_java" != xno],
              [AS_IF([test -n "$JAVA_HOME"],
                     [],
                     [
-                     READLINK_FKNOWN=$(readlink -f xxx 1>/dev/null 2>&1 && echo yes)
-                     AS_IF([test "x${READLINK_FKNOWN}" == xyes],
+                     AC_CHECK_PROG(READLINK, readlink, yes)
+                     AS_IF([test "x${READLINK}" == xyes],
                            [
-                            AC_SUBST([JAVA], [$(readlink -f $(type java | awk '{print $3;}'))])
+                            AC_SUBST([JAVA], [$(readlink -f $(type -P java))])
                             AC_SUBST([JAVA_HOME], [${JAVA%*/jre*}])
                             AC_MSG_WARN([Please set JAVA_HOME=$JAVA_HOME])
                            ],
                            [
-                            AC_MSG_ERROR([Plesae install readlink or set JAVA_HOME=<path-to-java>])
+                            AC_MSG_ERROR([Please install readlink or set JAVA_HOME=<path-to-java>])
                            ]
                           )
                     ]
@@ -47,24 +47,22 @@ AS_IF([test "x$with_java" != xno],
             )
 
        save_CPPFLAGS="$CPPFLAGS"
-
        CPPFLAGS="-I$with_java/include/linux $CPPFLAGS"
+       AC_CHECK_HEADER([$with_java/include/linux/jni_md.h],
+                       [
+                        AC_CHECK_HEADER([$with_java/include/jni.h],
+                                        [java_happy="yes"],
+                                        [
+                                         AC_MSG_ERROR([jni.h file not found])
+                                        ]
+                                       )
+                       ],
+                       [
+                        AC_MSG_ERROR([jni_md.h file not found])
+                       ]
+                      )
 
-        AC_CHECK_HEADER([$with_java/include/linux/jni_md.h],
-                        [
-                         AC_CHECK_HEADER([$with_java/include/jni.h],
-                                         [java_happy="yes"],
-                                         [
-                                          AC_MSG_ERROR([jni.h file not found])
-                                         ]
-                                        )
-                        ],
-                        [
-                         AC_MSG_ERROR([jni_md.h file not found])
-                        ]
-                       )
-
-        CPPFLAGS="$save_CPPFLAGS"
+       CPPFLAGS="$save_CPPFLAGS"
       ]
      )
 
