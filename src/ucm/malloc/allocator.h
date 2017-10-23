@@ -7,9 +7,7 @@
 #ifndef UCM_ALLOCATOR_H_
 #define UCM_ALLOCATOR_H_
 
-#if HAVE_UCM_PTMALLOC283
-#include <ucm/ptmalloc283/malloc-2.8.3.h>
-#elif HAVE_UCM_PTMALLOC286
+#if HAVE_UCM_PTMALLOC286
 #include <ucm/ptmalloc286/malloc-2.8.6.h>
 #else
 #error "No memory allocator is defined"

@@ -47,28 +47,6 @@ libucm_la_SOURCES = \
 	util/reloc.c \
 	util/sys.c
 
-if HAVE_UCM_PTMALLOC283
-libucm_la_CPPFLAGS += \
-    -I$(srcdir)/ptmalloc283/sysdeps/pthread \
-    -I$(srcdir)/ptmalloc283/sysdeps/generic \
-    -fno-strict-aliasing \
-    -DUSE_TSD_DATA_HACK \
-    -DUSE_LOCKS=1 \
-    -DONLY_MSPACES=0 \
-    -DMALLINFO_FIELD_TYPE=int
-
-libucm_la_SOURCES += \
-    ptmalloc283/malloc.c
-
-noinst_HEADERS += \
-    ptmalloc283/malloc-2.8.3.h \
-    ptmalloc283/sysdeps/generic/atomic.h \
-    ptmalloc283/sysdeps/generic/malloc-machine.h \
-    ptmalloc283/sysdeps/generic/thread-st.h \
-    ptmalloc283/sysdeps/pthread/malloc-machine.h \
-    ptmalloc283/sysdeps/pthread/thread-st.h
-endif
-
 if HAVE_UCM_PTMALLOC286
 libucm_la_CPPFLAGS += \
     -fno-strict-aliasing \
