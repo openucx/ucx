@@ -33,6 +33,7 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {0x02c9, 4103, "ConnectX-3 Pro", UCT_IB_DEVICE_FLAG_MLX4_PRM, 11},
   {0x02c9, 4113, "Connect-IB",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 20},
   {0x02c9, 4115, "ConnectX-4",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 30},
+  {0x02c9, 4116, "ConnectX-4",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 29},
   {0x02c9, 4117, "ConnectX-4 LX",  UCT_IB_DEVICE_FLAG_MLX5_PRM, 28},
   {0x02c9, 4119, "ConnectX-5",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 38},
   {0x02c9, 4121, "ConnectX-5",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 40},
