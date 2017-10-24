@@ -34,20 +34,20 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_ep_t,
                            const uct_device_addr_t *dev_addr,
                            const uct_iface_addr_t *iface_addr)
 {
-    uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_verbs_iface_t);
-    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
-    const uct_dc_iface_addr_t *if_addr = (const uct_dc_iface_addr_t *)iface_addr;
-    ucs_status_t status;
-    int is_global;
+    uct_dc_verbs_iface_t      *iface    = ucs_derived_of(tl_iface, uct_dc_verbs_iface_t);
+    uct_ib_iface_t            *ib_iface = &iface->super.super.super;
+    const uct_ib_address_t    *ib_addr  = (const uct_ib_address_t *)dev_addr;
+    const uct_dc_iface_addr_t *if_addr  = (const uct_dc_iface_addr_t *)iface_addr;
+    ucs_status_t               status;
+    struct ibv_ah_attr         ah_attr;
 
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_ep_t, &iface->super, if_addr);
 
-    status = uct_ib_iface_create_ah(&iface->super.super.super, ib_addr,
-                                    iface->super.super.super.path_bits[0], &self->ah,
-                                    &is_global);
+    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, ib_iface->path_bits[0], &ah_attr);
+    status = uct_ib_iface_create_ah(ib_iface, &ah_attr, &self->ah);
     if (status != UCS_OK) {
-        return UCS_ERR_INVALID_ADDR;
+        return status;
     }
 
     self->dest_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
@@ -593,31 +593,16 @@ ucs_status_t uct_dc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completio
 ucs_status_t uct_dc_verbs_iface_create_ah(uct_dc_iface_t *dc_iface, uint16_t lid,
                                           union ibv_gid *gid, struct ibv_ah **ah_p)
 {
-    struct ibv_ah_attr ah_attr = {};
-    struct ibv_ah *ah;
     uct_ib_iface_t *iface = &dc_iface->super.super;
+    struct ibv_ah_attr ah_attr;
+    struct ibv_ah *ah;
+    ucs_status_t status;
 
-    ah_attr.sl            = iface->config.sl;
-    ah_attr.src_path_bits = iface->path_bits[0];
-    ah_attr.dlid          = lid | ah_attr.src_path_bits;
-    ah_attr.port_num      = iface->config.port_num;
-    ah_attr.static_rate   = 0;
+    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, gid, iface->path_bits[0], &ah_attr);
 
-    if ((gid == NULL) ||
-       ((iface->addr_type != UCT_IB_ADDRESS_TYPE_GLOBAL) &&
-        (iface->gid.global.subnet_prefix == gid->global.subnet_prefix))) {
-        ah_attr.is_global = 0;
-    } else {
-        ah_attr.is_global = 1;
-        ah_attr.grh.sgid_index = iface->config.gid_index;
-        ah_attr.grh.dgid = *gid;
-    }
-
-    ah = ibv_create_ah(uct_ib_iface_md(iface)->pd, &ah_attr);
-    if (ucs_unlikely(ah == NULL)) {
-        ucs_error("Failed to create ah on "UCT_IB_IFACE_FMT,
-                  UCT_IB_IFACE_ARG(iface));
-        return UCS_ERR_INVALID_ADDR;
+    status = uct_ib_iface_create_ah(iface, &ah_attr, &ah);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
     }
 
     *ah_p = ah;

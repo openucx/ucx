@@ -635,7 +635,7 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     ucs_status_t status;
     uint32_t qp_num;
 
-    uct_ib_iface_fill_ah_attr(&iface->super.super, ib_addr, ep->super.path_bits,
+    uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr, ep->super.path_bits,
                               &ah_attr);
 #if IBV_EXP_HW_TM
     if (iface->verbs_common.tm.enabled) {

@@ -63,7 +63,7 @@ static ucs_status_t uct_cm_ep_fill_path_rec(uct_cm_ep_t *ep,
     }
     path->raw_traffic               = 0; /* IB traffic */
     path->flow_label                = 0;
-    path->traffic_class             = 0;
+    path->traffic_class             = iface->super.config.traffic_class;
     path->reversible                = htonl(1); /* IBCM currently only supports reversible paths */
     path->numb_path                 = 0;
     path->pkey                      = ntohs(iface->super.pkey_value);

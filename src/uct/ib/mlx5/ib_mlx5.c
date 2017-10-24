@@ -208,11 +208,11 @@ void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
 
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
-    struct mlx5_wqe_av mlx5_av;
-    struct ibv_ah *ah;
-    uct_ib_address_t *ib_addr;
-    ucs_status_t status;
-    int is_global;
+    struct mlx5_wqe_av  mlx5_av;
+    struct ibv_ah      *ah;
+    uct_ib_address_t   *ib_addr;
+    ucs_status_t        status;
+    struct ibv_ah_attr  ah_attr;
 
     /* coverity[result_independent_of_operands] */
     ib_addr = ucs_alloca((size_t)iface->addr_size);
@@ -223,10 +223,10 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
         return status;
     }
 
-    status = uct_ib_iface_create_ah(iface, ib_addr, iface->path_bits[0],
-                                    &ah, &is_global);
+    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, iface->path_bits[0], &ah_attr);
+    status = uct_ib_iface_create_ah(iface, &ah_attr, &ah);
     if (status != UCS_OK) {
-        return UCS_ERR_INVALID_ADDR;
+        return status;
     }
 
     uct_ib_mlx5_get_av(ah, &mlx5_av);

@@ -140,6 +140,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Which IB service level to use.\n",
    ucs_offsetof(uct_ib_iface_config_t, sl), UCS_CONFIG_TYPE_UINT},
 
+  {"TRAFFIC_CLASS", "0",
+   "Which IB traffic class to use.\n",
+   ucs_offsetof(uct_ib_iface_config_t, traffic_class), UCS_CONFIG_TYPE_UINT},
+
   {"LID_PATH_BITS", "0-17",
    "list of IB Path bits separated by comma (a,b,c) "
    "which will be the low portion of the LID, according to the LMC in the fabric.",
@@ -244,61 +248,31 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
     }
 }
 
-void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib_addr,
-                               uint8_t path_bits, struct ibv_ah_attr *ah_attr)
-{
-    uint8_t is_global;
-
-    memset(ah_attr, 0, sizeof(*ah_attr));
-
-    uct_ib_address_unpack(ib_addr, &ah_attr->dlid, &is_global, &ah_attr->grh.dgid);
-    ah_attr->sl            = iface->config.sl;
-    ah_attr->src_path_bits = path_bits;
-    ah_attr->dlid         |= path_bits;
-    ah_attr->port_num      = iface->config.port_num;
-
-    /* Create a global address only if we cannot reach the destination using local
-     * address. It means either an Ethernet address, or IB address on a different subnet.
-     */
-    if (is_global &&
-        ((iface->addr_type == UCT_IB_ADDRESS_TYPE_ETH) ||
-         (iface->addr_type == UCT_IB_ADDRESS_TYPE_GLOBAL) ||
-         (iface->gid.global.subnet_prefix != ah_attr->grh.dgid.global.subnet_prefix)))
-    {
-        ah_attr->is_global      = 1;
-        ah_attr->grh.sgid_index = iface->config.gid_index;
-    } else {
-        ah_attr->is_global      = 0;
-    }
-}
-
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
-                                    const uct_ib_address_t *ib_addr,
-                                    uint8_t path_bits,
-                                    struct ibv_ah **ah_p,
-                                    int *is_global_p)
+                                    struct ibv_ah_attr *ah_attr,
+                                    struct ibv_ah **ah_p)
 {
-    struct ibv_ah_attr ah_attr;
     struct ibv_ah *ah;
     char buf[128];
     char *p, *endp;
 
-    uct_ib_iface_fill_ah_attr(iface, ib_addr, path_bits, &ah_attr);
-    ah = ibv_create_ah(uct_ib_iface_md(iface)->pd, &ah_attr);
+    ah = ibv_create_ah(uct_ib_iface_md(iface)->pd, ah_attr);
 
     if (ah == NULL) {
         p    = buf;
         endp = buf + sizeof(buf);
         snprintf(p, endp - p, "dlid=%d sl=%d port=%d src_path_bits=%d",
-                 ah_attr.dlid, ah_attr.sl, ah_attr.port_num, ah_attr.src_path_bits);
+                 ah_attr->dlid, ah_attr->sl,
+                 ah_attr->port_num, ah_attr->src_path_bits);
         p += strlen(p);
 
-        if (ah_attr.is_global) {
+        if (ah_attr->is_global) {
             snprintf(p, endp - p, " dgid=");
             p += strlen(p);
-            inet_ntop(AF_INET6, &ah_attr.grh.dgid, p, endp - p);
+            inet_ntop(AF_INET6, &ah_attr->grh.dgid, p, endp - p);
             p += strlen(p);
-            snprintf(p, endp - p, " sgid_index=%d", ah_attr.grh.sgid_index);
+            snprintf(p, endp - p, " sgid_index=%d traffic_class=%d",
+                     ah_attr->grh.sgid_index, ah_attr->grh.traffic_class);
         }
 
         ucs_error("ibv_create_ah(%s) on "UCT_IB_IFACE_FMT" failed: %m", buf,
@@ -307,7 +281,6 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
     }
 
     *ah_p        = ah;
-    *is_global_p = ah_attr.is_global;
     return UCS_OK;
 }
 
@@ -582,6 +555,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                                              config->rx.queue_len / 4);
     self->config.port_num          = port_num;
     self->config.sl                = config->sl;
+    self->config.traffic_class     = config->traffic_class;
     self->config.gid_index         = config->gid_index;
     self->release_desc.cb          = uct_ib_iface_release_desc;
 

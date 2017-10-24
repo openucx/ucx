@@ -573,6 +573,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     struct ibv_ah_attr ah_attr = {.is_global = 0};
     struct ibv_ah *ah;
     struct mlx5_wqe_av mlx5_av;
+    ucs_status_t status;
 
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
@@ -591,19 +592,13 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
         /* TODO: look at common code with uct_ud_mlx5_iface_get_av */
         if (dc_req->sender.global.is_global) {
-            ah_attr.sl             = ib_iface->config.sl;
-            ah_attr.src_path_bits  = ib_iface->path_bits[0];
-            ah_attr.dlid           = dc_req->lid | ib_iface->path_bits[0];
-            ah_attr.port_num       = ib_iface->config.port_num;
-            ah_attr.is_global      = 1;
-            ah_attr.grh.dgid       = dc_req->sender.global.gid;
-            ah_attr.grh.sgid_index = ib_iface->config.gid_index;
+            uct_ib_iface_fill_ah_attr_from_gid_lid(ib_iface, dc_req->lid,
+                                                   &dc_req->sender.global.gid,
+                                                   ib_iface->path_bits[0], &ah_attr);
 
-            ah = ibv_create_ah(uct_ib_iface_md(ib_iface)->pd, &ah_attr);
-
-            if (ah == NULL) {
-                ucs_error("ibv_create_ah failed: %m");
-                return UCS_ERR_INVALID_ADDR;
+            status = uct_ib_iface_create_ah(ib_iface, &ah_attr, &ah);
+            if (status != UCS_OK) {
+                return status;
             }
 
             uct_ib_mlx5_get_av(ah, &mlx5_av);

@@ -75,6 +75,9 @@ struct uct_ib_iface_config {
     /* IB SL to use */
     unsigned                sl;
 
+    /* IB Traffic Class to use */
+    unsigned                traffic_class;
+
     /* Ranges of path bits */
     UCS_CONFIG_ARRAY_FIELD(ucs_range_spec_t, ranges) lid_path_bits;
 
@@ -119,6 +122,7 @@ struct uct_ib_iface {
         uint8_t             max_inl_resp;
         uint8_t             port_num;
         uint8_t             sl;
+        uint8_t             traffic_class;
         uint8_t             gid_index;
         size_t              max_iov;             /* Maximum buffers in IOV array */
     } config;
@@ -257,10 +261,8 @@ void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib
                                uint8_t src_path_bits, struct ibv_ah_attr *ah_attr);
 
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
-                                    const uct_ib_address_t *ib_addr,
-                                    uint8_t path_bits,
-                                    struct ibv_ah **ah_p,
-                                    int *is_global_p);
+                                    struct ibv_ah_attr *ah_attr,
+                                    struct ibv_ah **ah_p);
 
 ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 
@@ -356,5 +358,51 @@ void uct_ib_iface_set_max_iov(uct_ib_iface_t *iface, size_t max_iov)
     iface->config.max_iov = ucs_min(UCT_IB_MAX_IOV, min_iov_requested);
 }
 
+
+static UCS_F_ALWAYS_INLINE
+void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
+                                            const union ibv_gid *gid,
+                                            uint8_t path_bits,
+                                            struct ibv_ah_attr *ah_attr)
+{
+    memset(ah_attr, 0, sizeof(*ah_attr));
+
+    ah_attr->sl                = iface->config.sl;
+    ah_attr->src_path_bits     = path_bits;
+    ah_attr->dlid              = lid | path_bits;
+    ah_attr->port_num          = iface->config.port_num;
+    ah_attr->grh.traffic_class = iface->config.traffic_class;
+
+    if ((gid != NULL) &&
+        ((iface->addr_type == UCT_IB_ADDRESS_TYPE_ETH)    ||
+         (iface->addr_type == UCT_IB_ADDRESS_TYPE_GLOBAL) ||
+         (iface->gid.global.subnet_prefix != gid->global.subnet_prefix))) {
+        ah_attr->is_global = 1;
+        ah_attr->grh.sgid_index = iface->config.gid_index;
+        ah_attr->grh.dgid = *gid;
+    } else {
+        ah_attr->is_global = 0;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE
+void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
+                                         const uct_ib_address_t *ib_addr,
+                                         uint8_t path_bits,
+                                         struct ibv_ah_attr *ah_attr)
+{
+    union ibv_gid *gid_p = NULL;
+    union ibv_gid  gid;
+    uint8_t        is_global;
+    uint16_t       lid;
+
+    uct_ib_address_unpack(ib_addr, &lid, &is_global, &gid);
+
+    if (is_global) {
+        gid_p = &gid;
+    }
+
+    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, gid_p, path_bits, ah_attr);
+}
 
 #endif

@@ -406,13 +406,14 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
                                  const uct_iface_addr_t *iface_addr, uct_ep_h *new_ep_p)
 {
     uct_ud_verbs_iface_t *iface = ucs_derived_of(iface_h, uct_ud_verbs_iface_t);
+    uct_ib_iface_t       *ib_iface = &iface->super.super;
     uct_ud_verbs_ep_t *ep;
     uct_ud_ep_t *new_ud_ep;
     const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
     const uct_ud_iface_addr_t *if_addr = (const uct_ud_iface_addr_t *)iface_addr;
     uct_ud_send_skb_t *skb;
     ucs_status_t status, status_ah;
-    int is_global;
+    struct ibv_ah_attr ah_attr;
 
     uct_ud_enter(&iface->super);
     status = uct_ud_ep_create_connected_common(&iface->super, ib_addr, if_addr,
@@ -433,8 +434,8 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
 
     ucs_assert_always(ep->ah == NULL);
 
-    status_ah = uct_ib_iface_create_ah(&iface->super.super, ib_addr,
-                                       ep->super.path_bits, &ep->ah, &is_global);
+    uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, ep->super.path_bits, &ah_attr);
+    status_ah = uct_ib_iface_create_ah(ib_iface, &ah_attr, &ep->ah);
     if (status_ah != UCS_OK) {
         uct_ud_ep_destroy_connected(&ep->super, ib_addr, if_addr);
         *new_ep_p = NULL;
@@ -464,7 +465,7 @@ uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
     const uct_ud_ep_addr_t *ud_ep_addr = (const uct_ud_ep_addr_t *)ep_addr;
     ucs_status_t status;
-    int is_global;
+    struct ibv_ah_attr ah_attr;
 
     status = uct_ud_ep_connect_to_ep(&ep->super, ib_addr, ud_ep_addr);
     if (status != UCS_OK) {
@@ -473,7 +474,8 @@ uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     ucs_assert_always(ep->ah == NULL);
     ep->dest_qpn = uct_ib_unpack_uint24(ud_ep_addr->iface_addr.qp_num);
 
-    return uct_ib_iface_create_ah(iface, ib_addr, ep->super.path_bits, &ep->ah, &is_global);
+    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, ep->super.path_bits, &ah_attr);
+    return uct_ib_iface_create_ah(iface, &ah_attr, &ep->ah);
 }
 
 
