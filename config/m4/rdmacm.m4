@@ -20,16 +20,20 @@ AS_IF([test "x$with_rdmacm" != xno],
        save_LDFLAGS="$LDFLAGS"
        save_CPPFLAGS="$CPPFLAGS"
 
-       LDFLAGS="-L$with_rdmacm/lib$libsuff $LDFLAGS"
-       CPPFLAGS="-I$with_rdmacm/include $CPPFLAGS"
+       AS_IF([test "$with_rdmacm" != /usr],
+             [
+             LDFLAGS="-L$with_rdmacm/lib$libsuff $LDFLAGS"
+             CPPFLAGS="-I$with_rdmacm/include $CPPFLAGS"])
 
        AC_CHECK_HEADER([$with_rdmacm/include/rdma/rdma_cma.h],
                        [
                        AC_CHECK_LIB([rdmacm], [rdma_create_id],
                                      [transports="${transports},rdmacm"
                                       rdmacm_happy="yes"
-                                      AC_SUBST(RDMACM_CPPFLAGS, ["-I$with_rdmacm/include"])
-                                      AC_SUBST(RDMACM_LDFLAGS,  ["-L$with_rdmacm/lib$libsuff"])
+                                      AS_IF([test "$with_rdmacm" != /usr],
+                                            [
+                                            AC_SUBST(RDMACM_CPPFLAGS, ["-I$with_rdmacm/include"])
+                                            AC_SUBST(RDMACM_LDFLAGS,  ["-L$with_rdmacm/lib$libsuff"])])
                                       AC_SUBST(RDMACM_LIBS,     [-lrdmacm])
                                      ], 
                                      [AC_MSG_WARN([RDMACM requested but librdmacm is not found])
