@@ -178,12 +178,15 @@ static void uct_ib_async_event_handler(int fd, void *arg)
     ibv_ack_async_event(&event);
 }
 
-ucs_status_t uct_ib_device_init(uct_ib_device_t *dev, struct ibv_device *ibv_device
+ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
+                                struct ibv_device *ibv_device, int async_events
                                 UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
     ucs_status_t status;
     uint8_t i;
     int ret;
+
+    dev->async_events = async_events;
 
     /* Open verbs context */
     dev->ibv_context = ibv_open_device(ibv_device);
@@ -250,14 +253,14 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev, struct ibv_device *ibv_dev
         goto err_release_stats;
     }
 
-    /* Register to IB async events
-     * TODO have option to set async mode as signal/thread.
-     */
-    status = ucs_async_set_event_handler(UCS_ASYNC_MODE_THREAD,
-                                         dev->ibv_context->async_fd, POLLIN,
-                                         uct_ib_async_event_handler, dev, NULL);
-    if (status != UCS_OK) {
-        goto err_release_stats;
+    /* Register to IB async events */
+    if (dev->async_events) {
+        status = ucs_async_set_event_handler(UCS_ASYNC_MODE_THREAD,
+                                             dev->ibv_context->async_fd, POLLIN,
+                                             uct_ib_async_event_handler, dev, NULL);
+        if (status != UCS_OK) {
+            goto err_release_stats;
+        }
     }
 
     ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
@@ -277,7 +280,9 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 {
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
 
-    ucs_async_remove_handler(dev->ibv_context->async_fd, 1);
+    if (dev->async_events) {
+        ucs_async_remove_handler(dev->ibv_context->async_fd, 1);
+    }
     UCS_STATS_NODE_FREE(dev->stats);
     ibv_close_device(dev->ibv_context);
 }

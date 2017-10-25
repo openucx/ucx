@@ -118,6 +118,7 @@ typedef struct uct_ib_device {
     uint8_t                     first_port;      /* Number of first port (usually 1) */
     uint8_t                     num_ports;       /* Amount of physical ports */
     cpu_set_t                   local_cpus;      /* CPUs local to device */
+    int                         async_events;    /* Whether async events are handled */
     UCS_STATS_NODE_DECLARE(stats);
     struct ibv_exp_port_attr    port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
 } uct_ib_device_t;
@@ -145,7 +146,8 @@ ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
                                               unsigned *num_resources_p);
 
 
-ucs_status_t uct_ib_device_init(uct_ib_device_t *dev, struct ibv_device *ibv_device
+ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
+                                struct ibv_device *ibv_device, int async_events
                                 UCS_STATS_ARG(ucs_stats_node_t *stats_parent));
 
 void uct_ib_device_cleanup(uct_ib_device_t *dev);
