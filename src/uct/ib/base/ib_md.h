@@ -104,6 +104,7 @@ typedef struct uct_ib_md_config {
     uct_linear_growth_t      uc_reg_cost;  /**< Memory registration cost estimation
                                                 without using the cache */
     unsigned                 fork_init;    /**< Use ibv_fork_init() */
+    int                      async_events; /**< Whether async events should be delivered */
 
     uct_ib_md_ext_config_t   ext;          /**< External configuration */
 
