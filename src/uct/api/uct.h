@@ -1318,11 +1318,11 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  *                               was established. No reply from the server is
  *                               required and therefore the reply_cb callback
  *                               won't be invoked.
- *         UCS_INPROGRESS      - The connection to the remote peer was initiated.
+ * @return UCS_INPROGRESS      - The connection to the remote peer was initiated.
  *                               The user will be notified of the connection
  *                               establishment, on the client side, when the reply_cb
  *                               callback will be invoked.
- *         error code          - In case of an error.
+ * @return error code          - In case of an error. (@ref ucs_status_t)
  */
 ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
                                     const ucs_sock_addr_t *sockaddr,
