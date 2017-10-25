@@ -19,8 +19,6 @@
    Memcheck:Leak
    match-leak-kinds: possible
    ...
-   fun:__cache_pickup
-   fun:nl_cache_pickup
    fun:rtnl_*_alloc_cache
    ...
    fun:ibv_create_ah
@@ -32,6 +30,6 @@
    write(buf)
    obj:*
    fun:ibv_cmd_create_ah
-   obj:*/libmlx5-rdmav2.so
+   obj:*/libmlx5*.so*
    fun:ibv_create_ah
 }

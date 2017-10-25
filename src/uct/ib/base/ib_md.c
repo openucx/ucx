@@ -87,6 +87,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
    "Initialize a fork-safe IB library with ibv_fork_init().",
    ucs_offsetof(uct_ib_md_config_t, fork_init), UCS_CONFIG_TYPE_TERNARY},
 
+  {"ASYNC_EVENTS", "n",
+   "Enable listening for async events on the device",
+   ucs_offsetof(uct_ib_md_config_t, async_events), UCS_CONFIG_TYPE_BOOL},
+
   {"ETH_PAUSE_ON", "n",
    "Whether or not 'Pause Frame' is enabled on an Ethernet network.\n"
    "Pause frame is a mechanism for temporarily stopping the transmission of data to\n"
@@ -1180,7 +1184,8 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         uct_ib_fork_warn_enable();
     }
 
-    status = uct_ib_device_init(&md->dev, ib_device UCS_STATS_ARG(md->stats));
+    status = uct_ib_device_init(&md->dev, ib_device, md_config->async_events
+                                UCS_STATS_ARG(md->stats));
     if (status != UCS_OK) {
         goto err_release_stats;
     }
