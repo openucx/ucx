@@ -22,7 +22,7 @@ static ucs_config_field_t uct_dc_verbs_iface_config_table[] = {
    ucs_offsetof(uct_dc_verbs_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_dc_iface_config_table)},
 
-  {"", "", NULL,
+  {"", UCT_DC_VERBS_TM_ENABLE_STR, NULL,
    ucs_offsetof(uct_dc_verbs_iface_config_t, verbs_common),
    UCS_CONFIG_TYPE_TABLE(uct_rc_verbs_iface_common_config_table)},
 

@@ -25,6 +25,13 @@
     }
 
 
+#if IBV_EXP_HW_TM
+#  define UCT_DC_VERBS_TM_ENABLE_STR  "TM_ENABLE=n"
+#else
+#  define UCT_DC_VERBS_TM_ENABLE_STR  ""
+#endif
+
+
 typedef struct uct_dc_verbs_iface_addr {
     uct_dc_iface_addr_t            super;
     uint8_t                        hw_tm;
