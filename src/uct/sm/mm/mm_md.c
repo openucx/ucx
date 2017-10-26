@@ -124,7 +124,7 @@ ucs_status_t uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
         md_attr->reg_cost.growth   = 0.007e-9;
     }
     md_attr->cap.flags        |= UCT_MD_FLAG_NEED_RKEY;
-    md_attr->cap.mem_type_reg_flags = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
     md_attr->cap.mem_type     = UCT_MD_MEM_TYPE_HOST;
     /* all mm md(s) support fixed memory alloc */
     md_attr->cap.flags        |= UCT_MD_FLAG_FIXED;
@@ -230,7 +230,7 @@ uct_md_ops_t uct_mm_md_ops = {
     .mem_reg      = uct_mm_mem_reg,
     .mem_dereg    = uct_mm_mem_dereg,
     .mkey_pack    = uct_mm_mkey_pack,
-    .is_mem_type_owned   = ucs_empty_function_return_unsupported,
+    .is_mem_type_owned   = uct_md_return_mem_type_not_detectable,
 };
 
 ucs_status_t uct_mm_md_open(const char *md_name, const uct_md_config_t *md_config,

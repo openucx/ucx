@@ -13,7 +13,7 @@ ucs_status_t uct_knem_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->rkey_packed_size  = sizeof(uct_knem_key_t);
     md_attr->cap.flags         = UCT_MD_FLAG_REG |
                                  UCT_MD_FLAG_NEED_RKEY;
-    md_attr->cap.mem_type_reg_flags = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+    md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
     md_attr->cap.mem_type      = UCT_MD_MEM_TYPE_HOST;
     md_attr->cap.max_alloc     = 0;
     md_attr->cap.max_reg       = ULONG_MAX;
@@ -189,7 +189,7 @@ static ucs_status_t uct_knem_md_open(const char *md_name, const uct_md_config_t 
         .mkey_pack    = uct_knem_rkey_pack,
         .mem_reg      = uct_knem_mem_reg,
         .mem_dereg    = uct_knem_mem_dereg,
-        .is_mem_type_owned   = ucs_empty_function_return_unsupported,
+        .is_mem_type_owned   = uct_md_return_mem_type_not_detectable,
     };
 
     knem_md = ucs_malloc(sizeof(uct_knem_md_t), "uct_knem_md_t");

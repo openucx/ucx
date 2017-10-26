@@ -544,7 +544,15 @@ int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
     return md->ops->is_sockaddr_accessible(md, sockaddr, mode);
 }
 
-ucs_status_t uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
+uct_memory_type_owned_status_t uct_md_is_mem_type_owned(uct_md_h md,
+                                                        void *addr, size_t length)
 {
     return md->ops->is_mem_type_owned(md, addr, length);
+}
+
+uct_memory_type_owned_status_t uct_md_return_mem_type_not_detectable(uct_md_h md,
+                                                                        void *addr,
+                                                                        size_t length)
+{
+    return UCT_MD_MEM_TYPE_NOT_DETECTABLE;
 }

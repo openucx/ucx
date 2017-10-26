@@ -136,7 +136,7 @@ struct uct_md_ops {
 
     int          (*is_sockaddr_accessible)(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                            uct_sockaddr_accessibility_t mode);
-    ucs_status_t (*is_mem_type_owned)(uct_md_h md, void *addr, size_t length);
+    uct_memory_type_owned_status_t (*is_mem_type_owned)(uct_md_h md, void *addr, size_t length);
 };
 
 
@@ -174,4 +174,7 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_md_component_t *mdc,
 extern ucs_list_link_t uct_md_components_list;
 extern ucs_config_field_t uct_md_config_table[];
 
+uct_memory_type_owned_status_t uct_md_return_mem_type_not_detectable(uct_md_h md,
+                                                                     void *addr,
+                                                                     size_t length);
 #endif
