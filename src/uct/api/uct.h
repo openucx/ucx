@@ -588,11 +588,6 @@ struct uct_iface_params {
             void                                 *conn_request_arg;
             /** Callback for an incoming connection request on the server */
             uct_sockaddr_conn_request_callback_t conn_request_cb;
-            /** Argument for connection ready callback */
-            void                                 *conn_ready_arg;
-            /** Callback for an incoming message on the server indicating that
-                the connection is ready */
-            uct_sockaddr_conn_ready_callback_t   conn_ready_cb;
             /** Callback flags to indicate where the callback can be invoked from.
              * @ref uct_cb_flags */
             uint32_t                             cb_flags;
@@ -1318,6 +1313,16 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  *                               remote peer.
  * @param [in]  length           Length of the private data.
  * @param [out] ep_p             Handle to the created endpoint.
+ *
+ * @return UCS_OK              - The connection to the server, on the client side,
+ *                               was established. No reply from the server is
+ *                               required and therefore the reply_cb callback
+ *                               won't be invoked.
+ * @return UCS_INPROGRESS      - The connection to the remote peer was initiated.
+ *                               The user will be notified of the connection
+ *                               establishment, on the client side, when the reply_cb
+ *                               callback will be invoked.
+ * @return error code          - In case of an error. (@ref ucs_status_t)
  */
 ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
                                     const ucs_sock_addr_t *sockaddr,
