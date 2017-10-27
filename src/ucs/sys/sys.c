@@ -1,7 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2012.  ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -184,12 +184,32 @@ uint64_t ucs_machine_guid()
            __sumup_host_name(1);
 }
 
+/*
+ * If a certain system constant (name) is undefined on the underlying system the
+ * sysconf routine returns -1.  ucs_sysconf return the negative value
+ * a user and the user is responsible to define default value or abort.
+ *
+ * If an error occurs sysconf modified errno and ucs_sysconf aborts.
+ *
+ * Otherwise, a non-negative values is returned.
+ */
+static long ucs_sysconf(int name)
+{
+    long rc;
+    errno = 0;
+
+    rc = sysconf(name);
+    ucs_assert_always(errno == 0);
+
+    return rc;
+}
+
 int ucs_get_first_cpu()
 {
     int first_cpu, total_cpus, ret;
     cpu_set_t mask;
 
-    ret = sysconf(_SC_NPROCESSORS_CONF);
+    ret = ucs_sysconf(_SC_NPROCESSORS_CONF);
     if (ret < 0) {
         ucs_error("failed to get local cpu count: %m");
         return ret;
@@ -314,32 +334,32 @@ out:
     return read_bytes;
 }
 
-static unsigned long ucs_sysconf(int name)
-{
-    long rc;
-
-    rc = sysconf(name);
-    ucs_assert_always(rc >= 0);
-
-    return (unsigned long)rc;
-}
-
 size_t ucs_get_max_iov()
 {
-    static size_t max_iov = 1;
+    static long max_iov = 0;
 
-    if (1 == max_iov) {
-        max_iov = ucs_max(ucs_sysconf(_SC_IOV_MAX), 1); /* max_iov shouldn't be zero */
+    if (max_iov == 0) {
+        max_iov = ucs_sysconf(_SC_IOV_MAX);
+        if (max_iov < 0) {
+            max_iov = 1;
+            ucs_debug("_SC_IOV_MAX is undefined, setting default value to %ld",
+                      max_iov);
+        }
     }
     return max_iov;
 }
 
 size_t ucs_get_page_size()
 {
-    static size_t page_size = 0;
+    static long page_size = 0;
 
     if (page_size == 0) {
         page_size = ucs_sysconf(_SC_PAGESIZE);
+        if (page_size < 0) {
+            page_size = 4096;
+            ucs_debug("_SC_PAGESIZE is undefined, setting default value to %ld",
+                      page_size);
+        }
     }
     return page_size;
 }
@@ -403,12 +423,20 @@ size_t ucs_get_huge_page_size()
 
 size_t ucs_get_phys_mem_size()
 {
-    static size_t phys_pages = 0;
+    static size_t phys_mem_size = 0;
+    long phys_pages;
 
-    if (phys_pages == 0) {
+    if (phys_mem_size == 0) {
         phys_pages = ucs_sysconf(_SC_PHYS_PAGES);
+        if (phys_pages < 0) {
+            ucs_debug("_SC_PHYS_PAGES is undefined, setting default value to %ld",
+                      SIZE_MAX);
+            phys_mem_size = SIZE_MAX;
+        } else {
+            phys_mem_size = phys_pages * ucs_get_page_size();
+        }
     }
-    return phys_pages * ucs_get_page_size();
+    return phys_mem_size;
 }
 
 #define UCS_SYS_THP_ENABLED_FILE "/sys/kernel/mm/transparent_hugepage/enabled"
