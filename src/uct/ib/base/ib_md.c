@@ -872,7 +872,7 @@ static uct_md_ops_t uct_ib_md_ops = {
     .mem_dereg    = uct_ib_mem_dereg,
     .mem_advise   = uct_ib_mem_advise,
     .mkey_pack    = uct_ib_mkey_pack,
-    .is_mem_type_owned   = uct_md_return_mem_type_not_detectable,
+    .is_mem_type_owned = uct_md_return_mem_type_not_owned,
 };
 
 static inline uct_ib_rcache_region_t* uct_ib_rache_region_from_memh(uct_mem_h memh)

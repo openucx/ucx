@@ -214,7 +214,7 @@ static ucs_status_t uct_rocm_cma_md_open(const char *md_name,
         .mkey_pack    = uct_rocm_cma_rkey_pack,
         .mem_reg      = uct_rocm_cma_mem_reg,
         .mem_dereg    = uct_rocm_cma_mem_dereg,
-        .is_mem_type_owned   = uct_md_return_mem_type_not_detectable,
+        .is_mem_type_owned = uct_md_return_mem_type_not_owned,
     };
 
     ucs_trace("deal with any memory = %d\n", md_config->any_memory);

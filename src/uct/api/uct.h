@@ -396,17 +396,6 @@ typedef enum {
 } uct_memory_type_t;
 
 
-/*
- * @ingroup UCT_MD
- * @brief  Memory type owned status
- */
-typedef enum {
-    UCT_MD_MEM_TYPE_OWNED = 0,          /**< MD owns the memory type */
-    UCT_MD_MEM_TYPE_NOT_OWNED,          /**< MD not owns the memort type */
-    UCT_MD_MEM_TYPE_NOT_DETECTABLE      /**< MD can't detect memory owned or not */
-} uct_memory_type_owned_status_t;
-
-
 /**
  * @ingroup UCT_MD
  * @brief  Memory allocation/registration flags.
@@ -1444,13 +1433,13 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @brief Check if memory type is owned by MD
  *
  *  Check memory type.
- *  Return uct_memory_type_owned_status_t
+ *  @return Nonzero if memory is owned, 0 if not owned
  *
  * @param [in]     md        Memory domain to detect if memory belongs to.
  * @param [in]     address   Memory address to detect.
  * @param [in]     length    Size of memory
  */
-uct_memory_type_owned_status_t uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length);
+int uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length);
 
 /**
  * @ingroup UCT_MD

@@ -33,7 +33,7 @@ static ucs_status_t uct_tcp_md_open(const char *md_name, const uct_md_config_t *
         .mkey_pack    = ucs_empty_function_return_unsupported,
         .mem_reg      = ucs_empty_function_return_unsupported,
         .mem_dereg    = ucs_empty_function_return_unsupported,
-        .is_mem_type_owned   = uct_md_return_mem_type_not_detectable,
+        .is_mem_type_owned = uct_md_return_mem_type_not_owned,
     };
     static uct_md_t md = {
         .ops          = &md_ops,
