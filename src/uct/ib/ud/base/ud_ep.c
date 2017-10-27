@@ -698,7 +698,7 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                 return UCS_ERR_NO_RESOURCE;
             }
 
-            skb->flags                 |= UCT_UD_SEND_SKB_FLAG_COMP;
+            skb->flags                  = UCT_UD_SEND_SKB_FLAG_COMP;
             skb->len                    = 0;
             uct_ud_comp_desc(skb)->comp = comp;
             uct_ud_comp_desc(skb)->ep   = ep;
