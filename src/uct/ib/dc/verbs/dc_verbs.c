@@ -22,7 +22,11 @@ static ucs_config_field_t uct_dc_verbs_iface_config_table[] = {
    ucs_offsetof(uct_dc_verbs_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_dc_iface_config_table)},
 
+#if IBV_EXP_HW_TM
+  {"", "TM_ENABLE=n", NULL,
+#else
   {"", "", NULL,
+#endif
    ucs_offsetof(uct_dc_verbs_iface_config_t, verbs_common),
    UCS_CONFIG_TYPE_TABLE(uct_rc_verbs_iface_common_config_table)},
 
