@@ -549,7 +549,3 @@ int uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
     return md->ops->is_mem_type_owned(md, addr, length);
 }
 
-int uct_md_return_mem_type_not_owned(uct_md_h md, void *addr, size_t length)
-{
-    return 0;
-}

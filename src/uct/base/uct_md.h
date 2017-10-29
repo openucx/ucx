@@ -174,5 +174,4 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_md_component_t *mdc,
 extern ucs_list_link_t uct_md_components_list;
 extern ucs_config_field_t uct_md_config_table[];
 
-int uct_md_return_mem_type_not_owned(uct_md_h md, void *addr, size_t length);
 #endif

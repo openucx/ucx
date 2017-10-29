@@ -230,7 +230,7 @@ uct_md_ops_t uct_mm_md_ops = {
     .mem_reg      = uct_mm_mem_reg,
     .mem_dereg    = uct_mm_mem_dereg,
     .mkey_pack    = uct_mm_mkey_pack,
-    .is_mem_type_owned = uct_md_return_mem_type_not_owned,
+    .is_mem_type_owned = (void *)ucs_empty_function_return_zero,
 };
 
 ucs_status_t uct_mm_md_open(const char *md_name, const uct_md_config_t *md_config,
