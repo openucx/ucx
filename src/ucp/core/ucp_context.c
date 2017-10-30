@@ -101,7 +101,7 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.rndv_perf_diff), UCS_CONFIG_TYPE_DOUBLE},
 
   {"RNDV_RAILS", "1",
-   "Set max multirail-get rendezvous line numbers",
+   "Set max multirail-get rendezvous lane numbers",
    ucs_offsetof(ucp_config_t, ctx.rndv_rails), UCS_CONFIG_TYPE_UINT},
 
   {"ZCOPY_THRESH", "auto",
