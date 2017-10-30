@@ -190,7 +190,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     struct ibv_ah_attr ah_attr;
     ucs_status_t status;
 
-    uct_ib_iface_fill_ah_attr(&iface->super, ib_addr, ep->path_bits, &ah_attr);
+    uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr, ep->path_bits, &ah_attr);
 
     status = uct_rc_iface_qp_connect(iface, ep->txqp.qp,
                                      uct_ib_unpack_uint24(rc_addr->qp_num),

@@ -36,14 +36,17 @@ ucs_status_t uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
                                       struct mlx5_grh_av *grh_av,
                                       int *is_global)
 {
-    ucs_status_t status;
-    struct ibv_ah *ah;
-    struct mlx5_wqe_av mlx5_av;
+    ucs_status_t        status;
+    struct ibv_ah      *ah;
+    struct mlx5_wqe_av  mlx5_av;
+    struct ibv_ah_attr  ah_attr;
 
-    status = uct_ib_iface_create_ah(iface, ib_addr, path_bits, &ah, is_global);
+    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, path_bits, &ah_attr);
+    status = uct_ib_iface_create_ah(iface, &ah_attr, &ah);
     if (status != UCS_OK) {
-        return UCS_ERR_INVALID_ADDR;
+        return status;
     }
+    *is_global = ah_attr.is_global;
 
     uct_ib_mlx5_get_av(ah, &mlx5_av);
     ibv_destroy_ah(ah);
