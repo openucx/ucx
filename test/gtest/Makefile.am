@@ -163,6 +163,10 @@ gtest_SOURCES += \
 	uct/ib/test_dc.cc
 endif
 endif
+if HAVE_CUDA
+gtest_SOURCES += \
+	ucm/cuda_hooks.cc
+endif
 
 noinst_HEADERS = \
 	common/gtest.h \
