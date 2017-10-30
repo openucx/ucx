@@ -8,12 +8,12 @@
 #include "ucp_worker.h"
 #include "ucp_ep.inl"
 #include "ucp_request.inl"
-#include "ucs/datastruct/queue.h"
 
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/wireup/wireup.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
+#include <ucs/datastruct/queue.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
@@ -80,7 +80,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
         if (ep->ext.stream == NULL) {
             ucs_error("Failed to allocate ucp ep stream extension");
             status = UCS_ERR_NO_MEMORY;
-            goto err;
+            goto err_free_ep;
         }
         ucs_queue_head_init(&ep->ext.stream->data);
         ucs_queue_head_init(&ep->ext.stream->reqs);
@@ -100,7 +100,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     status = UCS_STATS_NODE_ALLOC(&ep->stats, &ucp_ep_stats_class,
                                   worker->stats, "-%p", ep);
     if (status != UCS_OK) {
-        goto err_free_ep;
+        goto err_free_ext_ep;
     }
 
     hash_it = kh_put(ucp_worker_ep_hash, &worker->ep_hash, dest_uuid,
@@ -121,6 +121,8 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 
 err_free_stats:
     UCS_STATS_NODE_FREE(ep->stats);
+err_free_ext_ep:
+    free(ep->ext.stream);
 err_free_ep:
     ucs_free(ep);
 err:
