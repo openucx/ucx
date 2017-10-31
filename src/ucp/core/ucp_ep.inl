@@ -49,9 +49,14 @@ static inline int ucp_ep_is_rndv_lane_present(ucp_ep_h ep, ucp_lane_index_t idx)
     return ucp_ep_config(ep)->key.rndv_lanes[idx] != UCP_NULL_LANE;
 }
 
+static inline int ucp_ep_rndv_num_lanes(ucp_ep_h ep)
+{
+    return ucp_ep_config(ep)->key.num_rndv_lanes;
+}
+
 static inline int ucp_ep_is_rndv_mrail_present(ucp_ep_h ep)
 {
-    return ucp_ep_config(ep)->key.rndv_lanes[1] != UCP_NULL_LANE;
+    return ucp_ep_rndv_num_lanes(ep) > 1;
 }
 
 static inline int ucp_ep_is_tag_offload_enabled(ucp_ep_config_t *config)

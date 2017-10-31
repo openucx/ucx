@@ -136,7 +136,7 @@ ucs_mpool_ops_t ucp_request_mpool_ops = {
     .obj_cleanup   = ucp_worker_request_fini_proxy
 };
 
-ucs_mpool_ops_t ucp_mrail_mpool_ops = {
+ucs_mpool_ops_t ucp_rndv_get_mpool_ops = {
     .chunk_alloc   = ucs_mpool_hugetlb_malloc,
     .chunk_release = ucs_mpool_hugetlb_free,
     .obj_init      = NULL,
@@ -254,6 +254,7 @@ UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg,
     case UCP_DATATYPE_CONTIG:
         if (state->dt.contig.memh != UCT_MEM_HANDLE_NULL) {
             uct_md_mem_dereg(uct_md, state->dt.contig.memh);
+            state->dt.contig.memh = UCT_MEM_HANDLE_NULL;
         }
         break;
     case UCP_DATATYPE_IOV:
@@ -351,3 +352,51 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
 
     return UCS_ERR_NO_PROGRESS;
 }
+
+int ucp_request_mrail_reg(ucp_request_t *req)
+{
+    ucp_ep_t        *ep      = req->send.ep;
+    ucp_dt_state_t  *state   = &req->send.state.dt;
+    int              cnt     = 0;
+    ucs_status_t     status;
+    int              i;
+    ucp_lane_index_t lane;
+
+    ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
+
+    ucp_request_clear_rails(state);
+
+    for (i = 0; i < ucp_ep_rndv_num_lanes(ep); i++) {
+        lane = ucp_ep_get_rndv_get_lane(ep, i);
+
+        if (ucp_ep_rndv_md_flags(ep, i) & UCT_MD_FLAG_NEED_RKEY) {
+            status = uct_md_mem_reg(ucp_ep_md(ep, lane),
+                                    (void *)req->send.buffer, req->send.length,
+                                    UCT_MD_MEM_ACCESS_RMA, &state->dt.mrail[i].memh);
+            ucs_assert_always(status == UCS_OK);
+            cnt++;
+        }
+    }
+
+    return cnt;
+}
+
+void ucp_request_mrail_dereg(ucp_request_t *req)
+{
+    ucp_dt_state_t  *state = &req->send.state.dt;
+    ucs_status_t     status;
+    int              i;
+
+    for (i = 0; i < ucs_countof(state->dt.mrail); i++) {
+        if (state->dt.mrail[i].memh != UCT_MEM_HANDLE_NULL) {
+            status = uct_md_mem_dereg(ucp_ep_md(req->send.ep,
+                                                ucp_ep_get_rndv_get_lane(req->send.ep, i)),
+                                      state->dt.mrail[i].memh);
+            ucs_assert_always(status == UCS_OK);
+        }
+    }
+
+    ucp_request_clear_rails(state);
+}
+
+

@@ -80,6 +80,15 @@ enum {
 
 
 /**
+ * Multirail rendezvous-get info.
+ */
+typedef struct ucp_rndv_get_rkey {
+    ucp_lane_index_t  rail_idx;
+    uct_rkey_bundle_t rkey_bundle[UCP_MAX_RAILS];
+} ucp_rndv_get_rkey_t;
+
+
+/**
  * Request in progress.
  */
 struct ucp_request {
@@ -118,11 +127,10 @@ struct ucp_request {
                 } proxy;
 
                 struct {
-                    uint64_t           remote_address; /* address of the sender's data buffer */
-                    uintptr_t          remote_request; /* pointer to the sender's send request */
-                    uct_rkey_bundle_t  rkey_bundle;
-                    ucp_request_t     *rreq;           /* receive request on the recv side */
-                    struct ucp_rndv_get_mrail *mrail;  /* multirail info */
+                    uint64_t                  remote_address; /* address of the sender's data buffer */
+                    uintptr_t                 remote_request; /* pointer to the sender's send request */
+                    ucp_request_t            *rreq;           /* receive request on the recv side */
+                    struct ucp_rndv_get_rkey *rkey;           /* rendezvous-get remote keys */
                 } rndv_get;
 
                 struct {
@@ -207,20 +215,8 @@ typedef struct ucp_recv_desc {
 } ucp_recv_desc_t;
 
 
-/**
- * Multirail rendezvous-get info.
- */
-typedef struct ucp_rndv_get_mrail {
-    ucp_lane_index_t      rail_idx;
-    struct {
-        ucp_lane_index_t  lane;
-        uct_rkey_bundle_t rkey_bundle;
-    } rail[UCP_MAX_RAILS];
-} ucp_rndv_get_mrail_t;
-
-
 extern ucs_mpool_ops_t ucp_request_mpool_ops;
-extern ucs_mpool_ops_t ucp_mrail_mpool_ops;
+extern ucs_mpool_ops_t ucp_rndv_get_mpool_ops;
 
 
 int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status);
@@ -239,5 +235,8 @@ void ucp_request_memory_dereg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t multi_thresh,
                                     size_t rndv_thresh, const ucp_proto_t *proto);
+
+int ucp_request_mrail_reg(ucp_request_t *req);
+void ucp_request_mrail_dereg(ucp_request_t *req);
 
 #endif

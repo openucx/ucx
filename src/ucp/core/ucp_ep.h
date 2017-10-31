@@ -61,8 +61,8 @@ enum {
 typedef struct ucp_ep_config_key {
 
     ucp_lane_index_t       num_lanes;    /* Number of active lanes */
-    /* Number of rendezvous lanes */
-    ucp_lane_index_t       num_rndv_lanes;
+
+    ucp_lane_index_t       num_rndv_lanes; /* Number of rendezvous lanes */
 
     struct {
         ucp_rsc_index_t    rsc_index;    /* Resource index */
@@ -246,7 +246,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config);
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);
 
-int ucp_ep_config_get_rma_prio(const ucp_lane_index_t *lanes,
+int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
                                ucp_lane_index_t lane);
 
 size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,

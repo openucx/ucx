@@ -54,7 +54,7 @@ typedef struct ucp_context_config {
     /** On-demand progress */
     int                                    adaptive_progress;
     /** Rendezvous multirail support */
-    unsigned                               rndv_rails;
+    unsigned                               max_rndv_lanes;
 } ucp_context_config_t;
 
 

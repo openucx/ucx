@@ -402,7 +402,7 @@ static int ucp_wireup_compare_lane_amo_score(const void *elem1, const void *elem
 }
 
 static int ucp_wireup_compare_lane_rndv_score(const void *elem1, const void *elem2,
-                                             void *arg)
+                                              void *arg)
 {
     return UCP_WIREUP_COMPARE_SCORE(elem1, elem2, arg, rndv);
 }
@@ -840,9 +840,9 @@ static ucs_status_t ucp_wireup_add_rndv_lanes(ucp_ep_h ep,
         criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
     }
 
-    if (!(ep->worker->context->config.ext.rndv_rails > 1) ||
-         ((params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) &&
-          (params->err_mode == UCP_ERR_HANDLING_MODE_PEER))){
+    if (!(ep->worker->context->config.ext.max_rndv_lanes > 1) ||
+        ((params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) &&
+         (params->err_mode == UCP_ERR_HANDLING_MODE_PEER))){
         status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
                                              -1, -1, 0, &rsc_index, &addr_index, &score);
         if ((status == UCS_OK) &&
@@ -1061,11 +1061,11 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                                           lane_descs,
                                                           key->num_lanes);
     /* Cut slowest rndv lanes by configuration value */
-    for (lane = ep->worker->context->config.ext.rndv_rails; lane < UCP_MAX_RAILS; lane++) {
+    for (lane = ep->worker->context->config.ext.max_rndv_lanes; lane < UCP_MAX_RAILS; lane++) {
         key->rndv_lanes[lane] = UCP_NULL_LANE;
     }
 
-    for (key->num_rndv_lanes = 1;
+    for (key->num_rndv_lanes = 0;
          key->num_rndv_lanes < UCP_MAX_LANES &&
          key->rndv_lanes[key->num_rndv_lanes] != UCP_NULL_LANE;
          key->num_rndv_lanes++) {}

@@ -1098,10 +1098,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     /* Create memory pool for multirail info */
-    status = ucs_mpool_init(&worker->mrail_mp, 0,
-                            sizeof(ucp_rndv_get_mrail_t),
+    status = ucs_mpool_init(&worker->rndv_get_mp, 0,
+                            sizeof(ucp_rndv_get_rkey_t),
                             0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                            &ucp_mrail_mpool_ops, "ucp_multirail");
+                            &ucp_rndv_get_mpool_ops, "ucp_rndv_get");
     if (status != UCS_OK) {
         goto err_req_mp_cleanup;
     }
@@ -1143,7 +1143,7 @@ err_close_ifaces:
     ucp_worker_close_ifaces(worker);
     ucp_worker_wakeup_cleanup(worker);
 err_mrail_mp_cleanup:
-    ucs_mpool_cleanup(&worker->mrail_mp, 1);
+    ucs_mpool_cleanup(&worker->rndv_get_mp, 1);
 err_req_mp_cleanup:
     ucs_mpool_cleanup(&worker->req_mp, 1);
 err_destroy_uct_worker:
@@ -1180,7 +1180,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucp_worker_close_ifaces(worker);
     ucp_worker_wakeup_cleanup(worker);
-    ucs_mpool_cleanup(&worker->mrail_mp, 1);
+    ucs_mpool_cleanup(&worker->rndv_get_mp, 1);
     ucs_mpool_cleanup(&worker->req_mp, 1);
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
