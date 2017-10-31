@@ -94,4 +94,10 @@ typedef void (*ucp_am_tracer_t)(ucp_worker_h worker, uct_am_trace_type_t type,
                                 char *buffer, size_t max);
 
 
+/**
+ * Internal callback for UCP requests
+ */
+typedef void (*ucp_request_callback_t)(ucp_request_t *req);
+
+
 #endif

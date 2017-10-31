@@ -98,7 +98,7 @@ public:
                 (test->*m_send_2)(m_entity, &zero, &result,
                                   m_memheap, m_rkey);
 
-                m_entity->flush_worker();
+                test->flush_worker(*m_entity);
 
                 if (result != (uint64_t)(i+1))
                     (*error)++;

@@ -78,10 +78,6 @@ enum {
 };
 
 
-/* Callback for UCP requests */
-typedef void (*ucp_request_callback_t)(ucp_request_t *req);
-
-
 /**
  * Request in progress.
  */
@@ -128,12 +124,16 @@ struct ucp_request {
                 } rndv_get;
 
                 struct {
-                    ucp_request_callback_t    flushed_cb;/* Called when flushed */
-                    uct_worker_cb_id_t        slow_cb_id;/* Slow-path callback */
-                    ucp_lane_map_t            lanes;     /* Which lanes need to be flushed */
-                    unsigned                  uct_flags; /* Flags to pass to
+                    ucp_request_callback_t flushed_cb;/* Called when flushed */
+                    uct_worker_cb_id_t     prog_id;   /* Progress callback ID */
+                    ucp_lane_map_t         lanes;     /* Which lanes need to be flushed */
+                    unsigned               uct_flags; /* Flags to pass to
                                                             @ref uct_ep_flush */
                 } flush;
+
+                struct {
+                    uct_worker_cb_id_t        prog_id;/* Slow-path callback */
+                } disconnect;
 
                 struct {
                     uint64_t              remote_addr; /* Remote address */
@@ -181,6 +181,12 @@ struct ucp_request {
             ucp_mem_desc_t        *rdesc;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
         } recv;
+
+        struct {
+            ucp_worker_h          worker;   /* Worker to flush */
+            ucp_send_callback_t   cb;       /* Completion callback */
+            uct_worker_cb_id_t    prog_id;  /* Progress callback ID */
+        } flush_worker;
     };
 };
 

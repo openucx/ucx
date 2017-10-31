@@ -276,6 +276,30 @@ err:
     return ret;
 }
 
+static void flush_callback(void *request, ucs_status_t status)
+{
+}
+
+static ucs_status_t flush_ep(ucp_worker_h worker, ucp_ep_h ep)
+{
+    void *request;
+
+    request = ucp_ep_flush_nb(ep, 0, flush_callback);
+    if (request == NULL) {
+        return UCS_OK;
+    } else if (UCS_PTR_IS_ERR(request)) {
+        return UCS_PTR_STATUS(request);
+    } else {
+        ucs_status_t status;
+        do {
+            ucp_worker_progress(worker);
+            status = ucp_request_check_status(request);
+        } while (status == UCS_INPROGRESS);
+        ucp_request_release(request);
+        return status;
+    }
+}
+
 static int run_ucx_server(ucp_worker_h ucp_worker)
 {
     ucp_tag_recv_info_t info_tag;
@@ -360,7 +384,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
         ucp_request_release(request);
     }
 
-    status = ucp_ep_flush(client_ep);
+    status = flush_ep(ucp_worker, client_ep);
     fprintf(stderr, "ucp_ep_flush is completed with status %d (%s)\n",
             status, ucs_status_string(status));
 

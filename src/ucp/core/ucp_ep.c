@@ -352,9 +352,11 @@ void ucp_ep_destroy_internal(ucp_ep_h ep, const char *message)
     ucs_free(ep);
 }
 
-void ucp_ep_disconnected(ucp_ep_h ep)
+static void ucp_ep_disconnected(ucp_ep_h ep)
 {
     ucp_recv_desc_t  *rdesc;
+
+    ucs_trace("ep %p is disconnected", ep);
 
     while (!ucs_queue_is_empty(&ep->stream_data)) {
         rdesc = ucs_queue_pull_elem_non_empty(&ep->stream_data, ucp_recv_desc_t,
@@ -381,6 +383,36 @@ void ucp_ep_disconnected(ucp_ep_h ep)
     ucp_ep_destroy_internal(ep, " from disconnect");
 }
 
+static unsigned ucp_ep_do_disconnect(void *arg)
+{
+    ucp_request_t *req = arg;
+
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
+
+    ucp_ep_disconnected(req->send.ep);
+
+    /* Complete send request from here, to avoid releasing the request while
+     * slow-path element is still pending */
+    ucp_request_complete_send(req, req->status);
+
+    return 0;
+}
+
+static void ucp_ep_close_flushed_callback(ucp_request_t *req)
+{
+    ucp_ep_h ep = req->send.ep;
+
+    /* If a flush is completed from a pending/completion callback, we need to
+     * schedule slow-path callback to release the endpoint later, since a UCT
+     * endpoint cannot be released from pending/completion callback context.
+     */
+    ucs_trace("adding slow-path callback to destroy ep %p", ep);
+    req->send.disconnect.prog_id = UCS_CALLBACKQ_ID_NULL;
+    uct_worker_progress_register_safe(ep->worker->uct, ucp_ep_do_disconnect,
+                                      req, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &req->send.disconnect.prog_id);
+}
+
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 {
     ucp_worker_h worker = ep->worker;
@@ -394,7 +426,15 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     UCS_ASYNC_BLOCK(&worker->async);
-    request = ucp_disconnect_nb_internal(ep, mode);
+    request = ucp_ep_flush_internal(ep,
+                                    (mode == UCP_EP_CLOSE_MODE_FLUSH) ?
+                                    UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL,
+                                    NULL, 0,
+                                    ucp_ep_close_flushed_callback);
+    if (!UCS_PTR_IS_PTR(request)) {
+        ucp_ep_disconnected(ep);
+    }
+
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);

@@ -122,9 +122,21 @@ void ucp_test::short_progress_loop(int worker_index) const {
     }
 }
 
+void ucp_test::flush_ep(const entity &e, int worker_index, int ep_index)
+{
+    void *request = e.flush_ep_nb(worker_index, ep_index);
+    wait(request, worker_index);
+}
+
+void ucp_test::flush_worker(const entity &e, int worker_index)
+{
+    void *request = e.flush_worker_nb(worker_index);
+    wait(request, worker_index);
+}
+
 void ucp_test::disconnect(const entity& entity) {
     for (int i = 0; i < entity.get_num_workers(); i++) {
-        entity.flush_worker(i);
+        flush_worker(entity, i);
         void *dreq = entity.disconnect_nb(i);
         if (!UCS_PTR_IS_PTR(dreq)) {
             ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
@@ -364,27 +376,23 @@ void ucp_test_base::entity::connect(const entity* other,
     }
 }
 
-void ucp_test_base::entity::flush_worker(int worker_index) const {
-    if (worker(worker_index) == NULL) {
-        return;
-    }
-    ucs_status_t status = ucp_worker_flush(worker(worker_index));
-    ASSERT_UCS_OK(status);
+void ucp_test_base::entity::empty_send_completion(void *r, ucs_status_t status) {
 }
 
-void ucp_test_base::entity::flush_ep(int worker_index, int ep_index) const {
-    ucs_status_t status = ucp_ep_flush(ep(worker_index, ep_index));
-    ASSERT_UCS_OK(status);
+void* ucp_test_base::entity::flush_ep_nb(int worker_index, int ep_index) const {
+    return ucp_ep_flush_nb(ep(worker_index, ep_index), 0, empty_send_completion);
+}
+
+void* ucp_test_base::entity::flush_worker_nb(int worker_index) const {
+    if (worker(worker_index) == NULL) {
+        return NULL;
+    }
+    return ucp_worker_flush_nb(worker(worker_index), 0, empty_send_completion);
 }
 
 void ucp_test_base::entity::fence(int worker_index) const {
     ucs_status_t status = ucp_worker_fence(worker(worker_index));
     ASSERT_UCS_OK(status);
-}
-
-void ucp_test_base::entity::disconnect(int worker_index, int ep_index) {
-    flush_ep(worker_index, ep_index);
-    m_workers[worker_index].second[ep_index].reset();
 }
 
 void* ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index) const {

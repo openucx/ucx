@@ -56,4 +56,31 @@ ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
 ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info);
 
 
+/**
+ * @ingroup UCP_ENDPOINT
+ * @deprecated Replaced by @ref ucp_ep_flush_nb.
+ */
+ucs_status_t ucp_ep_flush(ucp_ep_h ep);
+
+/**
+ * @ingroup UCP_WORKER
+ *
+ * @brief Flush outstanding AMO and RMA operations on the @ref ucp_worker_h
+ * "worker"
+ *
+ * This routine flushes all outstanding AMO and RMA communications on the
+ * @ref ucp_worker_h "worker". All the AMO and RMA operations issued on the
+ * @a worker prior to this call are completed both at the origin and at the
+ * target when this call returns.
+ *
+ * @note For description of the differences between @ref ucp_worker_flush
+ * "flush" and @ref ucp_worker_fence "fence" operations please see
+ * @ref ucp_worker_fence "ucp_worker_fence()"
+ *
+ * @param [in] worker        UCP worker.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_worker_flush(ucp_worker_h worker);
+
 #endif

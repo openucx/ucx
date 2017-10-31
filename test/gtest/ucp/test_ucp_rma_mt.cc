@@ -100,7 +100,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
                          (uintptr_t)((uint64_t *)memheap + i), rkey[worker_index]);
         ASSERT_UCS_OK(status);
 
-        sender().flush_worker(worker_index);
+        flush_worker(sender(), worker_index);
 
         EXPECT_EQ(orig_data[i], target_data[i]);
     }
@@ -126,7 +126,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
                              (uintptr_t)((uint64_t *)memheap + i), rkey[worker_index]);
         ASSERT_UCS_OK_OR_INPROGRESS(status);
 
-        sender().flush_worker(worker_index);
+        flush_worker(sender(), worker_index);
 
         EXPECT_EQ(orig_data[i], target_data[i]);
     }
@@ -152,7 +152,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
                          (uintptr_t)((uint64_t *)memheap + i), rkey[worker_index]);
         ASSERT_UCS_OK(status);
 
-        sender().flush_worker(worker_index);
+        flush_worker(sender(), worker_index);
 
         EXPECT_EQ(orig_data[i], target_data[i]);
     }
@@ -178,7 +178,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
                              (uintptr_t)((uint64_t *)memheap + i), rkey[worker_index]);
         ASSERT_UCS_OK_OR_INPROGRESS(status);
 
-        sender().flush_worker(worker_index);
+        flush_worker(sender(), worker_index);
 
         EXPECT_EQ(orig_data[i], target_data[i]);
     }

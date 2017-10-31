@@ -48,9 +48,6 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     memheap_size = max_iter * size + alignment;
 
     sender().connect(&receiver(), get_ep_params());
-    if (&sender() != &receiver()) {
-        receiver().connect(&sender(), get_ep_params());
-    }
 
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                         UCP_MEM_MAP_PARAM_FIELD_LENGTH |
@@ -111,9 +108,9 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     }
 
     if (is_ep_flush) {
-        sender().flush_ep();
+        flush_ep(sender());
     } else {
-        sender().flush_worker();
+        flush_worker(sender());
     }
 
     for (int i = 0; i < max_iter; ++i) {
@@ -123,10 +120,8 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     }
 
     ucp_rkey_destroy(rkey);
-    receiver().flush_worker();
 
     disconnect(sender());
-    disconnect(receiver());
 
     ucp_rkey_buffer_release(rkey_buffer);
     status = ucp_mem_unmap(receiver().ucph(), memh);
@@ -160,9 +155,6 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
     }
 
     sender().connect(&receiver(), get_ep_params());
-    if (&sender() != &receiver()) {
-        receiver().connect(&sender(), get_ep_params());
-    }
 
     ucp_mem_h memh;
     void *memheap = NULL;
@@ -233,9 +225,9 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
                       rkey, expected_data);
 
         if (is_ep_flush) {
-            sender().flush_ep();
+            flush_ep(sender());
         } else {
-            sender().flush_worker();
+            flush_worker(sender());
         }
 
         EXPECT_EQ(expected_data,
@@ -245,13 +237,11 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
     }
 
     ucp_rkey_destroy(rkey);
-    receiver().flush_worker();
+
+    disconnect(sender());
 
     status = ucp_mem_unmap(receiver().ucph(), memh);
     ASSERT_UCS_OK(status);
-
-    disconnect(sender());
-    disconnect(receiver());
 
     if (malloc_allocate) {
         free(memheap);
