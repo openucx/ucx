@@ -864,6 +864,16 @@ public:
         stats_restore();
     }
 
+    std::vector<ucp_test_param>
+    static enum_test_params(const ucp_params_t& ctx_params,
+                            const std::string& name,
+                            const std::string& test_case_name,
+                            const std::string& tls) {
+
+        return ucp_test::enum_test_params(ctx_params, name,
+                                          test_case_name, tls);
+    }
+
     ucs_stats_node_t* ep_stats(entity &e) {
         return e.ep()->stats;
     }
@@ -872,12 +882,44 @@ public:
         return e.worker()->stats;
     }
 
+    ucs_stats_node_t* worker_offload_stats(entity &e) {
+        return e.worker()->offload_stats;
+    }
+
+    void skip_no_tag_offload() {
+        if (!(sender().ep()->flags & UCP_EP_FLAG_TAG_OFFLOAD_ENABLED)) {
+            UCS_TEST_SKIP_R("no tag offload");
+        }
+    }
+
     void validate_counters(uint64_t tx_cntr, uint64_t rx_cntr) {
         uint64_t cnt;
         cnt = UCS_STATS_GET_COUNTER(ep_stats(sender()), tx_cntr);
         EXPECT_EQ(1ul, cnt);
         cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()), rx_cntr);
         EXPECT_EQ(1ul, cnt);
+    }
+
+    void validate_offload_counters(uint64_t rx_cntr, uint64_t posted_cnt) {
+        uint64_t cnt;
+        cnt = UCS_STATS_GET_COUNTER(worker_offload_stats(receiver()),
+                                    UCP_WORKER_STAT_TAG_OFFLOAD_POSTED);
+        EXPECT_EQ(posted_cnt, cnt);
+        cnt = UCS_STATS_GET_COUNTER(worker_offload_stats(receiver()), rx_cntr);
+        EXPECT_EQ(1ul, cnt);
+    }
+
+    void wait_counter(ucs_stats_node_t *stats, uint64_t cntr,
+                      double timeout = UCP_TEST_TIMEOUT_IN_SEC) {
+        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
+        uint64_t v;
+
+        do {
+            short_progress_loop();
+            v = UCS_STATS_GET_COUNTER(stats, cntr);
+        } while ((ucs_get_time() < deadline) && !v);
+
+        EXPECT_EQ(1ul, v);
     }
 
 };
@@ -933,7 +975,6 @@ UCS_TEST_P(test_ucp_tag_stats, sync_unexpected, "RNDV_THRESH=1248576",
 
 UCS_TEST_P(test_ucp_tag_stats, rndv_expected, "RNDV_THRESH=1000",
                                               "TM_OFFLOAD=n") {
-    skip_err_handling();
     test_run_xfer(true, true, true, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
                       UCP_WORKER_STAT_TAG_RX_RNDV_EXP);
@@ -941,10 +982,79 @@ UCS_TEST_P(test_ucp_tag_stats, rndv_expected, "RNDV_THRESH=1000",
 
 UCS_TEST_P(test_ucp_tag_stats, rndv_unexpected, "RNDV_THRESH=1000",
                                                 "TM_OFFLOAD=n") {
-    skip_err_handling();
     test_run_xfer(true, true, false, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
                       UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP);
+}
+
+UCS_TEST_P(test_ucp_tag_stats, offload_rndv_expected, "RNDV_THRESH=1000",
+                                                      "TM_THRESH=1",
+                                                      "TM_OFFLOAD=y") {
+    skip_no_tag_offload();
+
+    test_run_xfer(true, true, true, false, false);
+
+    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_RX, 1ul);
+}
+
+UCS_TEST_P(test_ucp_tag_stats, offload_rndv_unexpected, "RNDV_THRESH=1000",
+                                                        "TM_THRESH=1",
+                                                        "TM_OFFLOAD=y") {
+    skip_no_tag_offload();
+
+    test_run_xfer(true, true, false, false, false);
+
+    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_RNDV, 0ul);
+}
+
+UCS_TEST_P(test_ucp_tag_stats, offload_sw_rndv_expected, "RNDV_THRESH=1000",
+                                                         "TM_THRESH=1",
+                                                         "TM_OFFLOAD=y") {
+    skip_no_tag_offload();
+
+    test_run_xfer(false, true, true, false, false);
+
+    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_RX_SW_RNDV, 1ul);
+}
+
+UCS_TEST_P(test_ucp_tag_stats, offload_sw_rndv_unexpected, "RNDV_THRESH=1000",
+                                                           "TM_THRESH=1",
+                                                           "TM_OFFLOAD=y") {
+    skip_no_tag_offload();
+
+    test_run_xfer(false, true, false, false, false);
+
+    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV, 0ul);
+}
+
+UCS_TEST_P(test_ucp_tag_stats, offload_post, "TM_OFFLOAD=y", "TM_THRESH=1") {
+
+    skip_no_tag_offload();
+
+    uint64_t dummy;
+    uint64_t tag  = 0x11;
+    uint64_t mask = 0xffff;
+    request *rreq = recv_nb(&dummy, sizeof(dummy), DATATYPE, tag, mask);
+
+    // Check general flow
+    wait_counter(worker_offload_stats(receiver()),
+                 UCP_WORKER_STAT_TAG_OFFLOAD_POSTED);
+
+    ucp_request_cancel(receiver().worker(), rreq);
+
+    wait_counter(worker_offload_stats(receiver()),
+                 UCP_WORKER_STAT_TAG_OFFLOAD_CANCELED);
+    request_release(rreq);
+
+    // Check non-contig types
+    ucp_datatype_t recv_dt;
+    ASSERT_UCS_OK(ucp_dt_create_generic(&test_dt_uint8_ops, NULL, &recv_dt));
+    rreq = recv_nb(&dummy, sizeof(dummy), recv_dt, tag, mask);
+
+    wait_counter(worker_offload_stats(receiver()),
+                 UCP_WORKER_STAT_TAG_OFFLOAD_NON_CONTIG);
+    ucp_request_cancel(receiver().worker(), rreq);
+    request_release(rreq);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_stats)
