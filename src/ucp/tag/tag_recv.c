@@ -201,14 +201,16 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     } else if (save_rreq) {
         /* If not found on unexpected, wait until it arrives.
          * If was found but need this receive request for later completion, save it */
-        context            = worker->context;
-        queue              = ucp_tag_exp_get_queue(&context->tm, tag, tag_mask);
-        req->recv.buffer   = buffer;
-        req->recv.length   = buffer_size;
-        req->recv.datatype = datatype;
-        req->recv.tag.tag      = tag;
-        req->recv.tag.tag_mask = tag_mask;
-        req->recv.tag.cb       = cb;
+        context = worker->context;
+        queue   = ucp_tag_exp_get_queue(&context->tm, tag, tag_mask);
+
+        req->recv.buffer        = buffer;
+        req->recv.length        = buffer_size;
+        req->recv.datatype      = datatype;
+        req->recv.tag.tag       = tag;
+        req->recv.tag.tag_mask  = tag_mask;
+        req->recv.tag.cb        = cb;
+
         ucp_tag_exp_push(&context->tm, queue, req);
 
         /* If offload supported, post this tag to transport as well.
