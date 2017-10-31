@@ -105,7 +105,7 @@ UCS_TEST_P(test_ucp_wakeup, efd)
 
     ucp_request_release(req);
 
-    ucp_worker_flush(sender().worker());
+    flush_worker(sender());
     EXPECT_EQ(send_data, recv_data);
 }
 
@@ -255,7 +255,7 @@ UCS_TEST_P(test_ucp_wakeup_external_epollfd, epoll_wait)
 
     ucp_request_release(req);
 
-    ucp_worker_flush(sender().worker());
+    flush_worker(sender());
     EXPECT_EQ(send_data, recv_data);
 }
 

@@ -87,6 +87,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
    "Initialize a fork-safe IB library with ibv_fork_init().",
    ucs_offsetof(uct_ib_md_config_t, fork_init), UCS_CONFIG_TYPE_TERNARY},
 
+  {"ASYNC_EVENTS", "n",
+   "Enable listening for async events on the device",
+   ucs_offsetof(uct_ib_md_config_t, async_events), UCS_CONFIG_TYPE_BOOL},
+
   {"ETH_PAUSE_ON", "n",
    "Whether or not 'Pause Frame' is enabled on an Ethernet network.\n"
    "Pause frame is a mechanism for temporarily stopping the transmission of data to\n"
@@ -158,6 +162,9 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
                              UCT_MD_FLAG_NEED_MEMH |
                              UCT_MD_FLAG_NEED_RKEY |
                              UCT_MD_FLAG_ADVISE;
+    md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST) |
+                                 UCS_BIT(UCT_MD_MEM_TYPE_CUDA);
+    md_attr->cap.mem_type  = UCT_MD_MEM_TYPE_HOST;
     md_attr->rkey_packed_size = sizeof(uint64_t);
 
     if (md->config.enable_contig_pages &&
@@ -869,9 +876,10 @@ static uct_md_ops_t uct_ib_md_ops = {
     .mem_dereg    = uct_ib_mem_dereg,
     .mem_advise   = uct_ib_mem_advise,
     .mkey_pack    = uct_ib_mkey_pack,
+    .is_mem_type_owned = (void *)ucs_empty_function_return_zero,
 };
 
-static inline uct_ib_rcache_region_t* uct_ib_rache_region_from_memh(uct_mem_h memh)
+static inline uct_ib_rcache_region_t* uct_ib_rcache_region_from_memh(uct_mem_h memh)
 {
     return ucs_container_of(memh, uct_ib_rcache_region_t, memh);
 }
@@ -907,7 +915,7 @@ static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
 static ucs_status_t uct_ib_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
-    uct_ib_rcache_region_t *region = uct_ib_rache_region_from_memh(memh);
+    uct_ib_rcache_region_t *region = uct_ib_rcache_region_from_memh(memh);
 
     ucs_rcache_region_put(md->rcache, &region->super);
     return UCS_OK;
@@ -1180,7 +1188,8 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         uct_ib_fork_warn_enable();
     }
 
-    status = uct_ib_device_init(&md->dev, ib_device UCS_STATS_ARG(md->stats));
+    status = uct_ib_device_init(&md->dev, ib_device, md_config->async_events
+                                UCS_STATS_ARG(md->stats));
     if (status != UCS_OK) {
         goto err_release_stats;
     }

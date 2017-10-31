@@ -396,6 +396,11 @@ public:
 
         wait_window(m_max_outstanding);
         ucp_worker_flush(m_perf.ucp.worker);
+
+        if (my_index == 1) {
+            ucx_perf_update(&m_perf, 0, 0);
+        }
+
         rte_call(&m_perf, barrier);
         return UCS_OK;
     }

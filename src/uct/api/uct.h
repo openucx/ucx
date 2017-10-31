@@ -385,6 +385,16 @@ enum {
                                                sockaddr */
 };
 
+/*
+ * @ingroup UCT_MD
+ * @brief  Memory types
+ */
+typedef enum {
+    UCT_MD_MEM_TYPE_HOST = 0,      /**< Default system memory */
+    UCT_MD_MEM_TYPE_CUDA,          /**< NVIDIA CUDA memory */
+    UCT_MD_MEM_TYPE_LAST
+} uct_memory_type_t;
+
 
 /**
  * @ingroup UCT_MD
@@ -588,11 +598,6 @@ struct uct_iface_params {
             void                                 *conn_request_arg;
             /** Callback for an incoming connection request on the server */
             uct_sockaddr_conn_request_callback_t conn_request_cb;
-            /** Argument for connection ready callback */
-            void                                 *conn_ready_arg;
-            /** Callback for an incoming message on the server indicating that
-                the connection is ready */
-            uct_sockaddr_conn_ready_callback_t   conn_ready_cb;
             /** Callback flags to indicate where the callback can be invoked from.
              * @ref uct_cb_flags */
             uint32_t                             cb_flags;
@@ -633,6 +638,8 @@ struct uct_md_attr {
         size_t               max_alloc; /**< Maximal allocation size */
         size_t               max_reg;   /**< Maximal registration size */
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
+        uint64_t             reg_mem_types; /** UCS_BIT(uct_memory_type_t) */
+        uct_memory_type_t    mem_type;  /**< Supported(owned) memory type */
     } cap;
 
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost estimation
@@ -1318,6 +1325,16 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  *                               remote peer.
  * @param [in]  length           Length of the private data.
  * @param [out] ep_p             Handle to the created endpoint.
+ *
+ * @return UCS_OK              - The connection to the server, on the client side,
+ *                               was established. No reply from the server is
+ *                               required and therefore the reply_cb callback
+ *                               won't be invoked.
+ * @return UCS_INPROGRESS      - The connection to the remote peer was initiated.
+ *                               The user will be notified of the connection
+ *                               establishment, on the client side, when the reply_cb
+ *                               callback will be invoked.
+ * @return error code          - In case of an error. (@ref ucs_status_t)
  */
 ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
                                     const ucs_sock_addr_t *sockaddr,
@@ -1415,6 +1432,19 @@ ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
  */
 ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
 
+
+/**
+ * @ingroup UCT_MD
+ * @brief Check if memory type is owned by MD
+ *
+ *  Check memory type.
+ *  @return Nonzero if memory is owned, 0 if not owned
+ *
+ * @param [in]     md        Memory domain to detect if memory belongs to.
+ * @param [in]     address   Memory address to detect.
+ * @param [in]     length    Size of memory
+ */
+int uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length);
 
 /**
  * @ingroup UCT_MD

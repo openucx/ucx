@@ -135,8 +135,8 @@ static ucs_config_field_t ucp_config_table[] = {
    "Size of a segment in the worker preregistered memory pool.",
    ucs_offsetof(ucp_config_t, ctx.seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TM_OFFLOAD", "y", "Enable tag matching offload",
-   ucs_offsetof(ucp_config_t, ctx.tm_offload), UCS_CONFIG_TYPE_BOOL},
+  {"TM_OFFLOAD", "try", "Enable tag matching offload",
+   ucs_offsetof(ucp_config_t, ctx.tm_offload), UCS_CONFIG_TYPE_TERNARY},
 
   {"TM_THRESH", "1024", /* TODO: calculate automaticlly */
    "Threshold for using tag matching offload capabilities.\n"

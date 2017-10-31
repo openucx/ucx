@@ -320,23 +320,6 @@ typedef void (*uct_sockaddr_conn_reply_callback_t)(void *arg, const void *reply_
 
 
 /**
- * @ingroup UCT_RESOURCE
- * @brief Callback to process an incoming 'ready' message from the client.
- *
- * This callback routine will be invoked on the server side upon receiving a
- * message from the client indicating that the connection is ready.
- * It should be set by the server side while initializing an interface.
- * This callback has to be thread safe.
- * Other than communication progress routines, it is allowed to call other UCT
- * communication routines from this callback.
- *
- * @param [in]  arg         User defined argument for this callback.
- *
- */
-typedef void (*uct_sockaddr_conn_ready_callback_t)(void *arg);
-
-
-/**
  * @ingroup UCT_TAG
  * @brief Callback to process unexpected eager tagged message.
  *

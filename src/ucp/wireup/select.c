@@ -520,6 +520,68 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
     ucp_wireup_fill_ep_params_criteria(criteria, params);
 }
 
+static void ucp_wireup_fill_tag_criteria(ucp_ep_h ep, ucp_wireup_criteria_t *criteria)
+{
+    criteria->title              = "tag_offload";
+    criteria->local_md_flags     = UCT_MD_FLAG_REG; /* needed for posting tags to HW */
+    criteria->remote_md_flags    = UCT_MD_FLAG_REG; /* needed for posting tags to HW */
+    criteria->remote_iface_flags = /* the same as local_iface_flags */
+    criteria->local_iface_flags  = UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                                   UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  |
+                                   UCT_IFACE_FLAG_GET_ZCOPY       |
+                                   UCT_IFACE_FLAG_PENDING;
+
+    /* Use RMA score func for now (to target mid size messages).
+     * TODO: have to align to TM_THRESH value. */
+    criteria->calc_score         = ucp_wireup_rma_score_func;
+}
+
+static int ucp_wireup_tag_lane_supported(ucp_ep_h ep,
+                                         ucp_err_handling_mode_t err_mode,
+                                         ucs_ternary_value_t tm_config_mode)
+{
+    return ((ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) &&
+            (ep->worker->context->config.ext.tm_offload == tm_config_mode) &&
+            !ucs_queue_is_empty(&ep->worker->context->tm.offload.ifaces) &&
+            /* TODO: remove check below when UCP_ERR_HANDLING_MODE_PEER supports
+             *       RNDV-protocol or HW TM supports fragmented protocols
+             */
+            (err_mode == UCP_ERR_HANDLING_MODE_NONE));
+
+}
+
+static uint32_t ucp_wireup_tag_lane_usage(ucp_ep_h ep,
+                                          const ucp_address_entry_t *address_list,
+                                          unsigned addr_index,
+                                          ucp_rsc_index_t rsc_index,
+                                          ucp_err_handling_mode_t err_mode)
+{
+    ucp_context_t *context = ep->worker->context;
+    uct_tl_resource_desc_t *resource;
+    ucp_wireup_criteria_t criteria;
+
+    if (!ucp_wireup_tag_lane_supported(ep, err_mode, UCS_TRY)) {
+        return 0;
+    }
+
+    resource   = &context->tl_rscs[rsc_index].tl_rsc;
+
+    ucp_wireup_fill_tag_criteria(ep, &criteria);
+
+    if (ucp_wireup_check_flags(resource,
+                               ep->worker->ifaces[rsc_index].attr.cap.flags,
+                               criteria.local_iface_flags, criteria.title,
+                               ucp_wireup_iface_flags, NULL, 0) &&
+        ucp_wireup_check_flags(resource,
+                               address_list[addr_index].iface_attr.cap_flags,
+                               criteria.remote_iface_flags, criteria.title,
+                               ucp_wireup_iface_flags, NULL, 0)) {
+        return UCP_WIREUP_LANE_USAGE_TAG;
+    }
+
+    return 0;
+}
+
 static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                              unsigned address_count,
                                              const ucp_address_entry_t *address_list,
@@ -629,7 +691,8 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
                                            unsigned address_count,
                                            const ucp_address_entry_t *address_list,
                                            ucp_wireup_lane_desc_t *lane_descs,
-                                           ucp_lane_index_t *num_lanes_p)
+                                           ucp_lane_index_t *num_lanes_p,
+                                           ucp_err_handling_mode_t err_mode)
 {
     ucp_wireup_criteria_t criteria;
     uint64_t remote_cap_flags;
@@ -640,6 +703,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
     int is_proxy;
     double score;
     int need_am;
+    uint32_t usage;
 
     /* Check if we need active messages, for wireup */
     if (!(ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | UCP_FEATURE_STREAM))) {
@@ -684,9 +748,14 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
                ((remote_cap_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS) ==
                     UCT_IFACE_FLAG_EVENT_RECV_SIG_AM);
 
+    usage = UCP_WIREUP_LANE_USAGE_AM |
+            ucp_wireup_tag_lane_usage(ep, address_list, addr_index,
+                                      rsc_index, err_mode);
+
     ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                              address_list[addr_index].md_index, score,
-                             UCP_WIREUP_LANE_USAGE_AM, is_proxy);
+                             usage, is_proxy);
+
     return UCS_OK;
 }
 
@@ -747,33 +816,11 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
     unsigned addr_index;
     double score;
 
-    if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) ||
-        !ep->worker->context->config.ext.tm_offload ||
-        ucs_queue_is_empty(&ep->worker->context->tm.offload.ifaces) ||
-        /* TODO: remove check below when UCP_ERR_HANDLING_MODE_PEER supports
-         *       RNDV-protocol or HW TM supports fragmented protocols
-         */
-        err_mode == UCP_ERR_HANDLING_MODE_PEER)
-    {
+    if (!ucp_wireup_tag_lane_supported(ep, err_mode, UCS_YES)) {
         return UCS_OK;
     }
 
-    criteria.title              = "tag_offload";
-    criteria.local_md_flags     = UCT_MD_FLAG_REG; /* needed for posting tags to HW */
-    criteria.remote_md_flags    = UCT_MD_FLAG_REG; /* needed for posting tags to HW */
-    criteria.remote_iface_flags = UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
-                                  UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  |
-                                  UCT_IFACE_FLAG_GET_ZCOPY       |
-                                  UCT_IFACE_FLAG_PENDING;
-    criteria.local_iface_flags  = UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
-                                  UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  |
-                                  UCT_IFACE_FLAG_GET_ZCOPY       |
-                                  UCT_IFACE_FLAG_PENDING;
-
-    /* Use RMA score func for now (to target mid size messages).
-     * TODO: have to align to TM_THRESH value. */
-    criteria.calc_score         = ucp_wireup_rma_score_func;
-
+    ucp_wireup_fill_tag_criteria(ep, &criteria);
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
         criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
     }
@@ -881,7 +928,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     }
 
     status = ucp_wireup_add_am_lane(ep, params, address_count, address_list,
-                                    lane_descs, &key->num_lanes);
+                                    lane_descs, &key->num_lanes, key->err_mode);
     if (status != UCS_OK) {
         return status;
     }
