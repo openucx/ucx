@@ -2057,9 +2057,9 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  * @param [in]     ep       UCP endpoint that is used for the receive operation.
  * @param [in]     buffer   Pointer to the buffer to receive the data to.
  * @param [inout]  count    Number of elements to receive into @a buffer as
- *                          in-parameter and the size of the received data as
- *                          out-parameter. Out-parameter is valid only if return
- *                          code is UCS_OK.
+ *                          in-parameter and the size of the received data in
+ *                          bytes as out-parameter. Out-parameter is valid only
+ *                          if return code is UCS_OK.
  * @param [in]     datatype Datatype descriptor for the elements in the buffer.
  * @param [in]     cb       Callback function that is invoked whenever the
  *                          receive operation is completed and the data is ready
