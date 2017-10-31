@@ -22,6 +22,7 @@ static uct_md_ops_t uct_rdmacm_md_ops = {
     .close                  = uct_rdmacm_md_close,
     .query                  = uct_rdmacm_md_query,
     .is_sockaddr_accessible = uct_rdmacm_is_sockaddr_accessible,
+    .is_mem_type_owned      = (void *)ucs_empty_function_return_zero,
 };
 
 static void uct_rdmacm_md_close(uct_md_h md)
@@ -33,6 +34,8 @@ static void uct_rdmacm_md_close(uct_md_h md)
 ucs_status_t uct_rdmacm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->cap.flags         = UCT_MD_FLAG_SOCKADDR;
+    md_attr->cap.reg_mem_types = 0;
+    md_attr->cap.mem_type      = UCT_MD_MEM_TYPE_HOST;
     md_attr->cap.max_alloc     = 0;
     md_attr->cap.max_reg       = 0;
     md_attr->rkey_packed_size  = 0;
