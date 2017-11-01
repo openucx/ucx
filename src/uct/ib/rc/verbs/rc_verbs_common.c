@@ -385,3 +385,16 @@ void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
     txcnt->pi = txcnt->ci = 0;
 }
 
+ucs_status_t uct_rc_verbs_wc2ucs_status(enum ibv_wc_status status)
+{
+    switch (status)
+    {
+    case IBV_WC_SUCCESS:
+        return UCS_OK;
+    case IBV_WC_RETRY_EXC_ERR:
+    case IBV_WC_RNR_RETRY_EXC_ERR:
+        return UCS_ERR_ENDPOINT_TIMEOUT;
+    default:
+        return UCS_ERR_IO_ERROR;
+    }
+}

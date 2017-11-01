@@ -114,7 +114,8 @@ static ucs_status_t uct_rc_mlx5_iface_arm_rx_cq(uct_ib_iface_t *ib_iface,
 }
 
 static void
-uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
+uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
+                                 ucs_status_t status)
 {
     struct mlx5_cqe64 *cqe   = arg;
     uct_rc_iface_t    *iface = ucs_derived_of(ib_iface, uct_rc_iface_t);
@@ -126,17 +127,19 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
     }
 
     uct_ib_mlx5_completion_with_err(arg, ib_iface->super.config.failure_level);
-    uct_rc_txqp_purge_outstanding(&ep->super.txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
+    uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
     /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
        is not updated for the error cqe and all outstanding wqes*/
     iface->tx.cq_available += ep->tx.wq.bb_max -
                               uct_rc_txqp_available(&ep->super.txqp);
-    ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super);
+    ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super, status);
 }
 
-static void uct_rc_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep)
+static void uct_rc_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
+                                      ucs_status_t status)
 {
-    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_mlx5_ep_t), ep, &iface->super.super);
+    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_mlx5_ep_t), ep,
+                      &iface->super.super, status);
 }
 
 static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)

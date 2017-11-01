@@ -613,20 +613,22 @@ ucs_status_t uct_dc_verbs_iface_create_ah(uct_dc_iface_t *dc_iface, uint16_t lid
     return UCS_OK;
 }
 
-static void uct_dc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
+static void uct_dc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
+                                        ucs_status_t status)
 {
     struct ibv_wc *wc = arg;
 
     ucs_log(ib_iface->super.config.failure_level,
             "Send completion with error on qp 0x%x: %s syndrome 0x%x",
             wc->qp_num, ibv_wc_status_str(wc->status), wc->vendor_err);
-    uct_dc_handle_failure(ib_iface, wc->qp_num);
+    uct_dc_handle_failure(ib_iface, wc->qp_num, status);
 }
 
-static void uct_dc_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep)
+static void uct_dc_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
+                                       ucs_status_t status)
 {
     uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_verbs_ep_t), ep,
-                      &iface->super.super);
+                      &iface->super.super, status);
 }
 
 static ucs_status_t uct_dc_verbs_reset_dci(uct_dc_iface_t *dc_iface, int dci)
@@ -730,8 +732,9 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
 
     UCT_RC_VERBS_IFACE_FOREACH_TXWQE(&iface->super.super, i, wc, num_wcs) {
         if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
+            status = uct_rc_verbs_wc2ucs_status(wc[i].status);
             iface->super.super.super.ops->handle_failure(&iface->super.super.super,
-                                                         &wc[i]);
+                                                         &wc[i], status);
             continue;
         }
         dci = uct_dc_iface_dci_find(&iface->super, wc[i].qp_num);

@@ -472,7 +472,8 @@ void uct_iface_dump_am(uct_base_iface_t *iface, uct_am_trace_type_t type,
 
 void uct_iface_mpool_empty_warn(uct_base_iface_t *iface, ucs_mpool_t *mp);
 
-void uct_set_ep_failed(ucs_class_t* cls, uct_ep_h tl_ep, uct_iface_h tl_iface);
+void uct_set_ep_failed(ucs_class_t* cls, uct_ep_h tl_ep, uct_iface_h tl_iface,
+                       ucs_status_t status);
 
 ucs_status_t uct_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                   uct_completion_t *comp);

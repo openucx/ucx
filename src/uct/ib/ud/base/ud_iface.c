@@ -761,7 +761,8 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
             --cdesc->ep->tx.err_skb_count;
             if (cdesc->ep->tx.err_skb_count == 0) {
                 iface->super.ops->set_ep_failed(&iface->super,
-                                                &cdesc->ep->super.super);
+                                                &cdesc->ep->super.super,
+                                                skb->status);
             }
         }
 
@@ -847,11 +848,11 @@ void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc)
     uct_ud_leave(iface);
 }
 
-void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg)
+void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg,
+                                 ucs_status_t status)
 {
     uct_ud_tx_wnd_purge_outstanding(ucs_derived_of(iface, uct_ud_iface_t),
-                                    (uct_ud_ep_t *)arg,
-                                    UCS_ERR_ENDPOINT_TIMEOUT);
+                                    (uct_ud_ep_t *)arg, status);
 }
 
 ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
