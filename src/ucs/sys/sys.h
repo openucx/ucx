@@ -44,6 +44,7 @@
 #include <limits.h>
 #include <pthread.h>
 
+BEGIN_C_DECLS
 
 /**
  * @return Host name.
@@ -253,5 +254,7 @@ ucs_status_t ucs_empty_function_return_no_resource();
 ucs_status_t ucs_empty_function_return_ep_timeout();
 ssize_t ucs_empty_function_return_bc_ep_timeout();
 ucs_status_t ucs_empty_function_return_busy();
+
+END_C_DECLS
 
 #endif

@@ -11,11 +11,14 @@
 #  include "config.h"
 #endif
 
+#include <ucs/sys/compiler_def.h>
+
 #include <sys/types.h>
 #include <malloc.h>
 #include <stdlib.h>
 #include <stdio.h>
 
+BEGIN_C_DECLS
 
 enum {
     UCS_MEMTRACK_STAT_ALLOCATION_COUNT,
@@ -158,5 +161,6 @@ char *ucs_strdup(const char *src, const char *name);
 
 #endif /* ENABLE_MEMTRACK */
 
+END_C_DECLS
 
 #endif

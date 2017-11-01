@@ -6,10 +6,8 @@
 #include "ucp_test.h"
 
 #include <common/test_helpers.h>
-extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/stats/stats.h>
-}
 
 
 std::string ucp_test::m_last_err_msg;

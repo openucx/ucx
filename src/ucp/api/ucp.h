@@ -14,8 +14,10 @@
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/config/types.h>
+#include <ucs/sys/compiler_def.h>
 #include <stdio.h>
 
+BEGIN_C_DECLS
 
 /**
  * @defgroup UCP_API Unified Communication Protocol (UCP) API
@@ -2446,5 +2448,6 @@ ucs_status_t ucp_worker_flush(ucp_worker_h worker);
  * UCP hello world client / server example utility.
  */
 
+END_C_DECLS
 
 #endif

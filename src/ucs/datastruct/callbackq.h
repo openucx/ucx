@@ -11,6 +11,9 @@
 #include <ucs/async/async_fwd.h>
 #include <ucs/datastruct/list_types.h>
 #include <stdint.h>
+#include <ucs/sys/compiler_def.h>
+
+BEGIN_C_DECLS
 
 /*
  *
@@ -236,6 +239,7 @@ void ucs_callbackq_add_slow_path(ucs_callbackq_t *cbq,
 void ucs_callbackq_remove_slow_path(ucs_callbackq_t *cbq,
                                     ucs_callbackq_slow_elem_t* elem);
 
+END_C_DECLS
 
 /**
  * Remove all slow path elements with a given callback function from the list.

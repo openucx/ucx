@@ -6,11 +6,9 @@
 
 #include "test.h"
 
-extern "C" {
 #include <ucs/config/parser.h>
 #include <ucs/config/global_opts.h>
 #include <ucs/sys/sys.h>
-}
 
 namespace ucs {
 

@@ -9,6 +9,9 @@
 
 #include <stdint.h>
 
+#include <ucs/sys/compiler_def.h>
+
+BEGIN_C_DECLS
 
 typedef uint64_t                          ucs_stats_counter_t;        /* Stats counter*/
 typedef struct ucs_stats_class            ucs_stats_class_t;          /* Stats class */
@@ -24,5 +27,7 @@ typedef enum {
 
 extern const char *ucs_stats_formats_names[];
 ucs_stats_node_t * ucs_stats_get_root();
+
+END_C_DECLS
 
 #endif /* STATS_FD_H_ */
