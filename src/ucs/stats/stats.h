@@ -12,6 +12,10 @@
 #  include "config.h"
 #endif
 
+#include <ucs/sys/compiler_def.h>
+
+BEGIN_C_DECLS
+
 void ucs_stats_init();
 void ucs_stats_cleanup();
 void ucs_stats_dump();
@@ -103,5 +107,7 @@ void ucs_stats_node_free(ucs_stats_node_t *node);
 #define UCS_STATS_SET_TIME(_node, _index, _start_time)
 
 #endif
+
+END_C_DECLS
 
 #endif

@@ -10,6 +10,7 @@
 
 #include <ucs/sys/compiler.h>
 #include <ucs/arch/generic/cpu.h>
+#include <ucs/sys/compiler_def.h>
 #include <stdint.h>
 
 #ifdef __SSE4_1__
@@ -19,6 +20,7 @@
 #  include <immintrin.h>
 #endif
 
+BEGIN_C_DECLS
 
 #define UCS_ARCH_CACHE_LINE_SIZE 64
 
@@ -48,6 +50,7 @@ ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
 
 #define ucs_arch_wait_mem ucs_arch_generic_wait_mem
 
+END_C_DECLS
 
 #endif
 

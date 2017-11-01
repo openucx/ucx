@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <math.h>
 
+BEGIN_C_DECLS
 
 #define UCS_KBYTE    (1ull << 10)
 #define UCS_MBYTE    (1ull << 20)
@@ -147,5 +148,6 @@ uint32_t ucs_calc_crc32(uint32_t crc, const void *buf, size_t size);
  */
 uint64_t ucs_get_prime(unsigned index);
 
+END_C_DECLS
 
 #endif /* MACROS_H_ */

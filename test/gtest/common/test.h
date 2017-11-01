@@ -9,11 +9,9 @@
 
 #include "test_helpers.h"
 
-extern "C" {
 #include <ucs/debug/log.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/config/parser.h>
-}
 
 #include <map>
 #include <vector>
