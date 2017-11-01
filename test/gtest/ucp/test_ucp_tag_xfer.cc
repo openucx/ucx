@@ -1027,6 +1027,16 @@ UCS_TEST_P(test_ucp_tag_stats, offload_sw_rndv_unexpected, "RNDV_THRESH=1000",
     validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV, 0ul);
 }
 
+UCS_TEST_P(test_ucp_tag_stats, offload_exp_recv_generic, "RNDV_THRESH=1000",
+                                                         "TM_THRESH=1",
+                                                         "TM_OFFLOAD=y") {
+    skip_no_tag_offload();
+
+    test_run_xfer(false, false, true, false, false);
+
+    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_NON_CONTIG, 0ul);
+}
+
 UCS_TEST_P(test_ucp_tag_stats, offload_post, "TM_OFFLOAD=y", "TM_THRESH=1") {
 
     skip_no_tag_offload();
@@ -1044,16 +1054,6 @@ UCS_TEST_P(test_ucp_tag_stats, offload_post, "TM_OFFLOAD=y", "TM_THRESH=1") {
 
     wait_counter(worker_offload_stats(receiver()),
                  UCP_WORKER_STAT_TAG_OFFLOAD_CANCELED);
-    request_release(rreq);
-
-    // Check non-contig types
-    ucp_datatype_t recv_dt;
-    ASSERT_UCS_OK(ucp_dt_create_generic(&test_dt_uint8_ops, NULL, &recv_dt));
-    rreq = recv_nb(&dummy, sizeof(dummy), recv_dt, tag, mask);
-
-    wait_counter(worker_offload_stats(receiver()),
-                 UCP_WORKER_STAT_TAG_OFFLOAD_NON_CONTIG);
-    ucp_request_cancel(receiver().worker(), rreq);
     request_release(rreq);
 }
 
