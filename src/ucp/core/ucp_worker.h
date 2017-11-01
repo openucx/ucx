@@ -68,7 +68,6 @@ enum {
  * UCP worker tag offload statistics counters
  */
 enum {
-    /* Total number of received eager messages */
     UCP_WORKER_STAT_TAG_OFFLOAD_POSTED,
     UCP_WORKER_STAT_TAG_OFFLOAD_CANCELED,
     UCP_WORKER_STAT_TAG_OFFLOAD_TAG_EXCEED,
