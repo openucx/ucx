@@ -16,6 +16,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/sys/sys.h>
 
+
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_offload_release_buf(ucp_request_t *req, ucp_context_t *ctx,
                             ucp_rsc_index_t rsc_idx)
@@ -70,7 +71,7 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
                                  &req->recv.state);
     }
 
-    UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, RX);
+    UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, RX_COMPLETED);
 out:
     ucp_request_complete_recv(req, status);
 }
@@ -223,7 +224,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
 
     if (!UCP_DT_IS_CONTIG(req->recv.datatype)) {
         /* Non-contig buffers not supported yet. */
-        UCP_WORKER_STAT_TAG_OFFLOAD(worker, NON_CONTIG);
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_NON_CONTIG);
         return 0;
     }
 
@@ -232,14 +233,14 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
         /* Wildcard.
          * TODO add check that only offload capable iface present. In
          * this case can post tag as well. */
-        UCP_WORKER_STAT_TAG_OFFLOAD(worker, WILDCARD);
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_WILDCARD);
         return 0;
     }
 
     if (ctx->tm.offload.sw_req_count) {
         /* There are some requests which must be completed in SW. Do not post
          * tags to HW until they are completed. */
-        UCP_WORKER_STAT_TAG_OFFLOAD(worker, SW_REQ);
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_SW_PEND);
         return 0;
     }
 
@@ -296,7 +297,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
     if (status != UCS_OK) {
         /* No more matching entries in the transport. */
         ucp_tag_offload_release_buf(req, ctx, ucp_iface->rsc_index);
-        UCP_WORKER_STAT_TAG_OFFLOAD(worker, TAG_EXCEED);
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_TAG_EXCEED);
         return 0;
     }
     UCP_WORKER_STAT_TAG_OFFLOAD(worker, POSTED);

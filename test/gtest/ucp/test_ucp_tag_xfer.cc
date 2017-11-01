@@ -883,7 +883,7 @@ public:
     }
 
     ucs_stats_node_t* worker_offload_stats(entity &e) {
-        return e.worker()->offload_stats;
+        return e.worker()->tm_offload_stats;
     }
 
     void skip_no_tag_offload() {
@@ -994,7 +994,7 @@ UCS_TEST_P(test_ucp_tag_stats, offload_rndv_expected, "RNDV_THRESH=1000",
 
     test_run_xfer(true, true, true, false, false);
 
-    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_RX, 1ul);
+    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_RX_COMPLETED, 1ul);
 }
 
 UCS_TEST_P(test_ucp_tag_stats, offload_rndv_unexpected, "RNDV_THRESH=1000",
@@ -1034,7 +1034,7 @@ UCS_TEST_P(test_ucp_tag_stats, offload_exp_recv_generic, "RNDV_THRESH=1000",
 
     test_run_xfer(false, false, true, false, false);
 
-    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_NON_CONTIG, 0ul);
+    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_NON_CONTIG, 0ul);
 }
 
 UCS_TEST_P(test_ucp_tag_stats, offload_post, "TM_OFFLOAD=y", "TM_THRESH=1") {

@@ -70,11 +70,11 @@ enum {
 enum {
     UCP_WORKER_STAT_TAG_OFFLOAD_POSTED,
     UCP_WORKER_STAT_TAG_OFFLOAD_CANCELED,
-    UCP_WORKER_STAT_TAG_OFFLOAD_TAG_EXCEED,
-    UCP_WORKER_STAT_TAG_OFFLOAD_NON_CONTIG,
-    UCP_WORKER_STAT_TAG_OFFLOAD_WILDCARD,
-    UCP_WORKER_STAT_TAG_OFFLOAD_SW_REQ,
-    UCP_WORKER_STAT_TAG_OFFLOAD_RX,
+    UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_TAG_EXCEED,
+    UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_NON_CONTIG,
+    UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_WILDCARD,
+    UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_SW_PEND,
+    UCP_WORKER_STAT_TAG_OFFLOAD_RX_COMPLETED,
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_SW_RNDV,
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_EGR,
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_RNDV,
@@ -109,7 +109,7 @@ enum {
                              UCP_WORKER_STAT_TAG_RX_RNDV_##_is_exp, 1);
 
 #define UCP_WORKER_STAT_TAG_OFFLOAD(_worker, _name) \
-    UCS_STATS_UPDATE_COUNTER((_worker)->offload_stats, \
+    UCS_STATS_UPDATE_COUNTER((_worker)->tm_offload_stats, \
                              UCP_WORKER_STAT_TAG_OFFLOAD_##_name, 1);
 
 #define ucp_worker_mpool_get(_worker) \
@@ -172,7 +172,7 @@ typedef struct ucp_worker {
     ucp_mt_lock_t                 mt_lock;       /* Configuration of multi-threading support */
 
     UCS_STATS_NODE_DECLARE(stats);
-    UCS_STATS_NODE_DECLARE(offload_stats);
+    UCS_STATS_NODE_DECLARE(tm_offload_stats);
 
     unsigned                      ep_config_max; /* Maximal number of configurations */
     unsigned                      ep_config_count;/* Current number of configurations */
