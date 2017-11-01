@@ -518,6 +518,11 @@ run_coverity() {
 # Run the test suite (gtest)
 #
 run_gtest() {
+
+	#load cuda modules if available
+	module_load dev/cuda || true
+	module_load dev/gdrcopy || true
+
 	../contrib/configure-devel --prefix=$ucx_inst
 	$MAKE clean
 	$MAKE
