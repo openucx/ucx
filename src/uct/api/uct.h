@@ -19,10 +19,13 @@
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/stats/stats_fwd.h>
+#include <ucs/sys/compiler_def.h>
 
 #include <sys/socket.h>
 #include <stdio.h>
 #include <sched.h>
+
+BEGIN_C_DECLS
 
 /**
  * @defgroup UCT_API Unified Communication Transport (UCT) API
@@ -2395,5 +2398,6 @@ UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
  * UCT hello world client / server example utility.
  */
 
+END_C_DECLS
 
 #endif

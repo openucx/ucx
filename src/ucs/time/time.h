@@ -12,6 +12,7 @@
 #include <ucs/sys/math.h>
 #include <sys/time.h>
 
+BEGIN_C_DECLS
 
 /**
  * Short time type
@@ -131,5 +132,7 @@ static inline void ucs_sec_to_timespec(double seconds, struct timespec *ts)
     ts->tv_sec  = nsec / UCS_NSEC_PER_SEC;
     ts->tv_nsec = nsec % UCS_NSEC_PER_SEC;
 }
+
+END_C_DECLS
 
 #endif

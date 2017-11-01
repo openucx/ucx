@@ -10,6 +10,7 @@
 #include <ucs/type/status.h>
 #include <pthread.h>
 
+BEGIN_C_DECLS
 
 /**
  * Reentrant spinlock.
@@ -92,5 +93,7 @@ static inline void ucs_spin_unlock(ucs_spinlock_t *lock)
         pthread_spin_unlock(&lock->lock);
     }
 }
+
+END_C_DECLS
 
 #endif

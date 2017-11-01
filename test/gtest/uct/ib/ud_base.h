@@ -8,12 +8,10 @@
 
 #include <uct/uct_test.h>
 
-extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
 #include <uct/ib/ud/base/ud_ep.h>
 #include <uct/ib/ud/base/ud_iface.h>
-}
 
 
 #define TEST_UD_PROGRESS_TIMEOUT 300.0

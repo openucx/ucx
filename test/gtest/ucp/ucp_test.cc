@@ -6,10 +6,8 @@
 #include "ucp_test.h"
 
 #include <common/test_helpers.h>
-extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/stats/stats.h>
-}
 
 
 std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)

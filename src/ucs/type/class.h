@@ -11,6 +11,7 @@
 #include <ucs/sys/preprocessor.h>
 #include <ucs/type/status.h>
 
+BEGIN_C_DECLS
 
 typedef struct ucs_class     ucs_class_t;
 
@@ -301,5 +302,7 @@ void ucs_class_free(void *obj);
  * The empty class.
  */
 UCS_CLASS_DECLARE(void);
+
+END_C_DECLS
 
 #endif

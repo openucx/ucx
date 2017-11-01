@@ -10,6 +10,9 @@
 
 #include <ucs/datastruct/list_types.h>
 #include <stdint.h>
+#include <ucs/sys/compiler_def.h>
+
+BEGIN_C_DECLS
 
 /*
  * Thread-safe callback queue:
@@ -165,5 +168,6 @@ static inline unsigned ucs_callbackq_dispatch(ucs_callbackq_t *cbq)
     return count;
 }
 
+END_C_DECLS
 
 #endif

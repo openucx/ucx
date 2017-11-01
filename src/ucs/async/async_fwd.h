@@ -10,6 +10,7 @@
 #include <ucs/config/types.h>
 #include <ucs/time/time_def.h>
 
+BEGIN_C_DECLS
 
 typedef struct ucs_async_context ucs_async_context_t;
 
@@ -134,5 +135,6 @@ void ucs_async_poll(ucs_async_context_t *async);
 
 void __ucs_async_poll_missed(ucs_async_context_t *async);
 
+END_C_DECLS
 
 #endif

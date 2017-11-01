@@ -11,12 +11,14 @@
 
 #include <ucs/type/status.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/compiler_def.h>
 #include <stdio.h>
 
 
 #define UCS_CONFIG_PREFIX      "UCX_"
 #define UCS_CONFIG_ARRAY_MAX   128
 
+BEGIN_C_DECLS
 
 /*
  * Configuration varaibles syntax:
@@ -325,5 +327,7 @@ size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,
  */
 int ucs_config_names_search(ucs_config_names_array_t config_names,
                             const char *str);
+
+END_C_DECLS
 
 #endif

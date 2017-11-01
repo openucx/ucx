@@ -4,13 +4,11 @@
 * See file LICENSE for terms.
 */
 
-extern "C" {
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
 #include <ucs/config/parser.h>
 #include <ucs/sys/sys.h>
-}
 #include <ucm/api/ucm.h>
 #include "test_helpers.h"
 #include "tap.h"

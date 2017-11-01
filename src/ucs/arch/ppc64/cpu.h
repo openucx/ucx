@@ -13,9 +13,11 @@
 #ifdef HAVE_SYS_PLATFORM_PPC_H
 #  include <sys/platform/ppc.h>
 #endif
+#include <ucs/sys/compiler_def.h>
 #include <ucs/arch/generic/cpu.h>
 #include <stdint.h>
 
+BEGIN_C_DECLS
 
 #define UCS_ARCH_CACHE_LINE_SIZE 128
 
@@ -52,5 +54,7 @@ static inline int ucs_arch_get_cpu_flag()
 double ucs_arch_get_clocks_per_sec();
 
 #define ucs_arch_wait_mem ucs_arch_generic_wait_mem
+
+END_C_DECLS
 
 #endif

@@ -10,7 +10,9 @@
 
 
 #include <ucp/api/ucp_def.h>
+#include <ucs/sys/compiler_def.h>
 
+BEGIN_C_DECLS
 
 /**
  * @ingroup UCP_COMM
@@ -82,5 +84,7 @@ ucs_status_t ucp_ep_flush(ucp_ep_h ep);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_worker_flush(ucp_worker_h worker);
+
+END_C_DECLS
 
 #endif

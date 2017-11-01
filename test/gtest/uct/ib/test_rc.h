@@ -10,11 +10,9 @@
 #include <common/test.h>
 #include <uct/uct_test.h>
 
-extern "C" {
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/rc/base/rc_iface.h>
-}
 
 
 class test_rc : public uct_test {

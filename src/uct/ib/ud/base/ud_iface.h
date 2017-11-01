@@ -17,11 +17,13 @@
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/async/async.h>
 #include <ucs/time/timer_wheel.h>
+#include <ucs/sys/compiler_def.h>
 
 #include "ud_def.h"
 #include "ud_ep.h"
 #include "ud_iface_common.h"
 
+BEGIN_C_DECLS
 
 #define UCT_UD_MIN_INLINE   48
 
@@ -456,5 +458,7 @@ uct_ud_iface_dispatch_zcopy_comps(uct_ud_iface_t *iface)
 #define UCT_UD_CHECK_ZCOPY_LENGTH(iface, header_len, payload_len)
 #define UCT_UD_CHECK_BCOPY_LENGTH(iface, len)
 #endif
+
+END_C_DECLS
 
 #endif
