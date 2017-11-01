@@ -84,7 +84,7 @@ static inline int ucs_async_check_miss(ucs_async_context_t *async)
 
 
 /**
- * Block the async handler (if its currently running, wait until it exists and
+ * Block the async handler (if its currently running, wait until it exits and
  * block it then). Used to serialize accesses with the async handler.
  *
  * @param event Event context to block events for.
