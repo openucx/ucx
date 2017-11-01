@@ -994,7 +994,7 @@ UCS_TEST_P(test_ucp_tag_stats, offload_rndv_expected, "RNDV_THRESH=1000",
 
     test_run_xfer(true, true, true, false, false);
 
-    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_RX_COMPLETED, 1ul);
+    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED, 1ul);
 }
 
 UCS_TEST_P(test_ucp_tag_stats, offload_rndv_unexpected, "RNDV_THRESH=1000",
@@ -1014,7 +1014,7 @@ UCS_TEST_P(test_ucp_tag_stats, offload_sw_rndv_expected, "RNDV_THRESH=1000",
 
     test_run_xfer(false, true, true, false, false);
 
-    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_RX_SW_RNDV, 1ul);
+    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV, 1ul);
 }
 
 UCS_TEST_P(test_ucp_tag_stats, offload_sw_rndv_unexpected, "RNDV_THRESH=1000",

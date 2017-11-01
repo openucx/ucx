@@ -71,7 +71,7 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
                                  &req->recv.state);
     }
 
-    UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, RX_COMPLETED);
+    UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, MATCHED);
 out:
     ucp_request_complete_recv(req, status);
 }
@@ -112,7 +112,7 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
     unsigned length           = sizeof(ucp_rndv_rts_hdr_t);
     ucp_rndv_rts_hdr_t *rts;
 
-    UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, RX_SW_RNDV);
+    UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, MATCHED_SW_RNDV);
     if (ucs_unlikely(status != UCS_OK)) {
         ucp_tag_offload_release_buf(req, ctx, iface->rsc_index);
         ucp_request_complete_recv(req, status);
