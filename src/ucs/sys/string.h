@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
+BEGIN_C_DECLS
 
 /**
  * Expand a partial path to full path.
@@ -83,5 +84,6 @@ void ucs_memunits_to_str(size_t value, char *buf, size_t max);
  */
 const char* ucs_sockaddr_str(struct sockaddr *sock_addr, char *ip_str, size_t max_size);
 
+END_C_DECLS
 
 #endif

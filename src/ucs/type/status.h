@@ -11,6 +11,7 @@
 
 #include <ucs/sys/compiler_def.h>
 
+BEGIN_C_DECLS
 
 /**
  * @defgroup UCS_API Unified Communication Services (UCS) API
@@ -112,5 +113,6 @@ typedef void *ucs_status_ptr_t;
  */
 const char *ucs_status_string(ucs_status_t status);
 
+END_C_DECLS
 
 #endif

@@ -14,9 +14,11 @@
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/config/types.h>
+#include <ucs/sys/compiler_def.h>
 #include <stdio.h>
 #include <sys/types.h>
 
+BEGIN_C_DECLS
 
 /**
  * @defgroup UCP_API Unified Communication Protocol (UCP) API
@@ -2945,5 +2947,6 @@ ucs_status_ptr_t ucp_worker_flush_nb(ucp_worker_h worker, unsigned flags,
  * UCP hello world client / server example utility.
  */
 
+END_C_DECLS
 
 #endif

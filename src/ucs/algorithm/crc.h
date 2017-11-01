@@ -10,6 +10,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <ucs/sys/compiler_def.h>
+
+BEGIN_C_DECLS
+
 /**
  * Calculate CRC16 of an arbitrary buffer.
  *
@@ -26,5 +30,6 @@ uint16_t ucs_crc16(const void *buffer, size_t size);
  */
 uint16_t ucs_crc16_string(const char *s);
 
+END_C_DECLS
 
 #endif
