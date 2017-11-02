@@ -8,6 +8,7 @@
 
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
+#include <uct/base/uct_md.h>
 #include <string.h>
 
 
@@ -18,7 +19,13 @@ static void print_tl_config(uct_md_h md, const char *tl_name,
     uct_iface_config_t *config;
     ucs_status_t status;
 
-    snprintf(cfg_title, sizeof(cfg_title), "%s transport configuration", tl_name);
+    if (tl_name != NULL) {
+        snprintf(cfg_title, sizeof(cfg_title), "%s transport configuration", tl_name);
+    } else {
+        snprintf(cfg_title, sizeof(cfg_title), "%s client-server transport configuration",
+                 md->component->name);
+    }
+
     status = uct_md_iface_config_read(md, tl_name, NULL, NULL, &config);
     if (status != UCS_OK) {
         printf("# < Failed to read configuration >\n");
@@ -55,6 +62,7 @@ void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name)
     ucs_status_t status;
     uct_md_h md;
     uct_md_config_t *md_config;
+    uct_md_attr_t md_attr;
 
     status = uct_query_md_resources(&md_resources, &num_md_resources);
     if (status != UCS_OK) {
@@ -82,6 +90,19 @@ void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name)
         if (status != UCS_OK) {
             uct_md_close(md);
             continue;
+        }
+
+        /* handle the printing of a special case where cannot use tl_resources
+         * since there aren't any */
+        status = uct_md_query(md, &md_attr);
+        if (status != UCS_OK) {
+            uct_release_tl_resource_list(tl_resources);
+            uct_md_close(md);
+            continue;
+        }
+
+        if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
+            print_tl_config(md, NULL, print_flags);
         }
 
         for (tl_rsc_index = 0; tl_rsc_index < num_tl_resources; ++tl_rsc_index) {

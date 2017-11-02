@@ -56,6 +56,7 @@ public:
         // tl and dev names are taken from resources via GetParam, no need
         // to fill it here
         params.rx_headroom = 0;
+        params.open_mode   = UCT_IFACE_OPEN_MODE_DEVICE;
         params.eager_cb    = unexp_eager;
         params.eager_arg   = reinterpret_cast<void*>(this);
         params.rndv_cb     = unexp_rndv;
