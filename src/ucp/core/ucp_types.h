@@ -71,6 +71,8 @@ enum {
 
     UCP_AM_ID_STREAM_DATA       =  15, /* Eager STREAM packet */
 
+    UCP_AM_ID_RNDV_ATP          =  16, /* Ack-to-put complete after finishing a put_zcopy */
+
     UCP_AM_ID_LAST
 };
 
@@ -86,6 +88,16 @@ typedef enum {
     UCP_ATOMIC_MODE_LAST
 } ucp_atomic_mode_t;
 
+
+/**
+ * Communication scheme in RNDV protocol.
+ */
+typedef enum {
+    UCP_RNDV_MODE_GET_ZCOPY, /* Use get_zcopy scheme in RNDV protocol */
+    UCP_RNDV_MODE_PUT_ZCOPY, /* Use put_zcopy scheme in RNDV protocol */
+    UCP_RNDV_MODE_AUTO,      /* Runtime automatically chooses optimal scheme to use */
+    UCP_RNDV_MODE_LAST
+} ucp_rndv_mode_t;
 
 /**
  * Active message tracer.

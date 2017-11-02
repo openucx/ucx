@@ -127,6 +127,7 @@ ucp_tag_recv_request_init(ucp_request_t *req, ucp_worker_h worker, void* buffer,
     req->flags = UCP_REQUEST_FLAG_EXPECTED | UCP_REQUEST_FLAG_RECV | req_flags;
     req->recv.state.offset = 0;
     req->recv.worker       = worker;
+    req->recv.reg_rsc      = UCP_NULL_RESOURCE;
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_IOV:

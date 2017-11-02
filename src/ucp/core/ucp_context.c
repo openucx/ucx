@@ -38,6 +38,13 @@ static const char * ucp_device_type_names[] = {
     [UCT_DEVICE_TYPE_SELF] = "loopback",
 };
 
+static const char * ucp_rndv_modes[] = {
+    [UCP_RNDV_MODE_GET_ZCOPY] = "get_zcopy",
+    [UCP_RNDV_MODE_PUT_ZCOPY] = "put_zcopy",
+    [UCP_RNDV_MODE_AUTO]      = "auto",
+    [UCP_RNDV_MODE_LAST]      = NULL,
+};
+
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which network device(s) to use. The order is not meaningful.\n"
@@ -103,6 +110,13 @@ static ucs_config_field_t ucp_config_table[] = {
   {"MAX_RNDV_LANES", "1",
    "Maximal number of devices on which a rendezvous operation may be executed in parallel",
    ucs_offsetof(ucp_config_t, ctx.max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
+
+  {"RNDV_SCHEME", "get_zcopy",
+   "Communication scheme in RNDV protocol.\n"
+   " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
+   " put_zcopy - use put_zcopy scheme in RNDV protocol.\n"
+   " auto      - runtime automatically chooses optimal scheme to use.\n",
+   ucs_offsetof(ucp_config_t, ctx.rndv_mode), UCS_CONFIG_TYPE_ENUM(ucp_rndv_modes)},
 
   {"ZCOPY_THRESH", "auto",
    "Threshold for switching from buffer copy to zero copy protocol",
@@ -762,6 +776,13 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                      config->ctx.use_mt_mutex ? UCP_MT_TYPE_MUTEX
                                               : UCP_MT_TYPE_SPINLOCK);
     context->config.ext = config->ctx;
+
+    if (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) {
+        /* TODO: currently UCP_RNDV_MODE_AUTO == UCP_RNDV_MODE_GET_ZCOPY,
+         * after memory type support is added, will add tru UCP_RNDV_MODE_AUTO
+         * implementation */
+        context->config.ext.rndv_mode = UCP_RNDV_MODE_GET_ZCOPY;
+    }
 
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_
