@@ -215,6 +215,7 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name,
     uct_iface_config_t  *config; /* Defines interface configuration options */
     uct_iface_params_t  params;
 
+    params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
     params.mode.device.tl_name  = tl_name;
     params.mode.device.dev_name = dev_name;
     params.stats_root           = NULL;

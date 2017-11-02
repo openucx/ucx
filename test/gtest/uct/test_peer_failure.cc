@@ -83,6 +83,7 @@ public:
     void new_receiver()
     {
         uct_iface_params_t p = entity_params();
+        p.open_mode = UCT_IFACE_OPEN_MODE_DEVICE;
         m_receivers.push_back(uct_test::create_entity(p));
         m_entities.push_back(m_receivers.back());
         m_sender->connect(m_receivers.size() - 1, *m_receivers.back(), 0);
@@ -191,6 +192,7 @@ void test_uct_peer_failure::init()
     }
 
     uct_iface_params_t p = entity_params();
+    p.open_mode = UCT_IFACE_OPEN_MODE_DEVICE;
     m_sender = uct_test::create_entity(p);
     m_entities.push_back(m_sender);
 

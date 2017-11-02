@@ -251,9 +251,9 @@ err:
     return status;
 }
 
-static uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
-                                             uint64_t md_flags,
-                                             const char *tl_name)
+uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
+                                      uint64_t md_flags,
+                                      const char *tl_name)
 {
     uct_md_registered_tl_t *tlr;
 
@@ -318,7 +318,16 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
         return status;
     }
 
-    tlc = uct_find_tl_on_md(md->component, md_attr.cap.flags, params->mode.device.tl_name);
+    if (params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE) {
+        tlc = uct_find_tl_on_md(md->component, md_attr.cap.flags, params->mode.device.tl_name);
+    } else if ((params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT) ||
+               (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER)) {
+        tlc = uct_find_tl_on_md(md->component, md_attr.cap.flags, NULL);
+    } else {
+        ucs_error("Invalid open mode %zu", params->open_mode);
+        return status;
+    }
+
     if (tlc == NULL) {
         /* Non-existing transport */
         return UCS_ERR_NO_DEVICE;

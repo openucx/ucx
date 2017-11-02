@@ -1125,6 +1125,7 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
     uct_iface_config_t *iface_config;
     ucs_status_t status;
     uct_iface_params_t iface_params = {
+        .open_mode            = UCT_IFACE_OPEN_MODE_DEVICE,
         .mode.device.tl_name  = params->uct.tl_name,
         .mode.device.dev_name = params->uct.dev_name,
         .stats_root           = ucs_stats_get_root(),

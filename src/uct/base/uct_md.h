@@ -170,6 +170,10 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_md_component_t *mdc,
                                      const void *rkey_buffer, uct_rkey_t *rkey_p,
                                      void **handle_p);
 
+uct_tl_component_t *uct_find_tl_on_md(uct_md_component_t *mdc,
+                                      uint64_t md_flags,
+                                      const char *tl_name);
+
 
 extern ucs_list_link_t uct_md_components_list;
 extern ucs_config_field_t uct_md_config_table[];
