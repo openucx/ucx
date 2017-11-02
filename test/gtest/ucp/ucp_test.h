@@ -16,7 +16,8 @@
 
 #include <common/test.h>
 
-#define MT_TEST_NUM_THREADS 4
+#define MT_TEST_NUM_THREADS       4
+#define UCP_TEST_TIMEOUT_IN_SEC   10.0
 
 struct ucp_test_param {
     ucp_params_t              ctx_params;
