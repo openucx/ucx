@@ -181,9 +181,9 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                      flags);
     }
 
-    if ((status == UCS_OK) &&
+    if (ucs_likely((status == UCS_OK) &&
         (wqe_ctr == ((mlx5_common_iface->rx.srq.ready_idx + 1) &
-                      mlx5_common_iface->rx.srq.mask))) {
+                      mlx5_common_iface->rx.srq.mask)))) {
         /* If the descriptor was not used - if there are no "holes", we can just
          * reuse it on the receive queue. Otherwise, ready pointer will stay behind
          * until post_recv allocated more descriptors from the memory pool, fills
@@ -212,7 +212,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
 
 done:
     max_batch = rc_iface->super.config.rx_max_batch;
-    if (rc_iface->rx.srq.available >= max_batch) {
+    if (ucs_unlikely(rc_iface->rx.srq.available >= max_batch)) {
         uct_rc_mlx5_iface_srq_post_recv(rc_iface, &mlx5_common_iface->rx.srq);
     }
     return count;
