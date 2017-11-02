@@ -27,10 +27,7 @@ typedef struct ucp_dt_state {
         union {
             struct {
                 uct_mem_h         memh;
-            } contig;
-            struct {
-                uct_mem_h         memh;
-            } mrail[UCP_MAX_RAILS];
+            } contig[UCP_MAX_RAILS];
         };
         struct {
             size_t                iov_offset;     /* Offset in the IOV item */
@@ -123,6 +120,27 @@ ucp_dt_unpack(ucp_datatype_t datatype, void *buffer, size_t buffer_size,
         ucs_error("unexpected datatype=%lx", datatype);
         return UCS_ERR_INVALID_PARAM;
     }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_dt_clear_rails(ucp_dt_state_t *state)
+{
+    int i;
+    for (i = 0; i < UCP_MAX_RAILS; i++) {
+        state->dt.contig[i].memh = UCT_MEM_HANDLE_NULL;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_dt_is_empty_rail(ucp_dt_state_t *state, int rail)
+{
+    return state->dt.contig[rail].memh == UCT_MEM_HANDLE_NULL;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_dt_have_rails(ucp_dt_state_t *state)
+{
+    return !ucp_dt_is_empty_rail(state, 0);
 }
 
 #endif

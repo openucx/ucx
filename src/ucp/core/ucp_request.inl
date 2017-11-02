@@ -16,7 +16,7 @@
 
 
 #define UCP_REQUEST_FLAGS_FMT \
-    "%c%c%c%c%c%c%c%c%c%c"
+    "%c%c%c%c%c%c%c%c%c"
 
 #define UCP_REQUEST_FLAGS_ARG(_flags) \
     (((_flags) & UCP_REQUEST_FLAG_COMPLETED)       ? 'd' : '-'), \
@@ -27,8 +27,7 @@
     (((_flags) & UCP_REQUEST_FLAG_CALLBACK)        ? 'c' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_RECV)            ? 'r' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_SYNC)            ? 's' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_RNDV)            ? 'v' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_RNDV_MRAIL)      ? 'm' : '-')
+    (((_flags) & UCP_REQUEST_FLAG_RNDV)            ? 'v' : '-')
 
 
 /* defined as a macro to print the call site */
@@ -200,6 +199,35 @@ ucp_request_send_state_init(ucp_request_t *req, size_t dt_count)
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_request_send_state_reset(ucp_request_t *req,
+                             uct_completion_callback_t comp_cb, unsigned proto)
+{
+    switch (proto) {
+    case UCP_REQUEST_SEND_PROTO_RMA:
+        ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
+        /* Fall through */
+    case UCP_REQUEST_SEND_PROTO_RNDV_GET:
+        if (UCP_DT_IS_CONTIG(req->send.datatype)) {
+            ucp_dt_clear_rails(&req->send.state.dt);
+        }
+        /* Fall through */
+    case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
+        req->send.state.uct_comp.func       = comp_cb;
+        req->send.state.uct_comp.count      = 0;
+        /* Fall through */
+    case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
+        req->send.state.dt.offset           = 0;
+        break;
+    default:
+        ucs_fatal("unknown protocol");
+    }
+
+    /* offset is not used for RMA */
+    ucs_assert((proto == UCP_REQUEST_SEND_PROTO_RMA) ||
+               (req->send.state.dt.offset <= req->send.length));
+}
+
 /**
  * Advance state of send request after UCT operation. This function applies
  * @a new_dt_state to @a req request according to @a proto protocol. Also, UCT
@@ -294,23 +322,6 @@ static UCS_F_ALWAYS_INLINE void ucp_request_send_tag_stat(ucp_request_t *req)
     }
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_request_rndv_get_create(ucp_request_t *req)
-{
-    int i;
-    ucp_rndv_get_rkey_t *rkey;
-
-    ucs_trace_req("rendezvous-get create request %p", req);
-    req->send.rndv_get.rkey = ucs_mpool_get_inline(&(req->send.ep->worker)->rndv_get_mp);
-    req->flags |= UCP_REQUEST_FLAG_RNDV_MRAIL;
-
-    rkey = req->send.rndv_get.rkey;
-
-    for (i = 0; i < ucs_countof(rkey->rkey_bundle); i++) {
-        req->send.rndv_get.rkey->rkey_bundle[i].rkey = UCT_INVALID_RKEY;
-    }
-}
-
 static UCS_F_ALWAYS_INLINE
 uct_rkey_bundle_t *ucp_tag_rndv_rkey(ucp_request_t *req, int idx)
 {
@@ -318,73 +329,37 @@ uct_rkey_bundle_t *ucp_tag_rndv_rkey(ucp_request_t *req, int idx)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_request_rndv_get_create(ucp_request_t *req)
+{
+    int i;
+
+    ucs_trace_req("rendezvous-get create request %p", req);
+    req->send.rndv_get.rkey = ucs_mpool_get_inline(&(req->send.ep->worker)->rndv_get_mp);
+    ucs_assert_always(req->send.rndv_get.rkey != NULL);
+
+    req->send.rndv_get.rkey->lane_idx = 0;
+    req->send.rndv_get.rkey->lane_num = 0;
+
+    for (i = 0; i < UCP_MAX_RAILS; i++) {
+        ucp_tag_rndv_rkey(req, i)->rkey = UCT_INVALID_RKEY;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_request_rndv_get_release(ucp_request_t *req)
 {
     int i;
-    ucp_rndv_get_rkey_t *rkey;
 
-    ucs_trace_req("mrail release request %p", req);
+    ucs_trace_req("release request rndv-get remote key. req: %p", req);
 
-    if (req->send.rndv_get.rkey) {
-        rkey = req->send.rndv_get.rkey;
-        for (i = 0; i < ucs_countof(rkey->rkey_bundle); i++) {
-            if (ucp_tag_rndv_rkey(req, i)->rkey != UCT_INVALID_RKEY) {
-                uct_rkey_release(ucp_tag_rndv_rkey(req, i));
-            }
+    ucs_assert(req->send.rndv_get.rkey != NULL);
+
+    for (i = 0; i < UCP_MAX_RAILS; i++) {
+        if (ucp_tag_rndv_rkey(req, i)->rkey != UCT_INVALID_RKEY) {
+            uct_rkey_release(ucp_tag_rndv_rkey(req, i));
         }
     }
 
     ucs_mpool_put_inline(req->send.rndv_get.rkey);
-    req->flags &= ~UCP_REQUEST_FLAG_RNDV_MRAIL;
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_request_clear_rails(ucp_dt_state_t *state)
-{
-    int i;
-    for (i = 0; i < UCP_MAX_RAILS; i++) {
-        state->dt.mrail[i].memh = UCT_MEM_HANDLE_NULL;
-    }
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_request_is_empty_rail(ucp_dt_state_t *state, int rail)
-{
-    return state->dt.mrail[rail].memh == UCT_MEM_HANDLE_NULL;
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_request_have_rails(ucp_dt_state_t *state)
-{
-    return !ucp_request_is_empty_rail(state, 0);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_request_send_state_reset(ucp_request_t *req,
-                             uct_completion_callback_t comp_cb, unsigned proto)
-{
-    switch (proto) {
-    case UCP_REQUEST_SEND_PROTO_RMA:
-        ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
-        /* Fall through */
-    case UCP_REQUEST_SEND_PROTO_RNDV_GET:
-        if (UCP_DT_IS_CONTIG(req->send.datatype)) {
-            ucp_request_clear_rails(&req->send.state.dt);
-        }
-        /* Fall through */
-    case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
-        req->send.state.uct_comp.func       = comp_cb;
-        req->send.state.uct_comp.count      = 0;
-        /* Fall through */
-    case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
-        req->send.state.dt.offset           = 0;
-        break;
-    default:
-        ucs_fatal("unknown protocol");
-    }
-
-    /* offset is not used for RMA */
-    ucs_assert((proto == UCP_REQUEST_SEND_PROTO_RMA) ||
-               (req->send.state.dt.offset <= req->send.length));
 }
 

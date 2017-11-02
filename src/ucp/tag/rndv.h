@@ -15,8 +15,7 @@
 
 enum {
     UCP_RNDV_RTS_FLAG_PACKED_RKEY       = UCS_BIT(0),
-    UCP_RNDV_RTS_FLAG_OFFLOAD           = UCS_BIT(1),
-    UCP_RNDV_RTS_FLAG_PACKED_MRAIL_RKEY = UCS_BIT(2) /* multirail key packed */
+    UCP_RNDV_RTS_FLAG_OFFLOAD           = UCS_BIT(1)
 };
 
 /*

@@ -88,7 +88,7 @@ void ucp_dt_iov_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
     case UCP_DATATYPE_CONTIG:
         iov[0].buffer = (void *)src_iov + state->offset;
         iov[0].length = length_max;
-        iov[0].memh   = state->dt.contig.memh;
+        iov[0].memh   = state->dt.contig[0].memh;
         iov[0].stride = 0;
         iov[0].count  = 1;
 

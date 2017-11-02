@@ -36,7 +36,6 @@ enum {
     UCP_REQUEST_FLAG_RNDV                 = UCS_BIT(9),
     UCP_REQUEST_FLAG_OFFLOADED            = UCS_BIT(10),
     UCP_REQUEST_FLAG_BLOCK_OFFLOAD        = UCS_BIT(11),
-    UCP_REQUEST_FLAG_RNDV_MRAIL           = UCS_BIT(12),
 
 #if ENABLE_ASSERT
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(15)
@@ -81,9 +80,13 @@ enum {
 
 /**
  * Multirail rendezvous-get info.
+ * In regular rndv-get way there is always number of rkeys
+ * is equal to rndv lanes, but in case if tag offloading is
+ * available - only one rkey is proceeded
  */
 typedef struct ucp_rndv_get_rkey {
-    ucp_lane_index_t  rail_idx;
+    ucp_lane_index_t  lane_num; /* number of rkeys obtained from peer */
+    ucp_lane_index_t  lane_idx;
     uct_rkey_bundle_t rkey_bundle[UCP_MAX_RAILS];
 } ucp_rndv_get_rkey_t;
 
@@ -127,10 +130,10 @@ struct ucp_request {
                 } proxy;
 
                 struct {
-                    uint64_t                  remote_address; /* address of the sender's data buffer */
-                    uintptr_t                 remote_request; /* pointer to the sender's send request */
-                    ucp_request_t            *rreq;           /* receive request on the recv side */
-                    struct ucp_rndv_get_rkey *rkey;           /* rendezvous-get remote keys */
+                    uint64_t             remote_address; /* address of the sender's data buffer */
+                    uintptr_t            remote_request; /* pointer to the sender's send request */
+                    ucp_request_t       *rreq;           /* receive request on the recv side */
+                    ucp_rndv_get_rkey_t *rkey;           /* rendezvous-get remote keys */
                 } rndv_get;
 
                 struct {
