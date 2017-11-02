@@ -95,7 +95,7 @@ struct ucs_class {
         \
         status = _UCS_CLASS_INIT_NAME(_type)((_type*)(_obj), cls, &init_count, \
                                              ## __VA_ARGS__); \
-        if (status != UCS_OK) { \
+        if ((status != UCS_OK) && (status != UCS_INPROGRESS)) { \
             ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), \
                                          (_obj), init_count); \
         } \
@@ -148,7 +148,7 @@ struct ucs_class {
         obj = ucs_class_malloc(cls); \
         if (obj != NULL) { \
             status = UCS_CLASS_INIT(_type, obj, ## __VA_ARGS__); \
-            if (status == UCS_OK) { \
+            if ((status == UCS_OK) || (status == UCS_INPROGRESS)) { \
                 *(_obj) = (typeof(*(_obj)))obj; /* Success - assign pointer */ \
             } else { \
                 ucs_class_free(obj); /* Initialization failure */ \
