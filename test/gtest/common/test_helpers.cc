@@ -9,6 +9,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/time/time.h>
+#include <ucs/sys/string.h>
 
 namespace ucs {
 
@@ -80,6 +81,48 @@ void safe_usleep(double usec) {
     }
 }
 
+void print_ip(char *if_name, struct sockaddr *ifa_addr)
+{
+    size_t ip_len = ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN);
+    char ip_str[ip_len];
+
+    UCS_TEST_MESSAGE << "Testing " << if_name << " with " <<
+                        ucs_sockaddr_str(ifa_addr, ip_str, ip_len);
+}
+
+bool is_iface_ipoib(struct ifaddrs *ifa) {
+    struct ifreq if_req;
+    ucs_status_t status;
+
+    status = ucs_netif_ioctl(ifa->ifa_name, SIOCGIFHWADDR, &if_req);
+    ASSERT_UCS_OK(status);
+    /* check if this is an Infiniband interface and if there is an
+     * IPv4 address on it */
+    return (if_req.ifr_addr.sa_family == ARPHRD_INFINIBAND) &&
+           (ifa->ifa_addr->sa_family == AF_INET);
+}
+
+void set_ip(struct ifaddrs **ifaddr, const struct sockaddr** addr) {
+    struct ifaddrs *ifa;
+    int found_ipoib = 0;
+    struct sockaddr_in *addr_in;
+
+    /* go through a linked list of available interfaces */
+    for (ifa = *ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (is_iface_ipoib(ifa)) {
+            print_ip(ifa->ifa_name, ifa->ifa_addr);
+            *addr = ifa->ifa_addr;
+            addr_in = (struct sockaddr_in *) (ifa->ifa_addr);
+            addr_in->sin_port = 0;   /* Use a random port */
+            found_ipoib = 1;
+            break;
+        }
+    }
+
+    if (!found_ipoib) {
+        *addr = NULL;
+    }
+}
 
 namespace detail {
 

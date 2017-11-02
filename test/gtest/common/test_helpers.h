@@ -12,6 +12,10 @@
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
+#include <ifaddrs.h>
+#include <net/if_arp.h>
+#include <net/if.h>
+#include <netinet/in.h>
 #include <errno.h>
 #include <iostream>
 #include <stdexcept>
@@ -71,6 +75,25 @@ int test_time_multiplier();
  */
 void safe_usleep(double usec);
 
+
+/**
+ * Print the address for the given interface name
+ */
+void print_ip(char *if_name, struct sockaddr *ifa_addr);
+
+
+/**
+ * Check if the given interface is an Infiniband interface and if there is an
+ * IPv4 address on it.
+ */
+bool is_iface_ipoib(struct ifaddrs *ifa);
+
+
+/**
+ * From the given list of available interfaces, set addr to the first IPoIB
+ * address present. If none is present, set addr to NULL.
+ */
+void set_ip(struct ifaddrs **ifaddr, const struct sockaddr** addr);
 
 /*
  * For gtest's EXPECT_EQ

@@ -26,6 +26,7 @@ std::string resource::name() const {
 
 uct_test::uct_test() {
     ucs_status_t status;
+    uct_md_attr_t pd_attr;
     uct_md_h pd;
 
     status = uct_md_config_read(GetParam()->md_name.c_str(), NULL, NULL,
@@ -35,8 +36,16 @@ uct_test::uct_test() {
     status = uct_md_open(GetParam()->md_name.c_str(), m_md_config, &pd);
     ASSERT_UCS_OK(status);
 
-    status = uct_md_iface_config_read(pd, GetParam()->tl_name.c_str(), NULL,
-                                      NULL, &m_iface_config);
+    status = uct_md_query(pd, &pd_attr);
+    ASSERT_UCS_OK(status);
+
+    if (pd_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
+        status = uct_md_iface_config_read(pd, NULL, NULL, NULL, &m_iface_config);
+    } else {
+        status = uct_md_iface_config_read(pd, GetParam()->tl_name.c_str(), NULL,
+                                          NULL, &m_iface_config);
+    }
+
     ASSERT_UCS_OK(status);
     uct_md_close(pd);
 }
@@ -85,6 +94,14 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
                 rsc.tl_name    = tl_resources[j].tl_name,
                 rsc.dev_name   = tl_resources[j].dev_name;
                 rsc.dev_type   = tl_resources[j].dev_type;
+                all_resources.push_back(rsc);
+            }
+
+            if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
+                resource rsc;
+                rsc.md_name     = md_resources[i].md_name,
+                rsc.local_cpus  = md_attr.local_cpus,
+                rsc.tl_name     = "sockaddr";
                 all_resources.push_back(rsc);
             }
 
@@ -252,8 +269,11 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 
     ucs_status_t status;
 
-    params->mode.device.tl_name    = const_cast<char*>(resource.tl_name.c_str());
-    params->mode.device.dev_name   = const_cast<char*>(resource.dev_name.c_str());
+    if (params->open_mode == UCT_IFACE_OPEN_MODE_DEVICE) {
+        params->mode.device.tl_name    = const_cast<char*>(resource.tl_name.c_str());
+        params->mode.device.dev_name   = const_cast<char*>(resource.dev_name.c_str());
+    }
+
     params->stats_root = ucs_stats_get_root();
     UCS_CPU_ZERO(&params->cpu_mask);
 

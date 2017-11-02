@@ -225,6 +225,9 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
     ud_mlx5,            \
     cm
 
+#define UCT_TEST_SOCKADDR_TLS \
+    sockaddr
+
 #define UCT_TEST_NO_SELF_TLS \
     UCT_TEST_IB_TLS,         \
     ugni_rdma,               \
@@ -268,6 +271,9 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
  */
 #define UCT_INSTANTIATE_NO_SELF_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_NO_SELF_TLS)
+
+#define UCT_INSTANTIATE_SOCKADDR_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_SOCKADDR_TLS)
 
 std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resource);
 
