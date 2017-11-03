@@ -202,8 +202,8 @@ end:
 
 int uct_rocm_is_ptr_gpu_accessible(void *ptr, void **gpu_ptr)
 {
-    hsa_amd_pointer_info_v1_t info;
-    info.size = sizeof(hsa_amd_pointer_info_v1_t);
+    hsa_amd_pointer_info_t info;
+    info.size = sizeof(hsa_amd_pointer_info_t);
 
     hsa_status_t status = hsa_amd_pointer_info(ptr, (hsa_amd_pointer_info_t *)&info,
                                                NULL, NULL, NULL);
