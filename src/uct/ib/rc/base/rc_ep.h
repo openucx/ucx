@@ -15,7 +15,6 @@
 
 #define RC_UNSIGNALED_INF UINT16_MAX
 
-
 enum {
     UCT_RC_FC_STAT_NO_CRED,
     UCT_RC_FC_STAT_TX_GRANT,
@@ -209,6 +208,12 @@ typedef struct uct_rc_ep_address {
     uint8_t          atomic_mr_id;
 } UCS_S_PACKED uct_rc_ep_address_t;
 
+
+#if IBV_EXP_HW_TM
+
+ucs_status_t uct_rc_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op);
+
+#endif
 
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 

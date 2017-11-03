@@ -8,7 +8,6 @@
 #define UCT_RC_VERBS_COMMON_H
 
 #include <ucs/arch/bitops.h>
-#include <ucs/datastruct/ptr_array.h>
 
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
@@ -21,7 +20,7 @@
      { \
          UCT_RC_IFACE_GET_TX_DESC(_rc_iface, _mp, _desc) \
          hdr = _desc + 1; \
-         len = uct_rc_verbs_notag_header_fill(_iface, _hdr); \
+         len = uct_rc_verbs_notag_header_fill(_rc_iface, _hdr); \
      }
 
 #define UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(_iface, _rc_iface, _mp, _desc, _id, \
@@ -65,22 +64,6 @@ typedef struct uct_rc_verbs_txcnt {
 } uct_rc_verbs_txcnt_t;
 
 
-#if IBV_EXP_HW_TM
-typedef struct uct_rc_verbs_release_desc {
-    uct_recv_desc_t             super;
-    unsigned                    offset;
-} uct_rc_verbs_release_desc_t;
-
-typedef struct uct_rc_verbs_ctx_priv {
-    uint64_t                    tag;
-    uint64_t                    imm_data;
-    void                        *buffer;
-    uint32_t                    length;
-    uint32_t                    tag_handle;
-} uct_rc_verbs_ctx_priv_t;
-#endif
-
-
 /**
  * RC/DC verbs interface configuration
  */
@@ -89,9 +72,7 @@ typedef struct uct_rc_verbs_iface_common_config {
     unsigned               tx_max_wr;
 #if IBV_EXP_HW_TM
     struct {
-        int                            enable;
-        unsigned                       list_size;
-        double                         sync_ratio;
+        double             sync_ratio;
     } tm;
 #endif
     /* TODO flags for exp APIs */
@@ -105,29 +86,13 @@ typedef struct uct_rc_verbs_iface_common {
 
 #if IBV_EXP_HW_TM
     struct {
-        ucs_ptr_array_t         rndv_comps;
-        unsigned                num_tags;
-        unsigned                num_outstanding;
-        unsigned                num_canceled;
-        unsigned                tag_sync_thresh;
-        uint16_t                unexpected_cnt;
-        uint8_t                 enabled;
-        struct {
-            void                     *arg; /* User defined arg */
-            uct_tag_unexp_eager_cb_t cb;   /* Callback for unexpected eager messages */
-        } eager_unexp;
-
-        struct {
-            void                     *arg; /* User defined arg */
-            uct_tag_unexp_rndv_cb_t  cb;   /* Callback for unexpected rndv messages */
-        } rndv_unexp;
-        uct_rc_verbs_release_desc_t  eager_desc;
-        uct_rc_verbs_release_desc_t  rndv_desc;
+        unsigned           num_canceled;
+        unsigned           tag_sync_thresh;
     } tm;
 #endif
 
     /* Progress function (either regular or TM aware) */
-    ucs_callback_t              progress;
+    ucs_callback_t         progress;
 
     /* TODO: make a separate datatype */
     struct {
@@ -157,23 +122,12 @@ uct_rc_verbs_txqp_completed(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt, ui
     uct_rc_txqp_available_add(txqp, count);
 }
 
-void uct_rc_verbs_iface_common_preinit(uct_rc_verbs_iface_common_t *iface,
-                                       uct_md_h md,
-                                       uct_rc_verbs_iface_common_config_t *config,
-                                       uct_rc_iface_config_t *rc_config,
-                                       const uct_iface_params_t *params,
-                                       int tm_cap_flag, unsigned *rx_hdr_len,
-                                       unsigned *rx_cq_len);
-
 ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
                                             uct_rc_iface_t *rc_iface,
                                             uct_rc_verbs_iface_common_config_t *config,
-                                            uct_rc_iface_config_t *rc_config,
-                                            unsigned rc_hdr_size);
+                                            uct_rc_iface_config_t *rc_config);
 
 void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *iface);
-
-void uct_rc_verbs_iface_common_tag_cleanup(uct_rc_verbs_iface_common_t *iface);
 
 ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_iface_t *iface,
                                                      unsigned max);
@@ -310,9 +264,6 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
 
 #if IBV_EXP_HW_TM
 
-#  define UCT_RC_VERBS_TAG_MIN_POSTED  33
-
-#  define UCT_RC_VERBS_TM_ENABLED(_iface) (_iface)->tm.enabled
 
 /* If message arrived with imm_data = 0 - it is SW RNDV request */
 #  define UCT_RC_VERBS_TM_IS_SW_RNDV(_flags, _imm_data) \
@@ -322,7 +273,7 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
        { \
            UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
            hdr = _desc + 1; \
-           uct_rc_verbs_iface_fill_tmh(_hdr, _tag, _app_ctx, IBV_EXP_TMH_EAGER); \
+           uct_rc_iface_fill_tmh(_hdr, _tag, _app_ctx, IBV_EXP_TMH_EAGER); \
            hdr += sizeof(struct ibv_exp_tmh); \
        }
 
@@ -351,7 +302,7 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
            _priv = 0; \
        } else { \
            _wr_opcode = UCS_PP_TOKENPASTE(_op_prefix, _WR_SEND_WITH_IMM); \
-           uct_rc_verbs_tag_imm_data_pack(&(_wr_imm), &_priv, _imm_data); \
+           uct_rc_iface_tag_imm_data_pack(&(_wr_imm), &_priv, _imm_data); \
        }
 
 #  define UCT_RC_VERBS_FILL_TM_ADD_WR(_wr, _tag, _tag_mask, _sge, _sge_cnt, _ctx) \
@@ -396,68 +347,16 @@ uct_rc_verbs_iface_common_tag_init(uct_rc_verbs_iface_common_t *iface,
                                    struct ibv_exp_create_srq_attr *srq_init_attr,
                                    size_t rndv_hdr_len);
 
-static UCS_F_ALWAYS_INLINE void
-uct_rc_verbs_iface_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,
-                            uint32_t app_ctx, unsigned op)
-{
-    tmh->opcode  = op;
-    tmh->app_ctx = htonl(app_ctx);
-    tmh->tag     = htobe64(tag);
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_rc_verbs_iface_fill_rvh(struct ibv_exp_tmh_rvh *rvh, const void *vaddr,
-                            uint32_t rkey, uint32_t len)
-{
-    rvh->va   = htobe64((uint64_t)vaddr);
-    rvh->rkey = htonl(rkey);
-    rvh->len  = htonl(len);
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_rc_verbs_tag_imm_data_pack(uint32_t *ib_imm, uint32_t *app_ctx,
-                               uint64_t imm_val)
-{
-    *ib_imm  = (uint32_t)(imm_val & 0xFFFFFFFF);
-    *app_ctx = (uint32_t)(imm_val >> 32);
-}
-
-static UCS_F_ALWAYS_INLINE uint64_t
-uct_rc_verbs_tag_imm_data_unpack(struct ibv_exp_wc *wc, uint32_t app_ctx)
-{
-    if (wc->exp_wc_flags & IBV_EXP_WC_WITH_IMM) {
-        return ((uint64_t)app_ctx << 32) | wc->imm_data;
-    } else {
-        return 0ul;
-    }
-}
-
-static UCS_F_ALWAYS_INLINE uct_rc_verbs_ctx_priv_t*
-uct_rc_verbs_iface_ctx_priv(uct_tag_context_t *ctx)
-{
-    return (uct_rc_verbs_ctx_priv_t*)ctx->priv;
-}
-
-static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_verbs_iface_tag_get_op_id(uct_rc_verbs_iface_common_t *iface,
-                                 uct_completion_t *comp)
-{
-    uint32_t prev_ph;
-    return ucs_ptr_array_insert(&iface->tm.rndv_comps, comp, &prev_ph);
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_rc_verbs_iface_post_op(uct_rc_verbs_iface_common_t *iface,
-                           uct_rc_iface_t *rc_iface,
-                           struct ibv_exp_ops_wr *wr, int op,
-                           int flags, uint64_t wr_id)
+uct_rc_verbs_iface_post_op(uct_rc_iface_t *iface, struct ibv_exp_ops_wr *wr,
+                           int op, int flags, uint64_t wr_id)
 {
     struct ibv_exp_ops_wr *bad_wr;
     int ret;
 
     UCT_RC_VERBS_FILL_TM_OP_WR(iface, wr, op, flags, wr_id);
 
-    ret = ibv_exp_post_srq_ops(rc_iface->rx.srq.srq, wr, &bad_wr);
+    ret = ibv_exp_post_srq_ops(iface->rx.srq.srq, wr, &bad_wr);
     if (ret) {
         ucs_error("ibv_exp_post_srq_ops(op=%d) failed: %m", op);
         return UCS_ERR_IO_ERROR;
@@ -472,8 +371,7 @@ uct_rc_verbs_iface_post_signaled_op(uct_rc_verbs_iface_common_t *iface,
 {
     ucs_status_t status;
 
-    status = uct_rc_verbs_iface_post_op(iface, rc_iface, wr, op,
-                                        IBV_EXP_OPS_SIGNALED,
+    status = uct_rc_verbs_iface_post_op(rc_iface, wr, op, IBV_EXP_OPS_SIGNALED,
                                         iface->tm.num_canceled);
     if (status != UCS_OK) {
         return status;
@@ -490,14 +388,14 @@ uct_rc_verbs_iface_common_tag_recv(uct_rc_verbs_iface_common_t *iface,
                                    const uct_iov_t *iov, size_t iovcnt,
                                    uct_tag_context_t *ctx)
 {
-    uct_rc_verbs_ctx_priv_t *priv = (uct_rc_verbs_ctx_priv_t*)ctx->priv;
+    uct_rc_iface_ctx_priv_t *priv = uct_rc_iface_ctx_priv(ctx);
     ucs_status_t status;
     struct ibv_sge sge[UCT_IB_MAX_IOV];
     struct ibv_exp_ops_wr wr;
     size_t sge_cnt;
 
     UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_rc_verbs_iface_tag_recv_zcopy");
-    UCT_RC_VERBS_CHECK_TAG(iface);
+    UCT_RC_VERBS_CHECK_TAG(rc_iface);
 
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge, iov, iovcnt);
     UCT_RC_VERBS_FILL_TM_ADD_WR(&wr, tag, tag_mask, sge, sge_cnt, ctx);
@@ -508,8 +406,8 @@ uct_rc_verbs_iface_common_tag_recv(uct_rc_verbs_iface_common_t *iface,
         return status;
     }
 
-    --iface->tm.num_tags;
-    ++iface->tm.num_outstanding;
+    --rc_iface->tm.num_tags;
+    ++rc_iface->tm.num_outstanding;
 
     /* Save tag index in the device tags list returned by ibv_exp_post_srq_ops.
      * It may be needed for cancelling this posted tag. */
@@ -525,13 +423,13 @@ uct_rc_verbs_iface_common_tag_recv_cancel(uct_rc_verbs_iface_common_t *iface,
                                           uct_rc_iface_t *rc_iface,
                                           uct_tag_context_t *ctx, int force)
 {
-   uct_rc_verbs_ctx_priv_t *priv = (uct_rc_verbs_ctx_priv_t*)ctx->priv;
+   uct_rc_iface_ctx_priv_t *priv = uct_rc_iface_ctx_priv(ctx);
    struct ibv_exp_ops_wr wr;
    ucs_status_t status;
 
    wr.tm.handle = priv->tag_handle;
 
-   status = uct_rc_verbs_iface_post_op(iface, rc_iface, &wr, IBV_EXP_WR_TAG_DEL,
+   status = uct_rc_verbs_iface_post_op(rc_iface, &wr, IBV_EXP_WR_TAG_DEL,
                                        force ? 0 : IBV_EXP_OPS_SIGNALED,
                                        (uint64_t)ctx);
    if (status != UCS_OK) {
@@ -539,11 +437,11 @@ uct_rc_verbs_iface_common_tag_recv_cancel(uct_rc_verbs_iface_common_t *iface,
    }
 
    if (force) {
-       if (iface->tm.num_outstanding) {
+       if (rc_iface->tm.num_outstanding) {
            ++iface->tm.num_canceled;
        } else {
            /* No pending ADD operations, free the tag immediately */
-           ++iface->tm.num_tags;
+           ++rc_iface->tm.num_tags;
        }
        if (iface->tm.num_canceled > iface->tm.tag_sync_thresh) {
            /* Too many pending cancels. Need to issue a signaled operation
@@ -570,11 +468,10 @@ uct_rc_verbs_iface_wc_error(enum ibv_wc_status status)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_verbs_iface_tag_handle_exp(uct_rc_verbs_iface_common_t *iface,
-                                  struct ibv_exp_wc *wc)
+uct_rc_verbs_iface_tag_handle_exp(uct_rc_iface_t *iface, struct ibv_exp_wc *wc)
 {
     uct_tag_context_t *ctx        = (uct_tag_context_t*)wc->wr_id;
-    uct_rc_verbs_ctx_priv_t *priv = uct_rc_verbs_iface_ctx_priv(ctx);
+    uct_rc_iface_ctx_priv_t *priv = uct_rc_iface_ctx_priv(ctx);
 
     if (wc->exp_wc_flags & IBV_EXP_WC_TM_MATCH) {
         /* Need to keep app_ctx in case DATA will come with immediate */
@@ -584,7 +481,7 @@ uct_rc_verbs_iface_tag_handle_exp(uct_rc_verbs_iface_common_t *iface,
     }
 
     if (wc->exp_wc_flags & IBV_EXP_WC_TM_DATA_VALID) {
-        priv->imm_data = uct_rc_verbs_tag_imm_data_unpack(wc, priv->imm_data);
+        priv->imm_data = uct_rc_iface_tag_imm_data_unpack(wc, priv->imm_data);
         if (UCT_RC_VERBS_TM_IS_SW_RNDV(wc->exp_wc_flags, priv->imm_data)) {
             ctx->rndv_cb(ctx, priv->tag, priv->buffer, wc->byte_len, UCS_OK);
         } else {
@@ -599,7 +496,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_iface_unexp_consumed(uct_rc_verbs_iface_common_t *iface,
                                   uct_rc_iface_t *rc_iface,
                                   uct_ib_iface_recv_desc_t *ib_desc,
-                                  uct_rc_verbs_release_desc_t *release,
+                                  uct_rc_iface_release_desc_t *release,
                                   ucs_status_t comp_status)
 {
     struct ibv_exp_ops_wr wr;
@@ -612,7 +509,7 @@ uct_rc_verbs_iface_unexp_consumed(uct_rc_verbs_iface_common_t *iface,
         uct_recv_desc(udesc) = &release->super;
     }
 
-    if (ucs_unlikely(!(++iface->tm.unexpected_cnt % IBV_DEVICE_MAX_UNEXP_COUNT))) {
+    if (ucs_unlikely(!(++rc_iface->tm.unexpected_cnt % IBV_DEVICE_MAX_UNEXP_COUNT))) {
         uct_rc_verbs_iface_post_signaled_op(iface, rc_iface, &wr,
                                             IBV_EXP_WR_TAG_SYNC);
     }
@@ -640,22 +537,22 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_common_t *iface,
 
     switch (tmh->opcode) {
     case IBV_EXP_TMH_EAGER:
-        imm_data = uct_rc_verbs_tag_imm_data_unpack(wc, ntohl(tmh->app_ctx));
+        imm_data = uct_rc_iface_tag_imm_data_unpack(wc, ntohl(tmh->app_ctx));
 
         if (UCT_RC_VERBS_TM_IS_SW_RNDV(wc->exp_wc_flags, imm_data)) {
-            status = iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg,
-                                             UCT_CB_PARAM_FLAG_DESC,
-                                             be64toh(tmh->tag), tmh + 1,
-                                             wc->byte_len - sizeof(*tmh),
-                                             0ul, 0, NULL);
+            status = rc_iface->tm.rndv_unexp.cb(rc_iface->tm.rndv_unexp.arg,
+                                                UCT_CB_PARAM_FLAG_DESC,
+                                                be64toh(tmh->tag), tmh + 1,
+                                                wc->byte_len - sizeof(*tmh),
+                                                0ul, 0, NULL);
         } else {
-            status = iface->tm.eager_unexp.cb(iface->tm.eager_unexp.arg,
-                                              tmh + 1, wc->byte_len - sizeof(*tmh),
-                                              UCT_CB_PARAM_FLAG_DESC,
-                                              be64toh(tmh->tag), imm_data);
+            status = rc_iface->tm.eager_unexp.cb(rc_iface->tm.eager_unexp.arg,
+                                                 tmh + 1, wc->byte_len - sizeof(*tmh),
+                                                 UCT_CB_PARAM_FLAG_DESC,
+                                                 be64toh(tmh->tag), imm_data);
         }
         uct_rc_verbs_iface_unexp_consumed(iface, rc_iface, ib_desc,
-                                          &iface->tm.eager_desc, status);
+                                          &rc_iface->tm.eager_desc, status);
         break;
 
     case IBV_EXP_TMH_NO_TAG:
@@ -677,26 +574,27 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_common_t *iface,
         /* RC uses two headers: TMH + RVH, DC uses three: TMH + RVH + RAVH.
          * So, get actual RNDV hdrs len from offsets */
         tm_hdrs_len = sizeof(*tmh) +
-                      (iface->tm.rndv_desc.offset - iface->tm.eager_desc.offset);
+                      (rc_iface->tm.rndv_desc.offset -
+                       rc_iface->tm.eager_desc.offset);
 
-        status = iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg,
-                                         UCT_CB_PARAM_FLAG_DESC,
-                                         be64toh(tmh->tag),
-                                         (char*)tmh + tm_hdrs_len,
-                                         wc->byte_len - tm_hdrs_len,
-                                         be64toh(rvh->va), ntohl(rvh->len),
-                                         (char*)tmh + wc->byte_len);
+        status = rc_iface->tm.rndv_unexp.cb(rc_iface->tm.rndv_unexp.arg,
+                                            UCT_CB_PARAM_FLAG_DESC,
+                                            be64toh(tmh->tag),
+                                            (char*)tmh + tm_hdrs_len,
+                                            wc->byte_len - tm_hdrs_len,
+                                            be64toh(rvh->va), ntohl(rvh->len),
+                                            (char*)tmh + wc->byte_len);
 
         uct_rc_verbs_iface_unexp_consumed(iface, rc_iface, ib_desc,
-                                          &iface->tm.rndv_desc, status);
+                                          &rc_iface->tm.rndv_desc, status);
         break;
 
     case IBV_EXP_TMH_FIN:
-        found = ucs_ptr_array_lookup(&iface->tm.rndv_comps, ntohl(tmh->app_ctx),
-                                     rndv_comp);
+        found = ucs_ptr_array_lookup(&rc_iface->tm.rndv_comps,
+                                     ntohl(tmh->app_ctx), rndv_comp);
         ucs_assert_always(found > 0);
         uct_invoke_completion((uct_completion_t*)rndv_comp, UCS_OK);
-        ucs_ptr_array_remove(&iface->tm.rndv_comps, ntohl(tmh->app_ctx), 0);
+        ucs_ptr_array_remove(&rc_iface->tm.rndv_comps, ntohl(tmh->app_ctx), 0);
         ucs_mpool_put_inline(ib_desc);
         break;
 
@@ -715,7 +613,7 @@ uct_rc_verbs_iface_poll_rx_tm(uct_rc_verbs_iface_common_t *iface,
     const unsigned max_wcs = rc_iface->super.config.rx_max_poll;
     struct ibv_exp_wc wc[max_wcs];
     uct_tag_context_t *ctx;
-    uct_rc_verbs_ctx_priv_t *priv;
+    uct_rc_iface_ctx_priv_t *priv;
     int num_wcs, i;
 
     num_wcs = ibv_exp_poll_cq(rc_iface->super.recv_cq, max_wcs, wc,
@@ -741,7 +639,7 @@ uct_rc_verbs_iface_poll_rx_tm(uct_rc_verbs_iface_common_t *iface,
         case IBV_EXP_WC_TM_RECV:
             if (wc[i].exp_wc_flags &
                 (IBV_EXP_WC_TM_MATCH | IBV_EXP_WC_TM_DATA_VALID)) {
-                uct_rc_verbs_iface_tag_handle_exp(iface, &wc[i]);
+                uct_rc_verbs_iface_tag_handle_exp(rc_iface, &wc[i]);
             } else {
                 uct_rc_verbs_iface_tag_handle_unexp(iface, rc_iface, &wc[i]);
             }
@@ -749,17 +647,17 @@ uct_rc_verbs_iface_poll_rx_tm(uct_rc_verbs_iface_common_t *iface,
 
         case IBV_EXP_WC_TM_DEL:
             ctx  = (uct_tag_context_t*)wc[i].wr_id;
-            priv = uct_rc_verbs_iface_ctx_priv(ctx);
+            priv = uct_rc_iface_ctx_priv(ctx);
             ctx->completed_cb(ctx, priv->tag, 0, priv->length,
                               UCS_ERR_CANCELED);
-            ++iface->tm.num_tags;
+            ++rc_iface->tm.num_tags;
             break;
 
         case IBV_EXP_WC_TM_ADD:
-            --iface->tm.num_outstanding;
+            --rc_iface->tm.num_outstanding;
             /* Fall through */
         case IBV_EXP_WC_TM_SYNC:
-            iface->tm.num_tags += wc[i].wr_id;
+            rc_iface->tm.num_tags += wc[i].wr_id;
             break;
 
         default:
@@ -782,7 +680,7 @@ out:
 #endif /* IBV_EXP_HW_TM */
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_verbs_notag_header_fill(uct_rc_verbs_iface_common_t *iface, void *hdr)
+uct_rc_verbs_notag_header_fill(uct_rc_iface_t *iface, void *hdr)
 {
 #if IBV_EXP_HW_TM
     if (iface->tm.enabled) {

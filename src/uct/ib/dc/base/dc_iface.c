@@ -17,7 +17,7 @@ const static char *uct_dc_tx_policy_names[] = {
 };
 
 ucs_config_field_t uct_dc_iface_config_table[] = {
-    {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=n", NULL,
+    {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=n;"UCT_RC_IFACE_TM_OFF_STR, NULL,
      ucs_offsetof(uct_dc_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
@@ -216,14 +216,14 @@ void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config
 UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     unsigned rx_priv_len, uct_dc_iface_config_t *config,
-                    unsigned rx_cq_len, unsigned rx_hdr_len, int create_srq)
+                    int tm_cap_bit)
 {
     ucs_status_t status;
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &ops->super, md, worker, params,
-                              &config->super, rx_priv_len, rx_cq_len,
-                              rx_hdr_len, sizeof(uct_dc_fc_request_t), create_srq);
+                              &config->super, rx_priv_len,
+                              sizeof(uct_dc_fc_request_t), tm_cap_bit);
     if (config->ndci < 1) {
         ucs_error("dc interface must have at least 1 dci (requested: %d)",
                   config->ndci);
@@ -243,7 +243,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
     ucs_list_head_init(&self->tx.gc_list);
 
     /* create DC target */
-    if (create_srq) {
+    if (!UCT_RC_IFACE_TM_ENABLED(&self->super)) {
         status = uct_dc_iface_create_dct(self);
         if (status != UCS_OK) {
             goto err;
@@ -258,7 +258,8 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
 
     ucs_debug("dc iface %p: using '%s' policy with %d dcis, dct 0x%x", self,
               uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci,
-              create_srq ? self->rx.dct->dct_num : 0);
+              UCT_RC_IFACE_TM_ENABLED(&self->super) ?
+              0 : self->rx.dct->dct_num);
 
     /* Create fake endpoint which will be used for sending FC grants */
     uct_dc_iface_init_fc_ep(self);
@@ -267,7 +268,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
     return UCS_OK;
 
 err_destroy_dct:
-    if (create_srq) {
+    if (!UCT_RC_IFACE_TM_ENABLED(&self->super)) {
         ibv_exp_destroy_dct(self->rx.dct);
     }
 err:

@@ -189,15 +189,21 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
     * be dropped and RNR ACK will be returned. Set threshold to 16K to avoid
     * hitting this gap at all. */
 #  define IBV_DEVICE_MAX_UNEXP_COUNT        UCS_BIT(14)
+
+#  define IBV_DEVICE_MIN_UWQ_POST           33
 #else
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
 #  define IBV_EXP_TM_CAP_RC                 0
 #endif
 
-
 #ifndef IBV_EXP_HW_TM_DC
 #  define IBV_EXP_TM_CAP_DC                 0
 #endif
+
+#if !HAVE_DECL_IBV_EXP_CREATE_SRQ
+#  define ibv_exp_create_srq_attr           ibv_srq_init_attr
+#endif
+
 
 
 typedef uint8_t uct_ib_uint24_t[3];

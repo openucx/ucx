@@ -433,6 +433,17 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
     return UCS_INPROGRESS;
 }
 
+#if IBV_EXP_HW_TM
+ucs_status_t uct_rc_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+
+    uint32_t op_index = (uint32_t)((uint64_t)op);
+    ucs_ptr_array_remove(&iface->tm.rndv_comps, op_index, 0);
+    return UCS_OK;
+}
+#endif
+
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(_num_bits, _is_be) \
     void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \
             (uct_rc_iface_send_op_t *op, const void *resp) \
