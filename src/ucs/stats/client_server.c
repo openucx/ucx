@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <inttypes.h>
+#include <sys/uio.h>
 
 #include <ucs/datastruct/sglib_wrapper.h>
 #include <ucs/sys/compiler.h>
