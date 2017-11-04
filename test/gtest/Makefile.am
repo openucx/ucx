@@ -10,6 +10,7 @@
 # Set default configuration for running tests
 UCX_HANDLE_ERRORS        ?= freeze
 UCX_LOG_LEVEL            ?= info
+UCX_MEM_LOG_LEVEL        ?= info
 UCX_LOG_PRINT_ENABLE     ?= y
 GTEST_FILTER             ?= *
 GTEST_EXTRA_ARGS         ?=

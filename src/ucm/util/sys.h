@@ -11,6 +11,17 @@
 #include <stddef.h>
 
 
+/*
+ * Substitutes for glibc memory allocation routines, which take memory
+ * directly from the operating system, and therefore are safe to use from
+ * malloc hooks.
+ */
+void *ucm_sys_malloc(size_t size);
+void *ucm_sys_calloc(size_t nmemb, size_t size);
+void ucm_sys_free(void *ptr);
+void *ucm_sys_realloc(void *oldptr, size_t newsize);
+
+
 /**
  * Callback function for processing entries in /proc/self/maps.
  *
