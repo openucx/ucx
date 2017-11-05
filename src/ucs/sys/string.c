@@ -124,7 +124,7 @@ void ucs_memunits_to_str(size_t value, char *buf, size_t max)
     }
 }
 
-const char* ucs_sockaddr_str(struct sockaddr *sock_addr, char *str, size_t max_size)
+const char* ucs_sockaddr_str(const struct sockaddr *sock_addr, char *str, size_t max_size)
 {
     struct sockaddr_in6 *addr_in6;
     struct sockaddr_in *addr_in;

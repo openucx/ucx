@@ -383,13 +383,15 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
 
         if (!strcmp(GetParam().c_str(), "rdmacm")) {
             if (ucs::is_iface_ipoib(ifa)) {
-                ucs::print_ip(ifa->ifa_name, ifa->ifa_addr);
+                UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
+                                    ucs::get_iface_ip(ifa->ifa_addr);
                 ASSERT_TRUE(rc_local);
                 ASSERT_TRUE(rc_remote);
                 found_ipoib = 1;
             }
         } else {
-            ucs::print_ip(ifa->ifa_name, ifa->ifa_addr);
+            UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
+                                ucs::get_iface_ip(ifa->ifa_addr);
             ASSERT_TRUE(rc_local);
             ASSERT_TRUE(rc_remote);
         }

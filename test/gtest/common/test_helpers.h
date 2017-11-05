@@ -77,23 +77,17 @@ void safe_usleep(double usec);
 
 
 /**
- * Print the address for the given interface name
+ * Return the IP address of the given interface address.
  */
-void print_ip(char *if_name, struct sockaddr *ifa_addr);
+std::string get_iface_ip(const struct sockaddr *ifa_addr);
 
 
 /**
  * Check if the given interface is an Infiniband interface and if there is an
  * IPv4 address on it.
  */
-bool is_iface_ipoib(struct ifaddrs *ifa);
+bool is_iface_ipoib(const struct ifaddrs *ifa);
 
-
-/**
- * From the given list of available interfaces, set addr to the first IPoIB
- * address present. If none is present, set addr to NULL.
- */
-void set_ip(struct ifaddrs **ifaddr, const struct sockaddr** addr);
 
 /*
  * For gtest's EXPECT_EQ
