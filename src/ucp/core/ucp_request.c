@@ -353,7 +353,7 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
     return UCS_ERR_NO_PROGRESS;
 }
 
-int ucp_request_mrail_reg(ucp_request_t *req)
+int ucp_request_rndv_reg(ucp_request_t *req)
 {
     ucp_ep_t        *ep      = req->send.ep;
     ucp_dt_state_t  *state   = &req->send.state.dt;
@@ -364,7 +364,7 @@ int ucp_request_mrail_reg(ucp_request_t *req)
 
     ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
 
-    ucp_dt_clear_rails(state);
+    ucp_dt_clear_rndv_lanes(state);
 
     for (i = 0; i < ucp_ep_rndv_num_lanes(ep); i++) {
         lane = ucp_ep_get_rndv_get_lane(ep, i);
@@ -381,13 +381,13 @@ int ucp_request_mrail_reg(ucp_request_t *req)
     return cnt;
 }
 
-void ucp_request_mrail_dereg(ucp_request_t *req)
+void ucp_request_rndv_dereg(ucp_request_t *req)
 {
     ucp_dt_state_t  *state = &req->send.state.dt;
     ucs_status_t     status;
     int              i;
 
-    for (i = 0; i < UCP_MAX_RAILS; i++) {
+    for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
         if (state->dt.contig[i].memh != UCT_MEM_HANDLE_NULL) {
             status = uct_md_mem_dereg(ucp_ep_md(req->send.ep,
                                                 ucp_ep_get_rndv_get_lane(req->send.ep, i)),
@@ -397,7 +397,7 @@ void ucp_request_mrail_dereg(ucp_request_t *req)
     }
 
     req->send.reg_rsc = UCP_NULL_RESOURCE;
-    ucp_dt_clear_rails(state);
+    ucp_dt_clear_rndv_lanes(state);
 }
 
 

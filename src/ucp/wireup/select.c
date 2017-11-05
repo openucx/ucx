@@ -822,7 +822,7 @@ static ucs_status_t ucp_wireup_add_rndv_lanes(ucp_ep_h ep,
         (params->err_mode == UCP_ERR_HANDLING_MODE_PEER)) {
         max_lanes = ucs_min(1, ep->worker->context->config.ext.max_rndv_lanes);
     } else {
-        max_lanes = ucs_min(UCP_MAX_RAILS, ep->worker->context->config.ext.max_rndv_lanes);
+        max_lanes = ucs_min(UCP_MAX_RNDV_LANES, ep->worker->context->config.ext.max_rndv_lanes);
     }
 
     while (rndv_lanes < max_lanes) {

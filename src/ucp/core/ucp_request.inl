@@ -209,7 +209,7 @@ ucp_request_send_state_reset(ucp_request_t *req,
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
         if (UCP_DT_IS_CONTIG(req->send.datatype)) {
-            ucp_dt_clear_rails(&req->send.state.dt);
+            ucp_dt_clear_rndv_lanes(&req->send.state.dt);
         }
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
@@ -340,7 +340,7 @@ ucp_request_rndv_get_create(ucp_request_t *req)
     req->send.rndv_get.rkey->lane_idx = 0;
     req->send.rndv_get.rkey->lane_num = 0;
 
-    for (i = 0; i < UCP_MAX_RAILS; i++) {
+    for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
         ucp_tag_rndv_rkey(req, i)->rkey = UCT_INVALID_RKEY;
     }
 }
@@ -354,7 +354,7 @@ ucp_request_rndv_get_release(ucp_request_t *req)
 
     ucs_assert(req->send.rndv_get.rkey != NULL);
 
-    for (i = 0; i < UCP_MAX_RAILS; i++) {
+    for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
         if (ucp_tag_rndv_rkey(req, i)->rkey != UCT_INVALID_RKEY) {
             uct_rkey_release(ucp_tag_rndv_rkey(req, i));
         }

@@ -87,7 +87,7 @@ enum {
 typedef struct ucp_rndv_get_rkey {
     ucp_lane_index_t  lane_num; /* number of rkeys obtained from peer */
     ucp_lane_index_t  lane_idx;
-    uct_rkey_bundle_t rkey_bundle[UCP_MAX_RAILS];
+    uct_rkey_bundle_t rkey_bundle[UCP_MAX_RNDV_LANES];
 } ucp_rndv_get_rkey_t;
 
 
@@ -239,7 +239,7 @@ ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t multi_thresh,
                                     size_t rndv_thresh, const ucp_proto_t *proto);
 
-int ucp_request_mrail_reg(ucp_request_t *req);
-void ucp_request_mrail_dereg(ucp_request_t *req);
+int ucp_request_rndv_reg(ucp_request_t *req);
+void ucp_request_rndv_dereg(ucp_request_t *req);
 
 #endif

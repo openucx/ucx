@@ -1109,7 +1109,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     /* Create epoll set which combines events from all transports */
     status = ucp_worker_wakeup_init(worker, params);
     if (status != UCS_OK) {
-        goto err_mrail_mp_cleanup;
+        goto err_rndv_lanes_mp_cleanup;
     }
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
@@ -1142,7 +1142,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 err_close_ifaces:
     ucp_worker_close_ifaces(worker);
     ucp_worker_wakeup_cleanup(worker);
-err_mrail_mp_cleanup:
+err_rndv_lanes_mp_cleanup:
     ucs_mpool_cleanup(&worker->rndv_get_mp, 1);
 err_req_mp_cleanup:
     ucs_mpool_cleanup(&worker->req_mp, 1);
