@@ -353,41 +353,38 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
     return UCS_ERR_NO_PROGRESS;
 }
 
-int ucp_request_rndv_reg(ucp_request_t *req)
+void ucp_request_rndv_mem_reg(ucp_request_t *req)
 {
-    ucp_ep_t        *ep      = req->send.ep;
-    ucp_dt_state_t  *state   = &req->send.state.dt;
-    int              cnt     = 0;
+    ucp_ep_t        *ep    = req->send.ep;
+    ucp_dt_state_t  *state = &req->send.state.dt;
     ucs_status_t     status;
     int              i;
     ucp_lane_index_t lane;
 
     ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
 
-    ucp_dt_clear_rndv_lanes(state);
-
     for (i = 0; i < ucp_ep_rndv_num_lanes(ep); i++) {
         lane = ucp_ep_get_rndv_get_lane(ep, i);
 
-        if (ucp_ep_rndv_md_flags(ep, i) & UCT_MD_FLAG_NEED_RKEY) {
+        if (ucp_ep_rndv_md_flags(ep, i) & UCT_MD_FLAG_NEED_MEMH) {
             status = uct_md_mem_reg(ucp_ep_md(ep, lane),
                                     (void *)req->send.buffer, req->send.length,
                                     UCT_MD_MEM_ACCESS_RMA, &state->dt.contig[i].memh);
             ucs_assert_always(status == UCS_OK);
-            cnt++;
+        } else {
+            state->dt.contig[i].memh = UCT_MEM_HANDLE_NULL;
         }
     }
-
-    return cnt;
+    req->send.reg_rsc = UCP_NULL_RESOURCE;
 }
 
-void ucp_request_rndv_dereg(ucp_request_t *req)
+void ucp_request_rndv_mem_dereg(ucp_request_t *req)
 {
     ucp_dt_state_t  *state = &req->send.state.dt;
     ucs_status_t     status;
     int              i;
 
-    for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
+    for (i = 0; i < ucp_ep_rndv_num_lanes(req->send.ep); i++) {
         if (state->dt.contig[i].memh != UCT_MEM_HANDLE_NULL) {
             status = uct_md_mem_dereg(ucp_ep_md(req->send.ep,
                                                 ucp_ep_get_rndv_get_lane(req->send.ep, i)),

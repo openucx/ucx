@@ -337,8 +337,8 @@ ucp_request_rndv_get_create(ucp_request_t *req)
     req->send.rndv_get.rkey = ucs_mpool_get_inline(&(req->send.ep->worker)->rndv_get_mp);
     ucs_assert_always(req->send.rndv_get.rkey != NULL);
 
-    req->send.rndv_get.rkey->lane_idx = 0;
-    req->send.rndv_get.rkey->lane_num = 0;
+    req->send.rndv_get.rkey->lane_idx  = 0;
+    req->send.rndv_get.rkey->num_lanes = 0;
 
     for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
         ucp_tag_rndv_rkey(req, i)->rkey = UCT_INVALID_RKEY;
