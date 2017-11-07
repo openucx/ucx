@@ -26,11 +26,12 @@
 struct resource {
     virtual ~resource() {};
     virtual std::string name() const;
-    std::string       md_name;
-    cpu_set_t         local_cpus;
-    std::string       tl_name;
-    std::string       dev_name;
-    uct_device_type_t dev_type;
+    std::string             md_name;
+    cpu_set_t               local_cpus;
+    std::string             tl_name;
+    std::string             dev_name;
+    uct_device_type_t       dev_type;
+    struct sockaddr_storage if_addr;
 };
 
 

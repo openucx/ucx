@@ -315,6 +315,12 @@ ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
 
 
 /**
+ * Check if the given interface is in an active state.
+ */
+int ucs_netif_check(const char *if_name);
+
+
+/**
  * Create a socket.
  *
  * @param [out]  fd_p       Pointer to created fd.

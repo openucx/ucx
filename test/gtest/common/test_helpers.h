@@ -23,6 +23,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <dirent.h>
 
 
 namespace ucs {
@@ -83,10 +84,15 @@ std::string get_iface_ip(const struct sockaddr *ifa_addr);
 
 
 /**
- * Check if the given interface is an Infiniband interface and if there is an
- * IPv4 address on it.
+ * Check if the given interface has an IPv4 or an IPv6 address.
  */
-bool is_iface_ipoib(const struct ifaddrs *ifa);
+bool is_ip_on_iface(const struct sockaddr* ifa_addr);
+
+
+/**
+ * Check if the given interface is associated with a device.
+ */
+bool is_iface_on_dev(const char *ifa_name);
 
 
 /*

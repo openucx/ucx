@@ -614,6 +614,25 @@ out:
     return status;
 }
 
+int ucs_netif_check(const char *if_name)
+{
+    ucs_status_t status;
+    struct ifreq ifr;
+
+    status = ucs_netif_ioctl(if_name, SIOCGIFADDR, &ifr);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    status = ucs_netif_ioctl(if_name, SIOCGIFFLAGS, &ifr);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return (ifr.ifr_flags & IFF_UP) && (ifr.ifr_flags & IFF_RUNNING) &&
+           !(ifr.ifr_flags & IFF_LOOPBACK);
+}
+
 ucs_status_t ucs_mmap_alloc(size_t *size, void **address_p,
                             int flags UCS_MEMTRACK_ARG)
 {

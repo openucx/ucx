@@ -89,20 +89,41 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 
             for (unsigned j = 0; j < num_tl_resources; ++j) {
                 resource rsc;
-                rsc.md_name    = md_resources[i].md_name,
-                rsc.local_cpus = md_attr.local_cpus,
-                rsc.tl_name    = tl_resources[j].tl_name,
+                rsc.md_name    = md_resources[i].md_name;
+                rsc.local_cpus = md_attr.local_cpus;
+                rsc.tl_name    = tl_resources[j].tl_name;
                 rsc.dev_name   = tl_resources[j].dev_name;
                 rsc.dev_type   = tl_resources[j].dev_type;
                 all_resources.push_back(rsc);
             }
 
             if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-                resource rsc;
-                rsc.md_name     = md_resources[i].md_name,
-                rsc.local_cpus  = md_attr.local_cpus,
-                rsc.tl_name     = "sockaddr";
-                all_resources.push_back(rsc);
+                struct ifaddrs *ifaddr, *ifa;
+                ucs_sock_addr_t sock_addr;
+
+                EXPECT_TRUE(getifaddrs(&ifaddr) != -1);
+                for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+                    sock_addr.addr = ifa->ifa_addr;
+                    if (uct_md_is_sockaddr_accessible(pd, &sock_addr, UCT_SOCKADDR_ACC_REMOTE) &&
+                       (ucs_netif_check(ifa->ifa_name))) {
+                        resource rsc;
+                        rsc.md_name    = md_resources[i].md_name;
+                        rsc.local_cpus = md_attr.local_cpus;
+                        rsc.tl_name    = "sockaddr";
+                        rsc.dev_name   = ifa->ifa_name;
+                        rsc.dev_type   = UCT_DEVICE_TYPE_LAST;
+
+                        if (ifa->ifa_addr->sa_family == AF_INET) {
+                            *(struct sockaddr_in*)&(rsc.if_addr)  = *(struct sockaddr_in*) ifa->ifa_addr;
+                        } else if (ifa->ifa_addr->sa_family == AF_INET6) {
+                            *(struct sockaddr_in6*)&(rsc.if_addr) = *(struct sockaddr_in6*) ifa->ifa_addr;
+                        } else {
+                            UCS_TEST_ABORT("Unknown sa_family" << ifa->ifa_addr->sa_family);
+                        }
+                        all_resources.push_back(rsc);
+                    }
+                }
+                freeifaddrs(ifaddr);
             }
 
             uct_release_tl_resource_list(tl_resources);
