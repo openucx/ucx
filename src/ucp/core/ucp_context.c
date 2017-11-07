@@ -20,6 +20,8 @@
 #include <string.h>
 
 
+#define UCP_RSC_CONFIG_ALL    "all"
+
 ucp_am_handler_t ucp_am_handlers[UCP_AM_ID_LAST] = {{0, NULL, NULL}};
 
 static const char *ucp_atomic_modes[] = {
@@ -37,27 +39,27 @@ static const char * ucp_device_type_names[] = {
 };
 
 static ucs_config_field_t ucp_config_table[] = {
-  {"NET_DEVICES", "all",
+  {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which network device(s) to use. The order is not meaningful.\n"
    "\"all\" would use all available devices.",
    ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_NET]), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"SHM_DEVICES", "all",
+  {"SHM_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which intra-node device(s) to use. The order is not meaningful.\n"
    "\"all\" would use all available devices.",
    ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SHM]), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"ACC_DEVICES", "all",
+  {"ACC_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which accelerator device(s) to use. The order is not meaningful.\n"
    "\"all\" would use all available devices.",
    ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_ACC]), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"SELF_DEVICES", "all",
+  {"SELF_DEVICES", UCP_RSC_CONFIG_ALL,
     "Specifies which loop-back device(s) to use. The order is not meaningful.\n"
     "\"all\" would use all available devices.",
     ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SELF]), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"TLS", "all",
+  {"TLS", UCP_RSC_CONFIG_ALL,
    "Comma-separated list of transports to use. The order is not meaningful.\n"
    "In addition it's possible to use a combination of the following aliases:\n"
    " - all    : use all the available transports.\n"
@@ -241,7 +243,7 @@ static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_n
     snprintf(buf, sizeof(buf), "\\%s", tl_name);
     return (!is_alias && ucp_str_array_search(names, config->tls.count, buf) >= 0) ||
            ((ucp_str_array_search(names, config->tls.count, tl_name) >= 0)) ||
-           (ucp_str_array_search(names, config->tls.count, "all"  ) >= 0);
+            (ucp_str_array_search(names, config->tls.count, UCP_RSC_CONFIG_ALL) >= 0);
 }
 
 static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
@@ -254,10 +256,10 @@ static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
         return 0;
     }
 
-    if (!strcmp(devices[index].names[0], "all")) {
+    if (!strcmp(devices[index].names[0], UCP_RSC_CONFIG_ALL)) {
         /* if the user's list is 'all', use all the available resources */
-        device_enabled  = 1;
-        masks[index] = -1;      /* using all available devices. can satisfy 'all' */
+        device_enabled  =  1;
+        masks[index]    = -1;   /* using all available devices. can satisfy 'all' */
     } else {
         /* go over the device list from the user and check (against the available resources)
          * which can be satisfied */
@@ -381,21 +383,17 @@ err:
 }
 
 static void ucp_report_unavailable_devices(const ucs_config_names_array_t *devices,
-                                           uint64_t *masks)
+                                           const uint64_t *masks)
 {
     int dev_type_idx, i;
 
     /* Go over the devices lists and check which devices were marked as unavailable */
     for (dev_type_idx = 0; dev_type_idx < UCT_DEVICE_TYPE_LAST; dev_type_idx++) {
-        if (masks[dev_type_idx] == 0) {
-            ucs_info("No %s devices are available",
-                     ucp_device_type_names[dev_type_idx]);
-        } else {
-            for (i = 0; i < devices[dev_type_idx].count; i++) {
-                if (!(masks[dev_type_idx] & UCS_BIT(i))) {
-                    ucs_info("Device %s is not available",
-                             devices[dev_type_idx].names[i]);
-                }
+        for (i = 0; i < devices[dev_type_idx].count; i++) {
+            if (!(masks[dev_type_idx] & UCS_BIT(i)) &&
+                strcmp(devices[dev_type_idx].names[i], UCP_RSC_CONFIG_ALL)) {
+                ucs_warn("Device %s is not available",
+                         devices[dev_type_idx].names[i]);
             }
         }
     }
@@ -506,7 +504,8 @@ static void ucp_resource_config_array_str(const ucs_config_names_array_t *array,
     char *p, *endp;
     unsigned i;
 
-    if (ucp_str_array_search((const char**)array->names, array->count, "all") >= 0) {
+    if (ucp_str_array_search((const char**)array->names, array->count,
+                             UCP_RSC_CONFIG_ALL) >= 0) {
         strncpy(buf, "", max);
         return;
     }
