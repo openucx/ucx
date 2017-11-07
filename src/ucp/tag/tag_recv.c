@@ -163,9 +163,11 @@ ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
                   ucs_status_string(status));
 
     req->status = status;
-    req->flags |= UCP_REQUEST_FLAG_COMPLETED;
     if (req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD) {
         --req->recv.worker->context->tm.offload.sw_req_count;
+    }
+    if ((req->flags |= UCP_REQUEST_FLAG_COMPLETED) & UCP_REQUEST_FLAG_RELEASED) {
+        ucp_request_put(req);
     }
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
 }

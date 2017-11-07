@@ -39,7 +39,19 @@ public:
         return GetParam().variant == RECV_REQ_EXTERNAL;
     }
 
+protected:
+    static void recv_callback_release_req(void *request, ucs_status_t status,
+                                          ucp_tag_recv_info_t *info)
+    {
+        ucp_request_free(request);
+        m_req_status = status;
+    }
+
+    static ucs_status_t m_req_status;
 };
+
+ucs_status_t test_ucp_tag_match::m_req_status = UCS_OK;
+
 
 UCS_TEST_P(test_ucp_tag_match, send_recv_unexp) {
     ucp_tag_recv_info_t info;
@@ -290,6 +302,33 @@ UCS_TEST_P(test_ucp_tag_match, send_nb_recv_unexp) {
         EXPECT_TRUE(my_send_req->completed);
         EXPECT_EQ(UCS_OK, my_send_req->status);
         request_release(my_send_req);
+    }
+}
+
+UCS_TEST_P(test_ucp_tag_match, send_recv_cb_release) {
+
+    uint64_t send_data = 0xdeadbeefdeadbeef;
+
+    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
+
+    short_progress_loop(); /* Receive messages as unexpected */
+
+    m_req_status = UCS_INPROGRESS;
+
+    uint64_t recv_data;
+    request *recv_req = (request*)ucp_tag_recv_nb(receiver().worker(), &recv_data,
+                                                  sizeof(recv_data), DATATYPE, 0, 0,
+                                                  recv_callback_release_req);
+    if (UCS_PTR_IS_ERR(recv_req)) {
+        ASSERT_UCS_OK(UCS_PTR_STATUS(recv_req));
+    } else if (recv_req == NULL) {
+        UCS_TEST_ABORT("ucp_tag_recv_nb returned NULL");
+    } else {
+        /* request would be completed and released by the callback */
+        while (m_req_status == UCS_INPROGRESS) {
+            progress();
+        }
+        ASSERT_UCS_OK(m_req_status);
     }
 }
 
