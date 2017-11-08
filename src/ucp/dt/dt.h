@@ -12,6 +12,7 @@
 #include "dt_iov.h"
 #include "dt_generic.h"
 
+#include <ucp/core/ucp_types.h>
 #include <uct/api/uct.h>
 #include <ucp/api/ucp.h>
 
@@ -23,8 +24,8 @@ typedef struct ucp_dt_state {
     size_t                        offset;  /* Total offset in overall payload. */
     union {
         struct {
-            uct_mem_h             memh;
-        } contig;
+            uct_mem_h         memh;
+        } contig[UCP_MAX_RNDV_LANES];
         struct {
             size_t                iov_offset;     /* Offset in the IOV item */
             size_t                iovcnt_offset;  /* The IOV item to start copy */
@@ -41,4 +42,26 @@ typedef struct ucp_dt_state {
 size_t ucp_dt_pack(ucp_datatype_t datatype, void *dest, const void *src,
                    ucp_dt_state_t *state, size_t length);
 
-#endif
+static UCS_F_ALWAYS_INLINE void
+ucp_dt_clear_rndv_lanes(ucp_dt_state_t *state)
+{
+    int i;
+    for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
+        state->dt.contig[i].memh = UCT_MEM_HANDLE_NULL;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_dt_is_empty_rndv_lane(ucp_dt_state_t *state, int idx)
+{
+    return state->dt.contig[idx].memh == UCT_MEM_HANDLE_NULL;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_dt_have_rndv_lanes(ucp_dt_state_t *state)
+{
+    return !ucp_dt_is_empty_rndv_lane(state, 0);
+}
+
+#endif /* UCP_DT_H_ */
+

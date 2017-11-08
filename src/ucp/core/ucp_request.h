@@ -117,10 +117,10 @@ struct ucp_request {
                 } proxy;
 
                 struct {
-                    uint64_t      remote_address; /* address of the sender's data buffer */
-                    uintptr_t     remote_request; /* pointer to the sender's send request */
-                    uct_rkey_bundle_t rkey_bundle;
-                    ucp_request_t *rreq;    /* receive request on the recv side */
+                    uint64_t           remote_address; /* address of the sender's data buffer */
+                    uintptr_t          remote_request; /* pointer to the sender's send request */
+                    uct_rkey_bundle_t  rkey_bundle;
+                    ucp_request_t     *rreq;           /* receive request on the recv side */
                 } rndv_get;
 
                 struct {
@@ -216,6 +216,7 @@ typedef struct ucp_recv_desc {
 
 
 extern ucs_mpool_ops_t ucp_request_mpool_ops;
+extern ucs_mpool_ops_t ucp_rndv_get_mpool_ops;
 
 
 int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status);
@@ -225,8 +226,8 @@ ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req, ucp_lane_index_t la
 void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane);
 
 ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
-                                    void *buffer, size_t length,
-                                    ucp_datatype_t datatype, ucp_dt_state_t *state);
+                                    void *buffer, size_t length, ucp_datatype_t datatype,
+                                    ucp_dt_state_t *state);
 
 void ucp_request_memory_dereg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
                               ucp_datatype_t datatype, ucp_dt_state_t *state);

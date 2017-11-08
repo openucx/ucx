@@ -272,7 +272,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
 
         req->recv.rdesc     = NULL;
         iov.buffer          = (void*)req->recv.buffer;
-        iov.memh            = req->recv.state.dt.contig.memh;
+        iov.memh            = req->recv.state.dt.contig[0].memh;
     } else {
         rdesc = ucp_worker_mpool_get(worker);
         if (rdesc == NULL) {
