@@ -398,6 +398,8 @@ uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
         return status;
     }
 
+    iface_attr->overhead = 85e-9; /* Software overhead */
+
     return UCS_OK;
 }
 
