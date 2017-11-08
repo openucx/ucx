@@ -114,10 +114,10 @@ out:
     return status;
 }
 
-ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,
+ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t count,
                                     ucp_datatype_t datatype,
                                     ucp_stream_recv_callback_t cb,
-                                    unsigned flags)
+                                    size_t *length, unsigned flags)
 {
     return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
 }

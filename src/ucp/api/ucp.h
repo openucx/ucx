@@ -2056,16 +2056,16 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  *
  * @param [in]     ep       UCP endpoint that is used for the receive operation.
  * @param [in]     buffer   Pointer to the buffer to receive the data to.
- * @param [inout]  count    Number of elements to receive into @a buffer as
- *                          in-parameter and the size of the received data in
- *                          bytes as out-parameter. Out-parameter is valid only
- *                          if return code is UCS_OK.
+ * @param [in]     count    Number of elements to receive into @a buffer.
  * @param [in]     datatype Datatype descriptor for the elements in the buffer.
  * @param [in]     cb       Callback function that is invoked whenever the
  *                          receive operation is completed and the data is ready
  *                          in the receive @a buffer. It is important to note
  *                          that the call-back is only invoked in a case when
  *                          the operation cannot be completed immediately.
+ * @param [out]    length   The size of the received data in bytes,
+ *                          always boundary of base datatype size. The value is
+ *                          valid only if return code is UCS_OK.
  * @param [in]     flags    Reserved for future use.
  *
  * @return UCS_OK               - The receive operation was completed
@@ -2078,10 +2078,10 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  *                                the handle by calling the
  *                                @ref ucp_request_free routine.
  */
-ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,
+ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t count,
                                     ucp_datatype_t datatype,
                                     ucp_stream_recv_callback_t cb,
-                                    unsigned flags);
+                                    size_t *length, unsigned flags);
 
 
 /**

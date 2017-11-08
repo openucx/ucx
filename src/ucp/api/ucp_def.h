@@ -350,8 +350,9 @@ typedef struct ucp_listener_accept_handler {
  * @param [in]  status    Completion status. If the send operation was completed
  *                        successfully UCX_OK is returned. Otherwise,
  *                        an @ref ucs_status_t "error status" is returned.
- * @param [in]  length    The size of the received data in bytes. The value is
- *                        valid only if the status is UCS_OK.
+ * @param [in]  length    The size of the received data in bytes, always
+ *                        boundary of base datatype size. The value is valid
+ *                        only if the status is UCS_OK.
  */
 typedef void (*ucp_stream_recv_callback_t)(void *request, ucs_status_t status,
                                            size_t length);
