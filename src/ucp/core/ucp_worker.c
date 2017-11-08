@@ -1193,15 +1193,16 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
                                ucp_stream_poll_ep_t *poll_eps,
                                size_t max_eps, unsigned flags)
 {
-    ssize_t count = 0;
+    ucp_ep_ext_stream_t *ep_stream;
+    ucp_ep_h            ep;
+    ssize_t             count = 0;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     while ((count < max_eps) && !ucs_list_is_empty(&worker->stream_eps)) {
-        struct ucp_ep_ext_stream *ep_stream =
-            ucs_list_extract_head(&worker->stream_eps,
-                                  struct ucp_ep_ext_stream, list);
-        ucp_ep_h ep = ep_stream->ucp_ep;
+        ep_stream = ucs_list_extract_head(&worker->stream_eps,
+                                          ucp_ep_ext_stream_t, list);
+        ep = ep_stream->ucp_ep;
         ep->flags &= ~UCP_EP_FLAG_STREAM_IS_QUEUED;
         poll_eps[count].ep        = ep;
         poll_eps[count].user_data = ep->user_data;
@@ -1212,7 +1213,6 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
 
     return count;
 }
-
 
 ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
 {

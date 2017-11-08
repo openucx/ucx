@@ -82,6 +82,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
             status = UCS_ERR_NO_MEMORY;
             goto err_free_ep;
         }
+
         ucs_queue_head_init(&ep->ext.stream->data);
         ucs_queue_head_init(&ep->ext.stream->reqs);
         ep->ext.stream->ucp_ep       = ep;
@@ -122,7 +123,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 err_free_stats:
     UCS_STATS_NODE_FREE(ep->stats);
 err_free_ext_ep:
-    free(ep->ext.stream);
+    ucs_free(ep->ext.stream);
 err_free_ep:
     ucs_free(ep);
 err:

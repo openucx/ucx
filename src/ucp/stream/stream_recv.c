@@ -101,17 +101,31 @@ ucp_stream_am_handler(void *arg, void *data, size_t length, unsigned am_flags)
     hdr            = data;
 
     hash_it = kh_get(ucp_worker_ep_hash, &worker->ep_hash, hdr->sender_uuid);
-    if (ucs_likely(hash_it != kh_end(&worker->ep_hash))) {
-        ep = kh_value(&worker->ep_hash, hash_it);
-        ucs_queue_push(&ep->ext.stream->data, &rdesc->stream_queue);
-    } else {
+    if (ucs_unlikely(hash_it == kh_end(&worker->ep_hash))) {
         ucs_error("ep is not found by uuid: %lu", hdr->sender_uuid);
-        status = UCS_OK;
+        goto err;
     }
+
+    ep = kh_value(&worker->ep_hash, hash_it);
+
+    if (!(ep->flags & UCP_EP_FLAG_STREAM_IS_QUEUED)) {
+        ep->flags |= UCP_EP_FLAG_STREAM_IS_QUEUED;
+        ucs_list_add_tail(&worker->stream_eps, &ep->ext.stream->list);
+    }
+
+    ucs_queue_push(&ep->ext.stream->data, &rdesc->stream_queue);
 
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return status;
+
+err:
+    if (rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC) {
+        ucs_mpool_put(rdesc);
+    }
+
+    status = UCS_OK;
+    goto out;
 }
 
 ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,

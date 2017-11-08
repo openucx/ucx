@@ -13,6 +13,7 @@
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.h>
+#include <ucp/dt/dt.inl>
 #include <ucp/proto/proto.h>
 
 

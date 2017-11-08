@@ -290,11 +290,8 @@ ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info)
     ucp_request_t *req = (ucp_request_t*)request - 1;
 
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
-        /* NOTE: workaround for gtest */
         if (req->flags & UCP_REQUEST_FLAG_RECV) {
             *info = req->recv.tag.info;
-        } else if (req->flags & UCP_REQUEST_FLAG_STREAM_RECV) {
-            info->length = req->recv.stream.count;
         }
         ucs_assert(req->status != UCS_INPROGRESS);
         return req->status;

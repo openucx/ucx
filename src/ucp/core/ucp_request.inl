@@ -101,8 +101,8 @@ ucp_request_complete_stream_recv(ucp_request_t *req, ucs_status_t status)
 {
     ucs_assert(req->recv.state.offset > 0);
     req->recv.stream.count = req->recv.state.offset;
-    ucs_trace_req("completing receive request %p (%p) "UCP_REQUEST_FLAGS_FMT
-                  " count %zu, %s",
+    ucs_trace_req("completing stream receive request %p (%p) "
+                  UCP_REQUEST_FLAGS_FMT" count %zu, %s",
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   req->recv.stream.count, ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);

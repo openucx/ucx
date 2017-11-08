@@ -32,6 +32,7 @@ noinst_HEADERS = \
 	core/ucp_thread.h \
 	core/ucp_types.h \
 	dt/dt.h \
+	dt/dt.inl \
 	dt/dt_contig.h \
 	dt/dt_iov.h \
 	dt/dt_generic.h \
