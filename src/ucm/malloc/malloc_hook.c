@@ -20,6 +20,7 @@
 #include <ucm/mmap/mmap.h>
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
+#include <ucm/util/sys.h>
 #include <ucm/util/ucm_config.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/component.h>
@@ -28,6 +29,14 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/sys.h>
+
+
+/* make khash allocate memory directly from operating system */
+#define kmalloc  ucm_sys_malloc
+#define kcalloc  ucm_sys_calloc
+#define kfree    ucm_sys_free
+#define krealloc ucm_sys_realloc
+#include <ucs/datastruct/khash.h>
 
 #include <string.h>
 #include <netdb.h>
@@ -45,6 +54,16 @@
 #define UCM_OPERATOR_DELETE_SYMBOL     "_ZdlPv"
 #define UCM_OPERATOR_VEC_NEW_SYMBOL    "_Znam"
 #define UCM_OPERATOR_VEC_DELETE_SYMBOL "_ZdaPv"
+
+
+/* Take out 12 LSB's, since they are the page-offset on most systems */
+#define ucm_mmap_addr_hash(_addr) \
+    (khint32_t)((_addr >> 12) ^ (_addr & UCS_MASK(12)))
+
+#define ucm_mmap_ptr_hash(_p)          ucm_mmap_addr_hash((uintptr_t)(_p))
+#define ucm_mmap_ptr_equal(_p1, _p2)   ((_p1) == (_p2))
+
+KHASH_INIT(mmap_ptrs, void*, char, 0, ucm_mmap_ptr_hash, ucm_mmap_ptr_equal)
 
 
 /* Pointer to memory release function */
@@ -77,9 +96,7 @@ typedef struct ucm_malloc_hook_state {
     /* Save the pointers that we have allocated with mmap, so when they are
      * released we would know they are ours, despite the fact they are not in the
      * heap address range. */
-    void                 **ptrs;
-    unsigned             num_ptrs;
-    unsigned             max_ptrs;
+    khash_t(mmap_ptrs)   ptrs;
 
     /**
      * Save the environment strings we've allocated
@@ -99,9 +116,7 @@ static ucm_malloc_hook_state_t ucm_malloc_hook_state = {
     .free             = free,
     .heap_start       = (void*)-1,
     .heap_end         = (void*)-1,
-    .ptrs             = NULL,
-    .num_ptrs         = 0,
-    .max_ptrs         = 0,
+    .ptrs             = {0},
     .env_lock         = PTHREAD_MUTEX_INITIALIZER,
     .env_strs         = NULL,
     .num_env_strs     = 0
@@ -110,56 +125,36 @@ static ucm_malloc_hook_state_t ucm_malloc_hook_state = {
 
 static void ucm_malloc_mmaped_ptr_add(void *ptr)
 {
-    unsigned new_max_ptrs;
-    void **buf;
+    int hash_extra_status;
+    khiter_t hash_it;
 
     ucs_spin_lock(&ucm_malloc_hook_state.lock);
 
-    if (ucm_malloc_hook_state.num_ptrs == ucm_malloc_hook_state.max_ptrs) {
-        /* Enlarge the array if needed */
-        if (ucm_malloc_hook_state.max_ptrs == 0) {
-            new_max_ptrs = sysconf(_SC_PAGESIZE) / sizeof(void*);
-            /* coverity[suspicious_sizeof] */
-            buf = ucm_orig_mmap(NULL, new_max_ptrs * sizeof(void*),
-                                PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS,
-                                -1, 0);
-        } else {
-            new_max_ptrs = ucm_malloc_hook_state.max_ptrs * 2;
-            buf = ucm_orig_mremap(ucm_malloc_hook_state.ptrs,
-                                  ucm_malloc_hook_state.max_ptrs * sizeof(void*),
-                                  new_max_ptrs * sizeof(void*), MREMAP_MAYMOVE);
-        }
-        if (buf == MAP_FAILED) {
-            ucm_error("failed to allocated memory for mmap pointers: %m")
-            goto out_unlock;
-        }
+    hash_it = kh_put(mmap_ptrs, &ucm_malloc_hook_state.ptrs, ptr,
+                     &hash_extra_status);
+    ucs_assert_always(hash_extra_status >= 0);
+    ucs_assert_always(hash_it != kh_end(&ucm_malloc_hook_state.ptrs));
 
-        ucm_malloc_hook_state.ptrs     = buf;
-        ucm_malloc_hook_state.max_ptrs = new_max_ptrs;
-    }
-
-    ucm_malloc_hook_state.ptrs[ucm_malloc_hook_state.num_ptrs] = ptr;
-    ++ucm_malloc_hook_state.num_ptrs;
-out_unlock:
     ucs_spin_unlock(&ucm_malloc_hook_state.lock);
 }
 
 static int ucm_malloc_mmaped_ptr_remove_if_exists(void *ptr)
 {
-    unsigned i;
+    khiter_t hash_it;
+    int found;
 
     ucs_spin_lock(&ucm_malloc_hook_state.lock);
-    for (i = 0; i < ucm_malloc_hook_state.num_ptrs; ++i) {
-        if (ucm_malloc_hook_state.ptrs[i] == ptr) {
-            --ucm_malloc_hook_state.num_ptrs;
-            ucm_malloc_hook_state.ptrs[i] =
-                            ucm_malloc_hook_state.ptrs[ucm_malloc_hook_state.num_ptrs];
-            ucs_spin_unlock(&ucm_malloc_hook_state.lock);
-            return 1;
-        }
+
+    hash_it = kh_get(mmap_ptrs, &ucm_malloc_hook_state.ptrs, ptr);
+    if (hash_it == kh_end(&ucm_malloc_hook_state.ptrs)) {
+        found = 0;
+    } else {
+        found = 1;
+        kh_del(mmap_ptrs, &ucm_malloc_hook_state.ptrs, hash_it);
     }
+
     ucs_spin_unlock(&ucm_malloc_hook_state.lock);
-    return 0;
+    return found;
 }
 
 static int ucm_malloc_is_address_in_heap(void *ptr)
@@ -713,6 +708,7 @@ out_unlock:
 
 UCS_STATIC_INIT {
     ucs_spinlock_init(&ucm_malloc_hook_state.lock);
+    kh_init_inplace(mmap_ptrs, &ucm_malloc_hook_state.ptrs);
 }
 
 static void UCS_F_DTOR ucm_clear_env()
