@@ -94,7 +94,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
         if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
-            status = uct_rc_verbs_wc2ucs_status(wc[i].status);
+            status = uct_rc_verbs_wc_to_ucs_status(wc[i].status);
             iface->super.super.ops->handle_failure(&iface->super.super, &wc[i],
                                                    status);
             continue;

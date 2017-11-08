@@ -732,7 +732,7 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
 
     UCT_RC_VERBS_IFACE_FOREACH_TXWQE(&iface->super.super, i, wc, num_wcs) {
         if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
-            status = uct_rc_verbs_wc2ucs_status(wc[i].status);
+            status = uct_rc_verbs_wc_to_ucs_status(wc[i].status);
             iface->super.super.super.ops->handle_failure(&iface->super.super.super,
                                                          &wc[i], status);
             continue;
