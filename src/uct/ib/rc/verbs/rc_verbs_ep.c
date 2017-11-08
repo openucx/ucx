@@ -313,9 +313,8 @@ ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
-    UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(&iface->verbs_common, &iface->super,
-                                      &iface->super.tx.mp, desc, id, pack_cb,
-                                      arg, length, data_length);
+    UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
+                                      id, pack_cb, arg, length, data_length);
     UCT_RC_VERBS_FILL_AM_BCOPY_WR(wr, sge, length, wr.opcode);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, data_length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, IBV_SEND_SOLICITED);
@@ -348,7 +347,7 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
 
-    UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(verbs_common, &iface->super,
+    UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(&iface->super,
                                       &verbs_common->short_desc_mp, desc, id,
                                       header, header_length, comp, &send_flags,
                                       sge[0]);

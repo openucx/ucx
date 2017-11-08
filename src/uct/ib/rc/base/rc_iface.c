@@ -397,7 +397,7 @@ static void uct_rc_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
     uct_rc_iface_release_desc_t *release = ucs_derived_of(self,
                                                           uct_rc_iface_release_desc_t);
-    void *ib_desc = desc - release->offset;
+    void *ib_desc = (char*)desc - release->offset;
     ucs_mpool_put_inline(ib_desc);
 }
 #endif

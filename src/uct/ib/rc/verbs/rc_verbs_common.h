@@ -16,33 +16,33 @@
 /* definitions common to rc_verbs and dc_verbs go here */
 
 
-#define UCT_RC_VERBS_GET_TX_DESC(_iface, _rc_iface, _mp, _desc, _hdr, _len) \
+#define UCT_RC_VERBS_GET_TX_DESC(_iface, _mp, _desc, _hdr, _len) \
      { \
-         UCT_RC_IFACE_GET_TX_DESC(_rc_iface, _mp, _desc) \
+         UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
          hdr = _desc + 1; \
-         len = uct_rc_verbs_notag_header_fill(_rc_iface, _hdr); \
+         len = uct_rc_verbs_notag_header_fill(_iface, _hdr); \
      }
 
-#define UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(_iface, _rc_iface, _mp, _desc, _id, \
+#define UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(_iface, _mp, _desc, _id, \
                                           _pack_cb, _arg, _length, \
                                           _data_length) \
      { \
          void *hdr; \
          size_t len; \
-         UCT_RC_VERBS_GET_TX_DESC(_iface, _rc_iface,_mp, _desc, hdr, len) \
+         UCT_RC_VERBS_GET_TX_DESC(_iface, _mp, _desc, hdr, len) \
          (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
          uct_rc_bcopy_desc_fill(hdr + len, _id, _pack_cb, \
                                _arg, &(_data_length)); \
          _length = _data_length + len + sizeof(uct_rc_hdr_t); \
      }
 
-#define UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(_iface, _rc_iface, _mp, _desc, _id, \
+#define UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(_iface, _mp, _desc, _id, \
                                           _header,  _header_length, _comp, \
                                           _send_flags, _sge) \
      { \
          void *hdr; \
          size_t len; \
-         UCT_RC_VERBS_GET_TX_DESC(_iface, _rc_iface, _mp, _desc, hdr, len) \
+         UCT_RC_VERBS_GET_TX_DESC(_iface, _mp, _desc, hdr, len) \
          uct_rc_zcopy_desc_set_comp(_desc, _comp, _send_flags); \
          uct_rc_zcopy_desc_set_header(hdr + len, _id, _header, _header_length); \
          _sge.length = sizeof(uct_rc_hdr_t) + header_length + len; \
