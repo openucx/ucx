@@ -17,6 +17,7 @@
 #include <stdint.h>
 
 extern "C" {
+#include <ucs/time/time.h>
 #include <ucs/sys/sys.h>
 #include <malloc.h>
 }
@@ -355,28 +356,62 @@ UCS_TEST_F(malloc_hook, fork) {
 class malloc_hook_cplusplus : public malloc_hook {
 public:
 
-    malloc_hook_cplusplus() : m_unmapped_size(0) {
+    malloc_hook_cplusplus() : m_mapped_size(0), m_unmapped_size(0) {
     }
 
-    static void mem_event_callback(ucm_event_type_t event_type, ucm_event_t *event,
-                                   void *arg)
-    {
-        malloc_hook_cplusplus *self = reinterpret_cast<malloc_hook_cplusplus*>(arg);
-        self->m_unmapped_size += event->vm_unmapped.size;
+    void set() {
+        ucs_status_t status;
+        status = ucm_set_event_handler(UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED,
+                                       0, mem_event_callback,
+                                       reinterpret_cast<void*>(this));
+        ASSERT_UCS_OK(status);
+    }
+
+    void unset() {
+        ucm_unset_event_handler(UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED,
+                                mem_event_callback, reinterpret_cast<void*>(this));
     }
 
 protected:
+    static void mem_event_callback(ucm_event_type_t event_type,
+                                   ucm_event_t *event, void *arg)
+    {
+        malloc_hook_cplusplus *self =
+                        reinterpret_cast<malloc_hook_cplusplus*>(arg);
+        switch (event_type) {
+        case UCM_EVENT_VM_MAPPED:
+            self->m_mapped_size   += event->vm_mapped.size;
+            break;
+        case UCM_EVENT_VM_UNMAPPED:
+            self->m_unmapped_size += event->vm_unmapped.size;
+            break;
+        default:
+            break;
+        }
+    }
+
+    double measure_alloc_time(size_t size, unsigned iters)
+    {
+        ucs_time_t start_time = ucs_get_time();
+        for (unsigned i = 0; i < iters; ++i) {
+            void *ptr = malloc(size);
+            /* prevent the compiler from optimizing-out the memory allocation */
+            *(volatile char*)ptr = '5';
+            free(ptr);
+        }
+        return ucs_time_to_sec(ucs_get_time() - start_time);
+    }
+
+    size_t m_mapped_size;
     size_t m_unmapped_size;
 };
+
 
 UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
 
     const size_t size = 8 * 1000 * 1000;
 
-    ucs_status_t result = ucm_set_event_handler(UCM_EVENT_VM_UNMAPPED,
-                                                0, mem_event_callback,
-                                                reinterpret_cast<void*>(this));
-    ASSERT_UCS_OK(result);
+    set();
 
     {
         std::vector<char> vec1(size, 0);
@@ -392,8 +427,7 @@ UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
 
     EXPECT_GE(m_unmapped_size, size * 3);
 
-    ucm_unset_event_handler(UCM_EVENT_VM_UNMAPPED, mem_event_callback,
-                            reinterpret_cast<void*>(this));
+    unset();
 }
 
 extern "C" {
@@ -433,10 +467,7 @@ UCS_TEST_F(malloc_hook_cplusplus, mallopt) {
         UCS_TEST_SKIP_R("rcache must be disabled");
     }
 
-    ucs_status_t result = ucm_set_event_handler(UCM_EVENT_VM_UNMAPPED,
-                                                0, mem_event_callback,
-                                                reinterpret_cast<void*>(this));
-    ASSERT_UCS_OK(result);
+    set();
 
     v = ucm_dlmallopt_get(M_TRIM_THRESHOLD);
     EXPECT_EQ(trim_thresh, v);
@@ -462,6 +493,59 @@ UCS_TEST_F(malloc_hook_cplusplus, mallopt) {
     delete [] p;
 
     EXPECT_EQ(m_unmapped_size, size_t(0));
-    ucm_unset_event_handler(UCM_EVENT_VM_UNMAPPED, mem_event_callback,
-                            reinterpret_cast<void*>(this));
+
+    unset();
+}
+
+UCS_TEST_F(malloc_hook_cplusplus, mmmap_ptrs) {
+
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+
+    set();
+
+    const size_t   size    = ucm_dlmallopt_get(M_MMAP_THRESHOLD) * 2;
+    const size_t   max_mem = ucs_min(ucs_get_phys_mem_size() / 4, 4 * UCS_GBYTE);
+    const unsigned count   = ucs_min(400000ul, max_mem / size);
+    const unsigned iters   = 100000;
+
+    std::vector<std::string> ptrs;
+
+    size_t large_blocks = 0;
+
+    /* Allocate until we get MMAP event */
+    while (m_mapped_size == 0) {
+        std::string str(size, 'r');
+        ptrs.push_back(str);
+        ++large_blocks;
+    }
+
+    /* Measure allocation time with "clear" heap state */
+    double alloc_time = measure_alloc_time(size, iters);
+    UCS_TEST_MESSAGE << "With " << large_blocks << " large blocks:"
+                     << " allocated " << iters << " buffers of " << size
+                     << " bytes in " << alloc_time << " sec";
+
+    /* Allocate many large strings to trigger mmap() based allocation. */
+    for (unsigned i = 0; i < count; ++i) {
+        std::string str(size, 't');
+        ptrs.push_back(str);
+        ++large_blocks;
+    }
+
+    /* Measure allocation time with many large blocks on the heap */
+    double alloc_time_with_ptrs = measure_alloc_time(size, iters);
+    UCS_TEST_MESSAGE << "With " << large_blocks << " large blocks:"
+                     << " allocated " << iters << " buffers of " << size
+                     << " bytes in " << alloc_time_with_ptrs << " sec";
+
+    /* Allow up to 75% difference */
+    double eps = alloc_time * 0.75;
+    EXPECT_NEAR(alloc_time, alloc_time_with_ptrs, eps);
+
+    ptrs.clear();
+
+    unset();
+
 }

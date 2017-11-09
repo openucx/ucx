@@ -8,6 +8,7 @@
 
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
+#include <ucs/sys/math.h>
 #include <linux/mman.h>
 #include <sys/mman.h>
 #include <pthread.h>
@@ -19,6 +20,95 @@
 
 #define UCM_PROC_SELF_MAPS "/proc/self/maps"
 
+
+static size_t ucm_get_page_size()
+{
+    static long page_size = -1;
+    long value;
+
+    if (page_size == -1) {
+        value = sysconf(_SC_PAGESIZE);
+        if (value < 0) {
+            page_size = 4096;
+        } else {
+            page_size = value;
+        }
+    }
+    return page_size;
+}
+
+static void *ucm_sys_complete_alloc(void *ptr, size_t size)
+{
+    *(size_t*)ptr = size;
+    return ptr + sizeof(size_t);
+}
+
+void *ucm_sys_malloc(size_t size)
+{
+    size_t sys_size;
+    void *ptr;
+
+    sys_size = ucs_align_up_pow2(size + sizeof(size_t), ucm_get_page_size());
+    ptr = ucm_orig_mmap(NULL, sys_size, PROT_READ|PROT_WRITE,
+                        MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    if (ptr == MAP_FAILED) {
+        return NULL;
+    }
+
+    return ucm_sys_complete_alloc(ptr, sys_size);
+}
+
+void *ucm_sys_calloc(size_t nmemb, size_t size)
+{
+    size_t total_size = size * nmemb;
+    void *ptr;
+
+    ptr = ucm_sys_malloc(total_size);
+    if (ptr == NULL) {
+        return NULL;
+    }
+
+    memset(ptr, 0, total_size);
+    return ptr;
+}
+
+void ucm_sys_free(void *ptr)
+{
+    size_t size;
+
+    if (ptr == NULL) {
+        return;
+    }
+
+    ptr -= sizeof(size_t);
+    size = *(size_t*)ptr;
+    munmap(ptr, size);
+}
+
+void *ucm_sys_realloc(void *ptr, size_t size)
+{
+    size_t oldsize, sys_size;
+    void *oldptr, *newptr;
+
+    if (ptr == NULL) {
+        return ucm_sys_malloc(size);
+    }
+
+    oldptr   = ptr - sizeof(size_t);
+    oldsize  = *(size_t*)oldptr;
+    sys_size = ucs_align_up_pow2(size + sizeof(size_t), ucm_get_page_size());
+
+    if (sys_size == oldsize) {
+        return ptr;
+    }
+
+    newptr = ucm_orig_mremap(oldptr, oldsize, sys_size, MREMAP_MAYMOVE);
+    if (newptr == MAP_FAILED) {
+        return NULL;
+    }
+
+    return ucm_sys_complete_alloc(newptr, sys_size);
+}
 
 void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
 {
