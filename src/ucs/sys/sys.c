@@ -614,7 +614,7 @@ out:
     return status;
 }
 
-int ucs_netif_check(const char *if_name)
+int ucs_netif_is_active(const char *if_name)
 {
     ucs_status_t status;
     struct ifreq ifr;

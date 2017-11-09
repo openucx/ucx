@@ -322,7 +322,7 @@ static ucs_status_t uct_tcp_query_tl_resources(uct_md_h md,
             break; /* no more items */
         }
 
-        if (!ucs_netif_check(entry->d_name)) {
+        if (!ucs_netif_is_active(entry->d_name)) {
             continue;
         }
 

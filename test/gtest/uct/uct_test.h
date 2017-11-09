@@ -204,6 +204,8 @@ protected:
     void flush(ucs_time_t deadline = ULONG_MAX) const;
     virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS) const;
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;
+    static void set_sockaddr_resources(uct_md_h pd, char *md_name, cpu_set_t local_cpus,
+                                       std::vector<resource>& all_resources);
 
     uct_test::entity* create_entity(size_t rx_headroom);
     uct_test::entity* create_entity(uct_iface_params_t &params);

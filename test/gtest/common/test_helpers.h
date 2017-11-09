@@ -12,10 +12,6 @@
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
-#include <ifaddrs.h>
-#include <net/if_arp.h>
-#include <net/if.h>
-#include <netinet/in.h>
 #include <errno.h>
 #include <iostream>
 #include <stdexcept>
@@ -23,6 +19,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <netinet/in.h>
 #include <dirent.h>
 
 
@@ -86,13 +83,13 @@ std::string get_iface_ip(const struct sockaddr *ifa_addr);
 /**
  * Check if the given interface has an IPv4 or an IPv6 address.
  */
-bool is_ip_on_iface(const struct sockaddr* ifa_addr);
+bool is_inet_addr(const struct sockaddr* ifa_addr);
 
 
 /**
  * Check if the given interface is associated with a device.
  */
-bool is_iface_on_dev(const char *ifa_name);
+bool is_ib_netdev(const char *ifa_name);
 
 
 /*

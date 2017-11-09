@@ -88,27 +88,24 @@ std::string get_iface_ip(const struct sockaddr *ifa_addr) {
     return ucs_sockaddr_str(ifa_addr, ip_str, ip_len);
 }
 
-bool is_ip_on_iface(const struct sockaddr* ifa_addr) {
+bool is_inet_addr(const struct sockaddr* ifa_addr) {
     return ((ifa_addr->sa_family == AF_INET) ||
             (ifa_addr->sa_family == AF_INET6));
 }
 
-bool is_iface_on_dev(const char *ifa_name) {
-    char *path;
+bool is_ib_netdev(const char *ifa_name) {
+    char path[PATH_MAX];
     DIR *dir;
-    bool ret = false;
 
-    path = (char*)calloc(1, PATH_MAX);
     snprintf(path, PATH_MAX, "/sys/class/net/%s/device/infiniband", ifa_name);
 
     dir = opendir(path);
-    if (dir != NULL) {
-        ret = true;
+    if (dir == NULL) {
+        return false;
+    } else {
         closedir(dir);
+        return true;
     }
-
-    free(path);
-    return ret;
 }
 
 namespace detail {
