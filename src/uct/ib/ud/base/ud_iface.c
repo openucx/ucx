@@ -631,8 +631,8 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_a
     iface_attr->ep_addr_len            = sizeof(uct_ud_ep_addr_t);
     iface_attr->max_conn_priv          = 0;
 
-    /* Software overhead */
-    iface_attr->overhead               = 80e-9;
+    /* UD lacks of scatter to CQE support */
+    iface_attr->latency.overhead      += 10e-9;
 
     return UCS_OK;
 }

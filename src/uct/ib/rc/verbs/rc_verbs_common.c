@@ -67,8 +67,6 @@ static void uct_rc_verbs_iface_common_tag_query(uct_rc_verbs_iface_common_t *ifa
     iface_attr->cap.am.max_zcopy -= iface->config.notag_hdr_size;
     iface_attr->cap.am.max_hdr   -= iface->config.notag_hdr_size;
 
-    iface_attr->latency.growth   += 3e-9; /* + 3ns for TM QP */
-
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
                                     UCT_IFACE_FLAG_TAG_EAGER_ZCOPY |
                                     UCT_IFACE_FLAG_TAG_RNDV_ZCOPY;
