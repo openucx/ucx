@@ -602,10 +602,11 @@ static ucs_status_t uct_ud_mlx5_iface_arm_rx_cq(uct_ib_iface_t *ib_iface,
     return uct_ib_iface_arm_rx_cq(ib_iface, solicited);
 }
 
-static void uct_ud_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep)
+static void uct_ud_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
+                                      ucs_status_t status)
 {
     uct_set_ep_failed(&UCS_CLASS_NAME(uct_ud_mlx5_ep_t), ep,
-                      &iface->super.super);
+                      &iface->super.super, status);
 }
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t)(uct_iface_t*);

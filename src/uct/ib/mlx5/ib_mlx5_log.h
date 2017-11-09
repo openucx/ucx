@@ -12,8 +12,8 @@
 #include <uct/base/uct_log.h>
 
 
-void uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe,
-                                     ucs_log_level_t log_level);
+ucs_status_t uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe,
+                                             ucs_log_level_t log_level);
 
 
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,

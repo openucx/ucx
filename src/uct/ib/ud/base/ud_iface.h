@@ -413,7 +413,8 @@ uct_ud_iface_progress_pending_tx(uct_ud_iface_t *iface)
 
 ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
 
-void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg);
+void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg,
+                                 ucs_status_t status);
 
 ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events);
 

@@ -35,7 +35,8 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {NULL}
 };
 
-static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
+static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
+                                        ucs_status_t status)
 {
     uct_rc_verbs_ep_t *ep;
     struct ibv_wc     *wc    = arg;
@@ -54,13 +55,15 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
     iface->tx.cq_available += ep->txcnt.pi - ep->txcnt.ci;
     /* Reset CI to prevent cq_available overrun on ep_destoroy */
     ep->txcnt.ci = ep->txcnt.pi;
-    uct_rc_txqp_purge_outstanding(&ep->super.txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
-    ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super);
+    uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
+    ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super, status);
 }
 
-static void uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep)
+static void uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
+                                       ucs_status_t status)
 {
-    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_verbs_ep_t), ep, &iface->super.super);
+    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_verbs_ep_t), ep,
+                      &iface->super.super, status);
 }
 
 void uct_rc_verbs_ep_am_packet_dump(uct_base_iface_t *base_iface,
@@ -91,7 +94,9 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
         if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
-            iface->super.super.ops->handle_failure(&iface->super.super, &wc[i]);
+            status = uct_rc_verbs_wc_to_ucs_status(wc[i].status);
+            iface->super.super.ops->handle_failure(&iface->super.super, &wc[i],
+                                                   status);
             continue;
         }
 

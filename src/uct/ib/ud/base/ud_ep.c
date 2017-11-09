@@ -122,7 +122,8 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
     }
 
     if (diff > iface->config.peer_timeout) {
-        iface->super.ops->handle_failure(&iface->super, ep);
+        iface->super.ops->handle_failure(&iface->super, ep,
+                                         UCS_ERR_ENDPOINT_TIMEOUT);
         return;
     } else if (diff > 3*iface->async.slow_tick) {
         ucs_trace("scheduling resend now: %lu send_time: %lu diff: %lu tick: %lu",

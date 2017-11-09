@@ -543,19 +543,21 @@ static unsigned uct_dc_mlx5_iface_progress(uct_iface_h tl_iface)
     return uct_dc_mlx5_poll_tx(iface);
 }
 
-static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
+static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
+                                             void *arg, ucs_status_t status)
 {
     struct mlx5_cqe64 *cqe   = arg;
     uint32_t          qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
 
     uct_ib_mlx5_completion_with_err(arg, UCS_LOG_LEVEL_ERROR);
-    uct_dc_handle_failure(ib_iface, qp_num);
+    uct_dc_handle_failure(ib_iface, qp_num, status);
 }
 
-static void uct_dc_mlx5_ep_set_failed(uct_ib_iface_t *ib_iface, uct_ep_h ep)
+static void uct_dc_mlx5_ep_set_failed(uct_ib_iface_t *ib_iface, uct_ep_h ep,
+                                      ucs_status_t status)
 {
     uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_mlx5_ep_t), ep,
-                      &ib_iface->super.super);
+                      &ib_iface->super.super, status);
 }
 
 ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
