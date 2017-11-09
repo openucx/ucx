@@ -219,9 +219,9 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
 static int ucp_str_array_search(const char **array, unsigned array_len,
                                 const char *str, const char *str_postfix)
 {
+    int len = strlen(str);
     unsigned i;
     const char *p;
-    int len = strlen(str);
 
     for (i = 0; i < array_len; ++i) {
         if (str_postfix == NULL) {
