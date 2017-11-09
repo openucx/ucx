@@ -201,6 +201,11 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
         iface_attr   = &worker->ifaces[rsc_index].attr;
         md_attr      = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
+        if ((context->tl_rscs[rsc_index].flags & UCP_CONTEXT_TLS_FLAG_AUX) &&
+            strcmp(criteria->title, "auxiliary")) {
+            continue;
+        }
+
         /* Check that local md and interface satisfy the criteria */
         if (!ucp_wireup_check_flags(resource, md_attr->cap.flags,
                                     criteria->local_md_flags, criteria->title,
