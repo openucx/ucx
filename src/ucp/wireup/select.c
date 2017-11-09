@@ -14,6 +14,7 @@
 #include <inttypes.h>
 
 #define UCP_WIREUP_RNDV_TEST_MSG_SIZE       262144
+#define UCP_WIREUP_AUX_CRITERIA_TITLE       "auxiliary"
 
 enum {
     UCP_WIREUP_LANE_USAGE_AM   = UCS_BIT(0),
@@ -202,7 +203,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
         md_attr      = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
         if ((context->tl_rscs[rsc_index].flags & UCP_CONTEXT_TLS_FLAG_AUX) &&
-            strcmp(criteria->title, "auxiliary")) {
+            strcmp(criteria->title, UCP_WIREUP_AUX_CRITERIA_TITLE)) {
             continue;
         }
 
@@ -511,7 +512,7 @@ static void ucp_wireup_fill_ep_params_criteria(ucp_wireup_criteria_t *criteria,
 static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
                                          const ucp_ep_params_t *params)
 {
-    criteria->title              = "auxiliary";
+    criteria->title              = UCP_WIREUP_AUX_CRITERIA_TITLE;
     criteria->local_md_flags     = 0;
     criteria->remote_md_flags    = 0;
     criteria->local_iface_flags  = UCT_IFACE_FLAG_CONNECT_TO_IFACE |

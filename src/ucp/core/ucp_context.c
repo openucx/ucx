@@ -214,35 +214,28 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
                                  print_flags);
 }
 
-static int ucp_str_array_search_aux(const char **array, unsigned length,
-                                    const char *str)
+/* Search str in the array. If str_postfix is specified, search for
+ * 'str:str_postfix' string. */
+static int ucp_str_array_search(const char **array, unsigned array_len,
+                                const char *str, const char *str_postfix)
 {
     unsigned i;
-    char *aux_postfix;
+    const char *p;
+    int len = strlen(str);
 
-    /* tl alias may have ':aux' postfix, which means that this tl can be used
-     * for auxiliary wireup lane only. */
-    for (i = 0; i < length; ++i) {
-        aux_postfix = strchr(array[i], ':');
-        if ((aux_postfix != NULL) && strstr(array[i], str) &&
-            ((array[i] + strlen(str)) == aux_postfix)) {
-            ucs_assert_always(!strcmp(aux_postfix + 1, "aux"));
-            return i;
+    for (i = 0; i < array_len; ++i) {
+        if (str_postfix == NULL) {
+            if (!strcmp(array[i], str)) {
+                return i;
+            }
+        } else if (!strncmp(array[i], str, len)) {
+            p = array[i] + len;
+            if ((*p == ':') && !strcmp(p + 1, str_postfix)) {
+                return i;
+            }
         }
     }
-    return -1;
-}
 
-static int ucp_str_array_search(const char **array, unsigned length,
-                                const char *str)
-{
-    unsigned i;
-
-    for (i = 0; i < length; ++i) {
-        if (!strcmp(array[i], str)) {
-            return i;
-        }
-    }
     return -1;
 }
 
@@ -257,12 +250,13 @@ static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_n
                                     int is_alias)
 {
     const char **names = (const char**)config->tls.names;
+    unsigned count     = config->tls.count;
     char buf[UCT_TL_NAME_MAX + 1];
 
     snprintf(buf, sizeof(buf), "\\%s", tl_name);
-    return (!is_alias && ucp_str_array_search(names, config->tls.count, buf) >= 0) ||
-           ((ucp_str_array_search(names, config->tls.count, tl_name) >= 0)) ||
-            (ucp_str_array_search(names, config->tls.count, UCP_RSC_CONFIG_ALL) >= 0);
+    return (!is_alias && ucp_str_array_search(names, count, buf, NULL) >= 0) ||
+           ((ucp_str_array_search(names, count, tl_name, NULL) >= 0)) ||
+            (ucp_str_array_search(names, count, UCP_RSC_CONFIG_ALL, NULL) >= 0);
 }
 
 static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
@@ -286,7 +280,7 @@ static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
         ucs_assert_always(devices[index].count <= 64); /* Using uint64_t bitmap */
         config_idx = ucp_str_array_search((const char**)devices[index].names,
                                           devices[index].count,
-                                          resource->dev_name);
+                                          resource->dev_name, NULL);
         if (config_idx >= 0) {
             device_enabled  = 1;
             masks[index] |= UCS_BIT(config_idx);
@@ -325,13 +319,15 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
              */
             if (ucp_config_is_tl_enabled(config, alias->alias, 1)) {
                 if (ucp_str_array_search(alias->tls, count,
-                                         resource->tl_name) >= 0) {
+                                         resource->tl_name, NULL) >= 0) {
                     tl_enabled = 1;
                     ucs_trace("enabling tl '%s' for alias '%s'",
                               resource->tl_name, alias->alias);
                     break;
-                } else if (ucp_str_array_search_aux(alias->tls, count,
-                                                    resource->tl_name) >= 0) {
+                } else if (ucp_str_array_search(alias->tls, count,
+                                                resource->tl_name, "aux") >= 0) {
+                    /* Search for tl names with 'aux' postfix, such tls can be
+                     * used for auxiliary wireup purposes only */
                     tl_enabled = *is_aux = 1;
                     ucs_trace("enabling auxiliary tl '%s' for alias '%s'",
                               resource->tl_name, alias->alias);
@@ -536,7 +532,7 @@ static void ucp_resource_config_array_str(const ucs_config_names_array_t *array,
     unsigned i;
 
     if (ucp_str_array_search((const char**)array->names, array->count,
-                             UCP_RSC_CONFIG_ALL) >= 0) {
+                             UCP_RSC_CONFIG_ALL, NULL) >= 0) {
         strncpy(buf, "", max);
         return;
     }
