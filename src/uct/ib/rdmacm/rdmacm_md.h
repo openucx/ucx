@@ -8,6 +8,7 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/sys/string.h>
+#include <ucs/time/time.h>
 #include <rdma/rdma_cma.h>
 
 /**
@@ -34,5 +35,7 @@ ucs_status_t uct_rdmacm_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 
 int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                       uct_sockaddr_accessibility_t mode);
+
+int uct_rdmacm_is_addr_resolved(struct rdma_event_channel *event_ch);
 
 #endif
