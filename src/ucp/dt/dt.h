@@ -14,7 +14,6 @@
 
 #include <uct/api/uct.h>
 #include <ucp/api/ucp.h>
-//#include <string.h>
 
 
 /**
