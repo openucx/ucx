@@ -13,6 +13,7 @@
 #include <ucp/wireup/wireup.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
+#include <ucs/datastruct/queue.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
@@ -72,7 +73,25 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ep->cfg_index        = ucp_worker_get_ep_config(worker, &key);
     ep->am_lane          = UCP_NULL_LANE;
     ep->flags            = 0;
-    ucs_queue_head_init(&ep->stream_data);
+
+    if (worker->context->config.features & UCP_FEATURE_STREAM) {
+        ep->ext.stream = ucs_calloc(1, sizeof(*ep->ext.stream),
+                                    "ucp ep stream extension");
+        if (ep->ext.stream == NULL) {
+            ucs_error("Failed to allocate ucp ep stream extension");
+            status = UCS_ERR_NO_MEMORY;
+            goto err_free_ep;
+        }
+
+        ucs_queue_head_init(&ep->ext.stream->data);
+        ucs_queue_head_init(&ep->ext.stream->reqs);
+        ep->ext.stream->ucp_ep       = ep;
+        ep->ext.stream->rdesc        = NULL;
+        ep->ext.stream->rdesc_offset = 0;
+        ep->ext.stream->rdesc_len    = 0;
+    } else {
+        ep->ext.stream = NULL;
+    }
 
 #if ENABLE_DEBUG_DATA
     ucs_snprintf_zero(ep->peer_name, UCP_WORKER_NAME_MAX, "%s", peer_name);
@@ -82,7 +101,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     status = UCS_STATS_NODE_ALLOC(&ep->stats, &ucp_ep_stats_class,
                                   worker->stats, "-%p", ep);
     if (status != UCS_OK) {
-        goto err_free_ep;
+        goto err_free_ext_ep;
     }
 
     hash_it = kh_put(ucp_worker_ep_hash, &worker->ep_hash, dest_uuid,
@@ -103,6 +122,8 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 
 err_free_stats:
     UCS_STATS_NODE_FREE(ep->stats);
+err_free_ext_ep:
+    ucs_free(ep->ext.stream);
 err_free_ep:
     ucs_free(ep);
 err:
@@ -199,7 +220,7 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
 {
     ucs_status_t status = UCS_OK;
 
-    /* TODO: handle a case where the existing endpoint is incomplete */
+    /* handle a case where the existing endpoint is incomplete */
 
     if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
         if (ucp_ep_config(ep)->key.err_mode != params->err_mode) {
@@ -349,17 +370,21 @@ void ucp_ep_destroy_internal(ucp_ep_h ep, const char *message)
     }
 
     UCS_STATS_NODE_FREE(ep->stats);
+    ucs_free(ep->ext.stream);
     ucs_free(ep);
 }
 
-static void ucp_ep_disconnected(ucp_ep_h ep)
+static void ucp_ep_ext_stream_cleanup(ucp_ep_h ep)
 {
-    ucp_recv_desc_t  *rdesc;
+    ucp_ep_ext_stream_t *ep_stream = ep->ext.stream;
+    ucp_recv_desc_t     *rdesc;
 
-    ucs_trace("ep %p is disconnected", ep);
+    if (ep_stream == NULL) {
+        return;
+    }
 
-    while (!ucs_queue_is_empty(&ep->stream_data)) {
-        rdesc = ucs_queue_pull_elem_non_empty(&ep->stream_data, ucp_recv_desc_t,
+    while (!ucs_queue_is_empty(&ep_stream->data)) {
+        rdesc = ucs_queue_pull_elem_non_empty(&ep_stream->data, ucp_recv_desc_t,
                                               stream_queue);
 
         if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
@@ -369,6 +394,11 @@ static void ucp_ep_disconnected(ucp_ep_h ep)
             ucs_mpool_put_inline(rdesc);
         }
     }
+}
+
+static void ucp_ep_disconnected(ucp_ep_h ep)
+{
+    ucp_ep_ext_stream_cleanup(ep);
 
     if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
         /* Endpoints which have remote connection are destroyed only when the

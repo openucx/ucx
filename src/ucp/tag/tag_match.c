@@ -75,7 +75,7 @@ void ucp_tag_exp_remove(ucp_tag_match_t *tm, ucp_request_t *req)
 static inline uint64_t ucp_tag_exp_req_seq(ucs_queue_iter_t iter)
 {
     return (*iter == NULL) ? ULONG_MAX :
-                    ucs_container_of(*iter, ucp_request_t, recv.queue)->recv.sn;
+           ucs_container_of(*iter, ucp_request_t, recv.queue)->recv.tag.sn;
 }
 
 ucp_request_t*
@@ -108,12 +108,13 @@ ucp_tag_exp_search_all(ucp_tag_match_t *tm, ucs_queue_head_t *hash_queue,
         }
 
         req = ucs_container_of(**iter, ucp_request_t, recv.queue);
-        if (ucp_tag_recv_is_match(recv_tag, recv_flags, req->recv.tag,
-                                  req->recv.tag_mask, req->recv.state.offset,
-                                  req->recv.info.sender_tag))
+        if (ucp_tag_recv_is_match(recv_tag, recv_flags, req->recv.tag.tag,
+                                  req->recv.tag.tag_mask, req->recv.state.offset,
+                                  req->recv.tag.info.sender_tag))
         {
-            ucp_tag_log_match(recv_tag, recv_len, req, req->recv.tag,
-                              req->recv.tag_mask, req->recv.state.offset, "expected");
+            ucp_tag_log_match(recv_tag, recv_len, req, req->recv.tag.tag,
+                              req->recv.tag.tag_mask, req->recv.state.offset,
+                              "expected");
             if (recv_flags & UCP_RECV_DESC_FLAG_LAST) {
                 ucs_queue_del_iter(queue, *iter);
             }

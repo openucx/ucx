@@ -164,6 +164,7 @@ typedef struct ucp_worker {
     ucs_list_link_t               arm_ifaces;    /* List of interfaces to arm */
 
     void                          *user_data;    /* User-defined data */
+    ucs_list_link_t               stream_eps;    /* List of EPs with received stream data */
     khash_t(ucp_worker_ep_hash)   ep_hash;       /* Hash table of all endpoints */
     khash_t(ucp_ep_errh_hash)     ep_errh_hash;  /* Hash table of error handlers associated with endpoints */
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */

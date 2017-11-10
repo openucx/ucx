@@ -39,7 +39,7 @@ ucs_status_t ucp_tag_recv_request_test(void *request, ucp_tag_recv_info_t *info)
 
     if (status != UCS_INPROGRESS) {
         ucs_assert(req->flags & UCP_REQUEST_FLAG_RECV);
-        *info = req->recv.info;
+        *info = req->recv.tag.info;
     }
 
     return status;
@@ -99,7 +99,7 @@ UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
         ucp_tag_exp_remove(&worker->context->tm, req);
         /* If tag posted to the transport need to wait its completion */
         if (!(req->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
-            ucp_request_complete_recv(req, UCS_ERR_CANCELED);
+            ucp_request_complete_tag_recv(req, UCS_ERR_CANCELED);
         }
 
         UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);
@@ -291,7 +291,7 @@ ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info)
 
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         if (req->flags & UCP_REQUEST_FLAG_RECV) {
-            *info = req->recv.info;
+            *info = req->recv.tag.info;
         }
         ucs_assert(req->status != UCS_INPROGRESS);
         return req->status;

@@ -12,6 +12,7 @@
 #include <ucp/proto/proto_am.inl>
 #include <ucp/stream/stream.h>
 #include <ucp/dt/dt.h>
+#include <ucp/dt/dt.inl>
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

@@ -49,8 +49,8 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
     ucp_worker_iface_t *iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
                                                               ucp_worker_iface_t, queue);
 
-    req->recv.info.sender_tag = stag;
-    req->recv.info.length     = length;
+    req->recv.tag.info.sender_tag = stag;
+    req->recv.tag.info.length     = length;
 
     if (ucs_unlikely(status != UCS_OK)) {
         ucp_tag_offload_release_buf(req, ctx, iface->rsc_index);
@@ -63,8 +63,10 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
     }
 
     if (req->recv.rdesc != NULL) {
-        status = ucp_dt_unpack(req->recv.datatype, req->recv.buffer, req->recv.length,
-                               &req->recv.state, req->recv.rdesc + 1, length, 1);
+        status = ucp_dt_unpack(req->recv.datatype, req->recv.buffer,
+                               req->recv.length, &req->recv.state,
+                               req->recv.rdesc + 1, length,
+                               UCP_RECV_DESC_FLAG_LAST);
         ucs_mpool_put_inline(req->recv.rdesc);
     } else {
         ucp_request_memory_dereg(ctx, iface->rsc_index, req->recv.datatype,
@@ -73,7 +75,7 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
 
     UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, MATCHED);
 out:
-    ucp_request_complete_recv(req, status);
+    ucp_request_complete_tag_recv(req, status);
 }
 
 static size_t ucp_tag_offload_fetch_rkey(ucp_ep_t *ep, ucp_sw_rndv_hdr_t *sw_hdr,
@@ -115,7 +117,7 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
     UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, MATCHED_SW_RNDV);
     if (ucs_unlikely(status != UCS_OK)) {
         ucp_tag_offload_release_buf(req, ctx, iface->rsc_index);
-        ucp_request_complete_recv(req, status);
+        ucp_request_complete_tag_recv(req, status);
         return;
     }
 
@@ -228,7 +230,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
         return 0;
     }
 
-    if ((ctx->config.tag_sender_mask & req->recv.tag_mask) !=
+    if ((ctx->config.tag_sender_mask & req->recv.tag.tag_mask) !=
          ctx->config.tag_sender_mask) {
         /* Wildcard.
          * TODO add check that only offload capable iface present. In
@@ -291,8 +293,8 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
     req->recv.uct_ctx.completed_cb    = ucp_tag_offload_completed;
     req->recv.uct_ctx.rndv_cb         = ucp_tag_offload_rndv_cb;
 
-    status = uct_iface_tag_recv_zcopy(ucp_iface->iface, req->recv.tag,
-                                      req->recv.tag_mask, &iov, 1,
+    status = uct_iface_tag_recv_zcopy(ucp_iface->iface, req->recv.tag.tag,
+                                      req->recv.tag.tag_mask, &iov, 1,
                                       &req->recv.uct_ctx);
     if (status != UCS_OK) {
         /* No more matching entries in the transport. */
