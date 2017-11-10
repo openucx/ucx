@@ -14,7 +14,6 @@
 #include <inttypes.h>
 
 #define UCP_WIREUP_RNDV_TEST_MSG_SIZE       262144
-#define UCP_WIREUP_AUX_CRITERIA_TITLE       "auxiliary"
 
 enum {
     UCP_WIREUP_LANE_USAGE_AM   = UCS_BIT(0),
@@ -202,8 +201,8 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
         iface_attr   = &worker->ifaces[rsc_index].attr;
         md_attr      = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
-        if ((context->tl_rscs[rsc_index].flags & UCP_CONTEXT_TLS_FLAG_AUX) &&
-            strcmp(criteria->title, UCP_WIREUP_AUX_CRITERIA_TITLE)) {
+        if ((context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) &&
+            !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX)) {
             continue;
         }
 
@@ -512,7 +511,7 @@ static void ucp_wireup_fill_ep_params_criteria(ucp_wireup_criteria_t *criteria,
 static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
                                          const ucp_ep_params_t *params)
 {
-    criteria->title              = UCP_WIREUP_AUX_CRITERIA_TITLE;
+    criteria->title              = "auxiliary";
     criteria->local_md_flags     = 0;
     criteria->remote_md_flags    = 0;
     criteria->local_iface_flags  = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
@@ -522,6 +521,7 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
                                    UCT_IFACE_FLAG_AM_BCOPY |
                                    UCT_IFACE_FLAG_CB_ASYNC;
     criteria->calc_score         = ucp_wireup_aux_score_func;
+    criteria->tl_rsc_flags       = UCP_TL_RSC_FLAG_AUX; /* Can use aux transports */
 
     ucp_wireup_fill_ep_params_criteria(criteria, params);
 }
@@ -540,6 +540,7 @@ static void ucp_wireup_fill_tag_criteria(ucp_ep_h ep, ucp_wireup_criteria_t *cri
     /* Use RMA score func for now (to target mid size messages).
      * TODO: have to align to TM_THRESH value. */
     criteria->calc_score         = ucp_wireup_rma_score_func;
+    criteria->tl_rsc_flags       = 0;
 }
 
 static int ucp_wireup_tag_lane_supported(ucp_ep_h ep,
@@ -609,6 +610,7 @@ static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, const ucp_ep_params_t 
     criteria.local_iface_flags  = criteria.remote_iface_flags |
                                   UCT_IFACE_FLAG_PENDING;
     criteria.calc_score         = ucp_wireup_rma_score_func;
+    criteria.tl_rsc_flags       = 0;
     ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
     return ucp_wireup_add_memaccess_lanes(ep, address_count, address_list,
@@ -649,6 +651,7 @@ static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, const ucp_ep_params_t 
     criteria.local_iface_flags  = criteria.remote_iface_flags |
                                   UCT_IFACE_FLAG_PENDING;
     criteria.calc_score         = ucp_wireup_amo_score_func;
+    criteria.tl_rsc_flags       = 0;
     ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
     /* We can use only non-p2p resources or resources which are explicitly
@@ -731,6 +734,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
                                   UCT_IFACE_FLAG_CB_SYNC;
     criteria.local_iface_flags  = UCT_IFACE_FLAG_AM_BCOPY;
     criteria.calc_score         = ucp_wireup_am_score_func;
+    criteria.tl_rsc_flags       = 0;
     ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_TAG |
@@ -790,6 +794,7 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep,
                                   UCT_IFACE_FLAG_PENDING;
     criteria.local_iface_flags  = UCT_IFACE_FLAG_GET_ZCOPY;
     criteria.calc_score         = ucp_wireup_rndv_score_func;
+    criteria.tl_rsc_flags       = 0;
     ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
