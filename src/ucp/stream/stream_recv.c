@@ -64,7 +64,8 @@ static UCS_F_ALWAYS_INLINE void
 ucp_stream_rdesc_release(ucp_recv_desc_t *rdesc)
 {
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
-        uct_iface_release_desc((char*)rdesc - sizeof(ucp_eager_sync_hdr_t));
+        uct_iface_release_desc(UCS_PTR_BYTE_OFFSET(rdesc,
+                                                   -sizeof(ucp_eager_sync_hdr_t)));
     } else {
         ucs_mpool_put_inline(rdesc);
     }
@@ -94,7 +95,7 @@ ucp_stream_data_unpack(void *data, size_t length, ucp_request_t *req)
                                            UCP_RECV_DESC_FLAG_LAST);
     if (ucs_likely(status == UCS_OK)) {
         req->recv.state.offset += valid_len;
-        ucs_trace_data("unpacked %zd\n", valid_len);
+        ucs_trace_data("unpacked %zd stream data\n", valid_len);
 
         return valid_len;
     }
@@ -104,14 +105,14 @@ ucp_stream_data_unpack(void *data, size_t length, ucp_request_t *req)
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
-ucp_stream_request_recv_get(ucp_worker_t *worker, void *buffer, size_t *count,
+static UCS_F_ALWAYS_INLINE ucp_request_t *
+ucp_stream_recv_request_get(ucp_worker_t *worker, void *buffer, size_t count,
                             ucp_datatype_t datatype,
                             ucp_stream_recv_callback_t cb)
 {
     ucp_request_t *req = ucp_request_get(worker);
     if (ucs_unlikely(req == NULL)) {
-        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+        return NULL;
     }
 
     req->flags = UCP_REQUEST_FLAG_CALLBACK;
@@ -122,13 +123,13 @@ ucp_stream_request_recv_get(ucp_worker_t *worker, void *buffer, size_t *count,
     if (ucs_unlikely(UCP_DT_IS_IOV(datatype))) {
         req->recv.state.dt.iov.iov_offset    = 0;
         req->recv.state.dt.iov.iovcnt_offset = 0;
-        req->recv.state.dt.iov.iovcnt        = *count;
+        req->recv.state.dt.iov.iovcnt        = count;
         req->recv.state.dt.iov.memh          = UCT_MEM_HANDLE_NULL;
     }
 
     req->recv.buffer   = buffer;
     req->recv.datatype = datatype;
-    req->recv.length   = ucp_dt_length(datatype, *count, buffer,
+    req->recv.length   = ucp_dt_length(datatype, count, buffer,
                                        &req->recv.state);
 
     return req;
@@ -154,8 +155,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
-    req = ucp_stream_request_recv_get(ep->worker, buffer, count, datatype, cb);
-    if (ucs_unlikely(!UCS_PTR_IS_PTR(req))) {
+    req = ucp_stream_recv_request_get(ep->worker, buffer, *count, datatype, cb);
+    if (ucs_unlikely(req == NULL)) {
+        req = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
         goto out;
     }
 
@@ -185,7 +187,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
             unpacked = ucp_stream_data_unpack(UCS_PTR_BYTE_OFFSET(rdata, offset),
                                               length - offset, req);
             if (ucs_unlikely(unpacked < 0)) {
-                ucp_request_complete_stream_recv(req, unpacked);
+                ucp_request_put(req);
+                req = UCS_STATUS_PTR(unpacked);
                 goto out;
             } else if (unpacked == (length - offset)) {
                 if (ucp_stream_rdesc_from_data(rdata) == ep_stream->rdesc) {
@@ -214,14 +217,18 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
                 ucs_queue_push(&ep_stream->reqs, &req->recv.queue);
             } else {
                 /* TODO: count != bytes_count */
-                ucp_request_complete_stream_recv(req, UCS_OK);
+                *count = req->recv.state.offset;
+                ucp_request_put(req);
+                req = UCS_STATUS_PTR(UCS_OK);
             }
             goto out;
         }
     }
 
     ucs_assert(req->recv.state.offset == req->recv.length);
-    ucp_request_complete_stream_recv(req, UCS_OK);
+    *count = req->recv.state.offset;
+    ucp_request_put(req);
+    req = UCS_STATUS_PTR(UCS_OK);
 
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
@@ -362,11 +369,16 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
                                              is_handled);
             if (status == UCS_OK) {
                 is_handled = 1;
-            } else if (status == UCS_ERR_NO_MESSAGE) {
-                ucp_request_complete_stream_recv(req, UCS_OK);
+            } else if (status < 0) {
+                if (status == UCS_ERR_NO_MESSAGE) {
+                    ucp_request_complete_stream_recv(req, UCS_OK);
+                }
                 goto out;
+            } else {
+                ucs_assert(status == UCS_INPROGRESS);
             }
 
+            ucs_assert(ep_stream->rdesc != NULL);
             rdata_ptr = ucp_stream_rdesc_data_offset(ep_stream->rdesc,
                                                      ep_stream->rdesc_offset);
             rdata_len = ep_stream->rdesc_len - ep_stream->rdesc_offset;
@@ -383,7 +395,7 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
             } else {
                 /* The descriptor is completely processed, go to next */
                 ucs_assert((ep_stream->rdesc_len ==
-                           (ep_stream->rdesc_offset += unpacked)));
+                           (ep_stream->rdesc_offset + unpacked)));
                 if (ep_stream->rdesc != rdesc) {
                     ucp_stream_rdesc_release(ep_stream->rdesc);
                 }
@@ -393,7 +405,8 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
     } while (!ucs_queue_is_empty(&ep_stream->reqs));
 
 out:
-    if (UCS_PTR_IS_PTR(ep_stream) && (ep_stream->rdesc == NULL)) {
+    if (UCS_PTR_IS_PTR(ep_stream) && (ep_stream != NULL) &&
+        (ep_stream->rdesc == NULL)) {
         if (!(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
             ucs_mpool_put_inline(rdesc);
         }
