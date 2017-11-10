@@ -78,8 +78,8 @@ protected:
             while (1) {
                 if (uct_iface_event_arm(iface,
                                         UCT_EVENT_SEND_COMP |
-                                        UCT_EVENT_RECV_AM   |
-                                        UCT_EVENT_RECV_SIG_AM) != UCS_ERR_BUSY) {
+                                        UCT_EVENT_RECV      |
+                                        UCT_EVENT_RECV_SIG) != UCS_ERR_BUSY) {
                     break;
                 }
                 progress();
@@ -115,7 +115,7 @@ void test_uct_cq_moderation::run_test(uct_iface_h iface) {
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP);
-    check_caps(UCT_IFACE_FLAG_EVENT_RECV_AM);
+    check_caps(UCT_IFACE_FLAG_EVENT_RECV);
 
     uct_iface_set_am_handler(m_receiver->iface(), 0, am_cb, this, UCT_CB_FLAG_SYNC);
 

@@ -141,7 +141,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                   UCT_IFACE_FLAG_CONNECT_TO_EP |
                                   UCT_IFACE_FLAG_CB_SYNC |
                                   UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                  UCT_IFACE_FLAG_EVENT_RECV_AM;
+                                  UCT_IFACE_FLAG_EVENT_RECV;
 
     if (uct_ib_atomic_is_supported(dev, 0, sizeof(uint64_t))) {
         iface_attr->cap.flags  |= UCT_IFACE_FLAG_ATOMIC_ADD64 |
@@ -954,7 +954,7 @@ ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
 
     arm_rx_solicited = 0;
     arm_rx_all       = 0;
-    if (events & UCT_EVENT_RECV_AM) {
+    if (events & UCT_EVENT_RECV) {
         arm_rx_solicited = 1; /* to wake up on active messages */
     }
     if (((events & UCT_EVENT_SEND_COMP) && iface->config.fc_enabled) ||

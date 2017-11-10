@@ -88,7 +88,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                              UCT_IFACE_FLAG_PENDING          |
                              UCT_IFACE_FLAG_CB_SYNC          |
                              UCT_IFACE_FLAG_EVENT_SEND_COMP  |
-                             UCT_IFACE_FLAG_EVENT_RECV_AM;
+                             UCT_IFACE_FLAG_EVENT_RECV;
 
     attr->cap.am.max_bcopy = iface->config.buf_size - sizeof(uct_tcp_am_hdr_t);
 
