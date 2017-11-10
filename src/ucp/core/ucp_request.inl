@@ -68,6 +68,7 @@ ucp_request_put(ucp_request_t *req)
 {
     ucs_trace_req("put request %p", req);
     UCS_PROFILE_REQUEST_FREE(req);
+
     ucs_mpool_put_inline(req);
 }
 
@@ -78,6 +79,7 @@ ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_send", status);
+
     ucp_request_complete(req, send.cb, status);
 }
 
@@ -93,6 +95,7 @@ ucp_request_complete_recv(ucp_request_t *req, ucs_status_t status)
     if (req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD) {
         --req->recv.worker->context->tm.offload.sw_req_count;
     }
+
     ucp_request_complete(req, recv.cb, status, &req->recv.info);
 }
 
@@ -206,7 +209,7 @@ ucp_request_send_state_reset(ucp_request_t *req,
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
         if (UCP_DT_IS_CONTIG(req->send.datatype)) {
-            req->send.state.dt.dt.contig.memh = UCT_MEM_HANDLE_NULL;
+            ucp_dt_clear_rndv_lanes(&req->send.state.dt);
         }
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
@@ -318,3 +321,45 @@ static UCS_F_ALWAYS_INLINE void ucp_request_send_tag_stat(ucp_request_t *req)
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
     }
 }
+
+static UCS_F_ALWAYS_INLINE
+uct_rkey_bundle_t *ucp_tag_rndv_rkey(ucp_request_t *req, int idx)
+{
+    return &req->send.rndv_get.rkey->rkey_bundle[idx];
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_rndv_get_create(ucp_request_t *req)
+{
+    int i;
+
+    ucs_trace_req("rendezvous-get create request %p", req);
+    req->send.rndv_get.rkey = ucs_mpool_get_inline(&(req->send.ep->worker)->rndv_get_mp);
+    ucs_assert_always(req->send.rndv_get.rkey != NULL);
+
+    req->send.rndv_get.rkey->lane_idx  = 0;
+    req->send.rndv_get.rkey->num_lanes = 0;
+
+    for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
+        ucp_tag_rndv_rkey(req, i)->rkey = UCT_INVALID_RKEY;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_rndv_get_release(ucp_request_t *req)
+{
+    int i;
+
+    ucs_trace_req("release request rndv-get remote key. req: %p", req);
+
+    ucs_assert(req->send.rndv_get.rkey != NULL);
+
+    for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
+        if (ucp_tag_rndv_rkey(req, i)->rkey != UCT_INVALID_RKEY) {
+            uct_rkey_release(ucp_tag_rndv_rkey(req, i));
+        }
+    }
+
+    ucs_mpool_put_inline(req->send.rndv_get.rkey);
+}
+

@@ -38,15 +38,16 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 {
     memset(key, 0, sizeof(*key));
     key->num_lanes        = 0;
+    key->num_rndv_lanes   = 0;
     key->am_lane          = UCP_NULL_LANE;
-    key->rndv_lane        = UCP_NULL_LANE;
     key->wireup_lane      = UCP_NULL_LANE;
     key->tag_lane         = UCP_NULL_LANE;
     key->reachable_md_map = 0;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     key->status           = UCS_OK;
-    memset(key->rma_lanes, UCP_NULL_LANE, sizeof(key->rma_lanes));
-    memset(key->amo_lanes, UCP_NULL_LANE, sizeof(key->amo_lanes));
+    memset(key->rndv_lanes, UCP_NULL_LANE, sizeof(key->rndv_lanes));
+    memset(key->rma_lanes,  UCP_NULL_LANE, sizeof(key->rma_lanes));
+    memset(key->amo_lanes,  UCP_NULL_LANE, sizeof(key->amo_lanes));
 }
 
 ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
@@ -150,7 +151,7 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
     key.lanes[0].rsc_index    = UCP_NULL_RESOURCE;
     key.lanes[0].dst_md_index = UCP_NULL_RESOURCE;
     key.am_lane               = 0;
-    key.rndv_lane             = 0;
+    key.rndv_lanes[0]         = 0;
     key.wireup_lane           = 0;
 
     ep->cfg_index        = ucp_worker_get_ep_config(worker, &key);
@@ -481,16 +482,16 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     ucp_lane_index_t lane;
 
 
-    if ((key1->num_lanes        != key2->num_lanes) ||
-        memcmp(key1->rma_lanes, key2->rma_lanes, sizeof(key1->rma_lanes)) ||
-        memcmp(key1->amo_lanes, key2->amo_lanes, sizeof(key1->amo_lanes)) ||
-        (key1->reachable_md_map != key2->reachable_md_map) ||
-        (key1->am_lane          != key2->am_lane) ||
-        (key1->rndv_lane        != key2->rndv_lane) ||
-        (key1->tag_lane         != key2->tag_lane) ||
-        (key1->wireup_lane      != key2->wireup_lane) ||
-        (key1->err_mode         != key2->err_mode) ||
-        (key1->status           != key2->status))
+    if ((key1->num_lanes         != key2->num_lanes)                         ||
+        memcmp(key1->rma_lanes,  key2->rma_lanes,  sizeof(key1->rma_lanes))  ||
+        memcmp(key1->amo_lanes,  key2->amo_lanes,  sizeof(key1->amo_lanes))  ||
+        memcmp(key1->rndv_lanes, key2->rndv_lanes, sizeof(key1->rndv_lanes)) ||
+        (key1->reachable_md_map  != key2->reachable_md_map)                  ||
+        (key1->am_lane           != key2->am_lane)                           ||
+        (key1->tag_lane          != key2->tag_lane)                          ||
+        (key1->wireup_lane       != key2->wireup_lane)                       ||
+        (key1->err_mode          != key2->err_mode)                          ||
+        (key1->status            != key2->status))
     {
         return 0;
     }
@@ -779,7 +780,8 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             if (!ucp_ep_is_tag_offload_enabled(config)) {
                 /* Tag offload is disabled, AM will be used for all
                  * tag-matching protocols */
-                ucp_ep_config_set_rndv_thresh(worker, config, config->key.rndv_lane,
+                /* TODO: set threshold level based on all available lanes */
+                ucp_ep_config_set_rndv_thresh(worker, config, config->key.rndv_lanes[0],
                                               UCT_IFACE_FLAG_GET_ZCOPY,
                                               max_rndv_thresh);
                 config->tag.eager      = config->am;
@@ -793,7 +795,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
     /* Configuration for remote memory access */
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
-        if (ucp_ep_config_get_rma_prio(config->key.rma_lanes, lane) == -1) {
+        if (ucp_ep_config_get_multi_lane_prio(config->key.rma_lanes, lane) == -1) {
             continue;
         }
 
@@ -897,8 +899,8 @@ static void ucp_ep_config_print_rma_proto(FILE *stream, const char *name,
     fprintf(stream, "..(inf)\n");
 }
 
-int ucp_ep_config_get_rma_prio(const ucp_lane_index_t *lanes,
-                               ucp_lane_index_t lane)
+int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
+                                      ucp_lane_index_t lane)
 {
     int prio;
     for (prio = 0; prio < UCP_MAX_LANES; ++prio) {
@@ -956,13 +958,13 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
     snprintf(p, endp - p, "md[%d]", key->lanes[lane].dst_md_index);
     p += strlen(p);
 
-    prio = ucp_ep_config_get_rma_prio(key->rma_lanes, lane);
+    prio = ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane);
     if (prio != -1) {
         snprintf(p, endp - p, " rma#%d", prio);
         p += strlen(p);
     }
 
-    prio = ucp_ep_config_get_rma_prio(key->amo_lanes, lane);
+    prio = ucp_ep_config_get_multi_lane_prio(key->amo_lanes, lane);
     if (prio != -1) {
         snprintf(p, endp - p, " amo#%d", prio);
         p += strlen(p);
@@ -973,8 +975,9 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
         p += strlen(p);
     }
 
-    if (lane == key->rndv_lane) {
-        snprintf(p, endp - p, " zcopy_rndv");
+    prio = ucp_ep_config_get_multi_lane_prio(key->rndv_lanes, lane);
+    if (prio != -1) {
+        snprintf(p, endp - p, " zcopy_rndv#%d", prio);
         p += strlen(p);
     }
 
@@ -1028,7 +1031,7 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
 
      if (context->config.features & UCP_FEATURE_RMA) {
          for (lane = 0; lane < config->key.num_lanes; ++lane) {
-             if (ucp_ep_config_get_rma_prio(config->key.rma_lanes, lane) == -1) {
+             if (ucp_ep_config_get_multi_lane_prio(config->key.rma_lanes, lane) == -1) {
                  continue;
              }
              ucp_ep_config_print_rma_proto(stream, "put", lane,
