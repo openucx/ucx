@@ -357,7 +357,7 @@ static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *
     } else {
         if (rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) {
             UCS_PROFILE_CALL(uct_rkey_unpack, rndv_rts_hdr + 1,
-                    &rndv_req->send.rndv_get.rkey_bundle);
+                             &rndv_req->send.rndv_get.rkey_bundle);
         }
         /* rndv_req is the request that would perform the get operation */
         rndv_req->send.uct.func     = ucp_proto_progress_rndv_get_zcopy;

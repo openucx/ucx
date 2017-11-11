@@ -43,7 +43,7 @@ size_t ucp_dt_pack(ucp_datatype_t datatype, void *dest, const void *src,
                    ucp_dt_state_t *state, size_t length);
 
 static UCS_F_ALWAYS_INLINE void
-ucp_dt_clear_rndv_lanes(ucp_dt_state_t *state)
+ucp_dt_clear_memh(ucp_dt_state_t *state)
 {
     int i;
     for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {

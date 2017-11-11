@@ -219,7 +219,7 @@ ucp_request_send_state_reset(ucp_request_t *req,
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
         if (UCP_DT_IS_CONTIG(req->send.datatype)) {
-            ucp_dt_clear_rndv_lanes(&req->send.state.dt);
+            ucp_dt_clear_memh(&req->send.state.dt);
         }
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
