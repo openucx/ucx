@@ -45,7 +45,7 @@ ucs_status_t uct_rdmacm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     return UCS_OK;
 }
 
-int uct_rdmacm_is_addr_resolved(struct rdma_event_channel *event_ch)
+static int uct_rdmacm_is_addr_resolved(struct rdma_event_channel *event_ch)
 {
     struct rdma_cm_event *event;
     int is_resolved, ret;
@@ -66,14 +66,15 @@ int uct_rdmacm_is_addr_resolved(struct rdma_event_channel *event_ch)
         is_resolved = 0;
         break;
     default:
-        ucs_warn("Received an unexpected RDMACM event %s.", rdma_event_str(event->event));
+        ucs_warn("Received an unexpected RDMACM event %s. status: %d",
+                 rdma_event_str(event->event), event->status);
         is_resolved = 0;
         break;
     }
 
     ret = rdma_ack_cm_event(event);
     if (ret) {
-        ucs_warn("rdma_ack_cm_event() failed: %m");
+        ucs_warn("rdma_ack_cm_event() failed: %m. status: %d", event->status);
     }
 
     return is_resolved;
@@ -133,7 +134,7 @@ int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
         is_accessible = uct_rdmacm_is_addr_resolved(event_ch);
     }
 
-    ucs_debug("Address %s (port %d) is accessible from rdmacm_md %p with mode: %d",
+    ucs_debug("address %s (port %d) is accessible from rdmacm_md %p with mode: %d",
               ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_str, ip_len),
               ntohs(rdma_get_src_port(cm_id)), rdmacm_md, mode);
 
@@ -153,7 +154,7 @@ static ucs_status_t uct_rdmacm_query_md_resources(uct_md_resource_desc_t **resou
     /* Create a dummy event channel to check if RDMACM can be used */
     event_ch = rdma_create_event_channel();
     if (event_ch == NULL) {
-        ucs_debug("Could not create an RDMACM event channel. %m. "
+        ucs_debug("could not create an RDMACM event channel. %m. "
                   "Disabling the RDMACM resource");
         *resources_p     = NULL;
         *num_resources_p = 0;
