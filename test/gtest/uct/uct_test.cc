@@ -56,7 +56,7 @@ uct_test::~uct_test() {
     uct_config_release(m_md_config);
 }
 
-void uct_test::set_sockaddr_resources(uct_md_h pd, char *md_name, cpu_set_t local_cpus,
+void uct_test::set_sockaddr_resources(uct_md_h md, char *md_name, cpu_set_t local_cpus,
                                       std::vector<resource>& all_resources) {
 
     struct ifaddrs *ifaddr, *ifa;
@@ -67,8 +67,8 @@ void uct_test::set_sockaddr_resources(uct_md_h pd, char *md_name, cpu_set_t loca
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         sock_addr.addr = ifa->ifa_addr;
 
-        if (uct_md_is_sockaddr_accessible(pd, &sock_addr, UCT_SOCKADDR_ACC_LOCAL) &&
-            uct_md_is_sockaddr_accessible(pd, &sock_addr, UCT_SOCKADDR_ACC_REMOTE) &&
+        if (uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_LOCAL) &&
+            uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_REMOTE) &&
             ucs_netif_is_active(ifa->ifa_name)) {
             resource rsc;
             rsc.md_name    = md_name,

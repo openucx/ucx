@@ -19,7 +19,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <netinet/in.h>
+#include <sys/socket.h>
 #include <dirent.h>
 
 
