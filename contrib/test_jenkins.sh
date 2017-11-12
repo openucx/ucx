@@ -218,6 +218,17 @@ build_icc() {
 	fi
 }
 
+#
+# Build debug version
+#
+build_debug() {
+	echo "==== Build with --enable-debug option ===="
+	../contrib/configure-devel --prefix=$ucx_inst --enable-debug
+	$MAKE clean
+	$MAKE
+	$MAKE distclean
+}
+
 run_hello() {
 	api=$1
 	shift
@@ -480,6 +491,7 @@ run_tests() {
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 
 	do_distributed_task 0 4 build_icc
+	do_distributed_task 1 4 build_debug
 
 	# all are running mpi tests
 	run_mpi_tests
