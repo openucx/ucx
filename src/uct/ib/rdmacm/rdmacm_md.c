@@ -74,7 +74,7 @@ static int uct_rdmacm_is_addr_resolved(struct rdma_event_channel *event_ch)
 
     ret = rdma_ack_cm_event(event);
     if (ret) {
-        ucs_warn("rdma_ack_cm_event() failed: %m. status: %d", event->status);
+        ucs_warn("rdma_ack_cm_event() failed. event status: %d. %m.", event->status);
     }
 
     return is_resolved;
