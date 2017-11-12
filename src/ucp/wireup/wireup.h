@@ -49,6 +49,7 @@ typedef struct {
                               const uct_md_attr_t *md_attr,
                               const uct_iface_attr_t *iface_attr,
                               const ucp_address_iface_attr_t *remote_iface_attr);
+    uint8_t     tl_rsc_flags; /* Flags that describe TL specifics */
 
 } ucp_wireup_criteria_t;
 

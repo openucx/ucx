@@ -159,11 +159,11 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
   { "shm",   { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
   { "ib",    { "rc", "ud", "rc_mlx5", "ud_mlx5", NULL } },
-  { "rc",    { "rc", "ud", NULL } },
-  { "rc_x",  { "rc_mlx5", "ud_mlx5", NULL } },
+  { "rc",    { "rc", "ud:aux", NULL } },
+  { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", NULL } },
   { "ud_x",  { "ud_mlx5", NULL } },
   { "dc_x",  { "dc_mlx5", NULL } },
-  { "ugni",  { "ugni_smsg", "ugni_udt", "ugni_rdma", NULL } },
+  { "ugni",  { "ugni_smsg", "ugni_udt:aux", "ugni_rdma", NULL } },
   { NULL }
 };
 
@@ -214,16 +214,28 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
                                  print_flags);
 }
 
-static int ucp_str_array_search(const char **array, unsigned length,
-                                const char *str)
+/* Search str in the array. If str_suffix is specified, search for
+ * 'str:str_suffix' string. */
+static int ucp_str_array_search(const char **array, unsigned array_len,
+                                const char *str, const char *str_suffix)
 {
+    int len = strlen(str);
     unsigned i;
+    const char *p;
 
-    for (i = 0; i < length; ++i) {
-        if (!strcmp(array[i], str)) {
-            return i;
+    for (i = 0; i < array_len; ++i) {
+        if (str_suffix == NULL) {
+            if (!strcmp(array[i], str)) {
+                return i;
+            }
+        } else if (!strncmp(array[i], str, len)) {
+            p = array[i] + len;
+            if ((*p == ':') && !strcmp(p + 1, str_suffix)) {
+                return i;
+            }
         }
     }
+
     return -1;
 }
 
@@ -238,12 +250,13 @@ static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_n
                                     int is_alias)
 {
     const char **names = (const char**)config->tls.names;
+    unsigned count     = config->tls.count;
     char buf[UCT_TL_NAME_MAX + 1];
 
     snprintf(buf, sizeof(buf), "\\%s", tl_name);
-    return (!is_alias && ucp_str_array_search(names, config->tls.count, buf) >= 0) ||
-           ((ucp_str_array_search(names, config->tls.count, tl_name) >= 0)) ||
-            (ucp_str_array_search(names, config->tls.count, UCP_RSC_CONFIG_ALL) >= 0);
+    return (!is_alias && ucp_str_array_search(names, count, buf, NULL) >= 0) ||
+           ((ucp_str_array_search(names, count, tl_name, NULL) >= 0)) ||
+            (ucp_str_array_search(names, count, UCP_RSC_CONFIG_ALL, NULL) >= 0);
 }
 
 static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
@@ -267,7 +280,7 @@ static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
         ucs_assert_always(devices[index].count <= 64); /* Using uint64_t bitmap */
         config_idx = ucp_str_array_search((const char**)devices[index].names,
                                           devices[index].count,
-                                          resource->dev_name);
+                                          resource->dev_name, NULL);
         if (config_idx >= 0) {
             device_enabled  = 1;
             masks[index] |= UCS_BIT(config_idx);
@@ -279,15 +292,17 @@ static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
 
 static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
                                    const ucp_config_t *config,
-                                   uint64_t *masks)
+                                   uint64_t *masks, uint8_t *flags)
 {
     int device_enabled, tl_enabled;
     ucp_tl_alias_t *alias;
+    unsigned count;
 
     /* Find the enabled devices */
     device_enabled = ucp_is_resource_in_device_list(resource, config->devices,
                                                     masks, resource->dev_type);
 
+    *flags = 0;
     /* Find the enabled UCTs */
     ucs_assert(config->tls.count > 0);
     if (ucp_config_is_tl_enabled(config, resource->tl_name, 0)) {
@@ -297,18 +312,28 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
 
         /* check aliases */
         for (alias = ucp_tl_aliases; alias->alias != NULL; ++alias) {
+            count = ucp_tl_alias_count(alias);
 
             /* If an alias is enabled, and the transport is part of this alias,
              * enable the transport.
              */
-            if (ucp_config_is_tl_enabled(config, alias->alias, 1) &&
-                (ucp_str_array_search(alias->tls, ucp_tl_alias_count(alias),
-                                      resource->tl_name) >= 0))
-            {
-                tl_enabled = 1;
-                ucs_trace("enabling tl '%s' for alias '%s'", resource->tl_name,
-                          alias->alias);
-                break;
+            if (ucp_config_is_tl_enabled(config, alias->alias, 1)) {
+                if (ucp_str_array_search(alias->tls, count,
+                                         resource->tl_name, NULL) >= 0) {
+                    tl_enabled = 1;
+                    ucs_trace("enabling tl '%s' for alias '%s'",
+                              resource->tl_name, alias->alias);
+                    break;
+                } else if (ucp_str_array_search(alias->tls, count,
+                                                resource->tl_name, "aux") >= 0) {
+                    /* Search for tl names with 'aux' suffix, such tls can be
+                     * used for auxiliary wireup purposes only */
+                    tl_enabled = 1;
+                    *flags     = UCP_TL_RSC_FLAG_AUX;
+                    ucs_trace("enabling auxiliary tl '%s' for alias '%s'",
+                              resource->tl_name, alias->alias);
+                    break;
+                }
             }
         }
     }
@@ -330,6 +355,7 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context, ucp_tl_md_t *md,
     unsigned num_tl_resources;
     ucs_status_t status;
     ucp_rsc_index_t i;
+    uint8_t flags;
 
     *num_resources_p = 0;
 
@@ -362,11 +388,12 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context, ucp_tl_md_t *md,
     /* copy only the resources enabled by user configuration */
     context->tl_rscs = tmp;
     for (i = 0; i < num_tl_resources; ++i) {
-        if (ucp_is_resource_enabled(&tl_resources[i], config, masks)) {
-            context->tl_rscs[context->num_tls].tl_rsc   = tl_resources[i];
-            context->tl_rscs[context->num_tls].md_index = md_index;
+        if (ucp_is_resource_enabled(&tl_resources[i], config, masks, &flags)) {
+            context->tl_rscs[context->num_tls].tl_rsc       = tl_resources[i];
+            context->tl_rscs[context->num_tls].md_index     = md_index;
             context->tl_rscs[context->num_tls].tl_name_csum =
-                            ucs_crc16_string(tl_resources[i].tl_name);
+                                      ucs_crc16_string(tl_resources[i].tl_name);
+            context->tl_rscs[context->num_tls].flags        = flags;
             ++context->num_tls;
             ++(*num_resources_p);
         }
@@ -505,7 +532,7 @@ static void ucp_resource_config_array_str(const ucs_config_names_array_t *array,
     unsigned i;
 
     if (ucp_str_array_search((const char**)array->names, array->count,
-                             UCP_RSC_CONFIG_ALL) >= 0) {
+                             UCP_RSC_CONFIG_ALL, NULL) >= 0) {
         strncpy(buf, "", max);
         return;
     }
