@@ -83,13 +83,13 @@ ucp_tag_exp_get_queue(ucp_tag_match_t *tm, ucp_tag_t tag, ucp_tag_t tag_mask)
 static UCS_F_ALWAYS_INLINE ucs_queue_head_t*
 ucp_tag_exp_get_req_queue(ucp_tag_match_t *tm, ucp_request_t *req)
 {
-    return ucp_tag_exp_get_queue(tm, req->recv.tag, req->recv.tag_mask);
+    return ucp_tag_exp_get_queue(tm, req->recv.tag.tag, req->recv.tag.tag_mask);
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_exp_push(ucp_tag_match_t *tm, ucs_queue_head_t *queue, ucp_request_t *req)
 {
-    req->recv.sn = tm->expected.sn++;
+    req->recv.tag.sn = tm->expected.sn++;
     ucs_queue_push(queue, &req->recv.queue);
 }
 
@@ -117,13 +117,13 @@ ucp_tag_exp_search(ucp_tag_match_t *tm, ucp_tag_t recv_tag, size_t recv_len,
     ucs_queue_for_each_safe(req, iter, queue, recv.queue) {
         req = ucs_container_of(*iter, ucp_request_t, recv.queue);
         ucs_trace_data("checking req %p tag %"PRIx64"/%"PRIx64" with recv_tag %"PRIx64,
-                       req, req->recv.tag, req->recv.tag_mask, recv_tag);
-        if (ucp_tag_recv_is_match(recv_tag, recv_flags, req->recv.tag,
-                                  req->recv.tag_mask, req->recv.state.offset,
-                                  req->recv.info.sender_tag))
+                       req, req->recv.tag.tag, req->recv.tag.tag_mask, recv_tag);
+        if (ucp_tag_recv_is_match(recv_tag, recv_flags, req->recv.tag.tag,
+                                  req->recv.tag.tag_mask, req->recv.state.offset,
+                                  req->recv.tag.info.sender_tag))
         {
-            ucp_tag_log_match(recv_tag, recv_len, req, req->recv.tag,
-                              req->recv.tag_mask, req->recv.state.offset, "expected");
+            ucp_tag_log_match(recv_tag, recv_len, req, req->recv.tag.tag,
+                              req->recv.tag.tag_mask, req->recv.state.offset, "expected");
             if (recv_flags & UCP_RECV_DESC_FLAG_LAST) {
                 ucs_queue_del_iter(queue, iter);
             }
