@@ -142,6 +142,8 @@ extern ucs_config_field_t uct_rc_verbs_iface_common_config_table[];
 
 void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt);
 
+ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status);
+
 static inline void
 uct_rc_verbs_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt,
                          uct_rc_iface_t *iface, int signaled)

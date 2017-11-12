@@ -302,7 +302,8 @@ static void uct_ep_failed_destroy(uct_ep_h tl_ep)
     ucs_free(tl_ep);
 }
 
-void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
+void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface,
+                       ucs_status_t status)
 {
     uct_failed_iface_t *f_iface;
     uct_iface_ops_t    *ops;
@@ -361,11 +362,10 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
     tl_ep->iface = &f_iface->super;
 
     if (iface->err_handler) {
-        iface->err_handler(iface->err_handler_arg, tl_ep,
-                           UCS_ERR_ENDPOINT_TIMEOUT);
+        iface->err_handler(iface->err_handler_arg, tl_ep, status);
     } else {
         ucs_error("Error %s was not handled for ep %p",
-                  ucs_status_string(UCS_ERR_ENDPOINT_TIMEOUT), tl_ep);
+                  ucs_status_string(status), tl_ep);
     }
 }
 

@@ -44,19 +44,20 @@ static const char *uct_ib_mlx5_cqe_err_opcode(struct mlx5_err_cqe *ecqe)
     }
 }
 
-void uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe,
-                                     ucs_log_level_t log_level)
+ucs_status_t uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe,
+                                             ucs_log_level_t log_level)
 {
-    uint16_t wqe_counter;
-    uint32_t qp_num;
-    char info[200] = {0};
+    uint16_t     wqe_counter;
+    uint32_t     qp_num;
+    char         info[200]  = {0};
+    ucs_status_t status     = UCS_ERR_IO_ERROR;
 
     wqe_counter = ntohs(ecqe->wqe_counter);
     qp_num      = ntohl(ecqe->s_wqe_opcode_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
 
     if (ecqe->syndrome == MLX5_CQE_SYNDROME_WR_FLUSH_ERR) {
         ucs_trace("QP 0x%x wqe[%d] is flushed", qp_num, wqe_counter);
-        return;
+        return status;
     }
 
     switch (ecqe->syndrome) {
@@ -92,12 +93,15 @@ void uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe,
         break;
     case MLX5_CQE_SYNDROME_TRANSPORT_RETRY_EXC_ERR:
         snprintf(info, sizeof(info), "Transport retry count exceeded");
+        status = UCS_ERR_ENDPOINT_TIMEOUT;
         break;
     case MLX5_CQE_SYNDROME_RNR_RETRY_EXC_ERR:
         snprintf(info, sizeof(info), "Receive-no-ready retry count exceeded");
+        status = UCS_ERR_ENDPOINT_TIMEOUT;
         break;
     case MLX5_CQE_SYNDROME_REMOTE_ABORTED_ERR:
         snprintf(info, sizeof(info), "Remote side aborted");
+        status = UCS_ERR_ENDPOINT_TIMEOUT;
         break;
     default:
         snprintf(info, sizeof(info), "Generic");
@@ -107,6 +111,7 @@ void uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe,
     ucs_log(log_level, "Error on QP 0x%x wqe[%d]: %s (synd 0x%x vend 0x%x) opcode %s",
             qp_num, wqe_counter, info, ecqe->syndrome, ecqe->vendor_err_synd,
             uct_ib_mlx5_cqe_err_opcode(ecqe));
+    return status;
 }
 
 static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,

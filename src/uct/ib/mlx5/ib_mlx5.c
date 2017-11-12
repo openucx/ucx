@@ -243,14 +243,17 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
                                                 uct_ib_mlx5_cq_t *cq,
                                                 struct mlx5_cqe64 *cqe)
 {
+    ucs_status_t status;
+
     switch (cqe->op_own >> 4) {
     case MLX5_CQE_INVALID:
         return NULL; /* No CQE */
     case MLX5_CQE_REQ_ERR:
-        ucs_debug("iface %p requester error on cqe[%d]=%p", iface, cq->cq_ci, cqe);
         /* update ci before invoking error callback, since it can poll on cq */
         ++cq->cq_ci;
-        iface->ops->handle_failure(iface, cqe);
+        status = uct_ib_mlx5_completion_with_err((void*)cqe,
+                                                 UCS_LOG_LEVEL_DEBUG);
+        iface->ops->handle_failure(iface, cqe, status);
         return NULL;
     case MLX5_CQE_RESP_ERR:
         /* Local side failure - treat as fatal */
