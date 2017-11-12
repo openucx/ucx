@@ -34,28 +34,6 @@ void* test_md::alloc_thread(void *arg)
     return NULL;
 }
 
-    static void print_ip(char *if_name, struct sockaddr *ifa_addr)
-    {
-        size_t ip_len = ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN);
-        char ip_str[ip_len];
-
-        UCS_TEST_MESSAGE << "Testing " << if_name << " with " <<
-                            ucs_sockaddr_str(ifa_addr, ip_str, ip_len);
-    }
-
-    bool is_iface_ipoib(struct ifaddrs *ifa)
-    {
-        struct ifreq if_req;
-        ucs_status_t status;
-
-        status = ucs_netif_ioctl(ifa->ifa_name, SIOCGIFHWADDR, &if_req);
-        ASSERT_UCS_OK(status);
-        /* check if this is an Infiniband interface and if there is an
-         * IPv4 address on it */
-        return (if_req.ifr_addr.sa_family == ARPHRD_INFINIBAND) &&
-               (ifa->ifa_addr->sa_family == AF_INET);
-    }
-
 std::vector<std::string> test_md::enum_mds(const std::string& mdc_name) {
     static std::vector<std::string> all_pds;
     std::vector<std::string> result;
@@ -398,22 +376,26 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
 
     /* go through a linked list of available interfaces */
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        sock_addr.addr = ifa->ifa_addr;
+        if (ucs::is_inet_addr(ifa->ifa_addr) && ucs_netif_is_active(ifa->ifa_name)) {
+            sock_addr.addr = ifa->ifa_addr;
 
-        rc_local  = uct_md_is_sockaddr_accessible(pd(), &sock_addr, UCT_SOCKADDR_ACC_LOCAL);
-        rc_remote = uct_md_is_sockaddr_accessible(pd(), &sock_addr, UCT_SOCKADDR_ACC_REMOTE);
+            rc_local  = uct_md_is_sockaddr_accessible(pd(), &sock_addr, UCT_SOCKADDR_ACC_LOCAL);
+            rc_remote = uct_md_is_sockaddr_accessible(pd(), &sock_addr, UCT_SOCKADDR_ACC_REMOTE);
 
-        if (!strcmp(GetParam().c_str(), "rdmacm")) {
-            if (is_iface_ipoib(ifa)) {
-                print_ip(ifa->ifa_name, ifa->ifa_addr);
+            if (!strcmp(GetParam().c_str(), "rdmacm")) {
+                if (ucs::is_ib_netdev(ifa->ifa_name)) {
+                    UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
+                                        ucs::get_iface_ip(ifa->ifa_addr);
+                    ASSERT_TRUE(rc_local);
+                    ASSERT_TRUE(rc_remote);
+                    found_ipoib = 1;
+                }
+            } else {
+                UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
+                                    ucs::get_iface_ip(ifa->ifa_addr);
                 ASSERT_TRUE(rc_local);
                 ASSERT_TRUE(rc_remote);
-                found_ipoib = 1;
             }
-        } else {
-            print_ip(ifa->ifa_name, ifa->ifa_addr);
-            ASSERT_TRUE(rc_local);
-            ASSERT_TRUE(rc_remote);
         }
     }
 
