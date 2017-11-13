@@ -173,6 +173,35 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     return UCS_OK;
 }
 
+ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface,
+                                      uct_iface_addr_t *addr)
+{
+    uct_rc_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_iface,
+                                                        uct_rc_iface_t);
+
+    *(uint8_t*)addr = UCT_RC_IFACE_TM_ENABLED(iface) ?
+                      UCT_RC_IFACE_ADDR_TYPE_TM :
+                      UCT_RC_IFACE_ADDR_TYPE_BASIC;
+    return UCS_OK;
+}
+
+int uct_rc_iface_is_reachable(const uct_iface_h tl_iface,
+                              const uct_device_addr_t *dev_addr,
+                              const uct_iface_addr_t *iface_addr)
+{
+    uct_rc_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_iface,
+                                                        uct_rc_iface_t);
+    uint8_t my_type = UCT_RC_IFACE_TM_ENABLED(iface) ?
+                      UCT_RC_IFACE_ADDR_TYPE_TM :
+                      UCT_RC_IFACE_ADDR_TYPE_BASIC;
+
+    if ((iface_addr != NULL) && (my_type != *(uint8_t*)iface_addr)) {
+        return 0;
+    }
+
+    return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
+}
+
 void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
                          unsigned qp_num)
 {

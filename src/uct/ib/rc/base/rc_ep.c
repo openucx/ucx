@@ -111,6 +111,50 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
     UCS_STATS_NODE_FREE(fc->stats);
 }
 
+static void uct_rc_ep_tag_qp_destroy(uct_rc_ep_t *ep)
+{
+#if IBV_EXP_HW_TM
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_rc_iface_t);
+    if (UCT_RC_IFACE_TM_ENABLED(iface)) {
+        uct_rc_iface_remove_qp(iface, ep->tm_qp->qp_num);
+        if (ibv_destroy_qp(ep->tm_qp)) {
+            ucs_warn("failed to destroy TM RNDV QP: %m");
+        }
+    }
+#endif
+}
+
+static ucs_status_t uct_rc_ep_tag_qp_create(uct_rc_iface_t *iface,
+                                            uct_rc_ep_t *ep)
+{
+#if IBV_EXP_HW_TM
+    struct ibv_qp_cap cap;
+    ucs_status_t status;
+    int ret;
+
+    if (UCT_RC_IFACE_TM_ENABLED(iface)) {
+        /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
+         * such a QP to be initialized with zero send queue length. */
+        status = uct_rc_iface_qp_create(iface, IBV_QPT_RC, &ep->tm_qp, &cap, 0);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = uct_rc_iface_qp_init(iface, ep->tm_qp);
+        if (status != UCS_OK) {
+            ret = ibv_destroy_qp(ep->tm_qp);
+            if (ret) {
+                ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
+            }
+            return status;
+        }
+        uct_rc_iface_add_qp(iface, ep, ep->tm_qp->qp_num);
+    }
+#endif
+    return UCS_OK;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 {
     struct ibv_qp_cap cap;
@@ -135,6 +179,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
         goto err_txqp_cleanup;
     }
 
+    status = uct_rc_ep_tag_qp_create(iface, self);
+    if (status != UCS_OK) {
+        goto err_fc_cleanup;
+    }
+
     self->sl                = iface->super.config.sl;    /* TODO multi-rail */
     self->path_bits         = iface->super.path_bits[0]; /* TODO multi-rail */
 
@@ -148,6 +197,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
     ucs_list_add_head(&iface->ep_list, &self->list);
     return UCS_OK;
 
+err_fc_cleanup:
+    uct_rc_fc_cleanup(&self->fc);
 err_txqp_cleanup:
     uct_rc_txqp_cleanup(&self->txqp);
 err:
@@ -162,6 +213,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 
     ucs_list_del(&self->list);
     uct_rc_iface_remove_qp(iface, self->txqp.qp->qp_num);
+    uct_rc_ep_tag_qp_destroy(self);
     uct_rc_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(&self->txqp);
@@ -171,12 +223,19 @@ UCS_CLASS_DEFINE(uct_rc_ep_t, uct_base_ep_t)
 
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
-    uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
+    uct_rc_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_ep_t);
     uct_rc_ep_address_t *rc_addr = (uct_rc_ep_address_t*)addr;
-    uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
+    uct_rc_iface_t *iface        = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
 
     uct_ib_pack_uint24(rc_addr->qp_num, ep->txqp.qp->qp_num);
-    rc_addr->atomic_mr_id = uct_ib_iface_get_atomic_mr_id(iface);
+    rc_addr->atomic_mr_id = uct_ib_iface_get_atomic_mr_id(&iface->super);
+
+#if IBV_EXP_HW_TM
+    if (UCT_RC_IFACE_TM_ENABLED(iface)) {
+        uct_ib_pack_uint24(rc_addr->tm_qp_num, ep->tm_qp->qp_num);
+    }
+#endif
+
     return UCS_OK;
 }
 
@@ -187,19 +246,41 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
     const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
     const uct_rc_ep_address_t *rc_addr = (const uct_rc_ep_address_t*)ep_addr;
+    uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
     ucs_status_t status;
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr, ep->path_bits, &ah_attr);
 
-    status = uct_rc_iface_qp_connect(iface, ep->txqp.qp,
-                                     uct_ib_unpack_uint24(rc_addr->qp_num),
-                                     &ah_attr);
-    if (status == UCS_OK) {
-        ep->atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
+#if IBV_EXP_HW_TM
+    if (UCT_RC_IFACE_TM_ENABLED(iface)) {
+        /* For HW TM we need 2 QPs, one of which will be used by the device for
+         * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
+         * should be posted to the send side of the QP which is owned by device. */
+        status = uct_rc_iface_qp_connect(iface, ep->tm_qp,
+                                         uct_ib_unpack_uint24(rc_addr->qp_num),
+                                         &ah_attr);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        /* Need to connect local ep QP to the one owned by device
+         * (and bound to XRQ) on the peer. */
+        qp_num = uct_ib_unpack_uint24(rc_addr->tm_qp_num);
+    } else
+#endif
+    {
+        qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
     }
 
-    return status;
+    status = uct_rc_iface_qp_connect(iface, ep->txqp.qp, qp_num, &ah_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ep->atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
+
+    return UCS_OK;
 }
 
 ucs_status_t uct_rc_modify_qp(uct_rc_txqp_t *txqp, enum ibv_qp_state state)
