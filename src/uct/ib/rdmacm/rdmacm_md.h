@@ -29,8 +29,6 @@ typedef struct uct_rdmacm_md_config {
 
 extern uct_md_component_t uct_rdmacm_mdc;
 
-static void uct_rdmacm_md_close(uct_md_h md);
-
 ucs_status_t uct_rdmacm_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 
 int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
