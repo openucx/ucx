@@ -767,10 +767,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_mlx5_iface_ops, md,
-                              worker, params, 0, &config->super,
-                              config->super.super.super.rx.queue_len,
-                              sizeof(uct_rc_hdr_t),
-                              config->super.super.super.rx.queue_len);
+                              worker, params, 0, &config->super, 0);
 
     status = uct_rc_mlx5_iface_common_init(&self->mlx5_common, &self->super.super,
                                            &config->super.super);

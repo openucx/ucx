@@ -77,7 +77,6 @@ typedef struct uct_rc_verbs_ep_tm_address {
                              UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
 
 
-
 ucs_status_t uct_rc_verbs_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
                                              const void *data, size_t length);
 
@@ -102,10 +101,6 @@ ucs_status_t uct_rc_verbs_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op);
 ucs_status_t uct_rc_verbs_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
                                               const void* header,
                                               unsigned header_length);
-#else
-
-#  define UCT_RC_VERBS_TM_ENABLED(_iface)   0
-
 #endif /* IBV_EXP_HW_TM */
 
 

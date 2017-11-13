@@ -24,16 +24,6 @@ ucs_config_field_t uct_rc_verbs_iface_common_config_table[] = {
    ucs_offsetof(uct_rc_verbs_iface_common_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
 
 #if IBV_EXP_HW_TM
-  {"TM_ENABLE", "y",
-   "Enable HW tag matching",
-   ucs_offsetof(uct_rc_verbs_iface_common_config_t, tm.enable), UCS_CONFIG_TYPE_BOOL},
-
-  {"TM_LIST_SIZE", "1024",
-   "Limits the number of tags posted to the HW for matching. The actual limit \n"
-   "is a minimum between this value and the maximum value supported by the HW. \n"
-   "-1 means no limit.",
-   ucs_offsetof(uct_rc_verbs_iface_common_config_t, tm.list_size), UCS_CONFIG_TYPE_UINT},
-
   {"TM_SYNC_RATIO", "0.5",
    "Maximal portion of the tag matching list which can be canceled without requesting\n"
    "a completion.",
@@ -44,14 +34,15 @@ ucs_config_field_t uct_rc_verbs_iface_common_config_table[] = {
 };
 
 static void uct_rc_verbs_iface_common_tag_query(uct_rc_verbs_iface_common_t *iface,
-                                                uct_ib_iface_t *ib_iface,
+                                                uct_rc_iface_t *rc_iface,
                                                 uct_iface_attr_t *iface_attr)
 {
 #if IBV_EXP_HW_TM
-    uct_ib_device_t *dev     = uct_ib_iface_device(ib_iface);
+    uct_ib_device_t *dev     = uct_ib_iface_device(&rc_iface->super);
     unsigned eager_hdr_size  = sizeof(struct ibv_exp_tmh);
+    struct ibv_exp_port_attr* port_attr;
 
-    if (!iface->tm.enabled) {
+    if (!UCT_RC_IFACE_TM_ENABLED(rc_iface)) {
         return;
     }
 
@@ -78,15 +69,18 @@ static void uct_rc_verbs_iface_common_tag_query(uct_rc_verbs_iface_common_t *ifa
         iface_attr->cap.flags |= UCT_IFACE_FLAG_TAG_EAGER_SHORT;
     }
 
-    iface_attr->cap.tag.eager.max_bcopy = ib_iface->config.seg_size - eager_hdr_size;
-    iface_attr->cap.tag.eager.max_zcopy = ib_iface->config.seg_size - eager_hdr_size;
+    iface_attr->cap.tag.eager.max_bcopy = rc_iface->super.config.seg_size -
+                                          eager_hdr_size;
+    iface_attr->cap.tag.eager.max_zcopy = rc_iface->super.config.seg_size -
+                                          eager_hdr_size;
     iface_attr->cap.tag.eager.max_iov   = 1;
 
-    iface_attr->cap.tag.rndv.max_zcopy  = uct_ib_iface_port_attr(ib_iface)->max_msg_sz;
+    port_attr = uct_ib_iface_port_attr(&rc_iface->super);
+    iface_attr->cap.tag.rndv.max_zcopy  = port_attr->max_msg_sz;
     iface_attr->cap.tag.rndv.max_hdr    = IBV_DEVICE_TM_CAPS(dev, max_rndv_hdr_size);
     iface_attr->cap.tag.rndv.max_iov    = 1;
 
-    iface_attr->cap.tag.recv.max_zcopy  = uct_ib_iface_port_attr(ib_iface)->max_msg_sz;
+    iface_attr->cap.tag.recv.max_zcopy  = port_attr->max_msg_sz;
     iface_attr->cap.tag.recv.max_iov    = 1;
     iface_attr->cap.tag.recv.min_recv   = 0;
 #endif
@@ -125,7 +119,7 @@ void uct_rc_verbs_iface_common_query(uct_rc_verbs_iface_common_t *verbs_iface,
     iface_attr->overhead          = 75e-9;
 
     /* TAG Offload */
-    uct_rc_verbs_iface_common_tag_query(verbs_iface, &iface->super, iface_attr);
+    uct_rc_verbs_iface_common_tag_query(verbs_iface, iface, iface_attr);
 }
 
 unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface, unsigned max)
@@ -187,14 +181,6 @@ void uct_rc_verbs_iface_common_progress_enable(uct_rc_verbs_iface_common_t *ifac
 
 #if IBV_EXP_HW_TM
 
-static void uct_rc_verbs_iface_release_desc(uct_recv_desc_t *self, void *desc)
-{
-    uct_rc_verbs_release_desc_t *release = ucs_derived_of(self,
-                                                          uct_rc_verbs_release_desc_t);
-    void *ib_desc = desc - release->offset;
-    ucs_mpool_put_inline(ib_desc);
-}
-
 ucs_status_t
 uct_rc_verbs_iface_common_tag_init(uct_rc_verbs_iface_common_t *iface,
                                    uct_rc_iface_t *rc_iface,
@@ -204,134 +190,41 @@ uct_rc_verbs_iface_common_tag_init(uct_rc_verbs_iface_common_t *iface,
                                    size_t rndv_hdr_len)
 
 {
-    int sync_ops_count;
-    int rx_hdr_len;
-    uct_ib_md_t *md = ucs_derived_of(rc_iface->super.super.md, uct_ib_md_t);
+    unsigned sync_ops_count;
+    ucs_status_t status;
 
-    if (!iface->tm.enabled) {
-        goto out;
+    if (!UCT_RC_IFACE_TM_ENABLED(rc_iface)) {
+        return UCS_OK;
     }
 
-    /* Create XRQ with TM capability */
-    srq_init_attr->base.attr.max_sge   = 1;
-    srq_init_attr->base.attr.max_wr    = ucs_max(UCT_RC_VERBS_TAG_MIN_POSTED,
-                                                rc_config->super.rx.queue_len);
-    srq_init_attr->base.attr.srq_limit = 0;
-    srq_init_attr->base.srq_context    = iface;
-    srq_init_attr->srq_type            = IBV_EXP_SRQT_TAG_MATCHING;
-    srq_init_attr->pd                  = md->pd;
-    srq_init_attr->cq                  = rc_iface->super.recv_cq;
-    srq_init_attr->tm_cap.max_num_tags = iface->tm.num_tags;
-
-    /* 2 ops for each tag (ADD + DEL) and extra ops for SYNC.
-     * There can be up to 1/"tag_sync_ratio" SYNC ops during cancellation.
-     * Also we assume that there can be up to two pending SYNC ops during
-     * unexpected messages flow. */
+    /* There can be up to 1/"tag_sync_ratio" SYNC ops during cancellation. */
     if (config->tm.sync_ratio > 0) {
         sync_ops_count = ceil(1.0 / config->tm.sync_ratio);
     } else {
-        sync_ops_count = iface->tm.num_tags;
-    }
-    srq_init_attr->tm_cap.max_ops = (2 * iface->tm.num_tags) + sync_ops_count + 2;
-    srq_init_attr->comp_mask     |= IBV_EXP_CREATE_SRQ_CQ | IBV_EXP_CREATE_SRQ_TM;
-
-    rc_iface->rx.srq.srq = ibv_exp_create_srq(md->dev.ibv_context, srq_init_attr);
-    if (rc_iface->rx.srq.srq == NULL) {
-        ucs_error("Failed to create TM XRQ: %m");
-        return UCS_ERR_IO_ERROR;
+        sync_ops_count = rc_iface->tm.num_tags;
     }
 
-    iface->tm.tag_sync_thresh = iface->tm.num_tags * config->tm.sync_ratio;
-    rc_iface->rx.srq.available   = srq_init_attr->base.attr.max_wr;
+    status = uct_rc_iface_tag_init(rc_iface, rc_config, srq_init_attr,
+                                   rndv_hdr_len, sync_ops_count);
+    if (status != UCS_OK) {
+        return status;
+    }
 
-    /* AM (NO_TAG) and eager messages have different header sizes.
-     * Receive descriptor offsets are calculated based on AM hdr length.
-     * Need to store headers difference for correct release of descriptors
-     * consumed by unexpected eager messages. */
-    rx_hdr_len = rc_iface->super.config.rx_payload_offset -
-                 rc_iface->super.config.rx_hdr_offset;
-    ucs_assert_always(sizeof(struct ibv_exp_tmh) >= rx_hdr_len);
+    iface->tm.num_canceled    = 0;
+    iface->tm.tag_sync_thresh = rc_iface->tm.num_tags * config->tm.sync_ratio;
 
-    iface->tm.eager_desc.super.cb = uct_rc_verbs_iface_release_desc;
-    iface->tm.eager_desc.offset   = sizeof(struct ibv_exp_tmh) - rx_hdr_len +
-                                    rc_iface->super.config.rx_headroom_offset;
-
-    iface->tm.rndv_desc.super.cb  = uct_rc_verbs_iface_release_desc;
-    iface->tm.rndv_desc.offset    = iface->tm.eager_desc.offset + rndv_hdr_len;
-
-    /* Init ptr array to store completions of RNDV operations. Index in
-     * ptr_array is used as operation ID and is passed in "app_context"
-     * of TM header. */
-    ucs_ptr_array_init(&iface->tm.rndv_comps, 0, "rm_rndv_completions");
-
-    ucs_debug("Tag Matching enabled: tag list size %d", iface->tm.num_tags);
-
-out:
     return UCS_OK;
 }
 
 #endif /* IBV_EXP_HW_TM */
 
-void uct_rc_verbs_iface_common_preinit(uct_rc_verbs_iface_common_t *iface,
-                                       uct_md_h md,
-                                       uct_rc_verbs_iface_common_config_t *config,
-                                       uct_rc_iface_config_t *rc_config,
-                                       const uct_iface_params_t *params,
-                                       int tm_cap_flag, unsigned *rx_hdr_len,
-                                       unsigned *rx_cq_len)
-{
-#if IBV_EXP_HW_TM
-    struct ibv_exp_tmh tmh;
-    uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
-    uint32_t  cap_flags  = IBV_DEVICE_TM_CAPS(dev, capability_flags);
-
-    iface->tm.enabled = (config->tm.enable && (cap_flags & tm_cap_flag));
-
-    if (iface->tm.enabled) {
-        UCS_STATIC_ASSERT(sizeof(uct_rc_verbs_ctx_priv_t) <= UCT_TAG_PRIV_LEN);
-
-        iface->tm.eager_unexp.cb  = params->eager_cb;
-        iface->tm.eager_unexp.arg = params->eager_arg;
-        iface->tm.rndv_unexp.cb   = params->rndv_cb;
-        iface->tm.rndv_unexp.arg  = params->rndv_arg;
-        iface->tm.unexpected_cnt  = 0;
-        iface->tm.num_outstanding = 0;
-        iface->tm.num_canceled    = 0;
-        iface->tm.num_tags        = ucs_min(IBV_DEVICE_TM_CAPS(dev, max_num_tags),
-                                            config->tm.list_size);
-
-        /* Only opcode (rather than the whole TMH) is sent with NO_TAG protocol */
-        *rx_hdr_len    = sizeof(uct_rc_hdr_t) + sizeof(tmh.opcode);
-
-        /* There can be:
-         * - up to rx.queue_len RX CQEs
-         * - up to 3 CQEs for every posted tag: ADD, TM_CONSUMED and MSG_ARRIVED
-         * - one SYNC CQE per every IBV_DEVICE_MAX_UNEXP_COUNT unexpected receives */
-        UCS_STATIC_ASSERT(IBV_DEVICE_MAX_UNEXP_COUNT);
-        *rx_cq_len     = rc_config->super.rx.queue_len + iface->tm.num_tags * 3  +
-                         rc_config->super.rx.queue_len / IBV_DEVICE_MAX_UNEXP_COUNT;
-        return;
-    }
-#endif
-    *rx_hdr_len = sizeof(uct_rc_hdr_t);
-    *rx_cq_len  = rc_config->super.rx.queue_len;
-}
-
-void uct_rc_verbs_iface_common_tag_cleanup(uct_rc_verbs_iface_common_t *iface)
-{
-#if IBV_EXP_HW_TM
-    if (UCT_RC_VERBS_TM_ENABLED(iface)) {
-        ucs_ptr_array_cleanup(&iface->tm.rndv_comps);
-    }
-#endif
-}
-
 ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
                                             uct_rc_iface_t *rc_iface,
                                             uct_rc_verbs_iface_common_config_t *config,
-                                            uct_rc_iface_config_t *rc_config,
-                                            unsigned rc_hdr_len)
+                                            uct_rc_iface_config_t *rc_config)
 {
+    unsigned rc_hdr_len = rc_iface->super.config.rx_payload_offset -
+                          rc_iface->super.config.rx_hdr_offset;
     ucs_status_t status;
 
     memset(iface->inl_sge, 0, sizeof(iface->inl_sge));
@@ -362,7 +255,7 @@ ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
         status = UCS_ERR_NO_MEMORY;
         goto err_mpool_cleanup;
     }
-    iface->config.notag_hdr_size = uct_rc_verbs_notag_header_fill(iface,
+    iface->config.notag_hdr_size = uct_rc_verbs_notag_header_fill(rc_iface,
                                                                   iface->am_inl_hdr);
     return UCS_OK;
 

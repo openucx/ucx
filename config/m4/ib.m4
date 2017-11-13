@@ -178,6 +178,7 @@ AS_IF([test "x$with_ib" == xyes],
                        ibv_exp_reg_mr,
                        ibv_exp_create_qp,
                        ibv_exp_prefetch_mr,
+                       ibv_exp_create_srq,
                        ibv_exp_setenv],
                       [], [], [[#include <infiniband/verbs_exp.h>]])
 
