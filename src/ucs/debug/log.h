@@ -16,6 +16,7 @@
 #include <ucs/config/global_opts.h>
 #include <stdint.h>
 
+BEGIN_C_DECLS
 
 #define ucs_log_enabled(_level) \
     ucs_unlikely(((_level) <= UCS_MAX_LOG_LEVEL) && ((_level) <= (ucs_global_opts.log_level)))
@@ -143,6 +144,8 @@ const char *ucs_log_dump_hex(const void* data, size_t length, char *buf, size_t 
 
 void ucs_log_push_handler(ucs_log_func_t handler);
 void ucs_log_pop_handler();
+
+END_C_DECLS
 
 #endif
 

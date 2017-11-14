@@ -9,11 +9,9 @@
 #ifndef UCT_TEST_H_
 #define UCT_TEST_H_
 
-extern "C" {
 #include <uct/api/uct.h>
 #include <ucs/sys/sys.h>
 #include <ucs/async/async.h>
-}
 #include <common/test.h>
 #include <vector>
 
@@ -188,6 +186,7 @@ protected:
     virtual void init();
     virtual void cleanup();
     virtual void modify_config(const std::string& name, const std::string& value);
+    bool get_config(const std::string& name, std::string& value) const;
     void stats_activate();
     void stats_restore();
 

@@ -11,9 +11,11 @@
 
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/type/status.h>
+#include <ucs/sys/compiler_def.h>
 #include <stddef.h>
 #include <stdio.h>
 
+BEGIN_C_DECLS
 
 
 /**
@@ -107,5 +109,7 @@ ucs_status_t ucs_global_opts_set_value(const char *name, const char *value);
 ucs_status_t ucs_global_opts_clone(void *dst);
 void ucs_global_opts_release();
 void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags);
+
+END_C_DECLS
 
 #endif

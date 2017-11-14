@@ -6,7 +6,6 @@
 #ifndef UCP_TEST_H_
 #define UCP_TEST_H_
 
-extern "C" {
 #include <ucp/api/ucp.h>
 #include <ucs/time/time.h>
 
@@ -15,7 +14,6 @@ extern "C" {
 #error possible bug in UCP version
 #endif
 
-}
 #include <common/test.h>
 
 #define MT_TEST_NUM_THREADS 4

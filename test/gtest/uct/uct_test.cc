@@ -6,9 +6,8 @@
 
 #include "uct_test.h"
 
-extern "C" {
 #include <ucs/stats/stats.h>
-}
+#include <ucs/sys/string.h>
 #include <common/test_helpers.h>
 #include <algorithm>
 #include <malloc.h>

@@ -37,6 +37,9 @@
 
 #include <stddef.h>
 
+#include <ucs/sys/compiler_def.h>
+
+BEGIN_C_DECLS
 
 /**
  * Compare callback for @ref qsort_r.
@@ -59,5 +62,6 @@ typedef int ucs_qsort_r_compare_cb_t(const void *elem1, const void *elem2,
 void ucs_qsort_r(void *base, size_t nmemb, size_t size,
                  ucs_qsort_r_compare_cb_t *compare, void *arg);
 
+END_C_DECLS
 
 #endif

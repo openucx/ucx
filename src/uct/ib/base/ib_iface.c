@@ -341,8 +341,8 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
     /* count the number of lid_path_bits */
     num_path_bits = 0;
     for (i = 0; i < config->lid_path_bits.count; i++) {
-        num_path_bits += 1 + abs(config->lid_path_bits.ranges[i].first -
-                                 config->lid_path_bits.ranges[i].last);
+        num_path_bits += 1 + abs((int)(config->lid_path_bits.ranges[i].first -
+                                       config->lid_path_bits.ranges[i].last));
     }
 
     iface->path_bits = ucs_calloc(1, num_path_bits * sizeof(*iface->path_bits),

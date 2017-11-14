@@ -10,7 +10,9 @@
 
 
 #include <ucp/api/ucp_def.h>
+#include <ucs/sys/compiler_def.h>
 
+BEGIN_C_DECLS
 
 /**
  * @ingroup UCP_COMM
@@ -32,5 +34,6 @@ void ucp_request_release(void *request);
  */
 void ucp_ep_destroy(ucp_ep_h ep);
 
+END_C_DECLS
 
 #endif

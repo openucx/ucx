@@ -199,12 +199,12 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
 
 #define UCT_RC_VERBS_FILL_AM_BCOPY_WR(_wr, _sge, _length, _wr_opcode) \
     UCT_RC_VERBS_FILL_SGE(_wr, _sge, _length) \
-    _wr_opcode = IBV_WR_SEND;
+    _wr_opcode = (typeof(_wr_opcode))IBV_WR_SEND;
 
 #define UCT_RC_VERBS_FILL_AM_ZCOPY_WR_IOV(_wr, _sge, _iovlen, _wr_opcode) \
     _wr.sg_list = _sge; \
     _wr.num_sge = _iovlen; \
-    _wr_opcode  = IBV_WR_SEND;
+    _wr_opcode  = (typeof(_wr_opcode))IBV_WR_SEND;
 
 #define UCT_RC_VERBS_FILL_RDMA_WR(_wr, _wr_opcode, _opcode, \
                                   _sge, _length, _raddr, _rkey) \

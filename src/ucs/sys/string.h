@@ -11,7 +11,9 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/socket.h>
 
+BEGIN_C_DECLS
 
 /**
  * Expand a partial path to full path.
@@ -70,5 +72,7 @@ uint64_t ucs_string_to_id(const char *str);
  */
 void ucs_memunits_to_str(size_t value, char *buf, size_t max);
 
+
+END_C_DECLS
 
 #endif

@@ -11,6 +11,9 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/status.h>
+#include <ucs/sys/compiler_def.h>
+
+BEGIN_C_DECLS
 
 
 typedef struct ucs_mpool_chunk   ucs_mpool_chunk_t;
@@ -235,5 +238,6 @@ void ucs_mpool_chunk_munmap(ucs_mpool_t *mp, void *chunk);
 ucs_status_t ucs_mpool_hugetlb_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 void ucs_mpool_hugetlb_free(ucs_mpool_t *mp, void *chunk);
 
+END_C_DECLS
 
 #endif /* MPOOL_H_ */

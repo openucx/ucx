@@ -12,6 +12,7 @@
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
 
+BEGIN_C_DECLS
 
 /*
  * Component definition - used internally.
@@ -143,6 +144,7 @@ size_t __ucs_components_total_size(ucs_list_link_t *list, size_t base_size);
 ucs_status_t __ucs_components_init_all(ucs_list_link_t *list, void *base_ptr);
 void __ucs_components_cleanup_all(ucs_list_link_t *list, void *base_ptr);
 
+END_C_DECLS
 
 #endif /* COMPONENT_H_ */
 

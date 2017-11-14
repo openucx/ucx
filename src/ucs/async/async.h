@@ -11,10 +11,12 @@
 #include "signal.h"
 #include "async_fwd.h"
 
+#include <ucs/sys/compiler_def.h>
 #include <ucs/datastruct/mpmc.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/log.h>
 
+BEGIN_C_DECLS
 
 /**
  * Async event context. Manages timer and fd notifications.
@@ -118,5 +120,7 @@ static inline int ucs_async_check_miss(ucs_async_context_t *async)
         } \
     } while (0)
 
+
+END_C_DECLS
 
 #endif

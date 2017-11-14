@@ -11,6 +11,7 @@
 #include "config.h"
 #include <time.h>
 #include <sys/times.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/arch/generic/cpu.h>
 #if __ARM_NEON
 #include <arm_neon.h>
@@ -18,6 +19,8 @@
 
 
 #define UCS_ARCH_CACHE_LINE_SIZE 64
+
+BEGIN_C_DECLS
 
 /**
  * Assume the worst - weak memory ordering.
@@ -63,8 +66,6 @@ static inline int ucs_arch_get_cpu_flag()
     return UCS_CPU_FLAG_UNKNOWN;
 }
 
-#endif
-
 static inline void ucs_arch_wait_mem(void *address)
 {
     unsigned long tmp;
@@ -73,3 +74,8 @@ static inline void ucs_arch_wait_mem(void *address)
                           : "=&r"(tmp)
                           : "r"(address));
 }
+
+END_C_DECLS
+
+#endif
+

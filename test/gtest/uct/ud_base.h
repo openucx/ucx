@@ -6,13 +6,11 @@
 #ifndef _UD_BASE_TEST
 #define _UD_BASE_TEST
 
-#include "uct_test.h"
-extern "C" {
+#include <uct/uct_test.h>
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
 #include <uct/ib/ud/base/ud_ep.h>
 #include <uct/ib/ud/base/ud_iface.h>
-};
 
 #define TEST_UD_PROGRESS_TIMEOUT 300.0
 #define TEST_UD_TIMEOUT_IN_SEC   10.0
