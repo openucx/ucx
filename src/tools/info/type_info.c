@@ -1,5 +1,5 @@
 /**_t
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -211,6 +211,7 @@ void print_type_info(const char * tl_name)
 #if HAVE_MLX5_HW
         if (tl_name == NULL || !strcasecmp(tl_name, "dc_mlx5")) {
             PRINT_SIZE(uct_dc_mlx5_ep_t);
+            PRINT_SIZE(uct_dc_mlx5_grh_ep_t);
             PRINT_SIZE(uct_dc_mlx5_iface_t);
         }
 #endif

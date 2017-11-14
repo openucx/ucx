@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -37,12 +37,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
 
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *dc_iface,
                            const uct_dc_iface_addr_t *if_addr,
-                           uct_ib_mlx5_base_av_t *av)
+                           const uct_ib_mlx5_base_av_t *av)
 {
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_ep_t, &dc_iface->super, if_addr);
-    self->is_global = 0;
+
     memcpy(&self->av, av, sizeof(*av));
     self->av.dqp_dct |= htonl(uct_ib_unpack_uint24(if_addr->qp_num));
     return UCS_OK;
@@ -62,7 +62,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *dc_iface,
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_mlx5_ep_t, dc_iface, if_addr, av);
-    self->super.is_global = 1;
+
+    self->super.super.is_global = 1;
     memcpy(&self->grh_av, grh_av, sizeof(*grh_av));
     return UCS_OK;
 }
@@ -102,8 +103,7 @@ uct_dc_mlx5_ep_create_connected(uct_iface_h tl_iface,
 
     if (is_global) {
         return UCS_CLASS_NEW(uct_dc_mlx5_grh_ep_t, ep_p, iface, if_addr, &av, &grh_av);
-    }
-    else {
+    } else {
         return UCS_CLASS_NEW(uct_dc_mlx5_ep_t, ep_p, iface, if_addr, &av);
     }
 }
@@ -679,7 +679,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         dc_mlx5_ep              = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
         sender.ep               = (uint64_t)dc_ep;
         sender.global.gid       = ib_iface->gid;
-        sender.global.is_global = dc_mlx5_ep->is_global;
+        sender.global.is_global = dc_mlx5_ep->super.is_global;
 
         UCS_STATS_UPDATE_COUNTER(dc_ep->fc.stats,
                                  UCT_RC_FC_STAT_TX_HARD_REQ, 1);

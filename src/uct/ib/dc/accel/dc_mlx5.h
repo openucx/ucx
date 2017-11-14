@@ -29,7 +29,6 @@ typedef struct uct_dc_mlx5_iface {
 
 typedef struct uct_dc_mlx5_ep {
     uct_dc_ep_t                         super;
-    uint8_t                             is_global;
     uct_ib_mlx5_base_av_t               av;
 } uct_dc_mlx5_ep_t;
 
@@ -43,8 +42,8 @@ typedef struct uct_dc_mlx5_grh_ep {
 static inline struct mlx5_grh_av *
 uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 {
-    return ep->is_global ?
-           &(ucs_derived_of(ep, uct_dc_mlx5_grh_ep_t)->grh_av) : NULL;
+   return ep->super.is_global ?
+          &(ucs_derived_of(ep, uct_dc_mlx5_grh_ep_t)->grh_av) : NULL;
 }
 
 #endif

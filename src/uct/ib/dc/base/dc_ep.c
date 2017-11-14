@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -25,7 +25,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_ep_t)
     ucs_arbiter_group_cleanup(&self->arb_group);
     uct_rc_fc_cleanup(&self->fc);
 
-    ucs_assert_always(self->state != UCT_DC_EP_INVALID);
+    ucs_assert_always(self->is_valid);
 
     if (self->dci == UCT_DC_EP_NO_DCI) {
         return;
@@ -58,7 +58,7 @@ void uct_dc_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls)
 
     if (uct_dc_ep_fc_wait_for_grant(ep)) {
         ucs_trace("not releasing dc_ep %p - waiting for grant", ep);
-        ep->state = UCT_DC_EP_INVALID;
+        ep->is_valid = 0;
         ucs_list_add_tail(&iface->tx.gc_list, &ep->list);
     } else {
         ucs_free(ep);
@@ -67,7 +67,7 @@ void uct_dc_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls)
 
 void uct_dc_ep_release(uct_dc_ep_t *ep)
 {
-    ucs_assert_always(ep->state == UCT_DC_EP_INVALID);
+    ucs_assert_always(!ep->is_valid);
     ucs_debug("release dc_ep %p", ep);
     ucs_list_del(&ep->list);
     ucs_free(ep);
