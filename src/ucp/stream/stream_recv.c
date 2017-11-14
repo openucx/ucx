@@ -267,8 +267,7 @@ ucp_stream_am_rdesc_get(ucp_worker_t *worker, void *data, size_t length,
             rdesc->flags = 0;
             memcpy(rdesc + 1, data, length);
         } else {
-            ucs_error("ucp recv descriptor is not allocated");
-            return NULL;
+            ucs_fatal("ucp recv descriptor is not allocated");
         }
     }
 
