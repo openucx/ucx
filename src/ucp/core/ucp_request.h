@@ -204,7 +204,7 @@ struct ucp_request {
 /**
  * Unexpected receive descriptor.
  */
-typedef struct ucp_recv_desc {
+struct ucp_recv_desc {
     union {
         ucs_list_link_t           tag_list[2];  /* Hash list TAG-element */
         ucs_queue_elem_t          stream_queue; /* Queue STREAM-element */
@@ -212,7 +212,7 @@ typedef struct ucp_recv_desc {
     size_t                        length;   /* Received length */
     uint16_t                      hdr_len;  /* Header size */
     uint16_t                      flags;    /* Flags */
-} ucp_recv_desc_t;
+};
 
 
 extern ucs_mpool_ops_t ucp_request_mpool_ops;

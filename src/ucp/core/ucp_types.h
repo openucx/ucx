@@ -37,6 +37,7 @@ UCP_UINT_TYPE(UCP_MAX_LANES)         ucp_lane_map_t;
 
 /* Forward declarations */
 typedef struct ucp_request              ucp_request_t;
+typedef struct ucp_recv_desc            ucp_recv_desc_t;
 typedef struct ucp_address_iface_attr   ucp_address_iface_attr_t;
 typedef struct ucp_address_entry        ucp_address_entry_t;
 typedef struct ucp_wireup_ep            ucp_wireup_ep_t;

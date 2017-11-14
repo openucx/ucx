@@ -97,8 +97,15 @@ ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_request_complete_stream_recv(ucp_request_t *req, ucs_status_t status)
+ucp_request_complete_stream_recv(ucp_request_t *req,
+                                 ucp_ep_ext_stream_t* ep_stream,
+                                 ucs_status_t status)
 {
+    /* dequeue request before complete */
+    ucp_request_t *check_req UCS_V_UNUSED =
+            ucs_queue_pull_elem_non_empty(&ep_stream->reqs, ucp_request_t,
+                                          recv.queue);
+    ucs_assert(check_req == req);
     ucs_assert(req->recv.state.offset > 0);
     req->recv.stream.count = req->recv.state.offset;
     ucs_trace_req("completing stream receive request %p (%p) "
