@@ -14,25 +14,12 @@
 #include "rc_verbs_common.h"
 
 
-enum {
-    UCT_RC_VERBS_IFACE_ADDR_TYPE_BASIC,
-
-    /* Tag Matching address. It additionaly contains QP number which
-     * is used for hardware offloads. */
-    UCT_RC_VERBS_IFACE_ADDR_TYPE_TM,
-    UCT_RC_VERBS_IFACE_ADDR_TYPE_LAST
-};
-
-
 /**
  * RC verbs communication context.
  */
 typedef struct uct_rc_verbs_ep {
     uct_rc_ep_t            super;
     uct_rc_verbs_txcnt_t   txcnt;
-#if IBV_EXP_HW_TM
-    struct ibv_qp          *tm_qp;
-#endif
 } uct_rc_verbs_ep_t;
 
 
@@ -62,14 +49,6 @@ typedef struct uct_rc_verbs_iface {
 
 #if IBV_EXP_HW_TM
 
-/* For RNDV TM enabling 2 QPs should be created, one is for sending WRs and
- * another one for HW (device will use it for RDMA reads and sending RNDV
- * Complete messages).*/
-typedef struct uct_rc_verbs_ep_tm_address {
-    uct_rc_ep_address_t         super;
-    uct_ib_uint24_t             tm_qp_num;
-} UCS_S_PACKED uct_rc_verbs_ep_tm_address_t;
-
 #  define UCT_RC_VERBS_CHECK_RES_PTR(_iface, _ep) \
        UCT_RC_CHECK_CQE_RET(_iface, _ep, &(_ep)->txqp, \
                             UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
@@ -95,8 +74,6 @@ ucs_status_ptr_t uct_rc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                                 const uct_iov_t *iov,
                                                 size_t iovcnt,
                                                 uct_completion_t *comp);
-
-ucs_status_t uct_rc_verbs_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op);
 
 ucs_status_t uct_rc_verbs_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
                                               const void* header,
@@ -183,12 +160,6 @@ ucs_status_t uct_rc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, ui
 
 ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                    uct_completion_t *comp);
-
-ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
-                                           const uct_device_addr_t *dev_addr,
-                                           const uct_ep_addr_t *ep_addr);
-
-ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      uct_rc_fc_request_t *req);
