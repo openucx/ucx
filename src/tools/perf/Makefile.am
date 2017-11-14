@@ -14,7 +14,7 @@ else
 ucx_perftest_CC = $(CC)
 endif
 
-perftestdir = $(pkgdatadir)/perftest
+perftestdir = $(docdir)/perftest
 dist_perftest_DATA = \
 	$(top_srcdir)/contrib/ucx_perftest_config/msg_pow2 \
 	$(top_srcdir)/contrib/ucx_perftest_config/README \

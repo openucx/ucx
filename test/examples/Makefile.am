@@ -5,7 +5,7 @@
 # See file LICENSE for terms.
 #
 
-examplesdir = $(pkgdatadir)/examples
+examplesdir = $(docdir)/examples
 dist_examples_DATA = \
 	ucx_hello_world.h \
 	ucp_hello_world.c \

@@ -13,14 +13,11 @@
 EXTRA_DIST =
 ACLOCAL_AMFLAGS = -I config/m4
 
+dist_doc_DATA = README AUTHORS NEWS LICENSE
 noinst_HEADERS = src/uct/api/uct.h src/uct/api/uct_def.h src/uct/api/tl.h
 doxygen_doc_files = $(noinst_HEADERS)
 
-doc_dir = $(pkgdatadir)/doc
-
 if !DOCS_ONLY
-perftest_dir = $(pkgdatadir)/perftest
-dist_perftest__DATA = contrib/ucx_perftest_config/msg_pow2 contrib/ucx_perftest_config/README contrib/ucx_perftest_config/test_types contrib/ucx_perftest_config/transports
 
 SUBDIRS = \
 	src/ucm \
@@ -49,13 +46,8 @@ EXTRA_DIST += contrib/configure-devel
 EXTRA_DIST += contrib/configure-release
 EXTRA_DIST += contrib/configure-prof
 EXTRA_DIST += contrib/buildrpm.sh
-EXTRA_DIST += contrib/ucx_perftest_config/msg_pow2
-EXTRA_DIST += contrib/ucx_perftest_config/README
-EXTRA_DIST += contrib/ucx_perftest_config/test_types
-EXTRA_DIST += contrib/ucx_perftest_config/transports
 EXTRA_DIST += debian
 EXTRA_DIST += ucx.pc.in
-EXTRA_DIST += LICENSE
 endif #!DOCS_ONLY
 EXTRA_DIST += doc/uml/uct.dot
 
