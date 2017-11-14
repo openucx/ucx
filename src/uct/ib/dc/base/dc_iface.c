@@ -472,7 +472,7 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
     } else if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
         ep = *((uct_dc_ep_t**)(hdr + 1));
 
-        if (!ep->is_valid) {
+        if (!(ep->state & UCT_DC_EP_IS_VALID)) {
             uct_dc_ep_release(ep);
             return UCS_OK;
         }
