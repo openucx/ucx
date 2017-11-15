@@ -277,34 +277,17 @@ ucp_stream_am_rdesc_get(ucp_worker_t *worker, void *data, size_t length,
     return rdesc;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
-ucp_stream_am_get_ep(ucp_worker_t *worker, uint64_t sender_uuid,
-                     ucp_recv_desc_t *rdesc)
+static UCS_F_ALWAYS_INLINE ucp_ep_h
+ucp_stream_am_get_ep(ucp_worker_t *worker, uint64_t sender_uuid)
 {
-    ucp_ep_ext_stream_t *ep_stream;
-    ucp_ep_h            ep;
-    khiter_t            hash_it;
-
-    hash_it = kh_get(ucp_worker_ep_hash, &worker->ep_hash, sender_uuid);
+    khiter_t hash_it = kh_get(ucp_worker_ep_hash, &worker->ep_hash,
+                              sender_uuid);
     if (ucs_unlikely(hash_it == kh_end(&worker->ep_hash))) {
         ucs_error("ep is not found by uuid: %lu", sender_uuid);
-        return UCS_STATUS_PTR(UCS_ERR_SOME_CONNECTS_FAILED);
+        return NULL;
     }
 
-    ep        = kh_value(&worker->ep_hash, hash_it);
-    ep_stream = ep->ext.stream;
-
-    if (ep->flags & UCP_EP_FLAG_STREAM_IS_QUEUED) {
-        ucs_queue_push(&ep_stream->data, &rdesc->stream_queue);
-        return UCS_STATUS_PTR(UCS_ERR_NO_PROGRESS);
-    } else if (ucs_queue_is_empty(&ep_stream->reqs)) {
-        ucs_list_add_tail(&worker->stream_eps, &ep_stream->list);
-        ep->flags |= UCP_EP_FLAG_STREAM_IS_QUEUED;
-        ucs_queue_push(&ep_stream->data, &rdesc->stream_queue);
-        return UCS_STATUS_PTR(UCS_ERR_NO_PROGRESS);
-    }
-
-    return ep_stream;
+    return kh_value(&worker->ep_hash, hash_it);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -314,6 +297,7 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
     ucp_worker_h        worker      = am_arg;
     ucp_stream_am_hdr_t *hdr        = am_data;
     ucp_ep_ext_stream_t *ep_stream  = NULL;
+    ucp_ep_h            ep;
     ucp_recv_desc_t     *rdesc;
     ucp_request_t       *req;
     ssize_t             unpacked;
@@ -321,12 +305,22 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_assert(am_length >= sizeof(ucp_stream_am_hdr_t));
 
     rdesc = ucp_stream_am_rdesc_get(worker, am_data, am_length, am_flags);
-    if (ucs_unlikely(rdesc == NULL)) {
+    ucs_assert(rdesc != NULL);
+
+    ep = ucp_stream_am_get_ep(worker, hdr->sender_uuid);
+    if (ucs_unlikely(ep == NULL)) {
         goto out;
     }
 
-    ep_stream = ucp_stream_am_get_ep(worker, hdr->sender_uuid, rdesc);
-    if (!UCS_PTR_IS_PTR(ep_stream)) {
+    ep_stream = ep->ext.stream;
+
+    if (ep->flags & UCP_EP_FLAG_STREAM_IS_QUEUED) {
+        ucs_queue_push(&ep_stream->data, &rdesc->stream_queue);
+        goto out;
+    } else if (ucs_queue_is_empty(&ep_stream->reqs)) {
+        ucs_list_add_tail(&worker->stream_eps, &ep_stream->list);
+        ep->flags |= UCP_EP_FLAG_STREAM_IS_QUEUED;
+        ucs_queue_push(&ep_stream->data, &rdesc->stream_queue);
         goto out;
     }
 
@@ -347,18 +341,14 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
             } else {
                 /* The descriptor is completely processed, go to next */
                 ucs_assert(ep_stream->rdesc->length == unpacked);
-                if (ep_stream->rdesc != rdesc) {
-                    ucp_stream_rdesc_release(ep_stream->rdesc);
-                }
+                ucp_stream_rdesc_release(ep_stream->rdesc);
                 ep_stream->rdesc = NULL;
             }
         }
     } while ((ep_stream->rdesc != NULL ) &&
              !ucs_queue_is_empty(&ep_stream->reqs));
 
-out:
-    if (UCS_PTR_IS_PTR(ep_stream) && (ep_stream != NULL) &&
-        (ep_stream->rdesc == NULL)) {
+    if (ep_stream->rdesc == NULL) {
         /* Complete partially filled request */
         if (req->recv.state.offset > 0) {
             ucp_request_complete_stream_recv(req, ep_stream, UCS_OK);
@@ -366,6 +356,7 @@ out:
         return UCS_OK;
     }
 
+out:
     return (am_flags & UCT_CB_PARAM_FLAG_DESC) ? UCS_INPROGRESS : UCS_OK;
 }
 
