@@ -42,7 +42,7 @@ typedef struct uct_dc_mlx5_grh_ep {
 static inline struct mlx5_grh_av *
 uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 {
-   return (ep->super.state & UCT_DC_EP_IS_GLOBAL) ?
+   return (ep->super.flags & UCT_DC_EP_FLAG_GRH) ?
           &(ucs_derived_of(ep, uct_dc_mlx5_grh_ep_t)->grh_av) : NULL;
 }
 

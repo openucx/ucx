@@ -22,7 +22,7 @@ enum {
 
 struct uct_dc_ep {
     /*
-     * per value of 'state':
+     * per value of 'flags':
      * INVALID   - 'list' is added to iface->tx.gc_list.
      * Otherwise - 'super' and 'arb_group' are used.
      */
@@ -35,7 +35,7 @@ struct uct_dc_ep {
     };
 
     uint8_t                       dci;
-    uint8_t                       state;
+    uint8_t                       flags;
     uint16_t                      atomic_mr_offset;
     uct_rc_fc_t                   fc;
 };
@@ -100,10 +100,13 @@ static inline void uct_dc_iface_dci_sched_tx(uct_dc_iface_t *iface, uct_dc_ep_t 
  *    - ep keeps using dci as long as it has oustanding sends
  */
 
-enum uct_dc_ep_state {
-    UCT_DC_EP_TX_WAIT   = UCS_BIT(0),
-    UCT_DC_EP_IS_GLOBAL = UCS_BIT(1),
-    UCT_DC_EP_IS_VALID  = UCS_BIT(2)
+enum uct_dc_ep_flags {
+    UCT_DC_EP_FLAG_TX_WAIT  = UCS_BIT(0), /* ep is in the tx_wait state. See
+                                             description of the dcs+quota dci
+                                             selection policy above */
+    UCT_DC_EP_FLAG_GRH      = UCS_BIT(1), /* ep has GRH address. Used by 
+                                             dc_mlx5 endpoint */
+    UCT_DC_EP_FLAG_VALID    = UCS_BIT(2)  /* ep is a valid endpoint */
 };
 
 
@@ -123,7 +126,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_dc_ep_basic_init(uct_dc_iface_t *ifa
     ucs_arbiter_group_init(&ep->arb_group);
     ep->dci   = UCT_DC_EP_NO_DCI;
     /* valid = 1, global = 0, tx_wait = 0 */
-    ep->state = UCT_DC_EP_IS_VALID;
+    ep->flags = UCT_DC_EP_FLAG_VALID;
 
     return uct_rc_fc_init(&ep->fc, iface->super.config.fc_wnd_size
                           UCS_STATS_ARG(ep->super.stats));
@@ -137,7 +140,7 @@ static inline int uct_dc_iface_dci_can_alloc_dcs(uct_dc_iface_t *iface)
 static inline int uct_dc_iface_dci_ep_can_send(uct_dc_ep_t *ep)
 {
     uct_dc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_iface_t);
-    return (!(ep->state & UCT_DC_EP_TX_WAIT)) &&
+    return (!(ep->flags & UCT_DC_EP_FLAG_TX_WAIT)) &&
            (ep->fc.fc_wnd > 0) &&
            uct_dc_iface_dci_has_tx_resources(iface, ep->dci);
 }
@@ -171,11 +174,11 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
              * -  if there are no eps are waiting for dci allocation
              *    ep goes back to normal state
              */
-            if (ep->state & UCT_DC_EP_TX_WAIT) {
+            if (ep->flags & UCT_DC_EP_FLAG_TX_WAIT) {
                 if (!ucs_arbiter_is_empty(uct_dc_iface_dci_waitq(iface))) {
                     return;
                 }
-                ep->state &= ~UCT_DC_EP_TX_WAIT;
+                ep->flags &= ~UCT_DC_EP_FLAG_TX_WAIT;
             }
         }
         ucs_arbiter_group_schedule(uct_dc_iface_tx_waitq(iface), &ep->arb_group);
@@ -190,7 +193,7 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
 
     ucs_assert(iface->tx.dcis[dci].ep->dci != UCT_DC_EP_NO_DCI);
     ep->dci    = UCT_DC_EP_NO_DCI;
-    ep->state &= ~UCT_DC_EP_TX_WAIT;
+    ep->flags &= ~UCT_DC_EP_FLAG_TX_WAIT;
     iface->tx.dcis[dci].ep = NULL;
 #if ENABLE_ASSERT
     iface->tx.dcis[dci].flags = 0;
@@ -242,7 +245,7 @@ static inline void uct_dc_iface_dci_free_dcs(uct_dc_iface_t *iface, uct_dc_ep_t 
 #endif
 
     ep->dci    = UCT_DC_EP_NO_DCI;
-    ep->state &= ~UCT_DC_EP_TX_WAIT;
+    ep->flags &= ~UCT_DC_EP_FLAG_TX_WAIT;
 }
 
 static inline ucs_status_t uct_dc_iface_dci_get_dcs(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
@@ -253,7 +256,7 @@ static inline ucs_status_t uct_dc_iface_dci_get_dcs(uct_dc_iface_t *iface, uct_d
     if (ep->dci != UCT_DC_EP_NO_DCI) {
         /* dci is already assigned - keep using it */
         if ((iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) &&
-            (ep->state & UCT_DC_EP_TX_WAIT)) {
+            (ep->flags & UCT_DC_EP_FLAG_TX_WAIT)) {
             UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
             return UCS_ERR_NO_RESOURCE;
         }
@@ -267,7 +270,7 @@ static inline ucs_status_t uct_dc_iface_dci_get_dcs(uct_dc_iface_t *iface, uct_d
             (available <= iface->tx.available_quota) &&
             !ucs_arbiter_is_empty(uct_dc_iface_dci_waitq(iface)))
         {
-            ep->state |= UCT_DC_EP_TX_WAIT;
+            ep->flags |= UCT_DC_EP_FLAG_TX_WAIT;
             UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
             return UCS_ERR_NO_RESOURCE;
         }

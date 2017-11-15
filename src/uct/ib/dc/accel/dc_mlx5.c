@@ -63,7 +63,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *dc_iface,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_mlx5_ep_t, dc_iface, if_addr, av);
 
-    self->super.super.state |= UCT_DC_EP_IS_GLOBAL;
+    self->super.super.flags |= UCT_DC_EP_FLAG_GRH;
     memcpy(&self->grh_av, grh_av, sizeof(*grh_av));
     return UCS_OK;
 }
@@ -85,13 +85,13 @@ uct_dc_mlx5_ep_create_connected(uct_iface_h tl_iface,
                                 const uct_iface_addr_t *iface_addr,
                                 uct_ep_h* ep_p)
 {
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
+    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
+    const uct_dc_iface_addr_t *if_addr = (const uct_dc_iface_addr_t *)iface_addr;
     ucs_status_t status;
     int is_global;
     uct_ib_mlx5_base_av_t av;
     struct mlx5_grh_av grh_av;
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
-    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
-    const uct_dc_iface_addr_t *if_addr = (const uct_dc_iface_addr_t *)iface_addr;
 
     ucs_trace_func("");
     status = uct_ud_mlx5_iface_get_av(&iface->super.super.super, &iface->ud_common,
@@ -679,7 +679,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         dc_mlx5_ep              = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
         sender.ep               = (uint64_t)dc_ep;
         sender.global.gid       = ib_iface->gid;
-        sender.global.is_global = dc_mlx5_ep->super.state & UCT_DC_EP_IS_GLOBAL;
+        sender.global.is_global = dc_mlx5_ep->super.flags & UCT_DC_EP_FLAG_GRH;
 
         UCS_STATS_UPDATE_COUNTER(dc_ep->fc.stats,
                                  UCT_RC_FC_STAT_TX_HARD_REQ, 1);
