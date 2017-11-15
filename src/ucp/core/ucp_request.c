@@ -45,6 +45,19 @@ ucs_status_t ucp_tag_recv_request_test(void *request, ucp_tag_recv_info_t *info)
     return status;
 }
 
+ucs_status_t ucp_stream_recv_request_test(void *request, size_t *length)
+{
+    ucp_request_t *req   = (ucp_request_t*)request - 1;
+    ucs_status_t  status = ucp_request_check_status(request);
+
+    if (status != UCS_INPROGRESS) {
+        ucs_assert(req->flags & UCP_REQUEST_FLAG_STREAM_RECV);
+        *length = req->recv.stream.length;
+    }
+
+    return status;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_request_release_common(void *request, uint8_t cb_flag, const char *debug_name)
 {
