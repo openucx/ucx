@@ -142,6 +142,7 @@ ucp_stream_process_rdesc(ucp_recv_desc_t* rdesc, ucp_ep_ext_stream_t *ep_stream,
         /* Save partially handled rdesc */
         rdesc->length   -= unpacked;
         ep_stream->rdesc = rdesc;
+        /* TODO: can we avoid extra copying? */
         memmove(rdata, UCS_PTR_BYTE_OFFSET(rdata, unpacked), rdesc->length);
     }
 
@@ -277,17 +278,11 @@ ucp_stream_am_rdesc_get(ucp_worker_t *worker, void *data, size_t length,
     return rdesc;
 }
 
-static UCS_F_ALWAYS_INLINE ucp_ep_h
-ucp_stream_am_get_ep(ucp_worker_t *worker, uint64_t sender_uuid)
+static UCS_F_ALWAYS_INLINE void
+ucp_stream_ep_enqueue(ucp_ep_ext_stream_t *ep, ucp_worker_h worker)
 {
-    khiter_t hash_it = kh_get(ucp_worker_ep_hash, &worker->ep_hash,
-                              sender_uuid);
-    if (ucs_unlikely(hash_it == kh_end(&worker->ep_hash))) {
-        ucs_error("ep is not found by uuid: %lu", sender_uuid);
-        return NULL;
-    }
-
-    return kh_value(&worker->ep_hash, hash_it);
+    ucs_list_add_tail(&worker->stream_eps, &ep->list);
+    ep->ucp_ep->flags |= UCP_EP_FLAG_STREAM_IS_QUEUED;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -307,8 +302,9 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
     rdesc = ucp_stream_am_rdesc_get(worker, am_data, am_length, am_flags);
     ucs_assert(rdesc != NULL);
 
-    ep = ucp_stream_am_get_ep(worker, hdr->sender_uuid);
+    ep = ucp_worker_ep_find(worker, hdr->sender_uuid);
     if (ucs_unlikely(ep == NULL)) {
+        ucs_error("ep is not found by uuid: %lu", hdr->sender_uuid);
         goto out;
     }
 
@@ -317,11 +313,12 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
     if (ep->flags & UCP_EP_FLAG_STREAM_IS_QUEUED) {
         ucs_queue_push(&ep_stream->data, &rdesc->stream_queue);
         goto out;
-    } else if (ucs_queue_is_empty(&ep_stream->reqs)) {
-        ucs_list_add_tail(&worker->stream_eps, &ep_stream->list);
-        ep->flags |= UCP_EP_FLAG_STREAM_IS_QUEUED;
+    } else {
+        ucp_stream_ep_enqueue(ep_stream, worker);
         ucs_queue_push(&ep_stream->data, &rdesc->stream_queue);
-        goto out;
+        if (ucs_queue_is_empty(&ep_stream->reqs)) {
+            goto out;
+        }
     }
 
     do {
@@ -341,7 +338,14 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
             } else {
                 /* The descriptor is completely processed, go to next */
                 ucs_assert(ep_stream->rdesc->length == unpacked);
-                ucp_stream_rdesc_release(ep_stream->rdesc);
+                /* Do not release currently arrived rdesc directly from
+                 * the callback */
+                if (ep_stream->rdesc != rdesc) {
+                    ucp_stream_rdesc_release(ep_stream->rdesc);
+                } else if (!(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
+                    /* return into the pool buffered rdesc */
+                    ucs_mpool_put_inline(rdesc);
+                }
                 ep_stream->rdesc = NULL;
             }
         }
@@ -353,7 +357,12 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
         if (req->recv.state.offset > 0) {
             ucp_request_complete_stream_recv(req, ep_stream, UCS_OK);
         }
+
         return UCS_OK;
+    } else if (!(ep->flags & UCP_EP_FLAG_STREAM_IS_QUEUED)) {
+        /* Last fragment is partially processed, enqueue EP back to worker
+         * in order to return it by ucp_stream_worker_poll */
+        ucp_stream_ep_enqueue(ep_stream, worker);
     }
 
 out:
