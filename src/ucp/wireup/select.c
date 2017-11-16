@@ -981,8 +981,9 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
             key->am_lane = lane;
         }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RNDV) {
-            ucs_assert(key->rndv_lane == UCP_NULL_LANE);
-            key->rndv_lane = lane;
+            ucs_assert(key->rndv_lanes[0] == UCP_NULL_LANE);
+            key->rndv_lanes[0] = lane;
+            key->num_rndv_lanes = 1;
         }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RMA) {
             key->rma_lanes[lane] = lane;
