@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -37,12 +37,5 @@ struct uct_rdmacm_iface {
 };
 
 extern uct_md_component_t uct_rdmacm_mdc;
-
-ucs_status_t uct_rdmacm_iface_get_address(uct_iface_h tl_iface,
-                                          uct_iface_addr_t *iface_addr);
-
-int uct_rdmacm_iface_is_reachable(const uct_iface_h tl_iface,
-                                  const uct_device_addr_t *dev_addr,
-                                  const uct_iface_addr_t *iface_addr);
 
 #endif

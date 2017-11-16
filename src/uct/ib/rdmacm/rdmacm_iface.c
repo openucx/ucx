@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -38,17 +38,21 @@ static ucs_status_t uct_rdmacm_iface_query(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-int uct_rdmacm_iface_is_reachable(const uct_iface_h tl_iface,
-                                  const uct_device_addr_t *dev_addr,
-                                  const uct_iface_addr_t *iface_addr)
+static int uct_rdmacm_iface_is_reachable(const uct_iface_h tl_iface,
+                                         const uct_device_addr_t *dev_addr,
+                                         const uct_iface_addr_t *iface_addr)
 {
-    /* Since the iface's address is the sockaddr, we already have the
+    /* Since the iface's address is the sockaddr, we can call the
      * uct_md_is_sockaddr_accessible API call to check accessibility to
      * this sockaddr */
-    return 1;
+    uct_rdmacm_iface_t *iface    = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
+    ucs_sock_addr_t *rdmacm_addr = (ucs_sock_addr_t *)iface_addr;
+
+    return uct_md_is_sockaddr_accessible(iface->super.md, rdmacm_addr,
+                                         UCT_SOCKADDR_ACC_REMOTE);
 }
 
-ucs_status_t uct_rdmacm_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
+static ucs_status_t uct_rdmacm_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
 {
     uct_rdmacm_iface_t *iface = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
     ucs_sock_addr_t *rdmacm_addr = (ucs_sock_addr_t *)iface_addr;
@@ -101,8 +105,6 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    self->cm_id                = NULL;
-    self->event_ch             = NULL;
     self->addr_resolve_timeout = rdmacm_md->addr_resolve_timeout;
     self->config.async_mode    = config->async_mode;
 
@@ -181,12 +183,8 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_iface_t)
 {
-    if (self->cm_id != NULL) {
-        rdma_destroy_id(self->cm_id);
-    }
-    if (self->event_ch != NULL) {
-        rdma_destroy_event_channel(self->event_ch);
-    }
+    rdma_destroy_id(self->cm_id);
+    rdma_destroy_event_channel(self->event_ch);
 }
 
 UCS_CLASS_DEFINE(uct_rdmacm_iface_t, uct_base_iface_t);
