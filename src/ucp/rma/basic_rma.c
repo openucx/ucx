@@ -49,7 +49,7 @@ ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
             if (ucs_likely(req->send.state.uct_comp.count == 0)) {
                 if (ucs_unlikely(req->send.state.dt.dt.contig[0].memh !=
                                  UCT_MEM_HANDLE_NULL)) {
-                    ucp_request_send_buffer_dereg(req, req->send.lane);
+                    ucp_request_send_buffer_dereg(req);
                 }
                 ucp_request_complete_send(req, UCS_OK);
             }
@@ -81,7 +81,7 @@ static void ucp_rma_request_zcopy_completion(uct_completion_t *self,
                                           send.state.uct_comp);
 
     if (ucs_likely(req->send.length == 0)) {
-        ucp_request_send_buffer_dereg(req, req->send.lane);
+        ucp_request_send_buffer_dereg(req);
         ucp_request_complete_send(req, UCS_OK);
     }
 }

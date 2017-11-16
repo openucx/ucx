@@ -49,7 +49,7 @@ ucs_status_t ucp_proto_progress_am_bcopy_single(uct_pending_req_t *self)
 void ucp_proto_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
     ucs_assert(req->send.state.uct_comp.count == 0);
-    ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
+    ucp_request_send_buffer_dereg(req); /* TODO register+lane change */
     ucp_request_complete_send(req, status);
 }
 
@@ -68,7 +68,7 @@ void ucp_proto_am_zcopy_completion(uct_completion_t *self,
          *       just dereg the buffer here and complete request on purge
          *       pending later.
          */
-        ucp_request_send_buffer_dereg(req, req->send.lane);
+        ucp_request_send_buffer_dereg(req);
         req->send.state.uct_comp.func = NULL;
     }
 }
