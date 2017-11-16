@@ -39,7 +39,7 @@ static void ucp_rndv_rma_request_send_buffer_dereg(ucp_request_t *sreq)
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
         ucp_ep_is_rndv_lane_present(sreq->send.ep, 0) &&
         ucp_request_is_send_buffer_reg(sreq)) {
-        ucp_request_send_buffer_dereg(sreq, ucp_ep_get_rndv_get_lane(sreq->send.ep, 0));
+        ucp_request_send_buffer_dereg(sreq);
     }
 }
 
@@ -501,7 +501,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
     UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_ats_recv", 0);
     if (sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) {
         ucp_tag_offload_cancel_rndv(sreq);
-        ucp_request_send_buffer_dereg(sreq, ucp_ep_get_tag_lane(sreq->send.ep));
+        ucp_request_send_buffer_dereg(sreq);
     } else {
         ucp_rndv_rma_request_send_buffer_dereg(sreq);
     }
@@ -594,7 +594,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_bcopy_send, (self),
 
 static void ucp_rndv_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_request_send_buffer_dereg(req, ucp_ep_get_am_lane(req->send.ep));
+    ucp_request_send_buffer_dereg(req);
     ucp_request_complete_send(req, status);
 }
 
@@ -643,7 +643,7 @@ static void ucp_rndv_prepare_zcopy_send_buffer(ucp_request_t *sreq, ucp_ep_h ep)
 
     if ((sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) &&
         (ucp_ep_get_am_lane(ep) != ucp_ep_get_tag_lane(ep))) {
-        ucp_request_send_buffer_dereg(sreq, ucp_ep_get_tag_lane(sreq->send.ep));
+        ucp_request_send_buffer_dereg(sreq);
         sreq->send.state.dt.dt.contig[0].memh = UCT_MEM_HANDLE_NULL;
     } else if ((ucp_ep_is_rndv_lane_present(ep, 0)) &&
                (ucp_ep_get_am_lane(ep) != ucp_ep_get_rndv_get_lane(ep, 0))) {

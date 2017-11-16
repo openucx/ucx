@@ -276,7 +276,7 @@ ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req,
                                   req->send.datatype, &req->send.state.dt);
 }
 
-void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane)
+void ucp_request_send_buffer_dereg(ucp_request_t *req)
 {
     ucp_context_t *context    = req->send.ep->worker->context;
     ucs_assert(req->send.reg_rsc != UCP_NULL_RESOURCE);
