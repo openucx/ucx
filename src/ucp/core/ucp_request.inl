@@ -219,7 +219,7 @@ ucp_request_send_state_reset(ucp_request_t *req,
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
         if (UCP_DT_IS_CONTIG(req->send.datatype)) {
-            req->send.state.dt.dt.contig.memh = UCT_MEM_HANDLE_NULL;
+            ucp_dt_clear_memh(&req->send.state.dt);
         }
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
@@ -331,3 +331,10 @@ static UCS_F_ALWAYS_INLINE void ucp_request_send_tag_stat(ucp_request_t *req)
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
     }
 }
+
+static UCS_F_ALWAYS_INLINE
+uct_rkey_bundle_t *ucp_tag_rndv_rkey(ucp_request_t *req)
+{
+    return &req->send.rndv_get.rkey_bundle;
+}
+

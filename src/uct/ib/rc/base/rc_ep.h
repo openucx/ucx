@@ -192,6 +192,9 @@ typedef struct uct_rc_fc {
 struct uct_rc_ep {
     uct_base_ep_t       super;
     uct_rc_txqp_t       txqp;
+#if IBV_EXP_HW_TM
+    struct ibv_qp       *tm_qp;
+#endif
     uint16_t            atomic_mr_offset;
     uint8_t             sl;
     uint8_t             path_bits;
@@ -205,6 +208,12 @@ UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
 
 typedef struct uct_rc_ep_address {
     uct_ib_uint24_t  qp_num;
+#if IBV_EXP_HW_TM
+    /* For RNDV TM enabling 2 QPs should be created, one is for sending WRs and
+     * another one for HW (device will use it for RDMA reads and sending RNDV
+     * Complete messages). */
+    uct_ib_uint24_t  tm_qp_num;
+#endif
     uint8_t          atomic_mr_id;
 } UCS_S_PACKED uct_rc_ep_address_t;
 

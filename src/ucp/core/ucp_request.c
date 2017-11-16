@@ -191,7 +191,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
         status = uct_md_mem_reg(uct_md, buffer, length, UCT_MD_MEM_ACCESS_RMA,
-                                &state->dt.contig.memh);
+                                &state->dt.contig[0].memh);
         break;
     case UCP_DATATYPE_IOV:
         iovcnt = state->dt.iov.iovcnt;
@@ -245,8 +245,9 @@ UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg,
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        if (state->dt.contig.memh != UCT_MEM_HANDLE_NULL) {
-            uct_md_mem_dereg(uct_md, state->dt.contig.memh);
+        if (state->dt.contig[0].memh != UCT_MEM_HANDLE_NULL) {
+            uct_md_mem_dereg(uct_md, state->dt.contig[0].memh);
+            state->dt.contig[0].memh = UCT_MEM_HANDLE_NULL;
         }
         break;
     case UCP_DATATYPE_IOV:
@@ -344,3 +345,4 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
 
     return UCS_ERR_NO_PROGRESS;
 }
+
