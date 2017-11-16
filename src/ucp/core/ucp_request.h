@@ -239,6 +239,10 @@ void ucp_request_send_buffer_dereg(ucp_request_t *req);
 
 void ucp_request_recv_buffer_dereg(ucp_request_t *req);
 
+ucs_status_t ucp_request_rndv_buffer_reg(ucp_request_t *req);
+
+ucp_lane_index_t ucp_request_rndv_buffer_dereg_unused(ucp_request_t *req, ucp_lane_index_t used);
+
 ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
                                     void *buffer, size_t length, ucp_datatype_t datatype,
                                     ucp_dt_state_t *state);

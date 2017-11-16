@@ -37,16 +37,15 @@ static void ucp_rndv_rma_request_send_buffer_dereg(ucp_request_t *sreq)
      *       (state->dt.contig.memh != UCT_MEM_HANDLE_NULL)
      */
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-        ucp_ep_is_rndv_lane_present(sreq->send.ep, 0) &&
-        ucp_request_is_send_buffer_reg(sreq)) {
+        ucp_ep_is_rndv_lane_present(sreq->send.ep, 0)) {
         ucp_request_send_buffer_dereg(sreq);
     }
 }
 
-size_t ucp_tag_rndv_pack_send_rkey(ucp_request_t *sreq, ucp_lane_index_t lane,
-                                   void *rkey_buf, uint16_t *flags)
+static size_t ucp_tag_rndv_pack_send_rkey(ucp_request_t *sreq, void *rkey_buf, uint16_t *flags)
 {
     ucp_ep_h ep = sreq->send.ep;
+    ucp_lane_index_t lane = ucp_ep_get_rndv_get_lane(ep, 0);
     ucs_status_t status;
 
     ucs_assert(UCP_DT_IS_CONTIG(sreq->send.datatype));
@@ -54,7 +53,7 @@ size_t ucp_tag_rndv_pack_send_rkey(ucp_request_t *sreq, ucp_lane_index_t lane,
     /* Check if the sender needs to register the send buffer -
      * is its datatype contiguous and does the receive side need it */
     if (ucp_ep_rndv_md_flags(ep, 0) & UCT_MD_FLAG_NEED_RKEY) {
-        status = ucp_request_send_buffer_reg(sreq, lane);
+        status = ucp_request_rndv_buffer_reg(sreq);
         ucs_assert_always(status == UCS_OK);
 
         /* if the send buffer was registered, send the rkey */
@@ -67,9 +66,9 @@ size_t ucp_tag_rndv_pack_send_rkey(ucp_request_t *sreq, ucp_lane_index_t lane,
     return 0;
 }
 
-size_t ucp_tag_rndv_pack_recv_rkey(ucp_request_t *rreq, ucp_ep_h ep,
-                                   ucp_lane_index_t lane,
-                                   void *rkey_buf, uint16_t *flags)
+static size_t ucp_tag_rndv_pack_recv_rkey(ucp_request_t *rreq, ucp_ep_h ep,
+                                          ucp_lane_index_t lane,
+                                          void *rkey_buf, uint16_t *flags)
 {
     ucs_status_t status;
 
@@ -108,7 +107,7 @@ static size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
         (ep->worker->context->config.ext.rndv_mode == UCP_RNDV_MODE_GET_ZCOPY)) {
         rndv_rts_hdr->address = (uintptr_t) sreq->send.buffer;
         if (ucp_ep_is_rndv_lane_present(ep, 0)) {
-            packed_len += ucp_tag_rndv_pack_send_rkey(sreq, ucp_ep_get_rndv_get_lane(ep, 0),
+            packed_len += ucp_tag_rndv_pack_send_rkey(sreq,
                                                       rndv_rts_hdr + 1,
                                                       &rndv_rts_hdr->flags);
         }
@@ -832,11 +831,10 @@ static void ucp_rndv_prepare_zcopy_send_buffer(ucp_request_t *sreq, ucp_ep_h ep)
         (ucp_ep_get_am_lane(ep) != ucp_ep_get_tag_lane(ep))) {
         ucp_request_send_buffer_dereg(sreq);
         sreq->send.state.dt.dt.contig[0].memh = UCT_MEM_HANDLE_NULL;
-    } else if ((ucp_ep_is_rndv_lane_present(ep, 0)) &&
-               (ucp_ep_get_am_lane(ep) != ucp_ep_get_rndv_get_lane(ep, 0))) {
-        /* dereg the original send request since we are going to send on the AM lane next */
-        ucp_rndv_rma_request_send_buffer_dereg(sreq);
-        sreq->send.state.dt.dt.contig[0].memh = UCT_MEM_HANDLE_NULL;
+    } else if (!(sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) &&
+               (ucp_ep_is_rndv_lane_present(ep, 0))) {
+        /* dereg all lanes except am lane */
+        ucp_request_rndv_buffer_dereg_unused(sreq, ucp_ep_get_am_lane(ep));
     }
 
     if (sreq->send.state.dt.dt.contig[0].memh == UCT_MEM_HANDLE_NULL) {

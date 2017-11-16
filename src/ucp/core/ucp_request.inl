@@ -345,3 +345,10 @@ uct_rkey_bundle_t *ucp_tag_rndv_rkey(ucp_request_t *req)
     return &req->send.rndv_get.rkey_bundle;
 }
 
+static UCS_F_ALWAYS_INLINE
+void ucp_request_rndv_buffer_dereg(ucp_request_t *req)
+{
+    ucp_request_rndv_buffer_dereg_unused(req, UCP_NULL_LANE);
+}
+
+
