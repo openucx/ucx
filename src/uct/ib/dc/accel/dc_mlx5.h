@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2016-.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 
 * See file LICENSE for terms.
 */
@@ -24,19 +24,26 @@ typedef struct uct_dc_mlx5_iface {
     uct_rc_mlx5_iface_common_t          mlx5_common;
     uct_ud_mlx5_iface_common_t          ud_common;
     uct_ib_mlx5_txwq_t                  dci_wqs[UCT_DC_IFACE_MAX_DCIS];
-
 } uct_dc_mlx5_iface_t;
 
 
 typedef struct uct_dc_mlx5_ep {
     uct_dc_ep_t                         super;
     uct_ib_mlx5_base_av_t               av;
-    int                                 is_global;
-    struct mlx5_grh_av                  grh_av;
 } uct_dc_mlx5_ep_t;
 
 
-#define UCT_DC_MLX5_EP_GET_GRH(_ep) \
-    ((_ep)->is_global ? &(_ep)->grh_av : NULL)
+typedef struct uct_dc_mlx5_grh_ep {
+    uct_dc_mlx5_ep_t                    super;
+    struct mlx5_grh_av                  grh_av;
+} uct_dc_mlx5_grh_ep_t;
+
+
+static inline struct mlx5_grh_av *
+uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
+{
+   return (ep->super.flags & UCT_DC_EP_FLAG_GRH) ?
+          &(ucs_derived_of(ep, uct_dc_mlx5_grh_ep_t)->grh_av) : NULL;
+}
 
 #endif

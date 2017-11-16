@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -473,7 +473,7 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
     } else if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
         ep = *((uct_dc_ep_t**)(hdr + 1));
 
-        if (ep->state == UCT_DC_EP_INVALID) {
+        if (!(ep->flags & UCT_DC_EP_FLAG_VALID)) {
             uct_dc_ep_release(ep);
             return UCS_OK;
         }
