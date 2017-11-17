@@ -67,7 +67,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb,
         *length = rdesc->length;
         ret = ucp_stream_rdesc_data(rdesc);
     } else {
-        ret = UCS_OK;
+        ret = UCS_STATUS_PTR(UCS_OK);
     }
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
