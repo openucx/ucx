@@ -13,6 +13,7 @@
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
+#include <ucp/stream/stream.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/cpu_set.h>
@@ -1221,19 +1222,15 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
                                ucp_stream_poll_ep_t *poll_eps,
                                size_t max_eps, unsigned flags)
 {
-    ucp_ep_ext_stream_t *ep_stream;
-    ucp_ep_h            ep;
+    ucp_ep_ext_stream_t *ep;
     ssize_t             count = 0;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     while ((count < max_eps) && !ucs_list_is_empty(&worker->stream_eps)) {
-        ep_stream = ucs_list_extract_head(&worker->stream_eps,
-                                          ucp_ep_ext_stream_t, list);
-        ep = ep_stream->ucp_ep;
-        ep->flags &= ~UCP_EP_FLAG_STREAM_IS_QUEUED;
-        poll_eps[count].ep        = ep;
-        poll_eps[count].user_data = ep->user_data;
+        ep                        = ucp_stream_worker_dequeue_ep_head(worker);
+        poll_eps[count].ep        = ep->ucp_ep;
+        poll_eps[count].user_data = ep->ucp_ep->user_data;
         ++count;
     }
 

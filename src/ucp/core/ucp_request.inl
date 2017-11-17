@@ -185,6 +185,36 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_request_recv_state_init(ucp_request_t *req, void *buffer, ucp_datatype_t dt,
+                            size_t dt_count)
+{
+    ucp_dt_generic_t *dt_gen;
+
+    req->recv.state.offset = 0;
+
+    switch (dt & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_IOV:
+        req->recv.state.dt.iov.iov_offset    = 0;
+        req->recv.state.dt.iov.iovcnt_offset = 0;
+        req->recv.state.dt.iov.iovcnt        = dt_count;
+        req->recv.state.dt.iov.memh          = UCT_MEM_HANDLE_NULL;
+        break;
+
+    case UCP_DATATYPE_GENERIC:
+        dt_gen = ucp_dt_generic(dt);
+        req->recv.state.dt.generic.state =
+            UCS_PROFILE_NAMED_CALL("dt_start", dt_gen->ops.start_unpack,
+                                   dt_gen->context, buffer, dt_count);
+        ucs_debug("req %p buffer %p count %zu dt_gen state=%p", req, buffer,
+                  dt_count, req->recv.state.dt.generic.state);
+        break;
+
+    default:
+        break;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_request_send_state_init(ucp_request_t *req, size_t dt_count)
 {
     ucp_dt_generic_t *dt_gen;
