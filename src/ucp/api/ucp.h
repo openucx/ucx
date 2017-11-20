@@ -2799,9 +2799,10 @@ ucs_status_t ucp_tag_recv_request_test(void *request, ucp_tag_recv_info_t *info)
  * UCS_INPROGRESS means that the request is in a completed state.
  *
  * @param [in]  request     Non-blocking request to check.
- * @param [out] length_p    The size of the received data in bytes, always on
- *                          the boundary of base datatype size. The value is
- *                          valid only if the status is UCS_OK.
+ * @param [out] length_p    The size of the received data in bytes. This value
+ *                          is only valid if the status is UCS_OK. If valid, it
+ *                          is always an integral multiple of the datatype size
+ *                          associated with the request.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
