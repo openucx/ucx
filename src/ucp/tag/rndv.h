@@ -49,6 +49,14 @@ typedef struct {
     uintptr_t                 rreq_ptr; /* request on the rndv receiver side */
 } UCS_S_PACKED ucp_rndv_data_hdr_t;
 
+/*
+ * RNDV rkey
+ */
+typedef struct {
+    ucp_rsc_index_t md_index;
+    uint8_t         key_size;
+    uint8_t         rkey[];
+} UCS_S_PACKED ucp_rndv_rkey_data_t;
 
 ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *req);
 
