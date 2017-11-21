@@ -377,7 +377,7 @@ found_ucp_ep:
     ucp_ep_config_key_t key = ucp_ep_config(ucp_ep)->key;
     key.am_lane            = 0;
     key.wireup_lane        = 0;
-    key.rndv_lanes[0]      = 0;
+    key.rndv_lane          = 0;
     key.tag_lane           = 0;
     key.amo_lanes[0]       = 0;
     key.rma_lanes[0]       = 0;
