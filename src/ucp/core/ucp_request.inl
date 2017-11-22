@@ -342,7 +342,7 @@ static UCS_F_ALWAYS_INLINE void ucp_request_send_tag_stat(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE
 uct_rkey_bundle_t *ucp_tag_rndv_rkey_bundle(ucp_request_t *req, int idx)
 {
-    ucs_assert((idx >= 0) && (idx < UCP_MAX_LANES));
+    ucs_assert((idx >= 0) && (idx < UCP_MAX_RNDV_LANES));
     return &req->send.rndv_get.rkey->rkey_bundle[idx];
 }
 
