@@ -276,6 +276,18 @@ ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req,
                                   req->send.datatype, &req->send.state.dt);
 }
 
+ucs_status_t ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_ep_h ep,
+                                         ucp_lane_index_t lane)
+{
+    ucp_context_t *context  = ep->worker->context;
+    req->recv.reg_rsc       = ucp_ep_get_rsc_index(ep, lane);
+    ucs_assert(req->recv.reg_rsc != UCP_NULL_RESOURCE);
+
+    return ucp_request_memory_reg(context, req->recv.reg_rsc,
+                                  (void*)req->recv.buffer, req->recv.length,
+                                  req->recv.datatype, &req->recv.state);
+}
+
 void ucp_request_send_buffer_dereg(ucp_request_t *req)
 {
     ucp_context_t *context    = req->send.ep->worker->context;
@@ -283,6 +295,15 @@ void ucp_request_send_buffer_dereg(ucp_request_t *req)
     ucp_request_memory_dereg(context, req->send.reg_rsc, req->send.datatype,
                              &req->send.state.dt);
     req->send.reg_rsc = UCP_NULL_RESOURCE;
+}
+
+void ucp_request_recv_buffer_dereg(ucp_request_t *req)
+{
+    ucp_context_t *context = req->recv.worker->context;
+    ucs_assert(req->recv.reg_rsc != UCP_NULL_RESOURCE);
+    ucp_request_memory_dereg(context, req->recv.reg_rsc, req->recv.datatype,
+                             &req->recv.state);
+    req->recv.reg_rsc = UCP_NULL_RESOURCE;
 }
 
 /* NOTE: deprecated */

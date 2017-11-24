@@ -166,6 +166,8 @@ typedef struct ucp_ep_config {
         struct {
             /* Maximal total size of rndv_get_zcopy */
             size_t          max_get_zcopy;
+            /* Maximal total size of rndv_put_zcopy */
+            size_t          max_put_zcopy;
             /* Threshold for switching from eager to RMA based rendezvous */
             size_t          rma_thresh;
             /* Threshold for switching from eager to AM based rendezvous */

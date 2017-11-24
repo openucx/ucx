@@ -420,7 +420,7 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
         addr         = (uintptr_t*)(rndv_hdr + 1);
         *addr        = (uintptr_t)req->send.buffer;
         rndv_hdr->flags = 0;
-        ucp_tag_rndv_pack_rkey(req, req->send.lane, addr + 1, &rndv_hdr->flags);
+        ucp_tag_rndv_pack_send_rkey(req, req->send.lane, addr + 1, &rndv_hdr->flags);
     } else {
         rndv_hdr_len = sizeof(ucp_sw_rndv_hdr_t);
         rndv_hdr     = ucs_alloca(rndv_hdr_len);

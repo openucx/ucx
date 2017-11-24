@@ -41,6 +41,8 @@ typedef struct ucp_context_config {
     double                                 rndv_perf_diff;
     /** Threshold for switching UCP to zero copy protocol */
     size_t                                 zcopy_thresh;
+    /** Communication scheme in RNDV protocol */
+    ucp_rndv_mode_t                        rndv_mode;
     /** Estimation of bcopy bandwidth */
     size_t                                 bcopy_bw;
     /** Segment size in the worker pre-registered memory pool */
