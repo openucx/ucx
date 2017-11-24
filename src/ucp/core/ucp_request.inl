@@ -205,8 +205,8 @@ ucp_request_recv_state_init(ucp_request_t *req, void *buffer, ucp_datatype_t dt,
         req->recv.state.dt.generic.state =
             UCS_PROFILE_NAMED_CALL("dt_start", dt_gen->ops.start_unpack,
                                    dt_gen->context, buffer, dt_count);
-        ucs_debug("req %p buffer %p count %zu dt_gen state=%p", req, buffer,
-                  dt_count, req->recv.state.dt.generic.state);
+        ucs_trace_req("req %p buffer %p count %zu dt_gen state=%p", req, buffer,
+                      dt_count, req->recv.state.dt.generic.state);
         break;
 
     default:
