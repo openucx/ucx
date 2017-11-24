@@ -37,6 +37,7 @@ enum {
     UCP_REQUEST_FLAG_OFFLOADED            = UCS_BIT(10),
     UCP_REQUEST_FLAG_BLOCK_OFFLOAD        = UCS_BIT(11),
     UCP_REQUEST_FLAG_RNDV_RKEY            = UCS_BIT(12),
+    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(13),
 
 #if ENABLE_ASSERT
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(15)
@@ -197,7 +198,7 @@ struct ucp_request {
 
                 struct {
                     ucp_stream_recv_callback_t cb;     /* Completion callback */
-                    size_t                     count;  /* Completion info to fill */
+                    size_t                     length; /* Completion info to fill */
                 } stream;
             };
         } recv;

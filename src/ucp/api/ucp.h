@@ -2786,9 +2786,9 @@ ucs_status_t ucp_request_check_status(void *request);
  *        returned from @ref ucp_tag_recv_nb routine.
  *
  * This routine checks the state and returns current status of the request
- *      returned from @ref ucp_tag_recv_nb routine or the user allocated request
- *      for @ref ucp_tag_recv_nbr. Any value different from UCS_INPROGRESS means
- *      that the request is in a completed state.
+ * returned from @ref ucp_tag_recv_nb routine or the user allocated request
+ * for @ref ucp_tag_recv_nbr. Any value different from UCS_INPROGRESS means
+ * that the request is in a completed state.
  *
  * @param [in]  request     Non-blocking request to check.
  * @param [out] info        It is filled with the details about the message
@@ -2798,6 +2798,25 @@ ucs_status_t ucp_request_check_status(void *request);
  */
 ucs_status_t ucp_tag_recv_request_test(void *request, ucp_tag_recv_info_t *info);
 
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Check the status and currently available state of non-blocking request
+ *        returned from @ref ucp_stream_recv_nb routine.
+ *
+ * This routine checks the state and returns current status of the request
+ * returned from @ref ucp_stream_recv_nb routine. Any value different from
+ * UCS_INPROGRESS means that the request is in a completed state.
+ *
+ * @param [in]  request     Non-blocking request to check.
+ * @param [out] length_p    The size of the received data in bytes. This value
+ *                          is only valid if the status is UCS_OK. If valid, it
+ *                          is always an integral multiple of the datatype size
+ *                          associated with the request.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_stream_recv_request_test(void *request, size_t *length_p);
 
 /**
  * @ingroup UCP_COMM
