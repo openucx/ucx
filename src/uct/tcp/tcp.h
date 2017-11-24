@@ -76,8 +76,6 @@ extern const char *uct_tcp_address_type_names[];
 
 ucs_status_t uct_tcp_socket_connect(int fd, const struct sockaddr_in *dest_addr);
 
-int uct_tcp_netif_check(const char *if_name);
-
 ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                                 double *bandwidth_p);
 

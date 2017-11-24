@@ -19,6 +19,8 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <sys/socket.h>
+#include <dirent.h>
 
 
 namespace ucs {
@@ -70,6 +72,24 @@ int test_time_multiplier();
  * Signal-safe sleep.
  */
 void safe_usleep(double usec);
+
+
+/**
+ * Return the IP address of the given interface address.
+ */
+std::string get_iface_ip(const struct sockaddr *ifa_addr);
+
+
+/**
+ * Check if the given interface has an IPv4 or an IPv6 address.
+ */
+bool is_inet_addr(const struct sockaddr* ifa_addr);
+
+
+/**
+ * Check if the given interface is associated with a device.
+ */
+bool is_ib_netdev(const char *ifa_name);
 
 
 /*

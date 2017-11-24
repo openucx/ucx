@@ -313,9 +313,8 @@ ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
-    UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(&iface->verbs_common, &iface->super,
-                                      &iface->super.tx.mp, desc, id, pack_cb,
-                                      arg, length, data_length);
+    UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
+                                      id, pack_cb, arg, length, data_length);
     UCT_RC_VERBS_FILL_AM_BCOPY_WR(wr, sge, length, wr.opcode);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, data_length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, IBV_SEND_SOLICITED);
@@ -348,7 +347,7 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
 
-    UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(verbs_common, &iface->super,
+    UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(&iface->super,
                                       &verbs_common->short_desc_mp, desc, id,
                                       header, header_length, comp, &send_flags,
                                       sge[0]);
@@ -557,121 +556,6 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     return UCS_OK;
 }
 
-static ucs_status_t uct_rc_verbs_ep_tag_qp_create(uct_rc_verbs_iface_t *iface,
-                                                  uct_rc_verbs_ep_t *ep)
-{
-#if IBV_EXP_HW_TM
-    struct ibv_qp_cap cap;
-    ucs_status_t status;
-    int ret;
-
-    if (iface->verbs_common.tm.enabled) {
-        /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
-         * such a QP to be initialized with zero send queue length. */
-        status = uct_rc_iface_qp_create(&iface->super, IBV_QPT_RC, &ep->tm_qp,
-                                        &cap, 0);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        status = uct_rc_iface_qp_init(&iface->super, ep->tm_qp);
-        if (status != UCS_OK) {
-            ret = ibv_destroy_qp(ep->tm_qp);
-            if (ret) {
-                ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
-            }
-            return status;
-        }
-        uct_rc_iface_add_qp(&iface->super, &ep->super, ep->tm_qp->qp_num);
-    }
-#endif
-    return UCS_OK;
-}
-
-static void uct_rc_verbs_ep_tag_qp_destroy(uct_rc_verbs_ep_t *ep)
-{
-#if IBV_EXP_HW_TM
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
-                                                 uct_rc_verbs_iface_t);
-    if (iface->verbs_common.tm.enabled) {
-        uct_rc_iface_remove_qp(&iface->super, ep->tm_qp->qp_num);
-        if (ibv_destroy_qp(ep->tm_qp)) {
-            ucs_warn("failed to destroy TM RNDV QP: %m");
-        }
-    }
-#endif
-}
-
-ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
-{
-    ucs_status_t status;
-    uct_rc_verbs_iface_t *iface UCS_V_UNUSED;
-
-    status = uct_rc_ep_get_address(tl_ep, addr);
-    if (status != UCS_OK) {
-        return status;
-    }
-#if IBV_EXP_HW_TM
-    iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
-    if (iface->verbs_common.tm.enabled) {
-        uct_rc_verbs_ep_tm_address_t *tm_addr = (uct_rc_verbs_ep_tm_address_t*)addr;
-        uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-
-        uct_ib_pack_uint24(tm_addr->tm_qp_num, ep->tm_qp->qp_num);
-    }
-#endif
-    return UCS_OK;
-}
-
-ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
-                                           const uct_device_addr_t *dev_addr,
-                                           const uct_ep_addr_t *ep_addr)
-{
-    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
-    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
-    const uct_rc_ep_address_t *rc_addr = (const uct_rc_ep_address_t*)ep_addr;
-    struct ibv_ah_attr ah_attr;
-    ucs_status_t status;
-    uint32_t qp_num;
-
-    uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr, ep->super.path_bits,
-                              &ah_attr);
-#if IBV_EXP_HW_TM
-    if (iface->verbs_common.tm.enabled) {
-        /* For HW TM we need 2 QPs, one of which will be used by the device for
-         * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
-         * should be posted to the send side of the QP which is owned by device. */
-        uct_rc_verbs_ep_tm_address_t *tm_addr = ucs_derived_of(rc_addr,
-                                                uct_rc_verbs_ep_tm_address_t);
-
-        status = uct_rc_iface_qp_connect(&iface->super, ep->tm_qp,
-                                         uct_ib_unpack_uint24(rc_addr->qp_num),
-                                         &ah_attr);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        /* Need to connect local ep QP to the one owned by device
-         * (and bound to XRQ) on the peer. */
-        qp_num = uct_ib_unpack_uint24(tm_addr->tm_qp_num);
-    } else
-#endif
-    {
-        qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
-    }
-
-    status = uct_rc_iface_qp_connect(&iface->super, ep->super.txqp.qp,
-                                     qp_num, &ah_attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
-
-    return UCS_OK;
-}
-
 #if IBV_EXP_HW_TM
 ucs_status_t uct_rc_verbs_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
                                              const void *data, size_t length)
@@ -685,7 +569,7 @@ ucs_status_t uct_rc_verbs_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
                      iface->verbs_common.config.max_inline, "tag_short");
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
-    uct_rc_verbs_iface_fill_tmh(&tmh, tag, 0, IBV_EXP_TMH_EAGER);
+    uct_rc_iface_fill_tmh(&tmh, tag, 0, IBV_EXP_TMH_EAGER);
     uct_rc_verbs_iface_fill_inl_sge(&iface->verbs_common, &tmh, sizeof(tmh), data, length);
 
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE);
@@ -770,24 +654,15 @@ ucs_status_ptr_t uct_rc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                    IBV_DEVICE_TM_CAPS(dev, max_rndv_hdr_size));
     UCT_RC_VERBS_CHECK_RES_PTR(&iface->super, &ep->super);
 
-    op_index = uct_rc_verbs_iface_tag_get_op_id(&iface->verbs_common, comp);
-    uct_rc_verbs_iface_fill_tmh(tmh, tag, op_index, IBV_EXP_TMH_RNDV);
-    uct_rc_verbs_iface_fill_rvh(tmh + sizeof(struct ibv_exp_tmh), iov->buffer,
-                                ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
+    op_index = uct_rc_iface_tag_get_op_id(&iface->super, comp);
+    uct_rc_iface_fill_tmh(tmh, tag, op_index, IBV_EXP_TMH_RNDV);
+    uct_rc_iface_fill_rvh(tmh + sizeof(struct ibv_exp_tmh), iov->buffer,
+                          ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
     uct_rc_verbs_iface_fill_inl_sge(&iface->verbs_common, tmh, tmh_len,
                                     header, header_length);
 
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE);
     return (ucs_status_ptr_t)((uint64_t)op_index);
-}
-
-ucs_status_t uct_rc_verbs_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op)
-{
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
-
-    uint32_t op_index = (uint32_t)((uint64_t)op);
-    ucs_ptr_array_remove(&iface->verbs_common.tm.rndv_comps, op_index, 0);
-    return UCS_OK;
 }
 
 /* For RNDV request send regular eager packet with IBV_SEND_WITH_IMM and
@@ -812,8 +687,8 @@ ucs_status_t uct_rc_verbs_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
     wr.opcode  = IBV_WR_SEND_WITH_IMM;
     wr.next    = NULL;
 
-    uct_rc_verbs_tag_imm_data_pack(&(wr.imm_data), &app_ctx, 0ul);
-    uct_rc_verbs_iface_fill_tmh(&tmh, tag, app_ctx, IBV_EXP_TMH_EAGER);
+    uct_rc_iface_tag_imm_data_pack(&(wr.imm_data), &app_ctx, 0ul);
+    uct_rc_iface_fill_tmh(&tmh, tag, app_ctx, IBV_EXP_TMH_EAGER);
     uct_rc_verbs_iface_fill_inl_sge(&iface->verbs_common, &tmh, sizeof(tmh),
                                     header, header_length);
     uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_INLINE);
@@ -831,7 +706,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)
     uct_rc_txqp_available_set(&self->super.txqp, iface->config.tx_max_wr);
     uct_rc_verbs_txcnt_init(&self->txcnt);
 
-    return uct_rc_verbs_ep_tag_qp_create(iface, self);
+    return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
@@ -848,7 +723,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     ucs_assert(self->txcnt.pi >= self->txcnt.ci);
     iface->super.tx.cq_available += self->txcnt.pi - self->txcnt.ci;
     ucs_assert(iface->super.tx.cq_available < iface->super.config.tx_ops_count);
-    uct_rc_verbs_ep_tag_qp_destroy(self);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_ep_t, uct_rc_ep_t);

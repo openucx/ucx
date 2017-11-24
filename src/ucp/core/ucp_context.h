@@ -20,6 +20,14 @@
 #include <ucs/type/spinlock.h>
 
 
+enum {
+    /* The flag indicates that the resource may be used for auxiliary
+     * wireup communications only */
+    UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
+
+};
+
+
 typedef struct ucp_context_config {
     /** Threshold for switching UCP to buffered copy(bcopy) protocol */
     size_t                                 bcopy_thresh;
@@ -33,6 +41,8 @@ typedef struct ucp_context_config {
     double                                 rndv_perf_diff;
     /** Threshold for switching UCP to zero copy protocol */
     size_t                                 zcopy_thresh;
+    /** Communication scheme in RNDV protocol */
+    ucp_rndv_mode_t                        rndv_mode;
     /** Estimation of bcopy bandwidth */
     size_t                                 bcopy_bw;
     /** Segment size in the worker pre-registered memory pool */
@@ -53,6 +63,8 @@ typedef struct ucp_context_config {
     int                                    use_mt_mutex;
     /** On-demand progress */
     int                                    adaptive_progress;
+    /** Rendezvous-get multi-lane support */
+    unsigned                               max_rndv_lanes;
 } ucp_context_config_t;
 
 
@@ -77,6 +89,7 @@ typedef struct ucp_tl_resource_desc {
     uct_tl_resource_desc_t        tl_rsc;   /* UCT resource descriptor */
     ucp_rsc_index_t               md_index; /* Memory domain index (within the context) */
     uint16_t                      tl_name_csum; /* Checksum of transport name */
+    uint8_t                       flags; /* Flags that describe resource specifics */
 } ucp_tl_resource_desc_t;
 
 
@@ -105,6 +118,10 @@ typedef struct ucp_tl_md {
 typedef struct ucp_context {
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
     ucp_rsc_index_t               num_mds;    /* Number of memory domains */
+
+    /* List of MDs which detect non host memory type */
+    ucp_rsc_index_t               mem_type_tl_mds[UCT_MD_MEM_TYPE_LAST];
+    ucp_rsc_index_t               num_mem_type_mds;  /* Number of mem type MDs */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/

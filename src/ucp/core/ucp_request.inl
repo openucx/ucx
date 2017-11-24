@@ -255,8 +255,9 @@ ucp_request_send_state_reset(ucp_request_t *req,
         ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
+    case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
         if (UCP_DT_IS_CONTIG(req->send.datatype)) {
-            req->send.state.dt.dt.contig.memh = UCT_MEM_HANDLE_NULL;
+            ucp_dt_clear_memh(&req->send.state.dt);
         }
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
@@ -309,6 +310,7 @@ ucp_request_send_state_advance(ucp_request_t *req,
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
+    case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
         if (status == UCS_INPROGRESS) {
             ++req->send.state.uct_comp.count;
         }
@@ -358,6 +360,11 @@ ucp_request_is_send_buffer_reg(ucp_request_t *req) {
     return req->send.reg_rsc != UCP_NULL_RESOURCE;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_request_is_recv_buffer_reg(ucp_request_t *req) {
+    return req->recv.reg_rsc != UCP_NULL_RESOURCE;
+}
+
 static UCS_F_ALWAYS_INLINE void ucp_request_send_tag_stat(ucp_request_t *req)
 {
     if (req->flags & UCP_REQUEST_FLAG_RNDV) {
@@ -368,3 +375,10 @@ static UCS_F_ALWAYS_INLINE void ucp_request_send_tag_stat(ucp_request_t *req)
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
     }
 }
+
+static UCS_F_ALWAYS_INLINE
+uct_rkey_bundle_t *ucp_tag_rndv_rkey(ucp_request_t *req)
+{
+    return &req->send.rndv_get.rkey_bundle;
+}
+

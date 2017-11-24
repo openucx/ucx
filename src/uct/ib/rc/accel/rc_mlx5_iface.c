@@ -15,7 +15,7 @@
 #include "rc_mlx5.h"
 
 ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
-  {"RC_", "", NULL,
+  {"RC_", UCT_RC_IFACE_TM_OFF_STR, NULL,
    ucs_offsetof(uct_rc_mlx5_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
@@ -157,14 +157,13 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    uct_rc_mlx5_iface_config_t *config = ucs_derived_of(tl_config, uct_rc_mlx5_iface_config_t);
+    uct_rc_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
+                                                        uct_rc_mlx5_iface_config_t);
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_mlx5_iface_ops, md, worker,
                               params, &config->super, 0,
-                              config->super.super.rx.queue_len,
-                              sizeof(uct_rc_hdr_t),
-                              sizeof(uct_rc_fc_request_t), 1);
+                              sizeof(uct_rc_fc_request_t), 0);
 
 
     self->tx.bb_max                  = ucs_min(config->tx_max_bb, UINT16_MAX);

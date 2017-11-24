@@ -20,8 +20,19 @@ class test_ucp_tag_xfer : public test_ucp_tag {
 public:
     enum {
         VARIANT_DEFAULT,
-        VARIANT_ERR_HANDLING
+        VARIANT_ERR_HANDLING,
+        VARIANT_RNDV_PUT_ZCOPY,
+        VARIANT_RNDV_AUTO
     };
+
+    virtual void init() {
+        if (GetParam().variant == VARIANT_RNDV_PUT_ZCOPY) {
+            modify_config("RNDV_SCHEME", "put_zcopy");
+        } else if (GetParam().variant == VARIANT_RNDV_AUTO) {
+            modify_config("RNDV_SCHEME", "auto");
+        }
+        test_ucp_tag::init();
+    }
 
     std::vector<ucp_test_param>
     static enum_test_params(const ucp_params_t& ctx_params,
@@ -35,6 +46,12 @@ public:
         generate_test_params_variant(ctx_params, name,
                                      test_case_name + "/err_handling_mode_peer",
                                      tls, VARIANT_ERR_HANDLING, result);
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name + "/rndv_put_zcopy", tls,
+                                     VARIANT_RNDV_PUT_ZCOPY, result);
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name + "/rndv_auto", tls,
+                                     VARIANT_RNDV_AUTO, result);
         return result;
     }
 

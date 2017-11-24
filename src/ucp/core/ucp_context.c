@@ -38,6 +38,13 @@ static const char * ucp_device_type_names[] = {
     [UCT_DEVICE_TYPE_SELF] = "loopback",
 };
 
+static const char * ucp_rndv_modes[] = {
+    [UCP_RNDV_MODE_GET_ZCOPY] = "get_zcopy",
+    [UCP_RNDV_MODE_PUT_ZCOPY] = "put_zcopy",
+    [UCP_RNDV_MODE_AUTO]      = "auto",
+    [UCP_RNDV_MODE_LAST]      = NULL,
+};
+
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which network device(s) to use. The order is not meaningful.\n"
@@ -100,6 +107,17 @@ static ucs_config_field_t ucp_config_table[] = {
    "the eager_zcopy protocol",
    ucs_offsetof(ucp_config_t, ctx.rndv_perf_diff), UCS_CONFIG_TYPE_DOUBLE},
 
+  {"MAX_RNDV_LANES", "1",
+   "Maximal number of devices on which a rendezvous operation may be executed in parallel",
+   ucs_offsetof(ucp_config_t, ctx.max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
+
+  {"RNDV_SCHEME", "get_zcopy",
+   "Communication scheme in RNDV protocol.\n"
+   " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
+   " put_zcopy - use put_zcopy scheme in RNDV protocol.\n"
+   " auto      - runtime automatically chooses optimal scheme to use.\n",
+   ucs_offsetof(ucp_config_t, ctx.rndv_mode), UCS_CONFIG_TYPE_ENUM(ucp_rndv_modes)},
+
   {"ZCOPY_THRESH", "auto",
    "Threshold for switching from buffer copy to zero copy protocol",
    ucs_offsetof(ucp_config_t, ctx.zcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
@@ -159,11 +177,11 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
   { "shm",   { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
   { "ib",    { "rc", "ud", "rc_mlx5", "ud_mlx5", NULL } },
-  { "rc",    { "rc", "ud", NULL } },
-  { "rc_x",  { "rc_mlx5", "ud_mlx5", NULL } },
+  { "rc",    { "rc", "ud:aux", NULL } },
+  { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", NULL } },
   { "ud_x",  { "ud_mlx5", NULL } },
   { "dc_x",  { "dc_mlx5", NULL } },
-  { "ugni",  { "ugni_smsg", "ugni_udt", "ugni_rdma", NULL } },
+  { "ugni",  { "ugni_smsg", "ugni_udt:aux", "ugni_rdma", NULL } },
   { NULL }
 };
 
@@ -214,16 +232,28 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
                                  print_flags);
 }
 
-static int ucp_str_array_search(const char **array, unsigned length,
-                                const char *str)
+/* Search str in the array. If str_suffix is specified, search for
+ * 'str:str_suffix' string. */
+static int ucp_str_array_search(const char **array, unsigned array_len,
+                                const char *str, const char *str_suffix)
 {
+    int len = strlen(str);
     unsigned i;
+    const char *p;
 
-    for (i = 0; i < length; ++i) {
-        if (!strcmp(array[i], str)) {
-            return i;
+    for (i = 0; i < array_len; ++i) {
+        if (str_suffix == NULL) {
+            if (!strcmp(array[i], str)) {
+                return i;
+            }
+        } else if (!strncmp(array[i], str, len)) {
+            p = array[i] + len;
+            if ((*p == ':') && !strcmp(p + 1, str_suffix)) {
+                return i;
+            }
         }
     }
+
     return -1;
 }
 
@@ -238,12 +268,13 @@ static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_n
                                     int is_alias)
 {
     const char **names = (const char**)config->tls.names;
+    unsigned count     = config->tls.count;
     char buf[UCT_TL_NAME_MAX + 1];
 
     snprintf(buf, sizeof(buf), "\\%s", tl_name);
-    return (!is_alias && ucp_str_array_search(names, config->tls.count, buf) >= 0) ||
-           ((ucp_str_array_search(names, config->tls.count, tl_name) >= 0)) ||
-            (ucp_str_array_search(names, config->tls.count, UCP_RSC_CONFIG_ALL) >= 0);
+    return (!is_alias && ucp_str_array_search(names, count, buf, NULL) >= 0) ||
+           ((ucp_str_array_search(names, count, tl_name, NULL) >= 0)) ||
+            (ucp_str_array_search(names, count, UCP_RSC_CONFIG_ALL, NULL) >= 0);
 }
 
 static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
@@ -267,7 +298,7 @@ static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
         ucs_assert_always(devices[index].count <= 64); /* Using uint64_t bitmap */
         config_idx = ucp_str_array_search((const char**)devices[index].names,
                                           devices[index].count,
-                                          resource->dev_name);
+                                          resource->dev_name, NULL);
         if (config_idx >= 0) {
             device_enabled  = 1;
             masks[index] |= UCS_BIT(config_idx);
@@ -279,15 +310,17 @@ static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
 
 static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
                                    const ucp_config_t *config,
-                                   uint64_t *masks)
+                                   uint64_t *masks, uint8_t *flags)
 {
     int device_enabled, tl_enabled;
     ucp_tl_alias_t *alias;
+    unsigned count;
 
     /* Find the enabled devices */
     device_enabled = ucp_is_resource_in_device_list(resource, config->devices,
                                                     masks, resource->dev_type);
 
+    *flags = 0;
     /* Find the enabled UCTs */
     ucs_assert(config->tls.count > 0);
     if (ucp_config_is_tl_enabled(config, resource->tl_name, 0)) {
@@ -297,18 +330,28 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
 
         /* check aliases */
         for (alias = ucp_tl_aliases; alias->alias != NULL; ++alias) {
+            count = ucp_tl_alias_count(alias);
 
             /* If an alias is enabled, and the transport is part of this alias,
              * enable the transport.
              */
-            if (ucp_config_is_tl_enabled(config, alias->alias, 1) &&
-                (ucp_str_array_search(alias->tls, ucp_tl_alias_count(alias),
-                                      resource->tl_name) >= 0))
-            {
-                tl_enabled = 1;
-                ucs_trace("enabling tl '%s' for alias '%s'", resource->tl_name,
-                          alias->alias);
-                break;
+            if (ucp_config_is_tl_enabled(config, alias->alias, 1)) {
+                if (ucp_str_array_search(alias->tls, count,
+                                         resource->tl_name, NULL) >= 0) {
+                    tl_enabled = 1;
+                    ucs_trace("enabling tl '%s' for alias '%s'",
+                              resource->tl_name, alias->alias);
+                    break;
+                } else if (ucp_str_array_search(alias->tls, count,
+                                                resource->tl_name, "aux") >= 0) {
+                    /* Search for tl names with 'aux' suffix, such tls can be
+                     * used for auxiliary wireup purposes only */
+                    tl_enabled = 1;
+                    *flags     = UCP_TL_RSC_FLAG_AUX;
+                    ucs_trace("enabling auxiliary tl '%s' for alias '%s'",
+                              resource->tl_name, alias->alias);
+                    break;
+                }
             }
         }
     }
@@ -330,6 +373,7 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context, ucp_tl_md_t *md,
     unsigned num_tl_resources;
     ucs_status_t status;
     ucp_rsc_index_t i;
+    uint8_t flags;
 
     *num_resources_p = 0;
 
@@ -362,11 +406,12 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context, ucp_tl_md_t *md,
     /* copy only the resources enabled by user configuration */
     context->tl_rscs = tmp;
     for (i = 0; i < num_tl_resources; ++i) {
-        if (ucp_is_resource_enabled(&tl_resources[i], config, masks)) {
-            context->tl_rscs[context->num_tls].tl_rsc   = tl_resources[i];
-            context->tl_rscs[context->num_tls].md_index = md_index;
+        if (ucp_is_resource_enabled(&tl_resources[i], config, masks, &flags)) {
+            context->tl_rscs[context->num_tls].tl_rsc       = tl_resources[i];
+            context->tl_rscs[context->num_tls].md_index     = md_index;
             context->tl_rscs[context->num_tls].tl_name_csum =
-                            ucs_crc16_string(tl_resources[i].tl_name);
+                                      ucs_crc16_string(tl_resources[i].tl_name);
+            context->tl_rscs[context->num_tls].flags        = flags;
             ++context->num_tls;
             ++(*num_resources_p);
         }
@@ -505,7 +550,7 @@ static void ucp_resource_config_array_str(const ucs_config_names_array_t *array,
     unsigned i;
 
     if (ucp_str_array_search((const char**)array->names, array->count,
-                             UCP_RSC_CONFIG_ALL) >= 0) {
+                             UCP_RSC_CONFIG_ALL, NULL) >= 0) {
         strncpy(buf, "", max);
         return;
     }
@@ -587,11 +632,14 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     ucp_rsc_index_t i;
     unsigned md_index;
     uint64_t masks[UCT_DEVICE_TYPE_LAST] = {0};
+    uint64_t mem_type_mask;
+    uct_memory_type_t mem_type;
 
     context->tl_mds      = NULL;
     context->num_mds     = 0;
     context->tl_rscs     = NULL;
     context->num_tls     = 0;
+    context->num_mem_type_mds = 0;
 
     status = ucp_check_resource_config(config);
     if (status != UCS_OK) {
@@ -621,6 +669,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
 
     /* Open all memory domains */
     md_index = 0;
+    mem_type_mask = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
     for (i = 0; i < num_md_resources; ++i) {
         status = ucp_fill_tl_md(&md_rscs[i], &context->tl_mds[md_index]);
         if (status != UCS_OK) {
@@ -639,6 +688,13 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
          * client-server connection establishment via sockaddr, don't use it */
         if ((num_tl_resources > 0) ||
             (context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) {
+            /*List of memory type MDs*/
+            mem_type = context->tl_mds[md_index].attr.cap.mem_type;
+            if (!(mem_type_mask & UCS_BIT(mem_type))) {
+                context->mem_type_tl_mds[context->num_mem_type_mds] = md_index;
+                ++context->num_mem_type_mds;
+                mem_type_mask |= UCS_BIT(mem_type);
+            }
             ++md_index;
             ++context->num_mds;
         } else {
@@ -731,6 +787,13 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                      config->ctx.use_mt_mutex ? UCP_MT_TYPE_MUTEX
                                               : UCP_MT_TYPE_SPINLOCK);
     context->config.ext = config->ctx;
+
+    if (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) {
+        /* TODO: currently UCP_RNDV_MODE_AUTO == UCP_RNDV_MODE_GET_ZCOPY,
+         * after memory type support is added, will add tru UCP_RNDV_MODE_AUTO
+         * implementation */
+        context->config.ext.rndv_mode = UCP_RNDV_MODE_GET_ZCOPY;
+    }
 
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_

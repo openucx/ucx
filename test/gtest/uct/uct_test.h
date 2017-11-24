@@ -26,11 +26,12 @@
 struct resource {
     virtual ~resource() {};
     virtual std::string name() const;
-    std::string       md_name;
-    cpu_set_t         local_cpus;
-    std::string       tl_name;
-    std::string       dev_name;
-    uct_device_type_t dev_type;
+    std::string             md_name;
+    cpu_set_t               local_cpus;
+    std::string             tl_name;
+    std::string             dev_name;
+    uct_device_type_t       dev_type;
+    struct sockaddr_storage if_addr;
 };
 
 
@@ -203,6 +204,8 @@ protected:
     void flush(ucs_time_t deadline = ULONG_MAX) const;
     virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS) const;
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;
+    static void set_sockaddr_resources(uct_md_h pd, char *md_name, cpu_set_t local_cpus,
+                                       std::vector<resource>& all_resources);
 
     uct_test::entity* create_entity(size_t rx_headroom);
     uct_test::entity* create_entity(uct_iface_params_t &params);
@@ -224,6 +227,9 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
     ud,                 \
     ud_mlx5,            \
     cm
+
+#define UCT_TEST_SOCKADDR_TLS \
+    sockaddr
 
 #define UCT_TEST_NO_SELF_TLS \
     UCT_TEST_IB_TLS,         \
@@ -268,6 +274,9 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
  */
 #define UCT_INSTANTIATE_NO_SELF_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_NO_SELF_TLS)
+
+#define UCT_INSTANTIATE_SOCKADDR_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_SOCKADDR_TLS)
 
 std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resource);
 

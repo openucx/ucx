@@ -14,6 +14,7 @@
 #include <uct/ib/base/ib_iface.h>
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/ptr_array.h>
 #include <ucs/debug/log.h>
 
 
@@ -83,6 +84,16 @@
 
 
 enum {
+    UCT_RC_IFACE_ADDR_TYPE_BASIC,
+
+    /* Tag Matching address. It additionaly contains QP number which
+     * is used for hardware offloads. */
+    UCT_RC_IFACE_ADDR_TYPE_TM,
+    UCT_RC_IFACE_ADDR_TYPE_LAST
+};
+
+
+enum {
     UCT_RC_IFACE_STAT_RX_COMPLETION,
     UCT_RC_IFACE_STAT_TX_COMPLETION,
     UCT_RC_IFACE_STAT_NO_CQE,
@@ -143,6 +154,14 @@ struct uct_rc_iface_config {
         double               hard_thresh;
         unsigned             wnd_size;
     } fc;
+
+#if IBV_EXP_HW_TM
+    struct {
+        int                  enable;
+        unsigned             list_size;
+    } tm;
+#endif
+
 };
 
 
@@ -164,8 +183,27 @@ typedef struct uct_rc_srq {
 } uct_rc_srq_t;
 
 
+#if IBV_EXP_HW_TM
+
+typedef struct uct_rc_iface_release_desc {
+    uct_recv_desc_t             super;
+    unsigned                    offset;
+} uct_rc_iface_release_desc_t;
+
+
+typedef struct uct_rc_iface_ctx_priv {
+    uint64_t                    tag;
+    uint64_t                    imm_data;
+    void                        *buffer;
+    uint32_t                    length;
+    uint32_t                    tag_handle;
+} uct_rc_iface_ctx_priv_t;
+
+#endif
+
+
 struct uct_rc_iface {
-    uct_ib_iface_t             super;
+    uct_ib_iface_t              super;
 
     struct {
         ucs_mpool_t             mp;      /* pool for send descriptors */
@@ -185,6 +223,28 @@ struct uct_rc_iface {
         ucs_mpool_t          mp;
         uct_rc_srq_t         srq;
     } rx;
+
+#if IBV_EXP_HW_TM
+    struct {
+        ucs_ptr_array_t              rndv_comps;
+        unsigned                     num_tags;
+        unsigned                     num_outstanding;
+        uint16_t                     unexpected_cnt;
+        uint8_t                      enabled;
+        struct {
+            void                     *arg; /* User defined arg */
+            uct_tag_unexp_eager_cb_t cb;   /* Callback for unexpected eager messages */
+        } eager_unexp;
+
+        struct {
+            void                     *arg; /* User defined arg */
+            uct_tag_unexp_rndv_cb_t  cb;   /* Callback for unexpected rndv messages */
+        } rndv_unexp;
+        uct_rc_iface_release_desc_t  eager_desc;
+        uct_rc_iface_release_desc_t  rndv_desc;
+
+    } tm;
+#endif
 
     struct {
         unsigned             tx_qp_len;
@@ -227,8 +287,7 @@ struct uct_rc_iface {
 };
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h,
                   uct_worker_h, const uct_iface_params_t*,
-                  const uct_rc_iface_config_t*, unsigned, unsigned,
-                  unsigned, unsigned, int)
+                  const uct_rc_iface_config_t*, unsigned, unsigned, int)
 
 
 struct uct_rc_iface_send_op {
@@ -265,11 +324,91 @@ typedef struct uct_rc_am_short_hdr {
 } UCS_S_PACKED uct_rc_am_short_hdr_t;
 
 
+#if IBV_EXP_HW_TM
+
+#  define UCT_RC_IFACE_TM_ENABLED(_iface) (_iface)->tm.enabled
+
+#  define UCT_RC_IFACE_TM_OFF_STR         "TM_ENABLE=n"
+
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,
+                      uint32_t app_ctx, unsigned op)
+{
+    tmh->opcode  = op;
+    tmh->app_ctx = htonl(app_ctx);
+    tmh->tag     = htobe64(tag);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_fill_rvh(struct ibv_exp_tmh_rvh *rvh, const void *vaddr,
+                      uint32_t rkey, uint32_t len)
+{
+    rvh->va   = htobe64((uint64_t)vaddr);
+    rvh->rkey = htonl(rkey);
+    rvh->len  = htonl(len);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_tag_imm_data_pack(uint32_t *ib_imm, uint32_t *app_ctx,
+                               uint64_t imm_val)
+{
+    *ib_imm  = (uint32_t)(imm_val & 0xFFFFFFFF);
+    *app_ctx = (uint32_t)(imm_val >> 32);
+}
+
+static UCS_F_ALWAYS_INLINE uint64_t
+uct_rc_iface_tag_imm_data_unpack(struct ibv_exp_wc *wc, uint32_t app_ctx)
+{
+    if (wc->exp_wc_flags & IBV_EXP_WC_WITH_IMM) {
+        return ((uint64_t)app_ctx << 32) | wc->imm_data;
+    } else {
+        return 0ul;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE uct_rc_iface_ctx_priv_t*
+uct_rc_iface_ctx_priv(uct_tag_context_t *ctx)
+{
+    return (uct_rc_iface_ctx_priv_t*)ctx->priv;
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_iface_tag_get_op_id(uct_rc_iface_t *iface, uct_completion_t *comp)
+{
+    uint32_t prev_ph;
+    return ucs_ptr_array_insert(&iface->tm.rndv_comps, comp, &prev_ph);
+}
+
+#else
+
+#  define UCT_RC_IFACE_TM_ENABLED(_iface) 0
+
+#  define UCT_RC_IFACE_TM_OFF_STR         ""
+
+#endif
+
+
 extern ucs_config_field_t uct_rc_iface_config_table[];
 extern ucs_config_field_t uct_rc_fc_config_table[];
 
 ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 uct_iface_attr_t *iface_attr);
+
+ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface,
+                                      uct_iface_addr_t *addr);
+
+int uct_rc_iface_is_reachable(const uct_iface_h tl_iface,
+                              const uct_device_addr_t *dev_addr,
+                              const uct_iface_addr_t *iface_addr);
+
+ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
+                                   uct_rc_iface_config_t *config,
+                                   struct ibv_exp_create_srq_attr *srq_init_attr,
+                                   unsigned rndv_hdr_len,
+                                   unsigned max_cancel_sync_ops);
+
+void uct_rc_iface_tag_cleanup(uct_rc_iface_t *iface);
 
 void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
                          unsigned qp_num);

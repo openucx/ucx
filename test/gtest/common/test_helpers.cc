@@ -9,6 +9,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/time/time.h>
+#include <ucs/sys/string.h>
 
 namespace ucs {
 
@@ -80,6 +81,32 @@ void safe_usleep(double usec) {
     }
 }
 
+std::string get_iface_ip(const struct sockaddr *ifa_addr) {
+    size_t ip_len = ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN);
+    char ip_str[ip_len];
+
+    return ucs_sockaddr_str(ifa_addr, ip_str, ip_len);
+}
+
+bool is_inet_addr(const struct sockaddr* ifa_addr) {
+    return ((ifa_addr->sa_family == AF_INET) ||
+            (ifa_addr->sa_family == AF_INET6));
+}
+
+bool is_ib_netdev(const char *ifa_name) {
+    char path[PATH_MAX];
+    DIR *dir;
+
+    snprintf(path, PATH_MAX, "/sys/class/net/%s/device/infiniband", ifa_name);
+
+    dir = opendir(path);
+    if (dir == NULL) {
+        return false;
+    } else {
+        closedir(dir);
+        return true;
+    }
+}
 
 namespace detail {
 

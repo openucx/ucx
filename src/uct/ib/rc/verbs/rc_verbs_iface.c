@@ -171,25 +171,15 @@ static ucs_status_t uct_rc_verbs_iface_tag_recv_cancel(uct_iface_h tl_iface,
 }
 #endif /* IBV_EXP_HW_TM */
 
-static size_t uct_rc_verbs_get_ep_addr_len(uct_rc_verbs_iface_t *iface)
-{
-#if IBV_EXP_HW_TM
-    if (iface->verbs_common.tm.enabled) {
-        return sizeof(uct_rc_verbs_ep_tm_address_t);
-    }
-#endif
-    return sizeof(uct_rc_ep_address_t);
-}
-
 static ucs_status_t
 uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
                             uct_rc_verbs_iface_config_t *config)
 {
 #if IBV_EXP_HW_TM
-    if (UCT_RC_VERBS_TM_ENABLED(&iface->verbs_common)) {
+    if (UCT_RC_IFACE_TM_ENABLED(&iface->super)) {
         struct ibv_exp_create_srq_attr srq_init_attr = {};
 
-        iface->verbs_common.progress   = uct_rc_verbs_iface_progress_tm;
+        iface->verbs_common.progress = uct_rc_verbs_iface_progress_tm;
 
         return uct_rc_verbs_iface_common_tag_init(&iface->verbs_common,
                                                   &iface->super,
@@ -218,34 +208,6 @@ static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
     iface->inl_rwrite_wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
 }
 
-static ucs_status_t uct_rc_verbs_iface_get_address(uct_iface_h tl_iface,
-                                                   uct_iface_addr_t *addr)
-{
-    uct_rc_verbs_iface_t UCS_V_UNUSED *iface =
-                    ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
-
-    *(uint8_t*)addr = UCT_RC_VERBS_TM_ENABLED(&iface->verbs_common) ?
-                      UCT_RC_VERBS_IFACE_ADDR_TYPE_TM :
-                      UCT_RC_VERBS_IFACE_ADDR_TYPE_BASIC;
-    return UCS_OK;
-}
-static int uct_rc_verbs_iface_is_reachable(const uct_iface_h tl_iface,
-                                           const uct_device_addr_t *dev_addr,
-                                           const uct_iface_addr_t *iface_addr)
-{
-    uct_rc_verbs_iface_t UCS_V_UNUSED *iface =
-                    ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
-    uint8_t my_type = UCT_RC_VERBS_TM_ENABLED(&iface->verbs_common) ?
-                      UCT_RC_VERBS_IFACE_ADDR_TYPE_TM :
-                      UCT_RC_VERBS_IFACE_ADDR_TYPE_BASIC;
-
-    if ((iface_addr != NULL) && (my_type != *(uint8_t*)iface_addr)) {
-        return 0;
-    }
-
-    return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
-}
-
 static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
@@ -260,8 +222,6 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     iface_attr->latency.growth += 1e-9; /* 1 ns per each extra QP */
     iface_attr->iface_addr_len  = sizeof(uint8_t); /* overwrite */
 
-    /* Redefine ep addr len (needed for TM offload) */
-    iface_attr->ep_addr_len     = uct_rc_verbs_get_ep_addr_len(iface);
     return UCS_OK;
 }
 
@@ -281,18 +241,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     ucs_status_t status;
     struct ibv_qp_cap cap;
     struct ibv_qp *qp;
-    unsigned rc_hdr_len;
-    unsigned rx_cq_len;
-
-    uct_rc_verbs_iface_common_preinit(&self->verbs_common, md,
-                                      &config->verbs_common, &config->super,
-                                      params, IBV_EXP_TM_CAP_RC, &rc_hdr_len,
-                                      &rx_cq_len);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
-                              worker, params, &config->super, 0, rx_cq_len,
-                              rc_hdr_len, sizeof(uct_rc_fc_request_t),
-                              !UCT_RC_VERBS_TM_ENABLED(&self->verbs_common));
+                              worker, params, &config->super, 0,
+                              sizeof(uct_rc_fc_request_t), IBV_EXP_TM_CAP_RC);
 
     self->config.tx_max_wr           = ucs_min(config->verbs_common.tx_max_wr,
                                                self->super.config.tx_qp_len);
@@ -307,8 +259,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     status = uct_rc_verbs_iface_common_init(&self->verbs_common,
                                             &self->super,
                                             &config->verbs_common,
-                                            &config->super,
-                                            rc_hdr_len);
+                                            &config->super);
     if (status != UCS_OK) {
         goto err_tag_cleanup;
     }
@@ -338,7 +289,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
 err_common_cleanup:
     uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
 err_tag_cleanup:
-    uct_rc_verbs_iface_common_tag_cleanup(&self->verbs_common);
+    uct_rc_iface_tag_cleanup(&self->super);
 err:
     return status;
 }
@@ -347,8 +298,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
     uct_base_iface_progress_disable(&self->super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-    uct_rc_verbs_iface_common_tag_cleanup(&self->verbs_common);
     uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
+    uct_rc_iface_tag_cleanup(&self->super);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_iface_t, uct_rc_iface_t);
@@ -382,8 +333,8 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_verbs_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t),
-    .ep_get_address           = uct_rc_verbs_ep_get_address,
-    .ep_connect_to_ep         = uct_rc_verbs_ep_connect_to_ep,
+    .ep_get_address           = uct_rc_ep_get_address,
+    .ep_connect_to_ep         = uct_rc_ep_connect_to_ep,
     .iface_flush              = uct_rc_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_rc_verbs_iface_progress_enable,
@@ -396,16 +347,16 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_tag_eager_bcopy       = uct_rc_verbs_ep_tag_eager_bcopy,
     .ep_tag_eager_zcopy       = uct_rc_verbs_ep_tag_eager_zcopy,
     .ep_tag_rndv_zcopy        = uct_rc_verbs_ep_tag_rndv_zcopy,
-    .ep_tag_rndv_cancel       = uct_rc_verbs_ep_tag_rndv_cancel,
+    .ep_tag_rndv_cancel       = uct_rc_ep_tag_rndv_cancel,
     .ep_tag_rndv_request      = uct_rc_verbs_ep_tag_rndv_request,
 #endif
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
     .iface_event_arm          = uct_rc_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_iface_t),
     .iface_query              = uct_rc_verbs_iface_query,
-    .iface_get_address        = uct_rc_verbs_iface_get_address,
+    .iface_get_address        = uct_rc_iface_get_address,
     .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_rc_verbs_iface_is_reachable,
+    .iface_is_reachable       = uct_rc_iface_is_reachable,
     },
     .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
     .arm_rx_cq                = uct_ib_iface_arm_rx_cq,

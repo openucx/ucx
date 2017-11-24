@@ -11,6 +11,7 @@
 #include <common/test_helpers.h>
 #include <algorithm>
 #include <malloc.h>
+#include <ifaddrs.h>
 
 
 #define FOR_EACH_ENTITY(_iter) \
@@ -26,6 +27,7 @@ std::string resource::name() const {
 
 uct_test::uct_test() {
     ucs_status_t status;
+    uct_md_attr_t pd_attr;
     uct_md_h pd;
 
     status = uct_md_config_read(GetParam()->md_name.c_str(), NULL, NULL,
@@ -35,8 +37,16 @@ uct_test::uct_test() {
     status = uct_md_open(GetParam()->md_name.c_str(), m_md_config, &pd);
     ASSERT_UCS_OK(status);
 
-    status = uct_md_iface_config_read(pd, GetParam()->tl_name.c_str(), NULL,
-                                      NULL, &m_iface_config);
+    status = uct_md_query(pd, &pd_attr);
+    ASSERT_UCS_OK(status);
+
+    if (pd_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
+        status = uct_md_iface_config_read(pd, NULL, NULL, NULL, &m_iface_config);
+    } else {
+        status = uct_md_iface_config_read(pd, GetParam()->tl_name.c_str(), NULL,
+                                          NULL, &m_iface_config);
+    }
+
     ASSERT_UCS_OK(status);
     uct_md_close(pd);
 }
@@ -44,6 +54,41 @@ uct_test::uct_test() {
 uct_test::~uct_test() {
     uct_config_release(m_iface_config);
     uct_config_release(m_md_config);
+}
+
+void uct_test::set_sockaddr_resources(uct_md_h md, char *md_name, cpu_set_t local_cpus,
+                                      std::vector<resource>& all_resources) {
+
+    struct ifaddrs *ifaddr, *ifa;
+    ucs_sock_addr_t sock_addr;
+
+    EXPECT_TRUE(getifaddrs(&ifaddr) != -1);
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        sock_addr.addr = ifa->ifa_addr;
+
+        if (uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_LOCAL) &&
+            uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_REMOTE) &&
+            ucs_netif_is_active(ifa->ifa_name)) {
+            resource rsc;
+            rsc.md_name    = md_name,
+            rsc.local_cpus = local_cpus,
+            rsc.tl_name    = "sockaddr",
+            rsc.dev_name   = ifa->ifa_name;
+            rsc.dev_type   = UCT_DEVICE_TYPE_NET;
+
+            if (ifa->ifa_addr->sa_family == AF_INET) {
+                memcpy(&rsc.if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in));
+            } else if (ifa->ifa_addr->sa_family == AF_INET6) {
+                memcpy(&rsc.if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in6));
+            } else {
+                UCS_TEST_ABORT("Unknown sa_family " << ifa->ifa_addr->sa_family);
+            }
+            all_resources.push_back(rsc);
+        }
+    }
+
+    freeifaddrs(ifaddr);
 }
 
 std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name,
@@ -80,12 +125,17 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 
             for (unsigned j = 0; j < num_tl_resources; ++j) {
                 resource rsc;
-                rsc.md_name    = md_resources[i].md_name,
-                rsc.local_cpus = md_attr.local_cpus,
-                rsc.tl_name    = tl_resources[j].tl_name,
+                rsc.md_name    = md_resources[i].md_name;
+                rsc.local_cpus = md_attr.local_cpus;
+                rsc.tl_name    = tl_resources[j].tl_name;
                 rsc.dev_name   = tl_resources[j].dev_name;
                 rsc.dev_type   = tl_resources[j].dev_type;
                 all_resources.push_back(rsc);
+            }
+
+            if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
+                uct_test::set_sockaddr_resources(pd, md_resources[i].md_name,
+                                                 md_attr.local_cpus, all_resources);
             }
 
             uct_release_tl_resource_list(tl_resources);
@@ -252,8 +302,11 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 
     ucs_status_t status;
 
-    params->mode.device.tl_name    = const_cast<char*>(resource.tl_name.c_str());
-    params->mode.device.dev_name   = const_cast<char*>(resource.dev_name.c_str());
+    if (params->open_mode == UCT_IFACE_OPEN_MODE_DEVICE) {
+        params->mode.device.tl_name  = resource.tl_name.c_str();
+        params->mode.device.dev_name = resource.dev_name.c_str();
+    }
+
     params->stats_root = ucs_stats_get_root();
     UCS_CPU_ZERO(&params->cpu_mask);
 

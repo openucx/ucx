@@ -34,25 +34,6 @@ ucs_status_t uct_tcp_socket_connect(int fd, const struct sockaddr_in *dest_addr)
     return UCS_OK;
 }
 
-int uct_tcp_netif_check(const char *if_name)
-{
-    ucs_status_t status;
-    struct ifreq ifr;
-
-    status = ucs_netif_ioctl(if_name, SIOCGIFADDR, &ifr);
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    status = ucs_netif_ioctl(if_name, SIOCGIFFLAGS, &ifr);
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    return (ifr.ifr_flags & IFF_UP) && (ifr.ifr_flags & IFF_RUNNING) &&
-           !(ifr.ifr_flags & IFF_LOOPBACK);
-}
-
 ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                                 double *bandwidth_p)
 {

@@ -123,9 +123,10 @@ ucp_tag_recv_request_init(ucp_request_t *req, ucp_worker_h worker, void* buffer,
                           size_t count, ucp_datatype_t datatype,
                           uint16_t req_flags)
 {
-    req->flags       = UCP_REQUEST_FLAG_EXPECTED | UCP_REQUEST_FLAG_RECV |
-                       req_flags;
-    req->recv.worker = worker;
+    req->flags          = UCP_REQUEST_FLAG_EXPECTED | UCP_REQUEST_FLAG_RECV |
+                          req_flags;
+    req->recv.worker    = worker;
+    req->recv.reg_rsc   = UCP_NULL_RESOURCE;
 
     ucp_request_recv_state_init(req, buffer, datatype, count);
 

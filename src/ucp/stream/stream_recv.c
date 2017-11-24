@@ -186,10 +186,10 @@ ucp_stream_recv_request_put(ucp_request_t *req, size_t *length,
 }
 
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
-                 (ep, buffer, count, datatype, cb, flags),
-                 ucp_ep_h ep, void *buffer, size_t *count,
+                 (ep, buffer, count, datatype, cb, length, flags),
+                 ucp_ep_h ep, void *buffer, size_t count,
                  ucp_datatype_t datatype, ucp_stream_recv_callback_t cb,
-                 unsigned flags)
+                 size_t *length, unsigned flags)
 {
     ucp_ep_ext_stream_t *ep_stream;
     ucp_request_t       *req;
@@ -203,7 +203,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
-    req = ucp_stream_recv_request_get(ep->worker, buffer, *count, datatype, cb);
+    req = ucp_stream_recv_request_get(ep->worker, buffer, count, datatype, cb);
     if (ucs_unlikely(req == NULL)) {
         req = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
         goto out;
@@ -227,20 +227,20 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
                 ucs_queue_push(&ep_stream->reqs, &req->recv.queue);
                 goto ptr_out;
             } else {
-                req = ucp_stream_recv_request_put(req, count, UCS_OK);
+                req = ucp_stream_recv_request_put(req, length, UCS_OK);
                 goto out;
             }
         }
 
         status = ucp_stream_process_rdesc(rdesc, ep_stream, req);
         if (ucs_unlikely(status != UCS_OK)) {
-            req = ucp_stream_recv_request_put(req, count, status);
+            req = ucp_stream_recv_request_put(req, length, status);
             goto out;
         }
     }
 
     ucs_assert(req->recv.state.offset == req->recv.length);
-    req = ucp_stream_recv_request_put(req, count, UCS_OK);
+    req = ucp_stream_recv_request_put(req, length, UCS_OK);
 
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
