@@ -372,7 +372,7 @@ typedef struct {
                                                    queue); \
         \
         UCS_STATIC_ASSERT(sizeof(*(_priv)) <= UCT_PENDING_REQ_PRIV_LEN); \
-        _priv = ucs_derived_of(_base_priv, typeof(*(_priv))); \
+        _priv = (typeof(_priv))(_base_priv); \
         \
         if (!(_cond)) { \
             break; \
@@ -403,7 +403,7 @@ typedef struct {
         ucs_queue_iter_t _iter; \
         \
         ucs_queue_for_each_safe(_base_priv, _iter, _queue, queue) { \
-            _priv = ucs_derived_of(_base_priv, typeof(*_priv)); \
+            _priv = (typeof(_priv))(_base_priv); \
             if (_cond) { \
                 ucs_queue_del_iter(_queue, _iter); \
                 (void)_cb(ucs_container_of(_base_priv, uct_pending_req_t, priv), _arg); \
