@@ -99,6 +99,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_atomic.cc \
 	ucp/test_ucp_memheap.cc \
 	ucp/test_ucp_mmap.cc \
+	ucp/test_ucp_mem_type.cc \
 	ucp/test_ucp_perf.cc \
 	ucp/test_ucp_rma.cc \
 	ucp/test_ucp_rma_mt.cc \

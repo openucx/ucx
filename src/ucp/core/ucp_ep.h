@@ -64,6 +64,8 @@ typedef struct ucp_ep_config_key {
 
     ucp_lane_index_t       num_lanes;    /* Number of active lanes */
 
+    ucp_lane_index_t       num_rndv_lanes; /* Number of rendezvous lanes */
+
     struct {
         ucp_rsc_index_t    rsc_index;    /* Resource index */
         ucp_lane_index_t   proxy_lane;   /* UCP_NULL_LANE - no proxy
@@ -73,9 +75,11 @@ typedef struct ucp_ep_config_key {
     } lanes[UCP_MAX_LANES];
 
     ucp_lane_index_t       am_lane;      /* Lane for AM (can be NULL) */
-    ucp_lane_index_t       rndv_lane;    /* Lane for zcopy Rendezvous (can be NULL) */
     ucp_lane_index_t       tag_lane;     /* Lane for tag matching offload (can be NULL) */
     ucp_lane_index_t       wireup_lane;  /* Lane for wireup messages (can be NULL) */
+
+    /* Lane for zcopy rendezvous (can be NULL) */
+    ucp_lane_index_t       rndv_lanes[UCP_MAX_LANES];
 
     /* Lanes for remote memory access, sorted by priority, highest first */
     ucp_lane_index_t       rma_lanes[UCP_MAX_LANES];
@@ -162,6 +166,8 @@ typedef struct ucp_ep_config {
         struct {
             /* Maximal total size of rndv_get_zcopy */
             size_t          max_get_zcopy;
+            /* Maximal total size of rndv_put_zcopy */
+            size_t          max_put_zcopy;
             /* Threshold for switching from eager to RMA based rendezvous */
             size_t          rma_thresh;
             /* Threshold for switching from eager to AM based rendezvous */
@@ -269,8 +275,8 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config);
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);
 
-int ucp_ep_config_get_rma_prio(const ucp_lane_index_t *lanes,
-                               ucp_lane_index_t lane);
+int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
+                                      ucp_lane_index_t lane);
 
 size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
                                            const uct_linear_growth_t *reg_cost,

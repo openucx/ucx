@@ -204,7 +204,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
         status = uct_md_mem_reg(uct_md, buffer, length, UCT_MD_MEM_ACCESS_RMA,
-                                &state->dt.contig.memh);
+                                &state->dt.contig[0].memh);
         break;
     case UCP_DATATYPE_IOV:
         iovcnt = state->dt.iov.iovcnt;
@@ -258,8 +258,9 @@ UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg,
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        if (state->dt.contig.memh != UCT_MEM_HANDLE_NULL) {
-            uct_md_mem_dereg(uct_md, state->dt.contig.memh);
+        if (state->dt.contig[0].memh != UCT_MEM_HANDLE_NULL) {
+            uct_md_mem_dereg(uct_md, state->dt.contig[0].memh);
+            state->dt.contig[0].memh = UCT_MEM_HANDLE_NULL;
         }
         break;
     case UCP_DATATYPE_IOV:
@@ -288,13 +289,34 @@ ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req,
                                   req->send.datatype, &req->send.state.dt);
 }
 
-void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane)
+ucs_status_t ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_ep_h ep,
+                                         ucp_lane_index_t lane)
+{
+    ucp_context_t *context  = ep->worker->context;
+    req->recv.reg_rsc       = ucp_ep_get_rsc_index(ep, lane);
+    ucs_assert(req->recv.reg_rsc != UCP_NULL_RESOURCE);
+
+    return ucp_request_memory_reg(context, req->recv.reg_rsc,
+                                  (void*)req->recv.buffer, req->recv.length,
+                                  req->recv.datatype, &req->recv.state);
+}
+
+void ucp_request_send_buffer_dereg(ucp_request_t *req)
 {
     ucp_context_t *context    = req->send.ep->worker->context;
     ucs_assert(req->send.reg_rsc != UCP_NULL_RESOURCE);
     ucp_request_memory_dereg(context, req->send.reg_rsc, req->send.datatype,
                              &req->send.state.dt);
     req->send.reg_rsc = UCP_NULL_RESOURCE;
+}
+
+void ucp_request_recv_buffer_dereg(ucp_request_t *req)
+{
+    ucp_context_t *context = req->recv.worker->context;
+    ucs_assert(req->recv.reg_rsc != UCP_NULL_RESOURCE);
+    ucp_request_memory_dereg(context, req->recv.reg_rsc, req->recv.datatype,
+                             &req->recv.state);
+    req->recv.reg_rsc = UCP_NULL_RESOURCE;
 }
 
 /* NOTE: deprecated */
@@ -357,3 +379,4 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
 
     return UCS_ERR_NO_PROGRESS;
 }
+
