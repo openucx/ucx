@@ -162,9 +162,9 @@ ucp_stream_recv_request_get(ucp_worker_t *worker, void *buffer, size_t count,
         return NULL;
     }
 
-    req->flags = UCP_REQUEST_FLAG_CALLBACK;
-    req->recv.stream.cb    = cb;
-    req->recv.stream.count = 0;
+    req->flags = UCP_REQUEST_FLAG_CALLBACK | UCP_REQUEST_FLAG_STREAM_RECV;
+    req->recv.stream.cb     = cb;
+    req->recv.stream.length = 0;
 
     req->recv.buffer   = buffer;
     req->recv.datatype = datatype;
