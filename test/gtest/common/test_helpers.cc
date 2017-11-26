@@ -130,9 +130,6 @@ message_stream::~message_stream() {
 
 namespace ucp {
 
-const size_t
-data_type_desc_t::_iov_cnt_limit = sizeof(data_type_desc_t::_iov) /
-                                   sizeof(data_type_desc_t::_iov[0]);
 
 data_type_desc_t &
 data_type_desc_t::make(ucp_datatype_t datatype, void *buf, size_t length,

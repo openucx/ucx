@@ -484,17 +484,20 @@ namespace ucp {
 
 class data_type_desc_t {
 public: 
-    data_type_desc_t() :  _origin(uintptr_t(NULL)), _length(0), _buf(NULL) {};
+    data_type_desc_t()
+        : _origin(uintptr_t(NULL)), _length(0), _buf(NULL),
+          _iov_cnt_limit(sizeof(_iov) / sizeof(_iov[0])) {};
 
     data_type_desc_t(ucp_datatype_t datatype, void *buf, size_t length)
-        : _origin(uintptr_t(buf)), _length(length), _buf(NULL) {
+        : _origin(uintptr_t(buf)), _length(length), _buf(NULL),
+          _iov_cnt_limit(sizeof(_iov) / sizeof(_iov[0])) {
         make(datatype, buf, length);
     }
 
     data_type_desc_t(ucp_datatype_t datatype, void *buf, size_t length,
                      size_t iov_count)
-        : _origin(uintptr_t(buf)), _length(length), _buf(NULL)
-    {
+        : _origin(uintptr_t(buf)), _length(length), _buf(NULL),
+          _iov_cnt_limit(sizeof(_iov) / sizeof(_iov[0])) {
         make(datatype, buf, length, iov_count);
     };
 
@@ -547,7 +550,7 @@ private:
     void           *_buf;
     size_t         _count;
 
-    static const size_t _iov_cnt_limit;
+    const size_t _iov_cnt_limit;
     ucp_dt_iov_t _iov[40];
 };
 
