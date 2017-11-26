@@ -284,6 +284,82 @@ UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg,
     }
 }
 
+ucs_status_t ucp_request_rndv_buffer_reg(ucp_request_t *req)
+{
+    ucp_ep_t        *ep = req->send.ep;
+    uct_md_h         md;
+    ucp_lane_index_t lane;
+    ucp_lane_index_t i;
+    ucp_lane_index_t r;
+    ucs_status_t     status;
+
+    req->send.reg_rsc = UCP_NULL_RESOURCE;
+
+    for (i = 0; i < ucp_ep_rndv_num_lanes(ep); i++) {
+        if (ucp_ep_rndv_md_flags(ep, i) & UCT_MD_FLAG_NEED_MEMH) {
+            lane = ucp_ep_get_rndv_get_lane(ep, i);
+            md   = ucp_ep_md(ep, lane);
+            status = uct_md_mem_reg(md, (void*)req->send.buffer, req->send.length,
+                                    UCT_MD_MEM_ACCESS_RMA,
+                                    &req->send.state.dt.dt.contig[i].memh);
+            if (status != UCS_OK) {
+                /* rollback all registrations */
+                for (r = 0; r < i; r++) {
+                    if (ucp_ep_rndv_md_flags(ep, r) & UCT_MD_FLAG_NEED_MEMH) {
+                        ucs_assert(req->send.state.dt.dt.contig[r].memh != UCT_MEM_HANDLE_NULL);
+                        lane = ucp_ep_get_rndv_get_lane(ep, r);
+                        md = ucp_ep_md(ep, lane);
+                        uct_md_mem_dereg(md, req->send.state.dt.dt.contig[r].memh);
+                    }
+                }
+                ucp_dt_clear_memh(&req->send.state.dt);
+                return status;
+            }
+        } else {
+            req->send.state.dt.dt.contig[i].memh = UCT_MEM_HANDLE_NULL;
+        }
+    }
+
+    return UCS_OK;
+}
+
+/* De-register memory on all lanes except 'used' lane.
+ * This trick is used when rndv proto is degraded to AM rndv */
+ucp_lane_index_t ucp_request_rndv_buffer_dereg_unused(ucp_request_t *req, ucp_lane_index_t used)
+{
+    ucp_ep_t        *ep = req->send.ep;
+    ucp_lane_index_t found = UCP_NULL_LANE;
+    ucp_lane_index_t lane;
+    ucp_lane_index_t i;
+    uct_md_h         md;
+
+    ucs_assert_always(req->send.reg_rsc == UCP_NULL_RESOURCE);
+
+    for (i = 0; i < ucp_ep_rndv_num_lanes(ep); i++) {
+        lane = ucp_ep_get_rndv_get_lane(ep, i);
+        if (lane == used && used != UCP_NULL_LANE) {
+            /* if found used lane (used means that it is same as used in AM proto)
+             * then de-register all other lane hanles & make state to same as it was
+             * registered by ucp_request_send_buffer_reg */
+            found = lane;
+            req->send.reg_rsc = ucp_ep_get_rsc_index(ep, lane);
+            if (i > 0) {
+                req->send.state.dt.dt.contig[0].memh = req->send.state.dt.dt.contig[i].memh;
+                req->send.state.dt.dt.contig[i].memh = UCT_MEM_HANDLE_NULL;
+            }
+        } else if ((ucp_ep_rndv_md_flags(ep, i) & UCT_MD_FLAG_NEED_MEMH) &&
+                   (req->send.state.dt.dt.contig[i].memh != UCT_MEM_HANDLE_NULL)) {
+            md = ucp_ep_md(ep, lane);
+            uct_md_mem_dereg(md, req->send.state.dt.dt.contig[i].memh);
+            req->send.state.dt.dt.contig[i].memh = UCT_MEM_HANDLE_NULL;
+        } else {
+            ucs_assert_always(req->send.state.dt.dt.contig[i].memh == UCT_MEM_HANDLE_NULL);
+        }
+    }
+
+    return found;
+}
+
 ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req,
                                          ucp_lane_index_t lane)
 {
@@ -311,10 +387,13 @@ ucs_status_t ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_ep_h ep,
 void ucp_request_send_buffer_dereg(ucp_request_t *req)
 {
     ucp_context_t *context    = req->send.ep->worker->context;
-    ucs_assert(req->send.reg_rsc != UCP_NULL_RESOURCE);
-    ucp_request_memory_dereg(context, req->send.reg_rsc, req->send.datatype,
-                             &req->send.state.dt);
-    req->send.reg_rsc = UCP_NULL_RESOURCE;
+    if (req->send.reg_rsc != UCP_NULL_RESOURCE) {
+        ucp_request_memory_dereg(context, req->send.reg_rsc, req->send.datatype,
+                                 &req->send.state.dt);
+        req->send.reg_rsc = UCP_NULL_RESOURCE;
+    } else {
+        ucp_request_rndv_buffer_dereg(req);
+    }
 }
 
 void ucp_request_recv_buffer_dereg(ucp_request_t *req)

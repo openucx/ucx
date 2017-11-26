@@ -434,3 +434,10 @@ ucp_request_rndv_get_release(ucp_request_t *req)
     ucs_mpool_put_inline(req->send.rndv_get.rkey);
 }
 
+static UCS_F_ALWAYS_INLINE
+void ucp_request_rndv_buffer_dereg(ucp_request_t *req)
+{
+    ucp_request_rndv_buffer_dereg_unused(req, UCP_NULL_LANE);
+}
+
+
