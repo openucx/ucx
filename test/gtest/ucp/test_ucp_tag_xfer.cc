@@ -358,16 +358,20 @@ void test_ucp_tag_xfer::test_xfer_iov(size_t size, bool expected, bool sync,
 
     ucs::fill_random(sendbuf.begin(), sendbuf.end());
 
-    UCS_TEST_GET_BUFFER_DT_IOV(send_iov, send_iovcnt, sendbuf.data(), sendbuf.size(), iovcnt);
-    UCS_TEST_GET_BUFFER_DT_IOV(recv_iov, recv_iovcnt, recvbuf.data(), recvbuf.size(), iovcnt);
+    ucp::data_type_desc_t send_dt_desc(DATATYPE_IOV, sendbuf.data(),
+                                       sendbuf.size(), iovcnt);
+    ucp::data_type_desc_t recv_dt_desc(DATATYPE_IOV, recvbuf.data(),
+                                       recvbuf.size(), iovcnt);
 
-    size_t recvd = do_xfer(&send_iov, &recv_iov, iovcnt, DATATYPE_IOV, DATATYPE_IOV,
-                           expected, sync, truncated);
+    size_t recvd = do_xfer(send_dt_desc.buf(), recv_dt_desc.buf(), iovcnt,
+                           DATATYPE_IOV, DATATYPE_IOV, expected, sync,
+                           truncated);
     if (!truncated) {
         ASSERT_EQ(sendbuf.size(), recvd);
     }
-    EXPECT_TRUE(!check_buffers(sendbuf, recvbuf, recvd, send_iovcnt, recv_iovcnt,
-                               size, expected, sync, "IOV"));
+    EXPECT_TRUE(!check_buffers(sendbuf, recvbuf, recvd, send_dt_desc.count(),
+                               recv_dt_desc.count(), size, expected, sync,
+                               "IOV"));
 }
 
 void test_ucp_tag_xfer::test_xfer_generic_err(size_t size, bool expected,
