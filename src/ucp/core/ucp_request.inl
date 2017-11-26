@@ -97,8 +97,15 @@ ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_request_complete_stream_recv(ucp_request_t *req, ucs_status_t status)
+ucp_request_complete_stream_recv(ucp_request_t *req,
+                                 ucp_ep_ext_stream_t* ep_stream,
+                                 ucs_status_t status)
 {
+    /* dequeue request before complete */
+    ucp_request_t *check_req UCS_V_UNUSED =
+            ucs_queue_pull_elem_non_empty(&ep_stream->reqs, ucp_request_t,
+                                          recv.queue);
+    ucs_assert(check_req == req);
     ucs_assert(req->recv.state.offset > 0);
     req->recv.stream.length = req->recv.state.offset;
     ucs_trace_req("completing stream receive request %p (%p) "
@@ -174,6 +181,36 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
         dt = ucp_dt_generic(req->recv.datatype);
         ucs_assert(NULL != dt);
         dt->ops.finish(req->recv.state.dt.generic.state);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_recv_state_init(ucp_request_t *req, void *buffer, ucp_datatype_t dt,
+                            size_t dt_count)
+{
+    ucp_dt_generic_t *dt_gen;
+
+    req->recv.state.offset = 0;
+
+    switch (dt & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_IOV:
+        req->recv.state.dt.iov.iov_offset    = 0;
+        req->recv.state.dt.iov.iovcnt_offset = 0;
+        req->recv.state.dt.iov.iovcnt        = dt_count;
+        req->recv.state.dt.iov.memh          = UCT_MEM_HANDLE_NULL;
+        break;
+
+    case UCP_DATATYPE_GENERIC:
+        dt_gen = ucp_dt_generic(dt);
+        req->recv.state.dt.generic.state =
+            UCS_PROFILE_NAMED_CALL("dt_start", dt_gen->ops.start_unpack,
+                                   dt_gen->context, buffer, dt_count);
+        ucs_trace_req("req %p buffer %p count %zu dt_gen state=%p", req, buffer,
+                      dt_count, req->recv.state.dt.generic.state);
+        break;
+
+    default:
+        break;
     }
 }
 

@@ -86,10 +86,8 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 
         ucs_queue_head_init(&ep->ext.stream->data);
         ucs_queue_head_init(&ep->ext.stream->reqs);
-        ep->ext.stream->ucp_ep       = ep;
-        ep->ext.stream->rdesc        = NULL;
-        ep->ext.stream->rdesc_offset = 0;
-        ep->ext.stream->rdesc_len    = 0;
+        ep->ext.stream->ucp_ep = ep;
+        ep->ext.stream->rdesc  = NULL;
     } else {
         ep->ext.stream = NULL;
     }
