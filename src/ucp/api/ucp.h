@@ -386,6 +386,9 @@ typedef enum {
  * @param [in]  _elem_size    Size of the basic element of the type.
  *
  * @return Data-type identifier.
+ *
+ * @note In case of partial receive, the buffer will be filled with integral
+ *       count of elements.
  */
 #define ucp_dt_make_contig(_elem_size) \
     (((ucp_datatype_t)(_elem_size) << UCP_DATATYPE_SHIFT) | UCP_DATATYPE_CONTIG)
@@ -399,6 +402,9 @@ typedef enum {
  * with multiple pointers
  *
  * @return Data-type identifier.
+ *
+ * @note In case of partial receive, @ref ucp_dt_iov_t::buffer can be filled
+ *       with any number of bytes according to its @ref ucp_dt_iov_t::length.
  */
 #define ucp_dt_make_iov() (UCP_DATATYPE_IOV)
 
@@ -429,6 +435,8 @@ typedef struct ucp_dt_iov {
  * Typically, the descriptor is used for an integration with datatype
  * engines implemented within MPI and SHMEM implementations.
  *
+ * @note In case of partial receive, any amount of received data is acceptable
+ *       which matches buffer size.
  */
 typedef struct ucp_generic_dt_ops {
 
@@ -2097,15 +2105,17 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  *
  * @param [in]     ep       UCP endpoint that is used for the receive operation.
  * @param [in]     buffer   Pointer to the buffer to receive the data to.
- * @param [inout] count     Number of elements to receive into @a buffer as
- *                          in-parameter and number of actual elements received.
- *                          I.e. output value can be less or equal input value.
+ * @param [in]     count    Number of elements to receive into @a buffer.
  * @param [in]     datatype Datatype descriptor for the elements in the buffer.
  * @param [in]     cb       Callback function that is invoked whenever the
  *                          receive operation is completed and the data is ready
  *                          in the receive @a buffer. It is important to note
  *                          that the call-back is only invoked in a case when
  *                          the operation cannot be completed immediately.
+ * @param [out]    length   Size of the received data in bytes. The value is
+ *                          valid only if return code is UCS_OK.
+ * @note                    The amount of data received, in bytes, is always an
+ *                          integral multiple of the @a datatype size.
  * @param [in]     flags    Reserved for future use.
  *
  * @return UCS_OK               - The receive operation was completed
@@ -2118,10 +2128,10 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  *                                the handle by calling the
  *                                @ref ucp_request_free routine.
  */
-ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t *count,
+ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t count,
                                     ucp_datatype_t datatype,
                                     ucp_stream_recv_callback_t cb,
-                                    unsigned flags);
+                                    size_t *length, unsigned flags);
 
 
 /**

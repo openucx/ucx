@@ -72,6 +72,10 @@ void ucp_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 
+/* Detect memory type on all MDs */
+ucs_status_t ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
+                                        uct_memory_type_t *mem_type_p);
+
 static UCS_F_ALWAYS_INLINE uct_mem_h
 ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
 {
