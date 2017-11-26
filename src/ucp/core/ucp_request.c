@@ -149,6 +149,13 @@ ucs_mpool_ops_t ucp_request_mpool_ops = {
     .obj_cleanup   = ucp_worker_request_fini_proxy
 };
 
+ucs_mpool_ops_t ucp_rndv_get_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL
+};
+
 int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status)
 {
     ucs_status_t status;

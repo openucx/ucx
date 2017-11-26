@@ -82,6 +82,17 @@ enum {
 
 
 /**
+ * Multirail rendezvous-get info.
+ * In tag offloading there is only one lane used, but
+ * in other cases number of remote keys should match number
+ * of lanes used in rndv-get protocol
+ */
+typedef struct ucp_rndv_get_rkey {
+    uct_rkey_bundle_t rkey_bundle[UCP_MAX_RNDV_LANES];
+} ucp_rndv_get_rkey_t;
+
+
+/**
  * Request in progress.
  */
 struct ucp_request {
@@ -120,10 +131,12 @@ struct ucp_request {
                 } proxy;
 
                 struct {
-                    uint64_t           remote_address; /* address of the sender's data buffer */
-                    uintptr_t          remote_request; /* pointer to the sender's send request */
-                    uct_rkey_bundle_t  rkey_bundle;
-                    ucp_request_t     *rreq;           /* receive request on the recv side */
+                    uint64_t             remote_address; /* address of the sender's data buffer */
+                    uintptr_t            remote_request; /* pointer to the sender's send request */
+                    ucp_rndv_get_rkey_t *rkey;
+                    ucp_request_t       *rreq;           /* receive request on the recv side */
+                    ucp_lane_index_t     num_lanes;      /* number of rkeys obtained from peer */
+                    ucp_lane_index_t     lane_idx;       /* rendezvous line index used for next op */
                 } rndv_get;
 
                 struct {
