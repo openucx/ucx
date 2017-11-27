@@ -137,20 +137,20 @@ data_type_desc_t::make(ucp_datatype_t datatype, void *buf, size_t length,
 {
     EXPECT_FALSE(is_valid());
 
-    if (_length == 0) {
-        _length = length;
+    if (m_length == 0) {
+        m_length = length;
     }
 
-    if (_origin == uintptr_t(NULL)) {
-        _origin = uintptr_t(buf);
+    if (m_origin == uintptr_t(NULL)) {
+        m_origin = uintptr_t(buf);
     }
 
-    _dt    = datatype;
-    _buf   = buf;
-    _count = length;
-    memset(_iov, 0, sizeof(_iov));
+    m_dt    = datatype;
+    m_buf   = buf;
+    m_count = length;
+    memset(m_iov, 0, sizeof(m_iov));
 
-    switch (_dt & UCP_DATATYPE_CLASS_MASK) {
+    switch (m_dt & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
         break;
     case UCP_DATATYPE_IOV:
@@ -159,22 +159,22 @@ data_type_desc_t::make(ucp_datatype_t datatype, void *buf, size_t length,
             ucs::rand() % (length / iov_cnt) : 0;
         size_t iov_length_it = 0;
         for (size_t iov_it = 0; iov_it < iov_cnt - 1; ++iov_it) {
-            _iov[iov_it].buffer = (char *)(buf) + iov_length_it;
-            _iov[iov_it].length = iov_length;
+            m_iov[iov_it].buffer = (char *)(buf) + iov_length_it;
+            m_iov[iov_it].length = iov_length;
             iov_length_it += iov_length;
         }
 
         /* Last entry */
-        _iov[iov_cnt - 1].buffer = (char *)(buf) + iov_length_it;
-        _iov[iov_cnt - 1].length = length - iov_length_it;
+        m_iov[iov_cnt - 1].buffer = (char *)(buf) + iov_length_it;
+        m_iov[iov_cnt - 1].length = length - iov_length_it;
 
-        _buf   = _iov;
-        _count = iov_cnt;
+        m_buf   = m_iov;
+        m_count = iov_cnt;
         break;
     }
     default:
-        _buf   = NULL;
-        _count = 0;
+        m_buf   = NULL;
+        m_count = 0;
         EXPECT_TRUE(false) << "Unsupported datatype";
         break;
     }

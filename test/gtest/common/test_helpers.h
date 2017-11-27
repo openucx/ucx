@@ -485,19 +485,19 @@ namespace ucp {
 class data_type_desc_t {
 public: 
     data_type_desc_t()
-        : _origin(uintptr_t(NULL)), _length(0), _buf(NULL),
-          _iov_cnt_limit(sizeof(_iov) / sizeof(_iov[0])) {};
+        : m_origin(uintptr_t(NULL)), m_length(0), m_buf(NULL),
+          m_iov_cnt_limit(sizeof(m_iov) / sizeof(m_iov[0])) {};
 
     data_type_desc_t(ucp_datatype_t datatype, void *buf, size_t length)
-        : _origin(uintptr_t(buf)), _length(length), _buf(NULL),
-          _iov_cnt_limit(sizeof(_iov) / sizeof(_iov[0])) {
+        : m_origin(uintptr_t(buf)), m_length(length), m_buf(NULL),
+          m_iov_cnt_limit(sizeof(m_iov) / sizeof(m_iov[0])) {
         make(datatype, buf, length);
     }
 
     data_type_desc_t(ucp_datatype_t datatype, void *buf, size_t length,
                      size_t iov_count)
-        : _origin(uintptr_t(buf)), _length(length), _buf(NULL),
-          _iov_cnt_limit(sizeof(_iov) / sizeof(_iov[0])) {
+        : m_origin(uintptr_t(buf)), m_length(length), m_buf(NULL),
+          m_iov_cnt_limit(sizeof(m_iov) / sizeof(m_iov[0])) {
         make(datatype, buf, length, iov_count);
     };
 
@@ -505,53 +505,53 @@ public:
                            size_t iov_count);
 
     data_type_desc_t &make(ucp_datatype_t datatype, void *buf, size_t length) {
-        return make(datatype, buf, length, _iov_cnt_limit);
+        return make(datatype, buf, length, m_iov_cnt_limit);
     };
 
     data_type_desc_t &forward_to(size_t offset) {
-        EXPECT_LE(offset, _length);
+        EXPECT_LE(offset, m_length);
         invalidate();
-        return make(_dt, (void *)(_origin + offset), _length - offset,
-                    _iov_cnt_limit);
+        return make(m_dt, (void *)(m_origin + offset), m_length - offset,
+                    m_iov_cnt_limit);
     };
 
     ucp_datatype_t dt() const {
         EXPECT_TRUE(is_valid());
-        return _dt;
+        return m_dt;
     };
 
     void *buf() const {
         EXPECT_TRUE(is_valid());
-        return _buf;
+        return m_buf;
     };
 
     size_t count() const {
         EXPECT_TRUE(is_valid());
-        return _count;
+        return m_count;
     };
 
     bool is_valid() const {
-        return (_buf != NULL) && (_count != 0) &&
-               (UCP_DT_IS_IOV(_dt) ? (_count <= _iov_cnt_limit) :
-                UCP_DT_IS_CONTIG(_dt));
+        return (m_buf != NULL) && (m_count != 0) &&
+               (UCP_DT_IS_IOV(m_dt) ? (m_count <= m_iov_cnt_limit) :
+                UCP_DT_IS_CONTIG(m_dt));
     }
 
 private:
     void invalidate() {
         EXPECT_TRUE(is_valid());
-        _buf   = NULL;
-        _count = 0;
+        m_buf   = NULL;
+        m_count = 0;
     }
 
-    uintptr_t      _origin;
-    size_t         _length;
+    uintptr_t       m_origin;
+    size_t          m_length;
 
-    ucp_datatype_t _dt;
-    void           *_buf;
-    size_t         _count;
+    ucp_datatype_t  m_dt;
+    void           *m_buf;
+    size_t          m_count;
 
-    const size_t _iov_cnt_limit;
-    ucp_dt_iov_t _iov[40];
+    const size_t    m_iov_cnt_limit;
+    ucp_dt_iov_t    m_iov[40];
 };
 
 } // ucp
