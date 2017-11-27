@@ -17,32 +17,19 @@
 #define UCT_RC_MLX5_OPCODE_FLAG_RAW   0x100
 #define UCT_RC_MLX5_OPCODE_MASK       0xff
 
-#define UCT_RC_MLX5_PUT_MAX_SHORT(_av_size) \
-    UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB - \
-    (sizeof(struct mlx5_wqe_ctrl_seg) + \
-     (_av_size) + \
-     sizeof(struct mlx5_wqe_inl_data_seg) + \
-     sizeof(struct mlx5_wqe_raddr_seg))
-
-#define UCT_RC_MLX5_AM_MAX_SHORT(_av_size) \
-    UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB - \
-    (sizeof(struct mlx5_wqe_ctrl_seg) + \
-     (_av_size) + \
-     sizeof(struct mlx5_wqe_inl_data_seg))
-
 #define UCT_RC_MLX5_CHECK_AM_ZCOPY(_id, _header_length, _length, _seg_size, _av_size) \
     UCT_RC_CHECK_AM_ZCOPY(_id, _header_length, _length, \
                           UCT_IB_MLX5_AM_MAX_HDR(_av_size), _seg_size)
 
 #define UCT_RC_MLX5_CHECK_AM_SHORT(_id, _length, _av_size) \
-    UCT_RC_CHECK_AM_SHORT(_id, _length, UCT_RC_MLX5_AM_MAX_SHORT(_av_size))
+    UCT_RC_CHECK_AM_SHORT(_id, _length, UCT_IB_MLX5_AM_MAX_SHORT(_av_size))
 
 
 /* there is no need to do a special check for length == 0 because in that
  * case wqe size is valid: inl + raddr + dgram + ctrl fit in 2 WQ BB
  */
 #define UCT_RC_MLX5_CHECK_PUT_SHORT(_length, _av_size) \
-    UCT_CHECK_LENGTH(_length, 0, UCT_RC_MLX5_PUT_MAX_SHORT(_av_size), "put_short")
+    UCT_CHECK_LENGTH(_length, 0, UCT_IB_MLX5_PUT_MAX_SHORT(_av_size), "put_short")
 
 
 enum {

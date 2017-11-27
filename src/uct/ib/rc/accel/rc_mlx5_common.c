@@ -180,7 +180,7 @@ void uct_rc_mlx5_iface_common_query(uct_rc_iface_t *iface,
                                     uct_iface_attr_t *iface_attr, size_t av_size)
 {
     /* PUT */
-    iface_attr->cap.put.max_short = UCT_RC_MLX5_PUT_MAX_SHORT(av_size);
+    iface_attr->cap.put.max_short = UCT_IB_MLX5_PUT_MAX_SHORT(av_size);
     iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
@@ -193,7 +193,7 @@ void uct_rc_mlx5_iface_common_query(uct_rc_iface_t *iface,
     iface_attr->cap.get.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
 
     /* AM */
-    iface_attr->cap.am.max_short  = UCT_RC_MLX5_AM_MAX_SHORT(av_size) - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_short  = UCT_IB_MLX5_AM_MAX_SHORT(av_size) - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.min_zcopy  = 0;
     iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
