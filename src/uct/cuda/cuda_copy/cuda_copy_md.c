@@ -25,7 +25,7 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
 static ucs_status_t uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->cap.flags         = UCT_MD_FLAG_REG;
-    md_attr->cap.reg_mem_types = 0;
+    md_attr->cap.reg_mem_types = UCT_MD_MEM_TYPE_HOST;
     md_attr->cap.mem_type      = UCT_MD_MEM_TYPE_CUDA;
     md_attr->cap.max_alloc     = 0;
     md_attr->cap.max_reg       = ULONG_MAX;
@@ -60,50 +60,111 @@ static ucs_status_t uct_cuda_copy_rkey_release(uct_md_component_t *mdc, uct_rkey
 static ucs_status_t uct_cuda_copy_mem_reg(uct_md_h md, void *address, size_t length,
                                           unsigned flags, uct_mem_h *memh_p)
 {
-    ucs_status_t rc;
-    uct_mem_h * mem_hndl = NULL;
+    cudaError_t cuerr = cudaSuccess;
 
-    mem_hndl = ucs_malloc(sizeof(void *), "cuda_copy handle for test passing");
-    if (NULL == mem_hndl) {
-        ucs_error("Failed to allocate memory for gni_mem_handle_t");
-        rc = UCS_ERR_NO_MEMORY;
-        goto mem_err;
+    if(address == NULL) {
+        *memh_p = address;
+        return UCS_OK;
     }
-    *memh_p = mem_hndl;
+
+    cuerr = cudaHostRegister(address, length, cudaHostRegisterPortable);
+    if (cuerr != cudaSuccess) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *memh_p = address;
     return UCS_OK;
- mem_err:
-    return rc;
 }
 
 static ucs_status_t uct_cuda_copy_mem_dereg(uct_md_h md, uct_mem_h memh)
 {
-    ucs_free(memh);
+    void *address = (void *)memh;
+    cudaError_t cuerr;
+
+    if (address == NULL) {
+        return UCS_OK;
+    }
+    cuerr = cudaHostUnregister(address);
+    if (cuerr != cudaSuccess) {
+        return UCS_ERR_IO_ERROR;
+    }
+
     return UCS_OK;
+}
+
+static int uct_is_cuda_copy_mem_type_owned(uct_md_h md, void *addr, size_t length)
+{
+    int memory_type;
+    struct cudaPointerAttributes attributes;
+    cudaError_t cuda_err;
+    CUresult cu_err;
+
+    if (addr == NULL) {
+        return 0;
+    }
+
+    cu_err = cuPointerGetAttribute(&memory_type,
+                                   CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+                                   (CUdeviceptr)addr);
+    if (cu_err != CUDA_SUCCESS) {
+        cuda_err = cudaPointerGetAttributes (&attributes, addr);
+        if (cuda_err == cudaSuccess) {
+            if (attributes.memoryType == cudaMemoryTypeDevice) {
+                return 1;
+            }
+        }
+    } else if (memory_type == CU_MEMORYTYPE_DEVICE) {
+        return 1;
+    }
+    return 0;
 }
 
 static ucs_status_t uct_cuda_copy_query_md_resources(uct_md_resource_desc_t **resources_p,
                                                      unsigned *num_resources_p)
 {
+    int num_gpus;
+    cudaError_t cudaErr;
+
+    cudaErr = cudaGetDeviceCount(&num_gpus);
+    if (cudaErr!= cudaSuccess || num_gpus == 0) {
+        ucs_debug("Not found cuda devices");
+        *resources_p     = NULL;
+        *num_resources_p = 0;
+        return UCS_OK;
+    }
+
     return uct_single_md_resource(&uct_cuda_copy_md_component, resources_p, num_resources_p);
 }
+
+static void uct_cuda_copy_md_close(uct_md_h uct_md) {
+    uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
+    ucs_free(md);
+}
+
+static uct_md_ops_t md_ops = {
+    .close        = uct_cuda_copy_md_close,
+    .query        = uct_cuda_copy_md_query,
+    .mkey_pack    = uct_cuda_copy_mkey_pack,
+    .mem_reg      = uct_cuda_copy_mem_reg,
+    .mem_dereg    = uct_cuda_copy_mem_dereg,
+    .is_mem_type_owned = uct_is_cuda_copy_mem_type_owned,
+};
 
 static ucs_status_t uct_cuda_copy_md_open(const char *md_name, const uct_md_config_t *md_config,
                                           uct_md_h *md_p)
 {
-    static uct_md_ops_t md_ops = {
-        .close        = (void*)ucs_empty_function,
-        .query        = uct_cuda_copy_md_query,
-        .mkey_pack    = uct_cuda_copy_mkey_pack,
-        .mem_reg      = uct_cuda_copy_mem_reg,
-        .mem_dereg    = uct_cuda_copy_mem_dereg,
-        .is_mem_type_owned = (void *)ucs_empty_function_return_zero,
-    };
-    static uct_md_t md = {
-        .ops          = &md_ops,
-        .component    = &uct_cuda_copy_md_component
-    };
+    uct_cuda_copy_md_t *md;
 
-    *md_p = &md;
+    md = ucs_malloc(sizeof(uct_cuda_copy_md_t), "uct_cuda_copy_md_t");
+    if (NULL == md) {
+        ucs_error("Failed to allocate memory for uct_cuda_copy_md_t");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    md->super.ops = &md_ops;
+    md->super.component = &uct_cuda_copy_md_component;
+
+    *md_p = (uct_md_h) md;
     return UCS_OK;
 }
 

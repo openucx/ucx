@@ -33,3 +33,11 @@
    obj:*/libmlx5*.so*
    fun:ibv_create_ah
 }
+
+{
+   cuInit
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:cuInit
+}
