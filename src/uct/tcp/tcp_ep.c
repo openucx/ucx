@@ -28,6 +28,7 @@ static void uct_tcp_ep_epoll_ctl(uct_tcp_ep_t *ep, int op)
 static inline int uct_tcp_ep_can_send(uct_tcp_ep_t *ep)
 {
     ucs_assert(ep->offset <= ep->length);
+    /* TODO optimize to allow partial sends/message coalescing */
     return ep->length == 0;
 }
 
@@ -54,6 +55,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
             goto err;
         }
 
+        /* TODO use non-blocking connect */
         status = uct_tcp_socket_connect(self->fd, dest_addr);
         if (status != UCS_OK) {
             goto err_close;
@@ -124,6 +126,7 @@ ucs_status_t uct_tcp_ep_create_connected(uct_iface_t *tl_iface,
     dest_addr.sin_port   = *(in_port_t*)iface_addr;
     dest_addr.sin_addr   = *(struct in_addr*)dev_addr;
 
+    /* TODO try to reuse existing connection */
     status = uct_tcp_ep_create(iface, -1, &dest_addr, &tcp_ep);
     if (status == UCS_OK) {
         ucs_debug("tcp_ep %p: connected to %s:%d", tcp_ep,
@@ -237,7 +240,9 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
                             hdr->length, 0);
     }
 
-    /* Move the remaining data to the beginning of the buffer */
+    /* Move the remaining data to the beginning of the buffer
+     * TODO avoid extra copy on partial receive
+     */
     ucs_assert(remainder >= 0);
     memmove(ep->buf, ep->buf + ep->offset, remainder);
     ep->offset = 0;
