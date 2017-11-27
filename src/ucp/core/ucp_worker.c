@@ -181,9 +181,11 @@ static void ucp_worker_am_tracer(void *arg, uct_am_trace_type_t type,
     ucp_worker_h worker = arg;
     ucp_am_tracer_t tracer;
 
-    tracer = ucp_am_handlers[id].tracer;
-    if (tracer != NULL) {
-        tracer(worker, type, id, data, length, buffer, max);
+    if (id < UCP_AM_ID_LAST) {
+        tracer = ucp_am_handlers[id].tracer;
+        if (tracer != NULL) {
+            tracer(worker, type, id, data, length, buffer, max);
+        }
     }
 }
 

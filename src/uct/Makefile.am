@@ -36,8 +36,7 @@ libuct_la_SOURCES = \
 	tcp/tcp_ep.c \
 	tcp/tcp_iface.c \
 	tcp/tcp_md.c \
-	tcp/tcp_net.c \
-	tcp/tcp_recv.c
+	tcp/tcp_net.c
 
 if HAVE_IB
 libuct_la_CPPFLAGS += $(IBVERBS_CPPFLAGS)

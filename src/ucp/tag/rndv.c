@@ -133,6 +133,8 @@ static size_t ucp_tag_rndv_rtr_pack(void *dest, void *arg)
     ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = dest;
     size_t packed_len = sizeof(*rndv_rtr_hdr);
 
+    memset(rndv_rtr_hdr, 0, sizeof(*rndv_rtr_hdr));
+
     /* sreq_ptr holds the sender's send req */
     rndv_rtr_hdr->sreq_ptr = rndv_req->send.proto.remote_request;
 
@@ -150,8 +152,6 @@ static size_t ucp_tag_rndv_rtr_pack(void *dest, void *arg)
                                                           rndv_rtr_hdr + 1,
                                                           &(rndv_rtr_hdr->flags));
             }
-        } else {
-            rndv_rtr_hdr->address = 0;
         }
     }
 

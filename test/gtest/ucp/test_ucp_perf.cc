@@ -148,6 +148,11 @@ UCS_TEST_P(test_ucp_perf, envelope) {
     /* Run all tests */
     std::stringstream ss;
     ss << GetParam();
+    bool check_perf = true;
+    if (ss.str().find("tcp") != std::string::npos) {
+        check_perf = false;
+    }
+
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv tls("UCX_TLS", ss.str().c_str());
     for (test_spec *test = tests; test->title != NULL; ++test) {
@@ -157,7 +162,7 @@ UCS_TEST_P(test_ucp_perf, envelope) {
             test->max *= UCP_ARM_PERF_TEST_MULTIPLIER;
             test->min /= UCP_ARM_PERF_TEST_MULTIPLIER;
         }
-        run_test(*test, flags, true, "", "");
+        run_test(*test, flags, check_perf, "", "");
     }
 }
 

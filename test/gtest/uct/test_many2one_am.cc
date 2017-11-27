@@ -87,14 +87,13 @@ UCS_TEST_P(test_many2one_am, am_bcopy, "MAX_BCOPY=16384")
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
     check_caps(UCT_IFACE_FLAG_CB_SYNC);
 
-    ucs::ptr_vector<entity> senders;
     ucs::ptr_vector<mapped_buffer> buffers;
     for (unsigned i = 0; i < NUM_SENDERS; ++i) {
         entity *sender = create_entity(0);
         mapped_buffer *buffer = new mapped_buffer(
                             sender->iface_attr().cap.am.max_bcopy, 0, *sender);
         sender->connect(0, *receiver, i);
-        senders.push_back(sender);
+        m_entities.push_back(sender);
         buffers.push_back(buffer);
     }
 
@@ -112,7 +111,7 @@ UCS_TEST_P(test_many2one_am, am_bcopy, "MAX_BCOPY=16384")
 
         ssize_t packed_len;
         for (;;) {
-            entity& sender = senders.at(sender_num);
+            const entity& sender = ent(sender_num + 1);
             packed_len = uct_ep_am_bcopy(sender.ep(0), AM_ID, mapped_buffer::pack,
                                          (void*)&buffer, 0);
             if (packed_len != UCS_ERR_NO_RESOURCE) {
@@ -127,7 +126,7 @@ UCS_TEST_P(test_many2one_am, am_bcopy, "MAX_BCOPY=16384")
     }
 
     while (m_am_count < num_sends) {
-        receiver->progress();
+        progress();
     }
 
     status = uct_iface_set_am_handler(receiver->iface(), AM_ID, NULL, NULL,
@@ -137,11 +136,10 @@ UCS_TEST_P(test_many2one_am, am_bcopy, "MAX_BCOPY=16384")
     check_backlog();
 
     for (unsigned i = 0; i < NUM_SENDERS; ++i) {
-        senders.at(i).flush();
+        ent(i + 1).flush();
     }
 
     buffers.clear();
-    senders.clear();
 }
 
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_many2one_am)
