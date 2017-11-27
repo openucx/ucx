@@ -181,11 +181,6 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
     return UCS_OK;
 }
 
-int64_t uct_tcp_addr_uuid(const struct sockaddr_in *in_addr)
-{
-    return in_addr->sin_addr.s_addr | ((int64_t)in_addr->sin_port << 32);
-}
-
 static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_am_bcopy              = uct_tcp_ep_am_bcopy,
     .ep_pending_add           = uct_tcp_ep_pending_add,

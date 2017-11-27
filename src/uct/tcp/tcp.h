@@ -21,7 +21,7 @@
  * TCP active message header
  */
 typedef struct uct_tcp_am_hdr {
-    uint16_t                      am_id;
+    uint8_t                       am_id;
     uint16_t                      length;
 } UCS_S_PACKED uct_tcp_am_hdr_t;
 
@@ -118,7 +118,7 @@ ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
 ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req);
 
 void uct_tcp_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
-                             void *arg);
+                              void *arg);
 
 ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
                               uct_completion_t *comp);

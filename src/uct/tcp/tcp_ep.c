@@ -115,8 +115,8 @@ ucs_status_t uct_tcp_ep_create_connected(uct_iface_t *tl_iface,
                                          uct_ep_h *ep_p)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
-    struct sockaddr_in dest_addr;
     uct_tcp_ep_t *tcp_ep = NULL;
+    struct sockaddr_in dest_addr;
     ucs_status_t status;
 
     memset(&dest_addr, 0, sizeof(dest_addr));
