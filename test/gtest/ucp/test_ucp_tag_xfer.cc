@@ -20,8 +20,19 @@ class test_ucp_tag_xfer : public test_ucp_tag {
 public:
     enum {
         VARIANT_DEFAULT,
-        VARIANT_ERR_HANDLING
+        VARIANT_ERR_HANDLING,
+        VARIANT_RNDV_PUT_ZCOPY,
+        VARIANT_RNDV_AUTO
     };
+
+    virtual void init() {
+        if (GetParam().variant == VARIANT_RNDV_PUT_ZCOPY) {
+            modify_config("RNDV_SCHEME", "put_zcopy");
+        } else if (GetParam().variant == VARIANT_RNDV_AUTO) {
+            modify_config("RNDV_SCHEME", "auto");
+        }
+        test_ucp_tag::init();
+    }
 
     std::vector<ucp_test_param>
     static enum_test_params(const ucp_params_t& ctx_params,
@@ -35,6 +46,12 @@ public:
         generate_test_params_variant(ctx_params, name,
                                      test_case_name + "/err_handling_mode_peer",
                                      tls, VARIANT_ERR_HANDLING, result);
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name + "/rndv_put_zcopy", tls,
+                                     VARIANT_RNDV_PUT_ZCOPY, result);
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name + "/rndv_auto", tls,
+                                     VARIANT_RNDV_AUTO, result);
         return result;
     }
 
@@ -341,16 +358,20 @@ void test_ucp_tag_xfer::test_xfer_iov(size_t size, bool expected, bool sync,
 
     ucs::fill_random(sendbuf.begin(), sendbuf.end());
 
-    UCS_TEST_GET_BUFFER_DT_IOV(send_iov, send_iovcnt, sendbuf.data(), sendbuf.size(), iovcnt);
-    UCS_TEST_GET_BUFFER_DT_IOV(recv_iov, recv_iovcnt, recvbuf.data(), recvbuf.size(), iovcnt);
+    ucp::data_type_desc_t send_dt_desc(DATATYPE_IOV, sendbuf.data(),
+                                       sendbuf.size(), iovcnt);
+    ucp::data_type_desc_t recv_dt_desc(DATATYPE_IOV, recvbuf.data(),
+                                       recvbuf.size(), iovcnt);
 
-    size_t recvd = do_xfer(&send_iov, &recv_iov, iovcnt, DATATYPE_IOV, DATATYPE_IOV,
-                           expected, sync, truncated);
+    size_t recvd = do_xfer(send_dt_desc.buf(), recv_dt_desc.buf(), iovcnt,
+                           DATATYPE_IOV, DATATYPE_IOV, expected, sync,
+                           truncated);
     if (!truncated) {
         ASSERT_EQ(sendbuf.size(), recvd);
     }
-    EXPECT_TRUE(!check_buffers(sendbuf, recvbuf, recvd, send_iovcnt, recv_iovcnt,
-                               size, expected, sync, "IOV"));
+    EXPECT_TRUE(!check_buffers(sendbuf, recvbuf, recvd, send_dt_desc.count(),
+                               recv_dt_desc.count(), size, expected, sync,
+                               "IOV"));
 }
 
 void test_ucp_tag_xfer::test_xfer_generic_err(size_t size, bool expected,

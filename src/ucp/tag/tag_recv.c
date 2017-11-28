@@ -123,31 +123,12 @@ ucp_tag_recv_request_init(ucp_request_t *req, ucp_worker_h worker, void* buffer,
                           size_t count, ucp_datatype_t datatype,
                           uint16_t req_flags)
 {
-    ucp_dt_generic_t *dt_gen;
-    req->flags = UCP_REQUEST_FLAG_EXPECTED | UCP_REQUEST_FLAG_RECV | req_flags;
-    req->recv.state.offset = 0;
-    req->recv.worker       = worker;
+    req->flags          = UCP_REQUEST_FLAG_EXPECTED | UCP_REQUEST_FLAG_RECV |
+                          req_flags;
+    req->recv.worker    = worker;
+    req->recv.reg_rsc   = UCP_NULL_RESOURCE;
 
-    switch (datatype & UCP_DATATYPE_CLASS_MASK) {
-    case UCP_DATATYPE_IOV:
-        req->recv.state.dt.iov.iov_offset    = 0;
-        req->recv.state.dt.iov.iovcnt_offset = 0;
-        req->recv.state.dt.iov.iovcnt        = count;
-        req->recv.state.dt.iov.memh          = UCT_MEM_HANDLE_NULL;
-        break;
-
-    case UCP_DATATYPE_GENERIC:
-        dt_gen = ucp_dt_generic(datatype);
-        req->recv.state.dt.generic.state =
-                        UCS_PROFILE_NAMED_CALL("dt_start", dt_gen->ops.start_unpack,
-                                               dt_gen->context, buffer, count);
-        ucs_debug("req %p buffer %p count %zu dt_gen state=%p", req, buffer, count,
-                  req->recv.state.dt.generic.state);
-        break;
-
-    default:
-        break;
-    }
+    ucp_request_recv_state_init(req, buffer, datatype, count);
 
     if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
         req->recv.tag.info.sender_tag = 0;

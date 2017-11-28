@@ -127,3 +127,59 @@ message_stream::~message_stream() {
 } // detail
 
 } // ucs
+
+namespace ucp {
+
+
+data_type_desc_t &
+data_type_desc_t::make(ucp_datatype_t datatype, void *buf, size_t length,
+                       size_t iov_cnt)
+{
+    EXPECT_FALSE(is_valid());
+
+    if (m_length == 0) {
+        m_length = length;
+    }
+
+    if (m_origin == uintptr_t(NULL)) {
+        m_origin = uintptr_t(buf);
+    }
+
+    m_dt    = datatype;
+    m_buf   = buf;
+    m_count = length;
+    memset(m_iov, 0, sizeof(m_iov));
+
+    switch (m_dt & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_CONTIG:
+        break;
+    case UCP_DATATYPE_IOV:
+    {
+        const size_t iov_length = (length > iov_cnt) ?
+            ucs::rand() % (length / iov_cnt) : 0;
+        size_t iov_length_it = 0;
+        for (size_t iov_it = 0; iov_it < iov_cnt - 1; ++iov_it) {
+            m_iov[iov_it].buffer = (char *)(buf) + iov_length_it;
+            m_iov[iov_it].length = iov_length;
+            iov_length_it += iov_length;
+        }
+
+        /* Last entry */
+        m_iov[iov_cnt - 1].buffer = (char *)(buf) + iov_length_it;
+        m_iov[iov_cnt - 1].length = length - iov_length_it;
+
+        m_buf   = m_iov;
+        m_count = iov_cnt;
+        break;
+    }
+    default:
+        m_buf   = NULL;
+        m_count = 0;
+        EXPECT_TRUE(false) << "Unsupported datatype";
+        break;
+    }
+
+    return *this;
+}
+
+} // ucp

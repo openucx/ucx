@@ -13,6 +13,7 @@
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
+#include <ucp/stream/stream.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/cpu_set.h>
@@ -180,9 +181,11 @@ static void ucp_worker_am_tracer(void *arg, uct_am_trace_type_t type,
     ucp_worker_h worker = arg;
     ucp_am_tracer_t tracer;
 
-    tracer = ucp_am_handlers[id].tracer;
-    if (tracer != NULL) {
-        tracer(worker, type, id, data, length, buffer, max);
+    if (id < UCP_AM_ID_LAST) {
+        tracer = ucp_am_handlers[id].tracer;
+        if (tracer != NULL) {
+            tracer(worker, type, id, data, length, buffer, max);
+        }
     }
 }
 
@@ -1098,10 +1101,19 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_destroy_uct_worker;
     }
 
+    /* Create memory pool for multirail info */
+    status = ucs_mpool_init(&worker->rndv_get_mp, 0,
+                            sizeof(ucp_rndv_get_rkey_t),
+                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                            &ucp_rndv_get_mpool_ops, "ucp_rndv_get");
+    if (status != UCS_OK) {
+        goto err_req_mp_cleanup;
+    }
+
     /* Create epoll set which combines events from all transports */
     status = ucp_worker_wakeup_init(worker, params);
     if (status != UCS_OK) {
-        goto err_req_mp_cleanup;
+        goto err_rndv_lanes_mp_cleanup;
     }
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
@@ -1134,6 +1146,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 err_close_ifaces:
     ucp_worker_close_ifaces(worker);
     ucp_worker_wakeup_cleanup(worker);
+err_rndv_lanes_mp_cleanup:
+    ucs_mpool_cleanup(&worker->rndv_get_mp, 1);
 err_req_mp_cleanup:
     ucs_mpool_cleanup(&worker->req_mp, 1);
 err_destroy_uct_worker:
@@ -1168,6 +1182,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_destroy_eps(worker);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
+    ucs_mpool_cleanup(&worker->rndv_get_mp, 1);
     ucp_worker_close_ifaces(worker);
     ucp_worker_wakeup_cleanup(worker);
     ucs_mpool_cleanup(&worker->req_mp, 1);
@@ -1221,19 +1236,15 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
                                ucp_stream_poll_ep_t *poll_eps,
                                size_t max_eps, unsigned flags)
 {
-    ucp_ep_ext_stream_t *ep_stream;
-    ucp_ep_h            ep;
+    ucp_ep_ext_stream_t *ep;
     ssize_t             count = 0;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     while ((count < max_eps) && !ucs_list_is_empty(&worker->stream_eps)) {
-        ep_stream = ucs_list_extract_head(&worker->stream_eps,
-                                          ucp_ep_ext_stream_t, list);
-        ep = ep_stream->ucp_ep;
-        ep->flags &= ~UCP_EP_FLAG_STREAM_IS_QUEUED;
-        poll_eps[count].ep        = ep;
-        poll_eps[count].user_data = ep->user_data;
+        ep                        = ucp_stream_worker_dequeue_ep_head(worker);
+        poll_eps[count].ep        = ep->ucp_ep;
+        poll_eps[count].user_data = ep->ucp_ep->user_data;
         ++count;
     }
 

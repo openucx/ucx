@@ -10,6 +10,8 @@ static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
     attr->cap.flags         = 0;
     attr->cap.max_alloc     = 0;
+    attr->cap.reg_mem_types = 0;
+    attr->cap.mem_type      = 0;
     attr->cap.max_reg       = 0;
     attr->rkey_packed_size  = 0;
     attr->reg_cost.overhead = 0;

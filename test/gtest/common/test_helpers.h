@@ -10,6 +10,10 @@
 
 #include "gtest.h"
 
+#include <ucp/api/ucp.h>
+#include <ucp/dt/dt_contig.h>
+#include <ucp/dt/dt_iov.h>
+
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
 #include <errno.h>
@@ -476,6 +480,83 @@ private:
 } // ucs
 
 
+namespace ucp {
+
+class data_type_desc_t {
+public: 
+    data_type_desc_t()
+        : m_origin(uintptr_t(NULL)), m_length(0), m_buf(NULL),
+          m_iov_cnt_limit(sizeof(m_iov) / sizeof(m_iov[0])) {};
+
+    data_type_desc_t(ucp_datatype_t datatype, void *buf, size_t length)
+        : m_origin(uintptr_t(buf)), m_length(length), m_buf(NULL),
+          m_iov_cnt_limit(sizeof(m_iov) / sizeof(m_iov[0])) {
+        make(datatype, buf, length);
+    }
+
+    data_type_desc_t(ucp_datatype_t datatype, void *buf, size_t length,
+                     size_t iov_count)
+        : m_origin(uintptr_t(buf)), m_length(length), m_buf(NULL),
+          m_iov_cnt_limit(sizeof(m_iov) / sizeof(m_iov[0])) {
+        make(datatype, buf, length, iov_count);
+    };
+
+    data_type_desc_t &make(ucp_datatype_t datatype, void *buf, size_t length,
+                           size_t iov_count);
+
+    data_type_desc_t &make(ucp_datatype_t datatype, void *buf, size_t length) {
+        return make(datatype, buf, length, m_iov_cnt_limit);
+    };
+
+    data_type_desc_t &forward_to(size_t offset) {
+        EXPECT_LE(offset, m_length);
+        invalidate();
+        return make(m_dt, (void *)(m_origin + offset), m_length - offset,
+                    m_iov_cnt_limit);
+    };
+
+    ucp_datatype_t dt() const {
+        EXPECT_TRUE(is_valid());
+        return m_dt;
+    };
+
+    void *buf() const {
+        EXPECT_TRUE(is_valid());
+        return m_buf;
+    };
+
+    size_t count() const {
+        EXPECT_TRUE(is_valid());
+        return m_count;
+    };
+
+    bool is_valid() const {
+        return (m_buf != NULL) && (m_count != 0) &&
+               (UCP_DT_IS_IOV(m_dt) ? (m_count <= m_iov_cnt_limit) :
+                UCP_DT_IS_CONTIG(m_dt));
+    }
+
+private:
+    void invalidate() {
+        EXPECT_TRUE(is_valid());
+        m_buf   = NULL;
+        m_count = 0;
+    }
+
+    uintptr_t       m_origin;
+    size_t          m_length;
+
+    ucp_datatype_t  m_dt;
+    void           *m_buf;
+    size_t          m_count;
+
+    const size_t    m_iov_cnt_limit;
+    ucp_dt_iov_t    m_iov[40];
+};
+
+} // ucp
+
+
 #ifndef UINT16_MAX
 #define UINT16_MAX (65535)
 #endif /* UINT16_MAX */
@@ -587,25 +668,6 @@ private:
             } else { \
                 _name_iov[iov_it].length = _buffer_iov_length; \
                 _buffer_iov_length_it += _buffer_iov_length; \
-            } \
-        }
-
-/**
- * Make ucp_dt_iov_t iov[iovcnt] array with pointer elements to original buffer
- */
-#define UCS_TEST_GET_BUFFER_DT_IOV(_name_iov, _name_iovcnt, _buffer_ptr, _buffer_length, _iovcnt) \
-        ucp_dt_iov_t _name_iov[_iovcnt]; \
-        const size_t _name_iovcnt = _iovcnt; \
-        const size_t _name_iov##_length = (_buffer_length > _name_iovcnt) ? \
-                                           ucs::rand() % (_buffer_length / _name_iovcnt) : 0; \
-        size_t _name_iov##_length_it = 0; \
-        for (size_t iov_it = 0; iov_it < _name_iovcnt; ++iov_it) { \
-            _name_iov[iov_it].buffer = (char *)(_buffer_ptr) + _name_iov##_length_it; \
-            if (iov_it == (_name_iovcnt - 1)) { /* Last iteration */ \
-                _name_iov[iov_it].length = _buffer_length - _name_iov##_length_it; \
-            } else { \
-                _name_iov[iov_it].length = _name_iov##_length; \
-                _name_iov##_length_it += _name_iov##_length; \
             } \
         }
 

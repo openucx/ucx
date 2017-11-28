@@ -234,8 +234,8 @@ UCS_TEST_P(test_ucp_peer_failure, disable_sync_send) {
         EXPECT_FALSE(UCS_PTR_IS_PTR(req));
         EXPECT_EQ(UCS_ERR_UNSUPPORTED, UCS_PTR_STATUS(req));
 
-        UCS_TEST_GET_BUFFER_DT_IOV(iov_, iov_cnt_, buf.data(), size, 40ul);
-        req = send_sync_nb(iov_, iov_cnt_, DATATYPE_IOV, 0x111337);
+        ucp::data_type_desc_t dt_desc(DATATYPE_IOV, buf.data(), size);
+        req = send_sync_nb(dt_desc.buf(), dt_desc.count(), dt_desc.dt(), 0x111337);
         EXPECT_FALSE(UCS_PTR_IS_PTR(req));
         EXPECT_EQ(UCS_ERR_UNSUPPORTED, UCS_PTR_STATUS(req));
     }

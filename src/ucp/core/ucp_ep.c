@@ -86,10 +86,8 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 
         ucs_queue_head_init(&ep->ext.stream->data);
         ucs_queue_head_init(&ep->ext.stream->reqs);
-        ep->ext.stream->ucp_ep       = ep;
-        ep->ext.stream->rdesc        = NULL;
-        ep->ext.stream->rdesc_offset = 0;
-        ep->ext.stream->rdesc_len    = 0;
+        ep->ext.stream->ucp_ep = ep;
+        ep->ext.stream->rdesc  = NULL;
     } else {
         ep->ext.stream = NULL;
     }
@@ -663,6 +661,7 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
     rndv_thresh = ucs_max(rndv_thresh, iface_attr->cap.get.min_zcopy);
 
     config->tag.rndv.max_get_zcopy = iface_attr->cap.get.max_zcopy;
+    config->tag.rndv.max_put_zcopy = iface_attr->cap.put.max_zcopy;
     config->tag.rndv.rma_thresh    = ucs_min(rndv_thresh, adjust_min_val);
 }
 
@@ -742,6 +741,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     config->tag.sync_proto              = &ucp_tag_eager_sync_proto;
     config->tag.rndv.rma_thresh         = SIZE_MAX;
     config->tag.rndv.max_get_zcopy      = SIZE_MAX;
+    config->tag.rndv.max_put_zcopy      = SIZE_MAX;
     config->tag.rndv.am_thresh          = SIZE_MAX;
     config->stream.proto                = &ucp_stream_am_proto;
     max_rndv_thresh                     = SIZE_MAX;

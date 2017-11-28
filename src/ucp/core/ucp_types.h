@@ -38,6 +38,7 @@ UCP_UINT_TYPE(UCP_MAX_LANES)         ucp_lane_map_t;
 
 /* Forward declarations */
 typedef struct ucp_request              ucp_request_t;
+typedef struct ucp_recv_desc            ucp_recv_desc_t;
 typedef struct ucp_address_iface_attr   ucp_address_iface_attr_t;
 typedef struct ucp_address_entry        ucp_address_entry_t;
 typedef struct ucp_wireup_ep            ucp_wireup_ep_t;
@@ -71,6 +72,8 @@ enum {
 
     UCP_AM_ID_STREAM_DATA       =  15, /* Eager STREAM packet */
 
+    UCP_AM_ID_RNDV_ATP          =  16, /* Ack-to-put complete after finishing a put_zcopy */
+
     UCP_AM_ID_LAST
 };
 
@@ -86,6 +89,16 @@ typedef enum {
     UCP_ATOMIC_MODE_LAST
 } ucp_atomic_mode_t;
 
+
+/**
+ * Communication scheme in RNDV protocol.
+ */
+typedef enum {
+    UCP_RNDV_MODE_GET_ZCOPY, /* Use get_zcopy scheme in RNDV protocol */
+    UCP_RNDV_MODE_PUT_ZCOPY, /* Use put_zcopy scheme in RNDV protocol */
+    UCP_RNDV_MODE_AUTO,      /* Runtime automatically chooses optimal scheme to use */
+    UCP_RNDV_MODE_LAST
+} ucp_rndv_mode_t;
 
 /**
  * Active message tracer.

@@ -38,6 +38,13 @@ static const char * ucp_device_type_names[] = {
     [UCT_DEVICE_TYPE_SELF] = "loopback",
 };
 
+static const char * ucp_rndv_modes[] = {
+    [UCP_RNDV_MODE_GET_ZCOPY] = "get_zcopy",
+    [UCP_RNDV_MODE_PUT_ZCOPY] = "put_zcopy",
+    [UCP_RNDV_MODE_AUTO]      = "auto",
+    [UCP_RNDV_MODE_LAST]      = NULL,
+};
+
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which network device(s) to use. The order is not meaningful.\n"
@@ -103,6 +110,13 @@ static ucs_config_field_t ucp_config_table[] = {
   {"MAX_RNDV_LANES", "1",
    "Maximal number of devices on which a rendezvous operation may be executed in parallel",
    ucs_offsetof(ucp_config_t, ctx.max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
+
+  {"RNDV_SCHEME", "get_zcopy",
+   "Communication scheme in RNDV protocol.\n"
+   " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
+   " put_zcopy - use put_zcopy scheme in RNDV protocol.\n"
+   " auto      - runtime automatically chooses optimal scheme to use.\n",
+   ucs_offsetof(ucp_config_t, ctx.rndv_mode), UCS_CONFIG_TYPE_ENUM(ucp_rndv_modes)},
 
   {"ZCOPY_THRESH", "auto",
    "Threshold for switching from buffer copy to zero copy protocol",
@@ -618,11 +632,14 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     ucp_rsc_index_t i;
     unsigned md_index;
     uint64_t masks[UCT_DEVICE_TYPE_LAST] = {0};
+    uint64_t mem_type_mask;
+    uct_memory_type_t mem_type;
 
     context->tl_mds      = NULL;
     context->num_mds     = 0;
     context->tl_rscs     = NULL;
     context->num_tls     = 0;
+    context->num_mem_type_mds = 0;
 
     status = ucp_check_resource_config(config);
     if (status != UCS_OK) {
@@ -652,6 +669,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
 
     /* Open all memory domains */
     md_index = 0;
+    mem_type_mask = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
     for (i = 0; i < num_md_resources; ++i) {
         status = ucp_fill_tl_md(&md_rscs[i], &context->tl_mds[md_index]);
         if (status != UCS_OK) {
@@ -670,6 +688,13 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
          * client-server connection establishment via sockaddr, don't use it */
         if ((num_tl_resources > 0) ||
             (context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) {
+            /*List of memory type MDs*/
+            mem_type = context->tl_mds[md_index].attr.cap.mem_type;
+            if (!(mem_type_mask & UCS_BIT(mem_type))) {
+                context->mem_type_tl_mds[context->num_mem_type_mds] = md_index;
+                ++context->num_mem_type_mds;
+                mem_type_mask |= UCS_BIT(mem_type);
+            }
             ++md_index;
             ++context->num_mds;
         } else {
@@ -762,6 +787,13 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                      config->ctx.use_mt_mutex ? UCP_MT_TYPE_MUTEX
                                               : UCP_MT_TYPE_SPINLOCK);
     context->config.ext = config->ctx;
+
+    if (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) {
+        /* TODO: currently UCP_RNDV_MODE_AUTO == UCP_RNDV_MODE_GET_ZCOPY,
+         * after memory type support is added, will add tru UCP_RNDV_MODE_AUTO
+         * implementation */
+        context->config.ext.rndv_mode = UCP_RNDV_MODE_GET_ZCOPY;
+    }
 
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_

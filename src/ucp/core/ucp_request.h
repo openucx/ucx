@@ -36,6 +36,8 @@ enum {
     UCP_REQUEST_FLAG_RNDV                 = UCS_BIT(9),
     UCP_REQUEST_FLAG_OFFLOADED            = UCS_BIT(10),
     UCP_REQUEST_FLAG_BLOCK_OFFLOAD        = UCS_BIT(11),
+    UCP_REQUEST_FLAG_RNDV_RKEY            = UCS_BIT(12),
+    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(13),
 
 #if ENABLE_ASSERT
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(15)
@@ -52,6 +54,7 @@ enum {
     UCP_REQUEST_SEND_PROTO_BCOPY_AM = 0,
     UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
     UCP_REQUEST_SEND_PROTO_RNDV_GET,
+    UCP_REQUEST_SEND_PROTO_RNDV_PUT,
     UCP_REQUEST_SEND_PROTO_RMA
 };
 
@@ -76,6 +79,17 @@ enum {
     UCP_RDESC_HASH_LIST = 0,
     UCP_RDESC_ALL_LIST  = 1
 };
+
+
+/**
+ * Multirail rendezvous-get info.
+ * In tag offloading there is only one lane used, but
+ * in other cases number of remote keys should match number
+ * of lanes used in rndv-get protocol
+ */
+typedef struct ucp_rndv_get_rkey {
+    uct_rkey_bundle_t rkey_bundle[UCP_MAX_RNDV_LANES];
+} ucp_rndv_get_rkey_t;
 
 
 /**
@@ -117,11 +131,20 @@ struct ucp_request {
                 } proxy;
 
                 struct {
-                    uint64_t           remote_address; /* address of the sender's data buffer */
-                    uintptr_t          remote_request; /* pointer to the sender's send request */
-                    uct_rkey_bundle_t  rkey_bundle;
-                    ucp_request_t     *rreq;           /* receive request on the recv side */
+                    uint64_t             remote_address; /* address of the sender's data buffer */
+                    uintptr_t            remote_request; /* pointer to the sender's send request */
+                    ucp_rndv_get_rkey_t *rkey;
+                    ucp_request_t       *rreq;           /* receive request on the recv side */
+                    ucp_lane_index_t     num_lanes;      /* number of rkeys obtained from peer */
+                    ucp_lane_index_t     lane_idx;       /* rendezvous line index used for next op */
                 } rndv_get;
+
+                struct {
+                    uint64_t      remote_address; /* address of the receiver's data buffer */
+                    uintptr_t     remote_request; /* pointer to the receiver's send request */
+                    uct_rkey_bundle_t rkey_bundle;
+                    ucp_request_t *sreq;          /* send request on the send side */
+                } rndv_put;
 
                 struct {
                     ucp_request_callback_t flushed_cb;/* Called when flushed */
@@ -171,6 +194,7 @@ struct ucp_request {
             void                  *buffer;  /* Buffer to receive data to */
             ucp_datatype_t        datatype; /* Receive type */
             size_t                length;   /* Total length, in bytes */
+            ucp_rsc_index_t       reg_rsc;  /* Resource on which memory is registered */
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
             ucp_mem_desc_t        *rdesc;
@@ -187,7 +211,7 @@ struct ucp_request {
 
                 struct {
                     ucp_stream_recv_callback_t cb;     /* Completion callback */
-                    size_t                     count;  /* Completion info to fill */
+                    size_t                     length; /* Completion info to fill */
                 } stream;
             };
         } recv;
@@ -204,7 +228,7 @@ struct ucp_request {
 /**
  * Unexpected receive descriptor.
  */
-typedef struct ucp_recv_desc {
+struct ucp_recv_desc {
     union {
         ucs_list_link_t           tag_list[2];  /* Hash list TAG-element */
         ucs_queue_elem_t          stream_queue; /* Queue STREAM-element */
@@ -212,7 +236,7 @@ typedef struct ucp_recv_desc {
     size_t                        length;   /* Received length */
     uint16_t                      hdr_len;  /* Header size */
     uint16_t                      flags;    /* Flags */
-} ucp_recv_desc_t;
+};
 
 
 extern ucs_mpool_ops_t ucp_request_mpool_ops;
@@ -223,7 +247,15 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status);
 
 ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req, ucp_lane_index_t lane);
 
-void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane);
+ucs_status_t ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_ep_h ep, ucp_lane_index_t lane);
+
+void ucp_request_send_buffer_dereg(ucp_request_t *req);
+
+void ucp_request_recv_buffer_dereg(ucp_request_t *req);
+
+ucs_status_t ucp_request_rndv_buffer_reg(ucp_request_t *req);
+
+ucp_lane_index_t ucp_request_rndv_buffer_dereg_unused(ucp_request_t *req, ucp_lane_index_t used);
 
 ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
                                     void *buffer, size_t length, ucp_datatype_t datatype,

@@ -403,6 +403,30 @@ static ucs_status_t ucp_tag_offload_eager_zcopy(uct_pending_req_t *self)
                                     ucp_proto_am_zcopy_req_complete);
 }
 
+static size_t ucp_tag_offload_rndv_pack_rkey(ucp_request_t *sreq, ucp_lane_index_t lane,
+                                             void *rkey_buf, uint16_t *flags)
+{
+    ucp_ep_h ep = sreq->send.ep;
+    ucs_status_t status;
+
+    ucs_assert(UCP_DT_IS_CONTIG(sreq->send.datatype));
+
+    /* Check if the sender needs to register the send buffer -
+     * is its datatype contiguous and does the receive side need it */
+    if (ucp_ep_md_attr(ep, lane)->cap.flags & UCT_MD_FLAG_NEED_RKEY) {
+        status = ucp_request_send_buffer_reg(sreq, lane);
+        ucs_assert_always(status == UCS_OK);
+
+        /* if the send buffer was registered, send the rkey */
+        UCS_PROFILE_CALL(uct_md_mkey_pack, ucp_ep_md(ep, lane),
+                         sreq->send.state.dt.dt.contig[0].memh, rkey_buf);
+        *flags |= UCP_RNDV_RTS_FLAG_PACKED_RKEY;
+        return ucp_ep_md_attr(ep, lane)->rkey_packed_size;
+    }
+
+    return 0;
+}
+
 ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
@@ -420,7 +444,7 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
         addr         = (uintptr_t*)(rndv_hdr + 1);
         *addr        = (uintptr_t)req->send.buffer;
         rndv_hdr->flags = 0;
-        ucp_tag_rndv_pack_rkey(req, req->send.lane, addr + 1, &rndv_hdr->flags);
+        ucp_tag_offload_rndv_pack_rkey(req, req->send.lane, addr + 1, &rndv_hdr->flags);
     } else {
         rndv_hdr_len = sizeof(ucp_sw_rndv_hdr_t);
         rndv_hdr     = ucs_alloca(rndv_hdr_len);

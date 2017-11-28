@@ -97,16 +97,23 @@ ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_request_complete_stream_recv(ucp_request_t *req, ucs_status_t status)
+ucp_request_complete_stream_recv(ucp_request_t *req,
+                                 ucp_ep_ext_stream_t* ep_stream,
+                                 ucs_status_t status)
 {
+    /* dequeue request before complete */
+    ucp_request_t *check_req UCS_V_UNUSED =
+            ucs_queue_pull_elem_non_empty(&ep_stream->reqs, ucp_request_t,
+                                          recv.queue);
+    ucs_assert(check_req == req);
     ucs_assert(req->recv.state.offset > 0);
-    req->recv.stream.count = req->recv.state.offset;
+    req->recv.stream.length = req->recv.state.offset;
     ucs_trace_req("completing stream receive request %p (%p) "
                   UCP_REQUEST_FLAGS_FMT" count %zu, %s",
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
-                  req->recv.stream.count, ucs_status_string(status));
+                  req->recv.stream.length, ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
-    ucp_request_complete(req, recv.stream.cb, status, req->recv.stream.count);
+    ucp_request_complete(req, recv.stream.cb, status, req->recv.stream.length);
 }
 
 /*
@@ -178,6 +185,36 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_request_recv_state_init(ucp_request_t *req, void *buffer, ucp_datatype_t dt,
+                            size_t dt_count)
+{
+    ucp_dt_generic_t *dt_gen;
+
+    req->recv.state.offset = 0;
+
+    switch (dt & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_IOV:
+        req->recv.state.dt.iov.iov_offset    = 0;
+        req->recv.state.dt.iov.iovcnt_offset = 0;
+        req->recv.state.dt.iov.iovcnt        = dt_count;
+        req->recv.state.dt.iov.memh          = UCT_MEM_HANDLE_NULL;
+        break;
+
+    case UCP_DATATYPE_GENERIC:
+        dt_gen = ucp_dt_generic(dt);
+        req->recv.state.dt.generic.state =
+            UCS_PROFILE_NAMED_CALL("dt_start", dt_gen->ops.start_unpack,
+                                   dt_gen->context, buffer, dt_count);
+        ucs_trace_req("req %p buffer %p count %zu dt_gen state=%p", req, buffer,
+                      dt_count, req->recv.state.dt.generic.state);
+        break;
+
+    default:
+        break;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_request_send_state_init(ucp_request_t *req, size_t dt_count)
 {
     ucp_dt_generic_t *dt_gen;
@@ -218,6 +255,7 @@ ucp_request_send_state_reset(ucp_request_t *req,
         ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
+    case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
         if (UCP_DT_IS_CONTIG(req->send.datatype)) {
             ucp_dt_clear_memh(&req->send.state.dt);
         }
@@ -272,6 +310,7 @@ ucp_request_send_state_advance(ucp_request_t *req,
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
+    case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
         if (status == UCS_INPROGRESS) {
             ++req->send.state.uct_comp.count;
         }
@@ -321,6 +360,11 @@ ucp_request_is_send_buffer_reg(ucp_request_t *req) {
     return req->send.reg_rsc != UCP_NULL_RESOURCE;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_request_is_recv_buffer_reg(ucp_request_t *req) {
+    return req->recv.reg_rsc != UCP_NULL_RESOURCE;
+}
+
 static UCS_F_ALWAYS_INLINE void ucp_request_send_tag_stat(ucp_request_t *req)
 {
     if (req->flags & UCP_REQUEST_FLAG_RNDV) {
@@ -333,8 +377,67 @@ static UCS_F_ALWAYS_INLINE void ucp_request_send_tag_stat(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE
-uct_rkey_bundle_t *ucp_tag_rndv_rkey(ucp_request_t *req)
+uct_rkey_bundle_t *ucp_tag_rndv_rkey_bundle(ucp_request_t *req, int idx)
 {
-    return &req->send.rndv_get.rkey_bundle;
+    ucs_assert((idx >= 0) && (idx < UCP_MAX_RNDV_LANES));
+    return &req->send.rndv_get.rkey->rkey_bundle[idx];
 }
+
+static UCS_F_ALWAYS_INLINE
+uct_rkey_t ucp_tag_rndv_rkey(ucp_request_t *req, int idx)
+{
+    return (req->send.rndv_get.rkey != NULL) ?
+           ucp_tag_rndv_rkey_bundle(req, idx)->rkey : UCT_INVALID_RKEY;
+}
+
+static UCS_F_ALWAYS_INLINE
+int ucp_tag_rndv_is_rkey_valid(ucp_request_t *req, int idx)
+{
+    return (req->send.rndv_get.rkey != NULL) &&
+           (ucp_tag_rndv_rkey_bundle(req, idx)->rkey != UCT_INVALID_RKEY);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_rndv_get_init(ucp_request_t *req)
+{
+    int i;
+
+    ucs_trace_req("rendezvous-get create request %p", req);
+    req->send.rndv_get.rkey = ucs_mpool_get_inline(&req->send.ep->worker->rndv_get_mp);
+    ucs_assert_always(req->send.rndv_get.rkey != NULL);
+
+    req->send.rndv_get.lane_idx  = 0;
+    req->send.rndv_get.num_lanes = 0;
+
+    for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
+        ucp_tag_rndv_rkey_bundle(req, i)->rkey = UCT_INVALID_RKEY;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_rndv_get_release(ucp_request_t *req)
+{
+    int i;
+
+    ucs_trace_req("release request rndv-get remote key. req: %p", req);
+
+    if (req->send.rndv_get.rkey == NULL) {
+        return;
+    }
+
+    for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
+        if (ucp_tag_rndv_is_rkey_valid(req, i)) {
+            uct_rkey_release(ucp_tag_rndv_rkey_bundle(req, i));
+        }
+    }
+
+    ucs_mpool_put_inline(req->send.rndv_get.rkey);
+}
+
+static UCS_F_ALWAYS_INLINE
+void ucp_request_rndv_buffer_dereg(ucp_request_t *req)
+{
+    ucp_request_rndv_buffer_dereg_unused(req, UCP_NULL_LANE);
+}
+
 

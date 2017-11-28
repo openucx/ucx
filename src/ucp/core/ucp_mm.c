@@ -106,6 +106,22 @@ static ucs_status_t ucp_memh_reg_mds(ucp_context_h context, ucp_mem_h memh,
     return UCS_OK;
 }
 
+ucs_status_t ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
+                                        uct_memory_type_t *mem_type_p)
+{
+    unsigned i, md_index;
+
+    for (i = 0; i < context->num_mem_type_mds; ++i) {
+        md_index = context->mem_type_tl_mds[i];
+        if (uct_md_is_mem_type_owned(context->tl_mds[md_index].md, addr, length)) {
+            *mem_type_p = context->tl_mds[md_index].attr.cap.mem_type;
+            return UCS_OK;
+        }
+    }
+    *mem_type_p = UCT_MD_MEM_TYPE_HOST;
+    return UCS_OK;
+}
+
 /**
  * @return Whether MD number 'md_index' is selected by the configuration as part
  *         of allocation method number 'config_method_index'.

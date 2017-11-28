@@ -133,6 +133,10 @@
 /* Special pointer value */
 #define UCS_ERR_PTR(err)           ((void*)-(err + 1))
 
+/* Helper macro for address arithmetic in bytes */
+#define UCS_PTR_BYTE_OFFSET(_ptr, _offset) \
+    ((void *)((uintptr_t)(_ptr) + (_offset)))
+
 /**
  * Copy words from _src to _dst.
  *

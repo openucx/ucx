@@ -5,6 +5,7 @@
 */
 
 #include "ucp_test.h"
+#include "common/test_helpers.h"
 
 
 class test_ucp_stream : public ucp_test {
@@ -47,28 +48,9 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 
     /* send all msg sizes*/
     for (size_t i = 3; i < sbuf.size(); i *= 2) {
-        ucs_status_ptr_t sstatus;
-        void *tmp    = reinterpret_cast<void *>(sbuf.data());
-        void *buf    = NULL;
-        size_t count = 0;
-
-        UCS_TEST_GET_BUFFER_DT_IOV(iov_, iov_cnt_, tmp, i, 40ul);
-
-        switch (datatype & UCP_DATATYPE_CLASS_MASK) {
-        case UCP_DATATYPE_CONTIG:
-            buf   = tmp;
-            count = i;
-            break;
-        case UCP_DATATYPE_IOV:
-            buf   = iov_;
-            count = iov_cnt_;
-            break;
-        }
-
-        ASSERT_TRUE(buf   != NULL);
-        ASSERT_TRUE(count != 0);
-
-        sstatus = stream_send_nb(buf, count, datatype);
+        ucp::data_type_desc_t dt_desc(datatype, sbuf.data(), i);
+        void *sstatus = stream_send_nb(dt_desc.buf(), dt_desc.count(),
+                                       dt_desc.dt());
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
         wait(sstatus);
         ssize += i;
