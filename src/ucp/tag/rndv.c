@@ -337,9 +337,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_get_zcopy, (self),
         return UCS_ERR_NO_RESOURCE;
     }
 
+    /* Reinitialize a lane, since ep could be a stub before */
     rndv_req->send.lane = (rndv_req->flags & UCP_REQUEST_FLAG_OFFLOADED) ?
-                          ucp_ep_get_tag_lane(rndv_req->send.ep) :
-                          ucp_ep_get_rndv_get_lane(rndv_req->send.ep, 0);
+                          ucp_ep_get_tag_lane(ep) :
+                          ucp_ep_get_rndv_get_lane(ep, 0);
 
     if (!(ucp_tag_rndv_is_get_put_op_possible(rndv_req->send.ep, rndv_req->send.lane,
                                               ucp_tag_rndv_rkey(rndv_req, 0)))) {
@@ -461,8 +462,10 @@ static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *
         }
 
         if (rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_OFFLOAD) {
-            rndv_req->flags |= UCP_REQUEST_FLAG_OFFLOADED;
-
+            rndv_req->flags    |= UCP_REQUEST_FLAG_OFFLOADED;
+            rndv_req->send.lane = ucp_ep_get_tag_lane(rndv_req->send.ep);
+        } else {
+            rndv_req->send.lane = ucp_ep_get_rndv_get_lane(rndv_req->send.ep, 0);
         }
 
         ucp_request_send_state_reset(rndv_req, ucp_rndv_get_completion,
