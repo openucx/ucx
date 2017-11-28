@@ -176,7 +176,7 @@ static ucs_config_field_t ucp_config_table[] = {
 static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
   { "shm",   { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
-  { "ib",    { "rc", "ud", "rc_mlx5", "ud_mlx5", NULL } },
+  { "ib",    { "rc", "ud", "dc", "rc_mlx5", "ud_mlx5", "dc_mlx5", NULL } },
   { "rc",    { "rc", "ud:aux", NULL } },
   { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", NULL } },
   { "ud_x",  { "ud_mlx5", NULL } },
