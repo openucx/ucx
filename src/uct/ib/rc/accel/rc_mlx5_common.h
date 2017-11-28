@@ -19,7 +19,7 @@
 
 #define UCT_RC_MLX5_CHECK_AM_ZCOPY(_id, _header_length, _length, _seg_size, _av_size) \
     UCT_RC_CHECK_AM_ZCOPY(_id, _header_length, _length, \
-                          UCT_IB_MLX5_AM_MAX_HDR(_av_size), _seg_size)
+                          UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(_av_size), _seg_size)
 
 #define UCT_RC_MLX5_CHECK_AM_SHORT(_id, _length, _av_size) \
     UCT_RC_CHECK_AM_SHORT(_id, _length, UCT_IB_MLX5_AM_MAX_SHORT(_av_size))

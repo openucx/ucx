@@ -197,7 +197,8 @@ void uct_rc_mlx5_iface_common_query(uct_rc_iface_t *iface,
     iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.min_zcopy  = 0;
     iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
-    iface_attr->cap.am.max_hdr    = UCT_IB_MLX5_AM_MAX_HDR(av_size) - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_hdr    = UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(av_size)
+                                    - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.max_iov    = UCT_IB_MLX5_AM_ZCOPY_MAX_IOV;
 
     /* Atomics */

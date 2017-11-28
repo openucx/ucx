@@ -269,7 +269,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super),
                        "uct_ud_mlx5_ep_am_zcopy");
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length, 0,
-                     UCT_IB_MLX5_AM_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE),
+                     UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE),
                      "am_zcopy header");
     UCT_UD_CHECK_ZCOPY_LENGTH(&iface->super, header_length,
                               uct_iov_total_length(iov, iovcnt));
@@ -490,7 +490,7 @@ uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->overhead       = 50e-9; /* Software overhead */
     iface_attr->cap.am.max_iov = uct_ib_iface_get_max_iov(&iface->super);
 
-    iface_attr->cap.am.max_hdr = UCT_IB_MLX5_AM_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE)
+    iface_attr->cap.am.max_hdr = UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE)
                                  - sizeof(uct_ud_neth_t);
 
     return UCS_OK;

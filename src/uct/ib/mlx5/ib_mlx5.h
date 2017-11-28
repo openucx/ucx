@@ -74,7 +74,7 @@ struct mlx5_grh_av {
       (_av_size) + \
       sizeof(struct mlx5_wqe_inl_data_seg)))
 
-#define UCT_IB_MLX5_AM_MAX_HDR(_av_size) \
+#define UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(_av_size) \
     (UCT_IB_MLX5_AM_MAX_SHORT(_av_size) - \
      UCT_IB_MLX5_AM_ZCOPY_MAX_IOV * sizeof(struct mlx5_wqe_data_seg))
 
