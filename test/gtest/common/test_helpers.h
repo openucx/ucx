@@ -485,8 +485,10 @@ namespace ucp {
 class data_type_desc_t {
 public: 
     data_type_desc_t()
-        : m_origin(uintptr_t(NULL)), m_length(0), m_buf(NULL),
-          m_iov_cnt_limit(sizeof(m_iov) / sizeof(m_iov[0])) {};
+        : m_origin(uintptr_t(NULL)), m_length(0), m_dt(0), m_buf(NULL),
+          m_count(0), m_iov_cnt_limit(sizeof(m_iov) / sizeof(m_iov[0])) {
+        memset(m_iov, 0, sizeof(m_iov));
+    };
 
     data_type_desc_t(ucp_datatype_t datatype, void *buf, size_t length)
         : m_origin(uintptr_t(buf)), m_length(length), m_buf(NULL),
