@@ -23,6 +23,12 @@ ucp_stream_ep_enqueue(ucp_ep_ext_stream_t *ep, ucp_worker_h worker)
     ep->ucp_ep->flags |= UCP_EP_FLAG_STREAM_IS_QUEUED;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_stream_ep_is_queued(ucp_ep_h ep)
+{
+    return ep->flags & UCP_EP_FLAG_STREAM_IS_QUEUED;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_stream_ep_dequeue(ucp_ep_ext_stream_t *ep)
 {
