@@ -9,12 +9,9 @@
 #include <ucs/sys/string.h>
 
 static ucs_config_field_t uct_rdmacm_iface_config_table[] = {
-    {"MAX_CONN", "1024",
-     "Maximal number of supported incoming connections on the RDMACM listener.",
-     ucs_offsetof(uct_rdmacm_iface_config_t, num_conns), UCS_CONFIG_TYPE_UINT},
-
-    {"ASYNC_MODE", "thread", "Async mode to use",
-     ucs_offsetof(uct_rdmacm_iface_config_t, async_mode), UCS_CONFIG_TYPE_ENUM(ucs_async_mode_names)},
+    {"BACKLOG", "1024",
+     "Maximum number of pending connections for an rdma_cm_id.",
+     ucs_offsetof(uct_rdmacm_iface_config_t, backlog), UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
@@ -42,23 +39,16 @@ static int uct_rdmacm_iface_is_reachable(const uct_iface_h tl_iface,
                                          const uct_device_addr_t *dev_addr,
                                          const uct_iface_addr_t *iface_addr)
 {
-    /* Since the iface's address is the sockaddr, we can call the
-     * uct_md_is_sockaddr_accessible API call to check accessibility to
-     * this sockaddr */
-    uct_rdmacm_iface_t *iface    = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
-    ucs_sock_addr_t *rdmacm_addr = (ucs_sock_addr_t *)iface_addr;
-
-    return uct_md_is_sockaddr_accessible(iface->super.md, rdmacm_addr,
-                                         UCT_SOCKADDR_ACC_REMOTE);
+    /* Reachability can be checked with the uct_md_is_sockaddr_accessible API call */
+    return 1;
 }
 
 static ucs_status_t uct_rdmacm_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
 {
-    uct_rdmacm_iface_t *iface = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
     ucs_sock_addr_t *rdmacm_addr = (ucs_sock_addr_t *)iface_addr;
 
-    rdmacm_addr->addr    = rdma_get_local_addr(iface->cm_id);
-    rdmacm_addr->addrlen = sizeof(struct sockaddr);
+    rdmacm_addr->addr    = NULL;
+    rdmacm_addr->addrlen = 0;
     return UCS_OK;
 }
 
@@ -99,18 +89,22 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
                               params, tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_RDMACM_TL_NAME));
 
-    rdmacm_md = (uct_rdmacm_md_t *)self->super.md;
+
+    rdmacm_md = ucs_derived_of(self->super.md, uct_rdmacm_md_t);
+
     if (self->super.worker->async == NULL) {
         ucs_error("rdmacm must have async != NULL");
         return UCS_ERR_INVALID_PARAM;
     }
+    if (self->super.worker->async->mode == UCS_ASYNC_MODE_SIGNAL) {
+        ucs_warn("rdmacm does not support SIGIO");
+    }
 
-    self->addr_resolve_timeout = rdmacm_md->addr_resolve_timeout;
-    self->config.async_mode    = config->async_mode;
+    self->config.addr_resolve_timeout = rdmacm_md->addr_resolve_timeout;
 
     self->event_ch = rdma_create_event_channel();
     if (self->event_ch == NULL) {
-        ucs_error("rdma_create_event_channel() failed. open_mode %zu. %m.",
+        ucs_error("rdma_create_event_channel(open_mode=%zu) failed: %m",
                   params->open_mode);
         status = UCS_ERR_IO_ERROR;
         goto err;
@@ -126,20 +120,20 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
     /* Create an id for this interface. Events associated with this id will be
      * reported on the event_channel that was previously created. */
     if (rdma_create_id(self->event_ch, &self->cm_id, NULL, RDMA_PS_UDP)) {
-        ucs_error("rdma_create_id() failed on server: %m");
+        ucs_error("rdma_create_id() failed: %m");
         status = UCS_ERR_IO_ERROR;
         goto err_destroy_event_channel;
     }
 
     if (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) {
-        if (rdma_bind_addr(self->cm_id, (struct sockaddr *)(params->mode.sockaddr.listen_sockaddr.addr))) {
+        if (rdma_bind_addr(self->cm_id, (struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr)) {
             ucs_error("rdma_bind_addr() failed: %m");
             status = UCS_ERR_IO_ERROR;
             goto err_destroy_id;
         }
 
-        if (rdma_listen(self->cm_id, config->num_conns)) {
-            ucs_error("rdma_listen() failed. cm_id: %p, event_channel: %p addr: %s. %m",
+        if (rdma_listen(self->cm_id, config->backlog)) {
+            ucs_error("rdma_listen(cm_id:=%p event_channel=%p addr=%s) failed: %m",
                        self->cm_id, self->event_ch,
                        ucs_sockaddr_str((struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr,
                                         ip_str, ip_len));
@@ -147,30 +141,27 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
             goto err_destroy_id;
         }
 
-        ucs_debug("server listening on IP %s port %d",
+        ucs_debug("rdma_cm id %p listening on %s:%d", self->cm_id,
                   ucs_sockaddr_str((struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr,
                                    ip_str, ip_len),
                   ntohs(rdma_get_src_port(self->cm_id)));
 
-        if (config->async_mode == UCS_ASYNC_MODE_SIGNAL) {
-            ucs_warn("rdmacm does not support SIGIO");
+        if (params->mode.sockaddr.cb_flags != UCT_CB_FLAG_ASYNC) {
+            ucs_fatal("UCT_CB_FLAG_SYNC is not supported");
         }
 
-        self->config.cb_flags  = params->mode.sockaddr.cb_flags;
+        self->cb_flags         = params->mode.sockaddr.cb_flags;
         self->conn_request_cb  = params->mode.sockaddr.conn_request_cb;
         self->conn_request_arg = params->mode.sockaddr.conn_request_arg;
         self->is_server        = 1;
     } else {
-        self->config.cb_flags  = UCT_CB_FLAG_ASYNC; /* Only ASYNC is currently supported */
         self->is_server        = 0;
     }
 
     self->ep = NULL;
-    ucs_queue_head_init(&self->pending_eps_q);
 
     ucs_debug("created an RDMACM iface %p. event_channel: %p, fd: %d, cm_id: %p",
               self, self->event_ch, self->event_ch->fd, self->cm_id);
-
     return UCS_OK;
 
 err_destroy_id:

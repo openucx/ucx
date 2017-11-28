@@ -15,6 +15,7 @@ struct uct_rdmacm_ep {
     void                               *conn_reply_arg;
     ucs_queue_elem_t                   queue;
     struct sockaddr                    *remote_addr;
+    uint32_t                           cb_flags;
 };
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t, uct_iface_t*,

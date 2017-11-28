@@ -18,7 +18,10 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
-    ucs_assert(iface->is_server == 0);
+    if (iface->is_server) {
+        /* TODO allow an interface to be used both for server and client */
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     /* Initialize these fields before calling rdma_resolve_addr to avoid a race
      * where they are used before being initialized (from the async thread
@@ -26,22 +29,22 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
     hdr.length           = length;
     self->conn_reply_cb  = reply_cb;
     self->conn_reply_arg = arg;
-    self->priv_data      = ucs_malloc(sizeof(uct_rdmacm_priv_data_hdr_t) + length,
-                                      "client private data");
+    self->priv_data      = ucs_malloc(sizeof(hdr) + length, "client private data");
+    if (self->priv_data == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
 
-    memcpy(self->priv_data, &hdr, sizeof(uct_rdmacm_priv_data_hdr_t));
-    memcpy(self->priv_data + sizeof(uct_rdmacm_priv_data_hdr_t), priv_data, length);
+    memcpy(self->priv_data, &hdr, sizeof(hdr));
+    memcpy(self->priv_data + sizeof(hdr), priv_data, length);
 
     /* The interface can point at one endpoint at a time and therefore, the
      * connection establishment cannot be done in parallel for several endpoints */
+    /* TODO support connection establishment on parallel endpoints on the same iface */
     if (iface->ep == NULL) {
         iface->ep = self;
     } else {
         /* Add the ep to the pending queue */
         self->remote_addr = (struct sockaddr *)(sockaddr->addr);
-        UCS_ASYNC_BLOCK(iface->super.worker->async);
-        ucs_queue_push(&iface->pending_eps_q, &self->queue);
-        UCS_ASYNC_UNBLOCK(iface->super.worker->async);
     }
 
     ucs_debug("created an RDMACM endpoint on iface %p. event_channel: %p, "
@@ -51,6 +54,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
                                 ip_str, ip_len));
 
     if (cb_flags == UCT_CB_FLAG_ASYNC) {
+        self->cb_flags = cb_flags;
         /* If the user's callbacks are called from the async thread, we cannot
          * tell at this point if they were already invoked and if this client's
          * ep is already connected to the server */
