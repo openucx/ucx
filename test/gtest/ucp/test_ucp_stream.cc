@@ -192,7 +192,7 @@ void test_ucp_stream::do_send_exp_recv_test(ucp_datatype_t datatype)
         if (UCS_PTR_IS_PTR(rreq)) {
             length = wait_stream_recv(rreq);
         }
-        ASSERT_GT(length, 0);
+        ASSERT_GT(length, 0ul);
         ASSERT_LE(length, msg_size);
         rcount += length;
     }
