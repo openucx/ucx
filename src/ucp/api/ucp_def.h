@@ -387,11 +387,10 @@ typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
  * The enumeration allows specifying which events are expected on wakeup, though
  * empty events are possible.
  *
- * @note UCP doesn't generate POLLOUT like events (see poll man pages) since
+ * @note UCP doesn't generate POLLOUT-like events (see poll man pages) since
  * it's always ready to initiate outgoing operations (e.g any type of sending,
- * atomic or RMA). Hoverer, they can be pended due to limitation of resources.
- * It's user's responsibility to do progressing calling @ref ucp_worker_progress
- * when it's needed to achieve the best performance.
+ * atomic or RMA). Hoverer, they can be queued due to limitation of resources.
+ * Send completions are reported by POLLIN-like events.
  */
 typedef enum ucp_wakeup_event_types {
     UCP_WAKEUP_RMA         = UCS_BIT(0), /**< Remote memory access send completion */
