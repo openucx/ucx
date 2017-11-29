@@ -86,7 +86,6 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
                 status = ucp_eager_unexp_match(worker, rdesc, recv_tag, flags,
                                                buffer, buffer_size, datatype,
                                                &req->recv.state, info);
-                ucs_trace_req("release receive descriptor %p", rdesc);
                 if (status != UCS_INPROGRESS) {
                     goto out_release_desc;
                 }

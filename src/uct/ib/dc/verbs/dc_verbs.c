@@ -85,20 +85,6 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     return UCS_OK;
 }
 
-static void uct_dc_verbs_ep_am_packet_dump(uct_base_iface_t *base_iface,
-                                           uct_am_trace_type_t type,
-                                           void *data, size_t length,
-                                           size_t valid_length,
-                                           char *buffer, size_t max)
-{
-    uct_dc_verbs_iface_t *iface = ucs_derived_of(base_iface,
-                                                 uct_dc_verbs_iface_t);
-    uct_rc_ep_am_packet_dump(base_iface, type,
-                             data + iface->verbs_common.config.notag_hdr_size,
-                             length - iface->verbs_common.config.notag_hdr_size,
-                             valid_length, buffer, max);
-}
-
 static UCS_F_ALWAYS_INLINE void
 uct_dc_verbs_iface_post_send_to_dci(uct_dc_verbs_iface_t* iface,
                                     struct ibv_exp_send_wr *wr,
@@ -121,7 +107,7 @@ uct_dc_verbs_iface_post_send_to_dci(uct_dc_verbs_iface_t* iface,
 
     uct_ib_log_exp_post_send(&iface->super.super.super, txqp->qp, wr,
                              (wr->exp_opcode == IBV_EXP_WR_SEND) ?
-                             uct_dc_verbs_ep_am_packet_dump : NULL);
+                             uct_rc_ep_am_packet_dump : NULL);
 
     ret = ibv_exp_post_send(txqp->qp, wr, &bad_wr);
     if (ret != 0) {
@@ -299,8 +285,7 @@ ucs_status_t uct_dc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_dc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
     uct_rc_verbs_iface_common_t *verbs_common = &iface->verbs_common;
 
-    UCT_RC_CHECK_AM_SHORT(id, length + verbs_common->config.notag_hdr_size,
-                          verbs_common->config.max_inline);
+    UCT_RC_CHECK_AM_SHORT(id, length, verbs_common->config.max_inline);
 
     UCT_DC_CHECK_RES_AND_FC(&iface->super, &ep->super);
     uct_rc_verbs_iface_fill_inl_am_sge(verbs_common, id, hdr, buffer, length);
@@ -322,20 +307,20 @@ ssize_t uct_dc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     struct ibv_exp_send_wr wr;
     struct ibv_sge sge;
     size_t length;
-    size_t data_length;
 
     UCT_CHECK_AM_ID(id);
 
     UCT_DC_CHECK_RES_AND_FC(&iface->super, &ep->super);
-    UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(&iface->super.super,
+    UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(&iface->super.super,
                                       &iface->super.super.tx.mp, desc, id,
-                                      pack_cb, arg, length, data_length);
-    UCT_RC_VERBS_FILL_AM_BCOPY_WR(wr, sge, length, wr.exp_opcode);
-    UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, data_length);
+                                      pack_cb, arg, &length);
+    UCT_RC_VERBS_FILL_AM_BCOPY_WR(wr, sge, length + sizeof(uct_rc_hdr_t),
+                                  wr.exp_opcode);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, IBV_SEND_SOLICITED);
     UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->super.fc);
 
-    return data_length;
+    return length;
 }
 
 
@@ -356,17 +341,16 @@ ucs_status_t uct_dc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     UCT_CHECK_IOV_SIZE(iovcnt,
                        uct_ib_iface_get_max_iov(&iface->super.super.super) - 1,
                        "uct_dc_verbs_ep_am_zcopy");
-    UCT_RC_CHECK_AM_ZCOPY(id,
-                          header_length + verbs_common->config.notag_hdr_size,
-                          uct_iov_total_length(iov, iovcnt),
+    UCT_RC_CHECK_AM_ZCOPY(id, header_length, uct_iov_total_length(iov, iovcnt),
                           verbs_common->config.short_desc_size,
                           iface->super.super.super.config.seg_size);
     UCT_DC_CHECK_RES_AND_FC(&iface->super, &ep->super);
 
-    UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(&iface->super.super,
+    UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(&iface->super.super,
                                       &verbs_common->short_desc_mp, desc, id,
-                                      header, header_length, comp, &send_flags,
-                                      sge[0]);
+                                      header, header_length, comp, &send_flags);
+
+    sge[0].length = sizeof(uct_rc_hdr_t) + header_length;
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge + 1, iov, iovcnt);
     UCT_RC_VERBS_FILL_AM_ZCOPY_WR_IOV(wr, sge, sge_cnt + 1, wr.exp_opcode);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY,
@@ -654,16 +638,14 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
     uct_dc_ep_t *dc_ep          = ucs_derived_of(tl_ep, uct_dc_ep_t);
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_dc_verbs_iface_t);
-    size_t notag_hdr_size       = iface->verbs_common.config.notag_hdr_size;
-    uct_rc_hdr_t *hdr           = iface->verbs_common.am_inl_hdr + notag_hdr_size;
+    uct_rc_hdr_t *hdr           = &iface->verbs_common.am_inl_hdr.rc_hdr;
     uct_ib_iface_t *ib_iface    = &iface->super.super.super;
     uct_dc_fc_sender_data_t sender = {
         .ep               = (uintptr_t)dc_ep,
         .global.gid       = ib_iface->gid,
         .global.is_global = ib_iface->addr_type != UCT_IB_ADDRESS_TYPE_LINK_LOCAL};
 
-    ucs_assert((sizeof(*hdr) + notag_hdr_size + sizeof(sender)) <=
-               iface->verbs_common.config.max_inline);
+    ucs_assert(sizeof(*hdr) <= iface->verbs_common.config.max_inline);
 
     UCT_DC_CHECK_RES(&iface->super, dc_ep);
 
@@ -673,8 +655,8 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
     wr.dc.dct_access_key                  = UCT_IB_KEY;
     wr.next                               = NULL;
 
-    iface->verbs_common.inl_sge[0].addr   = (uintptr_t)iface->verbs_common.am_inl_hdr;
-    iface->verbs_common.inl_sge[0].length = sizeof(*hdr) + notag_hdr_size;
+    iface->verbs_common.inl_sge[0].addr   = (uintptr_t)hdr;
+    iface->verbs_common.inl_sge[0].length = sizeof(*hdr);
 
     dc_req = ucs_derived_of(req, uct_dc_fc_request_t);
 
