@@ -172,6 +172,7 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
     key.am_lane               = 0;
     key.rndv_lanes[0]         = 0;
     key.wireup_lane           = 0;
+    key.tag_lane              = 0;
 
     ep->cfg_index        = ucp_worker_get_ep_config(worker, &key);
     ep->am_lane          = 0;

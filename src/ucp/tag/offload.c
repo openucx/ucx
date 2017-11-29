@@ -17,14 +17,25 @@
 #include <ucs/sys/sys.h>
 
 
-static UCS_F_ALWAYS_INLINE void
-ucp_tag_offload_release_buf(ucp_request_t *req, ucp_context_t *ctx,
-                            ucp_rsc_index_t rsc_idx)
+static UCS_F_ALWAYS_INLINE ucp_worker_iface_t*
+ucp_tag_offload_iface(ucp_context_t *ctx)
 {
+    ucs_assert(!ucs_queue_is_empty(&ctx->tm.offload.ifaces));
+
+    return ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
+                                         ucp_worker_iface_t, queue);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_offload_release_buf(ucp_request_t *req, ucp_context_t *ctx)
+{
+    ucp_worker_iface_t *iface;
+
     if (req->recv.rdesc != NULL) {
         ucs_mpool_put_inline(req->recv.rdesc);
     } else {
-        ucp_request_memory_dereg(ctx, rsc_idx, req->recv.datatype,
+        iface = ucp_tag_offload_iface(ctx);
+        ucp_request_memory_dereg(ctx, iface->rsc_index, req->recv.datatype,
                                  &req->recv.state);
     }
 }
@@ -46,14 +57,13 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
 {
     ucp_request_t *req        = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
     ucp_context_t *ctx        = req->recv.worker->context;
-    ucp_worker_iface_t *iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
-                                                              ucp_worker_iface_t, queue);
+    ucp_worker_iface_t *iface;
 
     req->recv.tag.info.sender_tag = stag;
     req->recv.tag.info.length     = length;
 
     if (ucs_unlikely(status != UCS_OK)) {
-        ucp_tag_offload_release_buf(req, ctx, iface->rsc_index);
+        ucp_tag_offload_release_buf(req, ctx);
         goto out;
     }
 
@@ -69,6 +79,7 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
                                UCP_RECV_DESC_FLAG_LAST);
         ucs_mpool_put_inline(req->recv.rdesc);
     } else {
+        iface = ucp_tag_offload_iface(ctx);
         ucp_request_memory_dereg(ctx, iface->rsc_index, req->recv.datatype,
                                  &req->recv.state);
     }
@@ -78,62 +89,98 @@ out:
     ucp_request_complete_tag_recv(req, status);
 }
 
-static size_t ucp_tag_offload_fetch_rkey(ucp_ep_t *ep, ucp_sw_rndv_hdr_t *sw_hdr,
-                                         ucp_rndv_rts_hdr_t *rts)
+static UCS_F_ALWAYS_INLINE size_t
+ucp_tag_offload_rkey_size(ucp_context_t *ctx)
 {
-    uint64_t *addr;
-    size_t rkey_size;
+    ucp_worker_iface_t *iface = ucp_tag_offload_iface(ctx);
+    ucp_md_index_t md_idx;
 
-    if (!(sw_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) || ucp_ep_is_stub(ep)) {
-        rts->address = 0;
+    md_idx = ctx->tl_rscs[iface->rsc_index].md_index;
+    return ctx->tl_mds[md_idx].attr.rkey_packed_size;
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_tag_offload_copy_rkey(ucp_rndv_rts_hdr_t *rts, const void *rkey_buf,
+                          size_t rkey_size)
+{
+    if (rkey_buf == NULL) {
         return 0;
     }
 
-    /* SW RNDV with valid remote addr and key. Must be large message which
-     * does not fit offload RNDV proto. */
-    rkey_size    = ucp_ep_md_attr(ep, ucp_ep_get_tag_lane(ep))->rkey_packed_size;
-    addr         = (uint64_t*)(sw_hdr + 1);
-    rts->address = *addr;
-    rts->flags  |= sw_hdr->flags | UCP_RNDV_RTS_FLAG_OFFLOAD;
-    memcpy(rts + 1, addr + 1, rkey_size);
+    ucs_assert(rts != NULL);
+    memcpy(rts + 1, rkey_buf, rkey_size);
+    rts->flags |= UCP_RNDV_RTS_FLAG_OFFLOAD | UCP_RNDV_RTS_FLAG_PACKED_RKEY;
     return rkey_size;
 }
 
-/* RNDV request matched by the transport. Need to proceed with AM based RNDV */
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_offload_fill_rts(ucp_rndv_rts_hdr_t *rts, const ucp_request_hdr_t *hdr,
+                         uint64_t stag, uint64_t addr, size_t size,
+                         uint16_t flags)
+{
+    rts->super.tag = stag;
+    rts->sreq      = *hdr;
+    rts->address   = addr;
+    rts->size      = size;
+    rts->flags     = flags;
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_tag_offload_fill_sw_rts(ucp_rndv_rts_hdr_t *rts,
+                            const ucp_sw_rndv_hdr_t *rndv_hdr,
+                            unsigned header_length, uint64_t stag,
+                            size_t rkey_size)
+{
+    size_t length = sizeof(*rts);
+    ucp_sw_rndv_ext_hdr_t *ext_rndv_hdr;
+
+    if (rndv_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) {
+        ucs_assert(rkey_size);
+        ucs_assert((sizeof(*ext_rndv_hdr) + rkey_size) == header_length);
+
+        ext_rndv_hdr = ucs_derived_of(rndv_hdr, ucp_sw_rndv_ext_hdr_t);
+
+        ucp_tag_offload_fill_rts(rts, &rndv_hdr->super, stag,
+                                 ext_rndv_hdr->address, rndv_hdr->length, 0);
+
+        length += ucp_tag_offload_copy_rkey(rts, ext_rndv_hdr + 1, rkey_size);
+    } else {
+        ucs_assert(sizeof(*rndv_hdr) == header_length);
+        ucp_tag_offload_fill_rts(rts, &rndv_hdr->super, stag, 0,
+                                 rndv_hdr->length, 0);
+    }
+
+    return length;
+}
+
+/* RNDV request matched by the transport. Need to proceed with SW based RNDV */
 void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
                              const void *header, unsigned header_length,
                              ucs_status_t status)
 {
     ucp_request_t *req        = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
     ucp_context_t *ctx        = req->recv.worker->context;
-    ucp_sw_rndv_hdr_t *sreq   = (ucp_sw_rndv_hdr_t*)header;
-    ucp_ep_t *ep              = ucp_worker_get_reply_ep(req->recv.worker,
-                                                        sreq->super.sender_uuid);
-    ucp_worker_iface_t *iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
-                                                              ucp_worker_iface_t, queue);
-    unsigned length           = sizeof(ucp_rndv_rts_hdr_t);
+    ucp_sw_rndv_hdr_t *sw_hdr = (ucp_sw_rndv_hdr_t*)header;
     ucp_rndv_rts_hdr_t *rts;
+    size_t rkey_size;
 
     UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, MATCHED_SW_RNDV);
+
     if (ucs_unlikely(status != UCS_OK)) {
-        ucp_tag_offload_release_buf(req, ctx, iface->rsc_index);
+        ucp_tag_offload_release_buf(req, ctx);
         ucp_request_complete_tag_recv(req, status);
         return;
     }
 
-    if ((sreq->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) && !ucp_ep_is_stub(ep)) {
-        length += ucp_ep_md_attr(ep, ucp_ep_get_tag_lane(ep))->rkey_packed_size;
-    }
-    rts = alloca(length);
+    rkey_size = (sw_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) ?
+                ucp_tag_offload_rkey_size(ctx) : 0;
 
-    rts->sreq      = sreq->super;
-    rts->super.tag = stag;
-    rts->flags     = 0;
-    rts->size      = sreq->length;
-    ucp_tag_offload_fetch_rkey(ep, sreq, rts);
+    rts = alloca(sizeof(*rts) + rkey_size);
+
+    ucp_tag_offload_fill_sw_rts(rts, sw_hdr, header_length, stag, rkey_size);
 
     ucp_rndv_matched(req->recv.worker, req, rts);
-    ucp_tag_offload_release_buf(req, ctx, iface->rsc_index);
+    ucp_tag_offload_release_buf(req, ctx);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
@@ -144,60 +191,39 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
 {
     ucp_worker_t *worker        = arg;
     ucp_request_hdr_t *rndv_hdr = (ucp_request_hdr_t*)hdr;
-    ucp_ep_t *ep                = ucp_worker_get_reply_ep(worker, rndv_hdr->sender_uuid);
-    size_t len                  = sizeof(ucp_rndv_rts_hdr_t);
     ucp_rndv_rts_hdr_t *rts;
-    ucp_sw_rndv_hdr_t  *sw_rndv_hdr;
-    const uct_md_attr_t *md_attr;
+    size_t len;
     size_t rkey_size;
 
-    if (!ucp_ep_is_stub(ep) && rkey_buf) {
-        md_attr   = ucp_ep_md_attr(ep, ucp_ep_get_tag_lane(ep));
-        rkey_size = md_attr->rkey_packed_size;
-        len += rkey_size;
-    } else {
-        rkey_size = 0;
-    }
-
-    rts = ucs_alloca(len);
-
-
-    /* Fill RTS to emulate SW RNDV flow. */
-    rts->super.tag = stag;
-    rts->sreq      = *rndv_hdr;
-    rts->address   = remote_addr;
-
+    rkey_size = ucp_tag_offload_rkey_size(worker->context);
+    rts       = ucs_alloca(sizeof(*rts) + rkey_size); /* SW rndv req may also
+                                                         carry a key */
     if (remote_addr) {
-        rts->size  = length;
-        rts->flags = UCP_RNDV_RTS_FLAG_OFFLOAD;
-        if (rkey_size) {
-            memcpy(rts + 1, rkey_buf, rkey_size);
-            rts->flags |= UCP_RNDV_RTS_FLAG_PACKED_RKEY;
-        }
+        /* Unexpected tag offload RNDV */
+        ucp_tag_offload_fill_rts(rts, rndv_hdr, stag, remote_addr, length, 0);
+        len = ucp_tag_offload_copy_rkey(rts, (void*)rkey_buf, rkey_size) +
+              sizeof(*rts);
+
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_RNDV);
     } else {
-        /* This must be SW RNDV request. Take length from its header. */
-        sw_rndv_hdr = ucs_derived_of(hdr, ucp_sw_rndv_hdr_t);
-        rts->size   = sw_rndv_hdr->length;
-        rts->flags  = 0;
-        len        += ucp_tag_offload_fetch_rkey(ep, sw_rndv_hdr, rts);
+        /* Unexpected tag offload rndv request. Sender buffer is either
+           non-contig or it's length > rndv.max_zcopy capability of tag lane */
+        len = ucp_tag_offload_fill_sw_rts(rts, (void*)hdr, hdr_length, stag,
+                                          rkey_size);
+
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_SW_RNDV);
     }
 
-    /* Pass 0 as tl flags, because RTS needs to be stored in UCP pool. */
+    /* Pass 0 as tl flags, because RTS needs to be stored in UCP mpool. */
     ucp_rndv_process_rts(arg, rts, len, 0);
 
-    /* Always return UCS_OK, since RNDV hdr should be stored in UCP mpool. */
     return UCS_OK;
 }
 
 void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
 {
-    ucp_worker_iface_t *ucp_iface;
+    ucp_worker_iface_t *ucp_iface = ucp_tag_offload_iface(ctx);
     ucs_status_t status;
-
-    ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
-                                              ucp_worker_iface_t, queue);
 
     status = uct_iface_tag_recv_cancel(ucp_iface->iface, &req->recv.uct_ctx,
                                        force);
@@ -210,7 +236,7 @@ void ucp_tag_offload_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
 
     /* if cancel is not forced, need to wait its completion */
     if (force) {
-        ucp_tag_offload_release_buf(req, ctx, ucp_iface->rsc_index);
+        ucp_tag_offload_release_buf(req, ctx);
     }
 }
 
@@ -250,8 +276,8 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
      * posted to the transport */
     ucs_assert(req->recv.state.offset == 0);
 
-    ucp_iface = ucs_queue_head_elem_non_empty(&ctx->tm.offload.ifaces,
-                                              ucp_worker_iface_t, queue);
+    ucp_iface = ucp_tag_offload_iface(ctx);
+
     if (ucs_unlikely(length >= ctx->tm.offload.zcopy_thresh)) {
         if (length > ucp_iface->attr.cap.tag.recv.max_zcopy) {
             /* Post maximum allowed length. If sender sends smaller message
@@ -298,7 +324,7 @@ int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req)
                                       &req->recv.uct_ctx);
     if (status != UCS_OK) {
         /* No more matching entries in the transport. */
-        ucp_tag_offload_release_buf(req, ctx, ucp_iface->rsc_index);
+        ucp_tag_offload_release_buf(req, ctx);
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_TAG_EXCEED);
         return 0;
     }
@@ -432,24 +458,26 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
     ucp_sw_rndv_hdr_t *rndv_hdr;
+    ucp_sw_rndv_ext_hdr_t *ext_rndv_hdr;
     unsigned rndv_hdr_len;
     size_t packed_rkey;
-    uintptr_t *addr;
 
     if (UCP_DT_IS_CONTIG(req->send.datatype) &&
         (req->send.length > ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) {
         packed_rkey  = ucp_ep_md_attr(ep, req->send.lane)->rkey_packed_size;
-        rndv_hdr_len = sizeof(ucp_sw_rndv_hdr_t) + packed_rkey + sizeof(uintptr_t);
-        rndv_hdr     = ucs_alloca(rndv_hdr_len);
-        addr         = (uintptr_t*)(rndv_hdr + 1);
-        *addr        = (uintptr_t)req->send.buffer;
-        rndv_hdr->flags = 0;
-        ucp_tag_offload_rndv_pack_rkey(req, req->send.lane, addr + 1, &rndv_hdr->flags);
+        rndv_hdr_len = sizeof(ucp_sw_rndv_ext_hdr_t) + packed_rkey;
+        ext_rndv_hdr = ucs_alloca(rndv_hdr_len);
+        ext_rndv_hdr->address     = (uintptr_t)req->send.buffer;
+        ext_rndv_hdr->super.flags = 0;
+        ucp_tag_offload_rndv_pack_rkey(req, req->send.lane, ext_rndv_hdr + 1,
+                                       &ext_rndv_hdr->super.flags);
+        rndv_hdr = &ext_rndv_hdr->super;
     } else {
-        rndv_hdr_len = sizeof(ucp_sw_rndv_hdr_t);
-        rndv_hdr     = ucs_alloca(rndv_hdr_len);
+        rndv_hdr_len    = sizeof(ucp_sw_rndv_hdr_t);
+        rndv_hdr        = ucs_alloca(rndv_hdr_len);
         rndv_hdr->flags = 0;
     }
+
     rndv_hdr->super.sender_uuid = ep->worker->uuid;
     rndv_hdr->super.reqptr      = (uintptr_t)req;
     rndv_hdr->length            = req->send.length;
