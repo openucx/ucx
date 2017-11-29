@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -28,8 +28,6 @@ typedef struct uct_rdmacm_md_config {
 } uct_rdmacm_md_config_t;
 
 extern uct_md_component_t uct_rdmacm_mdc;
-
-static void uct_rdmacm_md_close(uct_md_h md);
 
 ucs_status_t uct_rdmacm_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 

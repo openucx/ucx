@@ -164,6 +164,10 @@ if HAVE_TL_DC
 gtest_SOURCES += \
 	uct/ib/test_dc.cc
 endif
+if HAVE_RDMACM
+gtest_SOURCES += \
+	uct/ib/test_sockaddr.cc
+endif
 endif
 if HAVE_CUDA
 gtest_SOURCES += \

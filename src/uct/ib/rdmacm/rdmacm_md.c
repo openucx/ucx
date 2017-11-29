@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -17,6 +17,8 @@ static ucs_config_field_t uct_rdmacm_md_config_table[] = {
 
   {NULL}
 };
+
+static void uct_rdmacm_md_close(uct_md_h md);
 
 static uct_md_ops_t uct_rdmacm_md_ops = {
     .close                  = uct_rdmacm_md_close,
