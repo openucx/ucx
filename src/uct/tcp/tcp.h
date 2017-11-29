@@ -61,6 +61,7 @@ typedef struct uct_tcp_iface {
 
     struct {
         int                       nodelay;        /* TCP_NODELAY */
+        int                       sndbuf;         /* SO_SNDBUF */
     } sockopt;
 } uct_tcp_iface_t;
 
@@ -74,6 +75,7 @@ typedef struct uct_tcp_iface_config {
     unsigned                      backlog;
     unsigned                      max_poll;
     int                           sockopt_nodelay;
+    size_t                        sockopt_sndbuf;
 } uct_tcp_iface_config_t;
 
 

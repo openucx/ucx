@@ -36,6 +36,10 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "option usually provides better performance",
    ucs_offsetof(uct_tcp_iface_config_t, sockopt_nodelay), UCS_CONFIG_TYPE_BOOL},
 
+  {"SNDBUF", "64k",
+   "Socket send buffer size.",
+   ucs_offsetof(uct_tcp_iface_config_t, sockopt_sndbuf), UCS_CONFIG_TYPE_MEMUNITS},
+
   {NULL}
 };
 
@@ -184,6 +188,13 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
         return UCS_ERR_IO_ERROR;
     }
 
+    ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (void*)&iface->sockopt.sndbuf,
+                     sizeof(int));
+    if (ret < 0) {
+        ucs_error("Failed to set SO_SNDBUF on fd %d: %m", fd);
+        return UCS_ERR_IO_ERROR;
+    }
+
     return UCS_OK;
 }
 
@@ -230,6 +241,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.prefer_default  = config->prefer_default;
     self->config.max_poll        = config->max_poll;
     self->sockopt.nodelay        = config->sockopt_nodelay;
+    self->sockopt.sndbuf         = config->sockopt_sndbuf;
     ucs_list_head_init(&self->ep_list);
 
     status = uct_tcp_netif_inaddr(self->if_name, &self->config.ifaddr,
