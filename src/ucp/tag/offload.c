@@ -127,27 +127,27 @@ ucp_tag_offload_fill_rts(ucp_rndv_rts_hdr_t *rts, const ucp_request_hdr_t *hdr,
 
 static UCS_F_ALWAYS_INLINE size_t
 ucp_tag_offload_fill_sw_rts(ucp_rndv_rts_hdr_t *rts,
-                            const ucp_sw_rndv_hdr_t *sw_rndv_hdr,
+                            const ucp_sw_rndv_hdr_t *rndv_hdr,
                             unsigned header_length, uint64_t stag,
                             size_t rkey_size)
 {
     size_t length = sizeof(*rts);
-    uint64_t *addr_ptr;
+    ucp_sw_rndv_ext_hdr_t *ext_rndv_hdr;
 
-    if (sw_rndv_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) {
+    if (rndv_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) {
         ucs_assert(rkey_size);
-        ucs_assert((sizeof(*sw_rndv_hdr) + rkey_size + sizeof(uint64_t)) ==
-                   header_length);
-        addr_ptr = (uint64_t*)(sw_rndv_hdr + 1);
+        ucs_assert((sizeof(*ext_rndv_hdr) + rkey_size) == header_length);
 
-        ucp_tag_offload_fill_rts(rts, &sw_rndv_hdr->super, stag, *addr_ptr,
-                                 sw_rndv_hdr->length, 0);
+        ext_rndv_hdr = ucs_derived_of(rndv_hdr, ucp_sw_rndv_ext_hdr_t);
 
-        length += ucp_tag_offload_copy_rkey(rts, addr_ptr + 1, rkey_size);
+        ucp_tag_offload_fill_rts(rts, &rndv_hdr->super, stag,
+                                 ext_rndv_hdr->address, rndv_hdr->length, 0);
+
+        length += ucp_tag_offload_copy_rkey(rts, ext_rndv_hdr + 1, rkey_size);
     } else {
-        ucs_assert(sizeof(*sw_rndv_hdr) == header_length);
-        ucp_tag_offload_fill_rts(rts, &sw_rndv_hdr->super, stag, 0,
-                                 sw_rndv_hdr->length, 0);
+        ucs_assert(sizeof(*rndv_hdr) == header_length);
+        ucp_tag_offload_fill_rts(rts, &rndv_hdr->super, stag, 0,
+                                 rndv_hdr->length, 0);
     }
 
     return length;
@@ -458,24 +458,26 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
     ucp_sw_rndv_hdr_t *rndv_hdr;
+    ucp_sw_rndv_ext_hdr_t *ext_rndv_hdr;
     unsigned rndv_hdr_len;
     size_t packed_rkey;
-    uintptr_t *addr;
 
     if (UCP_DT_IS_CONTIG(req->send.datatype) &&
         (req->send.length > ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) {
         packed_rkey  = ucp_ep_md_attr(ep, req->send.lane)->rkey_packed_size;
-        rndv_hdr_len = sizeof(ucp_sw_rndv_hdr_t) + packed_rkey + sizeof(uintptr_t);
-        rndv_hdr     = ucs_alloca(rndv_hdr_len);
-        addr         = (uintptr_t*)(rndv_hdr + 1);
-        *addr        = (uintptr_t)req->send.buffer;
-        rndv_hdr->flags = 0;
-        ucp_tag_offload_rndv_pack_rkey(req, req->send.lane, addr + 1, &rndv_hdr->flags);
+        rndv_hdr_len = sizeof(ucp_sw_rndv_ext_hdr_t) + packed_rkey;
+        ext_rndv_hdr = ucs_alloca(rndv_hdr_len);
+        ext_rndv_hdr->address     = (uintptr_t)req->send.buffer;
+        ext_rndv_hdr->super.flags = 0;
+        ucp_tag_offload_rndv_pack_rkey(req, req->send.lane, ext_rndv_hdr + 1,
+                                       &ext_rndv_hdr->super.flags);
+        rndv_hdr = &ext_rndv_hdr->super;
     } else {
-        rndv_hdr_len = sizeof(ucp_sw_rndv_hdr_t);
-        rndv_hdr     = ucs_alloca(rndv_hdr_len);
+        rndv_hdr_len    = sizeof(ucp_sw_rndv_hdr_t);
+        rndv_hdr        = ucs_alloca(rndv_hdr_len);
         rndv_hdr->flags = 0;
     }
+
     rndv_hdr->super.sender_uuid = ep->worker->uuid;
     rndv_hdr->super.reqptr      = (uintptr_t)req;
     rndv_hdr->length            = req->send.length;

@@ -21,6 +21,14 @@ typedef struct ucp_sw_rndv_hdr {
 } UCS_S_PACKED ucp_sw_rndv_hdr_t;
 
 /**
+ * Header for extended SW RNDV request
+ */
+typedef struct ucp_sw_rndv_ext_hdr {
+    ucp_sw_rndv_hdr_t super;
+    uintptr_t         address;
+} UCS_S_PACKED ucp_sw_rndv_ext_hdr_t;
+
+/**
  * Header for sync send acknowledgment
  */
 typedef struct {
