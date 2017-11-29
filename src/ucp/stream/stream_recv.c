@@ -48,7 +48,9 @@ ucp_stream_recv_data_nb_internal(ucp_ep_ext_stream_t *ep_stream)
     }
 
     if (ucs_unlikely(ucs_queue_is_empty(&ep_stream->data))) {
-        ucp_stream_ep_dequeue(ep_stream);
+        if (ucp_stream_ep_is_queued(ep_stream->ucp_ep)) {
+            ucp_stream_ep_dequeue(ep_stream);
+        }
     }
 
     return rdesc;
@@ -113,8 +115,8 @@ ucp_stream_rdata_unpack(void *rdata, size_t length, ucp_request_t *dst_req)
 
     if (ucs_likely(status == UCS_OK)) {
         dst_req->recv.state.offset += valid_len;
-        ucs_trace_data("unpacked %zd stream data from rdesc %p\n", valid_len,
-                       ucp_stream_rdesc_from_data(rdata));
+        ucs_trace_data("unpacked %zd bytes of stream data from rdesc %p\n",
+                       valid_len, ucp_stream_rdesc_from_data(rdata));
         return valid_len;
     }
 
@@ -129,13 +131,11 @@ ucp_stream_process_rdesc(ucp_recv_desc_t* rdesc, ucp_ep_ext_stream_t *ep_stream,
     void    *rdata   = ucp_stream_rdesc_data(rdesc);
     ssize_t unpacked;
 
+    ucs_assert(ep_stream->rdesc == NULL);
     unpacked = ucp_stream_rdata_unpack(rdata, rdesc->length, req);
     if (ucs_unlikely(unpacked < 0)) {
         return unpacked;
     } else if (ucs_likely(unpacked == rdesc->length)) {
-        if (rdesc == ep_stream->rdesc) {
-            ep_stream->rdesc = NULL;
-        }
         ucp_stream_rdesc_release(rdesc);
     } else {
         ucs_assert(unpacked < rdesc->length);
@@ -304,12 +304,11 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
 
     ep_stream = ep->ext.stream;
 
-    if (ep->flags & UCP_EP_FLAG_STREAM_IS_QUEUED) {
-        ucs_queue_push(&ep_stream->data, &rdesc->stream_queue);
+    ucs_queue_push(&ep_stream->data, &rdesc->stream_queue);
+    if (ucp_stream_ep_is_queued(ep)) {
         goto out;
     } else {
         ucp_stream_ep_enqueue(ep_stream, worker);
-        ucs_queue_push(&ep_stream->data, &rdesc->stream_queue);
         if (ucs_queue_is_empty(&ep_stream->reqs)) {
             goto out;
         }
@@ -358,7 +357,7 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
         }
 
         return UCS_OK;
-    } else if (!(ep->flags & UCP_EP_FLAG_STREAM_IS_QUEUED)) {
+    } else if (!ucp_stream_ep_is_queued(ep)) {
         /* Last fragment is partially processed, enqueue EP back to worker
          * in order to return it by ucp_stream_worker_poll */
         ucp_stream_ep_enqueue(ep_stream, worker);
