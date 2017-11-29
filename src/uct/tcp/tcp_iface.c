@@ -27,6 +27,10 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Backlog size of incoming connections",
    ucs_offsetof(uct_tcp_iface_config_t, backlog), UCS_CONFIG_TYPE_UINT},
 
+  {"MAX_POLL", "16",
+   "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained",
+   ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
+
   {"NODELAY", "y",
    "Set TCP_NODELAY socket option to disable Nagle algorithm. Setting this\n"
    "option usually provides better performance",
@@ -112,13 +116,15 @@ unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
     uct_tcp_ep_t *ep;
     unsigned count;
     int i, nevents;
+    int max_events;
 
     ucs_trace_poll("iface=%p", iface);
 
-    nevents = epoll_wait(iface->epfd, events, UCT_TCP_MAX_EVENTS, 0);
+    max_events = ucs_min(UCT_TCP_MAX_EVENTS, iface->config.max_poll);
+    nevents = epoll_wait(iface->epfd, events, max_events, 0);
     if ((nevents < 0) && (errno != EINTR)) {
         ucs_error("epoll_wait(epfd=%d max=%d) failed: %m", iface->epfd,
-                  UCT_TCP_MAX_EVENTS);
+                  max_events);
         return 0;
     }
 
@@ -222,6 +228,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.buf_size        = config->super.max_bcopy +
                                    sizeof(uct_tcp_am_hdr_t);
     self->config.prefer_default  = config->prefer_default;
+    self->config.max_poll        = config->max_poll;
     self->sockopt.nodelay        = config->sockopt_nodelay;
     ucs_list_head_init(&self->ep_list);
 
