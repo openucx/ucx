@@ -86,7 +86,9 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                              UCT_IFACE_FLAG_AM_BCOPY         |
                              UCT_IFACE_FLAG_PENDING          |
-                             UCT_IFACE_FLAG_CB_SYNC;
+                             UCT_IFACE_FLAG_CB_SYNC          |
+                             UCT_IFACE_FLAG_EVENT_SEND_COMP  |
+                             UCT_IFACE_FLAG_EVENT_RECV_AM;
 
     attr->cap.am.max_bcopy = iface->config.buf_size - sizeof(uct_tcp_am_hdr_t);
 
@@ -110,6 +112,14 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
         attr->priority = 0;
     }
 
+    return UCS_OK;
+}
+
+static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+
+    *fd_p = iface->epfd;
     return UCS_OK;
 }
 
@@ -211,6 +221,8 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_tcp_iface_progress,
+    .iface_event_fd_get       = uct_tcp_iface_event_fd_get,
+    .iface_event_arm          = ucs_empty_function_return_success,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_iface_t),
     .iface_query              = uct_tcp_iface_query,
     .iface_get_address        = uct_tcp_iface_get_address,

@@ -82,11 +82,13 @@ void test_uct_event_fd::test_recv_am(bool signaled)
 
     initialize();
     if (signaled) {
-        check_caps(UCT_IFACE_FLAG_EVENT_RECV_SIG_AM | UCT_IFACE_FLAG_CB_SYNC);
+        check_caps(UCT_IFACE_FLAG_EVENT_RECV_SIG_AM | UCT_IFACE_FLAG_CB_SYNC |
+                   UCT_IFACE_FLAG_AM_BCOPY);
         arm_flags  = UCT_EVENT_RECV_SIG_AM;
         send_flags = UCT_AM_FLAG_SIGNALED;
     } else {
-        check_caps(UCT_IFACE_FLAG_EVENT_RECV_AM | UCT_IFACE_FLAG_CB_SYNC);
+        check_caps(UCT_IFACE_FLAG_EVENT_RECV_AM | UCT_IFACE_FLAG_CB_SYNC |
+                   UCT_IFACE_FLAG_AM_BCOPY);
         arm_flags  = UCT_EVENT_RECV_AM;
         send_flags = 0;
     }
@@ -118,11 +120,12 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
 
     for (;;) {
-        status = uct_iface_event_arm(m_e2->iface(), arm_flags);
-        if (status != UCS_ERR_BUSY) {
-            break;
+        if ((progress() == 0) && (m_am_count == am_send_count)) {
+            status = uct_iface_event_arm(m_e2->iface(), arm_flags);
+            if (status != UCS_ERR_BUSY) {
+                break;
+            }
         }
-        progress();
     }
     ASSERT_EQ(UCS_OK, status);
 
