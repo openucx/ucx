@@ -79,7 +79,8 @@ enum ucx_perf_test_flags {
     UCX_PERF_TEST_FLAG_TAG_WILDCARD = UCS_BIT(4), /* For tag tests, use wildcard mask */
     UCX_PERF_TEST_FLAG_TAG_SYNC     = UCS_BIT(5), /* For tag tests, use sync send */
     UCX_PERF_TEST_FLAG_VERBOSE      = UCS_BIT(7), /* Print error messages */
-    UCX_PERF_TEST_FLAG_STREAM_RECV_DATA = UCS_BIT(8)  /* For stream tests, use recv data API */
+    UCX_PERF_TEST_FLAG_STREAM_RECV_DATA = UCS_BIT(8), /* For stream tests, use recv data API */
+    UCX_PERF_TEST_FLAG_STREAM_RECV      = UCS_BIT(9)  /* For stream tests, use recv API */
 };
 
 enum {

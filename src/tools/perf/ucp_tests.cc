@@ -131,6 +131,24 @@ public:
         return UCS_OK;
     }
 
+    ssize_t UCS_F_ALWAYS_INLINE wait_stream_recv(void *request)
+    {
+        size_t       length;
+        ucs_status_t status;
+
+        if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
+            return UCS_PTR_STATUS(request);
+        }
+
+        while ((status = ucp_stream_recv_request_test(request, &length)) ==
+                UCS_INPROGRESS) {
+            progress_responder();
+        }
+        ucp_request_release(request);
+
+        return ucs_likely(status == UCS_OK) ? length : status;
+    }
+
     static void send_cb(void *request, ucs_status_t status)
     {
         ucp_perf_request_t *r = reinterpret_cast<ucp_perf_request_t*>(request);
@@ -268,6 +286,8 @@ public:
         case UCX_PERF_CMD_STREAM:
             if (FLAGS & UCX_PERF_TEST_FLAG_STREAM_RECV_DATA) {
                 return recv_stream_data(hndl.get_ep(), length, datatype, sn);
+            } else if (FLAGS & UCX_PERF_TEST_FLAG_STREAM_RECV) {
+                return recv_stream(hndl.get_ep(), buffer, length, datatype, sn);
             }
             return UCS_ERR_INVALID_PARAM;
         default:
@@ -440,6 +460,35 @@ private:
         return UCS_PTR_IS_PTR(data) ? UCS_OK : UCS_PTR_STATUS(data);
     }
 
+    ucs_status_t UCS_F_ALWAYS_INLINE
+    recv_stream(ucp_ep_h ep, void *buf, unsigned length, ucp_datatype_t datatype,
+                     uint8_t sn)
+    {
+        ssize_t  total = 0;
+        void    *rreq;
+        size_t   rlength;
+        ssize_t  rlength_s;
+
+        do {
+            rreq = ucp_stream_recv_nb(ep, buf, length - total, datatype,
+                                      (ucp_stream_recv_callback_t)ucs_empty_function,
+                                      &rlength, 0);
+            if (ucs_unlikely(UCS_PTR_IS_ERR(rreq))) {
+                return UCS_PTR_STATUS(rreq);
+            } else if (UCS_PTR_STATUS(rreq) == UCS_OK) {
+                total += rlength;
+            } else {
+                rlength_s = wait_stream_recv(rreq);
+                if (rlength_s < 0) {
+                    return ucs_status_t(rlength_s);
+                }
+                total += rlength_s;
+            }
+        } while (total < length);
+
+        return UCS_OK;
+    }
+
     void UCS_F_ALWAYS_INLINE send_started()
     {
         ++m_outstanding;
@@ -468,7 +517,10 @@ private:
 #define TEST_CASE_ALL_STREAM(_perf, _case) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
               UCX_PERF_TEST_FLAG_STREAM_RECV_DATA, \
-              UCX_PERF_TEST_FLAG_STREAM_RECV_DATA)
+              UCX_PERF_TEST_FLAG_STREAM_RECV_DATA) \
+    TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
+              UCX_PERF_TEST_FLAG_STREAM_RECV, \
+              UCX_PERF_TEST_FLAG_STREAM_RECV)
 
 #define TEST_CASE_ALL_TAG(_perf, _case) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
