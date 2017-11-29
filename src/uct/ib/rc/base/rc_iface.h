@@ -494,7 +494,7 @@ uct_rc_iface_put_send_op(uct_rc_iface_send_op_t *op)
     iface->tx.free_ops = op;
 }
 
-static inline void
+static UCS_F_ALWAYS_INLINE void
 uct_rc_am_hdr_fill(uct_rc_hdr_t *rch, uint8_t id)
 {
 #if IBV_EXP_HW_TM

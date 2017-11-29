@@ -38,7 +38,9 @@ typedef struct uct_rc_verbs_txcnt {
 typedef struct uct_rc_verbs_iface_common_config {
     size_t                 max_am_hdr;
     unsigned               tx_max_wr;
+#if IBV_EXP_HW_TM
     double                 tm_sync_ratio;
+#endif
     /* TODO flags for exp APIs */
 } uct_rc_verbs_iface_common_config_t;
 

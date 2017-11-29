@@ -23,11 +23,12 @@ ucs_config_field_t uct_rc_verbs_iface_common_config_table[] = {
    "a minimum between this value and the TX queue length. -1 means no limit.",
    ucs_offsetof(uct_rc_verbs_iface_common_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
 
+#if IBV_EXP_HW_TM
   {"TM_SYNC_RATIO", "0.5",
    "Maximal portion of the tag matching list which can be canceled without requesting\n"
    "a completion.",
    ucs_offsetof(uct_rc_verbs_iface_common_config_t, tm_sync_ratio), UCS_CONFIG_TYPE_DOUBLE},
-
+#endif
   {NULL}
 };
 

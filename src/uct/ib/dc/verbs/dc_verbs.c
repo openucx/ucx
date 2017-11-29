@@ -645,7 +645,8 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
         .global.gid       = ib_iface->gid,
         .global.is_global = ib_iface->addr_type != UCT_IB_ADDRESS_TYPE_LINK_LOCAL};
 
-    ucs_assert(sizeof(*hdr) <= iface->verbs_common.config.max_inline);
+    ucs_assert(sizeof(*hdr) + sizeof(sender) <=
+               iface->verbs_common.config.max_inline);
 
     UCT_DC_CHECK_RES(&iface->super, dc_ep);
 
