@@ -20,7 +20,6 @@ public:
         return params;
     }
 
-    virtual void init() = 0;
     static void ucp_send_cb(void *request, ucs_status_t status) {}
     static void ucp_recv_cb(void *request, ucs_status_t status, size_t length) {}
 
@@ -71,7 +70,7 @@ protected:
 
 void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 {
-    std::vector<char> sbuf(size_t(16)*1024*1024, 's');
+    std::vector<char> sbuf(16 * 1024 * 1024, 's');
     size_t            ssize = 0; /* total send size */
     ucs_status_ptr_t  sstatus;
     std::vector<char> check_pattern;
@@ -108,7 +107,7 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 
 void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
 {
-    std::vector<char> sbuf(size_t(16)*1024*1024, 's');
+    std::vector<char> sbuf(16 * 1024 * 1024, 's');
     size_t            ssize = 0; /* total send size */
     ucs_status_ptr_t  sstatus;
     std::vector<char> check_pattern;
@@ -145,7 +144,7 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
 
 void test_ucp_stream::do_send_exp_recv_test(ucp_datatype_t datatype)
 {
-    const size_t msg_size = size_t(4)*1024*1024;
+    const size_t msg_size = 4 * 1024 * 1024;
     const size_t n_msgs   = 10;
     std::vector<std::vector<char> > rbufs(n_msgs,
                                           std::vector<char>(msg_size, 'r'));
@@ -360,7 +359,7 @@ void test_ucp_stream_many2one::check_recv_data(size_t n_iter)
     for (size_t i = 0; i < m_nsenders; ++i) {
         const std::string test = std::string("sender_") + ucs::to_string(i);
         const std::string str(&m_recv_data[i].front());
-        size_t            next  = 0;
+        size_t            next = 0;
         for (size_t j = 0; j < n_iter; ++j) {
             size_t match = str.find(test, next);
             EXPECT_NE(std::string::npos, match);

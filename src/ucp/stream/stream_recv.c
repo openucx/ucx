@@ -304,12 +304,11 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
 
     ep_stream = ep->ext.stream;
 
+    ucs_queue_push(&ep_stream->data, &rdesc->stream_queue);
     if (ucp_stream_ep_is_queued(ep)) {
-        ucs_queue_push(&ep_stream->data, &rdesc->stream_queue);
         goto out;
     } else {
         ucp_stream_ep_enqueue(ep_stream, worker);
-        ucs_queue_push(&ep_stream->data, &rdesc->stream_queue);
         if (ucs_queue_is_empty(&ep_stream->reqs)) {
             goto out;
         }
