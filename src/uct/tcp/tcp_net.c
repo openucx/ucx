@@ -91,6 +91,16 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                      ETH_FCS_LEN + /* CRC */
                      12; /* inter-packet gap */
         break;
+    case ARPHRD_INFINIBAND:
+        ll_headers = UCT_IB_LRH_LEN +
+                     UCT_IB_GRH_LEN +
+                     UCT_IB_BTH_LEN +
+                     UCT_IB_DETH_LEN + /* UD */
+                     4 + 20 +          /* IPoIB */
+                     UCT_IB_ICRC_LEN +
+                     UCT_IB_VCRC_LEN +
+                     UCT_IB_DELIM_LEN;
+        break;
     default:
         ll_headers = 0;
         break;

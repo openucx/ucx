@@ -27,10 +27,18 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Backlog size of incoming connections",
    ucs_offsetof(uct_tcp_iface_config_t, backlog), UCS_CONFIG_TYPE_UINT},
 
+  {"MAX_POLL", "16",
+   "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained",
+   ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
+
   {"NODELAY", "y",
    "Set TCP_NODELAY socket option to disable Nagle algorithm. Setting this\n"
    "option usually provides better performance",
    ucs_offsetof(uct_tcp_iface_config_t, sockopt_nodelay), UCS_CONFIG_TYPE_BOOL},
+
+  {"SNDBUF", "64k",
+   "Socket send buffer size.",
+   ucs_offsetof(uct_tcp_iface_config_t, sockopt_sndbuf), UCS_CONFIG_TYPE_MEMUNITS},
 
   {NULL}
 };
@@ -78,7 +86,9 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                              UCT_IFACE_FLAG_AM_BCOPY         |
                              UCT_IFACE_FLAG_PENDING          |
-                             UCT_IFACE_FLAG_CB_SYNC;
+                             UCT_IFACE_FLAG_CB_SYNC          |
+                             UCT_IFACE_FLAG_EVENT_SEND_COMP  |
+                             UCT_IFACE_FLAG_EVENT_RECV_AM;
 
     attr->cap.am.max_bcopy = iface->config.buf_size - sizeof(uct_tcp_am_hdr_t);
 
@@ -105,6 +115,14 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     return UCS_OK;
 }
 
+static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+
+    *fd_p = iface->epfd;
+    return UCS_OK;
+}
+
 unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
@@ -112,13 +130,15 @@ unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
     uct_tcp_ep_t *ep;
     unsigned count;
     int i, nevents;
+    int max_events;
 
     ucs_trace_poll("iface=%p", iface);
 
-    nevents = epoll_wait(iface->epfd, events, UCT_TCP_MAX_EVENTS, 0);
+    max_events = ucs_min(UCT_TCP_MAX_EVENTS, iface->config.max_poll);
+    nevents = epoll_wait(iface->epfd, events, max_events, 0);
     if ((nevents < 0) && (errno != EINTR)) {
         ucs_error("epoll_wait(epfd=%d max=%d) failed: %m", iface->epfd,
-                  UCT_TCP_MAX_EVENTS);
+                  max_events);
         return 0;
     }
 
@@ -178,6 +198,13 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
         return UCS_ERR_IO_ERROR;
     }
 
+    ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (void*)&iface->sockopt.sndbuf,
+                     sizeof(int));
+    if (ret < 0) {
+        ucs_error("Failed to set SO_SNDBUF on fd %d: %m", fd);
+        return UCS_ERR_IO_ERROR;
+    }
+
     return UCS_OK;
 }
 
@@ -194,6 +221,8 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_tcp_iface_progress,
+    .iface_event_fd_get       = uct_tcp_iface_event_fd_get,
+    .iface_event_arm          = ucs_empty_function_return_success,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_iface_t),
     .iface_query              = uct_tcp_iface_query,
     .iface_get_address        = uct_tcp_iface_get_address,
@@ -222,7 +251,9 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.buf_size        = config->super.max_bcopy +
                                    sizeof(uct_tcp_am_hdr_t);
     self->config.prefer_default  = config->prefer_default;
+    self->config.max_poll        = config->max_poll;
     self->sockopt.nodelay        = config->sockopt_nodelay;
+    self->sockopt.sndbuf         = config->sockopt_sndbuf;
     ucs_list_head_init(&self->ep_list);
 
     status = uct_tcp_netif_inaddr(self->if_name, &self->config.ifaddr,
