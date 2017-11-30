@@ -832,6 +832,8 @@ static ucs_status_t ucp_wireup_add_rndv_lanes(ucp_ep_h ep,
 
     memcpy(addrs, address_list, address_count * sizeof(*addrs));
 
+    /* every local & remote address should be selected only once, that is why
+     * we exclude selected address from processing on next iteration */
     for (i = 0; (i < max_lanes) && address_count; /* no increment here */) {
         status = ucp_wireup_select_transport(ep, addrs, address_count, &criteria,
                                              tl_bitmap, -1, 0, &rsc_index, &addr_index, &score);
@@ -853,8 +855,7 @@ static ucs_status_t ucp_wireup_add_rndv_lanes(ucp_ep_h ep,
 
         /* exclude last-found address from next processing */
         if (addr_index + 1 < address_count) {
-            memmove(addrs + addr_index, addrs + addr_index + 1,
-                    (address_count - addr_index - 1) * sizeof(*addrs));
+            addrs[addr_index] = addrs[address_count - 1];
         }
 
         address_count--;
