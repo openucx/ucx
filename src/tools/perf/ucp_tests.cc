@@ -462,7 +462,7 @@ private:
 
     ucs_status_t UCS_F_ALWAYS_INLINE
     recv_stream(ucp_ep_h ep, void *buf, unsigned length, ucp_datatype_t datatype,
-                     uint8_t sn)
+                uint8_t sn)
     {
         ssize_t  total = 0;
         void    *rreq;
