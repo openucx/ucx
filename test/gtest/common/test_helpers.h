@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <sys/socket.h>
 #include <dirent.h>
+#include <stdint.h>
 
 
 namespace ucs {
@@ -94,6 +95,12 @@ bool is_inet_addr(const struct sockaddr* ifa_addr);
  * Check if the given interface is associated with a device.
  */
 bool is_ib_netdev(const char *ifa_name);
+
+
+/**
+ * Get an available port on the host.
+ */
+uint16_t get_port();
 
 
 /*

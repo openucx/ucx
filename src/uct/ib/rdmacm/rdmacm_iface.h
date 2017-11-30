@@ -30,11 +30,15 @@ struct uct_rdmacm_iface {
 
     uct_rdmacm_ep_t                      *ep;
 
+    /** Field used only for client side */
+    ucs_queue_head_t                     pending_eps_q;
+
     struct {
         double                           addr_resolve_timeout;
     } config;
 };
 
+void uct_rdmacm_iface_client_start_next_ep(uct_rdmacm_iface_t *iface);
 
 extern uct_md_component_t uct_rdmacm_mdc;
 

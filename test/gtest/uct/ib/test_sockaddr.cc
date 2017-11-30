@@ -38,11 +38,18 @@ public:
         ASSERT_TRUE(sock_addr.addr != NULL);
 
         addr_in = (struct sockaddr_in *) (sock_addr.addr);
-        addr_in->sin_port = 0;   /* Use a random port */
+
+        /* Get a usable port on the host.
+         * Ports below 1024 are considered "privileged" (can be used only by user root).
+         * Ports above and including 1024 can use by anyone. */
+        do {
+            addr_in->sin_port = ucs::get_port();
+        } while (ntohs(addr_in->sin_port) < 1024);
 
         /* open iface for the server side */
         memset(&server_params, 0, sizeof(server_params));
         server_params.open_mode                      = UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER;
+        server_params.err_handler                    = err_handler;
         server_params.err_handler_arg                = reinterpret_cast<void*>(this);
         server_params.mode.sockaddr.listen_sockaddr  = sock_addr;
         server_params.mode.sockaddr.cb_flags         = UCT_CB_FLAG_ASYNC;
@@ -55,6 +62,7 @@ public:
         /* open iface for the client side */
         memset(&client_params, 0, sizeof(client_params));
         client_params.open_mode                      = UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT;
+        client_params.err_handler                    = err_handler;
         client_params.err_handler_arg                = reinterpret_cast<void*>(this);
 
         client = uct_test::create_entity(client_params);
@@ -64,17 +72,70 @@ public:
     static ssize_t conn_request_cb(void *arg, const void *conn_priv_data,
                                    size_t length, void *reply_priv_data)
     {
-        return 0;
+        test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr*>(arg);
+
+        EXPECT_EQ(sizeof(uint64_t), length);
+        EXPECT_EQ(0xdeadbeef, *(uint64_t*)conn_priv_data);
+
+        memcpy(reply_priv_data, uct_test::entity::server_priv_data.c_str(),
+               uct_test::entity::server_priv_data.length() + 1);
+
+        self->server_recv_req = 1;
+        return uct_test::entity::server_priv_data.length() + 1;
+    }
+
+    static void err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
+    {
+        test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr*>(arg);
+        self->err_count++;
     }
 
 protected:
     entity *server, *client;
-    ucs_sock_addr_t sock_addr;;
+    ucs_sock_addr_t sock_addr;
+    volatile int err_count, server_recv_req;
 };
 
-UCS_TEST_P(test_uct_sockaddr, iface_open)
-{   /* A temporary empty test to test the initialization of the interface */
-    UCS_TEST_MESSAGE << "Opening an iface for " << ucs::get_iface_ip(sock_addr.addr);
+UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
+{
+    UCS_TEST_MESSAGE << "Testing " << ucs::get_iface_ip(sock_addr.addr);
+
+    uct_test::entity::client_connected = 0;
+    err_count = 0;
+    client->connect(0, *server, 0);
+
+    while (uct_test::entity::client_connected == 0);
+    ASSERT_TRUE(uct_test::entity::client_connected == 1);
+
+    /* since the transport may support a graceful exit in case of an error,
+     * make sure that the error handling flow wasn't invoked (there were no
+     * errors) */
+    EXPECT_EQ(0, err_count);
+}
+
+UCS_TEST_P(test_uct_sockaddr, err_handle)
+{
+    check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
+    UCS_TEST_MESSAGE << "Testing " << ucs::get_iface_ip(sock_addr.addr);
+
+    uct_test::entity::client_connected = 0;
+    server_recv_req = 0;
+    err_count = 0;
+
+    client->connect(0, *server, 0);
+
+    /* kill the server */
+    wrap_errors();
+    m_entities.remove(server);
+
+    /* If the server didn't receive a connection request from the client yet,
+     * test error handling */
+    if (server_recv_req == 0) {
+        wait_for_flag(&err_count);
+        EXPECT_EQ(1, err_count);
+        ASSERT_TRUE(uct_test::entity::client_connected == 0);
+    }
+    restore_errors();
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_sockaddr)

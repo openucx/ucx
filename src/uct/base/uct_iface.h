@@ -480,6 +480,8 @@ ucs_status_t uct_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
 ucs_status_t uct_base_iface_fence(uct_iface_h tl_iface, unsigned flags);
 
+ucs_status_t uct_base_iface_get_max_conn_priv(uct_iface_h tl_iface, size_t *max_conn_priv);
+
 void uct_base_iface_progress_enable(uct_iface_h tl_iface, unsigned flags);
 
 void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,

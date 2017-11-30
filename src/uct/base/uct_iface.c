@@ -259,6 +259,21 @@ ucs_status_t uct_base_iface_fence(uct_iface_h tl_iface, unsigned flags)
     return UCS_OK;
 }
 
+ucs_status_t uct_base_iface_get_max_conn_priv(uct_iface_h tl_iface, size_t *max_conn_priv)
+{
+    ucs_status_t status;
+    uct_iface_attr_t attr;
+
+    status = uct_iface_query(tl_iface, &attr);
+    if (status != UCS_OK) {
+        ucs_error("Failed to uct_iface_query: %s", ucs_status_string(status));
+        return status;
+    }
+
+    *max_conn_priv = attr.max_conn_priv;
+    return UCS_OK;
+}
+
 ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                uct_completion_t *comp)
 {

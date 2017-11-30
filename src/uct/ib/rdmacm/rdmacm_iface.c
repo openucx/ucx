@@ -26,7 +26,8 @@ static ucs_status_t uct_rdmacm_iface_query(uct_iface_h tl_iface,
     iface_attr->iface_addr_len  = sizeof(ucs_sock_addr_t);
     iface_attr->device_addr_len = 0;
     iface_attr->cap.flags       = UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR |
-                                  UCT_IFACE_FLAG_CB_ASYNC;
+                                  UCT_IFACE_FLAG_CB_ASYNC            |
+                                  UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
     /* User's private data size is UCT_RDMACM_UDP_PRIV_DATA_LEN minus room for
      * the private_data header (to hold the length of the data) */
     iface_attr->max_conn_priv   = UCT_RDMACM_UDP_PRIV_DATA_LEN -
@@ -70,6 +71,225 @@ static uct_iface_ops_t uct_rdmacm_iface_ops = {
     .iface_get_address        = uct_rdmacm_iface_get_address
 };
 
+void uct_rdmacm_iface_client_start_next_ep(uct_rdmacm_iface_t *iface)
+{
+    size_t ip_len = ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN);
+    char *ip_str  = ucs_alloca(ip_len);
+    unsigned set_new_ep = 0;
+
+    UCS_ASYNC_BLOCK(iface->super.worker->async);
+    /* set a new ep (take one from the pending eps queue) */
+    while (!ucs_queue_is_empty(&iface->pending_eps_q) && (!set_new_ep)) {
+        iface->ep = ucs_queue_pull_elem_non_empty(&iface->pending_eps_q,
+                                                  uct_rdmacm_ep_t, queue);
+
+        if (rdma_resolve_addr(iface->cm_id, NULL, iface->ep->remote_addr,
+                              UCS_MSEC_PER_SEC * iface->config.addr_resolve_timeout)) {
+            ucs_error("rdma_resolve_addr(addr=%s) failed: %m",
+                       ucs_sockaddr_str(iface->ep->remote_addr, ip_str, ip_len));
+            uct_rdmacm_ep_set_failed(&iface->super.super, &iface->ep->super.super,
+                                     UCS_ERR_IO_ERROR);
+        } else {
+            set_new_ep = 1;
+        }
+    }
+
+    if (!set_new_ep) {
+        iface->ep = NULL;
+    }
+
+    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
+}
+
+static void uct_rdmacm_client_handle_failure(uct_rdmacm_iface_t *iface, ucs_status_t status)
+{
+    ucs_assert((!iface->is_server));
+    uct_rdmacm_ep_set_failed(&iface->super.super, &iface->ep->super.super, status);
+    uct_rdmacm_iface_client_start_next_ep(iface);
+}
+
+static void uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
+                                             struct rdma_cm_event *event,
+                                             struct sockaddr *remote_addr)
+{
+    uct_rdmacm_priv_data_hdr_t *hdr, cb_hdr;
+    size_t max_conn_priv;
+    ssize_t server_data_len;
+    struct rdma_conn_param conn_param;
+    ucs_status_t status;
+    size_t ip_len  = ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN);
+    char *ip_str   = ucs_alloca(ip_len);
+
+    status = uct_base_iface_get_max_conn_priv(&iface->super.super, &max_conn_priv);
+    if (status != UCS_OK) {
+        ucs_error("Server failed to get max_conn_priv");
+        rdma_reject(event->id, NULL, 0);
+        return;
+    }
+
+    hdr = (uct_rdmacm_priv_data_hdr_t*) event->param.ud.private_data;
+
+    memset(&conn_param, 0, sizeof(conn_param));
+    conn_param.private_data = ucs_alloca(max_conn_priv + sizeof(uct_rdmacm_priv_data_hdr_t));
+
+    /* TODO check the iface's cb_flags to determine when to invoke this callback.
+     * currently only UCT_CB_FLAG_ASYNC is supported so the cb is invoked from here */
+    server_data_len = iface->conn_request_cb(iface->conn_request_arg,
+                                             event->param.ud.private_data +
+                                             sizeof(uct_rdmacm_priv_data_hdr_t), /* private data */
+                                             hdr->length,                        /* length */
+                                             (void*)(conn_param.private_data +
+                                             sizeof(uct_rdmacm_priv_data_hdr_t)));
+    if (server_data_len < 0) {
+        ucs_error("Server failed to fill private data");
+        rdma_reject(event->id, NULL, 0);
+        return;
+    }
+
+    cb_hdr.length = server_data_len;
+    memcpy((void*)conn_param.private_data, &cb_hdr.length, sizeof(uct_rdmacm_priv_data_hdr_t));
+    conn_param.private_data_len = sizeof(uct_rdmacm_priv_data_hdr_t) + cb_hdr.length;
+
+    /* Accepting the connection will generate the RDMA_CM_EVENT_ESTABLISHED
+     * event on the client side. */
+    if (rdma_accept(event->id, &conn_param)) {
+        ucs_error("rdma_accept(to addr=%s) failed: %m.",
+                  ucs_sockaddr_str(remote_addr, ip_str, ip_len));
+        rdma_reject(event->id, NULL, 0);
+        return;
+    }
+
+    /* Destroy the new rdma_cm_id which was created when receiving the
+     * RDMA_CM_EVENT_CONNECT_REQUEST event. (this is not the listening rdma_cm_id)*/
+    rdma_destroy_id(event->id);
+}
+
+static void uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdma_cm_event *event)
+{
+    struct sockaddr *remote_addr = rdma_get_peer_addr(event->id);
+    struct sockaddr_in *addr_in  = (struct sockaddr_in *)(remote_addr);
+    uct_rdmacm_md_t *rdmacm_md   = (uct_rdmacm_md_t *)iface->super.md;
+    size_t ip_len                = ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN);
+    char *ip_str                 = ucs_alloca(ip_len);
+    uct_rdmacm_priv_data_hdr_t *hdr;
+    struct rdma_conn_param conn_param;
+
+    ucs_debug("RDMACM event (fd=%d) on %s: %s. Peer: %s:%d.",
+              iface->event_ch->fd, (iface->is_server ? "server" : "client"),
+              rdma_event_str(event->event),
+              ucs_sockaddr_str(remote_addr, ip_str, ip_len),
+              ntohs(addr_in->sin_port));
+
+    ucs_assert((iface->cm_id == event->id) ||
+               ((event->event == RDMA_CM_EVENT_CONNECT_REQUEST) && (iface->cm_id == event->listen_id)));
+
+    /* The following applies for rdma_cm_id of type RDMA_PS_UDP only */
+    switch (event->event) {
+    case RDMA_CM_EVENT_ADDR_RESOLVED:
+        /* Client - resolve the route to the server */
+        ucs_assert(iface->ep != NULL);
+        if (rdma_resolve_route(event->id, UCS_MSEC_PER_SEC * rdmacm_md->addr_resolve_timeout)) {
+            ucs_error("rdma_resolve_route(to addr=%s) failed: %m",
+                      ucs_sockaddr_str(remote_addr, ip_str, ip_len));
+            uct_rdmacm_client_handle_failure(iface, UCS_ERR_IO_ERROR);
+        }
+        break;
+
+    case RDMA_CM_EVENT_ROUTE_RESOLVED:
+        /* Client - send a connection request to the server */
+        ucs_assert(iface->ep != NULL);
+        hdr = (uct_rdmacm_priv_data_hdr_t*)iface->ep->priv_data;
+
+        memset(&conn_param, 0, sizeof(conn_param));
+        conn_param.private_data     = iface->ep->priv_data;
+        conn_param.private_data_len = sizeof(uct_rdmacm_priv_data_hdr_t) +
+                                      hdr->length;
+
+        if (rdma_connect(event->id, &conn_param)) {
+            ucs_error("rdma_connect(to addr=%s) failed: %m",
+                      ucs_sockaddr_str(remote_addr, ip_str, ip_len));
+            uct_rdmacm_client_handle_failure(iface, UCS_ERR_IO_ERROR);
+        }
+        break;
+
+    case RDMA_CM_EVENT_CONNECT_REQUEST:
+        /* Server - handle a connection request from the client */
+        uct_rdmacm_iface_process_conn_req(iface, event, remote_addr);
+        break;
+
+    case RDMA_CM_EVENT_REJECTED:
+        /* Client - server rejected the connection request */
+        ucs_error("Connection request to %s rejected",
+                  ucs_sockaddr_str(remote_addr, ip_str, ip_len));
+
+        uct_rdmacm_client_handle_failure(iface, UCS_ERR_IO_ERROR);
+        break;
+
+    case RDMA_CM_EVENT_ESTABLISHED:
+        /* Client - connection is ready, call the callback to notify the upper layer */
+        ucs_assert(iface->ep != NULL);
+        hdr = (uct_rdmacm_priv_data_hdr_t*)event->param.ud.private_data;
+        /* TODO check the ep's cb_flags to determine when to invoke this callback.
+         * currently only UCT_CB_FLAG_ASYNC is supported so the cb is invoked from here */
+        iface->ep->conn_reply_cb(iface->ep->conn_reply_arg,
+                                 event->param.ud.private_data + sizeof(uct_rdmacm_priv_data_hdr_t),
+                                 hdr->length);
+
+        uct_rdmacm_iface_client_start_next_ep(iface);
+        break;
+
+    /* client error events */
+    case RDMA_CM_EVENT_ADDR_ERROR:
+    case RDMA_CM_EVENT_ROUTE_ERROR:
+    case RDMA_CM_EVENT_CONNECT_RESPONSE:
+    case RDMA_CM_EVENT_UNREACHABLE:
+
+    /* client and server error events */
+    case RDMA_CM_EVENT_CONNECT_ERROR:
+    case RDMA_CM_EVENT_DISCONNECTED:
+        /* Server/Client - connection was disconnected */
+        ucs_error("Received event %s. status = %d. Peer: %s.",
+                  rdma_event_str(event->event), event->status,
+                  ucs_sockaddr_str(remote_addr, ip_str, ip_len));
+
+        if (!iface->is_server) {
+            uct_rdmacm_client_handle_failure(iface, UCS_ERR_IO_ERROR);
+        }
+        break;
+
+    default:
+        ucs_warn("Unexpected RDMACM event: %d", event->event);
+        break;
+    }
+}
+
+static void uct_rdmacm_iface_event_handler(int fd, void *arg)
+{
+    uct_rdmacm_iface_t *iface = arg;
+    struct rdma_cm_event *event;
+    int ret;
+
+    for (;;) {
+        /* Fetch an event */
+        ret = rdma_get_cm_event(iface->event_ch, &event);
+        if (ret) {
+            /* EAGAIN (in a non-blocking rdma_get_cm_event) means that
+             * there are no more events */
+            if (errno != EAGAIN) {
+                ucs_warn("rdma_get_cm_event() failed: %m");
+            }
+            return;
+        }
+
+        uct_rdmacm_iface_process_event(iface, event);
+
+        ret = rdma_ack_cm_event(event);
+        if (ret) {
+            ucs_warn("rdma_ack_cm_event() failed: %m");
+        }
+    }
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -88,7 +308,6 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rdmacm_iface_ops, md, worker,
                               params, tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_RDMACM_TL_NAME));
-
 
     rdmacm_md = ucs_derived_of(self->super.md, uct_rdmacm_md_t);
 
@@ -127,7 +346,9 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
 
     if (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) {
         if (rdma_bind_addr(self->cm_id, (struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr)) {
-            ucs_error("rdma_bind_addr() failed: %m");
+            ucs_error("rdma_bind_addr(addr=%s) failed: %m",
+                      ucs_sockaddr_str((struct sockaddr *)params->mode.sockaddr.listen_sockaddr.addr,
+                                       ip_str, ip_len));
             status = UCS_ERR_IO_ERROR;
             goto err_destroy_id;
         }
@@ -158,7 +379,18 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
         self->is_server        = 0;
     }
 
+    /* Server and client register an event handler for incoming messages */
+    status = ucs_async_set_event_handler(self->super.worker->async->mode,
+                                         self->event_ch->fd, POLLIN,
+                                         uct_rdmacm_iface_event_handler,
+                                         self, self->super.worker->async);
+    if (status != UCS_OK) {
+        ucs_error("failed to set event handler");
+        goto err_destroy_id;
+    }
+
     self->ep = NULL;
+    ucs_queue_head_init(&self->pending_eps_q);
 
     ucs_debug("created an RDMACM iface %p. event_channel: %p, fd: %d, cm_id: %p",
               self, self->event_ch, self->event_ch->fd, self->cm_id);
@@ -174,6 +406,7 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_iface_t)
 {
+    ucs_async_remove_handler(self->event_ch->fd, 1);
     rdma_destroy_id(self->cm_id);
     rdma_destroy_event_channel(self->event_ch);
 }
