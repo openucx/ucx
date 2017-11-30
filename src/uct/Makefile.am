@@ -14,6 +14,7 @@ libuct_la_CPPFLAGS = $(BASE_CPPFLAGS) -I$(abs_top_srcdir)/src -I$(abs_top_buildd
 libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libuct_la_LIBADD   = $(LIBM) ../ucs/libucs.la
 libuct_ladir       = $(includedir)/uct
+libmlx5_ver        = \"`rpm -qf $(IBVERBS_DIR)/include/infiniband/mlx5_hw.h &>/dev/null && rpm -qf /usr/include/infiniband/mlx5_hw.h`\"
 
 nobase_dist_libuct_la_HEADERS = \
 	api/tl.h \
@@ -55,6 +56,9 @@ libuct_la_SOURCES += \
 	ib/base/ib_md.c
 
 if HAVE_MLX5_HW
+libuct_la_CPPFLAGS += \
+	-DLIB_MLX5_VER=$(libmlx5_ver)
+
 libuct_la_SOURCES += \
 	ib/mlx5/ib_mlx5_log.c \
 	ib/mlx5/ib_mlx5.c

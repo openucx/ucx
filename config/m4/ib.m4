@@ -94,6 +94,7 @@ AS_IF([test "x$with_ib" == xyes],
         AC_CHECK_LIB([ibverbs], [ibv_get_device_list],
             [
             AC_SUBST(IBVERBS_LDFLAGS,  ["$verbs_libs -libverbs"])
+            AC_SUBST(IBVERBS_DIR,      ["$with_verbs"])
             AC_SUBST(IBVERBS_CPPFLAGS, ["$verbs_incl"])
             AC_SUBST(IBVERBS_CFLAGS,   ["$verbs_incl"])
             ],

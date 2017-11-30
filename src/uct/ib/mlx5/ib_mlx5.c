@@ -42,6 +42,12 @@ typedef struct uct_ib_mlx5_srq_info {
     unsigned           tail;
 } uct_ib_mlx5_srq_info_t;
 
+static void UCS_F_MAYBE_UNUSED uct_ib_mlx5_obj_error(const char *obj_name)
+{
+    ucs_error("Failed to get mlx5 %s information. Please make sure the installed "
+              "libmlx5 version matches the one UCX was compiled with (%s)",
+              obj_name, LIB_MLX5_VER);
+}
 
 static ucs_status_t uct_ib_mlx5_get_qp_info(struct ibv_qp *qp, uct_ib_mlx5_qp_info_t *qp_info)
 {
@@ -51,6 +57,7 @@ static ucs_status_t uct_ib_mlx5_get_qp_info(struct ibv_qp *qp, uct_ib_mlx5_qp_in
 
     ret = ibv_mlx5_exp_get_qp_info(qp, &ibv_qp_info);
     if (ret != 0) {
+        uct_ib_mlx5_obj_error("qp");
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -101,6 +108,7 @@ static ucs_status_t uct_ib_mlx5_get_srq_info(struct ibv_srq *srq,
 
     ret = ibv_mlx5_exp_get_srq_info(srq, &ibv_srq_info);
     if (ret != 0) {
+        uct_ib_mlx5_obj_error("srq");
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -141,6 +149,7 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 
     ret = ibv_mlx5_exp_get_cq_info(cq, &ibv_cq_info);
     if (ret != 0) {
+        uct_ib_mlx5_obj_error("cq");
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -301,7 +310,6 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
 
     status = uct_ib_mlx5_get_qp_info(verbs_qp, &qp_info);
     if (status != UCS_OK) {
-        ucs_error("Failed to get mlx5 QP information");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -354,7 +362,6 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
 
     status = uct_ib_mlx5_get_qp_info(verbs_qp, &qp_info);
     if (status != UCS_OK) {
-        ucs_error("Failed to get mlx5 QP information");
         return UCS_ERR_IO_ERROR;
     }
 
