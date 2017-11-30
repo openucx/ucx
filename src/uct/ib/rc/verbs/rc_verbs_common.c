@@ -27,9 +27,8 @@ ucs_config_field_t uct_rc_verbs_iface_common_config_table[] = {
   {"TM_SYNC_RATIO", "0.5",
    "Maximal portion of the tag matching list which can be canceled without requesting\n"
    "a completion.",
-   ucs_offsetof(uct_rc_verbs_iface_common_config_t, tm.sync_ratio), UCS_CONFIG_TYPE_DOUBLE},
+   ucs_offsetof(uct_rc_verbs_iface_common_config_t, tm_sync_ratio), UCS_CONFIG_TYPE_DOUBLE},
 #endif
-
   {NULL}
 };
 
@@ -45,18 +44,6 @@ static void uct_rc_verbs_iface_common_tag_query(uct_rc_verbs_iface_common_t *ifa
     if (!UCT_RC_IFACE_TM_ENABLED(rc_iface)) {
         return;
     }
-
-    /* Redefine AM caps, because we have to send TMH (with NO_TAG
-     * operation) with every AM message. */
-    iface_attr->cap.am.max_short -= iface->config.notag_hdr_size;
-    if (iface_attr->cap.am.max_short <= 0) {
-        iface_attr->cap.am.max_short = 0;
-        iface_attr->cap.flags &= ~UCT_IFACE_FLAG_AM_SHORT;
-    }
-
-    iface_attr->cap.am.max_bcopy -= iface->config.notag_hdr_size;
-    iface_attr->cap.am.max_zcopy -= iface->config.notag_hdr_size;
-    iface_attr->cap.am.max_hdr   -= iface->config.notag_hdr_size;
 
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
                                     UCT_IFACE_FLAG_TAG_EAGER_ZCOPY |
@@ -198,8 +185,8 @@ uct_rc_verbs_iface_common_tag_init(uct_rc_verbs_iface_common_t *iface,
     }
 
     /* There can be up to 1/"tag_sync_ratio" SYNC ops during cancellation. */
-    if (config->tm.sync_ratio > 0) {
-        sync_ops_count = ceil(1.0 / config->tm.sync_ratio);
+    if (config->tm_sync_ratio > 0) {
+        sync_ops_count = ceil(1.0 / config->tm_sync_ratio);
     } else {
         sync_ops_count = rc_iface->tm.num_tags;
     }
@@ -211,7 +198,7 @@ uct_rc_verbs_iface_common_tag_init(uct_rc_verbs_iface_common_t *iface,
     }
 
     iface->tm.num_canceled    = 0;
-    iface->tm.tag_sync_thresh = rc_iface->tm.num_tags * config->tm.sync_ratio;
+    iface->tm.tag_sync_thresh = rc_iface->tm.num_tags * config->tm_sync_ratio;
 
     return UCS_OK;
 }
@@ -223,14 +210,14 @@ ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
                                             uct_rc_verbs_iface_common_config_t *config,
                                             uct_rc_iface_config_t *rc_config)
 {
-    unsigned rc_hdr_len = rc_iface->super.config.rx_payload_offset -
-                          rc_iface->super.config.rx_hdr_offset;
     ucs_status_t status;
 
     memset(iface->inl_sge, 0, sizeof(iface->inl_sge));
+    uct_rc_am_hdr_fill(&iface->am_inl_hdr.rc_hdr, 0);
 
     /* Configuration */
-    iface->config.short_desc_size = ucs_max(rc_hdr_len, config->max_am_hdr);
+    iface->config.short_desc_size = ucs_max(sizeof(uct_rc_hdr_t),
+                                            config->max_am_hdr);
     iface->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE,
                                             iface->config.short_desc_size);
 
@@ -249,25 +236,14 @@ ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
         goto err;
     }
 
-    iface->am_inl_hdr = ucs_mpool_get(&iface->short_desc_mp);
-    if (iface->am_inl_hdr == NULL) {
-        ucs_error("Failed to allocate AM short header");
-        status = UCS_ERR_NO_MEMORY;
-        goto err_mpool_cleanup;
-    }
-    iface->config.notag_hdr_size = uct_rc_verbs_notag_header_fill(rc_iface,
-                                                                  iface->am_inl_hdr);
     return UCS_OK;
 
-err_mpool_cleanup:
-    ucs_mpool_cleanup(&iface->short_desc_mp, 1);
 err:
     return status;
 }
 
 void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *self)
 {
-    ucs_mpool_put(self->am_inl_hdr);
     ucs_mpool_cleanup(&self->short_desc_mp, 1);
 }
 

@@ -86,12 +86,6 @@ UCS_CLASS_DECLARE(uct_rc_verbs_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_verbs_ep_t, uct_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_verbs_ep_t, uct_ep_t);
 
-void uct_rc_verbs_ep_am_packet_dump(uct_base_iface_t *iface,
-                                    uct_am_trace_type_t type,
-                                    void *data, size_t length,
-                                    size_t valid_length,
-                                    char *buffer, size_t max);
-
 ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                        unsigned length, uint64_t remote_addr,
                                        uct_rkey_t rkey);

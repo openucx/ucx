@@ -120,7 +120,10 @@ typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op, const void *re
  * RC network header.
  */
 typedef struct uct_rc_hdr {
-    uint8_t           am_id;  /* Active message ID */
+#if IBV_EXP_HW_TM
+    uint8_t           tmh_opcode; /* reserved for TMH.opcode */
+#endif
+    uint8_t           am_id;     /* Active message ID */
 } UCS_S_PACKED uct_rc_hdr_t;
 
 
@@ -491,11 +494,20 @@ uct_rc_iface_put_send_op(uct_rc_iface_send_op_t *op)
     iface->tx.free_ops = op;
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_am_hdr_fill(uct_rc_hdr_t *rch, uint8_t id)
+{
+#if IBV_EXP_HW_TM
+    rch->tmh_opcode = IBV_EXP_TMH_NO_TAG;
+#endif
+    rch->am_id      = id;
+}
+
 static inline void
 uct_rc_bcopy_desc_fill(uct_rc_hdr_t *rch, uint8_t id,
                        uct_pack_callback_t pack_cb, void *arg, size_t *length)
 {
-    rch->am_id = id;
+    uct_rc_am_hdr_fill(rch, id);
     *length = pack_cb(rch + 1, arg);
 }
 
@@ -517,7 +529,7 @@ static inline void uct_rc_zcopy_desc_set_header(uct_rc_hdr_t *rch,
                                                 uint8_t id, const void *header,
                                                 unsigned header_length)
 {
-    rch->am_id = id;
+    uct_rc_am_hdr_fill(rch, id);
     memcpy(rch + 1, header, header_length);
 }
 

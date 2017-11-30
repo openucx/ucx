@@ -66,20 +66,6 @@ static void uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
                       &iface->super.super, status);
 }
 
-void uct_rc_verbs_ep_am_packet_dump(uct_base_iface_t *base_iface,
-                                    uct_am_trace_type_t type,
-                                    void *data, size_t length,
-                                    size_t valid_length,
-                                    char *buffer, size_t max)
-{
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(base_iface,
-                                                 uct_rc_verbs_iface_t);
-    uct_rc_ep_am_packet_dump(base_iface, type,
-                             data + iface->verbs_common.config.notag_hdr_size,
-                             length - iface->verbs_common.config.notag_hdr_size,
-                             valid_length, buffer, max);
-}
-
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {

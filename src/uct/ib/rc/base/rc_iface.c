@@ -434,8 +434,7 @@ static void uct_rc_iface_release_desc(uct_recv_desc_t *self, void *desc)
 static void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
                                  const uct_rc_iface_config_t *config,
                                  const uct_iface_params_t *params,
-                                 int tm_cap_flag, unsigned *rc_hdr_len,
-                                 unsigned *rx_cq_len)
+                                 int tm_cap_flag, unsigned *rx_cq_len)
 {
 #if IBV_EXP_HW_TM
     struct ibv_exp_tmh tmh;
@@ -448,6 +447,13 @@ static void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
         goto out_tm_disabled;
     }
 
+    /* Compile-time check that THM and uct_rc_hdr_t are wire-compatible for the
+     * case of no-tag protocol.
+     */
+    UCS_STATIC_ASSERT(sizeof(tmh.opcode) == sizeof(((uct_rc_hdr_t*)0)->tmh_opcode));
+    UCS_STATIC_ASSERT(ucs_offsetof(struct ibv_exp_tmh, opcode) ==
+                      ucs_offsetof(uct_rc_hdr_t, tmh_opcode));
+
     UCS_STATIC_ASSERT(sizeof(uct_rc_iface_ctx_priv_t) <= UCT_TAG_PRIV_LEN);
 
     iface->tm.eager_unexp.cb  = params->eager_cb;
@@ -458,9 +464,6 @@ static void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
     iface->tm.num_outstanding = 0;
     iface->tm.num_tags        = ucs_min(IBV_DEVICE_TM_CAPS(dev, max_num_tags),
                                         config->tm.list_size);
-
-    /* Only opcode (rather than the whole TMH) is sent with NO_TAG protocol */
-    *rc_hdr_len = sizeof(uct_rc_hdr_t) + sizeof(tmh.opcode);
 
     /* There can be:
      * - up to rx.queue_len RX CQEs
@@ -473,7 +476,6 @@ static void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
 
 out_tm_disabled:
 #endif
-    *rc_hdr_len = sizeof(uct_rc_hdr_t);
     *rx_cq_len  = config->super.rx.queue_len;
 }
 
@@ -486,22 +488,15 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
 
 #if IBV_EXP_HW_TM
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super);
-    int rc_hdr_len;
 
     if (!UCT_RC_IFACE_TM_ENABLED(iface)) {
         goto out_tm_disabled;
     }
-    /* AM (NO_TAG) and eager messages have different header sizes.
-     * Receive descriptor offsets are calculated based on AM hdr length.
-     * Need to store headers difference for correct release of descriptors
-     * consumed by unexpected eager messages. */
-    rc_hdr_len = iface->super.config.rx_payload_offset -
-                 iface->super.config.rx_hdr_offset;
-    ucs_assert_always(sizeof(struct ibv_exp_tmh) >= rc_hdr_len);
 
     iface->tm.eager_desc.super.cb = uct_rc_iface_release_desc;
-    iface->tm.eager_desc.offset   = sizeof(struct ibv_exp_tmh) - rc_hdr_len +
-                                    iface->super.config.rx_headroom_offset;
+    iface->tm.eager_desc.offset   = sizeof(struct ibv_exp_tmh)
+                                    - sizeof(uct_rc_hdr_t) +
+                                    + iface->super.config.rx_headroom_offset;
 
     iface->tm.rndv_desc.super.cb  = uct_rc_iface_release_desc;
     iface->tm.rndv_desc.offset    = iface->tm.eager_desc.offset + rndv_hdr_len;
@@ -563,16 +558,15 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 {
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     unsigned tx_cq_len   = config->tx.cq_len;
-    unsigned rc_hdr_len, rx_cq_len;
     struct ibv_srq_init_attr srq_init_attr;
     ucs_status_t status;
+    unsigned rx_cq_len;
 
-    uct_rc_iface_preinit(self, md, config, params, tm_cap_flag,
-                         &rc_hdr_len, &rx_cq_len);
+    uct_rc_iface_preinit(self, md, config, params, tm_cap_flag, &rx_cq_len);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
-                              rx_priv_len, rc_hdr_len, tx_cq_len, rx_cq_len,
-                              SIZE_MAX, &config->super);
+                              rx_priv_len, sizeof(uct_rc_hdr_t), tx_cq_len,
+                              rx_cq_len, SIZE_MAX, &config->super);
 
     self->tx.cq_available           = tx_cq_len - 1;
     self->rx.srq.available          = 0;
