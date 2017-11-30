@@ -477,8 +477,8 @@ size_t ucs_get_shmmax()
     return size;
 }
 
-ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmid
-                            UCS_MEMTRACK_ARG)
+ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
+                            int flags, int *shmid UCS_MEMTRACK_ARG)
 {
     struct shminfo shminfo, *shminfo_ptr;
     size_t alloc_size;
@@ -491,6 +491,10 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
         alloc_size = ucs_align_up(alloc_size, ucs_get_huge_page_size());
     } else {
         alloc_size = ucs_align_up(alloc_size, ucs_get_page_size());
+    }
+
+    if (alloc_size >= max_size) {
+        return UCS_ERR_EXCEEDS_LIMIT;
     }
 
     flags |= IPC_CREAT | SHM_R | SHM_W;

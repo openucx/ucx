@@ -284,8 +284,8 @@ ucs_status_t ucs_mpool_hugetlb_malloc(ucs_mpool_t *mp, size_t *size_p, void **ch
 
     /* First, try hugetlb */
     real_size = *size_p;
-    status = ucs_sysv_alloc(&real_size, (void**)&ptr, SHM_HUGETLB, &shmid
-                            UCS_MEMTRACK_NAME(ucs_mpool_name(mp)));
+    status = ucs_sysv_alloc(&real_size, real_size * 2, (void**)&ptr, SHM_HUGETLB,
+                            &shmid UCS_MEMTRACK_NAME(ucs_mpool_name(mp)));
     if (status == UCS_OK) {
         chunk = ptr;
         chunk->hugetlb = 1;

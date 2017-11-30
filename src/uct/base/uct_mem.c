@@ -142,6 +142,10 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             }
 
             alloc_length = ucs_align_up(min_length, ucs_get_huge_page_size());
+            if (alloc_length >= 2 * min_length) {
+                break;
+            }
+
             address = ucs_memalign(ucs_get_huge_page_size(), alloc_length
                                    UCS_MEMTRACK_VAL);
             if (address != NULL) {
@@ -199,8 +203,8 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             /* Allocate huge pages */
             alloc_length = min_length;
             address = (flags & UCT_MD_MEM_FLAG_FIXED) ? addr : NULL;
-            status = ucs_sysv_alloc(&alloc_length, &address, SHM_HUGETLB, &shmid
-                                    UCS_MEMTRACK_VAL);
+            status = ucs_sysv_alloc(&alloc_length, min_length * 2, &address,
+                                    SHM_HUGETLB, &shmid UCS_MEMTRACK_VAL);
             if (status == UCS_OK) {
                 goto allocated_without_md;
             }

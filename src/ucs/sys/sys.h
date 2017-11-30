@@ -173,13 +173,15 @@ size_t ucs_get_phys_mem_size();
  *
  * @param size      Pointer to memory size to allocate, updated with actual size
  *                  (rounded up to huge page size or to regular page size).
+ * @param max_size  maximal size to allocate. If need to allocate more than this,
+ *                  the function fails and returns UCS_ERR_EXCEEDS_LIMIT.
  * @param address_p Filled with allocated memory address.
  * @param flags     Flags to indicate the permissions for the allocate memory.
  *                  (also, whether or not to allocate memory with huge pages).
  * @param shmid     Filled with the shmid from the shmget call in the function.
  */
-ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shimd
-                            UCS_MEMTRACK_ARG);
+ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
+                            int flags, int *shimd UCS_MEMTRACK_ARG);
 
 
 /**
