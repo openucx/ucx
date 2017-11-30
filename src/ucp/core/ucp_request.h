@@ -68,7 +68,8 @@ enum {
     UCP_RECV_DESC_FLAG_SYNC     = UCS_BIT(3),
     UCP_RECV_DESC_FLAG_RNDV     = UCS_BIT(4),
     UCP_RECV_DESC_FLAG_UCT_DESC = UCS_BIT(5),
-    UCP_RECV_DESC_FLAG_OFFLOAD  = UCS_BIT(6)
+    UCP_RECV_DESC_FLAG_OFFLOAD  = UCS_BIT(6),
+    UCP_RECV_DESC_FLAG_STREAM_Q = UCS_BIT(7)    /* need to dequeue the desc before release*/
 };
 
 

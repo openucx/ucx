@@ -202,8 +202,6 @@ typedef struct ucp_ep_ext_stream {
     ucs_queue_head_t              reqs;
     /* Queue of receive descriptors with data */
     ucs_queue_head_t              data;
-    /* Partially handled desc */
-    ucp_recv_desc_t               *rdesc;
 } ucp_ep_ext_stream_t;
 
 
