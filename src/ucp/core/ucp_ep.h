@@ -215,7 +215,7 @@ typedef struct ucp_ep {
 
     ucp_ep_cfg_index_t            cfg_index;     /* Configuration index */
     ucp_lane_index_t              am_lane;       /* Cached value */
-#if ENABLE_DEBUG_DATA
+#if ENABLE_ASSERT || ENABLE_DEBUG_DATA
     uint16_t                      flags;         /* Endpoint flags */
 #else
     uint8_t                       flags;         /* Endpoint flags */
