@@ -11,6 +11,7 @@
 #include "ucp_ep.h"
 #include "ucp_thread.h"
 
+#include <ucp/tag/tag_match.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/datastruct/queue_types.h>
@@ -172,6 +173,7 @@ typedef struct ucp_worker {
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
     ucp_mt_lock_t                 mt_lock;       /* Configuration of multi-threading support */
+    ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
 
     UCS_STATS_NODE_DECLARE(stats);
     UCS_STATS_NODE_DECLARE(tm_offload_stats);

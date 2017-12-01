@@ -55,19 +55,18 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
     ucp_worker_h worker = arg;
     ucp_eager_hdr_t *eager_hdr = data;
     ucp_eager_first_hdr_t *eager_first_hdr = data;
-    ucp_context_h context = worker->context;
     ucp_request_t *req;
     ucs_status_t status;
     size_t recv_len;
     ucp_tag_t recv_tag;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     ucs_assert(length >= hdr_len);
     recv_tag = eager_hdr->super.tag;
     recv_len = length - hdr_len;
 
-    req = ucp_tag_exp_search(&context->tm, recv_tag, recv_len, flags);
+    req = ucp_tag_exp_search(&worker->tm, recv_tag, recv_len, flags);
     if (req != NULL) {
         UCS_PROFILE_REQUEST_EVENT(req, "eager_recv", recv_len);
 
@@ -85,7 +84,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
              * because it arrived either:
              * 1) via SW TM (e. g. peer doesn't support offload)
              * 2) as unexpected via HW TM */
-            ucp_tag_offload_try_cancel(context, req, 1);
+            ucp_tag_offload_try_cancel(worker, req, 1);
 
             if (flags & UCP_RECV_DESC_FLAG_LAST) {
                 req->recv.tag.info.length = recv_len;
@@ -111,11 +110,11 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
 
         status = UCS_OK;
     } else {
-        status = ucp_tag_unexp_recv(&context->tm, worker, data, length, am_flags,
+        status = ucp_tag_unexp_recv(&worker->tm, worker, data, length, am_flags,
                                     hdr_len, flags);
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return status;
 }
 
@@ -182,7 +181,7 @@ static ucs_status_t ucp_eager_offload_sync_ack_handler(void *arg, void *data,
 {
     ucp_offload_ssend_hdr_t *rep_hdr = data;
     ucp_worker_t *worker             = arg;
-    ucs_queue_head_t *queue          = &worker->context->tm.offload.sync_reqs;
+    ucs_queue_head_t *queue          = &worker->tm.offload.sync_reqs;
     ucp_request_t *sreq;
     ucs_queue_iter_t iter;
 

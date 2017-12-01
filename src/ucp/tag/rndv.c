@@ -562,34 +562,33 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
 ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
                                   unsigned tl_flags)
 {
-    const unsigned recv_flags = UCP_RECV_DESC_FLAG_FIRST |
-                                UCP_RECV_DESC_FLAG_LAST  |
-                                UCP_RECV_DESC_FLAG_RNDV;
-    ucp_worker_h worker = arg;
-    ucp_rndv_rts_hdr_t *rndv_rts_hdr = data;
-    ucp_context_h context = worker->context;
+    const unsigned recv_flags          = UCP_RECV_DESC_FLAG_FIRST |
+                                         UCP_RECV_DESC_FLAG_LAST  |
+                                         UCP_RECV_DESC_FLAG_RNDV;
+    ucp_worker_h worker                = arg;
+    ucp_rndv_rts_hdr_t *rndv_rts_hdr   = data;
     ucp_request_t *rreq;
     ucs_status_t status;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
-    rreq = ucp_tag_exp_search(&context->tm, rndv_rts_hdr->super.tag,
+    rreq = ucp_tag_exp_search(&worker->tm, rndv_rts_hdr->super.tag,
                               rndv_rts_hdr->size, recv_flags);
     if (rreq != NULL) {
         ucp_rndv_matched(worker, rreq, rndv_rts_hdr);
 
         /* Cancel req in transport if it was offloaded, because it arrived
            as unexpected */
-        ucp_tag_offload_try_cancel(context, rreq, 1);
+        ucp_tag_offload_try_cancel(worker, rreq, 1);
 
         UCP_WORKER_STAT_RNDV(worker, EXP);
         status = UCS_OK;
     } else {
-        status = ucp_tag_unexp_recv(&context->tm, worker, data, length, tl_flags,
+        status = ucp_tag_unexp_recv(&worker->tm, worker, data, length, tl_flags,
                                     sizeof(*rndv_rts_hdr), recv_flags);
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return status;
 }
 

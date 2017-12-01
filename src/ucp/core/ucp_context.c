@@ -922,20 +922,12 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_free_config;
     }
 
-    /* initialize tag matching */
-    status = ucp_tag_match_init(&context->tm);
-    if (status != UCS_OK) {
-        goto err_free_resources;
-    }
-
     ucs_debug("created ucp context %p [%d mds %d tls] features 0x%lx", context,
               context->num_mds, context->num_tls, context->config.features);
 
     *context_p = context;
     return UCS_OK;
 
-err_free_resources:
-    ucp_free_resources(context);
 err_free_config:
     ucp_free_config(context);
 err_free_ctx:
@@ -946,7 +938,6 @@ err:
 
 void ucp_cleanup(ucp_context_h context)
 {
-    ucp_tag_match_cleanup(&context->tm);
     ucp_free_resources(context);
     ucp_free_config(context);
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);
@@ -1025,28 +1016,5 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
     }
 
     fprintf(stream, "#\n");
-}
-
-void ucp_context_tag_offload_enable(ucp_context_h context)
-{
-    ucp_worker_iface_t *offload_iface;
-
-    /* Enable offload, if only one tag offload capable interface is present
-     * (multiple offload ifaces are not supported yet). */
-    if (context->config.ext.tm_offload &&
-        (ucs_queue_length(&context->tm.offload.ifaces) == 1)) {
-        context->tm.offload.thresh       = context->config.ext.tm_thresh;
-        context->tm.offload.zcopy_thresh = context->config.ext.tm_max_bcopy;
-
-        offload_iface = ucs_queue_head_elem_non_empty(&context->tm.offload.ifaces,
-                                                      ucp_worker_iface_t, queue);
-        ucp_worker_iface_activate(offload_iface, 0);
-
-        ucs_debug("Enable TM offload: thresh %zu, zcopy_thresh %zu",
-                  context->tm.offload.thresh, context->tm.offload.zcopy_thresh);
-    } else {
-        context->tm.offload.thresh = SIZE_MAX;
-        ucs_debug("Disable TM offload, multiple offload ifaces are not supported");
-    }
 }
 
