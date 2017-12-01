@@ -15,6 +15,15 @@ typedef struct {
 } UCS_S_PACKED ucp_stream_am_hdr_t;
 
 
+typedef struct {
+    union {
+        ucp_stream_am_hdr_t hdr;
+        size_t              offset;
+    };
+    uint8_t                 payload[0];
+} UCS_S_PACKED ucp_stream_am_data_t;
+
+
 static UCS_F_ALWAYS_INLINE void
 ucp_stream_ep_enqueue(ucp_ep_ext_stream_t *ep, ucp_worker_h worker)
 {

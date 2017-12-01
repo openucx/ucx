@@ -17,14 +17,16 @@
 #include <ucp/tag/eager.h> /* TODO: remove ucp_eager_sync_hdr_t usage */
 
 
-#define ucp_stream_rdesc_data(_rdesc)                           \
-    UCS_PTR_BYTE_OFFSET((ucp_recv_desc_t *)(_rdesc) + 1,        \
-                        ((ucp_recv_desc_t *)(_rdesc))->hdr_len)
+#define ucp_stream_rdesc_am_data(_rdesc)                                      \
+    ((ucp_stream_am_data_t *)                                                 \
+     UCS_PTR_BYTE_OFFSET((_rdesc), (_rdesc)->stream_offset))
 
 
-#define ucp_stream_rdesc_from_data(_data)           \
-    ((ucp_recv_desc_t *)UCS_PTR_BYTE_OFFSET(_data,  \
-                                            -sizeof(ucp_stream_am_hdr_t)) - 1)
+#define ucp_stream_rdesc_from_data(_data)                                     \
+    ((ucp_recv_desc_t *)                                                      \
+     UCS_PTR_BYTE_OFFSET(_data,                                               \
+                         -(ucs_container_of(_data, ucp_stream_am_data_t,      \
+                                            payload)->offset)))
 
 
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t *
@@ -73,7 +75,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb,
     rdesc = ucp_stream_recv_data_nb_internal(ep->ext.stream, 1);
     if (ucs_likely(rdesc != NULL)) {
         *length = rdesc->length;
-        ret = ucp_stream_rdesc_data(rdesc);
+        ret = ucp_stream_rdesc_am_data(rdesc)->payload;
     } else {
         ret = UCS_STATUS_PTR(UCS_OK);
     }
@@ -138,11 +140,22 @@ ucp_stream_rdata_unpack(void *rdata, size_t length, ucp_request_t *dst_req)
     return status;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_stream_rdesc_advance(ucp_recv_desc_t *rdesc, size_t offset)
+{
+    ucs_assert(offset < rdesc->length);
+
+    rdesc->length        -= offset;
+    rdesc->stream_offset += offset;
+    ucp_stream_rdesc_am_data(rdesc)->offset =
+        rdesc->stream_offset + ucs_offsetof(ucp_stream_am_data_t, payload);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_stream_process_rdesc(ucp_recv_desc_t* rdesc, ucp_ep_ext_stream_t *ep_stream,
+ucp_stream_process_rdesc(ucp_recv_desc_t *rdesc, ucp_ep_ext_stream_t *ep_stream,
                          ucp_request_t *req)
 {
-    void    *rdata   = ucp_stream_rdesc_data(rdesc);
+    void    *rdata = ucp_stream_rdesc_am_data(rdesc)->payload;
     ssize_t unpacked;
 
     unpacked = ucp_stream_rdata_unpack(rdata, rdesc->length, req);
@@ -151,12 +164,7 @@ ucp_stream_process_rdesc(ucp_recv_desc_t* rdesc, ucp_ep_ext_stream_t *ep_stream,
     } else if (ucs_likely(unpacked == rdesc->length)) {
         ucp_stream_rdesc_release(rdesc, ep_stream);
     } else {
-        ucs_assert(unpacked < rdesc->length);
-
-        /* Save partially handled rdesc */
-        rdesc->length -= unpacked;
-        /* TODO: can we avoid extra copying? */
-        memmove(rdata, UCS_PTR_BYTE_OFFSET(rdata, unpacked), rdesc->length);
+        ucp_stream_rdesc_advance(rdesc, unpacked);
     }
 
     ucs_assert(req->recv.state.offset <= req->recv.length);
@@ -265,8 +273,8 @@ ptr_out:
 }
 
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t *
-ucp_stream_am_rdesc_get(ucp_worker_t *worker, void *data, size_t length,
-                        unsigned am_flags)
+ucp_stream_am_rdesc_get(ucp_worker_t *worker, ucp_stream_am_data_t *data,
+                        size_t length, unsigned am_flags)
 {
     ucp_recv_desc_t *rdesc;
 
@@ -279,14 +287,18 @@ ucp_stream_am_rdesc_get(ucp_worker_t *worker, void *data, size_t length,
         rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
         if (ucs_likely(rdesc != NULL)) {
             rdesc->flags = 0;
-            memcpy(rdesc + 1, data, length);
+            memcpy(((ucp_stream_am_data_t *)(rdesc + 1))->payload,
+                   data->payload, length);
         } else {
             ucs_fatal("ucp recv descriptor is not allocated");
         }
     }
 
-    rdesc->length  = length - sizeof(ucp_stream_am_hdr_t);
-    rdesc->hdr_len = sizeof(ucp_stream_am_hdr_t);
+    rdesc->length        = length;
+    rdesc->stream_offset = sizeof(*rdesc);
+    ucp_stream_rdesc_am_data(rdesc)->offset = sizeof(*rdesc) +
+                                              ucs_offsetof(ucp_stream_am_data_t,
+                                                           payload);
 
     return rdesc;
 }
@@ -295,26 +307,29 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
                       unsigned am_flags)
 {
-    ucp_worker_h        worker      = am_arg;
-    ucp_stream_am_hdr_t *hdr        = am_data;
-    ucp_ep_ext_stream_t *ep_stream  = NULL;
-    ucp_ep_h            ep;
-    ucp_recv_desc_t     *rdesc, *rdesc_iter;
-    ucp_request_t       *req;
-    ssize_t             unpacked;
+    ucp_ep_ext_stream_t  *ep_stream = NULL;
+    ucp_worker_h          worker    = am_arg;
+    ucp_stream_am_data_t *data      = am_data;
+    ucp_stream_am_data_t *data_iter;
+    ucp_recv_desc_t      *rdesc;
+    ucp_recv_desc_t      *rdesc_iter;
+    ucp_ep_h              ep;
+    ucp_request_t        *req;
+    ssize_t               unpacked;
 
     ucs_assert(am_length >= sizeof(ucp_stream_am_hdr_t));
 
-    rdesc = ucp_stream_am_rdesc_get(worker, am_data, am_length, am_flags);
-    ucs_assert(rdesc != NULL);
-
-    ep = ucp_worker_ep_find(worker, hdr->sender_uuid);
+    ep = ucp_worker_ep_find(worker, data->hdr.sender_uuid);
     if (ucs_unlikely(ep == NULL)) {
-        ucs_error("ep is not found by uuid: %lu", hdr->sender_uuid);
+        ucs_error("ep is not found by uuid: %lu", data->hdr.sender_uuid);
         goto out;
     }
 
     ep_stream = ep->ext.stream;
+
+    rdesc = ucp_stream_am_rdesc_get(worker, data, am_length - sizeof(data->hdr),
+                                    am_flags);
+    ucs_assert(rdesc != NULL);
 
     rdesc->flags |= UCP_RECV_DESC_FLAG_STREAM_Q;
     ucs_queue_push(&ep_stream->data, &rdesc->stream_queue);
@@ -332,17 +347,13 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
                                             recv.queue);
         while ((rdesc_iter = ucp_stream_recv_data_nb_internal(ep_stream, 0)) !=
                 NULL) {
-
-            unpacked = ucp_stream_rdata_unpack(ucp_stream_rdesc_data(rdesc_iter),
-                                               rdesc_iter->length, req);
+            data_iter = ucp_stream_rdesc_am_data(rdesc_iter);
+            unpacked  = ucp_stream_rdata_unpack(data_iter->payload,
+                                                rdesc_iter->length, req);
             if (ucs_unlikely(unpacked < 0)) {
                 goto out;
             } else if (unpacked < rdesc_iter->length) {
-                rdesc_iter->length -= unpacked;
-                /* TODO: can we avoid extra copying? */
-                memmove(ucp_stream_rdesc_data(rdesc_iter),
-                        UCS_PTR_BYTE_OFFSET(ucp_stream_rdesc_data(rdesc_iter),
-                                            unpacked), rdesc_iter->length);
+                ucp_stream_rdesc_advance(rdesc_iter, unpacked);
                 /* This request is full, try next one */
                 ucp_request_complete_stream_recv(req, ep_stream, UCS_OK);
                 break;

@@ -234,9 +234,12 @@ struct ucp_recv_desc {
         ucs_list_link_t           tag_list[2];  /* Hash list TAG-element */
         ucs_queue_elem_t          stream_queue; /* Queue STREAM-element */
     };
-    size_t                        length;   /* Received length */
-    uint16_t                      hdr_len;  /* Header size */
-    uint16_t                      flags;    /* Flags */
+    size_t                        length;       /* Received length */
+    union {
+        uint16_t                  hdr_len;      /* Header size */
+        uint16_t                  stream_offset;/* offset from base to stream AM data */
+    };
+    uint16_t                      flags;        /* Flags */
 };
 
 

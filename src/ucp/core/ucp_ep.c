@@ -13,6 +13,7 @@
 #include <ucp/wireup/wireup.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
+#include <ucp/stream/stream.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
@@ -76,6 +77,9 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ep->flags            = 0;
 
     if (worker->context->config.features & UCP_FEATURE_STREAM) {
+        UCS_STATIC_ASSERT(ucs_offsetof(ucp_stream_am_data_t, payload) ==
+                          sizeof(ucp_stream_am_hdr_t));
+
         ep->ext.stream = ucs_calloc(1, sizeof(*ep->ext.stream),
                                     "ucp ep stream extension");
         if (ep->ext.stream == NULL) {
