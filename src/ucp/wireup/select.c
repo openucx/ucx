@@ -803,7 +803,7 @@ static ucs_status_t ucp_wireup_add_rndv_lanes(ucp_ep_h ep,
 
     if ((params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) &&
         (params->err_mode == UCP_ERR_HANDLING_MODE_PEER)) {
-        ucs_trace_func("rendezvous: disabled due to error mode");
+        ucs_trace("rendezvous: disabled due to error mode");
         return UCS_OK;
     }
 
