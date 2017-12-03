@@ -136,9 +136,7 @@ public:
         size_t       length;
         ucs_status_t status;
 
-        if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
-            return UCS_PTR_STATUS(request);
-        }
+        ucs_assert(UCS_PTR_IS_PTR(request));
 
         while ((status = ucp_stream_recv_request_test(request, &length)) ==
                 UCS_INPROGRESS) {
@@ -470,19 +468,20 @@ private:
         ssize_t  rlength_s;
 
         do {
-            rreq = ucp_stream_recv_nb(ep, buf, length - total, datatype,
+            rreq = ucp_stream_recv_nb(ep, (char *)buf + total, length - total,
+                                      datatype,
                                       (ucp_stream_recv_callback_t)ucs_empty_function,
                                       &rlength, 0);
-            if (ucs_unlikely(UCS_PTR_IS_ERR(rreq))) {
-                return UCS_PTR_STATUS(rreq);
-            } else if (UCS_PTR_STATUS(rreq) == UCS_OK) {
+            if (ucs_likely(rreq == NULL)) {
                 total += rlength;
-            } else {
+            } else if (UCS_PTR_IS_PTR(rreq)) {
                 rlength_s = wait_stream_recv(rreq);
-                if (rlength_s < 0) {
+                if (ucs_unlikely(rlength_s < 0)) {
                     return ucs_status_t(rlength_s);
                 }
                 total += rlength_s;
+            } else {
+                return UCS_PTR_STATUS(rreq);
             }
         } while (total < length);
 
