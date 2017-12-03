@@ -287,6 +287,19 @@ build_clang() {
 	fi
 }
 
+check_inst_headers() {
+	echo 1..1 > inst_headers.tap
+	echo "==== Testing installed headers ===="
+
+	../contrib/configure-release --prefix=$PWD/install
+	$MAKE clean
+	$MAKE install
+	../contrib/check_inst_headers.sh $PWD/install/include
+	$MAKE distclean
+
+	echo "ok 1 - build successful " >> inst_headers.tap
+}
+
 run_hello() {
 	api=$1
 	shift
@@ -618,6 +631,7 @@ do_distributed_task 0 4 build_docs
 do_distributed_task 0 4 build_disable_numa
 do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
+do_distributed_task 3 4 check_inst_headers
 
 if [ -n "$JENKINS_RUN_TESTS" ]
 then

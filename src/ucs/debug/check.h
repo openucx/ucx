@@ -7,6 +7,10 @@
 #ifndef _UCS_CHECK_H
 #define _UCS_CHECK_H
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
 

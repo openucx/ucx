@@ -8,8 +8,9 @@
 #include "rc_verbs_common.h"
 
 #include <uct/api/uct.h>
-#include <ucs/arch/bitops.h>
 #include <uct/ib/rc/base/rc_iface.h>
+#include <ucs/arch/bitops.h>
+#include <ucs/arch/cpu.h>
 
 
 ucs_config_field_t uct_rc_verbs_iface_common_config_table[] = {
