@@ -497,7 +497,7 @@ UCS_TEST_F(malloc_hook_cplusplus, mallopt) {
     unset();
 }
 
-UCS_TEST_F(malloc_hook_cplusplus, mmmap_ptrs) {
+UCS_TEST_F(malloc_hook_cplusplus, mmap_ptrs) {
 
     if (RUNNING_ON_VALGRIND) {
         UCS_TEST_SKIP_R("skipping on valgrind");
@@ -506,7 +506,7 @@ UCS_TEST_F(malloc_hook_cplusplus, mmmap_ptrs) {
     set();
 
     const size_t   size    = ucm_dlmallopt_get(M_MMAP_THRESHOLD) * 2;
-    const size_t   max_mem = ucs_min(ucs_get_phys_mem_size() / 4, 4 * UCS_GBYTE);
+    const size_t   max_mem = ucs_min(ucs_get_phys_mem_size() / 8, 4 * UCS_GBYTE);
     const unsigned count   = ucs_min(400000ul, max_mem / size);
     const unsigned iters   = 100000;
 
@@ -514,9 +514,12 @@ UCS_TEST_F(malloc_hook_cplusplus, mmmap_ptrs) {
 
     size_t large_blocks = 0;
 
-    /* Allocate until we get MMAP event */
+    /* Allocate until we get MMAP event
+     * Lock memory to avoid going to swap and ensure consistet test results.
+     */
     while (m_mapped_size == 0) {
         std::string str(size, 'r');
+        mlock(&str[0], size);
         ptrs.push_back(str);
         ++large_blocks;
     }
@@ -530,21 +533,34 @@ UCS_TEST_F(malloc_hook_cplusplus, mmmap_ptrs) {
     /* Allocate many large strings to trigger mmap() based allocation. */
     for (unsigned i = 0; i < count; ++i) {
         std::string str(size, 't');
+        mlock(&str[0], size);
         ptrs.push_back(str);
         ++large_blocks;
     }
 
     /* Measure allocation time with many large blocks on the heap */
-    double alloc_time_with_ptrs = measure_alloc_time(size, iters);
-    UCS_TEST_MESSAGE << "With " << large_blocks << " large blocks:"
-                     << " allocated " << iters << " buffers of " << size
-                     << " bytes in " << alloc_time_with_ptrs << " sec";
+    bool success = false;
+    unsigned attempt = 0;
+    while (!success && (attempt < 5)) {
+        double alloc_time_with_ptrs = measure_alloc_time(size, iters);
+        UCS_TEST_MESSAGE << "With " << large_blocks << " large blocks:"
+                         << " allocated " << iters << " buffers of " << size
+                         << " bytes in " << alloc_time_with_ptrs << " sec";
 
-    /* Allow up to 75% difference */
-    double eps = alloc_time * 0.75;
-    EXPECT_NEAR(alloc_time, alloc_time_with_ptrs, eps);
+        /* Allow up to 75% difference */
+        success = (alloc_time < 0.25) || (alloc_time_with_ptrs < (1.75 * alloc_time));
+        ++attempt;
+    }
 
-    ptrs.clear();
+    if (!success) {
+        ADD_FAILURE() << "Failed after " << attempt << " attempts";
+    }
+
+    /* Unlock memory */
+    while (!ptrs.empty()) {
+        munlock(&ptrs.back()[0], size);
+        ptrs.pop_back();
+    }
 
     unset();
 
