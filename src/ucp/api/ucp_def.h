@@ -385,7 +385,8 @@ typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
  * @brief UCP worker wakeup events mask.
  *
  * The enumeration allows specifying which events are expected on wakeup, though
- * empty events are possible.
+ * empty events are possible for any type of events excepting @ref UCP_WAKEUP_TX
+ * and UCP_WAKEUP_RX which are the most common events.
  *
  * @note UCP doesn't generate POLLOUT-like events (see poll man pages) since
  * it's always ready to initiate outgoing operations (e.g any type of sending,
@@ -397,8 +398,8 @@ typedef enum ucp_wakeup_event_types {
     UCP_WAKEUP_AMO         = UCS_BIT(1), /**< Atomic operation send completion */
     UCP_WAKEUP_TAG_SEND    = UCS_BIT(2), /**< Tag send completion  */
     UCP_WAKEUP_TAG_RECV    = UCS_BIT(3), /**< Tag receive completion */
-    UCP_WAKEUP_STREAM_TX   = UCS_BIT(4), /**< Stream data was transferred */
-    UCP_WAKEUP_STREAM_RX   = UCS_BIT(5), /**< Stream data was received */
+    UCP_WAKEUP_TX          = UCS_BIT(4), /**< Some data portion was transferred */
+    UCP_WAKEUP_RX          = UCS_BIT(5), /**< Some data portion was received */
     UCP_WAKEUP_EDGE        = UCS_BIT(16) /**< Use edge-triggered wakeup. The event
                                               file descriptor will be signaled only
                                               for new events, rather than existing
