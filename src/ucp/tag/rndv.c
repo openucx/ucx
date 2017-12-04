@@ -36,6 +36,7 @@ static void ucp_tag_rndv_resolve_lanes(ucp_request_t *req)
     ucp_rndv_get_lane_info_t *info;
     ucp_lane_index_t lane;
     ucp_rsc_index_t i;
+    uint64_t md_flags;
 
     UCS_STATIC_ASSERT(UCP_MAX_LANES < (sizeof(lane_map) * 8));
 
@@ -54,8 +55,10 @@ static void ucp_tag_rndv_resolve_lanes(ucp_request_t *req)
         ucs_assert(info->lane == UCP_NULL_LANE);
         ucs_assert(info->md_index != UCP_NULL_RESOURCE);
         for (lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
+            md_flags = ucp_ep_md_attr(ep, lane)->cap.flags;
             if ((lane_map & UCS_BIT(lane)) &&
-                (info->md_index == ucp_ep_md_index(ep, lane))) {
+                (info->md_index == ucp_ep_md_index(ep, lane))&&
+                !((md_flags & UCT_MD_FLAG_NEED_RKEY) && !ucp_tag_rndv_is_rkey_valid(req, i))) {
                 info->lane = lane;
                 lane_map &= ~UCS_BIT(lane); /* do not allow repeat lanes */
                 break;
@@ -83,12 +86,7 @@ static void ucp_tag_rndv_resolve_lanes(ucp_request_t *req)
 
 static int ucp_tag_rndv_is_get_op_possible(ucp_request_t *req)
 {
-    ucp_ep_h ep = req->send.ep;
-    uint64_t md_flags;
-    ucp_lane_index_t i;
-    ucp_lane_index_t lane;
-
-    ucs_assert(!ucp_ep_is_stub(ep));
+    ucs_assert(!ucp_ep_is_stub(req->send.ep));
 
     if (req->send.rndv_get.rkey == NULL) {
         return 0;
@@ -98,16 +96,9 @@ static int ucp_tag_rndv_is_get_op_possible(ucp_request_t *req)
 
     if (req->send.rndv_get.num_lanes == 0) {
         return 0;
+    } else {
+        return 1;
     }
-
-    for (i = 0; i < req->send.rndv_get.num_lanes; i++) {
-        lane = ucp_tag_rndv_get_lane_info(req, i)->lane;
-        md_flags = ucp_ep_md_attr(ep, lane)->cap.flags;
-        if ((md_flags & UCT_MD_FLAG_NEED_RKEY) && !ucp_tag_rndv_is_rkey_valid(req, i)) {
-            return 0;
-        }
-    }
-    return 1;
 }
 
 
