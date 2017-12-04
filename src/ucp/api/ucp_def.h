@@ -398,8 +398,17 @@ typedef enum ucp_wakeup_event_types {
     UCP_WAKEUP_AMO         = UCS_BIT(1), /**< Atomic operation send completion */
     UCP_WAKEUP_TAG_SEND    = UCS_BIT(2), /**< Tag send completion  */
     UCP_WAKEUP_TAG_RECV    = UCS_BIT(3), /**< Tag receive completion */
-    UCP_WAKEUP_TX          = UCS_BIT(4), /**< Some data portion was transferred */
-    UCP_WAKEUP_RX          = UCS_BIT(5), /**< Some data portion was received */
+    UCP_WAKEUP_TX          = UCS_BIT(10),/**< This event type will generate an
+                                              event on completion of any
+                                              outgoing operation (or even its
+                                              part, according to underlying
+                                              protocol) wheter any type of
+                                              sending, atomic or RMA. */
+    UCP_WAKEUP_RX          = UCS_BIT(11),/**< This event type will generate an
+                                              event on completion of any
+                                              receive operation (or even its
+                                              part, according to underlying
+                                              protocol). */
     UCP_WAKEUP_EDGE        = UCS_BIT(16) /**< Use edge-triggered wakeup. The event
                                               file descriptor will be signaled only
                                               for new events, rather than existing
