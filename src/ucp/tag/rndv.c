@@ -115,6 +115,33 @@ static void ucp_rndv_rma_request_send_buffer_dereg(ucp_request_t *sreq)
     }
 }
 
+
+size_t ucp_rndv_packed_rkey_size(size_t key_size)
+{
+    return sizeof(ucp_rndv_rkey_data_t) + key_size + 1;
+}
+
+
+size_t ucp_rndv_copy_rkey(ucp_worker_iface_t *iface, void *rts_rkey,
+                          const void *rkey_buf, size_t rkey_size)
+{
+    uint8_t *buf               = (uint8_t*)(rts_rkey);
+    uint8_t *cnt               = buf;
+    ucp_rndv_rkey_data_t *rkey = (ucp_rndv_rkey_data_t*)(buf + 1);
+    ucp_context_t *ctx         = iface->worker->context;
+
+    ucs_assert(rkey_buf != NULL);
+    ucs_assert(rts_rkey != NULL);
+
+    *cnt = 1; /* 1 rkey packed */
+    rkey->md_index = ctx->tl_rscs[iface->rsc_index].md_index;
+    rkey->key_size = rkey_size;
+
+    memcpy(rkey->rkey, rkey_buf, rkey_size);
+    return ucp_rndv_packed_rkey_size(rkey_size);
+}
+
+
 static size_t ucp_tag_rndv_pack_send_rkey(ucp_request_t *sreq, void *rkey_buf, uint16_t *flags)
 {
     ucp_ep_h ep  = sreq->send.ep;

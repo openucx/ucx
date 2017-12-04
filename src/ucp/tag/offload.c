@@ -102,31 +102,21 @@ ucp_tag_offload_rkey_size(ucp_context_t *ctx)
 static UCS_F_ALWAYS_INLINE size_t
 ucp_tag_offload_packed_key_size(ucp_context_t *ctx)
 {
-    return sizeof(ucp_rndv_rkey_data_t) + ucp_tag_offload_rkey_size(ctx) + 1;
+    return ucp_rndv_packed_rkey_size(ucp_tag_offload_rkey_size(ctx));
 }
 
 static UCS_F_ALWAYS_INLINE size_t
 ucp_tag_offload_copy_rkey(ucp_context_t *ctx, ucp_rndv_rts_hdr_t *rts,
                           const void *rkey_buf, size_t rkey_size)
 {
-    uint8_t *buf               = (uint8_t*)(rts + 1);
-    uint8_t *cnt               = buf;
-    ucp_rndv_rkey_data_t *rkey = (ucp_rndv_rkey_data_t*)(buf + 1);
-    ucp_worker_iface_t *iface  = ucp_tag_offload_iface(ctx);
-
     if (rkey_buf == NULL) {
         return 0;
     }
 
     ucs_assert(rts != NULL);
 
-    *cnt = 1; /* 1 rkey packed */
-    rkey->md_index = ctx->tl_rscs[iface->rsc_index].md_index;
-    rkey->key_size = rkey_size;
-
-    memcpy(rkey->rkey, rkey_buf, rkey_size);
     rts->flags |= UCP_RNDV_RTS_FLAG_OFFLOAD | UCP_RNDV_RTS_FLAG_PACKED_RKEY;
-    return rkey_size + sizeof(*rkey) + 1;
+    return ucp_rndv_copy_rkey(ucp_tag_offload_iface(ctx), rts + 1, rkey_buf, rkey_size);
 }
 
 static UCS_F_ALWAYS_INLINE void
