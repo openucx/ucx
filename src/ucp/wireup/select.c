@@ -780,6 +780,24 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
     return UCS_OK;
 }
 
+
+static uint64_t ucp_wireup_unset_tl_by_device(ucp_ep_h ep, uint64_t tl_bitmap,
+                                              ucp_rsc_index_t rsc_index)
+{
+    ucp_worker_h  worker   = ep->worker;
+    ucp_context_h context  = worker->context;
+    char         *dev_name = context->tl_rscs[rsc_index].tl_rsc.dev_name;
+    ucp_rsc_index_t i;
+
+    for (i = 0; i < context->num_tls; i++) {
+        if (!strcmp(context->tl_rscs[i].tl_rsc.dev_name, dev_name)) {
+            tl_bitmap &= ~UCS_BIT(i);
+        }
+    }
+
+    return tl_bitmap;
+}
+
 static ucs_status_t ucp_wireup_add_rndv_lanes(ucp_ep_h ep,
                                               const ucp_ep_params_t *params,
                                               unsigned address_count,
@@ -861,7 +879,7 @@ static ucs_status_t ucp_wireup_add_rndv_lanes(ucp_ep_h ep,
         address_count--;
 
         /* exclude tl index from map */
-        tl_bitmap &= ~UCS_BIT(rsc_index);
+        tl_bitmap = ucp_wireup_unset_tl_by_device(ep, tl_bitmap, rsc_index);
     }
 
     ucs_trace_func("detected %d rndv lanes", i);
