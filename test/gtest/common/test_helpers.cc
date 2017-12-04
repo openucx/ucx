@@ -121,15 +121,19 @@ uint16_t get_port() {
     memset(&addr_in, 0, sizeof(struct sockaddr_in));
     addr_in.sin_family      = AF_INET;
     addr_in.sin_addr.s_addr = INADDR_ANY;
-    addr_in.sin_port        = htons(0);
 
-    ret = bind(sock_fd, (struct sockaddr*)&addr_in, sizeof(struct sockaddr_in));
-    EXPECT_EQ(ret, 0);
+    do {
+        addr_in.sin_port        = htons(0);
+        /* Ports below 1024 are considered "privileged" (can be used only by user root).
+         * Ports above and including 1024 can be used by anyone */
+        ret = bind(sock_fd, (struct sockaddr*)&addr_in, sizeof(struct sockaddr_in));
+    } while (ret);
 
     ret = getsockname(sock_fd, (struct sockaddr*)&ret_addr, &len);
     EXPECT_EQ(ret, 0);
+    EXPECT_LT(1023, ntohs(ret_addr.sin_port)) ;
 
-    port = ntohs(ret_addr.sin_port);
+    port = ret_addr.sin_port;
     close(sock_fd);
     return port;
 }

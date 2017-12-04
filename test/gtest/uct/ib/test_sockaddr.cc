@@ -39,12 +39,8 @@ public:
 
         addr_in = (struct sockaddr_in *) (sock_addr.addr);
 
-        /* Get a usable port on the host.
-         * Ports below 1024 are considered "privileged" (can be used only by user root).
-         * Ports above and including 1024 can use by anyone. */
-        do {
-            addr_in->sin_port = ucs::get_port();
-        } while (ntohs(addr_in->sin_port) < 1024);
+        /* Get a usable port on the host */
+        addr_in->sin_port = ucs::get_port();
 
         /* open iface for the server side */
         memset(&server_params, 0, sizeof(server_params));

@@ -79,9 +79,10 @@ void uct_rdmacm_iface_client_start_next_ep(uct_rdmacm_iface_t *iface)
 
     UCS_ASYNC_BLOCK(iface->super.worker->async);
     /* set a new ep (take one from the pending eps queue) */
-    while (!ucs_queue_is_empty(&iface->pending_eps_q) && (!set_new_ep)) {
-        iface->ep = ucs_queue_pull_elem_non_empty(&iface->pending_eps_q,
-                                                  uct_rdmacm_ep_t, queue);
+    while (!ucs_list_is_empty(&iface->pending_eps_list) && (!set_new_ep)) {
+        iface->ep = ucs_list_extract_head(&iface->pending_eps_list,
+                                          uct_rdmacm_ep_t, list_elem);
+        iface->ep->is_on_pending = 0;
 
         if (rdma_resolve_addr(iface->cm_id, NULL, iface->ep->remote_addr,
                               UCS_MSEC_PER_SEC * iface->config.addr_resolve_timeout)) {
@@ -147,6 +148,8 @@ static void uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
     }
 
     cb_hdr.length = server_data_len;
+    /* The private_data starts with the header of the user's private data and then
+     * the private data itself */
     memcpy((void*)conn_param.private_data, &cb_hdr.length, sizeof(uct_rdmacm_priv_data_hdr_t));
     conn_param.private_data_len = sizeof(uct_rdmacm_priv_data_hdr_t) + cb_hdr.length;
 
@@ -214,6 +217,7 @@ static void uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdm
 
     case RDMA_CM_EVENT_CONNECT_REQUEST:
         /* Server - handle a connection request from the client */
+        ucs_assert(iface->is_server);
         uct_rdmacm_iface_process_conn_req(iface, event, remote_addr);
         break;
 
@@ -390,7 +394,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     self->ep = NULL;
-    ucs_queue_head_init(&self->pending_eps_q);
+    ucs_list_head_init(&self->pending_eps_list);
 
     ucs_debug("created an RDMACM iface %p. event_channel: %p, fd: %d, cm_id: %p",
               self, self->event_ch, self->event_ch->fd, self->cm_id);

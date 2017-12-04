@@ -31,7 +31,7 @@ struct uct_rdmacm_iface {
     uct_rdmacm_ep_t                      *ep;
 
     /** Field used only for client side */
-    ucs_queue_head_t                     pending_eps_q;
+    ucs_list_link_t                      pending_eps_list;
 
     struct {
         double                           addr_resolve_timeout;

@@ -39,11 +39,22 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
     memcpy(self->priv_data, &hdr, sizeof(hdr));
     memcpy(self->priv_data + sizeof(hdr), priv_data, length);
 
+    /* TODO When UCT_CB_FLAG_SYNC is supported, return UCS_INPROGRESS since for
+     * librdmacm the reply_cb still needs to be invoked and it will be from the
+     * main thread after getting a reply from the server side */
+    ucs_assertv_always((cb_flags & UCT_CB_FLAG_ASYNC), "UCT_CB_FLAG_SYNC is not supported");
+
+    /* If the user's callbacks are called from the async thread, we cannot
+     * tell if by the end of this function they were already invoked and if this
+     * client's ep would already be connected to the server */
+    self->cb_flags = cb_flags;
+
     /* The interface can point at one endpoint at a time and therefore, the
      * connection establishment cannot be done in parallel for several endpoints */
     /* TODO support connection establishment on parallel endpoints on the same iface */
     if (iface->ep == NULL) {
         iface->ep = self;
+        self->is_on_pending = 0;
 
         /* After rdma_resolve_addr(), the client will wait for an
          * RDMA_CM_EVENT_ADDR_RESOLVED event on the event_channel
@@ -62,7 +73,8 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
         /* Add the ep to the pending queue */
         self->remote_addr = (struct sockaddr *)(sockaddr->addr);
         UCS_ASYNC_BLOCK(iface->super.worker->async);
-        ucs_queue_push(&iface->pending_eps_q, &self->queue);
+        ucs_list_add_tail(&iface->pending_eps_list, &self->list_elem);
+        self->is_on_pending = 1;
         UCS_ASYNC_UNBLOCK(iface->super.worker->async);
     }
 
@@ -72,20 +84,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
                ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
                                 ip_str, ip_len));
 
-    if (cb_flags == UCT_CB_FLAG_ASYNC) {
-        self->cb_flags = cb_flags;
-        /* If the user's callbacks are called from the async thread, we cannot
-         * tell at this point if they were already invoked and if this client's
-         * ep is already connected to the server */
-        status = UCS_INPROGRESS;
-    } else {
-        /* TODO When sync is supported, return UCS_INPROGRESS since for librdmacm the
-         * reply_cb still needs to be invoked and it will be from the main thread
-         * after getting a reply from the server side */
-        ucs_fatal("UCT_CB_FLAG_SYNC is not supported");
-    }
-
-    return status;
+    return UCS_INPROGRESS;
 
 err_free_mem:
     ucs_free(self->priv_data);
@@ -96,18 +95,17 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
 {
     uct_rdmacm_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_rdmacm_iface_t);
-    ucs_queue_iter_t iter;
-    uct_rdmacm_ep_t *ep;
+
+    ucs_debug("rdmacm_ep %p: destroying", self);
 
     UCS_ASYNC_BLOCK(iface->super.worker->async);
-    ucs_queue_for_each_safe(ep, iter, &iface->pending_eps_q, queue) {
-        if (ep == self) {
-            ucs_queue_del_iter(&iface->pending_eps_q, iter);
-            uct_rdmacm_iface_client_start_next_ep(iface);
-            break;
-        }
+    if (self->is_on_pending) {
+        ucs_list_del(&self->list_elem);
+        self->is_on_pending = 0;
     }
+    uct_rdmacm_iface_client_start_next_ep(iface);
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
+
     ucs_free(self->priv_data);
 }
 
