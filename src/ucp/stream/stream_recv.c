@@ -17,6 +17,34 @@
 #include <ucp/tag/eager.h> /* TODO: remove ucp_eager_sync_hdr_t usage */
 
 
+/* @verbatim
+ * Data layout within Stream AM
+ * |----------------------------------------------------------------------------------------------------------------------|
+ * | ucp_recv_desc_t                                            | \    / | ucp_stream_am_data_t | payload                 |
+ * |------------------------------------------------------------|  \  /  |----------------------|-------------------------|
+ * | stream_queue    | length         | stream_offset | flags   |   \/   | am_header            |                         |
+ * |                 |                |               |         |   /\   | offset               |                         |
+ * |-----------------|----------------|---------------|---------|  /  \  |----------------------|-------------------------|
+ * | sizeof(ptr)     | sizeof(size_t) | 16 bits       | 16 bits | /    \ | 64 bits              | up to TL AM buffer size |
+ * |----------------------------------------------------------------------------------------------------------------------|
+ * @endverbatim
+ *
+ * stream_queue  is an entry link in the "unexpected" queue per endpoint
+ * length        is an actual size of 'payload'
+ * stream_offset is a distance between 'ucp_recv_desc_t *' and
+ *               'ucp_stream_am_data_t *'
+ * X             is an optional empty space which is a result of partial
+ *               handled payload in case when 'length' greater than user's
+ *               buffer size passed to @ref ucp_stream_recv_nb
+ * am_header     is an active message header, not actual after ucp_recv_desc_t
+ *               initialization and setup of offsets
+ * offset        is a distance between 'ucp_recv_desc_t *' and 'payload', it's
+ *               needed to get access to ucp_recv_desc_t inside
+ *               @ref ucp_stream_release_data after the buffer was returned to
+ *               user by @ref ucp_stream_recv_data_nb as a pointer to 'paylod'
+ */
+
+
 #define ucp_stream_rdesc_am_data(_rdesc)                                      \
     ((ucp_stream_am_data_t *)                                                 \
      UCS_PTR_BYTE_OFFSET((_rdesc), (_rdesc)->stream_offset))
@@ -143,12 +171,16 @@ ucp_stream_rdata_unpack(void *rdata, size_t length, ucp_request_t *dst_req)
 static UCS_F_ALWAYS_INLINE void
 ucp_stream_rdesc_advance(ucp_recv_desc_t *rdesc, size_t offset)
 {
+    ucp_stream_am_data_t *am_data;
+
     ucs_assert(offset < rdesc->length);
 
     rdesc->length        -= offset;
     rdesc->stream_offset += offset;
-    ucp_stream_rdesc_am_data(rdesc)->offset =
-        rdesc->stream_offset + ucs_offsetof(ucp_stream_am_data_t, payload);
+
+    am_data         = ucp_stream_rdesc_am_data(rdesc);
+    am_data->offset = rdesc->stream_offset + ucs_offsetof(ucp_stream_am_data_t,
+                                                          payload);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
