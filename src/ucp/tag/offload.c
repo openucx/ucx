@@ -112,7 +112,7 @@ ucp_tag_offload_copy_rkey(ucp_context_t *ctx, ucp_rndv_rts_hdr_t *rts,
     uint8_t *buf               = (uint8_t*)(rts + 1);
     uint8_t *cnt               = buf;
     ucp_rndv_rkey_data_t *rkey = (ucp_rndv_rkey_data_t*)(buf + 1);
-    ucp_worker_iface_t *iface = ucp_tag_offload_iface(ctx);
+    ucp_worker_iface_t *iface  = ucp_tag_offload_iface(ctx);
 
     if (rkey_buf == NULL) {
         return 0;
@@ -190,11 +190,13 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
         return;
     }
 
-    rkey_size = (sw_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) ?
-                ucp_tag_offload_rkey_size(ctx) : 0;
-
-    pkey_size = (sw_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) ?
-                ucp_tag_offload_packed_key_size(ctx) : 0;
+    if (sw_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) {
+        rkey_size = ucp_tag_offload_rkey_size(ctx);
+        pkey_size = ucp_tag_offload_packed_key_size(ctx);
+    } else {
+        rkey_size = 0;
+        pkey_size = 0;
+    }
 
     rts = ucs_alloca(sizeof(*rts) + pkey_size);
 
@@ -217,8 +219,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
     size_t rkey_size;
 
     rkey_size = ucp_tag_offload_rkey_size(worker->context);
-    rts       = ucs_alloca(sizeof(*rts) + rkey_size); /* SW rndv req may also
-                                                         carry a key */
+    /* SW rndv req may also carry a key */
+    rts       = ucs_alloca(sizeof(*rts) + ucp_tag_offload_packed_key_size(worker->context));
+
     if (remote_addr) {
         /* Unexpected tag offload RNDV */
         ucp_tag_offload_fill_rts(rts, rndv_hdr, stag, remote_addr, length, 0);

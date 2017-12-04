@@ -68,11 +68,11 @@ static void ucp_tag_rndv_resolve_lanes(ucp_request_t *req)
             /* could not find pair lane - release rkey */
             if (ucp_tag_rndv_is_rkey_valid(req, i)) {
                 uct_rkey_release(ucp_tag_rndv_rkey_bundle(req, i));
+                info->rkey_bundle.rkey = UCT_INVALID_RKEY;
             }
-            /* shift rest of rkeys to current location */
+            /* shift last rkey to current location and decrease number of lanes */
             if (i + 1 < req->send.rndv_get.num_lanes) {
-                memmove(info, ucp_tag_rndv_get_lane_info(req, i + 1),
-                        (req->send.rndv_get.num_lanes - i - 1) * sizeof(ucp_rndv_get_lane_info_t));
+                *info = *ucp_tag_rndv_get_lane_info(req, req->send.rndv_get.num_lanes - 1);
             }
             req->send.rndv_get.num_lanes--;
         }
@@ -126,10 +126,10 @@ static void ucp_rndv_rma_request_send_buffer_dereg(ucp_request_t *sreq)
 
 static size_t ucp_tag_rndv_pack_send_rkey(ucp_request_t *sreq, void *rkey_buf, uint16_t *flags)
 {
-    ucp_ep_h ep           = sreq->send.ep;
-    uint8_t *buf          = rkey_buf;
-    uint8_t *cnt          = buf;
-    size_t packet;
+    ucp_ep_h ep  = sreq->send.ep;
+    uint8_t *buf = rkey_buf;
+    uint8_t *cnt = buf;
+    size_t packed_len;
     ucp_lane_index_t lane;
     ucs_status_t status;
     int i;
@@ -137,15 +137,15 @@ static size_t ucp_tag_rndv_pack_send_rkey(ucp_request_t *sreq, void *rkey_buf, u
 
     ucs_assert(UCP_DT_IS_CONTIG(sreq->send.datatype));
 
-    *cnt   = 0;
-    packet = 1; /* packet at least counter */
+    *cnt       = 0;
+    packed_len = 1; /* packed at least counter */
 
     status = ucp_request_rndv_buffer_reg(sreq);
     ucs_assert_always(status == UCS_OK);
 
     for (i = 0; i < ucp_ep_rndv_num_lanes(ep); i++) {
-        lane = ucp_ep_get_rndv_get_lane(ep, i);
-        rkey = (ucp_rndv_rkey_data_t*)(buf + packet);
+        lane           = ucp_ep_get_rndv_get_lane(ep, i);
+        rkey           = (ucp_rndv_rkey_data_t*)(buf + packed_len);
         rkey->md_index = ucp_ep_dst_md_index(ep, lane);
         /* Check if the sender needs to register the send buffer -
          * is its datatype contiguous and does the receive side need it */
@@ -159,13 +159,13 @@ static size_t ucp_tag_rndv_pack_send_rkey(ucp_request_t *sreq, void *rkey_buf, u
             /* in case if remote key is not used - just let peer to know about MD used */
             rkey->key_size = 0;
         }
-        *flags |= UCP_RNDV_RTS_FLAG_PACKED_RKEY;
-        packet += sizeof(*rkey) + rkey->key_size;
+        *flags     |= UCP_RNDV_RTS_FLAG_PACKED_RKEY;
+        packed_len += sizeof(*rkey) + rkey->key_size;
         (*cnt)++;
     }
 
-    ucs_assert_always(packet <= ucp_ep_config(ep)->am.max_bcopy);
-    return ((*flags) & UCP_RNDV_RTS_FLAG_PACKED_RKEY) ? packet : 0;
+    ucs_assert_always(packed_len <= ucp_ep_config(ep)->am.max_bcopy);
+    return ((*flags) & UCP_RNDV_RTS_FLAG_PACKED_RKEY) ? packed_len : 0;
 }
 
 static void ucp_tag_rndv_unpack_send_rkey(ucp_request_t *req, void *rkey_buf)

@@ -93,6 +93,7 @@ typedef struct ucp_rndv_get_lane_info {
     uct_mem_h         memh;
     uct_rkey_bundle_t rkey_bundle;
 } ucp_rndv_get_lane_info_t;
+
 typedef struct ucp_rndv_get_rkey {
     ucp_rndv_get_lane_info_t rndv_get[UCP_MAX_RNDV_LANES];
     int resolved;
