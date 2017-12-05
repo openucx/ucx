@@ -126,7 +126,7 @@ static ucs_status_t uct_cuda_copy_query_md_resources(uct_md_resource_desc_t **re
     cudaError_t cudaErr;
 
     cudaErr = cudaGetDeviceCount(&num_gpus);
-    if (cudaErr!= cudaSuccess || num_gpus == 0) {
+    if ((cudaErr!= cudaSuccess) || (num_gpus == 0)) {
         ucs_debug("Not found cuda devices");
         *resources_p     = NULL;
         *num_resources_p = 0;
@@ -138,16 +138,17 @@ static ucs_status_t uct_cuda_copy_query_md_resources(uct_md_resource_desc_t **re
 
 static void uct_cuda_copy_md_close(uct_md_h uct_md) {
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
+
     ucs_free(md);
 }
 
 static uct_md_ops_t md_ops = {
-    .close        = uct_cuda_copy_md_close,
-    .query        = uct_cuda_copy_md_query,
-    .mkey_pack    = uct_cuda_copy_mkey_pack,
-    .mem_reg      = uct_cuda_copy_mem_reg,
-    .mem_dereg    = uct_cuda_copy_mem_dereg,
-    .is_mem_type_owned = uct_is_cuda_copy_mem_type_owned,
+    .close              = uct_cuda_copy_md_close,
+    .query              = uct_cuda_copy_md_query,
+    .mkey_pack          = uct_cuda_copy_mkey_pack,
+    .mem_reg            = uct_cuda_copy_mem_reg,
+    .mem_dereg          = uct_cuda_copy_mem_dereg,
+    .is_mem_type_owned  = uct_is_cuda_copy_mem_type_owned,
 };
 
 static ucs_status_t uct_cuda_copy_md_open(const char *md_name, const uct_md_config_t *md_config,

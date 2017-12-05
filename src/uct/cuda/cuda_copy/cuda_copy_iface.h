@@ -31,7 +31,8 @@ _status;                                                \
 typedef struct uct_cuda_copy_iface {
     uct_base_iface_t        super;
     ucs_mpool_t             cuda_event_desc;
-    ucs_queue_head_t        pending_event_q;
+    ucs_queue_head_t        outstanding_d2h_cuda_event_q;
+    ucs_queue_head_t        outstanding_h2d_cuda_event_q;
     cudaStream_t            stream_d2h;
     cudaStream_t            stream_h2d;
 } uct_cuda_copy_iface_t;

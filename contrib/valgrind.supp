@@ -35,9 +35,22 @@
 }
 
 {
-   cuInit
+   libcuda_leak
    Memcheck:Leak
-   match-leak-kinds: possible
    ...
-   fun:cuInit
+   obj:*libcuda*.so*
+}
+
+{
+   libcuda_cond
+   Memcheck:Cond
+   ...
+   obj:*libcuda*.so*
+}
+
+{
+   libcuda_value8
+   Memcheck:Value8
+   ...
+   obj:*libcuda*.so*
 }
