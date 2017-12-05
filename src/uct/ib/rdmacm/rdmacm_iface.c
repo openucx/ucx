@@ -150,6 +150,7 @@ static void uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
     cb_hdr.length = server_data_len;
     /* The private_data starts with the header of the user's private data and then
      * the private data itself */
+    UCS_STATIC_ASSERT(sizeof(cb_hdr.length) == sizeof(uct_rdmacm_priv_data_hdr_t));
     memcpy((void*)conn_param.private_data, &cb_hdr.length, sizeof(uct_rdmacm_priv_data_hdr_t));
     conn_param.private_data_len = sizeof(uct_rdmacm_priv_data_hdr_t) + cb_hdr.length;
 
