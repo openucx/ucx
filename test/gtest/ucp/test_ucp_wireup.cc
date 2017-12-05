@@ -260,7 +260,7 @@ UCS_TEST_P(test_ucp_wireup, address) {
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
-    EXPECT_LE(size, 512ul); /* Expect a reasonable address size */
+    EXPECT_LE(size, 2048ul); /* Expect a reasonable address size */
     for (tl = 0; tl < sender().worker()->context->num_tls; tl++) {
         packed_dev_priorities.insert(sender().worker()->ifaces[tl].attr.priority);
     }
