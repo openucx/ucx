@@ -570,8 +570,6 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
     ucp_request_t *rreq;
     ucs_status_t status;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
     rreq = ucp_tag_exp_search(&worker->tm, rndv_rts_hdr->super.tag,
                               rndv_rts_hdr->size, recv_flags);
     if (rreq != NULL) {
@@ -588,7 +586,6 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
                                     sizeof(*rndv_rts_hdr), recv_flags);
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return status;
 }
 

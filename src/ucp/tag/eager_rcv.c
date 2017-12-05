@@ -60,8 +60,6 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
     size_t recv_len;
     ucp_tag_t recv_tag;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
     ucs_assert(length >= hdr_len);
     recv_tag = eager_hdr->super.tag;
     recv_len = length - hdr_len;
@@ -114,7 +112,6 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
                                     hdr_len, flags);
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return status;
 }
 
