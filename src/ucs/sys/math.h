@@ -9,9 +9,9 @@
 #ifndef UCS_MATH_H
 #define UCS_MATH_H
 
-#include "compiler.h"
 #include "compiler_def.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include <math.h>
 

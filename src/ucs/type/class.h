@@ -7,9 +7,10 @@
 #ifndef UCS_OBJECT_H_
 #define UCS_OBJECT_H_
 
-#include <ucs/sys/compiler.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/type/status.h>
+#include <stddef.h>
 
 BEGIN_C_DECLS
 

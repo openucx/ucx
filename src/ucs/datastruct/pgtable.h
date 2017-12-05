@@ -7,8 +7,8 @@
 #ifndef UCS_PGTABLE_H_
 #define UCS_PGTABLE_H_
 
-#include <ucs/arch/cpu.h>
 #include <ucs/config/types.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
 
 /*
@@ -21,7 +21,6 @@
  *
  */
 
-#include <ucs/sys/compiler.h>
 
 
 /* Address alignment requirements */
