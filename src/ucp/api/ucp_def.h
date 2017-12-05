@@ -384,14 +384,14 @@ typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
  * @ingroup UCP_WORKER
  * @brief UCP worker wakeup events mask.
  *
- * The enumeration allows specifying which events are expected on wakeup, though
- * empty events are possible for any type of events excepting @ref UCP_WAKEUP_TX
- * and UCP_WAKEUP_RX which are the most common events.
+ * The enumeration allows specifying which events are expected on wakeup. Empty
+ * events are possible for any type of event except for @ref UCP_WAKEUP_TX and
+ * @ref UCP_WAKEUP_RX.
  *
- * @note UCP doesn't generate POLLOUT-like events (see poll man pages) since
- * it's always ready to initiate outgoing operations (e.g any type of sending,
- * atomic or RMA). Hoverer, they can be queued due to limitation of resources.
- * Send completions are reported by POLLIN-like events.
+ * @note Send completions are reported by POLLIN-like events (see poll man
+ * page). Since outgoing operations can be initiated at any time, UCP does not
+ * generate POLLOUT-like events, although it must be noted that outgoing
+ * operations may be queued depending upon resource availability.
  */
 typedef enum ucp_wakeup_event_types {
     UCP_WAKEUP_RMA         = UCS_BIT(0), /**< Remote memory access send completion */
@@ -400,14 +400,15 @@ typedef enum ucp_wakeup_event_types {
     UCP_WAKEUP_TAG_RECV    = UCS_BIT(3), /**< Tag receive completion */
     UCP_WAKEUP_TX          = UCS_BIT(10),/**< This event type will generate an
                                               event on completion of any
-                                              outgoing operation (or even its
-                                              part, according to underlying
-                                              protocol) wheter any type of
-                                              sending, atomic or RMA. */
+                                              outgoing operation (complete or
+                                              partial, according to the
+                                              underlying protocol) for any type
+                                              of transfer (send, atomic, or
+                                              RMA). */
     UCP_WAKEUP_RX          = UCS_BIT(11),/**< This event type will generate an
-                                              event on completion of any
-                                              receive operation (or even its
-                                              part, according to underlying
+                                              event on completion of any receive
+                                              operation (complete or partial,
+                                              according to the underlying
                                               protocol). */
     UCP_WAKEUP_EDGE        = UCS_BIT(16) /**< Use edge-triggered wakeup. The event
                                               file descriptor will be signaled only
