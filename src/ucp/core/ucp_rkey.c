@@ -18,14 +18,58 @@ static ucp_rkey_t ucp_mem_dummy_rkey = {
 
 static ucp_md_map_t ucp_mem_dummy_buffer = 0;
 
+
+ucs_status_t ucp_rkey_pack_uct(ucp_context_h context,
+                               ucp_md_map_t md_map, const uct_mem_h *memh,
+                               void *rkey_buffer, size_t *size_p)
+{
+    void *p             = rkey_buffer;
+    ucs_status_t status = UCS_OK;
+    unsigned md_index, uct_memh_index;
+    size_t md_size;
+    char UCS_V_UNUSED buf[128];
+
+    /* Write the MD map */
+    *(ucp_md_map_t*)p = md_map;
+    p += sizeof(ucp_md_map_t);
+
+    /* Write both size and rkey_buffer for each UCT rkey */
+    uct_memh_index = 0;
+    for (md_index = 0; md_index < context->num_mds; ++md_index) {
+        if (!(md_map & UCS_BIT(md_index))) {
+            continue;
+        }
+
+        md_size = context->tl_mds[md_index].attr.rkey_packed_size;
+        *((uint8_t*)p++) = md_size;
+        uct_md_mkey_pack(context->tl_mds[md_index].md, memh[uct_memh_index], p);
+
+        ucs_trace("rkey[%d]=%s for md[%d]=%s", uct_memh_index,
+                  ucs_log_dump_hex(p, md_size, buf, sizeof(buf)), md_index,
+                  context->tl_mds[md_index].rsc.md_name);
+
+        ++uct_memh_index;
+        p += md_size;
+    }
+
+    if (uct_memh_index == 0) {
+        status = UCS_ERR_UNSUPPORTED;
+    }
+
+    if (size_p != NULL) {
+        *size_p = (size_t)((uint8_t*)p - (uint8_t*)rkey_buffer);
+    }
+
+    return status;
+}
+
 ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
                            void **rkey_buffer_p, size_t *size_p)
 {
-    unsigned md_index, uct_memh_index;
+    unsigned md_index;
     void *rkey_buffer, *p;
     size_t size, md_size;
     ucs_status_t status;
-    char UCS_V_UNUSED buf[128];
 
     /* always acquire context lock */
     UCP_THREAD_CS_ENTER(&context->mt_lock);
@@ -61,31 +105,9 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
 
     p = rkey_buffer;
 
-    /* Write the MD map */
-    *(ucp_md_map_t*)p = memh->md_map;
-    p += sizeof(ucp_md_map_t);
+    status = ucp_rkey_pack_uct(context, memh->md_map, memh->uct, p, NULL);
 
-    /* Write both size and rkey_buffer for each UCT rkey */
-    uct_memh_index = 0;
-    for (md_index = 0; md_index < context->num_mds; ++md_index) {
-        if (!(memh->md_map & UCS_BIT(md_index))) {
-            continue;
-        }
-
-        md_size = context->tl_mds[md_index].attr.rkey_packed_size;
-        *((uint8_t*)p++) = md_size;
-        uct_md_mkey_pack(context->tl_mds[md_index].md, memh->uct[uct_memh_index], p);
-
-        ucs_trace("rkey[%d]=%s for md[%d]=%s", uct_memh_index,
-                  ucs_log_dump_hex(p, md_size, buf, sizeof(buf)), md_index,
-                  context->tl_mds[md_index].rsc.md_name);
-
-        ++uct_memh_index;
-        p += md_size;
-    }
-
-    if (uct_memh_index == 0) {
-        status = UCS_ERR_UNSUPPORTED;
+    if (status != UCS_OK) {
         goto err_destroy;
     }
 
