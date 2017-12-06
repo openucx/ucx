@@ -77,8 +77,9 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
         if (ucp_tag_recv_is_match(recv_tag, flags, tag, tag_mask,
                                   req->recv.state.offset, info->sender_tag))
         {
-            ucp_tag_log_match(recv_tag, rdesc->length - rdesc->hdr_len, req, tag,
-                              tag_mask, req->recv.state.offset, "unexpected");
+            ucp_tag_log_match(recv_tag, rdesc->length - rdesc->payload_offset,
+                              req, tag, tag_mask, req->recv.state.offset,
+                              "unexpected");
             ucp_tag_unexp_remove(rdesc);
 
             if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {

@@ -185,8 +185,8 @@ ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_worker_h worker, void *data,
                   (flags & UCP_RECV_DESC_FLAG_RNDV)  ? 'r' : '-',
                   ucp_rdesc_get_tag(rdesc), length - hdr_len, rdesc);
 
-    rdesc->length  = length;
-    rdesc->hdr_len = hdr_len;
+    rdesc->length         = length;
+    rdesc->payload_offset = hdr_len;
     hash_list = ucp_tag_unexp_get_list_for_tag(tm, ucp_rdesc_get_tag(rdesc));
     ucs_list_add_tail(hash_list,
                       &rdesc->tag_list[UCP_RDESC_HASH_LIST]);

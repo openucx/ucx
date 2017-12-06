@@ -17,10 +17,9 @@ typedef struct {
 
 typedef struct {
     union {
-        ucp_stream_am_hdr_t hdr;
-        size_t              offset;
+        ucp_stream_am_hdr_t  hdr;
+        ucp_recv_desc_t     *rdesc;
     };
-    uint8_t                 payload[0];
 } UCS_S_PACKED ucp_stream_am_data_t;
 
 
