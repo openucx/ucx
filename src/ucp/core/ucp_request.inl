@@ -373,10 +373,17 @@ static UCS_F_ALWAYS_INLINE void ucp_request_send_tag_stat(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE
+ucp_rndv_get_lane_info_t *ucp_tag_rndv_get_lane_info(ucp_request_t *req, int idx)
+{
+    ucs_assert((idx >= 0) && (idx < UCP_MAX_RNDV_LANES));
+    return &req->send.rndv_get.rkey->rndv_get[idx];
+}
+
+static UCS_F_ALWAYS_INLINE
 uct_rkey_bundle_t *ucp_tag_rndv_rkey_bundle(ucp_request_t *req, int idx)
 {
     ucs_assert((idx >= 0) && (idx < UCP_MAX_RNDV_LANES));
-    return &req->send.rndv_get.rkey->rkey_bundle[idx];
+    return &ucp_tag_rndv_get_lane_info(req, idx)->rkey_bundle;
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -397,6 +404,10 @@ static UCS_F_ALWAYS_INLINE void
 ucp_request_rndv_get_init(ucp_request_t *req)
 {
     int i;
+    /* dirty hack: in unexpected tag offload we can't know remote MD index to
+     * create 'fake' rts packet, in this case we use local MD index to
+     * resolve lanes */
+    uint8_t is_local = (req->flags & UCP_REQUEST_FLAG_OFFLOADED) != 0;
 
     ucs_trace_req("rendezvous-get create request %p", req);
     req->send.rndv_get.rkey = ucs_mpool_get_inline(&req->send.ep->worker->rndv_get_mp);
@@ -406,14 +417,21 @@ ucp_request_rndv_get_init(ucp_request_t *req)
     req->send.rndv_get.num_lanes = 0;
 
     for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
-        ucp_tag_rndv_rkey_bundle(req, i)->rkey = UCT_INVALID_RKEY;
+        ucp_tag_rndv_rkey_bundle(req, i)->rkey             = UCT_INVALID_RKEY;
+        ucp_tag_rndv_get_lane_info(req, i)->lane           = UCP_NULL_LANE;
+        ucp_tag_rndv_get_lane_info(req, i)->memh           = UCT_MEM_HANDLE_NULL;
+        ucp_tag_rndv_get_lane_info(req, i)->md_index       = UCP_NULL_RESOURCE;
+        ucp_tag_rndv_get_lane_info(req, i)->local_md_index = is_local;
     }
+
+    req->send.rndv_get.rkey->resolved = 0;
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_request_rndv_get_release(ucp_request_t *req)
 {
     int i;
+    uct_md_h md;
 
     ucs_trace_req("release request rndv-get remote key. req: %p", req);
 
@@ -425,6 +443,10 @@ ucp_request_rndv_get_release(ucp_request_t *req)
         if (ucp_tag_rndv_is_rkey_valid(req, i)) {
             uct_rkey_release(ucp_tag_rndv_rkey_bundle(req, i));
         }
+        if (ucp_tag_rndv_get_lane_info(req, i)->memh != UCT_MEM_HANDLE_NULL) {
+            md = ucp_ep_md(req->send.ep, ucp_tag_rndv_get_lane_info(req, i)->lane);
+            uct_md_mem_dereg(md, ucp_tag_rndv_get_lane_info(req, i)->memh);
+        }
     }
 
     ucs_mpool_put_inline(req->send.rndv_get.rkey);
@@ -433,7 +455,7 @@ ucp_request_rndv_get_release(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE
 void ucp_request_rndv_buffer_dereg(ucp_request_t *req)
 {
-    ucp_request_rndv_buffer_dereg_unused(req, UCP_NULL_LANE);
+    ucp_request_rndv_buffer_dereg_unused(req, UCP_NULL_RESOURCE);
 }
 
 

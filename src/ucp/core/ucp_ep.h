@@ -64,8 +64,6 @@ typedef struct ucp_ep_config_key {
 
     ucp_lane_index_t       num_lanes;    /* Number of active lanes */
 
-    ucp_lane_index_t       num_rndv_lanes; /* Number of rendezvous lanes */
-
     struct {
         ucp_rsc_index_t    rsc_index;    /* Resource index */
         ucp_lane_index_t   proxy_lane;   /* UCP_NULL_LANE - no proxy
@@ -79,7 +77,7 @@ typedef struct ucp_ep_config_key {
     ucp_lane_index_t       wireup_lane;  /* Lane for wireup messages (can be NULL) */
 
     /* Lane for zcopy rendezvous (can be NULL) */
-    ucp_lane_index_t       rndv_lanes[UCP_MAX_LANES];
+    ucp_lane_index_t       rndv_lane;
 
     /* Lanes for remote memory access, sorted by priority, highest first */
     ucp_lane_index_t       rma_lanes[UCP_MAX_LANES];
@@ -91,6 +89,10 @@ typedef struct ucp_ep_config_key {
      * of transports which could be selected in the future).
      */
     ucp_md_map_t           reachable_md_map;
+
+    /* Bitmap of mds which are used for rndv-get.
+     */
+    ucp_md_map_t           rndv_md_map;
 
     /* Error handling mode */
     ucp_err_handling_mode_t    err_mode;

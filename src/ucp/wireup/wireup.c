@@ -510,9 +510,10 @@ static void ucp_wireup_print_config(ucp_context_h context,
         return;
     }
 
-    ucs_log(log_level, "%s: am_lane %d wirep_lane %d reachable_mds 0x%lx",
+    ucs_log(log_level, "%s: am_lane %d wirep_lane %d reachable_mds 0x%lx"
+            " rndv_get_mds 0x%lx",
               title, key->am_lane, key->wireup_lane,
-              key->reachable_md_map);
+              key->reachable_md_map, key->rndv_md_map);
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
         ucp_ep_config_lane_info_str(context, key, addr_indices, lane,
