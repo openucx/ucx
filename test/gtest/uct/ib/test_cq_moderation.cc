@@ -17,7 +17,7 @@ static const unsigned nsec_per_usec = (UCS_NSEC_PER_SEC / UCS_USEC_PER_SEC);
 /* wait for 3 usecs to get statistics */
 static const unsigned long test_period = (3ul * UCS_USEC_PER_SEC);
 static const unsigned moderation_period = 1000; /* usecs */
-static const unsigned event_limit = (20 * test_period / moderation_period / nsec_per_usec);
+static const unsigned event_limit = (40 * test_period / moderation_period / nsec_per_usec);
 static const unsigned max_repeats = 1000;
 
 class test_uct_cq_moderation : public uct_test {
