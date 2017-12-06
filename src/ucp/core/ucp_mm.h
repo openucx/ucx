@@ -76,6 +76,10 @@ void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 ucs_status_t ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
                                         uct_memory_type_t *mem_type_p);
 
+ucs_status_t ucp_rkey_pack_uct(ucp_context_h context,
+                               ucp_md_map_t md_map, const uct_mem_h *memh,
+                               void *rkey_buffer, size_t *size_p);
+
 static UCS_F_ALWAYS_INLINE uct_mem_h
 ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
 {

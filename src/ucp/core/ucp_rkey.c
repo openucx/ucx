@@ -7,7 +7,6 @@
 #include "ucp_mm.h"
 #include "ucp_request.h"
 #include "ucp_ep.inl"
-#include "ucp_rkey.h"
 
 #include <inttypes.h>
 
@@ -20,9 +19,9 @@ static ucp_rkey_t ucp_mem_dummy_rkey = {
 static ucp_md_map_t ucp_mem_dummy_buffer = 0;
 
 
-ucs_status_t ucp_rkey_write(ucp_context_h context,
-                            ucp_md_map_t md_map, uct_mem_h *memh,
-                            void *rkey_buffer, size_t *size_p)
+ucs_status_t ucp_rkey_pack_uct(ucp_context_h context,
+                               ucp_md_map_t md_map, const uct_mem_h *memh,
+                               void *rkey_buffer, size_t *size_p)
 {
     void *p             = rkey_buffer;
     ucs_status_t status = UCS_OK;
@@ -106,7 +105,7 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
 
     p = rkey_buffer;
 
-    status = ucp_rkey_write(context, memh->md_map, memh->uct, p, NULL);
+    status = ucp_rkey_pack_uct(context, memh->md_map, memh->uct, p, NULL);
 
     if (status != UCS_OK) {
         goto err_destroy;

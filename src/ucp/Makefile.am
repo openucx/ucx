@@ -25,7 +25,6 @@ noinst_HEADERS = \
 	core/ucp_ep.h \
 	core/ucp_ep.inl \
 	core/ucp_mm.h \
-	core/ucp_rkey.h \
 	core/ucp_proxy_ep.h \
 	core/ucp_request.h \
 	core/ucp_request.inl \
