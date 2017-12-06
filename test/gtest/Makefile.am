@@ -19,6 +19,8 @@ VALGRIND_EXTRA_ARGS      ?=
 
 export UCX_HANDLE_ERRORS
 export UCX_LOG_LEVEL
+export UCX_MEM_LOG_LEVEL
+export UCX_LOG_PRINT_ENABLE
 
 GTEST_ARGS = \
 	--gtest_filter=$(GTEST_FILTER) \
