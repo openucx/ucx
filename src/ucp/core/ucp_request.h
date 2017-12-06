@@ -87,8 +87,16 @@ enum {
  * in other cases number of remote keys should match number
  * of lanes used in rndv-get protocol
  */
+typedef struct ucp_rndv_get_lane_info {
+    ucp_lane_index_t  lane;
+    ucp_rsc_index_t   md_index;
+    uct_mem_h         memh;
+    uct_rkey_bundle_t rkey_bundle;
+} ucp_rndv_get_lane_info_t;
+
 typedef struct ucp_rndv_get_rkey {
-    uct_rkey_bundle_t rkey_bundle[UCP_MAX_RNDV_LANES];
+    ucp_rndv_get_lane_info_t rndv_get[UCP_MAX_RNDV_LANES];
+    int resolved;
 } ucp_rndv_get_rkey_t;
 
 
@@ -136,7 +144,7 @@ struct ucp_request {
                     ucp_rndv_get_rkey_t *rkey;
                     ucp_request_t       *rreq;           /* receive request on the recv side */
                     ucp_lane_index_t     num_lanes;      /* number of rkeys obtained from peer */
-                    ucp_lane_index_t     lane_idx;       /* rendezvous line index used for next op */
+                    ucp_lane_index_t     lane_idx;       /* rendezvous lane index used for next op */
                 } rndv_get;
 
                 struct {

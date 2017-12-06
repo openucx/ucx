@@ -113,6 +113,11 @@ static inline ucp_rsc_index_t ucp_ep_md_index(ucp_ep_h ep, ucp_lane_index_t lane
     return context->tl_rscs[ucp_ep_get_rsc_index(ep, lane)].md_index;
 }
 
+static inline ucp_rsc_index_t ucp_ep_dst_md_index(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    return ucp_ep_config(ep)->key.lanes[lane].dst_md_index;
+}
+
 static inline uct_md_h ucp_ep_md(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     ucp_context_h context = ep->worker->context;

@@ -49,6 +49,14 @@ typedef struct {
     uintptr_t                 rreq_ptr; /* request on the rndv receiver side */
 } UCS_S_PACKED ucp_rndv_data_hdr_t;
 
+/*
+ * RNDV rkey
+ */
+typedef struct {
+    ucp_rsc_index_t md_index;
+    uint8_t         key_size;
+    uint8_t         rkey[];
+} UCS_S_PACKED ucp_rndv_rkey_data_t;
 
 ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *req);
 
@@ -59,6 +67,11 @@ ucs_status_t ucp_proto_progress_rndv_get_zcopy(uct_pending_req_t *self);
 
 ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
                                   unsigned tl_flags);
+
+size_t ucp_rndv_packed_rkey_size(size_t key_size);
+
+size_t ucp_rndv_copy_rkey(ucp_worker_iface_t *iface, void *rts_rkey,
+                          const void *rkey_buf, size_t rkey_size);
 
 static inline size_t ucp_rndv_total_len(ucp_rndv_rts_hdr_t *hdr)
 {
