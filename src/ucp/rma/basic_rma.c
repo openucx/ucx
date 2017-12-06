@@ -399,17 +399,17 @@ out_unlock:
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
 {
-    unsigned rsc_index;
+    ucp_worker_iface_t *wiface, *tmp;
     ucs_status_t status;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
-    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
-        if (worker->ifaces[rsc_index].iface == NULL) {
+    ucs_list_for_each_safe(wiface, tmp, &worker->ifaces, wiface_list) {
+        if (wiface->iface == NULL) {
             continue;
         }
 
-        status = uct_iface_fence(worker->ifaces[rsc_index].iface, 0);
+        status = uct_iface_fence(wiface->iface, 0);
         if (status != UCS_OK) {
             goto out;
         }

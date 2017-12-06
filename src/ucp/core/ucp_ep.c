@@ -645,7 +645,7 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
         return;
     }
 
-    iface_attr = &worker->ifaces[rsc_index].attr;
+    iface_attr = &worker->dev_ifaces[rsc_index]->attr;
     md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
     ucs_assert_always(iface_attr->cap.flags & rndv_cap_flag);
 
@@ -674,7 +674,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
                                      unsigned hdr_len, size_t adjust_min_val)
 {
     ucp_context_t *context       = worker->context;
-    uct_iface_attr_t *iface_attr = &worker->ifaces[rsc_index].attr;
+    uct_iface_attr_t *iface_attr = &worker->dev_ifaces[rsc_index]->attr;
     uct_md_attr_t *md_attr       = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
     size_t it;
     size_t zcopy_thresh;
@@ -763,7 +763,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         lane      = config->key.tag_lane;
         rsc_index = config->key.lanes[lane].rsc_index;
         if (rsc_index != UCP_NULL_RESOURCE) {
-            iface_attr = &worker->ifaces[rsc_index].attr;
+            iface_attr = &worker->dev_ifaces[rsc_index]->attr;
             ucp_ep_config_init_attrs(worker, rsc_index, &config->tag.eager,
                                      iface_attr->cap.tag.eager.max_short,
                                      iface_attr->cap.tag.eager.max_bcopy,
@@ -792,7 +792,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         lane        = config->key.am_lane;
         rsc_index   = config->key.lanes[lane].rsc_index;
         if (rsc_index != UCP_NULL_RESOURCE) {
-            iface_attr = &worker->ifaces[rsc_index].attr;
+            iface_attr = &worker->dev_ifaces[rsc_index]->attr;
             md_attr   = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
             ucp_ep_config_init_attrs(worker, rsc_index, &config->am,
                                      iface_attr->cap.am.max_short,
@@ -833,12 +833,13 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
         rma_config = &config->rma[lane];
         rsc_index  = config->key.lanes[lane].rsc_index;
-        iface_attr = &worker->ifaces[rsc_index].attr;
 
         rma_config->put_zcopy_thresh = SIZE_MAX;
         rma_config->get_zcopy_thresh = SIZE_MAX;
 
         if (rsc_index != UCP_NULL_RESOURCE) {
+            iface_attr = &worker->dev_ifaces[rsc_index]->attr;
+
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
                 rma_config->max_put_short = iface_attr->cap.put.max_short;
             }

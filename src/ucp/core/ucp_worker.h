@@ -132,6 +132,7 @@ typedef struct ucp_worker_iface {
     ucp_worker_h                  worker;        /* The parent worker */
     ucs_queue_elem_t              queue;         /* Element in tm.offload_ifaces */
     ucs_list_link_t               arm_list;      /* Element in arm_ifaces list */
+    ucs_list_link_t               wiface_list;   /* Element in ifaces list*/
     ucp_rsc_index_t               rsc_index;     /* Resource index */
     int                           event_fd;      /* Event FD, or -1 if undefined */
     unsigned                      activate_count;/* How times this iface has been activated */
@@ -168,7 +169,10 @@ typedef struct ucp_worker {
     ucs_list_link_t               stream_eps;    /* List of EPs with received stream data */
     khash_t(ucp_worker_ep_hash)   ep_hash;       /* Hash table of all endpoints */
     khash_t(ucp_ep_errh_hash)     ep_errh_hash;  /* Hash table of error handlers associated with endpoints */
-    ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
+    ucs_list_link_t               ifaces;        /* List of all interfaces (device and sockaddr),
+                                                    one for each resource */
+    ucp_worker_iface_t            **dev_ifaces;  /* Array of pointers to device interfaces,
+                                                    one for each resource */
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
     ucp_mt_lock_t                 mt_lock;       /* Configuration of multi-threading support */
@@ -215,9 +219,9 @@ static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uui
 }
 
 static UCS_F_ALWAYS_INLINE
-uint64_t ucp_worker_is_tl_tag_offload(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
+uint64_t ucp_worker_is_tl_tag_offload(ucp_worker_iface_t *iface)
 {
-    return (worker->ifaces[rsc_index].attr.cap.flags &
+    return (iface->attr.cap.flags &
             (UCT_IFACE_FLAG_TAG_EAGER_SHORT | UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
              UCT_IFACE_FLAG_TAG_EAGER_ZCOPY | UCT_IFACE_FLAG_TAG_RNDV_ZCOPY));
 }

@@ -362,7 +362,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
     ucp_worker_h worker          = ep->worker;
     ucp_rsc_index_t rsc_index    = ucp_ep_get_rsc_index(ep, lane);
     ucp_lane_index_t proxy_lane  = ucp_ep_get_proxy_lane(ep, lane);
-    uct_iface_attr_t *iface_attr = &worker->ifaces[rsc_index].attr;
+    uct_iface_attr_t *iface_attr = &worker->dev_ifaces[rsc_index]->attr;
     uct_ep_h uct_ep;
     ucs_status_t status;
 
@@ -379,7 +379,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
             /* create an endpoint connected to the remote interface */
             ucs_trace("ep %p: connect uct_ep[%d] to addr[%d]", ep, lane,
                       addr_index);
-            status = uct_ep_create_connected(worker->ifaces[rsc_index].iface,
+            status = uct_ep_create_connected(worker->dev_ifaces[rsc_index]->iface,
                                              address_list[addr_index].dev_addr,
                                              address_list[addr_index].iface_addr,
                                              &uct_ep);
@@ -391,7 +391,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
             uct_ep = NULL;
         }
 
-        ucp_worker_iface_progress_ep(&worker->ifaces[rsc_index]);
+        ucp_worker_iface_progress_ep(worker->dev_ifaces[rsc_index]);
 
         /* If ep already exists, it's a stub, and we need to update its next_ep
          * instead of replacing it.
@@ -447,7 +447,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
             return status;
         }
 
-        ucp_worker_iface_progress_ep(&worker->ifaces[rsc_index]);
+        ucp_worker_iface_progress_ep(worker->dev_ifaces[rsc_index]);
 
         return UCS_OK;
     }
@@ -475,7 +475,7 @@ static ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
             continue;
         }
 
-        iface_attr = &ep->worker->ifaces[ucp_ep_get_rsc_index(ep, lane)].attr;
+        iface_attr = &ep->worker->dev_ifaces[ucp_ep_get_rsc_index(ep, lane)]->attr;
         if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
             ucs_assert_always(iface_attr->cap.am.max_short <=
                               iface_attr->cap.am.max_bcopy);

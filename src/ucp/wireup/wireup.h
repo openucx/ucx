@@ -99,7 +99,7 @@ ucs_status_t ucp_signaling_ep_create(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
 static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return !(worker->ifaces[rsc_index].attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
+    return !(worker->dev_ifaces[rsc_index]->attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
 }
 
 

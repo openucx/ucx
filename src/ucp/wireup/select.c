@@ -115,7 +115,7 @@ static int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_inde
 {
     ucp_context_h context = worker->context;
     return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
-           uct_iface_is_reachable(worker->ifaces[rsc_index].iface, ae->dev_addr,
+           uct_iface_is_reachable(worker->dev_ifaces[rsc_index]->iface, ae->dev_addr,
                                   ae->iface_addr);
 }
 
@@ -198,7 +198,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
      * has a reachable tl on the remote peer */
     for (rsc_index = 0; addr_index_map && (rsc_index < context->num_tls); ++rsc_index) {
         resource     = &context->tl_rscs[rsc_index].tl_rsc;
-        iface_attr   = &worker->ifaces[rsc_index].attr;
+        iface_attr   = &worker->dev_ifaces[rsc_index]->attr;
         md_attr      = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
         if ((context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) &&
@@ -576,7 +576,7 @@ static uint32_t ucp_wireup_tag_lane_usage(ucp_ep_h ep,
     ucp_wireup_fill_tag_criteria(ep, &criteria);
 
     if (ucp_wireup_check_flags(resource,
-                               ep->worker->ifaces[rsc_index].attr.cap.flags,
+                               ep->worker->dev_ifaces[rsc_index]->attr.cap.flags,
                                criteria.local_iface_flags, criteria.title,
                                ucp_wireup_iface_flags, NULL, 0) &&
         ucp_wireup_check_flags(resource,
@@ -871,7 +871,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
         /* if the current lane satisfies the wireup criteria, choose it for wireup.
          * if it doesn't take a lane with a p2p transport */
         if (ucp_wireup_check_flags(resource,
-                                   worker->ifaces[rsc_index].attr.cap.flags,
+                                   worker->dev_ifaces[rsc_index]->attr.cap.flags,
                                    criteria.local_iface_flags, criteria.title,
                                    ucp_wireup_iface_flags, NULL, 0) &&
             ucp_wireup_check_flags(resource,
