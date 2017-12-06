@@ -158,10 +158,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
     size_t rkey_size;
 
     if (remote_addr) {
+        /* Unexpected tag offload RNDV */
         rkey_size = ucp_tag_offload_rkey_size(worker->context);
         rts       = ucs_alloca(sizeof(*rts) + rkey_size); /* SW rndv req may also
-                                                         carry a key */
-        /* Unexpected tag offload RNDV */
+                                                             carry a key */
         ucp_tag_offload_fill_rts(rts, rndv_hdr, stag, remote_addr, length, 0);
         len = ucp_tag_offload_copy_rkey(rts, (void*)rkey_buf, rkey_size) +
               sizeof(*rts);
@@ -395,31 +395,22 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
-    ucp_sw_rndv_hdr_t *rndv_hdr;
     ucp_rndv_rts_hdr_t *rndv_rts_hdr;
     unsigned rndv_hdr_len;
+    size_t packed_len;
 
-    if (UCP_DT_IS_CONTIG(req->send.datatype) &&
-        (req->send.length > ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) {
-        /* send RTS to allow fallback to SW RNDV on receiver */
-        rndv_hdr_len = ucp_rndv_rts_packed_len(ep);
-        rndv_rts_hdr = ucs_alloca(rndv_hdr_len);
-        ucs_assert(rndv_rts_hdr != NULL);
-        ucp_tag_rndv_rts_pack(rndv_rts_hdr, req);
-        return uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane], req->send.tag,
-                                       rndv_rts_hdr, rndv_hdr_len);
-    } else {
-        rndv_hdr_len    = sizeof(ucp_sw_rndv_hdr_t);
-        rndv_hdr        = ucs_alloca(rndv_hdr_len);
-        rndv_hdr->flags = 0;
+    ucs_assert((UCP_DT_IS_CONTIG(req->send.datatype) &&
+               (req->send.length > ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) ||
+               !UCP_DT_IS_CONTIG(req->send.datatype));
 
-        rndv_hdr->super.sender_uuid = ep->worker->uuid;
-        rndv_hdr->super.reqptr      = (uintptr_t)req;
-        rndv_hdr->length            = req->send.length;
-
-        return uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane], req->send.tag,
-                                       rndv_hdr, rndv_hdr_len);
-    }
+    /* send RTS to allow fallback to SW RNDV on receiver */
+    rndv_hdr_len = ucp_rndv_rts_packed_len(ep);
+    rndv_rts_hdr = ucs_alloca(rndv_hdr_len);
+    ucs_assert(rndv_rts_hdr != NULL);
+    packed_len = ucp_tag_rndv_rts_pack(rndv_rts_hdr, req);
+    ucs_assert((rndv_rts_hdr->address != 0) || !UCP_DT_IS_CONTIG(req->send.datatype));
+    return uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane], req->send.tag,
+                                   rndv_rts_hdr, packed_len);
 }
 
 static void ucp_tag_rndv_zcopy_completion(uct_completion_t *self,
