@@ -125,34 +125,6 @@ ucp_tag_offload_fill_rts(ucp_rndv_rts_hdr_t *rts, const ucp_request_hdr_t *hdr,
     rts->flags     = flags;
 }
 
-static UCS_F_ALWAYS_INLINE size_t
-ucp_tag_offload_fill_sw_rts(ucp_rndv_rts_hdr_t *rts,
-                            const ucp_sw_rndv_hdr_t *rndv_hdr,
-                            unsigned header_length, uint64_t stag,
-                            size_t rkey_size)
-{
-    size_t length = sizeof(*rts);
-    ucp_sw_rndv_ext_hdr_t *ext_rndv_hdr;
-
-    if (rndv_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) {
-        ucs_assert(rkey_size);
-        ucs_assert((sizeof(*ext_rndv_hdr) + rkey_size) == header_length);
-
-        ext_rndv_hdr = ucs_derived_of(rndv_hdr, ucp_sw_rndv_ext_hdr_t);
-
-        ucp_tag_offload_fill_rts(rts, &rndv_hdr->super, stag,
-                                 ext_rndv_hdr->address, rndv_hdr->length, 0);
-
-        length += ucp_tag_offload_copy_rkey(rts, ext_rndv_hdr + 1, rkey_size);
-    } else {
-        ucs_assert(sizeof(*rndv_hdr) == header_length);
-        ucp_tag_offload_fill_rts(rts, &rndv_hdr->super, stag, 0,
-                                 rndv_hdr->length, 0);
-    }
-
-    return length;
-}
-
 /* RNDV request matched by the transport. Need to proceed with SW based RNDV */
 void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
                              const void *header, unsigned header_length,
