@@ -506,11 +506,11 @@ UCS_TEST_F(malloc_hook_cplusplus, mmap_ptrs) {
     set();
 
     const size_t   size    = ucm_dlmallopt_get(M_MMAP_THRESHOLD) * 2;
-    const size_t   max_mem = ucs_min(ucs_get_phys_mem_size() / 8, 4 * UCS_GBYTE);
+    const size_t   max_mem = ucs_min(ucs_get_phys_mem_size() / 4, 4 * UCS_GBYTE);
     const unsigned count   = ucs_min(400000ul, max_mem / size);
     const unsigned iters   = 100000;
 
-    std::vector<std::string> ptrs;
+    std::vector< std::vector<char> > ptrs;
 
     size_t large_blocks = 0;
 
@@ -518,8 +518,7 @@ UCS_TEST_F(malloc_hook_cplusplus, mmap_ptrs) {
      * Lock memory to avoid going to swap and ensure consistet test results.
      */
     while (m_mapped_size == 0) {
-        std::string str(size, 'r');
-        mlock(&str[0], size);
+        std::vector<char> str(size, 'r');
         ptrs.push_back(str);
         ++large_blocks;
     }
@@ -532,8 +531,7 @@ UCS_TEST_F(malloc_hook_cplusplus, mmap_ptrs) {
 
     /* Allocate many large strings to trigger mmap() based allocation. */
     for (unsigned i = 0; i < count; ++i) {
-        std::string str(size, 't');
-        mlock(&str[0], size);
+        std::vector<char> str(size, 't');
         ptrs.push_back(str);
         ++large_blocks;
     }
@@ -556,11 +554,7 @@ UCS_TEST_F(malloc_hook_cplusplus, mmap_ptrs) {
         ADD_FAILURE() << "Failed after " << attempt << " attempts";
     }
 
-    /* Unlock memory */
-    while (!ptrs.empty()) {
-        munlock(&ptrs.back()[0], size);
-        ptrs.pop_back();
-    }
+    ptrs.clear();
 
     unset();
 
