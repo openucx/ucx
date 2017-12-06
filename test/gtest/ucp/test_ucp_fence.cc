@@ -142,9 +142,6 @@ protected:
         uint32_t error = 0;
 
         sender().connect(&receiver(), get_ep_params());
-        if (&sender() != &receiver()) {
-            receiver().connect(&sender(), get_ep_params());
-        }
 
         params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH |
