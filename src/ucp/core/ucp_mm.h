@@ -18,6 +18,11 @@
 #include <inttypes.h>
 
 
+/* Remote keys with that many remote MDs or less would be allocated from a
+ * memory pool.
+ */
+#define UCP_RKEY_MPOOL_MAX_MD     3
+
 /**
  * Remote memory key structure.
  * Contains remote keys for UCT MDs.

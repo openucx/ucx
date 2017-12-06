@@ -8,6 +8,7 @@
 #include "ucp_request.h"
 #include "ucp_ep.inl"
 
+#include <ucs/datastruct/mpool.inl>
 #include <inttypes.h>
 
 
@@ -134,23 +135,25 @@ void ucp_rkey_buffer_release(void *rkey_buffer)
 
 ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey_p)
 {
+    ucp_context_t *context = ep->worker->context;
     unsigned remote_md_index, remote_md_gap;
+    ucp_md_map_t md_map, remote_md_map;
     unsigned rkey_index;
     unsigned md_count;
     ucs_status_t status;
     ucp_rkey_h rkey;
     uint8_t md_size;
-    ucp_md_map_t md_map;
     void *p;
 
     /* Count the number of remote MDs in the rkey buffer */
     p = rkey_buffer;
 
     /* Read remote MD map */
-    md_map   = *(ucp_md_map_t*)p;
+    remote_md_map = *(ucp_md_map_t*)p;
+    ucs_trace("unpacking rkey with md_map 0x%lx", remote_md_map);
 
-    ucs_trace("unpacking rkey with md_map 0x%lx", md_map);
-
+    /* MD map for the unpacked rkey */
+    md_map = remote_md_map & ucp_ep_config(ep)->key.reachable_md_map;
     if (md_map == 0) {
         /* Dummy key return ok */
         *rkey_p = &ucp_mem_dummy_rkey;
@@ -160,21 +163,29 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
     md_count = ucs_count_one_bits(md_map);
     p       += sizeof(ucp_md_map_t);
 
-    /* Allocate rkey handle which holds UCT rkeys for all remote MDs.
+    /* Allocate rkey handle which holds UCT rkeys for all remote MDs. Small key
+     * allocations are done from a memory pool.
      * We keep all of them to handle a future transport switch.
      */
-    rkey = ucs_malloc(sizeof(*rkey) + (sizeof(rkey->uct[0]) * md_count), "ucp_rkey");
+    if (md_count <= UCP_RKEY_MPOOL_MAX_MD) {
+        UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
+        rkey = ucs_mpool_get(&context->rkey_mp);
+        UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
+    } else {
+        rkey = ucs_malloc(sizeof(*rkey) + (sizeof(rkey->uct[0]) * md_count),
+                          "ucp_rkey");
+    }
     if (rkey == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
 
-    rkey->md_map    = 0;
-    remote_md_index = 0; /* Index of remote MD */
-    rkey_index      = 0; /* Index of the rkey in the array */
+    rkey->md_map = md_map;
 
     /* Unpack rkey of each UCT MD */
-    while (md_map > 0) {
+    remote_md_index = 0; /* Index of remote MD */
+    rkey_index      = 0; /* Index of the rkey in the array */
+    while (remote_md_map > 0) {
         md_size = *((uint8_t*)p++);
 
         /* Use bit operations to iterate through the indices of the remote MDs
@@ -183,14 +194,14 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
          * valid MD index using ffs operation. If some rkeys cannot be unpacked,
          * we remove them from the local map.
          */
-        remote_md_gap    = ucs_ffs64(md_map); /* Find the offset for next MD index */
-        remote_md_index += remote_md_gap;      /* Calculate next index of remote MD*/
-        md_map >>= remote_md_gap;                   /* Remove the gap from the map */
-        ucs_assert(md_map & 1);
+        remote_md_gap    = ucs_ffs64(remote_md_map); /* Find the offset for next MD index */
+        remote_md_index += remote_md_gap;            /* Calculate next index of remote MD*/
+        remote_md_map  >>= remote_md_gap;            /* Remove the gap from the map */
+        ucs_assert(remote_md_map & 1);
         ucs_assert_always(remote_md_index <= UCP_MD_INDEX_BITS);
 
         /* Unpack only reachable rkeys */
-        if (UCS_BIT(remote_md_index) & ucp_ep_config(ep)->key.reachable_md_map) {
+        if (UCS_BIT(remote_md_index) & rkey->md_map) {
             ucs_assert(rkey_index < md_count);
 
             status = uct_rkey_unpack(p, &rkey->uct[rkey_index]);
@@ -207,15 +218,11 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
         }
 
         ++remote_md_index;
-        md_map >>= 1;
+        remote_md_map >>= 1;
         p += md_size;
     }
 
-    if (rkey->md_map == 0) {
-        ucs_debug("The unpacked rkey from the destination is unreachable");
-        status = UCS_ERR_UNREACHABLE;
-        goto err_destroy;
-    }
+    ucs_assert(rkey_index == md_count);
 
     ucp_rkey_resolve_inner(rkey, ep);
     *rkey_p = rkey;
@@ -252,6 +259,7 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p)
 
 void ucp_rkey_destroy(ucp_rkey_h rkey)
 {
+    ucp_context_h UCS_V_UNUSED context;
     unsigned num_rkeys;
     unsigned i;
 
@@ -264,7 +272,16 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
     for (i = 0; i < num_rkeys; ++i) {
         uct_rkey_release(&rkey->uct[i]);
     }
-    ucs_free(rkey);
+
+    if (ucs_count_one_bits(rkey->md_map) <= UCP_RKEY_MPOOL_MAX_MD) {
+        context = ucs_container_of(ucs_mpool_obj_owner(rkey), ucp_context_t,
+                                   rkey_mp);
+        UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
+        ucs_mpool_put(rkey);
+        UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
+    } else {
+        ucs_free(rkey);
+    }
 }
 
 static ucp_lane_index_t ucp_config_find_rma_lane(const ucp_ep_config_t *config,
