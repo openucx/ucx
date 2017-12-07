@@ -561,6 +561,21 @@ class test_ucp_ep_force_disconnect : public test_ucp_peer_failure
 {
 public:
     virtual void init() {
+        const std::vector<std::string> &tls = GetParam().transports;
+        std::vector<std::string>       skip_tls;
+
+        skip_tls.push_back("\\rc_mlx5");
+        skip_tls.push_back("ib");
+
+        if (std::find_first_of(tls.begin(),      tls.end(),
+                               skip_tls.begin(), skip_tls.end()) != tls.end()) {
+            UCS_TEST_SKIP_R("TEMPORATY DISABLED. There is a known issue with "
+                            "rc_mlx5 transport: it can't successfully clean up "
+                            "iface resources if it's receiving on closure. "
+                            "The issue is hardly reproducible with running 4+ "
+                            "gtest instances on the same node");
+        }
+
         m_env.clear(); /* restore default timeouts. */
         test_ucp_peer_failure::init();
     }
