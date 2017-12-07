@@ -90,7 +90,7 @@ static size_t ucp_tag_rndv_pack_recv_rkey(ucp_request_t *rreq, ucp_ep_h ep,
     return 0;
 }
 
-static size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
+size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
 {
     ucp_request_t *sreq = arg;   /* the sender's request */
     ucp_rndv_rts_hdr_t *rndv_rts_hdr = dest;

@@ -11,6 +11,7 @@
 
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_request.h>
+#include <ucp/core/ucp_ep.inl>
 #include <ucp/proto/proto.h>
 
 enum {
@@ -60,9 +61,17 @@ ucs_status_t ucp_proto_progress_rndv_get_zcopy(uct_pending_req_t *self);
 ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
                                   unsigned tl_flags);
 
+size_t ucp_tag_rndv_rts_pack(void *dest, void *arg);
+
 static inline size_t ucp_rndv_total_len(ucp_rndv_rts_hdr_t *hdr)
 {
     return hdr->size;
+}
+
+static inline size_t ucp_rndv_rts_packed_len(ucp_ep_h ep)
+{
+    ucp_lane_index_t lane = ucp_ep_get_rndv_get_lane(ep, 0);
+    return sizeof(ucp_rndv_rts_hdr_t) + ucp_ep_md_attr(ep, lane)->rkey_packed_size;
 }
 
 #endif
