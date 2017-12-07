@@ -553,15 +553,26 @@ run_gtest() {
 	$AFFINITY $TIMEOUT make -C test/gtest test
 	(cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
-    echo "==== Running malloc hooks mallopt() test ===="
-    # gtest returns with non zero exit code if there were no
-    # tests to run. As a workaround run a single test on every
-    # shard.
-    env UCX_IB_RCACHE=n \
-        MALLOC_TRIM_THRESHOLD_=-1 MALLOC_MMAP_THRESHOLD_=-1 \
-        GTEST_SHARD_INDEX=0 GTEST_TOTAL_SHARDS=1 \
-        GTEST_FILTER=malloc_hook_cplusplus.mallopt make -C test/gtest test
+	echo "==== Running malloc hooks mallopt() test ===="
+	# gtest returns with non zero exit code if there were no
+	# tests to run. As a workaround run a single test on every
+	# shard.
+	env UCX_IB_RCACHE=n \
+		MALLOC_TRIM_THRESHOLD_=-1 \
+		MALLOC_MMAP_THRESHOLD_=-1 \
+	        GTEST_SHARD_INDEX=0 \
+		GTEST_TOTAL_SHARDS=1 \
+	        GTEST_FILTER=malloc_hook_cplusplus.mallopt \
+		make -C test/gtest test
 	(cd test/gtest && rename .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
+
+	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384 ===="
+	env MALLOC_MMAP_THRESHOLD_=16384 \
+	        GTEST_SHARD_INDEX=0 \
+		GTEST_TOTAL_SHARDS=1 \
+	        GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
+		make -C test/gtest test
+	(cd test/gtest && rename .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]]
 	then
