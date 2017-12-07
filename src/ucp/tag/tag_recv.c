@@ -29,7 +29,6 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
                      ucp_tag_recv_callback_t cb, ucp_recv_desc_t *first_rdesc,
                      unsigned *save_rreq)
 {
-    ucp_context_h context = worker->context;
     ucp_recv_desc_t *rdesc, *next;
     ucs_list_link_t *list;
     ucs_status_t status;
@@ -38,26 +37,26 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
     int i_list;
 
     /* fast check of global unexpected queue */
-    if (ucs_list_is_empty(&context->tm.unexpected.all)) {
+    if (ucs_list_is_empty(&worker->tm.unexpected.all)) {
         return UCS_INPROGRESS;
     }
 
     if (first_rdesc == NULL) {
         if (tag_mask == UCP_TAG_MASK_FULL) {
-            list   = ucp_tag_unexp_get_list_for_tag(&context->tm, tag);
+            list = ucp_tag_unexp_get_list_for_tag(&worker->tm, tag);
             if (ucs_list_is_empty(list)) {
                 return UCS_INPROGRESS;
             }
 
             i_list = UCP_RDESC_HASH_LIST;
         } else {
-            list   = &context->tm.unexpected.all;
+            list   = &worker->tm.unexpected.all;
             i_list = UCP_RDESC_ALL_LIST;
         }
         rdesc = ucs_list_head(list, ucp_recv_desc_t, tag_list[i_list]);
     } else {
         ucs_assert(tag_mask == UCP_TAG_MASK_FULL);
-        list   = ucp_tag_unexp_get_list_for_tag(&context->tm, tag);
+        list   = ucp_tag_unexp_get_list_for_tag(&worker->tm, tag);
         i_list = UCP_RDESC_HASH_LIST;
         rdesc  = first_rdesc;
     }
@@ -144,7 +143,7 @@ ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
 
     req->status = status;
     if (req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD) {
-        --req->recv.worker->context->tm.offload.sw_req_count;
+        --req->recv.worker->tm.offload.sw_req_count;
     }
     if ((req->flags |= UCP_REQUEST_FLAG_COMPLETED) & UCP_REQUEST_FLAG_RELEASED) {
         ucp_request_put(req);
@@ -160,7 +159,6 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 {
     unsigned save_rreq = 1;
     ucs_queue_head_t *queue;
-    ucp_context_h context;
     ucs_status_t status;
     size_t buffer_size;
 
@@ -183,8 +181,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     } else if (save_rreq) {
         /* If not found on unexpected, wait until it arrives.
          * If was found but need this receive request for later completion, save it */
-        context = worker->context;
-        queue   = ucp_tag_exp_get_queue(&context->tm, tag, tag_mask);
+        queue = ucp_tag_exp_get_queue(&worker->tm, tag, tag_mask);
 
         req->recv.buffer        = buffer;
         req->recv.length        = buffer_size;
@@ -193,11 +190,11 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->recv.tag.tag_mask  = tag_mask;
         req->recv.tag.cb        = cb;
 
-        ucp_tag_exp_push(&context->tm, queue, req);
+        ucp_tag_exp_push(&worker->tm, queue, req);
 
         /* If offload supported, post this tag to transport as well.
          * TODO: need to distinguish the cases when posting is not needed. */
-        ucp_tag_offload_try_post(worker->context, req);
+        ucp_tag_offload_try_post(worker, req);
         ucs_trace_req("%s returning expected request %p (%p)", debug_name, req,
                       req + 1);
     }
@@ -215,13 +212,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,
     ucs_status_t status;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
 
     status = ucp_tag_recv_common(worker, buffer, count, datatype, tag, tag_mask,
                                  req, UCP_REQUEST_DEBUG_FLAG_EXTERNAL, NULL, NULL,
                                  "recv_nbr");
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return status;
 }
@@ -236,7 +231,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nb,
     ucp_request_t *req;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
 
     req = ucp_request_get(worker);
     if (ucs_likely(req != NULL)) {
@@ -247,7 +241,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nb,
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return ret;
 }
@@ -263,7 +256,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
     ucp_request_t *req;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
 
     req = ucp_request_get(worker);
     if (ucs_likely(req != NULL)) {
@@ -276,7 +268,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return ret;
 }

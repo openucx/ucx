@@ -14,7 +14,7 @@
 
 
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t*
-ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
+ucp_tag_probe_search(ucp_worker_h worker, ucp_tag_t tag, uint64_t tag_mask,
                      ucp_tag_recv_info_t *info, int remove)
 {
     ucp_recv_desc_t *rdesc;
@@ -22,7 +22,7 @@ ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
     ucp_tag_t recv_tag;
     unsigned flags;
 
-    ucs_list_for_each(rdesc, &context->tm.unexpected.all,
+    ucs_list_for_each(rdesc, &worker->tm.unexpected.all,
                       tag_list[UCP_RDESC_ALL_LIST]) {
         hdr      = (void*)(rdesc + 1);
         recv_tag = hdr->tag;
@@ -60,16 +60,14 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
                                    ucp_tag_t tag_mask, int remove,
                                    ucp_tag_recv_info_t *info)
 {
-    ucp_context_h context = worker->context;
+    ucp_context_h UCS_V_UNUSED context = worker->context;
     ucp_recv_desc_t *ret;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
 
     ucs_trace_req("probe_nb tag %"PRIx64"/%"PRIx64, tag, tag_mask);
-    ret = ucp_tag_probe_search(context, tag, tag_mask, info, remove);
+    ret = ucp_tag_probe_search(worker, tag, tag_mask, info, remove);
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
 
     return ret;
