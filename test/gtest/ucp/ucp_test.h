@@ -137,7 +137,7 @@ protected:
     bool is_self() const;
     virtual void cleanup();
     entity* create_entity(bool add_in_front = false);
-
+    entity* create_entity(bool add_in_front, const ucp_test_param& test_param);
     unsigned progress(int worker_index = 0) const;
     void short_progress_loop(int worker_index = 0) const;
     void flush_ep(const entity &e, int worker_index = 0, int ep_index = 0);
