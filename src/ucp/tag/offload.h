@@ -11,6 +11,8 @@
 #include <ucp/core/ucp_request.h>
 #include <ucp/proto/proto.h>
 
+#define UCP_TAG_OFFLOAD_REQPTR_MDI_MASK (UCS_SYS_CACHE_LINE_SIZE - 1)
+
 /**
  * Header for SW RNDV request
  */
