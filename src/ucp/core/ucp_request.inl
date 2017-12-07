@@ -105,9 +105,12 @@ ucp_request_complete_stream_recv(ucp_request_t *req,
     ucp_request_t *check_req UCS_V_UNUSED =
             ucs_queue_pull_elem_non_empty(&ep_stream->reqs, ucp_request_t,
                                           recv.queue);
-    ucs_assert(check_req == req);
-    ucs_assert(req->recv.state.offset > 0);
-    req->recv.stream.length = req->recv.state.offset;
+    ucs_assert(check_req               == req);
+    ucs_assert(req->recv.state.offset  >  0);
+    ucs_assert(ep_stream->reqs_buf_len >= req->recv.length);
+
+    ep_stream->reqs_buf_len -= req->recv.length;
+    req->recv.stream.length  = req->recv.state.offset;
     ucs_trace_req("completing stream receive request %p (%p) "
                   UCP_REQUEST_FLAGS_FMT" count %zu, %s",
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
@@ -435,5 +438,4 @@ void ucp_request_rndv_buffer_dereg(ucp_request_t *req)
 {
     ucp_request_rndv_buffer_dereg_unused(req, UCP_NULL_LANE);
 }
-
 

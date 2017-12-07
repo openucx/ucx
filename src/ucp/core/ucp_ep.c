@@ -86,9 +86,12 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
             goto err_free_ep;
         }
 
+        /* NOTE: both queues are in the union must be the same type in order to
+         *       initialize once */
+        UCS_STATIC_TYPE_MATCH(ep->ext.stream->data, ep->ext.stream->reqs);
         ucs_queue_head_init(&ep->ext.stream->data);
-        ucs_queue_head_init(&ep->ext.stream->reqs);
-        ep->ext.stream->ucp_ep = ep;
+        ep->ext.stream->ucp_ep       = ep;
+        ep->ext.stream->reqs_buf_len = 0;
     } else {
         ep->ext.stream = NULL;
     }

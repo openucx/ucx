@@ -194,14 +194,18 @@ typedef struct ucp_ep_config {
  * UCP_FEATURE_STREAM specific extention of the remote protocol layer endpoint
  */
 typedef struct ucp_ep_ext_stream {
-    /* ep which owns the extension */
-    ucp_ep_h                      ucp_ep;
     /* List entry in worker's EP list */
     ucs_list_link_t               list;
-    /* Queue of receive requests posted on the EP */
-    ucs_queue_head_t              reqs;
-    /* Queue of receive descriptors with data */
-    ucs_queue_head_t              data;
+    /* ep which owns the extension */
+    ucp_ep_h                      ucp_ep;
+    /* Total buffers length queued in @ref reqs, if > 0 @ref data is not valid */
+    size_t                        reqs_buf_len;
+    union {
+        /* Queue of receive requests posted on the EP */
+        ucs_queue_head_t          reqs;
+        /* Queue of receive descriptors with data */
+        ucs_queue_head_t          data;
+    };
 } ucp_ep_ext_stream_t;
 
 
