@@ -287,6 +287,19 @@ build_clang() {
 	fi
 }
 
+check_inst_headers() {
+	echo 1..1 > inst_headers.tap
+	echo "==== Testing installed headers ===="
+
+	../contrib/configure-release --prefix=$PWD/install
+	$MAKE clean
+	$MAKE install
+	../contrib/check_inst_headers.sh $PWD/install/include
+	$MAKE distclean
+
+	echo "ok 1 - build successful " >> inst_headers.tap
+}
+
 run_hello() {
 	api=$1
 	shift
@@ -540,15 +553,26 @@ run_gtest() {
 	$AFFINITY $TIMEOUT make -C test/gtest test
 	(cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
-    echo "==== Running malloc hooks mallopt() test ===="
-    # gtest returns with non zero exit code if there were no
-    # tests to run. As a workaround run a single test on every
-    # shard.
-    env UCX_IB_RCACHE=n \
-        MALLOC_TRIM_THRESHOLD_=-1 MALLOC_MMAP_THRESHOLD_=-1 \
-        GTEST_SHARD_INDEX=0 GTEST_TOTAL_SHARDS=1 \
-        GTEST_FILTER=malloc_hook_cplusplus.mallopt make -C test/gtest test
+	echo "==== Running malloc hooks mallopt() test ===="
+	# gtest returns with non zero exit code if there were no
+	# tests to run. As a workaround run a single test on every
+	# shard.
+	env UCX_IB_RCACHE=n \
+		MALLOC_TRIM_THRESHOLD_=-1 \
+		MALLOC_MMAP_THRESHOLD_=-1 \
+	        GTEST_SHARD_INDEX=0 \
+		GTEST_TOTAL_SHARDS=1 \
+	        GTEST_FILTER=malloc_hook_cplusplus.mallopt \
+		make -C test/gtest test
 	(cd test/gtest && rename .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
+
+	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384 ===="
+	env MALLOC_MMAP_THRESHOLD_=16384 \
+	        GTEST_SHARD_INDEX=0 \
+		GTEST_TOTAL_SHARDS=1 \
+	        GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
+		make -C test/gtest test
+	(cd test/gtest && rename .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]]
 	then
@@ -618,6 +642,7 @@ do_distributed_task 0 4 build_docs
 do_distributed_task 0 4 build_disable_numa
 do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
+do_distributed_task 3 4 check_inst_headers
 
 if [ -n "$JENKINS_RUN_TESTS" ]
 then

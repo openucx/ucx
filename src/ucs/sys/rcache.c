@@ -8,9 +8,11 @@
 
 #include <ucs/arch/atomic.h>
 #include <ucs/type/class.h>
+#include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/profile.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
 
@@ -542,8 +544,7 @@ void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 }
 
 static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
-                           const char *name
-                           UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
+                           const char *name, ucs_stats_node_t *stats_parent)
 {
     ucs_status_t status;
     int ret;
@@ -637,6 +638,6 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
 
 UCS_CLASS_DEFINE(ucs_rcache_t, void);
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucs_rcache_create, ucs_rcache_t, ucs_rcache_t,
-                                const ucs_rcache_params_t*, const char *
-                                UCS_STATS_ARG(ucs_stats_node_t*))
+                                const ucs_rcache_params_t*, const char *,
+                                ucs_stats_node_t*)
 UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(ucs_rcache_destroy, ucs_rcache_t, ucs_rcache_t)

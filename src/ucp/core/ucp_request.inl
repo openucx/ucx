@@ -270,10 +270,6 @@ ucp_request_send_state_reset(ucp_request_t *req,
     default:
         ucs_fatal("unknown protocol");
     }
-
-    /* offset is not used for RMA */
-    ucs_assert((proto == UCP_REQUEST_SEND_PROTO_RMA) ||
-               (req->send.state.dt.offset <= req->send.length));
 }
 
 /**

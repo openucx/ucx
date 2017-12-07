@@ -9,8 +9,10 @@
 #define UCS_CALLBACKQ_H
 
 #include <ucs/datastruct/list_types.h>
-#include <stdint.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/type/status.h>
+#include <stddef.h>
+#include <stdint.h>
 
 BEGIN_C_DECLS
 

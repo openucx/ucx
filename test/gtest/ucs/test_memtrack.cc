@@ -16,6 +16,8 @@ extern "C" {
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <limits>
+
 
 #if ENABLE_MEMTRACK
 
@@ -144,7 +146,8 @@ UCS_TEST_F(test_memtrack, sysv) {
 
     size = ALLOC_SIZE;
 
-    status = ucs_sysv_alloc(&size, &ptr, 0, &shmid, ALLOC_NAME);
+    status = ucs_sysv_alloc(&size, std::numeric_limits<size_t>::max(), &ptr, 0,
+                            &shmid, ALLOC_NAME);
     ASSERT_UCS_OK(status);
     ASSERT_NE((void *)NULL, ptr);
 

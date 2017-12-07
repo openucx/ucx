@@ -1228,8 +1228,8 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = md;
         rcache_params.ops                = &uct_ib_rcache_ops;
-        status = ucs_rcache_create(&rcache_params, uct_ib_device_name(&md->dev)
-                                   UCS_STATS_ARG(md->stats), &md->rcache);
+        status = ucs_rcache_create(&rcache_params, uct_ib_device_name(&md->dev),
+                                   UCS_STATS_RVAL(md->stats), &md->rcache);
         if (status == UCS_OK) {
             md->super.ops         = &uct_ib_md_rcache_ops;
             md->reg_cost.overhead = md_config->rcache.overhead;

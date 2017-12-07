@@ -46,8 +46,8 @@ uct_sysv_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 
     if (hugetlb != UCS_NO) {
-        status = ucs_sysv_alloc(length_p, address_p, flags | SHM_HUGETLB, &shmid
-                                UCS_MEMTRACK_VAL);
+        status = ucs_sysv_alloc(length_p, (*length_p) * 2, address_p,
+                                flags | SHM_HUGETLB, &shmid UCS_MEMTRACK_VAL);
         if (status == UCS_OK) {
             goto out_ok;
         }
@@ -56,7 +56,8 @@ uct_sysv_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 
     if (hugetlb != UCS_YES) {
-        status = ucs_sysv_alloc(length_p, address_p, flags , &shmid UCS_MEMTRACK_VAL);
+        status = ucs_sysv_alloc(length_p, SIZE_MAX, address_p, flags , &shmid
+                                UCS_MEMTRACK_VAL);
         if (status == UCS_OK) {
             goto out_ok;
         }

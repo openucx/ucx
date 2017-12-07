@@ -6,6 +6,8 @@
 
 #include "ud_iface_common.h"
 
+#include <ucs/sys/compiler.h>
+
 
 ucs_config_field_t uct_ud_iface_common_config_table[] = {
   {"RX_QUEUE_LEN_INIT", "128",

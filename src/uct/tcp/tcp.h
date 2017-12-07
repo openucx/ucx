@@ -56,10 +56,12 @@ typedef struct uct_tcp_iface {
         struct sockaddr_in        netmask;        /* Network address mask */
         size_t                    buf_size;       /* Maximal bcopy size */
         int                       prefer_default; /* prefer default gateway */
+        unsigned                  max_poll;       /* number of events to poll per socket*/
     } config;
 
     struct {
         int                       nodelay;        /* TCP_NODELAY */
+        int                       sndbuf;         /* SO_SNDBUF */
     } sockopt;
 } uct_tcp_iface_t;
 
@@ -71,7 +73,9 @@ typedef struct uct_tcp_iface_config {
     uct_iface_config_t            super;
     int                           prefer_default;
     unsigned                      backlog;
+    unsigned                      max_poll;
     int                           sockopt_nodelay;
+    size_t                        sockopt_sndbuf;
 } uct_tcp_iface_config_t;
 
 

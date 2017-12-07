@@ -9,6 +9,7 @@
 
 #include <ucs/config/types.h>
 #include <ucs/time/time_def.h>
+#include <ucs/type/status.h>
 
 BEGIN_C_DECLS
 

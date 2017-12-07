@@ -14,6 +14,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucs/sys/math.h>
 
 #define UCT_IB_MAX_IOV         8UL
 
