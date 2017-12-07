@@ -247,19 +247,19 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nb, (ep, flags, cb),
 
 static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
 {
+    ucp_worker_iface_t *wiface, *tmp;
     ucs_status_t status;
-    unsigned rsc_index;
 
     if (worker->wireup_pend_count > 0) {
         return UCS_INPROGRESS;
     }
 
-    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
-        if (worker->ifaces[rsc_index].iface == NULL) {
+    ucs_list_for_each_safe(wiface, tmp, &worker->ifaces, wiface_list) {
+        if (wiface->iface == NULL) {
             continue;
         }
 
-        status = uct_iface_flush(worker->ifaces[rsc_index].iface, 0, NULL);
+        status = uct_iface_flush(wiface->iface, 0, NULL);
         if (status != UCS_OK) {
             return status;
         }

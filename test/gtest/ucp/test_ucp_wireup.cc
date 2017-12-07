@@ -262,7 +262,7 @@ UCS_TEST_P(test_ucp_wireup, address) {
     ASSERT_GT(size, 0ul);
     EXPECT_LE(size, 2048ul); /* Expect a reasonable address size */
     for (tl = 0; tl < sender().worker()->context->num_tls; tl++) {
-        packed_dev_priorities.insert(sender().worker()->ifaces[tl].attr.priority);
+        packed_dev_priorities.insert(sender().worker()->dev_ifaces[tl]->attr.priority);
     }
 
     char name[UCP_WORKER_NAME_MAX];

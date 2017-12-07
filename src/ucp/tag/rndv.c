@@ -354,8 +354,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_get_zcopy, (self),
     }
 
     rsc_index = ucp_ep_get_rsc_index(rndv_req->send.ep, rndv_req->send.lane);
-    align     = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.opt_zcopy_align;
-    ucp_mtu   = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.align_mtu;
+    align     = rndv_req->send.ep->worker->dev_ifaces[rsc_index]->attr.cap.get.opt_zcopy_align;
+    ucp_mtu   = rndv_req->send.ep->worker->dev_ifaces[rsc_index]->attr.cap.get.align_mtu;
 
     ucs_trace_data("ep: %p try to progress get_zcopy for rndv get. rndv_req: %p. lane: %d",
                    ep, rndv_req, rndv_req->send.lane);
@@ -735,8 +735,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_put_zcopy, (self),
     }
 
     rsc_index = ucp_ep_get_rsc_index(rndv_req->send.ep, rndv_req->send.lane);
-    align     = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.put.opt_zcopy_align;
-    ucp_mtu   = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.put.align_mtu;
+    align     = rndv_req->send.ep->worker->dev_ifaces[rsc_index]->attr.cap.put.opt_zcopy_align;
+    ucp_mtu   = rndv_req->send.ep->worker->dev_ifaces[rsc_index]->attr.cap.put.align_mtu;
 
     ucs_trace_data("ep: %p try to progress put_zcopy for rndv get. rndv_req: %p. lane: %d",
                    rndv_req->send.ep, rndv_req, rndv_req->send.lane);

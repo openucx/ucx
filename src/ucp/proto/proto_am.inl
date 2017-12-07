@@ -278,7 +278,7 @@ ucp_proto_get_zcopy_threshold(const ucp_request_t *req,
             zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(count,
                                &ucp_ep_md_attr(req->send.ep, lane)->reg_cost,
                                worker->context,
-                               worker->ifaces[rsc_index].attr.bandwidth);
+                               worker->dev_ifaces[rsc_index]->attr.bandwidth);
         }
         return ucs_min(max_zcopy, zcopy_thresh);
     } else if (UCP_DT_IS_GENERIC(req->send.datatype)) {

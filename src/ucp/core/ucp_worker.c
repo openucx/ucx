@@ -166,7 +166,7 @@ static void ucp_worker_remove_am_handlers(ucp_worker_h worker)
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
         for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
             if (context->config.features & ucp_am_handlers[am_id].features) {
-                (void)uct_iface_set_am_handler(worker->ifaces[tl_id].iface,
+                (void)uct_iface_set_am_handler(worker->dev_ifaces[tl_id]->iface,
                                                am_id, ucp_stub_am_handler,
                                                worker, UCT_CB_FLAG_ASYNC);
             }
@@ -614,15 +614,15 @@ void ucp_worker_iface_event(int fd, void *arg)
 
 static void ucp_worker_close_ifaces(ucp_worker_h worker)
 {
-    ucp_rsc_index_t rsc_index;
-    ucp_worker_iface_t *wiface;
+    ucp_worker_iface_t *wiface, *tmp;
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
-        wiface = &worker->ifaces[rsc_index];
+    ucs_list_for_each_safe(wiface, tmp, &worker->ifaces, wiface_list) {
         if (wiface->iface == NULL) {
+            ucs_list_del(&wiface->wiface_list);
+            ucs_free(wiface);
             continue;
         }
 
@@ -642,12 +642,14 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
             }
         }
 
-        if (ucp_worker_is_tl_tag_offload(worker, rsc_index)) {
+        if (ucp_worker_is_tl_tag_offload(wiface)) {
             ucs_queue_remove(&worker->context->tm.offload.ifaces, &wiface->queue);
             ucp_context_tag_offload_enable(worker->context);
         }
 
         uct_iface_close(wiface->iface);
+        ucs_list_del(&wiface->wiface_list);
+        ucs_free(wiface);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -660,10 +662,13 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 {
     ucp_context_h context            = worker->context;
     ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
-    ucp_worker_iface_t *wiface       = &worker->ifaces[tl_id];
+    ucp_worker_iface_t *wiface       = ucs_calloc(1, sizeof(ucp_worker_iface_t),
+                                                  "ucp iface");
     uct_iface_config_t *iface_config;
     uct_iface_params_t iface_params;
     ucs_status_t status;
+
+    worker->dev_ifaces[tl_id] = wiface;
 
     wiface->worker           = worker;
     wiface->rsc_index        = tl_id;
@@ -679,7 +684,7 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                       resource->tl_rsc.tl_name, NULL, NULL,
                                       &iface_config);
     if (status != UCS_OK) {
-        goto out;
+        goto out_free_wiface;
     }
 
     memset(&iface_params, 0, sizeof(iface_params));
@@ -701,7 +706,7 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     uct_config_release(iface_config);
 
     if (status != UCS_OK) {
-        goto out;
+        goto out_free_wiface;
     }
 
     ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
@@ -711,7 +716,7 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     VALGRIND_MAKE_MEM_UNDEFINED(&wiface->attr, sizeof(wiface->attr));
     status = uct_iface_query(wiface->iface, &wiface->attr);
     if (status != UCS_OK) {
-        goto out;
+        goto out_free_wiface;
     }
 
     /* Set wake-up handlers */
@@ -751,17 +756,19 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         }
     }
 
-    if (ucp_worker_is_tl_tag_offload(worker, tl_id)) {
-        worker->ifaces[tl_id].rsc_index = tl_id;
+    if (ucp_worker_is_tl_tag_offload(wiface)) {
+        worker->dev_ifaces[tl_id]->rsc_index = tl_id;
         ucs_queue_push(&context->tm.offload.ifaces, &wiface->queue);
         ucp_context_tag_offload_enable(context);
     }
 
+    ucs_list_add_tail(&worker->ifaces, &wiface->wiface_list);
     return UCS_OK;
 
 out_close_iface:
     uct_iface_close(wiface->iface);
-out:
+out_free_wiface:
+    ucs_free(wiface);
     /* coverity[leaked_storage] */
     return status;
 }
@@ -783,7 +790,7 @@ static void ucp_worker_init_cpu_atomics(ucp_worker_h worker)
 
     /* Enable all interfaces which have host-based atomics */
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-        if (worker->ifaces[rsc_index].attr.cap.flags & UCT_IFACE_FLAG_ATOMIC_CPU) {
+        if (worker->dev_ifaces[rsc_index]->attr.cap.flags & UCT_IFACE_FLAG_ATOMIC_CPU) {
             ucp_worker_enable_atomic_tl(worker, "cpu", rsc_index);
         }
     }
@@ -822,7 +829,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
         rsc        = &context->tl_rscs[rsc_index];
         md_index   = rsc->md_index;
         md_attr    = &context->tl_mds[md_index].attr;
-        iface_attr = &worker->ifaces[rsc_index].attr;
+        iface_attr = &worker->dev_ifaces[rsc_index]->attr;
 
         if (!(md_attr->cap.flags & UCT_MD_FLAG_REG) ||
             !ucs_test_all_flags(iface_attr->cap.flags, iface_cap_flags))
@@ -869,13 +876,13 @@ static void ucp_worker_init_guess_atomics(ucp_worker_h worker)
     uint64_t accumulated_flags = 0;
 
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-        accumulated_flags |= worker->ifaces[rsc_index].attr.cap.flags;
+        accumulated_flags |= worker->dev_ifaces[rsc_index]->attr.cap.flags;
     }
 
     if (accumulated_flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
-	ucp_worker_init_device_atomics(worker);
+        ucp_worker_init_device_atomics(worker);
     } else {
-	ucp_worker_init_cpu_atomics(worker);
+        ucp_worker_init_cpu_atomics(worker);
     }
 }
 
@@ -913,7 +920,7 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker,
     ucs_status_t     status;
 
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
-        if_attr = &worker->ifaces[tl_id].attr;
+        if_attr = &worker->dev_ifaces[tl_id]->attr;
         max_mp_entry_size = ucs_max(max_mp_entry_size,
                                     if_attr->cap.am.max_short);
         max_mp_entry_size = ucs_max(max_mp_entry_size,
@@ -1060,9 +1067,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     kh_init_inplace(ucp_worker_ep_hash, &worker->ep_hash);
     kh_init_inplace(ucp_ep_errh_hash,   &worker->ep_errh_hash);
 
-    worker->ifaces = ucs_calloc(context->num_tls, sizeof(ucp_worker_iface_t),
-                                "ucp iface");
-    if (worker->ifaces == NULL) {
+    ucs_list_head_init(&worker->ifaces);
+    /* The ifaces array will hold pointers to the device ifaces that will be
+     * stored in the linked list of all the iface */
+    worker->dev_ifaces = ucs_calloc(context->num_tls, sizeof(ucp_worker_iface_t*),
+                                    "ucp dev iface");
+    if (worker->dev_ifaces == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free;
     }
@@ -1159,7 +1169,7 @@ err_free_tm_offload_stats:
 err_free_stats:
     UCS_STATS_NODE_FREE(worker->stats);
 err_free_ifaces:
-    ucs_free(worker->ifaces);
+    ucs_free(worker->dev_ifaces);
 err_free:
     UCP_THREAD_LOCK_FINALIZE(&worker->mt_lock);
     ucs_free(worker);
@@ -1188,7 +1198,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_mpool_cleanup(&worker->req_mp, 1);
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
-    ucs_free(worker->ifaces);
+    ucs_free(worker->dev_ifaces);
     kh_destroy_inplace(ucp_worker_ep_hash, &worker->ep_hash);
     kh_destroy_inplace(ucp_ep_errh_hash, &worker->ep_errh_hash);
     UCP_THREAD_LOCK_FINALIZE(&worker->mt_lock);
@@ -1346,7 +1356,7 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
     }
 
     if (worker->flags & UCP_WORKER_FLAG_EXTERNAL_EVENT_FD) {
-        pfd = ucs_alloca(sizeof(*pfd) * worker->context->num_tls);
+        pfd = ucs_alloca(sizeof(*pfd) * ucs_list_length(&worker->ifaces));
         nfds = 0;
         ucs_list_for_each(wiface, &worker->arm_ifaces, arm_list) {
             pfd[nfds].fd     = wiface->event_fd;

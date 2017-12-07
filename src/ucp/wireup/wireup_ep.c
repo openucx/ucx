@@ -247,14 +247,14 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
     aux_addr = &address_list[aux_addr_index];
 
     /* create auxiliary endpoint connected to the remote iface. */
-    status = uct_ep_create_connected(worker->ifaces[rsc_index].iface,
+    status = uct_ep_create_connected(worker->dev_ifaces[rsc_index]->iface,
                                      aux_addr->dev_addr, aux_addr->iface_addr,
                                      &wireup_ep->aux_ep);
     if (status != UCS_OK) {
         return status;
     }
 
-    ucp_worker_iface_progress_ep(&worker->ifaces[rsc_index]);
+    ucp_worker_iface_progress_ep(worker->dev_ifaces[rsc_index]);
 
     ucs_debug("ep %p: wireup_ep %p created aux_ep %p to %s using "
               UCT_TL_RESOURCE_DESC_FMT, ucp_ep, wireup_ep, wireup_ep->aux_ep,
@@ -335,7 +335,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
 
     uct_worker_progress_unregister_safe(worker->uct, &self->progress_id);
     if (self->aux_ep != NULL) {
-        ucp_worker_iface_unprogress_ep(&worker->ifaces[self->aux_rsc_index]);
+        ucp_worker_iface_unprogress_ep(worker->dev_ifaces[self->aux_rsc_index]);
         uct_ep_destroy(self->aux_ep);
     }
 }
@@ -367,7 +367,7 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *param
 
     ucs_assert(ucp_wireup_ep_test(uct_ep));
 
-    status = uct_ep_create(worker->ifaces[rsc_index].iface, &next_ep);
+    status = uct_ep_create(worker->dev_ifaces[rsc_index]->iface, &next_ep);
     if (status != UCS_OK) {
         goto err;
     }
