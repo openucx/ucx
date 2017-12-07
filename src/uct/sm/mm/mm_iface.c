@@ -115,24 +115,24 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->device_addr_len         = UCT_SM_IFACE_DEVICE_ADDR_LEN;
     iface_attr->ep_addr_len             = 0;
     iface_attr->max_conn_priv           = 0;
-    iface_attr->cap.flags               = UCT_IFACE_FLAG_PUT_SHORT        |
-                                          UCT_IFACE_FLAG_PUT_BCOPY        |
-                                          UCT_IFACE_FLAG_ATOMIC_ADD32     |
-                                          UCT_IFACE_FLAG_ATOMIC_ADD64     |
-                                          UCT_IFACE_FLAG_ATOMIC_FADD64    |
-                                          UCT_IFACE_FLAG_ATOMIC_FADD32    |
-                                          UCT_IFACE_FLAG_ATOMIC_SWAP64    |
-                                          UCT_IFACE_FLAG_ATOMIC_SWAP32    |
-                                          UCT_IFACE_FLAG_ATOMIC_CSWAP64   |
-                                          UCT_IFACE_FLAG_ATOMIC_CSWAP32   |
-                                          UCT_IFACE_FLAG_ATOMIC_CPU       |
-                                          UCT_IFACE_FLAG_GET_BCOPY        |
-                                          UCT_IFACE_FLAG_AM_SHORT         |
-                                          UCT_IFACE_FLAG_AM_BCOPY         |
-                                          UCT_IFACE_FLAG_PENDING          |
-                                          UCT_IFACE_FLAG_CB_SYNC          |
-                                          UCT_IFACE_FLAG_EVENT_SEND_COMP  |
-                                          UCT_IFACE_FLAG_EVENT_RECV_SIG_AM|
+    iface_attr->cap.flags               = UCT_IFACE_FLAG_PUT_SHORT           |
+                                          UCT_IFACE_FLAG_PUT_BCOPY           |
+                                          UCT_IFACE_FLAG_ATOMIC_ADD32        |
+                                          UCT_IFACE_FLAG_ATOMIC_ADD64        |
+                                          UCT_IFACE_FLAG_ATOMIC_FADD64       |
+                                          UCT_IFACE_FLAG_ATOMIC_FADD32       |
+                                          UCT_IFACE_FLAG_ATOMIC_SWAP64       |
+                                          UCT_IFACE_FLAG_ATOMIC_SWAP32       |
+                                          UCT_IFACE_FLAG_ATOMIC_CSWAP64      |
+                                          UCT_IFACE_FLAG_ATOMIC_CSWAP32      |
+                                          UCT_IFACE_FLAG_ATOMIC_CPU          |
+                                          UCT_IFACE_FLAG_GET_BCOPY           |
+                                          UCT_IFACE_FLAG_AM_SHORT            |
+                                          UCT_IFACE_FLAG_AM_BCOPY            |
+                                          UCT_IFACE_FLAG_PENDING             |
+                                          UCT_IFACE_FLAG_CB_SYNC             |
+                                          UCT_IFACE_FLAG_EVENT_SEND_COMP     |
+                                          UCT_IFACE_FLAG_EVENT_RECV_SIG      |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
     iface_attr->latency.overhead        = 80e-9; /* 80 ns */

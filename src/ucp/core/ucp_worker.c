@@ -251,7 +251,7 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
     }
 
     if (events & (UCP_WAKEUP_TAG_RECV | UCP_WAKEUP_RX)) {
-        worker->uct_events |= UCT_EVENT_RECV_AM;
+        worker->uct_events |= UCT_EVENT_RECV;
     }
 
     if (events & (UCP_WAKEUP_RMA | UCP_WAKEUP_AMO | UCP_WAKEUP_TX)) {

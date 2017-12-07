@@ -40,7 +40,7 @@ ucp_signaling_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
 
     packed_size = uct_ep_am_bcopy(proxy_ep->uct_ep, id,
                                   ucp_signaling_ep_pack_short, &ctx,
-                                  UCT_AM_FLAG_SIGNALED);
+                                  UCT_SEND_FLAG_SIGNALED);
     if (packed_size < 0) {
         return (ucs_status_t)packed_size;
     }
@@ -57,7 +57,7 @@ ucp_signaling_ep_am_bcopy(uct_ep_h ep, uint8_t id, uct_pack_callback_t pack_cb,
     ssize_t packed_size;
 
     packed_size = uct_ep_am_bcopy(proxy_ep->uct_ep, id, pack_cb, arg,
-                                  flags | UCT_AM_FLAG_SIGNALED);
+                                  flags | UCT_SEND_FLAG_SIGNALED);
     if (packed_size >= 0) {
         ucp_proxy_ep_replace(proxy_ep);
     }
@@ -73,7 +73,7 @@ ucp_signaling_ep_am_zcopy(uct_ep_h ep, uint8_t id, const void *header,
     ucs_status_t status;
 
     status = uct_ep_am_zcopy(proxy_ep->uct_ep, id, header, header_length, iov,
-                             iovcnt, flags | UCT_AM_FLAG_SIGNALED, comp);
+                             iovcnt, flags | UCT_SEND_FLAG_SIGNALED, comp);
     if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
         ucp_proxy_ep_replace(proxy_ep);
     }

@@ -338,7 +338,7 @@ ucp_do_tag_offload_bcopy(uct_pending_req_t *self, uint64_t imm_data,
     req->send.lane = ucp_ep_get_tag_lane(ep);
     packed_len     = uct_ep_tag_eager_bcopy(ep->uct_eps[req->send.lane],
                                             req->send.tag, imm_data,
-                                            pack_cb, req);
+                                            pack_cb, req, 0);
     if (packed_len < 0) {
         return packed_len;
     }
@@ -363,7 +363,7 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
                         req->send.datatype, req->send.length);
 
     status = uct_ep_tag_eager_zcopy(ep->uct_eps[req->send.lane], req->send.tag,
-                                    imm_data, iov, iovcnt,
+                                    imm_data, iov, iovcnt, 0,
                                     &req->send.state.uct_comp);
     if (status == UCS_OK) {
         complete(req, UCS_OK);
@@ -413,7 +413,7 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     packed_len = ucp_tag_rndv_rts_pack(rndv_rts_hdr, req);
     ucs_assert((rndv_rts_hdr->address != 0) || !UCP_DT_IS_CONTIG(req->send.datatype));
     return uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane], req->send.tag,
-                                   rndv_rts_hdr, packed_len);
+                                   rndv_rts_hdr, packed_len, 0);
 }
 
 static void ucp_tag_rndv_zcopy_completion(uct_completion_t *self,
@@ -446,7 +446,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
                         req->send.datatype, req->send.length);
 
     rndv_op = uct_ep_tag_rndv_zcopy(ep->uct_eps[req->send.lane], req->send.tag,
-                                    &rndv_hdr, sizeof(rndv_hdr), iov, iovcnt,
+                                    &rndv_hdr, sizeof(rndv_hdr), iov, iovcnt, 0,
                                     &req->send.state.uct_comp);
     if (UCS_PTR_IS_ERR(rndv_op)) {
         return UCS_PTR_STATUS(rndv_op);

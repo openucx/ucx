@@ -65,8 +65,8 @@ static const char *ucp_wireup_iface_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_CB_SYNC)]          = "sync callback",
     [ucs_ilog2(UCT_IFACE_FLAG_CB_ASYNC)]         = "async callback",
     [ucs_ilog2(UCT_IFACE_FLAG_EVENT_SEND_COMP)]  = "send completion event",
-    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV_AM)]    = "active message event",
-    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV_SIG_AM)]= "signaled message event",
+    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV)]       = "tag or active message event",
+    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV_SIG)]   = "signaled message event",
     [ucs_ilog2(UCT_IFACE_FLAG_PENDING)]          = "pending",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_SHORT)]  = "tag eager short",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_BCOPY)]  = "tag eager bcopy",
@@ -756,7 +756,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
     remote_cap_flags = address_list[addr_index].iface_attr.cap_flags;
     is_proxy = !ucp_worker_is_tl_p2p(ep->worker, rsc_index) &&
                ((remote_cap_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS) ==
-                    UCT_IFACE_FLAG_EVENT_RECV_SIG_AM);
+                UCT_IFACE_FLAG_EVENT_RECV_SIG);
 
     usage = UCP_WIREUP_LANE_USAGE_AM |
             ucp_wireup_tag_lane_usage(ep, address_list, addr_index,

@@ -82,14 +82,14 @@ void test_uct_event_fd::test_recv_am(bool signaled)
 
     initialize();
     if (signaled) {
-        check_caps(UCT_IFACE_FLAG_EVENT_RECV_SIG_AM | UCT_IFACE_FLAG_CB_SYNC |
+        check_caps(UCT_IFACE_FLAG_EVENT_RECV_SIG | UCT_IFACE_FLAG_CB_SYNC |
                    UCT_IFACE_FLAG_AM_BCOPY);
-        arm_flags  = UCT_EVENT_RECV_SIG_AM;
-        send_flags = UCT_AM_FLAG_SIGNALED;
+        arm_flags  = UCT_EVENT_RECV_SIG;
+        send_flags = UCT_SEND_FLAG_SIGNALED;
     } else {
-        check_caps(UCT_IFACE_FLAG_EVENT_RECV_AM | UCT_IFACE_FLAG_CB_SYNC |
+        check_caps(UCT_IFACE_FLAG_EVENT_RECV | UCT_IFACE_FLAG_CB_SYNC |
                    UCT_IFACE_FLAG_AM_BCOPY);
-        arm_flags  = UCT_EVENT_RECV_AM;
+        arm_flags  = UCT_EVENT_RECV;
         send_flags = 0;
     }
 
