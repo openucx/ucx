@@ -14,6 +14,7 @@
 
 #include <ucp/api/ucp.h>
 #include <uct/api/uct.h>
+#include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/type/component.h>
 #include <ucs/type/spinlock.h>
@@ -124,6 +125,8 @@ typedef struct ucp_context {
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/
+
+    ucs_mpool_t                   rkey_mp;    /* Pool for memory keys */
 
     struct {
 

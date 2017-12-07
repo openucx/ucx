@@ -14,9 +14,9 @@
  */
 #include <ucs/datastruct/pgtable.h>
 #include <ucs/datastruct/list.h>
-#include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/mpool.h>
-#include <ucs/stats/stats.h>
+#include <ucs/stats/stats_fwd.h>
 #include <sys/mman.h>
 
 
@@ -143,9 +143,8 @@ struct ucs_rcache {
  * @param [in]  stats_parent  Pointer to statistics parent node.
  * @param [out] rcache_p      Filled with a pointer to the registration cache.
  */
-ucs_status_t ucs_rcache_create(const ucs_rcache_params_t *params, const char *name
-                               UCS_STATS_ARG(ucs_stats_node_t *stats_parent),
-                               ucs_rcache_t **rcache_p);
+ucs_status_t ucs_rcache_create(const ucs_rcache_params_t *params, const char *name,
+                               ucs_stats_node_t *stats_parent, ucs_rcache_t **rcache_p);
 
 
 /**

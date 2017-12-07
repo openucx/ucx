@@ -20,6 +20,33 @@ libucs_la_LIBADD   = \
 nobase_dist_libucs_la_HEADERS = \
 	algorithm/crc.h \
 	algorithm/qsort_r.h \
+	async/async_fwd.h \
+	config/global_opts.h \
+	config/parser.h \
+	config/types.h \
+	datastruct/arbiter.h \
+	datastruct/callbackq.h \
+	datastruct/list_types.h \
+	datastruct/list.h \
+	datastruct/mpool.h \
+	datastruct/pgtable.h \
+	datastruct/queue_types.h \
+	stats/stats_fwd.h \
+	stats/libstats.h \
+	sys/compiler_def.h\
+	sys/math.h \
+	sys/preprocessor.h \
+	sys/rcache.h \
+	sys/string.h \
+	time/time_def.h \
+	type/class.h \
+	type/component.h \
+	type/spinlock.h \
+	type/status.h \
+	type/thread_mode.h \
+	type/cpu_set.h
+
+noinst_HEADERS = \
 	arch/aarch64/bitops.h \
 	arch/aarch64/cpu.h \
 	arch/generic/atomic.h \
@@ -32,50 +59,22 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/atomic.h \
 	arch/bitops.h \
 	arch/cpu.h \
-	async/async_fwd.h \
-	config/global_opts.h \
-	config/parser.h \
-	config/types.h \
-	datastruct/callbackq.h \
-	datastruct/list_types.h \
-	datastruct/mpool.h \
+	datastruct/frag_list.h \
+	datastruct/mpmc.h \
+	datastruct/mpool.inl \
+	datastruct/ptr_array.h \
+	datastruct/queue.h \
+	datastruct/sglib.h \
+	datastruct/sglib_wrapper.h \
+	datastruct/khash.h \
 	debug/check.h \
 	debug/debug.h \
 	debug/log.h \
 	debug/memtrack.h \
 	debug/profile.h \
-	stats/stats_fwd.h \
-	stats/libstats.h \
 	stats/stats.h \
-	sys/compiler_def.h\
-	sys/string.h \
-	time/time_def.h \
-	type/class.h \
-	type/component.h \
-	type/spinlock.h \
-	type/status.h \
-	type/thread_mode.h \
-	type/cpu_set.h
-
-noinst_HEADERS = \
-	datastruct/arbiter.h \
-	datastruct/frag_list.h \
-	datastruct/hash.h \
-	datastruct/list.h \
-	datastruct/mpmc.h \
-	datastruct/mpool.inl \
-	datastruct/pgtable.h \
-	datastruct/ptr_array.h \
-	datastruct/queue_types.h \
-	datastruct/queue.h \
-	datastruct/sglib.h \
-	datastruct/sglib_wrapper.h \
-	datastruct/khash.h \
 	sys/checker.h \
 	sys/compiler.h \
-	sys/math.h \
-	sys/preprocessor.h \
-	sys/rcache.h \
 	sys/sys.h \
 	time/time.h \
 	time/timerq.h \

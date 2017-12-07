@@ -7,6 +7,7 @@
 #include <common/test.h>
 extern "C" {
 #include <ucs/arch/atomic.h>
+#include <ucs/sys/math.h>
 #include <ucs/sys/rcache.h>
 #include <ucs/sys/sys.h>
 }
@@ -39,7 +40,7 @@ protected:
             reinterpret_cast<void*>(this)
         };
         UCS_TEST_CREATE_HANDLE(ucs_rcache_t*, m_rcache, ucs_rcache_destroy,
-                               ucs_rcache_create, &params, "test" UCS_STATS_ARG(NULL));
+                               ucs_rcache_create, &params, "test", NULL);
     }
 
     virtual void cleanup() {

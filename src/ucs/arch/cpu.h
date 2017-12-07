@@ -8,6 +8,10 @@
 #ifndef UCS_ARCH_CPU_H
 #define UCS_ARCH_CPU_H
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/sys/compiler_def.h>
 
 

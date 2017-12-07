@@ -7,7 +7,7 @@
 #ifndef UCS_LIST_H_
 #define UCS_LIST_H_
 
-#include <ucs/sys/compiler.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/datastruct/list_types.h>
 
 

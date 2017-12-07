@@ -78,7 +78,7 @@ struct perftest_context {
     sock_rte_group_t             sock_rte_group;
 };
 
-#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oSCqM:T:d:x:A:B"
+#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oSCqMr:T:d:x:A:B"
 
 
 test_type_t tests[] = {
@@ -372,6 +372,9 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("     -B             Register memory with NONBLOCK flag.\n");
     printf("     -C             Use wildcard for tag tests.\n");
     printf("     -S             Use synchronous mode for tag sends.\n");
+    printf("     -r <mode>      Receive mode for stream tests. (recv)\n");
+    printf("                        recv       : Use ucp_stream_recv_nb.\n"); 
+    printf("                        recv_data  : Use ucp_stream_recv_data_nb.\n");
 #if HAVE_MPI
     printf("     -P <0|1>       Disable/enable MPI mode (%d)\n", ctx->mpi);
 #endif
@@ -461,7 +464,8 @@ static void init_test_params(ucx_perf_params_t *params)
     params->max_iter        = 1000000l;
     params->max_time        = 0.0;
     params->report_interval = 1.0;
-    params->flags           = UCX_PERF_TEST_FLAG_VERBOSE;
+    params->flags           = UCX_PERF_TEST_FLAG_VERBOSE |
+                              UCX_PERF_TEST_FLAG_STREAM_RECV;
     params->uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
     params->uct.data_layout = UCT_PERF_DATA_LAYOUT_SHORT;
     params->msg_size_cnt    = 1;
@@ -480,10 +484,6 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
 {
     test_type_t *test;
     char *optarg2 = NULL;
-
-    /* TODO: currently, UCP supports only ucp_stream_recv_data_nb path,
-     *       add option when ucp_stream_recv_nb is implemented */
-    params->flags |= UCX_PERF_TEST_FLAG_STREAM_RECV_DATA;
 
     switch (opt) {
     case 'd':
@@ -509,11 +509,11 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         }
         return UCS_OK;
     case 'D':
-        if (0 == strcmp(optarg, "short")) {
+        if (!strcmp(optarg, "short")) {
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_SHORT;
-        } else if (0 == strcmp(optarg, "bcopy")) {
+        } else if (!strcmp(optarg, "bcopy")) {
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_BCOPY;
-        } else if (0 == strcmp(optarg, "zcopy")) {
+        } else if (!strcmp(optarg, "zcopy")) {
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_ZCOPY;
         } else if (UCS_OK == parse_ucp_datatype_params(optarg,
                                                        &params->ucp.send_datatype)) {
@@ -565,13 +565,13 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         params->flags |= UCX_PERF_TEST_FLAG_TAG_SYNC;
         return UCS_OK;
     case 'M':
-        if (0 == strcmp(optarg, "single")) {
+        if (!strcmp(optarg, "single")) {
             params->thread_mode = UCS_THREAD_MODE_SINGLE;
             return UCS_OK;
-        } else if (0 == strcmp(optarg, "serialized")) {
+        } else if (!strcmp(optarg, "serialized")) {
             params->thread_mode = UCS_THREAD_MODE_SERIALIZED;
             return UCS_OK;
-        } else if (0 == strcmp(optarg, "multi")) {
+        } else if (!strcmp(optarg, "multi")) {
             params->thread_mode = UCS_THREAD_MODE_MULTI;
             return UCS_OK;
         } else {
@@ -583,16 +583,27 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         params->thread_mode = UCS_THREAD_MODE_MULTI;
         return UCS_OK;
     case 'A':
-        if (0 == strcmp(optarg, "thread")) {
+        if (!strcmp(optarg, "thread")) {
             params->async_mode = UCS_ASYNC_MODE_THREAD;
             return UCS_OK;
-        } else if (0 == strcmp(optarg, "signal")) {
+        } else if (!strcmp(optarg, "signal")) {
             params->async_mode = UCS_ASYNC_MODE_SIGNAL;
             return UCS_OK;
         } else {
             ucs_error("Invalid option argument for -A");
             return UCS_ERR_INVALID_PARAM;
         }
+    case 'r':
+        if (!strcmp(optarg, "recv_data")) {
+            params->flags &= ~UCX_PERF_TEST_FLAG_STREAM_RECV;
+            params->flags |= UCX_PERF_TEST_FLAG_STREAM_RECV_DATA;
+            return UCS_OK;
+        } else if (!strcmp(optarg, "recv")) {
+            params->flags &= ~UCX_PERF_TEST_FLAG_STREAM_RECV_DATA;
+            params->flags |= UCX_PERF_TEST_FLAG_STREAM_RECV;
+            return UCS_OK;
+        }
+        return UCS_ERR_INVALID_PARAM;
     default:
        return UCS_ERR_INVALID_PARAM;
     }

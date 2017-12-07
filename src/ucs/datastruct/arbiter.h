@@ -7,7 +7,7 @@
 #ifndef UCS_ARBITER_H_
 #define UCS_ARBITER_H_
 
-#include <ucs/sys/compiler.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
 #include <stdio.h>

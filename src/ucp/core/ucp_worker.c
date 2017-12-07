@@ -208,7 +208,7 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
         events = params->events;
     } else {
         events = UCP_WAKEUP_RMA | UCP_WAKEUP_AMO | UCP_WAKEUP_TAG_SEND |
-                 UCP_WAKEUP_TAG_RECV;
+                 UCP_WAKEUP_TAG_RECV | UCP_WAKEUP_TX | UCP_WAKEUP_RX;
     }
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_EVENT_FD) {
@@ -250,11 +250,11 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
         worker->uct_events |= UCT_EVENT_SEND_COMP;
     }
 
-    if (events & UCP_WAKEUP_TAG_RECV) {
+    if (events & (UCP_WAKEUP_TAG_RECV | UCP_WAKEUP_RX)) {
         worker->uct_events |= UCT_EVENT_RECV_AM;
     }
 
-    if (events & (UCP_WAKEUP_RMA | UCP_WAKEUP_AMO)) {
+    if (events & (UCP_WAKEUP_RMA | UCP_WAKEUP_AMO | UCP_WAKEUP_TX)) {
         worker->uct_events |= UCT_EVENT_SEND_COMP;
     }
 

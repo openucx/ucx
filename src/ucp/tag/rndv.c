@@ -90,7 +90,7 @@ static size_t ucp_tag_rndv_pack_recv_rkey(ucp_request_t *rreq, ucp_ep_h ep,
     return 0;
 }
 
-static size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
+size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
 {
     ucp_request_t *sreq = arg;   /* the sender's request */
     ucp_rndv_rts_hdr_t *rndv_rts_hdr = dest;
@@ -468,9 +468,6 @@ static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *
             rndv_req->send.lane = ucp_ep_get_rndv_get_lane(rndv_req->send.ep, 0);
         }
 
-        ucp_request_send_state_reset(rndv_req, ucp_rndv_get_completion,
-                                     UCP_REQUEST_SEND_PROTO_RNDV_GET);
-
         /* rndv_req is the request that would perform the get operation */
         rndv_req->send.uct.func                = ucp_proto_progress_rndv_get_zcopy;
         rndv_req->send.buffer                  = rreq->recv.buffer;
@@ -480,6 +477,9 @@ static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *
         rndv_req->send.rndv_get.remote_request = rndv_rts_hdr->sreq.reqptr;
         rndv_req->send.rndv_get.remote_address = rndv_rts_hdr->address;
         rndv_req->send.rndv_get.rreq           = rreq;
+
+        ucp_request_send_state_reset(rndv_req, ucp_rndv_get_completion,
+                                     UCP_REQUEST_SEND_PROTO_RNDV_GET);
     }
     ucp_request_send(rndv_req);
 }

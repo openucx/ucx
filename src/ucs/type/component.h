@@ -11,6 +11,7 @@
 #include <ucs/sys/preprocessor.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
+#include <stddef.h>
 
 BEGIN_C_DECLS
 
