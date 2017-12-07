@@ -14,9 +14,9 @@ struct uct_rdmacm_ep {
     uct_sockaddr_conn_reply_callback_t conn_reply_cb;
     void                               *conn_reply_arg;
     ucs_list_link_t                    list_elem;
-    int                                is_on_pending;
     struct sockaddr                    *remote_addr;
     uint32_t                           cb_flags;
+    int                                is_on_pending;
 };
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t, uct_iface_t*,

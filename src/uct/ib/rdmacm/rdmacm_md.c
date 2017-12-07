@@ -74,11 +74,11 @@ static int uct_rdmacm_is_addr_route_resolved(struct rdma_cm_id *cm_id,
 {
     size_t ip_len = ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN);
     char *ip_str  = ucs_alloca(ip_len);
+    ucs_status_t status;
     int event_type;
 
-    if (rdma_resolve_addr(cm_id, NULL, addr, timeout_ms)) {
-        ucs_debug("rdma_resolve_addr(addr = %s) failed: %m",
-                  ucs_sockaddr_str(addr, ip_str, ip_len));
+    status = uct_rdmacm_resolve_addr(cm_id, addr, timeout_ms, UCS_LOG_LEVEL_DEBUG);
+    if (status != UCS_OK) {
         return 0;
     }
 

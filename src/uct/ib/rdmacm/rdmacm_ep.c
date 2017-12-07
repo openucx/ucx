@@ -61,14 +61,12 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
          * to proceed with the connection establishment.
          * This event will be retrieved from the event_channel by the async thread.
          * All endpoints share the interface's event_channel but can use it serially. */
-         if (rdma_resolve_addr(iface->cm_id, NULL, (struct sockaddr *)sockaddr->addr,
-                               UCS_MSEC_PER_SEC * iface->config.addr_resolve_timeout)) {
-             ucs_error("rdma_resolve_addr(addr=%s) failed: %m",
-                       ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
-                                        ip_str, ip_len));
-             status = UCS_ERR_IO_ERROR;
-             goto err_free_mem;
-         }
+        status = uct_rdmacm_resolve_addr(iface->cm_id, (struct sockaddr *)sockaddr->addr,
+                                         UCS_MSEC_PER_SEC * iface->config.addr_resolve_timeout,
+                                         UCS_LOG_LEVEL_ERROR);
+        if (status != UCS_OK) {
+            goto err_free_mem;
+        }
     } else {
         /* Add the ep to the pending queue */
         self->remote_addr = (struct sockaddr *)(sockaddr->addr);
