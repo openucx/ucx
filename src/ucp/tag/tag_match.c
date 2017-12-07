@@ -38,10 +38,12 @@ ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm)
         ucs_list_head_init(&tm->unexpected.hash[bucket]);
     }
 
-    ucs_queue_head_init(&tm->offload.ifaces);
     ucs_queue_head_init(&tm->offload.sync_reqs);
+    kh_init_inplace(ucp_tag_offload_hash, &tm->offload.tag_hash);
     tm->offload.thresh       = SIZE_MAX;
     tm->offload.zcopy_thresh = SIZE_MAX;
+    tm->offload.iface        = NULL;
+    tm->offload.num_ifaces   = 0;
     return UCS_OK;
 }
 
@@ -49,6 +51,7 @@ void ucp_tag_match_cleanup(ucp_tag_match_t *tm)
 {
     ucs_free(tm->unexpected.hash);
     ucs_free(tm->expected.hash);
+    kh_destroy_inplace(ucp_tag_offload_hash, &tm->offload.tag_hash);
 }
 
 int ucp_tag_unexp_is_empty(ucp_tag_match_t *tm)

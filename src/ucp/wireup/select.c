@@ -565,7 +565,6 @@ static int ucp_wireup_tag_lane_supported(ucp_ep_h ep,
 {
     return ((ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) &&
             (ep->worker->context->config.ext.tm_offload == tm_config_mode) &&
-            !ucs_queue_is_empty(&ep->worker->tm.offload.ifaces) &&
             /* TODO: remove check below when UCP_ERR_HANDLING_MODE_PEER supports
              *       RNDV-protocol or HW TM supports fragmented protocols
              */

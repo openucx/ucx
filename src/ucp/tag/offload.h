@@ -10,6 +10,7 @@
 #include <ucp/dt/dt_contig.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/proto/proto.h>
+#include <ucs/datastruct/queue.h>
 
 #define UCP_TAG_OFFLOAD_REQPTR_MDI_MASK (UCS_SYS_CACHE_LINE_SIZE - 1)
 
@@ -66,6 +67,10 @@ void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, int force)
 
 int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue);
 
+/* Returns 0 if tag offloading is disabled in the configuration,
+ * returns 1 otherwise */
+int ucp_tag_offload_iface_activate(ucp_worker_iface_t *wiface);
+
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_offload_try_post(ucp_worker_t *worker, ucp_request_t *req,
                          ucp_request_queue_t *req_queue)
@@ -89,5 +94,37 @@ ucp_tag_offload_try_cancel(ucp_worker_t *worker, ucp_request_t *req, int force)
         ucp_tag_offload_cancel(worker, req, force);
     }
 }
+
+/* For homogeneous clusters it is expected that tag offload messages will arrive
+ * from the single interface. Otherwise need to add a particular iface to tags
+ * hash, where key is a tag masked with tag_sender mask. */
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_offload_unexp(ucp_worker_iface_t *wiface, ucp_tag_t tag)
+{
+    ucp_worker_t *worker = wiface->worker;
+    ucp_tag_t tag_key;
+    khiter_t hash_it;
+    int ret;
+
+    ++wiface->proxy_recv_count;
+
+    if (ucs_unlikely(!(wiface->flags & UCP_WORKER_IFACE_FLAG_OFFLOAD_ACTIVATED))) {
+        if (!ucp_tag_offload_iface_activate(wiface)) {
+            return;
+        }
+    }
+
+    if (ucs_unlikely(worker->tm.offload.num_ifaces > 1)) {
+        tag_key = worker->context->config.tag_sender_mask & tag;
+        hash_it = kh_put(ucp_tag_offload_hash, &worker->tm.offload.tag_hash,
+                         tag_key, &ret);
+
+        /* khash returns 1 or 2 if key is not present and value can be set */
+        if (ret > 0) {
+            kh_value(&worker->tm.offload.tag_hash, hash_it) = wiface;
+        }
+    }
+}
+
 
 #endif

@@ -43,6 +43,7 @@ typedef struct ucp_address_iface_attr   ucp_address_iface_attr_t;
 typedef struct ucp_address_entry        ucp_address_entry_t;
 typedef struct ucp_wireup_ep            ucp_wireup_ep_t;
 typedef struct ucp_proto                ucp_proto_t;
+typedef struct ucp_worker_iface         ucp_worker_iface_t;
 
 
 /**
