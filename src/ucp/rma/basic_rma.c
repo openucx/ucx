@@ -42,25 +42,31 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
                         ucs_status_t status)
 {
-    if (ucs_likely((status == UCS_OK) || (status == UCS_INPROGRESS))) {
-        req->send.length -= frag_length;
-        if (req->send.length == 0) {
-            /* bcopy is the fast path */
-            if (ucs_likely(req->send.state.uct_comp.count == 0)) {
-                if (ucs_unlikely(req->send.state.dt.dt.contig[0].memh !=
-                                 UCT_MEM_HANDLE_NULL)) {
-                    ucp_request_send_buffer_dereg(req);
-                }
-                ucp_request_complete_send(req, UCS_OK);
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        if (status != UCS_ERR_NO_RESOURCE) {
+            if (req->send.state.dt.dt.contig[0].memh != UCT_MEM_HANDLE_NULL) {
+                ucp_request_send_buffer_dereg(req);
             }
-            return UCS_OK;
-        } 
-        req->send.buffer          += frag_length;
-        req->send.rma.remote_addr += frag_length;
-        return UCS_INPROGRESS;
-    } else {
+            ucp_request_complete_send(req, status);
+        }
         return status;
     }
+
+    req->send.length -= frag_length;
+    if (req->send.length == 0) {
+        /* bcopy is the fast path */
+        if (ucs_likely(req->send.state.uct_comp.count == 0)) {
+            if (ucs_unlikely(req->send.state.dt.dt.contig[0].memh !=
+                             UCT_MEM_HANDLE_NULL)) {
+                ucp_request_send_buffer_dereg(req);
+            }
+            ucp_request_complete_send(req, UCS_OK);
+        }
+        return UCS_OK;
+    }
+    req->send.buffer          += frag_length;
+    req->send.rma.remote_addr += frag_length;
+    return UCS_INPROGRESS;
 }
 
 static void ucp_rma_request_bcopy_completion(uct_completion_t *self,
