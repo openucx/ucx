@@ -32,13 +32,13 @@ ucp_tag_probe_search(ucp_worker_h worker, ucp_tag_t tag, uint64_t tag_mask,
         if ((flags & UCP_RECV_DESC_FLAG_FIRST) &&
             ucp_tag_is_match(recv_tag, tag, tag_mask))
         {
-            ucp_tag_log_match(recv_tag, rdesc->length - rdesc->hdr_len, NULL,
-                              tag, tag_mask, 0, "probe");
+            ucp_tag_log_match(recv_tag, rdesc->length - rdesc->payload_offset,
+                              NULL, tag, tag_mask, 0, "probe");
 
             info->sender_tag = hdr->tag;
             if (flags & UCP_RECV_DESC_FLAG_EAGER) {
                 info->length = ucp_eager_total_len(ucs_container_of(hdr, ucp_eager_hdr_t, super),
-                                                   flags, rdesc->length - rdesc->hdr_len);
+                                                   flags, rdesc->length - rdesc->payload_offset);
             } else {
                 info->length = ucp_rndv_total_len(ucs_container_of(hdr, ucp_rndv_rts_hdr_t, super));
             }
