@@ -36,11 +36,7 @@ ucs_status_t ucp_rkey_pack_uct(ucp_context_h context,
 
     /* Write both size and rkey_buffer for each UCT rkey */
     uct_memh_index = 0;
-    for (md_index = 0; md_index < context->num_mds; ++md_index) {
-        if (!(md_map & UCS_BIT(md_index))) {
-            continue;
-        }
-
+    ucs_for_each_bit (md_index, md_map) {
         md_size = context->tl_mds[md_index].attr.rkey_packed_size;
         *((uint8_t*)p++) = md_size;
         uct_md_mkey_pack(context->tl_mds[md_index].md, memh[uct_memh_index], p);
@@ -87,11 +83,7 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
     }
 
     size = sizeof(ucp_md_map_t);
-    for (md_index = 0; md_index < context->num_mds; ++md_index) {
-        if (!(memh->md_map & UCS_BIT(md_index))) {
-            continue;
-        }
-
+    ucs_for_each_bit (md_index, memh->md_map) {
         size += sizeof(uint8_t);
         md_size = context->tl_mds[md_index].attr.rkey_packed_size;
         ucs_assert_always(md_size < UINT8_MAX);
@@ -136,7 +128,7 @@ void ucp_rkey_buffer_release(void *rkey_buffer)
 ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey_p)
 {
     ucp_context_t *context = ep->worker->context;
-    unsigned remote_md_index, remote_md_gap;
+    unsigned remote_md_index;
     ucp_md_map_t md_map, remote_md_map;
     unsigned rkey_index;
     unsigned md_count;
@@ -185,19 +177,15 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
     /* Unpack rkey of each UCT MD */
     remote_md_index = 0; /* Index of remote MD */
     rkey_index      = 0; /* Index of the rkey in the array */
-    while (remote_md_map > 0) {
+    ucs_for_each_bit (remote_md_index, remote_md_map) {
         md_size = *((uint8_t*)p++);
 
         /* Use bit operations to iterate through the indices of the remote MDs
          * as provided in the md_map. md_map always holds a bitmap of MD indices
-         * that remain to be used. Every time we find the "gap" until the next
-         * valid MD index using ffs operation. If some rkeys cannot be unpacked,
-         * we remove them from the local map.
+         * that remain to be used. Every time we find the next valid MD index.
+         * If some rkeys cannot be unpacked, we remove them from the local map.
          */
-        remote_md_gap    = ucs_ffs64(remote_md_map); /* Find the offset for next MD index */
-        remote_md_index += remote_md_gap;            /* Calculate next index of remote MD*/
-        remote_md_map  >>= remote_md_gap;            /* Remove the gap from the map */
-        ucs_assert(remote_md_map & 1);
+        ucs_assert(UCS_BIT(remote_md_index) & remote_md_map);
         ucs_assert_always(remote_md_index <= UCP_MD_INDEX_BITS);
 
         /* Unpack only reachable rkeys */
@@ -217,8 +205,6 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
             ++rkey_index;
         }
 
-        ++remote_md_index;
-        remote_md_map >>= 1;
         p += md_size;
     }
 
