@@ -87,14 +87,15 @@ UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic_cswap32, uint32_t, uint32_t,
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, tag_eager_short, uct_tag_t, const void*,
                        size_t)
 UCP_PROXY_EP_DEFINE_OP(ssize_t, tag_eager_bcopy, uct_tag_t, uint64_t,
-                       uct_pack_callback_t, void*)
+                       uct_pack_callback_t, void*, unsigned)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, tag_eager_zcopy, uct_tag_t, uint64_t,
-                       const uct_iov_t*, size_t, uct_completion_t*)
+                       const uct_iov_t*, size_t, unsigned, uct_completion_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_ptr_t, tag_rndv_zcopy, uct_tag_t, const void*,
-                       unsigned, const uct_iov_t*, size_t, uct_completion_t*)
+                       unsigned, const uct_iov_t*, size_t, unsigned,
+                       uct_completion_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, tag_rndv_cancel, void*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, tag_rndv_request, uct_tag_t, const void*,
-                       unsigned)
+                       unsigned, unsigned)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, pending_add, uct_pending_req_t*)
 UCP_PROXY_EP_DEFINE_OP(void, pending_purge, uct_pending_purge_callback_t, void*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, flush, unsigned, uct_completion_t*)

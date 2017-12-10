@@ -11,6 +11,7 @@
 #include "ucp_ep.h"
 #include "ucp_thread.h"
 
+#include <ucp/tag/tag_match.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/datastruct/queue_types.h>
@@ -83,15 +84,15 @@ enum {
 };
 
 
-#define UCP_WORKER_UCT_RECV_EVENT_ARM_FLAGS  (UCT_EVENT_RECV_AM | \
-                                              UCT_EVENT_RECV_SIG_AM)
-#define UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS  (UCT_IFACE_FLAG_EVENT_RECV_AM | \
-                                              UCT_IFACE_FLAG_EVENT_RECV_SIG_AM)
+#define UCP_WORKER_UCT_RECV_EVENT_ARM_FLAGS  (UCT_EVENT_RECV | \
+                                              UCT_EVENT_RECV_SIG)
+#define UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS  (UCT_IFACE_FLAG_EVENT_RECV | \
+                                              UCT_IFACE_FLAG_EVENT_RECV_SIG)
 #define UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS   (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
-                                              UCT_IFACE_FLAG_EVENT_RECV_AM | \
-                                              UCT_IFACE_FLAG_EVENT_RECV_SIG_AM)
+                                              UCT_IFACE_FLAG_EVENT_RECV | \
+                                              UCT_IFACE_FLAG_EVENT_RECV_SIG)
 #define UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
-                                              UCT_IFACE_FLAG_EVENT_RECV_AM)
+                                              UCT_IFACE_FLAG_EVENT_RECV)
 
 
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
@@ -172,6 +173,7 @@ typedef struct ucp_worker {
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
     ucp_mt_lock_t                 mt_lock;       /* Configuration of multi-threading support */
+    ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
 
     UCS_STATS_NODE_DECLARE(stats);
     UCS_STATS_NODE_DECLARE(tm_offload_stats);

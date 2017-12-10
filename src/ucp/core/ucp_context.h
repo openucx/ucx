@@ -13,7 +13,6 @@
 #include "ucp_thread.h"
 
 #include <ucp/api/ucp.h>
-#include <ucp/tag/tag_match.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
@@ -128,8 +127,6 @@ typedef struct ucp_context {
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/
 
     ucs_mpool_t                   rkey_mp;    /* Pool for memory keys */
-
-    ucp_tag_match_t               tm;         /* Tag-matching queues and offload info */
 
     struct {
 

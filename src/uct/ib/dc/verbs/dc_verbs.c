@@ -774,7 +774,7 @@ ucs_status_t uct_dc_verbs_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
 ssize_t uct_dc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                         uint64_t imm,
                                         uct_pack_callback_t pack_cb,
-                                        void *arg)
+                                        void *arg, unsigned flags)
 {
     uct_dc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
@@ -800,7 +800,8 @@ ssize_t uct_dc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
 ucs_status_t uct_dc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                              uint64_t imm, const uct_iov_t *iov,
-                                             size_t iovcnt, uct_completion_t *comp)
+                                             size_t iovcnt, unsigned flags,
+                                             uct_completion_t *comp)
 {
     uct_dc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
@@ -846,7 +847,7 @@ ucs_status_ptr_t uct_dc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                                 const void *header,
                                                 unsigned header_length,
                                                 const uct_iov_t *iov,
-                                                size_t iovcnt,
+                                                size_t iovcnt, unsigned flags,
                                                 uct_completion_t *comp)
 {
     uct_dc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
@@ -883,7 +884,8 @@ ucs_status_ptr_t uct_dc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
  * imm_value = 0. Receiver will handle such message as rndv request. */
 ucs_status_t uct_dc_verbs_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
                                               const void* header,
-                                              unsigned header_length)
+                                              unsigned header_length,
+                                              unsigned flags)
 {
     uct_dc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,

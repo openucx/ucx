@@ -109,7 +109,7 @@ ucp_eager_unexp_match(ucp_worker_h worker, ucp_recv_desc_t *rdesc, ucp_tag_t tag
     void *data = rdesc + 1;
 
     UCP_WORKER_STAT_EAGER_CHUNK(worker, UNEXP);
-    hdr_len  = rdesc->hdr_len;
+    hdr_len  = rdesc->payload_offset;
     recv_len = rdesc->length - hdr_len;
     status   = ucp_dt_unpack(datatype, buffer, count, state, data + hdr_len,
                              recv_len, flags & UCP_RECV_DESC_FLAG_LAST);

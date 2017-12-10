@@ -330,7 +330,8 @@ public:
         test_uct_ib::initialize();
 
         check_caps(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_CB_SYNC |
-                   UCT_IFACE_FLAG_EVENT_SEND_COMP | UCT_IFACE_FLAG_EVENT_RECV_AM);
+                   UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                   UCT_IFACE_FLAG_EVENT_RECV);
 
         /* create receiver wakeup */
         status = uct_iface_event_fd_get(m_e1->iface(), &wakeup_fd.fd);
@@ -407,7 +408,7 @@ public:
     }
 
 protected:
-    static const unsigned EVENTS = UCT_EVENT_RECV_AM | UCT_EVENT_SEND_COMP;
+    static const unsigned EVENTS = UCT_EVENT_RECV | UCT_EVENT_SEND_COMP;
 
     struct pollfd wakeup_fd;
     size_t length;

@@ -117,7 +117,7 @@ protected:
 void test_ucp_peer_failure::init() {
     test_ucp_peer_failure_base::init();
     test_ucp_tag::init();
-    if (GetParam().variant== FAIL_AFTER_WIREUP) {
+    if (GetParam().variant != FAIL_IMMEDIATELY) {
         smoke_test();
     }
 
@@ -125,7 +125,7 @@ void test_ucp_peer_failure::init() {
     create_entity(true);
     create_entity(false);
     sender().connect(&receiver(), get_ep_params());
-    if (GetParam().variant == FAIL_AFTER_WIREUP) {
+    if (GetParam().variant != FAIL_IMMEDIATELY) {
         smoke_test();
     }
     wrap_errors();
@@ -287,6 +287,25 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_zcopy_multi)
 
 class test_ucp_peer_failure_with_rma : public test_ucp_peer_failure {
 public:
+    enum {
+        FAIL_ON_RMA = FAIL_IMMEDIATELY + 1
+    };
+
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params,
+                     const std::string& name,
+                     const std::string& test_case_name,
+                     const std::string& tls)
+    {
+        std::vector<ucp_test_param> result =
+            test_ucp_peer_failure::enum_test_params(ctx_params, name,
+                                                    test_case_name, tls);
+
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     FAIL_ON_RMA, result);
+        return result;
+    }
+
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = test_ucp_tag::get_ctx_params();
         params.features |= UCP_FEATURE_RMA;
@@ -322,11 +341,20 @@ UCS_TEST_P(test_ucp_peer_failure_with_rma, status_after_error) {
     ucp_mem_unmap(receiver().ucph(), memh);
 
     fail_receiver();
-    request *req = send_nb(NULL, 0, DATATYPE, 0x111337);
-    wait_err();
-    if (UCS_PTR_IS_PTR(req)) {
-        request_release(req);
+    if (GetParam().variant == FAIL_ON_RMA) {
+        ucp_get_nbi(sender().ep(), mem_attr.address, 1, (uintptr_t)&buf, rkey);
+    } else {
+        request *req = send_nb(NULL, 0, DATATYPE, 0x111337);
+        if (UCS_PTR_IS_PTR(req)) {
+            request_release(req);
+        }
     }
+    /* TODO: Remove this check. The test hangs if call flush when wireup is
+     *       not done. (Not RMA related) */
+    if (GetParam().variant != FAIL_IMMEDIATELY) {
+        ucp_ep_flush(sender().ep());
+    }
+    wait_err();
 
     EXPECT_NE(UCS_OK, m_err_status);
 
@@ -561,6 +589,21 @@ class test_ucp_ep_force_disconnect : public test_ucp_peer_failure
 {
 public:
     virtual void init() {
+        const std::vector<std::string> &tls = GetParam().transports;
+        std::vector<std::string>       skip_tls;
+
+        skip_tls.push_back("\\rc_mlx5");
+        skip_tls.push_back("ib");
+
+        if (std::find_first_of(tls.begin(),      tls.end(),
+                               skip_tls.begin(), skip_tls.end()) != tls.end()) {
+            UCS_TEST_SKIP_R("TEMPORATY DISABLED. There is a known issue with "
+                            "rc_mlx5 transport: it can't successfully clean up "
+                            "iface resources if it's receiving on closure. "
+                            "The issue is hardly reproducible with running 4+ "
+                            "gtest instances on the same node");
+        }
+
         m_env.clear(); /* restore default timeouts. */
         test_ucp_peer_failure::init();
     }

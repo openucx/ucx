@@ -251,7 +251,7 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
     }
 
     if (events & (UCP_WAKEUP_TAG_RECV | UCP_WAKEUP_RX)) {
-        worker->uct_events |= UCT_EVENT_RECV_AM;
+        worker->uct_events |= UCT_EVENT_RECV;
     }
 
     if (events & (UCP_WAKEUP_RMA | UCP_WAKEUP_AMO | UCP_WAKEUP_TX)) {
@@ -612,6 +612,30 @@ void ucp_worker_iface_event(int fd, void *arg)
     ucp_worker_signal_internal(worker);
 }
 
+static void ucp_worker_tag_offload_enable(ucp_worker_t *worker)
+{
+    ucp_context_t *context = worker->context;
+    ucp_worker_iface_t *offload_iface;
+
+    /* Enable offload, if only one tag offload capable interface is present
+     * (multiple offload ifaces are not supported yet). */
+    if (context->config.ext.tm_offload &&
+        (ucs_queue_length(&worker->tm.offload.ifaces) == 1)) {
+        worker->tm.offload.thresh       = context->config.ext.tm_thresh;
+        worker->tm.offload.zcopy_thresh = context->config.ext.tm_max_bcopy;
+
+        offload_iface = ucs_queue_head_elem_non_empty(&worker->tm.offload.ifaces,
+                                                      ucp_worker_iface_t, queue);
+        ucp_worker_iface_activate(offload_iface, 0);
+
+        ucs_debug("Enable TM offload: thresh %zu, zcopy_thresh %zu",
+                  worker->tm.offload.thresh, worker->tm.offload.zcopy_thresh);
+    } else {
+        worker->tm.offload.thresh = SIZE_MAX;
+        ucs_debug("Disable TM offload, multiple offload ifaces are not supported");
+    }
+}
+
 static void ucp_worker_close_ifaces(ucp_worker_h worker)
 {
     ucp_rsc_index_t rsc_index;
@@ -643,8 +667,8 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
         }
 
         if (ucp_worker_is_tl_tag_offload(worker, rsc_index)) {
-            ucs_queue_remove(&worker->context->tm.offload.ifaces, &wiface->queue);
-            ucp_context_tag_offload_enable(worker->context);
+            ucs_queue_remove(&worker->tm.offload.ifaces, &wiface->queue);
+            ucp_worker_tag_offload_enable(worker);
         }
 
         uct_iface_close(wiface->iface);
@@ -753,8 +777,8 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
     if (ucp_worker_is_tl_tag_offload(worker, tl_id)) {
         worker->ifaces[tl_id].rsc_index = tl_id;
-        ucs_queue_push(&context->tm.offload.ifaces, &wiface->queue);
-        ucp_context_tag_offload_enable(context);
+        ucs_queue_push(&worker->tm.offload.ifaces, &wiface->queue);
+        ucp_worker_tag_offload_enable(worker);
     }
 
     return UCS_OK;
@@ -1123,6 +1147,13 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         cpu_mask = &empty_cpu_mask;
     }
 
+    /* Initialize tag matching */
+    status = ucp_tag_match_init(&worker->tm);
+    if (status != UCS_OK) {
+        goto err_wakeup_cleanup;
+    }
+
+
     /* Open all resources as interfaces on this worker */
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
         status = ucp_worker_add_iface(worker, tl_id, rx_headroom, cpu_mask);
@@ -1145,6 +1176,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
 err_close_ifaces:
     ucp_worker_close_ifaces(worker);
+    ucp_tag_match_cleanup(&worker->tm);
+err_wakeup_cleanup:
     ucp_worker_wakeup_cleanup(worker);
 err_rndv_lanes_mp_cleanup:
     ucs_mpool_cleanup(&worker->rndv_get_mp, 1);
@@ -1184,6 +1217,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->rndv_get_mp, 1);
     ucp_worker_close_ifaces(worker);
+    ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_wakeup_cleanup(worker);
     ucs_mpool_cleanup(&worker->req_mp, 1);
     uct_worker_destroy(worker->uct);
