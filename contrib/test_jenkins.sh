@@ -595,6 +595,19 @@ run_gtest() {
 	fi
 }
 
+run_ucx_tl_check() {
+
+	echo "1..1" > ucx_tl_check.tap
+
+	../test/apps/test_ucx_tls.py $ucx_inst
+
+	if [ $? -ne 0 ]; then
+		echo "not ok 1" >> ucx_tl_check.tap
+	else
+		echo "ok 1" >> ucx_tl_check.tap
+	fi
+}
+
 #
 # Run all tests
 #
@@ -626,6 +639,8 @@ run_tests() {
 	../contrib/configure-devel --prefix=$ucx_inst
 	$MAKE
 	$MAKE install
+
+	run_ucx_tl_check
 
 	do_distributed_task 1 4 run_ucp_hello
 	do_distributed_task 2 4 run_uct_hello

@@ -611,7 +611,7 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_a
                                          UCT_IFACE_FLAG_CB_SYNC          |
                                          UCT_IFACE_FLAG_CB_ASYNC         |
                                          UCT_IFACE_FLAG_EVENT_SEND_COMP  |
-                                         UCT_IFACE_FLAG_EVENT_RECV_AM    |
+                                         UCT_IFACE_FLAG_EVENT_RECV       |
                                          UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
     iface_attr->cap.am.max_short       = iface->config.max_inline - sizeof(uct_ud_neth_t);
@@ -866,7 +866,7 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     }
 
     /* Check if some receives were not delivered yet */
-    if ((events & (UCT_EVENT_RECV_AM|UCT_EVENT_RECV_SIG_AM)) &&
+    if ((events & (UCT_EVENT_RECV | UCT_EVENT_RECV_SIG)) &&
         !ucs_queue_is_empty(&iface->rx.pending_q))
     {
         return UCS_ERR_BUSY;
@@ -886,7 +886,7 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
         }
     }
 
-    if (events & (UCT_EVENT_SEND_COMP|UCT_EVENT_RECV_AM)) {
+    if (events & (UCT_EVENT_SEND_COMP | UCT_EVENT_RECV)) {
         /* we may get send completion through ACKs as well */
         status = iface->super.ops->arm_rx_cq(&iface->super, 0);
         if (status != UCS_OK) {

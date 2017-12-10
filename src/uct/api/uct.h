@@ -226,9 +226,12 @@ typedef struct uct_tl_resource_desc {
                                                        is called. */
 
         /* Event notification */
-#define UCT_IFACE_FLAG_EVENT_SEND_COMP    UCS_BIT(46) /**< Event notification of send completion is supported */
-#define UCT_IFACE_FLAG_EVENT_RECV_AM      UCS_BIT(47) /**< Event notification of active message receive is supported */
-#define UCT_IFACE_FLAG_EVENT_RECV_SIG_AM  UCS_BIT(48) /**< Event notification of signaled active message is supported */
+#define UCT_IFACE_FLAG_EVENT_SEND_COMP UCS_BIT(46) /**< Event notification of send completion is
+                                                        supported */
+#define UCT_IFACE_FLAG_EVENT_RECV      UCS_BIT(47) /**< Event notification of tag and active message
+                                                        receive is supported */
+#define UCT_IFACE_FLAG_EVENT_RECV_SIG  UCS_BIT(48) /**< Event notification of signaled tag and active
+                                                        message is supported */
 
         /* Tag matching operations */
 #define UCT_IFACE_FLAG_TAG_EAGER_SHORT UCS_BIT(50) /**< Hardware tag matching short eager support */
@@ -259,11 +262,19 @@ typedef enum {
 /**
  * @ingroup UCT_RESOURCE
  * @brief  Asynchronous event types.
+ *
+ * @note The UCT_EVENT_RECV and UCT_EVENT_RECV_SIG event types are used to
+ *       indicate receive-side completions for both tag matching and active
+ *       messages. If the interface supports signaled receives
+ *       (@ref UCT_IFACE_FLAG_EVENT_RECV_SIG), then for the messages sent with
+ *       UCT_SEND_FLAG_SIGNALED flag, UCT_EVENT_RECV_SIG should be triggered
+ *       on the receiver. Otherwise, UCT_EVENT_RECV should be triggered.
  */
 enum uct_iface_event_types {
-    UCT_EVENT_SEND_COMP   = UCS_BIT(0), /**< Send completion event */
-    UCT_EVENT_RECV_AM     = UCS_BIT(1), /**< Active message received */
-    UCT_EVENT_RECV_SIG_AM = UCS_BIT(2)  /**< Signaled active message received */
+    UCT_EVENT_SEND_COMP     = UCS_BIT(0), /**< Send completion event */
+    UCT_EVENT_RECV          = UCS_BIT(1), /**< Tag or active message received */
+    UCT_EVENT_RECV_SIG      = UCS_BIT(2)  /**< Signaled tag or active message
+                                               received */
 };
 
 
@@ -305,12 +316,12 @@ enum uct_progress_types {
  * @ingroup UCT_AM
  * @brief Flags for active message send operation.
  */
-enum uct_am_flags {
-    UCT_AM_FLAG_SIGNALED = UCS_BIT(0)  /**< Trigger @ref UCT_EVENT_RECV_SIG_AM
-                                            event on remote side. Make best
-                                            effort attempt to avoid triggering
-                                            @ref UCT_EVENT_RECV_AM event.
-                                            Ignored if not supported by interface. */
+enum uct_msg_flags {
+    UCT_SEND_FLAG_SIGNALED = UCS_BIT(0) /**< Trigger @ref UCT_EVENT_RECV_SIG
+                                             event on remote side. Make best
+                                             effort attempt to avoid triggering
+                                             @ref UCT_EVENT_RECV event.
+                                             Ignored if not supported by interface. */
 };
 
 
@@ -1851,7 +1862,7 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
  *                           array. If @a iovcnt is zero, the data is considered empty.
  *                           @a iovcnt is limited by @ref uct_iface_attr_cap_am_max_iov
  *                           "uct_iface_attr::cap::am::max_iov"
- * @param [in] flags         Active message flags, see @ref uct_am_flags.
+ * @param [in] flags         Active message flags, see @ref uct_msg_flags.
  * @param [in] comp          Completion handle as defined by @ref ::uct_completion_t.
  *
  * @return UCS_INPROGRESS    Some communication operations are still in progress.
@@ -2108,6 +2119,7 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_eager_short(uct_ep_h ep, uct_tag_t tag,
  *                        receiver.
  * @param [in]  pack_cb   User callback to pack the data.
  * @param [in]  arg       Custom argument to @a pack_cb.
+ * @param [in]  flags     Tag message flags, see @ref uct_msg_flags.
  *
  * @return >=0       - The size of the data packed by @a pack_cb.
  * @return otherwise - Error code.
@@ -2115,9 +2127,9 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_eager_short(uct_ep_h ep, uct_tag_t tag,
 UCT_INLINE_API ssize_t uct_ep_tag_eager_bcopy(uct_ep_h ep, uct_tag_t tag,
                                               uint64_t imm,
                                               uct_pack_callback_t pack_cb,
-                                              void *arg)
+                                              void *arg, unsigned flags)
 {
-    return ep->iface->ops.ep_tag_eager_bcopy(ep, tag, imm, pack_cb, arg);
+    return ep->iface->ops.ep_tag_eager_bcopy(ep, tag, imm, pack_cb, arg, flags);
 }
 
 
@@ -2147,6 +2159,7 @@ UCT_INLINE_API ssize_t uct_ep_tag_eager_bcopy(uct_ep_h ep, uct_tag_t tag,
  *                        data is considered empty. Note that @a iovcnt is
  *                        limited by the corresponding @a max_iov value in
  *                        @ref uct_iface_attr.
+ * @param [in]  flags     Tag message flags, see @ref uct_msg_flags.
  * @param [in]  comp      Completion callback which will be called when the data
  *                        is reliably received by the peer, and the buffer
  *                        can be reused or invalidated.
@@ -2161,9 +2174,11 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_eager_zcopy(uct_ep_h ep, uct_tag_t tag,
                                                    uint64_t imm,
                                                    const uct_iov_t *iov,
                                                    size_t iovcnt,
+                                                   unsigned flags,
                                                    uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_tag_eager_zcopy(ep, tag, imm, iov, iovcnt, comp);
+    return ep->iface->ops.ep_tag_eager_zcopy(ep, tag, imm, iov, iovcnt, flags,
+                                             comp);
 }
 
 
@@ -2193,6 +2208,7 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_eager_zcopy(uct_ep_h ep, uct_tag_t tag,
  *                            the data is considered empty. Note that @a iovcnt
  *                            is limited by the corresponding @a max_iov value
  *                            in @ref uct_iface_attr.
+ * @param [in]  flags         Tag message flags, see @ref uct_msg_flags.
  * @param [in]  comp          Completion callback which will be called when the
  *                            data is reliably received by the peer, and the
  *                            buffer can be reused or invalidated.
@@ -2207,10 +2223,11 @@ UCT_INLINE_API ucs_status_ptr_t uct_ep_tag_rndv_zcopy(uct_ep_h ep, uct_tag_t tag
                                                       unsigned header_length,
                                                       const uct_iov_t *iov,
                                                       size_t iovcnt,
+                                                      unsigned flags,
                                                       uct_completion_t *comp)
 {
     return ep->iface->ops.ep_tag_rndv_zcopy(ep, tag, header, header_length,
-                                            iov, iovcnt, comp);
+                                            iov, iovcnt, flags, comp);
 }
 
 
@@ -2251,6 +2268,7 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_cancel(uct_ep_h ep, void *op)
  * @param [in]  header_length User defined header length in bytes. Note that it
  *                            is limited by the corresponding @a max_hdr value
  *                            in @ref uct_iface_attr.
+ * @param [in]  flags         Tag message flags, see @ref uct_msg_flags.
  *
  * @return UCS_OK              - operation completed successfully.
  * @return UCS_ERR_NO_RESOURCE - could not start the operation now due to lack of
@@ -2258,9 +2276,11 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_cancel(uct_ep_h ep, void *op)
  */
 UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_request(uct_ep_h ep, uct_tag_t tag,
                                                     const void* header,
-                                                    unsigned header_length)
+                                                    unsigned header_length,
+                                                    unsigned flags)
 {
-    return ep->iface->ops.ep_tag_rndv_request(ep, tag, header, header_length);
+    return ep->iface->ops.ep_tag_rndv_request(ep, tag, header, header_length,
+                                              flags);
 }
 
 

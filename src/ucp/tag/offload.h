@@ -60,28 +60,28 @@ ucs_status_t ucp_tag_offload_unexp_rndv(void *arg, unsigned flags, uint64_t stag
                                         uint64_t remote_addr, size_t length,
                                         const void *rkey_buf);
 
-void ucp_tag_offload_cancel(ucp_context_t *context, ucp_request_t *req, int force);
+void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, int force);
 
-int ucp_tag_offload_post(ucp_context_t *ctx, ucp_request_t *req);
+int ucp_tag_offload_post(ucp_request_t *req);
 
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_offload_try_post(ucp_context_t *ctx, ucp_request_t *req)
+ucp_tag_offload_try_post(ucp_worker_t *worker, ucp_request_t *req)
 {
-    if (ucs_unlikely((req->recv.length >= ctx->tm.offload.thresh) &&
+    if (ucs_unlikely((req->recv.length >= worker->tm.offload.thresh) &&
                      (req->recv.state.offset == 0))) {
-        if (ucp_tag_offload_post(ctx, req)) {
+        if (ucp_tag_offload_post(req)) {
             return;
         }
     }
     req->flags |= UCP_REQUEST_FLAG_BLOCK_OFFLOAD;
-    ++ctx->tm.offload.sw_req_count;
+    ++worker->tm.offload.sw_req_count;
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_offload_try_cancel(ucp_context_t *ctx, ucp_request_t *req, int force)
+ucp_tag_offload_try_cancel(ucp_worker_t *worker, ucp_request_t *req, int force)
 {
     if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
-        ucp_tag_offload_cancel(ctx, req, force);
+        ucp_tag_offload_cancel(worker, req, force);
     }
 }
 

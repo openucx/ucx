@@ -487,7 +487,7 @@ uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
         return status;
     }
 
-    iface_attr->overhead       = 50e-9; /* Software overhead */
+    iface_attr->overhead       = 80e-9; /* Software overhead */
     iface_attr->cap.am.max_iov = uct_ib_iface_get_max_iov(&iface->super);
 
     iface_attr->cap.am.max_hdr = UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE)

@@ -136,6 +136,13 @@ static inline double ucs_log2(double x)
 #define UCS_CIRCULAR_COMPARE32(__a, __op, __b)  UCS_CIRCULAR_COMPARE(__a, __op, __b, int32_t)
 #define UCS_CIRCULAR_COMPARE64(__a, __op, __b)  UCS_CIRCULAR_COMPARE(__a, __op, __b, int64_t)
 
+/* on some arch ffs64(0) returns 0, on other -1, let's unify this */
+#define ucs_ffs64_safe(_val) ((_val) ? ucs_ffs64(_val) : 64)
+
+#define ucs_for_each_bit(_index, _map)                   \
+    for ((_index) = ucs_ffs64_safe(_map); (_index) < 64; \
+         (_index) = ucs_ffs64_safe((uint64_t)(_map) & (-2ull << (uint64_t)(_index))))
+
 
 /**
  * Calculate CRC32 of a buffer.

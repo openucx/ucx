@@ -85,7 +85,7 @@ protected:
 
     void wait_and_validate(request *req);
 
-    void wait_for_unexpected_msg(ucp_context_h context, double sec);
+    void wait_for_unexpected_msg(ucp_worker_h worker, double sec);
 
     static void* dt_common_start(size_t count);
 

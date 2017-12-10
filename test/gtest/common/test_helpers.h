@@ -497,30 +497,31 @@ public:
         memset(m_iov, 0, sizeof(m_iov));
     };
 
-    data_type_desc_t(ucp_datatype_t datatype, void *buf, size_t length)
+    data_type_desc_t(ucp_datatype_t datatype, const void *buf, size_t length)
         : m_origin(uintptr_t(buf)), m_length(length), m_buf(NULL),
           m_iov_cnt_limit(sizeof(m_iov) / sizeof(m_iov[0])) {
         make(datatype, buf, length);
     }
 
-    data_type_desc_t(ucp_datatype_t datatype, void *buf, size_t length,
+    data_type_desc_t(ucp_datatype_t datatype, const void *buf, size_t length,
                      size_t iov_count)
         : m_origin(uintptr_t(buf)), m_length(length), m_buf(NULL),
           m_iov_cnt_limit(sizeof(m_iov) / sizeof(m_iov[0])) {
         make(datatype, buf, length, iov_count);
     };
 
-    data_type_desc_t &make(ucp_datatype_t datatype, void *buf, size_t length,
-                           size_t iov_count);
+    data_type_desc_t &make(ucp_datatype_t datatype, const void *buf,
+                           size_t length, size_t iov_count);
 
-    data_type_desc_t &make(ucp_datatype_t datatype, void *buf, size_t length) {
+    data_type_desc_t &make(ucp_datatype_t datatype, const void *buf,
+                           size_t length) {
         return make(datatype, buf, length, m_iov_cnt_limit);
     };
 
     data_type_desc_t &forward_to(size_t offset) {
         EXPECT_LE(offset, m_length);
         invalidate();
-        return make(m_dt, (void *)(m_origin + offset), m_length - offset,
+        return make(m_dt, (const void *)(m_origin + offset), m_length - offset,
                     m_iov_cnt_limit);
     };
 
@@ -531,7 +532,7 @@ public:
 
     void *buf() const {
         EXPECT_TRUE(is_valid());
-        return m_buf;
+        return const_cast<void *>(m_buf);
     };
 
     size_t count() const {
@@ -556,7 +557,7 @@ private:
     size_t          m_length;
 
     ucp_datatype_t  m_dt;
-    void           *m_buf;
+    const void     *m_buf;
     size_t          m_count;
 
     const size_t    m_iov_cnt_limit;

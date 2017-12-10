@@ -5,11 +5,11 @@
 */
 
 #include <common/test.h>
-extern "C" {
+
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/sys/math.h>
-}
+#include <ucs/sys/sys.h>
 
 #include <vector>
 
@@ -158,4 +158,37 @@ UCS_TEST_F(test_math, atomic_cswap_fail) {
         TEST_ATOMIC_CSWAP(32, 1);
         TEST_ATOMIC_CSWAP(64, 1);
     }
+}
+
+UCS_TEST_F(test_math, for_each_bit) {
+    uint64_t gen_mask = 0;
+    uint64_t mask;
+    int idx;
+
+    mask = ucs_generate_uuid(0);
+
+    ucs_for_each_bit (idx, mask) {
+        EXPECT_EQ(gen_mask & UCS_BIT(idx), 0ull);
+        gen_mask |= UCS_BIT(idx);
+    }
+
+    EXPECT_EQ(mask, gen_mask);
+
+    ucs_for_each_bit(idx, 0) {
+        EXPECT_EQ(1, 0); /* should not be here */
+    }
+
+    gen_mask = 0;
+    ucs_for_each_bit(idx, UCS_BIT(0)) {
+        EXPECT_EQ(gen_mask & UCS_BIT(idx), 0ull);
+        gen_mask |= UCS_BIT(idx);
+    }
+    EXPECT_EQ(1ull, gen_mask);
+
+    gen_mask = 0;
+    ucs_for_each_bit(idx, UCS_BIT(63)) {
+        EXPECT_EQ(gen_mask & UCS_BIT(idx), 0ull);
+        gen_mask |= UCS_BIT(idx);
+    }
+    EXPECT_EQ(UCS_BIT(63), gen_mask);
 }

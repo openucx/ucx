@@ -100,7 +100,8 @@ public:
     {
         ssize_t status = uct_ep_tag_eager_bcopy(e.ep(0), ctx.tag,
                                                 ctx.imm_data, mapped_buffer::pack,
-                                                reinterpret_cast<void*>(ctx.mbuf));
+                                                reinterpret_cast<void*>(ctx.mbuf),
+                                                0);
 
         return (status >= 0) ? UCS_OK : static_cast<ucs_status_t>(status);
     }
@@ -111,8 +112,9 @@ public:
                                 ctx.mbuf->length(), ctx.mbuf->memh(),
                                 sender().iface_attr().cap.tag.eager.max_iov);
 
-        ucs_status_t status = uct_ep_tag_eager_zcopy(e.ep(0), ctx.tag, ctx.imm_data,
-                                                     iov, iovcnt, &ctx.uct_comp);
+        ucs_status_t status = uct_ep_tag_eager_zcopy(e.ep(0), ctx.tag,
+                                                     ctx.imm_data, iov, iovcnt,
+                                                     0, &ctx.uct_comp);
         if (status == UCS_INPROGRESS) {
             status = UCS_OK;
         }
@@ -127,7 +129,7 @@ public:
                                  ctx.mbuf->length(), ctx.mbuf->memh(), 1);
 
          ctx.rndv_op = uct_ep_tag_rndv_zcopy(e.ep(0), ctx.tag, &ctxs,
-                                             sizeof(ctxs), iov, iovcnt,
+                                             sizeof(ctxs), iov, iovcnt, 0,
                                              &ctx.uct_comp);
 
          return  (UCS_PTR_IS_ERR(ctx.rndv_op)) ? UCS_PTR_STATUS(ctx.rndv_op) :
@@ -144,7 +146,7 @@ public:
         uint64_t ctxs[2] = {ctx.imm_data, reinterpret_cast<uint64_t>(&ctx)};
         ctx.sw_rndv = true;
 
-        return uct_ep_tag_rndv_request(e.ep(0), ctx.tag, &ctxs, sizeof(ctxs));
+        return uct_ep_tag_rndv_request(e.ep(0), ctx.tag, &ctxs, sizeof(ctxs), 0);
     }
 
     ucs_status_t tag_post(entity &e, recv_ctx &ctx)
@@ -600,7 +602,7 @@ UCS_TEST_P(test_tag, sw_rndv_expected)
 
     ASSERT_UCS_OK(uct_ep_tag_rndv_request(sender().ep(0), s_ctx.tag,
                                           s_ctx.mbuf->ptr(),
-                                          s_ctx.mbuf->length()));
+                                          s_ctx.mbuf->length(), 0));
 
     wait_for_flag(&r_ctx.sw_rndv);
 
