@@ -98,9 +98,7 @@ void uct_rdmacm_iface_client_start_next_ep(uct_rdmacm_iface_t *iface)
                                           uct_rdmacm_ep_t, list_elem);
         iface->ep->is_on_pending = 0;
 
-        status = uct_rdmacm_resolve_addr(iface->cm_id, iface->ep->remote_addr,
-                                         UCS_MSEC_PER_SEC * iface->config.addr_resolve_timeout,
-                                         UCS_LOG_LEVEL_ERROR);
+        status = uct_rdmacm_ep_resolve_addr(iface->ep);
         if (status != UCS_OK) {
             uct_rdmacm_ep_set_failed(&iface->super.super, &iface->ep->super.super,
                                      UCS_ERR_IO_ERROR);

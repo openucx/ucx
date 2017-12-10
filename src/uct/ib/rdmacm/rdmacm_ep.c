@@ -5,6 +5,15 @@
 
 #include "rdmacm_ep.h"
 
+ucs_status_t uct_rdmacm_ep_resolve_addr(uct_rdmacm_ep_t *ep)
+{
+    uct_rdmacm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rdmacm_iface_t);
+
+    return uct_rdmacm_resolve_addr(iface->cm_id, (struct sockaddr *)&(ep->remote_addr),
+                                   UCS_MSEC_PER_SEC * iface->config.addr_resolve_timeout,
+                                   UCS_LOG_LEVEL_ERROR);
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
                            const ucs_sock_addr_t *sockaddr,
                            uct_sockaddr_conn_reply_callback_t reply_cb,
@@ -49,6 +58,17 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
      * client's ep would already be connected to the server */
     self->cb_flags = cb_flags;
 
+    /* Save the remote address */
+    if (sockaddr->addr->sa_family == AF_INET) {
+        memcpy(&self->remote_addr, sockaddr->addr, sizeof(struct sockaddr_in));
+    } else if (sockaddr->addr->sa_family == AF_INET6) {
+        memcpy(&self->remote_addr, sockaddr->addr, sizeof(struct sockaddr_in6));
+    } else {
+        ucs_error("rdmacm ep: unknown remote sa_family=%d", sockaddr->addr->sa_family);
+        status = UCS_ERR_IO_ERROR;
+        goto err_free_mem;
+    }
+
     /* The interface can point at one endpoint at a time and therefore, the
      * connection establishment cannot be done in parallel for several endpoints */
     /* TODO support connection establishment on parallel endpoints on the same iface */
@@ -61,15 +81,12 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
          * to proceed with the connection establishment.
          * This event will be retrieved from the event_channel by the async thread.
          * All endpoints share the interface's event_channel but can use it serially. */
-        status = uct_rdmacm_resolve_addr(iface->cm_id, (struct sockaddr *)sockaddr->addr,
-                                         UCS_MSEC_PER_SEC * iface->config.addr_resolve_timeout,
-                                         UCS_LOG_LEVEL_ERROR);
+        status = uct_rdmacm_ep_resolve_addr(self);
         if (status != UCS_OK) {
             goto err_free_mem;
         }
     } else {
         /* Add the ep to the pending queue */
-        self->remote_addr = (struct sockaddr *)(sockaddr->addr);
         UCS_ASYNC_BLOCK(iface->super.worker->async);
         ucs_list_add_tail(&iface->pending_eps_list, &self->list_elem);
         self->is_on_pending = 1;

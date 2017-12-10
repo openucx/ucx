@@ -14,7 +14,7 @@ struct uct_rdmacm_ep {
     uct_sockaddr_conn_reply_callback_t conn_reply_cb;
     void                               *conn_reply_arg;
     ucs_list_link_t                    list_elem;
-    struct sockaddr                    *remote_addr;
+    struct sockaddr_storage            remote_addr;
     uint32_t                           cb_flags;
     int                                is_on_pending;
 };
