@@ -17,6 +17,10 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
      ucs_offsetof(uct_cuda_copy_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
+    {"MAX_POLL", "16",
+     "Max number of event completions to pick during cuda events polling",
+      ucs_offsetof(uct_cuda_copy_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
@@ -106,7 +110,7 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_cuda_copy_progress_event_queue(ucs_queue_head_t *event_queue)
+uct_cuda_copy_progress_event_queue(ucs_queue_head_t *event_queue, unsigned max_events)
 {
     unsigned count = 0;
     cudaError_t result = cudaSuccess;
@@ -122,9 +126,12 @@ uct_cuda_copy_progress_event_queue(ucs_queue_head_t *event_queue)
         if (cuda_event->comp != NULL) {
             uct_invoke_completion(cuda_event->comp, UCS_OK);
         }
-        ucs_info("CUDA Event Done :%p", cuda_event);
+        ucs_trace_poll("CUDA Event Done :%p", cuda_event);
         ucs_mpool_put(cuda_event);
         count++;
+        if (count >= max_events) {
+            break;
+        }
     }
     return count;
 }
@@ -132,10 +139,13 @@ uct_cuda_copy_progress_event_queue(ucs_queue_head_t *event_queue)
 static unsigned uct_cuda_copy_iface_progress(uct_iface_h tl_iface)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
+    unsigned max_events = iface->config.max_poll;
     unsigned count;
 
-    count = uct_cuda_copy_progress_event_queue(&iface->outstanding_d2h_cuda_event_q);
-    count += uct_cuda_copy_progress_event_queue(&iface->outstanding_h2d_cuda_event_q);
+    count = uct_cuda_copy_progress_event_queue(&iface->outstanding_d2h_cuda_event_q,
+                                               max_events);
+    count += uct_cuda_copy_progress_event_queue(&iface->outstanding_h2d_cuda_event_q,
+                                                (max_events - count));
     return count;
 }
 
@@ -194,6 +204,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
+    uct_cuda_copy_iface_config_t *config = ucs_derived_of(tl_config,
+                                                          uct_cuda_copy_iface_config_t);
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_copy_iface_ops, md, worker,
@@ -205,6 +217,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
         ucs_error("No device was found: %s", params->mode.device.dev_name);
         return UCS_ERR_NO_DEVICE;
     }
+
+    self->config.max_poll = config->max_poll;
 
     status = ucs_mpool_init(&self->cuda_event_desc,
                             0,

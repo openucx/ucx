@@ -35,11 +35,15 @@ typedef struct uct_cuda_copy_iface {
     ucs_queue_head_t        outstanding_h2d_cuda_event_q;
     cudaStream_t            stream_d2h;
     cudaStream_t            stream_h2d;
+    struct {
+        unsigned            max_poll;
+    } config;
 } uct_cuda_copy_iface_t;
 
 
 typedef struct uct_cuda_copy_iface_config {
     uct_iface_config_t      super;
+    unsigned                max_poll;
 } uct_cuda_copy_iface_config_t;
 
 typedef struct uct_cuda_copy_event_desc {
