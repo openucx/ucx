@@ -77,6 +77,8 @@ protected:
 
         const uct_iface_attr& iface_attr() const;
 
+        const uct_iface_params& iface_params() const;
+
         uct_ep_h ep(unsigned index) const;
 
         void create_ep(unsigned index);
@@ -86,8 +88,12 @@ protected:
         void connect_to_iface(unsigned index, entity& other);
         void connect_to_ep(unsigned index, entity& other,
                            unsigned other_index);
+        void connect_to_sockaddr(unsigned index, entity& other);
 
         void flush() const;
+
+        static const std::string server_priv_data;
+        volatile static int client_connected;
 
     private:
         class async_wrapper {
@@ -106,6 +112,7 @@ protected:
         void reserve_ep(unsigned index);
 
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
+        static void conn_reply_cb(void *arg, const void *reply_data, long unsigned length);
 
         ucs::handle<uct_md_h>      m_md;
         uct_md_attr_t              m_md_attr;
@@ -114,6 +121,7 @@ protected:
         ucs::handle<uct_iface_h>   m_iface;
         eps_vec_t                  m_eps;
         uct_iface_attr_t           m_iface_attr;
+        uct_iface_params_t         m_iface_params;
     };
 
     class mapped_buffer {

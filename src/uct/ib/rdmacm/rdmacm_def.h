@@ -27,4 +27,10 @@ typedef struct uct_rdmacm_priv_data_hdr {
     uint8_t length;     /* length of the private data */
 } uct_rdmacm_priv_data_hdr_t;
 
+ucs_status_t uct_rdmacm_resolve_addr(struct rdma_cm_id *cm_id,
+                                     struct sockaddr *addr, int timeout_ms,
+                                     ucs_log_level_t log_level);
+
+ucs_status_t uct_rdmacm_ep_resolve_addr(uct_rdmacm_ep_t *ep);
+
 #endif /* UCT_RDMACM_H */

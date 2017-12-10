@@ -297,6 +297,9 @@ void uct_test::twait(int delta_ms) const {
     } while (now + ucs_time_from_msec(delta_ms) > ucs_get_time());
 }
 
+const std::string uct_test::entity::server_priv_data = "Server private data";
+volatile int uct_test::entity::client_connected = 0;
+
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
                          uct_iface_params_t *params, uct_md_config_t *md_config) {
 
@@ -326,6 +329,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     ASSERT_UCS_OK(status);
 
     uct_iface_progress_enable(m_iface, UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+    m_iface_params = *params;
 }
 
 
@@ -420,6 +424,10 @@ const uct_iface_attr& uct_test::entity::iface_attr() const {
     return m_iface_attr;
 }
 
+const uct_iface_params& uct_test::entity::iface_params() const {
+    return m_iface_params;
+}
+
 uct_ep_h uct_test::entity::ep(unsigned index) const {
     return m_eps.at(index);
 }
@@ -488,6 +496,41 @@ void uct_test::entity::destroy_eps() {
     }
 }
 
+void uct_test::entity::conn_reply_cb(void *arg, const void *reply_data, long unsigned length)
+{
+    EXPECT_EQ(std::string(reinterpret_cast<const char *>(server_priv_data.c_str())),
+              std::string(reinterpret_cast<const char *>(reply_data)));
+
+    EXPECT_EQ(server_priv_data.length() + 1, length);
+    EXPECT_FALSE(memcmp(server_priv_data.c_str(), reply_data, server_priv_data.length() + 1));
+    client_connected = 1;
+}
+
+void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other)
+{
+    uct_ep_h ep;
+    ucs_status_t status;
+    uint64_t client_priv_data = 0xdeadbeef;
+
+    reserve_ep(index);
+    if (m_eps[index]) {
+        return; /* Already connected */
+    }
+
+    ASSERT_TRUE(sizeof(client_priv_data) <= other.iface_attr().max_conn_priv);
+
+    /* Connect to the server */
+    status = uct_ep_create_sockaddr(iface(),
+                                    &other.iface_params().mode.sockaddr.listen_sockaddr,
+                                    conn_reply_cb, iface(), UCT_CB_FLAG_ASYNC,
+                                    &client_priv_data, sizeof(client_priv_data),
+                                    &ep);
+    /* For UCT_CB_FLAG_ASYNC */
+    ASSERT_TRUE(status == UCS_INPROGRESS);
+
+    m_eps[index].reset(ep, uct_ep_destroy);
+}
+
 void uct_test::entity::connect_to_ep(unsigned index, entity& other,
                                      unsigned other_index)
 {
@@ -553,6 +596,8 @@ void uct_test::entity::connect(unsigned index, entity& other,
         connect_to_ep(index, other, other_index);
     } else if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         connect_to_iface(index, other);
+    } else if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR) {
+        connect_to_sockaddr(index, other);
     } else {
         UCS_TEST_SKIP_R("cannot connect");
     }

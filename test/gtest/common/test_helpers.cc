@@ -108,6 +108,36 @@ bool is_ib_netdev(const char *ifa_name) {
     }
 }
 
+uint16_t get_port() {
+    int sock_fd, ret;
+    ucs_status_t status;
+    struct sockaddr_in addr_in, ret_addr;
+    socklen_t len = sizeof(ret_addr);
+    uint16_t port;
+
+    status = ucs_tcpip_socket_create(&sock_fd);
+    EXPECT_EQ(status, UCS_OK);
+
+    memset(&addr_in, 0, sizeof(struct sockaddr_in));
+    addr_in.sin_family      = AF_INET;
+    addr_in.sin_addr.s_addr = INADDR_ANY;
+
+    do {
+        addr_in.sin_port        = htons(0);
+        /* Ports below 1024 are considered "privileged" (can be used only by user root).
+         * Ports above and including 1024 can be used by anyone */
+        ret = bind(sock_fd, (struct sockaddr*)&addr_in, sizeof(struct sockaddr_in));
+    } while (ret);
+
+    ret = getsockname(sock_fd, (struct sockaddr*)&ret_addr, &len);
+    EXPECT_EQ(ret, 0);
+    EXPECT_LT(1023, ntohs(ret_addr.sin_port)) ;
+
+    port = ret_addr.sin_port;
+    close(sock_fd);
+    return port;
+}
+
 namespace detail {
 
 message_stream::message_stream(const std::string& title) {

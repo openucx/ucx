@@ -9,6 +9,8 @@
 #include "rdmacm_def.h"
 #include "rdmacm_md.h"
 
+#define UCT_RDMACM_MAX_CONN_PRIV \
+        (UCT_RDMACM_UDP_PRIV_DATA_LEN) - (sizeof(uct_rdmacm_priv_data_hdr_t))
 
 typedef struct uct_rdmacm_iface_config {
     uct_iface_config_t       super;
@@ -30,11 +32,15 @@ struct uct_rdmacm_iface {
 
     uct_rdmacm_ep_t                      *ep;
 
+    /** Field used only for client side */
+    ucs_list_link_t                      pending_eps_list;
+
     struct {
         double                           addr_resolve_timeout;
     } config;
 };
 
+void uct_rdmacm_iface_client_start_next_ep(uct_rdmacm_iface_t *iface);
 
 extern uct_md_component_t uct_rdmacm_mdc;
 

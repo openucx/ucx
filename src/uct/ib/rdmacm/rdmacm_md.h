@@ -6,6 +6,7 @@
 #ifndef UCT_RDMACM_MD_H_
 #define UCT_RDMACM_MD_H_
 
+#include "rdmacm_def.h"
 #include <uct/base/uct_md.h>
 #include <ucs/sys/string.h>
 #include <ucs/time/time.h>
