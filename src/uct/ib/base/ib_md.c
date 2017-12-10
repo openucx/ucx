@@ -91,7 +91,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
    "Enable listening for async events on the device",
    ucs_offsetof(uct_ib_md_config_t, async_events), UCS_CONFIG_TYPE_BOOL},
 
-  {"ETH_PAUSE_ON", "n",
+  {"ETH_PAUSE_ON", "y",
    "Whether or not 'Pause Frame' is enabled on an Ethernet network.\n"
    "Pause frame is a mechanism for temporarily stopping the transmission of data to\n"
    "ensure zero loss under congestion on Ethernet family computer networks.\n"
