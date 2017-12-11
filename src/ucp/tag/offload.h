@@ -62,19 +62,22 @@ ucs_status_t ucp_tag_offload_unexp_rndv(void *arg, unsigned flags, uint64_t stag
 
 void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, int force);
 
-int ucp_tag_offload_post(ucp_request_t *req);
+int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue);
 
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_offload_try_post(ucp_worker_t *worker, ucp_request_t *req)
+ucp_tag_offload_try_post(ucp_worker_t *worker, ucp_request_t *req,
+                         ucp_request_queue_t *req_queue)
 {
     if (ucs_unlikely((req->recv.length >= worker->tm.offload.thresh) &&
                      (req->recv.state.offset == 0))) {
-        if (ucp_tag_offload_post(req)) {
+        if (ucp_tag_offload_post(req, req_queue)) {
             return;
         }
     }
+
     req->flags |= UCP_REQUEST_FLAG_BLOCK_OFFLOAD;
-    ++worker->tm.offload.sw_req_count;
+    ++worker->tm.expected.sw_all_count;
+    ++req_queue->sw_count;
 }
 
 static UCS_F_ALWAYS_INLINE void

@@ -46,7 +46,7 @@ void ucp_tag_offload_tag_consumed(uct_tag_context_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
     ucs_queue_head_t *queue;
 
-    queue = ucp_tag_exp_get_req_queue(&req->recv.worker->tm, req);
+    queue = &ucp_tag_exp_get_req_queue(&req->recv.worker->tm, req)->queue;
     ucs_queue_remove(queue, &req->recv.queue);
 }
 
@@ -204,7 +204,7 @@ void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, int force)
     }
 }
 
-int ucp_tag_offload_post(ucp_request_t *req)
+int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
 {
     size_t length          = req->recv.length;
     ucp_mem_desc_t *rdesc  = NULL;
@@ -221,18 +221,20 @@ int ucp_tag_offload_post(ucp_request_t *req)
         return 0;
     }
 
-    if ((context->config.tag_sender_mask & req->recv.tag.tag_mask) !=
-         context->config.tag_sender_mask) {
-        /* Wildcard.
-         * TODO add check that only offload capable iface present. In
-         * this case can post tag as well. */
-        UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_WILDCARD);
-        return 0;
-    }
-
-    if (worker->tm.offload.sw_req_count) {
-        /* There are some requests which must be completed in SW. Do not post
-         * tags to HW until they are completed. */
+    if (req->recv.tag.tag_mask != UCP_TAG_MASK_FULL) {
+        if (!ucp_tag_is_specific_source(context, req->recv.tag.tag_mask)) {
+            /* Sender rank wildcard */
+            UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_WILDCARD);
+            return 0;
+        } else if (worker->tm.expected.sw_all_count) {
+            /* There are some requests which must be completed in SW.
+             * Do not post tags to HW until they are completed. */
+            UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_SW_PEND);
+            return 0;
+        }
+    } else if (worker->tm.expected.wildcard.sw_count ||
+               req_queue->sw_count) {
+        /* There are some requests which must be completed in SW */
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_SW_PEND);
         return 0;
     }

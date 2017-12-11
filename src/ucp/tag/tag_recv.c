@@ -143,9 +143,6 @@ ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
                   ucs_status_string(status));
 
     req->status = status;
-    if (req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD) {
-        --req->recv.worker->tm.offload.sw_req_count;
-    }
     if ((req->flags |= UCP_REQUEST_FLAG_COMPLETED) & UCP_REQUEST_FLAG_RELEASED) {
         ucp_request_put(req);
     }
@@ -159,7 +156,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                     ucp_recv_desc_t *rdesc, const char *debug_name)
 {
     unsigned save_rreq = 1;
-    ucs_queue_head_t *queue;
+    ucp_request_queue_t *req_queue;
     ucs_status_t status;
     size_t buffer_size;
 
@@ -182,7 +179,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     } else if (save_rreq) {
         /* If not found on unexpected, wait until it arrives.
          * If was found but need this receive request for later completion, save it */
-        queue = ucp_tag_exp_get_queue(&worker->tm, tag, tag_mask);
+        req_queue = ucp_tag_exp_get_queue(&worker->tm, tag, tag_mask);
 
         req->recv.buffer        = buffer;
         req->recv.length        = buffer_size;
@@ -191,11 +188,11 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->recv.tag.tag_mask  = tag_mask;
         req->recv.tag.cb        = cb;
 
-        ucp_tag_exp_push(&worker->tm, queue, req);
+        ucp_tag_exp_push(&worker->tm, req_queue, req);
 
         /* If offload supported, post this tag to transport as well.
          * TODO: need to distinguish the cases when posting is not needed. */
-        ucp_tag_offload_try_post(worker, req);
+        ucp_tag_offload_try_post(worker, req, req_queue);
         ucs_trace_req("%s returning expected request %p (%p)", debug_name, req,
                       req + 1);
     }
