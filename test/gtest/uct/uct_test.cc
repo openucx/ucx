@@ -344,15 +344,21 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
                                      alloc_name, mem);
         ASSERT_UCS_OK(status);
 
-        rkey_buffer = malloc(md_attr().rkey_packed_size);
+        if (md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY) {
+            rkey_buffer = malloc(md_attr().rkey_packed_size);
 
-        status = uct_md_mkey_pack(m_md, mem->memh, rkey_buffer);
-        ASSERT_UCS_OK(status);
+            status = uct_md_mkey_pack(m_md, mem->memh, rkey_buffer);
+            ASSERT_UCS_OK(status);
 
-        status = uct_rkey_unpack(rkey_buffer, rkey_bundle);
-        ASSERT_UCS_OK(status);
+            status = uct_rkey_unpack(rkey_buffer, rkey_bundle);
+            ASSERT_UCS_OK(status);
 
-        free(rkey_buffer);
+            free(rkey_buffer);
+        } else {
+            rkey_bundle->handle = NULL;
+            rkey_bundle->rkey   = UCT_INVALID_RKEY;
+            rkey_bundle->type   = NULL;
+        }
     } else {
         uct_alloc_method_t method = UCT_ALLOC_METHOD_MMAP;
         status = uct_mem_alloc(NULL, length, UCT_MD_MEM_ACCESS_ALL,
