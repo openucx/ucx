@@ -318,18 +318,16 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     uct_ep_h                aux_ep           = NULL;
     uct_tl_resource_desc_t* tl_rsc;
     uint64_t                dest_uuid UCS_V_UNUSED;
-    ucp_ep_h                ucp_ep_iter;
     khiter_t                ucp_ep_errh_iter;
     ucp_err_handler_cb_t    err_cb;
-    ucp_lane_index_t        lane, n_lanes, failed_lane;
+    ucp_lane_index_t        lane, failed_lane;
     ucp_rsc_index_t         rsc_index;
 
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
-    kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep_iter, {
-        for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep_iter); ++lane) {
-            if ((uct_ep == ucp_ep_iter->uct_eps[lane]) ||
-                ucp_wireup_ep_test_aux(ucp_ep_iter->uct_eps[lane], uct_ep)) {
-                ucp_ep = ucp_ep_iter;
+    kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep, {
+        for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+            if ((uct_ep == ucp_ep->uct_eps[lane]) ||
+                ucp_wireup_ep_test_aux(ucp_ep->uct_eps[lane], uct_ep)) {
                 failed_lane = lane;
                 goto found_ucp_ep;
             }
@@ -345,20 +343,27 @@ found_ucp_ep:
     rsc_index   = ucp_ep_get_rsc_index(ucp_ep, lane);
     tl_rsc      = &worker->context->tl_rscs[rsc_index].tl_rsc;
 
-    /* Purge outstanding */
-    uct_ep_pending_purge(ucp_ep_iter->uct_eps[lane], ucp_ep_err_pending_purge,
-                         UCS_STATUS_PTR(status));
+    /* Destroy all lanes except failed one since ucp_ep becomes unusable as well */
+    for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+        if (ucp_ep->uct_eps[lane] == NULL) {
+            continue;
+        }
 
-    /* Destroy all lanes excepting failed one since ucp_ep becomes unusable as well */
-    for (lane = 0, n_lanes = ucp_ep_num_lanes(ucp_ep); lane < n_lanes; ++lane) {
-        if ((lane != failed_lane) && ucp_ep->uct_eps[lane]) {
-            /* TODO flush and purge outstanding operations */
+        /* Purge pending queue */
+        ucs_trace("ep %p: purge pending on uct_ep[%d]=%p", ucp_ep, lane,
+                  ucp_ep->uct_eps[lane]);
+        uct_ep_pending_purge(ucp_ep->uct_eps[lane], ucp_ep_err_pending_purge,
+                             UCS_STATUS_PTR(status));
+
+        if (lane != failed_lane) {
+            ucs_trace("ep %p: destroy uct_ep[%d]=%p", ucp_ep, lane,
+                      ucp_ep->uct_eps[lane]);
             uct_ep_destroy(ucp_ep->uct_eps[lane]);
             ucp_ep->uct_eps[lane] = NULL;
         }
     }
 
-    /* Move failed lane at 0 index */
+    /* Move failed lane to index 0 */
     if (failed_lane != 0) {
         ucp_ep->uct_eps[0] = ucp_ep->uct_eps[failed_lane];
         ucp_ep->uct_eps[failed_lane] = NULL;
@@ -367,10 +372,11 @@ found_ucp_ep:
     /* NOTE: if failed ep is wireup auxiliary then we need to replace the lane
      *       with failed ep and destroy wireup ep
      */
-    if (ucp_wireup_ep_test_aux(ucp_ep_iter->uct_eps[0], uct_ep)) {
-        aux_ep = ucp_wireup_ep_extract_aux(ucp_ep_iter->uct_eps[0]);
-        uct_ep_destroy(ucp_ep_iter->uct_eps[0]);
-        ucp_ep_iter->uct_eps[0] = aux_ep;
+    if (ucp_wireup_ep_test_aux(ucp_ep->uct_eps[0], uct_ep)) {
+        aux_ep = ucp_wireup_ep_extract_aux(ucp_ep->uct_eps[0]);
+        ucs_trace("ep %p: destroy failed uct_ep=%p", ucp_ep, ucp_ep->uct_eps[0]);
+        uct_ep_destroy(ucp_ep->uct_eps[0]);
+        ucp_ep->uct_eps[0] = aux_ep;
     }
 
     /* Redirect all lanes to failed one */
