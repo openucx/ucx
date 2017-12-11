@@ -78,14 +78,6 @@
 /* Used for labels */
 #define UCS_EMPTY_STATEMENT {}
 
-/*
- * Compile-time check _var1 and _var2 are the same type
- *
- * Usage: UCS_STATIC_TYPE_MATCH(a, b)
- */
-#define UCS_STATIC_TYPE_MATCH(_var1, _var2) \
-     typeof(_var1) *_tmp UCS_V_UNUSED = 1 ? &(_var1) : &(_var2);
-
 /**
  * Size of statically-declared array
  */
@@ -136,5 +128,14 @@
 
 /* Check if an expression is a compile-time constant */
 #define ucs_is_constant(expr)      __builtin_constant_p(expr)
+
+/*
+ * Compile-time check _var1 and _var2 are the same type
+ *
+ * Usage: UCS_STATIC_TYPE_MATCH(a, b)
+ */
+#define UCS_STATIC_TYPE_MATCH(_var1, _var2) \
+    UCS_STATIC_ASSERT(__builtin_types_compatible_p(typeof(_var1), \
+                                                   typeof(_var2)));
 
 #endif /* UCS_COMPILER_DEF_H */
