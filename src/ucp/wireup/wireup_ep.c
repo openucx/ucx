@@ -192,12 +192,12 @@ ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
     uct_pending_req_t *req;
     ucp_request_t *ucp_req;
 
-    if (wireup_ep->aux_ep != NULL) {
-        ucs_queue_for_each_extract(req, &wireup_ep->pending_q, priv, 1) {
-            ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
-            cb(&ucp_req->send.uct, arg);
-        }
+    ucs_queue_for_each_extract(req, &wireup_ep->pending_q, priv, 1) {
+        ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
+        cb(&ucp_req->send.uct, arg);
+    }
 
+    if (wireup_ep->aux_ep != NULL) {
         uct_ep_pending_purge(wireup_ep->aux_ep, ucp_wireup_ep_pending_req_release,
                              arg);
     }
