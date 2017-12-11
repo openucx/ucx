@@ -66,6 +66,7 @@ protected:
     void do_send_recv_data_test(ucp_datatype_t datatype);
     void do_send_recv_test(ucp_datatype_t datatype);
     void do_send_exp_recv_test(ucp_datatype_t datatype);
+    void do_send_recv_data_recv_test(ucp_datatype_t datatype);
 };
 
 void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
@@ -131,8 +132,8 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
         void   *rreq = ucp_stream_recv_nb(receiver().ep(), dt_desc.buf(),
                                           dt_desc.count(), dt_desc.dt(),
                                           ucp_recv_cb, &length, 0);
+        ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq));
         if (UCS_PTR_IS_PTR(rreq)) {
-            ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq));
             length = wait_stream_recv(rreq);
         }
         roffset += length;
@@ -210,6 +211,60 @@ void test_ucp_stream::do_send_exp_recv_test(ucp_datatype_t datatype)
     EXPECT_EQ(scount, rcount);
 }
 
+void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
+{
+    std::vector<char> sbuf(16 * 1024 * 1024, 's');
+    size_t            ssize = 0; /* total send size */
+    ucs_status_ptr_t  sstatus;
+    std::vector<char> check_pattern;
+    std::vector<char> rbuf;
+    size_t            roffset = 0;
+    ucs_status_ptr_t  rdata;
+    size_t            length;
+
+    size_t            send_i = 3;
+    size_t            recv_i = 0;
+    do {
+        if (send_i < sbuf.size()) {
+            rbuf.resize(rbuf.size() + send_i, 'r');
+            ucs::fill_random(sbuf.data(), send_i);
+            check_pattern.insert(check_pattern.end(), sbuf.begin(),
+                                 sbuf.begin() + send_i);
+            sstatus = stream_send_nb(ucp::data_type_desc_t(datatype, sbuf.data(),
+                                                           send_i));
+            EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
+            wait(sstatus);
+            ssize += send_i;
+            send_i *= 2;
+        }
+
+        progress();
+
+        if (++recv_i % 2) {
+            rdata = ucp_stream_recv_data_nb(receiver().ep(), &length);
+            if (UCS_PTR_STATUS(rdata) == UCS_OK) {
+                continue;
+            }
+
+            memcpy(&rbuf[roffset], rdata, length);
+            ucp_stream_data_release(receiver().ep(), rdata);
+        } else {
+            ucp::data_type_desc_t dt_desc(datatype, &rbuf[roffset], ssize - roffset);
+            void *rreq = ucp_stream_recv_nb(receiver().ep(), dt_desc.buf(),
+                                            dt_desc.count(), dt_desc.dt(),
+                                            ucp_recv_cb, &length, 0);
+            ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq));
+            if (UCS_PTR_IS_PTR(rreq)) {
+                length = wait_stream_recv(rreq);
+            }
+        }
+        roffset += length;
+    } while (roffset < ssize);
+
+    EXPECT_EQ(roffset, ssize);
+    EXPECT_EQ(check_pattern, rbuf);
+}
+
 UCS_TEST_P(test_ucp_stream, send_recv_data) {
     do_send_recv_data_test(DATATYPE);
 }
@@ -232,6 +287,14 @@ UCS_TEST_P(test_ucp_stream, send_exp_recv) {
 
 UCS_TEST_P(test_ucp_stream, send_exp_recv_iov) {
     do_send_exp_recv_test(DATATYPE_IOV);
+}
+
+UCS_TEST_P(test_ucp_stream, send_recv_data_recv) {
+    do_send_recv_data_recv_test(DATATYPE);
+}
+
+UCS_TEST_P(test_ucp_stream, send_recv_data_recv_iov) {
+    do_send_recv_data_recv_test(DATATYPE_IOV);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_stream)
