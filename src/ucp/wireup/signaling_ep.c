@@ -137,7 +137,7 @@ ucp_signaling_ep_tag_eager_zcopy(uct_ep_h ep, uct_tag_t tag, uint64_t imm,
     status = uct_ep_tag_eager_zcopy(proxy_ep->uct_ep, tag, imm, iov, iovcnt,
                                     flags | UCT_SEND_FLAG_SIGNALED, comp);
 
-    if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
+    if (!UCS_STATUS_IS_ERR(status)) {
         ucp_proxy_ep_replace(proxy_ep);
     }
     return status;
