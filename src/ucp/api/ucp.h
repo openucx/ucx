@@ -620,6 +620,8 @@ typedef struct ucp_params {
      * the number of ranks (or processing elements) in the job.
      * Does not affect semantics, but only transport selection criteria and the
      * resulting performance.
+     * The value can be also set by UCX_NUM_EPS environment variable. In such case
+     * it will override the number of endpoints set by @e estimated_num_eps
      */
     size_t                             estimated_num_eps;
 
