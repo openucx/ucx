@@ -47,6 +47,7 @@ mlx5_am_override = {
       16 :      "rc_mlx5",
       32 :      "rc_mlx5",
       64 :      "rc_mlx5",
+     256 :      "rc_mlx5",
     1024 :      "rc_mlx5",
  1000000 :      "rc_mlx5",
 }
@@ -56,6 +57,7 @@ mlx4_am_override = {
       16 :      "rc",
       32 :      "rc",
       64 :      "rc",
+     256 :      "rc",
     1024 :      "rc",
  1000000 :      "rc",
 }
