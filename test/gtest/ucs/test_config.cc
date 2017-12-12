@@ -3,7 +3,9 @@
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
-
+/* force older C++ version to have SIZE_MAX */
+#define __STDC_LIMIT_MACROS
+#define __STDC_CONSTANT_MACROS
 #include <common/test.h>
 extern "C" {
 #include <ucs/config/parser.h>
