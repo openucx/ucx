@@ -294,7 +294,7 @@ ucs_status_t ucp_request_rndv_buffer_reg(ucp_request_t *req)
     req->send.reg_rsc = UCP_NULL_RESOURCE;
 
     for (i = 0; i < ucp_ep_rndv_num_lanes(ep); i++) {
-        if (ucp_ep_rndv_md_flags(ep, i) & UCT_MD_FLAG_NEED_MEMH) {
+        if (ucp_ep_rndv_md_flags(ep, i) & UCT_MD_FLAG_REG) {
             lane = ucp_ep_get_rndv_get_lane(ep, i);
             md   = ucp_ep_md(ep, lane);
             status = uct_md_mem_reg(md, (void*)req->send.buffer, req->send.length,
@@ -303,7 +303,7 @@ ucs_status_t ucp_request_rndv_buffer_reg(ucp_request_t *req)
             if (status != UCS_OK) {
                 /* rollback all registrations */
                 for (r = 0; r < i; r++) {
-                    if (ucp_ep_rndv_md_flags(ep, r) & UCT_MD_FLAG_NEED_MEMH) {
+                    if (ucp_ep_rndv_md_flags(ep, r) & UCT_MD_FLAG_REG) {
                         ucs_assert(req->send.state.dt.dt.contig[r].memh != UCT_MEM_HANDLE_NULL);
                         lane = ucp_ep_get_rndv_get_lane(ep, r);
                         md = ucp_ep_md(ep, lane);
@@ -345,7 +345,7 @@ ucp_lane_index_t ucp_request_rndv_buffer_dereg_unused(ucp_request_t *req, ucp_la
                 req->send.state.dt.dt.contig[0].memh = req->send.state.dt.dt.contig[i].memh;
                 req->send.state.dt.dt.contig[i].memh = UCT_MEM_HANDLE_NULL;
             }
-        } else if ((ucp_ep_rndv_md_flags(ep, i) & UCT_MD_FLAG_NEED_MEMH) &&
+        } else if ((ucp_ep_rndv_md_flags(ep, i) & UCT_MD_FLAG_REG) &&
                    (req->send.state.dt.dt.contig[i].memh != UCT_MEM_HANDLE_NULL)) {
             md = ucp_ep_md(ep, lane);
             uct_md_mem_dereg(md, req->send.state.dt.dt.contig[i].memh);
