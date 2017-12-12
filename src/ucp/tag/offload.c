@@ -571,6 +571,7 @@ void ucp_tag_offload_eager_sync_send_ack(ucp_worker_h worker,
     req->send.proto.am_id       = UCP_AM_ID_OFFLOAD_SYNC_ACK;
     req->send.proto.sender_uuid = sender_uuid;
     req->send.proto.sender_tag  = sender_tag;
+    req->send.proto.comp_cb     = ucp_request_put;
     ucp_request_send(req);
 }
 

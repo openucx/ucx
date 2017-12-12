@@ -209,6 +209,7 @@ static void ucp_rndv_send_ats(ucp_request_t *rndv_req, uintptr_t remote_request)
     rndv_req->send.proto.am_id  = UCP_AM_ID_RNDV_ATS;
     rndv_req->send.proto.status = UCS_OK;
     rndv_req->send.proto.remote_request = remote_request;
+    rndv_req->send.proto.comp_cb = ucp_request_put;
 
     ucp_request_send(rndv_req);
 }
@@ -225,6 +226,7 @@ static void ucp_rndv_send_atp(ucp_request_t *rndv_req, uintptr_t remote_request)
     rndv_req->send.proto.am_id  = UCP_AM_ID_RNDV_ATP;
     rndv_req->send.proto.status = UCS_OK;
     rndv_req->send.proto.remote_request = remote_request;
+    rndv_req->send.proto.comp_cb = ucp_request_put;
 
     ucp_request_send(rndv_req);
 }
