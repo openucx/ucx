@@ -64,7 +64,9 @@ public:
 
 protected:
     void do_send_recv_data_test(ucp_datatype_t datatype);
+    template <typename T>
     void do_send_recv_test(ucp_datatype_t datatype);
+    template <typename T>
     void do_send_exp_recv_test(ucp_datatype_t datatype);
     void do_send_recv_data_recv_test(ucp_datatype_t datatype);
 };
@@ -72,14 +74,15 @@ protected:
 void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 {
     std::vector<char> sbuf(16 * 1024 * 1024, 's');
-    size_t            ssize = 0; /* total send size */
-    ucs_status_ptr_t  sstatus;
+    size_t            ssize = 0; /* total send size in bytes */
     std::vector<char> check_pattern;
+    ucs_status_ptr_t  sstatus;
 
     /* send all msg sizes*/
     for (size_t i = 3; i < sbuf.size(); i *= 2) {
-        ucs::fill_random(sbuf.data(), i);
-        check_pattern.insert(check_pattern.end(), sbuf.begin(), sbuf.begin() + i);
+        ucs::fill_random(sbuf.begin(), sbuf.begin() + i);
+        check_pattern.insert(check_pattern.end(), sbuf.begin(),
+                             sbuf.begin() + i);
         sstatus = stream_send_nb(ucp::data_type_desc_t(datatype, sbuf.data(), i));
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
         wait(sstatus);
@@ -106,27 +109,44 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
     EXPECT_EQ(check_pattern, rbuf);
 }
 
+template <typename T>
 void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
 {
+    const size_t      dt_elem_size = UCP_DT_IS_CONTIG(datatype) ?
+                                     ucp_contig_dt_elem_size(datatype) : 1;
     std::vector<char> sbuf(16 * 1024 * 1024, 's');
     size_t            ssize = 0; /* total send size */
     ucs_status_ptr_t  sstatus;
     std::vector<char> check_pattern;
 
-    /* send all msg sizes*/
+    /* send all msg sizes in bytes*/
     for (size_t i = 3; i < sbuf.size(); i *= 2) {
-        ucs::fill_random(sbuf.data(), i);
+        ucs::fill_random(sbuf.begin(), sbuf.begin() + i);
         check_pattern.insert(check_pattern.end(), sbuf.begin(), sbuf.begin() + i);
-        sstatus = stream_send_nb(ucp::data_type_desc_t(datatype, sbuf.data(), i));
+        sstatus = stream_send_nb(ucp::data_type_desc_t(DATATYPE, sbuf.data(), i));
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
         wait(sstatus);
         ssize += i;
     }
 
-    std::vector<char> rbuf(ssize, 'r');
-    size_t            roffset = 0;
+    size_t align_tail = dt_elem_size - ssize % dt_elem_size;
+    if (align_tail != 0) {
+        ucs::fill_random(sbuf.begin(), sbuf.begin() + align_tail);
+        check_pattern.insert(check_pattern.end(), sbuf.begin(), sbuf.begin() + align_tail);
+        sstatus = stream_send_nb(ucp::data_type_desc_t(ucp_dt_make_contig(align_tail),
+                                                       sbuf.data(), align_tail));
+        EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
+        wait(sstatus);
+        ssize += align_tail;
+    }
+
+    EXPECT_EQ(size_t(0), (ssize % dt_elem_size));
+
+    std::vector<T> rbuf(ssize / dt_elem_size, 'r');
+    size_t         roffset = 0;
     do {
-        ucp::data_type_desc_t dt_desc(datatype, &rbuf[roffset], ssize - roffset);
+        ucp::data_type_desc_t dt_desc(datatype, &rbuf[roffset / dt_elem_size],
+                                      ssize - roffset);
 
         size_t length;
         void   *rreq = ucp_stream_recv_nb(receiver().ep(), dt_desc.buf(),
@@ -136,19 +156,26 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
         if (UCS_PTR_IS_PTR(rreq)) {
             length = wait_stream_recv(rreq);
         }
+        EXPECT_EQ(size_t(0), length % dt_elem_size);
         roffset += length;
     } while (roffset < ssize);
 
     EXPECT_EQ(roffset, ssize);
-    EXPECT_EQ(check_pattern, rbuf);
+    const T     *check_ptr  = reinterpret_cast<const T *>(check_pattern.data());
+    const size_t check_size = check_pattern.size() / dt_elem_size;
+    EXPECT_EQ(std::vector<T>(check_ptr, check_ptr + check_size), rbuf);
 }
 
+template <typename T>
 void test_ucp_stream::do_send_exp_recv_test(ucp_datatype_t datatype)
 {
-    const size_t msg_size = 4 * 1024 * 1024;
+    const size_t dt_elem_size = UCP_DT_IS_CONTIG(datatype) ?
+                                ucp_contig_dt_elem_size(datatype) : 1;
+    const size_t msg_size = dt_elem_size * 1024 * 1024;
     const size_t n_msgs   = 10;
-    std::vector<std::vector<char> > rbufs(n_msgs,
-                                          std::vector<char>(msg_size, 'r'));
+
+    std::vector<std::vector<T> > rbufs(n_msgs,
+                                       std::vector<T>(msg_size / dt_elem_size, 'r'));
     std::vector<ucp::data_type_desc_t> dt_rdescs(n_msgs);
     std::vector<void *> rreqs;
 
@@ -179,21 +206,23 @@ void test_ucp_stream::do_send_exp_recv_test(ucp_datatype_t datatype)
 
     size_t rcount = 0;
     for (size_t i = 0; i < rreqs.size(); ++i) {
-        rcount += wait_stream_recv(rreqs[i]);
+        size_t length = wait_stream_recv(rreqs[i]);
+        EXPECT_EQ(size_t(0), length % dt_elem_size);
+        rcount += length;
     }
 
     while (rcount < scount) {
-        void             *buf   = &rbufs[0][0];
-        size_t           count  = rbufs[0].size();
         size_t           length = std::numeric_limits<size_t>::max();
         ucs_status_ptr_t rreq;
-        rreq = ucp_stream_recv_nb(receiver().ep(), buf, count, DATATYPE,
+        rreq = ucp_stream_recv_nb(receiver().ep(), dt_rdescs[0].buf(),
+                                  dt_rdescs[0].count(), dt_rdescs[0].dt(),
                                   ucp_recv_cb, &length, 0);
         if (UCS_PTR_IS_PTR(rreq)) {
             length = wait_stream_recv(rreq);
         }
         ASSERT_GT(length, 0ul);
         ASSERT_LE(length, msg_size);
+        EXPECT_EQ(size_t(0), length % dt_elem_size);
         rcount += length;
     }
     EXPECT_EQ(scount, rcount);
@@ -213,6 +242,8 @@ void test_ucp_stream::do_send_exp_recv_test(ucp_datatype_t datatype)
 
 void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
 {
+    const size_t dt_elem_size = UCP_DT_IS_CONTIG(datatype) ?
+                                ucp_contig_dt_elem_size(datatype) : 1;
     std::vector<char> sbuf(16 * 1024 * 1024, 's');
     size_t            ssize = 0; /* total send size */
     ucs_status_ptr_t  sstatus;
@@ -222,12 +253,12 @@ void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
     ucs_status_ptr_t  rdata;
     size_t            length;
 
-    size_t            send_i = 3;
+    size_t            send_i = dt_elem_size;
     size_t            recv_i = 0;
     do {
         if (send_i < sbuf.size()) {
             rbuf.resize(rbuf.size() + send_i, 'r');
-            ucs::fill_random(sbuf.data(), send_i);
+            ucs::fill_random(sbuf.begin(), sbuf.begin() + send_i);
             check_pattern.insert(check_pattern.end(), sbuf.begin(),
                                  sbuf.begin() + send_i);
             sstatus = stream_send_nb(ucp::data_type_desc_t(datatype, sbuf.data(),
@@ -240,7 +271,7 @@ void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
 
         progress();
 
-        if (++recv_i % 2) {
+        if ((++recv_i % 2) || ((ssize - roffset) < dt_elem_size)) {
             rdata = ucp_stream_recv_data_nb(receiver().ep(), &length);
             if (UCS_PTR_STATUS(rdata) == UCS_OK) {
                 continue;
@@ -273,24 +304,60 @@ UCS_TEST_P(test_ucp_stream, send_iov_recv_data) {
     do_send_recv_data_test(DATATYPE_IOV);
 }
 
-UCS_TEST_P(test_ucp_stream, send_recv) {
-    do_send_recv_test(DATATYPE);
+UCS_TEST_P(test_ucp_stream, send_recv_8) {
+    do_send_recv_test<uint8_t>(ucp_dt_make_contig(sizeof(uint8_t)));
+}
+
+UCS_TEST_P(test_ucp_stream, send_recv_16) {
+    do_send_recv_test<uint16_t>(ucp_dt_make_contig(sizeof(uint16_t)));
+}
+
+UCS_TEST_P(test_ucp_stream, send_recv_32) {
+    do_send_recv_test<uint32_t>(ucp_dt_make_contig(sizeof(uint32_t)));
+}
+
+UCS_TEST_P(test_ucp_stream, send_recv_64) {
+    do_send_recv_test<uint64_t>(ucp_dt_make_contig(sizeof(uint64_t)));
 }
 
 UCS_TEST_P(test_ucp_stream, send_recv_iov) {
-    do_send_recv_test(DATATYPE_IOV);
+    do_send_recv_test<uint8_t>(DATATYPE_IOV);
 }
 
-UCS_TEST_P(test_ucp_stream, send_exp_recv) {
-    do_send_exp_recv_test(DATATYPE);
+UCS_TEST_P(test_ucp_stream, send_exp_recv_8) {
+    do_send_exp_recv_test<uint8_t>(ucp_dt_make_contig(sizeof(uint8_t)));
+}
+
+UCS_TEST_P(test_ucp_stream, send_exp_recv_16) {
+    do_send_exp_recv_test<uint16_t>(ucp_dt_make_contig(sizeof(uint16_t)));
+}
+
+UCS_TEST_P(test_ucp_stream, send_exp_recv_32) {
+    do_send_exp_recv_test<uint32_t>(ucp_dt_make_contig(sizeof(uint32_t)));
+}
+
+UCS_TEST_P(test_ucp_stream, send_exp_recv_64) {
+    do_send_exp_recv_test<uint64_t>(ucp_dt_make_contig(sizeof(uint64_t)));
 }
 
 UCS_TEST_P(test_ucp_stream, send_exp_recv_iov) {
-    do_send_exp_recv_test(DATATYPE_IOV);
+    do_send_exp_recv_test<uint8_t>(DATATYPE_IOV);
 }
 
-UCS_TEST_P(test_ucp_stream, send_recv_data_recv) {
-    do_send_recv_data_recv_test(DATATYPE);
+UCS_TEST_P(test_ucp_stream, send_recv_data_recv_8) {
+    do_send_recv_data_recv_test(ucp_dt_make_contig(sizeof(uint8_t)));
+}
+
+UCS_TEST_P(test_ucp_stream, send_recv_data_recv_16) {
+    do_send_recv_data_recv_test(ucp_dt_make_contig(sizeof(uint16_t)));
+}
+
+UCS_TEST_P(test_ucp_stream, send_recv_data_recv_32) {
+    do_send_recv_data_recv_test(ucp_dt_make_contig(sizeof(uint32_t)));
+}
+
+UCS_TEST_P(test_ucp_stream, send_recv_data_recv_64) {
+    do_send_recv_data_recv_test(ucp_dt_make_contig(sizeof(uint64_t)));
 }
 
 UCS_TEST_P(test_ucp_stream, send_recv_data_recv_iov) {
@@ -425,7 +492,7 @@ void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
         m_recv_data[i].resize(m_msgs[i].length() * niter + 1);
         ucp::data_type_desc_t &rdesc = dt_rdescs[i].make(dt,
                                                          &m_recv_data[i][roffsets[i]],
-                                                         m_recv_data[i].size());
+                                             m_recv_data[i].size());
         size_t length;
         void *rreq = ucp_stream_recv_nb(e(m_receiver_idx).ep(0, i),
                                         rdesc.buf(), rdesc.count(), rdesc.dt(),
