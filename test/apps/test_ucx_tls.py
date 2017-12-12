@@ -16,6 +16,7 @@ mlx4_am = {
       16 :      "rc",
       32 :      "rc",
       64 :      "rc",
+     256 :      "ud",
     1024 :      "ud",
  1000000 :      "ud",
 }
@@ -25,15 +26,17 @@ mlx5_am = {
       16 :      "rc_mlx5",
       32 :      "rc_mlx5",
       64 :      "dc_mlx5",
+     256 :      "dc_mlx5",
     1024 :      "dc_mlx5",
  1000000 :      "dc_mlx5",
 }
 
 mlx5_am_roce = {
-       2 :      "ud_mlx5",
-      16 :      "ud_mlx5",
-      32 :      "ud_mlx5",
-      64 :      "ud_mlx5",
+       2 :      "rc_mlx5",
+      16 :      "rc_mlx5",
+      32 :      "rc_mlx5",
+      64 :      "rc_mlx5",
+     256 :      "ud_mlx5",
     1024 :      "ud_mlx5",
  1000000 :      "ud_mlx5",
 }

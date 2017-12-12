@@ -123,6 +123,9 @@ ucp_tag_offload_fill_rts(ucp_rndv_rts_hdr_t *rts, const ucp_request_hdr_t *hdr,
     rts->address   = addr;
     rts->size      = size;
     rts->flags     = flags;
+
+    /* ensure that send remote request is processed without packed MD index */
+    rts->sreq.reqptr &= ~((uintptr_t)UCP_TAG_OFFLOAD_REQPTR_MDI_MASK);
 }
 
 /* RNDV request matched by the transport. Need to proceed with SW based RNDV */
@@ -431,12 +434,19 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     size_t max_iov     = ucp_ep_config(ep)->tag.eager.max_iov;
     uct_iov_t *iov     = ucs_alloca(max_iov * sizeof(uct_iov_t));
     size_t iovcnt      = 0;
+    ucp_rsc_index_t md_index;
     ucp_dt_state_t dt_state;
     void *rndv_op;
 
+    md_index = ucp_ep_md_index(ep, req->send.lane);
+
+    UCS_STATIC_ASSERT(UCP_MD_INDEX_BITS <= UCS_SYS_CACHE_LINE_SIZE);
+    ucs_assert(md_index < UCS_SYS_CACHE_LINE_SIZE);
+    ucs_assert_always(!((uintptr_t)req & UCP_TAG_OFFLOAD_REQPTR_MDI_MASK));
+
     ucp_request_hdr_t rndv_hdr = {
         .sender_uuid = ep->worker->uuid,
-        .reqptr      = (uintptr_t)req
+        .reqptr      = (uintptr_t)req | md_index
     };
 
     dt_state = req->send.state.dt;

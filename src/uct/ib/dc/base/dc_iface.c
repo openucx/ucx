@@ -120,6 +120,11 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
     attr.path_mtu                   = iface->super.config.path_mtu;
     attr.min_rnr_timer              = 0;
     attr.max_dest_rd_atomic         = 1;
+    if ((iface->super.super.addr_type == UCT_IB_ADDRESS_TYPE_ETH) ||
+        (iface->super.super.addr_type == UCT_IB_ADDRESS_TYPE_GLOBAL))
+    {
+        attr.ah_attr.is_global      = 1;
+    }
     attr.ah_attr.sl                 = iface->super.super.config.sl;
     attr_mask                       = IBV_EXP_QP_STATE     |
                                       IBV_EXP_QP_PATH_MTU  |
@@ -331,8 +336,7 @@ ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
                                               unsigned *num_resources_p)
 {
     return uct_ib_device_query_tl_resources(dev, tl_name,
-                                            flags | UCT_IB_DEVICE_FLAG_LINK_IB |
-                                            UCT_IB_DEVICE_FLAG_DC,
+                                            flags | UCT_IB_DEVICE_FLAG_DC,
                                             resources_p, num_resources_p);
 }
 

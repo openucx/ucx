@@ -1919,7 +1919,8 @@ void ucp_rkey_buffer_release(void *rkey_buffer);
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey_p);
+ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
+                                ucp_rkey_h *rkey_p);
 
 
 /**
