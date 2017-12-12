@@ -175,8 +175,8 @@ static ucs_config_field_t ucp_config_table[] = {
    "Does not affect semantics, but only transport selection criteria and the\n"
    "resulting performance.\n"
    " If set to a value different from \"auto\" it will override the value passed\n"
-   "to the ucp_init()",
-   ucs_offsetof(ucp_config_t, ctx.estimated_num_eps), UCS_CONFIG_TYPE_MEMUNITS},
+   "to ucp_init()",
+   ucs_offsetof(ucp_config_t, ctx.estimated_num_eps), UCS_CONFIG_TYPE_ULUNITS},
 
   {NULL}
 };
@@ -796,10 +796,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                                               : UCP_MT_TYPE_SPINLOCK);
     context->config.ext = config->ctx;
 
-    if (context->config.ext.estimated_num_eps != UCS_CONFIG_MEMUNITS_AUTO) {
+    if (context->config.ext.estimated_num_eps != UCS_CONFIG_ULUNITS_AUTO) {
         /* num_eps were set via the env variable. Override current value */
         context->config.est_num_eps = context->config.ext.estimated_num_eps;
     }
+    ucs_debug("Estimated number of endpoints is %d",
+              context->config.est_num_eps);
 
     if (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) {
         /* TODO: currently UCP_RNDV_MODE_AUTO == UCP_RNDV_MODE_GET_ZCOPY,
