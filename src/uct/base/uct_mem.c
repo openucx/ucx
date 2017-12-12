@@ -81,7 +81,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
     }
 
     for (method = methods; method < methods + num_methods; ++method) {
-        ucs_debug("trying allocation method %s", uct_alloc_method_names[*method]);
+        ucs_trace("trying allocation method %s", uct_alloc_method_names[*method]);
 
         switch (*method) {
         case UCT_ALLOC_METHOD_MD:
@@ -160,7 +160,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 }
             }
 
-            ucs_debug("failed to allocate by thp %zu bytes: %m", alloc_length);
+            ucs_trace("failed to allocate by thp %zu bytes: %m", alloc_length);
 #endif
 
             break;
@@ -180,7 +180,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 goto allocated_without_md;
             }
 
-            ucs_debug("failed to allocate %zu bytes from the heap", alloc_length);
+            ucs_trace("failed to allocate %zu bytes from the heap", alloc_length);
             break;
 
         case UCT_ALLOC_METHOD_MMAP:
@@ -195,7 +195,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 goto allocated_without_md;
             }
 
-            ucs_debug("failed to mmap %zu bytes: %s", min_length,
+            ucs_trace("failed to mmap %zu bytes: %s", min_length,
                       ucs_status_string(status));
             break;
 
@@ -209,7 +209,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 goto allocated_without_md;
             }
 
-            ucs_debug("failed to allocate %zu bytes from hugetlb: %s",
+            ucs_trace("failed to allocate %zu bytes from hugetlb: %s",
                       min_length, ucs_status_string(status));
             break;
 
@@ -226,7 +226,7 @@ allocated_without_md:
     mem->md      = NULL;
     mem->memh    = UCT_MEM_HANDLE_NULL;
 allocated:
-    ucs_debug("allocated %zu bytes at %p using %s", alloc_length, address,
+    ucs_trace("allocated %zu bytes at %p using %s", alloc_length, address,
               (mem->md == NULL) ? uct_alloc_method_names[*method]
                                 : mem->md->component->name);
     mem->address = address;
