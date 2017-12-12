@@ -84,8 +84,16 @@ typedef struct ucp_ep_config_key {
     /* Lanes for remote memory access, sorted by priority, highest first */
     ucp_lane_index_t       rma_lanes[UCP_MAX_LANES];
 
+    /* Lanes for high-bw memory access, sorted by priority, highest first */
+    ucp_lane_index_t       rma_bw_lanes[UCP_MAX_LANES];
+
     /* Lanes for atomic operations, sorted by priority, highest first */
     ucp_lane_index_t       amo_lanes[UCP_MAX_LANES];
+
+    /* Local memory domains to send remote keys for in high-bw rma protocols
+     * NOTE: potentially it can be different than what is imposed by rma_bw_lanes,
+     * since these are the MDs used by remote side for accessing our memory. */
+    ucp_md_map_t           rma_bw_md_map;
 
     /* Bitmap of remote mds which are reachable from this endpoint (with any set
      * of transports which could be selected in the future).
@@ -144,11 +152,15 @@ typedef struct ucp_ep_config {
 
     /* Configuration for each lane that provides RMA */
     ucp_ep_rma_config_t     rma[UCP_MAX_LANES];
+
     /* Threshold for switching from put_short to put_bcopy */
     size_t                  bcopy_thresh;
 
     /* Configuration for AM lane */
     ucp_ep_msg_config_t     am;
+
+    /* MD index of each lane */
+    ucp_md_index_t          md_index[UCP_MAX_LANES];
 
     struct {
         /* Protocols used for tag matching operations
@@ -172,6 +184,8 @@ typedef struct ucp_ep_config {
             size_t          rma_thresh;
             /* Threshold for switching from eager to AM based rendezvous */
             size_t          am_thresh;
+            /* Total size of packed rkey, according to high-bw md_map */
+            size_t          rkey_size;
         } rndv;
 
         struct {

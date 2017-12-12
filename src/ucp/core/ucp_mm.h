@@ -71,6 +71,9 @@ typedef struct ucp_mem_desc {
 
 void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep);
 
+ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,
+                                          uct_rkey_t *uct_rkey_p);
+
 ucs_status_t ucp_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 
 void ucp_mpool_free(ucs_mpool_t *mp, void *chunk);
@@ -81,9 +84,11 @@ void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 ucs_status_t ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
                                         uct_memory_type_t *mem_type_p);
 
-ucs_status_t ucp_rkey_pack_uct(ucp_context_h context,
-                               ucp_md_map_t md_map, const uct_mem_h *memh,
-                               void *rkey_buffer, size_t *size_p);
+ucs_status_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map);
+
+ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
+                          const uct_mem_h *memh, void *rkey_buffer);
+
 
 static UCS_F_ALWAYS_INLINE uct_mem_h
 ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
@@ -102,11 +107,12 @@ ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
     ({ \
         ucs_status_t status = UCS_OK; \
         if (ucs_unlikely((_ep)->cfg_index != (_rkey)->cache.ep_cfg_index)) { \
-            ucp_rkey_resolve_inner(rkey, ep); \
-            if (ucs_unlikely((_rkey)->cache._op_type##_lane == UCP_NULL_LANE)) { \
-                ucs_error("Remote memory is unreachable"); \
-                status = UCS_ERR_UNREACHABLE; \
-            } \
+            ucp_rkey_resolve_inner(_rkey, _ep); \
+        } \
+        if (ucs_unlikely((_rkey)->cache._op_type##_lane == UCP_NULL_LANE)) { \
+            ucs_error("remote memory is unreachable (remote md_map 0x%lx)", \
+                      (_rkey)->md_map); \
+            status = UCS_ERR_UNREACHABLE; \
         } \
         status; \
     })
