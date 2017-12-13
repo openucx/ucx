@@ -14,11 +14,6 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/proto/proto.h>
 
-enum {
-    UCP_RNDV_RTS_FLAG_PACKED_RKEY  = UCS_BIT(0),
-    UCP_RNDV_RTS_FLAG_OFFLOAD      = UCS_BIT(1),
-    UCP_RNDV_RTR_FLAG_PACKED_RKEY  = UCS_BIT(2)
-};
 
 /*
  * Rendezvous RTS
@@ -28,7 +23,6 @@ typedef struct {
     ucp_request_hdr_t         sreq;     /* send request on the rndv initiator side */
     uint64_t                  address;  /* holds the address of the data buffer on the sender's side */
     size_t                    size;     /* size of the data for sending */
-    uint16_t                  flags;
     /* packed rkeys follow */
 } UCS_S_PACKED ucp_rndv_rts_hdr_t;
 
@@ -39,8 +33,7 @@ typedef struct {
     uintptr_t                 sreq_ptr; /* request on the rndv initiator side - sender */
     uintptr_t                 rreq_ptr; /* request on the rndv receiver side */
     uint64_t                  address;  /* holds the address of the data buffer on the receiver's side */
-    uint16_t                  flags;
-    uint64_t                  recv_uuid;
+    /* packed rkeys follow */
 } UCS_S_PACKED ucp_rndv_rtr_hdr_t;
 
 /*
@@ -54,9 +47,9 @@ typedef struct {
 ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *req);
 
 void ucp_rndv_matched(ucp_worker_h worker, ucp_request_t *req,
-                      ucp_rndv_rts_hdr_t *rndv_rts_hdr);
+                      const ucp_rndv_rts_hdr_t *rndv_rts_hdr);
 
-ucs_status_t ucp_proto_progress_rndv_get_zcopy(uct_pending_req_t *self);
+ucs_status_t ucp_rndv_progress_rma_get_zcopy(uct_pending_req_t *self);
 
 ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
                                   unsigned tl_flags);
@@ -66,12 +59,6 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg);
 static inline size_t ucp_rndv_total_len(ucp_rndv_rts_hdr_t *hdr)
 {
     return hdr->size;
-}
-
-static inline size_t ucp_rndv_rts_packed_len(ucp_ep_h ep)
-{
-    ucp_lane_index_t lane = ucp_ep_get_rndv_get_lane(ep, 0);
-    return sizeof(ucp_rndv_rts_hdr_t) + ucp_ep_md_attr(ep, lane)->rkey_packed_size;
 }
 
 #endif

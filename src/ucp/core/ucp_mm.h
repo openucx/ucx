@@ -115,8 +115,13 @@ ucs_status_t ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map);
 
+void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
+                          void *rkey_buffer, const void* uct_rkeys[]);
+
 ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
                           const uct_mem_h *memh, void *rkey_buffer);
+
+void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max);
 
 
 static UCS_F_ALWAYS_INLINE uct_mem_h

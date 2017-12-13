@@ -13,16 +13,14 @@
 #include <string.h>
 #include <inttypes.h>
 
-#define UCP_WIREUP_RNDV_TEST_MSG_SIZE       262144
-#define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE     262144
+#define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE       262144
 
 enum {
     UCP_WIREUP_LANE_USAGE_AM     = UCS_BIT(0), /* Active messages */
     UCP_WIREUP_LANE_USAGE_RMA    = UCS_BIT(1), /* Remote memory access */
     UCP_WIREUP_LANE_USAGE_RMA_BW = UCS_BIT(2), /* High-BW remote memory access */
     UCP_WIREUP_LANE_USAGE_AMO    = UCS_BIT(3), /* Atomic memory access */
-    UCP_WIREUP_LANE_USAGE_TAG    = UCS_BIT(4), /* Tag matching offload */
-    UCP_WIREUP_LANE_USAGE_RNDV   = UCS_BIT(5)  /* Rendezvous (to be removed) */
+    UCP_WIREUP_LANE_USAGE_TAG    = UCS_BIT(4)  /* Tag matching offload */
 };
 
 
@@ -693,22 +691,6 @@ static double ucp_wireup_am_score_func(ucp_context_h context,
                    iface_attr->overhead + remote_iface_attr->overhead);
 }
 
-static double ucp_wireup_rndv_score_func(ucp_context_h context,
-                                         const uct_md_attr_t *md_attr,
-                                         const uct_iface_attr_t *iface_attr,
-                                         const ucp_address_iface_attr_t *remote_iface_attr)
-{
-    /* highest bandwidth with lowest overhead - test a message size of 256KB,
-     * a size which is likely to be used with the Rendezvous protocol, for
-     * how long it would take to transfer it with a certain transport. */
-
-    return 1 / ((UCP_WIREUP_RNDV_TEST_MSG_SIZE /
-                ucs_min(iface_attr->bandwidth, remote_iface_attr->bandwidth)) +
-                ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
-                iface_attr->overhead + md_attr->reg_cost.overhead +
-                (UCP_WIREUP_RNDV_TEST_MSG_SIZE * md_attr->reg_cost.growth));
-}
-
 static double ucp_wireup_rma_bw_score_func(ucp_context_h context,
                                            const uct_md_attr_t *md_attr,
                                            const uct_iface_attr_t *iface_attr,
@@ -717,7 +699,6 @@ static double ucp_wireup_rma_bw_score_func(ucp_context_h context,
     /* highest bandwidth with lowest overhead - test a message size of 256KB,
      * a size which is likely to be used for high-bw memory access protocol, for
      * how long it would take to transfer it with a certain transport. */
-
     return 1 / ((UCP_WIREUP_RMA_BW_TEST_MSG_SIZE /
                 ucs_min(iface_attr->bandwidth, remote_iface_attr->bandwidth)) +
                 ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
@@ -841,51 +822,6 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
 
     /* high-bw RMA is not mandatory */
     return (status == UCS_ERR_UNREACHABLE) ? UCS_OK : status;
-}
-
-static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep,
-                                             const ucp_ep_params_t *params,
-                                             unsigned address_count,
-                                             const ucp_address_entry_t *address_list,
-                                             ucp_wireup_lane_desc_t *lane_descs,
-                                             ucp_lane_index_t *num_lanes_p)
-{
-    ucp_wireup_criteria_t criteria;
-    ucp_rsc_index_t rsc_index;
-    ucs_status_t status;
-    unsigned addr_index;
-    double score;
-
-    if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG)) {
-        return UCS_OK;
-    }
-
-    /* Select one lane for the Rendezvous protocol (for the actual data. not for rts/rtr) */
-    criteria.title              = "rendezvous";
-    criteria.local_md_flags     = UCT_MD_FLAG_REG;
-    criteria.remote_md_flags    = UCT_MD_FLAG_REG;  /* TODO not all ucts need reg on remote side */
-    criteria.remote_iface_flags = UCT_IFACE_FLAG_GET_ZCOPY |
-                                  UCT_IFACE_FLAG_PENDING;
-    criteria.local_iface_flags  = UCT_IFACE_FLAG_GET_ZCOPY;
-    criteria.calc_score         = ucp_wireup_rndv_score_func;
-    criteria.tl_rsc_flags       = 0;
-    ucp_wireup_fill_ep_params_criteria(&criteria, params);
-
-    if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
-        criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
-    }
-
-    status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
-                                         -1, -1, 0, &rsc_index, &addr_index, &score);
-    if ((status == UCS_OK) &&
-        /* a temporary workaround to prevent the ugni uct from using rndv */
-        (strstr(ep->worker->context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni") == NULL)) {
-         ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
-                                 address_list[addr_index].md_index, score,
-                                 UCP_WIREUP_LANE_USAGE_RNDV, 0);
-    }
-
-    return UCS_OK;
 }
 
 /* Lane for transport offloaded tag interface */
@@ -1021,12 +957,6 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
         return status;
     }
 
-    status = ucp_wireup_add_rndv_lane(ep, params, address_count, address_list,
-                                      lane_descs, &key->num_lanes);
-    if (status != UCS_OK) {
-        return status;
-    }
-
     status = ucp_wireup_add_rma_bw_lanes(ep, params, address_count, address_list,
                                          lane_descs, &key->num_lanes);
     if (status != UCS_OK) {
@@ -1062,11 +992,6 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AM) {
             ucs_assert(key->am_lane == UCP_NULL_LANE);
             key->am_lane = lane;
-        }
-        if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RNDV) {
-            ucs_assert(key->rndv_lanes[0] == UCP_NULL_LANE);
-            key->rndv_lanes[0] = lane;
-            key->num_rndv_lanes = 1;
         }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RMA) {
             key->rma_lanes[lane] = lane;

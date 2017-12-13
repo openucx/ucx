@@ -207,8 +207,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     ucs_trace_func("context=%p md_map=0x%lx buffer=%p length=%zu datatype=0x%lu "
                    "state=%p", context, md_map, buffer, length, datatype, state);
 
-    UCS_PROFILE_REQUEST_EVENT(req_dbg, "mem_reg", 0);
-
     status = UCS_OK;
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
@@ -268,8 +266,6 @@ UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg, (context, datatype, state, req_d
     ucs_trace_func("context=%p datatype=0x%lu state=%p", context, datatype,
                    state);
 
-    UCS_PROFILE_REQUEST_EVENT(req_dbg, "mem_reg", 0);
-
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
         ucp_request_dt_dereg(context, &state->dt.contig, 1, req_dbg);
@@ -285,24 +281,6 @@ UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg, (context, datatype, state, req_d
     default:
         break;
     }
-}
-
-ucs_status_t ucp_request_rndv_buffer_reg(ucp_request_t *req)
-{
-    ucp_ep_t *ep = req->send.ep;
-    ucp_md_map_t md_map;
-    int i;
-
-    ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
-
-    md_map = 0;
-    for (i = 0; i < ucp_ep_rndv_num_lanes(ep); i++) {
-        md_map |= UCS_BIT(ucp_ep_md_index(ep, ucp_ep_get_rndv_get_lane(ep, i)));
-    }
-
-    return ucp_request_memory_reg(ep->worker->context, md_map,
-                                  (void*)req->send.buffer, req->send.length,
-                                  req->send.datatype, &req->send.state.dt, req);
 }
 
 /* NOTE: deprecated */
