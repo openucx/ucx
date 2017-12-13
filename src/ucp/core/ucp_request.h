@@ -123,6 +123,7 @@ struct ucp_request {
                     uintptr_t     rreq_ptr;    /* receive request ptr on the recv side */
                     uint64_t      sender_uuid; /* Sender uuid, which is sent back in sync ack */
                     ucp_tag_t     sender_tag;  /* Sender tag, which is sent back in sync ack */
+                    ucp_request_callback_t comp_cb; /* Called to complete the request */
                 } proto;
 
                 struct {

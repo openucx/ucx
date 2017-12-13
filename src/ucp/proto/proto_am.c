@@ -42,7 +42,7 @@ ucs_status_t ucp_proto_progress_am_bcopy_single(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_bcopy_single(self, req->send.proto.am_id,
                                                  ucp_proto_pack);
     if (status == UCS_OK) {
-        ucp_request_put(req);
+        req->send.proto.comp_cb(req);
     }
     return status;
 }
