@@ -14,6 +14,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
+#include <ucs/arch/cpu.h>
 #include <malloc.h>
 
 
@@ -22,6 +23,24 @@ UCS_LIST_HEAD(uct_md_components_list);
 ucs_config_field_t uct_md_config_table[] = {
 
   {NULL}
+};
+
+ucs_config_field_t uct_md_config_rcache_table[] = {
+    {"RCACHE", "try", "Enable using memory registration cache",
+     ucs_offsetof(uct_md_rcache_config_t, enable), UCS_CONFIG_TYPE_TERNARY},
+
+    {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
+     ucs_offsetof(uct_md_rcache_config_t, event_prio), UCS_CONFIG_TYPE_UINT},
+
+    {"RCACHE_OVERHEAD", "90ns", "Registration cache lookup overhead",
+     ucs_offsetof(uct_md_rcache_config_t, overhead), UCS_CONFIG_TYPE_TIME},
+
+    {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE),
+     "Registration cache address alignment, must be power of 2\n"
+         "between "UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN)"and system page size",
+     ucs_offsetof(uct_md_rcache_config_t, alignment), UCS_CONFIG_TYPE_UINT},
+
+    {NULL}
 };
 
 /**
