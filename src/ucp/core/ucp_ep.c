@@ -91,7 +91,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
         UCS_STATIC_TYPE_MATCH(ep->ext.stream->data, ep->ext.stream->reqs);
         ucs_queue_head_init(&ep->ext.stream->data);
         ep->ext.stream->ucp_ep       = ep;
-        ep->ext.stream->reqs_buf_len = 0;
+        ep->ext.stream->am_data_len  = 0;
     } else {
         ep->ext.stream = NULL;
     }

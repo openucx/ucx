@@ -64,8 +64,12 @@ ucp_stream_rdesc_dequeue(ucp_ep_ext_stream_t *ep_stream)
     ucp_recv_desc_t *rdesc = ucs_queue_pull_elem_non_empty(&ep_stream->data,
                                                            ucp_recv_desc_t,
                                                            stream_queue);
+    ucs_assert(ep_stream->am_data_len >= rdesc->length);
 
-    if (ucs_unlikely(ucs_queue_is_empty(&ep_stream->data))) {
+    ep_stream->am_data_len -= rdesc->length;
+
+    if (ucs_unlikely(ep_stream->am_data_len == 0)) {
+        ucs_assert(ucs_queue_is_empty(&ep_stream->data));
         if (ucp_stream_ep_is_queued(ep_stream->ucp_ep)) {
             ucp_stream_ep_dequeue(ep_stream);
         }
@@ -79,9 +83,7 @@ ucp_stream_recv_data_nb_internal(ucp_ep_ext_stream_t *ep_stream, int dequeue)
 {
     ucp_recv_desc_t *rdesc;
 
-    if ((ep_stream->reqs_buf_len > 0) || ucs_queue_is_empty(&ep_stream->data)) {
-        return NULL;
-    }
+    ucs_assert(ep_stream->am_data_len > 0);
 
     rdesc = dequeue ? ucp_stream_rdesc_dequeue(ep_stream) :
             ucs_queue_head_elem_non_empty(&ep_stream->data, ucp_recv_desc_t,
@@ -100,18 +102,19 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb,
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
+    if (ucs_unlikely(ep->ext.stream->am_data_len == 0)) {
+        UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+        return UCS_STATUS_PTR(UCS_OK);
+    }
+
     rdesc = ucp_stream_recv_data_nb_internal(ep->ext.stream, 1);
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
 
-    if (ucs_likely(rdesc != NULL)) {
-        *length         = rdesc->length;
-        am_data         = ucp_stream_rdesc_am_data(rdesc);
-        am_data->rdesc  = rdesc;
-        return am_data + 1;
-    }
-
-    return UCS_STATUS_PTR(UCS_OK);
+    *length         = rdesc->length;
+    am_data         = ucp_stream_rdesc_am_data(rdesc);
+    am_data->rdesc  = rdesc;
+    return am_data + 1;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -129,7 +132,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_stream_rdesc_dequeue_and_release(ucp_recv_desc_t *rdesc,
                                      ucp_ep_ext_stream_t *ep)
 {
-    ucs_assert((ep->reqs_buf_len == 0) && !ucs_queue_is_empty(&ep->data));
+    ucs_assert(ep->am_data_len > 0);
     ucs_assert(rdesc == ucs_queue_head_elem_non_empty(&ep->data,
                                                       ucp_recv_desc_t,
                                                       stream_queue));
@@ -201,17 +204,11 @@ ucp_stream_process_rdesc(ucp_recv_desc_t *rdesc, ucp_ep_ext_stream_t *ep_stream,
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE ucp_request_t *
-ucp_stream_recv_request_get(ucp_worker_t *worker, void *buffer, size_t count,
-                            ucp_datatype_t datatype,
-                            ucp_stream_recv_callback_t cb)
+static UCS_F_ALWAYS_INLINE void
+ucp_stream_recv_request_init(ucp_request_t *req, void *buffer, size_t count,
+                             ucp_datatype_t datatype,
+                             ucp_stream_recv_callback_t cb)
 {
-    ucp_request_t *req = ucp_request_get(worker);
-
-    if (ucs_unlikely(req == NULL)) {
-        return NULL;
-    }
-
     req->flags = UCP_REQUEST_FLAG_CALLBACK | UCP_REQUEST_FLAG_STREAM_RECV;
     req->recv.stream.cb     = cb;
     req->recv.stream.length = 0;
@@ -222,17 +219,6 @@ ucp_stream_recv_request_get(ucp_worker_t *worker, void *buffer, size_t count,
                                        &req->recv.state);
 
     ucp_request_recv_state_init(req, buffer, datatype, count);
-
-    return req;
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
-ucp_stream_recv_request_put(ucp_request_t *req, size_t *length,
-                            ucs_status_t status)
-{
-    *length = req->recv.state.offset;
-    ucp_request_put(req);
-    return UCS_STATUS_PTR(status);
 }
 
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
@@ -241,7 +227,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
                  ucp_datatype_t datatype, ucp_stream_recv_callback_t cb,
                  size_t *length, unsigned flags)
 {
-    ucp_ep_ext_stream_t *ep_stream;
+    ucp_ep_ext_stream_t *ep_stream = ep->ext.stream;
+    ucp_request_t       tmp_req;
     ucp_request_t       *req;
     ucs_status_ptr_t    rdesc;
     ucs_status_t        status;
@@ -253,47 +240,36 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
-    req = ucp_stream_recv_request_get(ep->worker, buffer, count, datatype, cb);
-    if (ucs_unlikely(req == NULL)) {
-        req = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-        goto out;
-    }
-
-    ep_stream = ep->ext.stream;
-
-    /* if there are already posted requests, need to queue this one */
-    if (ep_stream->reqs_buf_len > 0) {
-        ucs_assert(!ucs_queue_is_empty(&ep_stream->reqs));
+    if (ucs_unlikely(ep_stream->am_data_len == 0)) {
+        /* No data, enqueue request and out */
+        req = ucp_request_get(ep->worker);
+        if (ucs_unlikely(req == NULL)) {
+            req = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+            goto out;
+        }
+        ucp_stream_recv_request_init(req, buffer, count, datatype, cb);
         ucs_queue_push(&ep_stream->reqs, &req->recv.queue);
-        ep_stream->reqs_buf_len += req->recv.length;
         goto ptr_out;
     }
 
-    /* OK, lets obtain all arrived data which matches the recv size */
-    while (req->recv.state.offset < req->recv.length) {
-        rdesc = ucp_stream_recv_data_nb_internal(ep_stream, 0);
-        if (rdesc == NULL) {
-            /* No data any more. Enqueue empty request or complete if some
-             * data is filled */
-            if (req->recv.state.offset == 0) {
-                ucs_queue_push(&ep_stream->reqs, &req->recv.queue);
-                ep_stream->reqs_buf_len += req->recv.length;
-                goto ptr_out;
-            } else {
-                req = ucp_stream_recv_request_put(req, length, UCS_OK);
-                goto out;
-            }
-        }
+    /* We can complete request in place, use tmp request on stack */
+    req = &tmp_req;
+    ucp_stream_recv_request_init(req, buffer, count, datatype, cb);
 
+    /* OK, lets obtain all arrived data which matches the recv size */
+    do {
+        rdesc  = ucp_stream_recv_data_nb_internal(ep_stream, 0);
         status = ucp_stream_process_rdesc(rdesc, ep_stream, req);
         if (ucs_unlikely(status != UCS_OK)) {
-            req = ucp_stream_recv_request_put(req, length, status);
             goto out;
         }
-    }
+    } while ((req->recv.state.offset < req->recv.length) &&
+             (ep_stream->am_data_len > 0));
 
-    ucs_assert(req->recv.state.offset == req->recv.length);
-    req = ucp_stream_recv_request_put(req, length, UCS_OK);
+    ucs_assert(req->recv.state.offset >  0);
+    ucs_assert(req->recv.state.offset <= req->recv.length);
+    *length = req->recv.state.offset;
+    req = UCS_STATUS_PTR(UCS_OK);
 
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
@@ -322,22 +298,23 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_stream_t *ep,
                                                     place */
 
     /* First, process expected requests */
-    while (ep->reqs_buf_len > 0) {
-        ucs_assert(!ucs_queue_is_empty(&ep->reqs));
-        req      = ucs_queue_head_elem_non_empty(&ep->reqs, ucp_request_t,
-                                                 recv.queue);
-        payload  = UCS_PTR_BYTE_OFFSET(am_data, rdesc_tmp.payload_offset);
-        unpacked = ucp_stream_rdata_unpack(payload, rdesc_tmp.length, req);
-        if (ucs_unlikely(unpacked < 0)) {
-            ucs_fatal("failed to unpack from am_data %p with offset %u to request %p",
-                      am_data, rdesc_tmp.payload_offset, req);
-        } else if (unpacked == rdesc_tmp.length) {
+    if (ep->am_data_len == 0) {
+        while (!ucs_queue_is_empty(&ep->reqs)) {
+            req      = ucs_queue_head_elem_non_empty(&ep->reqs, ucp_request_t,
+                                                     recv.queue);
+            payload  = UCS_PTR_BYTE_OFFSET(am_data, rdesc_tmp.payload_offset);
+            unpacked = ucp_stream_rdata_unpack(payload, rdesc_tmp.length, req);
+            if (ucs_unlikely(unpacked < 0)) {
+                ucs_fatal("failed to unpack from am_data %p with offset %u to request %p",
+                          am_data, rdesc_tmp.payload_offset, req);
+            } else if (unpacked == rdesc_tmp.length) {
+                ucp_request_complete_stream_recv(req, ep, UCS_OK);
+                return UCS_OK;
+            }
+            ucp_stream_rdesc_advance(&rdesc_tmp, unpacked);
+            /* This request is full, try next one */
             ucp_request_complete_stream_recv(req, ep, UCS_OK);
-            return UCS_OK;
         }
-        ucp_stream_rdesc_advance(&rdesc_tmp, unpacked);
-        /* This request is full, try next one */
-        ucp_request_complete_stream_recv(req, ep, UCS_OK);
     }
 
     ucs_assert(rdesc_tmp.length > 0);
@@ -364,6 +341,7 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_stream_t *ep,
 
     rdesc->length         = length;
     rdesc->payload_offset = sizeof(*rdesc) + sizeof(*am_data);
+    ep->am_data_len      += length;
     ucs_queue_push(&ep->data, &rdesc->stream_queue);
 
     return UCS_INPROGRESS;

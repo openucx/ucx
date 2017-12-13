@@ -198,8 +198,8 @@ typedef struct ucp_ep_ext_stream {
     ucs_list_link_t               list;
     /* ep which owns the extension */
     ucp_ep_h                      ucp_ep;
-    /* Total buffers length queued in @ref reqs, if > 0 @ref data is not valid */
-    size_t                        reqs_buf_len;
+    /* Total AM buffers length queued in @ref data, if > 0 @ref reqs is not valid */
+    size_t                        am_data_len;
     union {
         /* Queue of receive requests posted on the EP */
         ucs_queue_head_t          reqs;
