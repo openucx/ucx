@@ -261,6 +261,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
         rdesc  = ucp_stream_recv_data_nb_internal(ep_stream, 0);
         status = ucp_stream_process_rdesc(rdesc, ep_stream, req);
         if (ucs_unlikely(status != UCS_OK)) {
+            req = UCS_STATUS_PTR(status);
             goto out;
         }
     } while ((req->recv.state.offset < req->recv.length) &&
