@@ -20,7 +20,7 @@ static ucp_rkey_t ucp_mem_dummy_rkey = {
 static ucp_md_map_t ucp_mem_dummy_buffer = 0;
 
 
-ucs_status_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map)
+size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map)
 {
     size_t size, md_size;
     unsigned md_index;

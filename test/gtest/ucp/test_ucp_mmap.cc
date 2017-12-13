@@ -84,7 +84,7 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh, bool is_dumm
     void *rkey_buffer;
     ucs_status_t status;
 
-     /* Some transports don't support memory registration, so the memory
+    /* Some transports don't support memory registration, so the memory
      * can be inaccessible remotely. But it should always be possible
      * to pack/unpack a key, even if empty. */
     status = ucp_rkey_pack(e->ucph(), memh, &rkey_buffer, &rkey_size);
@@ -93,8 +93,7 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh, bool is_dumm
     }
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(ucp_rkey_packed_size(e->ucph(), memh->md_map),
-              (ssize_t)rkey_size);
+    EXPECT_EQ(ucp_rkey_packed_size(e->ucph(), memh->md_map), rkey_size);
 
     /* Unpack remote key buffer */
     ucp_rkey_h rkey;

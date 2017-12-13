@@ -1079,8 +1079,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
             /* Pack remote key only if needed for RMA.
              * FIXME a temporary workaround to prevent the ugni uct from using rndv. */
             if ((context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
-                !(strstr(context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni")))
-            {
+                !(strstr(context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni"))) {
                 key->rma_bw_md_map |= UCS_BIT(md_index);
             }
         }
