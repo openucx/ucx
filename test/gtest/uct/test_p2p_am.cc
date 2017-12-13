@@ -181,7 +181,7 @@ public:
             short_progress_loop();
         }
 
-        if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_DUP) {
+        if (!(receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_DUP)) {
             sender().flush();
             EXPECT_EQ(1u, m_am_count);
         } else {
