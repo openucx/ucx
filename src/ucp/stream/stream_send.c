@@ -32,9 +32,8 @@ static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.ep           = ep;
     req->send.buffer       = buffer;
     req->send.datatype     = datatype;
-    req->send.reg_rsc      = UCP_NULL_RESOURCE;
     req->send.lane         = ep->am_lane;
-    ucp_request_send_state_init(req, count);
+    ucp_request_send_state_init(req, datatype, count);
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
                                            &req->send.state.dt);

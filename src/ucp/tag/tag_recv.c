@@ -125,7 +125,6 @@ ucp_tag_recv_request_init(ucp_request_t *req, ucp_worker_h worker, void* buffer,
     req->flags          = UCP_REQUEST_FLAG_EXPECTED | UCP_REQUEST_FLAG_RECV |
                           req_flags;
     req->recv.worker    = worker;
-    req->recv.reg_rsc   = UCP_NULL_RESOURCE;
 
     ucp_request_recv_state_init(req, buffer, datatype, count);
 
@@ -166,8 +165,8 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     ucp_tag_recv_request_init(req, worker, buffer, count, datatype, req_flags);
     buffer_size = ucp_dt_length(datatype, count, buffer, &req->recv.state);
 
-    ucs_trace_req("%s buffer %p buffer_size %zu tag %"PRIx64"/%"PRIx64, debug_name,
-                  buffer, buffer_size, tag, tag_mask);
+    ucp_trace_req(req, "%s buffer %p dt 0x%lx buffer_size %zu tag %"PRIx64"/%"PRIx64,
+                  debug_name, buffer, datatype, buffer_size, tag, tag_mask);
 
     /* First, search in unexpected list */
     status = ucp_tag_search_unexp(worker, buffer, buffer_size, datatype, tag,

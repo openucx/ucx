@@ -26,11 +26,11 @@ typedef uint8_t                      ucp_rsc_index_t;
 #define UCP_MD_INDEX_BITS            64  /* How many bits are in MD index */
 typedef ucp_rsc_index_t              ucp_md_index_t;
 #define UCP_MAX_MDS                  ucs_min(UCP_MD_INDEX_BITS, UCP_MAX_RESOURCES)
+#define UCP_MAX_OP_MDS               3  /* maximal number of MDs per single op */
 UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 
 /* Lanes */
 #define UCP_MAX_LANES                8
-#define UCP_MAX_RNDV_LANES           4
 #define UCP_NULL_LANE                ((ucp_lane_index_t)-1)
 typedef uint8_t                      ucp_lane_index_t;
 UCP_UINT_TYPE(UCP_MAX_LANES)         ucp_lane_map_t;
