@@ -81,14 +81,13 @@ void ucp_dt_iov_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
                            ucp_datatype_t datatype, size_t length_max)
 {
     size_t iov_offset, max_src_iov, src_it, dst_it;
-    const uct_mem_h *memh;
     size_t length_it = 0;
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
         iov[0].buffer = (void *)src_iov + state->offset;
         iov[0].length = length_max;
-        iov[0].memh   = state->dt.contig[0].memh;
+        iov[0].memh   = state->dt.contig.memh[0];
         iov[0].stride = 0;
         iov[0].count  = 1;
 
@@ -96,7 +95,6 @@ void ucp_dt_iov_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
         length_it = iov[0].length;
         break;
     case UCP_DATATYPE_IOV:
-        memh                        = state->dt.iov.memh;
         iov_offset                  = state->dt.iov.iov_offset;
         max_src_iov                 = state->dt.iov.iovcnt;
         src_it                      = state->dt.iov.iovcnt_offset;
@@ -106,7 +104,7 @@ void ucp_dt_iov_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
             if (src_iov[src_it].length) {
                 iov[dst_it].buffer  = src_iov[src_it].buffer + iov_offset;
                 iov[dst_it].length  = src_iov[src_it].length - iov_offset;
-                iov[dst_it].memh    = memh[src_it];
+                iov[dst_it].memh    = state->dt.iov.dt_reg[src_it].memh[0];
                 iov[dst_it].stride  = 0;
                 iov[dst_it].count   = 1;
                 length_it          += iov[dst_it].length;
