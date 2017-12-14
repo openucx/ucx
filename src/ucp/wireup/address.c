@@ -138,15 +138,15 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int has_ep,
             continue;
         }
 
-        dev = ucp_address_get_device(context->tl_rscs[i].tl_rsc.dev_name,
-                                     devices, &num_devices);
-
         iface_attr = &worker->ifaces[i].attr;
 
         if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) &&
             !(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP)) {
             continue;
         }
+
+        dev = ucp_address_get_device(context->tl_rscs[i].tl_rsc.dev_name,
+                                     devices, &num_devices);
 
         dev->tl_addrs_size += iface_attr->iface_addr_len;
 
