@@ -126,7 +126,7 @@ ucp_tag_recv_request_init(ucp_request_t *req, ucp_worker_h worker, void* buffer,
                           req_flags;
     req->recv.worker    = worker;
 
-    ucp_request_recv_state_init(req, buffer, datatype, count);
+    ucp_dt_recv_state_init(&req->recv.state, buffer, datatype, count);
 
     if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
         req->recv.tag.info.sender_tag = 0;
