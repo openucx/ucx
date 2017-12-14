@@ -103,7 +103,7 @@ ucp_request_complete_stream_recv(ucp_request_t *req,
 {
     /* dequeue request before complete */
     ucp_request_t *check_req UCS_V_UNUSED =
-            ucs_queue_pull_elem_non_empty(&ep_stream->reqs_q, ucp_request_t,
+            ucs_queue_pull_elem_non_empty(&ep_stream->match_q, ucp_request_t,
                                           recv.queue);
     ucs_assert(check_req               == req);
     ucs_assert(req->recv.state.offset  >  0);

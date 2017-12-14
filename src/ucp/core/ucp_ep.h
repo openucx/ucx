@@ -31,7 +31,6 @@ enum {
     UCP_EP_FLAG_CONNECT_REQ_QUEUED  = UCS_BIT(2), /* Connection request was queued */
     UCP_EP_FLAG_TAG_OFFLOAD_ENABLED = UCS_BIT(3), /* Endpoint uses tl offload for tag matching */
     UCP_EP_FLAG_FAILED              = UCS_BIT(4), /* EP is in failed state */
-    UCP_EP_FLAG_STREAM_IS_QUEUED    = UCS_BIT(5), /* EP is queued in stream list of worker */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT    = UCS_BIT(8), /* DEBUG: Connection request was sent */
@@ -195,17 +194,13 @@ typedef struct ucp_ep_config {
  */
 typedef struct ucp_ep_ext_stream {
     /* List entry in worker's EP list */
-    ucs_list_link_t               list;
-    /* ep which owns the extension */
-    ucp_ep_h                      ucp_ep;
-    /* Total AM buffers length queued in @ref descs_q, if > 0 @ref reqs_q is not valid */
-    size_t                        am_data_len;
-    union {
-        /* Queue of receive requests posted on the EP */
-        ucs_queue_head_t          reqs_q;
-        /* Queue of receive descriptors with data */
-        ucs_queue_head_t          descs_q;
-    };
+    ucs_list_link_t         list;
+    /* Queue of receive data or requests depends on flags field */
+    ucs_queue_head_t        match_q;
+    /* EP which owns the extension */
+    ucp_ep_h                ucp_ep;
+    /* Describes the state */
+    uint8_t                 flags;
 } ucp_ep_ext_stream_t;
 
 
