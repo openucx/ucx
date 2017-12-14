@@ -21,8 +21,8 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
                            const void *priv_data, size_t length)
 {
     uct_rdmacm_iface_t *iface = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
-    size_t ip_len = ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN);
-    char *ip_str  = ucs_alloca(ip_len);
+    size_t ip_port_len = ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN) + 1 + sizeof(in_port_t);
+    char *ip_port_str  = ucs_alloca(ip_port_len);
     uct_rdmacm_priv_data_hdr_t hdr;
     ucs_status_t status;
 
@@ -97,7 +97,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
               "iface cm_id: %p remote addr: %s",
                iface, iface->event_ch, iface->cm_id,
                ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
-                                ip_str, ip_len));
+                                ip_port_str, ip_port_len));
 
     return UCS_INPROGRESS;
 
