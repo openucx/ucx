@@ -20,6 +20,10 @@
 #include <ucp/wireup/wireup.h>
 
 
+#define ucp_trace_req(_sreq, _message, ...) \
+    ucs_trace_req("req %p: " _message, (_sreq), ## __VA_ARGS__)
+
+
 /**
  * Request flags
  */
@@ -88,7 +92,7 @@ enum {
  * of lanes used in rndv-get protocol
  */
 typedef struct ucp_rndv_get_rkey {
-    uct_rkey_bundle_t rkey_bundle[UCP_MAX_RNDV_LANES];
+    uct_rkey_bundle_t rkey_bundle[UCP_MAX_OP_MDS];
 } ucp_rndv_get_rkey_t;
 
 
@@ -123,6 +127,7 @@ struct ucp_request {
                     uintptr_t     rreq_ptr;    /* receive request ptr on the recv side */
                     uint64_t      sender_uuid; /* Sender uuid, which is sent back in sync ack */
                     ucp_tag_t     sender_tag;  /* Sender tag, which is sent back in sync ack */
+                    ucp_request_callback_t comp_cb; /* Called to complete the request */
                 } proto;
 
                 struct {
@@ -185,7 +190,6 @@ struct ucp_request {
             } state;
 
             ucp_lane_index_t      lane;     /* Lane on which this request is being sent */
-            ucp_rsc_index_t       reg_rsc;  /* Resource on which memory is registered */
             uct_pending_req_t     uct;      /* UCT pending request */
         } send;
 
@@ -194,7 +198,6 @@ struct ucp_request {
             void                  *buffer;  /* Buffer to receive data to */
             ucp_datatype_t        datatype; /* Receive type */
             size_t                length;   /* Total length, in bytes */
-            ucp_rsc_index_t       reg_rsc;  /* Resource on which memory is registered */
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
             ucp_mem_desc_t        *rdesc;
@@ -246,24 +249,14 @@ extern ucs_mpool_ops_t ucp_rndv_get_mpool_ops;
 
 int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status);
 
-ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req, ucp_lane_index_t lane);
-
-ucs_status_t ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_ep_h ep, ucp_lane_index_t lane);
-
-void ucp_request_send_buffer_dereg(ucp_request_t *req);
-
-void ucp_request_recv_buffer_dereg(ucp_request_t *req);
+ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
+                                    void *buffer, size_t length, ucp_datatype_t datatype,
+                                    ucp_dt_state_t *state, ucp_request_t *req_dbg);
 
 ucs_status_t ucp_request_rndv_buffer_reg(ucp_request_t *req);
 
-ucp_lane_index_t ucp_request_rndv_buffer_dereg_unused(ucp_request_t *req, ucp_lane_index_t used);
-
-ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
-                                    void *buffer, size_t length, ucp_datatype_t datatype,
-                                    ucp_dt_state_t *state);
-
-void ucp_request_memory_dereg(ucp_context_t *context, ucp_rsc_index_t rsc_index,
-                              ucp_datatype_t datatype, ucp_dt_state_t *state);
+void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
+                              ucp_dt_state_t *state, ucp_request_t *req_dbg);
 
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t multi_thresh,

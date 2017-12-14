@@ -67,16 +67,24 @@ ucp_tag_send_req(ucp_request_t *req, size_t count,
                                     rndv_thresh, proto);
     if (ucs_unlikely(status != UCS_OK)) {
         if (status == UCS_ERR_NO_PROGRESS) {
-             ucs_assert(req->send.length >= rndv_thresh);
             /* RMA/AM rendezvous */
+            ucs_assert(req->send.length >= rndv_thresh);
             status = ucp_tag_send_start_rndv(req);
-        }
-        if (status != UCS_OK) {
+            if (status != UCS_OK) {
+                return UCS_STATUS_PTR(status);
+            }
+
+            UCP_EP_STAT_TAG_OP(req->send.ep, RNDV);
+        } else {
             return UCS_STATUS_PTR(status);
         }
     }
 
-    ucp_request_send_tag_stat(req);
+    if (req->flags & UCP_REQUEST_FLAG_SYNC) {
+        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);
+    } else {
+        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
+    }
 
     /*
      * Start the request.
@@ -97,17 +105,16 @@ ucp_tag_send_req(ucp_request_t *req, size_t count,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
-                                  const void* buffer, uintptr_t datatype,
-                                  size_t count, ucp_tag_t tag, uint16_t flags)
+ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
+                      uintptr_t datatype, size_t count, ucp_tag_t tag,
+                      uint16_t flags)
 {
     req->flags             = flags;
     req->send.ep           = ep;
     req->send.buffer       = buffer;
     req->send.datatype     = datatype;
     req->send.tag          = tag;
-    req->send.reg_rsc      = UCP_NULL_RESOURCE;
-    ucp_request_send_state_init(req, count);
+    ucp_request_send_state_init(req, datatype, count);
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
                                            &req->send.state.dt);
@@ -211,5 +218,6 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, uint64_t sender_uuid,
     req->send.proto.am_id          = UCP_AM_ID_EAGER_SYNC_ACK;
     req->send.proto.remote_request = remote_request;
     req->send.proto.status         = UCS_OK;
+    req->send.proto.comp_cb        = ucp_request_put;
     ucp_request_send(req);
 }

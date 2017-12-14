@@ -65,6 +65,8 @@ typedef struct ucp_context_config {
     int                                    adaptive_progress;
     /** Rendezvous-get multi-lane support */
     unsigned                               max_rndv_lanes;
+    /** Estimated number of endpoints */
+    size_t                                 estimated_num_eps;
 } ucp_context_config_t;
 
 

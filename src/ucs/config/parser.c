@@ -422,6 +422,28 @@ int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *ar
     return 1;
 }
 
+int ucs_config_sscanf_ulunits(const char *buf, void *dest, const void *arg)
+{
+    /* Special value: auto */
+    if (!strcasecmp(buf, "auto")) {
+        *(size_t*)dest = UCS_CONFIG_ULUNITS_AUTO;
+        return 1;
+    }
+
+    return ucs_config_sscanf_ulong(buf, dest, arg);
+}
+
+int ucs_config_sprintf_ulunits(char *buf, size_t max, void *src, const void *arg)
+{
+    size_t val = *(size_t*)src;
+
+    if (val == UCS_CONFIG_ULUNITS_AUTO) {
+        return snprintf(buf, max, "auto");
+    }
+
+    return ucs_config_sprintf_ulong(buf, max, src, arg);
+}
+
 int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg)
 {
     ucs_range_spec_t *range_spec = dest;

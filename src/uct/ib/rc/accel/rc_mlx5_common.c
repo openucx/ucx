@@ -135,6 +135,9 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
 
     rc_iface->rx.srq.quota = iface->rx.srq.mask + 1;
 
+    /* By default set to something that is always in cache */
+    iface->rx.pref_ptr = iface;
+
     status = UCS_STATS_NODE_ALLOC(&iface->stats, &uct_rc_mlx5_iface_stats_class,
                                   rc_iface->stats);
     if (status != UCS_OK) {

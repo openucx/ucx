@@ -77,6 +77,35 @@ void ucp_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 
+/**
+ * Update memory registration to a specified set of memory domains.
+ *
+ * @param [in] context     UCP context with MDs to use for registration.
+ * @param [in] reg_md_map  Map of memory domains to update the registration to.
+ *                         MDs which are present in reg_md_map, but not yet
+ *                         registered will be registered.
+ *                         MDs which were registered, but not present in r
+ *                         eg_md_map, will be de-registered.
+ * @param [in] address     Address to register, unused if reg_md_map == 0
+ * @param [in] length      Length to register, unused if reg_md_map == 0
+ * @param [in] uct_flags   Flags for UCT registration, unused if reg_md_map == 0
+ * @param [in] alloc_md    If != NULL, MD that was used to register the memory.
+ *                         This MD will not be used to register the memory again;
+ *                         rather, the memh will be taken from *alloc_md_memh.
+ * @param [inout] alloc_md_memh_p  If non-NULL, specifies/filled with the memory
+ *                                 handle on alloc_md.
+ * @param [inout] uct_memh Array of memory handles to update.
+ * @param [inout] md_map_p Current map of registered MDs, updated by the function
+ *                         to the new map o
+ *
+ * In case alloc_md != NULL, alloc_md_memh will hold the memory key obtained from
+ * allocation. It will be put in the array of keys in the proper index.
+ */
+ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
+                               void *address, size_t length, unsigned uct_flags,
+                               uct_md_h alloc_md, uct_mem_h *alloc_md_memh_p,
+                               uct_mem_h *uct_memh, ucp_md_map_t *md_map_p);
+
 /* Detect memory type on all MDs */
 ucs_status_t ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
                                         uct_memory_type_t *mem_type_p);

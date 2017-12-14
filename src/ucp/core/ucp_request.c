@@ -179,62 +179,74 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status)
     return 1;
 }
 
-static UCS_F_ALWAYS_INLINE
-void ucp_iov_buffer_memh_dereg(uct_md_h uct_md, uct_mem_h *memh,
-                               size_t count)
+static void ucp_request_dt_dereg(ucp_context_t *context, ucp_dt_reg_t *dt_reg,
+                                 size_t count, ucp_request_t *req_dbg)
 {
-    size_t it;
+    size_t i;
 
-    for (it = 0; it < count; ++it) {
-        if (memh[it] != UCT_MEM_HANDLE_NULL) {
-            uct_md_mem_dereg(uct_md, memh[it]);
-        }
+    for (i = 0; i < count; ++i) {
+        ucp_trace_req(req_dbg, "mem dereg buffer %ld/%ld md_map 0x%"PRIx64,
+                      i, count, dt_reg[i].md_map);
+        ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, NULL, dt_reg[i].memh,
+                          &dt_reg[i].md_map);
+        ucs_assert(dt_reg[i].md_map == 0);
     }
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
-                 (context, rsc_index, buffer, length, datatype, state),
-                 ucp_context_t *context, ucp_rsc_index_t rsc_index, void *buffer,
-                 size_t length, ucp_datatype_t datatype, ucp_dt_state_t *state)
+                 (context, md_map, buffer, length, datatype, state, req_dbg),
+                 ucp_context_t *context, ucp_md_map_t md_map, void *buffer,
+                 size_t length, ucp_datatype_t datatype, ucp_dt_state_t *state,
+                 ucp_request_t *req_dbg)
 {
-    ucp_rsc_index_t mdi = context->tl_rscs[rsc_index].md_index;
-    uct_md_h uct_md     = context->tl_mds[mdi].md;
-    uct_md_attr_t *uct_md_attr;
     size_t iov_it, iovcnt;
     const ucp_dt_iov_t *iov;
-    uct_mem_h *memh;
+    ucp_dt_reg_t *dt_reg;
     ucs_status_t status;
+
+    ucs_trace_func("context=%p md_map=0x%lx buffer=%p length=%zu datatype=0x%lu "
+                   "state=%p", context, md_map, buffer, length, datatype, state);
+
+    UCS_PROFILE_REQUEST_EVENT(req_dbg, "mem_reg", 0);
 
     status = UCS_OK;
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        status = uct_md_mem_reg(uct_md, buffer, length, UCT_MD_MEM_ACCESS_RMA,
-                                &state->dt.contig[0].memh);
+        ucs_assert(ucs_count_one_bits(md_map) <= UCP_MAX_OP_MDS);
+        status = ucp_mem_rereg_mds(context, md_map, buffer, length,
+                                   UCT_MD_MEM_ACCESS_RMA, NULL, NULL,
+                                   state->dt.contig.memh, &state->dt.contig.md_map);
+        ucp_trace_req(req_dbg, "mem reg md_map 0x%"PRIx64"/0x%"PRIx64,
+                      state->dt.contig.md_map, md_map);
         break;
     case UCP_DATATYPE_IOV:
         iovcnt = state->dt.iov.iovcnt;
         iov    = buffer;
-        memh   = ucs_malloc(sizeof(*memh) * iovcnt, "IOV memh");
-        if (NULL == memh) {
+        dt_reg = ucs_malloc(sizeof(*dt_reg) * iovcnt, "iov_dt_reg");
+        if (NULL == dt_reg) {
             status = UCS_ERR_NO_MEMORY;
             goto err;
         }
         for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+            dt_reg[iov_it].md_map = 0;
             if (iov[iov_it].length) {
-                status = uct_md_mem_reg(uct_md, iov[iov_it].buffer,
-                                        iov[iov_it].length,
-                                        UCT_MD_MEM_ACCESS_RMA, &memh[iov_it]);
+                status = ucp_mem_rereg_mds(context, md_map, iov[iov_it].buffer,
+                                           iov[iov_it].length,
+                                           UCT_MD_MEM_ACCESS_RMA, NULL, NULL,
+                                           dt_reg[iov_it].memh,
+                                           &dt_reg[iov_it].md_map);
                 if (status != UCS_OK) {
                     /* unregister previously registered memory */
-                    ucp_iov_buffer_memh_dereg(uct_md, memh, iov_it);
-                    ucs_free(memh);
+                    ucp_request_dt_dereg(context, dt_reg, iov_it, req_dbg);
+                    ucs_free(dt_reg);
                     goto err;
                 }
-            } else {
-                memh[iov_it] = UCT_MEM_HANDLE_NULL; /* Indicator for zero length */
+                ucp_trace_req(req_dbg,
+                              "mem reg iov %ld/%ld md_map 0x%"PRIx64"/0x%"PRIx64,
+                              iov_it, iovcnt, dt_reg[iov_it].md_map, md_map);
             }
         }
-        state->dt.iov.memh = memh;
+        state->dt.iov.dt_reg = dt_reg;
         break;
     default:
         status = UCS_ERR_INVALID_PARAM;
@@ -243,164 +255,54 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
 
 err:
     if (status != UCS_OK) {
-        uct_md_attr = &context->tl_mds[mdi].attr;
-        ucs_error("failed to register user buffer [datatype=%lx address=%p "
-                  "len=%zu pd=\"%s\"]: %s", datatype, buffer, length,
-                  uct_md_attr->component_name, ucs_status_string(status));
+        ucs_error("failed to register user buffer datatype 0x%lx address %p len %zu:"
+                  " %s", datatype, buffer, length, ucs_status_string(status));
     }
     return status;
 }
 
-UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg,
-                      (context, rsc_index, datatype, state),
-                      ucp_context_t *context, ucp_rsc_index_t rsc_index,
-                      ucp_datatype_t datatype, ucp_dt_state_t *state)
+UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg, (context, datatype, state, req_dbg),
+                      ucp_context_t *context, ucp_datatype_t datatype,
+                      ucp_dt_state_t *state, ucp_request_t *req_dbg)
 {
-    ucp_rsc_index_t mdi = context->tl_rscs[rsc_index].md_index;
-    uct_md_h uct_md     = context->tl_mds[mdi].md;
-    uct_mem_h *memh;
-    size_t iov_it;
+    ucs_trace_func("context=%p datatype=0x%lu state=%p", context, datatype,
+                   state);
+
+    UCS_PROFILE_REQUEST_EVENT(req_dbg, "mem_reg", 0);
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        if (state->dt.contig[0].memh != UCT_MEM_HANDLE_NULL) {
-            uct_md_mem_dereg(uct_md, state->dt.contig[0].memh);
-            state->dt.contig[0].memh = UCT_MEM_HANDLE_NULL;
-        }
+        ucp_request_dt_dereg(context, &state->dt.contig, 1, req_dbg);
         break;
     case UCP_DATATYPE_IOV:
-        memh = state->dt.iov.memh;
-        for (iov_it = 0; iov_it < state->dt.iov.iovcnt; ++iov_it) {
-            if (memh[iov_it] != UCT_MEM_HANDLE_NULL) { /* skip zero memh */
-                uct_md_mem_dereg(uct_md, memh[iov_it]);
-            }
+        if (state->dt.iov.dt_reg != NULL) {
+            ucp_request_dt_dereg(context, state->dt.iov.dt_reg,
+                                 state->dt.iov.iovcnt, req_dbg);
+            ucs_free(state->dt.iov.dt_reg);
+            state->dt.iov.dt_reg = NULL;
         }
-        ucs_free(state->dt.iov.memh);
         break;
     default:
-        ucs_error("Invalid data type");
+        break;
     }
 }
 
 ucs_status_t ucp_request_rndv_buffer_reg(ucp_request_t *req)
 {
-    ucp_ep_t        *ep = req->send.ep;
-    uct_md_h         md;
-    ucp_lane_index_t lane;
-    ucp_lane_index_t i;
-    ucp_lane_index_t r;
-    ucs_status_t     status;
+    ucp_ep_t *ep = req->send.ep;
+    ucp_md_map_t md_map;
+    int i;
 
-    req->send.reg_rsc = UCP_NULL_RESOURCE;
+    ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
 
+    md_map = 0;
     for (i = 0; i < ucp_ep_rndv_num_lanes(ep); i++) {
-        if (ucp_ep_rndv_md_flags(ep, i) & UCT_MD_FLAG_NEED_MEMH) {
-            lane = ucp_ep_get_rndv_get_lane(ep, i);
-            md   = ucp_ep_md(ep, lane);
-            status = uct_md_mem_reg(md, (void*)req->send.buffer, req->send.length,
-                                    UCT_MD_MEM_ACCESS_RMA,
-                                    &req->send.state.dt.dt.contig[i].memh);
-            if (status != UCS_OK) {
-                /* rollback all registrations */
-                for (r = 0; r < i; r++) {
-                    if (ucp_ep_rndv_md_flags(ep, r) & UCT_MD_FLAG_NEED_MEMH) {
-                        ucs_assert(req->send.state.dt.dt.contig[r].memh != UCT_MEM_HANDLE_NULL);
-                        lane = ucp_ep_get_rndv_get_lane(ep, r);
-                        md = ucp_ep_md(ep, lane);
-                        uct_md_mem_dereg(md, req->send.state.dt.dt.contig[r].memh);
-                    }
-                }
-                ucp_dt_clear_memh(&req->send.state.dt);
-                return status;
-            }
-        } else {
-            req->send.state.dt.dt.contig[i].memh = UCT_MEM_HANDLE_NULL;
-        }
+        md_map |= UCS_BIT(ucp_ep_md_index(ep, ucp_ep_get_rndv_get_lane(ep, i)));
     }
 
-    return UCS_OK;
-}
-
-/* De-register memory on all lanes except 'used' lane.
- * This trick is used when rndv proto is degraded to AM rndv */
-ucp_lane_index_t ucp_request_rndv_buffer_dereg_unused(ucp_request_t *req, ucp_lane_index_t used)
-{
-    ucp_ep_t        *ep = req->send.ep;
-    ucp_lane_index_t found = UCP_NULL_LANE;
-    ucp_lane_index_t lane;
-    ucp_lane_index_t i;
-    uct_md_h         md;
-
-    ucs_assert_always(req->send.reg_rsc == UCP_NULL_RESOURCE);
-
-    for (i = 0; i < ucp_ep_rndv_num_lanes(ep); i++) {
-        lane = ucp_ep_get_rndv_get_lane(ep, i);
-        if (lane == used && used != UCP_NULL_LANE) {
-            /* if found used lane (used means that it is same as used in AM proto)
-             * then de-register all other lane hanles & make state to same as it was
-             * registered by ucp_request_send_buffer_reg */
-            found = lane;
-            req->send.reg_rsc = ucp_ep_get_rsc_index(ep, lane);
-            if (i > 0) {
-                req->send.state.dt.dt.contig[0].memh = req->send.state.dt.dt.contig[i].memh;
-                req->send.state.dt.dt.contig[i].memh = UCT_MEM_HANDLE_NULL;
-            }
-        } else if ((ucp_ep_rndv_md_flags(ep, i) & UCT_MD_FLAG_NEED_MEMH) &&
-                   (req->send.state.dt.dt.contig[i].memh != UCT_MEM_HANDLE_NULL)) {
-            md = ucp_ep_md(ep, lane);
-            uct_md_mem_dereg(md, req->send.state.dt.dt.contig[i].memh);
-            req->send.state.dt.dt.contig[i].memh = UCT_MEM_HANDLE_NULL;
-        } else {
-            ucs_assert_always(req->send.state.dt.dt.contig[i].memh == UCT_MEM_HANDLE_NULL);
-        }
-    }
-
-    return found;
-}
-
-ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req,
-                                         ucp_lane_index_t lane)
-{
-    ucp_context_t *context    = req->send.ep->worker->context;
-    req->send.reg_rsc         = ucp_ep_get_rsc_index(req->send.ep, lane);
-    ucs_assert(req->send.reg_rsc != UCP_NULL_RESOURCE);
-
-    return ucp_request_memory_reg(context, req->send.reg_rsc,
+    return ucp_request_memory_reg(ep->worker->context, md_map,
                                   (void*)req->send.buffer, req->send.length,
-                                  req->send.datatype, &req->send.state.dt);
-}
-
-ucs_status_t ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_ep_h ep,
-                                         ucp_lane_index_t lane)
-{
-    ucp_context_t *context  = ep->worker->context;
-    req->recv.reg_rsc       = ucp_ep_get_rsc_index(ep, lane);
-    ucs_assert(req->recv.reg_rsc != UCP_NULL_RESOURCE);
-
-    return ucp_request_memory_reg(context, req->recv.reg_rsc,
-                                  (void*)req->recv.buffer, req->recv.length,
-                                  req->recv.datatype, &req->recv.state);
-}
-
-void ucp_request_send_buffer_dereg(ucp_request_t *req)
-{
-    ucp_context_t *context    = req->send.ep->worker->context;
-    if (req->send.reg_rsc != UCP_NULL_RESOURCE) {
-        ucp_request_memory_dereg(context, req->send.reg_rsc, req->send.datatype,
-                                 &req->send.state.dt);
-        req->send.reg_rsc = UCP_NULL_RESOURCE;
-    } else {
-        ucp_request_rndv_buffer_dereg(req);
-    }
-}
-
-void ucp_request_recv_buffer_dereg(ucp_request_t *req)
-{
-    ucp_context_t *context = req->recv.worker->context;
-    ucs_assert(req->recv.reg_rsc != UCP_NULL_RESOURCE);
-    ucp_request_memory_dereg(context, req->recv.reg_rsc, req->recv.datatype,
-                             &req->recv.state);
-    req->recv.reg_rsc = UCP_NULL_RESOURCE;
+                                  req->send.datatype, &req->send.state.dt, req);
 }
 
 /* NOTE: deprecated */
@@ -446,7 +348,7 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
         /* zcopy */
         ucp_request_send_state_reset(req, proto->zcopy_completion,
                                      UCP_REQUEST_SEND_PROTO_ZCOPY_AM);
-        status = ucp_request_send_buffer_reg(req, req->send.lane);
+        status = ucp_request_send_buffer_reg_lane(req, req->send.lane);
         if (status != UCS_OK) {
             return status;
         }

@@ -17,6 +17,10 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
      ucs_offsetof(uct_cuda_copy_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
+    {"MAX_POLL", "16",
+     "Max number of event completions to pick during cuda events polling",
+      ucs_offsetof(uct_cuda_copy_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
@@ -46,24 +50,24 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h iface,
 {
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
-    /* FIXME all of these values */
     iface_attr->iface_addr_len          = sizeof(int);
     iface_attr->device_addr_len         = 0;
     iface_attr->ep_addr_len             = 0;
-    iface_attr->max_conn_priv           = 0;
-    iface_attr->cap.flags               = 0;
+    iface_attr->cap.flags               = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                          UCT_IFACE_FLAG_GET_ZCOPY |
+                                          UCT_IFACE_FLAG_PUT_ZCOPY;
 
     iface_attr->cap.put.max_short       = 0;
     iface_attr->cap.put.max_bcopy       = 0;
     iface_attr->cap.put.min_zcopy       = 0;
-    iface_attr->cap.put.max_zcopy       = 0;
+    iface_attr->cap.put.max_zcopy       = SIZE_MAX;
     iface_attr->cap.put.opt_zcopy_align = 1;
     iface_attr->cap.put.align_mtu       = iface_attr->cap.put.opt_zcopy_align;
     iface_attr->cap.put.max_iov         = 1;
 
     iface_attr->cap.get.max_bcopy       = 0;
     iface_attr->cap.get.min_zcopy       = 0;
-    iface_attr->cap.get.max_zcopy       = 0;
+    iface_attr->cap.get.max_zcopy       = SIZE_MAX;
     iface_attr->cap.get.opt_zcopy_align = 1;
     iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
     iface_attr->cap.get.max_iov         = 1;
@@ -86,16 +90,79 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h iface,
     return UCS_OK;
 }
 
+static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                              uct_completion_t *comp)
+{
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
+
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (ucs_queue_is_empty(&iface->outstanding_d2h_cuda_event_q) &&
+        ucs_queue_is_empty(&iface->outstanding_h2d_cuda_event_q)) {
+        UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
+        return UCS_OK;
+    }
+
+    UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
+    return UCS_INPROGRESS;
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_cuda_copy_progress_event_queue(ucs_queue_head_t *event_queue, unsigned max_events)
+{
+    unsigned count = 0;
+    cudaError_t result = cudaSuccess;
+    uct_cuda_copy_event_desc_t *cuda_event;
+    ucs_queue_iter_t iter;
+
+    ucs_queue_for_each_safe(cuda_event, iter, event_queue, queue) {
+        result = cudaEventQuery(cuda_event->event);
+        if (cudaSuccess != result) {
+            break;
+        }
+        ucs_queue_del_iter(event_queue, iter);
+        if (cuda_event->comp != NULL) {
+            uct_invoke_completion(cuda_event->comp, UCS_OK);
+        }
+        ucs_trace_poll("CUDA Event Done :%p", cuda_event);
+        ucs_mpool_put(cuda_event);
+        count++;
+        if (count >= max_events) {
+            break;
+        }
+    }
+    return count;
+}
+
+static unsigned uct_cuda_copy_iface_progress(uct_iface_h tl_iface)
+{
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
+    unsigned max_events = iface->config.max_poll;
+    unsigned count;
+
+    count = uct_cuda_copy_progress_event_queue(&iface->outstanding_d2h_cuda_event_q,
+                                               max_events);
+    count += uct_cuda_copy_progress_event_queue(&iface->outstanding_h2d_cuda_event_q,
+                                                (max_events - count));
+    return count;
+}
+
 static uct_iface_ops_t uct_cuda_copy_iface_ops = {
+    .ep_get_zcopy             = uct_cuda_copy_ep_get_zcopy,
+    .ep_put_zcopy             = uct_cuda_copy_ep_put_zcopy,
+    .ep_pending_add           = ucs_empty_function_return_busy,
+    .ep_pending_purge         = ucs_empty_function,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_cuda_copy_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_ep_t),
-    .iface_flush              = uct_base_iface_flush,
+    .iface_flush              = uct_cuda_copy_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
-    .iface_progress           = ucs_empty_function_return_zero,
+    .iface_progress_enable    = uct_base_iface_progress_enable,
+    .iface_progress_disable   = uct_base_iface_progress_disable,
+    .iface_progress           = uct_cuda_copy_iface_progress,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_iface_t),
     .iface_query              = uct_cuda_copy_iface_query,
     .iface_get_device_address = (void*)ucs_empty_function_return_success,
@@ -103,10 +170,44 @@ static uct_iface_ops_t uct_cuda_copy_iface_ops = {
     .iface_is_reachable       = uct_cuda_copy_iface_is_reachable,
 };
 
+static void uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    uct_cuda_copy_event_desc_t *base = (uct_cuda_copy_event_desc_t *) obj;
+    ucs_status_t status;
+
+    memset(base, 0 , sizeof(*base));
+    status = CUDA_FUNC(cudaEventCreateWithFlags(&(base->event), cudaEventDisableTiming));
+    if (UCS_OK != status) {
+        ucs_error("cudaEventCreateWithFlags Failed");
+    }
+}
+
+static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
+{
+    uct_cuda_copy_event_desc_t *base = (uct_cuda_copy_event_desc_t *) obj;
+    ucs_status_t status;
+
+    status = CUDA_FUNC(cudaEventDestroy(base->event));
+    if (UCS_OK != status) {
+        ucs_error("cudaEventDestroy Failed");
+    }
+}
+
+static ucs_mpool_ops_t uct_cuda_copy_event_desc_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = uct_cuda_copy_event_desc_init,
+    .obj_cleanup   = uct_cuda_copy_event_desc_cleanup,
+};
+
 static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
+    uct_cuda_copy_iface_config_t *config = ucs_derived_of(tl_config,
+                                                          uct_cuda_copy_iface_config_t);
+    ucs_status_t status;
+
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_copy_iface_ops, md, worker,
                               params, tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_CUDA_COPY_TL_NAME));
@@ -117,12 +218,45 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
         return UCS_ERR_NO_DEVICE;
     }
 
+    self->config.max_poll = config->max_poll;
+
+    status = ucs_mpool_init(&self->cuda_event_desc,
+                            0,
+                            sizeof(uct_cuda_copy_event_desc_t),
+                            0,
+                            UCS_SYS_CACHE_LINE_SIZE,
+                            128,
+                            1024,
+                            &uct_cuda_copy_event_desc_mpool_ops,
+                            "CUDA EVENT objects");
+
+    if (UCS_OK != status) {
+        ucs_error("Mpool creation failed");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    status = CUDA_FUNC(cudaStreamCreateWithFlags(&self->stream_d2h, cudaStreamNonBlocking));
+    if (UCS_OK != status) {
+        ucs_error("cudaStreamCreateWithFlags creation failed");
+        return UCS_ERR_IO_ERROR;
+    }
+    status = CUDA_FUNC(cudaStreamCreateWithFlags(&self->stream_h2d, cudaStreamNonBlocking));
+    if (UCS_OK != status) {
+        ucs_error("cudaStreamCreateWithFlags creation failed");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    ucs_queue_head_init(&self->outstanding_d2h_cuda_event_q);
+    ucs_queue_head_init(&self->outstanding_h2d_cuda_event_q);
+
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 {
-    /* tasks to tear down the domain */
+    uct_base_iface_progress_disable(&self->super.super,
+                                    UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+    ucs_mpool_cleanup(&self->cuda_event_desc, 1);
 }
 
 UCS_CLASS_DEFINE(uct_cuda_copy_iface_t, uct_base_iface_t);

@@ -46,6 +46,7 @@ typedef struct uct_rc_mlx5_iface_common {
     struct {
         uct_ib_mlx5_cq_t   cq;
         uct_ib_mlx5_srq_t  srq;
+        void               *pref_ptr;
     } rx;
     UCS_STATS_NODE_DECLARE(stats);
 } uct_rc_mlx5_iface_common_t;
@@ -98,6 +99,24 @@ uct_rc_mlx5_iface_common_rx_inline(uct_rc_mlx5_iface_common_t *mlx5_iface,
                                 byte_len);
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_srq_prefetch_first(uct_rc_mlx5_iface_common_t *mlx5_common_iface)
+{
+    ucs_prefetch(mlx5_common_iface->rx.pref_ptr);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_srq_prefetch_setup(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
+                               uct_rc_iface_t *rc_iface)
+{
+    unsigned wqe_ctr = (mlx5_common_iface->rx.srq.free_idx + 2) & mlx5_common_iface->rx.srq.mask;
+    uct_ib_mlx5_srq_seg_t *seg;
+
+    seg = uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq, wqe_ctr);
+    mlx5_common_iface->rx.pref_ptr =
+            uct_ib_iface_recv_desc_hdr(&rc_iface->super, seg->srq.desc);
+}
+
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                  uct_rc_iface_t *rc_iface)
@@ -118,6 +137,9 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
 
     ucs_assert(uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq,
                                        mlx5_common_iface->rx.srq.mask)->srq.next_wqe_index == 0);
+
+    /* Prefetch the descriptor if it was scheduled */
+    uct_rc_mlx5_srq_prefetch_first(mlx5_common_iface);
 
     cqe = uct_ib_mlx5_poll_cq(&rc_iface->super, &mlx5_common_iface->rx.cq);
     if (cqe == NULL) {
@@ -151,6 +173,10 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
         hdr = uct_ib_iface_recv_desc_hdr(&rc_iface->super, desc);
         VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
         flags = UCT_CB_PARAM_FLAG_DESC;
+        /* Assuming that next packet likely will be non-inline,
+         * setup the next prefetch pointer
+         */
+        uct_rc_mlx5_srq_prefetch_setup(mlx5_common_iface, rc_iface);
     }
 
     uct_ib_mlx5_log_rx(&rc_iface->super, IBV_QPT_RC, cqe, hdr,

@@ -49,13 +49,13 @@ test_perf::test_spec test_ucp_perf::tests[] =
   { "tag latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
 
   { "tag iov latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
     UCP_PERF_DATATYPE_IOV, 8192, 3, { 1024, 1024, 1024 }, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
 
   { "tag mr", "Mpps",

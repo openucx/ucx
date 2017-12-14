@@ -828,12 +828,12 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
         rma_config = &config->rma[lane];
         rsc_index  = config->key.lanes[lane].rsc_index;
-        iface_attr = &worker->ifaces[rsc_index].attr;
 
         rma_config->put_zcopy_thresh = SIZE_MAX;
         rma_config->get_zcopy_thresh = SIZE_MAX;
 
         if (rsc_index != UCP_NULL_RESOURCE) {
+            iface_attr = &worker->ifaces[rsc_index].attr;
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
                 rma_config->max_put_short = iface_attr->cap.put.max_short;
             }

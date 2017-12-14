@@ -3,7 +3,9 @@
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
-
+/* force older C++ version to have SIZE_MAX */
+#define __STDC_LIMIT_MACROS
+#define __STDC_CONSTANT_MACROS
 #include <common/test.h>
 extern "C" {
 #include <ucs/config/parser.h>
@@ -41,6 +43,7 @@ typedef struct {
 
 typedef struct {
     unsigned        volume;
+    unsigned long   power;
 } engine_opts_t;
 
 typedef struct {
@@ -50,6 +53,7 @@ typedef struct {
     const char      *brand;
     const char      *model;
     unsigned        color;
+    unsigned long   vin;
 } car_opts_t;
 
 
@@ -77,6 +81,9 @@ ucs_config_field_t engine_opts_table[] = {
   {"VOLUME", "6000", "Engine volume",
    ucs_offsetof(engine_opts_t, volume), UCS_CONFIG_TYPE_UINT},
 
+  {"POWER", "200", "Engine power",
+   ucs_offsetof(engine_opts_t, power), UCS_CONFIG_TYPE_ULUNITS},
+
   {NULL}
 };
 
@@ -98,6 +105,9 @@ ucs_config_field_t car_opts_table[] = {
 
   {"COLOR", "red", "Car color",
    ucs_offsetof(car_opts_t, color), UCS_CONFIG_TYPE_ENUM(color_names)},
+
+  {"VIN", "auto", "Vehicle identification number",
+   ucs_offsetof(car_opts_t, vin), UCS_CONFIG_TYPE_ULUNITS},
 
   {NULL}
 };
@@ -184,6 +194,8 @@ UCS_TEST_F(test_config, parse_default) {
     EXPECT_EQ((unsigned)COLOR_RED, opts->coach.driver_seat.color);
     EXPECT_EQ((unsigned)COLOR_BLUE, opts->coach.passenger_seat.color);
     EXPECT_EQ((unsigned)COLOR_BLACK, opts->coach.rear_seat.color);
+    EXPECT_EQ(UCS_CONFIG_ULUNITS_AUTO, opts->vin);
+    EXPECT_EQ(200UL, opts->engine.power);
 }
 
 UCS_TEST_F(test_config, clone) {
@@ -215,6 +227,9 @@ UCS_TEST_F(test_config, set_get) {
     EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
     EXPECT_EQ(std::string(color_names[COLOR_WHITE]),
               std::string(opts.get("COLOR")));
+
+    opts.set("VIN", "123456");
+    EXPECT_EQ(123456UL, opts->vin);
 }
 
 UCS_TEST_F(test_config, set_get_with_table_prefix) {
@@ -278,7 +293,7 @@ UCS_TEST_F(test_config, dump) {
         EXPECT_STREQ("UCX_", line_buf);
         ++num_lines;
     }
-    EXPECT_EQ(8u, num_lines);
+    EXPECT_EQ(10u, num_lines);
 
     fclose(file);
     free(dump_data);

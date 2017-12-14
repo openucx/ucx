@@ -33,3 +33,24 @@
    obj:*/libmlx5*.so*
    fun:ibv_create_ah
 }
+
+{
+   libcuda_leak
+   Memcheck:Leak
+   ...
+   obj:*libcuda*.so*
+}
+
+{
+   libcuda_cond
+   Memcheck:Cond
+   ...
+   obj:*libcuda*.so*
+}
+
+{
+   libcuda_value8
+   Memcheck:Value8
+   ...
+   obj:*libcuda*.so*
+}

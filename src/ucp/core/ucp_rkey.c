@@ -125,7 +125,8 @@ void ucp_rkey_buffer_release(void *rkey_buffer)
     ucs_free(rkey_buffer);
 }
 
-ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey_p)
+ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
+                                ucp_rkey_h *rkey_p)
 {
     ucp_context_t *context = ep->worker->context;
     unsigned remote_md_index;
@@ -135,7 +136,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
     ucs_status_t status;
     ucp_rkey_h rkey;
     uint8_t md_size;
-    void *p;
+    const void *p;
 
     /* Count the number of remote MDs in the rkey buffer */
     p = rkey_buffer;

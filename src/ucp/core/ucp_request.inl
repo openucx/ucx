@@ -194,13 +194,15 @@ ucp_request_recv_state_init(ucp_request_t *req, void *buffer, ucp_datatype_t dt,
     req->recv.state.offset = 0;
 
     switch (dt & UCP_DATATYPE_CLASS_MASK) {
-    case UCP_DATATYPE_IOV:
+    case UCP_DATATYPE_CONTIG:
+        req->recv.state.dt.contig.md_map     = 0;
+        break;
+   case UCP_DATATYPE_IOV:
         req->recv.state.dt.iov.iov_offset    = 0;
         req->recv.state.dt.iov.iovcnt_offset = 0;
         req->recv.state.dt.iov.iovcnt        = dt_count;
-        req->recv.state.dt.iov.memh          = UCT_MEM_HANDLE_NULL;
+        req->recv.state.dt.iov.dt_reg        = NULL;
         break;
-
     case UCP_DATATYPE_GENERIC:
         dt_gen = ucp_dt_generic(dt);
         req->recv.state.dt.generic.state =
@@ -209,14 +211,14 @@ ucp_request_recv_state_init(ucp_request_t *req, void *buffer, ucp_datatype_t dt,
         ucs_trace_req("req %p buffer %p count %zu dt_gen state=%p", req, buffer,
                       dt_count, req->recv.state.dt.generic.state);
         break;
-
     default:
         break;
     }
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_request_send_state_init(ucp_request_t *req, size_t dt_count)
+ucp_request_send_state_init(ucp_request_t *req, ucp_datatype_t datatype,
+                            size_t dt_count)
 {
     ucp_dt_generic_t *dt_gen;
     void             *state_gen;
@@ -228,16 +230,18 @@ ucp_request_send_state_init(ucp_request_t *req, size_t dt_count)
 
     req->send.state.uct_comp.func = NULL;
 
-    switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
+    switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
+        req->send.state.dt.dt.contig.md_map     = 0;
         return;
     case UCP_DATATYPE_IOV:
         req->send.state.dt.dt.iov.iovcnt_offset = 0;
         req->send.state.dt.dt.iov.iov_offset    = 0;
         req->send.state.dt.dt.iov.iovcnt        = dt_count;
+        req->send.state.dt.dt.iov.dt_reg        = NULL;
         return;
     case UCP_DATATYPE_GENERIC:
-        dt_gen    = ucp_dt_generic(req->send.datatype);
+        dt_gen    = ucp_dt_generic(datatype);
         state_gen = dt_gen->ops.start_pack(dt_gen->context, req->send.buffer,
                                            dt_count);
         req->send.state.dt.dt.generic.state = state_gen;
@@ -257,10 +261,6 @@ ucp_request_send_state_reset(ucp_request_t *req,
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
-        if (UCP_DT_IS_CONTIG(req->send.datatype)) {
-            ucp_dt_clear_memh(&req->send.state.dt);
-        }
-        /* Fall through */
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
         req->send.state.uct_comp.func       = comp_cb;
         req->send.state.uct_comp.count      = 0;
@@ -344,6 +344,41 @@ ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
     }
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_send_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map)
+{
+    return ucp_request_memory_reg(req->send.ep->worker->context, md_map,
+                                  (void*)req->send.buffer, req->send.length,
+                                  req->send.datatype, &req->send.state.dt, req);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_send_buffer_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
+{
+    ucp_md_map_t md_map = UCS_BIT(ucp_ep_md_index(req->send.ep, lane));
+    return ucp_request_send_buffer_reg(req, md_map);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map)
+{
+    return ucp_request_memory_reg(req->recv.worker->context, md_map,
+                                  req->recv.buffer, req->recv.length,
+                                  req->recv.datatype, &req->recv.state, req);
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_request_send_buffer_dereg(ucp_request_t *req)
+{
+    ucp_request_memory_dereg(req->send.ep->worker->context, req->send.datatype,
+                             &req->send.state.dt, req);
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_request_recv_buffer_dereg(ucp_request_t *req)
+{
+    ucp_request_memory_dereg(req->recv.worker->context, req->recv.datatype,
+                             &req->recv.state, req);
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_request_wait_uct_comp(ucp_request_t *req)
 {
@@ -352,31 +387,10 @@ ucp_request_wait_uct_comp(ucp_request_t *req)
     }
 }
 
-static UCS_F_ALWAYS_INLINE int
-ucp_request_is_send_buffer_reg(ucp_request_t *req) {
-    return req->send.reg_rsc != UCP_NULL_RESOURCE;
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_request_is_recv_buffer_reg(ucp_request_t *req) {
-    return req->recv.reg_rsc != UCP_NULL_RESOURCE;
-}
-
-static UCS_F_ALWAYS_INLINE void ucp_request_send_tag_stat(ucp_request_t *req)
-{
-    if (req->flags & UCP_REQUEST_FLAG_RNDV) {
-        UCP_EP_STAT_TAG_OP(req->send.ep, RNDV);
-    } else if (req->flags & UCP_REQUEST_FLAG_SYNC) {
-        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);
-    } else {
-        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
-    }
-}
-
 static UCS_F_ALWAYS_INLINE
 uct_rkey_bundle_t *ucp_tag_rndv_rkey_bundle(ucp_request_t *req, int idx)
 {
-    ucs_assert((idx >= 0) && (idx < UCP_MAX_RNDV_LANES));
+    ucs_assert((idx >= 0) && (idx < UCP_MAX_OP_MDS));
     return &req->send.rndv_get.rkey->rkey_bundle[idx];
 }
 
@@ -406,7 +420,7 @@ ucp_request_rndv_get_init(ucp_request_t *req)
     req->send.rndv_get.lane_idx  = 0;
     req->send.rndv_get.num_lanes = 0;
 
-    for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
+    for (i = 0; i < UCP_MAX_OP_MDS; i++) {
         ucp_tag_rndv_rkey_bundle(req, i)->rkey = UCT_INVALID_RKEY;
     }
 }
@@ -422,7 +436,7 @@ ucp_request_rndv_get_release(ucp_request_t *req)
         return;
     }
 
-    for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
+    for (i = 0; i < UCP_MAX_OP_MDS; i++) {
         if (ucp_tag_rndv_is_rkey_valid(req, i)) {
             uct_rkey_release(ucp_tag_rndv_rkey_bundle(req, i));
         }
@@ -430,10 +444,3 @@ ucp_request_rndv_get_release(ucp_request_t *req)
 
     ucs_mpool_put_inline(req->send.rndv_get.rkey);
 }
-
-static UCS_F_ALWAYS_INLINE
-void ucp_request_rndv_buffer_dereg(ucp_request_t *req)
-{
-    ucp_request_rndv_buffer_dereg_unused(req, UCP_NULL_LANE);
-}
-
