@@ -61,7 +61,7 @@
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t *
 ucp_stream_rdesc_dequeue(ucp_ep_ext_stream_t *ep_stream)
 {
-    ucp_recv_desc_t *rdesc = ucs_queue_pull_elem_non_empty(&ep_stream->data,
+    ucp_recv_desc_t *rdesc = ucs_queue_pull_elem_non_empty(&ep_stream->descs_q,
                                                            ucp_recv_desc_t,
                                                            stream_queue);
     ucs_assert(ep_stream->am_data_len >= rdesc->length);
@@ -69,7 +69,7 @@ ucp_stream_rdesc_dequeue(ucp_ep_ext_stream_t *ep_stream)
     ep_stream->am_data_len -= rdesc->length;
 
     if (ucs_unlikely(ep_stream->am_data_len == 0)) {
-        ucs_assert(ucs_queue_is_empty(&ep_stream->data));
+        ucs_assert(ucs_queue_is_empty(&ep_stream->descs_q));
         if (ucp_stream_ep_is_queued(ep_stream->ucp_ep)) {
             ucp_stream_ep_dequeue(ep_stream);
         }
@@ -86,7 +86,7 @@ ucp_stream_recv_data_nb_internal(ucp_ep_ext_stream_t *ep_stream, int dequeue)
     ucs_assert(ep_stream->am_data_len > 0);
 
     rdesc = dequeue ? ucp_stream_rdesc_dequeue(ep_stream) :
-            ucs_queue_head_elem_non_empty(&ep_stream->data, ucp_recv_desc_t,
+            ucs_queue_head_elem_non_empty(&ep_stream->descs_q, ucp_recv_desc_t,
                                           stream_queue);
     ucs_trace_data("ep %p, rdesc %p with %u stream bytes",
                    ep_stream->ucp_ep, rdesc, rdesc->length);
@@ -133,7 +133,7 @@ ucp_stream_rdesc_dequeue_and_release(ucp_recv_desc_t *rdesc,
                                      ucp_ep_ext_stream_t *ep)
 {
     ucs_assert(ep->am_data_len > 0);
-    ucs_assert(rdesc == ucs_queue_head_elem_non_empty(&ep->data,
+    ucs_assert(rdesc == ucs_queue_head_elem_non_empty(&ep->descs_q,
                                                       ucp_recv_desc_t,
                                                       stream_queue));
     ucp_stream_rdesc_dequeue(ep);
@@ -248,7 +248,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
             goto out;
         }
         ucp_stream_recv_request_init(req, buffer, count, datatype, cb);
-        ucs_queue_push(&ep_stream->reqs, &req->recv.queue);
+        ucs_queue_push(&ep_stream->reqs_q, &req->recv.queue);
         goto ptr_out;
     }
 
@@ -300,8 +300,8 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_stream_t *ep,
 
     /* First, process expected requests */
     if (ep->am_data_len == 0) {
-        while (!ucs_queue_is_empty(&ep->reqs)) {
-            req      = ucs_queue_head_elem_non_empty(&ep->reqs, ucp_request_t,
+        while (!ucs_queue_is_empty(&ep->reqs_q)) {
+            req      = ucs_queue_head_elem_non_empty(&ep->reqs_q, ucp_request_t,
                                                      recv.queue);
             payload  = UCS_PTR_BYTE_OFFSET(am_data, rdesc_tmp.payload_offset);
             unpacked = ucp_stream_rdata_unpack(payload, rdesc_tmp.length, req);
@@ -334,16 +334,14 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_stream_t *ep,
                rdesc_tmp.length);
     } else {
         /* slowpath */
-        rdesc        = (ucp_recv_desc_t *)am_data - 1;
+        rdesc                 = (ucp_recv_desc_t *)am_data - 1;
         rdesc->length         = rdesc_tmp.length;
         rdesc->payload_offset = rdesc_tmp.payload_offset + sizeof(*rdesc);
         rdesc->flags          = UCP_RECV_DESC_FLAG_UCT_DESC;
     }
 
-    rdesc->length         = length;
-    rdesc->payload_offset = sizeof(*rdesc) + sizeof(*am_data);
-    ep->am_data_len      += length;
-    ucs_queue_push(&ep->data, &rdesc->stream_queue);
+    ep->am_data_len += length;
+    ucs_queue_push(&ep->descs_q, &rdesc->stream_queue);
 
     return UCS_INPROGRESS;
 }
@@ -361,7 +359,7 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_assert(am_length >= sizeof(ucp_stream_am_hdr_t));
 
     ep = ucp_worker_ep_find(worker, data->hdr.sender_uuid);
-    ucs_assertv_always((ep != NULL),"ep is not found by uuid: %lu",
+    ucs_assertv_always(ep != NULL,"ep not found for uuid %"PRIx64,
                        data->hdr.sender_uuid);
     ep_stream = ep->ext.stream;
 
