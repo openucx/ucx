@@ -60,85 +60,75 @@ static const char *uct_ib_numa_policy_names[] = {
 };
 
 static ucs_config_field_t uct_ib_md_config_table[] = {
-  {"", "", NULL,
-   ucs_offsetof(uct_ib_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+    {"", "", NULL,
+     ucs_offsetof(uct_ib_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-  {"RCACHE", "try", "Enable using memory registration cache",
-   ucs_offsetof(uct_ib_md_config_t, rcache.enable), UCS_CONFIG_TYPE_TERNARY},
+    {"", "RCACHE_ADDR_ALIGN=" UCS_PP_MAKE_STRING(UCT_IB_MD_RCACHE_DEFAULT_ALIGN), NULL,
+     ucs_offsetof(uct_ib_md_config_t, rcache),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_rcache_table)},
 
-  {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCT_IB_MD_RCACHE_DEFAULT_ALIGN),
-   "Registration cache address alignment, must be power of 2\n"
-   "between "UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN)"and system page size",
-   ucs_offsetof(uct_ib_md_config_t, rcache.alignment), UCS_CONFIG_TYPE_UINT},
+    {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
+     ucs_offsetof(uct_ib_md_config_t, uc_reg_cost.overhead), UCS_CONFIG_TYPE_TIME},
 
-  {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
-   ucs_offsetof(uct_ib_md_config_t, rcache.event_prio), UCS_CONFIG_TYPE_UINT},
+    {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
+     ucs_offsetof(uct_ib_md_config_t, uc_reg_cost.growth), UCS_CONFIG_TYPE_TIME},
 
-  {"RCACHE_OVERHEAD", "90ns", "Registration cache lookup overhead",
-   ucs_offsetof(uct_ib_md_config_t, rcache.overhead), UCS_CONFIG_TYPE_TIME},
+    {"FORK_INIT", "try",
+     "Initialize a fork-safe IB library with ibv_fork_init().",
+     ucs_offsetof(uct_ib_md_config_t, fork_init), UCS_CONFIG_TYPE_TERNARY},
 
-  {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
-   ucs_offsetof(uct_ib_md_config_t, uc_reg_cost.overhead), UCS_CONFIG_TYPE_TIME},
+    {"ASYNC_EVENTS", "n",
+     "Enable listening for async events on the device",
+     ucs_offsetof(uct_ib_md_config_t, async_events), UCS_CONFIG_TYPE_BOOL},
 
-  {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
-   ucs_offsetof(uct_ib_md_config_t, uc_reg_cost.growth), UCS_CONFIG_TYPE_TIME},
+    {"ETH_PAUSE_ON", "y",
+     "Whether or not 'Pause Frame' is enabled on an Ethernet network.\n"
+     "Pause frame is a mechanism for temporarily stopping the transmission of data to\n"
+     "ensure zero loss under congestion on Ethernet family computer networks.\n"
+     "This parameter, if set to 'no', will disqualify IB transports that may not perform\n"
+     "well on a lossy fabric when working with RoCE.",
+     ucs_offsetof(uct_ib_md_config_t, ext.eth_pause), UCS_CONFIG_TYPE_BOOL},
 
-  {"FORK_INIT", "try",
-   "Initialize a fork-safe IB library with ibv_fork_init().",
-   ucs_offsetof(uct_ib_md_config_t, fork_init), UCS_CONFIG_TYPE_TERNARY},
+    {"ODP_NUMA_POLICY", "preferred",
+     "Override NUMA policy for ODP regions, to avoid extra page migrations.\n"
+     " - default: Do no change existing policy.\n"
+     " - preferred/bind:\n"
+     "     Unless the memory policy of the current thread is MPOL_BIND, set the\n"
+     "     policy of ODP regions to MPOL_PREFERRED/MPOL_BIND, respectively.\n"
+     "     If the numa node mask of the current thread is not defined, use the numa\n"
+     "     nodes which correspond to its cpu affinity mask.",
+     ucs_offsetof(uct_ib_md_config_t, ext.odp.numa_policy),
+     UCS_CONFIG_TYPE_ENUM(uct_ib_numa_policy_names)},
 
-  {"ASYNC_EVENTS", "n",
-   "Enable listening for async events on the device",
-   ucs_offsetof(uct_ib_md_config_t, async_events), UCS_CONFIG_TYPE_BOOL},
+    {"ODP_PREFETCH", "n",
+     "Force prefetch of memory regions created with ODP.\n",
+     ucs_offsetof(uct_ib_md_config_t, ext.odp.prefetch), UCS_CONFIG_TYPE_BOOL},
 
-  {"ETH_PAUSE_ON", "y",
-   "Whether or not 'Pause Frame' is enabled on an Ethernet network.\n"
-   "Pause frame is a mechanism for temporarily stopping the transmission of data to\n"
-   "ensure zero loss under congestion on Ethernet family computer networks.\n"
-   "This parameter, if set to 'no', will disqualify IB transports that may not perform\n"
-   "well on a lossy fabric when working with RoCE.",
-   ucs_offsetof(uct_ib_md_config_t, ext.eth_pause), UCS_CONFIG_TYPE_BOOL},
+    {"ODP_MAX_SIZE", "auto",
+     "Maximal memory region size to enable ODP for. 0 - disable.\n",
+     ucs_offsetof(uct_ib_md_config_t, ext.odp.max_size), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"ODP_NUMA_POLICY", "preferred",
-   "Override NUMA policy for ODP regions, to avoid extra page migrations.\n"
-   " - default: Do no change existing policy.\n"
-   " - preferred/bind:\n"
-   "     Unless the memory policy of the current thread is MPOL_BIND, set the\n"
-   "     policy of ODP regions to MPOL_PREFERRED/MPOL_BIND, respectively.\n"
-   "     If the numa node mask of the current thread is not defined, use the numa\n"
-   "     nodes which correspond to its cpu affinity mask.",
-   ucs_offsetof(uct_ib_md_config_t, ext.odp.numa_policy),
-   UCS_CONFIG_TYPE_ENUM(uct_ib_numa_policy_names)},
+    {"DEVICE_SPECS", "",
+     "Array of custom device specification. Each element is a string of the following format:\n"
+     "  <vendor-id>:<part-id>[:name[:<flags>[:<priority>]]]\n"
+     "where:\n"
+     "  <vendor-id> - (mandatory) vendor id, integer or hexadecimal.\n"
+     "  <part-id>   - (mandatory) vendor part id, integer or hexadecimal.\n"
+     "  <name>      - (optional) device name.\n"
+     "  <flags>     - (optional) empty, or any of: '4' - mlx4 device, '5' - mlx5 device.\n"
+     "  <priority>  - (optional) device priority, integer.\n",
+     ucs_offsetof(uct_ib_md_config_t, custom_devices), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"ODP_PREFETCH", "n",
-   "Force prefetch of memory regions created with ODP.\n",
-   ucs_offsetof(uct_ib_md_config_t, ext.odp.prefetch), UCS_CONFIG_TYPE_BOOL},
+    {"PREFER_NEAREST_DEVICE", "y",
+     "Prefer nearest device to cpu when selecting a device from NET_DEVICES list.\n",
+     ucs_offsetof(uct_ib_md_config_t, ext.prefer_nearest_device), UCS_CONFIG_TYPE_BOOL},
 
-  {"ODP_MAX_SIZE", "auto",
-   "Maximal memory region size to enable ODP for. 0 - disable.\n",
-   ucs_offsetof(uct_ib_md_config_t, ext.odp.max_size), UCS_CONFIG_TYPE_MEMUNITS},
+    {"CONTIG_PAGES", "n",
+     "Enable allocation with contiguous pages. Warning: enabling this option may\n"
+     "cause stack smashing.\n",
+     ucs_offsetof(uct_ib_md_config_t, ext.enable_contig_pages), UCS_CONFIG_TYPE_BOOL},
 
-  {"DEVICE_SPECS", "",
-   "Array of custom device specification. Each element is a string of the following format:\n"
-   "  <vendor-id>:<part-id>[:name[:<flags>[:<priority>]]]\n"
-   "where:\n"
-   "  <vendor-id> - (mandatory) vendor id, integer or hexadecimal.\n"
-   "  <part-id>   - (mandatory) vendor part id, integer or hexadecimal.\n"
-   "  <name>      - (optional) device name.\n"
-   "  <flags>     - (optional) empty, or any of: '4' - mlx4 device, '5' - mlx5 device.\n"
-   "  <priority>  - (optional) device priority, integer.\n",
-   ucs_offsetof(uct_ib_md_config_t, custom_devices), UCS_CONFIG_TYPE_STRING_ARRAY},
-
-  {"PREFER_NEAREST_DEVICE", "y",
-   "Prefer nearest device to cpu when selecting a device from NET_DEVICES list.\n",
-   ucs_offsetof(uct_ib_md_config_t, ext.prefer_nearest_device), UCS_CONFIG_TYPE_BOOL},
-
-  {"CONTIG_PAGES", "n",
-   "Enable allocation with contiguous pages. Warning: enabling this option may\n"
-   "cause stack smashing.\n",
-   ucs_offsetof(uct_ib_md_config_t, ext.enable_contig_pages), UCS_CONFIG_TYPE_BOOL},
-
-  {NULL}
+    {NULL}
 };
 
 #if ENABLE_STATS

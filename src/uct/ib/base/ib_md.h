@@ -98,13 +98,7 @@ typedef struct uct_ib_md {
  */
 typedef struct uct_ib_md_config {
     uct_md_config_t          super;
-
-    struct {
-        ucs_ternary_value_t  enable;       /**< Enable registration cache */
-        size_t               alignment;    /**< Force address alignment */
-        unsigned             event_prio;   /**< Memory events priority */
-        double               overhead;     /**< Lookup overhead estimation */
-    } rcache;
+    uct_md_rcache_config_t   rcache;
 
     uct_linear_growth_t      uc_reg_cost;  /**< Memory registration cost estimation
                                                 without using the cache */

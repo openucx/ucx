@@ -47,7 +47,7 @@ static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->latency.overhead       = 80e-9; /* 80 ns */
     iface_attr->latency.growth         = 0;
-    iface_attr->bandwidth              = 12000 * 1024.0 * 1024.0;
+    iface_attr->bandwidth              = 12923 * 1024.0 * 1024.0;
     iface_attr->overhead               = 0.25e-6; /* 0.25 us */
     return UCS_OK;
 }
