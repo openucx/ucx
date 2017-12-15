@@ -10,7 +10,9 @@
 #  include "config.h"
 #endif
 
+#if HAVE_IB
 #include <uct/ib/base/ib_device.h> /* for ipoib header size */
+#endif
 #include <ucs/sys/string.h>
 #include <linux/sockios.h>
 #include <linux/types.h>
@@ -91,6 +93,7 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                      ETH_FCS_LEN + /* CRC */
                      12; /* inter-packet gap */
         break;
+#if HAVE_IB
     case ARPHRD_INFINIBAND:
         ll_headers = UCT_IB_LRH_LEN +
                      UCT_IB_GRH_LEN +
@@ -101,6 +104,7 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                      UCT_IB_VCRC_LEN +
                      UCT_IB_DELIM_LEN;
         break;
+#endif
     default:
         ll_headers = 0;
         break;
