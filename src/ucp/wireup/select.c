@@ -829,7 +829,7 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
     ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
-                           UCP_FEATURE_TAG|UCP_FEATURE_WAKEUP)) {
+                           UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
         criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
     }
 
