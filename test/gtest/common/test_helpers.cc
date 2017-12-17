@@ -82,10 +82,9 @@ void safe_usleep(double usec) {
 }
 
 std::string get_iface_ip(const struct sockaddr *ifa_addr) {
-    size_t ip_port_len = ucs_max(INET_ADDRSTRLEN, INET6_ADDRSTRLEN) + 1 + sizeof(in_port_t);
-    char ip_port_str[ip_port_len];
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    return ucs_sockaddr_str(ifa_addr, ip_port_str, ip_port_len);
+    return ucs_sockaddr_str(ifa_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN);
 }
 
 bool is_inet_addr(const struct sockaddr* ifa_addr) {
