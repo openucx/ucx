@@ -25,15 +25,27 @@ typedef struct {
 
 
 /**
+ * Queue of expected requests
+ */
+typedef struct {
+    ucs_queue_head_t      queue;      /* Requests queue */
+    unsigned              sw_count;   /* Number of requests in this queue which
+                                         are not posted to offload */
+} ucp_request_queue_t;
+
+
+/**
  * Tag-matching context
  */
 typedef struct ucp_tag_match {
 
     /* Expected queue */
     struct {
-        ucs_queue_head_t      wildcard;   /* Expected wildcard requests */
-        ucs_queue_head_t      *hash;      /* Hash table of expected non-wild tags */
+        ucp_request_queue_t   wildcard;   /* Expected wildcard requests */
+        ucp_request_queue_t   *hash;      /* Hash table of expected non-wild tags */
         uint64_t              sn;
+        unsigned              sw_all_count; /* Number of all expected requests which
+                                               are not posted to offload */
     } expected;
 
     /* Unexpected queue */
@@ -57,9 +69,6 @@ typedef struct ucp_tag_match {
                                                  or not be used with tag-matching
                                                  offload at all, according to
                                                  'thresh' configuration. */
-        unsigned              sw_req_count;   /* Number of requests which need to
-                                                 be matched in software. If 0 - tags
-                                                 can be posted to the transport */
     } offload;
 
 } ucp_tag_match_t;
@@ -74,7 +83,7 @@ void ucp_tag_exp_remove(ucp_tag_match_t *tm, ucp_request_t *req);
 int ucp_tag_unexp_is_empty(ucp_tag_match_t *tm);
 
 ucp_request_t*
-ucp_tag_exp_search_all(ucp_tag_match_t *tm, ucs_queue_head_t *hash_queue,
+ucp_tag_exp_search_all(ucp_tag_match_t *tm, ucp_request_queue_t *req_queue,
                        ucp_tag_t recv_tag, size_t recv_len, unsigned recv_flags);
 
 #endif

@@ -30,6 +30,12 @@
                   "with tag %"PRIx64"/%"PRIx64, (_recv_tag), (size_t)(_recv_len), \
                   (_title), (_req), (size_t)(_offset), (_exp_tag), (_exp_tag_mask))
 
+static UCS_F_ALWAYS_INLINE
+int ucp_tag_is_specific_source(ucp_context_t *context, ucp_tag_t tag_mask)
+{
+    return ((context->config.tag_sender_mask & tag_mask) ==
+            context->config.tag_sender_mask);
+}
 
 static UCS_F_ALWAYS_INLINE
 int ucp_tag_is_match(ucp_tag_t tag, ucp_tag_t exp_tag, ucp_tag_t tag_mask)
@@ -64,13 +70,13 @@ ucp_tag_match_calc_hash(ucp_tag_t tag)
            ((uint32_t)(tag >> 32) % UCP_TAG_MATCH_HASH_SIZE);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_queue_head_t*
+static UCS_F_ALWAYS_INLINE ucp_request_queue_t*
 ucp_tag_exp_get_queue_for_tag(ucp_tag_match_t *tm, ucp_tag_t tag)
 {
     return &tm->expected.hash[ucp_tag_match_calc_hash(tag)];
 }
 
-static UCS_F_ALWAYS_INLINE ucs_queue_head_t*
+static UCS_F_ALWAYS_INLINE ucp_request_queue_t*
 ucp_tag_exp_get_queue(ucp_tag_match_t *tm, ucp_tag_t tag, ucp_tag_t tag_mask)
 {
     if (tag_mask == UCP_TAG_MASK_FULL) {
@@ -80,17 +86,18 @@ ucp_tag_exp_get_queue(ucp_tag_match_t *tm, ucp_tag_t tag, ucp_tag_t tag_mask)
     }
 }
 
-static UCS_F_ALWAYS_INLINE ucs_queue_head_t*
+static UCS_F_ALWAYS_INLINE ucp_request_queue_t*
 ucp_tag_exp_get_req_queue(ucp_tag_match_t *tm, ucp_request_t *req)
 {
     return ucp_tag_exp_get_queue(tm, req->recv.tag.tag, req->recv.tag.tag_mask);
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_exp_push(ucp_tag_match_t *tm, ucs_queue_head_t *queue, ucp_request_t *req)
+ucp_tag_exp_push(ucp_tag_match_t *tm, ucp_request_queue_t *req_queue,
+                 ucp_request_t *req)
 {
     req->recv.tag.sn = tm->expected.sn++;
-    ucs_queue_push(queue, &req->recv.queue);
+    ucs_queue_push(&req_queue->queue, &req->recv.queue);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -99,22 +106,34 @@ ucp_tag_exp_add(ucp_tag_match_t *tm, ucp_request_t *req)
     ucp_tag_exp_push(tm, ucp_tag_exp_get_req_queue(tm, req), req);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_exp_delete(ucp_request_t *req, ucp_tag_match_t *tm,
+                   ucp_request_queue_t *req_queue, ucs_queue_iter_t iter)
+{
+    if (req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD) {
+        --tm->expected.sw_all_count;
+        --req_queue->sw_count;
+    }
+    ucs_queue_del_iter(&req_queue->queue, iter);
+}
+
 static UCS_F_ALWAYS_INLINE ucp_request_t *
 ucp_tag_exp_search(ucp_tag_match_t *tm, ucp_tag_t recv_tag, size_t recv_len,
                    unsigned recv_flags)
 {
-    ucs_queue_head_t *queue;
+    ucp_request_queue_t *req_queue;
     ucs_queue_iter_t iter;
     ucp_request_t *req;
 
-    if (ucs_unlikely(!ucs_queue_is_empty(&tm->expected.wildcard))) {
-        queue = ucp_tag_exp_get_queue_for_tag(tm, recv_tag);
-        return ucp_tag_exp_search_all(tm, queue, recv_tag, recv_len, recv_flags);
+    if (ucs_unlikely(!ucs_queue_is_empty(&tm->expected.wildcard.queue))) {
+        req_queue = ucp_tag_exp_get_queue_for_tag(tm, recv_tag);
+        return ucp_tag_exp_search_all(tm, req_queue, recv_tag, recv_len,
+                                      recv_flags);
     }
 
     /* fast path - wildcard queue is empty, search only the specific queue */
-    queue = ucp_tag_exp_get_queue_for_tag(tm, recv_tag);
-    ucs_queue_for_each_safe(req, iter, queue, recv.queue) {
+    req_queue = ucp_tag_exp_get_queue_for_tag(tm, recv_tag);
+    ucs_queue_for_each_safe(req, iter, &req_queue->queue, recv.queue) {
         req = ucs_container_of(*iter, ucp_request_t, recv.queue);
         ucs_trace_data("checking req %p tag %"PRIx64"/%"PRIx64" with recv_tag %"PRIx64,
                        req, req->recv.tag.tag, req->recv.tag.tag_mask, recv_tag);
@@ -125,7 +144,7 @@ ucp_tag_exp_search(ucp_tag_match_t *tm, ucp_tag_t recv_tag, size_t recv_len,
             ucp_tag_log_match(recv_tag, recv_len, req, req->recv.tag.tag,
                               req->recv.tag.tag_mask, req->recv.state.offset, "expected");
             if (recv_flags & UCP_RECV_DESC_FLAG_LAST) {
-                ucs_queue_del_iter(queue, iter);
+                ucp_tag_exp_delete(req, tm, req_queue, iter);
             }
             return req;
         }
