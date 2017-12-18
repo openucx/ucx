@@ -26,11 +26,6 @@ enum {
 };
 
 
-typedef enum {
-    UCP_SELECT_TOP_BEST,     /* select at least one lane with highest score      */
-    UCP_SELECT_ALL_AVAILABLE /* select as much as possible lanes (if any exists) */
-} ucp_select_memaccess_lanes_t;
-
 typedef struct {
     ucp_rsc_index_t   rsc_index;
     unsigned          addr_index;
@@ -426,7 +421,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
                                ucp_lane_index_t *num_lanes_p,
                                const ucp_wireup_criteria_t *criteria,
                                uint64_t tl_bitmap, uint32_t usage,
-                               ucp_select_memaccess_lanes_t mode)
+                               int select_best)
 {
     ucp_wireup_criteria_t mem_criteria = *criteria;
     ucp_address_entry_t *address_list_copy;
@@ -437,7 +432,6 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
     unsigned addr_index;
     ucs_status_t status;
     char title[64];
-    ucp_lane_index_t lanes_count;
 
     remote_md_map = -1;
 
@@ -457,7 +451,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
     mem_criteria.remote_md_flags = UCT_MD_FLAG_REG | criteria->remote_md_flags;
     status = ucp_wireup_select_transport(ep, address_list_copy, address_count,
                                          &mem_criteria, tl_bitmap, remote_md_map,
-                                         mode == UCP_SELECT_TOP_BEST,
+                                         select_best,
                                          &rsc_index, &addr_index, &score);
     if (status != UCS_OK) {
         goto out_free_address_list;
@@ -465,7 +459,6 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
 
     dst_md_index = address_list_copy[addr_index].md_index;
     reg_score    = score;
-    lanes_count  = 1;
 
     /* Add to the list of lanes and remove all occurrences of the remote md
      * from the address list, to avoid selecting the same remote md again.*/
@@ -486,10 +479,8 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
         status = ucp_wireup_select_transport(ep, address_list_copy, address_count,
                                              &mem_criteria, tl_bitmap, remote_md_map,
                                              0, &rsc_index, &addr_index, &score);
-        ucs_assert((mode == UCP_SELECT_TOP_BEST) ||
-                   (mode == UCP_SELECT_ALL_AVAILABLE));
         if ((status != UCS_OK) ||
-            ((mode == UCP_SELECT_TOP_BEST) && (score <= reg_score))) {
+            (select_best && (score <= reg_score))) {
             break;
         }
 
@@ -498,7 +489,6 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
         ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                                  dst_md_index, score, usage, 0);
         remote_md_map &= ~UCS_BIT(dst_md_index);
-        lanes_count++;
     }
 
     status = UCS_OK;
@@ -506,7 +496,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
 out_free_address_list:
     ucs_free(address_list_copy);
 out:
-    return (mode == UCP_SELECT_TOP_BEST) ? status : UCS_OK;
+    return select_best ? status : UCS_OK;
 }
 
 static uint64_t ucp_ep_get_context_features(ucp_ep_h ep)
@@ -641,8 +631,7 @@ static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, const ucp_ep_params_t 
 
     return ucp_wireup_add_memaccess_lanes(ep, address_count, address_list,
                                           lane_descs, num_lanes_p, &criteria,
-                                          -1, UCP_WIREUP_LANE_USAGE_RMA,
-                                          UCP_SELECT_TOP_BEST);
+                                          -1, UCP_WIREUP_LANE_USAGE_RMA, 1);
 }
 
 double ucp_wireup_amo_score_func(ucp_context_h context,
@@ -694,8 +683,7 @@ static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, const ucp_ep_params_t 
 
     return ucp_wireup_add_memaccess_lanes(ep, address_count, address_list,
                                           lane_descs, num_lanes_p, &criteria,
-                                          tl_bitmap, UCP_WIREUP_LANE_USAGE_AMO,
-                                          UCP_SELECT_TOP_BEST);
+                                          tl_bitmap, UCP_WIREUP_LANE_USAGE_AMO, 1);
 }
 
 static double ucp_wireup_am_score_func(ucp_context_h context,
@@ -852,8 +840,7 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
      * number of lanes to use to this function */
     status = ucp_wireup_add_memaccess_lanes(ep, address_count, address_list,
                                             lane_descs, num_lanes_p, &criteria,
-                                            -1, UCP_WIREUP_LANE_USAGE_RMA_BW,
-                                            UCP_SELECT_ALL_AVAILABLE);
+                                            -1, UCP_WIREUP_LANE_USAGE_RMA_BW, 0);
 
     /* high-bw RMA is not mandatory */
     return (status == UCS_ERR_UNREACHABLE) ? UCS_OK : status;
