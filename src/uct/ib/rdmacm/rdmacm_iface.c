@@ -74,7 +74,7 @@ ucs_status_t uct_rdmacm_resolve_addr(struct rdma_cm_id *cm_id,
                                      struct sockaddr *addr, int timeout_ms,
                                      ucs_log_level_t log_level)
 {
-    char *ip_port_str  = ucs_alloca(UCS_SOCKADDR_STRING_LEN);
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
     if (rdma_resolve_addr(cm_id, NULL, addr, timeout_ms)) {
         ucs_log(log_level, "rdma_resolve_addr(addr=%s) failed: %m",
@@ -123,7 +123,7 @@ static void uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
     uct_rdmacm_priv_data_hdr_t *hdr, cb_hdr;
     ssize_t server_data_len;
     struct rdma_conn_param conn_param;
-    char *ip_port_str  = ucs_alloca(UCS_SOCKADDR_STRING_LEN);
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
     hdr = (uct_rdmacm_priv_data_hdr_t*) event->param.ud.private_data;
 
@@ -170,8 +170,7 @@ static void uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdm
 {
     struct sockaddr *remote_addr = rdma_get_peer_addr(event->id);
     uct_rdmacm_md_t *rdmacm_md   = (uct_rdmacm_md_t *)iface->super.md;
-    char *ip_port_str  = ucs_alloca(UCS_SOCKADDR_STRING_LEN);
-
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     uct_rdmacm_priv_data_hdr_t *hdr;
     struct rdma_conn_param conn_param;
 
@@ -296,7 +295,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_config_t *tl_config)
 {
     uct_rdmacm_iface_config_t *config = ucs_derived_of(tl_config, uct_rdmacm_iface_config_t);
-    char *ip_port_str  = ucs_alloca(UCS_SOCKADDR_STRING_LEN);
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     uct_rdmacm_md_t *rdmacm_md;
     ucs_status_t status;
 

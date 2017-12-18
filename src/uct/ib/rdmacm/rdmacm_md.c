@@ -72,7 +72,7 @@ static int uct_rdmacm_is_addr_route_resolved(struct rdma_cm_id *cm_id,
                                              struct sockaddr *addr,
                                              int timeout_ms)
 {
-    char *ip_port_str  = ucs_alloca(UCS_SOCKADDR_STRING_LEN);
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
     int event_type;
 
@@ -98,7 +98,8 @@ static int uct_rdmacm_is_addr_route_resolved(struct rdma_cm_id *cm_id,
     event_type = uct_rdmacm_get_event_type(cm_id->channel);
     if (event_type != RDMA_CM_EVENT_ROUTE_RESOLVED) {
         ucs_debug("failed to resolve route to addr = %s. RDMACM event %s.",
-                  ucs_sockaddr_str(addr, ip_port_str, UCS_SOCKADDR_STRING_LEN), rdma_event_str(event_type));
+                  ucs_sockaddr_str(addr, ip_port_str, UCS_SOCKADDR_STRING_LEN),
+                  rdma_event_str(event_type));
         return 0;
     }
 
@@ -112,7 +113,7 @@ int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
     struct rdma_event_channel *event_ch = NULL;
     struct rdma_cm_id *cm_id = NULL;
     int is_accessible = 0;
-    char *ip_port_str  = ucs_alloca(UCS_SOCKADDR_STRING_LEN);
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
     if ((mode != UCT_SOCKADDR_ACC_LOCAL) && (mode != UCT_SOCKADDR_ACC_REMOTE)) {
         ucs_error("Unknown sockaddr accessibility mode %d", mode);
@@ -150,7 +151,8 @@ int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
     }
 
     ucs_debug("address %s (port %d) is accessible from rdmacm_md %p with mode: %d",
-              ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_port_str, UCS_SOCKADDR_STRING_LEN),
+              ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_port_str,
+                               UCS_SOCKADDR_STRING_LEN),
               ntohs(rdma_get_src_port(cm_id)), rdmacm_md, mode);
 
 out_destroy_id:

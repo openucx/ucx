@@ -11,7 +11,6 @@
 #include "string.h"
 #include "math.h"
 #include "sys.h"
-#include <ucs/debug/log.h>
 
 #include <string.h>
 #include <stdio.h>
