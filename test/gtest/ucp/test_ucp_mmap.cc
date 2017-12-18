@@ -5,8 +5,10 @@
 */
 
 #include "test_ucp_memheap.h"
-#include "ucp/core/ucp_mm.h"
-
+extern "C" {
+#include <ucp/core/ucp_context.h>
+#include <ucp/core/ucp_mm.h>
+}
 
 class test_ucp_mmap : public test_ucp_memheap {
 public:
@@ -25,27 +27,75 @@ public:
     }
 
 protected:
+    bool resolve_rma(entity *e, ucp_rkey_h rkey);
+    bool resolve_amo(entity *e, ucp_rkey_h rkey);
+    bool resolve_rma_bw(entity *e, ucp_rkey_h rkey);
     void test_rkey_management(entity *e, ucp_mem_h memh, bool is_dummy);
 };
 
+bool test_ucp_mmap::resolve_rma(entity *e, ucp_rkey_h rkey)
+{
+    hide_errors();
+    ucs_status_t status = UCP_RKEY_RESOLVE(rkey, e->ep(), rma);
+    restore_errors();
+    if (status == UCS_OK) {
+        EXPECT_NE(UCP_NULL_LANE, rkey->cache.rma_lane);
+        return true;
+    } else if (status == UCS_ERR_UNREACHABLE) {
+        EXPECT_EQ(UCP_NULL_LANE, rkey->cache.rma_lane);
+        return false;
+    } else {
+        UCS_TEST_ABORT("Invalid status from UCP_RKEY_RESOLVE");
+    }
+}
+
+bool test_ucp_mmap::resolve_amo(entity *e, ucp_rkey_h rkey)
+{
+    hide_errors();
+    ucs_status_t status = UCP_RKEY_RESOLVE(rkey, e->ep(), amo);
+    restore_errors();
+    if (status == UCS_OK) {
+        EXPECT_NE(UCP_NULL_LANE, rkey->cache.amo_lane);
+        return true;
+    } else if (status == UCS_ERR_UNREACHABLE) {
+        EXPECT_EQ(UCP_NULL_LANE, rkey->cache.amo_lane);
+        return false;
+    } else {
+        UCS_TEST_ABORT("Invalid status from UCP_RKEY_RESOLVE");
+    }
+}
+
+bool test_ucp_mmap::resolve_rma_bw(entity *e, ucp_rkey_h rkey)
+{
+    ucp_lane_index_t lane;
+    uct_rkey_t uct_rkey;
+
+    lane = ucp_rkey_get_rma_bw_lane(rkey, e->ep(), &uct_rkey);
+    if (lane != UCP_NULL_LANE) {
+        return true;
+    } else {
+        return false;
+    }
+}
 
 void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh, bool is_dummy)
 {
     size_t rkey_size;
     void *rkey_buffer;
     ucs_status_t status;
-    void *ptr;
 
     /* Some transports don't support memory registration, so the memory
      * can be inaccessible remotely. But it should always be possible
-     * to pack/unpack a key for dummy memh. */
-
+     * to pack/unpack a key, even if empty. */
     status = ucp_rkey_pack(e->ucph(), memh, &rkey_buffer, &rkey_size);
     if (status == UCS_ERR_UNSUPPORTED && !is_dummy) {
         return;
     }
     ASSERT_UCS_OK(status);
 
+    EXPECT_EQ(ucp_rkey_packed_size(e->ucph(), memh->md_map), rkey_size);
+
+    /* Unpack remote key buffer */
     ucp_rkey_h rkey;
     status = ucp_ep_rkey_unpack(e->ep(), rkey_buffer, &rkey);
     if (status == UCS_ERR_UNREACHABLE && !is_dummy) {
@@ -54,6 +104,27 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh, bool is_dumm
     }
     ASSERT_UCS_OK(status);
 
+    bool have_rma    = resolve_rma(e, rkey);
+    bool have_amo    = resolve_amo(e, rkey);
+    bool have_rma_bw = resolve_rma_bw(e, rkey);
+
+    /* Test that lane resolution on the remote key returns consistent results */
+    for (int i = 0; i < 10; ++i) {
+        switch (ucs::rand() % 3) {
+        case 0:
+            EXPECT_EQ(have_rma, resolve_rma(e, rkey));
+            break;
+        case 1:
+            EXPECT_EQ(have_amo, resolve_amo(e, rkey));
+            break;
+        case 2:
+            EXPECT_EQ(have_rma_bw, resolve_rma_bw(e, rkey));
+            break;
+        }
+    }
+
+    /* Test obtaining direct-access pointer */
+    void *ptr;
     status = ucp_rkey_ptr(rkey, (uint64_t)memh->address, &ptr);
     if (status == UCS_OK) {
         EXPECT_EQ(0, memcmp(memh->address, ptr, memh->length));

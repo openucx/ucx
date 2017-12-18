@@ -107,6 +107,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_rma_mt.cc \
 	ucp/test_ucp_tag_cancel.cc \
 	ucp/test_ucp_tag_match.cc \
+	ucp/test_ucp_tag_offload.cc \
 	ucp/test_ucp_tag_mt.cc \
 	ucp/test_ucp_tag_perf.cc \
 	ucp/test_ucp_tag_probe.cc \
