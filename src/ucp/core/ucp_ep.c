@@ -88,9 +88,9 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
             goto err_free_ep;
         }
 
-        ucs_queue_head_init(&ep->ext.stream->data);
-        ucs_queue_head_init(&ep->ext.stream->reqs);
-        ep->ext.stream->ucp_ep = ep;
+        ucs_queue_head_init(&ep->ext.stream->match_q);
+        ep->ext.stream->ucp_ep  = ep;
+        ep->ext.stream->flags   = 0;
     } else {
         ep->ext.stream = NULL;
     }
@@ -380,22 +380,16 @@ void ucp_ep_destroy_internal(ucp_ep_h ep, const char *message)
 static void ucp_ep_ext_stream_cleanup(ucp_ep_h ep)
 {
     ucp_ep_ext_stream_t *ep_stream = ep->ext.stream;
-    ucp_recv_desc_t     *rdesc;
+    void                *data;
+    size_t              length;
 
     if (ep_stream == NULL) {
         return;
     }
 
-    while (!ucs_queue_is_empty(&ep_stream->data)) {
-        rdesc = ucs_queue_pull_elem_non_empty(&ep_stream->data, ucp_recv_desc_t,
-                                              stream_queue);
-
-        if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
-            /* TODO: remove ucp_eager_sync_hdr_t usage */
-            uct_iface_release_desc((char*)rdesc - sizeof(ucp_eager_sync_hdr_t));
-        } else {
-            ucs_mpool_put_inline(rdesc);
-        }
+    while ((data = ucp_stream_recv_data_nb(ep, &length)) != NULL) {
+        ucs_assert_always(!UCS_PTR_IS_ERR(data));
+        ucp_stream_data_release(ep, data);
     }
 }
 
