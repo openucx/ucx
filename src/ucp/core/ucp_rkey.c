@@ -20,15 +20,31 @@ static ucp_rkey_t ucp_mem_dummy_rkey = {
 static ucp_md_map_t ucp_mem_dummy_buffer = 0;
 
 
-ucs_status_t ucp_rkey_pack_uct(ucp_context_h context,
-                               ucp_md_map_t md_map, const uct_mem_h *memh,
-                               void *rkey_buffer, size_t *size_p)
+size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map)
+{
+    size_t size, md_size;
+    unsigned md_index;
+
+    size = sizeof(ucp_md_map_t);
+    ucs_for_each_bit (md_index, md_map) {
+        md_size = context->tl_mds[md_index].attr.rkey_packed_size;
+        ucs_assert_always(md_size <= UINT8_MAX);
+        size += sizeof(uint8_t) + md_size;
+    }
+    return size;
+}
+
+ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
+                          const uct_mem_h *memh, void *rkey_buffer)
 {
     void *p             = rkey_buffer;
     ucs_status_t status = UCS_OK;
     unsigned md_index, uct_memh_index;
     size_t md_size;
     char UCS_V_UNUSED buf[128];
+
+    /* Check that md_map is valid */
+    ucs_assert(ucs_test_all_flags(UCS_MASK(context->num_mds), md_map));
 
     /* Write the MD map */
     *(ucp_md_map_t*)p = md_map;
@@ -39,7 +55,11 @@ ucs_status_t ucp_rkey_pack_uct(ucp_context_h context,
     ucs_for_each_bit (md_index, md_map) {
         md_size = context->tl_mds[md_index].attr.rkey_packed_size;
         *((uint8_t*)p++) = md_size;
-        uct_md_mkey_pack(context->tl_mds[md_index].md, memh[uct_memh_index], p);
+        status = uct_md_mkey_pack(context->tl_mds[md_index].md,
+                                  memh[uct_memh_index], p);
+        if (status != UCS_OK) {
+            return status;
+        }
 
         ucs_trace("rkey[%d]=%s for md[%d]=%s", uct_memh_index,
                   ucs_log_dump_hex(p, md_size, buf, sizeof(buf)), md_index,
@@ -49,24 +69,16 @@ ucs_status_t ucp_rkey_pack_uct(ucp_context_h context,
         p += md_size;
     }
 
-    if (uct_memh_index == 0) {
-        status = UCS_ERR_UNSUPPORTED;
-    }
-
-    if (size_p != NULL) {
-        *size_p = (size_t)((uint8_t*)p - (uint8_t*)rkey_buffer);
-    }
-
-    return status;
+    return p - rkey_buffer;
 }
 
 ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
                            void **rkey_buffer_p, size_t *size_p)
 {
-    unsigned md_index;
     void *rkey_buffer, *p;
-    size_t size, md_size;
     ucs_status_t status;
+    ssize_t packed_size;
+    size_t size;
 
     /* always acquire context lock */
     UCP_THREAD_CS_ENTER(&context->mt_lock);
@@ -82,14 +94,7 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
         goto out;
     }
 
-    size = sizeof(ucp_md_map_t);
-    ucs_for_each_bit (md_index, memh->md_map) {
-        size += sizeof(uint8_t);
-        md_size = context->tl_mds[md_index].attr.rkey_packed_size;
-        ucs_assert_always(md_size < UINT8_MAX);
-        size += md_size;
-    }
-
+    size = ucp_rkey_packed_size(context, memh->md_map);
     rkey_buffer = ucs_malloc(size, "ucp_rkey_buffer");
     if (rkey_buffer == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -98,11 +103,13 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
 
     p = rkey_buffer;
 
-    status = ucp_rkey_pack_uct(context, memh->md_map, memh->uct, p, NULL);
-
-    if (status != UCS_OK) {
+    packed_size = ucp_rkey_pack_uct(context, memh->md_map, memh->uct, p);
+    if (packed_size < 0) {
+        status = (ucs_status_t)packed_size;
         goto err_destroy;
     }
+
+    ucs_assert(packed_size == size);
 
     *rkey_buffer_p = rkey_buffer;
     *size_p        = size;
@@ -162,7 +169,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
      */
     if (md_count <= UCP_RKEY_MPOOL_MAX_MD) {
         UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
-        rkey = ucs_mpool_get(&context->rkey_mp);
+        rkey = ucs_mpool_get_inline(&context->rkey_mp);
         UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
     } else {
         rkey = ucs_malloc(sizeof(*rkey) + (sizeof(rkey->uct[0]) * md_count),
@@ -264,21 +271,24 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
         context = ucs_container_of(ucs_mpool_obj_owner(rkey), ucp_context_t,
                                    rkey_mp);
         UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
-        ucs_mpool_put(rkey);
+        ucs_mpool_put_inline(rkey);
         UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
     } else {
         ucs_free(rkey);
     }
 }
 
-static ucp_lane_index_t ucp_config_find_rma_lane(const ucp_ep_config_t *config,
+static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
+                                                 const ucp_ep_config_t *config,
                                                  const ucp_lane_index_t *lanes,
-                                                 ucp_md_map_t rkey_md_map,
-                                                 ucp_md_index_t *rkey_index_p)
+                                                 ucp_rkey_h rkey,
+                                                 uct_rkey_t *uct_rkey_p)
 {
     ucp_md_index_t dst_md_index;
     ucp_lane_index_t lane;
     ucp_md_map_t dst_md_mask;
+    ucp_md_index_t md_index;
+    uint8_t rkey_index;
     int prio;
 
     for (prio = 0; prio < UCP_MAX_LANES; ++prio) {
@@ -287,11 +297,21 @@ static ucp_lane_index_t ucp_config_find_rma_lane(const ucp_ep_config_t *config,
             return UCP_NULL_LANE; /* No more lanes */
         }
 
+        md_index = config->md_index[lane];
+        if ((md_index != UCP_NULL_RESOURCE) &&
+            (!(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY)))
+        {
+            /* Lane does not need rkey, can use the lane with invalid rkey  */
+            *uct_rkey_p = UCT_INVALID_RKEY;
+            return lane;
+        }
+
         dst_md_index = config->key.lanes[lane].dst_md_index;
         dst_md_mask  = UCS_BIT(dst_md_index);
-        if (rkey_md_map & dst_md_mask) {
+        if (rkey->md_map & dst_md_mask) {
             /* Return first matching lane */
-            *rkey_index_p = ucs_count_one_bits(rkey_md_map & (dst_md_mask - 1));
+            rkey_index  = ucs_count_one_bits(rkey->md_map & (dst_md_mask - 1));
+            *uct_rkey_p = rkey->uct[rkey_index].rkey;
             return lane;
         }
     }
@@ -301,20 +321,23 @@ static ucp_lane_index_t ucp_config_find_rma_lane(const ucp_ep_config_t *config,
 
 void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
 {
+    ucp_context_h context   = ep->worker->context;
     ucp_ep_config_t *config = ucp_ep_config(ep);
-    ucp_md_index_t rkey_index;
+    uct_rkey_t uct_rkey;
 
-    rkey->cache.rma_lane = ucp_config_find_rma_lane(config, config->key.rma_lanes,
-                                                    rkey->md_map, &rkey_index);
+    rkey->cache.rma_lane = ucp_config_find_rma_lane(context, config,
+                                                    config->key.rma_lanes, rkey,
+                                                    &uct_rkey);
     if (rkey->cache.rma_lane != UCP_NULL_LANE) {
-        rkey->cache.rma_rkey      = rkey->uct[rkey_index].rkey;
+        rkey->cache.rma_rkey      = uct_rkey;
         rkey->cache.max_put_short = config->rma[rkey->cache.rma_lane].max_put_short;
     }
 
-    rkey->cache.amo_lane = ucp_config_find_rma_lane(config, config->key.amo_lanes,
-                                                    rkey->md_map, &rkey_index);
+    rkey->cache.amo_lane = ucp_config_find_rma_lane(context, config,
+                                                    config->key.amo_lanes, rkey,
+                                                    &uct_rkey);
     if (rkey->cache.amo_lane != UCP_NULL_LANE) {
-        rkey->cache.amo_rkey      = rkey->uct[rkey_index].rkey;
+        rkey->cache.amo_rkey      = uct_rkey;
     }
 
     rkey->cache.ep_cfg_index  = ep->cfg_index;
@@ -322,3 +345,10 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
               ep->cfg_index, rkey->cache.rma_lane, rkey->cache.amo_lane);
 }
 
+ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,
+                                          uct_rkey_t *uct_rkey_p)
+{
+    ucp_ep_config_t *config = ucp_ep_config(ep);
+    return ucp_config_find_rma_lane(ep->worker->context, config,
+                                    config->key.rma_bw_lanes, rkey, uct_rkey_p);
+}
