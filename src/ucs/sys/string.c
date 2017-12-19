@@ -133,10 +133,14 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr, char *str, size_t
     case AF_INET:
         addr_in = (struct sockaddr_in *) sock_addr;
         inet_ntop(AF_INET, &addr_in->sin_addr, str, max_size);
+        max_size -= strlen(str);
+        snprintf(str + strlen(str), max_size, ":%d", ntohs(addr_in->sin_port));
         return str;
     case AF_INET6:
         addr_in6 = (struct sockaddr_in6 *)sock_addr;
         inet_ntop(AF_INET6, &addr_in6->sin6_addr, str, max_size);
+        max_size -= strlen(str);
+        snprintf(str + strlen(str), max_size, ":%d", ntohs(addr_in6->sin6_port));
         return str;
     default:
         return "Invalid string";
