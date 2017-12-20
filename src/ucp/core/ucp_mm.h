@@ -109,6 +109,10 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
                                uct_md_h alloc_md, uct_mem_h *alloc_md_memh_p,
                                uct_mem_h *uct_memh, ucp_md_map_t *md_map_p);
 
+ucs_status_t ucp_mpool_rndv_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+
+void ucp_mpool_rndv_free(ucs_mpool_t *mp, void *chunk);
+
 /* Detect memory type on all MDs */
 ucs_status_t ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
                                         uct_memory_type_t *mem_type_p);

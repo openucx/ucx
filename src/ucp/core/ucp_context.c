@@ -178,6 +178,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "to ucp_init()",
    ucs_offsetof(ucp_config_t, ctx.estimated_num_eps), UCS_CONFIG_TYPE_ULUNITS},
 
+  {"RNDV_FRAG_SIZE", "65536",
+   "RNDV fragment size \n",
+   ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
+
   {NULL}
 };
 
@@ -802,13 +806,6 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
     ucs_debug("Estimated number of endpoints is %d",
               context->config.est_num_eps);
-
-    if (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) {
-        /* TODO: currently UCP_RNDV_MODE_AUTO == UCP_RNDV_MODE_GET_ZCOPY,
-         * after memory type support is added, will add tru UCP_RNDV_MODE_AUTO
-         * implementation */
-        context->config.ext.rndv_mode = UCP_RNDV_MODE_GET_ZCOPY;
-    }
 
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_

@@ -120,6 +120,39 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     return UCS_OK;
 }
 
+
+ucs_status_t ucp_mpool_rndv_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p) {
+    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, reg_mp);
+    ucp_mem_desc_t *chunk_hdr;
+    uct_mem_h alloc_md_memh;
+    ucs_status_t status;
+
+    status = ucp_mpool_malloc(mp, size_p, chunk_p);
+    if (status != UCS_OK) {
+        ucs_error("Failed to allocate memory pool chunk: %s", ucs_status_string(status));
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    chunk_hdr = (ucp_mem_desc_t *)(*chunk_p) - 1;
+    status = ucp_memh_reg_mds(worker->context, chunk_hdr->memh, 0, UCT_MEM_HANDLE_NULL);
+    if (status != UCS_OK) {
+        ucp_memh_dereg_mds(worker->context, chunk_hdr->memh, &alloc_md_memh);
+        return status;
+    }
+
+    return UCS_OK;
+}
+
+
+void ucp_mpool_rndv_free(ucs_mpool_t *mp, void *chunk) {
+    uct_mem_h alloc_md_memh;
+    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, reg_mp);
+    ucp_mem_desc_t *chunk_hdr = (ucp_mem_desc_t *)chunk - 1;
+    ucp_memh_dereg_mds(worker->context, chunk_hdr->memh, &alloc_md_memh);
+    ucp_mpool_free(mp, chunk);
+}
+
+
 ucs_status_t ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
                                         uct_memory_type_t *mem_type_p)
 {
