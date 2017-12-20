@@ -119,8 +119,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
                  unsigned hdr_length, uint64_t remote_addr, size_t length,
                  const void *rkey_buf)
 {
+    ucp_worker_t *worker    = arg;
+    const void *uct_rkeys[] = { rkey_buf };
     const ucp_tag_offload_unexp_rndv_hdr_t *rndv_hdr;
-    ucp_worker_t *worker = arg;
     ucp_rndv_rts_hdr_t *dummy_rts;
     ucp_md_index_t md_index;
     size_t dummy_rts_size;
@@ -148,7 +149,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         dummy_rts->size             = length;
 
         ucp_rkey_packed_copy(worker->context, UCS_BIT(md_index), dummy_rts + 1,
-                             &rkey_buf);
+                             uct_rkeys);
 
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_RNDV);
         ucp_rndv_process_rts(arg, dummy_rts, dummy_rts_size, 0);

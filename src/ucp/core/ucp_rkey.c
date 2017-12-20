@@ -255,6 +255,7 @@ void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max)
     ucp_md_map_t md_map;
     unsigned md_index;
     uint8_t md_size;
+    int first;
 
     snprintf(p, endp - p, "{");
     p += strlen(p);
@@ -262,9 +263,16 @@ void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max)
     md_map = *(ucp_md_map_t*)(rkey_buffer);
     rkey_buffer += sizeof(ucp_md_map_t);
 
+    first = 1;
     ucs_for_each_bit(md_index, md_map) {
          md_size      = *((uint8_t*)rkey_buffer);
          rkey_buffer += sizeof(uint8_t);
+
+         if (!first) {
+             snprintf(p, endp - p, ",");
+             p += strlen(p);
+         }
+         first = 0;
 
          snprintf(p, endp - p, "%d:", md_index);
          p += strlen(p);
@@ -273,9 +281,6 @@ void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max)
          p += strlen(p);
 
          rkey_buffer += md_size;
-
-         snprintf(p, endp - p, md_map ? "," : "");
-         p += strlen(p);
     }
 
     snprintf(p, endp - p, "}");
