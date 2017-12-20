@@ -209,7 +209,7 @@ enum ucp_ep_params_field {
  * @ref ucp_ep_create() function.
  */
 enum ucp_ep_params_flags_field {
-    UCP_EP_PARAMS_FLAGS_CLIENT_SERVER  = UCS_BIT(1)   /**< Using a client-server
+    UCP_EP_PARAMS_FLAGS_CLIENT_SERVER  = UCS_BIT(0)   /**< Using a client-server
                                                            connection establishment
                                                            mechanism.
                                                            @ref ucs_sock_addr_t
@@ -839,14 +839,11 @@ typedef struct ucp_ep_params {
      unsigned               flags;
 
     /**
-     * Destination address in the form of a sockaddr; if a client-server connection
-     * establishment mechanism is used, this address must be filled and obtained
+     * Destination address in the form of a sockaddr;
+     * if the @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag is set, this address
+     * is mandatory for filling (along with its corresponding bit in the
+     * field_mask - @ref UCP_EP_PARAM_FIELD_SOCK_ADDR) and should be obtained
      * from the user.
-     * The @ref UCP_EP_PARAM_FIELD_SOCK_ADDR bit in the field_mask should be set
-     * to indicate that the type of the remote address is a sockaddr.
-     * In order for sockaddr to be used for the connection establishment,
-     * the @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag needs to be set in the
-     * 'flags' field.
      */
     ucs_sock_addr_t         sockaddr;
 
