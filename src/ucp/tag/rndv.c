@@ -99,6 +99,13 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     size_t packed_len = sizeof(*rndv_rts_hdr);
     ucp_ep_t *ep = sreq->send.ep;
 
+    sreq->send.mem_type = UCT_MD_MEM_TYPE_HOST;
+    if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
+        ep->worker->context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) {
+        ucp_memory_type_detect_mds(ep->worker->context, (void *)sreq->send.buffer,
+                                   sreq->send.length, &sreq->send.mem_type);
+    }
+
     rndv_rts_hdr->flags            = 0;
     rndv_rts_hdr->super.tag        = sreq->send.tag;
     /* reqptr holds the original sreq */
@@ -106,7 +113,9 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     rndv_rts_hdr->sreq.sender_uuid = ep->worker->uuid;
     rndv_rts_hdr->size             = sreq->send.length;
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-        (ep->worker->context->config.ext.rndv_mode == UCP_RNDV_MODE_GET_ZCOPY)) {
+        ((ep->worker->context->config.ext.rndv_mode == UCP_RNDV_MODE_GET_ZCOPY) ||
+         (ep->worker->context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO &&
+          sreq->send.mem_type == UCT_MD_MEM_TYPE_HOST))) {
         rndv_rts_hdr->address = (uintptr_t) sreq->send.buffer;
         if (ucp_ep_is_rndv_lane_present(ep, 0)) {
             packed_len += ucp_tag_rndv_pack_send_rkey(sreq,
@@ -536,7 +545,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
              * rndv lane */
             ucp_rndv_handle_recv_contig(rndv_req, rreq, rndv_rts_hdr);
         } else {
-            if (ep->worker->context->config.ext.rndv_mode == UCP_RNDV_MODE_PUT_ZCOPY &&
+            if (ep->worker->context->config.ext.rndv_mode != UCP_RNDV_MODE_GET_ZCOPY &&
                 (rndv_rts_hdr->address == 0) &&
                 ucp_ep_is_rndv_lane_present(ep, 0)) {
                 /* pack rkey into RTR, ask sender to do put_zcopy */

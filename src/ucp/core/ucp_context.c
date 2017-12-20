@@ -807,13 +807,6 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     ucs_debug("Estimated number of endpoints is %d",
               context->config.est_num_eps);
 
-    if (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) {
-        /* TODO: currently UCP_RNDV_MODE_AUTO == UCP_RNDV_MODE_GET_ZCOPY,
-         * after memory type support is added, will add tru UCP_RNDV_MODE_AUTO
-         * implementation */
-        context->config.ext.rndv_mode = UCP_RNDV_MODE_GET_ZCOPY;
-    }
-
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_
      * routines */

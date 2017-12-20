@@ -107,6 +107,7 @@ struct ucp_request {
         struct {
             ucp_ep_h              ep;
             const void            *buffer;  /* Send buffer */
+            uct_memory_type_t     mem_type;
             ucp_datatype_t        datatype; /* Send type */
             size_t                length;   /* Total length, in bytes */
             ucp_send_callback_t   cb;       /* Completion callback */
