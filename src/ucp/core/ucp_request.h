@@ -106,6 +106,7 @@ struct ucp_request {
     union {
         struct {
             ucp_ep_h              ep;
+            ucp_ep_h              dummy_ep;
             const void            *buffer;  /* Send buffer */
             uct_memory_type_t     mem_type;
             ucp_datatype_t        datatype; /* Send type */
