@@ -406,10 +406,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_get_zcopy, (self),
         if (rndv_req->send.state.uct_comp.count == 0) {
             ucp_rndv_complete_rndv_get(rndv_req);
         }
+        return UCS_OK;
     } else if (status == UCS_OK) {
-            /* in case if not all chunks are transmitted - return in_progress
-             * status */
-            return UCS_INPROGRESS;
+        /* in case if not all chunks are transmitted - return in_progress
+         * status */
+        return UCS_INPROGRESS;
     }
 
     return status;
