@@ -50,8 +50,10 @@ enum {
 enum {
     UCP_WORKER_IFACE_FLAG_OFFLOAD_ACTIVATED = UCS_BIT(0), /**< UCP iface receives tag
                                                                offload messages */
-    UCP_WORKER_IFACE_FLAG_ON_ARM_LIST       = UCS_BIT(1)  /**< UCP iface is on the arm
-                                                               list */
+    UCP_WORKER_IFACE_FLAG_ON_ARM_LIST       = UCS_BIT(1)  /**< UCP iface is an element
+                                                               of arm_ifaces list, so
+                                                               it needs to be armed
+                                                               in ucp_worker_arm(). */
 };
 
 
