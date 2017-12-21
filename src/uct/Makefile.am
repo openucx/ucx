@@ -27,6 +27,9 @@ noinst_HEADERS = \
 	base/uct_iface.h \
 	base/uct_log.h \
 	base/uct_worker.h \
+	sm/self/self_md.h \
+	sm/self/self_iface.h \
+	sm/self/self_ep.h \
 	tcp/tcp.h
 
 libuct_la_SOURCES = \
@@ -34,6 +37,9 @@ libuct_la_SOURCES = \
 	base/uct_mem.c \
 	base/uct_iface.c \
 	base/uct_worker.c \
+	sm/self/self_md.c \
+	sm/self/self_iface.c \
+	sm/self/self_ep.c \
 	tcp/tcp_ep.c \
 	tcp/tcp_iface.c \
 	tcp/tcp_md.c \
@@ -294,14 +300,3 @@ libuct_la_SOURCES += \
 	sm/knem/knem_ep.c \
 	sm/knem/knem_md.c
 endif
-
-#Loopback interface (self)
-noinst_HEADERS += \
-	sm/self/self_md.h \
-	sm/self/self_iface.h \
-	sm/self/self_ep.h
-
-libuct_la_SOURCES += \
-	sm/self/self_md.c \
-	sm/self/self_iface.c \
-	sm/self/self_ep.c
