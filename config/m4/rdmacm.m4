@@ -8,9 +8,10 @@
 # Check for RDMACM support
 #
 rdmacm_happy="no"
+param_set="no"
 AC_ARG_WITH([rdmacm],
            [AS_HELP_STRING([--with-rdmacm=(DIR)], [Enable the use of RDMACM (default is yes).])],
-           [], [with_rdmacm=yes])
+           [param_set=yes], [with_rdmacm=yes])
 
 AS_IF([test "x$with_rdmacm" != xno],
       [AS_IF([test "x$with_rdmacm" == xyes],
@@ -40,7 +41,11 @@ AS_IF([test "x$with_rdmacm" != xno],
                                       AC_MSG_ERROR([Please install librdmacm and librdmacm-devel or disable rdmacm support])
                                      ])
                        ],
-                       [AC_MSG_ERROR([RDMACM requested but required file (rdma/rdma_cma.h) could not be found in $with_rdmacm])])
+                       [
+                       AS_IF([test "x$param_set" == xyes],
+                             [AC_MSG_ERROR([RDMACM requested but required file (rdma/rdma_cma.h) could not be found in $with_rdmacm])],
+                             [AC_MSG_WARN([RDMACM requested but required file (rdma/rdma_cma.h) could not be found in $with_rdmacm])])
+                       ])
 
        LDFLAGS="$save_LDFLAGS"
        CPPFLAGS="$save_CPPFLAGS"
