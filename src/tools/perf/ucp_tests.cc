@@ -455,7 +455,7 @@ private:
             }
         } while ((total < length) && !UCS_PTR_IS_ERR(data));
 
-        return UCS_PTR_IS_PTR(data) ? UCS_OK : UCS_PTR_STATUS(data);
+        return UCS_PTR_IS_ERR(data) ? UCS_PTR_STATUS(data) : UCS_OK;
     }
 
     ucs_status_t UCS_F_ALWAYS_INLINE

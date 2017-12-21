@@ -23,25 +23,34 @@ typedef struct {
 } UCS_S_PACKED ucp_stream_am_data_t;
 
 
+/**
+ * Stream specific endpoint flags
+ */
+enum {
+    UCP_EP_STREAM_FLAG_IS_QUEUED = UCS_BIT(0), /* EP is queued in stream list of worker */
+    UCP_EP_STREAM_FLAG_HAS_DATA  = UCS_BIT(1)  /* EP has data in the match_q */
+};
+
+
 static UCS_F_ALWAYS_INLINE void
 ucp_stream_ep_enqueue(ucp_ep_ext_stream_t *ep, ucp_worker_h worker)
 {
-    ucs_assert(!(ep->ucp_ep->flags & UCP_EP_FLAG_STREAM_IS_QUEUED));
+    ucs_assert(!(ep->flags & UCP_EP_STREAM_FLAG_IS_QUEUED));
     ucs_list_add_tail(&worker->stream_eps, &ep->list);
-    ep->ucp_ep->flags |= UCP_EP_FLAG_STREAM_IS_QUEUED;
+    ep->flags |= UCP_EP_STREAM_FLAG_IS_QUEUED;
 }
 
 static UCS_F_ALWAYS_INLINE int
-ucp_stream_ep_is_queued(ucp_ep_h ep)
+ucp_stream_ep_is_queued(ucp_ep_ext_stream_t *ep)
 {
-    return ep->flags & UCP_EP_FLAG_STREAM_IS_QUEUED;
+    return ep->flags & UCP_EP_STREAM_FLAG_IS_QUEUED;
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_stream_ep_dequeue(ucp_ep_ext_stream_t *ep)
 {
-    ucs_assert(ep->ucp_ep->flags & UCP_EP_FLAG_STREAM_IS_QUEUED);
-    ep->ucp_ep->flags &= ~UCP_EP_FLAG_STREAM_IS_QUEUED;
+    ucs_assert(ep->flags & UCP_EP_STREAM_FLAG_IS_QUEUED);
+    ep->flags &= ~UCP_EP_STREAM_FLAG_IS_QUEUED;
     ucs_list_del(&ep->list);
 }
 

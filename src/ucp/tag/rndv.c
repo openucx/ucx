@@ -291,6 +291,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
         }
         return UCS_OK;
     } else if (!UCS_STATUS_IS_ERR(status)) {
+        /* in case if not all chunks are transmitted - return in_progress
+         * status */
         return UCS_INPROGRESS;
     } else {
         return status;
