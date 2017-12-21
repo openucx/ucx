@@ -420,7 +420,8 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
                                ucp_wireup_lane_desc_t *lane_descs,
                                ucp_lane_index_t *num_lanes_p,
                                const ucp_wireup_criteria_t *criteria,
-                               uint64_t tl_bitmap, uint32_t usage, int mandatory)
+                               uint64_t tl_bitmap, uint32_t usage,
+                               int select_best)
 {
     ucp_wireup_criteria_t mem_criteria = *criteria;
     ucp_address_entry_t *address_list_copy;
@@ -450,7 +451,8 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
     mem_criteria.remote_md_flags = UCT_MD_FLAG_REG | criteria->remote_md_flags;
     status = ucp_wireup_select_transport(ep, address_list_copy, address_count,
                                          &mem_criteria, tl_bitmap, remote_md_map,
-                                         mandatory, &rsc_index, &addr_index, &score);
+                                         select_best,
+                                         &rsc_index, &addr_index, &score);
     if (status != UCS_OK) {
         goto out_free_address_list;
     }
@@ -477,7 +479,8 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
         status = ucp_wireup_select_transport(ep, address_list_copy, address_count,
                                              &mem_criteria, tl_bitmap, remote_md_map,
                                              0, &rsc_index, &addr_index, &score);
-        if ((status != UCS_OK) || (score <= reg_score)) {
+        if ((status != UCS_OK) ||
+            (select_best && (score <= reg_score))) {
             break;
         }
 
@@ -493,7 +496,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
 out_free_address_list:
     ucs_free(address_list_copy);
 out:
-    return mandatory ? status : UCS_OK;
+    return select_best ? status : UCS_OK;
 }
 
 static uint64_t ucp_ep_get_context_features(ucp_ep_h ep)
