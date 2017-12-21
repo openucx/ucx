@@ -11,8 +11,6 @@
 #include <ucp/core/ucp_request.h>
 #include <ucp/proto/proto.h>
 
-#define UCP_TAG_OFFLOAD_REQPTR_MDI_MASK (UCS_SYS_CACHE_LINE_SIZE - 1)
-
 /**
  * Header for SW RNDV request
  */
@@ -44,6 +42,8 @@ extern const ucp_proto_t ucp_tag_offload_proto;
 extern const ucp_proto_t ucp_tag_offload_sync_proto;
 
 ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self);
+
+ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self);
 
 void ucp_tag_offload_cancel_rndv(ucp_request_t *req);
 

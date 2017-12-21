@@ -40,7 +40,6 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 {
     memset(key, 0, sizeof(*key));
     key->num_lanes        = 0;
-    key->num_rndv_lanes   = 0;
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_lane      = UCP_NULL_LANE;
     key->tag_lane         = UCP_NULL_LANE;
@@ -48,7 +47,6 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->reachable_md_map = 0;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     key->status           = UCS_OK;
-    memset(key->rndv_lanes,   UCP_NULL_LANE, sizeof(key->rndv_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->rma_bw_lanes, UCP_NULL_LANE, sizeof(key->rma_bw_lanes));
     memset(key->amo_lanes,    UCP_NULL_LANE, sizeof(key->amo_lanes));
@@ -173,7 +171,6 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
     key.lanes[0].rsc_index    = UCP_NULL_RESOURCE;
     key.lanes[0].dst_md_index = UCP_NULL_RESOURCE;
     key.am_lane               = 0;
-    key.rndv_lanes[0]         = 0;
     key.wireup_lane           = 0;
     key.tag_lane              = 0;
 
@@ -509,11 +506,9 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
 
 
     if ((key1->num_lanes        != key2->num_lanes)                                ||
-        (key1->num_rndv_lanes   != key2->num_rndv_lanes)                           ||
         memcmp(key1->rma_lanes,    key2->rma_lanes,    sizeof(key1->rma_lanes))    ||
         memcmp(key1->rma_bw_lanes, key2->rma_bw_lanes, sizeof(key1->rma_bw_lanes)) ||
         memcmp(key1->amo_lanes,    key2->amo_lanes,    sizeof(key1->amo_lanes))    ||
-        memcmp(key1->rndv_lanes,   key2->rndv_lanes,   sizeof(key1->rndv_lanes))   ||
         (key1->rma_bw_md_map    != key2->rma_bw_md_map)                            ||
         (key1->reachable_md_map != key2->reachable_md_map)                         ||
         (key1->am_lane          != key2->am_lane)                                  ||
@@ -824,7 +819,8 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                 /* Tag offload is disabled, AM will be used for all
                  * tag-matching protocols */
                 /* TODO: set threshold level based on all available lanes */
-                ucp_ep_config_set_rndv_thresh(worker, config, config->key.rndv_lanes[0],
+                ucp_ep_config_set_rndv_thresh(worker, config,
+                                              config->key.rma_bw_lanes[0],
                                               UCT_IFACE_FLAG_GET_ZCOPY,
                                               max_rndv_thresh);
                 config->tag.eager      = config->am;
@@ -1021,12 +1017,6 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
 
     if (key->am_lane == lane) {
         snprintf(p, endp - p, " am");
-        p += strlen(p);
-    }
-
-    prio = ucp_ep_config_get_multi_lane_prio(key->rndv_lanes, lane);
-    if (prio != -1) {
-        snprintf(p, endp - p, " zcopy_rndv#%d", prio);
         p += strlen(p);
     }
 
