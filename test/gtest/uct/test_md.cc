@@ -4,20 +4,20 @@
 * See file LICENSE for terms.
 */
 
-extern "C" {
+#include "test_md.h"
+
 #include <uct/api/uct.h>
+extern "C" {
 #include <ucs/time/time.h>
-#include <uct/ib/base/ib_md.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 }
-#include <common/test.h>
-#include "test_md.h"
-#include <netdb.h>
-#include <ifaddrs.h>
-#include <net/if_arp.h>
-#include <net/if.h>
 #include <linux/sockios.h>
+#include <net/if_arp.h>
+#include <ifaddrs.h>
+#include <netdb.h>
+#include <net/if.h>
+
 
 void* test_md::alloc_thread(void *arg)
 {
