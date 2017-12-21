@@ -66,8 +66,8 @@ ucs_status_t uct_p2p_mix_test::put_short(const mapped_buffer &sendbuf,
                                          uct_completion_t *comp)
 {
     return uct_ep_put_short(sender().ep(0), sendbuf.ptr(),
-                                  sendbuf.length(), recvbuf.addr(),
-                                  recvbuf.rkey());
+                            sendbuf.length(), recvbuf.addr(),
+                            recvbuf.rkey());
 }
 
 ucs_status_t uct_p2p_mix_test::put_bcopy(const mapped_buffer &sendbuf,

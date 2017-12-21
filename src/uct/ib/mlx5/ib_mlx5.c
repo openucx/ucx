@@ -256,13 +256,14 @@ void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
     switch (cqe->op_own >> 4) {
     case MLX5_CQE_REQ_ERR:
         /* update ci before invoking error callback, since it can poll on cq */
+        UCS_STATIC_ASSERT(MLX5_CQE_REQ_ERR & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
         ++cq->cq_ci;
-        status = uct_ib_mlx5_completion_with_err((void*)cqe,
-                                                 UCS_LOG_LEVEL_DEBUG);
+        status = uct_ib_mlx5_completion_with_err((void*)cqe, UCS_LOG_LEVEL_DEBUG);
         iface->ops->handle_failure(iface, cqe, status);
         return;
     case MLX5_CQE_RESP_ERR:
         /* Local side failure - treat as fatal */
+        UCS_STATIC_ASSERT(MLX5_CQE_RESP_ERR & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
         ++cq->cq_ci;
         uct_ib_mlx5_completion_with_err((void*)cqe, UCS_LOG_LEVEL_FATAL);
         return;

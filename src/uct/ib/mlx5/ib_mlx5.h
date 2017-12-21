@@ -32,6 +32,7 @@
 #define UCT_IB_MLX5_EXTENDED_UD_AV      0x80 /* htonl(0x80000000) */
 #define UCT_IB_MLX5_BF_REG_SIZE         256
 #define UCT_IB_MLX5_CQE_VENDOR_SYND_ODP 0x93
+#define UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK 0x80
 
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \

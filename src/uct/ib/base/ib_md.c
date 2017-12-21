@@ -1016,7 +1016,7 @@ static ucs_status_t uct_ib_mem_global_odp_dereg(uct_md_h uct_md, uct_mem_h memh)
     return uct_ib_mem_dereg(uct_md, memh);
 }
 
-static uct_md_ops_t uct_ib_md_global_odp_ops = {
+static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
     .close        = uct_ib_md_close,
     .query        = uct_ib_md_query,
     .mem_alloc    = uct_ib_mem_alloc,
@@ -1285,8 +1285,6 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     }
 
     md->super.component       = &uct_ib_mdc;
-    md->rcache                = NULL;
-    md->global_odp.mr         = NULL;
     md->config                = md_config->ext;
 
     /* Create statistics */

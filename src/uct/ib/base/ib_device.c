@@ -844,7 +844,7 @@ int uct_ib_device_odp_has_global_mr(uct_ib_device_t *dev)
         } else if (fw_minor == 21) {
             return (fw_release >= 2031) && (fw_release <= 2099);
         } else if (fw_minor == 22) {
-            return (fw_release >=   84) && (fw_release <=   99);
+            return (fw_release >= 84);
         } else {
             return 1;
         }

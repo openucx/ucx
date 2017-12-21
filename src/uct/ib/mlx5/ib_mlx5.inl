@@ -27,6 +27,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
     if (ucs_unlikely((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length))) {
         return NULL;
     } else if (ucs_unlikely(op_own & 0x80)) {
+        UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
         if (ucs_unlikely((op_own >> 4) != MLX5_CQE_INVALID)) {
             uct_ib_mlx5_check_completion(iface, cq, cqe);
         }
