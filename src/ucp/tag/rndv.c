@@ -121,7 +121,7 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
             }
         }
 
-        sreq->send.lane     = ucp_ep_get_am_lane(ep);
+        ucs_assert(sreq->send.lane == ucp_ep_get_am_lane(ep));
         sreq->send.uct.func = ucp_proto_progress_rndv_rts;
     }
 
