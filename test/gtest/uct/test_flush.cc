@@ -386,16 +386,7 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
      }
 
      /* timeout used to prevent test hung */
-     ucs_time_t loop_end_limit_comp = ucs_get_time() +
-                                      ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
-     /* coverity[loop_condition] */
-     while (flush_req.comp.count != 1) {
-         if (ucs_get_time() > loop_end_limit_comp) {
-             break;
-         }
-         progress();
-     }
-
+     wait_for_value(&flush_req.comp.count, 1, true, 60.0);
      EXPECT_EQ(1, flush_req.comp.count);
 
      while (!reqs.empty()) {
