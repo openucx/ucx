@@ -469,6 +469,7 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
     ucs_status_t status;
     ucp_ep_t *ep = sreq->send.ep;
 
+    /* should be set by ucp_tag_send_req_init() */
     ucs_assert(sreq->send.lane == ucp_ep_get_tag_lane(ep));
 
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&

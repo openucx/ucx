@@ -130,7 +130,7 @@ struct ucp_request {
 
                 struct {
                     uint64_t         remote_address; /* address of the receiver's data buffer */
-                    uintptr_t        remote_request; /* pointer to the receiver's send request */
+                    uintptr_t        remote_request; /* pointer to the receiver's receive request */
                     ucp_rkey_h       rkey;           /* key for remote receive buffer */
                     uct_rkey_t       uct_rkey;       /* UCT remote key */
                 } rndv_put;

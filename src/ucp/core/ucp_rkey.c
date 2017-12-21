@@ -49,7 +49,7 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
         ucs_assert_always(md_size <= UINT8_MAX);
         *((uint8_t*)p++) = md_size;
         memcpy(p, *uct_rkeys, md_size);
-        p += sizeof(uint8_t) + md_size;
+        p += md_size;
         ++uct_rkeys;
     }
 }
