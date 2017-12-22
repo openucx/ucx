@@ -196,7 +196,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
                              uct_rkeys);
 
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_RNDV);
-        ucp_rndv_process_rts(arg, dummy_rts, dummy_rts_size, 0);
+        ucp_rndv_process_rts(worker, dummy_rts, dummy_rts_size, 0);
     } else {
         /* Unexpected tag offload rndv request. Sender buffer is either
            non-contig or it's length > rndv.max_zcopy capability of tag lane.
@@ -205,7 +205,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
          */
         ucs_assert(hdr_length >= sizeof(ucp_rndv_rts_hdr_t));
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_SW_RNDV);
-        ucp_rndv_process_rts(arg, (void*)hdr, hdr_length, 0);
+        ucp_rndv_process_rts(worker, (void*)hdr, hdr_length, 0);
     }
 
     ucp_tag_offload_unexp(iface, stag);
