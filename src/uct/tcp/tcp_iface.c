@@ -155,6 +155,23 @@ unsigned uct_tcp_iface_progress(uct_iface_h tl_iface)
     return count;
 }
 
+static ucs_status_t uct_tcp_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                        uct_completion_t *comp)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (iface->outstanding) {
+        UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super);
+    }
+
+    UCT_TL_IFACE_STAT_FLUSH(&iface->super);
+    return UCS_OK;
+}
+
 static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
 {
     uct_tcp_iface_t *iface = arg;
@@ -216,7 +233,7 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_fence                 = uct_base_ep_fence,
     .ep_create_connected      = uct_tcp_ep_create_connected,
     .ep_destroy               = uct_tcp_ep_destroy,
-    .iface_flush              = uct_base_iface_flush,
+    .iface_flush              = uct_tcp_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
@@ -248,6 +265,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_strncpy_zero(self->if_name, params->mode.device.dev_name,
                      sizeof(self->if_name));
+    self->outstanding            = 0;
     self->config.buf_size        = config->super.max_bcopy +
                                    sizeof(uct_tcp_am_hdr_t);
     self->config.prefer_default  = config->prefer_default;
