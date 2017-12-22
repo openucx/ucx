@@ -214,11 +214,11 @@ ucs_status_t ucp_tag_offload_unexp_eager(void *arg, void *data, size_t length,
                                          uint64_t imm)
 {
     /* Align data with AM protocol. We should add tag before the data. */
-    ucp_worker_t *worker UCS_V_UNUSED = arg;
-    uint16_t flags                    = UCP_RECV_DESC_FLAG_EAGER |
-                                        UCP_RECV_DESC_FLAG_FIRST |
-                                        UCP_RECV_DESC_FLAG_LAST  |
-                                        UCP_RECV_DESC_FLAG_OFFLOAD;
+    ucp_worker_iface_t *wiface = arg;
+    uint16_t flags             = UCP_RECV_DESC_FLAG_EAGER |
+                                 UCP_RECV_DESC_FLAG_FIRST |
+                                 UCP_RECV_DESC_FLAG_LAST  |
+                                 UCP_RECV_DESC_FLAG_OFFLOAD;
     ucp_eager_hdr_t *hdr;
     ucp_eager_sync_hdr_t *sync_hdr;
     unsigned hdr_len;
@@ -237,9 +237,11 @@ ucs_status_t ucp_tag_offload_unexp_eager(void *arg, void *data, size_t length,
     }
     hdr->super.tag = stag;
 
-    UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_EGR);
+    UCP_WORKER_STAT_TAG_OFFLOAD(wiface->worker, RX_UNEXP_EGR);
 
-    return ucp_eager_handler(arg, hdr, length + hdr_len, tl_flags,
+    ucp_tag_offload_unexp(wiface, stag);
+
+    return ucp_eager_handler(wiface->worker, hdr, length + hdr_len, tl_flags,
                              flags, hdr_len);
 }
 

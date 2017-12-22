@@ -73,7 +73,12 @@ bool ucp_test::is_self() const {
 }
 
 ucp_test_base::entity* ucp_test::create_entity(bool add_in_front) {
-    entity *e = new entity(GetParam(), m_ucp_config, get_worker_params());
+    return create_entity(add_in_front, GetParam());
+}
+
+ucp_test_base::entity* ucp_test::create_entity(bool add_in_front,
+                                               const ucp_test_param &test_param) {
+    entity *e = new entity(test_param, m_ucp_config, get_worker_params());
     if (add_in_front) {
         m_entities.push_front(e);
     } else {

@@ -198,7 +198,7 @@ typedef struct ucp_am_handler {
                                   unsigned flags) \
     { \
         ucp_worker_iface_t *wiface = arg; \
-        wiface->proxy_am_count++; \
+        wiface->proxy_recv_count++; \
         return ucp_am_handlers[_id].cb(wiface->worker, data, length, flags); \
     } \
     \
