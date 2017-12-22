@@ -30,17 +30,14 @@
 enum {
     UCP_REQUEST_FLAG_COMPLETED            = UCS_BIT(0),
     UCP_REQUEST_FLAG_RELEASED             = UCS_BIT(1),
-    UCP_REQUEST_FLAG_BLOCKING             = UCS_BIT(2),
     UCP_REQUEST_FLAG_EXPECTED             = UCS_BIT(3),
     UCP_REQUEST_FLAG_LOCAL_COMPLETED      = UCS_BIT(4),
     UCP_REQUEST_FLAG_REMOTE_COMPLETED     = UCS_BIT(5),
     UCP_REQUEST_FLAG_CALLBACK             = UCS_BIT(6),
     UCP_REQUEST_FLAG_RECV                 = UCS_BIT(7),
     UCP_REQUEST_FLAG_SYNC                 = UCS_BIT(8),
-    UCP_REQUEST_FLAG_RNDV                 = UCS_BIT(9),
     UCP_REQUEST_FLAG_OFFLOADED            = UCS_BIT(10),
     UCP_REQUEST_FLAG_BLOCK_OFFLOAD        = UCS_BIT(11),
-    UCP_REQUEST_FLAG_RNDV_RKEY            = UCS_BIT(12),
     UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(13),
 
 #if ENABLE_ASSERT
@@ -86,17 +83,6 @@ enum {
 
 
 /**
- * Multirail rendezvous-get info.
- * In tag offloading there is only one lane used, but
- * in other cases number of remote keys should match number
- * of lanes used in rndv-get protocol
- */
-typedef struct ucp_rndv_get_rkey {
-    uct_rkey_bundle_t rkey_bundle[UCP_MAX_OP_MDS];
-} ucp_rndv_get_rkey_t;
-
-
-/**
  * Request in progress.
  */
 struct ucp_request {
@@ -124,7 +110,6 @@ struct ucp_request {
                     uintptr_t     remote_request; /* pointer to the send request on receiver side */
                     uint8_t       am_id;
                     ucs_status_t  status;
-                    uintptr_t     rreq_ptr;    /* receive request ptr on the recv side */
                     uint64_t      sender_uuid; /* Sender uuid, which is sent back in sync ack */
                     ucp_tag_t     sender_tag;  /* Sender tag, which is sent back in sync ack */
                     ucp_request_callback_t comp_cb; /* Called to complete the request */
@@ -138,18 +123,26 @@ struct ucp_request {
                 struct {
                     uint64_t             remote_address; /* address of the sender's data buffer */
                     uintptr_t            remote_request; /* pointer to the sender's send request */
-                    ucp_rndv_get_rkey_t *rkey;
                     ucp_request_t       *rreq;           /* receive request on the recv side */
-                    ucp_lane_index_t     num_lanes;      /* number of rkeys obtained from peer */
-                    ucp_lane_index_t     lane_idx;       /* rendezvous line index used for next op */
+                    ucp_rkey_h           rkey;           /* key for remote send buffer */
+                    uct_rkey_t           uct_rkey;       /* UCT remote key */
                 } rndv_get;
 
                 struct {
-                    uint64_t      remote_address; /* address of the receiver's data buffer */
-                    uintptr_t     remote_request; /* pointer to the receiver's send request */
-                    uct_rkey_bundle_t rkey_bundle;
-                    ucp_request_t *sreq;          /* send request on the send side */
+                    uint64_t         remote_address; /* address of the receiver's data buffer */
+                    uintptr_t        remote_request; /* pointer to the receiver's receive request */
+                    ucp_rkey_h       rkey;           /* key for remote receive buffer */
+                    uct_rkey_t       uct_rkey;       /* UCT remote key */
                 } rndv_put;
+
+                struct {
+                    uintptr_t     rreq_ptr;    /* receive request ptr on the recv side */
+                } rndv_data;
+
+                struct {
+                    uintptr_t         remote_request; /* pointer to the send request on receiver side */
+                    ucp_request_t     *rreq;
+                } rndv_rtr;
 
                 struct {
                     ucp_request_callback_t flushed_cb;/* Called when flushed */
@@ -252,8 +245,6 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status);
 ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
                                     void *buffer, size_t length, ucp_datatype_t datatype,
                                     ucp_dt_state_t *state, ucp_request_t *req_dbg);
-
-ucs_status_t ucp_request_rndv_buffer_reg(ucp_request_t *req);
 
 void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
                               ucp_dt_state_t *state, ucp_request_t *req_dbg);

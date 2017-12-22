@@ -45,6 +45,19 @@ enum {
 
 
 /**
+ * UCP iface flags
+ */
+enum {
+    UCP_WORKER_IFACE_FLAG_OFFLOAD_ACTIVATED = UCS_BIT(0), /**< UCP iface receives tag
+                                                               offload messages */
+    UCP_WORKER_IFACE_FLAG_ON_ARM_LIST       = UCS_BIT(1)  /**< UCP iface is an element
+                                                               of arm_ifaces list, so
+                                                               it needs to be armed
+                                                               in ucp_worker_arm(). */
+};
+
+
+/**
  * UCP worker statistics counters
  */
 enum {
@@ -77,6 +90,7 @@ enum {
     UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_NON_CONTIG,
     UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_WILDCARD,
     UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_SW_PEND,
+    UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_NO_IFACE,
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_EGR,
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_RNDV,
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV,
@@ -127,19 +141,18 @@ enum {
  * UCP worker iface, which encapsulates UCT iface, its attributes and
  * some auxiliary info needed for tag matching offloads.
  */
-typedef struct ucp_worker_iface {
+struct ucp_worker_iface {
     uct_iface_h                   iface;         /* UCT interface */
     uct_iface_attr_t              attr;          /* UCT interface attributes */
     ucp_worker_h                  worker;        /* The parent worker */
-    ucs_queue_elem_t              queue;         /* Element in tm.offload_ifaces */
     ucs_list_link_t               arm_list;      /* Element in arm_ifaces list */
     ucp_rsc_index_t               rsc_index;     /* Resource index */
     int                           event_fd;      /* Event FD, or -1 if undefined */
     unsigned                      activate_count;/* How times this iface has been activated */
-    int                           on_arm_list;   /* Is the interface on arm_list */
     int                           check_events_id;/* Callback id for check_events */
-    int                           proxy_am_count;/* Counts active messages on proxy handler */
-} ucp_worker_iface_t;
+    unsigned                      proxy_recv_count;/* Counts active messages on proxy handler */
+    uint8_t                       flags;         /* Interface flags */
+};
 
 
 /**
@@ -151,7 +164,6 @@ typedef struct ucp_worker {
     uint64_t                      uuid;          /* Unique ID for wireup */
     uct_worker_h                  uct;           /* UCT worker handle */
     ucs_mpool_t                   req_mp;        /* Memory pool for requests */
-    ucs_mpool_t                   rndv_get_mp;   /* Memory pool for rendezvous-get/multirail */
     uint64_t                      atomic_tls;    /* Which resources can be used for atomics */
 
     int                           inprogress;
@@ -214,14 +226,6 @@ static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uui
     }
 
     return kh_value(&worker->ep_hash, hash_it);
-}
-
-static UCS_F_ALWAYS_INLINE
-uint64_t ucp_worker_is_tl_tag_offload(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
-{
-    return (worker->ifaces[rsc_index].attr.cap.flags &
-            (UCT_IFACE_FLAG_TAG_EAGER_SHORT | UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
-             UCT_IFACE_FLAG_TAG_EAGER_ZCOPY | UCT_IFACE_FLAG_TAG_RNDV_ZCOPY));
 }
 
 #endif

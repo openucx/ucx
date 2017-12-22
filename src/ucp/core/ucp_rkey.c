@@ -34,6 +34,26 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map)
     return size;
 }
 
+void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
+                          void *rkey_buffer, const void* uct_rkeys[])
+{
+    void *p = rkey_buffer;
+    unsigned md_index;
+    size_t md_size;
+
+    *(ucp_md_map_t*)p = md_map;
+    p += sizeof(ucp_md_map_t);
+
+    ucs_for_each_bit(md_index, md_map) {
+        md_size = context->tl_mds[md_index].attr.rkey_packed_size;
+        ucs_assert_always(md_size <= UINT8_MAX);
+        *((uint8_t*)p++) = md_size;
+        memcpy(p, *uct_rkeys, md_size);
+        p += md_size;
+        ++uct_rkeys;
+    }
+}
+
 ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
                           const uct_mem_h *memh, void *rkey_buffer)
 {
@@ -226,6 +246,45 @@ err_destroy:
     ucp_rkey_destroy(rkey);
 err:
     return status;
+}
+
+void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max)
+{
+    char *p       = buffer;
+    char *endp    = buffer + max;
+    ucp_md_map_t md_map;
+    unsigned md_index;
+    uint8_t md_size;
+    int first;
+
+    snprintf(p, endp - p, "{");
+    p += strlen(p);
+
+    md_map = *(ucp_md_map_t*)(rkey_buffer);
+    rkey_buffer += sizeof(ucp_md_map_t);
+
+    first = 1;
+    ucs_for_each_bit(md_index, md_map) {
+         md_size      = *((uint8_t*)rkey_buffer);
+         rkey_buffer += sizeof(uint8_t);
+
+         if (!first) {
+             snprintf(p, endp - p, ",");
+             p += strlen(p);
+         }
+         first = 0;
+
+         snprintf(p, endp - p, "%d:", md_index);
+         p += strlen(p);
+
+         ucs_log_dump_hex(rkey_buffer, md_size, p, endp - p);
+         p += strlen(p);
+
+         rkey_buffer += md_size;
+    }
+
+    snprintf(p, endp - p, "}");
+    p += strlen(p);
 }
 
 ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p)

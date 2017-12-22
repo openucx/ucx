@@ -47,6 +47,7 @@ static ucs_stats_class_t ucp_worker_tm_offload_stats_class = {
         [UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_NON_CONTIG] = "block_non_contig",
         [UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_WILDCARD]   = "block_wildcard",
         [UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_SW_PEND]    = "block_sw_pend",
+        [UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_NO_IFACE]   = "block_no_iface",
         [UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_EGR]     = "rx_unexp_egr",
         [UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_RNDV]    = "rx_unexp_rndv",
         [UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV] = "rx_unexp_sw_rndv",
@@ -383,10 +384,10 @@ found_ucp_ep:
     ucp_ep_config_key_t key = ucp_ep_config(ucp_ep)->key;
     key.am_lane            = 0;
     key.wireup_lane        = 0;
-    key.rndv_lanes[0]      = 0;
     key.tag_lane           = 0;
-    key.amo_lanes[0]       = 0;
     key.rma_lanes[0]       = 0;
+    key.rma_bw_lanes[0]    = 0;
+    key.amo_lanes[0]       = 0;
     key.lanes[0].rsc_index = UCP_NULL_RESOURCE;
     key.num_lanes          = 1;
     key.status             = status;
@@ -430,7 +431,7 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
     if (wiface->attr.cap.flags & UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS) {
         status = ucp_worker_wakeup_ctl_fd(worker, EPOLL_CTL_ADD, wiface->event_fd);
         ucs_assert_always(status == UCS_OK);
-        wiface->on_arm_list = 1;
+        wiface->flags |= UCP_WORKER_IFACE_FLAG_ON_ARM_LIST;
         ucs_list_add_tail(&worker->arm_ifaces, &wiface->arm_list);
     }
 
@@ -458,12 +459,12 @@ static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
                                UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
     /* Remove from user wakeup */
-    if (wiface->on_arm_list) {
+    if (wiface->flags & UCP_WORKER_IFACE_FLAG_ON_ARM_LIST) {
         status = ucp_worker_wakeup_ctl_fd(worker, EPOLL_CTL_DEL,
                                           wiface->event_fd);
         ucs_assert_always(status == UCS_OK);
         ucs_list_del(&wiface->arm_list);
-        wiface->on_arm_list = 0;
+        wiface->flags &= ~UCP_WORKER_IFACE_FLAG_ON_ARM_LIST;
     }
 
     /* Set proxy active message handlers to count receives */
@@ -504,7 +505,7 @@ void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface)
 static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
                                                      unsigned *progress_count)
 {
-    unsigned prev_am_count;
+    unsigned prev_recv_count;
     ucs_status_t status;
 
     ucs_trace_func("iface=%p", wiface->iface);
@@ -515,10 +516,10 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
         return UCS_OK;
     }
 
-    prev_am_count = wiface->proxy_am_count;
+    prev_recv_count = wiface->proxy_recv_count;
 
     *progress_count = uct_iface_progress(wiface->iface);
-    if (prev_am_count != wiface->proxy_am_count) {
+    if (prev_recv_count != wiface->proxy_recv_count) {
         /* Received relevant active messages, activate the interface */
         ucp_worker_iface_activate(wiface, 0);
         return UCS_OK;
@@ -618,30 +619,6 @@ void ucp_worker_iface_event(int fd, void *arg)
     ucp_worker_signal_internal(worker);
 }
 
-static void ucp_worker_tag_offload_enable(ucp_worker_t *worker)
-{
-    ucp_context_t *context = worker->context;
-    ucp_worker_iface_t *offload_iface;
-
-    /* Enable offload, if only one tag offload capable interface is present
-     * (multiple offload ifaces are not supported yet). */
-    if (context->config.ext.tm_offload &&
-        (ucs_queue_length(&worker->tm.offload.ifaces) == 1)) {
-        worker->tm.offload.thresh       = context->config.ext.tm_thresh;
-        worker->tm.offload.zcopy_thresh = context->config.ext.tm_max_bcopy;
-
-        offload_iface = ucs_queue_head_elem_non_empty(&worker->tm.offload.ifaces,
-                                                      ucp_worker_iface_t, queue);
-        ucp_worker_iface_activate(offload_iface, 0);
-
-        ucs_debug("Enable TM offload: thresh %zu, zcopy_thresh %zu",
-                  worker->tm.offload.thresh, worker->tm.offload.zcopy_thresh);
-    } else {
-        worker->tm.offload.thresh = SIZE_MAX;
-        ucs_debug("Disable TM offload, multiple offload ifaces are not supported");
-    }
-}
-
 static void ucp_worker_close_ifaces(ucp_worker_h worker)
 {
     ucp_rsc_index_t rsc_index;
@@ -659,7 +636,7 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
         uct_worker_progress_unregister_safe(worker->uct,
                                             &wiface->check_events_id);
 
-        if (wiface->on_arm_list) {
+        if (wiface->flags & UCP_WORKER_UCT_RECV_EVENT_ARM_FLAGS) {
             ucp_worker_wakeup_ctl_fd(worker, EPOLL_CTL_DEL, wiface->event_fd);
             ucs_list_del(&wiface->arm_list);
         }
@@ -670,11 +647,6 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
                 ucs_warn("failed to remove event handler for fd %d: %s",
                          wiface->event_fd, ucs_status_string(status));
             }
-        }
-
-        if (ucp_worker_is_tl_tag_offload(worker, rsc_index)) {
-            ucs_queue_remove(&worker->tm.offload.ifaces, &wiface->queue);
-            ucp_worker_tag_offload_enable(worker);
         }
 
         uct_iface_close(wiface->iface);
@@ -699,9 +671,9 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     wiface->rsc_index        = tl_id;
     wiface->event_fd         = -1;
     wiface->activate_count   = 0;
-    wiface->on_arm_list      = 0;
     wiface->check_events_id  = UCS_CALLBACKQ_ID_NULL;
-    wiface->proxy_am_count   = 0;
+    wiface->proxy_recv_count = 0;
+    wiface->flags            = 0;
 
     /* Read configuration
      * TODO pass env_prefix from context */
@@ -721,7 +693,7 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     iface_params.cpu_mask             = *cpu_mask_param;
     iface_params.err_handler_arg      = worker;
     iface_params.err_handler          = ucp_worker_iface_error_handler;
-    iface_params.eager_arg            = iface_params.rndv_arg = worker;
+    iface_params.eager_arg            = iface_params.rndv_arg = wiface;
     iface_params.eager_cb             = ucp_tag_offload_unexp_eager;
     iface_params.rndv_cb              = ucp_tag_offload_unexp_rndv;
 
@@ -779,12 +751,6 @@ ucp_worker_add_iface(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         } else {
             ucp_worker_iface_activate(wiface, 0);
         }
-    }
-
-    if (ucp_worker_is_tl_tag_offload(worker, tl_id)) {
-        worker->ifaces[tl_id].rsc_index = tl_id;
-        ucs_queue_push(&worker->tm.offload.ifaces, &wiface->queue);
-        ucp_worker_tag_offload_enable(worker);
     }
 
     return UCS_OK;
@@ -1131,19 +1097,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_destroy_uct_worker;
     }
 
-    /* Create memory pool for multirail info */
-    status = ucs_mpool_init(&worker->rndv_get_mp, 0,
-                            sizeof(ucp_rndv_get_rkey_t),
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                            &ucp_rndv_get_mpool_ops, "ucp_rndv_get");
-    if (status != UCS_OK) {
-        goto err_req_mp_cleanup;
-    }
-
     /* Create epoll set which combines events from all transports */
     status = ucp_worker_wakeup_init(worker, params);
     if (status != UCS_OK) {
-        goto err_rndv_lanes_mp_cleanup;
+        goto err_req_mp_cleanup;
     }
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
@@ -1185,8 +1142,6 @@ err_close_ifaces:
     ucp_tag_match_cleanup(&worker->tm);
 err_wakeup_cleanup:
     ucp_worker_wakeup_cleanup(worker);
-err_rndv_lanes_mp_cleanup:
-    ucs_mpool_cleanup(&worker->rndv_get_mp, 1);
 err_req_mp_cleanup:
     ucs_mpool_cleanup(&worker->req_mp, 1);
 err_destroy_uct_worker:
@@ -1221,7 +1176,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_destroy_eps(worker);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
-    ucs_mpool_cleanup(&worker->rndv_get_mp, 1);
     ucp_worker_close_ifaces(worker);
     ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_wakeup_cleanup(worker);
@@ -1467,7 +1421,7 @@ ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid)
             goto err;
         }
     } else {
-        ucs_debug("found ep %p", ep);
+        ucs_debug("found reply ep %p to uuid %"PRIx64, ep, dest_uuid);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);

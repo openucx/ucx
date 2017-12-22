@@ -31,7 +31,6 @@ enum {
     UCP_EP_FLAG_CONNECT_REQ_QUEUED  = UCS_BIT(2), /* Connection request was queued */
     UCP_EP_FLAG_TAG_OFFLOAD_ENABLED = UCS_BIT(3), /* Endpoint uses tl offload for tag matching */
     UCP_EP_FLAG_FAILED              = UCS_BIT(4), /* EP is in failed state */
-    UCP_EP_FLAG_STREAM_IS_QUEUED    = UCS_BIT(5), /* EP is queued in stream list of worker */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT    = UCS_BIT(8), /* DEBUG: Connection request was sent */
@@ -64,8 +63,6 @@ typedef struct ucp_ep_config_key {
 
     ucp_lane_index_t       num_lanes;    /* Number of active lanes */
 
-    ucp_lane_index_t       num_rndv_lanes; /* Number of rendezvous lanes */
-
     struct {
         ucp_rsc_index_t    rsc_index;    /* Resource index */
         ucp_lane_index_t   proxy_lane;   /* UCP_NULL_LANE - no proxy
@@ -77,9 +74,6 @@ typedef struct ucp_ep_config_key {
     ucp_lane_index_t       am_lane;      /* Lane for AM (can be NULL) */
     ucp_lane_index_t       tag_lane;     /* Lane for tag matching offload (can be NULL) */
     ucp_lane_index_t       wireup_lane;  /* Lane for wireup messages (can be NULL) */
-
-    /* Lane for zcopy rendezvous (can be NULL) */
-    ucp_lane_index_t       rndv_lanes[UCP_MAX_LANES];
 
     /* Lanes for remote memory access, sorted by priority, highest first */
     ucp_lane_index_t       rma_lanes[UCP_MAX_LANES];
@@ -208,14 +202,14 @@ typedef struct ucp_ep_config {
  * UCP_FEATURE_STREAM specific extention of the remote protocol layer endpoint
  */
 typedef struct ucp_ep_ext_stream {
-    /* ep which owns the extension */
-    ucp_ep_h                      ucp_ep;
     /* List entry in worker's EP list */
-    ucs_list_link_t               list;
-    /* Queue of receive requests posted on the EP */
-    ucs_queue_head_t              reqs;
-    /* Queue of receive descriptors with data */
-    ucs_queue_head_t              data;
+    ucs_list_link_t         list;
+    /* Queue of receive data or requests depends on flags field */
+    ucs_queue_head_t        match_q;
+    /* EP which owns the extension */
+    ucp_ep_h                ucp_ep;
+    /* Describes the state */
+    uint8_t                 flags;
 } ucp_ep_ext_stream_t;
 
 

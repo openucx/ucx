@@ -316,69 +316,68 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("This test can be also launched as an libRTE application\n");
 #endif
     printf("  Common options:\n");
-    printf("\n");
-    printf("  Test options:\n");
-    printf("     -t <test>      Test to run.\n");
+    printf("     -t <test>      test to run:\n");
     for (test = tests; test->name; ++test) {
-        printf("                   %11s : %s.\n", test->name, test->desc);
+        printf("                   %11s - %s\n", test->name, test->desc);
     }
-    printf("\n");
-    printf("     -D <layout>[,<layout>]    Data layout. Default is \"short\" in UCT,"
-                                         " \"contig\" in UCP and previous one "
-                                         "in batch mode. Second parameter is for "
-                                         "receive side in UCP only.\n");
-    printf("                                 short : Use short messages API (cannot used for get).\n");
-    printf("                                 bcopy : Use copy-out API (cannot used for atomics).\n");
-    printf("                                 zcopy : Use zero-copy API (cannot used for atomics).\n");
-    printf("                                contig : Use continuous datatype in UCP tests.\n");
-    printf("                                   iov : Use IOV datatype in UCP tests.\n");
-    printf("\n");
-    printf("     -d <device>    Device to use for testing.\n");
-    printf("     -x <tl>        Transport to use for testing.\n");
-    printf("     -c <cpu>       Set affinity to this CPU. (off)\n");
-    printf("     -n <iters>     Number of iterations to run. (%ld)\n",
-                                ctx->params.max_iter);
-    printf("     -s <size>      List of buffer sizes separated by comma, which "
-                                "make up a single message. Default is (%zu). "
-                                "For example, \"-s 16,48,8192,8192,14\"\n",
+    printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.msg_size_list[0]);
-    printf("     -H <size>      AM Header size. (%zu)\n", ctx->params.am_hdr_size);
-    printf("     -w <iters>     Number of warm-up iterations. (%zu)\n",
+    printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
+    printf("     -n <iters>     number of iterations to run (%ld)\n", ctx->params.max_iter);
+    printf("     -w <iters>     number of warm-up iterations (%zu)\n",
                                 ctx->params.warmup_iter);
-    printf("     -W <count>     Flow control window size, for active messages. (%u)\n",
-                                ctx->params.uct.fc_window);
-    printf("     -O <count>     Maximal number of uncompleted outstanding sends. (%u)\n",
+    printf("     -c <cpu>       set affinity to this CPU (off)\n");
+    printf("     -O <count>     maximal number of uncompleted outstanding sends (%u)\n",
                                 ctx->params.max_outstanding);
-    printf("     -i <count>     Distance between starting address of consecutive "
-                                "IOV entries. The same as UCT uct_iov_t stride.\n");
-    printf("     -N             Use numeric formatting - thousands separator.\n");
-    printf("     -f             Print only final numbers.\n");
-    printf("     -v             Print CSV-formatted output.\n");
-    printf("     -p <port>      TCP port to use for data exchange. (%d)\n", ctx->port);
-    printf("     -b <batchfile> Batch mode. Read and execute tests from a file.\n");
-    printf("                       Every line of the file is a test to run. "
-                                   "The first word is the\n");
-    printf("                       test name, and the rest are command-line "
-                                   "arguments for the test.\n");
-    printf("     -M <thread>    Thread support level for progress engine (single).\n");
-    printf("                        single     : Only the master thread can access.\n");
-    printf("                        serialized : One thread can access at a time.\n");
-    printf("                        multi      : Multiple threads can access.\n");
-    printf("     -T <threads>   Number of threads in the test (1); "
-                                "also implies \"-M multi\".\n");
-    printf("     -A <mode>      Async progress mode. (thread)\n");
-    printf("                        thread     : Use separate progress thread.\n");
-    printf("                        signal     : Use signal based timer.\n"); 
-    printf("     -B             Register memory with NONBLOCK flag.\n");
-    printf("     -C             Use wildcard for tag tests.\n");
-    printf("     -S             Use synchronous mode for tag sends.\n");
-    printf("     -r <mode>      Receive mode for stream tests. (recv)\n");
-    printf("                        recv       : Use ucp_stream_recv_nb.\n"); 
-    printf("                        recv_data  : Use ucp_stream_recv_data_nb.\n");
+    printf("     -i <offset>    distance between consecutive scatter-gather entries (%zu)\n",
+                                ctx->params.iov_stride);
+    printf("     -T <threads>   number of threads in the test (%d), if >1 implies \"-M multi\" for UCP\n",
+                                ctx->params.thread_count);
+    printf("     -B             register memory with NONBLOCK flag\n");
+    printf("     -b <file>      read and execute tests from a batch file: every line in the\n");
+    printf("                    file is a test to run, first word is test name, the rest of\n");
+    printf("                    the line is command-line arguments for the test.\n");
+    printf("     -p <port>      TCP port to use for data exchange (%d)\n", ctx->port);
 #if HAVE_MPI
-    printf("     -P <0|1>       Disable/enable MPI mode (%d)\n", ctx->mpi);
+    printf("     -P <0|1>       disable/enable MPI mode (%d)\n", ctx->mpi);
 #endif
-    printf("     -h             Show this help message.\n");
+    printf("     -h             show this help message\n");
+    printf("\n");
+    printf("  Output format:\n");
+    printf("     -N             use numeric formatting (thousands separator)\n");
+    printf("     -f             print only final numbers\n");
+    printf("     -v             print CSV-formatted output\n");
+    printf("\n");
+    printf("  UCT only:\n");
+    printf("     -d <device>    device to use for testing\n");
+    printf("     -x <tl>        transport to use for testing\n");
+    printf("     -D <layout>    data layout for sender side:\n");
+    printf("                        short - short messages API (default, cannot be used for get)\n");
+    printf("                        bcopy - copy-out API (cannot be used for atomics)\n");
+    printf("                        zcopy - zero-copy API (cannot be used for atomics)\n");
+    printf("                        iov    - scatter-gather list (iovec)\n");
+    printf("     -W <count>     flow control window size, for active messages (%u)\n",
+                                ctx->params.uct.fc_window);
+    printf("     -H <size>      active message header size (%zu)\n",
+                                ctx->params.am_hdr_size);
+    printf("     -A <mode>      asynchronous progress mode (thread)\n");
+    printf("                        thread - separate progress thread\n");
+    printf("                        signal - signal-based timer\n");
+    printf("\n");
+    printf("  UCP only:\n");
+    printf("     -M <thread>    thread support level for progress engine (single)\n");
+    printf("                        single     - only the master thread can access\n");
+    printf("                        serialized - one thread can access at a time\n");
+    printf("                        multi      - multiple threads can access\n");
+    printf("     -D <layout>[,<layout>]\n");
+    printf("                    data layout for sender and receiver side (contig)\n");
+    printf("                        contig - Continuous datatype\n");
+    printf("                        iov    - Scatter-gather list\n");
+    printf("     -C             use wildcard for tag tests\n");
+    printf("     -S             use synchronous mode for tag sends\n");
+    printf("     -r <mode>      receive mode for stream tests (recv)\n");
+    printf("                        recv       : Use ucp_stream_recv_nb\n");
+    printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
     printf("\n");
 }
 
