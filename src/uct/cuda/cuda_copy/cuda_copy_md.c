@@ -25,7 +25,7 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
 static ucs_status_t uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->cap.flags         = UCT_MD_FLAG_REG;
-    md_attr->cap.reg_mem_types = UCT_MD_MEM_TYPE_HOST;
+    md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
     md_attr->cap.mem_type      = UCT_MD_MEM_TYPE_CUDA;
     md_attr->cap.max_alloc     = 0;
     md_attr->cap.max_reg       = ULONG_MAX;
