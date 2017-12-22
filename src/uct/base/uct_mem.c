@@ -63,6 +63,9 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
     uct_md_h md;
     void *address;
     int shmid;
+#ifdef MADV_HUGEPAGE
+    int ret;
+#endif
 
     if (min_length == 0) {
         ucs_error("Allocation length cannot be 0");
@@ -148,21 +151,19 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 
             address = ucs_memalign(ucs_get_huge_page_size(), alloc_length
                                    UCS_MEMTRACK_VAL);
-            if (address != NULL) {
-                status = madvise(address, alloc_length, MADV_HUGEPAGE);
-                if (status != UCS_OK) {
-                    ucs_error("madvise failure status (%d) address(%p) len(%zu):"
-                              " %m", status, address, alloc_length);
+            if (address == NULL) {
+                ucs_trace("failed to allocate %zu bytes using THP: %m", alloc_length);
+            } else {
+                ret = madvise(address, alloc_length, MADV_HUGEPAGE);
+                if (ret != 0) {
+                    ucs_trace("madvise(address=%p, length=%zu, HUGEPAGE) "
+                              "returned %d: %m", address, alloc_length, ret);
                     ucs_free(address);
-                    break;
                 } else {
                     goto allocated_without_md;
                 }
             }
-
-            ucs_trace("failed to allocate by thp %zu bytes: %m", alloc_length);
 #endif
-
             break;
 
         case UCT_ALLOC_METHOD_HEAP:

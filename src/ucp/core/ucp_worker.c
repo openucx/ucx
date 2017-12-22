@@ -384,10 +384,10 @@ found_ucp_ep:
     ucp_ep_config_key_t key = ucp_ep_config(ucp_ep)->key;
     key.am_lane            = 0;
     key.wireup_lane        = 0;
-    key.rndv_lanes[0]      = 0;
     key.tag_lane           = 0;
-    key.amo_lanes[0]       = 0;
     key.rma_lanes[0]       = 0;
+    key.rma_bw_lanes[0]    = 0;
+    key.amo_lanes[0]       = 0;
     key.lanes[0].rsc_index = UCP_NULL_RESOURCE;
     key.num_lanes          = 1;
     key.status             = status;
@@ -1097,19 +1097,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_destroy_uct_worker;
     }
 
-    /* Create memory pool for multirail info */
-    status = ucs_mpool_init(&worker->rndv_get_mp, 0,
-                            sizeof(ucp_rndv_get_rkey_t),
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                            &ucp_rndv_get_mpool_ops, "ucp_rndv_get");
-    if (status != UCS_OK) {
-        goto err_req_mp_cleanup;
-    }
-
     /* Create epoll set which combines events from all transports */
     status = ucp_worker_wakeup_init(worker, params);
     if (status != UCS_OK) {
-        goto err_rndv_lanes_mp_cleanup;
+        goto err_req_mp_cleanup;
     }
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
@@ -1151,8 +1142,6 @@ err_close_ifaces:
     ucp_tag_match_cleanup(&worker->tm);
 err_wakeup_cleanup:
     ucp_worker_wakeup_cleanup(worker);
-err_rndv_lanes_mp_cleanup:
-    ucs_mpool_cleanup(&worker->rndv_get_mp, 1);
 err_req_mp_cleanup:
     ucs_mpool_cleanup(&worker->req_mp, 1);
 err_destroy_uct_worker:
@@ -1187,7 +1176,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_destroy_eps(worker);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
-    ucs_mpool_cleanup(&worker->rndv_get_mp, 1);
     ucp_worker_close_ifaces(worker);
     ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_wakeup_cleanup(worker);
@@ -1433,7 +1421,7 @@ ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid)
             goto err;
         }
     } else {
-        ucs_debug("found ep %p", ep);
+        ucs_debug("found reply ep %p to uuid %"PRIx64, ep, dest_uuid);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
