@@ -536,6 +536,8 @@ ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
         (UCX_PERF_CMD_STREAM,   UCX_PERF_TEST_TYPE_PINGPONG)
         );
 
-    ucs_error("Invalid test case");
+    ucs_error("Invalid test case: %d/%d/0x%x",
+              perf->params.command, perf->params.test_type,
+              perf->params.flags);
     return UCS_ERR_INVALID_PARAM;
 }

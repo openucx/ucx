@@ -111,10 +111,22 @@ test_perf::test_spec test_ucp_perf::tests[] =
     0 },
 
   { "get bw", "MB/sec",
-    UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 16384 }, 1, 10000l,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 100000.0,
     0 },
+
+  { "stream latency", "usec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000l,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
+    UCX_PERF_TEST_FLAG_STREAM_RECV_DATA },
+
+  { "stream zcopy bw", "MB/sec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 16384 }, 1, 10000l,
+    ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 100000.0,
+    UCX_PERF_TEST_FLAG_STREAM_RECV_DATA },
 
   { "atomic add rate", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,

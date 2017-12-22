@@ -182,7 +182,7 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     params.async_mode      = UCS_ASYNC_MODE_THREAD;
     params.thread_count    = 1;
     params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
-    params.flags           = flags;
+    params.flags           = test.test_flags | flags;
     params.am_hdr_size     = 8;
     params.alignment       = ucs_get_page_size();
     params.max_outstanding = test.max_outstanding;
