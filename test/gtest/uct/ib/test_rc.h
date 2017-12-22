@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -10,9 +10,11 @@
 #include <common/test.h>
 #include <uct/uct_test.h>
 
+extern "C" {
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/rc/base/rc_iface.h>
+}
 
 
 class test_rc : public uct_test {
@@ -28,9 +30,10 @@ public:
         return ucs_derived_of(e->ep(0), uct_rc_ep_t);
     }
 
-    void send_am_messages(entity *e, int wnd, ucs_status_t expected, int ep_idx = 0) {
+    void send_am_messages(entity *e, int wnd, ucs_status_t expected,
+                          uint8_t am_id = 0, int ep_idx = 0) {
         for (int i = 0; i < wnd; i++) {
-            EXPECT_EQ(expected, uct_ep_am_short(e->ep(ep_idx), 0, 0, NULL, 0));
+            EXPECT_EQ(expected, uct_ep_am_short(e->ep(ep_idx), am_id, 0, NULL, 0));
         }
     }
 
@@ -48,7 +51,6 @@ protected:
 
 };
 
-
 class test_rc_flow_control : public test_rc {
 public:
     typedef struct pending_send_request {
@@ -56,13 +58,7 @@ public:
         uct_pending_req_t uct;
     } pending_send_request_t;
 
-    void init() {
-        /* For correct testing FC needs to be initialized during interface creation */
-        if (UCS_OK != uct_config_modify(m_iface_config, "RC_FC_ENABLE", "y")) {
-            UCS_TEST_ABORT("Error: cannot enable flow control");
-        }
-        test_rc::init();
-    }
+    void init();
 
     virtual uct_rc_fc_t* get_fc_ptr(entity *e) {
         return &rc_ep(e)->fc;
@@ -88,6 +84,8 @@ public:
 
     }
 
+    void send_am_and_flush(entity *e, int num_msg);
+
     void progress_loop(double delta_ms=10.0) {
         uct_test::short_progress_loop(delta_ms);
     }
@@ -96,11 +94,16 @@ public:
         return UCS_OK;
     }
 
-    static void purge_cb(uct_pending_req_t *self, void *arg) {
-        req_count++;
+    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+                                   unsigned flags)
+    {
+        ++m_am_rx_count;
+        return UCS_OK;
     }
 
-    static ucs_status_t am_send(uct_pending_req_t *self);
+    static void purge_cb(uct_pending_req_t *self, void *arg) {
+        m_req_count++;
+    }
 
     void validate_grant(entity *e);
 
@@ -111,7 +114,9 @@ public:
     void test_pending_purge(int wnd, int num_pend_sends);
 
 protected:
-    static int req_count;
+    static int m_req_count;
+    static const uint8_t FLUSH_AM_ID = 1;
+    static uint32_t m_am_rx_count;
 };
 
 
