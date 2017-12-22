@@ -6,6 +6,11 @@
 
 #include "test_ucp_tag.h"
 
+extern "C" {
+#include <malloc.h>
+}
+
+
 class test_ucp_peer_failure_base {
 protected:
     enum {
@@ -175,12 +180,13 @@ void test_ucp_peer_failure::test_status_after(bool request_must_fail)
 
 void test_ucp_peer_failure::test_force_close()
 {
-    const size_t         msg_size = 16000;
-    const size_t         iter     = 1000;
+    const size_t            msg_size = 16000;
+    const size_t            iter     = 1000;
+    uint8_t                 *buf     = (uint8_t *)calloc(msg_size, iter);
+    struct mallinfo         mem_before, mem_after;
+    std::vector<request *>  reqs;
 
-    uint8_t *buf = (uint8_t *)calloc(msg_size, iter);
-
-    std::vector<request *> reqs;
+    reqs.reserve(iter);
     for (size_t i = 0; i < iter; ++i) {
         request *sreq = send_nb(&buf[i * msg_size], msg_size, DATATYPE, 17);
 
@@ -194,6 +200,8 @@ void test_ucp_peer_failure::test_force_close()
 
     fail_receiver();
 
+    mem_before = mallinfo();
+
     request *close_req = (request *)ucp_ep_close_nb(sender().ep(),
                                                     UCP_EP_CLOSE_MODE_FORCE);
     if (UCS_PTR_IS_PTR(close_req)) {
@@ -202,6 +210,13 @@ void test_ucp_peer_failure::test_force_close()
     } else {
         EXPECT_FALSE(UCS_PTR_IS_ERR(close_req));
     }
+
+    mem_after = mallinfo();
+    /* Too low chance to predict memory consumption on wire up for all TLS */
+    if (GetParam().variant != FAIL_IMMEDIATELY) {
+        EXPECT_GT(mem_before.uordblks, mem_after.uordblks);
+    }
+
     /* The EP can't be used now */
     sender().revoke_ep();
 
