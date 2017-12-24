@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.All rights reserved.
 * See file LICENSE for terms.
@@ -67,27 +67,37 @@ UCS_TEST_P(test_rc_max_wr, send_limit)
 UCT_RC_INSTANTIATE_TEST_CASE(test_rc_max_wr)
 
 
-int test_rc_flow_control::req_count = 0;
+int test_rc_flow_control::m_req_count        = 0;
+uint32_t test_rc_flow_control::m_am_rx_count = 0;
 
-ucs_status_t test_rc_flow_control::am_send(uct_pending_req_t *self)
+void test_rc_flow_control::init()
 {
+    /* For correct testing FC needs to be initialized during interface creation */
+    if (UCS_OK != uct_config_modify(m_iface_config, "RC_FC_ENABLE", "y")) {
+        UCS_TEST_ABORT("Error: cannot enable flow control");
+    }
+    test_rc::init();
 
-    pending_send_request_t *req = ucs_container_of(self,
-                                                   pending_send_request_t,
-                                                   uct);
+    uct_iface_set_am_handler(m_e1->iface(), FLUSH_AM_ID, am_handler,
+                             NULL, UCT_CB_FLAG_SYNC);
+    uct_iface_set_am_handler(m_e2->iface(), FLUSH_AM_ID, am_handler,
+                             NULL, UCT_CB_FLAG_SYNC);
 
-    ucs_status_t status = uct_ep_am_short(req->ep, 0, 0, NULL,0);
-    ucs_debug("sending short with grant %d ",status);
-    return status;
+}
+
+void test_rc_flow_control::send_am_and_flush(entity *e, int num_msg)
+{
+    m_am_rx_count = 0;
+
+    send_am_messages(e, num_msg - 1, UCS_OK);
+    send_am_messages(e, 1, UCS_OK, FLUSH_AM_ID); /* send last msg with FLUSH id */
+    wait_for_flag(&m_am_rx_count);
+    EXPECT_EQ(m_am_rx_count, 1ul);
 }
 
 void test_rc_flow_control::validate_grant(entity *e)
 {
-    ucs_time_t timeout = ucs_get_time() +
-                         ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
-    while ((ucs_get_time() < timeout) && (!get_fc_ptr(e)->fc_wnd)) {
-        short_progress_loop();
-    }
+    wait_for_flag(&get_fc_ptr(e)->fc_wnd);
     EXPECT_GT(get_fc_ptr(e)->fc_wnd, 0);
 }
 
@@ -119,8 +129,7 @@ void test_rc_flow_control::test_pending_grant(int wnd)
     disable_entity(m_e2);
     set_fc_attributes(m_e1, true, wnd, wnd, 1);
 
-    send_am_messages(m_e1, wnd, UCS_OK);
-    progress_loop();
+    send_am_and_flush(m_e1, wnd);
 
     /* Now m_e1 should be blocked by FC window and FC grant
      * should be in pending queue of m_e2. */
@@ -145,10 +154,8 @@ void test_rc_flow_control::test_pending_purge(int wnd, int num_pend_sends)
     disable_entity(m_e2);
     set_fc_attributes(m_e1, true, wnd, wnd, 1);
 
-    req_count = 0;
-
-    send_am_messages(m_e1, wnd, UCS_OK);
-    progress_loop();
+    m_req_count = 0;
+    send_am_and_flush(m_e1, wnd);
 
     /* Now m2 ep should have FC grant message in the pending queue.
      * Add some user pending requests as well */
@@ -157,7 +164,7 @@ void test_rc_flow_control::test_pending_purge(int wnd, int num_pend_sends)
         EXPECT_EQ(uct_ep_pending_add(m_e2->ep(0), &reqs[i]), UCS_OK);
     }
     uct_ep_pending_purge(m_e2->ep(0), purge_cb, NULL);
-    EXPECT_EQ(num_pend_sends, req_count);
+    EXPECT_EQ(num_pend_sends, m_req_count);
 }
 
 
@@ -181,8 +188,7 @@ UCS_TEST_P(test_rc_flow_control, pending_only_fc)
     disable_entity(m_e2);
     set_fc_attributes(m_e1, true, wnd, wnd, 1);
 
-    send_am_messages(m_e1, wnd, UCS_OK);
-    progress_loop();
+    send_am_and_flush(m_e1, wnd);
 
     m_e2->destroy_ep(0);
     ASSERT_TRUE(rc_iface(m_e2)->tx.arbiter.current == NULL);
@@ -218,7 +224,6 @@ void test_rc_flow_control_stats::test_general(int wnd, int soft_thresh,
     v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_NO_CRED);
     EXPECT_EQ(1ul, v);
 
-    progress_loop();
     validate_grant(m_e1);
     send_am_messages(m_e1, 1, UCS_OK);
 
@@ -244,16 +249,14 @@ UCS_TEST_P(test_rc_flow_control_stats, soft_request)
     int h_thresh = 1;
 
     set_fc_attributes(m_e1, true, wnd, s_thresh, h_thresh);
-    send_am_messages(m_e1, wnd - (s_thresh - 1), UCS_OK);
-    progress_loop();
+    send_am_and_flush(m_e1, wnd - (s_thresh - 1));
 
     v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_TX_SOFT_REQ);
     EXPECT_EQ(1ul, v);
     v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e2)->stats, UCT_RC_FC_STAT_RX_SOFT_REQ);
     EXPECT_EQ(1ul, v);
 
-    send_am_messages(m_e2, 1, UCS_OK);
-    progress_loop();
+    send_am_and_flush(m_e2, wnd - (s_thresh - 1));
     v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_RX_GRANT);
     EXPECT_EQ(1ul, v);
     v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e2)->stats, UCT_RC_FC_STAT_TX_GRANT);

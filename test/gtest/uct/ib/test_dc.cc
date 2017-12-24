@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.All rights reserved.
 * See file LICENSE for terms.
@@ -405,12 +405,10 @@ UCS_TEST_P(test_dc_flow_control, soft_request)
 
     set_fc_attributes(m_e1, true, wnd, s_thresh, h_thresh);
 
-    send_am_messages(m_e1, wnd - (s_thresh - 1), UCS_OK);
-    progress_loop();
+    send_am_and_flush(m_e1, wnd - (s_thresh - 1));
 
     set_tx_moderation(m_e2, 0);
-    send_am_messages(m_e2, 1, UCS_OK);
-    progress_loop();
+    send_am_and_flush(m_e2, 1);
 
     /* Check that window is not updated */
     EXPECT_EQ(get_fc_ptr(m_e1)->fc_wnd, s_thresh - 1);
@@ -427,8 +425,7 @@ UCS_TEST_P(test_dc_flow_control, flush_destroy)
                       ucs_max((int)(wnd*0.5), 1),
                       ucs_max((int)(wnd*0.25), 1));
 
-    send_am_messages(m_e1, wnd, UCS_OK);
-    progress_loop();
+    send_am_and_flush(m_e1, wnd);
 
     EXPECT_UCS_OK(uct_ep_flush(m_e1->ep(0), 0, NULL));
     m_e1->destroy_eps();
@@ -437,8 +434,7 @@ UCS_TEST_P(test_dc_flow_control, flush_destroy)
      * to force pending queue dispatch */
     enable_entity(m_e2);
     set_tx_moderation(m_e2, 0);
-    send_am_messages(m_e2, 1, UCS_OK);
-    progress_loop();
+    send_am_and_flush(m_e2, 1);
 }
 
 /* Check that there is no dci leak when just one (out of several) ep gets
@@ -522,8 +518,6 @@ UCS_TEST_P(test_dc_flow_control_stats, fc_ep)
     EXPECT_EQ(1ul, v);
     v = UCS_STATS_GET_COUNTER(fake_ep_fc_ptr(m_e2)->stats, UCT_RC_FC_STAT_RX_HARD_REQ);
     EXPECT_EQ(1ul, v);
-
-    progress_loop();
 
     v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_RX_PURE_GRANT);
     EXPECT_EQ(1ul, v);
