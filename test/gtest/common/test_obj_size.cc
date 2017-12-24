@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <common/test.h>
 #include <ucs/type/cpu_set.h>
 
@@ -12,14 +16,20 @@
 #include <ucp/core/ucp_types.h>
 #include <uct/api/tl.h>
 #include <uct/base/uct_iface.h>
-#include <uct/ib/dc/base/dc_ep.h>
-#include <uct/ib/dc/base/dc_iface.h>
-#include <uct/ib/dc/verbs/dc_verbs.h>
-#include <uct/ib/rc/verbs/rc_verbs.h>
-#include <uct/ib/ud/base/ud_ep.h>
-#include <uct/ib/ud/verbs/ud_verbs.h>
 #include <uct/sm/self/self_ep.h>
 #include <uct/tcp/tcp.h>
+#if HAVE_TL_RC
+#  include <uct/ib/rc/verbs/rc_verbs.h>
+#endif
+#if HAVE_TL_DC
+#  include <uct/ib/dc/base/dc_ep.h>
+#  include <uct/ib/dc/base/dc_iface.h>
+#  include <uct/ib/dc/verbs/dc_verbs.h>
+#endif
+#if HAVE_TL_UD
+#  include <uct/ib/ud/base/ud_ep.h>
+#  include <uct/ib/ud/verbs/ud_verbs.h>
+#endif
 
 class test_obj_size : public ucs::test {
 };
@@ -38,14 +48,20 @@ UCS_TEST_F(test_obj_size, size) {
     EXPECTED_SIZE(uct_ep_t, 8);
     EXPECTED_SIZE(uct_base_ep_t, 8);
     EXPECTED_SIZE(uct_rkey_bundle_t, 24);
-    EXPECTED_SIZE(uct_dc_ep_t, 24);
-    EXPECTED_SIZE(uct_dc_verbs_ep_t, 40);
-    EXPECTED_SIZE(uct_rc_ep_t, 88);
-    EXPECTED_SIZE(uct_rc_verbs_ep_t, 96);
-    EXPECTED_SIZE(uct_ud_ep_t, 248);
-    EXPECTED_SIZE(uct_ud_verbs_ep_t, 264);
     EXPECTED_SIZE(uct_self_ep_t, 8);
     EXPECTED_SIZE(uct_tcp_ep_t, 16);
+#  if HAVE_TL_RC
+    EXPECTED_SIZE(uct_rc_ep_t, 88);
+    EXPECTED_SIZE(uct_rc_verbs_ep_t, 96);
+#  endif
+#  if HAVE_TL_DC
+    EXPECTED_SIZE(uct_dc_ep_t, 24);
+    EXPECTED_SIZE(uct_dc_verbs_ep_t, 40);
+#  endif
+#  if HAVE_TL_UD
+    EXPECTED_SIZE(uct_ud_ep_t, 248);
+    EXPECTED_SIZE(uct_ud_verbs_ep_t, 264);
+#  endif
 #endif
 }
 
