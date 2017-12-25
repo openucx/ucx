@@ -7,12 +7,12 @@
 #ifndef UD_DEF_H_
 #define UD_DEF_H_
 
-
-#include <ucs/sys/math.h>
-
+#include <uct/ib/base/ib_iface.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/frag_list.h>
-#include <uct/ib/base/ib_iface.h>
+#include <ucs/sys/math.h>
+
 
 #define UCT_UD_QP_HASH_SIZE     256
 #define UCT_UD_TX_MODERATION    64
@@ -146,7 +146,7 @@ typedef struct uct_ud_send_skb {
     uint8_t                 flags;
     int8_t                  status;     /* used in case of failure */
     uct_ud_neth_t           neth[0];
-} UCS_S_PACKED uct_ud_send_skb_t;
+} UCS_S_PACKED UCS_V_ALIGNED(UCS_SYS_CACHE_LINE_SIZE) uct_ud_send_skb_t;
 
 
 typedef struct uct_ud_comp_desc {
