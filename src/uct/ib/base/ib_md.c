@@ -994,7 +994,7 @@ static ucs_status_t uct_ib_mem_global_odp_reg(uct_md_h uct_md, void *address,
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 
     ucs_assert(md->global_odp.mr != NULL);
-    if (flags & UCT_MD_MEM_FLAG_PIN) {
+    if (flags & UCT_MD_MEM_FLAG_LOCK) {
         return uct_ib_mem_reg(uct_md, address, length, flags, memh_p);
     }
 

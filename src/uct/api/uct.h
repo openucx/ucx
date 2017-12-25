@@ -422,8 +422,8 @@ enum uct_md_mem_flags {
                                                 transport. */
     UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1), /**< Place the mapping at exactly
                                                 defined address */
-    UCT_MD_MEM_FLAG_PIN      = UCS_BIT(2), /**< Registered memory should be
-                                                pinned. May incur extra cost for
+    UCT_MD_MEM_FLAG_LOCK     = UCS_BIT(2), /**< Registered memory should be
+                                                locked. May incur extra cost for
                                                 registration, but memory access
                                                 is usually faster. */
 
