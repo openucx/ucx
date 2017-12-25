@@ -125,7 +125,8 @@ struct ucp_request {
                     uintptr_t            remote_request; /* pointer to the sender's send request */
                     ucp_request_t       *rreq;           /* receive request on the recv side */
                     ucp_rkey_h           rkey;           /* key for remote send buffer */
-                    uct_rkey_t           uct_rkey;       /* UCT remote key */
+                    ucp_lane_map_t       lanes_map;      /* used lanes map */
+                    ucp_lane_index_t     lane_count;     /* number of lanes used in transaction */
                 } rndv_get;
 
                 struct {

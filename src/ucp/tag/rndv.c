@@ -221,27 +221,88 @@ static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     ucp_request_send(rndv_req);
 }
 
+static void ucp_rndv_get_lanes_count(ucp_request_t *req)
+{
+    ucp_ep_h ep        = req->send.ep;
+    ucp_lane_map_t map = 0;
+    uct_rkey_t uct_rkey;
+    ucp_lane_index_t lane;
+
+    if (ucs_likely(req->send.rndv_get.lane_count != 0)) {
+        return; /* already resolved */
+    }
+
+    while ((lane = ucp_rkey_get_rma_bw_lane(req->send.rndv_get.rkey, ep,
+                                            &uct_rkey, map)) != UCP_NULL_LANE) {
+        req->send.rndv_get.lane_count++;
+        map |= UCS_BIT(lane);
+    }
+
+    req->send.rndv_get.lane_count = ucs_min(req->send.rndv_get.lane_count,
+                                            ep->worker->context->config.ext.max_rndv_lanes);
+}
+
+static ucp_lane_index_t ucp_rndv_get_next_lane(ucp_request_t *rndv_req, uct_rkey_t *uct_rkey)
+{
+    /* get lane and mask it for next iteration.
+     * next time this lane will not be selected & we continue
+     * with another lane. After all lanes are masked - reset mask
+     * to zero & start from scratch. this way allows to enumerate
+     * all lanes */
+    ucp_ep_h ep = rndv_req->send.ep;
+    ucp_lane_index_t lane;
+
+    lane = ucp_rkey_get_rma_bw_lane(rndv_req->send.rndv_get.rkey, ep,
+                                    uct_rkey, rndv_req->send.rndv_get.lanes_map);
+
+    if ((lane == UCP_NULL_LANE) && (rndv_req->send.rndv_get.lanes_map != 0)) {
+        /* lanes_map != 0 - no more lanes (but BW lanes are exist because map
+         * is not NULL - we found at least one lane on previous iteration).
+         * reset used lanes map to NULL and iterate it again */
+        rndv_req->send.rndv_get.lanes_map = 0;
+        lane = ucp_rkey_get_rma_bw_lane(rndv_req->send.rndv_get.rkey, ep,
+                                        uct_rkey, rndv_req->send.rndv_get.lanes_map);
+    }
+
+    if (ucs_unlikely(lane == UCP_NULL_LANE)) {
+        /* there are no BW lanes */
+        return UCP_NULL_LANE;
+    }
+
+    rndv_req->send.rndv_get.lanes_map |= UCS_BIT(lane);
+    /* in case if masked too much lanes - reset mask to zero
+     * to select first lane next time */
+    if (ucs_count_one_bits(rndv_req->send.rndv_get.lanes_map) >=
+        ep->worker->context->config.ext.max_rndv_lanes) {
+        rndv_req->send.rndv_get.lanes_map = 0;
+    }
+    return lane;
+}
+
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
                  uct_pending_req_t *self)
 {
     ucp_request_t *rndv_req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_h ep             = rndv_req->send.ep;
-    ucs_status_t status;
-    size_t offset, length, ucp_mtu, remainder, align;
     const size_t max_iovcnt = 1;
+    ucs_status_t status;
+    size_t offset, length, ucp_mtu, remainder, align, chunk;
     uct_iov_t iov[max_iovcnt];
     size_t iovcnt;
     ucp_rsc_index_t rsc_index;
     ucp_dt_state_t state;
+    uct_rkey_t uct_rkey;
 
     if (ucp_ep_is_stub(ep)) {
         rndv_req->send.lane = 0;
         return UCS_ERR_NO_RESOURCE;
     }
 
+    ucp_rndv_get_lanes_count(rndv_req);
+
     /* Figure out which lane to use for get operation */
-    rndv_req->send.lane = ucp_rkey_get_rma_bw_lane(rndv_req->send.rndv_get.rkey, ep,
-                                                   &rndv_req->send.rndv_get.uct_rkey);
+    rndv_req->send.lane = ucp_rndv_get_next_lane(rndv_req, &uct_rkey);
+
     if (rndv_req->send.lane == UCP_NULL_LANE) {
         /* If can't perform get_zcopy - switch to active-message.
          * NOTE: we do not register memory and do not send our keys. */
@@ -252,7 +313,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
         return UCS_OK;
     }
 
-    status = ucp_request_send_buffer_reg_lane(rndv_req, rndv_req->send.lane);
+    status = ucp_send_request_add_reg_lane(rndv_req, rndv_req->send.lane);
     ucs_assert_always(status == UCS_OK);
 
     rsc_index = ucp_ep_get_rsc_index(rndv_req->send.ep, rndv_req->send.lane);
@@ -265,7 +326,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     if ((offset == 0) && (remainder > 0) && (rndv_req->send.length > ucp_mtu)) {
         length = ucp_mtu - remainder;
     } else {
-        length = ucs_min(rndv_req->send.length - offset,
+        chunk = ucs_align_up(rndv_req->send.length /
+                             rndv_req->send.rndv_get.lane_count, align);
+        length = ucs_min(ucs_min(chunk, rndv_req->send.length - offset),
                          ucp_ep_config(rndv_req->send.ep)->tag.rndv.max_get_zcopy);
     }
 
@@ -274,13 +337,17 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
                    length, rndv_req->send.lane);
 
     state = rndv_req->send.state.dt;
-    ucp_dt_iov_copy_uct(iov, &iovcnt, max_iovcnt, &state, rndv_req->send.buffer,
-                        ucp_dt_make_contig(1), length);
+    /* TODO: is this correct? memh array may skip MD's where
+     * registration is not supported. for now SHM may avoid registration,
+     * but it will work on single lane */
+    ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iovcnt, &state,
+                        rndv_req->send.buffer, ucp_dt_make_contig(1), length,
+                        ucp_ep_md_index(rndv_req->send.ep, rndv_req->send.lane));
 
     status = uct_ep_get_zcopy(ep->uct_eps[rndv_req->send.lane],
                               iov, iovcnt,
                               rndv_req->send.rndv_get.remote_address + offset,
-                              rndv_req->send.rndv_get.uct_rkey,
+                              uct_rkey,
                               &rndv_req->send.state.uct_comp);
     ucp_request_send_state_advance(rndv_req, &state,
                                    UCP_REQUEST_SEND_PROTO_RNDV_GET,
@@ -334,6 +401,8 @@ static void ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req, ucp_request_t *rr
     rndv_req->send.rndv_get.remote_request = rndv_rts_hdr->sreq.reqptr;
     rndv_req->send.rndv_get.remote_address = rndv_rts_hdr->address;
     rndv_req->send.rndv_get.rreq           = rreq;
+    rndv_req->send.rndv_get.lanes_map      = 0;
+    rndv_req->send.rndv_get.lane_count     = 0;
     rndv_req->send.datatype                = rreq->recv.datatype;
 
     status = ucp_ep_rkey_unpack(rndv_req->send.ep, rndv_rts_hdr + 1,
@@ -555,11 +624,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
                  uct_pending_req_t *self)
 {
-    ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *sreq     = ucs_container_of(self, ucp_request_t, send.uct);
+    const size_t max_iovcnt = 1;
+    ucp_ep_h ep             = sreq->send.ep;
     ucs_status_t status;
     size_t offset, ucp_mtu, align, remainder, length;
     ucp_rsc_index_t rsc_index;
-    const size_t max_iovcnt = 1;
     uct_iov_t iov[max_iovcnt];
     size_t iovcnt;
     ucp_dt_state_t state;
@@ -567,9 +637,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
     status = ucp_request_send_buffer_reg_lane(sreq, sreq->send.lane);
     ucs_assert_always(status == UCS_OK);
 
-    rsc_index = ucp_ep_get_rsc_index(sreq->send.ep, sreq->send.lane);
-    align     = sreq->send.ep->worker->ifaces[rsc_index].attr.cap.put.opt_zcopy_align;
-    ucp_mtu   = sreq->send.ep->worker->ifaces[rsc_index].attr.cap.put.align_mtu;
+    rsc_index = ucp_ep_get_rsc_index(ep, sreq->send.lane);
+    align     = ep->worker->ifaces[rsc_index].attr.cap.put.opt_zcopy_align;
+    ucp_mtu   = ep->worker->ifaces[rsc_index].attr.cap.put.align_mtu;
 
     offset    = sreq->send.state.dt.offset;
     remainder = (uintptr_t)sreq->send.buffer % align;
@@ -578,7 +648,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
         length = ucp_mtu - remainder;
     } else {
         length = ucs_min(sreq->send.length - offset,
-                         ucp_ep_config(sreq->send.ep)->tag.rndv.max_put_zcopy);
+                         ucp_ep_config(ep)->tag.rndv.max_put_zcopy);
     }
 
     ucs_trace_data("req %p: offset %zu remainder %zu. read to %p len %zu",
@@ -586,9 +656,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
                    (void*)sreq->send.buffer + offset, length);
 
     state = sreq->send.state.dt;
-    ucp_dt_iov_copy_uct(iov, &iovcnt, max_iovcnt, &state, sreq->send.buffer,
-                        ucp_dt_make_contig(1), length);
-    status = uct_ep_put_zcopy(sreq->send.ep->uct_eps[sreq->send.lane],
+    ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iovcnt, &state,
+                        sreq->send.buffer, ucp_dt_make_contig(1), length, 0);
+    status = uct_ep_put_zcopy(ep->uct_eps[sreq->send.lane],
                               iov, iovcnt,
                               sreq->send.rndv_put.remote_address + offset,
                               sreq->send.rndv_put.uct_rkey,
@@ -680,7 +750,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         }
 
         sreq->send.lane = ucp_rkey_get_rma_bw_lane(sreq->send.rndv_put.rkey, ep,
-                                                   &sreq->send.rndv_put.uct_rkey);
+                                                   &sreq->send.rndv_put.uct_rkey, 0);
         if (sreq->send.lane != UCP_NULL_LANE) {
             ucp_request_send_state_reset(sreq, ucp_rndv_put_completion,
                                          UCP_REQUEST_SEND_PROTO_RNDV_PUT);

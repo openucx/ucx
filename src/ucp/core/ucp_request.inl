@@ -347,6 +347,16 @@ ucp_request_send_buffer_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_send_request_add_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
+{
+    /* add new lane to registration map */
+    ucp_md_map_t md_map = UCS_BIT(ucp_ep_md_index(req->send.ep, lane)) |
+                          req->send.state.dt.dt.contig.md_map;
+    ucs_assert(ucs_count_one_bits(md_map) <= UCP_MAX_OP_MDS);
+    return ucp_request_send_buffer_reg(req, md_map);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map)
 {
     return ucp_request_memory_reg(req->recv.worker->context, md_map,
