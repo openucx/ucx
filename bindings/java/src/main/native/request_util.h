@@ -10,14 +10,16 @@
 
 #include <cstdint>
 
+// forward declaration
+class worker;
+
 /**
  * class to hold the request struct and request handlers
  */
 class request_util {
 public:
     struct request_t {
-        // User defined request
-        // Data members will be added later
+        worker*     request_worker;
     };
 
     class request_handler {

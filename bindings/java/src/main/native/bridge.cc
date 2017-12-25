@@ -4,44 +4,64 @@
  */
 
 #include "bridge.h"
-#include "request_util.h"
+#include "worker.h"
 
 #include <ucp/api/ucp.h>
-#include "ucs/time/time.h"
 
 #include <cstring>
 #include <iostream>
 
 
-#define ERR_EXIT(_msg, _ret)  do {                    \
+#define ERR_EXIT(_msg, _ret)  do {                   \
                                 print_error(_msg);   \
                                 return _ret;         \
-                            } while(0)
+                              } while(0)
 
+#define ERR_JUMP(_msg, _label)  do {                    \
+                                    print_error(_msg);  \
+                                    goto _label;        \
+                                } while(0)
 
-static JavaVM *cached_jvm;
-static jfieldID field_buff = NULL;
-static jfieldID field_addr = NULL;
+static JavaVM   *cached_jvm             = NULL;
+static jfieldID field_comp_queue        = NULL;
+static jfieldID field_worker_addr_arr   = NULL;
 
-static ucp_context_h cached_ctx = NULL;
+static context cached_ctx;
 
 
 static void print_error(const char* error);
 
-// Create context when JNI first loads
-static ucs_status_t create_context();
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
     cached_jvm = jvm;
     JNIEnv *env;
 
     if (jvm->GetEnv((void **) &env, JNI_VERSION_1_8)) {
-        ERR_EXIT("JNI version 1.8 or higher required.", JNI_ERR);
+        ERR_EXIT("JNI version 1.8 or higher required", JNI_ERR);
     }
 
-    ucs_status_t status = create_context();
-    if (status != UCS_OK) {
-        ERR_EXIT("Failed to create UCP context.", JNI_ERR);
+    jclass queue_cls_data = env->FindClass(
+            "org/ucx/jucx/Worker$CompletionQueue");
+    if (queue_cls_data == NULL) {
+        ERR_EXIT("java org/ucx/jucx/Worker$CompletionQueue class was NOT found",
+                JNI_ERR);
+    }
+
+    field_comp_queue = env->GetFieldID(queue_cls_data, "completionBuff",
+            "Ljava/nio/ByteBuffer;");
+    if (field_comp_queue == NULL) {
+        ERR_EXIT("could not get completionBuff's field id", JNI_ERR);
+    }
+
+    jclass worker_cls_data = env->FindClass("org/ucx/jucx/Worker");
+    if (worker_cls_data == NULL) {
+        ERR_EXIT("java org/ucx/jucx/Worker class was NOT found", JNI_ERR);
+    }
+
+    field_worker_addr_arr = env->GetFieldID(worker_cls_data, "workerAddress",
+            "[B");
+    if (field_worker_addr_arr == NULL) {
+        ERR_EXIT("could not get workerAddress' field id", JNI_ERR);
     }
 
     return JNI_VERSION_1_8;
@@ -51,33 +71,74 @@ static void print_error(const char* error_msg) {
     fprintf(stderr, "[ERROR] JUCX - %s: %s\n", __FILE__, error_msg);
 }
 
-static ucs_status_t create_context() {
-    if (cached_ctx) {
-        return UCS_OK;
-    }
-
-    ucp_params_t ucp_params = { 0 };
-    ucp_config_t *config;
+JNIEXPORT jlong JNICALL
+Java_org_ucx_jucx_Bridge_createWorkerNative(JNIEnv *env, jclass cls,
+        jint max_comp, jobject comp_queue, jobject jworker) {
+    ucp_worker_params_t worker_params = { 0 };
+    worker* worker_ptr = NULL;
     ucs_status_t status;
-    ucp_context_h ucp_context;
+    jobject jbyte_buff;
+    uint32_t cap = (uint32_t) max_comp;
+    ucp_address_t* local_addr;
+    size_t local_addr_len;
+    jbyteArray jaddr_arr;
+    jlong* addr_ptr;
+    jbyte* local_addr_wrap;
 
-    status = ucp_config_read(NULL, NULL, &config);
+    worker_params.field_mask    = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+    worker_params.thread_mode   = UCS_THREAD_MODE_SINGLE;
+
+    worker_ptr = new worker(&cached_ctx, cap);
+    status = worker_ptr->init(worker_params);
     if (status != UCS_OK) {
-        return status;
+        ERR_JUMP("Failed to initialize ucp native worker", err_worker);
     }
 
-    ucp_params.features     = UCP_FEATURE_TAG;
-    ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES      |
-                              UCP_PARAM_FIELD_REQUEST_INIT  |
-                              UCP_PARAM_FIELD_REQUEST_SIZE;
+    status = worker_ptr->extract_worker_address(&local_addr, local_addr_len);
+    if (!local_addr) {
+        ERR_JUMP("Failed to get ucp worker native address", err_worker);
+    }
 
-    ucp_params.request_size = sizeof(jucx_request);
-    ucp_params.request_init = request_util::request_handler::request_init;
+    local_addr_wrap = new jbyte[local_addr_len];
+    if (!local_addr_wrap) {
+        ERR_JUMP("Allocation failure", err_worker);
+    }
+    memcpy(local_addr_wrap, local_addr, local_addr_len);
 
-    status = ucp_init(&ucp_params, config, &ucp_context);
-    ucp_config_release(config);
+    jaddr_arr = env->NewByteArray(local_addr_len);
+    if (!jaddr_arr) {
+        ERR_JUMP("Failed to create Java byte[] object", err_worker_addr);
+    }
 
-    cached_ctx = ucp_context;
+    env->SetByteArrayRegion(jaddr_arr, 0, local_addr_len, local_addr_wrap);
+    delete[] local_addr_wrap;
+    worker_ptr->release_worker_address(local_addr);
 
-    return status;
+    // Set the Java workerAddress field
+    env->SetObjectField(jworker, field_worker_addr_arr, jaddr_arr);
+
+    jbyte_buff = env->NewDirectByteBuffer(worker_ptr->get_event_queue(), cap);
+    if (!jbyte_buff) {
+        env->ExceptionClear();
+        ERR_JUMP("Failed to create Java ByteBuffer object", err_worker);
+    }
+
+    // Set the completion queue field
+    env->SetObjectField(comp_queue, field_comp_queue, jbyte_buff);
+
+    return (native_ptr) worker_ptr;
+
+err_worker_addr:
+    delete[] local_addr_wrap;
+err_worker:
+    delete worker_ptr;
+
+    return 0;
+}
+
+JNIEXPORT void JNICALL
+Java_org_ucx_jucx_Bridge_releaseWorkerNative(JNIEnv *env, jclass cls,
+        jlong worker_id) {
+    worker* worker_ptr = (worker*) worker_id;
+    delete worker_ptr;
 }
