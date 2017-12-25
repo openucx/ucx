@@ -166,6 +166,7 @@ static ucs_status_t uct_tcp_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
     if (iface->outstanding) {
         UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super);
+        return UCS_INPROGRESS;
     }
 
     UCT_TL_IFACE_STAT_FLUSH(&iface->super);
