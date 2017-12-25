@@ -13,9 +13,9 @@
 #include <iostream>
 
 
-#define ERR_EXIT(msg, ret)  do {                    \
-                                print_error(msg);   \
-                                return ret;         \
+#define ERR_EXIT(_msg, _ret)  do {                    \
+                                print_error(_msg);   \
+                                return _ret;         \
                             } while(0)
 
 
@@ -52,8 +52,9 @@ static void print_error(const char* error_msg) {
 }
 
 static ucs_status_t create_context() {
-    if (cached_ctx)
+    if (cached_ctx) {
         return UCS_OK;
+    }
 
     ucp_params_t ucp_params = { 0 };
     ucp_config_t *config;
@@ -61,8 +62,9 @@ static ucs_status_t create_context() {
     ucp_context_h ucp_context;
 
     status = ucp_config_read(NULL, NULL, &config);
-    if (status != UCS_OK)
+    if (status != UCS_OK) {
         return status;
+    }
 
     ucp_params.features     = UCP_FEATURE_TAG;
     ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES      |
@@ -73,12 +75,9 @@ static ucs_status_t create_context() {
     ucp_params.request_init = request_util::request_handler::request_init;
 
     status = ucp_init(&ucp_params, config, &ucp_context);
-    if (status != UCS_OK)
-        return status;
-
     ucp_config_release(config);
 
     cached_ctx = ucp_context;
 
-    return UCS_OK;
+    return status;
 }
