@@ -213,6 +213,9 @@ struct ucp_request {
                     ucp_tag_recv_info_t     info;     /* Completion info to fill */
                     ucp_mem_desc_t          *rdesc;   /* Offload bounce buffer */
                     ssize_t                 remaining; /* How much more data to be received */
+                    ucp_worker_iface_t      *wiface;  /* Cached iface this request
+                                                         is received on. Used in 
+                                                         tag offload expected callbacks*/
                 } tag;
 
                 struct {

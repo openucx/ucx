@@ -36,6 +36,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                     ucp_request_t *req, uint16_t req_flags, ucp_tag_recv_callback_t cb,
                     ucp_recv_desc_t *rdesc, const char *debug_name)
 {
+    unsigned common_flags = UCP_REQUEST_FLAG_RECV | UCP_REQUEST_FLAG_EXPECTED;
     ucp_eager_first_hdr_t *eagerf_hdr;
     ucp_request_queue_t *req_queue;
     size_t hdr_len, recv_len;
@@ -76,8 +77,6 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     }
 
     /* Initialize receive request */
-    req->flags              = UCP_REQUEST_FLAG_RECV | UCP_REQUEST_FLAG_EXPECTED |
-                              req_flags;
     req->status             = UCS_OK;
     req->recv.worker        = worker;
     req->recv.buffer        = buffer;
@@ -85,6 +84,11 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 
     ucp_dt_recv_state_init(&req->recv.state, buffer, datatype, count);
 
+    if (!UCP_DT_IS_CONTIG(datatype)) {
+        common_flags       |= UCP_REQUEST_FLAG_BLOCK_OFFLOAD;
+    }
+
+    req->flags              = common_flags | req_flags;
     req->recv.length        = ucp_dt_length(datatype, count, buffer,
                                             &req->recv.state);
     req->recv.tag.tag       = tag;
@@ -99,11 +103,12 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
          * If was found but need this receive request for later completion, save it */
         req_queue = ucp_tag_exp_get_queue(&worker->tm, tag, tag_mask);
 
-        ucp_tag_exp_push(&worker->tm, req_queue, req);
-
         /* If offload supported, post this tag to transport as well.
          * TODO: need to distinguish the cases when posting is not needed. */
         ucp_tag_offload_try_post(worker, req, req_queue);
+
+        ucp_tag_exp_push(&worker->tm, req_queue, req);
+
         ucs_trace_req("%s returning expected request %p (%p)", debug_name, req,
                       req + 1);
         return;

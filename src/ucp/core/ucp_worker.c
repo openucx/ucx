@@ -701,6 +701,7 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     wiface->activate_count   = 0;
     wiface->check_events_id  = UCS_CALLBACKQ_ID_NULL;
     wiface->proxy_recv_count = 0;
+    wiface->post_count       = 0;
     wiface->flags            = 0;
 
     /* Read interface or md configuration */
