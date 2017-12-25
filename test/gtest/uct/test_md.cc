@@ -113,26 +113,25 @@ void test_md::check_caps(uint64_t flags, const std::string& name)
     }
 }
 
-void test_md::alloc_memory(void **address, size_t size, int fill, int mem_type)
+void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int mem_type)
 {
     if (mem_type == UCT_MD_MEM_TYPE_HOST) {
         *address = malloc(size);
         ASSERT_TRUE(*address != NULL);
-        memset(*address, fill, size);
+        if (fill_buffer) {
+            memcpy(*address, fill_buffer, size);
+        }
     } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
 #if HAVE_CUDA
-        void *temp;
-        cudaError_t ret;
+        cudaError_t cerr;
 
-        ret = cudaMalloc(address, size);
-        ASSERT_TRUE(ret == cudaSuccess);
+        cerr = cudaMalloc(address, size);
+        ASSERT_TRUE(cerr == cudaSuccess);
 
-        temp = malloc(size);
-        ASSERT_TRUE(temp != NULL);
-        memset(temp, fill, size);
-        ret = cudaMemcpy(*address, temp, size, cudaMemcpyHostToDevice);
-        ASSERT_TRUE(ret == cudaSuccess);
-        free(temp);
+        if(fill_buffer) {
+            cerr = cudaMemcpy(*address, fill_buffer, size, cudaMemcpyHostToDevice);
+            ASSERT_TRUE(cerr == cudaSuccess);
+        }
 #else
         std::stringstream ss;
         ss << "can't allocate cuda memory for " << GetParam();
@@ -141,20 +140,23 @@ void test_md::alloc_memory(void **address, size_t size, int fill, int mem_type)
     }
 }
 
-void test_md::check_memory(void *address, size_t pos, int expect, int mem_type)
+void test_md::check_memory(void *address, void *expect, size_t size, int mem_type)
 {
+    int ret;
     if (mem_type == UCT_MD_MEM_TYPE_HOST) {
-        EXPECT_EQ(expect, *((char*)address + pos));
+        ret = memcmp(address, expect, size);
+        EXPECT_EQ(0, ret);
     } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
 #if HAVE_CUDA
         void *temp;
-        cudaError_t ret;
+        cudaError_t cerr;
 
-        temp = malloc(1);
+        temp = malloc(size);
         ASSERT_TRUE(temp != NULL);
-        ret = cudaMemcpy(temp, (void *)((char *)address + pos), 1, cudaMemcpyDeviceToHost);
-        ASSERT_TRUE(ret == cudaSuccess);
-        EXPECT_EQ(expect, *((char *)temp));
+        cerr = cudaMemcpy(temp, address, size, cudaMemcpyDeviceToHost);
+        ASSERT_TRUE(cerr == cudaSuccess);
+        ret = memcmp(temp, expect, size);
+        EXPECT_EQ(0, ret);
         free(temp);
 #endif
     }
@@ -278,7 +280,7 @@ UCS_TEST_P(test_md, mem_type_owned) {
         UCS_TEST_SKIP_R("MD owns only host memory");
     }
 
-    alloc_memory(&address, 1024, 0xBB, md_attr.cap.mem_type);
+    alloc_memory(&address, 1024, NULL, md_attr.cap.mem_type);
 
     ret = uct_md_is_mem_type_owned(pd(), address, 1024);
     EXPECT_TRUE(ret > 0);
@@ -307,17 +309,20 @@ UCS_TEST_P(test_md, reg) {
                 continue;
             }
 
-            alloc_memory(&address, size, 0xBB, mem_type);
+            std::vector<char> fill_buffer(size, 0);
+            ucs::fill_random(fill_buffer);
+
+            alloc_memory(&address, size, &fill_buffer[0], mem_type);
 
             status = uct_md_mem_reg(pd(), address, size, UCT_MD_MEM_ACCESS_ALL, &memh);
 
             ASSERT_UCS_OK(status);
             ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
-            check_memory(address, size - 1, '\xBB', mem_type);
+            check_memory(address, &fill_buffer[0], size, mem_type);
 
             status = uct_md_mem_dereg(pd(), memh);
             ASSERT_UCS_OK(status);
-            check_memory(address, size - 1, '\xBB', mem_type);
+            check_memory(address, &fill_buffer[0], size, mem_type);
 
             free_memory(address, mem_type);
 
@@ -342,7 +347,7 @@ UCS_TEST_P(test_md, reg_perf) {
             continue;
         }
         for (size_t size = 4096; size <= 4 * 1024 * 1024; size *= 2) {
-            alloc_memory(&ptr, size, 0xBB, mem_type);
+            alloc_memory(&ptr, size, NULL, mem_type);
 
             ucs_time_t start_time = ucs_get_time();
             ucs_time_t end_time = start_time;
