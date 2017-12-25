@@ -390,11 +390,11 @@ static void ucp_ep_ext_stream_cleanup(ucp_ep_h ep)
     }
 }
 
-static void ucp_ep_disconnected(ucp_ep_h ep)
+static void ucp_ep_disconnected(ucp_ep_h ep, int force)
 {
     ucp_ep_ext_stream_cleanup(ep);
 
-    if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
+    if ((ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) && !force) {
         /* Endpoints which have remote connection are destroyed only when the
          * worker is destroyed, to enable remote endpoints keep sending
          * TODO negotiate disconnect.
@@ -413,7 +413,8 @@ static unsigned ucp_ep_do_disconnect(void *arg)
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
-    ucp_ep_disconnected(req->send.ep);
+    ucp_ep_disconnected(req->send.ep, req->send.flush.uct_flags &
+                                      UCT_FLUSH_FLAG_CANCEL);
 
     /* Complete send request from here, to avoid releasing the request while
      * slow-path element is still pending */
@@ -456,7 +457,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
                                     NULL, 0,
                                     ucp_ep_close_flushed_callback);
     if (!UCS_PTR_IS_PTR(request)) {
-        ucp_ep_disconnected(ep);
+        ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
