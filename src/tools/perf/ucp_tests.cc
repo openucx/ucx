@@ -260,10 +260,9 @@ public:
         case UCX_PERF_CMD_STREAM:
             if (FLAGS & UCX_PERF_TEST_FLAG_STREAM_RECV_DATA) {
                 return recv_stream_data(ep, length, datatype, sn);
-            } else if (FLAGS & UCX_PERF_TEST_FLAG_STREAM_RECV) {
+            } else {
                 return recv_stream(ep, buffer, length, datatype, sn);
             }
-            return UCS_ERR_INVALID_PARAM;
         default:
             return UCS_ERR_INVALID_PARAM;
         }
@@ -489,11 +488,11 @@ private:
 
 #define TEST_CASE_ALL_STREAM(_perf, _case) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
-              UCX_PERF_TEST_FLAG_STREAM_RECV_DATA, \
+              0, \
               UCX_PERF_TEST_FLAG_STREAM_RECV_DATA) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
-              UCX_PERF_TEST_FLAG_STREAM_RECV, \
-              UCX_PERF_TEST_FLAG_STREAM_RECV)
+              UCX_PERF_TEST_FLAG_STREAM_RECV_DATA, \
+              UCX_PERF_TEST_FLAG_STREAM_RECV_DATA)
 
 #define TEST_CASE_ALL_TAG(_perf, _case) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \

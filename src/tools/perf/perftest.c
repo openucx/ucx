@@ -463,8 +463,7 @@ static void init_test_params(ucx_perf_params_t *params)
     params->max_iter        = 1000000l;
     params->max_time        = 0.0;
     params->report_interval = 1.0;
-    params->flags           = UCX_PERF_TEST_FLAG_VERBOSE |
-                              UCX_PERF_TEST_FLAG_STREAM_RECV;
+    params->flags           = UCX_PERF_TEST_FLAG_VERBOSE;
     params->uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
     params->uct.data_layout = UCT_PERF_DATA_LAYOUT_SHORT;
     params->msg_size_cnt    = 1;
@@ -594,12 +593,10 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         }
     case 'r':
         if (!strcmp(optarg, "recv_data")) {
-            params->flags &= ~UCX_PERF_TEST_FLAG_STREAM_RECV;
             params->flags |= UCX_PERF_TEST_FLAG_STREAM_RECV_DATA;
             return UCS_OK;
         } else if (!strcmp(optarg, "recv")) {
             params->flags &= ~UCX_PERF_TEST_FLAG_STREAM_RECV_DATA;
-            params->flags |= UCX_PERF_TEST_FLAG_STREAM_RECV;
             return UCS_OK;
         }
         return UCS_ERR_INVALID_PARAM;
