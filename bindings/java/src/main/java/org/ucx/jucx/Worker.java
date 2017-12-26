@@ -63,7 +63,7 @@ public class Worker implements Closeable {
             throw new IOException("Failed to create Worker");
         }
 
-        // Allign Java side shared queue operations endianness to be as
+        // align Java side shared queue operations endianness to be as
         // allocated in native (C) code, in nativeCreateWorker()
         this.compQueue.setEndianness();
     }
