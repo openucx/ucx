@@ -28,6 +28,9 @@ protected:
     virtual void modify_config(const std::string& name, const std::string& value,
                                bool optional);
     void check_caps(uint64_t flags, const std::string& name);
+    void alloc_memory(void **address, size_t size, char *fill, int mem_type);
+    void check_memory(void *address, void *expect, size_t size, int mem_type);
+    void free_memory(void *address, int mem_type);
 
     void test_registration();
 
@@ -36,6 +39,7 @@ protected:
     }
 
     static void* alloc_thread(void *arg);
+    static std::string const mem_types[];
 
 private:
     ucs::handle<uct_md_config_t*> m_md_config;

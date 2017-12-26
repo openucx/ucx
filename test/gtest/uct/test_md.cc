@@ -19,6 +19,13 @@ extern "C" {
 #include <net/if.h>
 
 
+#if HAVE_CUDA
+#include <cuda.h>
+#include <cuda_runtime.h>
+#endif
+
+std::string const test_md::mem_types[] = {"host", "cuda"};
+
 void* test_md::alloc_thread(void *arg)
 {
     volatile int *stop_flag = (int*)arg;
@@ -103,6 +110,66 @@ void test_md::check_caps(uint64_t flags, const std::string& name)
         std::stringstream ss;
         ss << name << " is not supported by " << GetParam();
         UCS_TEST_SKIP_R(ss.str());
+    }
+}
+
+void test_md::alloc_memory(void **address, size_t size, char *fill_buffer, int mem_type)
+{
+    if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+        *address = malloc(size);
+        ASSERT_TRUE(*address != NULL);
+        if (fill_buffer) {
+            memcpy(*address, fill_buffer, size);
+        }
+    } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
+#if HAVE_CUDA
+        cudaError_t cerr;
+
+        cerr = cudaMalloc(address, size);
+        ASSERT_TRUE(cerr == cudaSuccess);
+
+        if(fill_buffer) {
+            cerr = cudaMemcpy(*address, fill_buffer, size, cudaMemcpyHostToDevice);
+            ASSERT_TRUE(cerr == cudaSuccess);
+        }
+#else
+        std::stringstream ss;
+        ss << "can't allocate cuda memory for " << GetParam();
+        UCS_TEST_SKIP_R(ss.str());
+#endif
+    }
+}
+
+void test_md::check_memory(void *address, void *expect, size_t size, int mem_type)
+{
+    int ret;
+    if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+        ret = memcmp(address, expect, size);
+        EXPECT_EQ(0, ret);
+    } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
+#if HAVE_CUDA
+        void *temp;
+        cudaError_t cerr;
+
+        temp = malloc(size);
+        ASSERT_TRUE(temp != NULL);
+        cerr = cudaMemcpy(temp, address, size, cudaMemcpyDeviceToHost);
+        ASSERT_TRUE(cerr == cudaSuccess);
+        ret = memcmp(temp, expect, size);
+        EXPECT_EQ(0, ret);
+        free(temp);
+#endif
+    }
+}
+
+void test_md::free_memory(void *address, int mem_type)
+{
+    if (mem_type == UCT_MD_MEM_TYPE_HOST) {
+        free(address);
+    } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
+#if HAVE_CUDA
+        cudaFree(address);
+#endif
     }
 }
 
@@ -199,78 +266,117 @@ UCS_TEST_P(test_md, alloc) {
     }
 }
 
+UCS_TEST_P(test_md, mem_type_owned) {
+
+    uct_md_attr_t md_attr;
+    ucs_status_t status;
+    int ret;
+    void *address;
+
+    status = uct_md_query(pd(), &md_attr);
+    ASSERT_UCS_OK(status);
+
+    if (md_attr.cap.mem_type == UCT_MD_MEM_TYPE_HOST) {
+        UCS_TEST_SKIP_R("MD owns only host memory");
+    }
+
+    alloc_memory(&address, 1024, NULL, md_attr.cap.mem_type);
+
+    ret = uct_md_is_mem_type_owned(pd(), address, 1024);
+    EXPECT_TRUE(ret > 0);
+}
+
 UCS_TEST_P(test_md, reg) {
     size_t size;
+    uct_md_attr_t md_attr;
     ucs_status_t status;
     void *address;
     uct_mem_h memh;
 
     check_caps(UCT_MD_FLAG_REG, "registration");
 
-    for (unsigned i = 0; i < 300; ++i) {
-        size = ucs::rand() % 65536;
-        if (size == 0) {
+    status = uct_md_query(pd(), &md_attr);
+    ASSERT_UCS_OK(status);
+    for (unsigned mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+        if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
+            UCS_TEST_MESSAGE << mem_types[mem_type] << " memory "
+                             << "registration is not supported by " << GetParam();
             continue;
         }
+        for (unsigned i = 0; i < 300; ++i) {
+            size = ucs::rand() % 65536;
+            if (size == 0) {
+                continue;
+            }
 
-        address = malloc(size);
-        ASSERT_TRUE(address != NULL);
+            std::vector<char> fill_buffer(size, 0);
+            ucs::fill_random(fill_buffer);
 
-        memset(address, 0xBB, size);
+            alloc_memory(&address, size, &fill_buffer[0], mem_type);
 
-        status = uct_md_mem_reg(pd(), address, size, UCT_MD_MEM_ACCESS_ALL,
-                                &memh);
+            status = uct_md_mem_reg(pd(), address, size, UCT_MD_MEM_ACCESS_ALL, &memh);
 
-        ASSERT_UCS_OK(status);
-        ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
-        EXPECT_EQ('\xBB', *((char*)address + size - 1));
+            ASSERT_UCS_OK(status);
+            ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
+            check_memory(address, &fill_buffer[0], size, mem_type);
 
-        status = uct_md_mem_dereg(pd(), memh);
-        ASSERT_UCS_OK(status);
-        EXPECT_EQ('\xBB', *((char*)address + size - 1));
+            status = uct_md_mem_dereg(pd(), memh);
+            ASSERT_UCS_OK(status);
+            check_memory(address, &fill_buffer[0], size, mem_type);
 
-        free(address);
+            free_memory(address, mem_type);
+
+        }
     }
 }
 
 UCS_TEST_P(test_md, reg_perf) {
     static const unsigned count = 10000;
     ucs_status_t status;
+    uct_md_attr_t md_attr;
+    void *ptr;
 
     check_caps(UCT_MD_FLAG_REG, "registration");
 
-    for (size_t size = 4096; size <= 4 * 1024 * 1024; size *= 2) {
-        void *ptr = malloc(size);
-        ASSERT_TRUE(ptr != NULL);
-        memset(ptr, 0xBB, size);
-
-        ucs_time_t start_time = ucs_get_time();
-        ucs_time_t end_time = start_time;
-
-        unsigned n = 0;
-        while (n < count) {
-            uct_mem_h memh;
-            status = uct_md_mem_reg(pd(), ptr, size, UCT_MD_MEM_ACCESS_ALL,
-                                    &memh);
-            ASSERT_UCS_OK(status);
-            ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
-
-            status = uct_md_mem_dereg(pd(), memh);
-            ASSERT_UCS_OK(status);
-
-            ++n;
-            end_time = ucs_get_time();
-
-            if (end_time - start_time > ucs_time_from_sec(1.0)) {
-                break;
-            }
+    status = uct_md_query(pd(), &md_attr);
+    ASSERT_UCS_OK(status);
+    for (unsigned mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+        if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
+            UCS_TEST_MESSAGE << mem_types[mem_type] << " memory "
+                             << " registration is not supported by " << GetParam();
+            continue;
         }
+        for (size_t size = 4096; size <= 4 * 1024 * 1024; size *= 2) {
+            alloc_memory(&ptr, size, NULL, mem_type);
 
-        UCS_TEST_MESSAGE << GetParam() << ": Registration time for " <<
-                        size << " bytes: " <<
-                        long(ucs_time_to_nsec(end_time - start_time) / n) << " ns";
+            ucs_time_t start_time = ucs_get_time();
+            ucs_time_t end_time = start_time;
 
-        free(ptr);
+            unsigned n = 0;
+            while (n < count) {
+                uct_mem_h memh;
+                status = uct_md_mem_reg(pd(), ptr, size, UCT_MD_MEM_ACCESS_ALL,
+                        &memh);
+                ASSERT_UCS_OK(status);
+                ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
+
+                status = uct_md_mem_dereg(pd(), memh);
+                ASSERT_UCS_OK(status);
+
+                ++n;
+                end_time = ucs_get_time();
+
+                if (end_time - start_time > ucs_time_from_sec(1.0)) {
+                    break;
+                }
+            }
+
+            UCS_TEST_MESSAGE << GetParam() << ": Registration time for " <<
+                mem_types[mem_type] << " memory " << size << " bytes: " <<
+                long(ucs_time_to_nsec(end_time - start_time) / n) << " ns";
+
+            free_memory(ptr, mem_type);
+        }
     }
 }
 
@@ -332,8 +438,16 @@ UCS_TEST_P(test_md, alloc_advise) {
  */
 UCS_TEST_P(test_md, reg_multi_thread) {
     ucs_status_t status;
+    uct_md_attr_t md_attr;
 
     check_caps(UCT_MD_FLAG_REG, "registration");
+
+    status = uct_md_query(pd(), &md_attr);
+    ASSERT_UCS_OK(status);
+
+    if (!(md_attr.cap.reg_mem_types & UCS_BIT(UCT_MD_MEM_TYPE_HOST))) {
+        UCS_TEST_SKIP_R("not host memory type");
+    }
 
     pthread_t thread_id;
     int stop_flag = 0;
@@ -413,7 +527,7 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
                    posix, \
                    sysv, \
                    xpmem, \
-                   cuda, \
+                   cuda_cpy, \
                    rocm, \
                    ib, \
                    ugni, \

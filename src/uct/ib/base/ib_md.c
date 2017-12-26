@@ -152,8 +152,15 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
                              UCT_MD_FLAG_NEED_MEMH |
                              UCT_MD_FLAG_NEED_RKEY |
                              UCT_MD_FLAG_ADVISE;
-    md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST) |
-                                 UCS_BIT(UCT_MD_MEM_TYPE_CUDA);
+    md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+
+#if HAVE_CUDA
+    /* check if GDR driver is loaded */
+    if (!access("/sys/kernel/mm/memory_peers/nv_mem/version", F_OK)) {
+        md_attr->cap.reg_mem_types |= UCS_BIT(UCT_MD_MEM_TYPE_CUDA);
+    }
+#endif
+
     md_attr->cap.mem_type  = UCT_MD_MEM_TYPE_HOST;
     md_attr->rkey_packed_size = sizeof(uint64_t);
 
