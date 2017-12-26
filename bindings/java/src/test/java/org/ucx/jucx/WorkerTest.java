@@ -60,7 +60,7 @@ public class WorkerTest {
                 workerAddress != null &&
                 workerAddress.length > 0);
 
-        if (nativeId <= 0 ||workerAddress == null ||
+        if (nativeId <= 0 || workerAddress == null ||
                 workerAddress.length == 0) {
             fail("Worker fields initialization failed");
         }

@@ -63,7 +63,8 @@ public class Worker implements Closeable {
             throw new IOException("Failed to create Worker");
         }
 
-        // Setting shared queue endianness to be the same as native (C) code
+        // Allign Java side shared queue operations endianness to be as
+        // allocated in native (C) code, in nativeCreateWorker()
         this.compQueue.setEndianness();
     }
 
@@ -72,7 +73,7 @@ public class Worker implements Closeable {
      *
      * @return long integer representing native pointer
      */
-    public long getNativeId() {
+    long getNativeId() {
         return nativeId;
     }
 
@@ -91,8 +92,8 @@ public class Worker implements Closeable {
      */
     @Override
     public void close() {
-        Bridge.releaseWorker(this);
         closed = true;
+        Bridge.releaseWorker(this);
     }
 
     /**
