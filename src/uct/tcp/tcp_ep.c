@@ -151,6 +151,7 @@ void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, uint32_t add, uint32_t remove)
 
 static unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
 {
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_tcp_iface_t);
     size_t send_length;
     ucs_status_t status;
 
@@ -164,7 +165,8 @@ static unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
 
     ucs_trace_data("tcp_ep %p: sent %zu bytes", ep, send_length);
 
-    ep->offset += send_length;
+    iface->outstanding -= send_length;
+    ep->offset         += send_length;
     if (ep->offset == ep->length) {
         ep->offset = 0;
         ep->length = 0;
@@ -186,7 +188,8 @@ unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
 
     uct_pending_queue_dispatch(priv, &ep->pending_q, uct_tcp_ep_can_send(ep));
 
-    if (uct_tcp_ep_can_send(ep) && ucs_queue_is_empty(&ep->pending_q)) {
+    if (uct_tcp_ep_can_send(ep)) {
+        ucs_assert(ucs_queue_is_empty(&ep->pending_q));
         uct_tcp_ep_mod_events(ep, 0, EPOLLOUT);
     }
 
@@ -272,6 +275,7 @@ ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
     UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, hdr->length);
     uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, hdr->am_id,
                        hdr + 1, hdr->length, "SEND fd %d", ep->fd);
+    iface->outstanding += ep->length;
 
     uct_tcp_ep_send(ep);
     if (ep->length > 0) {
@@ -306,10 +310,11 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
 {
     uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
 
-    if (!uct_tcp_ep_can_send(ep) || !ucs_queue_is_empty(&ep->pending_q)) {
+    if (!uct_tcp_ep_can_send(ep)) {
         return UCS_ERR_NO_RESOURCE;
     }
 
+    ucs_assert(ucs_queue_is_empty(&ep->pending_q));
     UCT_TL_EP_STAT_FLUSH(&ep->super);
     return UCS_OK;
 }

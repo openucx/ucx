@@ -383,7 +383,6 @@ typedef struct {
         _status = _req->func(_req); \
         if (_status != UCS_OK) { \
             ucs_queue_push_head(_queue, &_base_priv->queue); \
-            break; \
         } \
     }
 
