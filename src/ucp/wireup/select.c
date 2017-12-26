@@ -491,6 +491,11 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
         snprintf(title, sizeof(title), criteria->title, "allocated");
         mem_criteria.title           = title;
         mem_criteria.remote_md_flags = UCT_MD_FLAG_ALLOC | criteria->remote_md_flags;
+    } else if (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SHM) {
+        /* special case for SHM: do not try to lookup additional lanes when
+         * SHM transport detected (another transport will be significantly
+         * slower) */
+        goto out_free_address_list;
     }
 
     while (address_count > 0) {
