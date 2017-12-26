@@ -23,8 +23,10 @@
 enum {
     /* The flag indicates that the resource may be used for auxiliary
      * wireup communications only */
-    UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
-
+    UCP_TL_RSC_FLAG_AUX      = UCS_BIT(0),
+    /* The flag indicates that the resource may be used for client-server
+     * connection establishment with a sockaddr */
+    UCP_TL_RSC_FLAG_SOCKADDR = UCS_BIT(1)
 };
 
 
@@ -77,6 +79,8 @@ struct ucp_config {
     ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
     ucs_config_names_array_t               tls;
+    /** Array of sockaddr transport names to use */
+    ucs_config_names_array_t               sockaddr_tls;
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Configuration saved directly in the context */

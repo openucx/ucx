@@ -88,6 +88,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                    const ucp_address_entry_t *address_list,
                                    uint8_t *addr_indices);
 
+void ucp_ep_cleanup_lanes(ucp_ep_h ep);
+
 ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                      unsigned address_count,
                                      const ucp_address_entry_t *address_list,
@@ -99,7 +101,10 @@ ucs_status_t ucp_signaling_ep_create(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
 static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return !(worker->ifaces[rsc_index].attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
+    uint64_t flags = worker->ifaces[rsc_index].attr.cap.flags;
+
+    return (flags & UCT_IFACE_FLAG_CONNECT_TO_EP) &&
+           !(flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
 }
 
 

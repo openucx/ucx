@@ -240,7 +240,7 @@ typedef struct ucp_ep {
     /* TODO allocate ep dynamically according to number of lanes */
     uct_ep_h                      uct_eps[UCP_MAX_LANES]; /* Transports for every lane */
 
-    /* Feature specific extentions allocated on demand */
+    /* Feature specific extensions allocated on demand */
     struct {
         ucp_ep_ext_stream_t       *stream;      /* UCP_FEATURE_STREAM */
     } ext;
@@ -249,6 +249,8 @@ typedef struct ucp_ep {
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
 
+void ucp_ep_add_to_hash(ucp_ep_h ep, uint64_t dest_uuid);
+
 void ucp_ep_config_lane_info_str(ucp_context_h context,
                                  const ucp_ep_config_key_t *key,
                                  const uint8_t *addr_indices,
@@ -256,17 +258,20 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
                                  ucp_rsc_index_t aux_rsc_index,
                                  char *buf, size_t max);
 
-ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
-                        const char *peer_name, const char *message,
-                        ucp_ep_h *ep_p);
+ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
+                        const char *message, ucp_ep_h *ep_p);
+
+void ucp_ep_delete(ucp_ep_h ep);
 
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_send_callback_t req_cb,
                                        unsigned req_flags,
                                        ucp_request_callback_t flushed_cb);
 
-ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
-                                const char *message, ucp_ep_h *ep_p);
+void ucp_ep_config_key_set_params(ucp_ep_config_key_t *key,
+                                  const ucp_ep_params_t *params);
+
+ucs_status_t ucp_ep_init_stub(ucp_ep_h ep, const ucp_ep_params_t *params);
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
 

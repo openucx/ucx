@@ -1416,8 +1416,16 @@ ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid)
 
     ep = ucp_worker_ep_find(worker, dest_uuid);
     if (ep == NULL) {
-        status = ucp_ep_create_stub(worker, dest_uuid, "for-sending-reply", &ep);
+        status = ucp_ep_new(worker, "??", "for-sending-reply", &ep);
         if (status != UCS_OK) {
+            goto err;
+        }
+
+        ucp_ep_add_to_hash(ep, dest_uuid);
+
+        status = ucp_ep_init_stub(ep, NULL);
+        if (status != UCS_OK) {
+            ucp_ep_delete(ep);
             goto err;
         }
     } else {
