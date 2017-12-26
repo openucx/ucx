@@ -412,6 +412,23 @@ static int ucp_wireup_compare_lane_amo_score(const void *elem1, const void *elem
     return UCP_WIREUP_COMPARE_SCORE(elem1, elem2, arg, amo);
 }
 
+static uint64_t ucp_wireup_unset_tl_by_md(ucp_ep_h ep, uint64_t tl_bitmap,
+                                          ucp_rsc_index_t rsc_index)
+{
+    ucp_context_h context    = ep->worker->context;
+    ucp_rsc_index_t md_index = context->tl_rscs[rsc_index].md_index;
+    ucp_rsc_index_t i;
+
+    for (i = 0; i < context->num_tls; i++) {
+        if (context->tl_rscs[i].md_index == md_index) {
+            tl_bitmap &= ~UCS_BIT(i);
+        }
+    }
+
+    return tl_bitmap;
+}
+
+
 static UCS_F_NOINLINE ucs_status_t
 ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
                                const ucp_address_entry_t *address_list,
@@ -463,15 +480,18 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
     ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                              dst_md_index, score, usage, 0);
     remote_md_map &= ~UCS_BIT(dst_md_index);
+    tl_bitmap = ucp_wireup_unset_tl_by_md(ep, tl_bitmap, rsc_index);
 
     /* Select additional transports which can access allocated memory, but only
      * if their scores are better. We need this because a remote memory block can
      * be potentially allocated using one of them, and we might get better performance
      * than the transports which support only registered remote memory.
      */
-    snprintf(title, sizeof(title), criteria->title, "allocated");
-    mem_criteria.title           = title;
-    mem_criteria.remote_md_flags = UCT_MD_FLAG_ALLOC | criteria->remote_md_flags;
+    if (select_best) {
+        snprintf(title, sizeof(title), criteria->title, "allocated");
+        mem_criteria.title           = title;
+        mem_criteria.remote_md_flags = UCT_MD_FLAG_ALLOC | criteria->remote_md_flags;
+    }
 
     while (address_count > 0) {
         status = ucp_wireup_select_transport(ep, address_list_copy, address_count,
@@ -487,6 +507,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
         ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                                  dst_md_index, score, usage, 0);
         remote_md_map &= ~UCS_BIT(dst_md_index);
+        tl_bitmap = ucp_wireup_unset_tl_by_md(ep, tl_bitmap, rsc_index);
     }
 
     status = UCS_OK;
