@@ -127,6 +127,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 
                 ucs_assert(memh != UCT_MEM_HANDLE_NULL);
                 mem->md   = md;
+                mem->mem_type = md_attr.cap.mem_type;
                 mem->memh = memh;
                 goto allocated;
 
@@ -224,8 +225,9 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
     return UCS_ERR_NO_MEMORY;
 
 allocated_without_md:
-    mem->md      = NULL;
-    mem->memh    = UCT_MEM_HANDLE_NULL;
+    mem->md       = NULL;
+    mem->mem_type = UCT_MD_MEM_TYPE_HOST;
+    mem->memh     = UCT_MEM_HANDLE_NULL;
 allocated:
     ucs_trace("allocated %zu bytes at %p using %s", alloc_length, address,
               (mem->md == NULL) ? uct_alloc_method_names[*method]
@@ -283,7 +285,8 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned f
         }
 
         /* If MD does not support registration, allow only the MD method */
-        if (md_attr.cap.flags & UCT_MD_FLAG_REG) {
+        if ((md_attr.cap.flags & UCT_MD_FLAG_REG) &&
+            (md_attr.cap.reg_mem_types & UCS_BIT(mem->mem_type))) {
             status = uct_md_mem_reg(iface->md, mem->address, mem->length, flags,
                                     &mem->memh);
             if (status != UCS_OK) {
