@@ -112,6 +112,29 @@ ucp_request_complete_stream_recv(ucp_request_t *req,
     ucp_request_complete(req, recv.stream.cb, status, req->recv.stream.length);
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_request_can_complete_stream_recv(ucp_request_t *req)
+{
+    /* NOTE: first check is needed to avoid heavy "%" operation if request is
+     *       completely filled */
+    if (req->recv.state.offset == req->recv.length) {
+        return 1;
+    }
+
+    /* 0-length stream recv is meaningless if this was not requested explicitely */
+    if (req->recv.state.offset == 0) {
+        return 0;
+    }
+
+    if (ucs_likely(UCP_DT_IS_CONTIG(req->recv.datatype))) {
+        return req->recv.state.offset %
+               ucp_contig_dt_elem_size(req->recv.datatype) == 0;
+    }
+
+    /* Currently, all data types except contig has granularity 1 byte */
+    return 1;
+}
+
 /*
  * @return Whether completed.
  *         *req_status if filled with the completion status if completed.
@@ -177,37 +200,6 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
         dt = ucp_dt_generic(req->recv.datatype);
         ucs_assert(NULL != dt);
         dt->ops.finish(req->recv.state.dt.generic.state);
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_request_recv_state_init(ucp_request_t *req, void *buffer, ucp_datatype_t dt,
-                            size_t dt_count)
-{
-    ucp_dt_generic_t *dt_gen;
-
-    req->recv.state.offset = 0;
-
-    switch (dt & UCP_DATATYPE_CLASS_MASK) {
-    case UCP_DATATYPE_CONTIG:
-        req->recv.state.dt.contig.md_map     = 0;
-        break;
-   case UCP_DATATYPE_IOV:
-        req->recv.state.dt.iov.iov_offset    = 0;
-        req->recv.state.dt.iov.iovcnt_offset = 0;
-        req->recv.state.dt.iov.iovcnt        = dt_count;
-        req->recv.state.dt.iov.dt_reg        = NULL;
-        break;
-    case UCP_DATATYPE_GENERIC:
-        dt_gen = ucp_dt_generic(dt);
-        req->recv.state.dt.generic.state =
-            UCS_PROFILE_NAMED_CALL("dt_start", dt_gen->ops.start_unpack,
-                                   dt_gen->context, buffer, dt_count);
-        ucs_trace_req("req %p buffer %p count %zu dt_gen state=%p", req, buffer,
-                      dt_count, req->recv.state.dt.generic.state);
-        break;
-    default:
-        break;
     }
 }
 

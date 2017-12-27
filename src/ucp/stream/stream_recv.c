@@ -77,15 +77,13 @@ ucp_stream_rdesc_dequeue(ucp_ep_ext_stream_t *ep_stream)
 }
 
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t *
-ucp_stream_recv_data_nb_internal(ucp_ep_ext_stream_t *ep_stream, int dequeue)
+ucp_stream_rdesc_get(ucp_ep_ext_stream_t *ep_stream)
 {
-    ucp_recv_desc_t *rdesc;
+    ucp_recv_desc_t *rdesc = ucs_queue_head_elem_non_empty(&ep_stream->match_q,
+                                                           ucp_recv_desc_t,
+                                                           stream_queue);
 
     ucs_assert(ep_stream->flags & UCP_EP_STREAM_FLAG_HAS_DATA);
-
-    rdesc = dequeue ? ucp_stream_rdesc_dequeue(ep_stream) :
-            ucs_queue_head_elem_non_empty(&ep_stream->match_q, ucp_recv_desc_t,
-                                          stream_queue);
     ucs_trace_data("ep %p, rdesc %p with %u stream bytes",
                    ep_stream->ucp_ep, rdesc, rdesc->length);
 
@@ -105,7 +103,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb,
         return UCS_STATUS_PTR(UCS_OK);
     }
 
-    rdesc = ucp_stream_recv_data_nb_internal(ep->ext.stream, 1);
+    rdesc = ucp_stream_rdesc_dequeue(ep->ext.stream);
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
 
@@ -173,13 +171,39 @@ ucp_stream_rdata_unpack(const void *rdata, size_t length, ucp_request_t *dst_req
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_stream_rdesc_advance(ucp_recv_desc_t *rdesc, size_t offset)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_stream_rdesc_advance(ucp_recv_desc_t *rdesc, ssize_t offset,
+                         ucp_ep_ext_stream_t *ep)
 {
-    ucs_assert(offset < rdesc->length);
+    ucs_assert(offset <= rdesc->length);
 
-    rdesc->length         -= offset;
-    rdesc->payload_offset += offset;
+    if (ucs_unlikely(offset < 0)) {
+        return offset;
+    } else if (ucs_likely(offset == rdesc->length)) {
+        ucp_stream_rdesc_dequeue_and_release(rdesc, ep);
+    } else {
+        rdesc->length         -= offset;
+        rdesc->payload_offset += offset;
+    }
+
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_stream_process_rdesc_inplace(ucp_recv_desc_t *rdesc, ucp_datatype_t dt,
+                                 void *buffer, size_t length,
+                                 ucp_ep_ext_stream_t *ep_stream,
+                                 ucp_dt_state_t *state)
+{
+    ucs_status_t status;
+    ssize_t unpacked;
+
+    status   = ucp_dt_unpack(dt, buffer, length, state,
+                             ucp_stream_rdesc_payload(rdesc), length,
+                             UCP_RECV_DESC_FLAG_LAST);
+    unpacked = ucs_likely(status == UCS_OK) ? length : status;
+
+    return ucp_stream_rdesc_advance(rdesc, unpacked, ep_stream);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -190,33 +214,33 @@ ucp_stream_process_rdesc(ucp_recv_desc_t *rdesc, ucp_ep_ext_stream_t *ep_stream,
 
     unpacked = ucp_stream_rdata_unpack(ucp_stream_rdesc_payload(rdesc),
                                        rdesc->length, req);
-    if (ucs_unlikely(unpacked < 0)) {
-        return unpacked;
-    } else if (ucs_likely(unpacked == rdesc->length)) {
-        ucp_stream_rdesc_dequeue_and_release(rdesc, ep_stream);
-    } else {
-        ucp_stream_rdesc_advance(rdesc, unpacked);
-    }
-
     ucs_assert(req->recv.state.offset <= req->recv.length);
-    return UCS_OK;
+
+    return ucp_stream_rdesc_advance(rdesc, unpacked, ep_stream);
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_stream_recv_request_init(ucp_request_t *req, void *buffer, size_t count,
-                             ucp_datatype_t datatype,
+                             size_t length, ucp_datatype_t datatype,
                              ucp_stream_recv_callback_t cb)
 {
-    req->flags = UCP_REQUEST_FLAG_CALLBACK | UCP_REQUEST_FLAG_STREAM_RECV;
+    req->flags              = UCP_REQUEST_FLAG_CALLBACK |
+                              UCP_REQUEST_FLAG_STREAM_RECV;
     req->recv.stream.cb     = cb;
     req->recv.stream.length = 0;
 
     req->recv.buffer   = buffer;
     req->recv.datatype = datatype;
-    req->recv.length   = ucp_dt_length(datatype, count, buffer,
-                                       &req->recv.state);
+    req->recv.length   = length;
 
-    ucp_request_recv_state_init(req, buffer, datatype, count);
+    ucp_dt_recv_state_init(&req->recv.state, buffer, datatype, count);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_stream_recv_nb_is_inplace(ucp_ep_ext_stream_t *ep, size_t dt_length)
+{
+    return (ep->flags & UCP_EP_STREAM_FLAG_HAS_DATA) &&
+           (ucp_stream_rdesc_get(ep)->length >= dt_length);
 }
 
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
@@ -225,59 +249,70 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
                  ucp_datatype_t datatype, ucp_stream_recv_callback_t cb,
                  size_t *length, unsigned flags)
 {
+    ucs_status_t        status     = UCS_OK;
     ucp_ep_ext_stream_t *ep_stream = ep->ext.stream;
-    ucp_request_t       tmp_req;
+    size_t              dt_length;
     ucp_request_t       *req;
     ucs_status_ptr_t    rdesc;
-    ucs_status_t        status;
+    ucp_dt_state_t      dt_state;
 
     if (UCP_DT_IS_GENERIC(datatype)) {
         ucs_error("ucp_stream_recv_nb doesn't support generic datatype");
         return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
     }
 
+    dt_length = ucp_dt_length(datatype, count, buffer, &dt_state);
+
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
-    if (ucs_unlikely(!(ep_stream->flags & UCP_EP_STREAM_FLAG_HAS_DATA))) {
-        /* No data, enqueue request and out */
-        req = ucp_request_get(ep->worker);
-        if (ucs_unlikely(req == NULL)) {
-            req = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-            goto out;
-        }
-        ucp_stream_recv_request_init(req, buffer, count, datatype, cb);
-        ucs_queue_push(&ep_stream->match_q, &req->recv.queue);
-        goto ptr_out;
+    if (ucs_likely(ucp_stream_recv_nb_is_inplace(ep_stream, dt_length))) {
+        ucp_dt_recv_state_init(&dt_state, buffer, datatype, count);
+        status = ucp_stream_process_rdesc_inplace(ucp_stream_rdesc_get(ep_stream),
+                                                  datatype, buffer, dt_length,
+                                                  ep_stream, &dt_state);
+        *length = dt_length;
+        goto out_status;
     }
 
-    /* We can complete request in place, use tmp request on stack */
-    req = &tmp_req;
-    ucp_stream_recv_request_init(req, buffer, count, datatype, cb);
+    req = ucp_request_get(ep->worker);
+    if (ucs_unlikely(req == NULL)) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_status;
+    }
+
+    ucp_stream_recv_request_init(req, buffer, count, dt_length, datatype, cb);
 
     /* OK, lets obtain all arrived data which matches the recv size */
-    do {
-        rdesc  = ucp_stream_recv_data_nb_internal(ep_stream, 0);
+    while ((req->recv.state.offset < req->recv.length) &&
+           (ep_stream->flags & UCP_EP_STREAM_FLAG_HAS_DATA)) {
+
+        rdesc  = ucp_stream_rdesc_get(ep_stream);
         status = ucp_stream_process_rdesc(rdesc, ep_stream, req);
         if (ucs_unlikely(status != UCS_OK)) {
-            req = UCS_STATUS_PTR(status);
-            goto out;
+            goto out_put_request;
         }
-    } while ((req->recv.state.offset < req->recv.length) &&
-             (ep_stream->flags & UCP_EP_STREAM_FLAG_HAS_DATA));
+    }
 
-    ucs_assert(req->recv.state.offset >  0);
     ucs_assert(req->recv.state.offset <= req->recv.length);
-    *length = req->recv.state.offset;
-    req = UCS_STATUS_PTR(UCS_OK);
+
+    if (ucp_request_can_complete_stream_recv(req)) {
+        *length = req->recv.state.offset;
+    } else {
+        ucs_assert(!(ep_stream->flags & UCP_EP_STREAM_FLAG_HAS_DATA));
+        ucs_queue_push(&ep_stream->match_q, &req->recv.queue);
+        req += 1;
+        goto out;
+    }
+
+out_put_request:
+    ucp_request_put(req);
+
+out_status:
+    req = UCS_STATUS_PTR(status);
 
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return req;
-
-ptr_out:
-    ucs_assert(UCS_PTR_IS_PTR(req));
-    req += 1;
-    goto out;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -307,11 +342,14 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_stream_t *ep,
                 ucs_fatal("failed to unpack from am_data %p with offset %u to request %p",
                           am_data, rdesc_tmp.payload_offset, req);
             } else if (unpacked == rdesc_tmp.length) {
-                ucp_request_complete_stream_recv(req, ep, UCS_OK);
+                if (ucp_request_can_complete_stream_recv(req)) {
+                    ucp_request_complete_stream_recv(req, ep, UCS_OK);
+                }
                 return UCS_OK;
             }
-            ucp_stream_rdesc_advance(&rdesc_tmp, unpacked);
+            ucp_stream_rdesc_advance(&rdesc_tmp, unpacked, ep);
             /* This request is full, try next one */
+            ucs_assert(ucp_request_can_complete_stream_recv(req));
             ucp_request_complete_stream_recv(req, ep, UCS_OK);
         }
     }

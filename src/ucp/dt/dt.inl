@@ -83,3 +83,34 @@ ucp_dt_unpack(ucp_datatype_t datatype, void *buffer, size_t buffer_size,
         return UCS_ERR_INVALID_PARAM;
     }
 }
+
+static UCS_F_ALWAYS_INLINE void
+ucp_dt_recv_state_init(ucp_dt_state_t *dt_state, void *buffer,
+                       ucp_datatype_t dt, size_t dt_count)
+{
+    ucp_dt_generic_t *dt_gen;
+
+    dt_state->offset = 0;
+
+    switch (dt & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_CONTIG:
+        dt_state->dt.contig.md_map     = 0;
+        break;
+   case UCP_DATATYPE_IOV:
+        dt_state->dt.iov.iov_offset    = 0;
+        dt_state->dt.iov.iovcnt_offset = 0;
+        dt_state->dt.iov.iovcnt        = dt_count;
+        dt_state->dt.iov.dt_reg        = NULL;
+        break;
+    case UCP_DATATYPE_GENERIC:
+        dt_gen = ucp_dt_generic(dt);
+        dt_state->dt.generic.state = 
+            UCS_PROFILE_NAMED_CALL("dt_start", dt_gen->ops.start_unpack,
+                                   dt_gen->context, buffer, dt_count);
+        ucs_trace("dt state %p buffer %p count %zu dt_gen state=%p", dt_state,
+                  buffer, dt_count, dt_state->dt.generic.state);
+        break;
+    default:
+        break;
+    }
+}

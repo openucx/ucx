@@ -174,13 +174,13 @@ data_type_desc_t::make(ucp_datatype_t datatype, const void *buf, size_t length,
         m_origin = uintptr_t(buf);
     }
 
-    m_dt    = datatype;
-    m_buf   = buf;
-    m_count = length;
+    m_dt = datatype;
     memset(m_iov, 0, sizeof(m_iov));
 
     switch (m_dt & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
+        m_buf   = buf;
+        m_count = length / ucp_contig_dt_elem_size(datatype);
         break;
     case UCP_DATATYPE_IOV:
     {
