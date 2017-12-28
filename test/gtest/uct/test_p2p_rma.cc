@@ -62,18 +62,25 @@ ucs_status_t uct_p2p_rma_test::get_zcopy(uct_ep_h ep, const mapped_buffer &sendb
 void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
                                  direction_t direction)
 {
-    mapped_buffer sendbuf(length, SEED1, sender(), 1);
-    mapped_buffer recvbuf(length, SEED2, receiver(), 3);
+    for (int mem_type = 0; mem_type <= UCT_MD_MEM_TYPE_LAST; mem_type++) {
+        if (!((sender().md_attr().cap.mem_type == mem_type) ||
+            (sender().md_attr().cap.reg_mem_types & UCS_BIT(mem_type)))) {
+            continue;
+        }
 
-    blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
-    if (direction == DIRECTION_SEND_TO_RECV) {
-        sendbuf.pattern_fill(SEED3);
-        wait_for_remote();
-        recvbuf.pattern_check(SEED1);
-    } else if (direction == DIRECTION_RECV_TO_SEND) {
-        recvbuf.pattern_fill(SEED3);
-        sendbuf.pattern_check(SEED2);
-        wait_for_remote();
+        mapped_buffer sendbuf(length, SEED1, sender(), 1);
+        mapped_buffer recvbuf(length, SEED2, receiver(), 3, (uct_memory_type_t) mem_type);
+
+        blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
+        if (direction == DIRECTION_SEND_TO_RECV) {
+            sendbuf.pattern_fill(SEED3);
+            wait_for_remote();
+            recvbuf.pattern_check(SEED1);
+        } else if (direction == DIRECTION_RECV_TO_SEND) {
+            recvbuf.pattern_fill(SEED3);
+            sendbuf.pattern_check(SEED2);
+            wait_for_remote();
+        }
     }
 }
 
