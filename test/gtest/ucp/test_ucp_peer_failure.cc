@@ -115,11 +115,22 @@ protected:
         }
     }
 
+    static void err_cb_mod(void *arg, ucp_ep_h ep, ucs_status_t status) {
+        EXPECT_EQ(uintptr_t(MAGIC), uintptr_t(arg));
+        err_cb(arg, ep, status);
+        m_err_cb_mod = true;
+    }
+
 protected:
     const size_t m_msg_size;
+    static bool  m_err_cb_mod;
 };
 
+bool test_ucp_peer_failure::m_err_cb_mod = false;
+
 void test_ucp_peer_failure::init() {
+    m_err_cb_mod = false;
+
     test_ucp_peer_failure_base::init();
     test_ucp_tag::init();
     if (GetParam().variant != FAIL_IMMEDIATELY) {
@@ -134,6 +145,21 @@ void test_ucp_peer_failure::init() {
         smoke_test();
     }
     wrap_errors();
+
+    ucp_ep_params_t ep_params_mod = {0};
+    ep_params_mod.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLER_CB |
+                               UCP_EP_PARAM_FIELD_USER_DATA;
+    ep_params_mod.err_handler_cb = err_cb_mod;
+    ep_params_mod.user_data      = reinterpret_cast<void *>(uintptr_t(MAGIC));
+
+    for (size_t i = 0; i < m_entities.size(); ++i) {
+        for (int widx = 0; widx < e(i).get_num_workers(); ++widx) {
+            for (int epidx = 0; epidx < e(i).get_num_eps(widx); ++epidx) {
+                void *req = e(i).modify_ep(ep_params_mod, widx, epidx);
+                ucp_test::wait(req, widx);
+            }
+        }
+    }
 }
 
 void test_ucp_peer_failure::cleanup() {
@@ -150,6 +176,8 @@ void test_ucp_peer_failure::test_status_after(bool request_must_fail)
                                          0x111337);
     wait_err();
     EXPECT_NE(UCS_OK, m_err_status);
+    EXPECT_TRUE(m_err_cb_mod);
+
     if (UCS_PTR_IS_PTR(req)) {
         /* The request may either succeed or fail, even though the data is not
          * delivered - depends on when the error is detected on sender side and

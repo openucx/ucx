@@ -379,6 +379,11 @@ void ucp_test_base::entity::connect(const entity* other,
     }
 }
 
+void* ucp_test_base::entity::modify_ep(const ucp_ep_params_t& ep_params,
+                                      int worker_idx, int ep_idx) {
+    return ucp_ep_modify_nb(ep(worker_idx, ep_idx), &ep_params);
+}
+
 void ucp_test_base::entity::empty_send_completion(void *r, ucs_status_t status) {
 }
 
@@ -449,6 +454,10 @@ unsigned ucp_test_base::entity::progress(int worker_index)
 int ucp_test_base::entity::get_num_workers() const {
     ucs_assert(m_workers.size() == size_t(num_workers));
     return num_workers;
+}
+
+int ucp_test_base::entity::get_num_eps(int worker_index) const {
+    return m_workers[worker_index].second.size();
 }
 
 void ucp_test_base::entity::warn_existing_eps() const {
