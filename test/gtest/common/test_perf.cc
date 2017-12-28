@@ -258,7 +258,14 @@ void test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
     }
     cpus.resize(2);
 
-    for (int i = 0; i < 5; ++i) {
+    check_perf = check_perf &&
+                 (ucs::test_time_multiplier() == 1) &&
+                 (ucs::perf_retry_count > 0);
+    if (!check_perf) {
+        UCS_TEST_MESSAGE << "not validating performance";
+    }
+
+    for (int i = 0; i < (ucs::perf_retry_count + 1); ++i) {
         test_result result = run_multi_threaded(test, flags, tl_name, dev_name,
                                                 cpus);
         if ((result.status == UCS_ERR_UNSUPPORTED) ||
@@ -280,9 +287,12 @@ void test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
             UCS_TEST_MESSAGE << result_str << " (attempt " << i << ")";
         }
 
-        if (!check_perf || (ucs::test_time_multiplier() > 1) ||
-            ((value >= test.min) && (value <= test.max))) {
+        if (!check_perf) {
+            return; /* Skip */
+        } else if ((value >= test.min) && (value <= test.max)) {
             return; /* Success */
+        } else {
+            ucs::safe_sleep(ucs::perf_retry_interval);
         }
     }
 

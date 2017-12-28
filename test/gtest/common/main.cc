@@ -14,16 +14,24 @@
 #include "tap.h"
 
 static int ucs_gtest_random_seed = -1;
+int    ucs::perf_retry_count     = 0; /* 0 - don't check performance */
+double ucs::perf_retry_interval  = 1.0;
 
 void parse_test_opts(int argc, char **argv) {
     int c;
-    while ((c = getopt(argc, argv, "s:")) != -1) {
+    while ((c = getopt(argc, argv, "s:p:i:")) != -1) {
         switch (c) {
         case 's':
             ucs_gtest_random_seed = atoi(optarg);
             break;
+        case 'p':
+            ucs::perf_retry_count = atoi(optarg);
+            break;
+        case 'i':
+            ucs::perf_retry_interval = atof(optarg);
+            break;
         default:
-            fprintf(stderr, "Usage: gtest [ -s rand-seed ]\n");
+            fprintf(stderr, "Usage: gtest [ -s rand-seed ] [ -p count ] [ -i interval ]\n");
             exit(1);
         }
     }
