@@ -15,6 +15,10 @@
 #include <ucs/async/async.h>
 #include <common/test.h>
 #include <vector>
+#if HAVE_CUDA
+#include <cuda.h>
+#include <cuda_runtime.h>
+#endif
 
 
 #define UCT_TEST_TIMEOUT_IN_SEC   10.0
@@ -57,10 +61,11 @@ protected:
                uct_iface_params_t *params, uct_md_config_t *md_config);
 
         void mem_alloc(size_t length, uct_allocated_memory_t *mem,
-                       uct_rkey_bundle *rkey_bundle) const;
+                       uct_rkey_bundle *rkey_bundle, int mem_type) const;
 
         void mem_free(const uct_allocated_memory_t *mem,
-                      const uct_rkey_bundle_t& rkey) const;
+                      const uct_rkey_bundle_t& rkey,
+                      const uct_memory_type_t mem_type) const;
 
         unsigned progress() const;
 
@@ -124,8 +129,8 @@ protected:
 
     class mapped_buffer {
     public:
-        mapped_buffer(size_t size, uint64_t seed, const entity& entity,
-                      size_t offset = 0);
+        mapped_buffer(size_t size, uint64_t seed, const entity& entity, size_t offset = 0,
+                      uct_memory_type_t mem_type = UCT_MD_MEM_TYPE_HOST);
         virtual ~mapped_buffer();
 
         void *ptr() const;
@@ -139,9 +144,11 @@ protected:
         void pattern_check(uint64_t seed);
 
         static size_t pack(void *dest, void *arg);
-        static void pattern_fill(void *buffer, size_t length, uint64_t seed);
+        static void pattern_fill(void *buffer, size_t length, uint64_t seed,
+                                 uct_memory_type_t m_type = UCT_MD_MEM_TYPE_HOST);
         static void pattern_check(const void *buffer, size_t length);
-        static void pattern_check(const void *buffer, size_t length, uint64_t seed);
+        static void pattern_check(const void *buffer, size_t length, uint64_t seed,
+                                  uct_memory_type_t m_type = UCT_MD_MEM_TYPE_HOST);
     private:
         static uint64_t pat(uint64_t prev);
 
