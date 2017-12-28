@@ -140,11 +140,13 @@ void ucp_test::flush_worker(const entity &e, int worker_index)
 void ucp_test::disconnect(const entity& entity) {
     for (int i = 0; i < entity.get_num_workers(); i++) {
         flush_worker(entity, i);
-        void *dreq = entity.disconnect_nb(i);
-        if (!UCS_PTR_IS_PTR(dreq)) {
-            ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
+        for (int j = 0; j < entity.get_num_eps(i); j++) {
+            void *dreq = entity.disconnect_nb(i, j);
+            if (!UCS_PTR_IS_PTR(dreq)) {
+                ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
+            }
+            wait(dreq, i);
         }
-        wait(dreq, i);
     }
 }
 
@@ -449,6 +451,10 @@ unsigned ucp_test_base::entity::progress(int worker_index)
 int ucp_test_base::entity::get_num_workers() const {
     ucs_assert(m_workers.size() == size_t(num_workers));
     return num_workers;
+}
+
+int ucp_test_base::entity::get_num_eps(int worker_index) const {
+    return m_workers[worker_index].second.size();
 }
 
 void ucp_test_base::entity::warn_existing_eps() const {

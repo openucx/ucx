@@ -70,6 +70,8 @@ public:
 
         int get_num_workers() const;
 
+        int get_num_eps(int worker_index = 0) const;
+
         void warn_existing_eps() const;
 
         void cleanup();
