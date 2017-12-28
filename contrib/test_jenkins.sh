@@ -21,7 +21,6 @@
 #
 
 WORKSPACE=${WORKSPACE:=$PWD}
-MAKE="make -j$(($(nproc) / 2 + 1))"
 ucx_inst=${WORKSPACE}/install
 
 if [ -z "$BUILD_NUMBER" ]; then
@@ -29,10 +28,31 @@ if [ -z "$BUILD_NUMBER" ]; then
 	BUILD_NUMBER=1
 	WS_URL=file://$WORKSPACE
 	JENKINS_RUN_TESTS=yes
+	TIMEOUT="timeout 160m"
+	TIMEOUT_VALGRIND="timeout 200m"
 else
 	echo "Running under jenkins"
 	WS_URL=$JOB_URL/ws
+	TIMEOUT=""
+	TIMEOUT_VALGRIND=""
 fi
+
+
+#
+# Set affinity to 2 cores according to Jenkins executor number
+#
+if [ -n "$EXECUTOR_NUMBER" ] && [ -n "$JENKINS_RUN_TESTS" ]
+then
+	AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
+else
+	AFFINITY=""
+fi
+
+#
+# Build command runs with 4 tasks on 2 cores
+#
+MAKE="$AFFINITY make -j4"
+
 
 #
 # Set up parallel test execution - "worker" and "nworkers" should be set by jenkins
@@ -146,7 +166,7 @@ prepare() {
 #
 build_docs() {
 	echo " ==== Build docs only ===="
-	../configure --prefix=$ucx_inst --with-docs-only
+	$AFFINITY ../configure --prefix=$ucx_inst --with-docs-only
 	$MAKE clean
 	$MAKE docs
 	$MAKE clean # FIXME distclean does not work with docs-only
@@ -157,7 +177,7 @@ build_docs() {
 #
 build_no_verbs() {
 	echo "==== Build without IB verbs ===="
-	../contrib/configure-release --prefix=$ucx_inst --without-verbs
+	$AFFINITY ../contrib/configure-release --prefix=$ucx_inst --without-verbs
 	$MAKE clean
 	$MAKE
 	$MAKE distclean
@@ -168,7 +188,7 @@ build_no_verbs() {
 #
 build_disable_numa() {
 	echo "==== Check --disable-numa compilation option ===="
-	../contrib/configure-release --prefix=$ucx_inst --disable-numa
+	$AFFINITY ../contrib/configure-release --prefix=$ucx_inst --disable-numa
 	$MAKE clean
 	$MAKE
 	$MAKE distclean
@@ -179,7 +199,7 @@ build_disable_numa() {
 #
 build_release_pkg() {
 	echo "==== Build release ===="
-	../contrib/configure-release
+	$AFFINITY ../contrib/configure-release
 	$MAKE clean
 	$MAKE
 	$MAKE distcheck
@@ -215,7 +235,7 @@ build_icc() {
 	if module_load intel/ics
 	then
 		echo "==== Build with Intel compiler ===="
-		../contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
+		$AFFINITY ../contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
 		$MAKE clean
 		$MAKE
 		$MAKE distclean
@@ -232,7 +252,7 @@ build_icc() {
 #
 build_debug() {
 	echo "==== Build with --enable-debug option ===="
-	../contrib/configure-devel --prefix=$ucx_inst --enable-debug
+	$AFFINITY ../contrib/configure-devel --prefix=$ucx_inst --enable-debug
 	$MAKE clean
 	$MAKE
 	$MAKE distclean
@@ -249,13 +269,13 @@ build_cuda() {
         if module_load dev/gdrcopy
         then
             echo "==== Build with enable cuda ===="
-            ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
+            $AFFINITY ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
             $MAKE clean
             $MAKE
             $MAKE distclean
             module unload dev/gdrcopy
         else
-            ../contrib/configure-devel --prefix=$ucx_inst --with-cuda
+            $AFFINITY ../contrib/configure-devel --prefix=$ucx_inst --with-cuda
             $MAKE clean
             $MAKE
             $MAKE distclean
@@ -276,7 +296,7 @@ build_clang() {
 	if which clang > /dev/null 2>&1
 	then
 		echo "==== Build with clang compiler ===="
-		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
+		$AFFINITY ../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
 		$MAKE clean
 		$MAKE
 		$MAKE distclean
@@ -291,7 +311,7 @@ check_inst_headers() {
 	echo 1..1 > inst_headers.tap
 	echo "==== Testing installed headers ===="
 
-	../contrib/configure-release --prefix=$PWD/install
+	$AFFINITY ../contrib/configure-release --prefix=$PWD/install
 	$MAKE clean
 	$MAKE install
 	../contrib/check_inst_headers.sh $PWD/install/include
@@ -439,7 +459,7 @@ run_mpi_tests() {
 	echo "1..2" > mpi_tests.tap
 	if module_load hpcx-gcc
 	then
-		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
+		$AFFINITY ../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
 		$MAKE clean
 		$MAKE install
 		$MAKE installcheck # check whether installation is valid (it compiles examples at least)
@@ -536,7 +556,7 @@ run_gtest() {
 	module_load dev/cuda || true
 	module_load dev/gdrcopy || true
 
-	../contrib/configure-devel --prefix=$ucx_inst
+	$AFFINITY ../contrib/configure-devel --prefix=$ucx_inst
 	$MAKE clean
 	$MAKE
 
@@ -550,27 +570,29 @@ run_gtest() {
 	mkdir -p $GTEST_REPORT_DIR
 
 	echo "==== Running unit tests ===="
-	$AFFINITY $TIMEOUT make -C test/gtest test
+	$AFFINITY $TIMEOUT make -C test/gtest test $GTEST_ARGS
 	(cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mallopt() test ===="
 	# gtest returns with non zero exit code if there were no
 	# tests to run. As a workaround run a single test on every
 	# shard.
-	env UCX_IB_RCACHE=n \
+	$AFFINITY $TIMEOUT \
+		env UCX_IB_RCACHE=n \
 		MALLOC_TRIM_THRESHOLD_=-1 \
 		MALLOC_MMAP_THRESHOLD_=-1 \
-	        GTEST_SHARD_INDEX=0 \
+		GTEST_SHARD_INDEX=0 \
 		GTEST_TOTAL_SHARDS=1 \
-	        GTEST_FILTER=malloc_hook_cplusplus.mallopt \
+		GTEST_FILTER=malloc_hook_cplusplus.mallopt \
 		make -C test/gtest test
 	(cd test/gtest && rename .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384 ===="
-	env MALLOC_MMAP_THRESHOLD_=16384 \
-	        GTEST_SHARD_INDEX=0 \
+	$AFFINITY $TIMEOUT \
+		env MALLOC_MMAP_THRESHOLD_=16384 \
+		GTEST_SHARD_INDEX=0 \
 		GTEST_TOTAL_SHARDS=1 \
-	        GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
+		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 		make -C test/gtest test
 	(cd test/gtest && rename .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
@@ -612,17 +634,6 @@ run_ucx_tl_check() {
 # Run all tests
 #
 run_tests() {
-	# Set CPU affinity to 2 cores, for performance tests
-	if [ -n "$EXECUTOR_NUMBER" ]; then
-		AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
-		TIMEOUT="timeout 160m"
-		TIMEOUT_VALGRIND="timeout 200m"
-	else
-		AFFINITY=""
-		TIMEOUT=""
-		TIMEOUT_VALGRIND=""
-	fi
-
 	export UCX_HANDLE_ERRORS=freeze,bt
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
 	export UCX_ERROR_MAIL_TO=$ghprbActualCommitAuthorEmail
@@ -636,7 +647,7 @@ run_tests() {
 	# all are running mpi tests
 	run_mpi_tests
 
-	../contrib/configure-devel --prefix=$ucx_inst
+	$AFFINITY ../contrib/configure-devel --prefix=$ucx_inst
 	$MAKE
 	$MAKE install
 
