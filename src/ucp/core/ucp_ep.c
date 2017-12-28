@@ -72,6 +72,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ucp_ep_config_key_reset(&key);
     ep->worker           = worker;
     ep->dest_uuid        = dest_uuid;
+    ep->user_data        = NULL;
     ep->cfg_index        = ucp_worker_get_ep_config(worker, &key);
     ep->am_lane          = UCP_NULL_LANE;
     ep->flags            = 0;
@@ -234,8 +235,9 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
         status = ucp_ep_setup_err_handler(ep, params->err_handler_cb);
     }
 
-    ep->user_data = (params->field_mask & UCP_EP_PARAM_FIELD_USER_DATA) ?
-                    params->user_data : NULL;
+    if (params->field_mask & UCP_EP_PARAM_FIELD_USER_DATA) {
+        ep->user_data = params->user_data;
+    }
 
     return status;
 }
@@ -321,6 +323,28 @@ out:
     UCS_ASYNC_UNBLOCK(&worker->async);
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return status;
+}
+
+ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params)
+{
+    ucp_worker_h worker = ep->worker;
+    ucs_status_t status;
+
+    if (params->field_mask & (UCP_EP_PARAM_FIELD_REMOTE_ADDRESS |
+                              UCP_EP_PARAM_FIELD_SOCK_ADDR      |
+                              UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE)) {
+        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+    }
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    status = ucp_ep_adjust_params(ep, params);
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+
+    return UCS_STATUS_PTR(status);
 }
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
