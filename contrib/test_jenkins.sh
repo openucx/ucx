@@ -13,6 +13,7 @@
 #  - JOB_URL           : jenkins job url
 #  - EXECUTOR_NUMBER   : number of executor within the test machine
 #  - JENKINS_RUN_TESTS : whether to run unit tests
+#  - JENKINS_TEST_PERF : whether to validate performance
 #
 # Optional environment variables (could be set by job configuration):
 #  - nworkers : number of parallel executors
@@ -30,6 +31,7 @@ if [ -z "$BUILD_NUMBER" ]; then
 	JENKINS_RUN_TESTS=yes
 	TIMEOUT="timeout 160m"
 	TIMEOUT_VALGRIND="timeout 200m"
+	JENKINS_TEST_PERF=1
 else
 	echo "Running under jenkins"
 	WS_URL=$JOB_URL/ws
@@ -567,10 +569,18 @@ run_gtest() {
 	export GTEST_TAP=2
 	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
 
+	GTEST_EXTRA_ARGS=""
+	if [ "$JENKINS_TEST_PERF" == 1 ]
+	then
+		# Check performance with 10 retries and 2 seconds interval
+		GTEST_EXTRA_ARGS="$GTEST_EXTRA_ARGS -p 10 -i 2.0"
+	fi
+	export GTEST_EXTRA_ARGS
+
 	mkdir -p $GTEST_REPORT_DIR
 
 	echo "==== Running unit tests ===="
-	$AFFINITY $TIMEOUT make -C test/gtest test $GTEST_ARGS
+	$AFFINITY $TIMEOUT make -C test/gtest test
 	(cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mallopt() test ===="

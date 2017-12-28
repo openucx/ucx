@@ -229,11 +229,28 @@ public:
 };
 
 class test_hash_perf : public ucs::test {
+protected:
+    void check_lookup_perf(perf_compare_base* hash, size_t num_elems);
 };
+
+void test_hash_perf::check_lookup_perf(perf_compare_base* hash, size_t num_elems) {
+    const ucs_time_t MAX_LOOKUP_NS_1024 = 400;
+    for (int i = 0; i < (ucs::perf_retry_count + 1); ++i) {
+        ucs_time_t lookup_ns = hash->lookup(num_elems);
+        if (!ucs::perf_retry_count) {
+            UCS_TEST_MESSAGE << "not validating performance";
+            return; /* Skip */
+        } else if (lookup_ns < MAX_LOOKUP_NS_1024) {
+            return; /* Success */
+        } else {
+            ucs::safe_sleep(ucs::perf_retry_interval);
+        }
+    }
+    ADD_FAILURE() << hash->get_name()  << " bad lookup performance";
+}
 
 UCS_TEST_F(test_hash_perf, perf_compare) {
 
-    const ucs_time_t MAX_LOOKUP_NS_1024 = 400;
     size_t trip_counts[] = {1, 2, 8, 128, 1024, 32768, 262144, 1048576, 0};
 
     if (ucs::test_time_multiplier() > 1) {
@@ -264,13 +281,7 @@ UCS_TEST_F(test_hash_perf, perf_compare) {
                 ((cur_hash == perf_compare_khash_ptr) ||
                  (cur_hash == perf_compare_sglib_ptr)))
             {
-                int count = 1;
-                while ((lookup_ns >= MAX_LOOKUP_NS_1024) && (count < 5)) {
-                    lookup_ns = cur_hash->lookup(num_elems);
-                    ++count;
-                }
-                EXPECT_LT(lookup_ns, MAX_LOOKUP_NS_1024) << cur_hash->get_name()
-                                << " failed after " << count << " attempts";
+                check_lookup_perf(cur_hash, num_elems);
             }
 
             ucs_time_t remove_ns = cur_hash->cleanup(num_elems);

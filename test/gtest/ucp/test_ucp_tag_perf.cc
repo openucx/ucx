@@ -23,7 +23,7 @@ protected:
     static const ucp_tag_t TAG_MASK = 0xffffffffffffffffUL;
 
     double check_perf(size_t count, bool is_exp);
-    void check_scalability(double max_growth, bool is_exp, int retries);
+    void check_scalability(double max_growth, bool is_exp);
     void do_sends(size_t count);
 };
 
@@ -73,16 +73,12 @@ void test_ucp_tag_perf::do_sends(size_t count)
     }
 }
 
-void test_ucp_tag_perf::check_scalability(double max_growth, bool is_exp,
-                                          int retries)
+void test_ucp_tag_perf::check_scalability(double max_growth, bool is_exp)
 {
     double prev_time = 0.0, total_growth = 0.0, avg_growth;
     size_t n = 0;
-    int attempt;
 
-    attempt = 0;
-    do {
-        ++attempt;
+    for (int i = 0; i < (ucs::perf_retry_count + 1); ++i) {
 
         /* Estimate by how much the tag matching time grows when the matching queue
          * length grows by 2x. A result close to 1.0 means O(1) scalability (which
@@ -105,19 +101,27 @@ void test_ucp_tag_perf::check_scalability(double max_growth, bool is_exp,
         }
 
         avg_growth = total_growth / n;
-        UCS_TEST_MESSAGE << "Average growth: " << avg_growth <<
-                            " (" << attempt << "/" << retries << ")";
-    } while ((avg_growth >= max_growth) && (attempt < retries));
+        UCS_TEST_MESSAGE << "Average growth: " << avg_growth;
 
-    EXPECT_LT(avg_growth, max_growth) << "Tag matching is not scalable";
+        if (!ucs::perf_retry_count) {
+            UCS_TEST_MESSAGE << "not validating performance";
+            return; /* Skip */
+        } else if (avg_growth < max_growth) {
+            return; /* Success */
+        } else {
+            ucs::safe_sleep(ucs::perf_retry_interval);
+        }
+    }
+
+    ADD_FAILURE() << "Tag matching is not scalable";
 }
 
 UCS_TEST_P(test_ucp_tag_perf, multi_exp) {
-    check_scalability(1.5, true, 5);
+    check_scalability(1.5, true);
 }
 
 UCS_TEST_P(test_ucp_tag_perf, multi_unexp) {
-    check_scalability(1.5, false, 5);
+    check_scalability(1.5, false);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_perf)

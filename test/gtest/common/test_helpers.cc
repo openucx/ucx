@@ -71,14 +71,18 @@ scoped_setenv::~scoped_setenv() {
     }
 }
 
-void safe_usleep(double usec) {
+void safe_sleep(double sec) {
     ucs_time_t current_time = ucs_get_time();
-    ucs_time_t end_time = current_time + ucs_time_from_usec(usec);
+    ucs_time_t end_time = current_time + ucs_time_from_sec(sec);
 
     while (current_time < end_time) {
         usleep((long)ucs_time_to_usec(end_time - current_time));
         current_time = ucs_get_time();
     }
+}
+
+void safe_usleep(double usec) {
+    safe_sleep(usec * 1e-6);
 }
 
 std::string get_iface_ip(const struct sockaddr *ifa_addr) {

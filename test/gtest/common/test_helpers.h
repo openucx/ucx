@@ -76,6 +76,7 @@ int test_time_multiplier();
 /**
  * Signal-safe sleep.
  */
+void safe_sleep(double sec);
 void safe_usleep(double usec);
 
 
@@ -443,6 +444,8 @@ static inline O& operator<<(O& os, const size_value& sz)
     return os;
 }
 
+extern int    perf_retry_count;
+extern double perf_retry_interval;
 
 namespace detail {
 
