@@ -603,11 +603,11 @@ static void uct_dc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_dc_handle_failure(ib_iface, wc->qp_num, status);
 }
 
-static void uct_dc_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
-                                       ucs_status_t status)
+static ucs_status_t uct_dc_verbs_ep_set_failed(uct_ib_iface_t *iface,
+                                               uct_ep_h ep, ucs_status_t status)
 {
-    uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_verbs_ep_t), ep,
-                      &iface->super.super, status);
+    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_verbs_ep_t), ep,
+                             &iface->super.super, status);
 }
 
 static ucs_status_t uct_dc_verbs_reset_dci(uct_dc_iface_t *dc_iface, int dci)

@@ -38,9 +38,10 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
 static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                         ucs_status_t status)
 {
-    uct_rc_verbs_ep_t *ep;
     struct ibv_wc     *wc    = arg;
     uct_rc_iface_t    *iface = ucs_derived_of(ib_iface, uct_rc_iface_t);
+    uct_rc_verbs_ep_t *ep;
+    ucs_status_t       ep_status;
 
     ep = ucs_derived_of(uct_rc_iface_lookup_ep(iface, wc->qp_num),
                         uct_rc_verbs_ep_t);
@@ -56,14 +57,16 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     /* Reset CI to prevent cq_available overrun on ep_destoroy */
     ep->txcnt.ci = ep->txcnt.pi;
     uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
-    ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super, status);
+    ep_status = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super,
+                                             status);
+    ucs_assert_always(ep_status == UCS_OK);
 }
 
-static void uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
-                                       ucs_status_t status)
+static ucs_status_t uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface,
+                                               uct_ep_h ep, ucs_status_t status)
 {
-    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_verbs_ep_t), ep,
-                      &iface->super.super, status);
+    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_verbs_ep_t), ep,
+                             &iface->super.super, status);
 }
 
 static UCS_F_ALWAYS_INLINE unsigned

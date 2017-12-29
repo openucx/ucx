@@ -525,6 +525,7 @@ void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
     uct_dc_ep_t        *ep     = iface->tx.dcis[dci].ep;
     uct_dc_iface_ops_t *dc_ops = ucs_derived_of(iface->super.super.ops,
                                                 uct_dc_iface_ops_t);
+    ucs_status_t       ep_status;
     int16_t            outstanding;
 
     if (!ep) {
@@ -545,7 +546,9 @@ void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
     uct_dc_iface_dci_put(iface, dci);
     ucs_assert_always(ep->dci == UCT_DC_EP_NO_DCI);
 
-    iface->super.super.ops->set_ep_failed(ib_iface, &ep->super.super, status);
+    ep_status = iface->super.super.ops->set_ep_failed(ib_iface,
+                                                      &ep->super.super, status);
+    ucs_assert_always(ep_status == UCS_OK);
 
     status = dc_ops->reset_dci(iface, dci);
     if (status != UCS_OK) {

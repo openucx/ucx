@@ -302,8 +302,8 @@ static void uct_ep_failed_destroy(uct_ep_h tl_ep)
     ucs_free(tl_ep);
 }
 
-void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface,
-                       ucs_status_t status)
+ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
+                               uct_iface_h tl_iface, ucs_status_t status)
 {
     uct_failed_iface_t *f_iface;
     uct_iface_ops_t    *ops;
@@ -316,7 +316,7 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface,
     f_iface = ucs_malloc(sizeof(*f_iface), "failed iface");
     if (f_iface == NULL) {
         ucs_error("Could not create failed iface (nomem)");
-        return;
+        return status;
     }
 
     ucs_queue_head_init(&f_iface->pend_q);
@@ -362,11 +362,14 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface,
     tl_ep->iface = &f_iface->super;
 
     if (iface->err_handler) {
-        iface->err_handler(iface->err_handler_arg, tl_ep, status);
-    } else {
-        ucs_error("Error %s was not handled for ep %p",
-                  ucs_status_string(status), tl_ep);
+        return iface->err_handler(iface->err_handler_arg, tl_ep, status);
     }
+
+    ucs_debug("Error %s was not handled for ep %p", ucs_status_string(status),
+              tl_ep);
+
+    /* Suppress local errors, see GTEST uct_p2p_err_test */
+    return (status == UCS_ERR_ENDPOINT_TIMEOUT) ? status : UCS_OK;
 }
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)

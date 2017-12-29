@@ -311,7 +311,7 @@ void ucp_worker_signal_internal(ucp_worker_h worker)
     }
 }
 
-static void
+static ucs_status_t
 ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_worker_h            worker           = (ucp_worker_h)arg;
@@ -337,9 +337,13 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 
     ucs_fatal("No uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
               uct_ep, worker);
-    return;
+    return status;
 
 found_ucp_ep:
+    if (ucp_ep_config(ucp_ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) {
+        /* NOTE: do not cleanup resources for debugging needs */
+        return status;
+    }
 
     rsc_index   = ucp_ep_get_rsc_index(ucp_ep, lane);
     tl_rsc      = &worker->context->tl_rscs[rsc_index].tl_rsc;
@@ -398,15 +402,18 @@ found_ucp_ep:
 
     ucp_ep_errh_iter = kh_get(ucp_ep_errh_hash, &worker->ep_errh_hash,
                               (uintptr_t)ucp_ep);
-    if (ucp_ep_errh_iter != kh_end(&worker->ep_errh_hash)) {
-        err_cb = kh_val(&worker->ep_errh_hash, ucp_ep_errh_iter);
-        err_cb(ucp_ep->user_data, ucp_ep, status);
-    } else {
+    if (ucp_ep_errh_iter == kh_end(&worker->ep_errh_hash)) {
         ucs_error("Error %s was not handled for ep %p - "
                   UCT_TL_RESOURCE_DESC_FMT,
                   ucs_status_string(status), ucp_ep,
                   UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
+        return status;
     }
+
+    err_cb = kh_val(&worker->ep_errh_hash, ucp_ep_errh_iter);
+    err_cb(ucp_ep->user_data, ucp_ep, status);
+
+    return UCS_OK;
 }
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)

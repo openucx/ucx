@@ -66,10 +66,11 @@ public:
         m_req_count++;
     }
 
-    static void err_cb(void *arg, uct_ep_h ep, ucs_status_t status)
+    static ucs_status_t err_cb(void *arg, uct_ep_h ep, ucs_status_t status)
     {
         EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, status);
         reinterpret_cast<test_uct_peer_failure*>(arg)->m_err_count++;
+        return UCS_OK;
     }
 
     void kill_receiver()
@@ -355,10 +356,11 @@ public:
         return err_cb_ep_destroy;
     }
 
-    static void err_cb_ep_destroy(void *arg, uct_ep_h ep, ucs_status_t status) {
+    static ucs_status_t err_cb_ep_destroy(void *arg, uct_ep_h ep, ucs_status_t status) {
         test_uct_peer_failure_cb *self(reinterpret_cast<test_uct_peer_failure_cb*>(arg));
         EXPECT_EQ(self->ep0(), ep);
         self->m_sender->destroy_ep(0);
+        return UCS_OK;
     }
 };
 

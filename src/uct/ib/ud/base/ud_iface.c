@@ -746,6 +746,7 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
 {
     uct_ud_comp_desc_t *cdesc;
     uct_ud_send_skb_t  *skb;
+    ucs_status_t        status;
 
     do {
         skb = ucs_queue_pull_elem_non_empty(&iface->tx.async_comp_q,
@@ -760,9 +761,10 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
             ucs_assert(cdesc->ep->tx.err_skb_count > 0);
             --cdesc->ep->tx.err_skb_count;
             if (cdesc->ep->tx.err_skb_count == 0) {
-                iface->super.ops->set_ep_failed(&iface->super,
-                                                &cdesc->ep->super.super,
-                                                skb->status);
+                status = iface->super.ops->set_ep_failed(&iface->super,
+                                                         &cdesc->ep->super.super,
+                                                         skb->status);
+                ucs_assert_always(status == UCS_OK);
             }
         }
 
