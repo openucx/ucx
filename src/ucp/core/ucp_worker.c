@@ -634,8 +634,7 @@ void ucp_worker_iface_event(int fd, void *arg)
     ucp_worker_signal_internal(worker);
 }
 
-static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker,
-                                                   const ucs_cpu_set_t *cpu_mask)
+static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
     ucp_tl_resource_desc_t *resource;
@@ -656,7 +655,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker,
             iface_params.mode.device.dev_name = resource->tl_rsc.dev_name;
         }
 
-        status = ucp_worker_iface_init(worker, tl_id, &iface_params, cpu_mask,
+        status = ucp_worker_iface_init(worker, tl_id, &iface_params,
                                        &worker->ifaces[tl_id]);
         if (status != UCS_OK) {
             return status;
@@ -688,7 +687,6 @@ static size_t ucp_worker_rx_headroom(ucp_worker_h worker)
 
 ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    uct_iface_params_t *iface_params,
-                                   const ucs_cpu_set_t *cpu_mask,
                                    ucp_worker_iface_t *wiface)
 {
     ucp_context_h context            = worker->context;
@@ -725,7 +723,7 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     iface_params->eager_arg       = iface_params->rndv_arg = wiface;
     iface_params->eager_cb        = ucp_tag_offload_unexp_eager;
     iface_params->rndv_cb         = ucp_tag_offload_unexp_rndv;
-    iface_params->cpu_mask        = *cpu_mask;
+    iface_params->cpu_mask        = worker->cpu_mask;
 
     /* Open UCT interface */
     status = uct_iface_open(md, worker->uct, iface_params, iface_config,
@@ -1028,19 +1026,6 @@ out:
     return config_idx;
 }
 
-ucs_status_t ucp_worker_listen(ucp_worker_h worker,
-                               const ucp_worker_listener_params_t *params,
-                               ucp_listener_h *listener_p)
-{
-    ucs_error("ucp_worker_listen() not implemented yet");
-    return UCS_ERR_INVALID_ADDR;
-}
-
-ucs_status_t ucp_listener_destroy(ucp_listener_h listener)
-{
-    return UCS_OK;
-}
-
 ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
@@ -1049,9 +1034,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_status_t status;
     unsigned config_count;
     unsigned name_length;
-    ucs_cpu_set_t empty_cpu_mask;
     ucs_thread_mode_t thread_mode;
-    const ucs_cpu_set_t *cpu_mask;
 
     config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
                            UINT8_MAX);
@@ -1151,10 +1134,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
-        cpu_mask = &params->cpu_mask;
+        worker->cpu_mask = params->cpu_mask;
     } else {
-        UCS_CPU_ZERO(&empty_cpu_mask);
-        cpu_mask = &empty_cpu_mask;
+        UCS_CPU_ZERO(&worker->cpu_mask);
     }
 
     /* Initialize tag matching */
@@ -1164,7 +1146,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     /* Open all resources as interfaces on this worker */
-    status = ucp_worker_add_resource_ifaces(worker, cpu_mask);
+    status = ucp_worker_add_resource_ifaces(worker);
     if (status != UCS_OK) {
         goto err_close_ifaces;
     }
