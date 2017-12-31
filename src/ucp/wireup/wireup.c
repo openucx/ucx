@@ -201,10 +201,12 @@ static void ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg
 
     /* Create a new endpoint if does not exist */
     if (ep == NULL) {
-        status = ucp_ep_new(worker, uuid, peer_name, "remote-request", &ep);
+        status = ucp_ep_new(worker, peer_name, "remote-request", &ep);
         if (status != UCS_OK) {
             return;
         }
+
+        ucp_ep_add_to_hash(ep, uuid);
     }
 
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
@@ -523,6 +525,11 @@ static void ucp_wireup_print_config(ucp_context_h context,
     }
 }
 
+static void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg)
+{
+    ucs_bug("pending request %p on ep %p should have been flushed", self, arg);
+}
+
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                    unsigned address_count,
                                    const ucp_address_entry_t *address_list,
@@ -610,6 +617,38 @@ err:
         }
     }
     return status;
+}
+
+void ucp_ep_cleanup_lanes(ucp_ep_h ep)
+{
+    ucp_lane_index_t lane, proxy_lane;
+    uct_ep_h uct_ep;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        uct_ep = ep->uct_eps[lane];
+        if (uct_ep != NULL) {
+            ucs_debug("ep %p: purge uct_ep[%d]=%p", ep, lane, uct_ep);
+            uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ep);
+        }
+    }
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        uct_ep = ep->uct_eps[lane];
+        if (uct_ep == NULL) {
+            continue;
+        }
+
+        proxy_lane = ucp_ep_get_proxy_lane(ep, lane);
+        if ((proxy_lane != UCP_NULL_LANE) && (proxy_lane != lane) &&
+            (ep->uct_eps[lane] == ep->uct_eps[proxy_lane]))
+        {
+            /* duplicate of another lane */
+            continue;
+        }
+
+        ucs_debug("ep %p: destroy uct_ep[%d]=%p", ep, lane, uct_ep);
+        uct_ep_destroy(uct_ep);
+    }
 }
 
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)

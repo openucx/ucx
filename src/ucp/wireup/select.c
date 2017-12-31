@@ -962,10 +962,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 
     memset(lane_descs, 0, sizeof(lane_descs));
     ucp_ep_config_key_reset(key);
-
-    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
-        key->err_mode = params->err_mode;
-    }
+    ucp_ep_config_key_set_params(key, params);
 
     status = ucp_wireup_add_rma_lanes(ep, params, address_count, address_list,
                                       lane_descs, &key->num_lanes);

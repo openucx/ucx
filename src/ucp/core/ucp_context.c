@@ -82,6 +82,13 @@ static ucs_config_field_t ucp_config_table[] = {
    " and disables aliasing.\n",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
+  {"SOCKADDR_TLS", UCP_RSC_CONFIG_ALL,
+   "Comma-separated list of sockaddr transports to use. The order is not meaningful.\n"
+   "Possible values:\n"
+   " - rdmacm\n"
+   "These transports will be used only for client-server connection establishment purposes.",
+   ucs_offsetof(ucp_config_t, sockaddr_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
+
   {"ALLOC_PRIO", "md:sysv,md:posix,huge,thp,md:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
    "an allocation method (huge, thp, mmap, libc) or md:<NAME> which means to use the\n"
@@ -272,17 +279,17 @@ static unsigned ucp_tl_alias_count(ucp_tl_alias_t *alias)
     return count;
 }
 
-static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_name,
-                                    int is_alias)
+static int ucp_config_is_tl_enabled(const ucs_config_names_array_t *arr,
+                                    const char *name, int is_alias)
 {
-    const char **names = (const char**)config->tls.names;
-    unsigned count     = config->tls.count;
+    const char **arr_names = (const char**)arr->names;
+    unsigned count         = arr->count;
     char buf[UCT_TL_NAME_MAX + 1];
 
-    snprintf(buf, sizeof(buf), "\\%s", tl_name);
-    return (!is_alias && ucp_str_array_search(names, count, buf, NULL) >= 0) ||
-           ((ucp_str_array_search(names, count, tl_name, NULL) >= 0)) ||
-            (ucp_str_array_search(names, count, UCP_RSC_CONFIG_ALL, NULL) >= 0);
+    snprintf(buf, sizeof(buf), "\\%s", name);
+    return (!is_alias && ucp_str_array_search(arr_names, count, buf, NULL) >= 0) ||
+           ((ucp_str_array_search(arr_names, count, name, NULL) >= 0)) ||
+            (ucp_str_array_search(arr_names, count, UCP_RSC_CONFIG_ALL, NULL) >= 0);
 }
 
 static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
@@ -316,9 +323,9 @@ static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
     return device_enabled;
 }
 
-static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
-                                   const ucp_config_t *config,
-                                   uint64_t *masks, uint8_t *flags)
+static int ucp_is_dev_resource_enabled(uct_tl_resource_desc_t *resource,
+                                       const ucp_config_t *config,
+                                       uint64_t *masks, uint8_t *flags)
 {
     int device_enabled, tl_enabled;
     ucp_tl_alias_t *alias;
@@ -328,10 +335,9 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
     device_enabled = ucp_is_resource_in_device_list(resource, config->devices,
                                                     masks, resource->dev_type);
 
-    *flags = 0;
     /* Find the enabled UCTs */
     ucs_assert(config->tls.count > 0);
-    if (ucp_config_is_tl_enabled(config, resource->tl_name, 0)) {
+    if (ucp_config_is_tl_enabled(&config->tls, resource->tl_name, 0)) {
         tl_enabled = 1;
     } else {
         tl_enabled = 0;
@@ -343,7 +349,7 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
             /* If an alias is enabled, and the transport is part of this alias,
              * enable the transport.
              */
-            if (ucp_config_is_tl_enabled(config, alias->alias, 1)) {
+            if (ucp_config_is_tl_enabled(&config->tls, alias->alias, 1)) {
                 if (ucp_str_array_search(alias->tls, count,
                                          resource->tl_name, NULL) >= 0) {
                     tl_enabled = 1;
@@ -381,7 +387,7 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context, ucp_tl_md_t *md,
     unsigned num_tl_resources;
     ucs_status_t status;
     ucp_rsc_index_t i;
-    uint8_t flags;
+    uint8_t flags = 0;
 
     *num_resources_p = 0;
 
@@ -411,10 +417,14 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context, ucp_tl_md_t *md,
         ucs_trace("allowed transport %d : '%s'", i, config->tls.names[i]);
     }
 
+    for (i = 0; i < config->sockaddr_tls.count; ++i) {
+        ucs_trace("allowed sockaddr transport %d : '%s'", i, config->sockaddr_tls.names[i]);
+    }
+
     /* copy only the resources enabled by user configuration */
     context->tl_rscs = tmp;
     for (i = 0; i < num_tl_resources; ++i) {
-        if (ucp_is_resource_enabled(&tl_resources[i], config, masks, &flags)) {
+        if (ucp_is_dev_resource_enabled(&tl_resources[i], config, masks, &flags)) {
             context->tl_rscs[context->num_tls].tl_rsc       = tl_resources[i];
             context->tl_rscs[context->num_tls].md_index     = md_index;
             context->tl_rscs[context->num_tls].tl_name_csum =
@@ -469,7 +479,7 @@ static ucs_status_t ucp_check_tl_names(ucp_context_t *context)
     ucp_tl_resource_desc_t *rsc;
     const char *tl_name;
 
-    /* Make there we don't have two different transports with same checksum. */
+    /* Make sure there we don't have two different transports with same checksum. */
     for (rsc = context->tl_rscs; rsc < context->tl_rscs + context->num_tls; ++rsc) {
         tl_name = ucp_find_tl_name_by_csum(context, rsc->tl_name_csum);
         if ((tl_name != NULL) && strcmp(rsc->tl_rsc.tl_name, tl_name)) {
@@ -495,7 +505,12 @@ static void ucp_free_resources(ucp_context_t *context)
 
 static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
 {
-    /* if we got here then num_resources > 0.
+     if (0 == config->sockaddr_tls.count) {
+         ucs_warn("The SOCKADDR TLs list is empty. Client-server connection "
+                  "establishment will not be possible");
+     }
+
+     /* if we got here then num_resources > 0.
       * if the user's device list is empty, there is no match */
      if ((0 == config->devices[UCT_DEVICE_TYPE_NET].count) &&
          (0 == config->devices[UCT_DEVICE_TYPE_SHM].count) &&
