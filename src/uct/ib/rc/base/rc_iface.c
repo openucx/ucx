@@ -112,9 +112,49 @@ static ucs_mpool_ops_t uct_rc_fc_pending_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
+static void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
+                                   uct_iface_attr_t *iface_attr,
+                                   size_t max_inline)
+{
+#if IBV_EXP_HW_TM
+    uct_ib_device_t *dev     = uct_ib_iface_device(&iface->super);
+    unsigned eager_hdr_size  = sizeof(struct ibv_exp_tmh);
+    struct ibv_exp_port_attr* port_attr;
+
+    if (!UCT_RC_IFACE_TM_ENABLED(iface)) {
+        return;
+    }
+
+    iface_attr->cap.flags |= UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                             UCT_IFACE_FLAG_TAG_EAGER_ZCOPY |
+                             UCT_IFACE_FLAG_TAG_RNDV_ZCOPY;
+
+    if (max_inline >= eager_hdr_size) {
+        iface_attr->cap.tag.eager.max_short = max_inline - eager_hdr_size;
+        iface_attr->cap.flags              |= UCT_IFACE_FLAG_TAG_EAGER_SHORT;
+    }
+
+    iface_attr->cap.tag.eager.max_bcopy = iface->super.config.seg_size -
+                                          eager_hdr_size;
+    iface_attr->cap.tag.eager.max_zcopy = iface->super.config.seg_size -
+                                          eager_hdr_size;
+    iface_attr->cap.tag.eager.max_iov   = 1;
+
+    port_attr = uct_ib_iface_port_attr(&iface->super);
+    iface_attr->cap.tag.rndv.max_zcopy  = port_attr->max_msg_sz;
+    iface_attr->cap.tag.rndv.max_hdr    = IBV_DEVICE_TM_CAPS(dev, max_rndv_hdr_size);
+    iface_attr->cap.tag.rndv.max_iov    = 1;
+
+    iface_attr->cap.tag.recv.max_zcopy  = port_attr->max_msg_sz;
+    iface_attr->cap.tag.recv.max_iov    = 1;
+    iface_attr->cap.tag.recv.min_recv   = 0;
+#endif
+}
 
 ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
-                                uct_iface_attr_t *iface_attr)
+                                uct_iface_attr_t *iface_attr,
+                                size_t put_max_short, size_t max_inline,
+                                size_t am_max_hdr, size_t am_max_iov)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     ucs_status_t status;
@@ -169,6 +209,34 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     iface_attr->cap.put.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
     iface_attr->cap.get.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
     iface_attr->cap.am.align_mtu  = uct_ib_mtu_value(iface->config.path_mtu);
+
+
+    /* PUT */
+    iface_attr->cap.put.max_short = put_max_short;
+    iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
+    iface_attr->cap.put.min_zcopy = 0;
+    iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
+    iface_attr->cap.put.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
+
+    /* GET */
+    iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
+    iface_attr->cap.get.min_zcopy = iface->super.config.max_inl_resp + 1;
+    iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
+    iface_attr->cap.get.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
+
+    /* AM */
+    iface_attr->cap.am.max_short  = max_inline - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.min_zcopy  = 0;
+    iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_hdr    = am_max_hdr - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_iov    = am_max_iov;
+
+    /* Error Handling */
+    iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+
+    /* Tag Offload */
+    uct_rc_iface_tag_query(iface, iface_attr, max_inline);
 
     return UCS_OK;
 }
@@ -549,6 +617,12 @@ void uct_rc_iface_tag_cleanup(uct_rc_iface_t *iface)
         ucs_ptr_array_cleanup(&iface->tm.rndv_comps);
     }
 #endif
+}
+
+unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    return iface->progress(iface);
 }
 
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,

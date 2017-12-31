@@ -63,8 +63,7 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
 
 void uct_rc_mlx5_iface_common_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
-void uct_rc_mlx5_iface_common_query(uct_rc_iface_t *iface,
-                                    uct_iface_attr_t *iface_attr, size_t av_size);
+void uct_rc_mlx5_iface_common_query(uct_iface_attr_t *iface_attr);
 
 void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                             uct_ib_iface_t *ib_iface);
@@ -115,7 +114,8 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                   uct_rc_iface_t *rc_iface,
                                   uct_ib_mlx5_srq_seg_t *seg, uint16_t wqe_ctr,
-                                  ucs_status_t am_status)
+                                  ucs_status_t am_status, unsigned offset,
+                                  uct_recv_desc_t *release_desc)
 {
     void *udesc;
 
@@ -133,9 +133,8 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
          ++mlx5_common_iface->rx.srq.free_idx;
     } else {
          if (am_status != UCS_OK) {
-             udesc                = (char*)seg->srq.desc +
-                                    rc_iface->super.config.rx_headroom_offset;
-             uct_recv_desc(udesc) = &rc_iface->super.release_desc;
+             udesc                = (char*)seg->srq.desc + offset;
+             uct_recv_desc(udesc) = release_desc;
              seg->srq.desc        = NULL;
          }
          if (wqe_ctr == ((mlx5_common_iface->rx.srq.free_idx + 1) & mlx5_common_iface->rx.srq.mask)) {
@@ -170,7 +169,9 @@ uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *mlx5_common_if
         seg     = uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq, wqe_ctr);
         ++cq->cq_ci;
         uct_rc_mlx5_iface_release_srq_seg(mlx5_common_iface, rc_iface, seg,
-                                          wqe_ctr, UCS_OK);
+                                          wqe_ctr, UCS_OK,
+                                          rc_iface->super.config.rx_headroom_offset,
+                                          &rc_iface->super.release_desc);
     } else if ((ecqe->op_own >> 4) != MLX5_CQE_INVALID) {
         uct_ib_mlx5_check_completion(&rc_iface->super, cq, cqe);
     }
@@ -203,63 +204,58 @@ uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     return cqe; /* TODO optimize - let complier know cqe is not null */
 }
 
-static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
-                                 uct_rc_iface_t *rc_iface)
+static UCS_F_ALWAYS_INLINE void*
+uct_rc_mlx5_iface_common_data(uct_rc_mlx5_iface_common_t *mlx5_iface,
+                              uct_rc_iface_t *rc_iface, struct mlx5_cqe64 *cqe,
+                              uct_ib_iface_recv_desc_t *desc, unsigned byte_len,
+                              unsigned *flags)
 {
-    uct_ib_mlx5_srq_seg_t *seg;
-    uct_ib_iface_recv_desc_t *desc;
-    uct_rc_iface_ops_t *rc_ops;
-    uct_rc_hdr_t *hdr;
-    struct mlx5_cqe64 *cqe;
-    unsigned byte_len;
-    unsigned qp_num;
-    uint16_t wqe_ctr;
-    uint16_t max_batch;
-    ucs_status_t status;
-    unsigned count;
-    unsigned flags;
+    void *hdr;
 
-    ucs_assert(uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq,
-                                       mlx5_common_iface->rx.srq.mask)->srq.next_wqe_index == 0);
-
-    cqe = uct_rc_mlx5_iface_poll_rx_cq(mlx5_common_iface, rc_iface);
-    if (cqe == NULL) {
-        /* If no CQE - post receives */
-        count = 0;
-        goto done;
-    }
-
-    ucs_memory_cpu_load_fence();
-    UCS_STATS_UPDATE_COUNTER(rc_iface->stats, UCT_RC_IFACE_STAT_RX_COMPLETION, 1);
-
-    byte_len = ntohl(cqe->byte_cnt);
-    wqe_ctr  = ntohs(cqe->wqe_counter);
-    seg      = uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq, wqe_ctr);
-    desc     = seg->srq.desc;
-
-    /* Get a pointer to AM header (after which comes the payload)
+    /* Get a pointer to AM or Tag header (after which comes the payload)
      * Support cases of inline scatter by pointing directly to CQE.
      */
     if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
         hdr = (uct_rc_hdr_t*)(cqe);
-        uct_rc_mlx5_iface_common_rx_inline(mlx5_common_iface, rc_iface, desc,
-                                           UCT_RC_MLX5_IFACE_STAT_RX_INL_32, byte_len);
-        flags = 0;
+        uct_rc_mlx5_iface_common_rx_inline(mlx5_iface, rc_iface, desc,
+                                           UCT_RC_MLX5_IFACE_STAT_RX_INL_32,
+                                           byte_len);
+        *flags = 0;
     } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
         hdr = (uct_rc_hdr_t*)(cqe - 1);
-        uct_rc_mlx5_iface_common_rx_inline(mlx5_common_iface, rc_iface, desc,
-                                           UCT_RC_MLX5_IFACE_STAT_RX_INL_64, byte_len);
-        flags = 0;
+        uct_rc_mlx5_iface_common_rx_inline(mlx5_iface, rc_iface, desc,
+                                           UCT_RC_MLX5_IFACE_STAT_RX_INL_64,
+                                           byte_len);
+        *flags = 0;
     } else {
         hdr = uct_ib_iface_recv_desc_hdr(&rc_iface->super, desc);
         VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
-        flags = UCT_CB_PARAM_FLAG_DESC;
-        /* Assuming that next packet likely will be non-inline,
-         * setup the next prefetch pointer
-         */
-        uct_rc_mlx5_srq_prefetch_setup(mlx5_common_iface, rc_iface);
+        *flags = UCT_CB_PARAM_FLAG_DESC;
     }
+
+    return hdr;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *mlx5_iface,
+                                    uct_rc_iface_t *rc_iface,
+                                    struct mlx5_cqe64 *cqe,
+                                    uct_ib_mlx5_srq_seg_t *seg,
+                                    unsigned byte_len)
+{
+    uct_rc_hdr_t *hdr;
+    uint16_t wqe_ctr;
+    uct_ib_iface_recv_desc_t *desc;
+    uct_rc_iface_ops_t *rc_ops;
+    unsigned flags;
+    uint32_t qp_num;
+    ucs_status_t status;
+
+    wqe_ctr = ntohs(cqe->wqe_counter);
+    desc    = seg->srq.desc;
+
+    hdr = uct_rc_mlx5_iface_common_data(mlx5_iface, rc_iface, cqe, desc,
+                                        byte_len, &flags);
 
     uct_ib_mlx5_log_rx(&rc_iface->super, IBV_QPT_RC, cqe, hdr,
                        uct_rc_ep_am_packet_dump);
@@ -276,8 +272,40 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                      flags);
     }
 
-    uct_rc_mlx5_iface_release_srq_seg(mlx5_common_iface, rc_iface, seg, wqe_ctr,
-                                      status);
+    uct_rc_mlx5_iface_release_srq_seg(mlx5_iface, rc_iface, seg, wqe_ctr, status,
+                                      rc_iface->super.config.rx_headroom_offset,
+                                      &rc_iface->super.release_desc);
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
+                                 uct_rc_iface_t *rc_iface)
+{
+    uct_ib_mlx5_srq_seg_t *seg;
+    struct mlx5_cqe64 *cqe;
+    unsigned byte_len;
+    uint16_t max_batch;
+    unsigned count;
+
+    ucs_assert(uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq,
+                                       mlx5_common_iface->rx.srq.mask)->srq.next_wqe_index == 0);
+
+    cqe = uct_ib_mlx5_poll_cq(&rc_iface->super, &mlx5_common_iface->rx.cq);
+    if (cqe == NULL) {
+        /* If no CQE - post receives */
+        count = 0;
+        goto done;
+    }
+
+    ucs_memory_cpu_load_fence();
+    UCS_STATS_UPDATE_COUNTER(rc_iface->stats, UCT_RC_IFACE_STAT_RX_COMPLETION, 1);
+
+    byte_len = ntohl(cqe->byte_cnt);
+    seg      = uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq,
+                                       ntohs(cqe->wqe_counter));
+
+    uct_rc_mlx5_iface_common_am_handler(mlx5_common_iface, rc_iface, cqe,
+                                        seg, byte_len);
     count = 1;
 
 done:
