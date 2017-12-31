@@ -1191,8 +1191,7 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker)
     ucp_ep_h ep;
 
     ucs_debug("worker %p: destroy all endpoints", worker);
-    kh_foreach_value(&worker->ep_hash, ep,
-                     ucp_ep_destroy_internal(ep, " from worker destroy"));
+    kh_foreach_value(&worker->ep_hash, ep, ucp_ep_destroy_internal(ep));
 }
 
 void ucp_worker_destroy(ucp_worker_h worker)
@@ -1442,10 +1441,12 @@ ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid)
 
     ep = ucp_worker_ep_find(worker, dest_uuid);
     if (ep == NULL) {
-        status = ucp_ep_create_stub(worker, dest_uuid, "for-sending-reply", &ep);
+        status = ucp_ep_create_stub(worker, dest_uuid, NULL, "??",
+                                    "for-sending-reply", &ep);
         if (status != UCS_OK) {
             goto err;
         }
+        ep->flags |= UCP_EP_FLAG_DEST_UUID_PEER;
     } else {
         ucs_debug("found reply ep %p to uuid %"PRIx64, ep, dest_uuid);
     }
