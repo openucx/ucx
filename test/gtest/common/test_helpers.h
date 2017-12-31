@@ -16,6 +16,7 @@
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
+#include <ucs/sys/string.h>
 #include <errno.h>
 #include <iostream>
 #include <stdexcept>
@@ -81,12 +82,6 @@ void safe_usleep(double usec);
 
 
 /**
- * Return the IP address of the given interface address.
- */
-std::string get_iface_ip(const struct sockaddr *ifa_addr);
-
-
-/**
  * Check if the given interface has an IPv4 or an IPv6 address.
  */
 bool is_inet_addr(const struct sockaddr* ifa_addr);
@@ -102,6 +97,17 @@ bool is_ib_netdev(const char *ifa_name);
  * Get an available port on the host.
  */
 uint16_t get_port();
+
+
+/**
+ * Return the IP address of the given interface address.
+ */
+template <typename S>
+std::string sockaddr_to_str(const S *saddr) {
+    char buffer[UCS_SOCKADDR_STRING_LEN];
+    return ::ucs_sockaddr_str(reinterpret_cast<const struct sockaddr*>(saddr),
+                              buffer, UCS_SOCKADDR_STRING_LEN);
+}
 
 
 /*

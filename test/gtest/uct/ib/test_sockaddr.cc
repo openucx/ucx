@@ -94,7 +94,7 @@ protected:
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
 {
-    UCS_TEST_MESSAGE << "Testing " << ucs::get_iface_ip(sock_addr.addr);
+    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(sock_addr.addr);
 
     uct_test::entity::client_connected = 0;
     err_count = 0;
@@ -112,7 +112,7 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
 UCS_TEST_P(test_uct_sockaddr, err_handle)
 {
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
-    UCS_TEST_MESSAGE << "Testing " << ucs::get_iface_ip(sock_addr.addr);
+    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(sock_addr.addr);
 
     uct_test::entity::client_connected = 0;
     server_recv_req = 0;
