@@ -112,6 +112,12 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
     ucs_trace_func("iface=%p is_proxy=%d", wiface->iface, is_proxy);
 
     for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
+        if (!(wiface->attr.cap.flags & (UCT_IFACE_FLAG_AM_SHORT |
+                                        UCT_IFACE_FLAG_AM_BCOPY |
+                                        UCT_IFACE_FLAG_AM_ZCOPY))) {
+            continue;
+        }
+
         if (!(context->config.features & ucp_am_handlers[am_id].features)) {
             continue;
         }
@@ -165,6 +171,11 @@ static void ucp_worker_remove_am_handlers(ucp_worker_h worker)
     ucs_debug("worker %p: remove active message handlers", worker);
 
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+        if (!(worker->ifaces[tl_id].attr.cap.flags & (UCT_IFACE_FLAG_AM_SHORT |
+                                                      UCT_IFACE_FLAG_AM_BCOPY |
+                                                      UCT_IFACE_FLAG_AM_ZCOPY))) {
+            continue;
+        }
         for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
             if (context->config.features & ucp_am_handlers[am_id].features) {
                 (void)uct_iface_set_am_handler(worker->ifaces[tl_id].iface,
