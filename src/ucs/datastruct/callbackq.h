@@ -32,7 +32,30 @@ BEGIN_C_DECLS
  */
 typedef struct ucs_callbackq       ucs_callbackq_t;
 typedef struct ucs_callbackq_elem  ucs_callbackq_elem_t;
-typedef unsigned                   (*ucs_callback_t)(void *arg);
+
+
+/**
+ * Callback which can be placed in a queue.
+ *
+ * @param [in] arg  User-defined argument for the callback.
+ *
+ * @return Count of how much "work" was done by the callback. For example, zero
+ *         means that no work was done, and any nonzero value means that something
+ *         was done.
+ */
+typedef unsigned (*ucs_callback_t)(void *arg);
+
+
+/**
+ * Callback queue element predicate.
+ *
+ * @param [in] elem  Callback queue element to check.
+ * @param [in] arg   User-defined argument.
+ *
+ * @return Predicate result value - nonzero means "true", zero means "false".
+ */
+typedef int (*ucs_callbackq_predicate_t)(const ucs_callbackq_elem_t *elem,
+                                         void *arg);
 
 
 /**
@@ -142,12 +165,28 @@ int ucs_callbackq_add_safe(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg,
  * be removed at some point in the near future.
  * This can be used from any context and any thread, including but not limited to:
  * - A callback can remove another callback or itself.
- * - A thread remove add a callback while another thread is dispatching callbacks.
+ * - A thread remove a callback while another thread is dispatching callbacks.
  *
  * @param  [in] cbq      Callback queue to remove the callback from.
  * @param  [in] id       Callback identifier to remove.
  */
 void ucs_callbackq_remove_safe(ucs_callbackq_t *cbq, int id);
+
+
+/**
+ * Remove all callbacks from the queue for which the given predicate returns
+ * "true" (nonzero) value.
+ * This is *not* safe to call while another thread might be dispatching callbacks.
+ * However, it can be used from the dispatch context (e.g a callback may use this
+ * function to remove itself or another callback). In this case, the callback may
+ * still be dispatched once after this function returned.
+ *
+ * @param  [in] cbq       Callback queue.
+ * @param  [in] pred      Predicate to check candidates for removal.
+ * @param  [in] arg       User-defined argument for the predicate.
+ */
+void ucs_callbackq_remove_if(ucs_callbackq_t *cbq, ucs_callbackq_predicate_t pred,
+                             void *arg);
 
 
 /**
