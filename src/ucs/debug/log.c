@@ -186,8 +186,8 @@ void ucs_log_fatal_error(const char *fmt, ...)
     p = buffer;
 
     /* Print hostname:pid */
-    snprintf(p, buffer_size, "[%s:%-5d:%d] ", ucs_log_hostname, ucs_log_pid,
-             ucs_log_get_thread_num());
+    snprintf(p, buffer_size, "[%s:%-5d:%d:%d] ", ucs_log_hostname, ucs_log_pid,
+             ucs_log_get_thread_num(), ucs_get_tid());
     buffer_size -= strlen(p);
     p           += strlen(p);
 
