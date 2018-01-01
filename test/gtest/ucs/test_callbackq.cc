@@ -263,31 +263,40 @@ UCS_MT_TEST_P(test_callbackq, remove, 10) {
 
     init_ctx(&ctx1);
 
-    if (barrier()) {
+    if (barrier()) /*1*/ {
         add_safe(&ctx1);
-    }
-
-    sched_yield();
-
-    if (barrier()) {
-        callback_ctx ctx2;
-        init_ctx(&ctx2);
-
-        dispatch(1000);
-        add(&ctx2);
-        barrier();
+        dispatch(100);
+        barrier(); /*2*/
         remove_safe(&ctx1);
-        remove_safe(&ctx2);
         dispatch(1);
 
-        /* this should remove all instances of 'ctx', including queued async
-         * commands */
         uint32_t count1 = ctx1.count;
         dispatch(100);
         EXPECT_EQ(count1, ctx1.count);
-    } else {
+
+        barrier();/*3*/
+        dispatch(1); /* will remove ctx2 on other threads */
+        barrier();/*4*/
+
+        barrier();/*5*/
         dispatch(100);
-        barrier();
+        barrier();/*6*/
+    } else {
+        callback_ctx ctx2;
+        init_ctx(&ctx2);
+        add_safe(&ctx2);
+        barrier(); /*2*/
+
+        /* ask to ctx2 and wait until the main thread actually removes it */
+        remove_safe(&ctx2);
+        barrier(); /*3*/
+        barrier(); /*4*/
+
+        /* make sure ctx2 is not dispatched */
+        uint32_t count1 = ctx2.count;
+        barrier();/*5*/
+        barrier();/*6*/
+        EXPECT_EQ(count1, ctx2.count);
     }
 }
 

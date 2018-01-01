@@ -152,6 +152,7 @@ void ucs_callbackq_remove_safe(ucs_callbackq_t *cbq, int id);
 
 /**
  * Dispatch callbacks from the callback queue.
+ * Must be called from single thread only.
  *
  * @param  [in] cbq      Callback queue to dispatch callbacks from.
 
