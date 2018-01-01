@@ -978,16 +978,15 @@ out:
     return config_idx;
 }
 
-ucs_status_t ucp_worker_listen(ucp_worker_h worker,
-                               const ucp_worker_listener_params_t *params,
-                               ucp_listener_h *listener_p)
+ucs_status_t ucp_listener_create(ucp_worker_h worker,
+                                 const ucp_listener_params_t *params,
+                                 ucp_listener_h *listener_p)
 {
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
-ucs_status_t ucp_listener_destroy(ucp_listener_h listener)
+void ucp_listener_destroy(ucp_listener_h listener)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ucs_status_t ucp_worker_create(ucp_context_h context,
