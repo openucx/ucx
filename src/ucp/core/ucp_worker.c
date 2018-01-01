@@ -1032,12 +1032,13 @@ ucs_status_t ucp_worker_listen(ucp_worker_h worker,
                                const ucp_worker_listener_params_t *params,
                                ucp_listener_h *listener_p)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    ucs_error("ucp_worker_listen() not implemented yet");
+    return UCS_ERR_INVALID_ADDR;
 }
 
 ucs_status_t ucp_listener_destroy(ucp_listener_h listener)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    return UCS_OK;
 }
 
 ucs_status_t ucp_worker_create(ucp_context_h context,

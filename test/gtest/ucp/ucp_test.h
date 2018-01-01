@@ -58,6 +58,9 @@ public:
 
         void destroy_worker(int worker_index = 0);
 
+        ucs_status_t listen(const struct sockaddr *saddr, socklen_t addrlen,
+                            int worker_index = 0);
+
         ucp_ep_h ep(int worker_index = 0, int ep_index = 0) const;
 
         ucp_ep_h revoke_ep(int worker_index = 0, int ep_index = 0) const;
@@ -79,13 +82,17 @@ public:
         static void ep_destructor(ucp_ep_h ep, entity *e);
 
     protected:
-        ucs::handle<ucp_context_h> m_ucph;
-        worker_vec_t               m_workers;
+        ucs::handle<ucp_context_h>  m_ucph;
+        worker_vec_t                m_workers;
+        ucs::handle<ucp_listener_h> m_listener;
 
         int num_workers;
 
     private:
         static void empty_send_completion(void *r, ucs_status_t status);
+        static void accept_cb(ucp_ep_h ep, void *arg);
+
+        void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
     };
 };
 

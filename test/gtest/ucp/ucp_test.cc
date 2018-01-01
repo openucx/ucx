@@ -371,17 +371,29 @@ void ucp_test_base::entity::connect(const entity* other,
 
         ASSERT_UCS_OK(status);
 
-        if (size_t(ep_idx) < m_workers[i].second.size()) {
-            m_workers[i].second[ep_idx].reset(ep, ep_destructor, this);
-        } else {
-            m_workers[i].second.push_back(ucs::handle<ucp_ep_h, entity *>(ep, ucp_ep_destroy));
-        }
+        set_ep(ep, i, ep_idx);
 
         ucp_worker_release_address(other->worker(i), address);
     }
 }
 
+void ucp_test_base::entity::set_ep(ucp_ep_h ep, int worker_index, int ep_index)
+{
+    if (ep_index < get_num_eps(worker_index)) {
+        m_workers[worker_index].second[ep_index].reset(ep, ep_destructor, this);
+    } else {
+        m_workers[worker_index].second.push_back(
+                        ucs::handle<ucp_ep_h, entity *>(ep, ucp_ep_destroy));
+    }
+}
+
 void ucp_test_base::entity::empty_send_completion(void *r, ucs_status_t status) {
+}
+
+void ucp_test_base::entity::accept_cb(ucp_ep_h ep, void *arg) {
+    entity *self = reinterpret_cast<entity*>(arg);
+    int worker_index = 0; /* TODO pass worker index in arg */
+    self->set_ep(ep, worker_index, self->get_num_eps(worker_index));
 }
 
 void* ucp_test_base::entity::flush_ep_nb(int worker_index, int ep_index) const {
@@ -434,6 +446,31 @@ ucp_ep_h ucp_test_base::entity::revoke_ep(int worker_index, int ep_index) const 
     return ucp_ep;
 }
 
+ucs_status_t ucp_test_base::entity::listen(const struct sockaddr* saddr,
+                                           socklen_t addrlen, int worker_index)
+{
+    ucp_worker_listener_params_t params;
+    ucp_listener_h listener;
+
+    params.field_mask            = UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR |
+                                   UCP_WORKER_LISTENER_PARAM_FIELD_CALLBACK;
+    params.sockaddr.addr         = saddr;
+    params.sockaddr.addrlen      = addrlen;
+    params.ep_accept_handler.cb  = accept_cb;
+    params.ep_accept_handler.arg = reinterpret_cast<void*>(this);
+
+    wrap_errors();
+    ucs_status_t status = ucp_worker_listen(worker(worker_index), &params, &listener);
+    restore_errors();
+    if (status == UCS_OK) {
+        m_listener.reset(listener, (void(*)(ucp_listener_h))ucp_listener_destroy);
+    } else if (status != UCS_ERR_INVALID_ADDR) {
+        /* throw error if status is not (UCS_OK or UCS_ERR_INVALID_ADDR) */
+        ASSERT_UCS_OK(status);
+    }
+    return status;
+}
+
 ucp_worker_h ucp_test_base::entity::worker(int worker_index) const {
     return m_workers[worker_index].first;
 }
@@ -469,6 +506,7 @@ void ucp_test_base::entity::warn_existing_eps() const {
 }
 
 void ucp_test_base::entity::cleanup() {
+    m_listener.reset();
     m_workers.clear();
 }
 
