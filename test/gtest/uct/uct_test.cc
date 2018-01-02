@@ -688,52 +688,64 @@ uct_test::mapped_buffer::~mapped_buffer() {
 }
 
 void uct_test::mapped_buffer::pattern_fill(uint64_t seed) {
-    pattern_fill(m_buf, (char*)m_end - (char*)m_buf, seed, m_mem.mem_type);
+    switch(m_mem.mem_type) {
+    case UCT_MD_MEM_TYPE_HOST:
+        pattern_fill(m_buf, (char*)m_end - (char*)m_buf, seed);
+        break;
+    case UCT_MD_MEM_TYPE_CUDA:
+        pattern_fill_cuda(m_buf, (char*)m_end - (char*)m_buf, seed);
+        break;
+    default:
+        UCS_TEST_SKIP_R("Wrong buffer memory type");
+    }
 }
 
-void uct_test::mapped_buffer::pattern_fill(void *buffer, size_t length, uint64_t seed,
-                                           uct_memory_type_t mem_type)
+
+void uct_test::mapped_buffer::pattern_fill(void *buffer, size_t length, uint64_t seed)
 {
     uint64_t *ptr = (uint64_t*)buffer;
     char *end = (char *)buffer + length;
 
-    if (mem_type == UCT_MD_MEM_TYPE_HOST) {
-        while ((char*)(ptr + 1) <= end) {
-            *ptr = seed;
-            seed = pat(seed);
-            ++ptr;
-        }
-        memcpy(ptr, &seed, end - (char*)ptr);
-    } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
-#if HAVE_CUDA
-        void *temp;
-        cudaError_t cerr;
-
-        temp = malloc(length);
-        ASSERT_TRUE(temp != NULL);
-
-        cerr = cudaHostRegister(temp, length, cudaHostRegisterPortable);
-        ASSERT_TRUE(cerr == cudaSuccess);
-
-        ptr = (uint64_t*)temp;
-        end = (char *)temp + length;
-        while ((char*)(ptr + 1) <= end) {
-            *ptr = seed;
-            seed = pat(seed);
-            ++ptr;
-        }
-        memcpy(ptr, &seed, end - (char*)ptr);
-
-        cerr = cudaMemcpy(buffer, temp, length, cudaMemcpyHostToDevice);
-        ASSERT_TRUE(cerr == cudaSuccess);
-        cerr = cudaHostUnregister(temp);
-        free(temp);
-#endif
+    while ((char*)(ptr + 1) <= end) {
+        *ptr = seed;
+        seed = pat(seed);
+        ++ptr;
     }
+    memcpy(ptr, &seed, end - (char*)ptr);
+}
+
+void uct_test::mapped_buffer::pattern_fill_cuda(void *start, size_t length, uint64_t seed)
+{
+#if HAVE_CUDA
+    void *temp;
+    cudaError_t cerr;
+
+    temp = malloc(length);
+    ASSERT_TRUE(temp != NULL);
+
+    cerr = cudaHostRegister(temp, length, cudaHostRegisterPortable);
+    ASSERT_TRUE(cerr == cudaSuccess);
+
+    pattern_fill(temp, length, seed);
+
+    cerr = cudaMemcpy(start, temp, length, cudaMemcpyHostToDevice);
+    ASSERT_TRUE(cerr == cudaSuccess);
+    cerr = cudaHostUnregister(temp);
+    free(temp);
+#endif
 }
 
 void uct_test::mapped_buffer::pattern_check(uint64_t seed) {
-    pattern_check(ptr(), length(), seed, m_mem.mem_type);
+    switch(m_mem.mem_type) {
+    case UCT_MD_MEM_TYPE_HOST:
+        pattern_check(ptr(), length(), seed);
+        break;
+    case UCT_MD_MEM_TYPE_CUDA:
+        pattern_check_cuda(ptr(), length(), seed);
+        break;
+    default:
+        UCS_TEST_SKIP_R("Wrong buffer memory type");
+    }
 }
 
 void uct_test::mapped_buffer::pattern_check(const void *buffer, size_t length) {
@@ -743,29 +755,13 @@ void uct_test::mapped_buffer::pattern_check(const void *buffer, size_t length) {
 }
 
 void uct_test::mapped_buffer::pattern_check(const void *buffer, size_t length,
-                                            uint64_t seed, uct_memory_type_t mem_type) {
+                                            uint64_t seed) {
     const char* end = (const char*)buffer + length;
     const uint64_t *ptr = (const uint64_t*)buffer;
-    const void* ptr1 = buffer;
-    void *temp = NULL;
-
-    if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
-#if HAVE_CUDA
-        cudaError_t cerr;
-
-        temp = malloc(length);
-        end = (const char*)temp + length;
-        ptr = (const uint64_t*)temp;
-        ptr1 = temp;
-
-        cerr = cudaMemcpy(temp, buffer, length, cudaMemcpyDeviceToHost);
-        ASSERT_TRUE(cerr == cudaSuccess);
-#endif
-    }
 
     while ((const char*)(ptr + 1) <= end) {
        if (*ptr != seed) {
-            UCS_TEST_ABORT("At offset " << ((const char*)ptr - (const char*)ptr1) << ": " <<
+            UCS_TEST_ABORT("At offset " << ((const char*)ptr - (const char*)buffer) << ": " <<
                            "Expected: 0x" << std::hex << seed << " " <<
                            "Got: 0x" << std::hex << (*ptr) << std::dec);
         }
@@ -780,7 +776,7 @@ void uct_test::mapped_buffer::pattern_check(const void *buffer, size_t length,
         uint64_t value = 0;
         memcpy(&value, ptr, remainder);
         if (value != (seed & mask)) {
-             UCS_TEST_ABORT("At offset " << ((const char*)ptr - (const char*)ptr1) <<
+             UCS_TEST_ABORT("At offset " << ((const char*)ptr - (const char*)buffer) <<
                             " (remainder " << remainder << ") : " <<
                             "Expected: 0x" << std::hex << (seed & mask) << " " <<
                             "Mask: 0x" << std::hex << mask << " " <<
@@ -788,7 +784,23 @@ void uct_test::mapped_buffer::pattern_check(const void *buffer, size_t length,
          }
 
     }
+}
+
+void uct_test::mapped_buffer::pattern_check_cuda(const void *buffer, size_t length,
+                                                 uint64_t seed) {
+#if HAVE_CUDA
+    void *temp = NULL;
+    cudaError_t cerr;
+
+    temp = malloc(length);
+    ASSERT_TRUE(temp != NULL);
+
+    cerr = cudaMemcpy(temp, buffer, length, cudaMemcpyDeviceToHost);
+    ASSERT_TRUE(cerr == cudaSuccess);
+
+    pattern_check(temp, length, seed);
     free(temp);
+#endif
 }
 
 void *uct_test::mapped_buffer::ptr() const {

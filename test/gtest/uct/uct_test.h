@@ -144,11 +144,11 @@ protected:
         void pattern_check(uint64_t seed);
 
         static size_t pack(void *dest, void *arg);
-        static void pattern_fill(void *buffer, size_t length, uint64_t seed,
-                                 uct_memory_type_t m_type = UCT_MD_MEM_TYPE_HOST);
+        static void pattern_fill(void *buffer, size_t length, uint64_t seed);
+        static void pattern_fill_cuda(void *buffer, size_t length, uint64_t seed);
         static void pattern_check(const void *buffer, size_t length);
-        static void pattern_check(const void *buffer, size_t length, uint64_t seed,
-                                  uct_memory_type_t m_type = UCT_MD_MEM_TYPE_HOST);
+        static void pattern_check(const void *buffer, size_t length, uint64_t seed);
+        static void pattern_check_cuda(const void *buffer, size_t length, uint64_t seed);
     private:
         static uint64_t pat(uint64_t prev);
 
