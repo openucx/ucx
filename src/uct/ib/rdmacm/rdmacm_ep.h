@@ -13,13 +13,12 @@ struct uct_rdmacm_ep {
     void                               *priv_data;
     ucs_list_link_t                    list_elem;
     struct sockaddr_storage            remote_addr;
-    uint32_t                           cb_flags;
     int                                is_on_pending;
 };
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t, uct_iface_t*,
                            const ucs_sock_addr_t *,
-                           uint32_t, const void *, size_t);
+                           const void *, size_t);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_ep_t, uct_ep_t);
 
 void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t status);

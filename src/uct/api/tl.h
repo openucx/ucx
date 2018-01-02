@@ -162,7 +162,6 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*ep_create_sockaddr)(uct_iface_h iface,
                                        const ucs_sock_addr_t *sockaddr,
-                                       uint32_t cb_flags,
                                        const void *priv_data, size_t length,
                                        uct_ep_h *ep_p);
 

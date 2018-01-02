@@ -519,9 +519,9 @@ void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other)
     /* Connect to the server */
     status = uct_ep_create_sockaddr(iface(),
                                     &other.iface_params().mode.sockaddr.listen_sockaddr,
-                                    UCT_CB_FLAG_ASYNC, client_priv_data.c_str(),
+                                    client_priv_data.c_str(),
                                     client_priv_data.length(), &ep);
-    /* For UCT_CB_FLAG_ASYNC */
+
     ASSERT_TRUE(status == UCS_INPROGRESS);
 
     m_eps[index].reset(ep, uct_ep_destroy);

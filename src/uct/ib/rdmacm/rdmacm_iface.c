@@ -143,6 +143,7 @@ static void uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
         return;
     }
 
+    /* The server will not send any reply data back to the client */
     memset(&conn_param, 0, sizeof(conn_param));
     /* Accepting the connection will generate the RDMA_CM_EVENT_ESTABLISHED
      * event on the client side. */

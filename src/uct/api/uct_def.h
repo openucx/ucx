@@ -282,7 +282,11 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  *                               client side.
  * @param [in]  length           Length of the received data.
  *
- * @return  Error code.
+ * @retval UCS_OK         - the server will accept the connection request from
+ *                          the client.
+ * @retval Otherwise      - the server will reject the connection request from
+ *                          the client which will invoke the error handling flow
+ *                          on the client side.
  *
  */
 typedef ucs_status_t (*uct_sockaddr_conn_request_callback_t)(void *arg,
