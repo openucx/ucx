@@ -51,9 +51,9 @@ else
 fi
 
 #
-# Build command runs with 4 tasks on 2 cores
+# Build command runs with 10 tasks
 #
-MAKE="$AFFINITY make -j4"
+MAKE="make -j10"
 
 
 #
@@ -168,7 +168,7 @@ prepare() {
 #
 build_docs() {
 	echo " ==== Build docs only ===="
-	$AFFINITY ../configure --prefix=$ucx_inst --with-docs-only
+	../configure --prefix=$ucx_inst --with-docs-only
 	$MAKE clean
 	$MAKE docs
 	$MAKE clean # FIXME distclean does not work with docs-only
@@ -179,7 +179,7 @@ build_docs() {
 #
 build_no_verbs() {
 	echo "==== Build without IB verbs ===="
-	$AFFINITY ../contrib/configure-release --prefix=$ucx_inst --without-verbs
+	../contrib/configure-release --prefix=$ucx_inst --without-verbs
 	$MAKE clean
 	$MAKE
 	$MAKE distclean
@@ -190,7 +190,7 @@ build_no_verbs() {
 #
 build_disable_numa() {
 	echo "==== Check --disable-numa compilation option ===="
-	$AFFINITY ../contrib/configure-release --prefix=$ucx_inst --disable-numa
+	../contrib/configure-release --prefix=$ucx_inst --disable-numa
 	$MAKE clean
 	$MAKE
 	$MAKE distclean
@@ -201,7 +201,7 @@ build_disable_numa() {
 #
 build_release_pkg() {
 	echo "==== Build release ===="
-	$AFFINITY ../contrib/configure-release
+	../contrib/configure-release
 	$MAKE clean
 	$MAKE
 	$MAKE distcheck
@@ -237,7 +237,7 @@ build_icc() {
 	if module_load intel/ics
 	then
 		echo "==== Build with Intel compiler ===="
-		$AFFINITY ../contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
+		../contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
 		$MAKE clean
 		$MAKE
 		$MAKE distclean
@@ -254,7 +254,7 @@ build_icc() {
 #
 build_debug() {
 	echo "==== Build with --enable-debug option ===="
-	$AFFINITY ../contrib/configure-devel --prefix=$ucx_inst --enable-debug
+	../contrib/configure-devel --prefix=$ucx_inst --enable-debug
 	$MAKE clean
 	$MAKE
 	$MAKE distclean
@@ -271,13 +271,13 @@ build_cuda() {
         if module_load dev/gdrcopy
         then
             echo "==== Build with enable cuda ===="
-            $AFFINITY ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
+            ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
             $MAKE clean
             $MAKE
             $MAKE distclean
             module unload dev/gdrcopy
         else
-            $AFFINITY ../contrib/configure-devel --prefix=$ucx_inst --with-cuda
+            ../contrib/configure-devel --prefix=$ucx_inst --with-cuda
             $MAKE clean
             $MAKE
             $MAKE distclean
@@ -298,7 +298,7 @@ build_clang() {
 	if which clang > /dev/null 2>&1
 	then
 		echo "==== Build with clang compiler ===="
-		$AFFINITY ../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
+		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
 		$MAKE clean
 		$MAKE
 		$MAKE distclean
@@ -313,7 +313,7 @@ check_inst_headers() {
 	echo 1..1 > inst_headers.tap
 	echo "==== Testing installed headers ===="
 
-	$AFFINITY ../contrib/configure-release --prefix=$PWD/install
+	../contrib/configure-release --prefix=$PWD/install
 	$MAKE clean
 	$MAKE install
 	../contrib/check_inst_headers.sh $PWD/install/include
@@ -461,7 +461,7 @@ run_mpi_tests() {
 	echo "1..2" > mpi_tests.tap
 	if module_load hpcx-gcc
 	then
-		$AFFINITY ../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
+		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
 		$MAKE clean
 		$MAKE install
 		$MAKE installcheck # check whether installation is valid (it compiles examples at least)
@@ -558,7 +558,7 @@ run_gtest() {
 	module_load dev/cuda || true
 	module_load dev/gdrcopy || true
 
-	$AFFINITY ../contrib/configure-devel --prefix=$ucx_inst
+	../contrib/configure-devel --prefix=$ucx_inst
 	$MAKE clean
 	$MAKE
 
@@ -657,7 +657,7 @@ run_tests() {
 	# all are running mpi tests
 	run_mpi_tests
 
-	$AFFINITY ../contrib/configure-devel --prefix=$ucx_inst
+	../contrib/configure-devel --prefix=$ucx_inst
 	$MAKE
 	$MAKE install
 
