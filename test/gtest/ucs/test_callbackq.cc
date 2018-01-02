@@ -13,7 +13,7 @@ extern "C" {
 
 class test_callbackq :
     public ucs::test_base,
-    public ::testing::TestWithParam<bool> {
+    public ::testing::TestWithParam<int> {
 protected:
 
     enum {
@@ -28,6 +28,7 @@ protected:
         uint32_t                  count;
         int                       command;
         callback_ctx              *to_add;
+        int                       key;
     };
 
     test_callbackq() {
@@ -70,23 +71,24 @@ protected:
         return 1;
     }
 
-    void init_ctx(callback_ctx *ctx)
+    void init_ctx(callback_ctx *ctx, int key = 0)
     {
         ctx->test        = this;
         ctx->count       = 0;
         ctx->command     = COMMAND_NONE;
         ctx->callback_id = UCS_CALLBACKQ_ID_NULL;
+        ctx->key         = key;
     }
 
-    unsigned fast_path_flag() {
-        return GetParam() ? UCS_CALLBACKQ_FLAG_FAST : 0;
+    virtual unsigned cb_flags() {
+        return GetParam();
     }
 
     void add(callback_ctx *ctx, unsigned flags = 0)
     {
         ctx->callback_id = ucs_callbackq_add(&m_cbq, callback_proxy,
                                              reinterpret_cast<void*>(ctx),
-                                             fast_path_flag() | flags);
+                                             cb_flags() | flags);
     }
 
     void remove(callback_ctx *ctx)
@@ -98,12 +100,27 @@ protected:
     {
         ctx->callback_id = ucs_callbackq_add_safe(&m_cbq, callback_proxy,
                                                   reinterpret_cast<void*>(ctx),
-                                                  fast_path_flag() | flags);
+                                                  cb_flags() | flags);
     }
 
     void remove_safe(callback_ctx *ctx)
     {
         ucs_callbackq_remove_safe(&m_cbq, ctx->callback_id);
+    }
+
+    static int remove_if_pred(const ucs_callbackq_elem_t *elem, void *arg)
+    {
+        callback_ctx *ctx = reinterpret_cast<callback_ctx*>(elem->arg);
+        int key = *reinterpret_cast<int*>(arg);
+
+        /* remove callbacks with the given key */
+        return (elem->cb == callback_proxy) && (ctx->key == key);
+    }
+
+    void remove_if(int key)
+    {
+        ucs_callbackq_remove_if(&m_cbq, remove_if_pred,
+                                reinterpret_cast<void*>(&key));
     }
 
     unsigned dispatch(unsigned count = 1)
@@ -200,22 +217,6 @@ UCS_TEST_P(test_callbackq, add_another) {
     EXPECT_EQ(count + 2, ctx2.count);
 }
 
-UCS_TEST_P(test_callbackq, oneshot) {
-    callback_ctx ctx;
-
-    if (GetParam()) {
-        UCS_TEST_SKIP_R("oneshot is only for slow-path");
-    }
-
-    init_ctx(&ctx);
-    ctx.command = COMMAND_NONE;
-
-    add(&ctx, UCS_CALLBACKQ_FLAG_ONESHOT);
-    dispatch(100);
-    EXPECT_EQ(1u, ctx.count);
-}
-
-
 UCS_MT_TEST_P(test_callbackq, threads, 10) {
 
     static unsigned COUNT = 2000;
@@ -291,6 +292,64 @@ UCS_MT_TEST_P(test_callbackq, remove, 10) {
     }
 }
 
-INSTANTIATE_TEST_CASE_P(fast_path, test_callbackq, ::testing::Values(true));
-INSTANTIATE_TEST_CASE_P(slow_path, test_callbackq, ::testing::Values(false));
+INSTANTIATE_TEST_CASE_P(fast_path, test_callbackq, ::
+                        testing::Values(static_cast<int>(UCS_CALLBACKQ_FLAG_FAST)));
+INSTANTIATE_TEST_CASE_P(slow_path, test_callbackq, ::testing::Values(0));
+
+
+class test_callbackq_noflags : public test_callbackq {
+protected:
+    virtual unsigned cb_flags() {
+        return 0;
+    }
+};
+
+UCS_TEST_F(test_callbackq_noflags, oneshot) {
+    callback_ctx ctx;
+
+    init_ctx(&ctx);
+    ctx.command = COMMAND_NONE;
+
+    add(&ctx, UCS_CALLBACKQ_FLAG_ONESHOT);
+    dispatch(100);
+    EXPECT_EQ(1u, ctx.count);
+}
+
+UCS_TEST_F(test_callbackq_noflags, remove_if) {
+    const size_t count = 1000;
+    const int num_keys = 10;
+    std::vector<callback_ctx> ctx(count);
+    size_t key_counts[num_keys] = {0};
+
+    for (size_t i = 0; i < count; ++i) {
+        init_ctx(&ctx[i], ucs::rand() % num_keys);
+        add(&ctx[i], (i % 2) ? UCS_CALLBACKQ_FLAG_FAST : 0);
+        ++key_counts[ctx[i].key];
+    }
+
+    /* calculate how many callbacks expected to remain after removing each of
+     * the keys.
+     */
+    size_t exp_count[num_keys] = {0};
+    for (int key = num_keys - 2; key >= 0; --key) {
+        exp_count[key] = exp_count[key + 1] + key_counts[key + 1];
+    }
+
+    /* remove keys one after another and make sure the exact expected number
+     * of callbacks is being called after every removal.
+     */
+    for (int key = 0; key < num_keys; ++key) {
+        remove_if(key);
+
+        /* count how many different callbacks were called */
+        size_t num_cbs = 0;
+        dispatch(1000);
+        for (size_t i = 0; i < count; ++i) {
+            num_cbs += !!ctx[i].count;
+            ctx[i].count = 0; /* reset for next iteration */
+        }
+
+        EXPECT_EQ(exp_count[key], num_cbs) << "key=" << key;
+    }
+}
 

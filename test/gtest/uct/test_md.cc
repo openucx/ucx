@@ -499,14 +499,14 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
             if (!strcmp(GetParam().c_str(), "rdmacm")) {
                 if (ucs::is_ib_netdev(ifa->ifa_name)) {
                     UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
-                                        ucs::get_iface_ip(ifa->ifa_addr);
+                                        ucs::sockaddr_to_str(ifa->ifa_addr);
                     ASSERT_TRUE(rc_local);
                     ASSERT_TRUE(rc_remote);
                     found_ipoib = 1;
                 }
             } else {
                 UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
-                                    ucs::get_iface_ip(ifa->ifa_addr);
+                                    ucs::sockaddr_to_str(ifa->ifa_addr);
                 ASSERT_TRUE(rc_local);
                 ASSERT_TRUE(rc_remote);
             }

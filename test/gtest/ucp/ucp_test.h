@@ -58,6 +58,9 @@ public:
 
         void destroy_worker(int worker_index = 0);
 
+        ucs_status_t listen(const struct sockaddr *saddr, socklen_t addrlen,
+                            int worker_index = 0);
+
         ucp_ep_h ep(int worker_index = 0, int ep_index = 0) const;
 
         ucp_ep_h revoke_ep(int worker_index = 0, int ep_index = 0) const;
@@ -79,13 +82,17 @@ public:
         static void ep_destructor(ucp_ep_h ep, entity *e);
 
     protected:
-        ucs::handle<ucp_context_h> m_ucph;
-        worker_vec_t               m_workers;
+        ucs::handle<ucp_context_h>  m_ucph;
+        worker_vec_t                m_workers;
+        ucs::handle<ucp_listener_h> m_listener;
 
         int num_workers;
 
     private:
         static void empty_send_completion(void *r, ucs_status_t status);
+        static void accept_cb(ucp_ep_h ep, void *arg);
+
+        void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
     };
 };
 
@@ -192,18 +199,18 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
  *
  * @param _test_case  Test case class, derived from uct_test.
  */
-#define UCP_INSTANTIATE_TEST_CASE(_test_case)                                                    \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc,    "\\dc")                                     \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx,   "\\dc_mlx5")                                \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,    "\\ud")                                     \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,   "\\ud_mlx5")                                \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrc,  "\\ud,\\rc")                             \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, cmrcx, "\\cm,\\rc_mlx5")                        \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm,   "\\mm,\\knem,\\cma,\\xpmem,ib") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrcx, "\\ud_mlx5,\\rc_mlx5")                   \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,  "\\ugni_smsg,\\ugni_udt,\\ugni_rdma") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,  "\\self") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,  "\\tcp")
+#define UCP_INSTANTIATE_TEST_CASE(_test_case) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc,     "dc") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx,    "dc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,     "ud") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,    "ud_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,     "rc") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,    "rc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx_cm, "\\rc_mlx5,cm:aux") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib, "shm,ib") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,   "ugni") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,   "self") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,    "tcp")
 
 
 #endif
