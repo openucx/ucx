@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -106,10 +106,7 @@ ucs_status_t ucp_worker_listen(ucp_worker_h worker,
             listener->cb  = params->ep_accept_handler.cb;
             listener->arg = params->ep_accept_handler.arg;
         } else {
-            /* TODO if callback is not specified, avoid creating endpoint on server side
-             * if not really needed (not p2p tl)
-             */
-            listener->cb = NULL;
+            listener->cb  = (void*)ucs_empty_function;
         }
 
         memset(&iface_params, 0, sizeof(iface_params));

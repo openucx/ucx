@@ -211,7 +211,7 @@ typedef struct ucp_am_handler {
 
 #define UCP_CHECK_PARAM_NON_NULL(_param, _status, _action) \
     if ((_param) == NULL) { \
-        ucs_error("The parameter %s must not be NULL", #_param); \
+        ucs_error("the parameter %s must not be NULL", #_param); \
         (_status) = UCS_ERR_INVALID_PARAM; \
         _action; \
     };
