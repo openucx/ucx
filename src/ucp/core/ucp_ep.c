@@ -250,11 +250,19 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
     unsigned address_count;
     ucs_status_t status;
     uint64_t dest_uuid;
+    unsigned flags;
     ucp_ep_h ep;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     UCS_ASYNC_BLOCK(&worker->async);
+
+    flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
+    if (flags & UCP_EP_PARAMS_FLAGS_CLIENT_SERVER) {
+        ucs_error("client/server endpoint is not supported yet");
+        status = UCS_ERR_UNREACHABLE; /* TODO support client/server endpoint */
+        goto out;
+     }
 
     if (params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS) {
         status = ucp_address_unpack(params->address, &dest_uuid, peer_name, sizeof(peer_name),
