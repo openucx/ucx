@@ -56,14 +56,9 @@ public class WorkerTest {
         }
 
         assertTrue("Worker fields initialization failed",
-                nativeId > 0 &&
-                workerAddress != null &&
-                workerAddress.length > 0);
-
-        if (nativeId <= 0 || workerAddress == null ||
-                workerAddress.length == 0) {
-            fail("Worker fields initialization failed");
-        }
+                   nativeId > 0 &&
+                   workerAddress != null &&
+                   workerAddress.length > 0);
 
         worker.close();
     }

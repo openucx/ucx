@@ -44,7 +44,7 @@ public class LoadLibrary {
                 System.load(filename);
             } catch (UnsatisfiedLinkError e) {
                 errorMessage = "Native code library failed to load: "
-                        + resourceName;
+                               + resourceName;
             }
 
             file.deleteOnExit();
@@ -75,7 +75,7 @@ public class LoadLibrary {
         }
 
         File file = new File(tempDir,
-                new File(resourceURL.getPath()).getName());
+                             new File(resourceURL.getPath()).getName());
         FileOutputStream os = null;
         try {
             os = new FileOutputStream(file);

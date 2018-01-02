@@ -7,7 +7,7 @@
 
 #include <ucp/api/ucp.h>
 
-#include <atomic>
+#include <mutex>
 
 
 /**
@@ -17,25 +17,20 @@ class context {
 public:
     context() : ucp_context(nullptr), ref_count(0) {}
 
-
     ucs_status_t ref_context();
-
 
     void deref_context();
 
-
     ~context();
-
 
     ucp_context_h get_ucp_context();
 
 private:
-    ucp_context_h       ucp_context;
-    std::atomic<size_t> ref_count;
-
+    ucp_context_h   ucp_context;
+    size_t          ref_count;
+    std::mutex      ref_lock;
 
     ucs_status_t create_context();
-
 
     void release_context();
 };

@@ -4,22 +4,23 @@
  */
 #include "worker.h"
 
-ucs_status_t worker::init(ucp_worker_params_t params) {
+#include <new> // bad_alloc exception
+
+worker::worker(context* ctx, uint32_t cap, ucp_worker_params_t params) :
+               jucx_context(ctx),  ucp_worker(nullptr),
+               queue_size(cap),    event_queue(nullptr) {
     ucs_status_t status = jucx_context->ref_context();
     if (status != UCS_OK) {
-        return status;
+        throw std::bad_alloc{};
     }
 
-    status = ucp_worker_create(jucx_context->get_ucp_context(), &params,
-            &ucp_worker);
+    status = ucp_worker_create(jucx_context->get_ucp_context(),
+                               &params, &ucp_worker);
     if (status != UCS_OK) {
         jucx_context->deref_context();
+        throw std::bad_alloc{};
     }
-    else {
-        event_queue = new char[queue_size];
-    }
-
-    return status;
+    event_queue = new char[queue_size];
 }
 
 worker::~worker() {
@@ -29,7 +30,7 @@ worker::~worker() {
 }
 
 ucs_status_t worker::extract_worker_address(ucp_address_t** worker_address,
-        size_t& address_length) {
+                                            size_t& address_length) {
     return ucp_worker_get_address(ucp_worker, worker_address, &address_length);
 }
 

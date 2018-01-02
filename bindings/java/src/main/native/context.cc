@@ -7,18 +7,22 @@
 
 ucs_status_t context::ref_context() {
     ucs_status_t status = UCS_OK;
-    if (ucp_context == nullptr) {
-        status = create_context();
-    }
+    {   // Lock before checking context and updating reference counter
+        std::lock_guard<std::mutex> lk(ref_lock);
+        if (ucp_context == nullptr) {
+            status = create_context();
+        }
 
-    if (status == UCS_OK) {
-        ++ref_count;
-    }
+        if (status == UCS_OK) {
+            ++ref_count;
+        }
+    }   // Unlock
 
     return status;
 }
 
 void context::deref_context() {
+    std::lock_guard<std::mutex> lk(ref_lock);
     if (--ref_count == 0) { // All workers released
         release_context();
     }

@@ -13,23 +13,14 @@
 
 class worker {
 public:
-    worker(context* ctx, uint32_t cap) :
-        jucx_context(ctx),  ucp_worker(NULL),
-        queue_size(cap),    event_queue(NULL) {}
-
-
-    ucs_status_t init(ucp_worker_params_t params);
-
+    worker(context* ctx, uint32_t cap, ucp_worker_params_t params);
 
     ~worker();
 
-
     ucs_status_t extract_worker_address(ucp_address_t** worker_address,
-            size_t& address_length);
-
+                                        size_t& address_length);
 
     void release_worker_address(ucp_address_t* worker_address);
-
 
     char *get_event_queue() const {
         return event_queue;

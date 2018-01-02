@@ -22,10 +22,12 @@ public class Bridge {
     }
 
     private static native long createWorkerNative(int maxCompletions,
-            CompletionQueue compQueue, Worker worker);
+                                                  CompletionQueue compQueue,
+                                                  Worker worker);
 
     static long createWorker(final int maxCompletions,
-            final CompletionQueue compQueue, final Worker worker) {
+                             final CompletionQueue compQueue,
+                             final Worker worker) {
         return createWorkerNative(maxCompletions, compQueue, worker);
     }
 
