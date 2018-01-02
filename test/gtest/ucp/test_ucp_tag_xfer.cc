@@ -359,7 +359,7 @@ void test_ucp_tag_xfer::test_xfer_iov(size_t size, bool expected, bool sync,
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
-    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+    ucs::fill_random(sendbuf);
 
     ucp::data_type_desc_t send_dt_desc(DATATYPE_IOV, sendbuf.data(),
                                        sendbuf.size(), iovcnt);
