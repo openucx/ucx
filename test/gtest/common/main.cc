@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
     if (RUNNING_ON_VALGRIND) {
         modify_config_for_valgrind("IB_RX_QUEUE_LEN", "512");
         modify_config_for_valgrind("IB_RX_BUFS_GROW", "512");
-        modify_config_for_valgrind("MM_RX_BUFS_GROW", "32");
+        modify_config_for_valgrind("MM_RX_BUFS_GROW", "128");
         modify_config_for_valgrind("IB_TX_QUEUE_LEN", "128");
         modify_config_for_valgrind("IB_TX_BUFS_GROW", "64");
         modify_config_for_valgrind("RC_TX_CQ_LEN", "256");
