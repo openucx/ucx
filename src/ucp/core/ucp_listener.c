@@ -106,7 +106,7 @@ ucs_status_t ucp_worker_listen(ucp_worker_h worker,
             listener->cb  = params->ep_accept_handler.cb;
             listener->arg = params->ep_accept_handler.arg;
         } else {
-            listener->cb  = (void*)ucs_empty_function;
+            listener->cb  = NULL;
         }
 
         memset(&iface_params, 0, sizeof(iface_params));
