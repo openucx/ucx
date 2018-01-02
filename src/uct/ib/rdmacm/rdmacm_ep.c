@@ -16,8 +16,7 @@ ucs_status_t uct_rdmacm_ep_resolve_addr(uct_rdmacm_ep_t *ep)
 
 static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
                            const ucs_sock_addr_t *sockaddr,
-                           uct_sockaddr_conn_reply_callback_t reply_cb,
-                           void *arg, uint32_t cb_flags,
+                           uint32_t cb_flags,
                            const void *priv_data, size_t length)
 {
     uct_rdmacm_iface_t *iface = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
@@ -36,8 +35,6 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
      * where they are used before being initialized (from the async thread
      * - after an RDMA_CM_EVENT_ROUTE_RESOLVED event) */
     hdr.length           = length;
-    self->conn_reply_cb  = reply_cb;
-    self->conn_reply_arg = arg;
     self->priv_data      = ucs_malloc(sizeof(hdr) + length, "client private data");
     if (self->priv_data == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -117,7 +114,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
         ucs_list_del(&self->list_elem);
         self->is_on_pending = 0;
     }
-    uct_rdmacm_iface_client_start_next_ep(iface);
+
+    /* if the destroyeed ep is the active one on the iface, mark it as destroyed
+     * so that arriving events on the iface won't try to access this ep */
+    if (iface->ep == self) {
+        iface->ep = UCT_RDMACM_IFACE_BLOCKED_NO_EP;
+    }
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 
     ucs_free(self->priv_data);
@@ -126,8 +128,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
 UCS_CLASS_DEFINE(uct_rdmacm_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t, uct_iface_t*,
                           const ucs_sock_addr_t *,
-                          uct_sockaddr_conn_reply_callback_t ,
-                          void *, uint32_t, const void *, size_t);
+                          uint32_t, const void *, size_t);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rdmacm_ep_t, uct_ep_t);
 
 void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t status)

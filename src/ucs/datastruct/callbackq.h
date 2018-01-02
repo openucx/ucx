@@ -165,7 +165,7 @@ int ucs_callbackq_add_safe(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg,
  * be removed at some point in the near future.
  * This can be used from any context and any thread, including but not limited to:
  * - A callback can remove another callback or itself.
- * - A thread remove a callback while another thread is dispatching callbacks.
+ * - A thread can't remove a callback while another thread is dispatching callbacks.
  *
  * @param  [in] cbq      Callback queue to remove the callback from.
  * @param  [in] id       Callback identifier to remove.

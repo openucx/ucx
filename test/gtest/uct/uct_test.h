@@ -92,8 +92,7 @@ protected:
 
         void flush() const;
 
-        static const std::string server_priv_data;
-        volatile static int client_connected;
+        static const std::string client_priv_data;
 
     private:
         class async_wrapper {
@@ -112,7 +111,6 @@ protected:
         void reserve_ep(unsigned index);
 
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
-        static void conn_reply_cb(void *arg, const void *reply_data, long unsigned length);
 
         ucs::handle<uct_md_h>      m_md;
         uct_md_attr_t              m_md_attr;

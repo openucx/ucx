@@ -270,8 +270,7 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  * This callback routine will be invoked on the server side upon receiving an
  * incoming connection request. It should be set by the server side while
  * initializing an interface.
- * Incoming data is placed inside the conn_priv_data buffer and outgoing data should
- * be filled inside this function and placed in the reply_priv_data.
+ * Incoming data is placed inside the conn_priv_data buffer.
  * This callback has to be thread safe.
  * Other than communication progress routines, it is allowed to call other UCT
  * communication routines from this callback.
@@ -282,41 +281,13 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  *                               @ref uct_ep_create_sockaddr function on the
  *                               client side.
  * @param [in]  length           Length of the received data.
- * @param [out] reply_priv_data  Points to the user's data which was written in
- *                               this callback. It will be passed to reply_data
- *                               on client side upon invoking the @ref
- *                               uct_sockaddr_conn_reply_callback_t callback.
  *
- * @return  Size of the data that was written. Negative in case of an error.
+ * @return  Error code.
  *
  */
-typedef ssize_t (*uct_sockaddr_conn_request_callback_t)(void *arg,
-                                                        const void *conn_priv_data,
-                                                        size_t length,
-                                                        void *reply_priv_data);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Callback to process an incoming reply message from the server.
- *
- * This callback routine will be invoked on the client side upon receiving a
- * reply message from the server side. It should be set by the client side while
- * creating an endpoint to the remote server.
- * Incoming reply data, which was filled by the server @ref
- * uct_sockaddr_conn_request_callback_t callback, is placed inside the
- * reply_data buffer.
- * This callback has to be thread safe.
- * Other than communication progress routines, it is allowed to call other UCT
- * communication routines from this callback.
- *
- * @param [in]  arg         User defined argument for this callback.
- * @param [in]  reply_data  Points to the received reply data from server side.
- * @param [in]  length      Length of the received data.
- *
- */
-typedef void (*uct_sockaddr_conn_reply_callback_t)(void *arg, const void *reply_data,
-                                                   size_t length);
+typedef ucs_status_t (*uct_sockaddr_conn_request_callback_t)(void *arg,
+                                                             const void *conn_priv_data,
+                                                             size_t length);
 
 
 /**

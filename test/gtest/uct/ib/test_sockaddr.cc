@@ -65,19 +65,18 @@ public:
         m_entities.push_back(client);
     }
 
-    static ssize_t conn_request_cb(void *arg, const void *conn_priv_data,
-                                   size_t length, void *reply_priv_data)
+    static ucs_status_t conn_request_cb(void *arg, const void *conn_priv_data,
+                                        size_t length)
     {
         test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr*>(arg);
 
-        EXPECT_EQ(sizeof(uint64_t), length);
-        EXPECT_EQ(0xdeadbeef, *(uint64_t*)conn_priv_data);
+        EXPECT_EQ(std::string(reinterpret_cast<const char *>
+                              (uct_test::entity::client_priv_data.c_str())),
+                  std::string(reinterpret_cast<const char *>(conn_priv_data)));
 
-        memcpy(reply_priv_data, uct_test::entity::server_priv_data.c_str(),
-               uct_test::entity::server_priv_data.length() + 1);
-
+        EXPECT_EQ(uct_test::entity::client_priv_data.length(), length);
         self->server_recv_req = 1;
-        return uct_test::entity::server_priv_data.length() + 1;
+        return UCS_OK;
     }
 
     static void err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
@@ -96,17 +95,21 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
 {
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(sock_addr.addr);
 
-    uct_test::entity::client_connected = 0;
+    server_recv_req = 0;
     err_count = 0;
     client->connect(0, *server, 0);
 
-    while (uct_test::entity::client_connected == 0);
-    ASSERT_TRUE(uct_test::entity::client_connected == 1);
-
+    /* wait for the server to connect */
+    while (server_recv_req == 0);
+    ASSERT_TRUE(server_recv_req == 1);
     /* since the transport may support a graceful exit in case of an error,
      * make sure that the error handling flow wasn't invoked (there were no
      * errors) */
     EXPECT_EQ(0, err_count);
+    /* the test may end before the client's ep got connected.
+     * it should also pass in this case as well - the client's
+     * ep shouldn't be accessed (for connection reply from the server) after the
+     * test ends and the client's ep was destroyed */
 }
 
 UCS_TEST_P(test_uct_sockaddr, err_handle)
@@ -114,7 +117,6 @@ UCS_TEST_P(test_uct_sockaddr, err_handle)
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(sock_addr.addr);
 
-    uct_test::entity::client_connected = 0;
     server_recv_req = 0;
     err_count = 0;
 
@@ -129,9 +131,35 @@ UCS_TEST_P(test_uct_sockaddr, err_handle)
     if (server_recv_req == 0) {
         wait_for_flag(&err_count);
         EXPECT_EQ(1, err_count);
-        ASSERT_TRUE(uct_test::entity::client_connected == 0);
     }
     restore_errors();
+}
+
+UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
+{
+    check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
+
+    struct sockaddr_in *addr_in;
+    addr_in = (struct sockaddr_in *) (sock_addr.addr);
+    in_port_t orig_port = addr_in->sin_port;
+
+    addr_in->sin_port = 1;
+    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(sock_addr.addr);
+
+    err_count = 0;
+
+    /* client - try to connect to a non-existing port on the server side */
+    client->connect(0, *server, 0);
+
+    /* destroy the client's ep. this ep shouldn't be accessed anymore */
+    wrap_errors();
+    client->destroy_ep(0);
+    restore_errors();
+    /* wait for the transport's events to arrive */
+    sleep(3);
+
+    /* restore the previous existing port */
+    addr_in->sin_port = orig_port;
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_sockaddr)

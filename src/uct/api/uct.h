@@ -1329,9 +1329,6 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  *
  * @param [in]  iface            Interface to create the endpoint on.
  * @param [in]  sockaddr         The sockaddr to connect to on the remote peer.
- * @param [in]  reply_cb         Callback for an incoming reply message from
- *                               the server.
- * @param [in]  arg              User defined argument to pass to the callback.
  * @param [in]  cb_flags         Required @ref uct_cb_flags "callback flags" to
  *                               indicate where the @ref uct_sockaddr_conn_reply_callback_t
  *                               reply callback can be invoked from.
@@ -1352,8 +1349,7 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  */
 ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
                                     const ucs_sock_addr_t *sockaddr,
-                                    uct_sockaddr_conn_reply_callback_t reply_cb,
-                                    void *arg, uint32_t cb_flags,
+                                    uint32_t cb_flags,
                                     const void *priv_data, size_t length,
                                     uct_ep_h *ep_p);
 
