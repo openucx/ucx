@@ -135,19 +135,18 @@ static inline int rand() {
     return ::rand();
 }
 
-template <typename OutputIterator>
-static void fill_random(OutputIterator begin, OutputIterator end) {
-    for (OutputIterator iter = begin; iter != end; ++iter) {
-        *iter = rand();
-    }
-}
-
 void fill_random(void *data, size_t size);
 
 /* C can be vector or string */
 template <typename C>
 static void fill_random(C& c) {
     fill_random(&c[0], sizeof(c[0]) * c.size());
+}
+
+/* C can be vector or string */
+template <typename C>
+static void fill_random(C& c, size_t size) {
+    fill_random(&c[0], sizeof(c[0]) * size);
 }
 
 template <typename T>
