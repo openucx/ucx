@@ -22,8 +22,9 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     return 0;
 }
 
-static ssize_t ucp_listener_conn_request_callback(void *arg, const void *conn_priv_data,
-                                                  size_t length, void *reply_priv_data)
+static ucs_status_t ucp_listener_conn_request_callback(void *arg,
+                                                       const void *conn_priv_data,
+                                                       size_t length)
 {
     ucp_listener_h listener = arg;
     ucp_listener_accept_t *accept;
@@ -54,7 +55,7 @@ static ssize_t ucp_listener_conn_request_callback(void *arg, const void *conn_pr
                                           &prog_id);
     }
 
-    return 0;
+    return UCS_OK;
 }
 
 ucs_status_t ucp_worker_listen(ucp_worker_h worker,
