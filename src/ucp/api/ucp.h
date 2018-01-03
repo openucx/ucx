@@ -807,14 +807,14 @@ typedef struct ucp_ep_params {
      * is not set, this address is mandatory for filling
      * (along with its corresponding bit in the field_mask - @ref
      * UCP_EP_PARAM_FIELD_REMOTE_ADDRESS) and must be obtained using
-     * @ref ucp_worker_get_address. This is not reconfigurable parameter by
+     * @ref ucp_worker_get_address. This field cannot be changed by
      * @ref ucp_ep_modify_nb.
      */
     const ucp_address_t     *address;
 
     /**
      * Desired error handling mode, optional parameter. Default value is
-     * @ref UCP_ERR_HANDLING_MODE_NONE. This is not reconfigurable parameter by
+     * @ref UCP_ERR_HANDLING_MODE_NONE. This field cannot be changed by
      * @ref ucp_ep_modify_nb.
      */
     ucp_err_handling_mode_t err_mode;
@@ -845,8 +845,7 @@ typedef struct ucp_ep_params {
      * if the @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag is set, this address
      * is mandatory for filling (along with its corresponding bit in the
      * field_mask - @ref UCP_EP_PARAM_FIELD_SOCK_ADDR) and should be obtained
-     * from the user. This is not reconfigurable parameter by
-     * @ref ucp_ep_modify_nb.
+     * from the user. This field cannot be changed by @ref ucp_ep_modify_nb.
      */
     ucs_sock_addr_t         sockaddr;
 
@@ -1566,7 +1565,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  * @param [in]  params      User defined @ref ucp_ep_params_t configurations
  *                          for the @ref ucp_ep_h "UCP endpoint".
  *
- * @return UCS_OK           - The endpoint is modified successfully.
+ * @return NULL             - The endpoint is modified successfully.
  * @return UCS_PTR_IS_ERR(_ptr) - The reconfiguration failed and an error code
  *                                indicates the status. However, resources are
  *                                released and the @a endpoint can no longer be
@@ -1577,6 +1576,9 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  *                            progress of the endpoint modification.
  *                            The application is responsible for releasing the
  *                            handle using the @ref ucp_request_free routine.
+ *
+ * @note See the documentation of @ref ucp_ep_params_t for details, only some of
+ *       the parameters can be modified.
  */
 ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params);
 
