@@ -27,8 +27,9 @@ static ucp_mem_t ucp_mem_dummy_handle = {
 
 ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
                                void *address, size_t length, unsigned uct_flags,
-                               uct_md_h alloc_md, uct_mem_h *alloc_md_memh_p,
-                               uct_mem_h *uct_memh, ucp_md_map_t *md_map_p)
+                               uct_md_h alloc_md, uct_memory_type_t mem_type,
+                               uct_mem_h *alloc_md_memh_p, uct_mem_h *uct_memh,
+                               ucp_md_map_t *md_map_p)
 {
     unsigned memh_index, prev_memh_index;
     uct_mem_h *prev_uct_memh;
@@ -92,7 +93,8 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
             ucs_assert(alloc_md_memh_p != NULL);
             uct_memh[memh_index++] = *alloc_md_memh_p;
             new_md_map            |= UCS_BIT(md_index);
-        } else if (context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_REG) {
+        } else if ((context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_REG) &&
+                   (context->tl_mds[md_index].attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
             /* MD supports registration, register new memh on it */
             status = uct_md_mem_reg(context->tl_mds[md_index].md, address,
                                     length, uct_flags, &uct_memh[memh_index]);
@@ -101,7 +103,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
                           address, length, md_index,
                           context->tl_mds[md_index].rsc.md_name,
                           ucs_status_string(status));
-                ucp_mem_rereg_mds(context, 0, NULL, 0, 0, alloc_md,
+                ucp_mem_rereg_mds(context, 0, NULL, 0, 0, alloc_md, mem_type,
                                   alloc_md_memh_p, uct_memh, md_map_p);
                 return status;
             }
@@ -198,11 +200,12 @@ allocated:
     memh->address      = mem.address;
     memh->length       = mem.length;
     memh->alloc_method = mem.method;
+    memh->mem_type     = mem.mem_type;
     memh->alloc_md     = mem.md;
     memh->md_map       = 0;
     status = ucp_mem_rereg_mds(context, UCS_MASK(context->num_mds), memh->address,
-                               memh->length, uct_flags, memh->alloc_md, &mem.memh,
-                               memh->uct, &memh->md_map);
+                               memh->length, uct_flags, memh->alloc_md, memh->mem_type,
+                               &mem.memh, memh->uct, &memh->md_map);
     if (status != UCS_OK) {
         uct_mem_free(&mem);
     }
@@ -321,11 +324,12 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
     } else {
         ucs_debug("registering user memory at %p length %zu", address, length);
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
+        memh->mem_type     = UCT_MD_MEM_TYPE_HOST;
         memh->alloc_md     = NULL;
         memh->md_map       = 0;
         status = ucp_mem_rereg_mds(context, UCS_MASK(context->num_mds),
                                    memh->address, memh->length, uct_flags, NULL,
-                                   NULL, memh->uct, &memh->md_map);
+                                   memh->mem_type, NULL, memh->uct, &memh->md_map);
         if (status != UCS_OK) {
             goto err_free_memh;
         }
@@ -354,7 +358,7 @@ static ucs_status_t ucp_mem_unmap_common(ucp_context_h context, ucp_mem_h memh)
 
     /* Unregister from all memory domains */
     alloc_md_memh = UCT_MEM_HANDLE_NULL;
-    status = ucp_mem_rereg_mds(context, 0, NULL, 0, 0, memh->alloc_md,
+    status = ucp_mem_rereg_mds(context, 0, NULL, 0, 0, memh->alloc_md, memh->mem_type,
                                &alloc_md_memh, memh->uct, &memh->md_map);
     if (status != UCS_OK) {
         goto out;
