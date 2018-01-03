@@ -209,6 +209,19 @@ typedef struct ucp_am_handler {
     }
 
 
+#define UCP_CHECK_PARAM_NON_NULL(_param, _status, _action) \
+    if ((_param) == NULL) { \
+        ucs_error("the parameter %s must not be NULL", #_param); \
+        (_status) = UCS_ERR_INVALID_PARAM; \
+        _action; \
+    };
+
+
+#define UCP_PARAM_VALUE(_obj, _params, _name, _flag, _default) \
+    (((_params)->field_mask & (UCP_##_obj##_PARAM_FIELD_##_flag)) ? \
+                    (_params)->_name : (_default))
+
+
 extern ucp_am_handler_t ucp_am_handlers[];
 
 

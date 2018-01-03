@@ -182,7 +182,7 @@ public:
         }
 
         if (!(receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_DUP)) {
-            sender().flush();
+            flush();
             EXPECT_EQ(1u, m_am_count);
         } else {
             EXPECT_GE(m_am_count, 1u);
