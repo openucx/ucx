@@ -54,6 +54,8 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
         goto err_free_mem;
     }
 
+    self->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
+
     /* The interface can point at one endpoint at a time and therefore, the
      * connection establishment cannot be done in parallel for several endpoints */
     /* TODO support connection establishment on parallel endpoints on the same iface */
@@ -107,7 +109,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
         self->is_on_pending = 0;
     }
 
-    /* if the destroyeed ep is the active one on the iface, mark it as destroyed
+    /* remove the slow progress function in case it was placed on the slow progress
+     * chain but wasn't invoked yet */
+    uct_worker_progress_unregister_safe(&iface->super.worker->super,
+                                        &self->slow_prog_id);
+
+    /* if the destroyed ep is the active one on the iface, mark it as destroyed
      * so that arriving events on the iface won't try to access this ep */
     if (iface->ep == self) {
         iface->ep = UCT_RDMACM_IFACE_BLOCKED_NO_EP;

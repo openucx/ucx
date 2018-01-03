@@ -109,11 +109,24 @@ void uct_rdmacm_iface_client_start_next_ep(uct_rdmacm_iface_t *iface)
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 }
 
-static void uct_rdmacm_client_handle_failure(uct_rdmacm_iface_t *iface, ucs_status_t status)
+static unsigned uct_rdmacm_client_err_handle_progress(void *arg)
+{
+    uct_rdmacm_ep_t *ep = arg;
+    ucs_trace_func("err_handle ep=%p",ep);
+
+    ep->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
+    uct_rdmacm_ep_set_failed(ep->super.super.iface, &ep->super.super, UCS_ERR_IO_ERROR);
+    return 0;
+}
+
+static void uct_rdmacm_client_handle_failure(uct_rdmacm_iface_t *iface)
 {
     ucs_assert(!iface->is_server);
     if (iface->ep != UCT_RDMACM_IFACE_BLOCKED_NO_EP) {
-        uct_rdmacm_ep_set_failed(&iface->super.super, &iface->ep->super.super, status);
+        uct_worker_progress_register_safe(&iface->super.worker->super,
+                                          uct_rdmacm_client_err_handle_progress,
+                                          iface->ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                          &iface->ep->slow_prog_id);
     }
     uct_rdmacm_iface_client_start_next_ep(iface);
 }
@@ -185,7 +198,7 @@ static void uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdm
         } else if (rdma_resolve_route(event->id, UCS_MSEC_PER_SEC * rdmacm_md->addr_resolve_timeout)) {
             ucs_error("rdma_resolve_route(to addr=%s) failed: %m",
                       ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
-            uct_rdmacm_client_handle_failure(iface, UCS_ERR_IO_ERROR);
+            uct_rdmacm_client_handle_failure(iface);
         }
         break;
 
@@ -205,7 +218,7 @@ static void uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdm
             if (rdma_connect(event->id, &conn_param)) {
                 ucs_error("rdma_connect(to addr=%s) failed: %m",
                           ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
-                uct_rdmacm_client_handle_failure(iface, UCS_ERR_IO_ERROR);
+                uct_rdmacm_client_handle_failure(iface);
             }
         }
         break;
@@ -221,7 +234,7 @@ static void uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdm
         ucs_warn("rdmacm connection request to %s rejected",
                   ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
 
-        uct_rdmacm_client_handle_failure(iface, UCS_ERR_IO_ERROR);
+        uct_rdmacm_client_handle_failure(iface);
         break;
 
     case RDMA_CM_EVENT_ESTABLISHED:
@@ -245,7 +258,7 @@ static void uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdm
                   ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
 
         if (!iface->is_server) {
-            uct_rdmacm_client_handle_failure(iface, UCS_ERR_IO_ERROR);
+            uct_rdmacm_client_handle_failure(iface);
         }
         break;
 

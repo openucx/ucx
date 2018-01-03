@@ -29,7 +29,7 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
     ucp_listener_h listener = arg;
     ucp_listener_accept_t *accept;
     ucs_status_t status;
-    int prog_id;
+    uct_worker_cb_id_t prog_id;
 
     ucs_trace("listener %p: got connection request", listener);
 
