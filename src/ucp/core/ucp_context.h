@@ -23,8 +23,10 @@
 enum {
     /* The flag indicates that the resource may be used for auxiliary
      * wireup communications only */
-    UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
-
+    UCP_TL_RSC_FLAG_AUX      = UCS_BIT(0),
+    /* The flag indicates that the resource may be used for client-server
+     * connection establishment with a sockaddr */
+    UCP_TL_RSC_FLAG_SOCKADDR = UCS_BIT(1)
 };
 
 
@@ -205,6 +207,19 @@ typedef struct ucp_am_handler {
     UCS_STATIC_INIT { \
         ucp_am_handlers[_id].proxy_cb = ucp_am_##_id##_counting_proxy; \
     }
+
+
+#define UCP_CHECK_PARAM_NON_NULL(_param, _status, _action) \
+    if ((_param) == NULL) { \
+        ucs_error("the parameter %s must not be NULL", #_param); \
+        (_status) = UCS_ERR_INVALID_PARAM; \
+        _action; \
+    };
+
+
+#define UCP_PARAM_VALUE(_obj, _params, _name, _flag, _default) \
+    (((_params)->field_mask & (UCP_##_obj##_PARAM_FIELD_##_flag)) ? \
+                    (_params)->_name : (_default))
 
 
 extern ucp_am_handler_t ucp_am_handlers[];

@@ -193,6 +193,7 @@ typedef struct ucp_worker {
     unsigned                      ep_config_max; /* Maximal number of configurations */
     unsigned                      ep_config_count;/* Current number of configurations */
     ucp_ep_config_t               ep_config[0];  /* Array of transport limits and thresholds */
+    ucs_cpu_set_t                 cpu_mask;      /* Save CPU mask for subsequent calls to ucp_worker_listen */
 } ucp_worker_t;
 
 
@@ -202,6 +203,12 @@ ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid
 
 unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
                                   const ucp_ep_config_key_t *key);
+
+ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
+                                   uct_iface_params_t *iface_params,
+                                   ucp_worker_iface_t *wiface);
+
+void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface);
 
 void ucp_worker_iface_progress_ep(ucp_worker_iface_t *wiface);
 

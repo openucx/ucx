@@ -80,7 +80,7 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 
     /* send all msg sizes*/
     for (size_t i = 3; i < sbuf.size(); i *= 2) {
-        ucs::fill_random(sbuf.begin(), sbuf.begin() + i);
+        ucs::fill_random(sbuf, i);
         check_pattern.insert(check_pattern.end(), sbuf.begin(),
                              sbuf.begin() + i);
         sstatus = stream_send_nb(ucp::data_type_desc_t(datatype, sbuf.data(), i));
@@ -121,7 +121,7 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
 
     /* send all msg sizes in bytes*/
     for (size_t i = 3; i < sbuf.size(); i *= 2) {
-        ucs::fill_random(sbuf.begin(), sbuf.begin() + i);
+        ucs::fill_random(sbuf, i);
         check_pattern.insert(check_pattern.end(), sbuf.begin(), sbuf.begin() + i);
         sstatus = stream_send_nb(ucp::data_type_desc_t(DATATYPE, sbuf.data(), i));
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
@@ -131,7 +131,7 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
 
     size_t align_tail = dt_elem_size - ssize % dt_elem_size;
     if (align_tail != 0) {
-        ucs::fill_random(sbuf.begin(), sbuf.begin() + align_tail);
+        ucs::fill_random(sbuf, align_tail);
         check_pattern.insert(check_pattern.end(), sbuf.begin(), sbuf.begin() + align_tail);
         sstatus = stream_send_nb(ucp::data_type_desc_t(ucp_dt_make_contig(align_tail),
                                                        sbuf.data(), align_tail));
@@ -258,7 +258,7 @@ void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
     do {
         if (send_i < sbuf.size()) {
             rbuf.resize(rbuf.size() + send_i, 'r');
-            ucs::fill_random(sbuf.begin(), sbuf.begin() + send_i);
+            ucs::fill_random(sbuf, send_i);
             check_pattern.insert(check_pattern.end(), sbuf.begin(),
                                  sbuf.begin() + send_i);
             sstatus = stream_send_nb(ucp::data_type_desc_t(datatype, sbuf.data(),

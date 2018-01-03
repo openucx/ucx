@@ -274,9 +274,12 @@ void test_ucp_tag_xfer::test_xfer_probe(bool send_contig, bool recv_contig,
     }
 
     /* put RTS into the unexpected queue */
-    wait_for_flag(&info.length);
+    ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(10.0);
+    do {
+        short_progress_loop();
+        message = ucp_tag_probe_nb(receiver().worker(), RECV_TAG, RECV_MASK, 1, &info);
+    } while ((ucs_get_time() < loop_end_limit) && (message == NULL));
 
-    message = ucp_tag_probe_nb(receiver().worker(), RECV_TAG, RECV_MASK, 1, &info);
     /* make sure that there was a match (RTS) */
     EXPECT_TRUE(message != NULL);
     EXPECT_EQ(count, info.length);
@@ -356,7 +359,7 @@ void test_ucp_tag_xfer::test_xfer_iov(size_t size, bool expected, bool sync,
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
-    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+    ucs::fill_random(sendbuf);
 
     ucp::data_type_desc_t send_dt_desc(DATATYPE_IOV, sendbuf.data(),
                                        sendbuf.size(), iovcnt);

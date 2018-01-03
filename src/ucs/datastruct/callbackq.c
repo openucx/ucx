@@ -117,6 +117,11 @@ int ucs_callbackq_put_id(ucs_callbackq_t *cbq, int id)
     return idx_with_flag;
 }
 
+int ucs_callbackq_put_id_noflag(ucs_callbackq_t *cbq, int id)
+{
+    return ucs_callbackq_put_id(cbq, id) & UCS_CALLBACKQ_IDX_MASK;
+}
+
 /**
  * @param [in]  idx  Index to save in the lookup array.
  * @return unique ID which holds index 'idx'.
@@ -353,6 +358,7 @@ static unsigned ucs_callbackq_slow_proxy(void *arg)
     ucs_callbackq_t      *cbq  = arg;
     ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
     ucs_callbackq_elem_t *elem;
+    unsigned UCS_V_UNUSED removed_idx;
     unsigned slow_idx, fast_idx;
     ucs_callbackq_elem_t tmp_elem;
     unsigned count = 0;
@@ -377,6 +383,8 @@ static unsigned ucs_callbackq_slow_proxy(void *arg)
                 ucs_callbackq_remove_slow(cbq, slow_idx);
             }
         } else if (elem->flags & UCS_CALLBACKQ_FLAG_ONESHOT) {
+            removed_idx = ucs_callbackq_put_id_noflag(cbq, elem->id);
+            ucs_assert(removed_idx == slow_idx);
             ucs_callbackq_remove_slow(cbq, slow_idx);
         }
 
@@ -525,6 +533,46 @@ void ucs_callbackq_remove_safe(ucs_callbackq_t *cbq, int id)
         priv->fast_remove_mask |= UCS_BIT(idx);
         cbq->fast_elems[idx].id = UCS_CALLBACKQ_ID_NULL; /* for assertion */
         ucs_callbackq_enable_proxy(cbq);
+    }
+
+    ucs_callbackq_leave(cbq);
+}
+
+void ucs_callbackq_remove_if(ucs_callbackq_t *cbq, ucs_callbackq_predicate_t pred,
+                             void *arg)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    ucs_callbackq_elem_t *elem;
+    unsigned idx;
+
+    ucs_callbackq_enter(cbq);
+
+    ucs_trace_func("cbq=%p", cbq);
+
+    ucs_callbackq_purge_fast(cbq);
+
+    /* remote fast-path elements  */
+    elem = cbq->fast_elems;
+    while (elem->cb != NULL) {
+        if (pred(elem, arg)) {
+            idx = ucs_callbackq_put_id_noflag(cbq, elem->id);
+            ucs_assert(idx == (elem - cbq->fast_elems));
+            ucs_callbackq_remove_fast(cbq, idx);
+        } else {
+            ++elem;
+       }
+    }
+
+    /* remote slow-path elements */
+    elem = priv->slow_elems;
+    while (elem < priv->slow_elems + priv->num_slow_elems) {
+        if (pred(elem, arg)) {
+            idx = ucs_callbackq_put_id_noflag(cbq, elem->id);
+            ucs_assert(idx == (elem - priv->slow_elems));
+            ucs_callbackq_remove_slow(cbq, idx);
+        } else {
+            ++elem;
+       }
     }
 
     ucs_callbackq_leave(cbq);

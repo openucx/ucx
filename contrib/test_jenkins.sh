@@ -13,6 +13,7 @@
 #  - JOB_URL           : jenkins job url
 #  - EXECUTOR_NUMBER   : number of executor within the test machine
 #  - JENKINS_RUN_TESTS : whether to run unit tests
+#  - JENKINS_TEST_PERF : whether to validate performance
 #
 # Optional environment variables (could be set by job configuration):
 #  - nworkers : number of parallel executors
@@ -21,7 +22,6 @@
 #
 
 WORKSPACE=${WORKSPACE:=$PWD}
-MAKE="make -j$(($(nproc) / 2 + 1))"
 ucx_inst=${WORKSPACE}/install
 
 if [ -z "$BUILD_NUMBER" ]; then
@@ -29,10 +29,32 @@ if [ -z "$BUILD_NUMBER" ]; then
 	BUILD_NUMBER=1
 	WS_URL=file://$WORKSPACE
 	JENKINS_RUN_TESTS=yes
+	TIMEOUT="timeout 160m"
+	TIMEOUT_VALGRIND="timeout 200m"
+	JENKINS_TEST_PERF=1
 else
 	echo "Running under jenkins"
 	WS_URL=$JOB_URL/ws
+	TIMEOUT=""
+	TIMEOUT_VALGRIND=""
 fi
+
+
+#
+# Set affinity to 2 cores according to Jenkins executor number
+#
+if [ -n "$EXECUTOR_NUMBER" ] && [ -n "$JENKINS_RUN_TESTS" ]
+then
+	AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
+else
+	AFFINITY=""
+fi
+
+#
+# Build command runs with 10 tasks
+#
+MAKE="make -j10"
+
 
 #
 # Set up parallel test execution - "worker" and "nworkers" should be set by jenkins
@@ -547,6 +569,14 @@ run_gtest() {
 	export GTEST_TAP=2
 	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
 
+	GTEST_EXTRA_ARGS=""
+	if [ "$JENKINS_TEST_PERF" == 1 ]
+	then
+		# Check performance with 10 retries and 2 seconds interval
+		GTEST_EXTRA_ARGS="$GTEST_EXTRA_ARGS -p 10 -i 2.0"
+	fi
+	export GTEST_EXTRA_ARGS
+
 	mkdir -p $GTEST_REPORT_DIR
 
 	echo "==== Running unit tests ===="
@@ -557,20 +587,22 @@ run_gtest() {
 	# gtest returns with non zero exit code if there were no
 	# tests to run. As a workaround run a single test on every
 	# shard.
-	env UCX_IB_RCACHE=n \
+	$AFFINITY $TIMEOUT \
+		env UCX_IB_RCACHE=n \
 		MALLOC_TRIM_THRESHOLD_=-1 \
 		MALLOC_MMAP_THRESHOLD_=-1 \
-	        GTEST_SHARD_INDEX=0 \
+		GTEST_SHARD_INDEX=0 \
 		GTEST_TOTAL_SHARDS=1 \
-	        GTEST_FILTER=malloc_hook_cplusplus.mallopt \
+		GTEST_FILTER=malloc_hook_cplusplus.mallopt \
 		make -C test/gtest test
 	(cd test/gtest && rename .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384 ===="
-	env MALLOC_MMAP_THRESHOLD_=16384 \
-	        GTEST_SHARD_INDEX=0 \
+	$AFFINITY $TIMEOUT \
+		env MALLOC_MMAP_THRESHOLD_=16384 \
+		GTEST_SHARD_INDEX=0 \
 		GTEST_TOTAL_SHARDS=1 \
-	        GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
+		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 		make -C test/gtest test
 	(cd test/gtest && rename .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
@@ -612,17 +644,6 @@ run_ucx_tl_check() {
 # Run all tests
 #
 run_tests() {
-	# Set CPU affinity to 2 cores, for performance tests
-	if [ -n "$EXECUTOR_NUMBER" ]; then
-		AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
-		TIMEOUT="timeout 160m"
-		TIMEOUT_VALGRIND="timeout 200m"
-	else
-		AFFINITY=""
-		TIMEOUT=""
-		TIMEOUT_VALGRIND=""
-	fi
-
 	export UCX_HANDLE_ERRORS=freeze,bt
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
 	export UCX_ERROR_MAIL_TO=$ghprbActualCommitAuthorEmail

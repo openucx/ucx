@@ -262,6 +262,9 @@ UCS_TEST_P(test_ucp_wireup, address) {
     ASSERT_GT(size, 0ul);
     EXPECT_LE(size, 2048ul); /* Expect a reasonable address size */
     for (tl = 0; tl < sender().worker()->context->num_tls; tl++) {
+        if (sender().worker()->context->tl_rscs[tl].flags & UCP_TL_RSC_FLAG_SOCKADDR) {
+            continue;
+        }
         packed_dev_priorities.insert(sender().worker()->ifaces[tl].attr.priority);
     }
 
