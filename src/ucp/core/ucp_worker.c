@@ -335,13 +335,13 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
         }
     });
 
-    ucs_fatal("No uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
+    ucs_fatal("no uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
               uct_ep, worker);
-    return status;
 
 found_ucp_ep:
     if (ucp_ep_config(ucp_ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) {
-        /* NOTE: do not cleanup resources for debugging needs */
+        /* NOTE: if user has not requested error handling on the endpoint,
+         *       the failure is considered unhandled */
         return status;
     }
 
