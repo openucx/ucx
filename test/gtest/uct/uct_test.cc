@@ -668,7 +668,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         m_mem.address = NULL;
         m_mem.md      = NULL;
         m_mem.memh    = UCT_MEM_HANDLE_NULL;
-        m_mem.mem_type= UCT_MD_MEM_TYPE_LAST;
+        m_mem.mem_type= UCT_MD_MEM_TYPE_HOST;
         m_mem.length  = 0;
         m_buf         = NULL;
         m_end         = NULL;
@@ -696,7 +696,7 @@ void uct_test::mapped_buffer::pattern_fill(uint64_t seed) {
         pattern_fill_cuda(m_buf, (char*)m_end - (char*)m_buf, seed);
         break;
     default:
-        UCS_TEST_SKIP_R("Wrong buffer memory type");
+        UCS_TEST_ABORT("Wrong buffer memory type");
     }
 }
 
@@ -744,7 +744,7 @@ void uct_test::mapped_buffer::pattern_check(uint64_t seed) {
         pattern_check_cuda(ptr(), length(), seed);
         break;
     default:
-        UCS_TEST_SKIP_R("Wrong buffer memory type");
+        UCS_TEST_ABORT("Wrong buffer memory type");
     }
 }
 

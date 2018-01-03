@@ -62,7 +62,7 @@ ucs_status_t uct_p2p_rma_test::get_zcopy(uct_ep_h ep, const mapped_buffer &sendb
 void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
                                  direction_t direction)
 {
-    for (int mem_type = 0; mem_type <= UCT_MD_MEM_TYPE_LAST; mem_type++) {
+    for (int mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
         if (!((sender().md_attr().cap.mem_type == mem_type) ||
             (sender().md_attr().cap.reg_mem_types & UCS_BIT(mem_type)))) {
             continue;
