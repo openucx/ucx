@@ -764,7 +764,9 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
                 status = iface->super.ops->set_ep_failed(&iface->super,
                                                          &cdesc->ep->super.super,
                                                          skb->status);
-                ucs_assert_always(status == UCS_OK);
+                ucs_assertv_always(status == UCS_OK,
+                                   "send completion with error: %s",
+                                   ucs_status_string(status));
             }
         }
 
