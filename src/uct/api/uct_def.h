@@ -224,7 +224,8 @@ typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
  * @param [in]  status   Status indicating error.
  *
  * @return @ref UCS_OK   - The error was handled successfully.
- *         Otherwise     - Pass error code back to transport layer.
+ *         Otherwise     - The error was not handled and is returned back to
+ *                         the transport.
  */
 typedef ucs_status_t (*uct_error_handler_t)(void *arg, uct_ep_h ep,
                                             ucs_status_t status);
