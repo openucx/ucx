@@ -24,6 +24,7 @@ noinst_HEADERS = \
 	core/ucp_context.h \
 	core/ucp_ep.h \
 	core/ucp_ep.inl \
+	core/ucp_listener.h \
 	core/ucp_mm.h \
 	core/ucp_proxy_ep.h \
 	core/ucp_request.h \
@@ -53,6 +54,7 @@ libucp_la_SOURCES = \
 	amo/nb_amo.c \
 	core/ucp_context.c \
 	core/ucp_ep.c \
+	core/ucp_listener.c \
 	core/ucp_mm.c \
 	core/ucp_proxy_ep.c \
 	core/ucp_request.c \
