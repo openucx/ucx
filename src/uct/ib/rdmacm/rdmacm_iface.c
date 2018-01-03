@@ -99,8 +99,7 @@ void uct_rdmacm_iface_client_start_next_ep(uct_rdmacm_iface_t *iface)
 
         status = uct_rdmacm_ep_resolve_addr(iface->ep);
         if (status != UCS_OK) {
-            uct_rdmacm_ep_set_failed(&iface->super.super, &iface->ep->super.super,
-                                     UCS_ERR_IO_ERROR);
+            uct_rdmacm_ep_set_failed(&iface->super.super, &iface->ep->super.super);
         } else {
             break;
         }
@@ -109,24 +108,11 @@ void uct_rdmacm_iface_client_start_next_ep(uct_rdmacm_iface_t *iface)
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 }
 
-static unsigned uct_rdmacm_client_err_handle_progress(void *arg)
-{
-    uct_rdmacm_ep_t *ep = arg;
-    ucs_trace_func("err_handle ep=%p",ep);
-
-    ep->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
-    uct_rdmacm_ep_set_failed(ep->super.super.iface, &ep->super.super, UCS_ERR_IO_ERROR);
-    return 0;
-}
-
 static void uct_rdmacm_client_handle_failure(uct_rdmacm_iface_t *iface)
 {
     ucs_assert(!iface->is_server);
     if (iface->ep != UCT_RDMACM_IFACE_BLOCKED_NO_EP) {
-        uct_worker_progress_register_safe(&iface->super.worker->super,
-                                          uct_rdmacm_client_err_handle_progress,
-                                          iface->ep, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                          &iface->ep->slow_prog_id);
+        uct_rdmacm_ep_set_failed(&iface->super.super, &iface->ep->super.super);
     }
     uct_rdmacm_iface_client_start_next_ep(iface);
 }

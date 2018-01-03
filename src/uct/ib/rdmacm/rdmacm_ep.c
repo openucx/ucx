@@ -130,7 +130,24 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t, uct_iface_t*,
                           const void *, size_t);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rdmacm_ep_t, uct_ep_t);
 
-void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t status)
+static unsigned uct_rdmacm_client_err_handle_progress(void *arg)
 {
-    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), ep, iface, status);
+    uct_rdmacm_ep_t *ep = arg;
+    ucs_trace_func("err_handle ep=%p",ep);
+
+    ep->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
+    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), &ep->super.super,
+                      ep->super.super.iface, UCS_ERR_IO_ERROR);
+    return 0;
+}
+
+void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep)
+{
+    uct_rdmacm_iface_t *rdmacm_iface = ucs_derived_of(iface, uct_rdmacm_iface_t);
+
+    /* invoke the error handling flow from the main thread */
+    uct_worker_progress_register_safe(&rdmacm_iface->super.worker->super,
+                                      uct_rdmacm_client_err_handle_progress,
+                                      rdmacm_iface->ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &rdmacm_iface->ep->slow_prog_id);
 }

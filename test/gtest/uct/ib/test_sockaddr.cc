@@ -148,15 +148,16 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
 
     err_count = 0;
 
+    /* wrap errors now since the client will try to connect to a non existing port */
+    wrap_errors();
     /* client - try to connect to a non-existing port on the server side */
     client->connect(0, *server, 0);
 
     /* destroy the client's ep. this ep shouldn't be accessed anymore */
-    wrap_errors();
     client->destroy_ep(0);
-    restore_errors();
     /* wait for the transport's events to arrive */
     sleep(3);
+    restore_errors();
 
     /* restore the previous existing port */
     addr_in->sin_port = orig_port;
