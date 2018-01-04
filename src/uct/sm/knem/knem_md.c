@@ -362,7 +362,7 @@ static ucs_status_t uct_knem_md_open(const char *md_name,
                 uct_knem_md_close(&knem_md->super);
                 return status;
             } else {
-                ucs_debug("Could not create registration cache for: %s",
+                ucs_debug("Could not create registration cache: %s",
                           ucs_status_string(status));
             }
         }
