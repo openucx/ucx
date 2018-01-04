@@ -422,10 +422,15 @@ enum uct_md_mem_flags {
                                                 transport. */
     UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1), /**< Place the mapping at exactly
                                                 defined address */
+    UCT_MD_MEM_FLAG_LOCK     = UCS_BIT(2), /**< Registered memory should be
+                                                locked. May incur extra cost for
+                                                registration, but memory access
+                                                is usually faster. */
+
     /* memory access flags */
-    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(2), /**< enable remote put access */
-    UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(3), /**< enable remote get access */
-    UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(4), /**< enable remote atomic access */
+    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), /**< enable remote put access */
+    UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(6), /**< enable remote get access */
+    UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(7), /**< enable remote atomic access */
 
     /** enable local and remote access for all operations */
     UCT_MD_MEM_ACCESS_ALL =  (UCT_MD_MEM_ACCESS_REMOTE_PUT|
