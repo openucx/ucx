@@ -780,7 +780,7 @@ typedef struct ucp_listener_params {
     /**
      * Handler to endpoint creation in a client-server connection flow.
      * In order for the callback inside this handler to be invoked, the
-     * UCP_LISTENER_PARAM_FIELD_CALLBACK needs to be set in the
+     * UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER needs to be set in the
      * field_mask.
      */
     ucp_listener_accept_handler_t  accept_handler;
