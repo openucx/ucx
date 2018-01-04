@@ -22,6 +22,14 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     return 0;
 }
 
+static int ucp_listener_remove_filter(const ucs_callbackq_elem_t *elem,
+                                      void *arg)
+{
+    ucp_listener_h *listener = elem->arg;
+
+    return (elem->cb == ucp_listener_conn_request_progress) && (listener == arg);
+}
+
 static ucs_status_t ucp_listener_conn_request_callback(void *arg,
                                                        const void *conn_priv_data,
                                                        size_t length)
@@ -173,7 +181,9 @@ void ucp_listener_destroy(ucp_listener_h listener)
 {
     ucs_trace("listener %p: destroying", listener);
 
-    /* TODO remove pending slow-path progress */
+    /* remove pending slow-path progress in case it wasn't removed yet */
+    ucs_callbackq_remove_if(&listener->wiface.worker->uct->progress_q,
+                            ucp_listener_remove_filter, listener);
     ucp_worker_iface_cleanup(&listener->wiface);
     ucs_free(listener);
 }

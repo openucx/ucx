@@ -1118,7 +1118,7 @@ ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
             return UCS_OK;
         }
 
-        ucs_debug("ms %s cannot reach %s", context->tl_mds[md_index].rsc.md_name,
+        ucs_debug("md %s cannot reach %s", context->tl_mds[md_index].rsc.md_name,
                   ucs_sockaddr_str(params->sockaddr.addr, saddr_str, sizeof(saddr_str)));
     }
 
