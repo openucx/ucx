@@ -168,16 +168,17 @@ enum ucp_worker_params_field {
  * @ingroup UCP_WORKER
  * @brief UCP listener parameters field mask.
  *
- * The enumeration allows specifying which fields in @ref ucp_worker_listener_params_t
+ * The enumeration allows specifying which fields in @ref ucp_listener_params_t
  * are present. It is used for the enablement of backward compatibility support.
  */
-enum ucp_worker_listener_params_field {
-    UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR = UCS_BIT(0), /**< Sock address and
-                                                                 length */
-    UCP_WORKER_LISTENER_PARAM_FIELD_CALLBACK  = UCS_BIT(1)  /**< User's callback
-                                                                 for handling the
-                                                                 creation of an
-                                                                 endpoint */
+enum ucp_listener_params_field {
+    UCP_LISTENER_PARAM_FIELD_SOCK_ADDR       = UCS_BIT(0), /**< Sock address and
+                                                                length */
+    UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER  = UCS_BIT(1)  /**< User's callback
+                                                                and argument
+                                                                for handling the
+                                                                creation of an
+                                                                endpoint */
 };
 
 
@@ -755,13 +756,13 @@ typedef struct ucp_worker_params {
  * @ingroup UCP_WORKER
  * @brief Parameters for a UCP listener object.
  *
- * This structure defines parameters for @ref ucp_worker_listen, which is used to
+ * This structure defines parameters for @ref ucp_listener_create, which is used to
  * listen for incoming client/server connections.
  */
-typedef struct ucp_worker_listener_params {
+typedef struct ucp_listener_params {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_worker_listener_params_field.
+     * @ref ucp_listener_params_field.
      * Fields not specified in this mask would be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -770,8 +771,8 @@ typedef struct ucp_worker_listener_params {
     /**
      * An address in the form of a sockaddr.
      * This field is mandatory for filling (along with its corresponding bit
-     * in the field_mask - @ref UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR).
-     * The @ref ucp_worker_listen routine will return with an error if sockaddr
+     * in the field_mask - @ref UCP_LISTENER_PARAM_FIELD_SOCK_ADDR).
+     * The @ref ucp_listener_create routine will return with an error if sockaddr
      * is not specified.
      */
     ucs_sock_addr_t                sockaddr;
@@ -779,11 +780,11 @@ typedef struct ucp_worker_listener_params {
     /**
      * Handler to endpoint creation in a client-server connection flow.
      * In order for the callback inside this handler to be invoked, the
-     * UCP_WORKER_LISTENER_PARAM_FIELD_CALLBACK needs to be set in the
+     * UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER needs to be set in the
      * field_mask.
      */
-    ucp_listener_accept_handler_t  ep_accept_handler;
-} ucp_worker_listener_params_t;
+    ucp_listener_accept_handler_t  accept_handler;
+} ucp_listener_params_t;
 
 
 /**
@@ -1502,16 +1503,16 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker);
  *
  * @param [in]  worker           Worker object that is associated with the
  *                               params object.
- * @param [in]  params           User defined @ref ucp_worker_listener_params_t
+ * @param [in]  params           User defined @ref ucp_listener_params_t
  *                               configurations for the @ref ucp_listener_h.
  * @param [out] listener_p       A handle to the created listener, can be released
  *                               by calling @ref ucp_listener_destroy
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_worker_listen(ucp_worker_h worker,
-                               const ucp_worker_listener_params_t *params,
-                               ucp_listener_h *listener_p);
+ucs_status_t ucp_listener_create(ucp_worker_h worker,
+                                 const ucp_listener_params_t *params,
+                                 ucp_listener_h *listener_p);
 
 
 /**
@@ -1522,10 +1523,8 @@ ucs_status_t ucp_worker_listen(ucp_worker_h worker,
  * listening for incoming connection requests on it.
  *
  * @param [in] listener        A handle to the listener to stop listening on.
- *
- * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_listener_destroy(ucp_listener_h listener);
+void ucp_listener_destroy(ucp_listener_h listener);
 
 
 /**

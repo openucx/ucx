@@ -84,9 +84,9 @@ err:
     return status;
 }
 
-ucs_status_t ucp_worker_listen(ucp_worker_h worker,
-                               const ucp_worker_listener_params_t *params,
-                               ucp_listener_h *listener_p)
+ucs_status_t ucp_listener_create(ucp_worker_h worker,
+                                 const ucp_listener_params_t *params,
+                                 ucp_listener_h *listener_p)
 {
     ucp_context_h context = worker->context;
     ucp_tl_resource_desc_t *resource;
@@ -100,7 +100,7 @@ ucs_status_t ucp_worker_listen(ucp_worker_h worker,
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
     UCS_ASYNC_BLOCK(&worker->async);
 
-    if (!(params->field_mask & UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR)) {
+    if (!(params->field_mask & UCP_LISTENER_PARAM_FIELD_SOCK_ADDR)) {
         ucs_error("Missing sockaddr for listener");
         status = UCS_ERR_INVALID_PARAM;
         goto out;
@@ -128,10 +128,10 @@ ucs_status_t ucp_worker_listen(ucp_worker_h worker,
             goto out;
         }
 
-        if (params->field_mask & UCP_WORKER_LISTENER_PARAM_FIELD_CALLBACK) {
-            UCP_CHECK_PARAM_NON_NULL(params->ep_accept_handler.cb, status, goto err_free);
-            listener->cb  = params->ep_accept_handler.cb;
-            listener->arg = params->ep_accept_handler.arg;
+        if (params->field_mask & UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER) {
+            UCP_CHECK_PARAM_NON_NULL(params->accept_handler.cb, status, goto err_free);
+            listener->cb  = params->accept_handler.cb;
+            listener->arg = params->accept_handler.arg;
         } else {
             listener->cb  = NULL;
         }
@@ -169,12 +169,11 @@ out:
     return status;
 }
 
-ucs_status_t ucp_listener_destroy(ucp_listener_h listener)
+void ucp_listener_destroy(ucp_listener_h listener)
 {
     ucs_trace("listener %p: destroying", listener);
 
     /* TODO remove pending slow-path progress */
     ucp_worker_iface_cleanup(&listener->wiface);
     ucs_free(listener);
-    return UCS_OK;
 }
