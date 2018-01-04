@@ -332,6 +332,29 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 }
 
 
+void uct_test::entity::cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const {
+#if HAVE_CUDA
+    ucs_status_t status;
+    cudaError_t cerr;
+
+    mem->length     = length;
+    mem->md         = m_md;
+    mem->mem_type   = UCT_MD_MEM_TYPE_CUDA;
+    mem->memh       = UCT_MEM_HANDLE_NULL;
+
+    cerr = cudaMalloc(&mem->address, mem->length);
+    EXPECT_TRUE(cerr == cudaSuccess);
+
+    if (md_attr().cap.reg_mem_types & UCS_BIT(UCT_MD_MEM_TYPE_CUDA)) {
+        status = uct_md_mem_reg(m_md, mem->address, mem->length,
+                                UCT_MD_MEM_ACCESS_ALL, &mem->memh);
+        ASSERT_UCS_OK(status);
+    }
+#else
+    UCS_TEST_SKIP_R("can't allocate cuda memory");
+#endif
+}
+
 void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
                                  uct_rkey_bundle *rkey_bundle, int mem_type) const {
     static const char *alloc_name = "uct_test";
@@ -343,26 +366,8 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
             status = uct_iface_mem_alloc(m_iface, length, UCT_MD_MEM_ACCESS_ALL,
                                          alloc_name, mem);
             ASSERT_UCS_OK(status);
-        } else if(mem_type == UCT_MD_MEM_TYPE_CUDA) {
-#if HAVE_CUDA
-            cudaError_t cerr;
-
-            mem->length     = length;
-            mem->md         = m_md;
-            mem->mem_type   = UCT_MD_MEM_TYPE_CUDA;
-            mem->memh       = UCT_MEM_HANDLE_NULL;
-
-            cerr = cudaMalloc(&mem->address, mem->length);
-            EXPECT_TRUE(cerr == cudaSuccess);
-
-            if (md_attr().cap.reg_mem_types & UCS_BIT(mem_type)) {
-                status = uct_md_mem_reg(m_md, mem->address, mem->length,
-                                        UCT_MD_MEM_ACCESS_ALL, &mem->memh);
-                ASSERT_UCS_OK(status);
-            }
-#else
-            UCS_TEST_SKIP_R("can't allocate cuda memory");
-#endif
+        } else if (mem_type == UCT_MD_MEM_TYPE_CUDA) {
+            cuda_mem_alloc(length, mem);
         } else {
             UCS_TEST_ABORT("wrong memory type");
         }
@@ -401,6 +406,20 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
     }
 }
 
+void uct_test::entity::cuda_mem_free(const uct_allocated_memory_t *mem) const {
+#if HAVE_CUDA
+    ucs_status_t status;
+    cudaError_t cerr;
+
+    if (mem->memh != UCT_MEM_HANDLE_NULL) {
+        status = uct_md_mem_dereg(m_md, mem->memh);
+        ASSERT_UCS_OK(status);
+    }
+    cerr = cudaFree(mem->address);
+    ASSERT_TRUE(cerr == cudaSuccess);
+#endif
+}
+
 void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
                                 const uct_rkey_bundle_t& rkey,
                                 const uct_memory_type_t mem_type) const {
@@ -416,16 +435,7 @@ void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
             uct_iface_mem_free(mem);
         }
     } else if(mem_type == UCT_MD_MEM_TYPE_CUDA) {
-#if HAVE_CUDA
-        cudaError_t cerr;
-
-        if (md_attr().cap.reg_mem_types & UCS_BIT(mem_type)) {
-            status = uct_md_mem_dereg(m_md, mem->memh);
-            ASSERT_UCS_OK(status);
-        }
-        cerr = cudaFree(mem->address);
-        ASSERT_TRUE(cerr == cudaSuccess);
-#endif
+        cuda_mem_free(mem);
     }
 }
 
