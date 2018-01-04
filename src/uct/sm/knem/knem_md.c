@@ -14,6 +14,9 @@ static ucs_config_field_t uct_knem_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_knem_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
+    {"RCACHE", "try", "Enable using memory registration cache",
+     ucs_offsetof(uct_knem_md_config_t, rcache_enable), UCS_CONFIG_TYPE_TERNARY},
+
     {"", "", NULL,
      ucs_offsetof(uct_knem_md_config_t, rcache),
      UCS_CONFIG_TYPE_TABLE(uct_md_config_rcache_table)},
@@ -339,7 +342,7 @@ static ucs_status_t uct_knem_md_open(const char *md_name,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (md_config->rcache.enable != UCS_NO) {
+    if (md_config->rcache_enable != UCS_NO) {
         rcache_params.region_struct_size = sizeof(uct_knem_rcache_region_t);
         rcache_params.alignment          = md_config->rcache.alignment;
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
@@ -353,7 +356,7 @@ static ucs_status_t uct_knem_md_open(const char *md_name,
             knem_md->reg_cost.growth   = 0; /* It's close enough to 0 */
         } else {
             ucs_assert(knem_md->rcache == NULL);
-            if (md_config->rcache.enable == UCS_YES) {
+            if (md_config->rcache_enable == UCS_YES) {
                 ucs_error("Failed to create registration cache: %s",
                           ucs_status_string(status));
                 uct_knem_md_close(&knem_md->super);

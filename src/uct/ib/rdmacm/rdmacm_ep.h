@@ -11,20 +11,17 @@
 struct uct_rdmacm_ep {
     uct_base_ep_t                      super;
     void                               *priv_data;
-    uct_sockaddr_conn_reply_callback_t conn_reply_cb;
-    void                               *conn_reply_arg;
     ucs_list_link_t                    list_elem;
     struct sockaddr_storage            remote_addr;
-    uint32_t                           cb_flags;
     int                                is_on_pending;
+    uct_worker_cb_id_t                 slow_prog_id;
 };
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t, uct_iface_t*,
                            const ucs_sock_addr_t *,
-                           uct_sockaddr_conn_reply_callback_t ,
-                           void *, uint32_t, const void *, size_t);
+                           const void *, size_t);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_ep_t, uct_ep_t);
 
-void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t status);
+void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep);
 
 #endif

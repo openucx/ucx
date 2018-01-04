@@ -61,6 +61,15 @@ ucs_status_t uct_p2p_mix_test::swap32(const mapped_buffer &sendbuf,
                                 recvbuf.rkey(), (uint32_t*)sendbuf.ptr(), comp);
 }
 
+ucs_status_t uct_p2p_mix_test::put_short(const mapped_buffer &sendbuf,
+                                         const mapped_buffer &recvbuf,
+                                         uct_completion_t *comp)
+{
+    return uct_ep_put_short(sender().ep(0), sendbuf.ptr(),
+                            sendbuf.length(), recvbuf.addr(),
+                            recvbuf.rkey());
+}
+
 ucs_status_t uct_p2p_mix_test::put_bcopy(const mapped_buffer &sendbuf,
                                          const mapped_buffer &recvbuf,
                                          uct_completion_t *comp)
@@ -171,6 +180,10 @@ void uct_p2p_mix_test::init() {
     if (sender().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
         m_avail_send_funcs.push_back(&uct_p2p_mix_test::am_zcopy);
         m_send_size = ucs_min(m_send_size, sender().iface_attr().cap.am.max_zcopy);
+    }
+    if (sender().iface_attr().cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
+        m_avail_send_funcs.push_back(&uct_p2p_mix_test::put_short);
+        m_send_size = ucs_min(m_send_size, sender().iface_attr().cap.put.max_short);
     }
     if (sender().iface_attr().cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
         m_avail_send_funcs.push_back(&uct_p2p_mix_test::put_bcopy);

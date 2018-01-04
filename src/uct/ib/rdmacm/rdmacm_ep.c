@@ -16,8 +16,6 @@ ucs_status_t uct_rdmacm_ep_resolve_addr(uct_rdmacm_ep_t *ep)
 
 static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
                            const ucs_sock_addr_t *sockaddr,
-                           uct_sockaddr_conn_reply_callback_t reply_cb,
-                           void *arg, uint32_t cb_flags,
                            const void *priv_data, size_t length)
 {
     uct_rdmacm_iface_t *iface = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
@@ -36,8 +34,6 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
      * where they are used before being initialized (from the async thread
      * - after an RDMA_CM_EVENT_ROUTE_RESOLVED event) */
     hdr.length           = length;
-    self->conn_reply_cb  = reply_cb;
-    self->conn_reply_arg = arg;
     self->priv_data      = ucs_malloc(sizeof(hdr) + length, "client private data");
     if (self->priv_data == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -46,16 +42,6 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
 
     memcpy(self->priv_data, &hdr, sizeof(hdr));
     memcpy(self->priv_data + sizeof(hdr), priv_data, length);
-
-    /* TODO When UCT_CB_FLAG_SYNC is supported, return UCS_INPROGRESS since for
-     * librdmacm the reply_cb still needs to be invoked and it will be from the
-     * main thread after getting a reply from the server side */
-    ucs_assertv_always((cb_flags & UCT_CB_FLAG_ASYNC), "UCT_CB_FLAG_SYNC is not supported");
-
-    /* If the user's callbacks are called from the async thread, we cannot
-     * tell if by the end of this function they were already invoked and if this
-     * client's ep would already be connected to the server */
-    self->cb_flags = cb_flags;
 
     /* Save the remote address */
     if (sockaddr->addr->sa_family == AF_INET) {
@@ -67,6 +53,8 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
         status = UCS_ERR_IO_ERROR;
         goto err_free_mem;
     }
+
+    self->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
 
     /* The interface can point at one endpoint at a time and therefore, the
      * connection establishment cannot be done in parallel for several endpoints */
@@ -98,6 +86,9 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
                ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
                                 ip_port_str, UCS_SOCKADDR_STRING_LEN));
 
+    /* Since the user's (server's) callback is called from the async thread,
+     * we cannot tell if by the end of this function it was already invoked and
+     * if this client's ep would already be connected to the server */
     return UCS_INPROGRESS;
 
 err_free_mem:
@@ -117,7 +108,17 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
         ucs_list_del(&self->list_elem);
         self->is_on_pending = 0;
     }
-    uct_rdmacm_iface_client_start_next_ep(iface);
+
+    /* remove the slow progress function in case it was placed on the slow progress
+     * chain but wasn't invoked yet */
+    uct_worker_progress_unregister_safe(&iface->super.worker->super,
+                                        &self->slow_prog_id);
+
+    /* if the destroyed ep is the active one on the iface, mark it as destroyed
+     * so that arriving events on the iface won't try to access this ep */
+    if (iface->ep == self) {
+        iface->ep = UCT_RDMACM_IFACE_BLOCKED_NO_EP;
+    }
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 
     ucs_free(self->priv_data);
@@ -126,11 +127,27 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
 UCS_CLASS_DEFINE(uct_rdmacm_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t, uct_iface_t*,
                           const ucs_sock_addr_t *,
-                          uct_sockaddr_conn_reply_callback_t ,
-                          void *, uint32_t, const void *, size_t);
+                          const void *, size_t);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rdmacm_ep_t, uct_ep_t);
 
-void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t status)
+static unsigned uct_rdmacm_client_err_handle_progress(void *arg)
 {
-    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), ep, iface, status);
+    uct_rdmacm_ep_t *ep = arg;
+    ucs_trace_func("err_handle ep=%p",ep);
+
+    ep->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
+    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), &ep->super.super,
+                      ep->super.super.iface, UCS_ERR_IO_ERROR);
+    return 0;
+}
+
+void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep)
+{
+    uct_rdmacm_iface_t *rdmacm_iface = ucs_derived_of(iface, uct_rdmacm_iface_t);
+
+    /* invoke the error handling flow from the main thread */
+    uct_worker_progress_register_safe(&rdmacm_iface->super.worker->super,
+                                      uct_rdmacm_client_err_handle_progress,
+                                      rdmacm_iface->ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &rdmacm_iface->ep->slow_prog_id);
 }

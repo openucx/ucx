@@ -422,10 +422,15 @@ enum uct_md_mem_flags {
                                                 transport. */
     UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1), /**< Place the mapping at exactly
                                                 defined address */
+    UCT_MD_MEM_FLAG_LOCK     = UCS_BIT(2), /**< Registered memory should be
+                                                locked. May incur extra cost for
+                                                registration, but memory access
+                                                is usually faster. */
+
     /* memory access flags */
-    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(2), /**< enable remote put access */
-    UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(3), /**< enable remote get access */
-    UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(4), /**< enable remote atomic access */
+    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), /**< enable remote put access */
+    UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(6), /**< enable remote get access */
+    UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(7), /**< enable remote atomic access */
 
     /** enable local and remote access for all operations */
     UCT_MD_MEM_ACCESS_ALL =  (UCT_MD_MEM_ACCESS_REMOTE_PUT|
@@ -1329,12 +1334,6 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  *
  * @param [in]  iface            Interface to create the endpoint on.
  * @param [in]  sockaddr         The sockaddr to connect to on the remote peer.
- * @param [in]  reply_cb         Callback for an incoming reply message from
- *                               the server.
- * @param [in]  arg              User defined argument to pass to the callback.
- * @param [in]  cb_flags         Required @ref uct_cb_flags "callback flags" to
- *                               indicate where the @ref uct_sockaddr_conn_reply_callback_t
- *                               reply callback can be invoked from.
  * @param [in]  priv_data        User's private data for connecting to the
  *                               remote peer.
  * @param [in]  length           Length of the private data.
@@ -1352,8 +1351,6 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  */
 ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
                                     const ucs_sock_addr_t *sockaddr,
-                                    uct_sockaddr_conn_reply_callback_t reply_cb,
-                                    void *arg, uint32_t cb_flags,
                                     const void *priv_data, size_t length,
                                     uct_ep_h *ep_p);
 
