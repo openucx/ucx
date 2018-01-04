@@ -26,12 +26,33 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
                                                        const void *conn_priv_data,
                                                        size_t length)
 {
-    ucp_listener_h listener = arg;
+    const ucp_wireup_sockaddr_priv_t *client_data = conn_priv_data;
+    ucp_listener_h listener                       = arg;
     ucp_listener_accept_t *accept;
-    ucs_status_t status;
     uct_worker_cb_id_t prog_id;
+    ucp_ep_params_t params;
+    ucs_status_t status;
+    ucp_ep_h ep;
 
     ucs_trace("listener %p: got connection request", listener);
+
+    params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                        UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    params.err_mode   = client_data->err_mode;
+    params.address    = (ucp_address_t*)(client_data + 1);
+
+    /* create endpoint to the worker address we got in the private data */
+    status = ucp_ep_create_to_worker_addr(listener->wiface.worker, &params,
+                                          "listener", &ep);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    /* send wireup request message, to connect the client to the new endpoint */
+    status = ucp_wireup_send_request(ep, client_data->ep_uuid);
+    if (status != UCS_OK) {
+        goto err_destroy_ep;
+    }
 
     /* if user provided a callback for accepting new connection, launch it on
      * the main thread
@@ -41,11 +62,11 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
         if (accept == NULL) {
             ucs_error("failed to allocate listener accept context");
             status = UCS_ERR_NO_MEMORY;
-            return status;
+            goto err_destroy_ep;
         }
 
         accept->listener = listener;
-        accept->ep       = NULL; /* TODO create and wireup an endpoint */
+        accept->ep       = ep;
 
         /* defer user callback to be invoked from the main thread */
         prog_id = UCS_CALLBACKQ_ID_NULL;
@@ -56,6 +77,11 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
     }
 
     return UCS_OK;
+
+err_destroy_ep:
+    ucp_ep_destroy_internal(ep);
+err:
+    return status;
 }
 
 ucs_status_t ucp_worker_listen(ucp_worker_h worker,

@@ -62,7 +62,8 @@ void ucp_proto_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
 static inline void ucp_ep_connect_remote(ucp_ep_h ep)
 {
     if (ucs_unlikely(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED))) {
-        ucp_wireup_send_request(ep);
+        ucs_assert(ep->flags & UCP_EP_FLAG_DEST_UUID_PEER);
+        ucp_wireup_send_request(ep, ep->dest_uuid);
     }
 }
 
