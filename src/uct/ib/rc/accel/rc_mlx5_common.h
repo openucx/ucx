@@ -231,6 +231,10 @@ uct_rc_mlx5_iface_common_data(uct_rc_mlx5_iface_common_t *mlx5_iface,
         hdr = uct_ib_iface_recv_desc_hdr(&rc_iface->super, desc);
         VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
         *flags = UCT_CB_PARAM_FLAG_DESC;
+        /* Assuming that next packet likely will be non-inline,
+         * setup the next prefetch pointer
+         */
+         uct_rc_mlx5_srq_prefetch_setup(mlx5_iface, rc_iface);
     }
 
     return hdr;
