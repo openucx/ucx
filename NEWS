@@ -7,18 +7,19 @@
 ##
 #
 
-## 1.2.2 (November 28, 2017)
+## 1.2.2 (January 4, 2018)
 
 Main:
 - Support including UCX API headers from C++ code
 - UD transport to handle unicast flood on RoCE fabric
-- Compilation fixes for gcc 7.1.1 and clang 3.6
+- Compilation fixes for gcc 7.1.1, clang 3.6, clang 5
 
 Details:
 - When UD transport is used with RoCE, packets intended for other peers may
   arrive on different adapters (as a result of unicast flooding).
 - This change adds packet filtering based on destination GIDs. Now the packet
   is silently dropped, if its destination GID does not match the local GID.
+- Added a new device ID for InfiniBand HCA
 - [packaging] Move `examples/` and `perftest/` into doc
 - [packaging] Update spec to work on old distros while complaint with Fedora
   guidelines
