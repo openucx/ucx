@@ -27,10 +27,11 @@ protected:
                                                        const mapped_buffer &,
                                                        const mapped_buffer &);
 
-    typedef enum {
-        DIRECTION_SEND_TO_RECV,
-        DIRECTION_RECV_TO_SEND
-    } direction_t;
+    enum uct_p2p_test_flags {
+        TEST_UCT_FLAG_DIR_SEND_TO_RECV = UCS_BIT(0),
+        TEST_UCT_FLAG_SEND_ZCOPY       = UCS_BIT(1),
+        TEST_UCT_FLAG_RECV_ZCOPY       = UCS_BIT(2),
+    };
 
     struct completion {
         uct_p2p_test     *self;
@@ -42,9 +43,12 @@ protected:
         bool loopback;
     };
 
-    virtual void test_xfer(send_func_t send, size_t length, direction_t direction);
+    virtual void test_xfer(send_func_t send, size_t length, unsigned flags,
+                           uct_memory_type_t mem_type);
     void test_xfer_multi(send_func_t send, size_t min_length, size_t max_length,
-                         direction_t direction);
+                         unsigned flags);
+    void test_xfer_multi_mem_type(send_func_t send, size_t min_length, size_t max_length,
+                                  unsigned flags, uct_memory_type_t mem_type);
     void blocking_send(send_func_t send, uct_ep_h ep, const mapped_buffer &sendbuf,
                        const mapped_buffer &recvbuf, bool wait_for_completion);
     void wait_for_remote();
@@ -56,7 +60,7 @@ protected:
 private:
     template <typename O>
     void test_xfer_print(O& os, send_func_t send, size_t length,
-                         direction_t direction);
+                         unsigned flags, uct_memory_type_t mem_type);
 
     static void completion_cb(uct_completion_t *self, ucs_status_t status);
 

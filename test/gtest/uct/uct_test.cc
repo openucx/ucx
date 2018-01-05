@@ -25,6 +25,8 @@ std::string resource::name() const {
     return ss.str();
 }
 
+const char *uct_test::uct_mem_type_names[] = {"host", "cuda"};
+
 uct_test::uct_test() {
     ucs_status_t status;
     uct_md_attr_t pd_attr;
