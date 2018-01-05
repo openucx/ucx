@@ -589,8 +589,8 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
      * There can be up to "max_cancel_sync_ops" SYNC ops during cancellation.
      * Also we assume that there can be up to two pending SYNC ops during
      * unexpected messages flow. */
-    srq_init_attr->tm_cap.max_ops = (2 * iface->tm.num_tags) +
-                                    max_cancel_sync_ops + 2;
+    iface->tm.cmd_qp_len = (2 * iface->tm.num_tags) + max_cancel_sync_ops + 2;
+    srq_init_attr->tm_cap.max_ops = iface->tm.cmd_qp_len;
     srq_init_attr->comp_mask     |= IBV_EXP_CREATE_SRQ_CQ |
                                     IBV_EXP_CREATE_SRQ_TM;
 
