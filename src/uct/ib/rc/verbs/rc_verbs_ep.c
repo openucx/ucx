@@ -587,8 +587,9 @@ ssize_t uct_rc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
-    UCT_RC_VERBS_FILL_TM_IMM(wr, imm, app_ctx, wr.opcode, wr.imm_data, IBV);
-    UCT_RC_VERBS_GET_TM_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
+    UCT_RC_IFACE_FILL_TM_IMM(imm, app_ctx, wr.imm_data, wr.opcode, IBV_WR_SEND,
+                             _WITH_IMM);
+    UCT_RC_IFACE_GET_TM_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
                                    tag, app_ctx, pack_cb, arg, length);
     UCT_RC_VERBS_FILL_SGE(wr, sge, length + sizeof(struct ibv_exp_tmh));
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, 0);
@@ -617,7 +618,8 @@ ucs_status_t uct_rc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge + 1, iov, iovcnt);
 
-    UCT_RC_VERBS_FILL_TM_IMM(wr, imm, app_ctx, wr.opcode, wr.imm_data, IBV);
+    UCT_RC_IFACE_FILL_TM_IMM(imm, app_ctx, wr.imm_data, wr.opcode, IBV_WR_SEND,
+                             _WITH_IMM);
     UCT_RC_VERBS_GET_TM_ZCOPY_DESC(&iface->super,
                                    &iface->verbs_common.short_desc_mp,
                                    desc, tag, app_ctx, comp, &send_flags,

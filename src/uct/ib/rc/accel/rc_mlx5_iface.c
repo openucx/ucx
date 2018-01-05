@@ -88,12 +88,16 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
     ucs_status_t status;
 
-    status = uct_rc_iface_query(iface, iface_attr);
+    status = uct_rc_iface_query(iface, iface_attr,
+                                UCT_IB_MLX5_PUT_MAX_SHORT(0),
+                                UCT_IB_MLX5_AM_MAX_SHORT(0),
+                                UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(0),
+                                UCT_IB_MLX5_AM_ZCOPY_MAX_IOV);
     if (status != UCS_OK) {
         return status;
     }
 
-    uct_rc_mlx5_iface_common_query(iface, iface_attr, 0);
+    uct_rc_mlx5_iface_common_query(iface_attr);
     iface_attr->latency.growth += 1e-9; /* 1 ns per each extra QP */
     return UCS_OK;
 }
@@ -150,7 +154,8 @@ static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
         uct_rc_mlx5_iface_common_prepost_recvs(&iface->super, &iface->mlx5_common);
     }
 
-    uct_base_iface_progress_enable(&iface->super.super.super.super, flags);
+    uct_base_iface_progress_enable_cb(&iface->super.super.super,
+                                      iface->super.progress, flags);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker,
@@ -182,6 +187,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
                              sizeof(struct mlx5_wqe_raddr_seg) -
                              sizeof(struct mlx5_wqe_ctrl_seg)) /
                              sizeof(struct mlx5_wqe_data_seg));
+
+    self->super.progress = uct_rc_mlx5_iface_progress;
     return status;
 }
 
@@ -230,7 +237,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_rc_mlx5_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
-    .iface_progress           = (void*)uct_rc_mlx5_iface_progress,
+    .iface_progress           = uct_rc_iface_do_progress,
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
     .iface_event_arm          = uct_rc_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),

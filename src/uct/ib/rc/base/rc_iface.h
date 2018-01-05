@@ -196,8 +196,8 @@ typedef struct uct_rc_iface_release_desc {
 
 typedef struct uct_rc_iface_ctx_priv {
     uint64_t                    tag;
-    uint64_t                    imm_data;
     void                        *buffer;
+    uint32_t                    app_ctx;
     uint32_t                    length;
     uint32_t                    tag_handle;
 } uct_rc_iface_ctx_priv_t;
@@ -287,6 +287,9 @@ struct uct_rc_iface {
 
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
     ucs_list_link_t          ep_list;
+
+    /* Progress function (either regular or TM aware) */
+    ucs_callback_t           progress;
 };
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h,
                   uct_worker_h, const uct_iface_params_t*,
@@ -333,6 +336,32 @@ typedef struct uct_rc_am_short_hdr {
 
 #  define UCT_RC_IFACE_TM_OFF_STR         "TM_ENABLE=n"
 
+#  define UCT_RC_IFACE_FILL_TM_IMM(_imm_data, _app_ctx, _ib_imm, _res_op, \
+                                   _op, _imm_suffix) \
+       if (_imm_data == 0) { \
+           _res_op  = _op; \
+           _app_ctx = 0; \
+       } else { \
+           _res_op = UCS_PP_TOKENPASTE(_op, _imm_suffix); \
+           uct_rc_iface_tag_imm_data_pack(&(_ib_imm), &(_app_ctx), _imm_data); \
+       }
+
+#  define UCT_RC_IFACE_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, _hdr) \
+      { \
+          UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+          hdr = _desc + 1; \
+          uct_rc_iface_fill_tmh(_hdr, _tag, _app_ctx, IBV_EXP_TMH_EAGER); \
+          hdr += sizeof(struct ibv_exp_tmh); \
+      }
+
+#  define UCT_RC_IFACE_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
+                                       _pack_cb, _arg, _length) \
+       { \
+           void *hdr; \
+           UCT_RC_IFACE_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, hdr) \
+           (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
+           _length = pack_cb(hdr, arg); \
+       }
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,
@@ -361,13 +390,9 @@ uct_rc_iface_tag_imm_data_pack(uint32_t *ib_imm, uint32_t *app_ctx,
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
-uct_rc_iface_tag_imm_data_unpack(struct ibv_exp_wc *wc, uint32_t app_ctx)
+uct_rc_iface_tag_imm_data_unpack(uint32_t ib_imm, uint32_t app_ctx, int is_imm)
 {
-    if (wc->exp_wc_flags & IBV_EXP_WC_WITH_IMM) {
-        return ((uint64_t)app_ctx << 32) | wc->imm_data;
-    } else {
-        return 0ul;
-    }
+    return is_imm ? (((uint64_t)app_ctx << 32) | ib_imm) : 0ul;
 }
 
 static UCS_F_ALWAYS_INLINE uct_rc_iface_ctx_priv_t*
@@ -395,8 +420,12 @@ uct_rc_iface_tag_get_op_id(uct_rc_iface_t *iface, uct_completion_t *comp)
 extern ucs_config_field_t uct_rc_iface_config_table[];
 extern ucs_config_field_t uct_rc_fc_config_table[];
 
+unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface);
+
 ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
-                                uct_iface_attr_t *iface_attr);
+                                uct_iface_attr_t *iface_attr,
+                                size_t put_max_short, size_t max_inline,
+                                size_t am_max_hdr, size_t am_max_iov);
 
 ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface,
                                       uct_iface_addr_t *addr);

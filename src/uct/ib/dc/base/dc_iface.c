@@ -299,11 +299,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
 UCS_CLASS_DEFINE(uct_dc_iface_t, uct_rc_iface_t);
 
 ucs_status_t uct_dc_iface_query(uct_dc_iface_t *iface,
-                                uct_iface_attr_t *iface_attr)
+                                uct_iface_attr_t *iface_attr,
+                                size_t put_max_short, size_t max_inline,
+                                size_t am_max_hdr, size_t am_max_iov)
 {
     ucs_status_t status;
 
-    status = uct_rc_iface_query(&iface->super, iface_attr);
+    status = uct_rc_iface_query(&iface->super, iface_attr, put_max_short,
+                                max_inline, am_max_hdr, am_max_iov);
     if (status != UCS_OK) {
         return status;
     }
