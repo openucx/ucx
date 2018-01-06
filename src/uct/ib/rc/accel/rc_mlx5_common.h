@@ -381,7 +381,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     ucs_assert(uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq,
                                        mlx5_common_iface->rx.srq.mask)->srq.next_wqe_index == 0);
 
-    cqe = uct_ib_mlx5_poll_cq(&rc_iface->super, &mlx5_common_iface->rx.cq);
+    cqe = uct_rc_mlx5_iface_poll_rx_cq(mlx5_common_iface, rc_iface);
     if (cqe == NULL) {
         /* If no CQE - post receives */
         count = 0;
