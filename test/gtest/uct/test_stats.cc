@@ -32,7 +32,7 @@ public:
     {
         size_t size = ucs_max(min, ucs_min(64ul, max));
         lbuf = new mapped_buffer(size, 0, sender());
-        rbuf = new mapped_buffer(size, 0, receiver());
+        rbuf = new mapped_buffer(size, 0, receiver(), 0, sender().md_attr().cap.mem_type);
     }
 
     virtual void cleanup() {

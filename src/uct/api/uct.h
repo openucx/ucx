@@ -683,6 +683,7 @@ typedef struct uct_allocated_memory {
     void                     *address; /**< Address of allocated memory */
     size_t                   length;   /**< Real size of allocated memory */
     uct_alloc_method_t       method;   /**< Method used to allocate the memory */
+    uct_memory_type_t        mem_type; /**< type of allocated memory */
     uct_md_h                 md;       /**< if method==MD: MD used to allocate the memory */
     uct_mem_h                memh;     /**< if method==MD: MD memory handle */
 } uct_allocated_memory_t;
