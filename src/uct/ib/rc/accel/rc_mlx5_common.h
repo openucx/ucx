@@ -74,6 +74,7 @@ enum {
            return UCS_ERR_EXCEEDS_LIMIT; \
        }
 
+
 /* TODO: Remove this struct when mlx5dv.h is included! */
 typedef struct uct_rc_mlx5_wqe_tm_seg {
     uint8_t                       opcode;
@@ -86,23 +87,30 @@ typedef struct uct_rc_mlx5_wqe_tm_seg {
     uint64_t                      append_mask;
 } uct_rc_mlx5_wqe_tm_seg_t;
 
+
+/* Tag matching list entry */
 typedef struct uct_rc_mlx5_tag_entry {
     struct uct_rc_mlx5_tag_entry  *next;
-    uct_tag_context_t             *ctx;
-    unsigned                      num_cqes;
+    uct_tag_context_t             *ctx;     /* the corresponding UCT context */
+    unsigned                      num_cqes; /* how many CQEs is expected for this entry */
 } uct_rc_mlx5_tag_entry_t;
 
+
+/* Pending operation on the command QP */
 typedef struct uct_rc_mlx5_srq_op {
     uct_rc_mlx5_tag_entry_t       *tag;
 } uct_rc_mlx5_srq_op_t;
 
+
+/* Command QP work-queue. All tag matching list operations are posted on it. */
 typedef struct uct_rc_mlx5_cmd_wq {
     uct_ib_mlx5_txwq_t            super;
-    uint32_t                      qp_num;
-    uct_rc_mlx5_srq_op_t          *ops;
-    int                           ops_head;
-    int                           ops_tail;
-    int                           ops_mask;
+    uint32_t                      qp_num;   /* command QP num */
+    uct_rc_mlx5_srq_op_t          *ops;     /* array of operations on command QP */
+    int                           ops_head; /* points to the next operation to be completed */
+    int                           ops_tail; /* points to the last adde operation*/
+    int                           ops_mask; /* mask which bounds head and tail by
+                                               ops array size */
 } uct_rc_mlx5_cmd_wq_t;
 
 #endif /* IBV_EXP_HW_TM  */
