@@ -161,7 +161,7 @@ uct_dc_mlx5_iface_bcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                                0, 0, 0,
                                &ep->av, uct_dc_mlx5_ep_get_grh(ep),
                                uct_ib_mlx5_wqe_av_size(&ep->av),
-                               MLX5_WQE_CTRL_CQ_UPDATE | send_flags);
+                               MLX5_WQE_CTRL_CQ_UPDATE | send_flags, 0);
     uct_rc_txqp_add_send_op(txqp, &desc->super);
 }
 
@@ -209,7 +209,7 @@ uct_dc_mlx5_iface_atomic_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                                compare_mask, compare, swap_add,
                                &ep->av, uct_dc_mlx5_ep_get_grh(ep),
                                uct_ib_mlx5_wqe_av_size(&ep->av),
-                               MLX5_WQE_CTRL_CQ_UPDATE);
+                               MLX5_WQE_CTRL_CQ_UPDATE, 0);
 
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_rc_txqp_add_send_op(txqp, &desc->super);

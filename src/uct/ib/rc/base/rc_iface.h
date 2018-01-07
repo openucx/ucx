@@ -233,6 +233,7 @@ struct uct_rc_iface {
         unsigned                     num_tags;
         unsigned                     num_outstanding;
         uint16_t                     unexpected_cnt;
+        uint16_t                     cmd_qp_len;
         uint8_t                      enabled;
         struct {
             void                     *arg; /* User defined arg */

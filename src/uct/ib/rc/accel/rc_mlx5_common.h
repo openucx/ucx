@@ -38,16 +38,101 @@ enum {
     UCT_RC_MLX5_IFACE_STAT_LAST
 };
 
+#if IBV_EXP_HW_TM
+
+enum {
+    UCT_RC_MLX5_TM_OPCODE_NOP              = 0x00,
+    UCT_RC_MLX5_TM_OPCODE_APPEND           = 0x01,
+    UCT_RC_MLX5_TM_OPCODE_REMOVE           = 0x02
+};
+
+/* TODO: Remove/replace this enum when mlx5dv.h is included */
+enum {
+    UCT_RC_MLX5_OPCODE_TAG_MATCHING        = 0x28,
+    UCT_RC_MLX5_CQE_APP_TAG_MATCHING       = 1,
+
+    /* tag segment flags */
+    UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT         = (1 << 6),
+    UCT_RC_MLX5_SRQ_FLAG_TM_CQE_REQ        = (1 << 7),
+
+    /* tag CQE codes */
+    UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED     = 0x1,
+    UCT_RC_MLX5_CQE_APP_OP_TM_EXPECTED     = 0x2,
+    UCT_RC_MLX5_CQE_APP_OP_TM_UNEXPECTED   = 0x3,
+    UCT_RC_MLX5_CQE_APP_OP_TM_NO_TAG       = 0x4,
+    UCT_RC_MLX5_CQE_APP_OP_TM_APPEND       = 0x5,
+    UCT_RC_MLX5_CQE_APP_OP_TM_REMOVE       = 0x6,
+    UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG = 0xA
+};
+
+#  define UCT_RC_MLX5_TM_IS_SW_RNDV(_cqe64, _imm_data) \
+       (ucs_unlikely((((_cqe64)->op_own >> 4) == MLX5_CQE_RESP_SEND_IMM) && \
+                     !(_imm_data)))
+
+#  define UCT_RC_MLX5_CHECK_TAG(_mlx5_common_iface) \
+       if (ucs_unlikely((_mlx5_common_iface)->tm.head->next == NULL)) {  \
+           return UCS_ERR_EXCEEDS_LIMIT; \
+       }
+
+
+/* TODO: Remove this struct when mlx5dv.h is included! */
+typedef struct uct_rc_mlx5_wqe_tm_seg {
+    uint8_t                       opcode;
+    uint8_t                       flags;
+    uint16_t                      index;
+    uint8_t                       rsvd0[2];
+    uint16_t                      sw_cnt;
+    uint8_t                       rsvd1[8];
+    uint64_t                      append_tag;
+    uint64_t                      append_mask;
+} uct_rc_mlx5_wqe_tm_seg_t;
+
+
+/* Tag matching list entry */
+typedef struct uct_rc_mlx5_tag_entry {
+    struct uct_rc_mlx5_tag_entry  *next;
+    uct_tag_context_t             *ctx;     /* the corresponding UCT context */
+    unsigned                      num_cqes; /* how many CQEs is expected for this entry */
+} uct_rc_mlx5_tag_entry_t;
+
+
+/* Pending operation on the command QP */
+typedef struct uct_rc_mlx5_srq_op {
+    uct_rc_mlx5_tag_entry_t       *tag;
+} uct_rc_mlx5_srq_op_t;
+
+
+/* Command QP work-queue. All tag matching list operations are posted on it. */
+typedef struct uct_rc_mlx5_cmd_wq {
+    uct_ib_mlx5_txwq_t            super;
+    uint32_t                      qp_num;   /* command QP num */
+    uct_rc_mlx5_srq_op_t          *ops;     /* array of operations on command QP */
+    int                           ops_head; /* points to the next operation to be completed */
+    int                           ops_tail; /* points to the last adde operation*/
+    int                           ops_mask; /* mask which bounds head and tail by
+                                               ops array size */
+} uct_rc_mlx5_cmd_wq_t;
+
+#endif /* IBV_EXP_HW_TM  */
+
 typedef struct uct_rc_mlx5_iface_common {
     struct {
-        uct_ib_mlx5_cq_t   cq;
-        ucs_mpool_t        atomic_desc_mp;
+        uct_ib_mlx5_cq_t          cq;
+        ucs_mpool_t               atomic_desc_mp;
     } tx;
     struct {
-        uct_ib_mlx5_cq_t   cq;
-        uct_ib_mlx5_srq_t  srq;
-        void               *pref_ptr;
+        uct_ib_mlx5_cq_t          cq;
+        uct_ib_mlx5_srq_t         srq;
+        void                      *pref_ptr;
     } rx;
+#if IBV_EXP_HW_TM
+    struct {
+        uct_rc_mlx5_cmd_wq_t      cmd_wq;
+        uct_rc_mlx5_tag_entry_t   *head;
+        uct_rc_mlx5_tag_entry_t   *tail;
+        uct_rc_mlx5_tag_entry_t   *list;
+    } tm;
+#endif
     UCS_STATS_NODE_DECLARE(stats);
 } uct_rc_mlx5_iface_common_t;
 
@@ -73,6 +158,16 @@ void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 
 void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                         uct_rc_iface_t *rc_iface, uint32_t qpn);
+
+ucs_status_t
+uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
+                                  uct_rc_iface_t *rc_iface,
+                                  uct_rc_iface_config_t *rc_config,
+                                  struct ibv_exp_create_srq_attr *srq_init_attr,
+                                  unsigned rndv_hdr_len);
+
+void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface,
+                                          uct_rc_iface_t *rc_iface);
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txqp_process_tx_cqe(uct_rc_txqp_t *txqp, struct mlx5_cqe64 *cqe,
@@ -294,7 +389,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     ucs_assert(uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq,
                                        mlx5_common_iface->rx.srq.mask)->srq.next_wqe_index == 0);
 
-    cqe = uct_ib_mlx5_poll_cq(&rc_iface->super, &mlx5_common_iface->rx.cq);
+    cqe = uct_rc_mlx5_iface_poll_rx_cq(mlx5_common_iface, rc_iface);
     if (cqe == NULL) {
         /* If no CQE - post receives */
         count = 0;
@@ -480,7 +575,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
          /* RDMA/ATOMIC */ uint64_t remote_addr, uct_rkey_t rkey,
          /* ATOMIC      */ uint64_t compare_mask, uint64_t compare, uint64_t swap_add,
          /* AV          */ uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
-                           size_t av_size, uint8_t fm_ce_se)
+                           size_t av_size, uint8_t fm_ce_se, uint32_t imm_val_be)
 {
     struct mlx5_wqe_ctrl_seg                     *ctrl;
     struct mlx5_wqe_raddr_seg                    *raddr;
@@ -638,7 +733,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq,
                                  (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
-                                 opmod, fm_ce_se, wqe_size, av, grh_av, 0);
+                                 opmod, fm_ce_se, wqe_size, av, grh_av, imm_val_be);
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -713,5 +808,154 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, enum ibv_qp_type qp_t
                                  opcode_flags & UCT_RC_MLX5_OPCODE_MASK,
                                  0, fm_ce_se, wqe_size, av, grh_av, 0);
 }
+
+#if IBV_EXP_HW_TM
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_set_tm_seg(uct_ib_mlx5_txwq_t *txwq,
+                       uct_rc_mlx5_wqe_tm_seg_t *tmseg, int op, int index,
+                       uint32_t unexp_cnt, uint64_t tag, uint64_t mask,
+                       unsigned tm_flags)
+{
+    tmseg->sw_cnt = htons(unexp_cnt);
+    tmseg->opcode = op << 4;
+    tmseg->flags  = tm_flags;
+
+    if (op == UCT_RC_MLX5_TM_OPCODE_NOP) {
+        return;
+    }
+
+    tmseg->index = htons(index);
+
+    if (op == UCT_RC_MLX5_TM_OPCODE_REMOVE) {
+        return;
+    }
+
+    tmseg->append_tag  = htobe64(tag);
+    tmseg->append_mask = htobe64(mask);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_release_tag_entry(uct_rc_mlx5_iface_common_t *iface,
+                              uct_rc_mlx5_tag_entry_t *tag)
+{
+    if (!--tag->num_cqes) {
+        tag->next            = NULL;
+        iface->tm.tail->next = tag;
+        iface->tm.tail       = tag;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_add_cmd_qp_op(uct_rc_mlx5_iface_common_t *iface,
+                          uct_rc_mlx5_tag_entry_t *tag)
+{
+    uct_rc_mlx5_srq_op_t *op;
+
+    op      = iface->tm.cmd_wq.ops +
+              (iface->tm.cmd_wq.ops_tail++ & iface->tm.cmd_wq.ops_mask);
+    op->tag = tag;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_iface_common_post_srq_op(uct_rc_mlx5_cmd_wq_t *cmd_wq,
+                                     unsigned extra_wqe_size, unsigned op_code,
+                                     uint16_t next_idx, unsigned unexp_cnt,
+                                     uct_tag_t tag, uct_tag_t tag_mask,
+                                     unsigned tm_flags)
+{
+    uct_ib_mlx5_txwq_t       *txwq = &cmd_wq->super;
+    struct mlx5_wqe_ctrl_seg *ctrl = txwq->curr; /* 16 bytes */
+    uct_rc_mlx5_wqe_tm_seg_t *tm;                /* 32 bytes */
+    unsigned                  wqe_size;
+
+    wqe_size = sizeof(*ctrl) + sizeof(*tm) + extra_wqe_size;
+
+    tm = uct_ib_mlx5_txwq_wrap_none(txwq, ctrl + 1);
+
+    uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, UCT_RC_MLX5_OPCODE_TAG_MATCHING,
+                             0, cmd_wq->qp_num, 0, wqe_size);
+
+    uct_rc_mlx5_set_tm_seg(txwq, tm, op_code, next_idx, unexp_cnt,
+                           tag, tag_mask, tm_flags);
+
+    uct_ib_mlx5_post_send(txwq, ctrl, wqe_size);
+}
+
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
+                                  uct_rc_iface_t *rc_iface, uct_tag_t tag,
+                                  uct_tag_t tag_mask, const uct_iov_t *iov,
+                                  size_t iovcnt, uct_tag_context_t *ctx)
+{
+    uct_rc_iface_ctx_priv_t  *priv = uct_rc_iface_ctx_priv(ctx);
+    uct_ib_mlx5_txwq_t       *txwq = &iface->tm.cmd_wq.super;
+    struct mlx5_wqe_data_seg *dptr; /* 16 bytes */
+    uct_rc_mlx5_tag_entry_t  *tag_entry;
+    uint16_t                 next_idx;
+    unsigned                 ctrl_size;
+
+    UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_rc_mlx5_iface_common_tag_recv");
+    UCT_RC_MLX5_CHECK_TAG(iface);
+
+    ctrl_size           = sizeof(struct mlx5_wqe_ctrl_seg) +
+                          sizeof(uct_rc_mlx5_wqe_tm_seg_t);
+    tag_entry           = iface->tm.head;
+    next_idx            = tag_entry->next - iface->tm.list;
+    iface->tm.head      = tag_entry->next;
+    tag_entry->next     = NULL;
+    tag_entry->ctx      = ctx;
+    tag_entry->num_cqes = 2; /* ADD and MSG_ARRIVED/CANCELED */
+
+    /* Save aux data (which will be needed in the following ops) in the context */
+    priv->tag_handle   = tag_entry - iface->tm.list;
+    priv->tag          = tag;
+    priv->buffer       = iov->buffer; /* Only one iov is supported so far */
+    priv->length       = iov->length;
+
+    uct_rc_mlx5_add_cmd_qp_op(iface, tag_entry);
+
+    dptr = uct_ib_mlx5_txwq_wrap_none(txwq, (char*)txwq->curr + ctrl_size);
+    uct_ib_mlx5_set_data_seg(dptr, iov->buffer, iov->length,
+                             ((uct_ib_mem_t *)(iov->memh))->lkey);
+
+    uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_wq, sizeof(*dptr),
+                                         UCT_RC_MLX5_TM_OPCODE_APPEND, next_idx,
+                                         rc_iface->tm.unexpected_cnt, tag,
+                                         tag_mask,
+                                         UCT_RC_MLX5_SRQ_FLAG_TM_CQE_REQ |
+                                         UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT);
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_mlx5_iface_common_tag_recv_cancel(uct_rc_mlx5_iface_common_t *iface,
+                                         uct_rc_iface_t *rc_iface,
+                                         uct_tag_context_t *ctx, int force)
+{
+    uct_rc_iface_ctx_priv_t  *priv = uct_rc_iface_ctx_priv(ctx);
+    uint16_t                 index = priv->tag_handle;
+    uct_rc_mlx5_tag_entry_t  *tag_entry;
+    unsigned flags;
+
+    tag_entry = &iface->tm.list[index];
+
+    if (ucs_likely(force)) {
+        flags = UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT;
+        uct_rc_mlx5_release_tag_entry(iface, tag_entry);
+    } else {
+        flags = UCT_RC_MLX5_SRQ_FLAG_TM_CQE_REQ | UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT;
+        uct_rc_mlx5_add_cmd_qp_op(iface, tag_entry);
+    }
+
+    uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_wq, 0,
+                                         UCT_RC_MLX5_TM_OPCODE_REMOVE, index,
+                                         rc_iface->tm.unexpected_cnt, 0ul, 0ul,
+                                         flags);
+    return UCS_OK;
+}
+
+#endif /* IBV_EXP_HW_TM */
 
 #endif

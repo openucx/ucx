@@ -111,6 +111,98 @@ void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_iface_t *iface,
 UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(32)
 UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(64)
 
+ucs_status_t
+uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
+                                  uct_rc_iface_t *rc_iface,
+                                  uct_rc_iface_config_t *rc_config,
+                                  struct ibv_exp_create_srq_attr *srq_init_attr,
+                                  unsigned rndv_hdr_len)
+{
+    ucs_status_t status = UCS_OK;
+#if IBV_EXP_HW_TM
+    struct ibv_srq *srq;
+    struct mlx5_srq *msrq;
+    int i;
+
+    if (!UCT_RC_IFACE_TM_ENABLED(rc_iface)) {
+        return UCS_OK;
+    }
+
+    status = uct_rc_iface_tag_init(rc_iface, rc_config, srq_init_attr,
+                                   rndv_hdr_len, 0);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    srq = rc_iface->rx.srq.srq;
+    if (srq->handle == LEGACY_XRC_SRQ_HANDLE) {
+        srq = (struct ibv_srq *)(((struct ibv_srq_legacy *)srq)->ibv_srq);
+    }
+
+    msrq = ucs_container_of(srq, struct mlx5_srq, vsrq.srq);
+    if (msrq->counter != 0) {
+        ucs_error("SRQ counter is not 0 (%d)", msrq->counter);
+        status = UCS_ERR_NO_DEVICE;
+        goto err_tag_cleanup;
+    }
+
+    status = uct_ib_mlx5_txwq_init(rc_iface->super.super.worker,
+                                   &iface->tm.cmd_wq.super,
+                                   &msrq->cmd_qp->verbs_qp.qp);
+    if (status != UCS_OK) {
+        goto err_tag_cleanup;
+    }
+
+    iface->tm.cmd_wq.qp_num   = msrq->cmd_qp->verbs_qp.qp.qp_num;
+    iface->tm.cmd_wq.ops_mask = rc_iface->tm.cmd_qp_len - 1;
+    iface->tm.cmd_wq.ops_head = iface->tm.cmd_wq.ops_tail = 0;
+    iface->tm.cmd_wq.ops      = ucs_calloc(rc_iface->tm.cmd_qp_len,
+                                           sizeof(uct_rc_mlx5_srq_op_t),
+                                           "srq tag ops");
+    if (iface->tm.cmd_wq.ops == NULL) {
+        ucs_error("Failed to allocate memory for srq tm ops array");
+        status = UCS_ERR_NO_MEMORY;
+        goto err_tag_cleanup;
+    }
+
+    iface->tm.list = ucs_calloc(rc_iface->tm.num_tags + 1,
+                                sizeof(uct_rc_mlx5_tag_entry_t), "tm list");
+    if (iface->tm.list == NULL) {
+        ucs_error("Failed to allocate memory for tag matching list");
+        status = UCS_ERR_NO_MEMORY;
+        goto err_cmd_wq_free;
+    }
+
+    for (i = 0; i < rc_iface->tm.num_tags; ++i) {
+        iface->tm.list[i].next = &iface->tm.list[i + 1];
+    }
+
+    iface->tm.head = &iface->tm.list[0];
+    iface->tm.tail = &iface->tm.list[i];
+
+    return UCS_OK;
+
+err_cmd_wq_free:
+    ucs_free(iface->tm.cmd_wq.ops);
+err_tag_cleanup:
+    uct_rc_iface_tag_cleanup(rc_iface);
+err:
+#endif
+
+    return status;
+}
+
+void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface,
+                                          uct_rc_iface_t *rc_iface)
+{
+#if IBV_EXP_HW_TM
+    if (UCT_RC_IFACE_TM_ENABLED(rc_iface)) {
+        ucs_free(iface->tm.list);
+        ucs_free(iface->tm.cmd_wq.ops);
+    }
+#endif
+}
+
 ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                            uct_rc_iface_t *rc_iface,
                                            uct_rc_iface_config_t *config)
