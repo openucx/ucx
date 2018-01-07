@@ -483,6 +483,7 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
 {
     ucp_address_entry_t *address_list, *address;
     const uct_device_addr_t *dev_addr;
+    ucp_rsc_index_t dev_index;
     ucp_rsc_index_t md_index;
     unsigned address_count;
     int last_dev, last_tl, ep_addr_present;
@@ -554,6 +555,7 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
     /* Unpack addresses */
     address = address_list;
     ptr     = aptr;
+    dev_index = 0;
     do {
         if (*(uint8_t*)ptr == UCP_NULL_RESOURCE) {
             break;
@@ -594,6 +596,7 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
 
             address->dev_addr   = (dev_addr_len > 0) ? dev_addr : NULL;
             address->md_index   = md_index;
+            address->dev_index  = dev_index;
             address->md_flags   = md_flags;
             address->iface_addr = (iface_addr_len > 0) ? ptr : NULL;
             ptr                += iface_addr_len;
@@ -615,6 +618,8 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
                       address->iface_attr.priority);
             ++address;
         }
+
+        ++dev_index;
     } while (!last_dev);
 
     *address_count_p = address_count;
