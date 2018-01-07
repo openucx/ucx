@@ -355,8 +355,7 @@ public:
 
     static ucs_log_func_rc_t
     log_ep_destroy(const char *file, unsigned line, const char *function,
-                   ucs_log_level_t level, const char *prefix, const char *message,
-                   va_list ap)
+                   ucs_log_level_t level, const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_WARN) {
             // Ignore warnings about uncompleted operations during ep destroy

@@ -534,7 +534,7 @@ static void ucp_wireup_print_config(ucp_context_h context,
     char lane_info[128] = {0};
     ucp_lane_index_t lane;
 
-    if (!ucs_log_enabled(log_level)) {
+    if (!ucs_log_is_enabled(log_level)) {
         return;
     }
 

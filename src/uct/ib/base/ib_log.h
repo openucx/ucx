@@ -76,20 +76,20 @@ void __uct_ib_log_exp_post_send(const char *file, int line, const char *function
 
 
 #define uct_ib_log_post_send(_iface, _qp, _wr, _dump_cb) \
-    if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
         __uct_ib_log_post_send(__FILE__, __LINE__, __FUNCTION__, _iface, _qp, _wr, _dump_cb); \
     }
 
 /* Suitable for both: regular and exp wcs */
 #define uct_ib_log_recv_completion(_iface, _qp_type, _wc, _data, _length, _dump_cb, ...) \
-    if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
         __uct_ib_log_recv_completion(__FILE__, __LINE__, __FUNCTION__, \
                                      _iface, _qp_type, (_wc)->qp_num, (_wc)->src_qp, (_wc)->slid, \
                                      _data, _length, _dump_cb, ## __VA_ARGS__); \
     }
 
 #define uct_ib_log_exp_post_send(_iface, _qp, _wr, _dump_cb) \
-    if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
         __uct_ib_log_exp_post_send(__FILE__, __LINE__, __FUNCTION__, _iface, _qp, _wr, _dump_cb); \
     }
 

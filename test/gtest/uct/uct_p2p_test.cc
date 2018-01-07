@@ -100,8 +100,7 @@ void uct_p2p_test::test_xfer(send_func_t send, size_t length, unsigned flags,
 
 ucs_log_func_rc_t
 uct_p2p_test::log_handler(const char *file, unsigned line, const char *function,
-                          ucs_log_level_t level, const char *prefix, const char *message,
-                          va_list ap)
+                          ucs_log_level_t level, const char *message, va_list ap)
 {
     if (level == UCS_LOG_LEVEL_TRACE_DATA) {
         ++log_data_count;
@@ -116,7 +115,7 @@ template <typename O>
 void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
                                    unsigned flags, uct_memory_type_t mem_type)
 {
-    if (!ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
         os << ucs::size_value(length) << " " << std::flush;
     }
 
@@ -128,7 +127,7 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
     ucs_log_push_handler(log_handler);
     orig_log_level = ucs_global_opts.log_level;
     ucs_global_opts.log_level = UCS_LOG_LEVEL_TRACE_DATA;
-    bool expect_log = ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA);
+    bool expect_log = ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA);
 
     UCS_TEST_SCOPE_EXIT() {
         /* Restore logging */
@@ -216,7 +215,7 @@ void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
         repeat_count = 1;
     }
 
-    if (!ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
         ms << repeat_count << "x{" << ucs::size_value(min_length) << ".."
            << ucs::size_value(max_length) << "} " << std::flush;
     }

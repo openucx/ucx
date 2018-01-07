@@ -87,27 +87,23 @@ void ucs_log_flush()
 
 ucs_log_func_rc_t
 ucs_log_default_handler(const char *file, unsigned line, const char *function,
-                        ucs_log_level_t level, const char *prefix,
-                        const char *message, va_list ap)
+                        ucs_log_level_t level, const char *format, va_list ap)
 {
     size_t buffer_size = ucs_config_memunits_get(ucs_global_opts.log_buffer_size,
                                                  256, 2048);
     const char *short_file;
     struct timeval tv;
-    size_t length;
-    char *buf;
     char *valg_buf;
+    char *buf;
 
-    if (!ucs_log_enabled(level) && (level != UCS_LOG_LEVEL_PRINT)) {
+    if (!ucs_log_is_enabled(level) && (level != UCS_LOG_LEVEL_PRINT)) {
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
-    buf = ucs_alloca(buffer_size + 1);
+   buf = ucs_alloca(buffer_size + 1);
     buf[buffer_size] = 0;
 
-    strncpy(buf, prefix, buffer_size);
-    length = strlen(buf);
-    vsnprintf(buf + length, buffer_size - length, message, ap);
+    vsnprintf(buf, buffer_size, format, ap);
 
     short_file = strrchr(file, '/');
     short_file = (short_file == NULL) ? file : short_file + 1;
@@ -157,8 +153,8 @@ void ucs_log_pop_handler()
     }
 }
 
-void __ucs_log(const char *file, unsigned line, const char *function,
-               ucs_log_level_t level, const char *message, ...)
+void ucs_log_dispatch(const char *file, unsigned line, const char *function,
+                      ucs_log_level_t level, const char *format, ...)
 {
     ucs_log_func_rc_t rc;
     unsigned index;
@@ -169,13 +165,13 @@ void __ucs_log(const char *file, unsigned line, const char *function,
     index = ucs_log_num_handlers;
     while ((index > 0) && (rc == UCS_LOG_FUNC_RC_CONTINUE)) {
         --index;
-        va_start(ap, message);
-        rc = ucs_log_handlers[index](file, line, function, level, "", message, ap);
+        va_start(ap, format);
+        rc = ucs_log_handlers[index](file, line, function, level, format, ap);
         va_end(ap);
     }
 }
 
-void ucs_log_fatal_error(const char *fmt, ...)
+void ucs_log_fatal_error(const char *format, ...)
 {
     size_t buffer_size = ucs_global_opts.log_buffer_size;
     FILE *stream = stderr;
@@ -193,8 +189,8 @@ void ucs_log_fatal_error(const char *fmt, ...)
     p           += strlen(p);
 
     /* Print rest of the message */
-    va_start(ap, fmt);
-    vsnprintf(p, buffer_size, fmt, ap);
+    va_start(ap, format);
+    vsnprintf(p, buffer_size, format, ap);
     va_end(ap);
     buffer_size -= strlen(p);
     p           += strlen(p);
@@ -270,7 +266,8 @@ overflow:
 }
 
 
-const char * ucs_log_dump_hex(const void* data, size_t length, char *buf, size_t max)
+const char * ucs_log_dump_hex(const void* data, size_t length, char *buf,
+                              size_t max)
 {
     static const char hexchars[] = "0123456789abcdef";
     char *p, *endp;
@@ -326,9 +323,6 @@ void ucs_log_init()
          ucs_open_output_stream(ucs_global_opts.log_file, UCS_LOG_LEVEL_FATAL,
                                 &ucs_log_file, &ucs_log_file_close, &next_token);
     }
-
-    ucs_debug("%s loaded at 0x%lx", ucs_debug_get_lib_path(),
-              ucs_debug_get_lib_base_addr());
 }
 
 void ucs_log_cleanup()

@@ -194,7 +194,7 @@ public:
 
         check_backlog();
 
-        if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
+        if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
             if (&sender() == &receiver()) {
                 EXPECT_UD_CHECK(2u, m_send_tracer.count, LE, EQ);
             } else {
@@ -388,8 +388,7 @@ public:
 
     static ucs_log_func_rc_t
     no_rx_buffs_log_handler(const char *file, unsigned line, const char *function,
-                            ucs_log_level_t level, const char *prefix,
-                            const char *message, va_list ap)
+                            ucs_log_level_t level, const char *message, va_list ap)
     {
         /* Ignore warnings about empty memory pool */
         if ((level == UCS_LOG_LEVEL_WARN) &&
