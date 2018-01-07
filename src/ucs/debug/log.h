@@ -12,9 +12,11 @@
 #  include "config.h" /* Defines UCS_MAX_LOG_LEVEL */
 #endif
 
-#include <ucs/sys/compiler.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/config/global_opts.h>
+#include <stdarg.h>
 #include <stdint.h>
+
 
 BEGIN_C_DECLS
 
@@ -29,44 +31,6 @@ BEGIN_C_DECLS
         } \
     } while (0)
 
-
-#define ucs_assert_always(_expression) \
-    do { \
-        if (!ucs_likely(_expression)) { \
-            __ucs_abort("assertion failure", __FILE__, __LINE__, __FUNCTION__, \
-                        "Assertion `%s' failed", #_expression); \
-        } \
-    } while (0)
-
-#define ucs_assertv_always(_expression, _fmt, ...) \
-    do { \
-        if (!ucs_likely(_expression)) { \
-            __ucs_abort("assertion failure", __FILE__, __LINE__, __FUNCTION__, \
-                        "Assertion `%s' failed: " _fmt, #_expression, \
-                        ## __VA_ARGS__); \
-        } \
-    } while (0)
-
-#if ENABLE_ASSERT
-
-#define ucs_bug(_message, ...)                  __ucs_abort("bug", __FILE__, \
-                                                            __LINE__, __FUNCTION__, \
-                                                            "Bug: " _message, ## __VA_ARGS__)
-#define ucs_assert(_expression)                 ucs_assert_always(_expression)
-#define ucs_assertv(_expression, _fmt, ...)     ucs_assertv_always(_expression, _fmt, ## __VA_ARGS__)
-
-#else
-
-#define ucs_bug(_message, ...)
-#define ucs_assert(_expression)
-#define ucs_assertv(_expression, _fmt, ...)
-
-#endif
-
-
-#define ucs_fatal(_message, ...) \
-    __ucs_abort("fatal error", __FILE__, __LINE__, __FUNCTION__, \
-                "Fatal: " _message, ## __VA_ARGS__)
 
 #define ucs_error(_message, ...)        ucs_log(UCS_LOG_LEVEL_ERROR, _message, ## __VA_ARGS__)
 #define ucs_warn(_message, ...)         ucs_log(UCS_LOG_LEVEL_WARN, _message,  ## __VA_ARGS__)

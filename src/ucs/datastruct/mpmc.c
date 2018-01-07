@@ -9,7 +9,7 @@
 
 #include <ucs/arch/atomic.h>
 #include <ucs/arch/bitops.h>
-#include <ucs/debug/log.h>
+#include <ucs/debug/assert.h>
 #include <ucs/debug/memtrack.h>
 
 

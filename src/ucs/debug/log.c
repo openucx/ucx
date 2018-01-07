@@ -5,8 +5,9 @@
 */
 
 #include "log.h"
-#include "debug.h"
 
+#include <ucs/debug/debug.h>
+#include <ucs/sys/compiler.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
@@ -205,29 +206,6 @@ void ucs_log_fatal_error(const char *fmt, ...)
     fflush(stream);
     ret = write(fileno(stream), buffer, strlen(buffer));
     (void)ret;
-}
-
-void __ucs_abort(const char *error_type, const char *file, unsigned line,
-                 const char *function, const char *message, ...)
-{
-    size_t buffer_size = ucs_global_opts.log_buffer_size;
-    const char *short_file;
-    char *buffer;
-    va_list ap;
-
-    buffer = ucs_alloca(buffer_size + 1);
-    va_start(ap, message);
-    vsnprintf(buffer, buffer_size, message, ap);
-    va_end(ap);
-
-    ucs_debug_cleanup();
-    ucs_log_flush();
-
-    short_file = strrchr(file, '/');
-    short_file = (short_file == NULL) ? file : short_file + 1;
-    ucs_handle_error(error_type, "%13s:%-4u %s", short_file, line, buffer);
-
-    abort();
 }
 
 /**

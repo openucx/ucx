@@ -9,7 +9,8 @@
 
 #include "queue_types.h"
 
-#include <ucs/debug/log.h>
+#include <ucs/debug/assert.h>
+#include <stddef.h>
 
 
 /**

@@ -11,7 +11,7 @@
 
 #include <uct/api/uct.h>
 #include <ucs/stats/stats.h>
-#include <ucs/debug/log.h>
+#include <ucs/debug/assert.h>
 
 #include <endian.h>
 

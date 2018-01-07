@@ -14,8 +14,10 @@
 #include "preprocessor.h"
 #include "compiler_def.h"
 
+#include <ucs/debug/assert.h>
 #include <stddef.h>
 #include <stdarg.h>
+#include <alloca.h>
 
 #ifndef ULLONG_MAX
 #define ULLONG_MAX (__LONG_LONG_MAX__ * 2ULL + 1)
