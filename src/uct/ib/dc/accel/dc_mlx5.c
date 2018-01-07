@@ -584,7 +584,7 @@ static unsigned uct_dc_mlx5_iface_progress(uct_iface_h tl_iface)
     unsigned count;
 
     count = uct_rc_mlx5_iface_common_poll_rx(&iface->mlx5_common,
-                                             &iface->super.super);
+                                             &iface->super.super, 0);
     if (count > 0) {
         return count;
     }
