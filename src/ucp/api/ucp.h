@@ -2049,6 +2049,76 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
                                  ucp_datatype_t datatype, ucp_tag_t tag,
                                  ucp_send_callback_t cb);
 
+/**
+ * @ingroup UCP_COMM
+ * @brief Non-blocking tagged-send operations with user provided request
+ *
+ * This routine sends a messages that is described by the local address @a
+ * buffer, size @a count, and @a datatype object to the destination endpoint
+ * @a ep. Each message is associated with a @a tag value that is used for
+ * message matching on the @ref ucp_tag_recv_nbr "receiver".
+ *
+ * The routine is non-blocking and therefore returns immediately, however
+ * the actual send operation may be delayed. The send operation is considered
+ * completed when it is safe to reuse the source @e buffer. If the send
+ * operation is completed immediately the routine returns UCS_OK.
+ *
+ * If the operation is @b not completed immediately and no error reported
+ * then the UCP library will fill a user provided @a req and
+ * return UCS_INPROGRESS status. In order to monitor completion of the
+ * operation @ref ucp_request_check_status() should be used.
+ *
+ * The @a req filled by this routine is going to be completed faster than
+ * the one returned by @ref ucp_tag_send_nb(). To achieve this the routine
+ * uses bcopy and a higher rendezvous threshold. The threshold is controlled
+ * by the UCX_SEND_NBR_RNDV_THRESH environment variable.
+ *
+ * @note This routine provides a convinient and efficient way to implement
+ *       a blocking send pattern. For example MPI_send() pseudo code may
+ *       look like this:
+ *
+ * @code
+ * MPI_send(...)
+ * {
+ *     char request[ucp_request_size];
+ *     ucs_status_t status;
+ *
+ *     status = ucp_tag_send_nbr(ep, ..., request + ucp_request_size);
+ *     if (status != UCS_INPROGRESS) {
+ *         return status;
+ *     }
+ *
+ *     do {
+ *         ucp_worker_progress(worker);
+ *         status = ucp_request_check_status(request + ucp_request_size);
+ *     } while (status == UCS_INPROGRESS);
+ *
+ *     return status;
+ * }
+ * @endcode
+ *
+ * @note The user should not modify any part of the @a buffer after this
+ *       operation is called, until the operation completes.
+ *
+ *
+ * @param [in]  ep          Destination endpoint handle.
+ * @param [in]  buffer      Pointer to the message buffer (payload).
+ * @param [in]  count       Number of elements to send
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
+ * @param [in]  tag         Message tag.
+ * @param [in]  req         Request handle allocated by the user. There should
+ *                          be at least UCP request size bytes of available
+ *                          space before the @a req. The size of UCP request
+ *                          can be obtained by @ref ucp_context_query function.
+ *
+ * @return UCS_OK           - The send operation was completed immediately.
+ * @return UCS_INPROGRESS   - The send was not completed and is in progress.
+ *                            @ref ucp_request_check_status() should be used to
+ *                            monitor @a req status.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_tag_send_nbr(ucp_ep_h ep, const void *buffer, size_t count,
+                              ucp_datatype_t datatype, ucp_tag_t tag, void *req);
 
 /**
  * @ingroup UCP_COMM
