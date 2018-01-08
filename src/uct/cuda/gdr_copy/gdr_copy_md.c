@@ -427,7 +427,7 @@ static ucs_status_t uct_gdr_copy_md_open(const char *md_name,
             ucs_assert(md->rcache == NULL);
             if (md_config->enable_rcache == UCS_YES) {
                 status = UCS_ERR_IO_ERROR;
-                goto close_gdr;
+                goto err_close_gdr;
             } else {
                 ucs_debug("could not create registration cache for: %s",
                           ucs_status_string(status));
@@ -439,7 +439,7 @@ static ucs_status_t uct_gdr_copy_md_open(const char *md_name,
     status = UCS_OK;
 out:
     return status;
-close_gdr:
+err_close_gdr:
     gdr_close(md->gdrcpy_ctx);
 err_free_md:
     ucs_free(md);

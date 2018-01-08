@@ -50,7 +50,7 @@ ucs_status_t uct_gdr_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     }
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
-    ucs_trace_data("Posting PUT Short, gdr_copy of size %d from %p to %p",
+    ucs_trace_data("PUT_SHORT size %d from %p to %p",
                    length, buffer, (void *)remote_addr);
     return UCS_OK;
 }
