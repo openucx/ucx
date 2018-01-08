@@ -72,7 +72,7 @@ static ucs_status_t uct_gdr_copy_rkey_unpack(uct_md_component_t *mdc,
 
     key = ucs_malloc(sizeof(uct_gdr_copy_key_t), "uct_gdr_copy_key_t");
     if (NULL == key) {
-        ucs_error("Failed to allocate memory for uct_gdr_copy_key_t");
+        ucs_error("failed to allocate memory for uct_gdr_copy_key_t");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -140,12 +140,12 @@ uct_gdr_copy_mem_reg_internal(uct_md_h uct_md, void *address, size_t length,
 unmap_buffer:
     ret = gdr_unmap(md->gdrcpy_ctx, mem_hndl->mh, mem_hndl->bar_ptr, mem_hndl->reg_size);
     if (ret) {
-        ucs_error("gdr_unmap failed. unpin_size:%lu ret:%d", mem_hndl->reg_size, ret);
+        ucs_warn("gdr_unmap failed. unpin_size:%lu ret:%d", mem_hndl->reg_size, ret);
     }
 unpin_buffer:
     ret = gdr_unpin_buffer(md->gdrcpy_ctx, mh);
     if (ret) {
-        ucs_error("gdr_unpin_buffer failed. ret;%d", ret);
+        ucs_warn("gdr_unpin_buffer failed. ret;%d", ret);
     }
 err:
     return UCS_ERR_IO_ERROR;
@@ -184,7 +184,7 @@ static ucs_status_t uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t 
 
     mem_hndl = ucs_malloc(sizeof(uct_gdr_copy_mem_t), "gdr_copy handle");
     if (NULL == mem_hndl) {
-        ucs_error("Failed to allocate memory for gdr_copy_mem_t");
+        ucs_error("failed to allocate memory for gdr_copy_mem_t");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -208,7 +208,7 @@ static ucs_status_t uct_gdr_copy_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
 
     status = uct_gdr_copy_mem_dereg_internal(uct_md, mem_hndl);
     if (status != UCS_OK) {
-        ucs_warn("Failed to deregester memory handle");
+        ucs_warn("failed to deregister memory handle");
     }
 
     ucs_free(mem_hndl);
@@ -250,8 +250,8 @@ static ucs_status_t uct_gdr_copy_query_md_resources(uct_md_resource_desc_t **res
     cudaError_t cudaErr;
 
     cudaErr = cudaGetDeviceCount(&num_gpus);
-    if ((cudaErr!= cudaSuccess) || (num_gpus == 0)) {
-        ucs_debug("Not found cuda devices");
+    if ((cudaErr != cudaSuccess) || (num_gpus == 0)) {
+        ucs_debug("not found cuda devices");
         *resources_p     = NULL;
         *num_resources_p = 0;
         return UCS_OK;
@@ -259,7 +259,7 @@ static ucs_status_t uct_gdr_copy_query_md_resources(uct_md_resource_desc_t **res
 
     ctx = gdr_open();
     if (ctx == NULL) {
-        ucs_debug("Could not open gdr copy. Disabling gdr copy resource");
+        ucs_debug("could not open gdr copy. disabling gdr copy resource");
         *resources_p     = NULL;
         *num_resources_p = 0;
         return UCS_OK;
@@ -281,7 +281,7 @@ static void uct_gdr_copy_md_close(uct_md_h uct_md)
 
     ret = gdr_close(md->gdrcpy_ctx);
     if (ret) {
-        ucs_error("Failed to close gdrcopy. ret:%d", ret);
+        ucs_warn("failed to close gdrcopy. ret:%d", ret);
     }
 
     ucs_free(md);
@@ -348,14 +348,12 @@ uct_gdr_copy_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
     uct_gdr_copy_md_t *md = context;
     int *flags = arg;
     uct_gdr_copy_rcache_region_t *region;
-    ucs_status_t status;
 
     region = ucs_derived_of(rregion, uct_gdr_copy_rcache_region_t);
-    status = uct_gdr_copy_mem_reg_internal(&md->super, (void*)region->super.super.start,
-                                           region->super.super.end -
-                                           region->super.super.start,
-                                           *flags, &region->memh);
-    return status;
+    return uct_gdr_copy_mem_reg_internal(&md->super, (void*)region->super.super.start,
+                                         region->super.super.end -
+                                         region->super.super.start,
+                                         *flags, &region->memh);
 }
 
 static void uct_gdr_copy_rcache_mem_dereg_cb(void *context, ucs_rcache_t *rcache,
@@ -397,7 +395,7 @@ static ucs_status_t uct_gdr_copy_md_open(const char *md_name,
 
     md = ucs_malloc(sizeof(uct_gdr_copy_md_t), "uct_gdr_copy_md_t");
     if (NULL == md) {
-        ucs_error("Failed to allocate memory for uct_gdr_copy_md_t");
+        ucs_error("failed to allocate memory for uct_gdr_copy_md_t");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -408,7 +406,7 @@ static ucs_status_t uct_gdr_copy_md_open(const char *md_name,
 
     md->gdrcpy_ctx = gdr_open();
     if (md->gdrcpy_ctx == NULL) {
-        ucs_error("Failed to open gdr copy");
+        ucs_error("failed to open gdr copy");
         status = UCS_ERR_IO_ERROR;
         goto err_free_md;
     }
@@ -429,9 +427,9 @@ static ucs_status_t uct_gdr_copy_md_open(const char *md_name,
             ucs_assert(md->rcache == NULL);
             if (md_config->enable_rcache == UCS_YES) {
                 status = UCS_ERR_IO_ERROR;
-                goto err_free_md;
+                goto close_gdr;
             } else {
-                ucs_debug("Could not create registration cache for: %s",
+                ucs_debug("could not create registration cache for: %s",
                           ucs_status_string(status));
             }
         }
@@ -441,6 +439,8 @@ static ucs_status_t uct_gdr_copy_md_open(const char *md_name,
     status = UCS_OK;
 out:
     return status;
+close_gdr:
+    gdr_close(md->gdrcpy_ctx);
 err_free_md:
     ucs_free(md);
     goto out;

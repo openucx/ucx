@@ -43,10 +43,10 @@ typedef struct uct_gdr_copy_md_config {
  * @brief gdr copy mem handle
  */
 typedef struct uct_gdr_copy_mem {
-    gdr_mh_t    mh;
-    gdr_info_t  info;
-    void        *bar_ptr;
-    size_t      reg_size;
+    gdr_mh_t    mh;         /**< Memory handle of GPU memory */
+    gdr_info_t  info;       /**< Info of GPU memory mapping */
+    void        *bar_ptr;   /**< BAR address of GPU mapping */
+    size_t      reg_size;   /**< Size of mapping */
 } uct_gdr_copy_mem_t;
 
 
@@ -54,8 +54,8 @@ typedef struct uct_gdr_copy_mem {
  * @brief gdr copy  packed and remote key for put
  */
 typedef struct uct_gdr_copy_key {
-    uint64_t    vaddr;
-    void        *bar_ptr;
+    uint64_t    vaddr;      /**< Mapped GPU address */
+    void        *bar_ptr;   /**< BAR address of GPU mapping */
 } uct_gdr_copy_key_t;
 
 
