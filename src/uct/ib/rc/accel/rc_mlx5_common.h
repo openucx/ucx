@@ -1096,7 +1096,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     unsigned byte_len;
     uint16_t max_batch;
     unsigned count;
-    unsigned flags;
+    unsigned UCS_V_UNUSED flags;
 #if IBV_EXP_HW_TM
     struct ibv_exp_tmh *tmh;
     uct_rc_mlx5_tag_entry_t *tag;
