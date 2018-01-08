@@ -18,27 +18,20 @@
 
 static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
     {"", "", NULL,
-        ucs_offsetof(uct_gdr_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+     ucs_offsetof(uct_gdr_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
     {"RCACHE", "try", "Enable using memory registration cache",
-        ucs_offsetof(uct_gdr_copy_md_config_t, rcache.enable), UCS_CONFIG_TYPE_TERNARY},
+     ucs_offsetof(uct_gdr_copy_md_config_t, enable_rcache), UCS_CONFIG_TYPE_TERNARY},
 
-    {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN),
-        "Registration cache address alignment, must be power of 2\n"
-            "between "UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN)"and system page size",
-        ucs_offsetof(uct_gdr_copy_md_config_t, rcache.alignment), UCS_CONFIG_TYPE_UINT},
-
-    {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
-        ucs_offsetof(uct_gdr_copy_md_config_t, rcache.event_prio), UCS_CONFIG_TYPE_UINT},
-
-    {"RCACHE_OVERHEAD", "90ns", "Registration cache lookup overhead",
-        ucs_offsetof(uct_gdr_copy_md_config_t, rcache.overhead), UCS_CONFIG_TYPE_TIME},
+    {"", "RCACHE_ADDR_ALIGN=" UCS_PP_MAKE_STRING(UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN), NULL,
+     ucs_offsetof(uct_gdr_copy_md_config_t, rcache),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_rcache_table)},
 
     {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
-        ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.overhead), UCS_CONFIG_TYPE_TIME},
+     ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.overhead), UCS_CONFIG_TYPE_TIME},
 
     {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
-        ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.growth), UCS_CONFIG_TYPE_TIME},
+     ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.growth), UCS_CONFIG_TYPE_TIME},
 
     {NULL}
 };
@@ -82,6 +75,7 @@ static ucs_status_t uct_gdr_copy_rkey_unpack(uct_md_component_t *mdc,
         ucs_error("Failed to allocate memory for uct_gdr_copy_key_t");
         return UCS_ERR_NO_MEMORY;
     }
+
     key->vaddr      = packed->vaddr;
     key->bar_ptr    = packed->bar_ptr;
 
@@ -108,56 +102,74 @@ uct_gdr_copy_mem_reg_internal(uct_md_h uct_md, void *address, size_t length,
     gdr_mh_t mh;
     void *bar_ptr;
     gdr_info_t info;
+    int ret;
 
     if (!length) {
         mem_hndl->mh = 0;
         return UCS_OK;
     }
 
-    if (gdr_pin_buffer(md->gdrcpy_ctx, d_ptr, length, 0, 0, &mh) != 0) {
-        ucs_error("gdr_pin_buffer Failed. length :%lu ", length);
-        return UCS_ERR_IO_ERROR;
-    }
-    if (mh == 0) {
-        ucs_error("gdr_pin_buffer Failed. length :%lu ", length);
-        return UCS_ERR_IO_ERROR;
+    ret = gdr_pin_buffer(md->gdrcpy_ctx, d_ptr, length, 0, 0, &mh);
+    if (ret) {
+        ucs_error("gdr_pin_buffer failed. length :%lu ret:%d", length, ret);
+        goto err;
     }
 
-    if (gdr_map(md->gdrcpy_ctx, mh, &bar_ptr, length) !=0) {
-        ucs_error("gdr_map failed. length :%lu ", length);
-        return UCS_ERR_IO_ERROR;
+    ret = gdr_map(md->gdrcpy_ctx, mh, &bar_ptr, length);
+    if (ret) {
+        ucs_error("gdr_map failed. length :%lu ret:%d", length, ret);
+        goto unpin_buffer;
     }
 
-    if (gdr_get_info(md->gdrcpy_ctx, mh, &info) != 0) {
-        ucs_error("gdr_get_info failed. ");
-        return UCS_ERR_IO_ERROR;
+    ret = gdr_get_info(md->gdrcpy_ctx, mh, &info);
+    if (ret) {
+        ucs_error("gdr_get_info failed. ret:%d", ret);
+        goto unmap_buffer;
     }
+
     mem_hndl->mh        = mh;
     mem_hndl->info      = info;
     mem_hndl->bar_ptr   = bar_ptr;
     mem_hndl->reg_size  = length;
 
-    ucs_debug("registered memory:%p..%p length:%lu info.va:0x%"PRIx64" bar_ptr:%p",
+    ucs_trace("registered memory:%p..%p length:%lu info.va:0x%"PRIx64" bar_ptr:%p",
               address, address + length, length, info.va, bar_ptr);
 
     return UCS_OK;
+
+unmap_buffer:
+    ret = gdr_unmap(md->gdrcpy_ctx, mem_hndl->mh, mem_hndl->bar_ptr, mem_hndl->reg_size);
+    if (ret) {
+        ucs_error("gdr_unmap failed. unpin_size:%lu ret:%d", mem_hndl->reg_size, ret);
+    }
+unpin_buffer:
+    ret = gdr_unpin_buffer(md->gdrcpy_ctx, mh);
+    if (ret) {
+        ucs_error("gdr_unpin_buffer failed. ret;%d", ret);
+    }
+err:
+    return UCS_ERR_IO_ERROR;
 }
 
 static ucs_status_t uct_gdr_copy_mem_dereg_internal(uct_md_h uct_md, uct_gdr_copy_mem_t *mem_hndl)
 {
 
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
+    int ret;
 
-    if (gdr_unmap(md->gdrcpy_ctx, mem_hndl->mh, mem_hndl->bar_ptr, mem_hndl->reg_size) !=0) {
-        ucs_error("gdr_unmap Failed. unpin_size:%lu ", mem_hndl->reg_size);
-        return UCS_ERR_IO_ERROR;
-    }
-    if (gdr_unpin_buffer(md->gdrcpy_ctx, mem_hndl->mh) !=0) {
-        ucs_error("gdr_unpin_buffer failed ");
+    ret = gdr_unmap(md->gdrcpy_ctx, mem_hndl->mh, mem_hndl->bar_ptr, mem_hndl->reg_size);
+    if (ret) {
+        ucs_error("gdr_unmap failed. unpin_size:%lu ret:%d", mem_hndl->reg_size, ret);
         return UCS_ERR_IO_ERROR;
     }
 
-    ucs_debug("deregistered memorory. info.va:0x%"PRIx64" bar_ptr:%p",
+    ret = gdr_unpin_buffer(md->gdrcpy_ctx, mem_hndl->mh);
+    if (ret) {
+        ucs_error("gdr_unpin_buffer failed. ret:%d", ret);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    ucs_trace("deregistered memorory. info.va:0x%"PRIx64" bar_ptr:%p",
               mem_hndl->info.va, mem_hndl->bar_ptr);
     return UCS_OK;
 }
@@ -172,7 +184,7 @@ static ucs_status_t uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t 
 
     mem_hndl = ucs_malloc(sizeof(uct_gdr_copy_mem_t), "gdr_copy handle");
     if (NULL == mem_hndl) {
-        ucs_error("Failed to allocate memory for gni_mem_handle_t");
+        ucs_error("Failed to allocate memory for gdr_copy_mem_t");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -181,7 +193,7 @@ static ucs_status_t uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t 
 
     status = uct_gdr_copy_mem_reg_internal(uct_md, ptr, reg_size, 0, mem_hndl);
     if (status != UCS_OK) {
-        free(mem_hndl);
+        ucs_free(mem_hndl);
         return status;
     }
 
@@ -195,7 +207,11 @@ static ucs_status_t uct_gdr_copy_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
     ucs_status_t status;
 
     status = uct_gdr_copy_mem_dereg_internal(uct_md, mem_hndl);
-    free(mem_hndl);
+    if (status != UCS_OK) {
+        ucs_warn("Failed to deregester memory handle");
+    }
+
+    ucs_free(mem_hndl);
     return status;
 }
 
@@ -251,20 +267,21 @@ static ucs_status_t uct_gdr_copy_query_md_resources(uct_md_resource_desc_t **res
     gdr_close(ctx);
 
     return uct_single_md_resource(&uct_gdr_copy_md_component, resources_p,
-				  num_resources_p);
+                                  num_resources_p);
 }
 
 static void uct_gdr_copy_md_close(uct_md_h uct_md)
 {
-
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
+    int ret;
 
     if (md->rcache != NULL) {
         ucs_rcache_destroy(md->rcache);
     }
 
-    if (gdr_close(md->gdrcpy_ctx) != 0) {
-        ucs_error("Failed to close gdrcopy");
+    ret = gdr_close(md->gdrcpy_ctx);
+    if (ret) {
+        ucs_error("Failed to close gdrcopy. ret:%d", ret);
     }
 
     ucs_free(md);
@@ -338,11 +355,7 @@ uct_gdr_copy_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
                                            region->super.super.end -
                                            region->super.super.start,
                                            *flags, &region->memh);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    return UCS_OK;
+    return status;
 }
 
 static void uct_gdr_copy_rcache_mem_dereg_cb(void *context, ucs_rcache_t *rcache,
@@ -359,7 +372,11 @@ static void uct_gdr_copy_rcache_dump_region_cb(void *context, ucs_rcache_t *rcac
                                                ucs_rcache_region_t *rregion, char *buf,
                                                size_t max)
 {
-	/* TODO:*/
+    uct_gdr_copy_rcache_region_t *region = ucs_derived_of(rregion,
+                                                          uct_gdr_copy_rcache_region_t);
+    uct_gdr_copy_mem_t *memh = &region->memh;
+
+    snprintf(buf, max, "bar ptr:%p", memh->bar_ptr);
 }
 
 static ucs_rcache_ops_t uct_gdr_copy_rcache_ops = {
@@ -396,7 +413,7 @@ static ucs_status_t uct_gdr_copy_md_open(const char *md_name,
         goto err_free_md;
     }
 
-    if (md_config->rcache.enable != UCS_NO) {
+    if (md_config->enable_rcache != UCS_NO) {
         rcache_params.region_struct_size = sizeof(uct_gdr_copy_rcache_region_t);
         rcache_params.alignment          = md_config->rcache.alignment;
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
@@ -410,9 +427,7 @@ static ucs_status_t uct_gdr_copy_md_open(const char *md_name,
             md->reg_cost.growth   = 0;
         } else {
             ucs_assert(md->rcache == NULL);
-            if (md_config->rcache.enable == UCS_YES) {
-                ucs_error("Failed to create registration cache: %s",
-                          ucs_status_string(status));
+            if (md_config->enable_rcache == UCS_YES) {
                 status = UCS_ERR_IO_ERROR;
                 goto err_free_md;
             } else {

@@ -20,7 +20,7 @@ extern uct_md_component_t uct_gdr_copy_md_component;
  * @brief gdr_copy MD descriptor
  */
 typedef struct uct_gdr_copy_md {
-    struct uct_md       super;      /**< Domain info */
+    uct_md_t            super;      /**< Domain info */
     gdr_t               gdrcpy_ctx; /**< gdr copy context */
     ucs_rcache_t        *rcache;    /**< Registration cache (can be NULL) */
     uct_linear_growth_t reg_cost;   /**< Memory registration cost */
@@ -32,13 +32,8 @@ typedef struct uct_gdr_copy_md {
  */
 typedef struct uct_gdr_copy_md_config {
     uct_md_config_t         super;
-    struct {
-        ucs_ternary_value_t enable;       /**< Enable registration cache */
-        size_t              alignment;    /**< Force address alignment */
-        unsigned            event_prio;   /**< Memory events priority */
-        double              overhead;     /**< Lookup overhead estimation */
-    } rcache;
-
+    int                     enable_rcache;/**< Enable registration cache */
+    uct_md_rcache_config_t  rcache;       /**< Registration cache config */
     uct_linear_growth_t     uc_reg_cost;  /**< Memory registration cost estimation
                                              without using the cache */
 } uct_gdr_copy_md_config_t;

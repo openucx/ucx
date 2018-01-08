@@ -37,12 +37,14 @@ ucs_status_t uct_gdr_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                        uct_rkey_t rkey)
 {
     uct_gdr_copy_key_t *gdr_copy_key = (uct_gdr_copy_key_t *) rkey;
-    size_t bar_off;
+    size_t bar_offset;
+    int ret;
 
     if (ucs_likely(length)) {
-        bar_off = remote_addr - gdr_copy_key->vaddr;
-        if (gdr_copy_to_bar((gdr_copy_key->bar_ptr + bar_off), buffer, length) != 0) {
-            ucs_error("gdr_copy_to_bar Failed");
+        bar_offset = remote_addr - gdr_copy_key->vaddr;
+        ret = gdr_copy_to_bar((gdr_copy_key->bar_ptr + bar_offset), buffer, length);
+        if (ret) {
+            ucs_error("gdr_copy_to_bar failed. ret:%d", ret);
             return UCS_ERR_IO_ERROR;
         }
     }
