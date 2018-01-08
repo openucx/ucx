@@ -54,6 +54,7 @@ typedef struct ucp_mem {
     void                          *address;     /* Region start address */
     size_t                        length;       /* Region length */
     uct_alloc_method_t            alloc_method; /* Method used to allocate the memory */
+    uct_memory_type_t             mem_type;     /**< type of allocated memory */
     uct_md_h                      alloc_md;     /* MD used to allocated the memory */
     ucp_md_map_t                  md_map;       /* Which MDs have valid memory handles */
     uct_mem_h                     uct[0];       /* Valid memory handles, as popcount(md_map) */
@@ -106,8 +107,9 @@ void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
  */
 ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
                                void *address, size_t length, unsigned uct_flags,
-                               uct_md_h alloc_md, uct_mem_h *alloc_md_memh_p,
-                               uct_mem_h *uct_memh, ucp_md_map_t *md_map_p);
+                               uct_md_h alloc_md, uct_memory_type_t mem_type,
+                               uct_mem_h *alloc_md_memh_p, uct_mem_h *uct_memh,
+                               ucp_md_map_t *md_map_p);
 
 /* Detect memory type on all MDs */
 ucs_status_t ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,

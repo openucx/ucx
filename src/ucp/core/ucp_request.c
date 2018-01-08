@@ -187,8 +187,8 @@ static void ucp_request_dt_dereg(ucp_context_t *context, ucp_dt_reg_t *dt_reg,
     for (i = 0; i < count; ++i) {
         ucp_trace_req(req_dbg, "mem dereg buffer %ld/%ld md_map 0x%"PRIx64,
                       i, count, dt_reg[i].md_map);
-        ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, NULL, dt_reg[i].memh,
-                          &dt_reg[i].md_map);
+        ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, UCT_MD_MEM_TYPE_HOST, NULL,
+                          dt_reg[i].memh, &dt_reg[i].md_map);
         ucs_assert(dt_reg[i].md_map == 0);
     }
 }
@@ -212,7 +212,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     case UCP_DATATYPE_CONTIG:
         ucs_assert(ucs_count_one_bits(md_map) <= UCP_MAX_OP_MDS);
         status = ucp_mem_rereg_mds(context, md_map, buffer, length,
-                                   UCT_MD_MEM_ACCESS_RMA, NULL, NULL,
+                                   UCT_MD_MEM_ACCESS_RMA, NULL, UCT_MD_MEM_TYPE_HOST, NULL,
                                    state->dt.contig.memh, &state->dt.contig.md_map);
         ucp_trace_req(req_dbg, "mem reg md_map 0x%"PRIx64"/0x%"PRIx64,
                       state->dt.contig.md_map, md_map);
@@ -230,7 +230,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
             if (iov[iov_it].length) {
                 status = ucp_mem_rereg_mds(context, md_map, iov[iov_it].buffer,
                                            iov[iov_it].length,
-                                           UCT_MD_MEM_ACCESS_RMA, NULL, NULL,
+                                           UCT_MD_MEM_ACCESS_RMA, NULL,
+                                           UCT_MD_MEM_TYPE_HOST,  NULL,
                                            dt_reg[iov_it].memh,
                                            &dt_reg[iov_it].md_map);
                 if (status != UCS_OK) {
