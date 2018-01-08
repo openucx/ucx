@@ -342,6 +342,7 @@ typedef struct uct_rc_am_short_hdr {
        if (_imm_data == 0) { \
            _res_op  = _op; \
            _app_ctx = 0; \
+           _ib_imm  = 0; \
        } else { \
            _res_op = UCS_PP_TOKENPASTE(_op, _imm_suffix); \
            uct_rc_iface_tag_imm_data_pack(&(_ib_imm), &(_app_ctx), _imm_data); \
@@ -407,6 +408,21 @@ uct_rc_iface_tag_get_op_id(uct_rc_iface_t *iface, uct_completion_t *comp)
 {
     uint32_t prev_ph;
     return ucs_ptr_array_insert(&iface->tm.rndv_comps, comp, &prev_ph);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_handle_rndv_fin(uct_rc_iface_t *iface, struct ibv_exp_tmh *tmh)
+{
+    int found;
+    void *rndv_comp;
+
+    ucs_assert(tmh->opcode == IBV_EXP_TMH_FIN);
+
+    found = ucs_ptr_array_lookup(&iface->tm.rndv_comps, ntohl(tmh->app_ctx),
+                                 rndv_comp);
+    ucs_assert_always(found > 0);
+    uct_invoke_completion((uct_completion_t*)rndv_comp, UCS_OK);
+    ucs_ptr_array_remove(&iface->tm.rndv_comps, ntohl(tmh->app_ctx), 0);
 }
 
 #else

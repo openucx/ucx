@@ -457,8 +457,6 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_common_t *iface,
     uint64_t imm_data;
     ucs_status_t status;
     void *rb;
-    int found;
-    void *rndv_comp;
     struct ibv_exp_tmh_rvh *rvh;
     unsigned tm_hdrs_len;
 
@@ -521,11 +519,7 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_common_t *iface,
         break;
 
     case IBV_EXP_TMH_FIN:
-        found = ucs_ptr_array_lookup(&rc_iface->tm.rndv_comps,
-                                     ntohl(tmh->app_ctx), rndv_comp);
-        ucs_assert_always(found > 0);
-        uct_invoke_completion((uct_completion_t*)rndv_comp, UCS_OK);
-        ucs_ptr_array_remove(&rc_iface->tm.rndv_comps, ntohl(tmh->app_ctx), 0);
+        uct_rc_iface_handle_rndv_fin(rc_iface, tmh);
         ucs_mpool_put_inline(ib_desc);
         break;
 

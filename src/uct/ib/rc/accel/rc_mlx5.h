@@ -125,4 +125,11 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
 unsigned uct_rc_mlx5_iface_progress(void *arg);
 
+#if IBV_EXP_HW_TM
+ssize_t uct_rc_mlx5_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                       uint64_t imm,
+                                       uct_pack_callback_t pack_cb,
+                                       void *arg, unsigned flags);
+#endif
+
 #endif
