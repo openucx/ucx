@@ -151,12 +151,12 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
     wrap_errors();
     sender().connect(&receiver(), ep_params);
     /* allow for the unreachable event to arrive before restoring errors */
-    sleep (3);
+    wait_for_flag(&err_handler_count);
     restore_errors();
 
-    /* removing the following two lines will reproduce bug #2152 since it will
-     * invoke the err handling flow from the cleanup call */
-    wait_for_flag(&err_handler_count);
+    /* removing the call to wait_for_flag() and the following line will
+     * reproduce bug #2152 since it will invoke the err handling flow from
+     * the cleanup call */
     EXPECT_EQ(1, err_handler_count);
 }
 
