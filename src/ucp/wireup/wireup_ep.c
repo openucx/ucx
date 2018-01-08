@@ -506,17 +506,27 @@ int ucp_wireup_ep_test(uct_ep_h uct_ep)
                     UCS_CLASS_DELETE_FUNC_NAME(ucp_wireup_ep_t);
 }
 
-int ucp_wireup_ep_test_aux(uct_ep_h wireup_ep, uct_ep_h aux_ep)
+int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep)
 {
-    return ucp_wireup_ep_test(wireup_ep) &&
-           (ucs_derived_of(wireup_ep, ucp_wireup_ep_t)->aux_ep == aux_ep);
+    ucp_wireup_ep_t *wireup_ep;
+
+    if (!ucp_wireup_ep_test(uct_ep)) {
+        return 0;
+    }
+
+    wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    return (wireup_ep->aux_ep == owned_ep) || (wireup_ep->sockaddr_ep == owned_ep);
+
 }
 
-uct_ep_h ucp_wireup_ep_extract_aux(uct_ep_h ep)
+void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(ep, ucp_wireup_ep_t);
-    uct_ep_h aux_ep = wireup_ep->aux_ep;
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);;
 
-    wireup_ep->aux_ep = NULL;
-    return aux_ep;
+    ucs_assert_always(ucp_wireup_ep_test(uct_ep));
+    if (wireup_ep->aux_ep == owned_ep) {
+        wireup_ep->aux_ep = NULL;
+    } else if (wireup_ep->sockaddr_ep == owned_ep) {
+        wireup_ep->sockaddr_ep = NULL;
+    }
 }

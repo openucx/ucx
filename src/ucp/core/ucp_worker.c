@@ -340,7 +340,6 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_worker_h            worker           = (ucp_worker_h)arg;
     ucp_ep_h                ucp_ep           = NULL;
-    uct_ep_h                aux_ep           = NULL;
     uct_tl_resource_desc_t* tl_rsc;
     uint64_t                dest_uuid UCS_V_UNUSED;
     khiter_t                ucp_ep_errh_iter;
@@ -352,7 +351,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep, {
         for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
             if ((uct_ep == ucp_ep->uct_eps[lane]) ||
-                ucp_wireup_ep_test_aux(ucp_ep->uct_eps[lane], uct_ep)) {
+                ucp_wireup_ep_is_owner(ucp_ep->uct_eps[lane], uct_ep)) {
                 failed_lane = lane;
                 goto found_ucp_ep;
             }
@@ -364,7 +363,6 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     return;
 
 found_ucp_ep:
-
     rsc_index   = ucp_ep_get_rsc_index(ucp_ep, lane);
     tl_rsc      = &worker->context->tl_rscs[rsc_index].tl_rsc;
 
@@ -394,14 +392,15 @@ found_ucp_ep:
         ucp_ep->uct_eps[failed_lane] = NULL;
     }
 
-    /* NOTE: if failed ep is wireup auxiliary then we need to replace the lane
-     *       with failed ep and destroy wireup ep
+    /* NOTE: if failed ep is wireup auxiliary/sockaddr then we need to replace
+     *       the lane with failed ep and destroy wireup ep
      */
-    if (ucp_wireup_ep_test_aux(ucp_ep->uct_eps[0], uct_ep)) {
-        aux_ep = ucp_wireup_ep_extract_aux(ucp_ep->uct_eps[0]);
-        ucs_trace("ep %p: destroy failed uct_ep=%p", ucp_ep, ucp_ep->uct_eps[0]);
+    if (ucp_ep->uct_eps[0] != uct_ep) {
+        ucs_assert(ucp_wireup_ep_is_owner(ucp_ep->uct_eps[0], uct_ep));
+        ucp_wireup_ep_disown(ucp_ep->uct_eps[0], uct_ep);
+        ucs_trace("ep %p: destroy failed wireup ep %p", ucp_ep, ucp_ep->uct_eps[0]);
         uct_ep_destroy(ucp_ep->uct_eps[0]);
-        ucp_ep->uct_eps[0] = aux_ep;
+        ucp_ep->uct_eps[0] = uct_ep;
     }
 
     /* Redirect all lanes to failed one */

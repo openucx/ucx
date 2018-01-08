@@ -83,8 +83,8 @@ void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep);
 
 int ucp_wireup_ep_test(uct_ep_h uct_ep);
 
-int ucp_wireup_ep_test_aux(uct_ep_h wireup_ep, uct_ep_h aux_ep);
+int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep);
 
-uct_ep_h ucp_wireup_ep_extract_aux(uct_ep_h uct_ep);
+void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep);
 
 #endif
