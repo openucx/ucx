@@ -80,6 +80,14 @@ public:
 
         EXPECT_EQ(send_data, recv_data);
     }
+
+    static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
+        test_ucp_sockaddr *self = reinterpret_cast<test_ucp_sockaddr*>(arg);
+        self->err_handler_count++;
+    }
+
+protected:
+    volatile int err_handler_count;
 };
 
 UCS_TEST_P(test_ucp_sockaddr, listen) {
@@ -110,6 +118,46 @@ UCS_TEST_P(test_ucp_sockaddr, listen) {
         progress();
     }
     tag_send(receiver(), sender());
+}
+
+UCS_TEST_P(test_ucp_sockaddr, err_handle) {
+
+    struct sockaddr_in listen_addr;
+    err_handler_count = 0;
+
+    get_listen_addr(&listen_addr);
+
+    ucs_status_t status = receiver().listen((const struct sockaddr*)&listen_addr,
+                                            sizeof(listen_addr));
+    if (status == UCS_ERR_INVALID_ADDR) {
+        UCS_TEST_SKIP_R("cannot listen to " + ucs::sockaddr_to_str(&listen_addr));
+    }
+
+    /* make the client try to connect to a non-existing port on the server side */
+    listen_addr.sin_port = 1;
+
+    ucp_ep_params_t ep_params = ucp_test::get_ep_params();
+    ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
+                                 UCP_EP_PARAM_FIELD_SOCK_ADDR |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER_CB |
+                                 UCP_EP_PARAM_FIELD_USER_DATA;
+    ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
+    ep_params.err_handler_cb   = err_handler_cb;
+    ep_params.user_data        = reinterpret_cast<void*>(this);
+    ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
+    ep_params.sockaddr.addr    = (struct sockaddr*)&listen_addr;
+    ep_params.sockaddr.addrlen = sizeof(listen_addr);
+    wrap_errors();
+    sender().connect(&receiver(), ep_params);
+    /* allow for the unreachable event to arrive before restoring errors */
+    wait_for_flag(&err_handler_count);
+    restore_errors();
+
+    /* removing the call to wait_for_flag() and the following line will
+     * reproduce bug #2152 since it will invoke the err handling flow from
+     * the cleanup call */
+    EXPECT_EQ(1, err_handler_count);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_sockaddr)
