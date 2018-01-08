@@ -33,22 +33,6 @@
 #define UCS_F_NOOPTIMIZE
 #endif
 
-/* Silence "uninitialized variable" for stupid compilers (gcc 4.1)
- * which can't optimize properly.
- */
-#if (((__GNUC__ == 4) && (__GNUC_MINOR__ == 1)) || !defined(__OPTIMIZE__))
-#  define UCS_V_INITIALIZED(_v)  (_v = (typeof(_v))0)
-#else
-#  define UCS_V_INITIALIZED(_v)  ((void)0)
-#endif
-
-/**
- * Prevent compiler from reordering instructions
- */
-#define ucs_compiler_fence()       asm volatile(""::: "memory")
-
-/* Special pointer value */
-#define UCS_ERR_PTR(err)           ((void*)-(err + 1))
 
 /* Helper macro for address arithmetic in bytes */
 #define UCS_PTR_BYTE_OFFSET(_ptr, _offset) \

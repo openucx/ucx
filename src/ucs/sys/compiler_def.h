@@ -55,6 +55,15 @@
 #define UCS_F_ALWAYS_INLINE      inline
 #endif
 
+/* Silence "uninitialized variable" for stupid compilers (gcc 4.1)
+ * which can't optimize properly.
+ */
+#if (((__GNUC__ == 4) && (__GNUC_MINOR__ == 1)) || !defined(__OPTIMIZE__))
+#  define UCS_V_INITIALIZED(_v)  (_v = (typeof(_v))0)
+#else
+#  define UCS_V_INITIALIZED(_v)  ((void)0)
+#endif
+
 /* The i-th bit */
 #define UCS_BIT(i)               (1ul << (i))
 
@@ -116,6 +125,11 @@
         UCS_STATIC_ASSERT(offsetof(_type, super) == 0) \
         ucs_container_of(_ptr, _type, super); \
     })
+
+/**
+ * Prevent compiler from reordering instructions
+ */
+#define ucs_compiler_fence()       asm volatile(""::: "memory")
 
 /**
  * Prefetch cache line
