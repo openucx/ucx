@@ -49,7 +49,8 @@ public:
     typedef ucs_status_t (test_tag::*send_func)(entity&, send_ctx&);
 
     void init() {
-        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_TM_ENABLE", "y"));
+        ucs_status_t status = uct_config_modify(m_iface_config, "RC_TM_ENABLE", "y");
+        ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_ELEM));
 
         uct_test::init();
 
