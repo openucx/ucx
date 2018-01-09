@@ -573,8 +573,7 @@ void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other)
                                     &other.iface_params().mode.sockaddr.listen_sockaddr,
                                     client_priv_data.c_str(),
                                     client_priv_data.length(), &ep);
-
-    ASSERT_TRUE(status == UCS_INPROGRESS);
+    ASSERT_UCS_OK(status);
 
     m_eps[index].reset(ep, uct_ep_destroy);
 }
