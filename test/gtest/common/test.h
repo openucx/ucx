@@ -81,19 +81,15 @@ private:
 
     static ucs_log_func_rc_t
     count_warns_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level, const char *prefix,
-                       const char *message,
-                       va_list ap);
-
+                       ucs_log_level_t level, const char *message, va_list ap);
 
     static ucs_log_func_rc_t
     hide_errors_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level, const char *prefix,
-                       const char *message, va_list ap);
+                       ucs_log_level_t level, const char *message, va_list ap);
+
     static ucs_log_func_rc_t
     wrap_errors_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level, const char *prefix,
-                       const char *message, va_list ap);
+                       ucs_log_level_t level, const char *message, va_list ap);
 
     pthread_barrier_t    m_barrier;
 };

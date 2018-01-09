@@ -529,8 +529,7 @@ protected:
 
     static ucs_log_func_rc_t
     log_handler(const char *file, unsigned line, const char *function,
-                ucs_log_level_t level, const char *prefix, const char *message,
-                va_list ap)
+                ucs_log_level_t level, const char *message, va_list ap)
     {
         /* Ignore warnings about empty memory pool */
         if ((level == UCS_LOG_LEVEL_WARN) && strstr(message, "failed to register")) {

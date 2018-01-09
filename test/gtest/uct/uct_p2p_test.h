@@ -66,8 +66,7 @@ private:
 
     static ucs_log_func_rc_t
     log_handler(const char *file, unsigned line, const char *function,
-                ucs_log_level_t level, const char *prefix, const char *message,
-                va_list ap);
+                ucs_log_level_t level, const char *prefix, va_list ap);
 
     static int             log_data_count;
     static ucs_log_level_t orig_log_level;

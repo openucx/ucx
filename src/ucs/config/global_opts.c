@@ -8,7 +8,9 @@
 
 #include <ucs/config/parser.h>
 #include <ucs/debug/profile.h>
+#include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/compiler.h>
 #include <sys/signal.h>
 
 

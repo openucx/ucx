@@ -50,7 +50,9 @@ UCS_TEST_F(test_time, get_time) {
     ASSERT_NEAR(1.0, time(NULL) - system_start_time, 0.000001);
 
     double nsec = (ucs_time_to_nsec(current_time - start_time)) / count;
-    EXPECT_LT(nsec, 40.0) << "ucs_get_time() performance is too bad";
+    if (ucs::perf_retry_count) {
+        EXPECT_LT(nsec, 40.0) << "ucs_get_time() performance is too bad";
+    }
 }
 #endif
 

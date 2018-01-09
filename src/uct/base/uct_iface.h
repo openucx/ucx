@@ -421,7 +421,7 @@ typedef struct {
  * @paral _length   Active message length
  */
 #define uct_iface_trace_am(_iface, _type, _am_id, _payload, _length, _fmt, ...) \
-    if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
         char buf[256] = {0}; \
         uct_iface_dump_am(_iface, _type, _am_id, _payload, _length, \
                           buf, sizeof(buf) - 1); \

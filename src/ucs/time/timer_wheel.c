@@ -6,6 +6,7 @@
 
 #include <ucs/time/timer_wheel.h>
 
+#include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>

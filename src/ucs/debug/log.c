@@ -5,8 +5,9 @@
 */
 
 #include "log.h"
-#include "debug.h"
 
+#include <ucs/debug/debug.h>
+#include <ucs/sys/compiler.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
@@ -86,27 +87,23 @@ void ucs_log_flush()
 
 ucs_log_func_rc_t
 ucs_log_default_handler(const char *file, unsigned line, const char *function,
-                        ucs_log_level_t level, const char *prefix,
-                        const char *message, va_list ap)
+                        ucs_log_level_t level, const char *format, va_list ap)
 {
     size_t buffer_size = ucs_config_memunits_get(ucs_global_opts.log_buffer_size,
                                                  256, 2048);
     const char *short_file;
     struct timeval tv;
-    size_t length;
-    char *buf;
     char *valg_buf;
+    char *buf;
 
-    if (!ucs_log_enabled(level) && (level != UCS_LOG_LEVEL_PRINT)) {
+    if (!ucs_log_is_enabled(level) && (level != UCS_LOG_LEVEL_PRINT)) {
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
-    buf = ucs_alloca(buffer_size + 1);
+   buf = ucs_alloca(buffer_size + 1);
     buf[buffer_size] = 0;
 
-    strncpy(buf, prefix, buffer_size);
-    length = strlen(buf);
-    vsnprintf(buf + length, buffer_size - length, message, ap);
+    vsnprintf(buf, buffer_size, format, ap);
 
     short_file = strrchr(file, '/');
     short_file = (short_file == NULL) ? file : short_file + 1;
@@ -156,8 +153,8 @@ void ucs_log_pop_handler()
     }
 }
 
-void __ucs_log(const char *file, unsigned line, const char *function,
-               ucs_log_level_t level, const char *message, ...)
+void ucs_log_dispatch(const char *file, unsigned line, const char *function,
+                      ucs_log_level_t level, const char *format, ...)
 {
     ucs_log_func_rc_t rc;
     unsigned index;
@@ -168,13 +165,13 @@ void __ucs_log(const char *file, unsigned line, const char *function,
     index = ucs_log_num_handlers;
     while ((index > 0) && (rc == UCS_LOG_FUNC_RC_CONTINUE)) {
         --index;
-        va_start(ap, message);
-        rc = ucs_log_handlers[index](file, line, function, level, "", message, ap);
+        va_start(ap, format);
+        rc = ucs_log_handlers[index](file, line, function, level, format, ap);
         va_end(ap);
     }
 }
 
-void ucs_log_fatal_error(const char *fmt, ...)
+void ucs_log_fatal_error(const char *format, ...)
 {
     size_t buffer_size = ucs_global_opts.log_buffer_size;
     FILE *stream = stderr;
@@ -186,14 +183,14 @@ void ucs_log_fatal_error(const char *fmt, ...)
     p = buffer;
 
     /* Print hostname:pid */
-    snprintf(p, buffer_size, "[%s:%-5d:%d] ", ucs_log_hostname, ucs_log_pid,
-             ucs_log_get_thread_num());
+    snprintf(p, buffer_size, "[%s:%-5d:%d:%d] ", ucs_log_hostname, ucs_log_pid,
+             ucs_log_get_thread_num(), ucs_get_tid());
     buffer_size -= strlen(p);
     p           += strlen(p);
 
     /* Print rest of the message */
-    va_start(ap, fmt);
-    vsnprintf(p, buffer_size, fmt, ap);
+    va_start(ap, format);
+    vsnprintf(p, buffer_size, format, ap);
     va_end(ap);
     buffer_size -= strlen(p);
     p           += strlen(p);
@@ -205,29 +202,6 @@ void ucs_log_fatal_error(const char *fmt, ...)
     fflush(stream);
     ret = write(fileno(stream), buffer, strlen(buffer));
     (void)ret;
-}
-
-void __ucs_abort(const char *error_type, const char *file, unsigned line,
-                 const char *function, const char *message, ...)
-{
-    size_t buffer_size = ucs_global_opts.log_buffer_size;
-    const char *short_file;
-    char *buffer;
-    va_list ap;
-
-    buffer = ucs_alloca(buffer_size + 1);
-    va_start(ap, message);
-    vsnprintf(buffer, buffer_size, message, ap);
-    va_end(ap);
-
-    ucs_debug_cleanup();
-    ucs_log_flush();
-
-    short_file = strrchr(file, '/');
-    short_file = (short_file == NULL) ? file : short_file + 1;
-    ucs_handle_error(error_type, "%13s:%-4u %s", short_file, line, buffer);
-
-    abort();
 }
 
 /**
@@ -292,7 +266,8 @@ overflow:
 }
 
 
-const char * ucs_log_dump_hex(const void* data, size_t length, char *buf, size_t max)
+const char * ucs_log_dump_hex(const void* data, size_t length, char *buf,
+                              size_t max)
 {
     static const char hexchars[] = "0123456789abcdef";
     char *p, *endp;
@@ -348,9 +323,6 @@ void ucs_log_init()
          ucs_open_output_stream(ucs_global_opts.log_file, UCS_LOG_LEVEL_FATAL,
                                 &ucs_log_file, &ucs_log_file_close, &next_token);
     }
-
-    ucs_debug("%s loaded at 0x%lx", ucs_debug_get_lib_path(),
-              ucs_debug_get_lib_base_addr());
 }
 
 void ucs_log_cleanup()
