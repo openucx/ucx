@@ -501,61 +501,6 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                                  wqe_size, av, grh_av, imm_val_be);
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
-                                 uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
-                                 unsigned opcode, const void *buffer, unsigned length,
-                                 const uct_iov_t *iov, /* relevant for RNDV */
-                                 uct_tag_t tag, uint32_t app_ctx, int tm_op,
-                                 uint32_t imm_val_be, uct_ib_mlx5_base_av_t *av,
-                                 struct mlx5_grh_av *grh_av, size_t av_size,
-                                 unsigned fm_ce_se)
-{
-    struct mlx5_wqe_ctrl_seg     *ctrl;
-    struct mlx5_wqe_inl_data_seg *inl;
-    size_t wqe_size, ctrl_av_size;
-    struct ibv_exp_tmh *tmh;
-    struct ibv_exp_tmh_rvh rvh;
-    void *data;
-
-    ctrl         = txwq->curr;
-    ctrl_av_size = sizeof(*ctrl) + av_size; /* can be 16, 32 or 64 bytes */
-    inl          = uct_ib_mlx5_txwq_wrap_exact(txwq, (char*)ctrl + ctrl_av_size);
-    tmh          = (struct ibv_exp_tmh*)(inl + 1);
-
-    ucs_assert((opcode == MLX5_OPCODE_SEND_IMM) || (opcode == MLX5_OPCODE_SEND));
-
-    if (tm_op == IBV_EXP_TMH_EAGER) {
-        wqe_size         = ctrl_av_size + sizeof(*inl) + sizeof(*tmh) + length;
-        inl->byte_count  = htonl((length + sizeof(*tmh)) | MLX5_INLINE_SEG);
-        data             = tmh + 1;
-    } else {
-        ucs_assert(tm_op == IBV_EXP_TMH_RNDV);
-
-        wqe_size         = ctrl_av_size + sizeof(*inl) + sizeof(*tmh) +
-                           sizeof(rvh) + length;
-        inl->byte_count  = htonl((length + sizeof(*tmh) + sizeof(rvh)) |
-                                 MLX5_INLINE_SEG);
-        /* RVH can be wrapped */
-        uct_rc_iface_fill_rvh(&rvh, iov->buffer,
-                              ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
-        uct_ib_mlx5_inline_copy(tmh + 1, &rvh, sizeof(rvh), txwq);
-        data = (char*)tmh + sizeof(*tmh) + sizeof(rvh);
-        if (ucs_unlikely(data >= txwq->qend)) {
-            data -= (txwq->qend - txwq->qstart);
-        }
-    }
-    ucs_assert(wqe_size <= (UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB));
-
-    uct_rc_iface_fill_tmh(tmh, tag, app_ctx, tm_op);
-
-    uct_ib_mlx5_inline_copy(data, buffer, length, txwq);
-    fm_ce_se |= uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
-
-    uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq, opcode, 0, fm_ce_se,
-                                 wqe_size, av, grh_av, imm_val_be);
-}
-
 /*
  * Generic data-pointer posting function.
  * Parameters which are not relevant to the opcode are ignored.
@@ -882,6 +827,61 @@ uct_rc_mlx5_add_cmd_qp_op(uct_rc_mlx5_iface_common_t *iface,
     op      = iface->tm.cmd_wq.ops +
               (iface->tm.cmd_wq.ops_tail++ & iface->tm.cmd_wq.ops_mask);
     op->tag = tag;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
+                                 uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
+                                 unsigned opcode, const void *buffer, unsigned length,
+                                 const uct_iov_t *iov, /* relevant for RNDV */
+                                 uct_tag_t tag, uint32_t app_ctx, int tm_op,
+                                 uint32_t imm_val_be, uct_ib_mlx5_base_av_t *av,
+                                 struct mlx5_grh_av *grh_av, size_t av_size,
+                                 unsigned fm_ce_se)
+{
+    struct mlx5_wqe_ctrl_seg     *ctrl;
+    struct mlx5_wqe_inl_data_seg *inl;
+    size_t wqe_size, ctrl_av_size;
+    struct ibv_exp_tmh *tmh;
+    struct ibv_exp_tmh_rvh rvh;
+    void *data;
+
+    ctrl         = txwq->curr;
+    ctrl_av_size = sizeof(*ctrl) + av_size; /* can be 16, 32 or 64 bytes */
+    inl          = uct_ib_mlx5_txwq_wrap_exact(txwq, (char*)ctrl + ctrl_av_size);
+    tmh          = (struct ibv_exp_tmh*)(inl + 1);
+
+    ucs_assert((opcode == MLX5_OPCODE_SEND_IMM) || (opcode == MLX5_OPCODE_SEND));
+
+    if (tm_op == IBV_EXP_TMH_EAGER) {
+        wqe_size         = ctrl_av_size + sizeof(*inl) + sizeof(*tmh) + length;
+        inl->byte_count  = htonl((length + sizeof(*tmh)) | MLX5_INLINE_SEG);
+        data             = tmh + 1;
+    } else {
+        ucs_assert(tm_op == IBV_EXP_TMH_RNDV);
+
+        wqe_size         = ctrl_av_size + sizeof(*inl) + sizeof(*tmh) +
+                           sizeof(rvh) + length;
+        inl->byte_count  = htonl((length + sizeof(*tmh) + sizeof(rvh)) |
+                                 MLX5_INLINE_SEG);
+        /* RVH can be wrapped */
+        uct_rc_iface_fill_rvh(&rvh, iov->buffer,
+                              ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
+        uct_ib_mlx5_inline_copy(tmh + 1, &rvh, sizeof(rvh), txwq);
+        data = (char*)tmh + sizeof(*tmh) + sizeof(rvh);
+        if (ucs_unlikely(data >= txwq->qend)) {
+            data -= (txwq->qend - txwq->qstart);
+        }
+    }
+    ucs_assert(wqe_size <= (UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB));
+
+    uct_rc_iface_fill_tmh(tmh, tag, app_ctx, tm_op);
+
+    uct_ib_mlx5_inline_copy(data, buffer, length, txwq);
+    fm_ce_se |= uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
+
+    uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq, opcode, 0, fm_ce_se,
+                                 wqe_size, av, grh_av, imm_val_be);
 }
 
 static UCS_F_ALWAYS_INLINE void
