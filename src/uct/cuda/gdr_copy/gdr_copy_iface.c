@@ -20,10 +20,8 @@ static ucs_config_field_t uct_gdr_copy_iface_config_table[] = {
     {NULL}
 };
 
-
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_gdr_copy_iface_t)(uct_iface_t*);
-
 
 static ucs_status_t uct_gdr_copy_iface_get_address(uct_iface_h tl_iface,
                                                    uct_iface_addr_t *iface_addr)
@@ -46,14 +44,13 @@ static ucs_status_t uct_gdr_copy_iface_query(uct_iface_h iface,
 {
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
-    /* FIXME all of these values */
     iface_attr->iface_addr_len          = sizeof(int);
     iface_attr->device_addr_len         = 0;
     iface_attr->ep_addr_len             = 0;
-    iface_attr->max_conn_priv           = 0;
-    iface_attr->cap.flags               = 0;
+    iface_attr->cap.flags               = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                          UCT_IFACE_FLAG_PUT_SHORT;
 
-    iface_attr->cap.put.max_short       = 0;
+    iface_attr->cap.put.max_short       = UINT_MAX;
     iface_attr->cap.put.max_bcopy       = 0;
     iface_attr->cap.put.min_zcopy       = 0;
     iface_attr->cap.put.max_zcopy       = 0;
@@ -87,6 +84,9 @@ static ucs_status_t uct_gdr_copy_iface_query(uct_iface_h iface,
 }
 
 static uct_iface_ops_t uct_gdr_copy_iface_ops = {
+    .ep_put_short             = uct_gdr_copy_ep_put_short,
+    .ep_pending_add           = ucs_empty_function_return_busy,
+    .ep_pending_purge         = ucs_empty_function,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_gdr_copy_ep_t),
