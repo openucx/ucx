@@ -526,6 +526,7 @@ static ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
             ucs_assert_always(uct_ep != NULL);
             status = ucp_signaling_ep_create(ep, uct_ep, 1, &signaling_ep);
             if (status != UCS_OK) {
+                /* coverity[leaked_storage] */
                 uct_ep_destroy(uct_ep);
                 return status;
             }
@@ -533,6 +534,7 @@ static ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
             status = ucp_signaling_ep_create(ep, ep->uct_eps[proxy_lane], 0,
                                              &signaling_ep);
             if (status != UCS_OK) {
+                /* coverity[leaked_storage] */
                 return status;
             }
         }
