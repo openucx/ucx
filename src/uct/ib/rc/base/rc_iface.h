@@ -337,6 +337,23 @@ typedef struct uct_rc_am_short_hdr {
 
 #  define UCT_RC_IFACE_TM_OFF_STR         "TM_ENABLE=n"
 
+#  define UCT_RC_IFACE_CHECK_RES_PTR(_iface, _ep) \
+       UCT_RC_CHECK_CQE_RET(_iface, _ep, &(_ep)->txqp, \
+                            UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
+       UCT_RC_CHECK_TXQP_RET(_iface, _ep, &(_ep)->txqp, \
+                             UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
+
+#  define UCT_RC_IFACE_CHECK_RNDV_PARAMS(_iovcnt, _header_len, _tm_len, \
+                                         _max_inline, _max_rndv_hdr) \
+       { \
+           UCT_CHECK_PARAM_PTR(_iovcnt <= 1ul, "Wrong iovcnt %lu", iovcnt); \
+           UCT_CHECK_PARAM_PTR(_header_len <= _max_rndv_hdr, \
+                               "Invalid header len %u", _header_len); \
+           UCT_CHECK_PARAM_PTR((_header_len + _tm_len) <= _max_inline, \
+                               "Invalid RTS len gth %u", \
+                               _header_len + _tm_len); \
+       }
+
 #  define UCT_RC_IFACE_FILL_TM_IMM(_imm_data, _app_ctx, _ib_imm, _res_op, \
                                    _op, _imm_suffix) \
        if (_imm_data == 0) { \
