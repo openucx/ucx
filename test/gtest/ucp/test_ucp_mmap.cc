@@ -70,7 +70,7 @@ bool test_ucp_mmap::resolve_rma_bw(entity *e, ucp_rkey_h rkey)
     ucp_lane_index_t lane;
     uct_rkey_t uct_rkey;
 
-    lane = ucp_rkey_get_rma_bw_lane(rkey, e->ep(), &uct_rkey);
+    lane = ucp_rkey_get_rma_bw_lane(rkey, e->ep(), &uct_rkey, 0);
     if (lane != UCP_NULL_LANE) {
         return true;
     } else {

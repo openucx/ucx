@@ -959,6 +959,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
     ucp_lane_index_t lane;
+    ucp_lane_index_t i;
     ucs_status_t status;
 
     memset(lane_descs, 0, sizeof(lane_descs));
@@ -1024,15 +1025,6 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
         }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RMA_BW) {
             key->rma_bw_lanes[lane] = lane;
-            rsc_index = lane_descs[lane].rsc_index;
-            md_index  = worker->context->tl_rscs[rsc_index].md_index;
-
-            /* Pack remote key only if needed for RMA.
-             * FIXME a temporary workaround to prevent the ugni uct from using rndv. */
-            if ((context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
-                !(strstr(context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni"))) {
-                key->rma_bw_md_map |= UCS_BIT(md_index);
-            }
         }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AMO) {
             key->amo_lanes[lane] = lane;
@@ -1060,6 +1052,23 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                                           address_list,
                                                           lane_descs,
                                                           key->num_lanes);
+
+    /* add to map first UCP_MAX_OP_MDS fastest MD's */
+    for (i = 0;
+         (key->rma_bw_lanes[i] != UCP_NULL_LANE) &&
+         (ucs_count_one_bits(key->rma_bw_md_map) < UCP_MAX_OP_MDS); i++) {
+        lane = key->rma_bw_lanes[i];
+        rsc_index = lane_descs[lane].rsc_index;
+        md_index  = worker->context->tl_rscs[rsc_index].md_index;
+
+        /* Pack remote key only if needed for RMA.
+         * FIXME a temporary workaround to prevent the ugni uct from using rndv. */
+        if ((context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
+            !(strstr(context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni"))) {
+            key->rma_bw_md_map |= UCS_BIT(md_index);
+        }
+    }
+
 
     return UCS_OK;
 }
