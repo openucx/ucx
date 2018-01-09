@@ -1165,9 +1165,6 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
          }
      }
 
-     if (context->config.features & UCP_FEATURE_TAG) {
-     }
-
      if (context->config.features & (UCP_FEATURE_TAG|UCP_FEATURE_RMA)) {
          fprintf(stream, "#\n");
          fprintf(stream, "# %23s: mds ", "rma_bw");

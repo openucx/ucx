@@ -517,7 +517,7 @@ static ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
 
         /* Create a signaling ep to the proxy lane */
         if (proxy_lane == lane) {
-            /* If proxy is to the same lane, temporarily remote the existing
+            /* If proxy is to the same lane, temporarily remove the existing
              * UCT endpoint in there, so it could be assigned to the signaling
              * proxy ep. This can also be an endpoint contained inside a wireup
              * proxy, so ucp_wireup_extract_lane() handles both cases.
