@@ -18,18 +18,21 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
                   uint16_t flags, uint16_t hdr_len)
 {
-    ucp_worker_h worker = arg;
-    ucp_eager_hdr_t *eager_hdr = data;
-    ucp_eager_first_hdr_t *eager_first_hdr = data;
-    ucp_recv_desc_t *rdesc;
+    ucp_worker_h worker                      = arg;
+    ucp_eager_hdr_t *eager_hdr               = data;
+    ucp_eager_first_hdr_t *eager_first_hdr   = data;
+    ucp_eager_middle_hdr_t *eager_middle_hdr = data;
     ucp_request_t *req;
     ucs_status_t status;
     size_t recv_len;
     ucp_tag_t recv_tag;
+    ucp_recv_desc_t *rdesc;
 
     UCS_PROFILE_SCOPE_BEGIN();
     ucs_assert(length >= hdr_len);
-    recv_tag = eager_hdr->super.tag;
+    /* TODO: split packets: shift middle packets to separate queue */
+    recv_tag = (flags & UCP_RECV_DESC_FLAG_MIDDLE) ?
+               eager_middle_hdr->super.tag : eager_hdr->super.tag;
     recv_len = length - hdr_len;
 
     req = ucp_tag_exp_search(&worker->tm, recv_tag, recv_len, flags);
@@ -113,8 +116,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
     return ucp_eager_handler(arg, data, length, am_flags,
-                             UCP_RECV_DESC_FLAG_EAGER,
-                             sizeof(ucp_eager_hdr_t));
+                             UCP_RECV_DESC_FLAG_EAGER|
+                             UCP_RECV_DESC_FLAG_MIDDLE,
+                             sizeof(ucp_eager_middle_hdr_t));
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_last_handler,
@@ -123,8 +127,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_last_handler,
 {
     return ucp_eager_handler(arg, data, length, am_flags,
                              UCP_RECV_DESC_FLAG_EAGER|
-                             UCP_RECV_DESC_FLAG_LAST,
-                             sizeof(ucp_eager_hdr_t));
+                             UCP_RECV_DESC_FLAG_LAST|
+                             UCP_RECV_DESC_FLAG_MIDDLE,
+                             sizeof(ucp_eager_middle_hdr_t));
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_only_handler,
@@ -229,6 +234,7 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 {
     const ucp_eager_first_hdr_t *eager_first_hdr = data;
     const ucp_eager_hdr_t *eager_hdr             = data;
+    const ucp_eager_middle_hdr_t *eager_mid_hdr  = data;
     const ucp_eager_sync_first_hdr_t *eagers_first_hdr = data;
     const ucp_eager_sync_hdr_t *eagers_hdr       = data;
     const ucp_reply_hdr_t *rep_hdr               = data;
@@ -238,17 +244,20 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 
     switch (id) {
     case UCP_AM_ID_EAGER_ONLY:
-        snprintf(buffer, max, "EGR tag %"PRIx64, eager_hdr->super.tag);
+        snprintf(buffer, max, "EGR_O tag %"PRIx64, eager_hdr->super.tag);
         header_len = sizeof(*eager_hdr);
         break;
     case UCP_AM_ID_EAGER_FIRST:
-        snprintf(buffer, max, "EGR_F tag %"PRIx64" len %zu",
-                 eager_first_hdr->super.super.tag, eager_first_hdr->total_len);
+        snprintf(buffer, max, "EGR_F tag %"PRIx64" msgid %"PRIx64" len %zu",
+                 eager_first_hdr->super.super.tag, eager_first_hdr->msg_id,
+                 eager_first_hdr->total_len);
         header_len = sizeof(*eager_first_hdr);
         break;
     case UCP_AM_ID_EAGER_MIDDLE:
-        snprintf(buffer, max, "EGR_M tag %"PRIx64, eager_hdr->super.tag);
-        header_len = sizeof(*eager_hdr);
+        snprintf(buffer, max, "EGR_M tag %"PRIx64" msgid %"PRIx64" offset %zu",
+                 eager_mid_hdr->super.tag, eager_mid_hdr->msg_id,
+                 eager_mid_hdr->offset);
+        header_len = sizeof(*eager_mid_hdr);
         break;
     case UCP_AM_ID_EAGER_LAST:
         snprintf(buffer, max, "EGR_L tag %"PRIx64, eager_hdr->super.tag);
@@ -261,8 +270,10 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         header_len = sizeof(*eagers_hdr);
         break;
     case UCP_AM_ID_EAGER_SYNC_FIRST:
-        snprintf(buffer, max, "EGRS_F tag %"PRIx64" len %zu uuid %"PRIx64" request 0x%lx",
+        snprintf(buffer, max, "EGRS_F tag %"PRIx64" msgid %"PRIx64" len %zu "
+                 "uuid %"PRIx64" request 0x%lx",
                  eagers_first_hdr->super.super.super.tag,
+                 eagers_first_hdr->super.msg_id,
                  eagers_first_hdr->super.total_len,
                  eagers_first_hdr->req.sender_uuid,
                  eagers_first_hdr->req.reqptr);

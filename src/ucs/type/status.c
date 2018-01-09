@@ -62,6 +62,8 @@ const char *ucs_status_string(ucs_status_t status)
         return "User-defined limit was reached";
     case UCS_ERR_UNSUPPORTED:
         return "Unsupported operation";
+    case UCS_ERR_PENDING:
+        return "Request switched to pending state";
     case UCS_ERR_ENDPOINT_TIMEOUT:
         return "Endpoint timeout";
     default:

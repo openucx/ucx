@@ -287,7 +287,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
 
     if (!found) {
         if (show_error) {
-            ucs_error("No %s transport to %s: %s", criteria->title,
+            ucs_error("no %s transport to %s: %s", criteria->title,
                       ucp_ep_peer_name(ep), tls_info);
         }
         return UCS_ERR_UNREACHABLE;
@@ -846,6 +846,8 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
     uint64_t tl_bitmap;
     double score;
     int found;
+    int is_proxy;
+    uint64_t remote_cap_flags;
 
     /* Check if we need active messages, for wireup */
     if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG)) {
@@ -872,7 +874,8 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
     found         = 0;
     tl_bitmap     = -1;
     remote_md_map = -1;
-    for (;;) {
+    /* 1 lane is always AM lane */
+    for (; found < ep->worker->context->config.ext.max_eager_lanes;) {
         status = ucp_wireup_select_transport(ep, address_list, address_count,
                                              &criteria, tl_bitmap, remote_md_map,
                                              !found, &rsc_index, &addr_index, &score);
@@ -880,13 +883,18 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
             break;
         }
 
+        remote_cap_flags = address_list[addr_index].iface_attr.cap_flags;
+        is_proxy = !ucp_worker_is_tl_p2p(ep->worker, rsc_index) &&
+                   ((remote_cap_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS) ==
+                    UCT_IFACE_FLAG_EVENT_RECV_SIG);
+
         ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                                  address_list[addr_index].md_index, score,
-                                 UCP_WIREUP_LANE_USAGE_AM_BW, 0);
+                                 UCP_WIREUP_LANE_USAGE_AM_BW, is_proxy);
 
         remote_md_map &= ~UCS_BIT(address_list[addr_index].md_index);
         tl_bitmap      = ucp_wireup_unset_tl_by_md(ep, tl_bitmap, rsc_index);
-        found          = 1;
+        found++;
 
         if (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SHM) {
             /* special case for SHM: do not try to lookup additional lanes when
@@ -896,7 +904,8 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
         }
     }
 
-    return found ? UCS_OK : status;
+    return (found || !ep->worker->context->config.ext.max_eager_lanes) ?
+           UCS_OK : status;
 }
 
 static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
@@ -1117,8 +1126,10 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
             ucs_assert(key->am_lane == UCP_NULL_LANE);
             key->am_lane = lane;
         }
-        if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AM_BW) {
-            key->am_bw_lanes[lane] = lane;
+        if ((lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AM_BW) &&
+            !(lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AM)   &&
+            (lane < UCP_MAX_LANES - 1)) {
+            key->am_bw_lanes[lane + 1] = lane;
         }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RMA) {
             key->rma_lanes[lane] = lane;
@@ -1136,7 +1147,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     }
 
     /* Sort AM, RMA and AMO lanes according to score */
-    ucs_qsort_r(key->am_bw_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
+    ucs_qsort_r(key->am_bw_lanes + 1, UCP_MAX_LANES - 1, sizeof(ucp_lane_index_t),
                 ucp_wireup_compare_lane_am_bw_score, lane_descs);
     ucs_qsort_r(key->rma_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
                 ucp_wireup_compare_lane_rma_score, lane_descs);
@@ -1171,6 +1182,9 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
         }
     }
 
+    /* use AM lane first for eager AM transport to simplify processing single/middle
+     * msg packets */
+    key->am_bw_lanes[0] = key->am_lane;
 
     return UCS_OK;
 }

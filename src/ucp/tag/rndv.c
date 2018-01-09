@@ -20,7 +20,7 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     ucp_worker_h worker              = sreq->send.ep->worker;
     ssize_t packed_rkey_size;
 
-    rndv_rts_hdr->super.tag        = sreq->send.tag;
+    rndv_rts_hdr->super.tag        = sreq->send.tag.tag;
     rndv_rts_hdr->sreq.reqptr      = (uintptr_t)sreq;
     rndv_rts_hdr->sreq.sender_uuid = worker->uuid;
     rndv_rts_hdr->size             = sreq->send.length;
@@ -561,6 +561,7 @@ static size_t ucp_rndv_pack_single_data(void *dest, void *arg)
     ucs_assert(sreq->send.state.dt.offset == 0);
 
     hdr->rreq_ptr = sreq->send.rndv_data.rreq_ptr;
+    hdr->offset   = sreq->send.state.dt.offset;
     length = ucp_dt_pack(sreq->send.datatype, hdr + 1, sreq->send.buffer,
                          &sreq->send.state.dt, sreq->send.length);
     ucs_assert(length == sreq->send.length);
@@ -574,7 +575,8 @@ static size_t ucp_rndv_pack_multi_data(void *dest, void *arg)
     size_t length;
 
     hdr->rreq_ptr = sreq->send.rndv_data.rreq_ptr;
-    length        = ucp_ep_config(sreq->send.ep)->am.max_bcopy - sizeof(*hdr);
+    hdr->offset   = sreq->send.state.dt.offset;
+    length        = ucp_ep_get_max_bcopy(sreq->send.ep, sreq->send.lane) - sizeof(*hdr);
 
     return sizeof(*hdr) + ucp_dt_pack(sreq->send.datatype, hdr + 1,
                                       sreq->send.buffer, &sreq->send.state.dt,
@@ -585,10 +587,12 @@ static size_t ucp_rndv_pack_multi_data_last(void *dest, void *arg)
 {
     ucp_rndv_data_hdr_t *hdr = dest;
     ucp_request_t *sreq = arg;
-    size_t length;
+    size_t length, offset;
 
+    offset        = sreq->send.state.dt.offset;
     hdr->rreq_ptr = sreq->send.rndv_data.rreq_ptr;
-    length        = sreq->send.length - sreq->send.state.dt.offset;
+    length        = sreq->send.length - offset;
+    hdr->offset   = offset;
 
     return sizeof(*hdr) + ucp_dt_pack(sreq->send.datatype, hdr + 1,
                                       sreq->send.buffer, &sreq->send.state.dt,
@@ -616,10 +620,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
                                        sizeof(ucp_rndv_data_hdr_t),
                                        ucp_rndv_pack_multi_data,
                                        ucp_rndv_pack_multi_data,
-                                       ucp_rndv_pack_multi_data_last);
+                                       ucp_rndv_pack_multi_data_last, 0);
     }
     if (status == UCS_OK) {
         ucp_rndv_complete_send(sreq);
+    } else if (status == UCS_ERR_PENDING) {
+        status = UCS_OK; // remove from arbiter
     }
 
     return status;
@@ -707,6 +713,7 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_single(uct_pending_req_t *self)
     ucp_rndv_data_hdr_t hdr;
 
     hdr.rreq_ptr = sreq->send.rndv_data.rreq_ptr;
+    hdr.offset   = 0;
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_RNDV_DATA_LAST, &hdr, sizeof(hdr),
                                   ucp_rndv_am_zcopy_send_req_complete);
 }
@@ -717,13 +724,14 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_multi(uct_pending_req_t *self)
     ucp_rndv_data_hdr_t hdr;
 
     hdr.rreq_ptr = sreq->send.rndv_data.rreq_ptr;
+    hdr.offset   = sreq->send.state.dt.offset;
     return ucp_do_am_zcopy_multi(self,
                                  UCP_AM_ID_RNDV_DATA,
                                  UCP_AM_ID_RNDV_DATA,
                                  UCP_AM_ID_RNDV_DATA_LAST,
                                  &hdr, sizeof(hdr),
                                  &hdr, sizeof(hdr),
-                                 ucp_rndv_am_zcopy_send_req_complete);
+                                 ucp_rndv_am_zcopy_send_req_complete, 0);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
@@ -783,11 +791,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
             ucp_ep_config(ep)->am.max_zcopy) {
             sreq->send.uct.func = ucp_rndv_progress_am_zcopy_single;
         } else {
-            sreq->send.uct.func = ucp_rndv_progress_am_zcopy_multi;
+            sreq->send.uct.func        = ucp_rndv_progress_am_zcopy_multi;
+            sreq->send.tag.am_bw_index = 0;
         }
     } else {
         ucp_request_send_state_reset(sreq, NULL, UCP_REQUEST_SEND_PROTO_BCOPY_AM);
-        sreq->send.uct.func = ucp_rndv_progress_am_bcopy;
+        sreq->send.uct.func        = ucp_rndv_progress_am_bcopy;
+        sreq->send.tag.am_bw_index = 0;
     }
 
 out_send:
@@ -915,16 +925,16 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         }
         break;
     case UCP_AM_ID_RNDV_DATA:
-        snprintf(buffer, max, "RNDV_DATA rreq 0x%"PRIx64,
-                 rndv_data->rreq_ptr);
+        snprintf(buffer, max, "RNDV_DATA rreq 0x%"PRIx64" offset %zu",
+                 rndv_data->rreq_ptr, rndv_data->offset);
         break;
     case UCP_AM_ID_RNDV_ATP:
         snprintf(buffer, max, "RNDV_ATP sreq 0x%lx status '%s'",
                  rep_hdr->reqptr, ucs_status_string(rep_hdr->status));
         break;
     case UCP_AM_ID_RNDV_DATA_LAST:
-        snprintf(buffer, max, "RNDV_DATA_LAST rreq 0x%"PRIx64,
-                 rndv_data->rreq_ptr);
+        snprintf(buffer, max, "RNDV_DATA_LAST rreq 0x%"PRIx64" offset %zu",
+                 rndv_data->rreq_ptr, rndv_data->offset);
         break;
     default:
         return;

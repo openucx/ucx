@@ -32,7 +32,19 @@ typedef struct {
 typedef struct {
     ucp_eager_hdr_t           super;
     size_t                    total_len;
+    uint64_t                  msg_id;
 } UCS_S_PACKED ucp_eager_first_hdr_t;
+
+
+/*
+ * EAGER_MIDDLE
+ */
+typedef struct {
+    /* TODO: remove super element after receiver is ready */
+    ucp_tag_hdr_t             super;
+    uint64_t                  msg_id;
+    size_t                    offset;
+} UCS_S_PACKED ucp_eager_middle_hdr_t;
 
 
 /*
