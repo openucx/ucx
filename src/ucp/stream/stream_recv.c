@@ -162,7 +162,7 @@ ucp_stream_rdata_unpack(const void *rdata, size_t length, ucp_request_t *dst_req
 
     if (ucs_likely(status == UCS_OK)) {
         dst_req->recv.state.offset += valid_len;
-        ucs_trace_data("unpacked %zd bytes of stream data %p\n",
+        ucs_trace_data("unpacked %zd bytes of stream data %p",
                        valid_len, rdata);
         return valid_len;
     }

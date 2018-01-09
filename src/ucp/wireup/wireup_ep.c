@@ -12,6 +12,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/class.h>
+#include <ucs/sys/string.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.inl>
 
@@ -312,6 +313,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     UCS_CLASS_CALL_SUPER_INIT(ucp_proxy_ep_t, &ops, ucp_ep, NULL, 0);
 
     self->aux_ep        = NULL;
+    self->sockaddr_ep   = NULL;
     self->aux_rsc_index = UCP_NULL_RESOURCE;
     self->pending_count = 0;
     self->flags         = 0;
@@ -337,6 +339,9 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
     if (self->aux_ep != NULL) {
         ucp_worker_iface_unprogress_ep(&worker->ifaces[self->aux_rsc_index]);
         uct_ep_destroy(self->aux_ep);
+    }
+    if (self->sockaddr_ep != NULL) {
+        uct_ep_destroy(self->sockaddr_ep);
     }
 }
 
@@ -396,6 +401,78 @@ err:
     return status;
 }
 
+ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
+                                               const ucp_ep_params_t *params)
+{
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
+    ucp_worker_h worker        = ucp_ep->worker;
+    ucp_context_h context      = worker->context;
+    char saddr_str[UCS_SOCKADDR_STRING_LEN];
+    ucp_wireup_sockaddr_priv_t *conn_priv;
+    size_t address_length, conn_priv_len;
+    ucp_address_t *worker_address;
+    ucp_rsc_index_t sockaddr_rsc;
+    ucp_worker_iface_t *wiface;
+    ucs_status_t status;
+
+    ucs_assert(ucp_wireup_ep_test(uct_ep));
+
+    status = ucp_wireup_select_sockaddr_transport(ucp_ep, params, &sockaddr_rsc);
+    if (status != UCS_OK) {
+        goto out;
+     }
+
+    status = ucp_worker_get_address(worker, &worker_address, &address_length);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    conn_priv_len = sizeof(*conn_priv) + address_length;
+
+    /* check private data limitation */
+    wiface = &worker->ifaces[sockaddr_rsc];
+    if (conn_priv_len > wiface->attr.max_conn_priv) {
+        ucs_error("sockaddr connection priv data (%zu) exceeds max_priv on "
+                  UCT_TL_RESOURCE_DESC_FMT" (%zu)", conn_priv_len,
+                  UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
+                  wiface->attr.max_conn_priv);
+        status = UCS_ERR_UNREACHABLE;
+        goto out_free_address;
+    }
+
+    conn_priv = ucs_malloc(conn_priv_len ,"ucp_sockaddr_conn_priv");
+    if (conn_priv == NULL) {
+        ucs_error("failed to allocate buffer for sockaddr conn priv");
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free_address;
+    }
+
+    /* pack private data */
+    conn_priv->err_mode = UCP_PARAM_VALUE(EP, params, err_mode, ERR_HANDLING_MODE,
+                                          UCP_ERR_HANDLING_MODE_NONE);
+    conn_priv->ep_uuid  = ucp_ep->dest_uuid;
+    memcpy(conn_priv + 1, worker_address, address_length);
+
+    /* send connection request using the transport */
+    status = uct_ep_create_sockaddr(wiface->iface, &params->sockaddr, conn_priv,
+                                    conn_priv_len, &wireup_ep->sockaddr_ep);
+    if (UCS_STATUS_IS_ERR(status)) {
+        goto out_free_priv;
+    }
+
+    ucs_debug("ep %p connecting to %s", ucp_ep,
+              ucs_sockaddr_str(params->sockaddr.addr, saddr_str, sizeof(saddr_str)));
+    status = UCS_OK;
+
+out_free_priv:
+    ucs_free(conn_priv);
+out_free_address:
+    ucp_worker_release_address(worker, worker_address);
+out:
+    return status;
+}
+
 void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
 {
     ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
@@ -429,17 +506,27 @@ int ucp_wireup_ep_test(uct_ep_h uct_ep)
                     UCS_CLASS_DELETE_FUNC_NAME(ucp_wireup_ep_t);
 }
 
-int ucp_wireup_ep_test_aux(uct_ep_h wireup_ep, uct_ep_h aux_ep)
+int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep)
 {
-    return ucp_wireup_ep_test(wireup_ep) &&
-           (ucs_derived_of(wireup_ep, ucp_wireup_ep_t)->aux_ep == aux_ep);
+    ucp_wireup_ep_t *wireup_ep;
+
+    if (!ucp_wireup_ep_test(uct_ep)) {
+        return 0;
+    }
+
+    wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    return (wireup_ep->aux_ep == owned_ep) || (wireup_ep->sockaddr_ep == owned_ep);
+
 }
 
-uct_ep_h ucp_wireup_ep_extract_aux(uct_ep_h ep)
+void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(ep, ucp_wireup_ep_t);
-    uct_ep_h aux_ep = wireup_ep->aux_ep;
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
 
-    wireup_ep->aux_ep = NULL;
-    return aux_ep;
+    ucs_assert_always(ucp_wireup_ep_test(uct_ep));
+    if (wireup_ep->aux_ep == owned_ep) {
+        wireup_ep->aux_ep = NULL;
+    } else if (wireup_ep->sockaddr_ep == owned_ep) {
+        wireup_ep->sockaddr_ep = NULL;
+    }
 }

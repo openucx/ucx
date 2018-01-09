@@ -33,7 +33,7 @@ public:
                            const mapped_buffer &recvbuf);
 
     virtual void test_xfer(send_func_t send, size_t length,
-                           direction_t direction);
+                           unsigned flags, uct_memory_type_t mem_type);
 };
 
 #endif

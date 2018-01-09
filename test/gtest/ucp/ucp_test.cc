@@ -455,21 +455,21 @@ ucp_ep_h ucp_test_base::entity::revoke_ep(int worker_index, int ep_index) const 
 ucs_status_t ucp_test_base::entity::listen(const struct sockaddr* saddr,
                                            socklen_t addrlen, int worker_index)
 {
-    ucp_worker_listener_params_t params;
+    ucp_listener_params_t params;
     ucp_listener_h listener;
 
-    params.field_mask            = UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR |
-                                   UCP_WORKER_LISTENER_PARAM_FIELD_CALLBACK;
-    params.sockaddr.addr         = saddr;
-    params.sockaddr.addrlen      = addrlen;
-    params.ep_accept_handler.cb  = accept_cb;
-    params.ep_accept_handler.arg = reinterpret_cast<void*>(this);
+    params.field_mask         = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
+                                UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
+    params.sockaddr.addr      = saddr;
+    params.sockaddr.addrlen   = addrlen;
+    params.accept_handler.cb  = accept_cb;
+    params.accept_handler.arg = reinterpret_cast<void*>(this);
 
     wrap_errors();
-    ucs_status_t status = ucp_worker_listen(worker(worker_index), &params, &listener);
+    ucs_status_t status = ucp_listener_create(worker(worker_index), &params, &listener);
     restore_errors();
     if (status == UCS_OK) {
-        m_listener.reset(listener, (void(*)(ucp_listener_h))ucp_listener_destroy);
+        m_listener.reset(listener, ucp_listener_destroy);
     } else if (status != UCS_ERR_INVALID_ADDR) {
         /* throw error if status is not (UCS_OK or UCS_ERR_INVALID_ADDR) */
         ASSERT_UCS_OK(status);

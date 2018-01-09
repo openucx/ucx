@@ -42,7 +42,6 @@ struct uct_md_component {
 
 
 typedef struct uct_md_rcache_config {
-    ucs_ternary_value_t  enable;       /**< Enable registration cache */
     size_t               alignment;    /**< Force address alignment */
     unsigned             event_prio;   /**< Memory events priority */
     double               overhead;     /**< Lookup overhead estimation */

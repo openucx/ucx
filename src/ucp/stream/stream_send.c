@@ -18,7 +18,7 @@
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_stream_send_am_short(ucp_ep_t *ep, const void *buffer, size_t length)
 {
-    UCS_STATIC_ASSERT(sizeof(ep->dest_uuid) == sizeof(uint64_t));
+    UCS_STATIC_ASSERT(sizeof(ep->worker->uuid) == sizeof(uint64_t));
 
     return uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_STREAM_DATA,
                            ep->worker->uuid, buffer, length);

@@ -118,13 +118,16 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     ucs_status_t status;
 
-    status = uct_dc_iface_query(&iface->super, iface_attr);
+    status = uct_dc_iface_query(&iface->super, iface_attr,
+                                UCT_IB_MLX5_PUT_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE),
+                                UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE),
+                                UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE),
+                                UCT_IB_MLX5_AM_ZCOPY_MAX_IOV);
     if (status != UCS_OK) {
         return status;
     }
 
-    uct_rc_mlx5_iface_common_query(&iface->super.super, iface_attr,
-                                   UCT_IB_MLX5_AV_FULL_SIZE);
+    uct_rc_mlx5_iface_common_query(iface_attr);
     return UCS_OK;
 }
 
@@ -158,7 +161,7 @@ uct_dc_mlx5_iface_bcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                                0, 0, 0,
                                &ep->av, uct_dc_mlx5_ep_get_grh(ep),
                                uct_ib_mlx5_wqe_av_size(&ep->av),
-                               MLX5_WQE_CTRL_CQ_UPDATE | send_flags);
+                               MLX5_WQE_CTRL_CQ_UPDATE | send_flags, 0);
     uct_rc_txqp_add_send_op(txqp, &desc->super);
 }
 
@@ -206,7 +209,7 @@ uct_dc_mlx5_iface_atomic_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                                compare_mask, compare, swap_add,
                                &ep->av, uct_dc_mlx5_ep_get_grh(ep),
                                uct_ib_mlx5_wqe_av_size(&ep->av),
-                               MLX5_WQE_CTRL_CQ_UPDATE);
+                               MLX5_WQE_CTRL_CQ_UPDATE, 0);
 
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_rc_txqp_add_send_op(txqp, &desc->super);
@@ -581,7 +584,7 @@ static unsigned uct_dc_mlx5_iface_progress(uct_iface_h tl_iface)
     unsigned count;
 
     count = uct_rc_mlx5_iface_common_poll_rx(&iface->mlx5_common,
-                                             &iface->super.super);
+                                             &iface->super.super, 0);
     if (count > 0) {
         return count;
     }

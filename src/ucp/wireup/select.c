@@ -9,6 +9,7 @@
 
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/sys/string.h>
 #include <ucp/core/ucp_ep.inl>
 #include <string.h>
 #include <inttypes.h>
@@ -962,10 +963,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 
     memset(lane_descs, 0, sizeof(lane_descs));
     ucp_ep_config_key_reset(key);
-
-    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
-        key->err_mode = params->err_mode;
-    }
+    ucp_ep_config_key_set_params(key, params);
 
     status = ucp_wireup_add_rma_lanes(ep, params, address_count, address_list,
                                       lane_descs, &key->num_lanes);
@@ -1090,4 +1088,39 @@ ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
     return ucp_wireup_select_transport(ep, address_list, address_count,
                                        &criteria, -1, -1, 1, rsc_index_p,
                                        addr_index_p, &score);
+}
+
+ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
+                                                  const ucp_ep_params_t *params,
+                                                  ucp_rsc_index_t *rsc_index_p)
+{
+    ucp_worker_h worker   = ep->worker;
+    ucp_context_h context = worker->context;
+    char saddr_str[UCS_SOCKADDR_STRING_LEN];
+    ucp_tl_resource_desc_t *resource;
+    ucp_rsc_index_t tl_id;
+    ucp_md_index_t md_index;
+    uct_md_h md;
+
+    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+        resource = &context->tl_rscs[tl_id];
+        if (!(resource->flags & UCP_TL_RSC_FLAG_SOCKADDR)) {
+            continue;
+        }
+
+        md_index = resource->md_index;
+        md       = context->tl_mds[md_index].md;
+        ucs_assert(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_SOCKADDR);
+
+        if (uct_md_is_sockaddr_accessible(md, &params->sockaddr, UCT_SOCKADDR_ACC_REMOTE)) {
+            /* TODO use score to prefer best tl rather than using first one */
+            *rsc_index_p = tl_id;
+            return UCS_OK;
+        }
+
+        ucs_debug("md %s cannot reach %s", context->tl_mds[md_index].rsc.md_name,
+                  ucs_sockaddr_str(params->sockaddr.addr, saddr_str, sizeof(saddr_str)));
+    }
+
+    return UCS_ERR_UNREACHABLE;
 }

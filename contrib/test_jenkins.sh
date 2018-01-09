@@ -29,14 +29,14 @@ if [ -z "$BUILD_NUMBER" ]; then
 	BUILD_NUMBER=1
 	WS_URL=file://$WORKSPACE
 	JENKINS_RUN_TESTS=yes
-	TIMEOUT="timeout 160m"
-	TIMEOUT_VALGRIND="timeout 200m"
 	JENKINS_TEST_PERF=1
+	TIMEOUT=""
+	TIMEOUT_VALGRIND=""
 else
 	echo "Running under jenkins"
 	WS_URL=$JOB_URL/ws
-	TIMEOUT=""
-	TIMEOUT_VALGRIND=""
+	TIMEOUT="timeout 160m"
+	TIMEOUT_VALGRIND="timeout 200m"
 fi
 
 

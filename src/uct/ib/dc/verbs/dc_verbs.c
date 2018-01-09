@@ -72,16 +72,21 @@ static void uct_dc_verbs_ep_destroy(uct_ep_h tl_ep)
 static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_verbs_iface_t);
+    uct_rc_verbs_iface_common_t *verbs_common = &iface->verbs_common;
     ucs_status_t status;
 
-    status = uct_dc_iface_query(&iface->super, iface_attr);
+    status = uct_dc_iface_query(&iface->super, iface_attr,
+                                verbs_common->config.max_inline,
+                                verbs_common->config.max_inline,
+                                verbs_common->config.short_desc_size,
+                                uct_ib_iface_get_max_iov(&iface->super.super.super) - 1);
     if (status != UCS_OK) {
         return status;
     }
 
-    uct_rc_verbs_iface_common_query(&iface->verbs_common,
-                                    &iface->super.super, iface_attr);
+    iface_attr->overhead       = 75e-9; /* Software overhead */
     iface_attr->iface_addr_len = sizeof(uct_dc_verbs_iface_addr_t);
+
     return UCS_OK;
 }
 
@@ -787,9 +792,9 @@ ssize_t uct_dc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
 
-    UCT_RC_VERBS_FILL_TM_IMM(wr, imm, app_ctx, wr.exp_opcode,
-                             wr.ex.imm_data, IBV_EXP);
-    UCT_RC_VERBS_GET_TM_BCOPY_DESC(&iface->super.super,
+    UCT_RC_IFACE_FILL_TM_IMM(imm, app_ctx, wr.ex.imm_data, wr.exp_opcode,
+                             IBV_EXP_WR_SEND, _WITH_IMM);
+    UCT_RC_IFACE_GET_TM_BCOPY_DESC(&iface->super.super,
                                    &iface->super.super.tx.mp, desc,
                                    tag, app_ctx, pack_cb, arg, length);
     UCT_RC_VERBS_FILL_SGE(wr, sge, length + sizeof(struct ibv_exp_tmh));
@@ -821,8 +826,8 @@ ucs_status_t uct_dc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge + 1, iov, iovcnt);
 
-    UCT_RC_VERBS_FILL_TM_IMM(wr, imm, app_ctx, wr.exp_opcode,
-                             wr.ex.imm_data, IBV_EXP);
+    UCT_RC_IFACE_FILL_TM_IMM(imm, app_ctx, wr.ex.imm_data, wr.exp_opcode,
+                             IBV_EXP_WR_SEND, _WITH_IMM);
     UCT_RC_VERBS_GET_TM_ZCOPY_DESC(&iface->super.super,
                                    &iface->verbs_common.short_desc_mp,
                                    desc, tag, app_ctx, comp, &send_flags,
@@ -992,11 +997,11 @@ uct_dc_verbs_iface_tag_init(uct_dc_verbs_iface_t *iface,
             return status;
         }
 
-        iface->verbs_common.progress   = uct_dc_verbs_iface_progress_tm;
+        iface->super.super.progress = uct_dc_verbs_iface_progress_tm;
     } else
 #endif
     {
-        iface->verbs_common.progress = uct_dc_verbs_iface_progress;
+        iface->super.super.progress = uct_dc_verbs_iface_progress;
     }
 
     return UCS_OK;
@@ -1056,19 +1061,6 @@ uct_dc_verbs_iface_event_arm(uct_iface_h tl_iface, unsigned events)
                                          UCT_RC_IFACE_TM_ENABLED(iface));
 }
 
-static void uct_dc_verbs_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
-{
-    uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_verbs_iface_t);
-    uct_rc_verbs_iface_common_progress_enable(&iface->verbs_common,
-                                              &iface->super.super, flags);
-}
-
-static unsigned uct_dc_verbs_iface_do_progress(uct_iface_h tl_iface)
-{
-    uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_verbs_iface_t);
-    return iface->verbs_common.progress(iface);
-}
-
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t)(uct_iface_t*);
 
 static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
@@ -1109,9 +1101,9 @@ static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
 #endif
     .iface_flush              = uct_dc_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = uct_dc_verbs_iface_progress_enable,
+    .iface_progress_enable    = uct_rc_verbs_iface_common_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
-    .iface_progress           = uct_dc_verbs_iface_do_progress,
+    .iface_progress           = uct_rc_iface_do_progress,
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
     .iface_event_arm          = uct_dc_verbs_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t),

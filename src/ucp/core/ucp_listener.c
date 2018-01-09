@@ -22,15 +22,45 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     return 0;
 }
 
-static ssize_t ucp_listener_conn_request_callback(void *arg, const void *conn_priv_data,
-                                                  size_t length, void *reply_priv_data)
+static int ucp_listener_remove_filter(const ucs_callbackq_elem_t *elem,
+                                      void *arg)
 {
-    ucp_listener_h listener = arg;
+    ucp_listener_h *listener = elem->arg;
+
+    return (elem->cb == ucp_listener_conn_request_progress) && (listener == arg);
+}
+
+static ucs_status_t ucp_listener_conn_request_callback(void *arg,
+                                                       const void *conn_priv_data,
+                                                       size_t length)
+{
+    const ucp_wireup_sockaddr_priv_t *client_data = conn_priv_data;
+    ucp_listener_h listener                       = arg;
     ucp_listener_accept_t *accept;
+    uct_worker_cb_id_t prog_id;
+    ucp_ep_params_t params;
     ucs_status_t status;
-    int prog_id;
+    ucp_ep_h ep;
 
     ucs_trace("listener %p: got connection request", listener);
+
+    params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                        UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    params.err_mode   = client_data->err_mode;
+    params.address    = (ucp_address_t*)(client_data + 1);
+
+    /* create endpoint to the worker address we got in the private data */
+    status = ucp_ep_create_to_worker_addr(listener->wiface.worker, &params,
+                                          "listener", &ep);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    /* send wireup request message, to connect the client to the new endpoint */
+    status = ucp_wireup_send_request(ep, client_data->ep_uuid);
+    if (status != UCS_OK) {
+        goto err_destroy_ep;
+    }
 
     /* if user provided a callback for accepting new connection, launch it on
      * the main thread
@@ -40,11 +70,11 @@ static ssize_t ucp_listener_conn_request_callback(void *arg, const void *conn_pr
         if (accept == NULL) {
             ucs_error("failed to allocate listener accept context");
             status = UCS_ERR_NO_MEMORY;
-            return status;
+            goto err_destroy_ep;
         }
 
         accept->listener = listener;
-        accept->ep       = NULL; /* TODO create and wireup an endpoint */
+        accept->ep       = ep;
 
         /* defer user callback to be invoked from the main thread */
         prog_id = UCS_CALLBACKQ_ID_NULL;
@@ -54,12 +84,17 @@ static ssize_t ucp_listener_conn_request_callback(void *arg, const void *conn_pr
                                           &prog_id);
     }
 
-    return 0;
+    return UCS_OK;
+
+err_destroy_ep:
+    ucp_ep_destroy_internal(ep);
+err:
+    return status;
 }
 
-ucs_status_t ucp_worker_listen(ucp_worker_h worker,
-                               const ucp_worker_listener_params_t *params,
-                               ucp_listener_h *listener_p)
+ucs_status_t ucp_listener_create(ucp_worker_h worker,
+                                 const ucp_listener_params_t *params,
+                                 ucp_listener_h *listener_p)
 {
     ucp_context_h context = worker->context;
     ucp_tl_resource_desc_t *resource;
@@ -73,7 +108,7 @@ ucs_status_t ucp_worker_listen(ucp_worker_h worker,
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
     UCS_ASYNC_BLOCK(&worker->async);
 
-    if (!(params->field_mask & UCP_WORKER_LISTENER_PARAM_FIELD_SOCK_ADDR)) {
+    if (!(params->field_mask & UCP_LISTENER_PARAM_FIELD_SOCK_ADDR)) {
         ucs_error("Missing sockaddr for listener");
         status = UCS_ERR_INVALID_PARAM;
         goto out;
@@ -101,10 +136,10 @@ ucs_status_t ucp_worker_listen(ucp_worker_h worker,
             goto out;
         }
 
-        if (params->field_mask & UCP_WORKER_LISTENER_PARAM_FIELD_CALLBACK) {
-            UCP_CHECK_PARAM_NON_NULL(params->ep_accept_handler.cb, status, goto err_free);
-            listener->cb  = params->ep_accept_handler.cb;
-            listener->arg = params->ep_accept_handler.arg;
+        if (params->field_mask & UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER) {
+            UCP_CHECK_PARAM_NON_NULL(params->accept_handler.cb, status, goto err_free);
+            listener->cb  = params->accept_handler.cb;
+            listener->arg = params->accept_handler.arg;
         } else {
             listener->cb  = NULL;
         }
@@ -142,12 +177,13 @@ out:
     return status;
 }
 
-ucs_status_t ucp_listener_destroy(ucp_listener_h listener)
+void ucp_listener_destroy(ucp_listener_h listener)
 {
     ucs_trace("listener %p: destroying", listener);
 
-    /* TODO remove pending slow-path progress */
+    /* remove pending slow-path progress in case it wasn't removed yet */
+    ucs_callbackq_remove_if(&listener->wiface.worker->uct->progress_q,
+                            ucp_listener_remove_filter, listener);
     ucp_worker_iface_cleanup(&listener->wiface);
     ucs_free(listener);
-    return UCS_OK;
 }

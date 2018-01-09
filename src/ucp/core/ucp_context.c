@@ -182,8 +182,8 @@ static ucs_config_field_t ucp_config_table[] = {
 };
 
 static ucp_tl_alias_t ucp_tl_aliases[] = {
-  { "sm",    { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
-  { "shm",   { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
+  { "sm",    { "mm", "knem", "cma", NULL } },
+  { "shm",   { "mm", "knem", "cma", NULL } },
   { "ib",    { "rc", "ud", "dc", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", NULL } },
   { "ud",    { "ud", "rdmacm", NULL } },
   { "ud_x",  { "ud_mlx5", "rdmacm", NULL } },
@@ -380,12 +380,26 @@ static void ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_tl_md_t *m
                                            uint8_t flags, unsigned *num_resources_p,
                                            uint64_t *masks)
 {
+    ucp_rsc_index_t dev_index, i;
+
     if (ucp_is_resource_enabled(resource, config, masks, &flags)) {
         context->tl_rscs[context->num_tls].tl_rsc       = *resource;
         context->tl_rscs[context->num_tls].md_index     = md_index;
         context->tl_rscs[context->num_tls].tl_name_csum =
                                   ucs_crc16_string(resource->tl_name);
         context->tl_rscs[context->num_tls].flags        = flags;
+
+        dev_index = 0;
+        for (i = 0; i < context->num_tls; ++i) {
+            if (!strcmp(context->tl_rscs[i].tl_rsc.dev_name, resource->dev_name)) {
+                dev_index = context->tl_rscs[i].dev_index;
+                break;
+            } else {
+                dev_index = ucs_max(context->tl_rscs[i].dev_index + 1, dev_index);
+            }
+        }
+        context->tl_rscs[context->num_tls].dev_index = dev_index;
+
         ++context->num_tls;
         ++(*num_resources_p);
     }
@@ -1079,17 +1093,20 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
     fprintf(stream, "#\n");
 
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
-        fprintf(stream, "#                   md[%d]:  %s\n",
+        fprintf(stream, "#            md %-2d :  %s\n",
                 md_index, context->tl_mds[md_index].rsc.md_name);
     }
 
     fprintf(stream, "#\n");
 
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-        fprintf(stream, "#    resource[%2d] / md[%d]:  "UCT_TL_RESOURCE_DESC_FMT"\n",
-                rsc_index, context->tl_rscs[rsc_index].md_index,
-                UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc)
-                );
+        ucp_tl_resource_desc_t *rsc = &context->tl_rscs[rsc_index];
+        fprintf(stream, "#      resource %-2d :  md %-2d dev %-2d flags %c%c "
+                UCT_TL_RESOURCE_DESC_FMT"\n",
+                rsc_index, rsc->md_index, rsc->dev_index,
+                (rsc->flags & UCP_TL_RSC_FLAG_AUX)      ? 'a' : '-',
+                (rsc->flags & UCP_TL_RSC_FLAG_SOCKADDR) ? 's' : '-',
+                UCT_TL_RESOURCE_DESC_ARG(&rsc->tl_rsc));
     }
 
     fprintf(stream, "#\n");
