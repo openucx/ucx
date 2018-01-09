@@ -229,89 +229,11 @@ ucp_tag_offload_do_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
     ucp_worker_t *worker   = req->recv.worker;
     ucp_context_t *context = worker->context;
     size_t length          = req->recv.length;
-   ucp_mem_desc_t *rdesc  = NULL;
+    ucp_mem_desc_t *rdesc  = NULL;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
     ucp_rsc_index_t mdi;
     uct_iov_t iov;
-
-     wiface = ucp_tag_offload_iface(worker, req->recv.tag.tag);
-     if (ucs_unlikely(wiface == NULL)) {
-         UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_NO_IFACE);
-         return UCS_ERR_NO_RESOURCE;
-     }
-
-     mdi = context->tl_rscs[wiface->rsc_index].md_index;
-
-     if (ucs_unlikely(length >= worker->tm.offload.zcopy_thresh)) {
-         if (length > wiface->attr.cap.tag.recv.max_zcopy) {
-             /* Post maximum allowed length. If sender sends smaller message
-              * (which is allowed per MPI standard), max recv should fit it.
-              * Otherwise sender will send SW RNDV req, which is small enough. */
-             ucs_assert(wiface->attr.cap.tag.rndv.max_zcopy <=
-                        wiface->attr.cap.tag.recv.max_zcopy);
-
-             length = wiface->attr.cap.tag.recv.max_zcopy;
-         }
-
-         status = ucp_request_memory_reg(context, UCS_BIT(mdi), req->recv.buffer,
-                                         length, req->recv.datatype,
-                                         &req->recv.state, req);
-         if (status != UCS_OK) {
-             return status;
-         }
-
-         req->recv.rdesc = NULL;
-         iov.buffer      = (void*)req->recv.buffer;
-         iov.memh        = req->recv.state.dt.contig.memh[0];
-     } else {
-         rdesc = ucp_worker_mpool_get(worker);
-         if (rdesc == NULL) {
-             return UCS_ERR_NO_MEMORY;
-         }
-
-         iov.memh        = ucp_memh2uct(rdesc->memh, mdi);
-         iov.buffer      = rdesc + 1;
-         req->recv.rdesc = rdesc;
-     }
-
-     iov.length = length;
-     iov.count  = 1;
-     iov.stride = 0;
-
-     req->recv.uct_ctx.tag_consumed_cb = ucp_tag_offload_tag_consumed;
-     req->recv.uct_ctx.completed_cb    = ucp_tag_offload_completed;
-     req->recv.uct_ctx.rndv_cb         = ucp_tag_offload_rndv_cb;
-
-     status = uct_iface_tag_recv_zcopy(wiface->iface, req->recv.tag.tag,
-                                       req->recv.tag.tag_mask, &iov, 1,
-                                       &req->recv.uct_ctx);
-     if (status != UCS_OK) {
-         /* No more matching entries in the transport. */
-         ucp_tag_offload_release_buf(req);
-         UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_TAG_EXCEED);
-         return status;
-     }
-
-     UCP_WORKER_STAT_TAG_OFFLOAD(worker, POSTED);
-     req->flags          |= UCP_REQUEST_FLAG_OFFLOADED;
-     req->recv.tag.wiface = wiface;
-     ++wiface->post_count;
-     ucs_trace_req("recv request %p (%p) was posted to transport (rsc %d)",
-                   req, req + 1, wiface->rsc_index);
-     return UCS_OK;
-
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_tag_offload_post_sw_reqs(ucp_request_t *req, ucp_request_queue_t *req_queue)
-{
-    ucp_worker_t *worker = req->recv.worker;
-    ucs_queue_iter_t iter;
-    ucs_status_t status;
-    ucp_request_t *req_e;
-    ucp_worker_iface_t *wiface;
-    size_t max_post;
 
     wiface = ucp_tag_offload_iface(worker, req->recv.tag.tag);
     if (ucs_unlikely(wiface == NULL)) {
@@ -319,7 +241,92 @@ ucp_tag_offload_post_sw_reqs(ucp_request_t *req, ucp_request_queue_t *req_queue)
         return UCS_ERR_NO_RESOURCE;
     }
 
-    max_post = wiface->attr.cap.tag.recv.max_outstanding - wiface->post_count;
+    mdi = context->tl_rscs[wiface->rsc_index].md_index;
+
+    if (ucs_unlikely(length >= worker->tm.offload.zcopy_thresh)) {
+        if (length > wiface->attr.cap.tag.recv.max_zcopy) {
+            /* Post maximum allowed length. If sender sends smaller message
+             * (which is allowed per MPI standard), max recv should fit it.
+             * Otherwise sender will send SW RNDV req, which is small enough. */
+            ucs_assert(wiface->attr.cap.tag.rndv.max_zcopy <=
+                       wiface->attr.cap.tag.recv.max_zcopy);
+
+            length = wiface->attr.cap.tag.recv.max_zcopy;
+        }
+
+        status = ucp_request_memory_reg(context, UCS_BIT(mdi), req->recv.buffer,
+                                        length, req->recv.datatype,
+                                        &req->recv.state, req);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        req->recv.tag.rdesc = NULL;
+        iov.buffer          = (void*)req->recv.buffer;
+        iov.memh            = req->recv.state.dt.contig.memh[0];
+    } else {
+        rdesc = ucp_worker_mpool_get(worker);
+        if (rdesc == NULL) {
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        iov.memh            = ucp_memh2uct(rdesc->memh, mdi);
+        iov.buffer          = rdesc + 1;
+        req->recv.tag.rdesc = rdesc;
+    }
+
+    iov.length = length;
+    iov.count  = 1;
+    iov.stride = 0;
+
+    req->recv.uct_ctx.tag_consumed_cb = ucp_tag_offload_tag_consumed;
+    req->recv.uct_ctx.completed_cb    = ucp_tag_offload_completed;
+    req->recv.uct_ctx.rndv_cb         = ucp_tag_offload_rndv_cb;
+
+    status = uct_iface_tag_recv_zcopy(wiface->iface, req->recv.tag.tag,
+                                      req->recv.tag.tag_mask, &iov, 1,
+                                      &req->recv.uct_ctx);
+    if (status != UCS_OK) {
+        /* No more matching entries in the transport. */
+        ucp_tag_offload_release_buf(req);
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_TAG_EXCEED);
+        return status;
+    }
+
+    UCP_WORKER_STAT_TAG_OFFLOAD(worker, POSTED);
+    req->flags          |= UCP_REQUEST_FLAG_OFFLOADED;
+    req->recv.tag.wiface = wiface;
+    ++wiface->post_count;
+    ucs_trace_req("recv request %p (%p) was posted to transport (rsc %d)",
+                  req, req + 1, wiface->rsc_index);
+    return UCS_OK;
+}
+
+/**
+ * @brief Offload all pending non-offloaded requests
+ *
+ * This routine tries to offload all pending non-offloaded requests on the
+ * specific queue of expected requests.
+ *
+ *
+ * @param [in]  req         Receive request being processed.
+ * @param [in]  req_queue   Specific request queue from the expected queues hash,
+ *                          which corresponds to the 'req' request tag.
+ * .
+ *
+ * @return 0 - Some (or all) pending requests can't be offloaded to the transport.
+ *         1 - All pending requests on the specific queue were offloaded to
+ *             the transport.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_tag_offload_post_sw_reqs(ucp_request_t *req, ucp_request_queue_t *req_queue)
+{
+    ucp_worker_t *worker = req->recv.worker;
+    ucs_queue_iter_t iter;
+    ucs_status_t status;
+    ucp_request_t *req_exp;
+    ucp_worker_iface_t *wiface;
+    size_t max_post;
 
     /* If large enough buffer is being posted to the transport,
      * try to post all unposted requests from the same TM queue before.
@@ -330,22 +337,33 @@ ucp_tag_offload_post_sw_reqs(ucp_request_t *req, ucp_request_queue_t *req_queue)
      * 3. Transport tag list is big enough to fit all unposted requests plus
      *    the one being posted */
     if ((req->recv.length < worker->context->config.ext.tm_force_thresh) ||
-        req_queue->block_count                                           ||
-        (req_queue->sw_count >= max_post)) {
+        req_queue->block_count) {
         return 0;
     }
 
-    ucs_queue_for_each_safe(req_e, iter, &req_queue->queue, recv.queue) {
-        if (!(req_e->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
-            ucs_assert(req->recv.state.offset == 0);
-            ucs_assert(req_e != req);
-            status = ucp_tag_offload_do_post(req_e, req_queue);
-            if (status != UCS_OK) {
-                return 0;
-            }
-            --req_queue->sw_count;
-            --worker->tm.expected.sw_all_count;
+    wiface = ucp_tag_offload_iface(worker, req->recv.tag.tag);
+    if (ucs_unlikely(wiface == NULL)) {
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_NO_IFACE);
+        return 0;
+    }
+
+    max_post = wiface->attr.cap.tag.recv.max_outstanding - wiface->post_count;
+
+    if (req_queue->sw_count >= max_post) {
+        return 0;
+    }
+
+    ucs_queue_for_each_safe(req_exp, iter, &req_queue->queue, recv.queue) {
+        if (req_exp->flags & UCP_REQUEST_FLAG_OFFLOADED) {
+            continue;
         }
+        ucs_assert(req_exp != req);
+        status = ucp_tag_offload_do_post(req_exp, req_queue);
+        if (status != UCS_OK) {
+            return 0;
+        }
+        --req_queue->sw_count;
+        --worker->tm.expected.sw_all_count;
     }
 
     return 1;
@@ -373,13 +391,11 @@ int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
             UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_SW_PEND);
             return 0;
         }
-    } else if (req_queue->sw_count || worker->tm.expected.wildcard.sw_count) {
-        if (worker->tm.expected.wildcard.sw_count ||
-            !ucp_tag_offload_post_sw_reqs(req, req_queue)) {
-            /* There are some requests which must be completed in SW */
-            UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_SW_PEND);
-            return 0;
-        }
+    } else if (worker->tm.expected.wildcard.sw_count ||
+               (req_queue->sw_count && !ucp_tag_offload_post_sw_reqs(req, req_queue))) {
+        /* There are some requests which must be completed in SW */
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_SW_PEND);
+        return 0;
     }
 
     if (ucp_tag_offload_do_post(req, req_queue) != UCS_OK) {

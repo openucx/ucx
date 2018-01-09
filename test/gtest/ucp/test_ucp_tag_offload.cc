@@ -178,7 +178,8 @@ UCS_TEST_P(test_ucp_tag_offload, post_dif_buckets)
     }
 }
 
-UCS_TEST_P(test_ucp_tag_offload, force_thresh_basic, "TM_FORCE_THRESH=4096")
+UCS_TEST_P(test_ucp_tag_offload, force_thresh_basic, "TM_FORCE_THRESH=4096",
+                                                     "TM_THRESH=1024")
 {
     uint64_t small_val      = 0xFAFA;
     const size_t big_size   = 5000;
@@ -215,7 +216,8 @@ UCS_TEST_P(test_ucp_tag_offload, force_thresh_basic, "TM_FORCE_THRESH=4096")
     }
 }
 
-UCS_TEST_P(test_ucp_tag_offload, force_thresh_blocked, "TM_FORCE_THRESH=4096")
+UCS_TEST_P(test_ucp_tag_offload, force_thresh_blocked, "TM_FORCE_THRESH=4096",
+                                                       "TM_THRESH=1024")
 {
     uint64_t small_val      = 0xFAFA;
     const size_t big_size   = 5000;
@@ -248,8 +250,8 @@ UCS_TEST_P(test_ucp_tag_offload, force_thresh_blocked, "TM_FORCE_THRESH=4096")
     // Check that offload is not forced while there are uncompleted blocking
     // SW requests with the same tag
     for (i = 0; i < 2; ++i) {
-        req = recv_nb(&recvbuf_big[0], recvbuf_big.size(), DATATYPE, tag,
-                      UCP_TAG_MASK_FULL);
+        req = recv_nb_and_check(&recvbuf_big[0], recvbuf_big.size(), DATATYPE, tag,
+                                UCP_TAG_MASK_FULL);
         EXPECT_EQ(num_reqs - i, receiver().worker()->tm.expected.sw_all_count);
         req_cancel(receiver(), req);
 
