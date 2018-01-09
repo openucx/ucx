@@ -49,6 +49,8 @@ public:
     typedef ucs_status_t (test_tag::*send_func)(entity&, send_ctx&);
 
     void init() {
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_TM_ENABLE", "y"));
+
         uct_test::init();
 
         uct_iface_params params;
@@ -651,3 +653,4 @@ UCS_TEST_P(test_tag, sw_rndv_unexpected)
 
 _UCT_INSTANTIATE_TEST_CASE(test_tag, rc)
 _UCT_INSTANTIATE_TEST_CASE(test_tag, dc)
+_UCT_INSTANTIATE_TEST_CASE(test_tag, rc_mlx5)

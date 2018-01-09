@@ -21,6 +21,7 @@ public:
     {
         // TODO: Remove this when DC TM is enabled by default
         m_env.push_back(new ucs::scoped_setenv("UCX_DC_VERBS_TM_ENABLE", "y"));
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_MLX5_TM_ENABLE", "y"));
         modify_config("TM_OFFLOAD", "y");
         modify_config("TM_THRESH" , "1024");
 
@@ -203,6 +204,7 @@ public:
         std::vector<std::string> tls;
         tls.push_back("rc");
         tls.push_back("dc");
+        tls.push_back("rc_x");
         ucp_test_param params = GetParam();
 
         for (std::vector<std::string>::const_iterator i = tls.begin();
@@ -278,4 +280,4 @@ UCS_TEST_P(test_ucp_tag_offload_multi, recv_from_multi)
     post_recv_and_check(e(2), 0u, tag + 1, UCP_TAG_MASK_FULL);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, rcdc, "\\rc,\\dc,\\ud")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, rcdc, "\\rc,\\dc,\\ud,rc_x")
