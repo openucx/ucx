@@ -197,6 +197,7 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface,
 {
 #if IBV_EXP_HW_TM
     if (UCT_RC_IFACE_TM_ENABLED(rc_iface)) {
+        uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_wq.super);
         ucs_free(iface->tm.list);
         ucs_free(iface->tm.cmd_wq.ops);
     }
