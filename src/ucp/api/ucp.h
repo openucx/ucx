@@ -1566,9 +1566,8 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  *
  * @return NULL             - The endpoint is modified successfully.
  * @return UCS_PTR_IS_ERR(_ptr) - The reconfiguration failed and an error code
- *                                indicates the status. However, resources are
- *                                released and the @a endpoint can no longer be
- *                                used.
+ *                                indicates the status. However, the @a endpoint
+ *                                is not modified and can be used further.
  * @return otherwise        - The reconfiguration process is started, and can be
  *                            completed at any point in time. A request handle
  *                            is returned to the application in order to track
