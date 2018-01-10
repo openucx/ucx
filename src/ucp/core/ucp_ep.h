@@ -85,6 +85,9 @@ typedef struct ucp_ep_config_key {
     /* Lanes for atomic operations, sorted by priority, highest first */
     ucp_lane_index_t       amo_lanes[UCP_MAX_LANES];
 
+    /* Lanes for high-bw active messages, sorted by priority, highest first */
+    ucp_lane_index_t       am_bw_lanes[UCP_MAX_LANES];
+
     /* Local memory domains to send remote keys for in high-bw rma protocols
      * NOTE: potentially it can be different than what is imposed by rma_bw_lanes,
      * since these are the MDs used by remote side for accessing our memory. */

@@ -49,6 +49,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->reachable_md_map = 0;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     key->status           = UCS_OK;
+    memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->rma_bw_lanes, UCP_NULL_LANE, sizeof(key->rma_bw_lanes));
     memset(key->amo_lanes,    UCP_NULL_LANE, sizeof(key->amo_lanes));
@@ -186,6 +187,10 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
     key.am_lane               = 0;
     key.wireup_lane           = 0;
     key.tag_lane              = 0;
+    key.am_bw_lanes[0]        = 0;
+    key.rma_lanes[0]          = 0;
+    key.rma_bw_lanes[0]       = 0;
+    key.amo_lanes[0]          = 0;
 
     ep->cfg_index        = ucp_worker_get_ep_config(worker, &key);
     ep->am_lane          = 0;
@@ -577,6 +582,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
 
     if ((key1->num_lanes        != key2->num_lanes)                                ||
         memcmp(key1->rma_lanes,    key2->rma_lanes,    sizeof(key1->rma_lanes))    ||
+        memcmp(key1->am_bw_lanes,  key2->am_bw_lanes,  sizeof(key1->am_bw_lanes))  ||
         memcmp(key1->rma_bw_lanes, key2->rma_bw_lanes, sizeof(key1->rma_bw_lanes)) ||
         memcmp(key1->amo_lanes,    key2->amo_lanes,    sizeof(key1->amo_lanes))    ||
         (key1->rma_bw_md_map    != key2->rma_bw_md_map)                            ||
@@ -1087,6 +1093,12 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
 
     if (key->am_lane == lane) {
         snprintf(p, endp - p, " am");
+        p += strlen(p);
+    }
+
+    prio = ucp_ep_config_get_multi_lane_prio(key->am_bw_lanes, lane);
+    if (prio != -1) {
+        snprintf(p, endp - p, " am_bw#%d", prio);
         p += strlen(p);
     }
 

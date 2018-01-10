@@ -380,6 +380,36 @@ out:
     return UCS_OK;
 }
 
+static void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane,
+                                   uct_ep_h uct_ep, const char *info)
+{
+    /* If ep already exists, it's a wireup proxy, and we need to update its
+     * next_ep instead of replacing it.
+     */
+    if (ep->uct_eps[lane] == NULL) {
+        ucs_trace("ep %p: assign uct_ep[%d]=%p%s", ep, lane, uct_ep, info);
+        ep->uct_eps[lane] = uct_ep;
+    } else {
+        ucs_assert(ucp_wireup_ep_test(ep->uct_eps[lane]));
+        ucs_trace("ep %p: wireup uct_ep[%d]=%p next set to %p%s", ep, lane,
+                  ep->uct_eps[lane], uct_ep, info);
+        ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
+        ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
+    }
+}
+
+static uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h uct_ep = ep->uct_eps[lane];
+
+    if ((uct_ep != NULL) && ucp_wireup_ep_test(uct_ep)) {
+        return ucp_wireup_ep_extract_next_ep(uct_ep);
+    } else {
+        ep->uct_eps[lane] = NULL;
+        return uct_ep;
+    }
+}
+
 static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
                                             const ucp_ep_params_t *params,
                                             ucp_lane_index_t lane,
@@ -415,29 +445,11 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
                 /* coverity[leaked_storage] */
                 return status;
             }
-        } else {
-            uct_ep = NULL;
+
+            ucp_wireup_assign_lane(ep, lane, uct_ep, "");
         }
 
         ucp_worker_iface_progress_ep(&worker->ifaces[rsc_index]);
-
-        /* If ep already exists, it's a stub, and we need to update its next_ep
-         * instead of replacing it.
-         */
-        if (ep->uct_eps[lane] == NULL) {
-            /* Create an endpoint which would send the 1st active message as
-             * signaled.
-             */
-            ucs_trace("ep %p: assign uct_ep[%d]=%p", ep, lane, uct_ep);
-            ep->uct_eps[lane] = uct_ep;
-        } else {
-            ucs_assert(ucp_wireup_ep_test(ep->uct_eps[lane]));
-            ucs_trace("ep %p: wireup uct_ep[%d]=%p next set to %p",
-                      ep, lane, ep->uct_eps[lane], uct_ep);
-            ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
-            ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
-        }
-
         return UCS_OK;
     }
 
@@ -447,7 +459,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
      */
     if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
 
-        /* For now, p2p transpors have no reason to have proxy */
+        /* For now, p2p transports have no reason to have proxy */
         ucs_assert_always(proxy_lane == UCP_NULL_LANE);
 
         /* If ep already exists, it's a wireup proxy, and we need to start
@@ -487,17 +499,11 @@ static ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
 {
     ucp_lane_index_t lane, proxy_lane;
     uct_iface_attr_t *iface_attr;
-    uct_ep_h signaling_ep;
+    uct_ep_h uct_ep, signaling_ep;
     ucs_status_t status;
 
     /* point proxy endpoints */
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if ((ep->uct_eps[lane] != NULL) &&
-            ucp_wireup_ep_test(ep->uct_eps[lane]))
-        {
-            continue;
-        }
-
         proxy_lane = ucp_ep_get_proxy_lane(ep, lane);
         if (proxy_lane == UCP_NULL_LANE) {
             continue;
@@ -510,16 +516,33 @@ static ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
         }
 
         /* Create a signaling ep to the proxy lane */
-        status = ucp_signaling_ep_create(ep, ep->uct_eps[proxy_lane],
-                                         proxy_lane == lane, &signaling_ep);
-        if (status != UCS_OK) {
-            /* coverity[leaked_storage] */
-            return status;
+        if (proxy_lane == lane) {
+            /* If proxy is to the same lane, temporarily remove the existing
+             * UCT endpoint in there, so it could be assigned to the signaling
+             * proxy ep. This can also be an endpoint contained inside a wireup
+             * proxy, so ucp_wireup_extract_lane() handles both cases.
+             */
+            uct_ep = ucp_wireup_extract_lane(ep, proxy_lane);
+            ucs_assert_always(uct_ep != NULL);
+            status = ucp_signaling_ep_create(ep, uct_ep, 1, &signaling_ep);
+            if (status != UCS_OK) {
+                /* coverity[leaked_storage] */
+                uct_ep_destroy(uct_ep);
+                return status;
+            }
+        } else {
+            status = ucp_signaling_ep_create(ep, ep->uct_eps[proxy_lane], 0,
+                                             &signaling_ep);
+            if (status != UCS_OK) {
+                /* coverity[leaked_storage] */
+                return status;
+            }
         }
 
-        ucs_trace("ep %p: reassign uct_ep[%d]=%p (signaling proxy to %p)",
-                  ep, lane, signaling_ep, ep->uct_eps[proxy_lane]);
-        ep->uct_eps[lane] = signaling_ep;
+        ucs_trace("ep %p: lane[%d]=%p proxy_lane=%d", ep, lane, ep->uct_eps[lane],
+                  proxy_lane);
+
+        ucp_wireup_assign_lane(ep, lane, signaling_ep, " (signaling proxy)");
     }
 
     return UCS_OK;

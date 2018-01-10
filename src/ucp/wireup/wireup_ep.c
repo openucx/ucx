@@ -483,6 +483,17 @@ void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
     ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1);
 }
 
+uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep)
+{
+    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    uct_ep_h next_ep;
+
+    ucs_assert_always(ucp_wireup_ep_test(uct_ep));
+    next_ep = wireup_ep->super.uct_ep;
+    wireup_ep->super.uct_ep = NULL;
+    return next_ep;
+}
+
 void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep)
 {
     ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
