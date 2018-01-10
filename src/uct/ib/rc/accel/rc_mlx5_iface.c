@@ -228,7 +228,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_mlx5_iface_ops, md, worker,
                               params, &config->super, 0,
-                              sizeof(uct_rc_fc_request_t), 0);
+                              sizeof(uct_rc_fc_request_t), IBV_EXP_TM_CAP_RC);
 
 
     self->tx.bb_max                  = ucs_min(config->tx_max_bb, UINT16_MAX);
@@ -246,6 +246,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     }
 
     status = uct_rc_mlx5_iface_common_init(&self->mlx5_common, &self->super, &config->super);
+    if (status != UCS_OK) {
+        uct_rc_mlx5_iface_common_tag_cleanup(&self->mlx5_common, &self->super);
+        return status;
+    }
+
     /* Set max_iov for put_zcopy and get_zcopy */
     uct_ib_iface_set_max_iov(&self->super.super,
                              ((UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB) -
@@ -253,7 +258,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
                              sizeof(struct mlx5_wqe_ctrl_seg)) /
                              sizeof(struct mlx5_wqe_data_seg));
 
-    return status;
+    return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
@@ -300,7 +305,12 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_get_address           = uct_rc_ep_get_address,
     .ep_connect_to_ep         = uct_rc_ep_connect_to_ep,
 #if IBV_EXP_HW_TM
+    .ep_tag_eager_short       = uct_rc_mlx5_ep_tag_eager_short,
     .ep_tag_eager_bcopy       = uct_rc_mlx5_ep_tag_eager_bcopy,
+    .ep_tag_eager_zcopy       = uct_rc_mlx5_ep_tag_eager_zcopy,
+    .ep_tag_rndv_zcopy        = uct_rc_mlx5_ep_tag_rndv_zcopy,
+    .ep_tag_rndv_request      = uct_rc_mlx5_ep_tag_rndv_request,
+    .ep_tag_rndv_cancel       = uct_rc_ep_tag_rndv_cancel,
     .iface_tag_recv_zcopy     = uct_rc_mlx5_iface_tag_recv_zcopy,
     .iface_tag_recv_cancel    = uct_rc_mlx5_iface_tag_recv_cancel,
 #endif
