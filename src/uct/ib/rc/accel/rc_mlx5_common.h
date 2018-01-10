@@ -15,6 +15,7 @@
 
 
 #define UCT_RC_MLX5_OPCODE_FLAG_RAW   0x100
+#define UCT_RC_MLX5_OPCODE_FLAG_TM    0x200
 #define UCT_RC_MLX5_OPCODE_MASK       0xff
 
 #define UCT_RC_MLX5_CHECK_AM_ZCOPY(_id, _header_length, _length, _seg_size, _av_size) \
@@ -742,8 +743,8 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, enum ibv_qp_type qp_t
         break;
 
 #if IBV_EXP_HW_TM
-    case MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_RAW:
-    case MLX5_OPCODE_SEND_IMM|UCT_RC_MLX5_OPCODE_FLAG_RAW:
+    case MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_TM:
+    case MLX5_OPCODE_SEND_IMM|UCT_RC_MLX5_OPCODE_FLAG_TM:
         inl_seg_size     = ucs_align_up_pow2(sizeof(*inl) + sizeof(struct ibv_exp_tmh),
                                              UCT_IB_MLX5_WQE_SEG_SIZE);
         inl              = next_seg;
@@ -853,13 +854,14 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type
 
     ucs_assert((opcode == MLX5_OPCODE_SEND_IMM) || (opcode == MLX5_OPCODE_SEND));
 
-    if (tm_op == IBV_EXP_TMH_EAGER) {
+    switch (tm_op) {
+    case IBV_EXP_TMH_EAGER:
         wqe_size         = ctrl_av_size + sizeof(*inl) + sizeof(*tmh) + length;
         inl->byte_count  = htonl((length + sizeof(*tmh)) | MLX5_INLINE_SEG);
         data             = tmh + 1;
-    } else {
-        ucs_assert(tm_op == IBV_EXP_TMH_RNDV);
+        break;
 
+    case IBV_EXP_TMH_RNDV:
         wqe_size         = ctrl_av_size + sizeof(*inl) + sizeof(*tmh) +
                            sizeof(rvh) + length;
         inl->byte_count  = htonl((length + sizeof(*tmh) + sizeof(rvh)) |
@@ -872,7 +874,13 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type
         if (ucs_unlikely(data >= txwq->qend)) {
             data -= (txwq->qend - txwq->qstart);
         }
+        break;
+
+    default:
+        ucs_fatal("Invalid tag opcode: %d", tm_op);
+        break;
     }
+
     ucs_assert(wqe_size <= (UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB));
 
     uct_rc_iface_fill_tmh(tmh, tag, app_ctx, tm_op);
