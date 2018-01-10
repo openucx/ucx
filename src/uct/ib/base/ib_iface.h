@@ -304,13 +304,6 @@ static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
         VALGRIND_MAKE_MEM_DEFINED(_hdr, _wc[i].byte_len); \
                1; }); ++_i)
 
-#define UCT_IB_IFACE_VERBS_FOREACH_TXWQE(_iface, _i, _wc, _wc_count) \
-    for (_i = 0; _i < _wc_count && ({ \
-        if (ucs_unlikely(_wc[i].status != IBV_WC_SUCCESS)) { \
-            UCT_IB_IFACE_VERBS_COMPLETION_ERR("send", _iface, _i, _wc); \
-        } \
-               1; }); ++_i)
-
 /**
  * Fill ibv_sge data structure by data provided in uct_iov_t
  * The function avoids copying IOVs with zero length
