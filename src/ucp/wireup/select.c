@@ -121,6 +121,12 @@ static int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_inde
                                   ae->iface_addr);
 }
 
+static int ucp_is_ep_mem_type(const ucp_ep_params_t *params)
+{
+    return ((params->field_mask & UCP_EP_PARAM_FIELD_FLAGS) &&
+            (params->flags & UCP_EP_PARAMS_FLAGS_MEM_TYPE));
+}
+
 /**
  * Select a local and remote transport
  */
@@ -637,18 +643,25 @@ static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, const ucp_ep_params_t 
 {
     ucp_wireup_criteria_t criteria;
 
-    if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_RMA)) {
+    if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_RMA) &&
+        !(ucp_is_ep_mem_type(params))) {
         return UCS_OK;
     }
 
     criteria.title              = "remote %s memory access";
     criteria.local_md_flags     = 0;
     criteria.remote_md_flags    = 0;
-    criteria.remote_iface_flags = UCT_IFACE_FLAG_PUT_SHORT |
-                                  UCT_IFACE_FLAG_PUT_BCOPY |
-                                  UCT_IFACE_FLAG_GET_BCOPY;
-    criteria.local_iface_flags  = criteria.remote_iface_flags |
-                                  UCT_IFACE_FLAG_PENDING;
+
+    if (ucp_is_ep_mem_type(params)) {
+        criteria.remote_iface_flags = UCT_IFACE_FLAG_PUT_SHORT;
+        criteria.local_iface_flags  = criteria.remote_iface_flags;
+    } else {
+        criteria.remote_iface_flags = UCT_IFACE_FLAG_PUT_SHORT |
+                                      UCT_IFACE_FLAG_PUT_BCOPY |
+                                      UCT_IFACE_FLAG_GET_BCOPY;
+        criteria.local_iface_flags  = criteria.remote_iface_flags |
+                                      UCT_IFACE_FLAG_PENDING;
+    }
     criteria.calc_score         = ucp_wireup_rma_score_func;
     criteria.tl_rsc_flags       = 0;
     ucp_wireup_fill_ep_params_criteria(&criteria, params);
@@ -753,6 +766,10 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
     int need_am;
     uint32_t usage;
 
+    if (ucp_is_ep_mem_type(params)) {
+        return UCS_OK;
+    }
+
     /* Check if we need active messages, for wireup */
     if (!(ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | UCP_FEATURE_STREAM))) {
         need_am = 0;
@@ -822,11 +839,14 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
         /* if needed for RMA, need also access for remote allocated memory */
         criteria.remote_md_flags = criteria.local_md_flags = 0;
     } else {
-        if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG)) {
+        if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) &&
+            !(ucp_is_ep_mem_type(params))) {
             return UCS_OK;
         }
         /* if needed for RNDV, need only access for remote registered memory */
-        criteria.remote_md_flags = criteria.local_md_flags = UCT_MD_FLAG_REG;
+        if (!(ucp_is_ep_mem_type(params))) {
+            criteria.remote_md_flags = criteria.local_md_flags = UCT_MD_FLAG_REG;
+        }
     }
 
     criteria.title              = "high-bw remote %s memory access";

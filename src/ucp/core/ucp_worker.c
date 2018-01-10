@@ -780,6 +780,9 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         }
     }
 
+    worker->mem_type_tls[context->tl_mds[resource->md_index].
+                         attr.cap.mem_type] |= UCS_BIT(tl_id);
+
     return UCS_OK;
 
 out_close_iface:
@@ -1146,6 +1149,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     /* Open all resources as interfaces on this worker */
     status = ucp_worker_add_resource_ifaces(worker);
+    if (status != UCS_OK) {
+        goto err_close_ifaces;
+    }
+
+    /* create mem type endponts */
+    status = ucp_worker_create_mem_type_endpoints(worker);;
     if (status != UCS_OK) {
         goto err_close_ifaces;
     }
