@@ -417,8 +417,7 @@ static ucs_status_t uct_gdr_copy_md_open(const char *md_name,
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = md;
         rcache_params.ops                = &uct_gdr_copy_rcache_ops;
-        status = ucs_rcache_create(&rcache_params, "gdr_copy"
-                                   UCS_STATS_ARG(NULL), &md->rcache);
+        status = ucs_rcache_create(&rcache_params, "gdr_copy", NULL, &md->rcache);
         if (status == UCS_OK) {
             md->super.ops         = &md_rcache_ops;
             md->reg_cost.overhead = 0;
