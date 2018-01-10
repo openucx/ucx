@@ -130,6 +130,8 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
                                            &req->send.state.dt);
+    ucp_memory_type_detect_mds(ep->worker->context, (void *)buffer,
+                               req->send.length, &req->send.mem_type);
     req->send.lane         = ucp_ep_config(ep)->tag.lane;
     req->send.pending_lane = UCP_NULL_LANE;
 }

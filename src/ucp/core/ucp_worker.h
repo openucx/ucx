@@ -184,8 +184,10 @@ typedef struct ucp_worker {
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
+    ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */
     ucp_mt_lock_t                 mt_lock;       /* Configuration of multi-threading support */
     ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
+    ucp_ep_h                      mem_type_ep[UCT_MD_MEM_TYPE_LAST];/* memory type eps */
 
     UCS_STATS_NODE_DECLARE(stats);
     UCS_STATS_NODE_DECLARE(tm_offload_stats);

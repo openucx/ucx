@@ -105,7 +105,8 @@ static UCS_F_ALWAYS_INLINE
 void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
                          size_t max_dst_iov, ucp_dt_state_t *state,
                          const ucp_dt_iov_t *src_iov, ucp_datatype_t datatype,
-                         size_t length_max, ucp_md_index_t md_index)
+                         size_t length_max, ucp_md_index_t md_index,
+                         ucp_mem_desc_t *mdesc)
 {
     size_t iov_offset, max_src_iov, src_it, dst_it;
     size_t length_it = 0;
@@ -114,8 +115,13 @@ void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
         if (context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_REG) {
-            memh_index  = ucp_memh_map2idx(state->dt.contig.md_map, md_index);
-            iov[0].memh = state->dt.contig.memh[memh_index];
+            if (mdesc) {
+                memh_index  = ucp_memh_map2idx(mdesc->memh->md_map, md_index);
+                iov[0].memh = mdesc->memh->uct[memh_index];
+            } else {
+                memh_index  = ucp_memh_map2idx(state->dt.contig.md_map, md_index);
+                iov[0].memh = state->dt.contig.memh[memh_index];
+            }
         } else {
             iov[0].memh = UCT_MEM_HANDLE_NULL;
         }
@@ -181,7 +187,7 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
 
     ucp_dt_iov_copy_uct(ep->worker->context,iov, &iovcnt, max_iov,
                         &state, req->send.buffer, req->send.datatype,
-                        req->send.length, 0);
+                        req->send.length, 0, NULL);
 
     status = uct_ep_am_zcopy(ep->uct_eps[req->send.lane], am_id, (void*)hdr,
                              hdr_size, iov, iovcnt, 0,
@@ -253,7 +259,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &state,
                                 req->send.buffer,  req->send.datatype,
                                 max_middle - hdr_size_first + hdr_size_middle,
-                                ucp_ep_md_index(ep, req->send.lane));
+                                ucp_ep_md_index(ep, req->send.lane), NULL);
 
             status = uct_ep_am_zcopy(uct_ep, am_id_first, (void*)hdr_first,
                                      hdr_size_first, iov, iovcnt, 0,
@@ -265,7 +271,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             /* Middle stage */
             ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov,
                                 &state, req->send.buffer, req->send.datatype,
-                                max_middle, ucp_ep_md_index(ep, req->send.lane));
+                                max_middle, ucp_ep_md_index(ep, req->send.lane), NULL);
 
             status = uct_ep_am_zcopy(uct_ep, am_id_middle, (void*)hdr_middle,
                                      hdr_size_middle, iov, iovcnt, 0,
@@ -278,7 +284,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &state,
                                 req->send.buffer, req->send.datatype,
                                 req->send.length - offset,
-                                ucp_ep_md_index(ep, req->send.lane));
+                                ucp_ep_md_index(ep, req->send.lane), NULL);
 
             status = uct_ep_am_zcopy(uct_ep, am_id_last, (void*)hdr_middle,
                                      hdr_size_middle, iov, iovcnt, 0,
@@ -331,6 +337,10 @@ ucp_proto_get_zcopy_threshold(const ucp_request_t *req,
         return max_zcopy;
     }
 
+    if (ucs_unlikely(!UCP_MEM_IS_HOST(req->send.mem_type))) {
+        return 1;
+    }
+
     if (ucs_likely(UCP_DT_IS_CONTIG(req->send.datatype))) {
         return ucs_min(max_zcopy, msg_config->zcopy_thresh[0]);
     } else if (UCP_DT_IS_IOV(req->send.datatype)) {
@@ -367,7 +377,8 @@ static UCS_F_ALWAYS_INLINE ssize_t
 ucp_proto_get_short_max(const ucp_request_t *req,
                         const ucp_ep_msg_config_t *msg_config)
 {
-    return (!UCP_DT_IS_CONTIG(req->send.datatype) ||
-            (req->flags & UCP_REQUEST_FLAG_SYNC)) ?
+    return  (!UCP_DT_IS_CONTIG(req->send.datatype) ||
+            (req->flags & UCP_REQUEST_FLAG_SYNC) ||
+            (!UCP_MEM_IS_HOST(req->send.mem_type))) ?
            -1 : msg_config->max_short;
 }

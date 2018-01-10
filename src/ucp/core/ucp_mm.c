@@ -122,22 +122,6 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     return UCS_OK;
 }
 
-ucs_status_t ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
-                                        uct_memory_type_t *mem_type_p)
-{
-    unsigned i, md_index;
-
-    for (i = 0; i < context->num_mem_type_mds; ++i) {
-        md_index = context->mem_type_tl_mds[i];
-        if (uct_md_is_mem_type_owned(context->tl_mds[md_index].md, addr, length)) {
-            *mem_type_p = context->tl_mds[md_index].attr.cap.mem_type;
-            return UCS_OK;
-        }
-    }
-    *mem_type_p = UCT_MD_MEM_TYPE_HOST;
-    return UCS_OK;
-}
-
 /**
  * @return Whether MD number 'md_index' is selected by the configuration as part
  *         of allocation method number 'config_method_index'.
@@ -513,9 +497,9 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
     return status;
 }
 
-ucs_status_t ucp_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+static inline ucs_status_t
+ucp_mpool_malloc(ucp_worker_h worker, ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
-    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, reg_mp);
     ucp_mem_desc_t *chunk_hdr;
     ucp_mem_h memh;
     ucs_status_t status;
@@ -539,9 +523,9 @@ out:
     return status;
 }
 
-void ucp_mpool_free(ucs_mpool_t *mp, void *chunk)
+static inline void
+ucp_mpool_free(ucp_worker_h worker, ucs_mpool_t *mp, void *chunk)
 {
-    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, reg_mp);
     ucp_mem_desc_t *chunk_hdr;
 
     chunk_hdr = (ucp_mem_desc_t*)chunk - 1;
@@ -555,4 +539,30 @@ void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
     elem_hdr->memh = chunk_hdr->memh;
 }
 
+ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+{
+    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, reg_mp);
 
+    return ucp_mpool_malloc(worker, mp, size_p, chunk_p);
+}
+
+void ucp_reg_mpool_free(ucs_mpool_t *mp, void *chunk)
+{
+    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, reg_mp);
+
+    ucp_mpool_free(worker, mp, chunk);
+}
+
+ucs_status_t ucp_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+{
+    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, rndv_frag_mp);
+
+    return ucp_mpool_malloc(worker, mp, size_p, chunk_p);
+}
+
+void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
+{
+    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, rndv_frag_mp);
+
+    ucp_mpool_free(worker, mp, chunk);
+}

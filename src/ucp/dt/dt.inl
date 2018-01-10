@@ -40,7 +40,8 @@ size_t ucp_dt_length(ucp_datatype_t datatype, size_t count,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_dt_unpack_only(void *buffer, size_t count, ucp_datatype_t datatype,
+ucp_dt_unpack_only(ucp_worker_h worker, void *buffer, size_t count,
+                   ucp_datatype_t datatype, uct_memory_type_t mem_type,
                    const void *data, size_t length, int truncation)
 {
     size_t iov_offset, iovcnt_offset;
@@ -55,7 +56,11 @@ ucp_dt_unpack_only(void *buffer, size_t count, ucp_datatype_t datatype,
             ucs_unlikely(length > (buffer_size = ucp_contig_dt_length(datatype, count)))) {
             goto err_truncated;
         }
-        UCS_PROFILE_NAMED_CALL("memcpy_recv", memcpy, buffer, data, length);
+        if (ucs_likely(UCP_MEM_IS_HOST(mem_type))) {
+            UCS_PROFILE_NAMED_CALL("memcpy_recv", memcpy, buffer, data, length);
+        } else {
+            ucp_mem_type_unpack(worker, buffer, data, length, mem_type);
+        }
         return UCS_OK;
 
     case UCP_DATATYPE_IOV:

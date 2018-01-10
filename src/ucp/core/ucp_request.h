@@ -95,6 +95,7 @@ struct ucp_request {
             const void            *buffer;  /* Send buffer */
             ucp_datatype_t        datatype; /* Send type */
             size_t                length;   /* Total length, in bytes */
+            uct_memory_type_t     mem_type; /* Memory type */
             ucp_send_callback_t   cb;       /* Completion callback */
 
             union {
@@ -139,6 +140,7 @@ struct ucp_request {
                 struct {
                     uint64_t         remote_address; /* address of the receiver's data buffer */
                     uintptr_t        remote_request; /* pointer to the receiver's receive request */
+                    ucp_request_t    *sreq;          /* send request on the send side */
                     ucp_rkey_h       rkey;           /* key for remote receive buffer */
                     uct_rkey_t       uct_rkey;       /* UCT remote key */
                 } rndv_put;
@@ -193,6 +195,7 @@ struct ucp_request {
                                                  * to pending state */
             ucp_lane_index_t      lane;     /* Lane on which this request is being sent */
             uct_pending_req_t     uct;      /* UCT pending request */
+            ucp_mem_desc_t        *mdesc;
         } send;
 
         struct {
@@ -200,6 +203,7 @@ struct ucp_request {
             void                  *buffer;  /* Buffer to receive data to */
             ucp_datatype_t        datatype; /* Receive type */
             size_t                length;   /* Total length, in bytes */
+            uct_memory_type_t     mem_type; /* Memory type */
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */

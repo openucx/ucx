@@ -50,7 +50,7 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
     params.address    = (ucp_address_t*)(client_data + 1);
 
     /* create endpoint to the worker address we got in the private data */
-    status = ucp_ep_create_to_worker_addr(listener->wiface.worker, &params,
+    status = ucp_ep_create_to_worker_addr(listener->wiface.worker, &params, 0,
                                           "listener", &ep);
     if (status != UCS_OK) {
         goto err;
