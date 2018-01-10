@@ -161,7 +161,13 @@ void ucp_test::wait(void *req, int worker_index)
         progress(worker_index);
         status = ucp_request_check_status(req);
     } while (status == UCS_INPROGRESS);
-    ASSERT_UCS_OK(status);
+
+    if (status != UCS_OK) {
+        /* UCS errors are suppressed in case of error handling tests */
+        ucs_error("request %p completed with error %s", req,
+                  ucs_status_string(status));
+    }
+
     ucp_request_release(req);
 }
 

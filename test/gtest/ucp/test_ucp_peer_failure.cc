@@ -364,11 +364,8 @@ UCS_TEST_P(test_ucp_peer_failure_with_rma, status_after_error) {
             request_release(req);
         }
     }
-    /* TODO: Remove this check. The test hangs if call flush when wireup is
-     *       not done. (Not RMA related) */
-    if (GetParam().variant != FAIL_IMMEDIATELY) {
-        ucp_ep_flush(sender().ep());
-    }
+
+    ucp_ep_flush(sender().ep());
     wait_err();
 
     EXPECT_NE(UCS_OK, m_err_status);
