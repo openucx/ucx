@@ -1558,7 +1558,10 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  * @brief Modify endpoint parameters.
  *
  * This routine modifies @ref ucp_ep_h "endpoint" created by @ref ucp_ep_create
- * or @ref ucp_listener_accept_callback_t.
+ * or @ref ucp_listener_accept_callback_t. For example, this API can be used
+ * to setup custom parameters like @ref ucp_ep_params_t::user_data or
+ * @ref ucp_ep_params_t::err_handler_cb to endpoint created by 
+ * @ref ucp_listener_accept_callback_t.
  *
  * @param [in]  ep          A handle to the endpoint.
  * @param [in]  params      User defined @ref ucp_ep_params_t configurations
