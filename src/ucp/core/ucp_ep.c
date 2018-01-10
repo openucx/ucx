@@ -115,7 +115,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 
         ucs_queue_head_init(&ep->ext.stream->match_q);
         ep->ext.stream->ucp_ep  = ep;
-        ep->ext.stream->flags   = 0;
+        ep->ext.stream->flags   = UCP_EP_STREAM_FLAG_VALID;
     } else {
         ep->ext.stream = NULL;
     }
@@ -277,6 +277,11 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     ep = ucp_worker_ep_find(worker, dest_uuid);
     if (ep != NULL) {
         status = ucp_ep_adjust_params(ep, params);
+
+        if ((status == UCS_OK) && (ep->ext.stream != NULL)) {
+            ep->ext.stream->flags |= UCP_EP_STREAM_FLAG_VALID;
+        }
+
         goto out_free_address;
     }
 
@@ -449,7 +454,7 @@ static void ucp_ep_cleanup_lanes(ucp_ep_h ep)
     }
 }
 
-static void ucp_ep_ext_stream_data_purge(ucp_ep_h ep)
+static void ucp_ep_ext_stream_invalidate(ucp_ep_h ep)
 {
     ucp_ep_ext_stream_t *ep_stream = ep->ext.stream;
     void                *data;
@@ -463,11 +468,13 @@ static void ucp_ep_ext_stream_data_purge(ucp_ep_h ep)
         ucs_assert_always(!UCS_PTR_IS_ERR(data));
         ucp_stream_data_release(ep, data);
     }
+
+    ep->ext.stream->flags &= ~UCP_EP_STREAM_FLAG_VALID;
 }
 
 static void ucp_ep_disconnected(ucp_ep_h ep, int force)
 {
-    ucp_ep_ext_stream_data_purge(ep);
+    ucp_ep_ext_stream_invalidate(ep);
 
     if ((ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) && !force) {
         /* Endpoints which have remote connection are destroyed only when the

@@ -28,7 +28,9 @@ typedef struct {
  */
 enum {
     UCP_EP_STREAM_FLAG_IS_QUEUED = UCS_BIT(0), /* EP is queued in stream list of worker */
-    UCP_EP_STREAM_FLAG_HAS_DATA  = UCS_BIT(1)  /* EP has data in the match_q */
+    UCP_EP_STREAM_FLAG_HAS_DATA  = UCS_BIT(1), /* EP has data in the match_q */
+    UCP_EP_STREAM_FLAG_VALID     = UCS_BIT(2)  /* EP was closed locally and cant
+                                                * do recv */
 };
 
 
