@@ -2053,6 +2053,17 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  * @ingroup UCP_COMM
  * @brief Non-blocking tagged-send operations with user provided request
  *
+ * This routine provides a convenient and efficient way to implement a
+ * blocking send pattern. It also completes requests faster than
+ * @ref ucp_tag_send_nbr() because:
+ * @li it always uses bcopy to send data up to the rendezvous threshold.
+ * @li its rendezvous threshold is higher than the one used by
+ *     the @ref ucp_tag_send_nb(). The threshold is controlled by
+ *     the @b UCX_SEND_NBR_RNDV_THRESH environment variable.
+ * @li its request handling is simpler. There is no callback and no need
+ *     to allocate and free requests. In fact request can be allocated by
+ *     caller on the stack.
+ *
  * This routine sends a messages that is described by the local address @a
  * buffer, size @a count, and @a datatype object to the destination endpoint
  * @a ep. Each message is associated with a @a tag value that is used for
@@ -2068,21 +2079,19 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  * return UCS_INPROGRESS status. In order to monitor completion of the
  * operation @ref ucp_request_check_status() should be used.
  *
- * The @a req filled by this routine is going to be completed faster than
- * the one returned by @ref ucp_tag_send_nb(). To achieve this the routine
- * uses bcopy and a higher rendezvous threshold. The threshold is controlled
- * by the UCX_SEND_NBR_RNDV_THRESH environment variable.
- *
- * @note This routine provides a convinient and efficient way to implement
- *       a blocking send pattern. For example MPI_send() pseudo code may
- *       look like this:
- *
+ * Following pseudo code implements a blocking send function:
  * @code
  * MPI_send(...)
  * {
- *     char request[ucp_request_size];
+ *     char *request;
  *     ucs_status_t status;
  *
+ *     // allocate request on the stack
+ *     // ucp_context_query() was used to get ucp_request_size
+ *     request = alloca(ucp_request_size);
+ *
+ *     // note: make sure that there is enough memory before the
+ *     // request handle
  *     status = ucp_tag_send_nbr(ep, ..., request + ucp_request_size);
  *     if (status != UCS_INPROGRESS) {
  *         return status;
