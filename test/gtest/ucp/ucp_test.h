@@ -48,7 +48,10 @@ public:
         void connect(const entity* other, const ucp_ep_params_t& ep_params,
                      int ep_idx = 0);
 
-        void *flush_ep_nb(int worker_index = 0, int ep_index = 0) const;
+        void* modify_ep(const ucp_ep_params_t& ep_params, int worker_idx = 0,
+                       int ep_idx = 0);
+
+        void* flush_ep_nb(int worker_index = 0, int ep_index = 0) const;
 
         void* flush_worker_nb(int worker_index = 0) const;
 

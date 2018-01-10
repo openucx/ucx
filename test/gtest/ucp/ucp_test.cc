@@ -383,6 +383,12 @@ void ucp_test_base::entity::connect(const entity* other,
     }
 }
 
+void* ucp_test_base::entity::modify_ep(const ucp_ep_params_t& ep_params,
+                                      int worker_idx, int ep_idx) {
+    return ucp_ep_modify_nb(ep(worker_idx, ep_idx), &ep_params);
+}
+
+
 void ucp_test_base::entity::set_ep(ucp_ep_h ep, int worker_index, int ep_index)
 {
     if (ep_index < get_num_eps(worker_index)) {
