@@ -40,6 +40,19 @@ typedef struct {
 
 
 /**
+ * Hash table entry for tag message fragments
+ */
+typedef union {
+    ucs_queue_head_t      unexp_q;    /* Queue of unexpected descriptors */
+    ucp_request_t         *exp_req;   /* Expected request */
+} ucp_tag_frag_match_t;
+
+
+KHASH_INIT(ucp_tag_frag_hash, uint64_t, ucp_tag_frag_match_t, 1,
+           kh_int64_hash_func, kh_int64_hash_equal);
+
+
+/**
  * Tag-matching context
  */
 typedef struct ucp_tag_match {
@@ -58,6 +71,9 @@ typedef struct ucp_tag_match {
         ucs_list_link_t       all;        /* Linked list of all tags */
         ucs_list_link_t       *hash;      /* Hash table of unexpected tags */
     } unexpected;
+
+    /* Hash for fragment assembly, the key is a globally unique tag message id */
+    khash_t(ucp_tag_frag_hash) frag_hash;
 
     /* Tag offload fields */
     struct {

@@ -229,6 +229,7 @@ struct ucp_recv_desc {
     union {
         ucs_list_link_t     tag_list[2];    /* Hash list TAG-element */
         ucs_queue_elem_t    stream_queue;   /* Queue STREAM-element */
+        ucs_queue_elem_t    tag_frag_queue; /* Tag fragments queue */
     };
     uint32_t                length;         /* Received length */
     uint32_t                payload_offset; /* Offset from end of the descriptor
