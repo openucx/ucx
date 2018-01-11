@@ -54,6 +54,9 @@ protected:
     request * send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
                       ucp_tag_t tag, int ep_index = 0);
 
+    request * send_nbr(const void *buffer, size_t count, ucp_datatype_t datatype,
+                       ucp_tag_t tag, int ep_index = 0);
+
     void send_b(const void *buffer, size_t count, ucp_datatype_t datatype,
                 ucp_tag_t tag, int buf_index = 0);
 
@@ -117,6 +120,8 @@ protected:
     static int dt_gen_start_count;
     static int dt_gen_finish_count;
     static ucp_context_attr_t ctx_attr;
+private:
+    int get_worker_index(int buf_index);
 public:
     int    count;
 };

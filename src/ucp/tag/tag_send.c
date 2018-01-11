@@ -45,23 +45,29 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_tag_send_req(ucp_request_t *req, size_t count,
                  const ucp_ep_msg_config_t* msg_config,
                  size_t rndv_rma_thresh, size_t rndv_am_thresh,
-                 ucp_send_callback_t cb, const ucp_proto_t *proto)
+                 ucp_send_callback_t cb, const ucp_proto_t *proto, int is_send_nbr)
 {
     size_t seg_size     = (msg_config->max_bcopy - proto->only_hdr_size);
     size_t rndv_thresh  = ucp_tag_get_rndv_threshold(req, count,
                                                      msg_config->max_iov,
                                                      rndv_rma_thresh,
                                                      rndv_am_thresh, seg_size);
-    size_t zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, count,
-                                                        rndv_thresh);
     ssize_t max_short   = ucp_proto_get_short_max(req, msg_config);
     ucs_status_t status;
+    size_t zcopy_thresh;
+
+    if (is_send_nbr) {
+        zcopy_thresh = rndv_thresh;
+    } else {
+        zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, count,
+                                                     rndv_thresh);
+    }
 
     ucs_trace_req("select tag request(%p) progress algorithm datatype=%lx "
                   "buffer=%p length=%zu max_short=%zd rndv_thresh=%zu "
-                  "zcopy_thresh=%zu",
+                  "zcopy_thresh=%zu is_send_nbr=%d",
                   req, req->send.datatype, req->send.buffer, req->send.length,
-                  max_short, rndv_thresh, zcopy_thresh);
+                  max_short, rndv_thresh, zcopy_thresh, is_send_nbr);
 
     status = ucp_request_send_start(req, max_short, zcopy_thresh, seg_size,
                                     rndv_thresh, proto);
@@ -95,11 +101,16 @@ ucp_tag_send_req(ucp_request_t *req, size_t count,
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucs_trace_req("releasing send request %p, returning status %s", req,
                       ucs_status_string(status));
-        ucp_request_put(req);
+        if (!is_send_nbr) {
+            ucp_request_put(req);
+        }
         return UCS_STATUS_PTR(status);
     }
 
-    ucp_request_set_callback(req, send.cb, cb)
+    if (!is_send_nbr) {
+        ucp_request_set_callback(req, send.cb, cb)
+    }
+
     ucs_trace_req("returning send request %p", req);
     return req + 1;
 }
@@ -121,6 +132,30 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
     req->send.lane         = ucp_ep_config(ep)->tag.lane;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t count,
+                    uintptr_t datatype, ucp_tag_t tag)
+{
+    ucs_status_t status;
+    size_t length;
+
+    if (ucs_unlikely(!UCP_DT_IS_CONTIG(datatype))) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    length = ucp_contig_dt_length(datatype, count);
+    if (ucs_unlikely((ssize_t)length > ucp_ep_config(ep)->tag.eager.max_short)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    status = UCS_PROFILE_CALL(ucp_tag_send_eager_short, ep, tag, buffer, length);
+    if (status != UCS_ERR_NO_RESOURCE) {
+        UCP_EP_STAT_TAG_OP(ep, EAGER);
+    }
+    return status;
+}
+
+
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
                  (ep, buffer, count, datatype, tag, cb),
                  ucp_ep_h ep, const void *buffer, size_t count,
@@ -128,7 +163,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
 {
     ucs_status_t status;
     ucp_request_t *req;
-    size_t length;
     ucs_status_ptr_t ret;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
@@ -136,17 +170,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
     ucs_trace_req("send_nb buffer %p count %zu tag %"PRIx64" to %s cb %p",
                   buffer, count, tag, ucp_ep_peer_name(ep), cb);
 
-    if (ucs_likely(UCP_DT_IS_CONTIG(datatype))) {
-        length = ucp_contig_dt_length(datatype, count);
-        if (ucs_likely((ssize_t)length <= ucp_ep_config(ep)->tag.eager.max_short)) {
-            status = UCS_PROFILE_CALL(ucp_tag_send_eager_short, ep, tag, buffer,
-                                      length);
-            if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
-                UCP_EP_STAT_TAG_OP(ep, EAGER);
-                ret = UCS_STATUS_PTR(status); /* UCS_OK also goes here */
-                goto out;
-            }
-        }
+    status = ucp_tag_send_inline(ep, buffer, count, datatype, tag);
+    if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
+        ret = UCS_STATUS_PTR(status); /* UCS_OK also goes here */
+        goto out;
     }
 
     req = ucp_request_get(ep->worker);
@@ -160,10 +187,45 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
     ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
                            ucp_ep_config(ep)->tag.rndv.rma_thresh,
                            ucp_ep_config(ep)->tag.rndv.am_thresh,
-                           cb, ucp_ep_config(ep)->tag.proto);
+                           cb, ucp_ep_config(ep)->tag.proto, 0);
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return ret;
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_send_nbr,
+                 (ep, buffer, count, datatype, tag, request),
+                 ucp_ep_h ep, const void *buffer, size_t count,
+                 uintptr_t datatype, ucp_tag_t tag, void *request)
+{
+    ucp_request_t *req = (ucp_request_t *)request - 1;
+    ucs_status_t status;
+    ucs_status_ptr_t ret;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+
+    ucs_trace_req("send_nbr buffer %p count %zu tag %"PRIx64" to %s req %p",
+                  buffer, count, tag, ucp_ep_peer_name(ep), request);
+
+    status = ucp_tag_send_inline(ep, buffer, count, datatype, tag);
+    if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
+        UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+        return status;
+    }
+
+    ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag, 0);
+
+    ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
+                           ucp_ep_config(ep)->tag.rndv_send_nbr.rma_thresh,
+                           ucp_ep_config(ep)->tag.rndv_send_nbr.am_thresh,
+                           NULL, ucp_ep_config(ep)->tag.proto, 1);
+
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+
+    if (ucs_unlikely(UCS_PTR_IS_ERR(ret))) {
+        return UCS_PTR_STATUS(ret);
+    }
+    return UCS_INPROGRESS;
 }
 
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
@@ -199,7 +261,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
     ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
                            ucp_ep_config(ep)->tag.rndv.rma_thresh,
                            ucp_ep_config(ep)->tag.rndv.am_thresh,
-                           cb, ucp_ep_config(ep)->tag.sync_proto);
+                           cb, ucp_ep_config(ep)->tag.sync_proto, 0);
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return ret;
