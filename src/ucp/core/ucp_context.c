@@ -284,7 +284,7 @@ static int ucp_tls_array_is_present(const char **tls, unsigned count,
     } else if (ucp_str_array_search(tls, count, tl_name, "aux") >= 0) {
         /* Search for tl names with 'aux' suffix, such tls can be
          * used for auxiliary wireup purposes only */
-        *flags    |= UCP_TL_RSC_FLAG_AUX;
+        *flags |= UCP_TL_RSC_FLAG_AUX;
         ucs_trace("enabling auxiliary tl '%s'%s", tl_name, info);
         return 1;
     } else {
@@ -369,7 +369,7 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
             tmp_flags = 0;
             if (ucp_config_is_tl_enabled(config, alias->alias, 1, &tmp_flags) &&
                 ucp_tls_array_is_present(alias->tls, count, resource->tl_name,
-                                     info, &tmp_flags)) {
+                                         info, &tmp_flags)) {
                 *flags    |= tmp_flags;
                 tl_enabled = 1;
                 break;
