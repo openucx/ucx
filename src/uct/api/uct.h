@@ -1341,6 +1341,12 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  * @param [out] ep_p             Handle to the created endpoint.
  *
  * @return UCS_OK              - Connection was request was sent to the server.
+ *                               This does not guarantee that the server has
+ *                               received the message; in case of failure, the
+ *                               error will be reported to the interface error
+ *                               handler callback provided to @ref uct_iface_open
+ *                               via @ref uct_iface_params_t.err_handler.
+ *
  * @return error code          - In case of an error. (@ref ucs_status_t)
  */
 ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
