@@ -1340,7 +1340,7 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  * @param [in]  length           Length of the private data.
  * @param [out] ep_p             Handle to the created endpoint.
  *
- * @return UCS_OK              - Connection was request was sent to the server.
+ * @return UCS_OK              - Connection request was sent to the server.
  *                               This does not guarantee that the server has
  *                               received the message; in case of failure, the
  *                               error will be reported to the interface error
