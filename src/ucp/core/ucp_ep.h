@@ -304,4 +304,6 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
                                            const ucp_context_h context,
                                            double bandwidth);
 
+ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
+
 #endif

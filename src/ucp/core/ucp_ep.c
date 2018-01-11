@@ -252,6 +252,58 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
     return UCS_OK;
 }
 
+ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
+{
+    ucp_context_h context = worker->context;
+    unsigned i, mem_type, md_index;
+    ucs_status_t status;
+    void *address;
+    size_t address_length;
+    ucp_ep_params_t params;
+
+    for (i = 0; i < UCT_MD_MEM_TYPE_LAST; i++) {
+        worker->mem_type_ep[i] = NULL;
+    }
+
+    if (!context->num_mem_type_mds) {
+        return UCS_OK;
+    }
+
+    params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS | UCP_EP_PARAM_FIELD_FLAGS;
+    params.flags      = UCP_EP_PARAMS_FLAGS_MEM_TYPE;
+
+    for (i = 0; i < context->num_mem_type_mds; ++i) {
+        md_index = context->mem_type_tl_mds[i];
+        mem_type = context->tl_mds[md_index].attr.cap.mem_type;
+
+        status = ucp_address_pack(worker, NULL, worker->mem_type_tls[mem_type], NULL,
+                                  &address_length, &address);
+        if (status != UCS_OK) {
+            goto err_cleanup_eps;
+        }
+
+        params.address    = (ucp_address_t*)address;
+
+        status = ucp_ep_create_to_worker_addr(worker, &params, "mem type",
+                                              &worker->mem_type_ep[mem_type]);
+        if (status != UCS_OK) {
+            goto err_cleanup_eps;
+        }
+
+        ucs_free(address);
+    }
+
+    return UCS_OK;
+
+err_cleanup_eps:
+    for (i = 0; i < UCT_MD_MEM_TYPE_LAST; i++) {
+        if (worker->mem_type_ep[i]) {
+           ucp_ep_destroy_internal(worker->mem_type_ep[i]);
+        }
+    }
+    return status;
+}
+
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           const ucp_ep_params_t *params,
                                           const char *message, ucp_ep_h *ep_p)
