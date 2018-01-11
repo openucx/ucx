@@ -11,8 +11,10 @@
 #include "gtest.h"
 
 #include <ucp/api/ucp.h>
+extern "C" {
 #include <ucp/dt/dt_contig.h>
 #include <ucp/dt/dt_iov.h>
+}
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
