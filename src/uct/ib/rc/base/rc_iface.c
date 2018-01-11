@@ -117,8 +117,7 @@ static void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
                                    size_t max_inline)
 {
 #if IBV_EXP_HW_TM
-    uct_ib_device_t *dev     = uct_ib_iface_device(&iface->super);
-    unsigned eager_hdr_size  = sizeof(struct ibv_exp_tmh);
+    unsigned eager_hdr_size = sizeof(struct ibv_exp_tmh);
     struct ibv_exp_port_attr* port_attr;
 
     if (!UCT_RC_IFACE_TM_ENABLED(iface)) {
@@ -142,7 +141,9 @@ static void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
 
     port_attr = uct_ib_iface_port_attr(&iface->super);
     iface_attr->cap.tag.rndv.max_zcopy  = port_attr->max_msg_sz;
-    iface_attr->cap.tag.rndv.max_hdr    = IBV_DEVICE_TM_CAPS(dev, max_rndv_hdr_size);
+
+    /* TMH can carry 2 additional bytes of private data */
+    iface_attr->cap.tag.rndv.max_hdr    = iface->tm.max_rndv_data + 2;
     iface_attr->cap.tag.rndv.max_iov    = 1;
 
     iface_attr->cap.tag.recv.max_zcopy  = port_attr->max_msg_sz;
@@ -555,7 +556,8 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
 {
 
 #if IBV_EXP_HW_TM
-    uct_ib_md_t *md = uct_ib_iface_md(&iface->super);
+    uct_ib_md_t *md       = uct_ib_iface_md(&iface->super);
+    unsigned tmh_hdrs_len = sizeof(struct ibv_exp_tmh) + rndv_hdr_len;
 
     if (!UCT_RC_IFACE_TM_ENABLED(iface)) {
         goto out_tm_disabled;
@@ -563,11 +565,15 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
 
     iface->tm.eager_desc.super.cb = uct_rc_iface_release_desc;
     iface->tm.eager_desc.offset   = sizeof(struct ibv_exp_tmh)
-                                    - sizeof(uct_rc_hdr_t) +
+                                    - sizeof(uct_rc_hdr_t)
                                     + iface->super.config.rx_headroom_offset;
 
     iface->tm.rndv_desc.super.cb  = uct_rc_iface_release_desc;
     iface->tm.rndv_desc.offset    = iface->tm.eager_desc.offset + rndv_hdr_len;
+
+    ucs_assert(IBV_DEVICE_TM_CAPS(&md->dev, max_rndv_hdr_size) >= tmh_hdrs_len);
+    iface->tm.max_rndv_data       = IBV_DEVICE_TM_CAPS(&md->dev, max_rndv_hdr_size) -
+                                    tmh_hdrs_len;
 
     /* Init ptr array to store completions of RNDV operations. Index in
      * ptr_array is used as operation ID and is passed in "app_context"

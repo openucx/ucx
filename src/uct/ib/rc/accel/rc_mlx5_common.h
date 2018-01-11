@@ -845,6 +845,8 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type
     size_t wqe_size, ctrl_av_size;
     struct ibv_exp_tmh *tmh;
     struct ibv_exp_tmh_rvh rvh;
+    unsigned tmh_len;
+    unsigned max_rndv_data;
     void *data;
 
     ctrl         = txwq->curr;
@@ -862,10 +864,14 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type
         break;
 
     case IBV_EXP_TMH_RNDV:
-        wqe_size         = ctrl_av_size + sizeof(*inl) + sizeof(*tmh) +
-                           sizeof(rvh) + length;
-        inl->byte_count  = htonl((length + sizeof(*tmh) + sizeof(rvh)) |
-                                 MLX5_INLINE_SEG);
+        tmh_len          = sizeof(*tmh) + sizeof(rvh);
+        wqe_size         = ctrl_av_size + sizeof(*inl) + tmh_len + length;
+        inl->byte_count  = htonl((length + tmh_len) | MLX5_INLINE_SEG);
+        max_rndv_data    = iface->tm.max_rndv_data;
+
+        uct_rc_iface_fill_tmh_priv_data(tmh, buffer, length, max_rndv_data);
+        length           = ucs_min(max_rndv_data, length); /* Note: change length
+                                                              func parameter */
         /* RVH can be wrapped */
         uct_rc_iface_fill_rvh(&rvh, iov->buffer,
                               ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
@@ -1091,15 +1097,11 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *mlx5_common_iface
                                    uct_rc_iface_t *rc_iface, struct mlx5_cqe64 *cqe,
                                    unsigned byte_len, uct_ib_mlx5_srq_seg_t *seg)
 {
-    uct_ib_md_t              *ib_md = uct_ib_iface_md(&rc_iface->super);
     uct_ib_iface_recv_desc_t *desc  = seg->srq.desc;
     struct ibv_exp_tmh       *tmh;
-    struct ibv_exp_tmh_rvh   *rvh;
     uint64_t                 imm_data;
     ucs_status_t             status;
     unsigned                 flags;
-    unsigned                 tm_hdrs_len;
-    void                     *rb;
 
     tmh = uct_rc_mlx5_iface_common_data(mlx5_common_iface, rc_iface, cqe, desc,
                                         byte_len, &flags);
@@ -1129,24 +1131,7 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *mlx5_common_iface
         break;
 
     case IBV_EXP_TMH_RNDV:
-        rvh = (struct ibv_exp_tmh_rvh*)(tmh + 1);
-
-        /* Create "packed" rkey to pass it in the callback */
-        rb = uct_md_fill_md_name(&ib_md->super, (char*)tmh + byte_len);
-        uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, rb);
-
-        /* RC uses two headers: TMH + RVH, DC uses three: TMH + RVH + RAVH.
-         * So, get actual RNDV hdrs len from offsets */
-        tm_hdrs_len = sizeof(*tmh) +
-                      (rc_iface->tm.rndv_desc.offset -
-                       rc_iface->tm.eager_desc.offset);
-
-        status = rc_iface->tm.rndv_unexp.cb(rc_iface->tm.rndv_unexp.arg,
-                                            flags, be64toh(tmh->tag),
-                                            (char*)tmh + tm_hdrs_len,
-                                            byte_len - tm_hdrs_len,
-                                            be64toh(rvh->va), ntohl(rvh->len),
-                                            (char*)tmh + byte_len);
+        status = uct_rc_iface_handle_rndv(rc_iface, tmh, byte_len, flags);
 
         uct_rc_mlx5_iface_unexp_consumed(mlx5_common_iface, rc_iface,
                                          &rc_iface->tm.rndv_desc, status,

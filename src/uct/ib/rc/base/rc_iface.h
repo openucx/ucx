@@ -232,6 +232,7 @@ struct uct_rc_iface {
         ucs_ptr_array_t              rndv_comps;
         unsigned                     num_tags;
         unsigned                     num_outstanding;
+        unsigned                     max_rndv_data;
         uint16_t                     unexpected_cnt;
         uint16_t                     cmd_qp_len;
         uint8_t                      enabled;
@@ -400,6 +401,30 @@ uct_rc_iface_fill_rvh(struct ibv_exp_tmh_rvh *rvh, const void *vaddr,
     rvh->len  = htonl(len);
 }
 
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_iface_tag_get_op_id(uct_rc_iface_t *iface, uct_completion_t *comp)
+{
+    uint32_t prev_ph;
+    return ucs_ptr_array_insert(&iface->tm.rndv_comps, comp, &prev_ph);
+}
+
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_fill_tmh_priv_data(struct ibv_exp_tmh *tmh, const void *hdr,
+                                unsigned hdr_len, unsigned max_rndv_priv_data)
+{
+    /* If header length is bigger tha max_rndv_priv_data size, need to add the
+     * rest to the TMH reserved field. */
+    if (hdr_len > max_rndv_priv_data) {
+        tmh->reserved[0] = hdr_len - max_rndv_priv_data;
+        ucs_assert(tmh->reserved[0] <= 2);
+        memcpy(&tmh->reserved[1], (char*)hdr + max_rndv_priv_data,
+               tmh->reserved[0]);
+    } else {
+        tmh->reserved[0] = 0;
+    }
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_tag_imm_data_pack(uint32_t *ib_imm, uint32_t *app_ctx,
                                uint64_t imm_val)
@@ -420,13 +445,6 @@ uct_rc_iface_ctx_priv(uct_tag_context_t *ctx)
     return (uct_rc_iface_ctx_priv_t*)ctx->priv;
 }
 
-static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_iface_tag_get_op_id(uct_rc_iface_t *iface, uct_completion_t *comp)
-{
-    uint32_t prev_ph;
-    return ucs_ptr_array_insert(&iface->tm.rndv_comps, comp, &prev_ph);
-}
-
 static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_handle_rndv_fin(uct_rc_iface_t *iface, struct ibv_exp_tmh *tmh)
 {
@@ -440,6 +458,49 @@ uct_rc_iface_handle_rndv_fin(uct_rc_iface_t *iface, struct ibv_exp_tmh *tmh)
     ucs_assert_always(found > 0);
     uct_invoke_completion((uct_completion_t*)rndv_comp, UCS_OK);
     ucs_ptr_array_remove(&iface->tm.rndv_comps, ntohl(tmh->app_ctx), 0);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_iface_handle_rndv(uct_rc_iface_t *iface, struct ibv_exp_tmh *tmh,
+                         unsigned byte_len, unsigned flags)
+{
+    uct_ib_md_t *ib_md = uct_ib_iface_md(&iface->super);
+    struct ibv_exp_tmh_rvh *rvh;
+    unsigned tm_hdrs_len;
+    unsigned rndv_priv_hdr_len;
+    unsigned tmh_priv_data_len;
+    void *rndv_priv_hdr;
+    void *rb;
+    void *packed_rkey;
+
+    rvh = (struct ibv_exp_tmh_rvh*)(tmh + 1);
+
+    /* RC uses two headers: TMH + RVH, DC uses three: TMH + RVH + RAVH.
+     * So, get actual RNDV hdrs len from offsets */
+    tm_hdrs_len = sizeof(*tmh) +
+                  (iface->tm.rndv_desc.offset - iface->tm.eager_desc.offset);
+
+    rndv_priv_hdr     = (char*)tmh + tm_hdrs_len;
+    rndv_priv_hdr_len = byte_len - tm_hdrs_len;
+    tmh_priv_data_len = tmh->reserved[0];
+
+    if (tmh_priv_data_len) {
+        /* TMH reserved field contains some more priv user data */
+        ucs_assert(tmh_priv_data_len <= 2);
+        memcpy((char*)rndv_priv_hdr + rndv_priv_hdr_len, &tmh->reserved[1],
+               tmh_priv_data_len);
+    }
+
+    /* Create "packed" rkey to pass it in the callback */
+    packed_rkey = (char*)tmh + byte_len + tmh_priv_data_len;
+    rb = uct_md_fill_md_name(&ib_md->super, packed_rkey);
+    uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, rb);
+
+    return iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, flags,
+                                   be64toh(tmh->tag), rndv_priv_hdr,
+                                   rndv_priv_hdr_len + tmh_priv_data_len,
+                                   be64toh(rvh->va), ntohl(rvh->len),
+                                   packed_rkey);
 }
 
 #else
