@@ -275,6 +275,11 @@ build_cuda() {
             $MAKE clean
             $MAKE
             $MAKE distclean
+
+            ../contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
+            $MAKE clean
+            $MAKE
+            $MAKE distclean
             module unload dev/gdrcopy
         else
             ../contrib/configure-devel --prefix=$ucx_inst --with-cuda
