@@ -235,4 +235,38 @@ ucp_tag_unexp_desc_release(ucp_recv_desc_t *rdesc)
     }
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_tag_frag_match_is_unexp(ucp_tag_frag_match_t *frag_list)
+{
+    /* Hack to reduce memory usage: instead of adding another field to specify
+     * which union field is valid, assume that when the unexpected queue field
+     * is valid, its ptail field could never be NULL */
+    return frag_list->unexp_q.ptail != NULL;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_frag_match_add_unexp(ucp_tag_frag_match_t *frag_list, ucp_recv_desc_t *rdesc,
+                         size_t offset)
+{
+    ucs_assert(ucp_tag_frag_match_is_unexp(frag_list));
+    ucs_queue_push(&frag_list->unexp_q, &rdesc->tag_frag_queue);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_frag_match_init_unexp(ucp_tag_frag_match_t *frag_list)
+{
+    ucs_queue_head_init(&frag_list->unexp_q);
+    ucs_assert(ucp_tag_frag_match_is_unexp(frag_list));
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_frag_hash_init_exp(ucp_tag_frag_match_t *frag_list, ucp_request_t *req)
+{
+    UCS_STATIC_ASSERT(ucs_offsetof(ucp_tag_frag_match_t, unexp_q.ptail) >=
+                      ucs_offsetof(ucp_tag_frag_match_t, exp_req) + sizeof(frag_list->exp_req));
+    frag_list->exp_req       = req;
+    frag_list->unexp_q.ptail = NULL;
+    ucs_assert(!ucp_tag_frag_match_is_unexp(frag_list));
+}
+
 #endif
