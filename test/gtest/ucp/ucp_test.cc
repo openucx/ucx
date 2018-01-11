@@ -69,7 +69,7 @@ void ucp_test::init() {
 }
 
 bool ucp_test::is_self() const {
-    return "\\self" == GetParam().transports.front();
+    return "self" == GetParam().transports.front();
 }
 
 ucp_test_base::entity* ucp_test::create_entity(bool add_in_front) {

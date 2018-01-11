@@ -274,8 +274,26 @@ static unsigned ucp_tl_alias_count(ucp_tl_alias_t *alias)
     return count;
 }
 
+static int ucp_tls_array_is_present(const char **tls, unsigned count,
+                                    const char *tl_name, const char *info,
+                                    uint8_t *flags)
+{
+    if (ucp_str_array_search(tls, count, tl_name, NULL) >= 0) {
+        ucs_trace("enabling tl '%s'%s", tl_name, info);
+        return 1;
+    } else if (ucp_str_array_search(tls, count, tl_name, "aux") >= 0) {
+        /* Search for tl names with 'aux' suffix, such tls can be
+         * used for auxiliary wireup purposes only */
+        *flags |= UCP_TL_RSC_FLAG_AUX;
+        ucs_trace("enabling auxiliary tl '%s'%s", tl_name, info);
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
 static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_name,
-                                    int is_alias)
+                                    int is_alias, uint8_t *flags)
 {
     const char **names = (const char**)config->tls.names;
     unsigned count     = config->tls.count;
@@ -283,7 +301,7 @@ static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_n
 
     snprintf(buf, sizeof(buf), "\\%s", tl_name);
     return (!is_alias && ucp_str_array_search(names, count, buf, NULL) >= 0) ||
-           ((ucp_str_array_search(names, count, tl_name, NULL) >= 0)) ||
+            ucp_tls_array_is_present(names, count, tl_name, "", flags) ||
             (ucp_str_array_search(names, count, UCP_RSC_CONFIG_ALL, NULL) >= 0);
 }
 
@@ -324,6 +342,8 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
 {
     int device_enabled, tl_enabled;
     ucp_tl_alias_t *alias;
+    uint8_t tmp_flags;
+    char info[32];
     unsigned count;
 
     /* Find the enabled devices */
@@ -334,35 +354,25 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
 
     /* Find the enabled UCTs */
     ucs_assert(config->tls.count > 0);
-    if (ucp_config_is_tl_enabled(config, resource->tl_name, 0)) {
+    if (ucp_config_is_tl_enabled(config, resource->tl_name, 0, flags)) {
         tl_enabled = 1;
     } else {
         tl_enabled = 0;
 
         /* check aliases */
         for (alias = ucp_tl_aliases; alias->alias != NULL; ++alias) {
-            count = ucp_tl_alias_count(alias);
-
             /* If an alias is enabled, and the transport is part of this alias,
              * enable the transport.
              */
-            if (ucp_config_is_tl_enabled(config, alias->alias, 1)) {
-                if (ucp_str_array_search(alias->tls, count,
-                                         resource->tl_name, NULL) >= 0) {
-                    tl_enabled = 1;
-                    ucs_trace("enabling tl '%s' for alias '%s'",
-                              resource->tl_name, alias->alias);
-                    break;
-                } else if (ucp_str_array_search(alias->tls, count,
-                                                resource->tl_name, "aux") >= 0) {
-                    /* Search for tl names with 'aux' suffix, such tls can be
-                     * used for auxiliary wireup purposes only */
-                    tl_enabled = 1;
-                    *flags    |= UCP_TL_RSC_FLAG_AUX;
-                    ucs_trace("enabling auxiliary tl '%s' for alias '%s'",
-                              resource->tl_name, alias->alias);
-                    break;
-                }
+            count = ucp_tl_alias_count(alias);
+            snprintf(info, sizeof(info), "for alias '%s'", alias->alias);
+            tmp_flags = 0;
+            if (ucp_config_is_tl_enabled(config, alias->alias, 1, &tmp_flags) &&
+                ucp_tls_array_is_present(alias->tls, count, resource->tl_name,
+                                         info, &tmp_flags)) {
+                *flags    |= tmp_flags;
+                tl_enabled = 1;
+                break;
             }
         }
     }
