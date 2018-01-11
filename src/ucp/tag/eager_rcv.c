@@ -21,6 +21,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
     ucp_worker_h worker = arg;
     ucp_eager_hdr_t *eager_hdr = data;
     ucp_eager_first_hdr_t *eager_first_hdr = data;
+    ucp_recv_desc_t *rdesc;
     ucp_request_t *req;
     ucs_status_t status;
     size_t recv_len;
@@ -75,8 +76,11 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
 
         status = UCS_OK;
     } else {
-        status = ucp_tag_unexp_recv(&worker->tm, worker, data, length, am_flags,
-                                    hdr_len, flags);
+        status = ucp_recv_desc_init(worker, data, length, am_flags, hdr_len,
+                                    flags, &rdesc);
+        if (!UCS_STATUS_IS_ERR(status)) {
+            ucp_tag_unexp_recv(&worker->tm, rdesc, recv_tag);
+        }
     }
 
     UCS_PROFILE_SCOPE_END("ucp_eager_handler");

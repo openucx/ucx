@@ -490,6 +490,7 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
                                          UCP_RECV_DESC_FLAG_RNDV;
     ucp_worker_h worker                = arg;
     ucp_rndv_rts_hdr_t *rndv_rts_hdr   = data;
+    ucp_recv_desc_t *rdesc;
     ucp_request_t *rreq;
     ucs_status_t status;
 
@@ -505,8 +506,11 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
         UCP_WORKER_STAT_RNDV(worker, EXP);
         status = UCS_OK;
     } else {
-        status = ucp_tag_unexp_recv(&worker->tm, worker, data, length, tl_flags,
-                                    sizeof(*rndv_rts_hdr), recv_flags);
+        status = ucp_recv_desc_init(worker, data, length, tl_flags,
+                                    sizeof(*rndv_rts_hdr), recv_flags, &rdesc);
+        if (!UCS_STATUS_IS_ERR(status)) {
+            ucp_tag_unexp_recv(&worker->tm, rdesc, rndv_rts_hdr->super.tag);
+        }
     }
 
     return status;
