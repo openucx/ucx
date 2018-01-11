@@ -45,7 +45,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_tag_send_req(ucp_request_t *req, size_t count,
                  const ucp_ep_msg_config_t* msg_config,
                  size_t rndv_rma_thresh, size_t rndv_am_thresh,
-                 ucp_send_callback_t cb, const ucp_proto_t *proto, int is_send_nbr)
+                 ucp_send_callback_t cb, const ucp_proto_t *proto,
+                 int enable_zcopy)
 {
     size_t seg_size     = (msg_config->max_bcopy - proto->only_hdr_size);
     size_t rndv_thresh  = ucp_tag_get_rndv_threshold(req, count,
@@ -56,18 +57,18 @@ ucp_tag_send_req(ucp_request_t *req, size_t count,
     ucs_status_t status;
     size_t zcopy_thresh;
 
-    if (is_send_nbr) {
-        zcopy_thresh = rndv_thresh;
-    } else {
+    if (enable_zcopy) {
         zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, count,
                                                      rndv_thresh);
+    } else {
+        zcopy_thresh = rndv_thresh;
     }
 
     ucs_trace_req("select tag request(%p) progress algorithm datatype=%lx "
                   "buffer=%p length=%zu max_short=%zd rndv_thresh=%zu "
-                  "zcopy_thresh=%zu is_send_nbr=%d",
+                  "zcopy_thresh=%zu zcopy_enabled=%d",
                   req, req->send.datatype, req->send.buffer, req->send.length,
-                  max_short, rndv_thresh, zcopy_thresh, is_send_nbr);
+                  max_short, rndv_thresh, zcopy_thresh, enable_zcopy);
 
     status = ucp_request_send_start(req, max_short, zcopy_thresh, seg_size,
                                     rndv_thresh, proto);
@@ -101,13 +102,13 @@ ucp_tag_send_req(ucp_request_t *req, size_t count,
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucs_trace_req("releasing send request %p, returning status %s", req,
                       ucs_status_string(status));
-        if (!is_send_nbr) {
+        if (enable_zcopy) {
             ucp_request_put(req);
         }
         return UCS_STATUS_PTR(status);
     }
 
-    if (!is_send_nbr) {
+    if (enable_zcopy) {
         ucp_request_set_callback(req, send.cb, cb)
     }
 
@@ -187,7 +188,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
     ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
                            ucp_ep_config(ep)->tag.rndv.rma_thresh,
                            ucp_ep_config(ep)->tag.rndv.am_thresh,
-                           cb, ucp_ep_config(ep)->tag.proto, 0);
+                           cb, ucp_ep_config(ep)->tag.proto, 1);
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return ret;
@@ -218,7 +219,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_send_nbr,
     ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
                            ucp_ep_config(ep)->tag.rndv_send_nbr.rma_thresh,
                            ucp_ep_config(ep)->tag.rndv_send_nbr.am_thresh,
-                           NULL, ucp_ep_config(ep)->tag.proto, 1);
+                           NULL, ucp_ep_config(ep)->tag.proto, 0);
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
 
@@ -261,7 +262,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
     ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
                            ucp_ep_config(ep)->tag.rndv.rma_thresh,
                            ucp_ep_config(ep)->tag.rndv.am_thresh,
-                           cb, ucp_ep_config(ep)->tag.sync_proto, 0);
+                           cb, ucp_ep_config(ep)->tag.sync_proto, 1);
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return ret;
