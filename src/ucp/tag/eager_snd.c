@@ -5,6 +5,7 @@
  */
 
 #include "eager.h"
+#include "offload.h"
 
 #include <ucp/core/ucp_worker.h>
 #include <ucp/proto/proto.h>
@@ -315,3 +316,39 @@ const ucp_proto_t ucp_tag_eager_sync_proto = {
     .first_hdr_size          = sizeof(ucp_eager_sync_first_hdr_t),
     .mid_hdr_size            = sizeof(ucp_eager_hdr_t)
 };
+
+void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t flags)
+{
+    ucp_eager_sync_hdr_t *eagers_hdr;
+    ucp_request_hdr_t *reqhdr;
+    ucp_request_t *req;
+
+    ucs_assert(flags & UCP_RECV_DESC_FLAG_SYNC);
+
+    if (flags & UCP_RECV_DESC_FLAG_OFFLOAD) {
+        eagers_hdr = hdr;
+        ucp_tag_offload_eager_sync_send_ack(worker,
+                                            eagers_hdr->req.sender_uuid,
+                                            eagers_hdr->super.super.tag);
+        return;
+    }
+
+    if (flags & UCP_RECV_DESC_FLAG_LAST) {
+        reqhdr = &((ucp_eager_sync_hdr_t*)hdr)->req;
+    } else /* first */ {
+        reqhdr = &((ucp_eager_sync_first_hdr_t*)hdr)->req;
+    }
+
+    ucs_assert(reqhdr->reqptr != 0);
+    ucs_trace_req("send_sync_ack sender_uuid %"PRIx64" remote_request 0x%lx",
+                  reqhdr->sender_uuid, reqhdr->reqptr);
+
+    req = ucp_worker_allocate_reply(worker, reqhdr->sender_uuid);
+    req->send.uct.func             = ucp_proto_progress_am_bcopy_single;
+    req->send.proto.am_id          = UCP_AM_ID_EAGER_SYNC_ACK;
+    req->send.proto.remote_request = reqhdr->reqptr;
+    req->send.proto.status         = UCS_OK;
+    req->send.proto.comp_cb        = ucp_request_put;
+
+    ucp_request_send(req);
+}

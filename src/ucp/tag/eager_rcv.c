@@ -14,40 +14,6 @@
 #include <ucp/core/ucp_request.inl>
 
 
-void ucp_eager_sync_send_handler(void *arg, void *data, uint16_t flags)
-{
-    ucp_eager_sync_hdr_t        *eagers_hdr;
-    ucp_eager_sync_first_hdr_t  *eagers_first_hdr;
-
-    if (ucs_test_all_flags(flags, UCP_RECV_DESC_FLAG_EAGER|
-                                  UCP_RECV_DESC_FLAG_FIRST|
-                                  UCP_RECV_DESC_FLAG_LAST|
-                                  UCP_RECV_DESC_FLAG_OFFLOAD|
-                                  UCP_RECV_DESC_FLAG_SYNC)) {
-        eagers_hdr = data;
-        ucp_tag_offload_eager_sync_send_ack(arg,
-                                            eagers_hdr->req.sender_uuid,
-                                            eagers_hdr->super.super.tag);
-    } else if (ucs_test_all_flags(flags, UCP_RECV_DESC_FLAG_EAGER|
-                                  UCP_RECV_DESC_FLAG_FIRST|
-                                  UCP_RECV_DESC_FLAG_LAST|
-                                  UCP_RECV_DESC_FLAG_SYNC)) {
-        eagers_hdr = data;
-        ucs_assert(eagers_hdr->req.reqptr != 0);
-        ucp_tag_eager_sync_send_ack(arg, eagers_hdr->req.sender_uuid,
-                                    eagers_hdr->req.reqptr);
-    } else if (ucs_test_all_flags(flags, UCP_RECV_DESC_FLAG_EAGER|
-                                         UCP_RECV_DESC_FLAG_FIRST|
-                                         UCP_RECV_DESC_FLAG_SYNC)) {
-        eagers_first_hdr = data;
-        ucs_assert(eagers_first_hdr->req.reqptr != 0);
-        ucp_tag_eager_sync_send_ack(arg, eagers_first_hdr->req.sender_uuid,
-                                    eagers_first_hdr->req.reqptr);
-    } else {
-        ucs_fatal("wrong UCP_RECV_DESC_FLAG bit mask");
-    }
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
                   uint16_t flags, uint16_t hdr_len)
@@ -104,7 +70,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
          * need to discard the rest of the messages */
 
         if (flags & UCP_RECV_DESC_FLAG_SYNC) {
-            ucp_eager_sync_send_handler(arg, data, flags);
+            ucp_tag_eager_sync_send_ack(arg, data, flags);
         }
 
         status = UCS_OK;
