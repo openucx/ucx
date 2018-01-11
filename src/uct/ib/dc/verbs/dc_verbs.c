@@ -866,7 +866,7 @@ ucs_status_ptr_t uct_dc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
     uint32_t op_index;
 
-    UCT_RC_VERBS_CHECK_RNDV_PARAMS(iovcnt, header_length, tmh_len,
+    UCT_RC_IFACE_CHECK_RNDV_PARAMS(iovcnt, header_length, tmh_len,
                                    iface->verbs_common.config.max_inline,
                                    IBV_DEVICE_TM_CAPS(dev, max_rndv_hdr_size));
     UCT_DC_VERBS_CHECK_RES_PTR(&iface->super, &ep->super);

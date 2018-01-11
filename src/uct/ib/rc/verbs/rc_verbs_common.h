@@ -250,17 +250,6 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
            (_wr)->next              = NULL; \
        }
 
-#  define UCT_RC_VERBS_CHECK_RNDV_PARAMS(_iovcnt, _header_len, _tm_len, \
-                                         _max_inline, _max_rndv_hdr) \
-       { \
-           UCT_CHECK_PARAM_PTR(_iovcnt <= 1ul, "Wrong iovcnt %lu", iovcnt); \
-           UCT_CHECK_PARAM_PTR(_header_len <= _max_rndv_hdr, \
-                               "Invalid header len %u", _header_len); \
-           UCT_CHECK_PARAM_PTR((_header_len + _tm_len) <= _max_inline, \
-                               "Invalid RTS len gth %u", \
-                               _header_len + _tm_len); \
-       }
-
 #  define UCT_RC_VERBS_CHECK_TAG(_iface) \
        if (!(_iface)->tm.num_tags) {  \
            return UCS_ERR_EXCEEDS_LIMIT; \

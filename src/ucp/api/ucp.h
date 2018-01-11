@@ -808,13 +808,15 @@ typedef struct ucp_ep_params {
      * is not set, this address is mandatory for filling
      * (along with its corresponding bit in the field_mask - @ref
      * UCP_EP_PARAM_FIELD_REMOTE_ADDRESS) and must be obtained using
-     * @ref ucp_worker_get_address.
+     * @ref ucp_worker_get_address. This field cannot be changed by
+     * @ref ucp_ep_modify_nb.
      */
     const ucp_address_t     *address;
 
     /**
      * Desired error handling mode, optional parameter. Default value is
-     * @ref UCP_ERR_HANDLING_MODE_NONE
+     * @ref UCP_ERR_HANDLING_MODE_NONE. This field cannot be changed by
+     * @ref ucp_ep_modify_nb.
      */
     ucp_err_handling_mode_t err_mode;
 
@@ -844,7 +846,7 @@ typedef struct ucp_ep_params {
      * if the @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag is set, this address
      * is mandatory for filling (along with its corresponding bit in the
      * field_mask - @ref UCP_EP_PARAM_FIELD_SOCK_ADDR) and should be obtained
-     * from the user.
+     * from the user. This field cannot be changed by @ref ucp_ep_modify_nb.
      */
     ucs_sock_addr_t         sockaddr;
 
@@ -1533,7 +1535,7 @@ void ucp_listener_destroy(ucp_listener_h listener);
  *
  * This routine creates and connects an @ref ucp_ep_h "endpoint" on a @ref
  * ucp_worker_h "local worker" for a destination @ref ucp_address_t "address"
- * that identifies the remote @ref ucp_worker_h "worker".  This function is
+ * that identifies the remote @ref ucp_worker_h "worker". This function is
  * non-blocking, and communications may begin immediately after it returns. If
  * the connection process is not completed, communications may be delayed.
  * The created @ref ucp_ep_h "endpoint" is associated with one and only one
@@ -1549,6 +1551,37 @@ void ucp_listener_destroy(ucp_listener_h listener);
  */
 ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
                            ucp_ep_h *ep_p);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Modify endpoint parameters.
+ *
+ * This routine modifies @ref ucp_ep_h "endpoint" created by @ref ucp_ep_create
+ * or @ref ucp_listener_accept_callback_t. For example, this API can be used
+ * to setup custom parameters like @ref ucp_ep_params_t::user_data or
+ * @ref ucp_ep_params_t::err_handler_cb to endpoint created by 
+ * @ref ucp_listener_accept_callback_t.
+ *
+ * @param [in]  ep          A handle to the endpoint.
+ * @param [in]  params      User defined @ref ucp_ep_params_t configurations
+ *                          for the @ref ucp_ep_h "UCP endpoint".
+ *
+ * @return NULL             - The endpoint is modified successfully.
+ * @return UCS_PTR_IS_ERR(_ptr) - The reconfiguration failed and an error code
+ *                                indicates the status. However, the @a endpoint
+ *                                is not modified and can be used further.
+ * @return otherwise        - The reconfiguration process is started, and can be
+ *                            completed at any point in time. A request handle
+ *                            is returned to the application in order to track
+ *                            progress of the endpoint modification.
+ *                            The application is responsible for releasing the
+ *                            handle using the @ref ucp_request_free routine.
+ *
+ * @note See the documentation of @ref ucp_ep_params_t for details, only some of
+ *       the parameters can be modified.
+ */
+ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params);
 
 
 /**
@@ -2049,6 +2082,86 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
                                  ucp_datatype_t datatype, ucp_tag_t tag,
                                  ucp_send_callback_t cb);
 
+/**
+ * @ingroup UCP_COMM
+ * @brief Non-blocking tagged-send operations with user provided request
+ *
+ * This routine provides a convenient and efficient way to implement a
+ * blocking send pattern. It also completes requests faster than
+ * @ref ucp_tag_send_nbr() because:
+ * @li it always uses @ref uct_ep_am_bcopy() to send data up to the
+ *     rendezvous threshold.
+ * @li its rendezvous threshold is higher than the one used by
+ *     the @ref ucp_tag_send_nb(). The threshold is controlled by
+ *     the @b UCX_SEND_NBR_RNDV_THRESH environment variable.
+ * @li its request handling is simpler. There is no callback and no need
+ *     to allocate and free requests. In fact request can be allocated by
+ *     caller on the stack.
+ *
+ * This routine sends a messages that is described by the local address @a
+ * buffer, size @a count, and @a datatype object to the destination endpoint
+ * @a ep. Each message is associated with a @a tag value that is used for
+ * message matching on the @ref ucp_tag_recv_nbr "receiver".
+ *
+ * The routine is non-blocking and therefore returns immediately, however
+ * the actual send operation may be delayed. The send operation is considered
+ * completed when it is safe to reuse the source @e buffer. If the send
+ * operation is completed immediately the routine returns UCS_OK.
+ *
+ * If the operation is @b not completed immediately and no error reported
+ * then the UCP library will fill a user provided @a req and
+ * return UCS_INPROGRESS status. In order to monitor completion of the
+ * operation @ref ucp_request_check_status() should be used.
+ *
+ * Following pseudo code implements a blocking send function:
+ * @code
+ * MPI_send(...)
+ * {
+ *     char *request;
+ *     ucs_status_t status;
+ *
+ *     // allocate request on the stack
+ *     // ucp_context_query() was used to get ucp_request_size
+ *     request = alloca(ucp_request_size);
+ *
+ *     // note: make sure that there is enough memory before the
+ *     // request handle
+ *     status = ucp_tag_send_nbr(ep, ..., request + ucp_request_size);
+ *     if (status != UCS_INPROGRESS) {
+ *         return status;
+ *     }
+ *
+ *     do {
+ *         ucp_worker_progress(worker);
+ *         status = ucp_request_check_status(request + ucp_request_size);
+ *     } while (status == UCS_INPROGRESS);
+ *
+ *     return status;
+ * }
+ * @endcode
+ *
+ * @note The user should not modify any part of the @a buffer after this
+ *       operation is called, until the operation completes.
+ *
+ *
+ * @param [in]  ep          Destination endpoint handle.
+ * @param [in]  buffer      Pointer to the message buffer (payload).
+ * @param [in]  count       Number of elements to send
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
+ * @param [in]  tag         Message tag.
+ * @param [in]  req         Request handle allocated by the user. There should
+ *                          be at least UCP request size bytes of available
+ *                          space before the @a req. The size of UCP request
+ *                          can be obtained by @ref ucp_context_query function.
+ *
+ * @return UCS_OK           - The send operation was completed immediately.
+ * @return UCS_INPROGRESS   - The send was not completed and is in progress.
+ *                            @ref ucp_request_check_status() should be used to
+ *                            monitor @a req status.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_tag_send_nbr(ucp_ep_h ep, const void *buffer, size_t count,
+                              ucp_datatype_t datatype, ucp_tag_t tag, void *req);
 
 /**
  * @ingroup UCP_COMM

@@ -126,10 +126,30 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 unsigned uct_rc_mlx5_iface_progress(void *arg);
 
 #if IBV_EXP_HW_TM
+ucs_status_t uct_rc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
+                                            const void *data, size_t length);
+
 ssize_t uct_rc_mlx5_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                        uint64_t imm,
                                        uct_pack_callback_t pack_cb,
                                        void *arg, unsigned flags);
+
+ucs_status_t uct_rc_mlx5_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                            uint64_t imm, const uct_iov_t *iov,
+                                            size_t iovcnt, unsigned flags,
+                                            uct_completion_t *comp);
+
+ucs_status_ptr_t uct_rc_mlx5_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                               const void *header,
+                                               unsigned header_length,
+                                               const uct_iov_t *iov,
+                                               size_t iovcnt, unsigned flags,
+                                               uct_completion_t *comp);
+
+ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
+                                             const void* header,
+                                             unsigned header_length,
+                                             unsigned flags);
 #endif
 
 #endif

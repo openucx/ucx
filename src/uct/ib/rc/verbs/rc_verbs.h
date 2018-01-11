@@ -49,13 +49,6 @@ typedef struct uct_rc_verbs_iface {
 
 #if IBV_EXP_HW_TM
 
-#  define UCT_RC_VERBS_CHECK_RES_PTR(_iface, _ep) \
-       UCT_RC_CHECK_CQE_RET(_iface, _ep, &(_ep)->txqp, \
-                            UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
-       UCT_RC_CHECK_TXQP_RET(_iface, _ep, &(_ep)->txqp, \
-                             UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
-
-
 ucs_status_t uct_rc_verbs_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
                                              const void *data, size_t length);
 

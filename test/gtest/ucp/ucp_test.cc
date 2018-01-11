@@ -161,7 +161,13 @@ void ucp_test::wait(void *req, int worker_index)
         progress(worker_index);
         status = ucp_request_check_status(req);
     } while (status == UCS_INPROGRESS);
-    ASSERT_UCS_OK(status);
+
+    if (status != UCS_OK) {
+        /* UCS errors are suppressed in case of error handling tests */
+        ucs_error("request %p completed with error %s", req,
+                  ucs_status_string(status));
+    }
+
     ucp_request_release(req);
 }
 
@@ -376,6 +382,12 @@ void ucp_test_base::entity::connect(const entity* other,
         ucp_worker_release_address(other->worker(i), address);
     }
 }
+
+void* ucp_test_base::entity::modify_ep(const ucp_ep_params_t& ep_params,
+                                      int worker_idx, int ep_idx) {
+    return ucp_ep_modify_nb(ep(worker_idx, ep_idx), &ep_params);
+}
+
 
 void ucp_test_base::entity::set_ep(ucp_ep_h ep, int worker_index, int ep_index)
 {
