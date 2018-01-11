@@ -85,11 +85,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
                iface, iface->event_ch, iface->cm_id,
                ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
                                 ip_port_str, UCS_SOCKADDR_STRING_LEN));
-
-    /* Since the user's (server's) callback is called from the async thread,
-     * we cannot tell if by the end of this function it was already invoked and
-     * if this client's ep would already be connected to the server */
-    return UCS_INPROGRESS;
+    return UCS_OK;
 
 err_free_mem:
     ucs_free(self->priv_data);

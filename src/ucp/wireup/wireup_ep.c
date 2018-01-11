@@ -457,7 +457,7 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
     /* send connection request using the transport */
     status = uct_ep_create_sockaddr(wiface->iface, &params->sockaddr, conn_priv,
                                     conn_priv_len, &wireup_ep->sockaddr_ep);
-    if (UCS_STATUS_IS_ERR(status)) {
+    if (status != UCS_OK) {
         goto out_free_priv;
     }
 
