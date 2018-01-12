@@ -65,3 +65,30 @@ size_t ucp_dt_iov_scatter(ucp_dt_iov_t *iov, size_t iovcnt, const void *src,
     }
     return length_it;
 }
+
+void ucp_dt_iov_seek(ucp_dt_iov_t *iov, size_t iovcnt, ptrdiff_t distance,
+                     size_t *iov_offset, size_t *iovcnt_offset)
+{
+    ssize_t new_iov_offset; /* signed, since it can be negative */
+    size_t length_it;
+
+    new_iov_offset = ((ssize_t)*iov_offset) + distance;
+
+    if (new_iov_offset < 0) {
+        /* seek backwards */
+        do {
+            ucs_assert(*iovcnt_offset > 0);
+            --(*iovcnt_offset);
+            new_iov_offset += iov[*iovcnt_offset].length;
+        } while (new_iov_offset < 0);
+    } else {
+        /* seek forward */
+        while (new_iov_offset >= (length_it = iov[*iovcnt_offset].length)) {
+            new_iov_offset -= length_it;
+            ++(*iovcnt_offset);
+            ucs_assert(*iovcnt_offset < iovcnt);
+        }
+    }
+
+    *iov_offset = new_iov_offset;
+}

@@ -73,4 +73,19 @@ size_t ucp_dt_iov_scatter(ucp_dt_iov_t *iov, size_t iovcnt, const void *src,
                           size_t length, size_t *iov_offset, size_t *iovcnt_offset);
 
 
+/**
+ * Seek to a logical offset in the iov
+ *
+ * @param [in]     iov            @ref ucp_dt_iov_t buffer to seek in
+ * @param [in]     iovcnt         Number of entries the @a iov buffer
+ * @param [in]     distance       Distance to move, relative to the current
+ *                                current location
+ * @param [inout]  iov_offset     The offset in bytes from the beginning of the
+ *                                current iov entry
+ * @param [inout]  iovcnt_offset  Current @a iov item index
+ */
+void ucp_dt_iov_seek(ucp_dt_iov_t *iov, size_t iovcnt, ptrdiff_t distance,
+                     size_t *iov_offset, size_t *iovcnt_offset);
+
+
 #endif
