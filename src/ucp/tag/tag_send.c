@@ -204,20 +204,3 @@ out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return ret;
 }
-
-void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, uint64_t sender_uuid,
-                                 uintptr_t remote_request)
-{
-    ucp_request_t *req;
-
-    ucs_trace_req("send_sync_ack sender_uuid %"PRIx64" remote_request 0x%lx",
-                  sender_uuid, remote_request);
-
-    req = ucp_worker_allocate_reply(worker, sender_uuid);
-    req->send.uct.func             = ucp_proto_progress_am_bcopy_single;
-    req->send.proto.am_id          = UCP_AM_ID_EAGER_SYNC_ACK;
-    req->send.proto.remote_request = remote_request;
-    req->send.proto.status         = UCS_OK;
-    req->send.proto.comp_cb        = ucp_request_put;
-    ucp_request_send(req);
-}

@@ -4,6 +4,9 @@
  * See file LICENSE for terms.
  */
 
+#ifndef UCP_REQUEST_INL_
+#define UCP_REQUEST_INL_
+
 #include "ucp_request.h"
 #include "ucp_worker.h"
 #include "ucp_ep.inl"
@@ -383,3 +386,36 @@ ucp_request_wait_uct_comp(ucp_request_t *req)
         ucp_worker_progress(req->send.ep->worker);
     }
 }
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
+                   unsigned am_flags, uint16_t hdr_len, uint16_t rdesc_flags,
+                   ucp_recv_desc_t **rdesc_p)
+{
+    ucp_recv_desc_t *rdesc;
+    ucs_status_t status;
+
+    if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
+        /* slowpath */
+        rdesc        = (ucp_recv_desc_t *)data - 1;
+        rdesc->flags = rdesc_flags | UCP_RECV_DESC_FLAG_UCT_DESC;
+        status       = UCS_INPROGRESS;
+    } else {
+        rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
+        if (rdesc == NULL) {
+            ucs_error("ucp recv descriptor is not allocated");
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        rdesc->flags = rdesc_flags;
+        memcpy(rdesc + 1, data, length);
+        status = UCS_OK;
+    }
+
+    rdesc->length         = length;
+    rdesc->payload_offset = hdr_len;
+    *rdesc_p              = rdesc;
+    return status;
+}
+
+#endif

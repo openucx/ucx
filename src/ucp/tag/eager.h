@@ -56,14 +56,10 @@ typedef struct {
 extern const ucp_proto_t ucp_tag_eager_proto;
 extern const ucp_proto_t ucp_tag_eager_sync_proto;
 
-
-void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, uint64_t sender_uuid,
-                                 uintptr_t remote_request);
+void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t flags);
 
 void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag,
                                    ucs_status_t status);
-
-void ucp_eager_sync_send_handler(void *arg, void *data, uint16_t flags);
 
 void ucp_tag_eager_zcopy_completion(uct_completion_t *self, ucs_status_t status);
 
@@ -120,7 +116,7 @@ ucp_eager_unexp_match(ucp_worker_h worker, ucp_recv_desc_t *rdesc, ucp_tag_t tag
         info->length     = ucp_eager_total_len(data, flags, recv_len);
 
         if (ucs_unlikely(flags & UCP_RECV_DESC_FLAG_SYNC)) {
-            ucp_eager_sync_send_handler(worker, data, flags);
+            ucp_tag_eager_sync_send_ack(worker, data, flags);
         }
         UCP_WORKER_STAT_EAGER_MSG(worker, flags);
     }

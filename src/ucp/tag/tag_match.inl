@@ -170,48 +170,24 @@ ucp_tag_unexp_remove(ucp_recv_desc_t *rdesc)
     ucs_list_del(&rdesc->tag_list[UCP_RDESC_ALL_LIST] );
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_worker_h worker, void *data,
-                   size_t length, unsigned am_flags, uint16_t hdr_len,
-                   uint16_t flags)
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_recv_desc_t *rdesc, ucp_tag_t tag)
 {
-    ucp_recv_desc_t *rdesc;
+    uint16_t flags = rdesc->flags;
     ucs_list_link_t *hash_list;
-    ucs_status_t status;
 
-    if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
-        /* slowpath */
-        rdesc        = (ucp_recv_desc_t *)data - 1;
-        rdesc->flags = flags | UCP_RECV_DESC_FLAG_UCT_DESC;
-        status       = UCS_INPROGRESS;
-    } else {
-        rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
-        if (rdesc == NULL) {
-            ucs_error("ucp recv descriptor is not allocated");
-            return UCS_ERR_NO_MEMORY;
-        }
+    hash_list = ucp_tag_unexp_get_list_for_tag(tm, tag);
+    ucs_list_add_tail(hash_list,           &rdesc->tag_list[UCP_RDESC_HASH_LIST]);
+    ucs_list_add_tail(&tm->unexpected.all, &rdesc->tag_list[UCP_RDESC_ALL_LIST]);
 
-        rdesc->flags = flags;
-        memcpy(rdesc + 1, data, length);
-        status = UCS_OK;
-    }
-
-    ucs_trace_req("unexp recv %c%c%c%c%c tag %"PRIx64" length %zu desc %p",
+    ucs_trace_req("unexp recv %c%c%c%c%c tag %"PRIx64" length %u desc %p",
                   (flags & UCP_RECV_DESC_FLAG_FIRST) ? 'f' : '-',
                   (flags & UCP_RECV_DESC_FLAG_LAST)  ? 'l' : '-',
                   (flags & UCP_RECV_DESC_FLAG_EAGER) ? 'e' : '-',
                   (flags & UCP_RECV_DESC_FLAG_SYNC)  ? 's' : '-',
                   (flags & UCP_RECV_DESC_FLAG_RNDV)  ? 'r' : '-',
-                  ucp_rdesc_get_tag(rdesc), length - hdr_len, rdesc);
+                  tag, rdesc->length - rdesc->payload_offset, rdesc);
 
-    rdesc->length         = length;
-    rdesc->payload_offset = hdr_len;
-    hash_list = ucp_tag_unexp_get_list_for_tag(tm, ucp_rdesc_get_tag(rdesc));
-    ucs_list_add_tail(hash_list,
-                      &rdesc->tag_list[UCP_RDESC_HASH_LIST]);
-    ucs_list_add_tail(&tm->unexpected.all,
-                      &rdesc->tag_list[UCP_RDESC_ALL_LIST]);
-    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void
