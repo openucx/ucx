@@ -858,31 +858,31 @@ ucs_status_ptr_t uct_dc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
     uct_dc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_dc_verbs_iface_t);
-    unsigned tmh_len     = sizeof(struct ibv_exp_tmh) +
-                           sizeof(struct ibv_exp_tmh_rvh) +
-                           sizeof(struct ibv_exp_tmh_ravh);
-    void *tmh            = ucs_alloca(tmh_len);
-    void *rvh            = tmh + sizeof(struct ibv_exp_tmh);
-    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
-    uint32_t op_index;
+    unsigned tmh_len            = sizeof(struct ibv_exp_tmh) +
+                                  sizeof(struct ibv_exp_tmh_rvh) +
+                                  sizeof(struct ibv_exp_tmh_ravh);
+    void *tmh                   = ucs_alloca(tmh_len);
+    void *rvh                   = tmh + sizeof(struct ibv_exp_tmh);
+    unsigned rndv_idx;
 
     UCT_RC_IFACE_CHECK_RNDV_PARAMS(iovcnt, header_length, tmh_len,
                                    iface->verbs_common.config.max_inline,
-                                   IBV_DEVICE_TM_CAPS(dev, max_rndv_hdr_size));
+                                   iface->super.super.tm.max_rndv_data +
+                                   UCT_RC_IFACE_TMH_PRIV_LEN);
     UCT_DC_VERBS_CHECK_RES_PTR(&iface->super, &ep->super);
 
-    op_index = uct_rc_iface_tag_get_op_id(&iface->super.super, comp);
-    uct_rc_iface_fill_tmh(tmh, tag, op_index, IBV_EXP_TMH_RNDV);
-    uct_rc_iface_fill_rvh(rvh, iov->buffer,
-                          ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
+    rndv_idx = uct_rc_verbs_iface_fill_rndv_hdrs(&iface->super.super,
+                                                 &iface->verbs_common,
+                                                 tmh, header, header_length,
+                                                 iface->super.super.tm.max_rndv_data,
+                                                 tmh_len, tag, iov, comp);
+
     uct_rc_verbs_iface_fill_ravh(rvh + sizeof(struct ibv_exp_tmh_rvh),
                                  iface->super.rx.dct->dct_num);
-    uct_rc_verbs_iface_fill_inl_sge(&iface->verbs_common, tmh, tmh_len,
-                                    header, header_length);
 
     uct_dc_verbs_iface_post_send(iface, ep, &iface->inl_am_wr,
                                  IBV_SEND_INLINE | IBV_SEND_SOLICITED);
-    return (ucs_status_ptr_t)((uint64_t)op_index);
+    return (ucs_status_ptr_t)((uint64_t)rndv_idx);
 }
 
 /* For RNDV request send regular eager packet with IBV_SEND_WITH_IMM and

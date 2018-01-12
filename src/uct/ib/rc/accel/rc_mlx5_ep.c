@@ -507,14 +507,14 @@ ucs_status_ptr_t uct_rc_mlx5_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
 {
     uct_rc_mlx5_ep_t *ep  = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
-    uct_ib_device_t *dev  = uct_ib_iface_device(&iface->super);
     unsigned tm_hdr_len   = sizeof(struct ibv_exp_tmh) +
                             sizeof(struct ibv_exp_tmh_rvh);
     uint32_t op_index;
 
     UCT_RC_IFACE_CHECK_RNDV_PARAMS(iovcnt, header_length, tm_hdr_len,
                                    UCT_IB_MLX5_AM_MAX_SHORT(0),
-                                   IBV_DEVICE_TM_CAPS(dev, max_rndv_hdr_size));
+                                   iface->tm.max_rndv_data +
+                                   UCT_RC_IFACE_TMH_PRIV_LEN);
     UCT_RC_IFACE_CHECK_RES_PTR(iface, &ep->super);
 
     op_index = uct_rc_iface_tag_get_op_id(iface, comp);

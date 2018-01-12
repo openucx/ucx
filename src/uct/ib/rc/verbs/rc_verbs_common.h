@@ -370,6 +370,30 @@ uct_rc_verbs_iface_common_tag_recv_cancel(uct_rc_verbs_iface_common_t *iface,
    return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE uint32_t
+uct_rc_verbs_iface_fill_rndv_hdrs(uct_rc_iface_t *iface,
+                                  uct_rc_verbs_iface_common_t *verbs_common,
+                                  struct ibv_exp_tmh *tmh, const void *hdr,
+                                  unsigned hdr_len, unsigned max_rndv_priv_data,
+                                  unsigned tmh_len, uct_tag_t tag,
+                                  const uct_iov_t *iov, uct_completion_t *comp)
+{
+    uint32_t op_index;
+    unsigned tmh_data_len;
+
+    op_index = uct_rc_iface_tag_get_op_id(iface, comp);
+    uct_rc_iface_fill_tmh(tmh, tag, op_index, IBV_EXP_TMH_RNDV);
+    tmh_data_len = uct_rc_iface_fill_tmh_priv_data(tmh, hdr, hdr_len,
+                                                   max_rndv_priv_data);
+    uct_rc_iface_fill_rvh((struct ibv_exp_tmh_rvh*)(tmh + 1), iov->buffer,
+                          ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
+    uct_rc_verbs_iface_fill_inl_sge(verbs_common, tmh, tmh_len,
+                                    (char*)hdr + tmh_data_len,
+                                    hdr_len - tmh_data_len);
+
+    return op_index;
+}
+
 /* This function check whether the error occured due to "MESSAGE_TRUNCATED"
  * error in Tag Matching (i.e. if posted buffer was not enough to fit the
  * incoming message). If this is the case the error should be reported in
@@ -439,15 +463,11 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_common_t *iface,
                                     uct_rc_iface_t *rc_iface,
                                     struct ibv_exp_wc *wc)
 {
-    uct_ib_md_t *ib_md = uct_ib_iface_md(&rc_iface->super);
     uct_ib_iface_recv_desc_t *ib_desc = (uct_ib_iface_recv_desc_t*)(uintptr_t)wc->wr_id;
     struct ibv_exp_tmh *tmh;
     uct_rc_hdr_t *rc_hdr;
     uint64_t imm_data;
     ucs_status_t status;
-    void *rb;
-    struct ibv_exp_tmh_rvh *rvh;
-    unsigned tm_hdrs_len;
 
     tmh = (struct ibv_exp_tmh*)uct_ib_iface_recv_desc_hdr(&rc_iface->super, ib_desc);
     VALGRIND_MAKE_MEM_DEFINED(tmh, wc->byte_len);
@@ -484,24 +504,7 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_common_t *iface,
         break;
 
     case IBV_EXP_TMH_RNDV:
-        rvh = (struct ibv_exp_tmh_rvh*)(tmh + 1);
-        /* Create "packed" rkey to pass it in the callback */
-        rb = uct_md_fill_md_name(&ib_md->super, (char*)tmh + wc->byte_len);
-        uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, rb);
-
-        /* RC uses two headers: TMH + RVH, DC uses three: TMH + RVH + RAVH.
-         * So, get actual RNDV hdrs len from offsets */
-        tm_hdrs_len = sizeof(*tmh) +
-                      (rc_iface->tm.rndv_desc.offset -
-                       rc_iface->tm.eager_desc.offset);
-
-        status = rc_iface->tm.rndv_unexp.cb(rc_iface->tm.rndv_unexp.arg,
-                                            UCT_CB_PARAM_FLAG_DESC,
-                                            be64toh(tmh->tag),
-                                            (char*)tmh + tm_hdrs_len,
-                                            wc->byte_len - tm_hdrs_len,
-                                            be64toh(rvh->va), ntohl(rvh->len),
-                                            (char*)tmh + wc->byte_len);
+        status = uct_rc_iface_handle_rndv(rc_iface, tmh, wc->byte_len);
 
         uct_rc_verbs_iface_unexp_consumed(iface, rc_iface, ib_desc,
                                           &rc_iface->tm.rndv_desc, status);

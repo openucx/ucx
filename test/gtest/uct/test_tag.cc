@@ -17,6 +17,11 @@ public:
     static const uint64_t RECV_SEED  = 0xb2b2b2b2b2b2b2b2ul;
     static const uint64_t MASK       = 0xfffffffffffffffful;
 
+    struct rndv_hdr {
+        uint64_t          priv[2];
+        uint16_t          tail;
+    } UCS_S_PACKED;
+
     struct recv_ctx {
         mapped_buffer     *mbuf;
         uct_tag_t         tag;
@@ -126,13 +131,17 @@ public:
 
     ucs_status_t tag_rndv_zcopy(entity &e, send_ctx &ctx)
     {
-         uint64_t ctxs[2] = {ctx.imm_data, reinterpret_cast<uint64_t>(&ctx)};
+         rndv_hdr hdr = {{ctx.imm_data,
+                          reinterpret_cast<uint64_t>(&ctx)
+                         },
+                         0xFAFA
+                        };
 
          UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, ctx.mbuf->ptr(),
                                  ctx.mbuf->length(), ctx.mbuf->memh(), 1);
 
-         ctx.rndv_op = uct_ep_tag_rndv_zcopy(e.ep(0), ctx.tag, &ctxs,
-                                             sizeof(ctxs), iov, iovcnt, 0,
+         ctx.rndv_op = uct_ep_tag_rndv_zcopy(e.ep(0), ctx.tag, &hdr,
+                                             sizeof(hdr), iov, iovcnt, 0,
                                              &ctx.uct_comp);
 
          return  (UCS_PTR_IS_ERR(ctx.rndv_op)) ? UCS_PTR_STATUS(ctx.rndv_op) :
@@ -146,10 +155,14 @@ public:
 
     ucs_status_t tag_rndv_request(entity &e, send_ctx &ctx)
     {
-        uint64_t ctxs[2] = {ctx.imm_data, reinterpret_cast<uint64_t>(&ctx)};
+        rndv_hdr hdr = {{ctx.imm_data,
+                         reinterpret_cast<uint64_t>(&ctx)
+                        },
+                        0xFAFA
+                       };
         ctx.sw_rndv = true;
 
-        return uct_ep_tag_rndv_request(e.ep(0), ctx.tag, &ctxs, sizeof(ctxs), 0);
+        return uct_ep_tag_rndv_request(e.ep(0), ctx.tag, &hdr, sizeof(hdr), 0);
     }
 
     ucs_status_t tag_post(entity &e, recv_ctx &ctx)
@@ -335,12 +348,14 @@ public:
                                    uint64_t remote_addr, size_t length,
                                    const void *rkey_buf)
     {
-        uint64_t *ctxs  = const_cast<uint64_t*>(static_cast<const uint64_t*>(header));
-        recv_ctx *r_ctx = reinterpret_cast<recv_ctx*>(*ctxs);
-        send_ctx *s_ctx = reinterpret_cast<send_ctx*>(*(ctxs + 1));
+        rndv_hdr *rhdr  = const_cast<rndv_hdr*>(static_cast<const rndv_hdr*>(header));
+        recv_ctx *r_ctx = reinterpret_cast<recv_ctx*>(rhdr->priv[0]);
+        send_ctx *s_ctx = reinterpret_cast<send_ctx*>(rhdr->priv[1]);
+        uint16_t  tail  = rhdr->tail;
         r_ctx->unexp  = true;
         r_ctx->status = UCS_OK;
 
+        EXPECT_EQ(tail, 0xFAFA);
         EXPECT_EQ(s_ctx->tag, stag);
         EXPECT_EQ(length, s_ctx->sw_rndv ? 0 : s_ctx->mbuf->length());
         EXPECT_EQ(remote_addr, s_ctx->sw_rndv ? 0ul :

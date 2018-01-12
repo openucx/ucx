@@ -188,6 +188,12 @@ typedef struct uct_rc_srq {
 
 #if IBV_EXP_HW_TM
 
+typedef struct uct_rc_iface_tmh_priv_data {
+    uint8_t                     length;
+    uint16_t                    data;
+} UCS_S_PACKED uct_rc_iface_tmh_priv_data_t;
+
+
 typedef struct uct_rc_iface_release_desc {
     uct_recv_desc_t             super;
     unsigned                    offset;
@@ -232,6 +238,7 @@ struct uct_rc_iface {
         ucs_ptr_array_t              rndv_comps;
         unsigned                     num_tags;
         unsigned                     num_outstanding;
+        unsigned                     max_rndv_data;
         uint16_t                     unexpected_cnt;
         uint16_t                     cmd_qp_len;
         uint8_t                      enabled;
@@ -337,6 +344,9 @@ typedef struct uct_rc_am_short_hdr {
 
 #  define UCT_RC_IFACE_TM_OFF_STR         "TM_ENABLE=n"
 
+/* TMH can carry 2 bytes of data in its reserved filed */
+#  define UCT_RC_IFACE_TMH_PRIV_LEN       2
+
 #  define UCT_RC_IFACE_CHECK_RES_PTR(_iface, _ep) \
        UCT_RC_CHECK_CQE_RET(_iface, _ep, &(_ep)->txqp, \
                             UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
@@ -382,6 +392,11 @@ typedef struct uct_rc_am_short_hdr {
            _length = pack_cb(hdr, arg); \
        }
 
+ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
+                                      struct ibv_exp_tmh *tmh,
+                                      unsigned byte_len);
+
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,
                       uint32_t app_ctx, unsigned op)
@@ -398,6 +413,33 @@ uct_rc_iface_fill_rvh(struct ibv_exp_tmh_rvh *rvh, const void *vaddr,
     rvh->va   = htobe64((uint64_t)vaddr);
     rvh->rkey = htonl(rkey);
     rvh->len  = htonl(len);
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_iface_tag_get_op_id(uct_rc_iface_t *iface, uct_completion_t *comp)
+{
+    uint32_t prev_ph;
+    return ucs_ptr_array_insert(&iface->tm.rndv_comps, comp, &prev_ph);
+}
+
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_iface_fill_tmh_priv_data(struct ibv_exp_tmh *tmh, const void *hdr,
+                                unsigned hdr_len, unsigned max_rndv_priv_data)
+{
+    uct_rc_iface_tmh_priv_data_t *priv = (uct_rc_iface_tmh_priv_data_t*)tmh->reserved;
+
+    /* If header length is bigger tha max_rndv_priv_data size, need to add the
+     * rest to the TMH reserved field. */
+    if (hdr_len > max_rndv_priv_data) {
+        priv->length = hdr_len - max_rndv_priv_data;
+        ucs_assert(tmh->reserved[0] <= 2);
+        memcpy(&priv->data, (char*)hdr, priv->length);
+    } else {
+        priv->length = 0;
+    }
+
+    return priv->length;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -418,13 +460,6 @@ static UCS_F_ALWAYS_INLINE uct_rc_iface_ctx_priv_t*
 uct_rc_iface_ctx_priv(uct_tag_context_t *ctx)
 {
     return (uct_rc_iface_ctx_priv_t*)ctx->priv;
-}
-
-static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_iface_tag_get_op_id(uct_rc_iface_t *iface, uct_completion_t *comp)
-{
-    uint32_t prev_ph;
-    return ucs_ptr_array_insert(&iface->tm.rndv_comps, comp, &prev_ph);
 }
 
 static UCS_F_ALWAYS_INLINE void
