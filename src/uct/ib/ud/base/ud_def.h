@@ -174,7 +174,7 @@ typedef struct uct_ud_zcopy_desc {
 typedef struct uct_ud_send_skb_inl {
     uct_ud_send_skb_t  super;
     uct_ud_neth_t      neth;
-} UCS_S_PACKED uct_ud_send_skb_inl_t;
+} UCS_S_PACKED UCS_V_ALIGNED(UCS_SYS_CACHE_LINE_SIZE) uct_ud_send_skb_inl_t;
 
 
 typedef struct uct_ud_recv_skb {

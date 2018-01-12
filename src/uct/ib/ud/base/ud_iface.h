@@ -171,7 +171,7 @@ struct uct_ud_ctl_hdr {
     };
     uct_ud_peer_name_t         peer;
     /* For CREQ packet, IB address follows */
-} UCS_S_PACKED;
+} UCS_S_PACKED UCS_V_ALIGNED(UCS_SYS_CACHE_LINE_SIZE);
 
 
 extern ucs_config_field_t uct_ud_iface_config_table[];
