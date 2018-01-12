@@ -620,12 +620,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
                                        sizeof(ucp_rndv_data_hdr_t),
                                        ucp_rndv_pack_multi_data,
                                        ucp_rndv_pack_multi_data,
-                                       ucp_rndv_pack_multi_data_last, 0);
+                                       ucp_rndv_pack_multi_data_last, 1);
     }
     if (status == UCS_OK) {
         ucp_rndv_complete_send(sreq);
     } else if (status == UCS_ERR_PENDING) {
-        status = UCS_OK; // remove from arbiter
+        status = UCS_OK;
     }
 
     return status;
@@ -731,7 +731,7 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_multi(uct_pending_req_t *self)
                                  UCP_AM_ID_RNDV_DATA_LAST,
                                  &hdr, sizeof(hdr),
                                  &hdr, sizeof(hdr),
-                                 ucp_rndv_am_zcopy_send_req_complete, 0);
+                                 ucp_rndv_am_zcopy_send_req_complete, 1);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,

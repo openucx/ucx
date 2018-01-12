@@ -167,8 +167,8 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status)
     if (status == UCS_OK) {
         ucs_trace_data("ep %p: added pending uct request %p to lane[%d]=%p",
                        req->send.ep, req, req->send.lane, uct_ep);
-        *req_status = UCS_INPROGRESS;
-        req->send.pend_add_lane = req->send.lane; // save pending lane
+        *req_status            = UCS_INPROGRESS;
+        req->send.pending_lane = req->send.lane; // save pending lane
         return 1;
     } else if (status == UCS_ERR_BUSY) {
         /* Could not add, try to send again */
@@ -323,7 +323,7 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
             req->send.uct.func        = proto->bcopy_multi;
             req->send.tag.message_id  = req->send.ep->worker->tm.am.message_id++;
             req->send.tag.am_bw_index = 0;
-            req->send.pend_add_lane   = UCP_NULL_LANE;
+            req->send.pending_lane    = UCP_NULL_LANE;
             UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_multi", req->send.length);
         }
         return UCS_OK;
@@ -343,7 +343,7 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
             req->send.uct.func        = proto->zcopy_multi;
             req->send.tag.message_id  = req->send.ep->worker->tm.am.message_id++;
             req->send.tag.am_bw_index = 0;
-            req->send.pend_add_lane   = UCP_NULL_LANE;
+            req->send.pending_lane    = UCP_NULL_LANE;
             UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_multi", req->send.length);
         }
         return UCS_OK;

@@ -39,7 +39,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                    uct_pack_callback_t pack_first,
                                    uct_pack_callback_t pack_middle,
                                    uct_pack_callback_t pack_last,
-                                   int force_am)
+                                   int enable_am_bw)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
@@ -50,8 +50,8 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     size_t offset;
     int pending_adde_res;
 
-    req->send.lane = force_am ? ucp_ep_get_am_lane(ep) :
-                                ucp_send_request_get_next_am_bw_lane(req);
+    req->send.lane = !enable_am_bw ? ucp_ep_get_am_lane(ep) :
+                                     ucp_send_request_get_next_am_bw_lane(req);
     offset         = req->send.state.dt.offset;
     uct_ep         = ep->uct_eps[req->send.lane];
     max_middle     = ucp_ep_get_max_bcopy(ep, req->send.lane) - hdr_size_middle;
@@ -80,18 +80,16 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             }
         }
 
-        if (packed_len < 0) {
-            if (req->send.lane != req->send.pend_add_lane) {
-                // got NO_RES on a different lane than pending one
-                // resched
+        if (ucs_unlikely(packed_len < 0)) {
+            if (req->send.lane != req->send.pending_lane) {
+                /* switch to new pending lane */
                 pending_adde_res = ucp_request_pending_add(req, &status);
                 if (!pending_adde_res) {
                     /* failed to switch req to pending queue, try again */
                     continue;
                 }
-                ucs_assert(pending_adde_res == 1);
                 ucs_assert(status == UCS_INPROGRESS);
-                return UCS_ERR_PENDING; // remove from current pending
+                return UCS_ERR_PENDING;
             } else {
                 return packed_len;
             }
@@ -201,7 +199,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                    uint8_t am_id_middle, uint8_t am_id_last,
                                    const void *hdr_first, size_t hdr_size_first,
                                    const void *hdr_middle, size_t hdr_size_middle,
-                                   ucp_req_complete_func_t complete, int force_am)
+                                   ucp_req_complete_func_t complete, int enable_am_bw)
 {
     ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep            = req->send.ep;
@@ -217,7 +215,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     int pending_adde_res;
 
     if (UCP_DT_IS_CONTIG(req->send.datatype)) {
-        if (!force_am) {
+        if (enable_am_bw) {
             req->send.lane = ucp_send_request_get_next_am_bw_lane(req);
             ucp_send_request_add_reg_lane(req, req->send.lane);
         } else {
@@ -298,17 +296,15 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         }
 
         if (status == UCS_ERR_NO_RESOURCE) {
-            if (req->send.lane != req->send.pend_add_lane) {
-                // got NO_RES on a different lane than pending one
-                // resched
+            if (req->send.lane != req->send.pending_lane) {
+                /* switch to new pending lane */
                 pending_adde_res = ucp_request_pending_add(req, &status);
                 if (!pending_adde_res) {
                     /* failed to switch req to pending queue, try again */
                     continue;
                 }
-                ucs_assert(pending_adde_res == 1);
                 ucs_assert(status == UCS_INPROGRESS);
-                return UCS_OK; // remove from current pending
+                return UCS_OK;
             }
         }
         ucp_request_send_state_advance(req, &state,

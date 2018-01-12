@@ -190,8 +190,8 @@ struct ucp_request {
                 uct_completion_t  uct_comp; /* UCT completion */
             } state;
 
-            ucp_lane_index_t      pend_add_lane; /* Lane on which request was moved
-                                                  * to pending state */
+            ucp_lane_index_t      pending_lane; /* Lane on which request was moved
+                                                 * to pending state */
             ucp_lane_index_t      lane;     /* Lane on which this request is being sent */
             uct_pending_req_t     uct;      /* UCT pending request */
         } send;

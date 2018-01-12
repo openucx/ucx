@@ -747,6 +747,14 @@ static double ucp_wireup_rma_bw_score_func(ucp_context_h context,
                 (UCP_WIREUP_RMA_BW_TEST_MSG_SIZE * md_attr->reg_cost.growth));
 }
 
+static int ucp_wireup_is_lane_proxy(ucp_ep_h ep, ucp_rsc_index_t rsc_index,
+                                    uint64_t remote_cap_flags)
+{
+    return !ucp_worker_is_tl_p2p(ep->worker, rsc_index) &&
+           ((remote_cap_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS) ==
+            UCT_IFACE_FLAG_EVENT_RECV_SIG);
+}
+
 static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *params,
                                            unsigned address_count,
                                            const ucp_address_entry_t *address_list,
@@ -755,7 +763,6 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
                                            ucp_err_handling_mode_t err_mode)
 {
     ucp_wireup_criteria_t criteria;
-    uint64_t remote_cap_flags;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -804,10 +811,8 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
      * Use a proxy lane which would send the first active message as signaled to
      * make sure the remote interface will indeed wake up.
      */
-    remote_cap_flags = address_list[addr_index].iface_attr.cap_flags;
-    is_proxy = !ucp_worker_is_tl_p2p(ep->worker, rsc_index) &&
-               ((remote_cap_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS) ==
-                UCT_IFACE_FLAG_EVENT_RECV_SIG);
+    is_proxy = ucp_wireup_is_lane_proxy(ep, rsc_index,
+                                        address_list[addr_index].iface_attr.cap_flags);
 
     usage = UCP_WIREUP_LANE_USAGE_AM |
             ucp_wireup_tag_lane_usage(ep, address_list, addr_index,
@@ -847,7 +852,6 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
     double score;
     int found;
     int is_proxy;
-    uint64_t remote_cap_flags;
 
     /* Check if we need active messages, for wireup */
     if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG)) {
@@ -875,7 +879,7 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
     tl_bitmap     = -1;
     remote_md_map = -1;
     /* 1 lane is always AM lane */
-    for (; found < ep->worker->context->config.ext.max_eager_lanes;) {
+    for (; found + 1 < ep->worker->context->config.ext.max_eager_lanes;) {
         status = ucp_wireup_select_transport(ep, address_list, address_count,
                                              &criteria, tl_bitmap, remote_md_map,
                                              !found, &rsc_index, &addr_index, &score);
@@ -883,10 +887,8 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
             break;
         }
 
-        remote_cap_flags = address_list[addr_index].iface_attr.cap_flags;
-        is_proxy = !ucp_worker_is_tl_p2p(ep->worker, rsc_index) &&
-                   ((remote_cap_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS) ==
-                    UCT_IFACE_FLAG_EVENT_RECV_SIG);
+        is_proxy = ucp_wireup_is_lane_proxy(ep, rsc_index,
+                                            address_list[addr_index].iface_attr.cap_flags);
 
         ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                                  address_list[addr_index].md_index, score,
@@ -904,7 +906,7 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
         }
     }
 
-    return (found || !ep->worker->context->config.ext.max_eager_lanes) ?
+    return (found || (ep->worker->context->config.ext.max_eager_lanes < 2)) ?
            UCS_OK : status;
 }
 

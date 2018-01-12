@@ -119,7 +119,7 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
                                            req->send.buffer,
                                            &req->send.state.dt);
     req->send.lane         = ucp_ep_config(ep)->tag.lane;
-    req->send.pend_add_lane = UCP_NULL_LANE;
+    req->send.pending_lane = UCP_NULL_LANE;
 }
 
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,

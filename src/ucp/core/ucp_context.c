@@ -107,7 +107,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "the eager_zcopy protocol",
    ucs_offsetof(ucp_config_t, ctx.rndv_perf_diff), UCS_CONFIG_TYPE_DOUBLE},
 
-  {"MAX_EAGER_LANES", "0",
+  {"MAX_EAGER_LANES", "1",
    "Maximal number of devices on which an eager operation may be executed in parallel",
    ucs_offsetof(ucp_config_t, ctx.max_eager_lanes), UCS_CONFIG_TYPE_UINT},
 
