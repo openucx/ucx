@@ -157,6 +157,18 @@ uct_ib_mlx5_txwq_wrap_any(uct_ib_mlx5_txwq_t *txwq, void *seg)
 }
 
 
+/* Wrapping of 'data' could happen, even past 'qend' boundary.
+ * Do not check for alignment. */
+static UCS_F_ALWAYS_INLINE void *
+uct_ib_mlx5_txwq_wrap_data(uct_ib_mlx5_txwq_t *txwq, void *data)
+{
+    if (ucs_unlikely(data >= txwq->qend)) {
+        data -= (txwq->qend - txwq->qstart);
+    }
+    return data;
+}
+
+
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_ep_set_rdma_seg(struct mlx5_wqe_raddr_seg *raddr, uint64_t rdma_raddr,
                             uct_rkey_t rdma_rkey)

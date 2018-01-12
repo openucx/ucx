@@ -147,6 +147,20 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
 void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
                            ucs_status_t status);
 
+#if IBV_EXP_HW_TM_DC
+void uct_dc_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,
+                                      struct ibv_exp_create_srq_attr *srq_attr,
+                                      struct ibv_exp_srq_dc_offload_params *dc_op);
+
+static UCS_F_ALWAYS_INLINE void
+uct_dc_iface_fill_ravh(struct ibv_exp_tmh_ravh *ravh, uint32_t dct_num)
+{
+    ravh->sl_dct        = htobe32(dct_num);
+    ravh->dc_access_key = htobe64(UCT_IB_KEY);
+    ravh->reserved      = 0;
+}
+#endif
+
 /* TODO:
  * use a better seach algorithm (perfect hash, bsearch, hash) ???
  *

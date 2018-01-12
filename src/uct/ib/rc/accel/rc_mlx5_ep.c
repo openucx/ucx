@@ -443,7 +443,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
     uct_rc_mlx5_txqp_tag_inline_post(iface, IBV_QPT_RC, &ep->super.txqp,
                                      &ep->tx.wq, MLX5_OPCODE_SEND, data, length,
                                      NULL, tag, 0, IBV_EXP_TMH_EAGER, 0, NULL,
-                                     NULL, 0, MLX5_WQE_CTRL_SOLICITED);
+                                     NULL, 0, NULL, 0, MLX5_WQE_CTRL_SOLICITED);
     return UCS_OK;
 }
 
@@ -523,7 +523,7 @@ ucs_status_ptr_t uct_rc_mlx5_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                      &ep->tx.wq, MLX5_OPCODE_SEND, header,
                                      header_length, iov, tag, op_index,
                                      IBV_EXP_TMH_RNDV, 0, NULL, NULL, 0,
-                                     MLX5_WQE_CTRL_SOLICITED);
+                                     NULL, 0, MLX5_WQE_CTRL_SOLICITED);
 
     return (ucs_status_ptr_t)((uint64_t)op_index);
 }
@@ -544,7 +544,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
                                      &ep->tx.wq, MLX5_OPCODE_SEND_IMM, header,
                                      header_length, NULL, tag, 0,
                                      IBV_EXP_TMH_EAGER, 0, NULL, NULL, 0,
-                                     MLX5_WQE_CTRL_SOLICITED);
+                                     NULL, 0, MLX5_WQE_CTRL_SOLICITED);
     return UCS_OK;
 }
 
