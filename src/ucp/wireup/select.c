@@ -850,7 +850,7 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
     unsigned addr_index;
     uint64_t tl_bitmap;
     double score;
-    int found;
+    int num_lanes;
     int is_proxy;
 
     /* Check if we need active messages, for wireup */
@@ -875,14 +875,14 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
     }
 
     status        = UCS_ERR_UNREACHABLE;
-    found         = 0;
+    num_lanes     = 1;
     tl_bitmap     = -1;
     remote_md_map = -1;
-    /* 1 lane is always AM lane */
-    for (; found + 1 < ep->worker->context->config.ext.max_eager_lanes;) {
+    /* am_bw_lane[0] is am_lane */
+    for (; num_lanes < ep->worker->context->config.ext.max_eager_lanes;) {
         status = ucp_wireup_select_transport(ep, address_list, address_count,
                                              &criteria, tl_bitmap, remote_md_map,
-                                             !found, &rsc_index, &addr_index, &score);
+                                             0, &rsc_index, &addr_index, &score);
         if (status != UCS_OK) {
             break;
         }
@@ -896,7 +896,7 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
 
         remote_md_map &= ~UCS_BIT(address_list[addr_index].md_index);
         tl_bitmap      = ucp_wireup_unset_tl_by_md(ep, tl_bitmap, rsc_index);
-        found++;
+        num_lanes++;
 
         if (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SHM) {
             /* special case for SHM: do not try to lookup additional lanes when
@@ -906,8 +906,7 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
         }
     }
 
-    return (found || (ep->worker->context->config.ext.max_eager_lanes < 2)) ?
-           UCS_OK : status;
+    return UCS_OK;
 }
 
 static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,

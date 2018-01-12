@@ -624,7 +624,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
     }
     if (status == UCS_OK) {
         ucp_rndv_complete_send(sreq);
-    } else if (status == UCS_ERR_PENDING) {
+    } else if (status == UCP_STATUS_PENDING_SWITCH) {
         status = UCS_OK;
     }
 

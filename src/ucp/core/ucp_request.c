@@ -168,7 +168,7 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status)
         ucs_trace_data("ep %p: added pending uct request %p to lane[%d]=%p",
                        req->send.ep, req, req->send.lane, uct_ep);
         *req_status            = UCS_INPROGRESS;
-        req->send.pending_lane = req->send.lane; // save pending lane
+        req->send.pending_lane = req->send.lane;
         return 1;
     } else if (status == UCS_ERR_BUSY) {
         /* Could not add, try to send again */

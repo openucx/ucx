@@ -11,6 +11,8 @@
 #include <ucp/dt/dt.h>
 #include <ucs/debug/profile.h>
 
+#define UCP_STATUS_PENDING_SWITCH (UCS_ERR_LAST - 1)
+
 typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
 
 
@@ -89,7 +91,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                     continue;
                 }
                 ucs_assert(status == UCS_INPROGRESS);
-                return UCS_ERR_PENDING;
+                return UCP_STATUS_PENDING_SWITCH;
             } else {
                 return packed_len;
             }

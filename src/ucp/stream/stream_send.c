@@ -230,7 +230,7 @@ static ucs_status_t ucp_stream_bcopy_multi(uct_pending_req_t *self)
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
         ucp_request_send_generic_dt_finish(req);
         ucp_request_complete_send(req, UCS_OK);
-    } else if (status == UCS_ERR_PENDING) {
+    } else if (status == UCP_STATUS_PENDING_SWITCH) {
         status = UCS_OK;
     }
     return status;
