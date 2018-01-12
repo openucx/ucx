@@ -513,7 +513,8 @@ ucs_status_ptr_t uct_rc_mlx5_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     UCT_RC_IFACE_CHECK_RNDV_PARAMS(iovcnt, header_length, tm_hdr_len,
                                    UCT_IB_MLX5_AM_MAX_SHORT(0),
-                                   iface->tm.max_rndv_data + 2);
+                                   iface->tm.max_rndv_data +
+                                   UCT_RC_IFACE_TMH_PRIV_LEN);
     UCT_RC_IFACE_CHECK_RES_PTR(iface, &ep->super);
 
     op_index = uct_rc_iface_tag_get_op_id(iface, comp);

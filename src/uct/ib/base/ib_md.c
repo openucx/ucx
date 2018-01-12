@@ -168,8 +168,8 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     }
 #endif
 
-    md_attr->cap.mem_type  = UCT_MD_MEM_TYPE_HOST;
-    md_attr->rkey_packed_size = sizeof(uint64_t);
+    md_attr->cap.mem_type     = UCT_MD_MEM_TYPE_HOST;
+    md_attr->rkey_packed_size = UCT_IB_MD_PACKED_RKEY_SIZE;
 
     if (md->config.enable_contig_pages &&
         IBV_EXP_HAVE_CONTIG_PAGES(&md->dev.dev_attr))

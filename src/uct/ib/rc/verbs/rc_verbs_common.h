@@ -379,14 +379,17 @@ uct_rc_verbs_iface_fill_rndv_hdrs(uct_rc_iface_t *iface,
                                   const uct_iov_t *iov, uct_completion_t *comp)
 {
     uint32_t op_index;
+    unsigned tmh_data_len;
 
     op_index = uct_rc_iface_tag_get_op_id(iface, comp);
     uct_rc_iface_fill_tmh(tmh, tag, op_index, IBV_EXP_TMH_RNDV);
-    uct_rc_iface_fill_tmh_priv_data(tmh, hdr, hdr_len, max_rndv_priv_data);
+    tmh_data_len = uct_rc_iface_fill_tmh_priv_data(tmh, hdr, hdr_len,
+                                                   max_rndv_priv_data);
     uct_rc_iface_fill_rvh((struct ibv_exp_tmh_rvh*)(tmh + 1), iov->buffer,
                           ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
-    uct_rc_verbs_iface_fill_inl_sge(verbs_common, tmh, tmh_len, hdr,
-                                    ucs_min(max_rndv_priv_data, hdr_len));
+    uct_rc_verbs_iface_fill_inl_sge(verbs_common, tmh, tmh_len,
+                                    (char*)hdr + tmh_data_len,
+                                    hdr_len - tmh_data_len);
 
     return op_index;
 }
@@ -501,8 +504,7 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_common_t *iface,
         break;
 
     case IBV_EXP_TMH_RNDV:
-        status = uct_rc_iface_handle_rndv(rc_iface, tmh, wc->byte_len,
-                                          UCT_CB_PARAM_FLAG_DESC);
+        status = uct_rc_iface_handle_rndv(rc_iface, tmh, wc->byte_len);
 
         uct_rc_verbs_iface_unexp_consumed(iface, rc_iface, ib_desc,
                                           &rc_iface->tm.rndv_desc, status);

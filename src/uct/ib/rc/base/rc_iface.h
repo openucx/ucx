@@ -188,6 +188,12 @@ typedef struct uct_rc_srq {
 
 #if IBV_EXP_HW_TM
 
+typedef struct uct_rc_iface_tmh_priv_data {
+    uint8_t                     length;
+    uint16_t                    data;
+} UCS_S_PACKED uct_rc_iface_tmh_priv_data_t;
+
+
 typedef struct uct_rc_iface_release_desc {
     uct_recv_desc_t             super;
     unsigned                    offset;
@@ -338,6 +344,9 @@ typedef struct uct_rc_am_short_hdr {
 
 #  define UCT_RC_IFACE_TM_OFF_STR         "TM_ENABLE=n"
 
+/* TMH can carry 2 bytes of data in its reserved filed */
+#  define UCT_RC_IFACE_TMH_PRIV_LEN       2
+
 #  define UCT_RC_IFACE_CHECK_RES_PTR(_iface, _ep) \
        UCT_RC_CHECK_CQE_RET(_iface, _ep, &(_ep)->txqp, \
                             UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
@@ -383,6 +392,11 @@ typedef struct uct_rc_am_short_hdr {
            _length = pack_cb(hdr, arg); \
        }
 
+ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
+                                      struct ibv_exp_tmh *tmh,
+                                      unsigned byte_len);
+
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,
                       uint32_t app_ctx, unsigned op)
@@ -409,20 +423,23 @@ uct_rc_iface_tag_get_op_id(uct_rc_iface_t *iface, uct_completion_t *comp)
 }
 
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_iface_fill_tmh_priv_data(struct ibv_exp_tmh *tmh, const void *hdr,
                                 unsigned hdr_len, unsigned max_rndv_priv_data)
 {
+    uct_rc_iface_tmh_priv_data_t *priv = (uct_rc_iface_tmh_priv_data_t*)tmh->reserved;
+
     /* If header length is bigger tha max_rndv_priv_data size, need to add the
      * rest to the TMH reserved field. */
     if (hdr_len > max_rndv_priv_data) {
-        tmh->reserved[0] = hdr_len - max_rndv_priv_data;
+        priv->length = hdr_len - max_rndv_priv_data;
         ucs_assert(tmh->reserved[0] <= 2);
-        memcpy(&tmh->reserved[1], (char*)hdr + max_rndv_priv_data,
-               tmh->reserved[0]);
+        memcpy(&priv->data, (char*)hdr, priv->length);
     } else {
-        tmh->reserved[0] = 0;
+        priv->length = 0;
     }
+
+    return priv->length;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -458,49 +475,6 @@ uct_rc_iface_handle_rndv_fin(uct_rc_iface_t *iface, struct ibv_exp_tmh *tmh)
     ucs_assert_always(found > 0);
     uct_invoke_completion((uct_completion_t*)rndv_comp, UCS_OK);
     ucs_ptr_array_remove(&iface->tm.rndv_comps, ntohl(tmh->app_ctx), 0);
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_rc_iface_handle_rndv(uct_rc_iface_t *iface, struct ibv_exp_tmh *tmh,
-                         unsigned byte_len, unsigned flags)
-{
-    uct_ib_md_t *ib_md = uct_ib_iface_md(&iface->super);
-    struct ibv_exp_tmh_rvh *rvh;
-    unsigned tm_hdrs_len;
-    unsigned rndv_priv_hdr_len;
-    unsigned tmh_priv_data_len;
-    void *rndv_priv_hdr;
-    void *rb;
-    void *packed_rkey;
-
-    rvh = (struct ibv_exp_tmh_rvh*)(tmh + 1);
-
-    /* RC uses two headers: TMH + RVH, DC uses three: TMH + RVH + RAVH.
-     * So, get actual RNDV hdrs len from offsets */
-    tm_hdrs_len = sizeof(*tmh) +
-                  (iface->tm.rndv_desc.offset - iface->tm.eager_desc.offset);
-
-    rndv_priv_hdr     = (char*)tmh + tm_hdrs_len;
-    rndv_priv_hdr_len = byte_len - tm_hdrs_len;
-    tmh_priv_data_len = tmh->reserved[0];
-
-    if (tmh_priv_data_len) {
-        /* TMH reserved field contains some more priv user data */
-        ucs_assert(tmh_priv_data_len <= 2);
-        memcpy((char*)rndv_priv_hdr + rndv_priv_hdr_len, &tmh->reserved[1],
-               tmh_priv_data_len);
-    }
-
-    /* Create "packed" rkey to pass it in the callback */
-    packed_rkey = (char*)tmh + byte_len + tmh_priv_data_len;
-    rb = uct_md_fill_md_name(&ib_md->super, packed_rkey);
-    uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, rb);
-
-    return iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, flags,
-                                   be64toh(tmh->tag), rndv_priv_hdr,
-                                   rndv_priv_hdr_len + tmh_priv_data_len,
-                                   be64toh(rvh->va), ntohl(rvh->len),
-                                   packed_rkey);
 }
 
 #else

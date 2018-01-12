@@ -847,6 +847,7 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type
     struct ibv_exp_tmh_rvh rvh;
     unsigned tmh_len;
     unsigned max_rndv_data;
+    unsigned tmh_data_len;
     void *data;
 
     ctrl         = txwq->curr;
@@ -861,6 +862,7 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type
         wqe_size         = ctrl_av_size + sizeof(*inl) + sizeof(*tmh) + length;
         inl->byte_count  = htonl((length + sizeof(*tmh)) | MLX5_INLINE_SEG);
         data             = tmh + 1;
+        tmh_data_len     = 0;
         break;
 
     case IBV_EXP_TMH_RNDV:
@@ -869,9 +871,8 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type
         inl->byte_count  = htonl((length + tmh_len) | MLX5_INLINE_SEG);
         max_rndv_data    = iface->tm.max_rndv_data;
 
-        uct_rc_iface_fill_tmh_priv_data(tmh, buffer, length, max_rndv_data);
-        length           = ucs_min(max_rndv_data, length); /* Note: change length
-                                                              func parameter */
+        tmh_data_len     = uct_rc_iface_fill_tmh_priv_data(tmh, buffer, length,
+                                                           max_rndv_data);
         /* RVH can be wrapped */
         uct_rc_iface_fill_rvh(&rvh, iov->buffer,
                               ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
@@ -891,7 +892,9 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type
 
     uct_rc_iface_fill_tmh(tmh, tag, app_ctx, tm_op);
 
-    uct_ib_mlx5_inline_copy(data, buffer, length, txwq);
+    /* In case of RNDV first bytes of data could be stored in TMH */
+    uct_ib_mlx5_inline_copy(data, (char*)buffer + tmh_data_len,
+                            length - tmh_data_len, txwq);
     fm_ce_se |= uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq, opcode, 0, fm_ce_se,
@@ -1131,7 +1134,7 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *mlx5_common_iface
         break;
 
     case IBV_EXP_TMH_RNDV:
-        status = uct_rc_iface_handle_rndv(rc_iface, tmh, byte_len, flags);
+        status = uct_rc_iface_handle_rndv(rc_iface, tmh, byte_len);
 
         uct_rc_mlx5_iface_unexp_consumed(mlx5_common_iface, rc_iface,
                                          &rc_iface->tm.rndv_desc, status,

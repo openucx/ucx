@@ -16,6 +16,9 @@
 #include <ucs/sys/rcache.h>
 
 
+#define UCT_IB_MD_PACKED_RKEY_SIZE  sizeof(uint64_t)
+
+
 /**
  * IB MD statistics counters
  */

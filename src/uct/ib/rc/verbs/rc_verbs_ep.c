@@ -648,7 +648,8 @@ ucs_status_ptr_t uct_rc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     UCT_RC_IFACE_CHECK_RNDV_PARAMS(iovcnt, header_length, tmh_len,
                                    iface->verbs_common.config.max_inline,
-                                   iface->super.tm.max_rndv_data + 2);
+                                   iface->super.tm.max_rndv_data +
+                                   UCT_RC_IFACE_TMH_PRIV_LEN);
     UCT_RC_IFACE_CHECK_RES_PTR(&iface->super, &ep->super);
 
     rndv_idx = uct_rc_verbs_iface_fill_rndv_hdrs(&iface->super,
