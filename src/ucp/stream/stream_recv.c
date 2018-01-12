@@ -153,15 +153,13 @@ ucp_stream_rdata_unpack(const void *rdata, size_t length, ucp_request_t *dst_req
 {
     /* Truncated error is not actual for stream, need to adjust */
     size_t       valid_len = ucs_min((dst_req->recv.length -
-                                      dst_req->recv.state.offset), length);
+                                      dst_req->recv.stream.offset), length);
     ucs_status_t status;
 
-    status = ucp_dt_unpack(dst_req->recv.datatype, dst_req->recv.buffer,
-                           dst_req->recv.length, &dst_req->recv.state,
-                           rdata, valid_len, UCP_RECV_DESC_FLAG_LAST);
-
+    status = ucp_request_recv_data_unpack(dst_req, rdata, valid_len,
+                                          dst_req->recv.stream.offset, 1);
     if (ucs_likely(status == UCS_OK)) {
-        dst_req->recv.state.offset += valid_len;
+        dst_req->recv.stream.offset += valid_len;
         ucs_trace_data("unpacked %zd bytes of stream data %p",
                        valid_len, rdata);
         return valid_len;
@@ -191,16 +189,14 @@ ucp_stream_rdesc_advance(ucp_recv_desc_t *rdesc, ssize_t offset,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_stream_process_rdesc_inplace(ucp_recv_desc_t *rdesc, ucp_datatype_t dt,
-                                 void *buffer, size_t length,
-                                 ucp_ep_ext_stream_t *ep_stream,
-                                 ucp_dt_state_t *state)
+                                 void *buffer, size_t count, size_t length,
+                                 ucp_ep_ext_stream_t *ep_stream)
 {
     ucs_status_t status;
     ssize_t unpacked;
 
-    status   = ucp_dt_unpack(dt, buffer, length, state,
-                             ucp_stream_rdesc_payload(rdesc), length,
-                             UCP_RECV_DESC_FLAG_LAST);
+    status   = ucp_dt_unpack_only(buffer, count, dt,
+                                  ucp_stream_rdesc_payload(rdesc), length, 0);
     unpacked = ucs_likely(status == UCS_OK) ? length : status;
 
     return ucp_stream_rdesc_advance(rdesc, unpacked, ep_stream);
@@ -214,7 +210,7 @@ ucp_stream_process_rdesc(ucp_recv_desc_t *rdesc, ucp_ep_ext_stream_t *ep_stream,
 
     unpacked = ucp_stream_rdata_unpack(ucp_stream_rdesc_payload(rdesc),
                                        rdesc->length, req);
-    ucs_assert(req->recv.state.offset <= req->recv.length);
+    ucs_assert(req->recv.stream.offset <= req->recv.length);
 
     return ucp_stream_rdesc_advance(rdesc, unpacked, ep_stream);
 }
@@ -226,8 +222,12 @@ ucp_stream_recv_request_init(ucp_request_t *req, void *buffer, size_t count,
 {
     req->flags              = UCP_REQUEST_FLAG_CALLBACK |
                               UCP_REQUEST_FLAG_STREAM_RECV;
+#if ENABLE_ASSERT
+    req->status             = UCS_OK; /* for ucp_request_recv_data_unpack() */
+#endif
     req->recv.stream.cb     = cb;
     req->recv.stream.length = 0;
+    req->recv.stream.offset = 0;
 
     req->recv.buffer   = buffer;
     req->recv.datatype = datatype;
@@ -266,10 +266,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
     if (ucs_likely(ucp_stream_recv_nb_is_inplace(ep_stream, dt_length))) {
-        ucp_dt_recv_state_init(&dt_state, buffer, datatype, count);
         status = ucp_stream_process_rdesc_inplace(ucp_stream_rdesc_get(ep_stream),
-                                                  datatype, buffer, dt_length,
-                                                  ep_stream, &dt_state);
+                                                  datatype, buffer, count,
+                                                  dt_length, ep_stream);
         *length = dt_length;
         goto out_status;
     }
@@ -283,7 +282,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
     ucp_stream_recv_request_init(req, buffer, count, dt_length, datatype, cb);
 
     /* OK, lets obtain all arrived data which matches the recv size */
-    while ((req->recv.state.offset < req->recv.length) &&
+    while ((req->recv.stream.offset < req->recv.length) &&
            (ep_stream->flags & UCP_EP_STREAM_FLAG_HAS_DATA)) {
 
         rdesc  = ucp_stream_rdesc_get(ep_stream);
@@ -293,10 +292,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
         }
     }
 
-    ucs_assert(req->recv.state.offset <= req->recv.length);
+    ucs_assert(req->recv.stream.offset <= req->recv.length);
 
     if (ucp_request_can_complete_stream_recv(req)) {
-        *length = req->recv.state.offset;
+        *length = req->recv.stream.offset;
     } else {
         ucs_assert(!(ep_stream->flags & UCP_EP_STREAM_FLAG_HAS_DATA));
         ucs_queue_push(&ep_stream->match_q, &req->recv.queue);

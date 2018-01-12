@@ -4,6 +4,9 @@
  * See file LICENSE for terms.
  */
 
+#ifndef UCP_DT_INL_
+#define UCP_DT_INL_
+
 #include <ucs/debug/profile.h>
 
 /**
@@ -84,6 +87,59 @@ ucp_dt_unpack(ucp_datatype_t datatype, void *buffer, size_t buffer_size,
     }
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_dt_unpack_only(void *buffer, size_t count, ucp_datatype_t datatype,
+                   const void *data, size_t length, int truncation)
+{
+    size_t iov_offset, iovcnt_offset;
+    ucp_dt_generic_t *dt_gen;
+    ucs_status_t status;
+    size_t buffer_size;
+    void *state;
+
+    switch (datatype & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_CONTIG:
+        if (truncation &&
+            ucs_unlikely(length > (buffer_size = ucp_contig_dt_length(datatype, count)))) {
+            goto err_truncated;
+        }
+        UCS_PROFILE_NAMED_CALL("memcpy_recv", memcpy, buffer, data, length);
+        return UCS_OK;
+
+    case UCP_DATATYPE_IOV:
+        if (truncation &&
+            ucs_unlikely(length > (buffer_size = ucp_dt_iov_length(buffer, count)))) {
+            goto err_truncated;
+        }
+        iov_offset = iovcnt_offset = 0;
+        UCS_PROFILE_CALL(ucp_dt_iov_scatter, buffer, count, data, length,
+                         &iov_offset, &iovcnt_offset);
+        return UCS_OK;
+
+    case UCP_DATATYPE_GENERIC:
+        dt_gen = ucp_dt_generic(datatype);
+        state  = UCS_PROFILE_NAMED_CALL("dt_start", dt_gen->ops.start_unpack,
+                                        dt_gen->context, buffer, count);
+        if (truncation &&
+            ucs_unlikely(length > (buffer_size = dt_gen->ops.packed_size(state)))) {
+            UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish, state);
+            goto err_truncated;
+        }
+        status = UCS_PROFILE_NAMED_CALL("dt_unpack", dt_gen->ops.unpack, state,
+                                        0, data, length);
+        UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish, state);
+        return status;
+
+    default:
+        ucs_fatal("unexpected datatype=%lx", datatype);
+    }
+
+err_truncated:
+    ucs_debug("message truncated: recv_length %zu buffer_size %zu", length,
+              buffer_size);
+    return UCS_ERR_MESSAGE_TRUNCATED;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_dt_recv_state_init(ucp_dt_state_t *dt_state, void *buffer,
                        ucp_datatype_t dt, size_t dt_count)
@@ -104,7 +160,7 @@ ucp_dt_recv_state_init(ucp_dt_state_t *dt_state, void *buffer,
         break;
     case UCP_DATATYPE_GENERIC:
         dt_gen = ucp_dt_generic(dt);
-        dt_state->dt.generic.state = 
+        dt_state->dt.generic.state =
             UCS_PROFILE_NAMED_CALL("dt_start", dt_gen->ops.start_unpack,
                                    dt_gen->context, buffer, dt_count);
         ucs_trace("dt state %p buffer %p count %zu dt_gen state=%p", dt_state,
@@ -114,3 +170,5 @@ ucp_dt_recv_state_init(ucp_dt_state_t *dt_state, void *buffer,
         break;
     }
 }
+
+#endif

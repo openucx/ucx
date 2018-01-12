@@ -15,6 +15,7 @@
 #include <ucp/dt/dt.h>
 #include <ucs/debug/profile.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucp/dt/dt.inl>
 #include <inttypes.h>
 
 
@@ -104,9 +105,9 @@ ucp_request_complete_stream_recv(ucp_request_t *req,
             ucs_queue_pull_elem_non_empty(&ep_stream->match_q, ucp_request_t,
                                           recv.queue);
     ucs_assert(check_req               == req);
-    ucs_assert(req->recv.state.offset  >  0);
+    ucs_assert(req->recv.stream.offset >  0);
 
-    req->recv.stream.length = req->recv.state.offset;
+    req->recv.stream.length = req->recv.stream.offset;
     ucs_trace_req("completing stream receive request %p (%p) "
                   UCP_REQUEST_FLAGS_FMT" count %zu, %s",
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
@@ -120,17 +121,17 @@ ucp_request_can_complete_stream_recv(ucp_request_t *req)
 {
     /* NOTE: first check is needed to avoid heavy "%" operation if request is
      *       completely filled */
-    if (req->recv.state.offset == req->recv.length) {
+    if (req->recv.stream.offset == req->recv.length) {
         return 1;
     }
 
     /* 0-length stream recv is meaningless if this was not requested explicitely */
-    if (req->recv.state.offset == 0) {
+    if (req->recv.stream.offset == 0) {
         return 0;
     }
 
     if (ucs_likely(UCP_DT_IS_CONTIG(req->recv.datatype))) {
-        return req->recv.state.offset %
+        return req->recv.stream.offset %
                ucp_contig_dt_elem_size(req->recv.datatype) == 0;
     }
 
@@ -382,6 +383,66 @@ ucp_request_wait_uct_comp(ucp_request_t *req)
 {
     while (req->send.state.uct_comp.count > 0) {
         ucp_worker_progress(req->send.ep->worker);
+    }
+}
+
+/**
+ * Unpack receive data to a request
+ *
+ * req - receive request
+ * data - data to unpack
+ * length -
+ * offset - offset of received data within the request, for OOO fragments
+ *
+ *
+ */
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
+                             size_t length, size_t offset, int last)
+{
+    ucp_dt_generic_t *dt_gen;
+    ucs_status_t status;
+
+    ucp_trace_req(req, "unpack recv_data req_len %zu data_len %zu offset %zu last: %s",
+                  req->recv.length, length, offset, last ? "yes" : "no");
+
+    if (ucs_unlikely((length + offset) > req->recv.length)) {
+        ucs_debug("message truncated: recv_length %zu offset %zu buffer_size %zu",
+                  length, offset, req->recv.length);
+        if (UCP_DT_IS_GENERIC(req->recv.datatype) && last) {
+            dt_gen = ucp_dt_generic(req->recv.datatype);
+            UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish,
+                                         req->recv.state.dt.generic.state);
+        }
+        return UCS_ERR_MESSAGE_TRUNCATED;
+    }
+
+    switch (req->recv.datatype & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_CONTIG:
+        UCS_PROFILE_NAMED_CALL("memcpy_recv", memcpy, req->recv.buffer + offset,
+                               data, length);
+        return UCS_OK;
+
+    case UCP_DATATYPE_IOV:
+        UCS_PROFILE_CALL(ucp_dt_iov_scatter, req->recv.buffer,
+                         req->recv.state.dt.iov.iovcnt, data, length,
+                         &req->recv.state.dt.iov.iov_offset,
+                         &req->recv.state.dt.iov.iovcnt_offset);
+        return UCS_OK;
+
+    case UCP_DATATYPE_GENERIC:
+        dt_gen = ucp_dt_generic(req->recv.datatype);
+        status = UCS_PROFILE_NAMED_CALL("dt_unpack", dt_gen->ops.unpack,
+                                        req->recv.state.dt.generic.state,
+                                        offset, data, length);
+        if (last) {
+            UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish,
+                                        req->recv.state.dt.generic.state);
+        }
+        return status;
+
+    default:
+        ucs_fatal("unexpected datatype=%lx", req->recv.datatype);
     }
 }
 
