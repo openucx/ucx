@@ -57,9 +57,4 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
 
 size_t ucp_tag_rndv_rts_pack(void *dest, void *arg);
 
-static inline size_t ucp_rndv_total_len(ucp_rndv_rts_hdr_t *hdr)
-{
-    return hdr->size;
-}
-
 #endif

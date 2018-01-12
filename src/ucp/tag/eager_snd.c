@@ -14,7 +14,7 @@
 
 /* packing  start */
 
-static size_t ucp_tag_pack_eager_single_dt(void *dest, void *arg)
+static size_t ucp_tag_pack_eager_only_dt(void *dest, void *arg)
 {
     ucp_eager_hdr_t *hdr = dest;
     ucp_request_t *req = arg;
@@ -29,7 +29,7 @@ static size_t ucp_tag_pack_eager_single_dt(void *dest, void *arg)
     return sizeof(*hdr) + length;
 }
 
-static size_t ucp_tag_pack_eager_sync_single_dt(void *dest, void *arg)
+static size_t ucp_tag_pack_eager_sync_only_dt(void *dest, void *arg)
 {
     ucp_eager_sync_hdr_t *hdr = dest;
     ucp_request_t *req = arg;
@@ -94,7 +94,6 @@ static size_t ucp_tag_pack_eager_middle_dt(void *dest, void *arg)
 
     length          = ucp_ep_get_max_bcopy(req->send.ep, req->send.lane) -
                       sizeof(*hdr);
-    hdr->super.tag  = req->send.tag.tag;
     hdr->msg_id     = req->send.tag.message_id;
     hdr->offset     = req->send.state.dt.offset;
     return sizeof(*hdr) + ucp_dt_pack(req->send.datatype, hdr + 1,
@@ -109,7 +108,6 @@ static size_t ucp_tag_pack_eager_last_dt(void *dest, void *arg)
     size_t length, ret_length;
 
     length         = req->send.length - req->send.state.dt.offset;
-    hdr->super.tag = req->send.tag.tag;
     hdr->msg_id    = req->send.tag.message_id;
     hdr->offset    = req->send.state.dt.offset;
     ret_length     = ucp_dt_pack(req->send.datatype, hdr + 1, req->send.buffer,
@@ -141,7 +139,7 @@ static ucs_status_t ucp_tag_eager_contig_short(uct_pending_req_t *self)
 static ucs_status_t ucp_tag_eager_bcopy_single(uct_pending_req_t *self)
 {
     ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_EAGER_ONLY,
-                                                 ucp_tag_pack_eager_single_dt);
+                                                 ucp_tag_pack_eager_only_dt);
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
         ucp_request_send_generic_dt_finish(req);
@@ -155,7 +153,7 @@ static ucs_status_t ucp_tag_eager_bcopy_multi(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_bcopy_multi(self,
                                                 UCP_AM_ID_EAGER_FIRST,
                                                 UCP_AM_ID_EAGER_MIDDLE,
-                                                UCP_AM_ID_EAGER_LAST,
+                                                UCP_AM_ID_EAGER_MIDDLE,
                                                 sizeof(ucp_eager_middle_hdr_t),
                                                 ucp_tag_pack_eager_first_dt,
                                                 ucp_tag_pack_eager_middle_dt,
@@ -188,14 +186,14 @@ static ucs_status_t ucp_tag_eager_zcopy_multi(uct_pending_req_t *self)
 
     first_hdr.super.super.tag = req->send.tag.tag;
     first_hdr.total_len       = req->send.length;
-    middle_hdr.super          = first_hdr.super.super;
     first_hdr.msg_id          = req->send.tag.message_id;
     middle_hdr.msg_id         = req->send.tag.message_id;
     middle_hdr.offset         = req->send.state.dt.offset;
+
     return ucp_do_am_zcopy_multi(self,
                                  UCP_AM_ID_EAGER_FIRST,
                                  UCP_AM_ID_EAGER_MIDDLE,
-                                 UCP_AM_ID_EAGER_LAST,
+                                 UCP_AM_ID_EAGER_MIDDLE,
                                  &first_hdr, sizeof(first_hdr),
                                  &middle_hdr, sizeof(middle_hdr),
                                  ucp_proto_am_zcopy_req_complete, 1);
@@ -233,7 +231,7 @@ void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag,
 static ucs_status_t ucp_tag_eager_sync_bcopy_single(uct_pending_req_t *self)
 {
     ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_EAGER_SYNC_ONLY,
-                                                 ucp_tag_pack_eager_sync_single_dt);
+                                                 ucp_tag_pack_eager_sync_only_dt);
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
         ucp_request_send_generic_dt_finish(req);
@@ -250,7 +248,7 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_multi(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_bcopy_multi(self,
                                                 UCP_AM_ID_EAGER_SYNC_FIRST,
                                                 UCP_AM_ID_EAGER_MIDDLE,
-                                                UCP_AM_ID_EAGER_LAST,
+                                                UCP_AM_ID_EAGER_MIDDLE,
                                                 sizeof(ucp_eager_middle_hdr_t),
                                                 ucp_tag_pack_eager_sync_first_dt,
                                                 ucp_tag_pack_eager_middle_dt,
@@ -301,14 +299,14 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
     first_hdr.super.total_len       = req->send.length;
     first_hdr.req.sender_uuid       = req->send.ep->worker->uuid;
     first_hdr.req.reqptr            = (uintptr_t)req;
-    middle_hdr.super                = first_hdr.super.super.super;
     first_hdr.super.msg_id          = req->send.tag.message_id;
     middle_hdr.msg_id               = req->send.tag.message_id;
     middle_hdr.offset               = req->send.state.dt.offset;
+
     return ucp_do_am_zcopy_multi(self,
                                  UCP_AM_ID_EAGER_SYNC_FIRST,
                                  UCP_AM_ID_EAGER_MIDDLE,
-                                 UCP_AM_ID_EAGER_LAST,
+                                 UCP_AM_ID_EAGER_MIDDLE,
                                  &first_hdr, sizeof(first_hdr),
                                  &middle_hdr, sizeof(middle_hdr),
                                  ucp_tag_eager_sync_zcopy_req_complete, 1);
@@ -340,9 +338,9 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t flags)
     ucp_request_hdr_t *reqhdr;
     ucp_request_t *req;
 
-    ucs_assert(flags & UCP_RECV_DESC_FLAG_SYNC);
+    ucs_assert(flags & UCP_RECV_DESC_FLAG_EAGER_SYNC);
 
-    if (flags & UCP_RECV_DESC_FLAG_OFFLOAD) {
+    if (flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
         eagers_hdr = hdr;
         ucp_tag_offload_eager_sync_send_ack(worker,
                                             eagers_hdr->req.sender_uuid,
@@ -350,7 +348,7 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t flags)
         return;
     }
 
-    if (flags & UCP_RECV_DESC_FLAG_LAST) {
+    if (flags & UCP_RECV_DESC_FLAG_EAGER_ONLY) {
         reqhdr = &((ucp_eager_sync_hdr_t*)hdr)->req;
     } else /* first */ {
         reqhdr = &((ucp_eager_sync_first_hdr_t*)hdr)->req;

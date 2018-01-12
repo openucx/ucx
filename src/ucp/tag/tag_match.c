@@ -87,7 +87,7 @@ static inline uint64_t ucp_tag_exp_req_seq(ucs_queue_iter_t iter)
 
 ucp_request_t*
 ucp_tag_exp_search_all(ucp_tag_match_t *tm, ucp_request_queue_t *req_queue,
-                       ucp_tag_t recv_tag, size_t recv_len, unsigned recv_flags)
+                       ucp_tag_t tag)
 {
     ucs_queue_head_t *hash_queue = &req_queue->queue;
     ucp_request_queue_t *queue;
@@ -116,16 +116,9 @@ ucp_tag_exp_search_all(ucp_tag_match_t *tm, ucp_request_queue_t *req_queue,
         }
 
         req = ucs_container_of(**iter, ucp_request_t, recv.queue);
-        if (ucp_tag_recv_is_match(recv_tag, recv_flags, req->recv.tag.tag,
-                                  req->recv.tag.tag_mask, req->recv.state.offset,
-                                  req->recv.tag.info.sender_tag))
-        {
-            ucp_tag_log_match(recv_tag, recv_len, req, req->recv.tag.tag,
-                              req->recv.tag.tag_mask, req->recv.state.offset,
-                              "expected");
-            if (recv_flags & UCP_RECV_DESC_FLAG_LAST) {
-                ucp_tag_exp_delete(req, tm, queue, *iter);
-            }
+        if (ucp_tag_is_match(tag, req->recv.tag.tag, req->recv.tag.tag_mask)) {
+            ucs_trace_req("matched received tag %"PRIx64" to req %p", tag, req);
+            ucp_tag_exp_delete(req, tm, queue, *iter);
             return req;
         }
 
@@ -138,4 +131,37 @@ ucp_tag_exp_search_all(ucp_tag_match_t *tm, ucp_request_queue_t *req_queue,
     ucs_assert(ucs_queue_iter_end(hash_queue, hash_iter));
     ucs_assert(ucs_queue_iter_end(&tm->expected.wildcard.queue, wild_iter));
     return NULL;
+}
+
+void ucp_tag_frag_list_process_queue(ucp_tag_match_t *tm, ucp_request_t *req,
+                                     uint64_t msg_id UCS_STATS_ARG(int counter_idx))
+{
+    ucp_eager_middle_hdr_t *hdr;
+    ucp_tag_frag_match_t *matchq;
+    ucp_recv_desc_t *rdesc;
+    ucs_status_t status;
+    khiter_t iter;
+    int ret;
+
+    iter   = kh_put(ucp_tag_frag_hash, &tm->frag_hash, msg_id, &ret);
+    matchq = &kh_value(&tm->frag_hash, iter);
+    if (ret == 0) {
+        status = UCS_INPROGRESS;
+        ucs_assert(ucp_tag_frag_match_is_unexp(matchq));
+        ucs_queue_for_each_extract(rdesc, &matchq->unexp_q, tag_frag_queue,
+                                   status == UCS_INPROGRESS) {
+            UCS_STATS_UPDATE_COUNTER(req->recv.worker->stats, counter_idx, 1);
+            hdr    = (void*)(rdesc + 1);
+            status = ucp_tag_recv_request_process_rdesc(req, rdesc, hdr->offset);
+        }
+        ucs_assert(ucs_queue_is_empty(&matchq->unexp_q));
+
+        /* if we completed the request, delete hash entry */
+        if (status != UCS_INPROGRESS) {
+            kh_del(ucp_tag_frag_hash, &tm->frag_hash, iter);
+        }
+    }
+
+    /* request not completed, put it on the hash */
+    ucp_tag_frag_hash_init_exp(matchq, req);
 }

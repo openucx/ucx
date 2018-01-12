@@ -111,7 +111,7 @@ enum {
 
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
-                             (_flags & UCP_RECV_DESC_FLAG_SYNC) ? \
+                             (_flags & UCP_RECV_DESC_FLAG_EAGER_SYNC) ? \
                              UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG : \
                              UCP_WORKER_STAT_TAG_RX_EAGER_MSG, 1);
 

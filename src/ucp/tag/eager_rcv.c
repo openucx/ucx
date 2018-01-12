@@ -15,65 +15,61 @@
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
-                  uint16_t flags, uint16_t hdr_len)
+ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags,
+                         uint16_t flags, uint16_t hdr_len)
 {
-    ucp_worker_h worker                      = arg;
-    ucp_eager_hdr_t *eager_hdr               = data;
-    ucp_eager_first_hdr_t *eager_first_hdr   = data;
-    ucp_eager_middle_hdr_t *eager_middle_hdr = data;
+    ucp_worker_h worker        = arg;
+    ucp_eager_hdr_t *eager_hdr = data;
+    ucp_eager_first_hdr_t *eagerf_hdr;
+    ucp_recv_desc_t *rdesc;
     ucp_request_t *req;
     ucs_status_t status;
-    size_t recv_len;
     ucp_tag_t recv_tag;
-    ucp_recv_desc_t *rdesc;
+    size_t recv_len;
 
-    UCS_PROFILE_SCOPE_BEGIN();
     ucs_assert(length >= hdr_len);
-    /* TODO: split packets: shift middle packets to separate queue */
-    recv_tag = (flags & UCP_RECV_DESC_FLAG_MIDDLE) ?
-               eager_middle_hdr->super.tag : eager_hdr->super.tag;
+    ucs_assert(flags & UCP_RECV_DESC_FLAG_EAGER);
+
+    recv_tag = eager_hdr->super.tag;
     recv_len = length - hdr_len;
 
-    req = ucp_tag_exp_search(&worker->tm, recv_tag, recv_len, flags);
+    req = ucp_tag_exp_search(&worker->tm, recv_tag);
     if (req != NULL) {
+        ucs_trace_req("found req %p", req);
         UCS_PROFILE_REQUEST_EVENT(req, "eager_recv", recv_len);
 
-        status = ucp_request_recv_data_unpack(req, data + hdr_len, recv_len,
-                                              req->recv.state.offset,
-                                              flags & UCP_RECV_DESC_FLAG_LAST);
-
         /* First fragment fills the receive information */
-        if (flags & UCP_RECV_DESC_FLAG_FIRST) {
-            UCP_WORKER_STAT_EAGER_MSG(worker, flags);
-            req->recv.tag.info.sender_tag = recv_tag;
+        UCP_WORKER_STAT_EAGER_MSG(worker, flags);
+        UCP_WORKER_STAT_EAGER_CHUNK(worker, EXP);
 
-            /* Cancel req in transport if it was offloaded,
-             * because it arrived either:
-             * 1) via SW TM (e. g. peer doesn't support offload)
-             * 2) as unexpected via HW TM */
-            ucp_tag_offload_try_cancel(worker, req, 1);
+        req->recv.tag.info.sender_tag = recv_tag;
 
-            if (flags & UCP_RECV_DESC_FLAG_LAST) {
-                req->recv.tag.info.length = recv_len;
-            } else {
-                req->recv.tag.info.length = eager_first_hdr->total_len;
-            }
+        /* Cancel req in transport if it was offloaded,
+         * because it arrived either:
+         * 1) via SW TM (e. g. peer doesn't support offload)
+         * 2) as unexpected via HW TM */
+        ucp_tag_offload_try_cancel(worker, req, 1);
+
+        if (flags & UCP_RECV_DESC_FLAG_EAGER_SYNC) {
+            ucp_tag_eager_sync_send_ack(worker, data, flags);
         }
 
-        /* Last fragment completes the request */
-        if (flags & UCP_RECV_DESC_FLAG_LAST) {
+        if (flags & UCP_RECV_DESC_FLAG_EAGER_ONLY) {
+            req->recv.tag.info.length = recv_len;
+            status = ucp_request_recv_data_unpack(req, data + hdr_len, recv_len,
+                                                  0, 1);
             ucp_request_complete_tag_recv(req, status);
         } else {
-            req->recv.state.offset += recv_len;
-        }
+            eagerf_hdr                = data;
+            req->recv.tag.info.length =
+            req->recv.tag.remaining   = eagerf_hdr->total_len;
 
-        UCP_WORKER_STAT_EAGER_CHUNK(worker, EXP);
-        /* TODO In case an error status is returned from ucp_tag_process_recv,
-         * need to discard the rest of the messages */
+            status = ucp_tag_request_process_recv_data(req, data + hdr_len,
+                                                       recv_len, 0, 0);
+            ucs_assert(status == UCS_INPROGRESS);
 
-        if (flags & UCP_RECV_DESC_FLAG_SYNC) {
-            ucp_tag_eager_sync_send_ack(arg, data, flags);
+            ucp_tag_frag_list_process_queue(&worker->tm, req, eagerf_hdr->msg_id
+                                            UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP));
         }
 
         status = UCS_OK;
@@ -85,7 +81,6 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
         }
     }
 
-    UCS_PROFILE_SCOPE_END("ucp_eager_handler");
     return status;
 }
 
@@ -93,65 +88,87 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_only_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
-    return ucp_eager_handler(arg, data, length, am_flags,
-                             UCP_RECV_DESC_FLAG_EAGER|
-                             UCP_RECV_DESC_FLAG_FIRST|
-                             UCP_RECV_DESC_FLAG_LAST,
-                             sizeof(ucp_eager_hdr_t));
+    return ucp_eager_tagged_handler(arg, data, length, am_flags,
+                                    UCP_RECV_DESC_FLAG_EAGER |
+                                    UCP_RECV_DESC_FLAG_EAGER_ONLY,
+                                    sizeof(ucp_eager_hdr_t));
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_first_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
-    return ucp_eager_handler(arg, data, length, am_flags,
-                             UCP_RECV_DESC_FLAG_EAGER|
-                             UCP_RECV_DESC_FLAG_FIRST,
-                             sizeof(ucp_eager_first_hdr_t));
+    return ucp_eager_tagged_handler(arg, data, length, am_flags,
+                                    UCP_RECV_DESC_FLAG_EAGER,
+                                    sizeof(ucp_eager_first_hdr_t));
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
-    return ucp_eager_handler(arg, data, length, am_flags,
-                             UCP_RECV_DESC_FLAG_EAGER|
-                             UCP_RECV_DESC_FLAG_MIDDLE,
-                             sizeof(ucp_eager_middle_hdr_t));
-}
+    ucp_worker_h worker         = arg;
+    ucp_eager_middle_hdr_t *hdr = data;
+    ucp_tag_frag_match_t *matchq;
+    ucp_recv_desc_t *rdesc;
+    ucp_request_t *req;
+    ucs_status_t status;
+    size_t recv_len;
+    khiter_t iter;
+    int ret;
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_last_handler,
-                 (arg, data, length, am_flags),
-                 void *arg, void *data, size_t length, unsigned am_flags)
-{
-    return ucp_eager_handler(arg, data, length, am_flags,
-                             UCP_RECV_DESC_FLAG_EAGER|
-                             UCP_RECV_DESC_FLAG_LAST|
-                             UCP_RECV_DESC_FLAG_MIDDLE,
-                             sizeof(ucp_eager_middle_hdr_t));
+    iter   = kh_put(ucp_tag_frag_hash, &worker->tm.frag_hash, hdr->msg_id, &ret);
+    matchq = &kh_value(&worker->tm.frag_hash, iter);
+    if (ret != 0) {
+        /* initialize a previously empty hash entry */
+        ucp_tag_frag_match_init_unexp(matchq);
+    }
+
+    if (ucp_tag_frag_match_is_unexp(matchq)) {
+        /* add new received descriptor to the queue */
+        status = ucp_recv_desc_init(worker, data, length, am_flags, sizeof(*hdr),
+                                    UCP_RECV_DESC_FLAG_EAGER, &rdesc);
+        if (!UCS_STATUS_IS_ERR(status)) {
+            ucp_tag_frag_match_add_unexp(matchq, rdesc, hdr->offset);
+        }
+    } else {
+        /* hash entry contains a request, copy data to user buffer */
+        req      = matchq->exp_req;
+        recv_len = length - sizeof(*hdr);
+
+        UCP_WORKER_STAT_EAGER_CHUNK(worker, EXP);
+        status = ucp_tag_request_process_recv_data(req, data + sizeof(*hdr),
+                                                   recv_len, hdr->offset, 0);
+        if (status != UCS_INPROGRESS) {
+            /* request completed, delete hash entry */
+            kh_del(ucp_tag_frag_hash, &worker->tm.frag_hash, iter);
+        }
+
+        status = UCS_OK;
+    }
+
+    return status;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_only_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
-    return ucp_eager_handler(arg, data, length, am_flags,
-                             UCP_RECV_DESC_FLAG_EAGER|
-                             UCP_RECV_DESC_FLAG_FIRST|
-                             UCP_RECV_DESC_FLAG_LAST|
-                             UCP_RECV_DESC_FLAG_SYNC,
-                             sizeof(ucp_eager_sync_hdr_t));
+    return ucp_eager_tagged_handler(arg, data, length, am_flags,
+                                    UCP_RECV_DESC_FLAG_EAGER|
+                                    UCP_RECV_DESC_FLAG_EAGER_ONLY|
+                                    UCP_RECV_DESC_FLAG_EAGER_SYNC,
+                                    sizeof(ucp_eager_sync_hdr_t));
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_first_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
-    return ucp_eager_handler(arg, data, length, am_flags,
-                             UCP_RECV_DESC_FLAG_EAGER|
-                             UCP_RECV_DESC_FLAG_FIRST|
-                             UCP_RECV_DESC_FLAG_SYNC,
-                             sizeof(ucp_eager_sync_first_hdr_t));
+    return ucp_eager_tagged_handler(arg, data, length, am_flags,
+                                    UCP_RECV_DESC_FLAG_EAGER|
+                                    UCP_RECV_DESC_FLAG_EAGER_SYNC,
+                                    sizeof(ucp_eager_sync_first_hdr_t));
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_offload_sync_ack_handler,
@@ -198,9 +215,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
     /* Align data with AM protocol. We should add tag before the data. */
     ucp_worker_iface_t *wiface = arg;
     uint16_t flags             = UCP_RECV_DESC_FLAG_EAGER |
-                                 UCP_RECV_DESC_FLAG_FIRST |
-                                 UCP_RECV_DESC_FLAG_LAST  |
-                                 UCP_RECV_DESC_FLAG_OFFLOAD;
+                                 UCP_RECV_DESC_FLAG_EAGER_ONLY |
+                                 UCP_RECV_DESC_FLAG_EAGER_OFFLOAD;
     ucp_eager_hdr_t *hdr;
     ucp_eager_sync_hdr_t *sync_hdr;
     unsigned hdr_len;
@@ -210,7 +226,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
         hdr_len  = sizeof(ucp_eager_sync_hdr_t);
         hdr      = (ucp_eager_hdr_t*)((char*)data - hdr_len);
         sync_hdr = ucs_derived_of(hdr, ucp_eager_sync_hdr_t);
-        flags   |= UCP_RECV_DESC_FLAG_SYNC;
+        flags   |= UCP_RECV_DESC_FLAG_EAGER_SYNC;
         sync_hdr->req.reqptr      = 0ul;
         sync_hdr->req.sender_uuid = imm;
     } else {
@@ -223,8 +239,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
 
     ucp_tag_offload_unexp(wiface, stag);
 
-    return ucp_eager_handler(wiface->worker, hdr, length + hdr_len, tl_flags,
-                             flags, hdr_len);
+    return ucp_eager_tagged_handler(wiface->worker, hdr, length + hdr_len,
+                                    tl_flags, flags, hdr_len);
 }
 
 static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
@@ -253,14 +269,9 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         header_len = sizeof(*eager_first_hdr);
         break;
     case UCP_AM_ID_EAGER_MIDDLE:
-        snprintf(buffer, max, "EGR_M tag %"PRIx64" msgid %"PRIx64" offset %zu",
-                 eager_mid_hdr->super.tag, eager_mid_hdr->msg_id,
-                 eager_mid_hdr->offset);
+        snprintf(buffer, max, "EGR_M msgid %"PRIx64" offset %zu",
+                 eager_mid_hdr->msg_id, eager_mid_hdr->offset);
         header_len = sizeof(*eager_mid_hdr);
-        break;
-    case UCP_AM_ID_EAGER_LAST:
-        snprintf(buffer, max, "EGR_L tag %"PRIx64, eager_hdr->super.tag);
-        header_len = sizeof(*eager_hdr);
         break;
     case UCP_AM_ID_EAGER_SYNC_ONLY:
         snprintf(buffer, max, "EGRS tag %"PRIx64" uuid %"PRIx64" request 0x%lx",
@@ -302,8 +313,6 @@ UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_ONLY, ucp_eager_only_handler,
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_FIRST, ucp_eager_first_handler,
               ucp_eager_dump, UCT_CB_FLAG_SYNC);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_MIDDLE, ucp_eager_middle_handler,
-              ucp_eager_dump, UCT_CB_FLAG_SYNC);
-UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_LAST, ucp_eager_last_handler,
               ucp_eager_dump, UCT_CB_FLAG_SYNC);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_SYNC_ONLY, ucp_eager_sync_only_handler,
               ucp_eager_dump, UCT_CB_FLAG_SYNC);
