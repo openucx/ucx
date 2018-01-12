@@ -395,9 +395,19 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_assert(am_length >= sizeof(ucp_stream_am_hdr_t));
 
     ep = ucp_worker_ep_find(worker, data->hdr.sender_uuid);
-    ucs_assertv_always(ep != NULL,"ep not found for uuid %"PRIx64,
-                       data->hdr.sender_uuid);
+    if (ucs_unlikely(ep == NULL)) {
+        ucs_trace_data("ep not found for uuid %"PRIx64, data->hdr.sender_uuid);
+        /* drop the data */
+        return UCS_OK;
+    }
+
     ep_stream = ep->ext.stream;
+    if (ucs_unlikely(!(ep_stream->flags & UCP_EP_STREAM_FLAG_VALID))) {
+        ucs_trace_data("stream ep with uuid %"PRIx64" is invalid",
+                       data->hdr.sender_uuid);
+        /* drop the data */
+        return UCS_OK;
+    }
 
     status = ucp_stream_am_data_process(worker, ep_stream, data,
                                         am_length - sizeof(data->hdr),
