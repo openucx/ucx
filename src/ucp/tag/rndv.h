@@ -41,6 +41,7 @@ typedef struct {
  */
 typedef struct {
     uintptr_t                 rreq_ptr; /* request on the rndv receiver side */
+    size_t                    offset;
 } UCS_S_PACKED ucp_rndv_data_hdr_t;
 
 

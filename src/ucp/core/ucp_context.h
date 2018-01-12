@@ -65,6 +65,8 @@ typedef struct ucp_context_config {
     int                                    use_mt_mutex;
     /** On-demand progress */
     int                                    adaptive_progress;
+    /** Eager-am multi-lane support */
+    unsigned                               max_eager_lanes;
     /** Rendezvous-get multi-lane support */
     unsigned                               max_rndv_lanes;
     /** Estimated number of endpoints */

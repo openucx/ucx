@@ -85,8 +85,8 @@ ucp_tag_offload_iface(ucp_worker_t *worker, ucp_tag_t tag)
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_offload_release_buf(ucp_request_t *req)
 {
-    if (req->recv.rdesc != NULL) {
-        ucs_mpool_put_inline(req->recv.rdesc);
+    if (req->recv.tag.rdesc != NULL) {
+        ucs_mpool_put_inline(req->recv.tag.rdesc);
     } else {
         ucp_request_recv_buffer_dereg(req);
     }
@@ -121,12 +121,12 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
         ucp_tag_offload_eager_sync_send_ack(req->recv.worker, imm, stag);
     }
 
-    if (req->recv.rdesc != NULL) {
+    if (req->recv.tag.rdesc != NULL) {
         status = ucp_dt_unpack(req->recv.datatype, req->recv.buffer,
                                req->recv.length, &req->recv.state,
-                               req->recv.rdesc + 1, length,
+                               req->recv.tag.rdesc + 1, length,
                                UCP_RECV_DESC_FLAG_LAST);
-        ucs_mpool_put_inline(req->recv.rdesc);
+        ucs_mpool_put_inline(req->recv.tag.rdesc);
     } else {
         ucp_request_recv_buffer_dereg(req);
     }
@@ -299,18 +299,18 @@ int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
             return 0;
         }
 
-        req->recv.rdesc = NULL;
-        iov.buffer      = (void*)req->recv.buffer;
-        iov.memh        = req->recv.state.dt.contig.memh[0];
+        req->recv.tag.rdesc = NULL;
+        iov.buffer          = (void*)req->recv.buffer;
+        iov.memh            = req->recv.state.dt.contig.memh[0];
     } else {
         rdesc = ucp_worker_mpool_get(worker);
         if (rdesc == NULL) {
             return 0;
         }
 
-        iov.memh        = ucp_memh2uct(rdesc->memh, mdi);
-        iov.buffer      = rdesc + 1;
-        req->recv.rdesc = rdesc;
+        iov.memh            = ucp_memh2uct(rdesc->memh, mdi);
+        iov.buffer          = rdesc + 1;
+        req->recv.tag.rdesc = rdesc;
     }
 
     iov.length = length;
@@ -356,7 +356,7 @@ static ucs_status_t ucp_tag_offload_eager_short(uct_pending_req_t *self)
 
     req->send.lane = ucp_ep_get_tag_lane(ep);
     status         = uct_ep_tag_eager_short(ep->uct_eps[req->send.lane],
-                                            req->send.tag, req->send.buffer,
+                                            req->send.tag.tag, req->send.buffer,
                                             req->send.length);
     if (status == UCS_OK) {
         ucp_request_complete_send(req, UCS_OK);
@@ -374,7 +374,7 @@ ucp_do_tag_offload_bcopy(uct_pending_req_t *self, uint64_t imm_data,
 
     req->send.lane = ucp_ep_get_tag_lane(ep);
     packed_len     = uct_ep_tag_eager_bcopy(ep->uct_eps[req->send.lane],
-                                            req->send.tag, imm_data,
+                                            req->send.tag.tag, imm_data,
                                             pack_cb, req, 0);
     if (packed_len < 0) {
         return packed_len;
@@ -399,7 +399,7 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
     ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &dt_state,
                         req->send.buffer, req->send.datatype, req->send.length, 0);
 
-    status = uct_ep_tag_eager_zcopy(ep->uct_eps[req->send.lane], req->send.tag,
+    status = uct_ep_tag_eager_zcopy(ep->uct_eps[req->send.lane], req->send.tag.tag,
                                     imm_data, iov, iovcnt, 0,
                                     &req->send.state.uct_comp);
     if (status == UCS_OK) {
@@ -448,7 +448,7 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     rndv_rts_hdr = ucs_alloca(rndv_hdr_len);
     packed_len   = ucp_tag_rndv_rts_pack(rndv_rts_hdr, req);
     ucs_assert((rndv_rts_hdr->address != 0) || !UCP_DT_IS_CONTIG(req->send.datatype));
-    return uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane], req->send.tag,
+    return uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane], req->send.tag.tag,
                                    rndv_rts_hdr, packed_len, 0);
 }
 
@@ -488,7 +488,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &dt_state,
                         req->send.buffer, req->send.datatype, req->send.length, 0);
 
-    rndv_op = uct_ep_tag_rndv_zcopy(ep->uct_eps[req->send.lane], req->send.tag,
+    rndv_op = uct_ep_tag_rndv_zcopy(ep->uct_eps[req->send.lane], req->send.tag.tag,
                                     &rndv_hdr, sizeof(rndv_hdr), iov, iovcnt, 0,
                                     &req->send.state.uct_comp);
     if (UCS_PTR_IS_ERR(rndv_op)) {
@@ -561,7 +561,7 @@ const ucp_proto_t ucp_tag_offload_proto = {
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_offload_sync_posted(ucp_worker_t *worker, ucp_request_t *req)
 {
-    req->send.tag_offload.ssend_tag = req->send.tag;
+    req->send.tag_offload.ssend_tag = req->send.tag.tag;
     ucs_queue_push(&worker->tm.offload.sync_reqs, &req->send.tag_offload.queue);
 }
 

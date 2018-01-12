@@ -69,7 +69,8 @@ enum {
     UCP_RECV_DESC_FLAG_SYNC     = UCS_BIT(3),
     UCP_RECV_DESC_FLAG_RNDV     = UCS_BIT(4),
     UCP_RECV_DESC_FLAG_UCT_DESC = UCS_BIT(5),
-    UCP_RECV_DESC_FLAG_OFFLOAD  = UCS_BIT(6)
+    UCP_RECV_DESC_FLAG_OFFLOAD  = UCS_BIT(6),
+    UCP_RECV_DESC_FLAG_MIDDLE   = UCS_BIT(7)
 };
 
 
@@ -98,8 +99,15 @@ struct ucp_request {
             ucp_send_callback_t   cb;       /* Completion callback */
 
             union {
-                ucp_tag_t         tag;      /* Tagged send */
+
                 ucp_wireup_msg_t  wireup;
+
+                /* Tagged send */
+                struct {
+                    ucp_tag_t        tag;
+                    uint64_t         message_id;  /* message ID used in AM */
+                    ucp_lane_index_t am_bw_index; /* AM BW lane index */
+                } tag;
 
                 struct {
                     uint64_t      remote_addr; /* Remote address */
@@ -171,7 +179,6 @@ struct ucp_request {
                     void              *rndv_op;  /* Handler of issued rndv send. Need to cancel
                                                     the operation if it is completed by SW. */
                  } tag_offload;
-
             };
 
             /* This structure holds all mutable fields, and everything else
@@ -183,6 +190,8 @@ struct ucp_request {
                 uct_completion_t  uct_comp; /* UCT completion */
             } state;
 
+            ucp_lane_index_t      pending_lane; /* Lane on which request was moved
+                                                 * to pending state */
             ucp_lane_index_t      lane;     /* Lane on which this request is being sent */
             uct_pending_req_t     uct;      /* UCT pending request */
         } send;
@@ -194,7 +203,6 @@ struct ucp_request {
             size_t                length;   /* Total length, in bytes */
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
-            ucp_mem_desc_t        *rdesc;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
 
             union {
@@ -204,6 +212,7 @@ struct ucp_request {
                     uint64_t                sn;       /* Tag match sequence */
                     ucp_tag_recv_callback_t cb;       /* Completion callback */
                     ucp_tag_recv_info_t     info;     /* Completion info to fill */
+                    ucp_mem_desc_t          *rdesc;   /* Offload bounce buffer */
                 } tag;
 
                 struct {

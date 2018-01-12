@@ -325,9 +325,7 @@ ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
 {
     if (req->send.state.uct_comp.func) {
         req->send.state.dt.offset = req->send.length;
-        if (status == UCS_ERR_CANCELED) {
-            req->send.state.uct_comp.count = 0;
-        }
+        req->send.state.uct_comp.count = 0;
         req->send.state.uct_comp.func(&req->send.state.uct_comp, status);
     } else {
         ucp_request_complete_send(req, status);
@@ -416,6 +414,26 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
     rdesc->payload_offset = hdr_len;
     *rdesc_p              = rdesc;
     return status;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_lane_index_t
+ucp_send_request_get_next_am_bw_lane(ucp_request_t *req)
+{
+    ucp_lane_index_t lane;
+
+    /* at least one lane must be initialized */
+    ucs_assert(ucp_ep_config(req->send.ep)->key.am_bw_lanes[0] != UCP_NULL_LANE);
+
+    lane = (req->send.tag.am_bw_index >= UCP_MAX_LANES) ?
+           UCP_NULL_LANE :
+           ucp_ep_config(req->send.ep)->key.am_bw_lanes[req->send.tag.am_bw_index];
+    if (lane != UCP_NULL_LANE) {
+        req->send.tag.am_bw_index++;
+        return lane;
+    } else {
+        req->send.tag.am_bw_index = 1;
+        return ucp_ep_config(req->send.ep)->key.am_bw_lanes[0];
+    }
 }
 
 #endif
