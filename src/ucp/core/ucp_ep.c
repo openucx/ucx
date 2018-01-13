@@ -877,6 +877,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             max_rndv_thresh                    = iface_attr->cap.tag.eager.max_zcopy;
             max_am_rndv_thresh                 = iface_attr->cap.tag.eager.max_bcopy;
 
+            ucs_assert_always(iface_attr->cap.tag.rndv.max_hdr >=
+                              sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
+
             if (config->key.am_lane != UCP_NULL_LANE) {
                 /* Must have active messages for using rendezvous */
                 ucp_ep_config_set_rndv_thresh(worker, config, lane,

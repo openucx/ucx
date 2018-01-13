@@ -16,16 +16,6 @@
 #include <ucs/sys/sys.h>
 
 
-/**
- * Header for unexpected rendezvous
- */
-typedef struct {
-    uint64_t       sender_uuid;  /* Sender worker uuid */
-    uintptr_t      reqptr;       /* Request pointer */
-    uint8_t        mdi;          /* md index */
-} UCS_S_PACKED ucp_tag_offload_unexp_rndv_hdr_t;
-
-
 int ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
 {
     ucp_worker_t *worker   = iface->worker;
@@ -176,7 +166,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         rndv_hdr = hdr;
 
         /* Calculate size for dummy (on-stack) RTS packet */
-        md_index       = rndv_hdr->mdi;
+        md_index       = rndv_hdr->md_index;
         rkey_size      = ucp_rkey_packed_size(worker->context, UCS_BIT(md_index));
         dummy_rts_size = sizeof(*dummy_rts) + rkey_size;
 
@@ -467,7 +457,6 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     size_t iovcnt      = 0;
     ucp_rsc_index_t md_index;
     ucp_dt_state_t dt_state;
-    size_t UCS_V_UNUSED max_rndv;
     void *rndv_op;
 
     md_index = ucp_ep_md_index(ep, req->send.lane);
@@ -475,14 +464,12 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     ucp_tag_offload_unexp_rndv_hdr_t rndv_hdr = {
         .sender_uuid   = ep->worker->uuid,
         .reqptr        = (uintptr_t)req,
-        .mdi           = md_index
+        .md_index      = md_index
     };
 
-    max_rndv = ucp_ep_get_iface_attr(ep, req->send.lane)->cap.tag.rndv.max_hdr;
     dt_state = req->send.state.dt;
 
-    UCS_STATIC_ASSERT(sizeof(ucp_rsc_index_t) <= sizeof(uint8_t));
-    ucs_assert(max_rndv >= sizeof(rndv_hdr));
+    UCS_STATIC_ASSERT(sizeof(ucp_rsc_index_t) <= sizeof(rndv_hdr.md_index));
     ucs_assert_always(UCP_DT_IS_CONTIG(req->send.datatype));
 
     ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &dt_state,
