@@ -564,7 +564,7 @@ void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
     }
 }
 
-#if IBV_EXP_HW_TM
+#if IBV_EXP_HW_TM_DC
 void uct_dc_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,
                                       struct ibv_exp_create_srq_attr *srq_attr,
                                       struct ibv_exp_srq_dc_offload_params *dc_op)
