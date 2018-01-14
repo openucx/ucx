@@ -12,22 +12,16 @@
 #include <ucp/proto/proto.h>
 #include <ucs/datastruct/queue.h>
 
-/**
- * Header for SW RNDV request
- */
-typedef struct ucp_sw_rndv_hdr {
-    ucp_request_hdr_t super;
-    size_t            length;
-    uint16_t          flags;
-} UCS_S_PACKED ucp_sw_rndv_hdr_t;
 
 /**
- * Header for extended SW RNDV request
+ * Header for unexpected rendezvous
  */
-typedef struct ucp_sw_rndv_ext_hdr {
-    ucp_sw_rndv_hdr_t super;
-    uintptr_t         address;
-} UCS_S_PACKED ucp_sw_rndv_ext_hdr_t;
+typedef struct {
+    uint64_t       sender_uuid;  /* Sender worker uuid */
+    uintptr_t      reqptr;       /* Request pointer */
+    uint8_t        md_index;     /* md index */
+} UCS_S_PACKED ucp_tag_offload_unexp_rndv_hdr_t;
+
 
 /**
  * Header for sync send acknowledgment

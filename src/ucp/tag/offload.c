@@ -16,17 +16,6 @@
 #include <ucs/sys/sys.h>
 
 
-#define UCP_TAG_OFFLOAD_REQPTR_MDI_MASK  ((uintptr_t)(UCS_SYS_CACHE_LINE_SIZE - 1))
-
-/**
- * Header for unexpected rendezvous
- */
-typedef struct {
-    uint64_t       sender_uuid;  /* Sender worker uuid */
-    uintptr_t      reqptr_mdi;   /* Request pointer (high) + md_index (low) */
-} UCS_S_PACKED ucp_tag_offload_unexp_rndv_hdr_t;
-
-
 int ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
 {
     ucp_worker_t *worker   = iface->worker;
@@ -177,7 +166,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         rndv_hdr = hdr;
 
         /* Calculate size for dummy (on-stack) RTS packet */
-        md_index       = rndv_hdr->reqptr_mdi & UCP_TAG_OFFLOAD_REQPTR_MDI_MASK;
+        md_index       = rndv_hdr->md_index;
         rkey_size      = ucp_rkey_packed_size(worker->context, UCS_BIT(md_index));
         dummy_rts_size = sizeof(*dummy_rts) + rkey_size;
 
@@ -187,8 +176,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         dummy_rts                   = ucs_alloca(dummy_rts_size);
         dummy_rts->super.tag        = stag;
         dummy_rts->sreq.sender_uuid = rndv_hdr->sender_uuid;
-        dummy_rts->sreq.reqptr      = rndv_hdr->reqptr_mdi &
-                                      ~UCP_TAG_OFFLOAD_REQPTR_MDI_MASK;
+        dummy_rts->sreq.reqptr      = rndv_hdr->reqptr;
         dummy_rts->address          = remote_addr;
         dummy_rts->size             = length;
 
@@ -473,18 +461,17 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
 
     md_index = ucp_ep_md_index(ep, req->send.lane);
 
-    UCS_STATIC_ASSERT(UCP_MD_INDEX_BITS <= UCS_SYS_CACHE_LINE_SIZE);
-    ucs_assert(md_index < UCS_SYS_CACHE_LINE_SIZE);
-    ucs_assert_always(!((uintptr_t)req & UCP_TAG_OFFLOAD_REQPTR_MDI_MASK));
-
-    ucp_request_hdr_t rndv_hdr = {
-        .sender_uuid = ep->worker->uuid,
-        .reqptr      = (uintptr_t)req | md_index
+    ucp_tag_offload_unexp_rndv_hdr_t rndv_hdr = {
+        .sender_uuid   = ep->worker->uuid,
+        .reqptr        = (uintptr_t)req,
+        .md_index      = md_index
     };
 
     dt_state = req->send.state.dt;
 
+    UCS_STATIC_ASSERT(sizeof(ucp_rsc_index_t) <= sizeof(rndv_hdr.md_index));
     ucs_assert_always(UCP_DT_IS_CONTIG(req->send.datatype));
+
     ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &dt_state,
                         req->send.buffer, req->send.datatype, req->send.length, 0);
 
