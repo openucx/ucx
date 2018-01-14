@@ -8,7 +8,6 @@
 
 #include <uct/ib/rc/verbs/rc_verbs_common.h>
 #include <uct/api/uct.h>
-#include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/bitops.h>
@@ -840,14 +839,6 @@ ucs_status_t uct_dc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
     return UCS_INPROGRESS;
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_rc_verbs_iface_fill_ravh(struct ibv_exp_tmh_ravh *ravh, uint32_t dct_num)
-{
-    ravh->sl_dct        = htobe32(dct_num);
-    ravh->dc_access_key = htobe64(UCT_IB_KEY);
-    ravh->reserved      = 0;
-}
-
 ucs_status_ptr_t uct_dc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                                 const void *header,
                                                 unsigned header_length,
@@ -869,7 +860,7 @@ ucs_status_ptr_t uct_dc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                    iface->verbs_common.config.max_inline,
                                    iface->super.super.tm.max_rndv_data +
                                    UCT_RC_IFACE_TMH_PRIV_LEN);
-    UCT_DC_VERBS_CHECK_RES_PTR(&iface->super, &ep->super);
+    UCT_DC_CHECK_RES_PTR(&iface->super, &ep->super);
 
     rndv_idx = uct_rc_verbs_iface_fill_rndv_hdrs(&iface->super.super,
                                                  &iface->verbs_common,
@@ -877,8 +868,8 @@ ucs_status_ptr_t uct_dc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                                  iface->super.super.tm.max_rndv_data,
                                                  tmh_len, tag, iov, comp);
 
-    uct_rc_verbs_iface_fill_ravh(rvh + sizeof(struct ibv_exp_tmh_rvh),
-                                 iface->super.rx.dct->dct_num);
+    uct_dc_iface_fill_ravh(rvh + sizeof(struct ibv_exp_tmh_rvh),
+                           iface->super.rx.dct->dct_num);
 
     uct_dc_verbs_iface_post_send(iface, ep, &iface->inl_am_wr,
                                  IBV_SEND_INLINE | IBV_SEND_SOLICITED);
@@ -970,14 +961,8 @@ uct_dc_verbs_iface_tag_init(uct_dc_verbs_iface_t *iface,
         struct ibv_exp_srq_dc_offload_params dc_op   = {};
         ucs_status_t status;
 
-        dc_op.timeout    = iface->super.super.config.timeout;
-        dc_op.path_mtu   = iface->super.super.config.path_mtu;
-        dc_op.pkey_index = 0;
-        dc_op.sl         = iface->super.super.super.config.sl;
-        dc_op.dct_key    = UCT_IB_KEY;
-
-        srq_init_attr.comp_mask         = IBV_EXP_CREATE_SRQ_DC_OFFLOAD_PARAMS;
-        srq_init_attr.dc_offload_params = &dc_op;
+        uct_dc_iface_fill_xrq_init_attrs(&iface->super.super, &srq_init_attr,
+                                         &dc_op);
 
         status = uct_rc_verbs_iface_common_tag_init(&iface->verbs_common,
                                                     &iface->super.super,

@@ -838,16 +838,16 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type
                                  uct_tag_t tag, uint32_t app_ctx, int tm_op,
                                  uint32_t imm_val_be, uct_ib_mlx5_base_av_t *av,
                                  struct mlx5_grh_av *grh_av, size_t av_size,
-                                 unsigned fm_ce_se)
+                                 void *ravh, size_t ravh_len, unsigned fm_ce_se)
 {
     struct mlx5_wqe_ctrl_seg     *ctrl;
     struct mlx5_wqe_inl_data_seg *inl;
     size_t wqe_size, ctrl_av_size;
     struct ibv_exp_tmh *tmh;
     struct ibv_exp_tmh_rvh rvh;
-    unsigned tmh_len;
-    unsigned max_rndv_data;
     unsigned tmh_data_len;
+    size_t tm_hdr_len;
+    void *ravh_ptr;
     void *data;
 
     ctrl         = txwq->curr;
@@ -866,21 +866,29 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type
         break;
 
     case IBV_EXP_TMH_RNDV:
-        tmh_len          = sizeof(*tmh) + sizeof(rvh);
-        wqe_size         = ctrl_av_size + sizeof(*inl) + tmh_len + length;
-        inl->byte_count  = htonl((length + tmh_len) | MLX5_INLINE_SEG);
-        max_rndv_data    = iface->tm.max_rndv_data;
-
-        tmh_data_len     = uct_rc_iface_fill_tmh_priv_data(tmh, buffer, length,
-                                                           max_rndv_data);
         /* RVH can be wrapped */
         uct_rc_iface_fill_rvh(&rvh, iov->buffer,
                               ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
         uct_ib_mlx5_inline_copy(tmh + 1, &rvh, sizeof(rvh), txwq);
-        data = (char*)tmh + sizeof(*tmh) + sizeof(rvh);
-        if (ucs_unlikely(data >= txwq->qend)) {
-            data -= (txwq->qend - txwq->qstart);
+
+        if (qp_type == IBV_EXP_QPT_DC_INI) {
+            /* RAVH can be wrapped as well */
+            ravh_ptr = uct_ib_mlx5_txwq_wrap_data(txwq, (char*)tmh +
+                                                  sizeof(*tmh) + sizeof(rvh));
+            uct_ib_mlx5_inline_copy(ravh_ptr, ravh, ravh_len, txwq);
+            tm_hdr_len = sizeof(*tmh) + sizeof(rvh) + ravh_len;
+
+        } else {
+            tm_hdr_len = sizeof(*tmh) + sizeof(rvh);
         }
+
+        tmh_data_len    = uct_rc_iface_fill_tmh_priv_data(tmh, buffer, length,
+                                                          iface->tm.max_rndv_data);
+        length         -= tmh_data_len; /* Note: change length func parameter */
+        wqe_size        = ctrl_av_size + sizeof(*inl) + tm_hdr_len + length;
+        inl->byte_count = htonl((length + tm_hdr_len) | MLX5_INLINE_SEG);
+        data            = uct_ib_mlx5_txwq_wrap_data(txwq, (char*)tmh + tm_hdr_len);
+
         break;
 
     default:
@@ -893,8 +901,7 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type
     uct_rc_iface_fill_tmh(tmh, tag, app_ctx, tm_op);
 
     /* In case of RNDV first bytes of data could be stored in TMH */
-    uct_ib_mlx5_inline_copy(data, (char*)buffer + tmh_data_len,
-                            length - tmh_data_len, txwq);
+    uct_ib_mlx5_inline_copy(data, (char*)buffer + tmh_data_len, length, txwq);
     fm_ce_se |= uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq, opcode, 0, fm_ce_se,
