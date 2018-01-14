@@ -255,10 +255,6 @@ int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
         return 0;
     }
 
-    /* Request which was already matched in SW should not be
-     * posted to the transport */
-    ucs_assert(req->recv.state.offset == 0);
-
     wiface = ucp_tag_offload_iface(worker, req->recv.tag.tag);
     if (ucs_unlikely(wiface == NULL)) {
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_NO_IFACE);
