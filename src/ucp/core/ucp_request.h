@@ -217,6 +217,7 @@ struct ucp_request {
 
                 struct {
                     ucp_stream_recv_callback_t cb;     /* Completion callback */
+                    size_t                     offset; /* Receive data offset */
                     size_t                     length; /* Completion info to fill */
                 } stream;
             };
