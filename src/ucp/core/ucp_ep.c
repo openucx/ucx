@@ -692,12 +692,28 @@ static size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
     }
 }
 
+static void
+ucp_ep_config_set_am_rndv_send_nbr_thresh(ucp_context_h context,
+                                          ucp_ep_config_t *config,
+                                          size_t adjust_min_val)
+{
+    size_t rndv_thresh;
+ 
+    if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+        rndv_thresh = SIZE_MAX;
+    } else {
+        rndv_thresh = ucs_min(context->config.ext.rndv_send_nbr_thresh,
+                              adjust_min_val);
+    }
+
+    config->tag.rndv_send_nbr.am_thresh = rndv_thresh;
+}
+
 static void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_attr_t *iface_attr,
                                              uct_md_attr_t *md_attr, ucp_ep_config_t *config,
                                              size_t adjust_min_val)
 {
     size_t rndv_thresh;
-
 
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
     ucs_assert(config->key.lanes[config->key.am_lane].rsc_index != UCP_NULL_RESOURCE);
@@ -719,6 +735,22 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_at
     /* use rendezvous only starting from minimal zero-copy am size */
     rndv_thresh = ucs_max(rndv_thresh, iface_attr->cap.am.min_zcopy);
     config->tag.rndv.am_thresh = ucs_min(rndv_thresh, adjust_min_val);
+
+    ucp_ep_config_set_am_rndv_send_nbr_thresh(context, config, adjust_min_val);
+}
+
+static void
+ucp_ep_config_set_rndv_send_nbr_thresh(ucp_context_h context,
+                                       ucp_ep_config_t *config,
+                                       size_t adjust_min_val,
+                                       size_t adjust_max_val)
+{
+    size_t rndv_thresh;
+
+    rndv_thresh = context->config.ext.rndv_send_nbr_thresh;
+    rndv_thresh = ucs_max(rndv_thresh, adjust_max_val);
+
+    config->tag.rndv_send_nbr.rma_thresh = ucs_min(rndv_thresh, adjust_min_val);
 }
 
 static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
@@ -762,6 +794,9 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
     config->tag.rndv.max_get_zcopy = iface_attr->cap.get.max_zcopy;
     config->tag.rndv.max_put_zcopy = iface_attr->cap.put.max_zcopy;
     config->tag.rndv.rma_thresh    = ucs_min(rndv_thresh, adjust_min_val);
+
+    ucp_ep_config_set_rndv_send_nbr_thresh(context, config, adjust_min_val,
+                                           iface_attr->cap.get.max_zcopy);
 }
 
 static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,

@@ -22,7 +22,8 @@ public:
         VARIANT_DEFAULT,
         VARIANT_ERR_HANDLING,
         VARIANT_RNDV_PUT_ZCOPY,
-        VARIANT_RNDV_AUTO
+        VARIANT_RNDV_AUTO,
+        VARIANT_SEND_NBR,
     };
 
     virtual void init() {
@@ -52,6 +53,9 @@ public:
         generate_test_params_variant(ctx_params, name,
                                      test_case_name + "/rndv_auto", tls,
                                      VARIANT_RNDV_AUTO, result);
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name + "/send_nbr", tls,
+                                     VARIANT_SEND_NBR, result);
         return result;
     }
 
@@ -425,6 +429,9 @@ test_ucp_tag_xfer::do_send(const void *sendbuf, size_t count, ucp_datatype_t dt,
     if (sync) {
         return send_sync_nb(sendbuf, count, dt, SENDER_TAG);
     } else {
+        if (GetParam().variant == VARIANT_SEND_NBR) {
+            return send_nbr(sendbuf, count, dt, SENDER_TAG);
+        }
         return send_nb(sendbuf, count, dt, SENDER_TAG);
     }
 }

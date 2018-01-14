@@ -97,6 +97,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "Threshold for switching from eager to rendezvous protocol",
    ucs_offsetof(ucp_config_t, ctx.rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"RNDV_SEND_NBR_THRESH", "256k",
+   "Threshold for switching from eager to rendezvous protocol in ucp_tag_send_nbr()",
+   ucs_offsetof(ucp_config_t, ctx.rndv_send_nbr_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"RNDV_THRESH_FALLBACK", "inf",
    "Message size to start using the rendezvous protocol in case the calculated threshold "
    "is zero or negative",
