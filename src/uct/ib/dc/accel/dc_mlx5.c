@@ -146,7 +146,6 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_iface_bcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                             unsigned opcode, unsigned length,
-                            /* SEND */ uint8_t am_id, void *am_hdr, unsigned am_hdr_len,
                             /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
                             uct_rc_iface_send_desc_t *desc, uint8_t send_flags,
                             uint32_t imm_val_be)
@@ -157,7 +156,6 @@ uct_dc_mlx5_iface_bcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
     desc->super.sn = txwq->sw_pi;
     uct_rc_mlx5_txqp_dptr_post(&iface->super.super, IBV_EXP_QPT_DC_INI, txqp, txwq,
                                opcode, desc + 1, length, &desc->lkey,
-                               am_id, am_hdr, am_hdr_len,
                                rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
                                0, 0, 0,
                                &ep->av, uct_dc_mlx5_ep_get_grh(ep),
@@ -208,7 +206,7 @@ uct_dc_mlx5_iface_atomic_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
     desc->super.sn = txwq->sw_pi;
     uct_rc_mlx5_txqp_dptr_post(&iface->super.super, IBV_EXP_QPT_DC_INI, txqp, txwq,
                                opcode, desc + 1, length, &desc->lkey,
-                               0, desc/*dummy*/, 0, remote_addr, ib_rkey,
+                               remote_addr, ib_rkey,
                                compare_mask, compare, swap_add,
                                &ep->av, uct_dc_mlx5_ep_get_grh(ep),
                                uct_ib_mlx5_wqe_av_size(&ep->av),
@@ -375,10 +373,9 @@ ssize_t uct_dc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(&iface->super.super, &iface->super.super.tx.mp, desc,
                                       id, pack_cb, arg, &length);
 
-    uct_dc_mlx5_iface_bcopy_post(iface, ep,
-                                 MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_RAW,
-                                 sizeof(uct_rc_hdr_t) + length, 0, NULL, 0, 0,
-                                 0, desc, MLX5_WQE_CTRL_SOLICITED, 0);
+    uct_dc_mlx5_iface_bcopy_post(iface, ep, MLX5_OPCODE_SEND,
+                                 sizeof(uct_rc_hdr_t) + length, 0, 0, desc,
+                                 MLX5_WQE_CTRL_SOLICITED, 0);
 
     UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->super.fc);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
@@ -449,8 +446,7 @@ ssize_t uct_dc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(&iface->super.super, &iface->super.super.tx.mp,
                                        desc, pack_cb, arg, length);
-    uct_dc_mlx5_iface_bcopy_post(iface, ep,
-                                 MLX5_OPCODE_RDMA_WRITE, length, 0, NULL, 0,
+    uct_dc_mlx5_iface_bcopy_post(iface, ep, MLX5_OPCODE_RDMA_WRITE, length,
                                  remote_addr, rkey, desc, 0, 0);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, BCOPY, length);
     return length;
@@ -492,8 +488,7 @@ ucs_status_t uct_dc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_GET_BCOPY_DESC(&iface->super.super, &iface->super.super.tx.mp,
                                        desc, unpack_cb, comp, arg, length);
-    uct_dc_mlx5_iface_bcopy_post(iface, ep,
-                                 MLX5_OPCODE_RDMA_READ, length, 0, NULL, 0,
+    uct_dc_mlx5_iface_bcopy_post(iface, ep, MLX5_OPCODE_RDMA_READ, length,
                                  remote_addr, rkey, desc, 0, 0);
     UCT_TL_EP_STAT_OP(&ep->super.super, GET, BCOPY, length);
     return UCS_INPROGRESS;
@@ -641,8 +636,8 @@ ssize_t uct_dc_mlx5_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
     UCT_RC_IFACE_GET_TM_BCOPY_DESC(&iface->super.super, &iface->super.super.tx.mp,
                                    desc, tag, app_ctx, pack_cb, arg, length);
 
-    uct_dc_mlx5_iface_bcopy_post(iface, ep, opcode|UCT_RC_MLX5_OPCODE_FLAG_RAW,
-                                 sizeof(struct ibv_exp_tmh) + length, 0, NULL, 0,
+    uct_dc_mlx5_iface_bcopy_post(iface, ep, opcode,
+                                 sizeof(struct ibv_exp_tmh) + length,
                                  0, 0, desc, MLX5_WQE_CTRL_SOLICITED, ib_imm);
 
     return length;

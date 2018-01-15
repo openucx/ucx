@@ -511,7 +511,7 @@ ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
     size_t rndv_data_len;
     void *rndv_usr_hdr;
     void *rb;
-    void *packed_rkey;
+    char packed_rkey[UCT_MD_COMPONENT_NAME_MAX + UCT_IB_MD_PACKED_RKEY_SIZE];
 
     rvh = (struct ibv_exp_tmh_rvh*)(tmh + 1);
 
@@ -532,8 +532,6 @@ ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
     memcpy((char*)rndv_usr_hdr - priv->length, &priv->data, priv->length);
 
     /* Create "packed" rkey to pass it in the callback */
-    packed_rkey = ucs_alloca(UCT_MD_COMPONENT_NAME_MAX +
-                             UCT_IB_MD_PACKED_RKEY_SIZE);
     rb = uct_md_fill_md_name(&ib_md->super, packed_rkey);
     uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, rb);
 

@@ -127,6 +127,12 @@
     })
 
 /**
+ * @return Size of _member in _type. _type is a structure type.
+ */
+#define ucs_sizeof(_type, _member) \
+    sizeof(((_type*)0)->_member)
+
+/**
  * Prevent compiler from reordering instructions
  */
 #define ucs_compiler_fence()       asm volatile(""::: "memory")
