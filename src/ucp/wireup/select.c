@@ -843,9 +843,11 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
                                                ucp_wireup_lane_desc_t *lane_descs,
                                                ucp_lane_index_t *num_lanes_p)
 {
+    ucp_context_h context = ep->worker->context;
     ucp_wireup_criteria_t criteria;
     ucp_lane_index_t lane_desc_idx;
     ucp_md_map_t remote_md_map;
+    ucp_md_map_t md_map;
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
     unsigned addr_index;
@@ -879,6 +881,7 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
     num_lanes     = 1;
     tl_bitmap     = -1;
     remote_md_map = -1;
+    md_map        = 0;
 
     /* am_bw_lane[0] is am_lane, so don't re-select it here */
     for (lane_desc_idx = 0; lane_desc_idx < *num_lanes_p; ++lane_desc_idx) {
@@ -886,11 +889,16 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
             addr_index     = lane_descs[lane_desc_idx].addr_index;
             rsc_index      = lane_descs[lane_desc_idx].rsc_index;
             remote_md_map &= ~UCS_BIT(address_list[addr_index].md_index);
+            md_map        |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
             tl_bitmap      = ucp_wireup_unset_tl_by_md(ep, tl_bitmap, rsc_index);
         }
     }
 
-    for (; num_lanes < ep->worker->context->config.ext.max_eager_lanes;) {
+    /* lookup for requested number of lanes or limit of MD map
+     * (we have to limit MD's number to avoid malloc in
+     * memory registration) */
+    for (; (num_lanes < ep->worker->context->config.ext.max_eager_lanes) &&
+           (ucs_count_one_bits(md_map) < UCP_MAX_OP_MDS);) {
         status = ucp_wireup_select_transport(ep, address_list, address_count,
                                              &criteria, tl_bitmap, remote_md_map,
                                              0, &rsc_index, &addr_index, &score);
@@ -906,6 +914,7 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
                                  UCP_WIREUP_LANE_USAGE_AM_BW, is_proxy);
 
         remote_md_map &= ~UCS_BIT(address_list[addr_index].md_index);
+        md_map        |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
         tl_bitmap      = ucp_wireup_unset_tl_by_md(ep, tl_bitmap, rsc_index);
         num_lanes++;
 
@@ -1109,6 +1118,8 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
         return status;
     }
 
+    /* call ucp_wireup_add_am_bw_lanes after ucp_wireup_add_am_lane to
+     * allow exclude AM lane from AM_BW list */
     status = ucp_wireup_add_am_bw_lanes(ep, params, address_count, address_list,
                                         lane_descs, &key->num_lanes);
     if (status != UCS_OK) {
@@ -1139,7 +1150,6 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
             key->am_lane = lane;
         }
         if ((lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AM_BW) &&
-            !(lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AM)   &&
             (lane < UCP_MAX_LANES - 1)) {
             key->am_bw_lanes[lane + 1] = lane;
         }
