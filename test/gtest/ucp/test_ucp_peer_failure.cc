@@ -632,7 +632,7 @@ public:
         const std::vector<std::string> &tls = GetParam().transports;
         std::vector<std::string>       skip_tls;
 
-        skip_tls.push_back("\\rc_mlx5");
+        skip_tls.push_back("rc_x");
         skip_tls.push_back("ib");
 
         if (std::find_first_of(tls.begin(),      tls.end(),
