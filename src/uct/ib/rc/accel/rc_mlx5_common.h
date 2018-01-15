@@ -455,8 +455,8 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
         inl              = next_seg;
         inl->byte_count  = htonl((length + sizeof(*am)) | MLX5_INLINE_SEG);
         am               = (void*)(inl + 1);
-        am->rc_hdr.am_id = am_id;
         am->am_hdr       = am_hdr;
+        uct_rc_am_hdr_fill(&am->rc_hdr, am_id);
         uct_ib_mlx5_inline_copy(am + 1, buffer, length, txwq);
         fm_ce_se        |= uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
         break;
@@ -700,8 +700,8 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, enum ibv_qp_type qp_t
         inl              = next_seg;
         inl->byte_count  = htonl((sizeof(*rch) + am_hdr_len) | MLX5_INLINE_SEG);
         rch              = (uct_rc_hdr_t *)(inl + 1);
-        rch->am_id       = am_id;
 
+        uct_rc_am_hdr_fill(rch, am_id);
         uct_ib_mlx5_inline_copy(rch + 1, am_hdr, am_hdr_len, txwq);
 
         /* Data segment with payload */
