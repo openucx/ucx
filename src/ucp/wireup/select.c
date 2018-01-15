@@ -891,6 +891,8 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
             remote_md_map &= ~UCS_BIT(address_list[addr_index].md_index);
             md_map        |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
             tl_bitmap      = ucp_wireup_unset_tl_by_md(ep, tl_bitmap, rsc_index);
+            break; /* do not continue searching due to we found
+                      AM lane (and there is only one lane) */
         }
     }
 
