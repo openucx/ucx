@@ -59,18 +59,17 @@ enum {
     UCP_REQUEST_SEND_PROTO_RMA
 };
 
+
 /**
  * Receive descriptor flags.
  */
 enum {
-    UCP_RECV_DESC_FLAG_FIRST    = UCS_BIT(0),
-    UCP_RECV_DESC_FLAG_LAST     = UCS_BIT(1),
-    UCP_RECV_DESC_FLAG_EAGER    = UCS_BIT(2),
-    UCP_RECV_DESC_FLAG_SYNC     = UCS_BIT(3),
-    UCP_RECV_DESC_FLAG_RNDV     = UCS_BIT(4),
-    UCP_RECV_DESC_FLAG_UCT_DESC = UCS_BIT(5),
-    UCP_RECV_DESC_FLAG_OFFLOAD  = UCS_BIT(6),
-    UCP_RECV_DESC_FLAG_MIDDLE   = UCS_BIT(7)
+    UCP_RECV_DESC_FLAG_UCT_DESC       = UCS_BIT(0), /* Descriptor allocated by UCT */
+    UCP_RECV_DESC_FLAG_EAGER          = UCS_BIT(1), /* Eager tag message */
+    UCP_RECV_DESC_FLAG_EAGER_ONLY     = UCS_BIT(2), /* Eager tag message with single fragment */
+    UCP_RECV_DESC_FLAG_EAGER_SYNC     = UCS_BIT(3), /* Eager tag message which requires reply */
+    UCP_RECV_DESC_FLAG_EAGER_OFFLOAD  = UCS_BIT(4), /* Eager tag from offload */
+    UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(5)  /* Rendezvous request */
 };
 
 
@@ -213,6 +212,7 @@ struct ucp_request {
                     ucp_tag_recv_callback_t cb;       /* Completion callback */
                     ucp_tag_recv_info_t     info;     /* Completion info to fill */
                     ucp_mem_desc_t          *rdesc;   /* Offload bounce buffer */
+                    ssize_t                 remaining; /* How much more data to be received */
                 } tag;
 
                 struct {

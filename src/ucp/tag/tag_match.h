@@ -12,6 +12,7 @@
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/stats/stats.h>
 
 
 #define UCP_TAG_MASK_FULL     0xffffffffffffffffUL  /* All 1-s */
@@ -113,6 +114,10 @@ int ucp_tag_unexp_is_empty(ucp_tag_match_t *tm);
 
 ucp_request_t*
 ucp_tag_exp_search_all(ucp_tag_match_t *tm, ucp_request_queue_t *req_queue,
-                       ucp_tag_t recv_tag, size_t recv_len, unsigned recv_flags);
+                       ucp_tag_t tag);
+
+void ucp_tag_frag_list_process_queue(ucp_tag_match_t *tm, ucp_request_t *req,
+                                     uint64_t msg_id
+                                     UCS_STATS_ARG(int counter_idx));
 
 #endif

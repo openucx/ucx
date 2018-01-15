@@ -31,6 +31,20 @@
     (((_flags) & UCP_REQUEST_FLAG_RECV)            ? 'r' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_SYNC)            ? 's' : '-')
 
+#define UCP_RECV_DESC_FMT \
+    "rdesc %p %c%c%c%c%c%c len %u+%u"
+
+#define UCP_RECV_DESC_ARG(_rdesc) \
+    (_rdesc), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_UCT_DESC)      ? 't' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_EAGER)         ? 'e' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_EAGER_ONLY)    ? 'o' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_EAGER_SYNC)    ? 's' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) ? 'f' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_RNDV)          ? 'r' : '-'), \
+    (_rdesc)->payload_offset, \
+    ((_rdesc)->length - (_rdesc)->payload_offset)
+
 
 /* defined as a macro to print the call site */
 #define ucp_request_get(_worker) \
@@ -403,13 +417,15 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
     ucp_dt_generic_t *dt_gen;
     ucs_status_t status;
 
+    ucs_assert(req->status == UCS_OK);
+
     ucp_trace_req(req, "unpack recv_data req_len %zu data_len %zu offset %zu last: %s",
                   req->recv.length, length, offset, last ? "yes" : "no");
 
     if (ucs_unlikely((length + offset) > req->recv.length)) {
         ucs_debug("message truncated: recv_length %zu offset %zu buffer_size %zu",
                   length, offset, req->recv.length);
-        if (UCP_DT_IS_GENERIC(req->recv.datatype) && last) {
+        if (UCP_DT_IS_GENERIC(req->recv.datatype)) {
             dt_gen = ucp_dt_generic(req->recv.datatype);
             UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish,
                                          req->recv.state.dt.generic.state);
@@ -424,10 +440,18 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
         return UCS_OK;
 
     case UCP_DATATYPE_IOV:
+        if (offset != req->recv.state.offset) {
+            ucp_dt_iov_seek(req->recv.buffer, req->recv.state.dt.iov.iovcnt,
+                            offset - req->recv.state.offset,
+                            &req->recv.state.dt.iov.iov_offset,
+                            &req->recv.state.dt.iov.iovcnt_offset);
+            req->recv.state.offset = offset;
+        }
         UCS_PROFILE_CALL(ucp_dt_iov_scatter, req->recv.buffer,
                          req->recv.state.dt.iov.iovcnt, data, length,
                          &req->recv.state.dt.iov.iov_offset,
                          &req->recv.state.dt.iov.iovcnt_offset);
+        req->recv.state.offset += length;
         return UCS_OK;
 
     case UCP_DATATYPE_GENERIC:
@@ -435,7 +459,7 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
         status = UCS_PROFILE_NAMED_CALL("dt_unpack", dt_gen->ops.unpack,
                                         req->recv.state.dt.generic.state,
                                         offset, data, length);
-        if (last) {
+        if (last || (status != UCS_OK)) {
             UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish,
                                         req->recv.state.dt.generic.state);
         }

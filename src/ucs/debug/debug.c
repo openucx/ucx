@@ -1126,6 +1126,7 @@ static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
 {
     return !strcmp(symbol, "ucs_handle_error") ||
+           !strcmp(symbol, "ucs_fatal_error") ||
            !strcmp(symbol, "ucs_error_freeze") ||
            !strcmp(symbol, "ucs_error_signal_handler") ||
            !strcmp(symbol, "ucs_debug_handle_error_signal") ||

@@ -844,6 +844,7 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
                                                ucp_lane_index_t *num_lanes_p)
 {
     ucp_wireup_criteria_t criteria;
+    ucp_lane_index_t lane_desc_idx;
     ucp_md_map_t remote_md_map;
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
@@ -878,7 +879,17 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
     num_lanes     = 1;
     tl_bitmap     = -1;
     remote_md_map = -1;
-    /* am_bw_lane[0] is am_lane */
+
+    /* am_bw_lane[0] is am_lane, so don't re-select it here */
+    for (lane_desc_idx = 0; lane_desc_idx < *num_lanes_p; ++lane_desc_idx) {
+        if (lane_descs[lane_desc_idx].usage & UCP_WIREUP_LANE_USAGE_AM) {
+            addr_index     = lane_descs[lane_desc_idx].addr_index;
+            rsc_index      = lane_descs[lane_desc_idx].rsc_index;
+            remote_md_map &= ~UCS_BIT(address_list[addr_index].md_index);
+            tl_bitmap      = ucp_wireup_unset_tl_by_md(ep, tl_bitmap, rsc_index);
+        }
+    }
+
     for (; num_lanes < ep->worker->context->config.ext.max_eager_lanes;) {
         status = ucp_wireup_select_transport(ep, address_list, address_count,
                                              &criteria, tl_bitmap, remote_md_map,

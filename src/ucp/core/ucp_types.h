@@ -55,7 +55,6 @@ enum {
     UCP_AM_ID_EAGER_ONLY        =  2, /* Single packet eager TAG */
     UCP_AM_ID_EAGER_FIRST       =  3, /* First eager fragment */
     UCP_AM_ID_EAGER_MIDDLE      =  4, /* Middle eager fragment */
-    UCP_AM_ID_EAGER_LAST        =  5, /* Last eager fragment */
 
     UCP_AM_ID_EAGER_SYNC_ONLY   =  6, /* Single packet eager-sync */
     UCP_AM_ID_EAGER_SYNC_FIRST  =  7, /* First eager-sync fragment */
@@ -67,8 +66,6 @@ enum {
                                           with a generic datatype */
     UCP_AM_ID_RNDV_DATA         =  12, /* Rndv data fragments when using software
                                           rndv (bcopy) */
-    UCP_AM_ID_RNDV_DATA_LAST    =  13, /* The last rndv data fragment when using
-                                          software rndv (bcopy) */
     UCP_AM_ID_OFFLOAD_SYNC_ACK  =  14, /* Eager sync ack for tag offload proto */
 
     UCP_AM_ID_STREAM_DATA       =  15, /* Eager STREAM packet */
