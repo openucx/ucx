@@ -78,7 +78,7 @@ struct perftest_context {
     sock_rte_group_t             sock_rte_group;
 };
 
-#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oSCqMr:T:d:x:A:B"
+#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oSCqMr:T:d:x:A:BU"
 
 
 test_type_t tests[] = {
@@ -117,6 +117,12 @@ test_type_t tests[] = {
 
     {"tag_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "UCP tag match bandwidth"},
+
+    {"tag_sync_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_PINGPONG,
+     "UCP tag sync match latency"},
+
+    {"tag_sync_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "UCP tag sync match bandwidth"},
 
     {"ucp_put_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
      "UCP put latency"},
@@ -373,8 +379,8 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("                    data layout for sender and receiver side (contig)\n");
     printf("                        contig - Continuous datatype\n");
     printf("                        iov    - Scatter-gather list\n");
-    printf("     -C             use wildcard for tag tests\n");
-    printf("     -S             use synchronous mode for tag sends\n");
+    printf("     -C             use wild-card tag for tag tests\n");
+    printf("     -U             force unexpected flow by using tag probe\n");
     printf("     -r <mode>      receive mode for stream tests (recv)\n");
     printf("                        recv       : Use ucp_stream_recv_nb\n");
     printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
@@ -559,8 +565,8 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
     case 'C':
         params->flags |= UCX_PERF_TEST_FLAG_TAG_WILDCARD;
         return UCS_OK;
-    case 'S':
-        params->flags |= UCX_PERF_TEST_FLAG_TAG_SYNC;
+    case 'U':
+        params->flags |= UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE;
         return UCS_OK;
     case 'M':
         if (!strcmp(optarg, "single")) {

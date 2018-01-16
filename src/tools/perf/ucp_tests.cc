@@ -58,12 +58,10 @@ public:
                                               size_t *length, void **buffer_p)
     {
         ucp_datatype_t type = ucp_dt_make_contig(1);
-        if (UCX_PERF_CMD_TAG == CMD) {
-            if (UCP_PERF_DATATYPE_IOV == datatype) {
-                *buffer_p = iov;
-                *length   = m_perf.params.msg_size_cnt;
-                type      = ucp_dt_make_iov();
-            }
+        if (UCP_PERF_DATATYPE_IOV == datatype) {
+            *buffer_p = iov;
+            *length   = m_perf.params.msg_size_cnt;
+            type      = ucp_dt_make_iov();
         }
         return type;
     }
@@ -149,14 +147,25 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
+        case UCX_PERF_CMD_TAG_SYNC:
+        case UCX_PERF_CMD_STREAM:
             wait_window(1);
-
-            if (FLAGS & UCX_PERF_TEST_FLAG_TAG_SYNC) {
-                request = ucp_tag_send_sync_nb(ep, buffer, length, datatype, TAG,
-                                               send_cb);
-            } else {
+            switch (CMD) {
+            case UCX_PERF_CMD_TAG:
                 request = ucp_tag_send_nb(ep, buffer, length, datatype, TAG,
                                           send_cb);
+                break;
+            case UCX_PERF_CMD_TAG_SYNC:
+                request = ucp_tag_send_sync_nb(ep, buffer, length, datatype, TAG,
+                                               send_cb);
+                break;
+            case UCX_PERF_CMD_STREAM:
+                request = ucp_stream_send_nb(ep, buffer, length, datatype,
+                                             send_cb, 0);
+                break;
+            default:
+                request = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+                break;
             }
             if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
                 return UCS_PTR_STATUS(request);
@@ -164,7 +173,6 @@ public:
             reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
             send_started();
             return UCS_OK;
-
         case UCX_PERF_CMD_PUT:
             *((uint8_t*)buffer + length - 1) = sn;
             return ucp_put(ep, buffer, length, remote_addr, rkey);
@@ -202,16 +210,6 @@ public:
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
-        case UCX_PERF_CMD_STREAM:
-            wait_window(1);
-            request = ucp_stream_send_nb(ep, buffer, length, datatype,
-                                         send_cb, 0);
-            if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
-                return UCS_PTR_STATUS(request);
-            }
-            reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
-            send_started();
-            return UCS_OK;
         default:
             return UCS_ERR_INVALID_PARAM;
         }
@@ -227,6 +225,13 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
+        case UCX_PERF_CMD_TAG_SYNC:
+            if (FLAGS & UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE) {
+                ucp_tag_recv_info_t tag_info;
+                while (ucp_tag_probe_nb(worker, TAG, TAG_MASK, 0, &tag_info) == NULL) {
+                    progress_responder();
+                }
+            }
             request = ucp_tag_recv_nb(worker, buffer, length, datatype, TAG, TAG_MASK,
                                       (ucp_tag_recv_callback_t)ucs_empty_function);
             return wait(request, false);
@@ -497,16 +502,16 @@ private:
 #define TEST_CASE_ALL_TAG(_perf, _case) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
               0, \
-              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_SYNC) \
+              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
               UCX_PERF_TEST_FLAG_TAG_WILDCARD, \
-              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_SYNC) \
+              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
-              UCX_PERF_TEST_FLAG_TAG_SYNC, \
-              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_SYNC) \
+              UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE, \
+              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
-              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_SYNC, \
-              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_SYNC) \
+              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE, \
+              UCX_PERF_TEST_FLAG_TAG_WILDCARD|UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE)
 
 #define TEST_CASE_ALL_OSD(_perf, _case) \
     TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, \
@@ -525,9 +530,12 @@ ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
         (UCX_PERF_CMD_SWAP,  UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI)
         );
+
     UCS_PP_FOREACH(TEST_CASE_ALL_TAG, perf,
-        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_PINGPONG),
-        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_STREAM_UNI)
+        (UCX_PERF_CMD_TAG,      UCX_PERF_TEST_TYPE_PINGPONG),
+        (UCX_PERF_CMD_TAG,      UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_PINGPONG),
+        (UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_STREAM_UNI)
         );
 
     UCS_PP_FOREACH(TEST_CASE_ALL_STREAM, perf,
