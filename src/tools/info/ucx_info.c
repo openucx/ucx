@@ -11,6 +11,7 @@
 #include <ucm/api/ucm.h>
 #include <getopt.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 static void usage() {
@@ -28,6 +29,11 @@ static void usage() {
     printf("                'r' : remote memory access\n");
     printf("                't' : tag matching \n");
     printf("                'w' : wakeup\n");
+    printf("  -D <type>  Set which device types to use\n");
+    printf("                'all'  : all possible devices (default)\n");
+    printf("                'shm'  : shared memory devices only\n");
+    printf("                'net'  : network devices only\n");
+    printf("                'self' : self transport only\n");
     printf("  -n         Estimated UCP endpoint count (for ucp_init)\n");
     printf("  -a         Show also hidden configuration\n");
     printf("  -b         Build configuration\n");
@@ -40,6 +46,7 @@ static void usage() {
 int main(int argc, char **argv)
 {
     ucs_config_print_flags_t print_flags;
+    unsigned dev_type_bitmap;
     uint64_t ucp_features;
     size_t ucp_num_eps;
     unsigned print_opts;
@@ -47,12 +54,13 @@ int main(int argc, char **argv)
     const char *f;
     int c;
 
-    print_opts   = 0;
-    print_flags  = 0;
-    tl_name      = NULL;
-    ucp_features = 0;
-    ucp_num_eps  = 1;
-    while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:")) != -1) {
+    print_opts       = 0;
+    print_flags      = 0;
+    tl_name          = NULL;
+    ucp_features     = 0;
+    ucp_num_eps      = 1;
+    dev_type_bitmap  = -1;
+    while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:D:")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -114,6 +122,20 @@ int main(int argc, char **argv)
                 }
             }
             break;
+        case 'D':
+            if (!strcasecmp(optarg, "net")) {
+                dev_type_bitmap = UCS_BIT(UCT_DEVICE_TYPE_NET);
+            } else if (!strcasecmp(optarg, "shm")) {
+                dev_type_bitmap = UCS_BIT(UCT_DEVICE_TYPE_SHM);
+            } else if (!strcasecmp(optarg, "self")) {
+                dev_type_bitmap = UCS_BIT(UCT_DEVICE_TYPE_SELF);
+            } else if (!strcasecmp(optarg, "all")) {
+                dev_type_bitmap = -1;
+            } else {
+                usage();
+                return -1;
+            }
+            break;
         case 'h':
         default:
             usage();
@@ -158,7 +180,8 @@ int main(int argc, char **argv)
             printf("Please select UCP features using -u switch\n");
             return -1;
         }
-        print_ucp_info(print_opts, print_flags, ucp_features, ucp_num_eps);
+        print_ucp_info(print_opts, print_flags, ucp_features, ucp_num_eps,
+                       dev_type_bitmap);
     }
 
     return 0;
