@@ -345,8 +345,8 @@ typedef struct uct_rc_am_short_hdr {
 #  define UCT_RC_IFACE_TM_OFF_STR         "TM_ENABLE=n"
 
 /* TMH can carry 2 bytes of data in its reserved filed */
-#  define UCT_RC_IFACE_TMH_PRIV_LEN       ucs_sizeof(uct_rc_iface_tmh_priv_data_t, \
-                                                     data)
+#  define UCT_RC_IFACE_TMH_PRIV_LEN       ucs_field_sizeof(uct_rc_iface_tmh_priv_data_t, \
+                                                           data)
 
 #  define UCT_RC_IFACE_CHECK_RES_PTR(_iface, _ep) \
        UCT_RC_CHECK_CQE_RET(_iface, _ep, &(_ep)->txqp, \

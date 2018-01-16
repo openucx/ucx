@@ -129,8 +129,8 @@
 /**
  * @return Size of _member in _type. _type is a structure type.
  */
-#define ucs_sizeof(_type, _member) \
-    sizeof(((_type*)0)->_member)
+#define ucs_field_sizeof(_type, _field) \
+    sizeof(((_type*)0)->_field)
 
 /**
  * Prevent compiler from reordering instructions
