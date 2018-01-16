@@ -576,21 +576,20 @@ ssize_t uct_rc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                         uct_pack_callback_t pack_cb,
                                         void *arg, unsigned flags)
 {
-    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
-                                                 uct_rc_verbs_iface_t);
+    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
     uct_rc_iface_send_desc_t *desc;
     struct ibv_send_wr wr;
     struct ibv_sge sge;
     size_t length;
     uint32_t app_ctx;
 
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RES(iface, &ep->super);
 
     UCT_RC_IFACE_FILL_TM_IMM(imm, app_ctx, wr.imm_data, wr.opcode, IBV_WR_SEND,
                              _WITH_IMM);
-    UCT_RC_IFACE_GET_TM_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
-                                   tag, app_ctx, pack_cb, arg, length);
+    UCT_RC_IFACE_GET_TM_BCOPY_DESC(iface, &iface->tx.mp, desc, tag, app_ctx,
+                                   pack_cb, arg, length);
     UCT_RC_VERBS_FILL_SGE(wr, sge, length + sizeof(struct ibv_exp_tmh));
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, 0);
     return length;
@@ -677,7 +676,7 @@ ucs_status_t uct_rc_verbs_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
     struct ibv_send_wr wr;
 
     UCT_CHECK_LENGTH(header_length + sizeof(tmh), 0,
-                     iface->verbs_common.config.max_inline, "tag_short");
+                     iface->verbs_common.config.max_inline, "tag_rndv_request");
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
     wr.sg_list = iface->verbs_common.inl_sge;

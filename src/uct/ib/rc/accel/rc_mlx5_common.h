@@ -455,8 +455,8 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
         inl              = next_seg;
         inl->byte_count  = htonl((length + sizeof(*am)) | MLX5_INLINE_SEG);
         am               = (void*)(inl + 1);
-        am->rc_hdr.am_id = am_id;
         am->am_hdr       = am_hdr;
+        uct_rc_am_hdr_fill(&am->rc_hdr, am_id);
         uct_ib_mlx5_inline_copy(am + 1, buffer, length, txwq);
         fm_ce_se        |= uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
         break;
@@ -506,9 +506,9 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
  * Generic data-pointer posting function.
  * Parameters which are not relevant to the opcode are ignored.
  *
- *            +--------+-----+-------+--------+-------+
- * SEND       | CTRL   | INL | am_id | am_hdr | DPSEG |
- *            +--------+-----+---+---+----+----+------+
+ *            +--------+-----+-------+
+ * SEND       | CTRL   | INL | DPSEG |
+ *            +--------+-----+---+---+----+
  * RDMA_WRITE | CTRL   | RADDR   | DPSEG  |
  *            +--------+---------+--------+-------+
  * ATOMIC     | CTRL   | RADDR   | ATOMIC | DPSEG |
@@ -525,7 +525,6 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                            uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                            unsigned opcode_flags, const void *buffer,
                            unsigned length, uint32_t *lkey_p,
-         /* SEND        */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
          /* RDMA/ATOMIC */ uint64_t remote_addr, uct_rkey_t rkey,
          /* ATOMIC      */ uint64_t compare_mask, uint64_t compare, uint64_t swap_add,
          /* AV          */ uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
@@ -535,12 +534,10 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     struct mlx5_wqe_raddr_seg                    *raddr;
     struct mlx5_wqe_atomic_seg                   *atomic;
     struct mlx5_wqe_data_seg                     *dptr;
-    struct mlx5_wqe_inl_data_seg                 *inl;
     struct uct_ib_mlx5_atomic_masked_cswap32_seg *masked_cswap32;
     struct uct_ib_mlx5_atomic_masked_fadd32_seg  *masked_fadd32;
     struct uct_ib_mlx5_atomic_masked_cswap64_seg *masked_cswap64;
-    uct_rc_hdr_t                                 *rch;
-    size_t  wqe_size, inl_seg_size, ctrl_av_size;
+    size_t  wqe_size, ctrl_av_size;
     uint8_t opmod;
     void *next_seg;
 
@@ -554,35 +551,8 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (void*)ctrl + ctrl_av_size);
 
     switch (opcode_flags) {
+    case MLX5_OPCODE_SEND_IMM: /* Used by tag offload */
     case MLX5_OPCODE_SEND:
-        inl_seg_size     = ucs_align_up_pow2(sizeof(*inl) + sizeof(*rch) + am_hdr_len,
-                                             UCT_IB_MLX5_WQE_SEG_SIZE);
-
-        ucs_assert(ctrl_av_size + inl_seg_size + sizeof(*dptr) <=
-                   UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB);
-        ucs_assert(length + sizeof(*rch) + am_hdr_len <=
-                   iface->super.config.seg_size);
-
-        /* Inline segment with AM ID and header */
-        inl              = next_seg;
-        inl->byte_count  = htonl((sizeof(*rch) + am_hdr_len) | MLX5_INLINE_SEG);
-        rch              = (uct_rc_hdr_t *)(inl + 1);
-        rch->am_id       = am_id;
-
-        uct_ib_mlx5_inline_copy(rch + 1, am_hdr, am_hdr_len, txwq);
-
-        /* Data segment with payload */
-        if (length == 0) {
-            wqe_size     = ctrl_av_size + inl_seg_size;
-        } else {
-            wqe_size     = ctrl_av_size + inl_seg_size + sizeof(*dptr);
-            dptr         = uct_ib_mlx5_txwq_wrap_any(txwq, (void*)inl + inl_seg_size);
-            uct_ib_mlx5_set_data_seg(dptr, buffer, length, *lkey_p);
-        }
-        break;
-
-    case MLX5_OPCODE_SEND_IMM|UCT_RC_MLX5_OPCODE_FLAG_RAW: /* Used by tag offload */
-    case MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_RAW:
         /* Data segment only */
         ucs_assert(length < (2ul << 30));
         ucs_assert(length <= iface->super.config.seg_size);
@@ -730,8 +700,8 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, enum ibv_qp_type qp_t
         inl              = next_seg;
         inl->byte_count  = htonl((sizeof(*rch) + am_hdr_len) | MLX5_INLINE_SEG);
         rch              = (uct_rc_hdr_t *)(inl + 1);
-        rch->am_id       = am_id;
 
+        uct_rc_am_hdr_fill(rch, am_id);
         uct_ib_mlx5_inline_copy(rch + 1, am_hdr, am_hdr_len, txwq);
 
         /* Data segment with payload */

@@ -310,7 +310,7 @@ uct_rc_verbs_iface_common_tag_recv(uct_rc_verbs_iface_common_t *iface,
     struct ibv_exp_ops_wr wr;
     size_t sge_cnt;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_rc_verbs_iface_tag_recv_zcopy");
+    UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_rc_verbs_iface_common_tag_recv");
     UCT_RC_VERBS_CHECK_TAG(rc_iface);
 
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge, iov, iovcnt);

@@ -345,7 +345,8 @@ typedef struct uct_rc_am_short_hdr {
 #  define UCT_RC_IFACE_TM_OFF_STR         "TM_ENABLE=n"
 
 /* TMH can carry 2 bytes of data in its reserved filed */
-#  define UCT_RC_IFACE_TMH_PRIV_LEN       2
+#  define UCT_RC_IFACE_TMH_PRIV_LEN       ucs_field_sizeof(uct_rc_iface_tmh_priv_data_t, \
+                                                           data)
 
 #  define UCT_RC_IFACE_CHECK_RES_PTR(_iface, _ep) \
        UCT_RC_CHECK_CQE_RET(_iface, _ep, &(_ep)->txqp, \
@@ -433,7 +434,7 @@ uct_rc_iface_fill_tmh_priv_data(struct ibv_exp_tmh *tmh, const void *hdr,
      * rest to the TMH reserved field. */
     if (hdr_len > max_rndv_priv_data) {
         priv->length = hdr_len - max_rndv_priv_data;
-        ucs_assert(tmh->reserved[0] <= 2);
+        ucs_assert(priv->length <= UCT_RC_IFACE_TMH_PRIV_LEN);
         memcpy(&priv->data, (char*)hdr, priv->length);
     } else {
         priv->length = 0;

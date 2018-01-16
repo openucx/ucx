@@ -19,7 +19,6 @@
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txqp_bcopy_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                             unsigned opcode, unsigned length,
-                            /* SEND */ uint8_t am_id, void *am_hdr, unsigned am_hdr_len,
                             /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
                             uint8_t fm_ce_se, uint32_t imm_val_be,
                             uct_rc_iface_send_desc_t *desc)
@@ -27,7 +26,6 @@ uct_rc_mlx5_txqp_bcopy_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_m
     desc->super.sn = txwq->sw_pi;
     uct_rc_mlx5_txqp_dptr_post(iface, IBV_QPT_RC, txqp, txwq,
                                opcode, desc + 1, length, &desc->lkey,
-                               am_id, am_hdr, am_hdr_len,
                                rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
                                0, 0, 0,
                                NULL, NULL, 0, fm_ce_se, imm_val_be);
@@ -82,7 +80,7 @@ uct_rc_mlx5_ep_atomic_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
     uct_rc_mlx5_txqp_dptr_post(iface, IBV_QPT_RC,
                                &ep->super.txqp, &ep->tx.wq,
                                opcode, desc + 1, length, &desc->lkey,
-                               0, NULL, 0, remote_addr, ib_rkey,
+                               remote_addr, ib_rkey,
                                compare_mask, compare, swap_add,
                                NULL, NULL, 0, signal, 0);
 
@@ -158,8 +156,8 @@ ssize_t uct_rc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
                                        desc, pack_cb, arg, length);
 
     uct_rc_mlx5_txqp_bcopy_post(iface, &ep->super.txqp, &ep->tx.wq,
-                                MLX5_OPCODE_RDMA_WRITE, length, 0, NULL, 0,
-                                remote_addr, rkey, MLX5_WQE_CTRL_CQ_UPDATE, 0, desc);
+                                MLX5_OPCODE_RDMA_WRITE, length, remote_addr,
+                                rkey, MLX5_WQE_CTRL_CQ_UPDATE, 0, desc);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, BCOPY, length);
     return length;
 }
@@ -201,8 +199,8 @@ ucs_status_t uct_rc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
                                        unpack_cb, comp, arg, length);
 
     uct_rc_mlx5_txqp_bcopy_post(iface, &ep->super.txqp, &ep->tx.wq,
-                                MLX5_OPCODE_RDMA_READ, length, 0, NULL, 0,
-                                remote_addr, rkey, MLX5_WQE_CTRL_CQ_UPDATE, 0, desc);
+                                MLX5_OPCODE_RDMA_READ, length, remote_addr,
+                                rkey, MLX5_WQE_CTRL_CQ_UPDATE, 0, desc);
     UCT_TL_EP_STAT_OP(&ep->super.super, GET, BCOPY, length);
     return UCS_INPROGRESS;
 }
@@ -269,9 +267,8 @@ ssize_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                       id, pack_cb, arg, &length);
 
     uct_rc_mlx5_txqp_bcopy_post(iface, &ep->super.txqp, &ep->tx.wq,
-                                MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_RAW,
-                                sizeof(uct_rc_hdr_t) + length, 0, NULL, 0, 0, 0,
-                                MLX5_WQE_CTRL_SOLICITED, 0, desc);
+                                MLX5_OPCODE_SEND, sizeof(uct_rc_hdr_t) + length,
+                                0, 0, MLX5_WQE_CTRL_SOLICITED, 0, desc);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     UCT_RC_UPDATE_FC(iface, &ep->super, id);
     return length;
@@ -468,8 +465,7 @@ ssize_t uct_rc_mlx5_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                    tag, app_ctx, pack_cb, arg, length);
 
     uct_rc_mlx5_txqp_bcopy_post(iface, &ep->super.txqp, &ep->tx.wq,
-                                opcode|UCT_RC_MLX5_OPCODE_FLAG_RAW,
-                                sizeof(struct ibv_exp_tmh) + length, 0, NULL, 0,
+                                opcode, sizeof(struct ibv_exp_tmh) + length,
                                 0, 0, MLX5_WQE_CTRL_SOLICITED, ib_imm, desc);
     return length;
 }
