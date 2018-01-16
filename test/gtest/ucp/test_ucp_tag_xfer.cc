@@ -913,30 +913,11 @@ public:
         return e.worker()->stats;
     }
 
-    ucs_stats_node_t* worker_offload_stats(entity &e) {
-        return e.worker()->tm_offload_stats;
-    }
-
-    void skip_no_tag_offload() {
-        if (!(sender().ep()->flags & UCP_EP_FLAG_TAG_OFFLOAD_ENABLED)) {
-            UCS_TEST_SKIP_R("no tag offload");
-        }
-    }
-
     void validate_counters(uint64_t tx_cntr, uint64_t rx_cntr) {
         uint64_t cnt;
         cnt = UCS_STATS_GET_COUNTER(ep_stats(sender()), tx_cntr);
         EXPECT_EQ(1ul, cnt);
         cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()), rx_cntr);
-        EXPECT_EQ(1ul, cnt);
-    }
-
-    void validate_offload_counters(uint64_t rx_cntr, uint64_t posted_cnt) {
-        uint64_t cnt;
-        cnt = UCS_STATS_GET_COUNTER(worker_offload_stats(receiver()),
-                                    UCP_WORKER_STAT_TAG_OFFLOAD_POSTED);
-        EXPECT_EQ(posted_cnt, cnt);
-        cnt = UCS_STATS_GET_COUNTER(worker_offload_stats(receiver()), rx_cntr);
         EXPECT_EQ(1ul, cnt);
     }
 
@@ -1016,75 +997,6 @@ UCS_TEST_P(test_ucp_tag_stats, rndv_unexpected, "RNDV_THRESH=1000",
     test_run_xfer(true, true, false, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
                       UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP);
-}
-
-UCS_TEST_P(test_ucp_tag_stats, offload_rndv, "RNDV_THRESH=1000",
-                                             "TM_THRESH=1",
-                                             "TM_OFFLOAD=y") {
-    skip_no_tag_offload();
-
-    test_run_xfer(true, true, true, false, false);
-
-    // First tag offload packet should be arrived unexpectedly in any case
-    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_RNDV, 0ul);
-
-    test_run_xfer(true, true, true, false, false);
-
-    // Now the packet should arrive expectedly, since previous packet activated
-    // offload interface
-    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED, 1ul);
-}
-
-UCS_TEST_P(test_ucp_tag_stats, offload_sw_rndv, "RNDV_THRESH=1000",
-                                                "TM_THRESH=1",
-                                                "TM_OFFLOAD=y") {
-    skip_no_tag_offload();
-
-    test_run_xfer(false, true, true, false, false);
-
-    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV, 0ul);
-
-    test_run_xfer(false, true, true, false, false);
-
-    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV, 1ul);
-}
-
-UCS_TEST_P(test_ucp_tag_stats, offload_exp_recv_generic, "RNDV_THRESH=1000",
-                                                         "TM_THRESH=1",
-                                                         "TM_OFFLOAD=y") {
-    skip_no_tag_offload();
-
-    // Send unexpected msg to activate offload interface
-    test_run_xfer(false, true, false, false, false);
-
-    test_run_xfer(false, false, true, false, false);
-
-    validate_offload_counters(UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_NON_CONTIG, 0ul);
-}
-
-UCS_TEST_P(test_ucp_tag_stats, offload_post, "TM_OFFLOAD=y", "TM_THRESH=1") {
-
-    skip_no_tag_offload();
-
-    uint64_t dummy;
-    uint64_t tag  = 0x11;
-    uint64_t mask = 0xffff;
-
-    // Send unexpected msg to activate offload interface
-    test_run_xfer(false, true, false, false, false);
-
-    // Check general flow
-    request *rreq = recv_nb(&dummy, sizeof(dummy), DATATYPE, tag, mask);
-
-    wait_counter(worker_offload_stats(receiver()),
-                 UCP_WORKER_STAT_TAG_OFFLOAD_POSTED);
-
-    ucp_request_cancel(receiver().worker(), rreq);
-
-    wait_counter(worker_offload_stats(receiver()),
-                 UCP_WORKER_STAT_TAG_OFFLOAD_CANCELED);
-
-    request_release(rreq);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_stats)
