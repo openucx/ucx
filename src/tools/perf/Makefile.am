@@ -70,11 +70,15 @@ ucx_perftest_SOURCE_FILES = \
 #
 # Add custom rules to compile and link ucx_perftest with MPICC
 #
+perftest_COMPILE = \
+	$(LIBTOOL) $(AM_V_lt) --mode=compile --tag=CC $(ucx_perftest_CC) \
+	$(DEFS) -I. -I$(top_builddir) $(AM_CPPFLAGS) $(CPPFLAGS) $(ucx_perftest_CPPFLAGS) \
+	$(AM_CFLAGS) $(CFLAGS) $(ucx_perftest_CFLAGS)
+
 perftest.lo: $(ucx_perftest_SOURCE_FILES)
 	$(AM_V_CC)
-	@$(LIBTOOL) $(AM_V_lt) --mode=compile --tag=CC $(ucx_perftest_CC) \
-		$(DEFS) -I. -I$(top_builddir) $(AM_CPPFLAGS) $(CPPFLAGS) $(ucx_perftest_CPPFLAGS) \
-		$(AM_CFLAGS) $(CFLAGS) $(ucx_perftest_CFLAGS) $(ucx_perftest_SOURCE_FILES) -c -o $@
+	@$(perftest_COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/ucx_perftest-perftest.Po -c -o $@ $<
+	@$(perftest_COMPILE) $(ucx_perftest_SOURCE_FILES) -c -o $@
 
 ucx_perftest$(EXEEXT): perftest.lo $(ucx_perftest_LDADD)
 	$(AM_V_CCLD)
