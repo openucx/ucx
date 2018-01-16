@@ -65,9 +65,7 @@ struct perftest_context {
     ucx_perf_params_t            params;
     const char                   *server_addr;
     int                          port;
-#if HAVE_MPI
     int                          mpi;
-#endif
     unsigned                     cpu;
     unsigned                     flags;
 
@@ -310,17 +308,27 @@ static void print_test_name(struct perftest_context *ctx)
     }
 }
 
-static void usage(struct perftest_context *ctx, const char *program)
+static void usage(const struct perftest_context *ctx, const char *program)
 {
     test_type_t *test;
+    int UCS_V_UNUSED rank;
 
-    printf("Usage: %s [ server-hostname ] [ options ]\n", program);
-    printf("\n");
 #if HAVE_MPI
-    printf("This test can be also launched as an MPI application\n");
-#elif HAVE_RTE
-    printf("This test can be also launched as an libRTE application\n");
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    if (ctx->mpi && (rank != 0)) {
+        return;
+    }
 #endif
+
+#if HAVE_MPI
+    printf("  Note: test can be also launched as an MPI application\n");
+    printf("\n");
+#elif HAVE_RTE
+    printf("  Note: this test can be also launched as an libRTE application\n");
+    printf("\n");
+#endif
+    printf("  Usage: %s [ server-hostname ] [ options ]\n", program);
+    printf("\n");
     printf("  Common options:\n");
     printf("     -t <test>      test to run:\n");
     for (test = tests; test->name; ++test) {
@@ -390,7 +398,7 @@ static void usage(struct perftest_context *ctx, const char *program)
 static const char *__basename(const char *path)
 {
     const char *p = strrchr(path, '/');
-    return (p == NULL) ? path : p;
+    return (p == NULL) ? path : (p + 1);
 }
 
 static ucs_status_t parse_ucp_datatype_params(const char *optarg,
@@ -652,7 +660,8 @@ static ucs_status_t read_batch_file(FILE *batch_file, ucx_perf_params_t *params,
     return UCS_OK;
 }
 
-static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **argv)
+static ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
+                               int argc, char **argv)
 {
     ucs_status_t status;
     int c;
@@ -664,9 +673,7 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
     ctx->num_batch_files        = 0;
     ctx->port                   = 13337;
     ctx->flags                  = 0;
-#if HAVE_MPI
-    ctx->mpi                    = !isatty(0);
-#endif
+    ctx->mpi                    = mpi_initialized;
 
     optind = 1;
     while ((c = getopt (argc, argv, "p:b:Nfvc:P:h" TEST_PARAMS_ARGS)) != -1) {
@@ -694,7 +701,7 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
             break;
         case 'P':
 #if HAVE_MPI
-            ctx->mpi = atoi(optarg);
+            ctx->mpi = atoi(optarg) && mpi_initialized;
             break;
 #endif
         case 'h':
@@ -1172,9 +1179,7 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
 
 static ucs_status_t cleanup_mpi_rte(struct perftest_context *ctx)
 {
-#if HAVE_MPI
-    MPI_Finalize();
-#elif HAVE_RTE
+#if HAVE_RTE
     rte_finalize();
 #endif
     return UCS_OK;
@@ -1289,28 +1294,37 @@ int main(int argc, char **argv)
 {
     struct perftest_context ctx;
     ucs_status_t status;
-    int rte = 0;
+    int mpi_initialized;
+    int mpi_rte;
     int ret;
 
+#if HAVE_MPI
+    mpi_initialized = !isatty(0) && (MPI_Init(&argc, &argv) == 0);
+#else
+    mpi_initialized = 0;
+#endif
+
     /* Parse command line */
-    if (parse_opts(&ctx, argc, argv) != UCS_OK) {
-        ret = -127;
+    status = parse_opts(&ctx, mpi_initialized, argc, argv);
+    if (status != UCS_OK) {
+        ret = (status == UCS_ERR_CANCELED) ? 0 : -127;
         goto out;
     }
 
 #ifdef __COVERITY__
     /* coverity[dont_call] */
-    rte = rand(); /* Shut up deadcode error */
+    mpi_rte = rand(); /* Shut up deadcode error */
 #endif
 
-#if HAVE_MPI
-    /* Don't try MPI when running interactively */
-    if (ctx.mpi && (MPI_Init(&argc, &argv) == 0)) {
-        rte = 1;
-    }
-#elif HAVE_RTE
-    rte = 1;
+    if (ctx.mpi) {
+        mpi_rte = 1;
+    } else {
+#if HAVE_RTE
+        mpi_rte = 1;
+#else
+        mpi_rte = 0;
 #endif
+    }
 
     status = check_system(&ctx);
     if (status != UCS_OK) {
@@ -1319,7 +1333,7 @@ int main(int argc, char **argv)
     }
 
     /* Create RTE */
-    status = (rte) ? setup_mpi_rte(&ctx) : setup_sock_rte(&ctx);
+    status = (mpi_rte) ? setup_mpi_rte(&ctx) : setup_sock_rte(&ctx);
     if (status != UCS_OK) {
         ret = -1;
         goto out;
@@ -1335,10 +1349,15 @@ int main(int argc, char **argv)
     ret = 0;
 
 out_cleanup_rte:
-    (rte) ? cleanup_mpi_rte(&ctx) : cleanup_sock_rte(&ctx);
+    (mpi_rte) ? cleanup_mpi_rte(&ctx) : cleanup_sock_rte(&ctx);
 out:
     if (ctx.params.msg_size_list) {
         free(ctx.params.msg_size_list);
+    }
+    if (mpi_initialized) {
+#if HAVE_MPI
+        MPI_Finalize();
+#endif
     }
     return ret;
 }
