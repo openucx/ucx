@@ -235,10 +235,10 @@ UCS_TEST_P(test_ucp_tag_offload, force_thresh_blocked, "TM_FORCE_THRESH=4096",
         reqs.push_back(req);
     }
 
-    // Add request with generic dt
-    ucp_datatype_t gen_dt;
-    ASSERT_UCS_OK(ucp_dt_create_generic(&test_dt_uint8_ops, NULL, &gen_dt));
-    req = recv_nb_and_check(&small_val, sizeof(small_val), gen_dt,
+    // Add request with noncontig dt
+    std::vector<char> buf(64, 0);
+    ucp::data_type_desc_t dt_desc(DATATYPE_IOV, buf.data(), buf.size(), 1);
+    req = recv_nb_and_check(dt_desc.buf(), dt_desc.count(), dt_desc.dt(),
                             tag, UCP_TAG_MASK_FULL);
     reqs.push_back(req);
 
