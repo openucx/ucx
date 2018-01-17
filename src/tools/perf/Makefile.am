@@ -77,7 +77,9 @@ perftest_COMPILE = \
 
 perftest.lo: $(ucx_perftest_SOURCE_FILES)
 	$(AM_V_CC)
+if AMDEP
 	@$(perftest_COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/ucx_perftest-perftest.Po -c -o $@ $<
+endif
 	@$(perftest_COMPILE) $(ucx_perftest_SOURCE_FILES) -c -o $@
 
 ucx_perftest$(EXEEXT): perftest.lo $(ucx_perftest_LDADD)
