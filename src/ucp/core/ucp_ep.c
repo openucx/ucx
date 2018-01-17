@@ -115,8 +115,9 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
         }
 
         ucs_queue_head_init(&ep->ext.stream->match_q);
-        ep->ext.stream->ucp_ep  = ep;
-        ep->ext.stream->flags   = UCP_EP_STREAM_FLAG_VALID;
+        ep->ext.stream->ucp_ep      = ep;
+        ep->ext.stream->session_id  = 0;
+        ep->ext.stream->flags       = UCP_EP_STREAM_FLAG_VALID;
     } else {
         ep->ext.stream = NULL;
     }
@@ -491,6 +492,7 @@ static void ucp_ep_ext_stream_invalidate(ucp_ep_h ep)
     }
 
     ep->ext.stream->flags &= ~UCP_EP_STREAM_FLAG_VALID;
+    ep->ext.stream->session_id++;
 }
 
 static void ucp_ep_disconnected(ucp_ep_h ep, int force)

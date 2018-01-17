@@ -12,6 +12,7 @@
 
 typedef struct {
     uint64_t    sender_uuid;
+    uint16_t    session_id;
 } UCS_S_PACKED ucp_stream_am_hdr_t;
 
 
@@ -19,7 +20,7 @@ typedef struct {
     union {
         ucp_stream_am_hdr_t  hdr;
         ucp_recv_desc_t     *rdesc;
-    };
+    } UCS_S_PACKED;
 } UCS_S_PACKED ucp_stream_am_data_t;
 
 
