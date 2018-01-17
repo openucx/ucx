@@ -89,7 +89,8 @@ static void print_resource_usage(const resource_usage_t *usage_before,
 }
 
 void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
-                    uint64_t features, size_t estimated_num_eps)
+                    uint64_t features, size_t estimated_num_eps,
+                    unsigned dev_type_bitmap)
 {
     ucp_config_t *config;
     ucs_status_t status;
@@ -116,6 +117,16 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     params.estimated_num_eps = estimated_num_eps;
 
     get_resource_usage(&usage);
+
+    if (!(dev_type_bitmap & UCS_BIT(UCT_DEVICE_TYPE_SELF))) {
+        ucp_config_modify(config, "SELF_DEVICES", "");
+    }
+    if (!(dev_type_bitmap & UCS_BIT(UCT_DEVICE_TYPE_SHM))) {
+        ucp_config_modify(config, "SHM_DEVICES", "");
+    }
+    if (!(dev_type_bitmap & UCS_BIT(UCT_DEVICE_TYPE_NET))) {
+        ucp_config_modify(config, "NET_DEVICES", "");
+    }
 
     status = ucp_init(&params, config, &context);
     if (status != UCS_OK) {
