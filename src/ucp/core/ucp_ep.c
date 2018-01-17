@@ -1210,6 +1210,12 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
                                        tag_config->zcopy_thresh[0],
                                        config->tag.rndv.rma_thresh,
                                        config->tag.rndv.am_thresh);
+         ucp_ep_config_print_tag_proto(stream, "tag_send_nbr",
+                                       tag_config->max_short,
+                                       /* disable zcopy */
+                                       config->tag.rndv_send_nbr.rma_thresh,
+                                       config->tag.rndv_send_nbr.rma_thresh,
+                                       config->tag.rndv_send_nbr.am_thresh);
          ucp_ep_config_print_tag_proto(stream, "tag_send_sync",
                                        tag_config->max_short,
                                        tag_config->sync_zcopy_thresh[0],
