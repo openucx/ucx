@@ -921,19 +921,6 @@ public:
         EXPECT_EQ(1ul, cnt);
     }
 
-    void wait_counter(ucs_stats_node_t *stats, uint64_t cntr,
-                      double timeout = UCP_TEST_TIMEOUT_IN_SEC) {
-        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
-        uint64_t v;
-
-        do {
-            short_progress_loop();
-            v = UCS_STATS_GET_COUNTER(stats, cntr);
-        } while ((ucs_get_time() < deadline) && !v);
-
-        EXPECT_EQ(1ul, v);
-    }
-
 };
 
 
@@ -943,10 +930,10 @@ UCS_TEST_P(test_ucp_tag_stats, eager_expected, "RNDV_THRESH=1248576",
     validate_counters(UCP_EP_STAT_TAG_TX_EAGER,
                       UCP_WORKER_STAT_TAG_RX_EAGER_MSG);
 
-     uint64_t cnt;
-     cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()),
-                                 UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP);
-     EXPECT_EQ(cnt, 0ul);
+    uint64_t cnt;
+    cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()),
+                                UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP);
+    EXPECT_EQ(cnt, 0ul);
 }
 
 UCS_TEST_P(test_ucp_tag_stats, eager_unexpected, "RNDV_THRESH=1248576",
@@ -954,10 +941,10 @@ UCS_TEST_P(test_ucp_tag_stats, eager_unexpected, "RNDV_THRESH=1248576",
     test_run_xfer(true, true, false, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_EAGER,
                       UCP_WORKER_STAT_TAG_RX_EAGER_MSG);
-     uint64_t cnt;
-     cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()),
-                                 UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP);
-     EXPECT_GT(cnt, 0ul);
+    uint64_t cnt;
+    cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()),
+                                UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP);
+    EXPECT_GT(cnt, 0ul);
 }
 
 UCS_TEST_P(test_ucp_tag_stats, sync_expected, "RNDV_THRESH=1248576",
@@ -967,10 +954,10 @@ UCS_TEST_P(test_ucp_tag_stats, sync_expected, "RNDV_THRESH=1248576",
     validate_counters(UCP_EP_STAT_TAG_TX_EAGER_SYNC,
                       UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG);
 
-     uint64_t cnt;
-     cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()),
+    uint64_t cnt;
+    cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()),
                                  UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP);
-     EXPECT_EQ(cnt, 0ul);
+    EXPECT_EQ(cnt, 0ul);
 }
 
 UCS_TEST_P(test_ucp_tag_stats, sync_unexpected, "RNDV_THRESH=1248576",
@@ -979,10 +966,10 @@ UCS_TEST_P(test_ucp_tag_stats, sync_unexpected, "RNDV_THRESH=1248576",
     test_run_xfer(true, true, false, true, false);
     validate_counters(UCP_EP_STAT_TAG_TX_EAGER_SYNC,
                       UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG);
-     uint64_t cnt;
-     cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()),
-                                 UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP);
-     EXPECT_GT(cnt, 0ul);
+    uint64_t cnt;
+    cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()),
+                                UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP);
+    EXPECT_GT(cnt, 0ul);
 }
 
 UCS_TEST_P(test_ucp_tag_stats, rndv_expected, "RNDV_THRESH=1000",
