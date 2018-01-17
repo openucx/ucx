@@ -21,7 +21,6 @@ public:
     {
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
         modify_config("TM_OFFLOAD", "y");
-        modify_config("TM_THRESH" , "1024");
 
         test_ucp_tag::init();
         if (!(sender().ep()->flags & UCP_EP_FLAG_TAG_OFFLOAD_ENABLED)) {
@@ -110,7 +109,7 @@ UCS_TEST_P(test_ucp_tag_offload, post_after_comp)
 
     send_b(&small_val, sizeof(small_val), DATATYPE, 0x11);
     wait(req);
-    request_release(req);
+    request_free(req);
 
     req = recv_nb_and_check(&recvbuf, recvbuf.size(), DATATYPE, tag,
                             UCP_TAG_MASK_FULL);
@@ -174,8 +173,7 @@ UCS_TEST_P(test_ucp_tag_offload, post_dif_buckets)
     EXPECT_EQ(2u, receiver().worker()->tm.expected.sw_all_count);
 
     for (std::vector<request*>::const_iterator iter = reqs.begin();
-         iter != reqs.end(); ++iter)
-    {
+         iter != reqs.end(); ++iter) {
         req_cancel(receiver(), *iter);
     }
 }
@@ -281,3 +279,179 @@ UCS_TEST_P(test_ucp_tag_offload_multi, recv_from_multi)
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, all_rcdc,
                               "\\rc,\\dc,\\ud,rc_x,dc_x")
+
+
+#if ENABLE_STATS
+
+class test_ucp_tag_offload_stats : public test_ucp_tag_offload_multi {
+public:
+
+    void init()
+    {
+        stats_activate();
+        test_ucp_tag_offload::init(); // No need for multi::init()
+    }
+
+    void cleanup()
+    {
+        test_ucp_tag_offload::cleanup();
+        stats_restore();
+    }
+
+    request* recv_nb_exp(void *buffer, size_t count, ucp_datatype_t dt,
+                         ucp_tag_t tag, ucp_tag_t tag_mask)
+    {
+        request *req1 = recv_nb_and_check(buffer, count, DATATYPE, tag,
+                                          UCP_TAG_MASK_FULL);
+
+        // Post and cancel another receive to make sure the first one was offloaded
+        request *req2 = recv_nb_and_check(buffer, count, DATATYPE, tag,
+                                          UCP_TAG_MASK_FULL);
+        req_cancel(receiver(), req2);
+
+        return req1;
+    }
+
+    ucs_stats_node_t* worker_offload_stats(entity &e)
+    {
+        return e.worker()->tm_offload_stats;
+    }
+
+    void validate_offload_counter(uint64_t rx_cntr, uint64_t val)
+    {
+        uint64_t cnt;
+        cnt = UCS_STATS_GET_COUNTER(worker_offload_stats(receiver()), rx_cntr);
+        EXPECT_EQ(val, cnt);
+    }
+
+    void wait_counter(ucs_stats_node_t *stats, uint64_t cntr,
+                      double timeout = UCP_TEST_TIMEOUT_IN_SEC)
+    {
+        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
+        uint64_t v;
+
+        do {
+            short_progress_loop();
+            v = UCS_STATS_GET_COUNTER(stats, cntr);
+        } while ((ucs_get_time() < deadline) && !v);
+
+        EXPECT_EQ(1ul, v);
+    }
+
+    void test_send_recv(size_t count, bool send_iov, uint64_t cntr)
+    {
+        ucp_tag_t tag = 0x11;
+
+        std::vector<char> sbuf(count, 0);
+        std::vector<char> rbuf(count, 0);
+        request *req = recv_nb_exp(rbuf.data(), rbuf.size(), DATATYPE, tag,
+                                   UCP_TAG_MASK_FULL);
+
+        if (send_iov) {
+            ucp::data_type_desc_t dt_desc(DATATYPE_IOV, sbuf.data(),
+                                          sbuf.size(), 1);
+            send_b(dt_desc.buf(), dt_desc.count(), dt_desc.dt(), tag);
+        } else {
+            send_b(sbuf.data(), sbuf.size(), DATATYPE, tag);
+        }
+        wait(req);
+        request_free(req);
+
+        validate_offload_counter(cntr, 1ul);
+    }
+};
+
+UCS_TEST_P(test_ucp_tag_offload_stats, post, "TM_THRESH=1")
+{
+    uint64_t dummy;
+    uint64_t tag = 0x11;
+
+    activate_offload(sender());
+
+    request *rreq = recv_nb(&dummy, sizeof(dummy), DATATYPE, tag,
+                            UCP_TAG_MASK_FULL);
+
+    wait_counter(worker_offload_stats(receiver()),
+                 UCP_WORKER_STAT_TAG_OFFLOAD_POSTED);
+
+    req_cancel(receiver(), rreq);
+
+    wait_counter(worker_offload_stats(receiver()),
+                 UCP_WORKER_STAT_TAG_OFFLOAD_CANCELED);
+}
+
+UCS_TEST_P(test_ucp_tag_offload_stats, block, "TM_THRESH=1")
+{
+    uint64_t tag = 0x11;
+    std::vector<char> buf(64, 0);
+
+    activate_offload(sender());
+
+    // Check BLOCK_NON_CONTIG
+    ucp::data_type_desc_t dt_desc(DATATYPE_IOV, buf.data(), buf.size(), 1);
+    request *rreq = recv_nb_and_check(dt_desc.buf(), dt_desc.count(),
+                                      dt_desc.dt(), tag, UCP_TAG_MASK_FULL);
+
+    wait_counter(worker_offload_stats(receiver()),
+                 UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_NON_CONTIG);
+
+    req_cancel(receiver(), rreq);
+
+    // Check BLOCK_WILDCARD
+    rreq = recv_nb_and_check(buf.data(), buf.size(), DATATYPE, tag, 0);
+
+    wait_counter(worker_offload_stats(receiver()),
+                 UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_WILDCARD);
+
+    req_cancel(receiver(), rreq);
+
+    // Check BLOCK_TAG_EXCEED
+    std::vector<request*> reqs;
+    uint64_t cnt;
+    unsigned limit = 1000; // Just a big value to avoid test hang
+    do {
+        rreq = recv_nb_and_check(buf.data(), buf.size(), DATATYPE, tag,
+                                 UCP_TAG_MASK_FULL);
+        cnt  = UCS_STATS_GET_COUNTER(worker_offload_stats(receiver()),
+                                    UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_TAG_EXCEED);
+        reqs.push_back(rreq);
+    } while (!cnt && (--limit > 0));
+
+    validate_offload_counter(UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_TAG_EXCEED , 1ul);
+
+    for (std::vector<request*>::const_iterator iter = reqs.begin();
+         iter != reqs.end(); ++iter) {
+        req_cancel(receiver(), *iter);
+    }
+}
+
+UCS_TEST_P(test_ucp_tag_offload_stats, eager, "RNDV_THRESH=1000", "TM_THRESH=64")
+{
+    size_t size = 512; // Size smaller than RNDV, but bigger than TM thresh
+
+    // Offload is not activated, so the first message should arrive unexpectedly
+    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_EGR);
+    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED);
+}
+
+UCS_TEST_P(test_ucp_tag_offload_stats, rndv, "RNDV_THRESH=1000")
+{
+    size_t size = 2048; // Size bigger than RNDV thresh
+
+    // Offload is not activated, so the first message should arrive unexpectedly
+    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_RNDV);
+    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED);
+}
+
+UCS_TEST_P(test_ucp_tag_offload_stats, sw_rndv, "RNDV_THRESH=1000")
+{
+    size_t size = 2048; // Size bigger than RNDV thresh
+
+    // Offload is not activated, so the first message should arrive unexpectedly
+    test_send_recv(size, true, UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV);
+    test_send_recv(size, true, UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_offload_stats)
+
+#endif
