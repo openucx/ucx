@@ -18,7 +18,7 @@
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_stream_send_am_short(ucp_ep_t *ep, const void *buffer, size_t length)
 {
-    UCS_STATIC_ASSERT(sizeof(ep->dest_uuid) == sizeof(uint64_t));
+    UCS_STATIC_ASSERT(sizeof(ep->worker->uuid) == sizeof(uint64_t));
 
     return uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_STREAM_DATA,
                            ep->worker->uuid, buffer, length);
@@ -32,9 +32,8 @@ static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.ep           = ep;
     req->send.buffer       = buffer;
     req->send.datatype     = datatype;
-    req->send.reg_rsc      = UCP_NULL_RESOURCE;
     req->send.lane         = ep->am_lane;
-    ucp_request_send_state_init(req, count);
+    ucp_request_send_state_init(req, datatype, count);
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
                                            &req->send.state.dt);
@@ -226,11 +225,13 @@ static ucs_status_t ucp_stream_bcopy_multi(uct_pending_req_t *self)
                                                 sizeof(ucp_stream_am_hdr_t),
                                                 ucp_stream_pack_am_first_dt,
                                                 ucp_stream_pack_am_middle_dt,
-                                                ucp_stream_pack_am_last_dt);
+                                                ucp_stream_pack_am_last_dt, 0);
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
         ucp_request_send_generic_dt_finish(req);
         ucp_request_complete_send(req, UCS_OK);
+    } else if (status == UCP_STATUS_PENDING_SWITCH) {
+        status = UCS_OK;
     }
     return status;
 }
@@ -256,7 +257,7 @@ static ucs_status_t ucp_stream_eager_zcopy_multi(uct_pending_req_t *self)
                                  UCP_AM_ID_STREAM_DATA,
                                  UCP_AM_ID_STREAM_DATA,
                                  &hdr, sizeof(hdr), &hdr, sizeof(hdr),
-                                 ucp_proto_am_zcopy_req_complete);
+                                 ucp_proto_am_zcopy_req_complete, 0);
 }
 
 const ucp_proto_t ucp_stream_am_proto = {

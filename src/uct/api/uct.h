@@ -422,10 +422,15 @@ enum uct_md_mem_flags {
                                                 transport. */
     UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1), /**< Place the mapping at exactly
                                                 defined address */
+    UCT_MD_MEM_FLAG_LOCK     = UCS_BIT(2), /**< Registered memory should be
+                                                locked. May incur extra cost for
+                                                registration, but memory access
+                                                is usually faster. */
+
     /* memory access flags */
-    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(2), /**< enable remote put access */
-    UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(3), /**< enable remote get access */
-    UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(4), /**< enable remote atomic access */
+    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), /**< enable remote put access */
+    UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(6), /**< enable remote get access */
+    UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(7), /**< enable remote atomic access */
 
     /** enable local and remote access for all operations */
     UCT_MD_MEM_ACCESS_ALL =  (UCT_MD_MEM_ACCESS_REMOTE_PUT|
@@ -678,6 +683,7 @@ typedef struct uct_allocated_memory {
     void                     *address; /**< Address of allocated memory */
     size_t                   length;   /**< Real size of allocated memory */
     uct_alloc_method_t       method;   /**< Method used to allocate the memory */
+    uct_memory_type_t        mem_type; /**< type of allocated memory */
     uct_md_h                 md;       /**< if method==MD: MD used to allocate the memory */
     uct_mem_h                memh;     /**< if method==MD: MD memory handle */
 } uct_allocated_memory_t;
@@ -1329,31 +1335,22 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  *
  * @param [in]  iface            Interface to create the endpoint on.
  * @param [in]  sockaddr         The sockaddr to connect to on the remote peer.
- * @param [in]  reply_cb         Callback for an incoming reply message from
- *                               the server.
- * @param [in]  arg              User defined argument to pass to the callback.
- * @param [in]  cb_flags         Required @ref uct_cb_flags "callback flags" to
- *                               indicate where the @ref uct_sockaddr_conn_reply_callback_t
- *                               reply callback can be invoked from.
  * @param [in]  priv_data        User's private data for connecting to the
  *                               remote peer.
  * @param [in]  length           Length of the private data.
  * @param [out] ep_p             Handle to the created endpoint.
  *
- * @return UCS_OK              - The connection to the server, on the client side,
- *                               was established. No reply from the server is
- *                               required and therefore the reply_cb callback
- *                               won't be invoked.
- * @return UCS_INPROGRESS      - The connection to the remote peer was initiated.
- *                               The user will be notified of the connection
- *                               establishment, on the client side, when the reply_cb
- *                               callback will be invoked.
+ * @return UCS_OK              - Connection request was sent to the server.
+ *                               This does not guarantee that the server has
+ *                               received the message; in case of failure, the
+ *                               error will be reported to the interface error
+ *                               handler callback provided to @ref uct_iface_open
+ *                               via @ref uct_iface_params_t.err_handler.
+ *
  * @return error code          - In case of an error. (@ref ucs_status_t)
  */
 ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
                                     const ucs_sock_addr_t *sockaddr,
-                                    uct_sockaddr_conn_reply_callback_t reply_cb,
-                                    void *arg, uint32_t cb_flags,
                                     const void *priv_data, size_t length,
                                     uct_ep_h *ep_p);
 

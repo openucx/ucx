@@ -16,6 +16,9 @@
 #include <ucs/sys/rcache.h>
 
 
+#define UCT_IB_MD_PACKED_RKEY_SIZE  sizeof(uint64_t)
+
+
 /**
  * IB MD statistics counters
  */
@@ -78,6 +81,7 @@ typedef struct uct_ib_mem {
 typedef struct uct_ib_md {
     uct_md_t                 super;
     ucs_rcache_t             *rcache;   /**< Registration cache (can be NULL) */
+    uct_ib_mem_t             global_odp;/**< Implicit ODP memory handle */
     struct ibv_pd            *pd;       /**< IB memory domain */
     uct_ib_device_t          dev;       /**< IB device */
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
@@ -99,13 +103,10 @@ typedef struct uct_ib_md {
 typedef struct uct_ib_md_config {
     uct_md_config_t          super;
 
-    struct {
-        ucs_ternary_value_t  enable;       /**< Enable registration cache */
-        size_t               alignment;    /**< Force address alignment */
-        unsigned             event_prio;   /**< Memory events priority */
-        double               overhead;     /**< Lookup overhead estimation */
-    } rcache;
+    /** List of registration methods in order of preference */
+    UCS_CONFIG_STRING_ARRAY_FIELD(rmtd) reg_methods;
 
+    uct_md_rcache_config_t   rcache;       /**< Registration cache config */
     uct_linear_growth_t      uc_reg_cost;  /**< Memory registration cost estimation
                                                 without using the cache */
     unsigned                 fork_init;    /**< Use ibv_fork_init() */

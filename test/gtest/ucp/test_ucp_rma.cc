@@ -60,7 +60,7 @@ public:
     {
         ucs_status_t status;
 
-        ucs::fill_random((char*)memheap_addr, (char*)memheap_addr + ucs_min(max_size, 16384U));
+        ucs::fill_random(memheap_addr, ucs_min(max_size, 16384U));
         status = ucp_get_nbi(e->ep(), (void *)&expected_data[0], expected_data.length(),
                              (uintptr_t)memheap_addr, rkey);
         ASSERT_UCS_OK_OR_INPROGRESS(status);
@@ -73,8 +73,7 @@ public:
     {
         ucs_status_t status;
 
-        //ucs::fill_random((char*)memheap_addr, (char*)memheap_addr + max_size);
-        ucs::fill_random((char*)memheap_addr, (char*)memheap_addr + ucs_min(max_size, 16384U));
+        ucs::fill_random(memheap_addr, ucs_min(max_size, 16384U));
         status = ucp_get(e->ep(), (void *)&expected_data[0], expected_data.length(),
                          (uintptr_t)memheap_addr, rkey);
         ASSERT_UCS_OK(status);

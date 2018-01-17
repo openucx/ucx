@@ -11,9 +11,11 @@
 #  include "config.h"
 #endif
 
+#include <ucs/config/global_opts.h>
+#include <ucs/debug/assert.h>
+#include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/time/time.h>
-#include <ucs/debug/log.h>
 
 
 #define UCS_PROFILE_STACK_MAX 64

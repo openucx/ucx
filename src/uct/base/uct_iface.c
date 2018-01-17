@@ -464,12 +464,9 @@ uct_ep_create_connected(uct_iface_h iface, const uct_device_addr_t *dev_addr,
 
 ucs_status_t
 uct_ep_create_sockaddr(uct_iface_h iface, const ucs_sock_addr_t *sockaddr,
-                       uct_sockaddr_conn_reply_callback_t reply_cb,
-                       void *arg, uint32_t cb_flags, const void *priv_data,
-                       size_t length, uct_ep_h *ep_p)
+                       const void *priv_data, size_t length, uct_ep_h *ep_p)
 {
-    return iface->ops.ep_create_sockaddr(iface, sockaddr, reply_cb, arg, cb_flags,
-                                         priv_data, length, ep_p);
+    return iface->ops.ep_create_sockaddr(iface, sockaddr, priv_data, length, ep_p);
 }
 
 void uct_ep_destroy(uct_ep_h ep)

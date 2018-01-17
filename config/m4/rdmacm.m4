@@ -9,38 +9,43 @@
 #
 rdmacm_happy="no"
 AC_ARG_WITH([rdmacm],
-           [AS_HELP_STRING([--with-rdmacm=(DIR)], [Enable the use of RDMACM (default is yes).])],
-           [], [with_rdmacm=yes])
+           [AS_HELP_STRING([--with-rdmacm=(DIR)], [Enable the use of RDMACM (default is guess).])],
+           [], [with_rdmacm=guess])
 
 AS_IF([test "x$with_rdmacm" != xno],
-      [AS_IF([test "x$with_rdmacm" == xyes],
-             [with_rdmacm=/usr])
+      [AS_IF([test "x$with_rdmacm" == xguess -o "x$with_rdmacm" == xyes -o "x$with_rdmacm" == x],
+             [ucx_check_rdmacm_dir=/usr],
+             [ucx_check_rdmacm_dir=$with_rdmacm])
 
-       AS_IF([test -d "$with_rdmacm/lib64"],[libsuff="64"],[libsuff=""])
+       AS_IF([test -d "$ucx_check_rdmacm_dir/lib64"],[libsuff="64"],[libsuff=""])
        save_LDFLAGS="$LDFLAGS"
        save_CPPFLAGS="$CPPFLAGS"
 
-       AS_IF([test "$with_rdmacm" != /usr],
+       AS_IF([test "$ucx_check_rdmacm_dir" != /usr],
              [
-             LDFLAGS="-L$with_rdmacm/lib$libsuff $LDFLAGS"
-             CPPFLAGS="-I$with_rdmacm/include $CPPFLAGS"])
+             LDFLAGS="-L$ucx_check_rdmacm_dir/lib$libsuff $LDFLAGS"
+             CPPFLAGS="-I$ucx_check_rdmacm_dir/include $CPPFLAGS"])
 
-       AC_CHECK_HEADER([$with_rdmacm/include/rdma/rdma_cma.h],
+       AC_CHECK_HEADER([$ucx_check_rdmacm_dir/include/rdma/rdma_cma.h],
                        [
                        AC_CHECK_LIB([rdmacm], [rdma_create_id],
                                      [transports="${transports},rdmacm"
                                       rdmacm_happy="yes"
-                                      AS_IF([test "$with_rdmacm" != /usr],
+                                      AS_IF([test "$ucx_check_rdmacm_dir" != /usr],
                                             [
-                                            AC_SUBST(RDMACM_CPPFLAGS, ["-I$with_rdmacm/include"])
-                                            AC_SUBST(RDMACM_LDFLAGS,  ["-L$with_rdmacm/lib$libsuff"])])
+                                            AC_SUBST(RDMACM_CPPFLAGS, ["-I$ucx_check_rdmacm_dir/include"])
+                                            AC_SUBST(RDMACM_LDFLAGS,  ["-L$ucx_check_rdmacm_dir/lib$libsuff"])])
                                       AC_SUBST(RDMACM_LIBS,     [-lrdmacm])
                                      ], 
                                      [AC_MSG_WARN([RDMACM requested but librdmacm is not found])
                                       AC_MSG_ERROR([Please install librdmacm and librdmacm-devel or disable rdmacm support])
                                      ])
                        ],
-                       [AC_MSG_ERROR([RDMACM requested but required file (rdma/rdma_cma.h) could not be found in $with_rdmacm])])
+                       [
+                       AS_IF([test "x$with_rdmacm" != xguess],
+                             [AC_MSG_ERROR([RDMACM requested but required file (rdma/rdma_cma.h) could not be found in $ucx_check_rdmacm_dir])],
+                             [AC_MSG_WARN([RDMACM requested but required file (rdma/rdma_cma.h) could not be found in $ucx_check_rdmacm_dir])])
+                       ])
 
        LDFLAGS="$save_LDFLAGS"
        CPPFLAGS="$save_CPPFLAGS"

@@ -41,18 +41,44 @@ mlx5_am_roce = {
  1000000 :      "ud_mlx5",
 }
 
-am_tls = {
-    "mlx4"      : mlx4_am,
-    "mlx5"      : mlx5_am,
-    "mlx5_roce" : mlx5_am_roce
+# check that UCX_NUM_EPS work
+mlx5_am_override = {
+       2 :      "rc_mlx5",
+      16 :      "rc_mlx5",
+      32 :      "rc_mlx5",
+      64 :      "rc_mlx5",
+     256 :      "rc_mlx5",
+    1024 :      "rc_mlx5",
+ 1000000 :      "rc_mlx5",
 }
 
-def find_am_transport(dev, neps) :
+mlx4_am_override = {
+       2 :      "rc",
+      16 :      "rc",
+      32 :      "rc",
+      64 :      "rc",
+     256 :      "rc",
+    1024 :      "rc",
+ 1000000 :      "rc",
+}
+
+am_tls = {
+    "mlx4"          : mlx4_am,
+    "mlx5"          : mlx5_am,
+    "mlx5_roce"     : mlx5_am_roce,
+    "mlx4_override" : mlx4_am_override,
+    "mlx5_override" : mlx5_am_override
+}
+
+def find_am_transport(dev, neps, override = 0) :
 
     ucx_info = bin_prefix+"/ucx_info -e -u t"
 
     os.putenv("UCX_TLS", "ib")
     os.putenv("UCX_NET_DEVICES", dev)
+
+    if (override):
+        os.putenv("UCX_NUM_EPS", "2")
 
     output = subprocess.check_output(ucx_info + " -n " + str(neps) + " | grep am", shell=True)
     #print output
@@ -61,6 +87,9 @@ def find_am_transport(dev, neps) :
     am_tls = match.group(1)
 
     #print am_tls
+    if (override):
+        os.unsetenv("UCX_NUM_EPS")
+
     return am_tls
 
 
@@ -79,15 +108,27 @@ for dev in sorted(dev_list):
     
     if dev_attrs.find("Link layer: Ethernet") == -1:
         dev_tl_map = am_tls[dev[0:dev.index('_')]]
+        dev_tl_override_map = am_tls[dev[0:dev.index('_')] + "_override"]
+        override = 1
     else:
         dev_tl_map = am_tls[dev[0:dev.index('_')]+"_roce"]
+        override = 0
 
     for n_eps in sorted(dev_tl_map):
         tl = find_am_transport(dev + ':' + port, n_eps)
-        print dev+':' + port + " eps: ", n_eps, " expected am tl: " + dev_tl_map[n_eps] + " selected: " + tl
+        print dev+':' + port + "               eps: ", n_eps, " expected am tl: " + \
+              dev_tl_map[n_eps] + " selected: " + tl
 
         if dev_tl_map[n_eps] != tl:
             sys.exit(1)
+
+        if override:
+            tl = find_am_transport(dev + ':' + port, n_eps, 1)
+            print dev+':' + port + " UCX_NUM_EPS=2 eps: ", n_eps, " expected am tl: " + \
+                  dev_tl_override_map[n_eps] + " selected: " + tl
+
+            if dev_tl_override_map[n_eps] != tl:
+                sys.exit(1)
 
 sys.exit(0)
 

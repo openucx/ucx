@@ -63,6 +63,9 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
     uct_md_h md;
     void *address;
     int shmid;
+#ifdef MADV_HUGEPAGE
+    int ret;
+#endif
 
     if (min_length == 0) {
         ucs_error("Allocation length cannot be 0");
@@ -81,7 +84,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
     }
 
     for (method = methods; method < methods + num_methods; ++method) {
-        ucs_debug("trying allocation method %s", uct_alloc_method_names[*method]);
+        ucs_trace("trying allocation method %s", uct_alloc_method_names[*method]);
 
         switch (*method) {
         case UCT_ALLOC_METHOD_MD:
@@ -124,6 +127,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 
                 ucs_assert(memh != UCT_MEM_HANDLE_NULL);
                 mem->md   = md;
+                mem->mem_type = md_attr.cap.mem_type;
                 mem->memh = memh;
                 goto allocated;
 
@@ -148,21 +152,19 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 
             address = ucs_memalign(ucs_get_huge_page_size(), alloc_length
                                    UCS_MEMTRACK_VAL);
-            if (address != NULL) {
-                status = madvise(address, alloc_length, MADV_HUGEPAGE);
-                if (status != UCS_OK) {
-                    ucs_error("madvise failure status (%d) address(%p) len(%zu):"
-                              " %m", status, address, alloc_length);
+            if (address == NULL) {
+                ucs_trace("failed to allocate %zu bytes using THP: %m", alloc_length);
+            } else {
+                ret = madvise(address, alloc_length, MADV_HUGEPAGE);
+                if (ret != 0) {
+                    ucs_trace("madvise(address=%p, length=%zu, HUGEPAGE) "
+                              "returned %d: %m", address, alloc_length, ret);
                     ucs_free(address);
-                    break;
                 } else {
                     goto allocated_without_md;
                 }
             }
-
-            ucs_debug("failed to allocate by thp %zu bytes: %m", alloc_length);
 #endif
-
             break;
 
         case UCT_ALLOC_METHOD_HEAP:
@@ -180,7 +182,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 goto allocated_without_md;
             }
 
-            ucs_debug("failed to allocate %zu bytes from the heap", alloc_length);
+            ucs_trace("failed to allocate %zu bytes from the heap", alloc_length);
             break;
 
         case UCT_ALLOC_METHOD_MMAP:
@@ -195,7 +197,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 goto allocated_without_md;
             }
 
-            ucs_debug("failed to mmap %zu bytes: %s", min_length,
+            ucs_trace("failed to mmap %zu bytes: %s", min_length,
                       ucs_status_string(status));
             break;
 
@@ -209,7 +211,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 goto allocated_without_md;
             }
 
-            ucs_debug("failed to allocate %zu bytes from hugetlb: %s",
+            ucs_trace("failed to allocate %zu bytes from hugetlb: %s",
                       min_length, ucs_status_string(status));
             break;
 
@@ -223,10 +225,11 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
     return UCS_ERR_NO_MEMORY;
 
 allocated_without_md:
-    mem->md      = NULL;
-    mem->memh    = UCT_MEM_HANDLE_NULL;
+    mem->md       = NULL;
+    mem->mem_type = UCT_MD_MEM_TYPE_HOST;
+    mem->memh     = UCT_MEM_HANDLE_NULL;
 allocated:
-    ucs_debug("allocated %zu bytes at %p using %s", alloc_length, address,
+    ucs_trace("allocated %zu bytes at %p using %s", alloc_length, address,
               (mem->md == NULL) ? uct_alloc_method_names[*method]
                                 : mem->md->component->name);
     mem->address = address;
@@ -282,7 +285,8 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned f
         }
 
         /* If MD does not support registration, allow only the MD method */
-        if (md_attr.cap.flags & UCT_MD_FLAG_REG) {
+        if ((md_attr.cap.flags & UCT_MD_FLAG_REG) &&
+            (md_attr.cap.reg_mem_types & UCS_BIT(mem->mem_type))) {
             status = uct_md_mem_reg(iface->md, mem->address, mem->length, flags,
                                     &mem->memh);
             if (status != UCS_OK) {
@@ -331,8 +335,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_iface_mp_chunk_alloc, (mp, size_p, chunk_p),
 
     length = sizeof(*hdr) + *size_p;
     status = uct_iface_mem_alloc(&iface->super, length,
-                                 UCT_MD_MEM_ACCESS_ALL, ucs_mpool_name(mp),
-                                 &mem);
+                                 UCT_MD_MEM_ACCESS_ALL | UCT_MD_MEM_FLAG_LOCK,
+                                 ucs_mpool_name(mp), &mem);
     if (status != UCS_OK) {
         return status;
     }

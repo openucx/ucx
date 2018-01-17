@@ -81,6 +81,8 @@ typedef enum {
 #define UCS_CONFIG_MEMUNITS_INF    SIZE_MAX
 #define UCS_CONFIG_MEMUNITS_AUTO   (SIZE_MAX - 1)
 
+#define UCS_CONFIG_ULUNITS_AUTO    (SIZE_MAX - 1)
+
 
 /**
  * Structure type for array configuration. Should be used inside the configuration

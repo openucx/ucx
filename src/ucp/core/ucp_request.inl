@@ -4,6 +4,9 @@
  * See file LICENSE for terms.
  */
 
+#ifndef UCP_REQUEST_INL_
+#define UCP_REQUEST_INL_
+
 #include "ucp_request.h"
 #include "ucp_worker.h"
 #include "ucp_ep.inl"
@@ -12,22 +15,35 @@
 #include <ucp/dt/dt.h>
 #include <ucs/debug/profile.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucp/dt/dt.inl>
 #include <inttypes.h>
 
 
 #define UCP_REQUEST_FLAGS_FMT \
-    "%c%c%c%c%c%c%c%c%c"
+    "%c%c%c%c%c%c%c"
 
 #define UCP_REQUEST_FLAGS_ARG(_flags) \
     (((_flags) & UCP_REQUEST_FLAG_COMPLETED)       ? 'd' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_RELEASED)        ? 'f' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_BLOCKING)        ? 'b' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_EXPECTED)        ? 'e' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_LOCAL_COMPLETED) ? 'L' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_CALLBACK)        ? 'c' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_RECV)            ? 'r' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_SYNC)            ? 's' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_RNDV)            ? 'v' : '-')
+    (((_flags) & UCP_REQUEST_FLAG_SYNC)            ? 's' : '-')
+
+#define UCP_RECV_DESC_FMT \
+    "rdesc %p %c%c%c%c%c%c len %u+%u"
+
+#define UCP_RECV_DESC_ARG(_rdesc) \
+    (_rdesc), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_UCT_DESC)      ? 't' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_EAGER)         ? 'e' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_EAGER_ONLY)    ? 'o' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_EAGER_SYNC)    ? 's' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) ? 'f' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_RNDV)          ? 'r' : '-'), \
+    (_rdesc)->payload_offset, \
+    ((_rdesc)->length - (_rdesc)->payload_offset)
 
 
 /* defined as a macro to print the call site */
@@ -90,9 +106,6 @@ ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
                   req->recv.tag.info.sender_tag, req->recv.tag.info.length,
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
-    if (req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD) {
-        --req->recv.worker->tm.offload.sw_req_count;
-    }
     ucp_request_complete(req, recv.tag.cb, status, &req->recv.tag.info);
 }
 
@@ -103,17 +116,41 @@ ucp_request_complete_stream_recv(ucp_request_t *req,
 {
     /* dequeue request before complete */
     ucp_request_t *check_req UCS_V_UNUSED =
-            ucs_queue_pull_elem_non_empty(&ep_stream->reqs, ucp_request_t,
+            ucs_queue_pull_elem_non_empty(&ep_stream->match_q, ucp_request_t,
                                           recv.queue);
-    ucs_assert(check_req == req);
-    ucs_assert(req->recv.state.offset > 0);
-    req->recv.stream.length = req->recv.state.offset;
+    ucs_assert(check_req               == req);
+    ucs_assert(req->recv.stream.offset >  0);
+
+    req->recv.stream.length = req->recv.stream.offset;
     ucs_trace_req("completing stream receive request %p (%p) "
                   UCP_REQUEST_FLAGS_FMT" count %zu, %s",
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   req->recv.stream.length, ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
     ucp_request_complete(req, recv.stream.cb, status, req->recv.stream.length);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_request_can_complete_stream_recv(ucp_request_t *req)
+{
+    /* NOTE: first check is needed to avoid heavy "%" operation if request is
+     *       completely filled */
+    if (req->recv.stream.offset == req->recv.length) {
+        return 1;
+    }
+
+    /* 0-length stream recv is meaningless if this was not requested explicitely */
+    if (req->recv.stream.offset == 0) {
+        return 0;
+    }
+
+    if (ucs_likely(UCP_DT_IS_CONTIG(req->recv.datatype))) {
+        return req->recv.stream.offset %
+               ucp_contig_dt_elem_size(req->recv.datatype) == 0;
+    }
+
+    /* Currently, all data types except contig has granularity 1 byte */
+    return 1;
 }
 
 /*
@@ -185,37 +222,8 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_request_recv_state_init(ucp_request_t *req, void *buffer, ucp_datatype_t dt,
+ucp_request_send_state_init(ucp_request_t *req, ucp_datatype_t datatype,
                             size_t dt_count)
-{
-    ucp_dt_generic_t *dt_gen;
-
-    req->recv.state.offset = 0;
-
-    switch (dt & UCP_DATATYPE_CLASS_MASK) {
-    case UCP_DATATYPE_IOV:
-        req->recv.state.dt.iov.iov_offset    = 0;
-        req->recv.state.dt.iov.iovcnt_offset = 0;
-        req->recv.state.dt.iov.iovcnt        = dt_count;
-        req->recv.state.dt.iov.memh          = UCT_MEM_HANDLE_NULL;
-        break;
-
-    case UCP_DATATYPE_GENERIC:
-        dt_gen = ucp_dt_generic(dt);
-        req->recv.state.dt.generic.state =
-            UCS_PROFILE_NAMED_CALL("dt_start", dt_gen->ops.start_unpack,
-                                   dt_gen->context, buffer, dt_count);
-        ucs_trace_req("req %p buffer %p count %zu dt_gen state=%p", req, buffer,
-                      dt_count, req->recv.state.dt.generic.state);
-        break;
-
-    default:
-        break;
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_request_send_state_init(ucp_request_t *req, size_t dt_count)
 {
     ucp_dt_generic_t *dt_gen;
     void             *state_gen;
@@ -227,16 +235,18 @@ ucp_request_send_state_init(ucp_request_t *req, size_t dt_count)
 
     req->send.state.uct_comp.func = NULL;
 
-    switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
+    switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
+        req->send.state.dt.dt.contig.md_map     = 0;
         return;
     case UCP_DATATYPE_IOV:
         req->send.state.dt.dt.iov.iovcnt_offset = 0;
         req->send.state.dt.dt.iov.iov_offset    = 0;
         req->send.state.dt.dt.iov.iovcnt        = dt_count;
+        req->send.state.dt.dt.iov.dt_reg        = NULL;
         return;
     case UCP_DATATYPE_GENERIC:
-        dt_gen    = ucp_dt_generic(req->send.datatype);
+        dt_gen    = ucp_dt_generic(datatype);
         state_gen = dt_gen->ops.start_pack(dt_gen->context, req->send.buffer,
                                            dt_count);
         req->send.state.dt.dt.generic.state = state_gen;
@@ -256,10 +266,6 @@ ucp_request_send_state_reset(ucp_request_t *req,
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
-        if (UCP_DT_IS_CONTIG(req->send.datatype)) {
-            ucp_dt_clear_memh(&req->send.state.dt);
-        }
-        /* Fall through */
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
         req->send.state.uct_comp.func       = comp_cb;
         req->send.state.uct_comp.count      = 0;
@@ -334,13 +340,56 @@ ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
 {
     if (req->send.state.uct_comp.func) {
         req->send.state.dt.offset = req->send.length;
-        if (status == UCS_ERR_CANCELED) {
-            req->send.state.uct_comp.count = 0;
-        }
+        req->send.state.uct_comp.count = 0;
         req->send.state.uct_comp.func(&req->send.state.uct_comp, status);
     } else {
         ucp_request_complete_send(req, status);
     }
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_send_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map)
+{
+    return ucp_request_memory_reg(req->send.ep->worker->context, md_map,
+                                  (void*)req->send.buffer, req->send.length,
+                                  req->send.datatype, &req->send.state.dt, req);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_send_buffer_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
+{
+    ucp_md_map_t md_map = UCS_BIT(ucp_ep_md_index(req->send.ep, lane));
+    return ucp_request_send_buffer_reg(req, md_map);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_send_request_add_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
+{
+    /* add new lane to registration map */
+    ucp_md_map_t md_map = UCS_BIT(ucp_ep_md_index(req->send.ep, lane)) |
+                          req->send.state.dt.dt.contig.md_map;
+    ucs_assert(ucs_count_one_bits(md_map) <= UCP_MAX_OP_MDS);
+    return ucp_request_send_buffer_reg(req, md_map);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map)
+{
+    return ucp_request_memory_reg(req->recv.worker->context, md_map,
+                                  req->recv.buffer, req->recv.length,
+                                  req->recv.datatype, &req->recv.state, req);
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_request_send_buffer_dereg(ucp_request_t *req)
+{
+    ucp_request_memory_dereg(req->send.ep->worker->context, req->send.datatype,
+                             &req->send.state.dt, req);
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_request_recv_buffer_dereg(ucp_request_t *req)
+{
+    ucp_request_memory_dereg(req->recv.worker->context, req->recv.datatype,
+                             &req->recv.state, req);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -351,89 +400,125 @@ ucp_request_wait_uct_comp(ucp_request_t *req)
     }
 }
 
-static UCS_F_ALWAYS_INLINE int
-ucp_request_is_send_buffer_reg(ucp_request_t *req) {
-    return req->send.reg_rsc != UCP_NULL_RESOURCE;
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_request_is_recv_buffer_reg(ucp_request_t *req) {
-    return req->recv.reg_rsc != UCP_NULL_RESOURCE;
-}
-
-static UCS_F_ALWAYS_INLINE void ucp_request_send_tag_stat(ucp_request_t *req)
+/**
+ * Unpack receive data to a request
+ *
+ * req - receive request
+ * data - data to unpack
+ * length -
+ * offset - offset of received data within the request, for OOO fragments
+ *
+ *
+ */
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
+                             size_t length, size_t offset, int last)
 {
-    if (req->flags & UCP_REQUEST_FLAG_RNDV) {
-        UCP_EP_STAT_TAG_OP(req->send.ep, RNDV);
-    } else if (req->flags & UCP_REQUEST_FLAG_SYNC) {
-        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);
-    } else {
-        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
-    }
-}
+    ucp_dt_generic_t *dt_gen;
+    ucs_status_t status;
 
-static UCS_F_ALWAYS_INLINE
-uct_rkey_bundle_t *ucp_tag_rndv_rkey_bundle(ucp_request_t *req, int idx)
-{
-    ucs_assert((idx >= 0) && (idx < UCP_MAX_RNDV_LANES));
-    return &req->send.rndv_get.rkey->rkey_bundle[idx];
-}
+    ucs_assert(req->status == UCS_OK);
 
-static UCS_F_ALWAYS_INLINE
-uct_rkey_t ucp_tag_rndv_rkey(ucp_request_t *req, int idx)
-{
-    return (req->send.rndv_get.rkey != NULL) ?
-           ucp_tag_rndv_rkey_bundle(req, idx)->rkey : UCT_INVALID_RKEY;
-}
+    ucp_trace_req(req, "unpack recv_data req_len %zu data_len %zu offset %zu last: %s",
+                  req->recv.length, length, offset, last ? "yes" : "no");
 
-static UCS_F_ALWAYS_INLINE
-int ucp_tag_rndv_is_rkey_valid(ucp_request_t *req, int idx)
-{
-    return (req->send.rndv_get.rkey != NULL) &&
-           (ucp_tag_rndv_rkey_bundle(req, idx)->rkey != UCT_INVALID_RKEY);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_request_rndv_get_init(ucp_request_t *req)
-{
-    int i;
-
-    ucs_trace_req("rendezvous-get create request %p", req);
-    req->send.rndv_get.rkey = ucs_mpool_get_inline(&req->send.ep->worker->rndv_get_mp);
-    ucs_assert_always(req->send.rndv_get.rkey != NULL);
-
-    req->send.rndv_get.lane_idx  = 0;
-    req->send.rndv_get.num_lanes = 0;
-
-    for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
-        ucp_tag_rndv_rkey_bundle(req, i)->rkey = UCT_INVALID_RKEY;
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_request_rndv_get_release(ucp_request_t *req)
-{
-    int i;
-
-    ucs_trace_req("release request rndv-get remote key. req: %p", req);
-
-    if (req->send.rndv_get.rkey == NULL) {
-        return;
-    }
-
-    for (i = 0; i < UCP_MAX_RNDV_LANES; i++) {
-        if (ucp_tag_rndv_is_rkey_valid(req, i)) {
-            uct_rkey_release(ucp_tag_rndv_rkey_bundle(req, i));
+    if (ucs_unlikely((length + offset) > req->recv.length)) {
+        ucs_debug("message truncated: recv_length %zu offset %zu buffer_size %zu",
+                  length, offset, req->recv.length);
+        if (UCP_DT_IS_GENERIC(req->recv.datatype)) {
+            dt_gen = ucp_dt_generic(req->recv.datatype);
+            UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish,
+                                         req->recv.state.dt.generic.state);
         }
+        return UCS_ERR_MESSAGE_TRUNCATED;
     }
 
-    ucs_mpool_put_inline(req->send.rndv_get.rkey);
+    switch (req->recv.datatype & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_CONTIG:
+        UCS_PROFILE_NAMED_CALL("memcpy_recv", memcpy, req->recv.buffer + offset,
+                               data, length);
+        return UCS_OK;
+
+    case UCP_DATATYPE_IOV:
+        if (offset != req->recv.state.offset) {
+            ucp_dt_iov_seek(req->recv.buffer, req->recv.state.dt.iov.iovcnt,
+                            offset - req->recv.state.offset,
+                            &req->recv.state.dt.iov.iov_offset,
+                            &req->recv.state.dt.iov.iovcnt_offset);
+            req->recv.state.offset = offset;
+        }
+        UCS_PROFILE_CALL(ucp_dt_iov_scatter, req->recv.buffer,
+                         req->recv.state.dt.iov.iovcnt, data, length,
+                         &req->recv.state.dt.iov.iov_offset,
+                         &req->recv.state.dt.iov.iovcnt_offset);
+        req->recv.state.offset += length;
+        return UCS_OK;
+
+    case UCP_DATATYPE_GENERIC:
+        dt_gen = ucp_dt_generic(req->recv.datatype);
+        status = UCS_PROFILE_NAMED_CALL("dt_unpack", dt_gen->ops.unpack,
+                                        req->recv.state.dt.generic.state,
+                                        offset, data, length);
+        if (last || (status != UCS_OK)) {
+            UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish,
+                                        req->recv.state.dt.generic.state);
+        }
+        return status;
+
+    default:
+        ucs_fatal("unexpected datatype=%lx", req->recv.datatype);
+    }
 }
 
-static UCS_F_ALWAYS_INLINE
-void ucp_request_rndv_buffer_dereg(ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
+                   unsigned am_flags, uint16_t hdr_len, uint16_t rdesc_flags,
+                   ucp_recv_desc_t **rdesc_p)
 {
-    ucp_request_rndv_buffer_dereg_unused(req, UCP_NULL_LANE);
+    ucp_recv_desc_t *rdesc;
+    ucs_status_t status;
+
+    if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
+        /* slowpath */
+        rdesc        = (ucp_recv_desc_t *)data - 1;
+        rdesc->flags = rdesc_flags | UCP_RECV_DESC_FLAG_UCT_DESC;
+        status       = UCS_INPROGRESS;
+    } else {
+        rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
+        if (rdesc == NULL) {
+            ucs_error("ucp recv descriptor is not allocated");
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        rdesc->flags = rdesc_flags;
+        memcpy(rdesc + 1, data, length);
+        status = UCS_OK;
+    }
+
+    rdesc->length         = length;
+    rdesc->payload_offset = hdr_len;
+    *rdesc_p              = rdesc;
+    return status;
 }
 
+static UCS_F_ALWAYS_INLINE ucp_lane_index_t
+ucp_send_request_get_next_am_bw_lane(ucp_request_t *req)
+{
+    ucp_lane_index_t lane;
 
+    /* at least one lane must be initialized */
+    ucs_assert(ucp_ep_config(req->send.ep)->key.am_bw_lanes[0] != UCP_NULL_LANE);
+
+    lane = (req->send.tag.am_bw_index >= UCP_MAX_LANES) ?
+           UCP_NULL_LANE :
+           ucp_ep_config(req->send.ep)->key.am_bw_lanes[req->send.tag.am_bw_index];
+    if (lane != UCP_NULL_LANE) {
+        req->send.tag.am_bw_index++;
+        return lane;
+    } else {
+        req->send.tag.am_bw_index = 1;
+        return ucp_ep_config(req->send.ep)->key.am_bw_lanes[0];
+    }
+}
+
+#endif

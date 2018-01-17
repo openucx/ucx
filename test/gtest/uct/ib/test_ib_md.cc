@@ -72,7 +72,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access) {
     free(buffer);
 }
 
-UCS_TEST_P(test_ib_md, ib_md_umr_rcache_on, "RCACHE=yes") {
+UCS_TEST_P(test_ib_md, ib_md_umr_rcache, "REG_METHODS=rcache") {
 
     ucs_status_t status;
     uct_md_attr_t md_attr;
@@ -93,7 +93,7 @@ UCS_TEST_P(test_ib_md, ib_md_umr_rcache_on, "RCACHE=yes") {
     free(rkey_buffer);
 }
 
-UCS_TEST_P(test_ib_md, ib_md_umr_rcache_off, "RCACHE=no") {
+UCS_TEST_P(test_ib_md, ib_md_umr_direct, "REG_METHODS=direct") {
 
     ucs_status_t status;
     uct_md_attr_t md_attr;
@@ -113,7 +113,4 @@ UCS_TEST_P(test_ib_md, ib_md_umr_rcache_off, "RCACHE=no") {
     free(rkey_buffer);
 }
 
-
 _UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md, ib)
-
-

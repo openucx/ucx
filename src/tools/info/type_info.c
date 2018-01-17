@@ -6,6 +6,10 @@
 
 #include "ucx_info.h"
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/async/async_int.h>
 #include <ucs/async/pipe.h>
 #include <ucs/datastruct/arbiter.h>
@@ -19,6 +23,8 @@
 #include <ucs/type/class.h>
 #include <uct/base/uct_md.h>
 #include <uct/base/uct_iface.h>
+#include <uct/sm/self/self_ep.h>
+#include <uct/tcp/tcp.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_mm.h>
@@ -141,6 +147,8 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_md_ops_t);
         PRINT_SIZE(uct_tl_resource_desc_t);
         PRINT_SIZE(uct_rkey_bundle_t);
+        PRINT_SIZE(uct_tcp_ep_t);
+        PRINT_SIZE(uct_self_ep_t);
 
 #if HAVE_TL_UGNI
         PRINT_SIZE(uct_sockaddr_ugni_t);

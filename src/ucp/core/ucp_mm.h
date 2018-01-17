@@ -54,6 +54,7 @@ typedef struct ucp_mem {
     void                          *address;     /* Region start address */
     size_t                        length;       /* Region length */
     uct_alloc_method_t            alloc_method; /* Method used to allocate the memory */
+    uct_memory_type_t             mem_type;     /**< type of allocated memory */
     uct_md_h                      alloc_md;     /* MD used to allocated the memory */
     ucp_md_map_t                  md_map;       /* Which MDs have valid memory handles */
     uct_mem_h                     uct[0];       /* Valid memory handles, as popcount(md_map) */
@@ -71,30 +72,81 @@ typedef struct ucp_mem_desc {
 
 void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep);
 
+ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,
+                                          uct_rkey_t *uct_rkey_p,
+                                          ucp_lane_map_t ignore);
+
 ucs_status_t ucp_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 
 void ucp_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 
+/**
+ * Update memory registration to a specified set of memory domains.
+ *
+ * @param [in] context     UCP context with MDs to use for registration.
+ * @param [in] reg_md_map  Map of memory domains to update the registration to.
+ *                         MDs which are present in reg_md_map, but not yet
+ *                         registered will be registered.
+ *                         MDs which were registered, but not present in r
+ *                         eg_md_map, will be de-registered.
+ * @param [in] address     Address to register, unused if reg_md_map == 0
+ * @param [in] length      Length to register, unused if reg_md_map == 0
+ * @param [in] uct_flags   Flags for UCT registration, unused if reg_md_map == 0
+ * @param [in] alloc_md    If != NULL, MD that was used to register the memory.
+ *                         This MD will not be used to register the memory again;
+ *                         rather, the memh will be taken from *alloc_md_memh.
+ * @param [inout] alloc_md_memh_p  If non-NULL, specifies/filled with the memory
+ *                                 handle on alloc_md.
+ * @param [inout] uct_memh Array of memory handles to update.
+ * @param [inout] md_map_p Current map of registered MDs, updated by the function
+ *                         to the new map o
+ *
+ * In case alloc_md != NULL, alloc_md_memh will hold the memory key obtained from
+ * allocation. It will be put in the array of keys in the proper index.
+ */
+ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
+                               void *address, size_t length, unsigned uct_flags,
+                               uct_md_h alloc_md, uct_memory_type_t mem_type,
+                               uct_mem_h *alloc_md_memh_p, uct_mem_h *uct_memh,
+                               ucp_md_map_t *md_map_p);
+
 /* Detect memory type on all MDs */
 ucs_status_t ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
                                         uct_memory_type_t *mem_type_p);
 
-ucs_status_t ucp_rkey_pack_uct(ucp_context_h context,
-                               ucp_md_map_t md_map, const uct_mem_h *memh,
-                               void *rkey_buffer, size_t *size_p);
+size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map);
+
+void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
+                          void *rkey_buffer, const void* uct_rkeys[]);
+
+ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
+                          const uct_mem_h *memh, void *rkey_buffer);
+
+void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max);
+
+
+static UCS_F_ALWAYS_INLINE ucp_md_index_t
+ucp_memh_map2idx(ucp_md_map_t md_map, ucp_md_index_t md_idx)
+{
+    return ucs_count_one_bits(md_map & UCS_MASK(md_idx));
+}
+
+static UCS_F_ALWAYS_INLINE uct_mem_h
+ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_idx)
+{
+    if (!(md_map & UCS_BIT(md_idx))) {
+        return NULL;
+    }
+
+    return uct[ucp_memh_map2idx(md_map, md_idx)];
+}
 
 static UCS_F_ALWAYS_INLINE uct_mem_h
 ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
 {
-    ucp_md_index_t uct_idx;
-
-    if (!(memh->md_map & UCS_BIT(md_idx))) {
-        return NULL;
-    }
-    uct_idx = ucs_count_one_bits(memh->md_map & UCS_MASK(md_idx));
-    return memh->uct[uct_idx];
+    return ucp_memh_map2uct(memh->uct, memh->md_map, md_idx);
 }
 
 
@@ -102,11 +154,12 @@ ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
     ({ \
         ucs_status_t status = UCS_OK; \
         if (ucs_unlikely((_ep)->cfg_index != (_rkey)->cache.ep_cfg_index)) { \
-            ucp_rkey_resolve_inner(rkey, ep); \
-            if (ucs_unlikely((_rkey)->cache._op_type##_lane == UCP_NULL_LANE)) { \
-                ucs_error("Remote memory is unreachable"); \
-                status = UCS_ERR_UNREACHABLE; \
-            } \
+            ucp_rkey_resolve_inner(_rkey, _ep); \
+        } \
+        if (ucs_unlikely((_rkey)->cache._op_type##_lane == UCP_NULL_LANE)) { \
+            ucs_error("remote memory is unreachable (remote md_map 0x%lx)", \
+                      (_rkey)->md_map); \
+            status = UCS_ERR_UNREACHABLE; \
         } \
         status; \
     })

@@ -746,27 +746,31 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
 {
     uct_ud_comp_desc_t *cdesc;
     uct_ud_send_skb_t  *skb;
+    uct_ud_ep_t *ep;
 
     do {
         skb = ucs_queue_pull_elem_non_empty(&iface->tx.async_comp_q,
                                             uct_ud_send_skb_t, queue);
         cdesc = uct_ud_comp_desc(skb);
+        ep    = cdesc->ep;
 
         if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
+            ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_DISCONNECTED));
             uct_invoke_completion(cdesc->comp, skb->status);
         }
 
         if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_ERR)) {
             ucs_assert(cdesc->ep->tx.err_skb_count > 0);
-            --cdesc->ep->tx.err_skb_count;
-            if (cdesc->ep->tx.err_skb_count == 0) {
+            --ep->tx.err_skb_count;
+            if ((ep->tx.err_skb_count == 0) &&
+                !(ep->flags & UCT_UD_EP_FLAG_DISCONNECTED)) {
                 iface->super.ops->set_ep_failed(&iface->super,
-                                                &cdesc->ep->super.super,
+                                                &ep->super.super,
                                                 skb->status);
             }
         }
 
-        cdesc->ep->flags &= ~UCT_UD_EP_FLAG_ASYNC_COMPS;
+        ep->flags &= ~UCT_UD_EP_FLAG_ASYNC_COMPS;
         skb->flags = 0;
         ucs_mpool_put(skb);
     } while (!ucs_queue_is_empty(&iface->tx.async_comp_q));

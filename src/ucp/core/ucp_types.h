@@ -26,11 +26,11 @@ typedef uint8_t                      ucp_rsc_index_t;
 #define UCP_MD_INDEX_BITS            64  /* How many bits are in MD index */
 typedef ucp_rsc_index_t              ucp_md_index_t;
 #define UCP_MAX_MDS                  ucs_min(UCP_MD_INDEX_BITS, UCP_MAX_RESOURCES)
+#define UCP_MAX_OP_MDS               3  /* maximal number of MDs per single op */
 UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 
 /* Lanes */
 #define UCP_MAX_LANES                8
-#define UCP_MAX_RNDV_LANES           4
 #define UCP_NULL_LANE                ((ucp_lane_index_t)-1)
 typedef uint8_t                      ucp_lane_index_t;
 UCP_UINT_TYPE(UCP_MAX_LANES)         ucp_lane_map_t;
@@ -43,6 +43,7 @@ typedef struct ucp_address_iface_attr   ucp_address_iface_attr_t;
 typedef struct ucp_address_entry        ucp_address_entry_t;
 typedef struct ucp_wireup_ep            ucp_wireup_ep_t;
 typedef struct ucp_proto                ucp_proto_t;
+typedef struct ucp_worker_iface         ucp_worker_iface_t;
 
 
 /**
@@ -54,7 +55,6 @@ enum {
     UCP_AM_ID_EAGER_ONLY        =  2, /* Single packet eager TAG */
     UCP_AM_ID_EAGER_FIRST       =  3, /* First eager fragment */
     UCP_AM_ID_EAGER_MIDDLE      =  4, /* Middle eager fragment */
-    UCP_AM_ID_EAGER_LAST        =  5, /* Last eager fragment */
 
     UCP_AM_ID_EAGER_SYNC_ONLY   =  6, /* Single packet eager-sync */
     UCP_AM_ID_EAGER_SYNC_FIRST  =  7, /* First eager-sync fragment */
@@ -66,8 +66,6 @@ enum {
                                           with a generic datatype */
     UCP_AM_ID_RNDV_DATA         =  12, /* Rndv data fragments when using software
                                           rndv (bcopy) */
-    UCP_AM_ID_RNDV_DATA_LAST    =  13, /* The last rndv data fragment when using
-                                          software rndv (bcopy) */
     UCP_AM_ID_OFFLOAD_SYNC_ACK  =  14, /* Eager sync ack for tag offload proto */
 
     UCP_AM_ID_STREAM_DATA       =  15, /* Eager STREAM packet */

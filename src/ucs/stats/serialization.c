@@ -8,6 +8,7 @@
 
 #include <ucs/debug/log.h>
 #include <ucs/datastruct/sglib_wrapper.h>
+#include <ucs/sys/compiler.h>
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>

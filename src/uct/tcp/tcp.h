@@ -50,6 +50,7 @@ typedef struct uct_tcp_iface {
     ucs_list_link_t               ep_list;        /* List of endpoints */
     char                          if_name[IFNAMSIZ];/* Network interface name */
     int                           epfd;           /* event poll set of sockets */
+    size_t                        outstanding;
 
     struct {
         struct sockaddr_in        ifaddr;         /* Network address */

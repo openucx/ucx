@@ -15,6 +15,9 @@
 
 BEGIN_C_DECLS
 
+/* A string to hold the IP address and port from a sockaddr */
+#define UCS_SOCKADDR_STRING_LEN  60
+
 /**
  * Expand a partial path to full path.
  *

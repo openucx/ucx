@@ -7,7 +7,9 @@
 #ifndef UCP_THREAD_H_
 #define UCP_THREAD_H_
 
-#include "config.h"
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include <ucs/type/spinlock.h>
 

@@ -22,15 +22,18 @@
 #include <string.h>
 
 
-#define UCT_IB_MLX5_WQE_SEG_SIZE     16 /* Size of a segment in a WQE */
-#define UCT_IB_MLX5_CQE64_MAX_INL    32 /* Inline scatter size in 64-byte CQE */
-#define UCT_IB_MLX5_CQE128_MAX_INL   64 /* Inline scatter size in 128-byte CQE */
-#define UCT_IB_MLX5_CQE64_SIZE_LOG   6
-#define UCT_IB_MLX5_CQE128_SIZE_LOG  7
-#define UCT_IB_MLX5_MAX_BB           4
-#define UCT_IB_MLX5_WORKER_BF_KEY    0x00c1b7e8u
-#define UCT_IB_MLX5_EXTENDED_UD_AV   0x80 /* htonl(0x80000000) */
-#define UCT_IB_MLX5_BF_REG_SIZE      256
+#define UCT_IB_MLX5_WQE_SEG_SIZE        16 /* Size of a segment in a WQE */
+#define UCT_IB_MLX5_CQE64_MAX_INL       32 /* Inline scatter size in 64-byte CQE */
+#define UCT_IB_MLX5_CQE128_MAX_INL      64 /* Inline scatter size in 128-byte CQE */
+#define UCT_IB_MLX5_CQE64_SIZE_LOG      6
+#define UCT_IB_MLX5_CQE128_SIZE_LOG     7
+#define UCT_IB_MLX5_MAX_BB              4
+#define UCT_IB_MLX5_WORKER_BF_KEY       0x00c1b7e8u
+#define UCT_IB_MLX5_EXTENDED_UD_AV      0x80 /* htonl(0x80000000) */
+#define UCT_IB_MLX5_BF_REG_SIZE         256
+#define UCT_IB_MLX5_CQE_VENDOR_SYND_ODP 0x93
+#define UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK 0x80
+
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
     ((8) | ((_log_arg_size) - 2))
@@ -233,9 +236,8 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av);
 /**
  * Check for completion with error.
  */
-struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
-                                                uct_ib_mlx5_cq_t *cq,
-                                                struct mlx5_cqe64 *cqe);
+void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
+                                  struct mlx5_cqe64 *cqe);
 
 /**
  * Initialize txwq structure.

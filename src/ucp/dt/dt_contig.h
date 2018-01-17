@@ -9,7 +9,7 @@
 #define UCP_DT_CONTIG_H_
 
 #include <ucp/api/ucp.h>
-#include <ucs/debug/log.h>
+#include <ucs/debug/assert.h>
 
 
 /**

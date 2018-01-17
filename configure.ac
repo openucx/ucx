@@ -270,6 +270,7 @@ AC_CONFIG_FILES([
                  test/examples/Makefile
                  test/gtest/Makefile
                  test/mpi/Makefile
+                 bindings/java/src/main/native/Makefile
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])

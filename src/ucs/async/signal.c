@@ -34,11 +34,13 @@ typedef struct ucs_async_signal_timer {
 
 static struct {
     struct sigaction            prev_sighandler;       /* Previous signal handler */
-    volatile uint32_t           event_count;           /* Number of events in use */
+    int                         event_count;           /* Number of events in use */
+    pthread_mutex_t             event_lock;            /* Lock for adding/removing events */
     pthread_mutex_t             timers_lock;           /* Lock for timers array */
     ucs_async_signal_timer_t    timers[UCS_SIGNAL_MAX_TIMERQS];/* Array of all threads */
 } ucs_async_signal_global_context = {
     .event_count = 0,
+    .event_lock  = PTHREAD_MUTEX_INITIALIZER,
     .timers_lock = PTHREAD_MUTEX_INITIALIZER,
     .timers      = {{ .tid = 0 }}
 };
@@ -155,6 +157,8 @@ static void ucs_async_signal_sys_timer_delete(timer_t sys_timer_id)
     if (ret < 0) {
         ucs_warn("failed to remove the timer: %m");
     }
+
+    ucs_trace_async("removed system timer %p", sys_timer_id);
 }
 
 static ucs_status_t ucs_async_signal_dispatch_timer(int uid)
@@ -210,16 +214,20 @@ static void ucs_async_signal_allow(int allow)
 
 static void ucs_async_signal_block_all()
 {
+    pthread_mutex_lock(&ucs_async_signal_global_context.event_lock);
     if (ucs_async_signal_global_context.event_count > 0) {
         ucs_async_signal_allow(0);
     }
+    pthread_mutex_unlock(&ucs_async_signal_global_context.event_lock);
 }
 
 static void ucs_async_signal_unblock_all()
 {
+    pthread_mutex_lock(&ucs_async_signal_global_context.event_lock);
     if (ucs_async_signal_global_context.event_count > 0) {
         ucs_async_signal_allow(1);
     }
+    pthread_mutex_unlock(&ucs_async_signal_global_context.event_lock);
 }
 
 static ucs_status_t ucs_async_signal_install_handler()
@@ -227,9 +235,10 @@ static ucs_status_t ucs_async_signal_install_handler()
     struct sigaction new_action;
     int ret;
 
-    ucs_trace_func("");
+    ucs_trace_func("event_count=%d", ucs_async_signal_global_context.event_count);
 
-    if (ucs_atomic_fadd32(&ucs_async_signal_global_context.event_count, +1) == 0) {
+    pthread_mutex_lock(&ucs_async_signal_global_context.event_lock);
+    if (ucs_async_signal_global_context.event_count == 0) {
         /* Set our signal handler */
         new_action.sa_sigaction = ucs_async_signal_handler;
         sigemptyset(&new_action.sa_mask);
@@ -240,26 +249,36 @@ static ucs_status_t ucs_async_signal_install_handler()
         if (ret < 0) {
             ucs_error("failed to set a handler for signal %d: %m",
                       ucs_global_opts.async_signo);
-            ucs_atomic_fadd32(&ucs_async_signal_global_context.event_count, -1);
+            pthread_mutex_unlock(&ucs_async_signal_global_context.event_lock);
             return UCS_ERR_INVALID_PARAM;
         }
 
         ucs_trace_async("installed signal handler for %s",
                         ucs_signal_names[ucs_global_opts.async_signo]);
     }
+    ++ucs_async_signal_global_context.event_count;
+    pthread_mutex_unlock(&ucs_async_signal_global_context.event_lock);
 
     return UCS_OK;
 }
 
+static void fatal_sighandler(int signo, siginfo_t *siginfo, void *arg)
+{
+    ucs_fatal("got timer signal");
+}
+
 static void ucs_async_signal_uninstall_handler()
 {
+    struct sigaction new_action;
     int ret;
 
-    ucs_trace_func("");
+    ucs_trace_func("event_count=%d", ucs_async_signal_global_context.event_count);
 
-    if (ucs_atomic_fadd32(&ucs_async_signal_global_context.event_count, -1) == 1) {
-        ret = sigaction(ucs_global_opts.async_signo,
-                        &ucs_async_signal_global_context.prev_sighandler, NULL);
+    pthread_mutex_lock(&ucs_async_signal_global_context.event_lock);
+    if (--ucs_async_signal_global_context.event_count == 0) {
+        new_action = ucs_async_signal_global_context.prev_sighandler;
+        new_action.sa_sigaction = fatal_sighandler;
+        ret = sigaction(ucs_global_opts.async_signo, &new_action, NULL);
         if (ret < 0) {
             ucs_warn("failed to restore the async signal handler: %m");
         }
@@ -267,6 +286,7 @@ static void ucs_async_signal_uninstall_handler()
         ucs_trace_async("uninstalled signal handler for %s",
                         ucs_signal_names[ucs_global_opts.async_signo]);
     }
+    pthread_mutex_unlock(&ucs_async_signal_global_context.event_lock);
 }
 
 static ucs_status_t ucs_async_signal_init(ucs_async_context_t *async)

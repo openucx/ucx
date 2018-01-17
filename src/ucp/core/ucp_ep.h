@@ -31,12 +31,12 @@ enum {
     UCP_EP_FLAG_CONNECT_REQ_QUEUED  = UCS_BIT(2), /* Connection request was queued */
     UCP_EP_FLAG_TAG_OFFLOAD_ENABLED = UCS_BIT(3), /* Endpoint uses tl offload for tag matching */
     UCP_EP_FLAG_FAILED              = UCS_BIT(4), /* EP is in failed state */
-    UCP_EP_FLAG_STREAM_IS_QUEUED    = UCS_BIT(5), /* EP is queued in stream list of worker */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT    = UCS_BIT(8), /* DEBUG: Connection request was sent */
     UCP_EP_FLAG_CONNECT_REP_SENT    = UCS_BIT(9), /* DEBUG: Connection reply was sent */
-    UCP_EP_FLAG_CONNECT_ACK_SENT    = UCS_BIT(10) /* DEBUG: Connection ACK was sent */
+    UCP_EP_FLAG_CONNECT_ACK_SENT    = UCS_BIT(10),/* DEBUG: Connection ACK was sent */
+    UCP_EP_FLAG_DEST_UUID_PEER      = UCS_BIT(11) /* DEBUG: dest_uuid is of the remote worker */
 };
 
 
@@ -64,8 +64,6 @@ typedef struct ucp_ep_config_key {
 
     ucp_lane_index_t       num_lanes;    /* Number of active lanes */
 
-    ucp_lane_index_t       num_rndv_lanes; /* Number of rendezvous lanes */
-
     struct {
         ucp_rsc_index_t    rsc_index;    /* Resource index */
         ucp_lane_index_t   proxy_lane;   /* UCP_NULL_LANE - no proxy
@@ -78,14 +76,22 @@ typedef struct ucp_ep_config_key {
     ucp_lane_index_t       tag_lane;     /* Lane for tag matching offload (can be NULL) */
     ucp_lane_index_t       wireup_lane;  /* Lane for wireup messages (can be NULL) */
 
-    /* Lane for zcopy rendezvous (can be NULL) */
-    ucp_lane_index_t       rndv_lanes[UCP_MAX_LANES];
-
     /* Lanes for remote memory access, sorted by priority, highest first */
     ucp_lane_index_t       rma_lanes[UCP_MAX_LANES];
 
+    /* Lanes for high-bw memory access, sorted by priority, highest first */
+    ucp_lane_index_t       rma_bw_lanes[UCP_MAX_LANES];
+
     /* Lanes for atomic operations, sorted by priority, highest first */
     ucp_lane_index_t       amo_lanes[UCP_MAX_LANES];
+
+    /* Lanes for high-bw active messages, sorted by priority, highest first */
+    ucp_lane_index_t       am_bw_lanes[UCP_MAX_LANES];
+
+    /* Local memory domains to send remote keys for in high-bw rma protocols
+     * NOTE: potentially it can be different than what is imposed by rma_bw_lanes,
+     * since these are the MDs used by remote side for accessing our memory. */
+    ucp_md_map_t           rma_bw_md_map;
 
     /* Bitmap of remote mds which are reachable from this endpoint (with any set
      * of transports which could be selected in the future).
@@ -144,11 +150,15 @@ typedef struct ucp_ep_config {
 
     /* Configuration for each lane that provides RMA */
     ucp_ep_rma_config_t     rma[UCP_MAX_LANES];
+
     /* Threshold for switching from put_short to put_bcopy */
     size_t                  bcopy_thresh;
 
     /* Configuration for AM lane */
     ucp_ep_msg_config_t     am;
+
+    /* MD index of each lane */
+    ucp_md_index_t          md_index[UCP_MAX_LANES];
 
     struct {
         /* Protocols used for tag matching operations
@@ -172,7 +182,17 @@ typedef struct ucp_ep_config {
             size_t          rma_thresh;
             /* Threshold for switching from eager to AM based rendezvous */
             size_t          am_thresh;
+            /* Total size of packed rkey, according to high-bw md_map */
+            size_t          rkey_size;
         } rndv;
+
+        /* special thresholds for the ucp_tag_send_nbr() */
+        struct {
+            /* Threshold for switching from eager to RMA based rendezvous */
+            size_t          rma_thresh;
+            /* Threshold for switching from eager to AM based rendezvous */
+            size_t          am_thresh;
+        } rndv_send_nbr;
 
         struct {
             /* Maximal iov count for RNDV offload */
@@ -194,14 +214,14 @@ typedef struct ucp_ep_config {
  * UCP_FEATURE_STREAM specific extention of the remote protocol layer endpoint
  */
 typedef struct ucp_ep_ext_stream {
-    /* ep which owns the extension */
-    ucp_ep_h                      ucp_ep;
     /* List entry in worker's EP list */
-    ucs_list_link_t               list;
-    /* Queue of receive requests posted on the EP */
-    ucs_queue_head_t              reqs;
-    /* Queue of receive descriptors with data */
-    ucs_queue_head_t              data;
+    ucs_list_link_t         list;
+    /* Queue of receive data or requests depends on flags field */
+    ucs_queue_head_t        match_q;
+    /* EP which owns the extension */
+    ucp_ep_h                ucp_ep;
+    /* Describes the state */
+    uint8_t                 flags;
 } ucp_ep_ext_stream_t;
 
 
@@ -232,7 +252,7 @@ typedef struct ucp_ep {
     /* TODO allocate ep dynamically according to number of lanes */
     uct_ep_h                      uct_eps[UCP_MAX_LANES]; /* Transports for every lane */
 
-    /* Feature specific extentions allocated on demand */
+    /* Feature specific extensions allocated on demand */
     struct {
         ucp_ep_ext_stream_t       *stream;      /* UCP_FEATURE_STREAM */
     } ext;
@@ -240,6 +260,10 @@ typedef struct ucp_ep {
 
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
+
+void ucp_ep_add_to_hash(ucp_ep_h ep);
+
+void ucp_ep_delete_from_hash(ucp_ep_h ep);
 
 void ucp_ep_config_lane_info_str(ucp_context_h context,
                                  const ucp_ep_config_key_t *key,
@@ -252,17 +276,26 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
                         const char *peer_name, const char *message,
                         ucp_ep_h *ep_p);
 
+ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
+                                const ucp_ep_params_t *params,
+                                const char *peer_name, const char *message,
+                                ucp_ep_h *ep_p);
+
+ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
+                                          const ucp_ep_params_t *params,
+                                          const char *message, ucp_ep_h *ep_p);
+
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_send_callback_t req_cb,
                                        unsigned req_flags,
                                        ucp_request_callback_t flushed_cb);
 
-ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
-                                const char *message, ucp_ep_h *ep_p);
+void ucp_ep_config_key_set_params(ucp_ep_config_key_t *key,
+                                  const ucp_ep_params_t *params);
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
 
-void ucp_ep_destroy_internal(ucp_ep_h ep, const char *message);
+void ucp_ep_destroy_internal(ucp_ep_h ep);
 
 int ucp_ep_is_stub(ucp_ep_h ep);
 

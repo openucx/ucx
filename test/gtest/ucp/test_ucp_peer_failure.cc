@@ -6,6 +6,11 @@
 
 #include "test_ucp_tag.h"
 
+extern "C" {
+#include <malloc.h>
+}
+
+
 class test_ucp_peer_failure_base {
 protected:
     enum {
@@ -110,11 +115,22 @@ protected:
         }
     }
 
+    static void err_cb_mod(void *arg, ucp_ep_h ep, ucs_status_t status) {
+        EXPECT_EQ(uintptr_t(MAGIC), uintptr_t(arg));
+        err_cb(arg, ep, status);
+        m_err_cb_mod = true;
+    }
+
 protected:
     const size_t m_msg_size;
+    static bool  m_err_cb_mod;
 };
 
+bool test_ucp_peer_failure::m_err_cb_mod = false;
+
 void test_ucp_peer_failure::init() {
+    m_err_cb_mod = false;
+
     test_ucp_peer_failure_base::init();
     test_ucp_tag::init();
     if (GetParam().variant != FAIL_IMMEDIATELY) {
@@ -129,6 +145,21 @@ void test_ucp_peer_failure::init() {
         smoke_test();
     }
     wrap_errors();
+
+    ucp_ep_params_t ep_params_mod = {0};
+    ep_params_mod.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLER_CB |
+                               UCP_EP_PARAM_FIELD_USER_DATA;
+    ep_params_mod.err_handler_cb = err_cb_mod;
+    ep_params_mod.user_data      = reinterpret_cast<void *>(uintptr_t(MAGIC));
+
+    for (size_t i = 0; i < m_entities.size(); ++i) {
+        for (int widx = 0; widx < e(i).get_num_workers(); ++widx) {
+            for (int epidx = 0; epidx < e(i).get_num_eps(widx); ++epidx) {
+                void *req = e(i).modify_ep(ep_params_mod, widx, epidx);
+                ucp_test::wait(req, widx);
+            }
+        }
+    }
 }
 
 void test_ucp_peer_failure::cleanup() {
@@ -145,6 +176,8 @@ void test_ucp_peer_failure::test_status_after(bool request_must_fail)
                                          0x111337);
     wait_err();
     EXPECT_NE(UCS_OK, m_err_status);
+    EXPECT_TRUE(m_err_cb_mod);
+
     if (UCS_PTR_IS_PTR(req)) {
         /* The request may either succeed or fail, even though the data is not
          * delivered - depends on when the error is detected on sender side and
@@ -175,12 +208,13 @@ void test_ucp_peer_failure::test_status_after(bool request_must_fail)
 
 void test_ucp_peer_failure::test_force_close()
 {
-    const size_t         msg_size = 16000;
-    const size_t         iter     = 1000;
+    const size_t            msg_size = 16000;
+    const size_t            iter     = 1000;
+    uint8_t                 *buf     = (uint8_t *)calloc(msg_size, iter);
+    struct mallinfo         mem_before, mem_after;
+    std::vector<request *>  reqs;
 
-    uint8_t *buf = (uint8_t *)calloc(msg_size, iter);
-
-    std::vector<request *> reqs;
+    reqs.reserve(iter);
     for (size_t i = 0; i < iter; ++i) {
         request *sreq = send_nb(&buf[i * msg_size], msg_size, DATATYPE, 17);
 
@@ -194,6 +228,8 @@ void test_ucp_peer_failure::test_force_close()
 
     fail_receiver();
 
+    mem_before = mallinfo();
+
     request *close_req = (request *)ucp_ep_close_nb(sender().ep(),
                                                     UCP_EP_CLOSE_MODE_FORCE);
     if (UCS_PTR_IS_PTR(close_req)) {
@@ -202,6 +238,13 @@ void test_ucp_peer_failure::test_force_close()
     } else {
         EXPECT_FALSE(UCS_PTR_IS_ERR(close_req));
     }
+
+    mem_after = mallinfo();
+    /* Too low chance to predict memory consumption on wire up for all TLS */
+    if (GetParam().variant != FAIL_IMMEDIATELY) {
+        EXPECT_GT(mem_before.uordblks, mem_after.uordblks);
+    }
+
     /* The EP can't be used now */
     sender().revoke_ep();
 
@@ -349,11 +392,8 @@ UCS_TEST_P(test_ucp_peer_failure_with_rma, status_after_error) {
             request_release(req);
         }
     }
-    /* TODO: Remove this check. The test hangs if call flush when wireup is
-     *       not done. (Not RMA related) */
-    if (GetParam().variant != FAIL_IMMEDIATELY) {
-        ucp_ep_flush(sender().ep());
-    }
+
+    ucp_ep_flush(sender().ep());
     wait_err();
 
     EXPECT_NE(UCS_OK, m_err_status);
@@ -592,7 +632,7 @@ public:
         const std::vector<std::string> &tls = GetParam().transports;
         std::vector<std::string>       skip_tls;
 
-        skip_tls.push_back("\\rc_mlx5");
+        skip_tls.push_back("rc_x");
         skip_tls.push_back("ib");
 
         if (std::find_first_of(tls.begin(),      tls.end(),

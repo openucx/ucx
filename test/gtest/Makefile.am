@@ -63,6 +63,7 @@ gtest_SOURCES = \
 	common/gtest-all.cc \
 	common/main.cc \
 	common/test_helpers.cc \
+	common/test_obj_size.cc \
 	common/test_perf.cc \
 	common/test.cc \
 	\
@@ -99,6 +100,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_stream.cc \
 	ucp/test_ucp_peer_failure.cc \
 	ucp/test_ucp_atomic.cc \
+	ucp/test_ucp_dt.cc \
 	ucp/test_ucp_memheap.cc \
 	ucp/test_ucp_mmap.cc \
 	ucp/test_ucp_mem_type.cc \
@@ -107,6 +109,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_rma_mt.cc \
 	ucp/test_ucp_tag_cancel.cc \
 	ucp/test_ucp_tag_match.cc \
+	ucp/test_ucp_tag_offload.cc \
 	ucp/test_ucp_tag_mt.cc \
 	ucp/test_ucp_tag_perf.cc \
 	ucp/test_ucp_tag_probe.cc \
@@ -116,6 +119,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_wireup.cc \
 	ucp/test_ucp_wakeup.cc \
 	ucp/test_ucp_fence.cc \
+	ucp/test_ucp_sockaddr.cc \
 	ucp/ucp_test.cc \
 	\
 	ucs/test_algorithm.cc \
@@ -147,7 +151,8 @@ if HAVE_IB
 gtest_SOURCES += \
 	uct/ib/test_ib.cc \
 	uct/ib/test_ib_md.cc \
-	uct/ib/test_cq_moderation.cc
+	uct/ib/test_cq_moderation.cc \
+	uct/ib/test_ib_xfer.cc
 gtest_CPPFLAGS += \
     $(IBVERBS_CPPFLAGS)
 if HAVE_TL_UD

@@ -23,8 +23,10 @@
 enum {
     /* The flag indicates that the resource may be used for auxiliary
      * wireup communications only */
-    UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
-
+    UCP_TL_RSC_FLAG_AUX      = UCS_BIT(0),
+    /* The flag indicates that the resource may be used for client-server
+     * connection establishment with a sockaddr */
+    UCP_TL_RSC_FLAG_SOCKADDR = UCS_BIT(1)
 };
 
 
@@ -33,6 +35,9 @@ typedef struct ucp_context_config {
     size_t                                 bcopy_thresh;
     /** Threshold for switching UCP to rendezvous protocol */
     size_t                                 rndv_thresh;
+    /** Threshold for switching UCP to rendezvous protocol
+     *  in ucp_tag_send_nbr() */
+    size_t                                 rndv_send_nbr_thresh;
     /** Threshold for switching UCP to rendezvous protocol in case the calculated
      *  threshold is zero or negative */
     size_t                                 rndv_thresh_fallback;
@@ -63,8 +68,12 @@ typedef struct ucp_context_config {
     int                                    use_mt_mutex;
     /** On-demand progress */
     int                                    adaptive_progress;
+    /** Eager-am multi-lane support */
+    unsigned                               max_eager_lanes;
     /** Rendezvous-get multi-lane support */
     unsigned                               max_rndv_lanes;
+    /** Estimated number of endpoints */
+    size_t                                 estimated_num_eps;
 } ucp_context_config_t;
 
 
@@ -86,10 +95,12 @@ struct ucp_config {
  * UCP communication resource descriptor
  */
 typedef struct ucp_tl_resource_desc {
-    uct_tl_resource_desc_t        tl_rsc;   /* UCT resource descriptor */
-    ucp_rsc_index_t               md_index; /* Memory domain index (within the context) */
+    uct_tl_resource_desc_t        tl_rsc;     /* UCT resource descriptor */
     uint16_t                      tl_name_csum; /* Checksum of transport name */
-    uint8_t                       flags; /* Flags that describe resource specifics */
+    ucp_rsc_index_t               md_index;   /* Memory domain index (within the context) */
+    ucp_rsc_index_t               dev_index;  /* Arbitrary device index. Resources
+                                                 with same index have same device name. */
+    uint8_t                       flags;      /* Flags that describe resource specifics */
 } ucp_tl_resource_desc_t;
 
 
@@ -196,13 +207,26 @@ typedef struct ucp_am_handler {
                                   unsigned flags) \
     { \
         ucp_worker_iface_t *wiface = arg; \
-        wiface->proxy_am_count++; \
+        wiface->proxy_recv_count++; \
         return ucp_am_handlers[_id].cb(wiface->worker, data, length, flags); \
     } \
     \
     UCS_STATIC_INIT { \
         ucp_am_handlers[_id].proxy_cb = ucp_am_##_id##_counting_proxy; \
     }
+
+
+#define UCP_CHECK_PARAM_NON_NULL(_param, _status, _action) \
+    if ((_param) == NULL) { \
+        ucs_error("the parameter %s must not be NULL", #_param); \
+        (_status) = UCS_ERR_INVALID_PARAM; \
+        _action; \
+    };
+
+
+#define UCP_PARAM_VALUE(_obj, _params, _name, _flag, _default) \
+    (((_params)->field_mask & (UCP_##_obj##_PARAM_FIELD_##_flag)) ? \
+                    (_params)->_name : (_default))
 
 
 extern ucp_am_handler_t ucp_am_handlers[];

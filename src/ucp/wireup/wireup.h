@@ -58,16 +58,20 @@ typedef struct {
  * Packet structure for wireup requests.
  */
 typedef struct ucp_wireup_msg {
-    uint8_t          type;                /* Message type */
-    uint8_t          tli[UCP_MAX_LANES];  /* For REQUEST - which p2p lanes must be connected
-                                             For REPLY - which p2p lanes have been connected
-                                           */
-    ucp_err_handling_mode_t err_mode;
+    uint8_t                 type;         /* Message type */
+    ucp_err_handling_mode_t err_mode;     /* Peer error handling mode */
+    uint64_t                ep_uuid;      /* Peer endpoint dest_uuid */
+
+    /* REQUEST - which p2p lanes must be connected
+     * REPLY - which p2p lanes have been connected
+     */
+    uint8_t                 tli[UCP_MAX_LANES];
+
     /* packed addresses follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
 
 
-ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
+ucs_status_t ucp_wireup_send_request(ucp_ep_h ep, uint64_t ep_uuid);
 
 ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
                                              const ucp_ep_params_t *params,
@@ -75,6 +79,10 @@ ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
                                              unsigned address_count,
                                              ucp_rsc_index_t *rsc_index_p,
                                              unsigned *addr_index_p);
+
+ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
+                                                  const ucp_ep_params_t *params,
+                                                  ucp_rsc_index_t *rsc_index_p);
 
 double ucp_wireup_amo_score_func(ucp_context_h context,
                                  const uct_md_attr_t *md_attr,
@@ -99,7 +107,10 @@ ucs_status_t ucp_signaling_ep_create(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
 static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return !(worker->ifaces[rsc_index].attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
+    uint64_t flags = worker->ifaces[rsc_index].attr.cap.flags;
+
+    return (flags & UCT_IFACE_FLAG_CONNECT_TO_EP) &&
+           !(flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
 }
 
 

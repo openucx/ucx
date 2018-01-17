@@ -12,6 +12,10 @@
 #define UCT_RDMACM_MAX_CONN_PRIV \
         (UCT_RDMACM_UDP_PRIV_DATA_LEN) - (sizeof(uct_rdmacm_priv_data_hdr_t))
 
+/* The ep was destroyed and shouldn't be accessed anymore */
+#define UCT_RDMACM_IFACE_BLOCKED_NO_EP \
+        ((void*)0x1)
+
 typedef struct uct_rdmacm_iface_config {
     uct_iface_config_t       super;
     unsigned                 backlog;

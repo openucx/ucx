@@ -124,6 +124,9 @@ int ucs_config_sprintf_signo(char *buf, size_t max, void *src, const void *arg);
 int ucs_config_sscanf_memunits(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *arg);
 
+int ucs_config_sscanf_ulunits(const char *buf, void *dest, const void *arg);
+int ucs_config_sprintf_ulunits(char *buf, size_t max, void *src, const void *arg);
+
 int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_range_spec(char *buf, size_t max, void *src, const void *arg);
 ucs_status_t ucs_config_clone_range_spec(void *src, void *dest, const void *arg);
@@ -166,6 +169,11 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_ULONG      {ucs_config_sscanf_ulong,     ucs_config_sprintf_ulong, \
                                     ucs_config_clone_ulong,      ucs_config_release_nop, \
                                     ucs_config_help_generic,     "unsigned long"}
+
+#define UCS_CONFIG_TYPE_ULUNITS    {ucs_config_sscanf_ulunits,   ucs_config_sprintf_ulunits, \
+                                    ucs_config_clone_ulong,      ucs_config_release_nop, \
+                                    ucs_config_help_generic, \
+                                    "unsigned long: <number> or \"auto\""}
 
 #define UCS_CONFIG_TYPE_DOUBLE     {ucs_config_sscanf_double,    ucs_config_sprintf_double, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \

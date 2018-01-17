@@ -9,7 +9,8 @@
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
-    attr->cap.flags         = UCT_MD_FLAG_REG;
+    attr->cap.flags         = UCT_MD_FLAG_REG |
+                              UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
     attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
     attr->cap.mem_type      = UCT_MD_MEM_TYPE_HOST;
     attr->cap.max_alloc     = 0;
