@@ -150,6 +150,7 @@ public:
         case UCX_PERF_CMD_TAG_SYNC:
         case UCX_PERF_CMD_STREAM:
             wait_window(1);
+            /* coverity[switch_selector_expr_is_constant] */
             switch (CMD) {
             case UCX_PERF_CMD_TAG:
                 request = ucp_tag_send_nb(ep, buffer, length, datatype, TAG,
