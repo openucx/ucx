@@ -192,10 +192,10 @@ typedef struct ucp_worker {
     UCS_STATS_NODE_DECLARE(stats);
     UCS_STATS_NODE_DECLARE(tm_offload_stats);
 
-    unsigned                      ep_config_max; /* Maximal number of configurations */
-    unsigned                      ep_config_count;/* Current number of configurations */
-    ucp_ep_config_t               ep_config[0];  /* Array of transport limits and thresholds */
-    ucs_cpu_set_t                 cpu_mask;      /* Save CPU mask for subsequent calls to ucp_worker_listen */
+    ucs_cpu_set_t                 cpu_mask;        /* Save CPU mask for subsequent calls to ucp_worker_listen */
+    unsigned                      ep_config_max;   /* Maximal number of configurations */
+    unsigned                      ep_config_count; /* Current number of configurations */
+    ucp_ep_config_t               ep_config[0];    /* Array of transport limits and thresholds */
 } ucp_worker_t;
 
 
