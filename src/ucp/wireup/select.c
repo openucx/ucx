@@ -263,9 +263,9 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
 
             priority = iface_attr->priority + ae->iface_attr.priority;
 
-            ucs_trace(UCT_TL_RESOURCE_DESC_FMT "->addr[%zd] : %s score %.2f",
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT "->addr[%zd] : %s score %.2f priority %d",
                       UCT_TL_RESOURCE_DESC_ARG(resource), ae - address_list,
-                      criteria->title, score);
+                      criteria->title, score, priority);
 
             /* First comparing score, if score equals to current best score,
              * comparing priority with the priority of best score */
@@ -897,10 +897,11 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
     /* am_bw_lane[0] is am_lane, so don't re-select it here */
     for (lane_desc_idx = 0; lane_desc_idx < *num_lanes_p; ++lane_desc_idx) {
         if (lane_descs[lane_desc_idx].usage & UCP_WIREUP_LANE_USAGE_AM) {
-            addr_index        = lane_descs[lane_desc_idx].addr_index;
-            rsc_index         = lane_descs[lane_desc_idx].rsc_index;
-            md_map           |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
-            local_dev_bitmap &= ~UCS_BIT(context->tl_rscs[rsc_index].dev_index);
+            addr_index         = lane_descs[lane_desc_idx].addr_index;
+            rsc_index          = lane_descs[lane_desc_idx].rsc_index;
+            md_map            |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
+            local_dev_bitmap  &= ~UCS_BIT(context->tl_rscs[rsc_index].dev_index);
+            remote_dev_bitmap &= ~UCS_BIT(address_list[addr_index].dev_index);
             break; /* do not continue searching due to we found
                       AM lane (and there is only one lane) */
         }
