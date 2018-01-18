@@ -75,7 +75,7 @@ public:
                   std::string(reinterpret_cast<const char *>(conn_priv_data)));
 
         EXPECT_EQ(uct_test::entity::client_priv_data.length(), length);
-        self->server_recv_req = 1;
+        self->server_recv_req++;
         return UCS_OK;
     }
 
@@ -110,6 +110,53 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
      * it should also pass in this case as well - the client's
      * ep shouldn't be accessed (for connection reply from the server) after the
      * test ends and the client's ep was destroyed */
+}
+
+UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
+{
+    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(sock_addr.addr);
+    server_recv_req = 0;
+    err_count = 0;
+
+    uct_iface_params client_params;
+    entity *client_test;
+    int i, num_clients = 100;
+
+    /* multiple clients, each on an iface of its own, connecting to the same server */
+    for (i = 0; i < num_clients; ++i) {
+        /* open iface for the client side */
+        memset(&client_params, 0, sizeof(client_params));
+        client_params.open_mode       = UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT;
+        client_params.err_handler     = err_handler;
+        client_params.err_handler_arg = reinterpret_cast<void*>(this);
+
+        client_test = uct_test::create_entity(client_params);
+        m_entities.push_back(client_test);
+
+        client_test->connect(i, *server, 0);
+    }
+
+    while (server_recv_req < num_clients);
+    ASSERT_TRUE(server_recv_req == num_clients);
+    EXPECT_EQ(0, err_count);
+}
+
+UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
+{
+    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(sock_addr.addr);
+    server_recv_req = 0;
+    err_count = 0;
+
+    int i, num_conns_on_client = 100;
+
+    /* multiple clients, on the same iface, connecting to the same server */
+    for (i = 0; i < num_conns_on_client; ++i) {
+        client->connect(i, *server, 0);
+    }
+
+    while (server_recv_req < num_conns_on_client);
+    ASSERT_TRUE(server_recv_req == num_conns_on_client);
+    EXPECT_EQ(0, err_count);
 }
 
 UCS_TEST_P(test_uct_sockaddr, err_handle)

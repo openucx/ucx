@@ -19,6 +19,7 @@
 typedef struct uct_rdmacm_iface_config {
     uct_iface_config_t       super;
     unsigned                 backlog;
+    unsigned                 cm_id_quota_size;
 } uct_rdmacm_iface_config_t;
 
 
@@ -34,13 +35,14 @@ struct uct_rdmacm_iface {
     uct_sockaddr_conn_request_callback_t conn_request_cb;
     uint32_t                             cb_flags;
 
-    uct_rdmacm_ep_t                      *ep;
-
     /** Field used only for client side */
     ucs_list_link_t                      pending_eps_list;
+    ucs_list_link_t                      used_cm_ids_list;
+    unsigned                             num_cm_id_in_quota;
 
     struct {
         double                           addr_resolve_timeout;
+        unsigned                         cm_id_quota_size;
     } config;
 };
 
