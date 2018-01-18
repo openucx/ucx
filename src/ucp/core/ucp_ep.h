@@ -51,6 +51,14 @@ enum {
 };
 
 
+/**
+ * Endpoint init flags
+ */
+enum {
+    UCP_EP_INIT_FLAG_MEM_TYPE          = UCS_BIT(0)  /**< Endpoint for local mem type transfers */
+};
+
+
 #define UCP_EP_STAT_TAG_OP(_ep, _op) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCP_EP_STAT_TAG_TX_##_op, 1);
 
@@ -283,6 +291,7 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
 
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           const ucp_ep_params_t *params,
+                                          unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p);
 
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
@@ -311,5 +320,7 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
                                            const uct_linear_growth_t *reg_cost,
                                            const ucp_context_h context,
                                            double bandwidth);
+
+ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
 
 #endif

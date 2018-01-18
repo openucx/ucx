@@ -379,7 +379,7 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
     req->send.lane = ucp_ep_get_tag_lane(ep);
 
     ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &dt_state,
-                        req->send.buffer, req->send.datatype, req->send.length, 0);
+                        req->send.buffer, req->send.datatype, req->send.length, 0, NULL);
 
     status = uct_ep_tag_eager_zcopy(ep->uct_eps[req->send.lane], req->send.tag.tag,
                                     imm_data, iov, iovcnt, 0,
@@ -467,7 +467,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     ucs_assert_always(UCP_DT_IS_CONTIG(req->send.datatype));
 
     ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &dt_state,
-                        req->send.buffer, req->send.datatype, req->send.length, 0);
+                        req->send.buffer, req->send.datatype, req->send.length, 0, NULL);
 
     rndv_op = uct_ep_tag_rndv_zcopy(ep->uct_eps[req->send.lane], req->send.tag.tag,
                                     &rndv_hdr, sizeof(rndv_hdr), iov, iovcnt, 0,

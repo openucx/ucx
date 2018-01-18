@@ -65,12 +65,18 @@ ucs_mpool_ops_t ucp_am_mpool_ops = {
 
 
 ucs_mpool_ops_t ucp_reg_mpool_ops = {
-    .chunk_alloc   = ucp_mpool_malloc,
-    .chunk_release = ucp_mpool_free,
+    .chunk_alloc   = ucp_reg_mpool_malloc,
+    .chunk_release = ucp_reg_mpool_free,
     .obj_init      = ucp_mpool_obj_init,
     .obj_cleanup   = ucs_empty_function
 };
 
+ucs_mpool_ops_t ucp_frag_mpool_ops = {
+    .chunk_alloc   = ucp_frag_mpool_malloc,
+    .chunk_release = ucp_frag_mpool_free,
+    .obj_init      = ucp_mpool_obj_init,
+    .obj_cleanup   = ucs_empty_function
+};
 
 void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force);
 
@@ -780,6 +786,9 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         }
     }
 
+    context->mem_type_tls[context->tl_mds[resource->md_index].
+                          attr.cap.mem_type] |= UCS_BIT(tl_id);
+
     return UCS_OK;
 
 out_close_iface:
@@ -981,8 +990,18 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         goto err_release_am_mpool;
     }
 
+    status = ucs_mpool_init(&worker->rndv_frag_mp, 0,
+                            context->config.ext.rndv_frag_size,
+                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                            &ucp_frag_mpool_ops, "ucp_rndv_frags");
+    if (status != UCS_OK) {
+        goto err_release_reg_mpool;
+    }
+
     return UCS_OK;
 
+err_release_reg_mpool:
+    ucs_mpool_cleanup(&worker->reg_mp, 0);
 err_release_am_mpool:
     ucs_mpool_cleanup(&worker->am_mp, 0);
 out:
@@ -1150,6 +1169,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_close_ifaces;
     }
 
+    /* create mem type endponts */
+    status = ucp_worker_create_mem_type_endpoints(worker);;
+    if (status != UCS_OK) {
+        goto err_close_ifaces;
+    }
+
     /* Init AM and registered memory pools */
     status = ucp_worker_init_mpools(worker);
     if (status != UCS_OK) {
@@ -1200,6 +1225,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_destroy_eps(worker);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
+    ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
     ucp_worker_close_ifaces(worker);
     ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_wakeup_cleanup(worker);
@@ -1469,6 +1495,7 @@ ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid
 
     req->flags   = 0;
     req->send.ep = ucp_worker_get_reply_ep(worker, dest_uuid);
+    req->send.mdesc = NULL;
     return req;
 }
 

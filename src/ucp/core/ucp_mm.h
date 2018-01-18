@@ -76,11 +76,15 @@ ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,
                                           uct_rkey_t *uct_rkey_p,
                                           ucp_lane_map_t ignore);
 
-ucs_status_t ucp_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 
-void ucp_mpool_free(ucs_mpool_t *mp, void *chunk);
+void ucp_reg_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
+
+ucs_status_t ucp_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+
+void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 /**
  * Update memory registration to a specified set of memory domains.
@@ -111,10 +115,6 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
                                uct_md_h alloc_md, uct_memory_type_t mem_type,
                                uct_mem_h *alloc_md_memh_p, uct_mem_h *uct_memh,
                                ucp_md_map_t *md_map_p);
-
-/* Detect memory type on all MDs */
-ucs_status_t ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
-                                        uct_memory_type_t *mem_type_p);
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map);
 
@@ -163,5 +163,7 @@ ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
         } \
         status; \
     })
+
+#define UCP_MEM_IS_HOST(_mem_type) ((_mem_type) == UCT_MD_MEM_TYPE_HOST)
 
 #endif

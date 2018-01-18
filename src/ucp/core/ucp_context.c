@@ -119,7 +119,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "Maximal number of devices on which a rendezvous operation may be executed in parallel",
    ucs_offsetof(ucp_config_t, ctx.max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
 
-  {"RNDV_SCHEME", "get_zcopy",
+  {"RNDV_SCHEME", "auto",
    "Communication scheme in RNDV protocol.\n"
    " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
    " put_zcopy - use put_zcopy scheme in RNDV protocol.\n"
@@ -185,6 +185,10 @@ static ucs_config_field_t ucp_config_table[] = {
    " If set to a value different from \"auto\" it will override the value passed\n"
    "to ucp_init()",
    ucs_offsetof(ucp_config_t, ctx.estimated_num_eps), UCS_CONFIG_TYPE_ULUNITS},
+
+  {"RNDV_FRAG_SIZE", "256k",
+   "RNDV fragment size \n",
+   ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {NULL}
 };
@@ -903,13 +907,6 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
     ucs_debug("Estimated number of endpoints is %d",
               context->config.est_num_eps);
-
-    if (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) {
-        /* TODO: currently UCP_RNDV_MODE_AUTO == UCP_RNDV_MODE_GET_ZCOPY,
-         * after memory type support is added, will add tru UCP_RNDV_MODE_AUTO
-         * implementation */
-        context->config.ext.rndv_mode = UCP_RNDV_MODE_GET_ZCOPY;
-    }
 
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_

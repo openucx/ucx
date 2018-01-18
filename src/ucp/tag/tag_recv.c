@@ -38,6 +38,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 {
     ucp_eager_first_hdr_t *eagerf_hdr;
     ucp_request_queue_t *req_queue;
+    uct_memory_type_t mem_type;
     size_t hdr_len, recv_len;
     ucs_status_t status;
     uint64_t msg_id;
@@ -63,7 +64,9 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->recv.tag.info.sender_tag = ucp_rdesc_get_tag(rdesc);
         req->recv.tag.info.length     = recv_len;
 
-        status = ucp_dt_unpack_only(buffer, count, datatype,
+        ucp_memory_type_detect_mds(worker->context, buffer, recv_len, &mem_type);
+
+        status = ucp_dt_unpack_only(worker, buffer, count, datatype, mem_type,
                                     (void*)(rdesc + 1) + hdr_len, recv_len, 1);
         ucp_tag_unexp_desc_release(rdesc);
 
@@ -87,6 +90,10 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 
     req->recv.length        = ucp_dt_length(datatype, count, buffer,
                                             &req->recv.state);
+
+    ucp_memory_type_detect_mds(worker->context, buffer, req->recv.length, &mem_type);
+
+    req->recv.mem_type      = mem_type;
     req->recv.tag.tag       = tag;
     req->recv.tag.tag_mask  = tag_mask;
     req->recv.tag.cb        = cb;

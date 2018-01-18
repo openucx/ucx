@@ -252,8 +252,60 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
     return UCS_OK;
 }
 
+ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
+{
+    ucp_context_h context = worker->context;
+    unsigned i, mem_type, md_index;
+    ucs_status_t status;
+    void *address;
+    size_t address_length;
+    ucp_ep_params_t params;
+
+    for (i = 0; i < UCT_MD_MEM_TYPE_LAST; i++) {
+        worker->mem_type_ep[i] = NULL;
+    }
+
+    if (!context->num_mem_type_mds) {
+        return UCS_OK;
+    }
+
+    params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+
+    for (i = 0; i < context->num_mem_type_mds; ++i) {
+        md_index = context->mem_type_tl_mds[i];
+        mem_type = context->tl_mds[md_index].attr.cap.mem_type;
+
+        status = ucp_address_pack(worker, NULL, context->mem_type_tls[mem_type], NULL,
+                                  &address_length, &address);
+        if (status != UCS_OK) {
+            goto err_cleanup_eps;
+        }
+
+        params.address    = (ucp_address_t*)address;
+
+        status = ucp_ep_create_to_worker_addr(worker, &params, UCP_EP_INIT_FLAG_MEM_TYPE,
+                                              "mem type", &worker->mem_type_ep[mem_type]);
+        if (status != UCS_OK) {
+            goto err_cleanup_eps;
+        }
+
+        ucs_free(address);
+    }
+
+    return UCS_OK;
+
+err_cleanup_eps:
+    for (i = 0; i < UCT_MD_MEM_TYPE_LAST; i++) {
+        if (worker->mem_type_ep[i]) {
+           ucp_ep_destroy_internal(worker->mem_type_ep[i]);
+        }
+    }
+    return status;
+}
+
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           const ucp_ep_params_t *params,
+                                          unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p)
 {
     ucp_address_entry_t *address_list;
@@ -298,8 +350,8 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     ep->flags |= UCP_EP_FLAG_DEST_UUID_PEER;
 
     /* initialize transport endpoints */
-    status = ucp_wireup_init_lanes(ep, params, address_count, address_list,
-                                   addr_indices);
+    status = ucp_wireup_init_lanes(ep, params, ep_init_flags, address_count,
+                                   address_list, addr_indices);
     if (status != UCS_OK) {
         goto err_delete;
     }
@@ -373,7 +425,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
             goto out;
         }
     } else {
-        status = ucp_ep_create_to_worker_addr(worker, params, "from api call",
+        status = ucp_ep_create_to_worker_addr(worker, params, 0, "from api call",
                                               &ep);
         if (status != UCS_OK) {
             goto out;
@@ -812,7 +864,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     size_t it;
     size_t zcopy_thresh;
 
-    if (iface_attr->cap.flags & short_flag) {
+    if (iface_attr->cap.flags & short_flag && !context->num_mem_type_mds) {
         config->max_short = max_short - hdr_len;
     } else {
         config->max_short = -1;
