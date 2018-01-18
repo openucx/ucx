@@ -163,7 +163,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     for (ae = address_list; ae < address_list + address_count; ++ae) {
         addr_index = ae - address_list;
         if (!(remote_dev_bitmap & UCS_BIT(ae->dev_index))) {
-            ucs_trace("addr[%d]: not in use, because device[%d]",
+            ucs_trace("addr[%d]: not in use, because on device[%d]",
                       addr_index, ae->dev_index);
             continue;
         } else if (!(remote_md_map & UCS_BIT(ae->md_index))) {
