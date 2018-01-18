@@ -1266,6 +1266,7 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
             free(params.msg_size_list);
             params.msg_size_list = NULL;
         }
+        params = *parent_params;
     }
 
     fclose(batch_file);
