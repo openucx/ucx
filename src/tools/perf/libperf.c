@@ -724,6 +724,7 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
 
         break;
     case UCX_PERF_CMD_TAG:
+    case UCX_PERF_CMD_TAG_SYNC:
         ucp_params->features    |= UCP_FEATURE_TAG;
         ucp_params->field_mask  |= UCP_PARAM_FIELD_REQUEST_SIZE;
         ucp_params->request_size = sizeof(ucp_perf_request_t);
