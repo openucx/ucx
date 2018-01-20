@@ -129,9 +129,10 @@ static int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_inde
 static UCS_F_NOINLINE ucs_status_t
 ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list,
                             unsigned address_count, const ucp_wireup_criteria_t *criteria,
-                            uint64_t tl_bitmap, uint64_t remote_md_map, int show_error,
-                            ucp_rsc_index_t *rsc_index_p, unsigned *dst_addr_index_p,
-                            double *score_p)
+                            uint64_t tl_bitmap, uint64_t remote_md_map,
+                            uint64_t local_dev_bitmap, uint64_t remote_dev_bitmap,
+                            int show_error, ucp_rsc_index_t *rsc_index_p,
+                            unsigned *dst_addr_index_p, double *score_p)
 {
     ucp_worker_h worker = ep->worker;
     ucp_context_h context = worker->context;
@@ -161,12 +162,15 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     addr_index_map = 0;
     for (ae = address_list; ae < address_list + address_count; ++ae) {
         addr_index = ae - address_list;
-        if (!(remote_md_map & UCS_BIT(ae->md_index))) {
+        if (!(remote_dev_bitmap & UCS_BIT(ae->dev_index))) {
+            ucs_trace("addr[%d]: not in use, because on device[%d]",
+                      addr_index, ae->dev_index);
+            continue;
+        } else if (!(remote_md_map & UCS_BIT(ae->md_index))) {
             ucs_trace("addr[%d]: not in use, because on md[%d]", addr_index,
                       ae->md_index);
             continue;
-        }
-        if (!ucs_test_all_flags(ae->md_flags, criteria->remote_md_flags)) {
+        } else if (!ucs_test_all_flags(ae->md_flags, criteria->remote_md_flags)) {
             ucs_trace("addr[%d] %s: no %s", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->md_flags,
@@ -224,9 +228,16 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
             continue;
         }
 
-        /* Check supplied tl bitmap */
+        /* Check supplied tl & device bitmap */
         if (!(tl_bitmap & UCS_BIT(rsc_index))) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT " : disabled by tl_bitmap",
+                      UCT_TL_RESOURCE_DESC_ARG(resource));
+            snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT" - disabled for %s, ",
+                     UCT_TL_RESOURCE_DESC_ARG(resource), criteria->title);
+            p += strlen(p);
+            continue;
+        } else if (!(local_dev_bitmap & UCS_BIT(context->tl_rscs[rsc_index].dev_index))) {
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT " : disabled by device bitmap",
                       UCT_TL_RESOURCE_DESC_ARG(resource));
             snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT" - disabled for %s, ",
                      UCT_TL_RESOURCE_DESC_ARG(resource), criteria->title);
@@ -252,9 +263,9 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
 
             priority = iface_attr->priority + ae->iface_attr.priority;
 
-            ucs_trace(UCT_TL_RESOURCE_DESC_FMT "->addr[%zd] : %s score %.2f",
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT "->addr[%zd] : %s score %.2f priority %d",
                       UCT_TL_RESOURCE_DESC_ARG(resource), ae - address_list,
-                      criteria->title, score);
+                      criteria->title, score, priority);
 
             /* First comparing score, if score equals to current best score,
              * comparing priority with the priority of best score */
@@ -441,7 +452,6 @@ static uint64_t ucp_wireup_unset_tl_by_md(ucp_ep_h ep, uint64_t tl_bitmap,
     return tl_bitmap;
 }
 
-
 static UCS_F_NOINLINE ucs_status_t
 ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
                                const ucp_address_entry_t *address_list,
@@ -479,7 +489,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
     mem_criteria.remote_md_flags = UCT_MD_FLAG_REG | criteria->remote_md_flags;
     status = ucp_wireup_select_transport(ep, address_list_copy, address_count,
                                          &mem_criteria, tl_bitmap, remote_md_map,
-                                         select_best,
+                                         -1, -1, select_best,
                                          &rsc_index, &addr_index, &score);
     if (status != UCS_OK) {
         goto out_free_address_list;
@@ -514,7 +524,8 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
     while (address_count > 0) {
         status = ucp_wireup_select_transport(ep, address_list_copy, address_count,
                                              &mem_criteria, tl_bitmap, remote_md_map,
-                                             0, &rsc_index, &addr_index, &score);
+                                             -1, -1, 0, &rsc_index,
+                                             &addr_index, &score);
         if ((status != UCS_OK) ||
             (select_best && (score <= reg_score))) {
             break;
@@ -809,7 +820,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
     }
 
     status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
-                                         -1, -1, 1, &rsc_index, &addr_index, &score);
+                                         -1, -1, -1, -1, 1, &rsc_index, &addr_index, &score);
     if (status != UCS_OK) {
         return status;
     }
@@ -854,12 +865,12 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
     ucp_context_h context = ep->worker->context;
     ucp_wireup_criteria_t criteria;
     ucp_lane_index_t lane_desc_idx;
-    ucp_md_map_t remote_md_map;
     ucp_md_map_t md_map;
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
     unsigned addr_index;
-    uint64_t tl_bitmap;
+    uint64_t local_dev_bitmap;
+    uint64_t remote_dev_bitmap;
     double score;
     int num_lanes;
     int is_proxy;
@@ -886,20 +897,20 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
         criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
     }
 
-    status        = UCS_ERR_UNREACHABLE;
-    num_lanes     = 1;
-    tl_bitmap     = -1;
-    remote_md_map = -1;
-    md_map        = 0;
+    status             = UCS_ERR_UNREACHABLE;
+    num_lanes          = 1;
+    local_dev_bitmap   = -1;
+    remote_dev_bitmap  = -1;
+    md_map             = 0;
 
     /* am_bw_lane[0] is am_lane, so don't re-select it here */
     for (lane_desc_idx = 0; lane_desc_idx < *num_lanes_p; ++lane_desc_idx) {
         if (lane_descs[lane_desc_idx].usage & UCP_WIREUP_LANE_USAGE_AM) {
-            addr_index     = lane_descs[lane_desc_idx].addr_index;
-            rsc_index      = lane_descs[lane_desc_idx].rsc_index;
-            remote_md_map &= ~UCS_BIT(address_list[addr_index].md_index);
-            md_map        |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
-            tl_bitmap      = ucp_wireup_unset_tl_by_md(ep, tl_bitmap, rsc_index);
+            addr_index         = lane_descs[lane_desc_idx].addr_index;
+            rsc_index          = lane_descs[lane_desc_idx].rsc_index;
+            md_map            |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
+            local_dev_bitmap  &= ~UCS_BIT(context->tl_rscs[rsc_index].dev_index);
+            remote_dev_bitmap &= ~UCS_BIT(address_list[addr_index].dev_index);
             break; /* do not continue searching due to we found
                       AM lane (and there is only one lane) */
         }
@@ -911,7 +922,8 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
     for (; (num_lanes < ep->worker->context->config.ext.max_eager_lanes) &&
            (ucs_count_one_bits(md_map) < UCP_MAX_OP_MDS);) {
         status = ucp_wireup_select_transport(ep, address_list, address_count,
-                                             &criteria, tl_bitmap, remote_md_map,
+                                             &criteria, -1, -1,
+                                             local_dev_bitmap, remote_dev_bitmap,
                                              0, &rsc_index, &addr_index, &score);
         if (status != UCS_OK) {
             break;
@@ -924,9 +936,9 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
                                  address_list[addr_index].md_index, score,
                                  UCP_WIREUP_LANE_USAGE_AM_BW, is_proxy);
 
-        remote_md_map &= ~UCS_BIT(address_list[addr_index].md_index);
-        md_map        |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
-        tl_bitmap      = ucp_wireup_unset_tl_by_md(ep, tl_bitmap, rsc_index);
+        md_map            |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
+        local_dev_bitmap  &= ~UCS_BIT(context->tl_rscs[rsc_index].dev_index);
+        remote_dev_bitmap &= ~UCS_BIT(address_list[addr_index].dev_index);
         num_lanes++;
 
         if (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SHM) {
@@ -1009,7 +1021,8 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
     }
 
     status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
-                                         -1, -1, 0, &rsc_index, &addr_index, &score);
+                                         -1, -1, -1, -1, 0, &rsc_index, &addr_index,
+                                         &score);
     if (status == UCS_OK) {
          ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                                   address_list[addr_index].md_index, score,
@@ -1246,7 +1259,7 @@ ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
 
     ucp_wireup_fill_aux_criteria(&criteria, params);
     return ucp_wireup_select_transport(ep, address_list, address_count,
-                                       &criteria, -1, -1, 1, rsc_index_p,
+                                       &criteria, -1, -1, -1, -1, 1, rsc_index_p,
                                        addr_index_p, &score);
 }
 
