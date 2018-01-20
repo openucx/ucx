@@ -146,9 +146,10 @@ static void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
     iface_attr->cap.tag.rndv.max_hdr    = iface->tm.max_rndv_data + 2;
     iface_attr->cap.tag.rndv.max_iov    = 1;
 
-    iface_attr->cap.tag.recv.max_zcopy  = port_attr->max_msg_sz;
-    iface_attr->cap.tag.recv.max_iov    = 1;
-    iface_attr->cap.tag.recv.min_recv   = 0;
+    iface_attr->cap.tag.recv.max_zcopy       = port_attr->max_msg_sz;
+    iface_attr->cap.tag.recv.max_iov         = 1;
+    iface_attr->cap.tag.recv.min_recv        = 0;
+    iface_attr->cap.tag.recv.max_outstanding = iface->tm.num_tags;
 #endif
 }
 

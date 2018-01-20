@@ -34,9 +34,11 @@ typedef struct {
  * Queue of expected requests
  */
 typedef struct {
-    ucs_queue_head_t      queue;      /* Requests queue */
-    unsigned              sw_count;   /* Number of requests in this queue which
-                                         are not posted to offload */
+    ucs_queue_head_t      queue;       /* Requests queue */
+    unsigned              sw_count;    /* Number of requests in this queue which
+                                          are not posted to offload */
+    unsigned              block_count; /* Number of requests which can't be
+                                          posted to offload. */
 } ucp_request_queue_t;
 
 

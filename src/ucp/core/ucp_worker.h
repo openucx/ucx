@@ -148,9 +148,12 @@ struct ucp_worker_iface {
     ucs_list_link_t               arm_list;      /* Element in arm_ifaces list */
     ucp_rsc_index_t               rsc_index;     /* Resource index */
     int                           event_fd;      /* Event FD, or -1 if undefined */
-    unsigned                      activate_count;/* How times this iface has been activated */
+    unsigned                      activate_count;/* How many times this iface has
+                                                    been activated */
     int                           check_events_id;/* Callback id for check_events */
     unsigned                      proxy_recv_count;/* Counts active messages on proxy handler */
+    unsigned                      post_count;    /* Counts uncompleted requests which are
+                                                    offloaded to the transport */
     uint8_t                       flags;         /* Interface flags */
 };
 

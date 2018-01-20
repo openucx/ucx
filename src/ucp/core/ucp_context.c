@@ -178,6 +178,14 @@ static ucs_config_field_t ucp_config_table[] = {
    "Also the value has to be bigger than UCX_TM_THRESH to take an effect." ,
    ucs_offsetof(ucp_config_t, ctx.tm_max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"TM_FORCE_THRESH", "8192", /* TODO: calculate automaticlly */
+   "Threshold for forcing tag matching offload mode. Every tag receive operation\n"
+   "with buffer bigger than this threshold would force offloading of all uncompleted\n"
+   "non-offloaded receive operations to the transport (e. g. operations with\n"
+   "buffers below the UCX_TM_THRESH value). Offloading may be unsuccessful in certain\n"
+   "cases (non-contig buffer, or sender wildcard).",
+   ucs_offsetof(ucp_config_t, ctx.tm_force_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"NUM_EPS", "auto",
    "An optimization hint of how many endpoints would be created on this context.\n"
    "Does not affect semantics, but only transport selection criteria and the\n"

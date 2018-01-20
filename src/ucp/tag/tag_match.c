@@ -33,7 +33,8 @@ ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm)
     }
 
     for (bucket = 0; bucket < hash_size; ++bucket) {
-        tm->expected.hash[bucket].sw_count = 0;
+        tm->expected.hash[bucket].sw_count    = 0;
+        tm->expected.hash[bucket].block_count = 0;
         ucs_queue_head_init(&tm->expected.hash[bucket].queue);
         ucs_list_head_init(&tm->unexpected.hash[bucket]);
     }

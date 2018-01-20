@@ -88,9 +88,12 @@ static UCS_F_ALWAYS_INLINE void
 ucp_tag_exp_delete(ucp_request_t *req, ucp_tag_match_t *tm,
                    ucp_request_queue_t *req_queue, ucs_queue_iter_t iter)
 {
-    if (req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD) {
+    if (!(req->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
         --tm->expected.sw_all_count;
         --req_queue->sw_count;
+        if (req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD) {
+            --req_queue->block_count;
+        }
     }
     ucs_queue_del_iter(&req_queue->queue, iter);
 }
