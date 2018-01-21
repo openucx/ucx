@@ -582,16 +582,24 @@ typedef struct ucp_params {
 
     /**
      * Pointer to a routine that is used for the request initialization.
-     * @e NULL can be used if no such function required.
-     * This field defaults to @e NULL if not specified.
+     * This function will be called only on the very first time a request memory
+     * is initialized, and will not be called again if a request is reused.
+     * If a request should be reset before the next reuse, it can be done before
+     * calling @ref ucp_request_free.
+     *
+     * @e NULL can be used if no such function required, which is also the default
+     * if this field is not specified by @ref field_mask.
      */
     ucp_request_init_callback_t        request_init;
 
     /**
-     * Pointer to a routine that is responsible for cleanup the memory
-     * associated with the request.  @e NULL can be used if no such function
-     * required.
-     * This field defaults to @e NULL if not specified.
+     * Pointer to a routine that is responsible for final cleanup of the memory
+     * associated with the request. This will routine will not be called every
+     * time a request is released; instead, it will be called only once during
+     * @ref ucp_worker_cleanup for every request that was ever initialized.
+     *
+     * @e NULL can be used if no such function required, which is also the default
+     * if this field is not specified by @ref field_mask.
      */
     ucp_request_cleanup_callback_t     request_cleanup;
 
