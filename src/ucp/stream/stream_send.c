@@ -145,7 +145,7 @@ static size_t ucp_stream_pack_am_single_dt(void *dest, void *arg)
     size_t              length;
 
     hdr->sender_uuid = req->send.ep->worker->uuid;
-    hdr->session_id  = req->send.ep->ext.stream->session_id;
+    hdr->session_id  = req->send.ep->ext.stream->tx_session_id;
 
     ucs_assert(req->send.state.dt.offset == 0);
 
@@ -176,7 +176,7 @@ static size_t ucp_stream_pack_am_first_dt(void *dest, void *arg)
     size_t              length;
 
     hdr->sender_uuid = req->send.ep->worker->uuid;
-    hdr->session_id  = req->send.ep->ext.stream->session_id;
+    hdr->session_id  = req->send.ep->ext.stream->tx_session_id;
     length           = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
 
     ucs_debug("pack stream_am_first paylen %zu", length);
@@ -194,7 +194,7 @@ static size_t ucp_stream_pack_am_middle_dt(void *dest, void *arg)
     size_t              length;
 
     hdr->sender_uuid = req->send.ep->worker->uuid;
-    hdr->session_id  = req->send.ep->ext.stream->session_id;
+    hdr->session_id  = req->send.ep->ext.stream->tx_session_id;
     length           = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
     ucs_debug("pack stream_am_middle paylen %zu offset %zu", length,
               req->send.state.dt.offset);
@@ -211,7 +211,7 @@ static size_t ucp_stream_pack_am_last_dt(void *dest, void *arg)
     size_t              length = req->send.length - req->send.state.dt.offset;
 
     hdr->sender_uuid = req->send.ep->worker->uuid;
-    hdr->session_id  = req->send.ep->ext.stream->session_id;
+    hdr->session_id  = req->send.ep->ext.stream->tx_session_id;
     ret_length       = ucp_dt_pack(req->send.datatype, hdr + 1,
                                    req->send.buffer, &req->send.state.dt,
                                    length);
@@ -249,7 +249,7 @@ static ucs_status_t ucp_stream_eager_zcopy_single(uct_pending_req_t *self)
     ucp_stream_am_hdr_t hdr;
 
     hdr.sender_uuid = req->send.ep->worker->uuid;
-    hdr.session_id  = req->send.ep->ext.stream->session_id;
+    hdr.session_id  = req->send.ep->ext.stream->tx_session_id;
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_STREAM_DATA, &hdr,
                                   sizeof(hdr), ucp_proto_am_zcopy_req_complete);
 }
@@ -260,7 +260,7 @@ static ucs_status_t ucp_stream_eager_zcopy_multi(uct_pending_req_t *self)
     ucp_stream_am_hdr_t hdr;
 
     hdr.sender_uuid = req->send.ep->worker->uuid;
-    hdr.session_id  = req->send.ep->ext.stream->session_id;
+    hdr.session_id  = req->send.ep->ext.stream->tx_session_id;
     return ucp_do_am_zcopy_multi(self,
                                  UCP_AM_ID_STREAM_DATA,
                                  UCP_AM_ID_STREAM_DATA,

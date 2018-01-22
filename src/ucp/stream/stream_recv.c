@@ -74,8 +74,7 @@ ucp_stream_rdesc_dequeue(ucp_ep_ext_stream_t *ep_stream)
 {
     ucp_recv_desc_t *rdesc;
 
-    do {
-        ucs_assert(ep_stream->flags & UCP_EP_STREAM_FLAG_HAS_DATA);
+    while (ep_stream->flags & UCP_EP_STREAM_FLAG_HAS_DATA) {
         rdesc = ucs_queue_pull_elem_non_empty(&ep_stream->match_q, ucp_recv_desc_t,
                                               stream.queue);
 
@@ -86,16 +85,23 @@ ucp_stream_rdesc_dequeue(ucp_ep_ext_stream_t *ep_stream)
             }
         }
 
-        if (ucs_likely(ep_stream->session_id == rdesc->stream.session_id)) {
+        if (ucs_likely(ucs_test_all_flags(ep_stream->flags,
+                                          (UCP_EP_STREAM_FLAG_LVALID |
+                                           UCP_EP_STREAM_FLAG_RVALID)) &&
+                       (ep_stream->rx_session_id == rdesc->stream.session_id))) {
             return rdesc;
         }
 
-        ucs_assert(0); /* TODO: cover me by test */
-        /* out-of-date descroptor 
-           TODO: handle possible overflow */
-        ucs_assert(ep_stream->session_id > rdesc->stream.session_id);
+        if ((ep_stream->rx_session_id == rdesc->stream.session_id) &&
+            (ep_stream->flags & (UCP_EP_STREAM_FLAG_RVALID))){
+            /* Keep the data internally until user have created EP by API */
+            return NULL;
+        }
+
+        /* out-of-date descriptor */
+        ucs_assert(ep_stream->rx_session_id >= rdesc->stream.session_id);
         ucp_stream_rdesc_release(rdesc);
-    } while (ep_stream->flags & UCP_EP_STREAM_FLAG_HAS_DATA);
+    };
 
     return NULL;
 }
@@ -108,7 +114,7 @@ ucp_stream_rdesc_get(ucp_ep_ext_stream_t *ep_stream)
                                                            stream.queue);
 
     ucs_assert(ep_stream->flags & UCP_EP_STREAM_FLAG_HAS_DATA);
-    ucs_assert(rdesc->stream.session_id == ep_stream->session_id);
+    ucs_assert(rdesc->stream.session_id == ep_stream->rx_session_id);
     ucs_trace_data("ep %p, rdesc %p with %u stream bytes",
                    ep_stream->ucp_ep, rdesc, rdesc->length);
 
@@ -123,12 +129,11 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb,
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
-    if (ucs_unlikely(!(ep->ext.stream->flags & UCP_EP_STREAM_FLAG_HAS_DATA))) {
+    rdesc = ucp_stream_rdesc_dequeue(ep->ext.stream);
+    if (ucs_unlikely(rdesc == NULL)) {
         UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
         return UCS_STATUS_PTR(UCS_OK);
     }
-
-    rdesc = ucp_stream_rdesc_dequeue(ep->ext.stream);
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
 
@@ -339,7 +344,7 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_stream_t *ep,
     ucp_request_t   *req;
     ssize_t          unpacked;
 
-    ucs_assert(am_data->hdr.session_id == ep->session_id);
+    ucs_assert(am_data->hdr.session_id == ep->rx_session_id);
 
     rdesc_tmp.length         = length;
     rdesc_tmp.payload_offset = sizeof(*am_data); /* add sizeof(*rdesc) only if
@@ -390,7 +395,7 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_stream_t *ep,
     }
 
     rdesc->length            = rdesc_tmp.length;
-    rdesc->stream.session_id = ep->session_id;
+    rdesc->stream.session_id = ep->rx_session_id;
     ep->flags |= UCP_EP_STREAM_FLAG_HAS_DATA;
     ucs_queue_push(&ep->match_q, &rdesc->stream.queue);
 
@@ -411,21 +416,15 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
     ucs_assert(am_length >= sizeof(ucp_stream_am_hdr_t));
 
     ep = ucp_worker_ep_find(worker, stream_am_data->hdr.sender_uuid);
-    if (ucs_unlikely(ep == NULL)) {
-        ucs_trace_data("ep not found for uuid %"PRIx64,
+    ucs_assertv_always(ep != NULL, "ep not found for uuid %"PRIx64,
                        stream_am_data->hdr.sender_uuid);
-        /* drop the data */
-        ucs_assert(0); /* FIXME: connection less TLS */
-        return UCS_OK;
-    }
 
     ep_stream = ep->ext.stream;
-    /* drop the data for out-of-date session */
-    if (ucs_unlikely(stream_am_data->hdr.session_id < ep_stream->session_id)) {
-        return UCS_OK;
-    }
 
-    if (ucs_likely(ep_stream->flags & UCP_EP_STREAM_FLAG_VALID)) {
+    if (ucs_likely(ucs_test_all_flags(ep_stream->flags,
+                                      (UCP_EP_STREAM_FLAG_LVALID |
+                                       UCP_EP_STREAM_FLAG_RVALID)) &&
+                   (ep_stream->rx_session_id == stream_am_data->hdr.session_id))) {
         status = ucp_stream_am_data_process(worker, ep_stream, stream_am_data,
                                             am_length - sizeof(stream_am_data->hdr),
                                             am_flags);
@@ -443,12 +442,11 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
         return (am_flags & UCT_CB_PARAM_FLAG_DESC) ? UCS_INPROGRESS : UCS_OK;
     }
 
-    ucs_trace_data("stream ep with uuid %"PRIx64" is invalid",
-                   stream_am_data->hdr.sender_uuid);
+    /* match_q should not contain requests, it can contain data or be empty */
     ucs_assert((ep_stream->flags & UCP_EP_STREAM_FLAG_HAS_DATA) ||
                ucs_queue_is_empty(&ep_stream->match_q));
 
-    /* Otherwise enqueue the data but don't enqueue the EP */
+    /* Enqueue the data but don't enqueue the EP since it's not user visible */
     rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
     ucs_assertv_always(rdesc != NULL,
                        "ucp recv descriptor is not allocated");
@@ -472,7 +470,8 @@ static void ucp_stream_am_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     size_t                    hdr_len = sizeof(*hdr);
     char                      *p;
 
-    snprintf(buffer, max, "STREAM ep uuid %"PRIx64, hdr->sender_uuid);
+    snprintf(buffer, max, "STREAM ep uuid %"PRIx64" session id %"PRIu64,
+             hdr->sender_uuid, hdr->session_id);
     p = buffer + strlen(buffer);
 
     ucp_dump_payload(worker->context, p, buffer + max - p, data + hdr_len,

@@ -12,6 +12,7 @@
 #include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_proxy_ep.h>
 #include <ucp/core/ucp_worker.h>
+#include <ucp/stream/stream.h>
 #include <ucp/tag/eager.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/async/async.h>
@@ -113,6 +114,8 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     req->send.wireup.type        = type;
     req->send.wireup.err_mode    = ucp_ep_config(ep)->key.err_mode;
     req->send.wireup.ep_uuid     = ep_uuid;
+    req->send.wireup.session_id  = ep->ext.stream ?
+                                   ep->ext.stream->tx_session_id : UINT64_MAX;
     req->send.uct.func           = ucp_wireup_msg_progress;
     req->send.datatype           = ucp_dt_make_contig(1);
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
@@ -183,6 +186,20 @@ static void ucp_wireup_remote_connected(ucp_ep_h ep)
     }
 }
 
+static void ucp_wireup_stream_rx_session_init(ucp_ep_ext_stream_t *ep,
+                                              uint64_t session_id)
+{
+    if (!ep) {
+        return;
+    }
+
+    if ((ep->rx_session_id < session_id) ||
+        !(ep->flags & UCP_EP_STREAM_FLAG_RVALID)) {
+        ep->rx_session_id = session_id;
+        ep->flags        |= UCP_EP_STREAM_FLAG_RVALID;
+    }
+}
+
 static void ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                                        uint64_t uuid, const char *peer_name,
                                        unsigned address_count,
@@ -228,6 +245,8 @@ static void ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg
         ep->flags    |= UCP_EP_FLAG_DEST_UUID_PEER;
         ucp_ep_add_to_hash(ep);
     }
+
+    ucp_wireup_stream_rx_session_init(ep->ext.stream, msg->session_id);
 
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     params.err_mode   = msg->err_mode;
@@ -310,19 +329,18 @@ static void ucp_wireup_process_reply(ucp_worker_h worker, ucp_wireup_msg_t *msg,
         ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
     }
 
+    ucp_wireup_stream_rx_session_init(ep->ext.stream, msg->session_id);
+
     if (ack) {
         /* Send ACK without any address, we've already sent it as part of the request */
         ucs_trace("ep %p: sending wireup ack", ep);
         memset(rsc_tli, -1, sizeof(rsc_tli));
-        status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, ep->dest_uuid, 0,
-                                     rsc_tli);
-        if (status != UCS_OK) {
-            return;
-        }
+        ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, ep->dest_uuid, 0, rsc_tli);
     }
 }
 
-static void ucp_wireup_process_ack(ucp_worker_h worker, uint64_t uuid)
+static void ucp_wireup_process_ack(ucp_worker_h worker, uint64_t uuid,
+                                   uint64_t session_id)
 {
     ucp_ep_h ep = ucp_worker_ep_find(worker, uuid);
 
@@ -334,11 +352,15 @@ static void ucp_wireup_process_ack(ucp_worker_h worker, uint64_t uuid)
     ucs_trace("ep %p: got wireup ack", ep);
 
     ucs_assert(ep->flags & UCP_EP_FLAG_DEST_UUID_PEER);
-    ucs_assert(ep->flags & UCP_EP_FLAG_CONNECT_REP_SENT);
+    ucs_assert((ep->flags & UCP_EP_FLAG_CONNECT_REP_SENT) || ep->ext.stream);
     ucs_assert(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 
-    ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
-    ucp_wireup_remote_connected(ep);
+    ucp_wireup_stream_rx_session_init(ep->ext.stream, session_id);
+
+    if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
+        ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
+        ucp_wireup_remote_connected(ep);
+    }
 }
 
 static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
@@ -363,7 +385,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
 
     if (msg->type == UCP_WIREUP_MSG_ACK) {
         ucs_assert(address_count == 0);
-        ucp_wireup_process_ack(worker, uuid);
+        ucp_wireup_process_ack(worker, uuid, msg->session_id);
     } else if (msg->type == UCP_WIREUP_MSG_REQUEST) {
         ucp_wireup_process_request(worker, msg, uuid, peer_name, address_count,
                                    address_list);
@@ -672,6 +694,13 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep, uint64_t ep_uuid)
     ucs_status_t status;
 
     if (ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) {
+        if (ep->ext.stream) {
+            ucs_trace("ep %p: start new stream session id %"PRId64"", ep,
+                      ep->ext.stream->tx_session_id);
+            memset(rsc_tli, -1, sizeof(rsc_tli));
+            ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, ep->dest_uuid,
+                                0, rsc_tli);
+        }
         return UCS_OK;
     }
 
@@ -721,11 +750,11 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 
     p   = buffer;
     end = buffer + max;
-    snprintf(p, end - p, "WIREUP %s [%s uuid 0x%"PRIx64" ep_uuid 0x%"PRIx64"]",
+    snprintf(p, end - p, "WIREUP %s [%s uuid 0x%"PRIx64" ep_uuid 0x%"PRIx64" session_id %"PRIx64"]",
              (msg->type == UCP_WIREUP_MSG_REQUEST ) ? "REQ" :
              (msg->type == UCP_WIREUP_MSG_REPLY   ) ? "REP" :
              (msg->type == UCP_WIREUP_MSG_ACK     ) ? "ACK" : "",
-             peer_name, uuid, msg->ep_uuid);
+             peer_name, uuid, msg->ep_uuid, msg->session_id);
 
     p += strlen(p);
     for (ae = address_list; ae < address_list + address_count; ++ae) {

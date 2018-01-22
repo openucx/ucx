@@ -241,7 +241,7 @@ struct ucp_recv_desc {
         ucs_queue_elem_t    tag_frag_queue; /* Tag fragments queue */
         struct {
             ucs_queue_elem_t    queue;      /* Queue STREAM-element */
-            uint16_t            session_id; /* EP to EP session identifier */
+            uint64_t            session_id; /* EP to EP session identifier */
         } stream;
     };
     uint32_t                length;         /* Received length */
