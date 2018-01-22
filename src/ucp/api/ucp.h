@@ -594,9 +594,9 @@ typedef struct ucp_params {
 
     /**
      * Pointer to a routine that is responsible for final cleanup of the memory
-     * associated with the request. This will routine will not be called every
-     * time a request is released; instead, it will be called only once during
-     * @ref ucp_worker_cleanup for every request that was ever initialized.
+     * associated with the request. This routine will not be called every time a
+     * request is released; instead, it will be called only once during
+     * @ref ucp_worker_cleanup, for every request that was ever initialized.
      *
      * @e NULL can be used if no such function required, which is also the default
      * if this field is not specified by @ref field_mask.
