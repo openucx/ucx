@@ -47,7 +47,7 @@ static const char *uct_ib_iface_addr_types[] = {
 };
 
 ucs_config_field_t uct_ib_iface_config_table[] = {
-  {"", "", NULL,
+  {"", "MAX_BCOPY=4096", NULL,
    ucs_offsetof(uct_ib_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
   {"TX_QUEUE_LEN", "256",

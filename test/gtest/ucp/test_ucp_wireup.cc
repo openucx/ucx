@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -37,6 +37,9 @@ protected:
     static const ucp_datatype_t DT_U64 = ucp_dt_make_contig(sizeof(elem_type));
     static const uint64_t TAG          = 0xdeadbeef;
     static const elem_type SEND_DATA   = 0xdeadbeef12121212ull;
+    /* a small message len of uint64_t datatype  that is it guaranteed to be
+     * sent by the eager proto */
+    static const size_t EAGER_DT64_LEN = 200;
 
     virtual void init();
     virtual void cleanup();
@@ -441,28 +444,28 @@ UCS_TEST_P(test_ucp_wireup, disconnect_nonexistent) {
 
 UCS_TEST_P(test_ucp_wireup, disconnect_reconnect) {
     sender().connect(&receiver(), get_ep_params());
-    send_b(sender().ep(), 1000, 1);
+    send_b(sender().ep(), EAGER_DT64_LEN, 1);
     disconnect(sender());
-    recv_b(receiver().worker(), 1000, 1);
+    recv_b(receiver().worker(), EAGER_DT64_LEN, 1);
 
     sender().connect(&receiver(), get_ep_params());
-    send_b(sender().ep(), 1000, 1);
+    send_b(sender().ep(), EAGER_DT64_LEN, 1);
     disconnect(sender());
-    recv_b(receiver().worker(), 1000, 1);
+    recv_b(receiver().worker(), EAGER_DT64_LEN, 1);
 }
 
 UCS_TEST_P(test_ucp_wireup, send_disconnect_onesided) {
     sender().connect(&receiver(), get_ep_params());
-    send_b(sender().ep(), 1000, 100);
+    send_b(sender().ep(), EAGER_DT64_LEN, 100);
     disconnect(sender());
-    recv_b(receiver().worker(), 1000, 100);
+    recv_b(receiver().worker(), EAGER_DT64_LEN, 100);
 }
 
 UCS_TEST_P(test_ucp_wireup, send_disconnect_onesided_nozcopy, "ZCOPY_THRESH=-1") {
     sender().connect(&receiver(), get_ep_params());
-    send_b(sender().ep(), 1000, 100);
+    send_b(sender().ep(), EAGER_DT64_LEN, 100);
     disconnect(sender());
-    recv_b(receiver().worker(), 1000, 100);
+    recv_b(receiver().worker(), EAGER_DT64_LEN, 100);
 }
 
 UCS_TEST_P(test_ucp_wireup, send_disconnect_reply1) {
@@ -503,16 +506,16 @@ UCS_TEST_P(test_ucp_wireup, send_disconnect_reply2) {
 UCS_TEST_P(test_ucp_wireup, send_disconnect_onesided_wait) {
     sender().connect(&receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), 8, 1);
-    send_b(sender().ep(), 1000, 200);
+    send_b(sender().ep(), EAGER_DT64_LEN, 200);
     disconnect(sender());
-    recv_b(receiver().worker(), 1000, 200);
+    recv_b(receiver().worker(), EAGER_DT64_LEN, 200);
 }
 
 UCS_TEST_P(test_ucp_wireup, disconnect_nb_onesided) {
     sender().connect(&receiver(), get_ep_params());
 
     std::vector<void*> sreqs;
-    send_nb(sender().ep(), 1000, 1000, sreqs);
+    send_nb(sender().ep(), EAGER_DT64_LEN, 1000, sreqs);
 
     void *dreq = sender().disconnect_nb();
     if (!UCS_PTR_IS_PTR(dreq)) {
@@ -520,7 +523,7 @@ UCS_TEST_P(test_ucp_wireup, disconnect_nb_onesided) {
     }
 
     wait(dreq);
-    recv_b(receiver().worker(), 1000, 1000);
+    recv_b(receiver().worker(), EAGER_DT64_LEN, 1000);
 
     waitall(sreqs);
 
