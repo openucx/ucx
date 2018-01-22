@@ -35,8 +35,7 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_self_ep_t, uct_ep_t);
 static void UCS_F_ALWAYS_INLINE uct_self_ep_am_reserve_buffer(uct_self_iface_t *self_iface,
                                                               void *desc)
 {
-    uct_recv_desc(desc)      = &self_iface->release_desc;
-    self_iface->msg_cur_desc = NULL;
+    uct_recv_desc(desc) = &self_iface->release_desc;
 }
 
 ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
@@ -47,6 +46,7 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     uct_self_ep_t *self_ep = 0;
     void *desc = 0, *p_data = 0;
     unsigned total_length = 0;
+    uct_recv_desc_t *cur_desc;
 
     self_ep = ucs_derived_of(tl_ep, uct_self_ep_t);
     self_iface = ucs_derived_of(self_ep->super.super.iface, uct_self_iface_t);
@@ -55,12 +55,10 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     /* Send part */
     UCT_CHECK_AM_ID(id);
     UCT_CHECK_LENGTH(total_length, 0, self_iface->data_length, "am_short");
-    if (ucs_unlikely(NULL == self_iface->msg_cur_desc)) {
-        UCT_TL_IFACE_GET_TX_DESC(&self_iface->super, &self_iface->msg_desc_mp,
-                                 self_iface->msg_cur_desc, return UCS_ERR_NO_MEMORY);
-    }
+    UCT_TL_IFACE_GET_TX_DESC(&self_iface->super, &self_iface->msg_desc_mp,
+                             cur_desc, return UCS_ERR_NO_MEMORY);
 
-    desc = self_iface->msg_cur_desc + 1;
+    desc = cur_desc + 1;
     p_data = desc + self_iface->rx_headroom;
     *(typeof(header)*) p_data = header;
     memcpy(p_data + sizeof(header), payload, length);
@@ -77,13 +75,9 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
     if (ucs_unlikely(UCS_INPROGRESS == status)) {
         uct_self_ep_am_reserve_buffer(self_iface, desc);
-        /**
-         * Try to get new buffer from memory pool and
-         * ignore UCS_ERR_NO_RESOURCE to resolve it later
-         */
-        UCT_TL_IFACE_GET_RX_DESC(&self_iface->super, &self_iface->msg_desc_mp,
-                                 self_iface->msg_cur_desc, );
         status = UCS_OK;
+    } else {
+        UCT_TL_IFACE_PUT_DESC(cur_desc);
     }
 
     return status;
@@ -98,18 +92,17 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     uct_self_ep_t *self_ep = 0;
     void *desc = 0, *payload = 0;
     ssize_t length = 0;
+    uct_recv_desc_t *cur_desc;
 
     self_ep = ucs_derived_of(tl_ep, uct_self_ep_t);
     self_iface = ucs_derived_of(self_ep->super.super.iface, uct_self_iface_t);
 
     /* Send part */
     UCT_CHECK_AM_ID(id);
-    if (ucs_unlikely(NULL == self_iface->msg_cur_desc)) {
-        UCT_TL_IFACE_GET_TX_DESC(&self_iface->super, &self_iface->msg_desc_mp,
-                                 self_iface->msg_cur_desc, return UCS_ERR_NO_MEMORY);
-    }
+    UCT_TL_IFACE_GET_TX_DESC(&self_iface->super, &self_iface->msg_desc_mp,
+                             cur_desc, return UCS_ERR_NO_MEMORY);
 
-    desc = self_iface->msg_cur_desc + 1;
+    desc = cur_desc + 1;
     payload = desc + self_iface->rx_headroom;
     length = pack_cb(payload, arg);
 
@@ -126,13 +119,9 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     if (ucs_unlikely(UCS_INPROGRESS == status)) {
         uct_self_ep_am_reserve_buffer(self_iface, desc);
-        /**
-         * Try to get new buffer from memory pool and
-         * ignore UCS_ERR_NO_RESOURCE to resolve it later
-         */
-        UCT_TL_IFACE_GET_RX_DESC(&self_iface->super, &self_iface->msg_desc_mp,
-                                 self_iface->msg_cur_desc, );
         status = UCS_OK;
+    } else {
+        UCT_TL_IFACE_PUT_DESC(cur_desc);
     }
 
     return length;
