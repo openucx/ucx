@@ -390,7 +390,7 @@ UCS_TEST_P(test_ucp_stream, session_no_garbage) {
     while (progress());
 
     size_t length;
-    EXPECT_EQ(intptr_t(NULL), ucp_stream_recv_data_nb(receiver().ep(), &length));
+    EXPECT_EQ(NULL, ucp_stream_recv_data_nb(receiver().ep(), &length));
 }
 
 UCS_TEST_P(test_ucp_stream, send_recv_data) {
