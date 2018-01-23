@@ -18,7 +18,7 @@ const static char *uct_dc_tx_policy_names[] = {
 };
 
 ucs_config_field_t uct_dc_iface_config_table[] = {
-    {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=n;"UCT_RC_IFACE_TM_OFF_STR, NULL,
+    {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=n;", NULL,
      ucs_offsetof(uct_dc_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 

@@ -67,7 +67,7 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
 #endif
 
 #if IBV_EXP_HW_TM
-  {"TM_ENABLE", "y",
+  {"TM_ENABLE", "n",
    "Enable HW tag matching",
    ucs_offsetof(uct_rc_iface_config_t, tm.enable), UCS_CONFIG_TYPE_BOOL},
 
