@@ -1133,7 +1133,7 @@ static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                  uct_rc_iface_t *rc_iface, int is_tag_enabled)
 {
-    uct_ib_mlx5_srq_seg_t *seg;
+    uct_ib_mlx5_srq_seg_t UCS_V_UNUSED *seg;
     struct mlx5_cqe64 *cqe;
     unsigned byte_len;
     uint16_t max_batch;
