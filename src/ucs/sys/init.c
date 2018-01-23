@@ -84,6 +84,8 @@ static void UCS_F_CTOR ucs_init()
     ucs_debug_init();
     ucs_profile_global_init();
     ucs_async_global_init();
+    ucs_debug("%s loaded at 0x%lx", ucs_debug_get_lib_path(),
+              ucs_debug_get_lib_base_addr());
 }
 
 static void UCS_F_DTOR ucs_cleanup(void)

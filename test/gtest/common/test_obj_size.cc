@@ -34,7 +34,7 @@
 class test_obj_size : public ucs::test {
 };
 
-#define EXPECTED_SIZE(_obj, _size) EXPECT_EQ(sizeof(_obj), _size)
+#define EXPECTED_SIZE(_obj, _size) EXPECT_EQ(sizeof(_obj), (size_t)_size)
 
 UCS_TEST_F(test_obj_size, size) {
 
@@ -49,7 +49,7 @@ UCS_TEST_F(test_obj_size, size) {
     EXPECTED_SIZE(uct_base_ep_t, 8);
     EXPECTED_SIZE(uct_rkey_bundle_t, 24);
     EXPECTED_SIZE(uct_self_ep_t, 8);
-    EXPECTED_SIZE(uct_tcp_ep_t, 16);
+    EXPECTED_SIZE(uct_tcp_ep_t, 72);
 #  if HAVE_TL_RC
     EXPECTED_SIZE(uct_rc_ep_t, 88);
     EXPECTED_SIZE(uct_rc_verbs_ep_t, 96);

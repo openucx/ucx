@@ -9,6 +9,7 @@
 
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/sys/string.h>
 #include <ucp/core/ucp_ep.inl>
 #include <string.h>
 #include <inttypes.h>
@@ -17,10 +18,11 @@
 
 enum {
     UCP_WIREUP_LANE_USAGE_AM     = UCS_BIT(0), /* Active messages */
-    UCP_WIREUP_LANE_USAGE_RMA    = UCS_BIT(1), /* Remote memory access */
-    UCP_WIREUP_LANE_USAGE_RMA_BW = UCS_BIT(2), /* High-BW remote memory access */
-    UCP_WIREUP_LANE_USAGE_AMO    = UCS_BIT(3), /* Atomic memory access */
-    UCP_WIREUP_LANE_USAGE_TAG    = UCS_BIT(4)  /* Tag matching offload */
+    UCP_WIREUP_LANE_USAGE_AM_BW  = UCS_BIT(1), /* High-BW active messages */
+    UCP_WIREUP_LANE_USAGE_RMA    = UCS_BIT(2), /* Remote memory access */
+    UCP_WIREUP_LANE_USAGE_RMA_BW = UCS_BIT(3), /* High-BW remote memory access */
+    UCP_WIREUP_LANE_USAGE_AMO    = UCS_BIT(4), /* Atomic memory access */
+    UCP_WIREUP_LANE_USAGE_TAG    = UCS_BIT(5)  /* Tag matching offload */
 };
 
 
@@ -30,6 +32,7 @@ typedef struct {
     ucp_lane_index_t  proxy_lane;
     ucp_rsc_index_t   dst_md_index;
     uint32_t          usage;
+    double            am_bw_score;
     double            rma_score;
     double            rma_bw_score;
     double            amo_score;
@@ -126,9 +129,10 @@ static int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_inde
 static UCS_F_NOINLINE ucs_status_t
 ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list,
                             unsigned address_count, const ucp_wireup_criteria_t *criteria,
-                            uint64_t tl_bitmap, uint64_t remote_md_map, int show_error,
-                            ucp_rsc_index_t *rsc_index_p, unsigned *dst_addr_index_p,
-                            double *score_p)
+                            uint64_t tl_bitmap, uint64_t remote_md_map,
+                            uint64_t local_dev_bitmap, uint64_t remote_dev_bitmap,
+                            int show_error, ucp_rsc_index_t *rsc_index_p,
+                            unsigned *dst_addr_index_p, double *score_p)
 {
     ucp_worker_h worker = ep->worker;
     ucp_context_h context = worker->context;
@@ -158,12 +162,15 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     addr_index_map = 0;
     for (ae = address_list; ae < address_list + address_count; ++ae) {
         addr_index = ae - address_list;
-        if (!(remote_md_map & UCS_BIT(ae->md_index))) {
+        if (!(remote_dev_bitmap & UCS_BIT(ae->dev_index))) {
+            ucs_trace("addr[%d]: not in use, because on device[%d]",
+                      addr_index, ae->dev_index);
+            continue;
+        } else if (!(remote_md_map & UCS_BIT(ae->md_index))) {
             ucs_trace("addr[%d]: not in use, because on md[%d]", addr_index,
                       ae->md_index);
             continue;
-        }
-        if (!ucs_test_all_flags(ae->md_flags, criteria->remote_md_flags)) {
+        } else if (!ucs_test_all_flags(ae->md_flags, criteria->remote_md_flags)) {
             ucs_trace("addr[%d] %s: no %s", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->md_flags,
@@ -221,9 +228,16 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
             continue;
         }
 
-        /* Check supplied tl bitmap */
+        /* Check supplied tl & device bitmap */
         if (!(tl_bitmap & UCS_BIT(rsc_index))) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT " : disabled by tl_bitmap",
+                      UCT_TL_RESOURCE_DESC_ARG(resource));
+            snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT" - disabled for %s, ",
+                     UCT_TL_RESOURCE_DESC_ARG(resource), criteria->title);
+            p += strlen(p);
+            continue;
+        } else if (!(local_dev_bitmap & UCS_BIT(context->tl_rscs[rsc_index].dev_index))) {
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT " : disabled by device bitmap",
                       UCT_TL_RESOURCE_DESC_ARG(resource));
             snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT" - disabled for %s, ",
                      UCT_TL_RESOURCE_DESC_ARG(resource), criteria->title);
@@ -249,9 +263,9 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
 
             priority = iface_attr->priority + ae->iface_attr.priority;
 
-            ucs_trace(UCT_TL_RESOURCE_DESC_FMT "->addr[%zd] : %s score %.2f",
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT "->addr[%zd] : %s score %.2f priority %d",
                       UCT_TL_RESOURCE_DESC_ARG(resource), ae - address_list,
-                      criteria->title, score);
+                      criteria->title, score, priority);
 
             /* First comparing score, if score equals to current best score,
              * comparing priority with the priority of best score */
@@ -284,7 +298,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
 
     if (!found) {
         if (show_error) {
-            ucs_error("No %s transport to %s: %s", criteria->title,
+            ucs_error("no %s transport to %s: %s", criteria->title,
                       ucp_ep_peer_name(ep), tls_info);
         }
         return UCS_ERR_UNREACHABLE;
@@ -365,11 +379,15 @@ out_add_lane:
     lane_desc->proxy_lane   = proxy_lane;
     lane_desc->dst_md_index = dst_md_index;
     lane_desc->usage        = usage;
+    lane_desc->am_bw_score  = 0.0;
     lane_desc->rma_score    = 0.0;
     lane_desc->rma_bw_score = 0.0;
     lane_desc->amo_score    = 0.0;
 
 out_update_score:
+    if (usage & UCP_WIREUP_LANE_USAGE_AM_BW) {
+        lane_desc->am_bw_score = score;
+    }
     if (usage & UCP_WIREUP_LANE_USAGE_RMA) {
         lane_desc->rma_score = score;
     }
@@ -393,6 +411,12 @@ out_update_score:
         /* sort from highest score to lowest */ \
         (score1 < score2) ? 1 : ((score1 > score2) ? -1 : 0); \
     })
+
+static int ucp_wireup_compare_lane_am_bw_score(const void *elem1, const void *elem2,
+                                               void *arg)
+{
+    return UCP_WIREUP_COMPARE_SCORE(elem1, elem2, arg, am_bw);
+}
 
 static int ucp_wireup_compare_lane_rma_score(const void *elem1, const void *elem2,
                                              void *arg)
@@ -427,7 +451,6 @@ static uint64_t ucp_wireup_unset_tl_by_md(ucp_ep_h ep, uint64_t tl_bitmap,
 
     return tl_bitmap;
 }
-
 
 static UCS_F_NOINLINE ucs_status_t
 ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
@@ -466,7 +489,7 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
     mem_criteria.remote_md_flags = UCT_MD_FLAG_REG | criteria->remote_md_flags;
     status = ucp_wireup_select_transport(ep, address_list_copy, address_count,
                                          &mem_criteria, tl_bitmap, remote_md_map,
-                                         select_best,
+                                         -1, -1, select_best,
                                          &rsc_index, &addr_index, &score);
     if (status != UCS_OK) {
         goto out_free_address_list;
@@ -501,7 +524,8 @@ ucp_wireup_add_memaccess_lanes(ucp_ep_h ep, unsigned address_count,
     while (address_count > 0) {
         status = ucp_wireup_select_transport(ep, address_list_copy, address_count,
                                              &mem_criteria, tl_bitmap, remote_md_map,
-                                             0, &rsc_index, &addr_index, &score);
+                                             -1, -1, 0, &rsc_index,
+                                             &addr_index, &score);
         if ((status != UCS_OK) ||
             (select_best && (score <= reg_score))) {
             break;
@@ -629,25 +653,32 @@ static uint32_t ucp_wireup_tag_lane_usage(ucp_ep_h ep,
 }
 
 static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
-                                             unsigned address_count,
+                                             unsigned ep_init_flags, unsigned address_count,
                                              const ucp_address_entry_t *address_list,
                                              ucp_wireup_lane_desc_t *lane_descs,
                                              ucp_lane_index_t *num_lanes_p)
 {
     ucp_wireup_criteria_t criteria;
 
-    if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_RMA)) {
+    if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_RMA) &&
+        (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE))) {
         return UCS_OK;
     }
 
     criteria.title              = "remote %s memory access";
     criteria.local_md_flags     = 0;
     criteria.remote_md_flags    = 0;
-    criteria.remote_iface_flags = UCT_IFACE_FLAG_PUT_SHORT |
-                                  UCT_IFACE_FLAG_PUT_BCOPY |
-                                  UCT_IFACE_FLAG_GET_BCOPY;
-    criteria.local_iface_flags  = criteria.remote_iface_flags |
-                                  UCT_IFACE_FLAG_PENDING;
+
+    if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
+        criteria.remote_iface_flags = UCT_IFACE_FLAG_PUT_SHORT;
+        criteria.local_iface_flags  = criteria.remote_iface_flags;
+    } else {
+        criteria.remote_iface_flags = UCT_IFACE_FLAG_PUT_SHORT |
+                                      UCT_IFACE_FLAG_PUT_BCOPY |
+                                      UCT_IFACE_FLAG_GET_BCOPY;
+        criteria.local_iface_flags  = criteria.remote_iface_flags |
+                                      UCT_IFACE_FLAG_PENDING;
+    }
     criteria.calc_score         = ucp_wireup_rma_score_func;
     criteria.tl_rsc_flags       = 0;
     ucp_wireup_fill_ep_params_criteria(&criteria, params);
@@ -734,15 +765,22 @@ static double ucp_wireup_rma_bw_score_func(ucp_context_h context,
                 (UCP_WIREUP_RMA_BW_TEST_MSG_SIZE * md_attr->reg_cost.growth));
 }
 
+static int ucp_wireup_is_lane_proxy(ucp_ep_h ep, ucp_rsc_index_t rsc_index,
+                                    uint64_t remote_cap_flags)
+{
+    return !ucp_worker_is_tl_p2p(ep->worker, rsc_index) &&
+           ((remote_cap_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS) ==
+            UCT_IFACE_FLAG_EVENT_RECV_SIG);
+}
+
 static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *params,
-                                           unsigned address_count,
+                                           unsigned ep_init_flags, unsigned address_count,
                                            const ucp_address_entry_t *address_list,
                                            ucp_wireup_lane_desc_t *lane_descs,
                                            ucp_lane_index_t *num_lanes_p,
                                            ucp_err_handling_mode_t err_mode)
 {
     ucp_wireup_criteria_t criteria;
-    uint64_t remote_cap_flags;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -753,7 +791,8 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
     uint32_t usage;
 
     /* Check if we need active messages, for wireup */
-    if (!(ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | UCP_FEATURE_STREAM))) {
+    if (!(ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | UCP_FEATURE_STREAM)) ||
+        (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) {
         need_am = 0;
         for (lane = 0; lane < *num_lanes_p; ++lane) {
             need_am = need_am || ucp_worker_is_tl_p2p(ep->worker,
@@ -781,7 +820,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
     }
 
     status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
-                                         -1, -1, 1, &rsc_index, &addr_index, &score);
+                                         -1, -1, -1, -1, 1, &rsc_index, &addr_index, &score);
     if (status != UCS_OK) {
         return status;
     }
@@ -791,10 +830,8 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
      * Use a proxy lane which would send the first active message as signaled to
      * make sure the remote interface will indeed wake up.
      */
-    remote_cap_flags = address_list[addr_index].iface_attr.cap_flags;
-    is_proxy = !ucp_worker_is_tl_p2p(ep->worker, rsc_index) &&
-               ((remote_cap_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS) ==
-                UCT_IFACE_FLAG_EVENT_RECV_SIG);
+    is_proxy = ucp_wireup_is_lane_proxy(ep, rsc_index,
+                                        address_list[addr_index].iface_attr.cap_flags);
 
     usage = UCP_WIREUP_LANE_USAGE_AM |
             ucp_wireup_tag_lane_usage(ep, address_list, addr_index,
@@ -807,9 +844,117 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
     return UCS_OK;
 }
 
+static double ucp_wireup_am_bw_score_func(ucp_context_h context,
+                                          const uct_md_attr_t *md_attr,
+                                          const uct_iface_attr_t *iface_attr,
+                                          const ucp_address_iface_attr_t *remote_iface_attr)
+{
+    /* best single MTU bandwidth */
+    double size = iface_attr->cap.am.max_bcopy;
+    double time = (size / iface_attr->bandwidth) + iface_attr->overhead +
+                  remote_iface_attr->overhead;
+    return size / time * 1e-5;
+}
+
+static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
+                                               unsigned ep_init_flags, unsigned address_count,
+                                               const ucp_address_entry_t *address_list,
+                                               ucp_wireup_lane_desc_t *lane_descs,
+                                               ucp_lane_index_t *num_lanes_p)
+{
+    ucp_context_h context = ep->worker->context;
+    ucp_wireup_criteria_t criteria;
+    ucp_lane_index_t lane_desc_idx;
+    ucp_md_map_t md_map;
+    ucp_rsc_index_t rsc_index;
+    ucs_status_t status;
+    unsigned addr_index;
+    uint64_t local_dev_bitmap;
+    uint64_t remote_dev_bitmap;
+    double score;
+    int num_lanes;
+    int is_proxy;
+
+    /* Check if we need active messages, for wireup */
+    if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) ||
+        (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) {
+        return UCS_OK;
+    }
+
+    /* Select one lane for active messages */
+    criteria.title              = "high-bw active messages";
+    criteria.local_md_flags     = 0;
+    criteria.remote_md_flags    = 0;
+    criteria.remote_iface_flags = UCT_IFACE_FLAG_AM_BCOPY |
+                                  UCT_IFACE_FLAG_CB_SYNC;
+    criteria.local_iface_flags  = UCT_IFACE_FLAG_AM_BCOPY;
+    criteria.calc_score         = ucp_wireup_am_bw_score_func;
+    criteria.tl_rsc_flags       = 0;
+    ucp_wireup_fill_ep_params_criteria(&criteria, params);
+
+    if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_TAG |
+                                                            UCP_FEATURE_WAKEUP)) {
+        criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
+    }
+
+    status             = UCS_ERR_UNREACHABLE;
+    num_lanes          = 1;
+    local_dev_bitmap   = -1;
+    remote_dev_bitmap  = -1;
+    md_map             = 0;
+
+    /* am_bw_lane[0] is am_lane, so don't re-select it here */
+    for (lane_desc_idx = 0; lane_desc_idx < *num_lanes_p; ++lane_desc_idx) {
+        if (lane_descs[lane_desc_idx].usage & UCP_WIREUP_LANE_USAGE_AM) {
+            addr_index         = lane_descs[lane_desc_idx].addr_index;
+            rsc_index          = lane_descs[lane_desc_idx].rsc_index;
+            md_map            |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
+            local_dev_bitmap  &= ~UCS_BIT(context->tl_rscs[rsc_index].dev_index);
+            remote_dev_bitmap &= ~UCS_BIT(address_list[addr_index].dev_index);
+            break; /* do not continue searching due to we found
+                      AM lane (and there is only one lane) */
+        }
+    }
+
+    /* lookup for requested number of lanes or limit of MD map
+     * (we have to limit MD's number to avoid malloc in
+     * memory registration) */
+    for (; (num_lanes < ep->worker->context->config.ext.max_eager_lanes) &&
+           (ucs_count_one_bits(md_map) < UCP_MAX_OP_MDS);) {
+        status = ucp_wireup_select_transport(ep, address_list, address_count,
+                                             &criteria, -1, -1,
+                                             local_dev_bitmap, remote_dev_bitmap,
+                                             0, &rsc_index, &addr_index, &score);
+        if (status != UCS_OK) {
+            break;
+        }
+
+        is_proxy = ucp_wireup_is_lane_proxy(ep, rsc_index,
+                                            address_list[addr_index].iface_attr.cap_flags);
+
+        ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
+                                 address_list[addr_index].md_index, score,
+                                 UCP_WIREUP_LANE_USAGE_AM_BW, is_proxy);
+
+        md_map            |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
+        local_dev_bitmap  &= ~UCS_BIT(context->tl_rscs[rsc_index].dev_index);
+        remote_dev_bitmap &= ~UCS_BIT(address_list[addr_index].dev_index);
+        num_lanes++;
+
+        if (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SHM) {
+            /* special case for SHM: do not try to lookup additional lanes when
+             * SHM transport detected (another transport will be significantly
+             * slower) */
+            break;
+        }
+    }
+
+    return UCS_OK;
+}
+
 static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
                                                 const ucp_ep_params_t *params,
-                                                unsigned address_count,
+                                                unsigned ep_init_flags, unsigned address_count,
                                                 const ucp_address_entry_t *address_list,
                                                 ucp_wireup_lane_desc_t *lane_descs,
                                                 ucp_lane_index_t *num_lanes_p)
@@ -817,7 +962,8 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
     ucp_wireup_criteria_t criteria;
     ucs_status_t status;
 
-    if (ucp_ep_get_context_features(ep) & UCP_FEATURE_RMA) {
+    if ((ucp_ep_get_context_features(ep) & UCP_FEATURE_RMA) ||
+        (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) {
         /* if needed for RMA, need also access for remote allocated memory */
         criteria.remote_md_flags = criteria.local_md_flags = 0;
     } else {
@@ -875,7 +1021,8 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
     }
 
     status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
-                                         -1, -1, 0, &rsc_index, &addr_index, &score);
+                                         -1, -1, -1, -1, 0, &rsc_index, &addr_index,
+                                         &score);
     if (status == UCS_OK) {
          ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                                   address_list[addr_index].md_index, score,
@@ -947,7 +1094,7 @@ ucp_wireup_get_reachable_mds(ucp_worker_h worker, unsigned address_count,
 }
 
 ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
-                                     unsigned address_count,
+                                     unsigned ep_init_flags, unsigned address_count,
                                      const ucp_address_entry_t *address_list,
                                      uint8_t *addr_indices,
                                      ucp_ep_config_key_t *key)
@@ -958,17 +1105,15 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
     ucp_lane_index_t lane;
+    ucp_lane_index_t i;
     ucs_status_t status;
 
     memset(lane_descs, 0, sizeof(lane_descs));
     ucp_ep_config_key_reset(key);
+    ucp_ep_config_key_set_params(key, params);
 
-    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
-        key->err_mode = params->err_mode;
-    }
-
-    status = ucp_wireup_add_rma_lanes(ep, params, address_count, address_list,
-                                      lane_descs, &key->num_lanes);
+    status = ucp_wireup_add_rma_lanes(ep, params, ep_init_flags, address_count,
+                                      address_list, lane_descs, &key->num_lanes);
     if (status != UCS_OK) {
         return status;
     }
@@ -979,14 +1124,15 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
         return status;
     }
 
-    status = ucp_wireup_add_am_lane(ep, params, address_count, address_list,
-                                    lane_descs, &key->num_lanes, key->err_mode);
+    status = ucp_wireup_add_am_lane(ep, params, ep_init_flags, address_count,
+                                    address_list, lane_descs, &key->num_lanes,
+                                    key->err_mode);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucp_wireup_add_rma_bw_lanes(ep, params, address_count, address_list,
-                                         lane_descs, &key->num_lanes);
+    status = ucp_wireup_add_rma_bw_lanes(ep, params, ep_init_flags, address_count,
+                                         address_list, lane_descs, &key->num_lanes);
     if (status != UCS_OK) {
         return status;
     }
@@ -994,6 +1140,14 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     status = ucp_wireup_add_tag_lane(ep, address_count, address_list,
                                      lane_descs, &key->num_lanes,
                                      key->err_mode);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* call ucp_wireup_add_am_bw_lanes after ucp_wireup_add_am_lane to
+     * allow exclude AM lane from AM_BW list */
+    status = ucp_wireup_add_am_bw_lanes(ep, params, ep_init_flags, address_count,
+                                        address_list, lane_descs, &key->num_lanes);
     if (status != UCS_OK) {
         return status;
     }
@@ -1021,20 +1175,15 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
             ucs_assert(key->am_lane == UCP_NULL_LANE);
             key->am_lane = lane;
         }
+        if ((lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AM_BW) &&
+            (lane < UCP_MAX_LANES - 1)) {
+            key->am_bw_lanes[lane + 1] = lane;
+        }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RMA) {
             key->rma_lanes[lane] = lane;
         }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RMA_BW) {
             key->rma_bw_lanes[lane] = lane;
-            rsc_index = lane_descs[lane].rsc_index;
-            md_index  = worker->context->tl_rscs[rsc_index].md_index;
-
-            /* Pack remote key only if needed for RMA.
-             * FIXME a temporary workaround to prevent the ugni uct from using rndv. */
-            if ((context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
-                !(strstr(context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni"))) {
-                key->rma_bw_md_map |= UCS_BIT(md_index);
-            }
         }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AMO) {
             key->amo_lanes[lane] = lane;
@@ -1045,7 +1194,9 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
         }
     }
 
-    /* Sort RMA and AMO lanes according to score */
+    /* Sort AM, RMA and AMO lanes according to score */
+    ucs_qsort_r(key->am_bw_lanes + 1, UCP_MAX_LANES - 1, sizeof(ucp_lane_index_t),
+                ucp_wireup_compare_lane_am_bw_score, lane_descs);
     ucs_qsort_r(key->rma_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
                 ucp_wireup_compare_lane_rma_score, lane_descs);
     ucs_qsort_r(key->rma_bw_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
@@ -1062,6 +1213,26 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                                           address_list,
                                                           lane_descs,
                                                           key->num_lanes);
+
+    /* add to map first UCP_MAX_OP_MDS fastest MD's */
+    for (i = 0;
+         (key->rma_bw_lanes[i] != UCP_NULL_LANE) &&
+         (ucs_count_one_bits(key->rma_bw_md_map) < UCP_MAX_OP_MDS); i++) {
+        lane = key->rma_bw_lanes[i];
+        rsc_index = lane_descs[lane].rsc_index;
+        md_index  = worker->context->tl_rscs[rsc_index].md_index;
+
+        /* Pack remote key only if needed for RMA.
+         * FIXME a temporary workaround to prevent the ugni uct from using rndv. */
+        if ((context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
+            !(strstr(context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni"))) {
+            key->rma_bw_md_map |= UCS_BIT(md_index);
+        }
+    }
+
+    /* use AM lane first for eager AM transport to simplify processing single/middle
+     * msg packets */
+    key->am_bw_lanes[0] = key->am_lane;
 
     return UCS_OK;
 }
@@ -1088,6 +1259,41 @@ ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
 
     ucp_wireup_fill_aux_criteria(&criteria, params);
     return ucp_wireup_select_transport(ep, address_list, address_count,
-                                       &criteria, -1, -1, 1, rsc_index_p,
+                                       &criteria, -1, -1, -1, -1, 1, rsc_index_p,
                                        addr_index_p, &score);
+}
+
+ucs_status_t ucp_wireup_select_sockaddr_transport(ucp_ep_h ep,
+                                                  const ucp_ep_params_t *params,
+                                                  ucp_rsc_index_t *rsc_index_p)
+{
+    ucp_worker_h worker   = ep->worker;
+    ucp_context_h context = worker->context;
+    char saddr_str[UCS_SOCKADDR_STRING_LEN];
+    ucp_tl_resource_desc_t *resource;
+    ucp_rsc_index_t tl_id;
+    ucp_md_index_t md_index;
+    uct_md_h md;
+
+    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+        resource = &context->tl_rscs[tl_id];
+        if (!(resource->flags & UCP_TL_RSC_FLAG_SOCKADDR)) {
+            continue;
+        }
+
+        md_index = resource->md_index;
+        md       = context->tl_mds[md_index].md;
+        ucs_assert(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_SOCKADDR);
+
+        if (uct_md_is_sockaddr_accessible(md, &params->sockaddr, UCT_SOCKADDR_ACC_REMOTE)) {
+            /* TODO use score to prefer best tl rather than using first one */
+            *rsc_index_p = tl_id;
+            return UCS_OK;
+        }
+
+        ucs_debug("md %s cannot reach %s", context->tl_mds[md_index].rsc.md_name,
+                  ucs_sockaddr_str(params->sockaddr.addr, saddr_str, sizeof(saddr_str)));
+    }
+
+    return UCS_ERR_UNREACHABLE;
 }

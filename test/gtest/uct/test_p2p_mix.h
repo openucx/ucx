@@ -44,6 +44,10 @@ protected:
                         const mapped_buffer &recvbuf,
                         uct_completion_t *comp);
 
+    ucs_status_t put_short(const mapped_buffer &sendbuf,
+                           const mapped_buffer &recvbuf,
+                           uct_completion_t *comp);
+
     ucs_status_t put_bcopy(const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf,
                            uct_completion_t *comp);

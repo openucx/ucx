@@ -19,7 +19,7 @@
 
 #define ucs_rcache_region_log(_level, _message, ...) \
     do { \
-        if (ucs_log_enabled(_level)) { \
+        if (ucs_log_is_enabled(_level)) { \
             __ucs_rcache_region_log(__FILE__, __LINE__, __FUNCTION__, (_level), \
                                     _message, ## __VA_ARGS__); \
         } \
@@ -62,15 +62,15 @@ static void __ucs_rcache_region_log(const char *file, int line, const char *func
         strcpy(region_desc, "");
     }
 
-    __ucs_log(file, line, function, level,
-              "%s: %s region " UCS_PGT_REGION_FMT " %c%c "UCS_RCACHE_PROT_FMT" ref %u %s",
-              rcache->name, message,
-              UCS_PGT_REGION_ARG(&region->super),
-              (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) ? 'g' : '-',
-              (region->flags & UCS_RCACHE_REGION_FLAG_PGTABLE)    ? 't' : '-',
-              UCS_RCACHE_PROT_ARG(region->prot),
-              region->refcount,
-              region_desc);
+    ucs_log_dispatch(file, line, function, level,
+                     "%s: %s region " UCS_PGT_REGION_FMT " %c%c "UCS_RCACHE_PROT_FMT" ref %u %s",
+                     rcache->name, message,
+                     UCS_PGT_REGION_ARG(&region->super),
+                     (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) ? 'g' : '-',
+                     (region->flags & UCS_RCACHE_REGION_FLAG_PGTABLE)    ? 't' : '-',
+                     UCS_RCACHE_PROT_ARG(region->prot),
+                     region->refcount,
+                     region_desc);
 }
 
 static ucs_pgt_dir_t *ucs_rcache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)

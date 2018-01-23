@@ -160,11 +160,14 @@ static void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
+    req->status = status;
+
     if (status == UCS_OK) {
-        req->status = status;
+        ucp_ep_flush_progress(req);
+    } else {
+        req->send.state.uct_comp.count = 0;
     }
 
-    ucp_ep_flush_progress(req);
     ucp_flush_check_completion(req);
 }
 

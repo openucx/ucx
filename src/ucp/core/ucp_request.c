@@ -167,7 +167,8 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status)
     if (status == UCS_OK) {
         ucs_trace_data("ep %p: added pending uct request %p to lane[%d]=%p",
                        req->send.ep, req, req->send.lane, uct_ep);
-        *req_status = UCS_INPROGRESS;
+        *req_status            = UCS_INPROGRESS;
+        req->send.pending_lane = req->send.lane;
         return 1;
     } else if (status == UCS_ERR_BUSY) {
         /* Could not add, try to send again */
@@ -187,8 +188,8 @@ static void ucp_request_dt_dereg(ucp_context_t *context, ucp_dt_reg_t *dt_reg,
     for (i = 0; i < count; ++i) {
         ucp_trace_req(req_dbg, "mem dereg buffer %ld/%ld md_map 0x%"PRIx64,
                       i, count, dt_reg[i].md_map);
-        ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, NULL, dt_reg[i].memh,
-                          &dt_reg[i].md_map);
+        ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, UCT_MD_MEM_TYPE_HOST, NULL,
+                          dt_reg[i].memh, &dt_reg[i].md_map);
         ucs_assert(dt_reg[i].md_map == 0);
     }
 }
@@ -212,7 +213,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     case UCP_DATATYPE_CONTIG:
         ucs_assert(ucs_count_one_bits(md_map) <= UCP_MAX_OP_MDS);
         status = ucp_mem_rereg_mds(context, md_map, buffer, length,
-                                   UCT_MD_MEM_ACCESS_RMA, NULL, NULL,
+                                   UCT_MD_MEM_ACCESS_RMA, NULL, UCT_MD_MEM_TYPE_HOST, NULL,
                                    state->dt.contig.memh, &state->dt.contig.md_map);
         ucp_trace_req(req_dbg, "mem reg md_map 0x%"PRIx64"/0x%"PRIx64,
                       state->dt.contig.md_map, md_map);
@@ -230,7 +231,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
             if (iov[iov_it].length) {
                 status = ucp_mem_rereg_mds(context, md_map, iov[iov_it].buffer,
                                            iov[iov_it].length,
-                                           UCT_MD_MEM_ACCESS_RMA, NULL, NULL,
+                                           UCT_MD_MEM_ACCESS_RMA, NULL,
+                                           UCT_MD_MEM_TYPE_HOST,  NULL,
                                            dt_reg[iov_it].memh,
                                            &dt_reg[iov_it].md_map);
                 if (status != UCS_OK) {
@@ -318,7 +320,10 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
             req->send.uct.func   = proto->bcopy_single;
             UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_single", req->send.length);
         } else {
-            req->send.uct.func   = proto->bcopy_multi;
+            req->send.uct.func        = proto->bcopy_multi;
+            req->send.tag.message_id  = req->send.ep->worker->tm.am.message_id++;
+            req->send.tag.am_bw_index = 0;
+            req->send.pending_lane    = UCP_NULL_LANE;
             UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_multi", req->send.length);
         }
         return UCS_OK;
@@ -335,7 +340,10 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
             req->send.uct.func   = proto->zcopy_single;
             UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_single", req->send.length);
         } else {
-            req->send.uct.func   = proto->zcopy_multi;
+            req->send.uct.func        = proto->zcopy_multi;
+            req->send.tag.message_id  = req->send.ep->worker->tm.am.message_id++;
+            req->send.tag.am_bw_index = 0;
+            req->send.pending_lane    = UCP_NULL_LANE;
             UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_multi", req->send.length);
         }
         return UCS_OK;

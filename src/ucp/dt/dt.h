@@ -49,5 +49,9 @@ typedef struct ucp_dt_state {
 size_t ucp_dt_pack(ucp_datatype_t datatype, void *dest, const void *src,
                    ucp_dt_state_t *state, size_t length);
 
+ucs_status_t ucp_mem_type_unpack(ucp_worker_h worker, void *buffer,
+                                 const void *recv_data, size_t recv_length,
+                                 uct_memory_type_t mem_type);
+
 #endif /* UCP_DT_H_ */
 

@@ -223,6 +223,9 @@ AS_IF([test "x$with_ib" == xyes],
                        [AC_DEFINE([HAVE_MASKED_ATOMICS_ENDIANNESS], 1, [have masked atomic endianness])],
                        [], [[#include <infiniband/verbs_exp.h>]])
 
+       AC_CHECK_DECLS(IBV_EXP_ODP_SUPPORT_IMPLICIT, [], [],
+                      [[#include <infiniband/verbs.h>]])
+
        AC_CHECK_MEMBERS([struct ibv_exp_device_attr.exp_device_cap_flags,
                          struct ibv_exp_device_attr.odp_caps,
                          struct ibv_exp_device_attr.odp_caps.per_transport_caps.dc_odp_caps,

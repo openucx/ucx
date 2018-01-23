@@ -54,6 +54,7 @@ typedef struct ucp_mem {
     void                          *address;     /* Region start address */
     size_t                        length;       /* Region length */
     uct_alloc_method_t            alloc_method; /* Method used to allocate the memory */
+    uct_memory_type_t             mem_type;     /**< type of allocated memory */
     uct_md_h                      alloc_md;     /* MD used to allocated the memory */
     ucp_md_map_t                  md_map;       /* Which MDs have valid memory handles */
     uct_mem_h                     uct[0];       /* Valid memory handles, as popcount(md_map) */
@@ -72,13 +73,18 @@ typedef struct ucp_mem_desc {
 void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep);
 
 ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,
-                                          uct_rkey_t *uct_rkey_p);
+                                          uct_rkey_t *uct_rkey_p,
+                                          ucp_lane_map_t ignore);
 
-ucs_status_t ucp_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 
-void ucp_mpool_free(ucs_mpool_t *mp, void *chunk);
+void ucp_reg_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
+
+ucs_status_t ucp_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+
+void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 /**
  * Update memory registration to a specified set of memory domains.
@@ -106,12 +112,9 @@ void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
  */
 ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
                                void *address, size_t length, unsigned uct_flags,
-                               uct_md_h alloc_md, uct_mem_h *alloc_md_memh_p,
-                               uct_mem_h *uct_memh, ucp_md_map_t *md_map_p);
-
-/* Detect memory type on all MDs */
-ucs_status_t ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
-                                        uct_memory_type_t *mem_type_p);
+                               uct_md_h alloc_md, uct_memory_type_t mem_type,
+                               uct_mem_h *alloc_md_memh_p, uct_mem_h *uct_memh,
+                               ucp_md_map_t *md_map_p);
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map);
 
@@ -124,16 +127,26 @@ ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
 void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max);
 
 
+static UCS_F_ALWAYS_INLINE ucp_md_index_t
+ucp_memh_map2idx(ucp_md_map_t md_map, ucp_md_index_t md_idx)
+{
+    return ucs_count_one_bits(md_map & UCS_MASK(md_idx));
+}
+
+static UCS_F_ALWAYS_INLINE uct_mem_h
+ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_idx)
+{
+    if (!(md_map & UCS_BIT(md_idx))) {
+        return NULL;
+    }
+
+    return uct[ucp_memh_map2idx(md_map, md_idx)];
+}
+
 static UCS_F_ALWAYS_INLINE uct_mem_h
 ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
 {
-    ucp_md_index_t uct_idx;
-
-    if (!(memh->md_map & UCS_BIT(md_idx))) {
-        return NULL;
-    }
-    uct_idx = ucs_count_one_bits(memh->md_map & UCS_MASK(md_idx));
-    return memh->uct[uct_idx];
+    return ucp_memh_map2uct(memh->uct, memh->md_map, md_idx);
 }
 
 
@@ -150,5 +163,7 @@ ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
         } \
         status; \
     })
+
+#define UCP_MEM_IS_HOST(_mem_type) ((_mem_type) == UCT_MD_MEM_TYPE_HOST)
 
 #endif

@@ -4,8 +4,10 @@
 * See file LICENSE for terms.
 */
 
-#include <vector>
+#include <list>
 #include <numeric>
+#include <set>
+#include <vector>
 
 #include "ucp_test.h"
 #include <common/test_helpers.h>
@@ -80,7 +82,7 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 
     /* send all msg sizes*/
     for (size_t i = 3; i < sbuf.size(); i *= 2) {
-        ucs::fill_random(sbuf.begin(), sbuf.begin() + i);
+        ucs::fill_random(sbuf, i);
         check_pattern.insert(check_pattern.end(), sbuf.begin(),
                              sbuf.begin() + i);
         sstatus = stream_send_nb(ucp::data_type_desc_t(datatype, sbuf.data(), i));
@@ -121,7 +123,7 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
 
     /* send all msg sizes in bytes*/
     for (size_t i = 3; i < sbuf.size(); i *= 2) {
-        ucs::fill_random(sbuf.begin(), sbuf.begin() + i);
+        ucs::fill_random(sbuf, i);
         check_pattern.insert(check_pattern.end(), sbuf.begin(), sbuf.begin() + i);
         sstatus = stream_send_nb(ucp::data_type_desc_t(DATATYPE, sbuf.data(), i));
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
@@ -131,7 +133,7 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
 
     size_t align_tail = dt_elem_size - ssize % dt_elem_size;
     if (align_tail != 0) {
-        ucs::fill_random(sbuf.begin(), sbuf.begin() + align_tail);
+        ucs::fill_random(sbuf, align_tail);
         check_pattern.insert(check_pattern.end(), sbuf.begin(), sbuf.begin() + align_tail);
         sstatus = stream_send_nb(ucp::data_type_desc_t(ucp_dt_make_contig(align_tail),
                                                        sbuf.data(), align_tail));
@@ -258,7 +260,7 @@ void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
     do {
         if (send_i < sbuf.size()) {
             rbuf.resize(rbuf.size() + send_i, 'r');
-            ucs::fill_random(sbuf.begin(), sbuf.begin() + send_i);
+            ucs::fill_random(sbuf, send_i);
             check_pattern.insert(check_pattern.end(), sbuf.begin(),
                                  sbuf.begin() + send_i);
             sstatus = stream_send_nb(ucp::data_type_desc_t(datatype, sbuf.data(),
@@ -400,6 +402,7 @@ protected:
                        std::vector<request_wrapper_t> &sreqs);
     size_t send_all(ucp_datatype_t datatype, size_t n_iter);
     void check_no_data();
+    std::set<ucp_ep_h> check_no_data(entity &e);
     void check_recv_data(size_t n_iter);
 
     std::vector<std::string>        m_msgs;
@@ -608,16 +611,46 @@ test_ucp_stream_many2one::send_all(ucp_datatype_t datatype, size_t n_iter)
 
 void test_ucp_stream_many2one::check_no_data()
 {
+    std::set<ucp_ep_h> check;
+
+    for (size_t i = 0; i <= m_receiver_idx; ++i) {
+        std::set<ucp_ep_h> check_e = check_no_data(e(i));
+        check.insert(check_e.begin(), check_e.end());
+    }
+
+    EXPECT_EQ(size_t(0), check.size());
+}
+
+std::set<ucp_ep_h> test_ucp_stream_many2one::check_no_data(entity &e)
+{
     const size_t         max_eps = 10;
     ucp_stream_poll_ep_t poll_eps[max_eps];
-    ssize_t              count;
+    std::set<ucp_ep_h>   ret;
+    std::list<ucp_ep_h>  check_list;
 
-    ASSERT_EQ(m_receiver_idx, m_nsenders);
-    for (size_t i = 0; i <= m_receiver_idx; ++i) {
-        while(progress());
-        count = ucp_stream_worker_poll(e(i).worker(), poll_eps, max_eps, 0);
-        EXPECT_EQ(ssize_t(0), count);
+    while (progress());
+
+    ssize_t count = ucp_stream_worker_poll(m_entities.at(m_receiver_idx).worker(),
+                                           poll_eps, max_eps, 0);
+    EXPECT_GE(count, ssize_t(0));
+
+    for (ssize_t i = 0; i < count; ++i) {
+        ret.insert(poll_eps[i].ep);
     }
+
+    for (int i = 0; i < e.get_num_workers(); ++i) {
+        for (int j = 0; j < e.get_num_eps(); ++j) {
+            check_list.push_back(e.ep(i, j));
+        }
+    }
+
+    std::list<ucp_ep_h>::const_iterator check_it = check_list.begin();
+    while (check_it != check_list.end()) {
+        EXPECT_EQ(ret.end(), ret.find(*check_it));
+        ++check_it;
+    }
+
+    return ret;
 }
 
 void test_ucp_stream_many2one::check_recv_data(size_t n_iter)
@@ -662,6 +695,32 @@ UCS_TEST_P(test_ucp_stream_many2one, drop_data) {
     send_all(DATATYPE, 10);
 
     ASSERT_EQ(m_receiver_idx, m_nsenders);
+    for (size_t i = 0; i <= m_receiver_idx; ++i) {
+        flush_worker(e(i));
+    }
+
+    /* destroy 1 connection */
+    entity::ep_destructor(m_entities.at(0).ep(),
+                          &m_entities.at(0));
+    entity::ep_destructor(m_entities.at(m_receiver_idx).ep(),
+                          &m_entities.at(0));
+    m_entities.at(0).revoke_ep();
+    m_entities.at(m_receiver_idx).revoke_ep(0, 0);
+
+    /* data from disconnected EP should be dropped */
+    std::set<ucp_ep_h> others = check_no_data(m_entities.at(0));
+    EXPECT_EQ(m_nsenders - 1, others.size());
+
+    /* reconnect */
+    m_entities.at(0).connect(&m_entities.at(m_receiver_idx), get_ep_params(), 0);
+    ucp_ep_params_t recv_ep_param = get_ep_params();
+    recv_ep_param.field_mask |= UCP_EP_PARAM_FIELD_USER_DATA;
+    recv_ep_param.user_data   = (void *)uintptr_t(0xdeadbeef);
+    e(m_receiver_idx).connect(&e(0), recv_ep_param, 0);
+
+    /* send again */
+    send_all(DATATYPE, 10);
+
     for (size_t i = 0; i <= m_receiver_idx; ++i) {
         flush_worker(e(i));
     }

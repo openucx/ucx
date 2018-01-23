@@ -59,17 +59,17 @@ enum {
     UCP_REQUEST_SEND_PROTO_RMA
 };
 
+
 /**
  * Receive descriptor flags.
  */
 enum {
-    UCP_RECV_DESC_FLAG_FIRST    = UCS_BIT(0),
-    UCP_RECV_DESC_FLAG_LAST     = UCS_BIT(1),
-    UCP_RECV_DESC_FLAG_EAGER    = UCS_BIT(2),
-    UCP_RECV_DESC_FLAG_SYNC     = UCS_BIT(3),
-    UCP_RECV_DESC_FLAG_RNDV     = UCS_BIT(4),
-    UCP_RECV_DESC_FLAG_UCT_DESC = UCS_BIT(5),
-    UCP_RECV_DESC_FLAG_OFFLOAD  = UCS_BIT(6)
+    UCP_RECV_DESC_FLAG_UCT_DESC       = UCS_BIT(0), /* Descriptor allocated by UCT */
+    UCP_RECV_DESC_FLAG_EAGER          = UCS_BIT(1), /* Eager tag message */
+    UCP_RECV_DESC_FLAG_EAGER_ONLY     = UCS_BIT(2), /* Eager tag message with single fragment */
+    UCP_RECV_DESC_FLAG_EAGER_SYNC     = UCS_BIT(3), /* Eager tag message which requires reply */
+    UCP_RECV_DESC_FLAG_EAGER_OFFLOAD  = UCS_BIT(4), /* Eager tag from offload */
+    UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(5)  /* Rendezvous request */
 };
 
 
@@ -95,11 +95,19 @@ struct ucp_request {
             const void            *buffer;  /* Send buffer */
             ucp_datatype_t        datatype; /* Send type */
             size_t                length;   /* Total length, in bytes */
+            uct_memory_type_t     mem_type; /* Memory type */
             ucp_send_callback_t   cb;       /* Completion callback */
 
             union {
-                ucp_tag_t         tag;      /* Tagged send */
+
                 ucp_wireup_msg_t  wireup;
+
+                /* Tagged send */
+                struct {
+                    ucp_tag_t        tag;
+                    uint64_t         message_id;  /* message ID used in AM */
+                    ucp_lane_index_t am_bw_index; /* AM BW lane index */
+                } tag;
 
                 struct {
                     uint64_t      remote_addr; /* Remote address */
@@ -125,12 +133,14 @@ struct ucp_request {
                     uintptr_t            remote_request; /* pointer to the sender's send request */
                     ucp_request_t       *rreq;           /* receive request on the recv side */
                     ucp_rkey_h           rkey;           /* key for remote send buffer */
-                    uct_rkey_t           uct_rkey;       /* UCT remote key */
+                    ucp_lane_map_t       lanes_map;      /* used lanes map */
+                    ucp_lane_index_t     lane_count;     /* number of lanes used in transaction */
                 } rndv_get;
 
                 struct {
                     uint64_t         remote_address; /* address of the receiver's data buffer */
                     uintptr_t        remote_request; /* pointer to the receiver's receive request */
+                    ucp_request_t    *sreq;          /* send request on the send side */
                     ucp_rkey_h       rkey;           /* key for remote receive buffer */
                     uct_rkey_t       uct_rkey;       /* UCT remote key */
                 } rndv_put;
@@ -170,7 +180,6 @@ struct ucp_request {
                     void              *rndv_op;  /* Handler of issued rndv send. Need to cancel
                                                     the operation if it is completed by SW. */
                  } tag_offload;
-
             };
 
             /* This structure holds all mutable fields, and everything else
@@ -182,8 +191,11 @@ struct ucp_request {
                 uct_completion_t  uct_comp; /* UCT completion */
             } state;
 
+            ucp_lane_index_t      pending_lane; /* Lane on which request was moved
+                                                 * to pending state */
             ucp_lane_index_t      lane;     /* Lane on which this request is being sent */
             uct_pending_req_t     uct;      /* UCT pending request */
+            ucp_mem_desc_t        *mdesc;
         } send;
 
         struct {
@@ -191,9 +203,9 @@ struct ucp_request {
             void                  *buffer;  /* Buffer to receive data to */
             ucp_datatype_t        datatype; /* Receive type */
             size_t                length;   /* Total length, in bytes */
+            uct_memory_type_t     mem_type; /* Memory type */
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
-            ucp_mem_desc_t        *rdesc;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
 
             union {
@@ -203,10 +215,16 @@ struct ucp_request {
                     uint64_t                sn;       /* Tag match sequence */
                     ucp_tag_recv_callback_t cb;       /* Completion callback */
                     ucp_tag_recv_info_t     info;     /* Completion info to fill */
+                    ucp_mem_desc_t          *rdesc;   /* Offload bounce buffer */
+                    ssize_t                 remaining; /* How much more data to be received */
+                    ucp_worker_iface_t      *wiface;  /* Cached iface this request
+                                                         is received on. Used in 
+                                                         tag offload expected callbacks*/
                 } tag;
 
                 struct {
                     ucp_stream_recv_callback_t cb;     /* Completion callback */
+                    size_t                     offset; /* Receive data offset */
                     size_t                     length; /* Completion info to fill */
                 } stream;
             };
@@ -228,6 +246,7 @@ struct ucp_recv_desc {
     union {
         ucs_list_link_t     tag_list[2];    /* Hash list TAG-element */
         ucs_queue_elem_t    stream_queue;   /* Queue STREAM-element */
+        ucs_queue_elem_t    tag_frag_queue; /* Tag fragments queue */
     };
     uint32_t                length;         /* Received length */
     uint32_t                payload_offset; /* Offset from end of the descriptor

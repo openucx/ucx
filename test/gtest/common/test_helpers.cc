@@ -85,15 +85,8 @@ void safe_usleep(double usec) {
     safe_sleep(usec * 1e-6);
 }
 
-std::string get_iface_ip(const struct sockaddr *ifa_addr) {
-    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
-
-    return ucs_sockaddr_str(ifa_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN);
-}
-
 bool is_inet_addr(const struct sockaddr* ifa_addr) {
-    return ((ifa_addr->sa_family == AF_INET) ||
-            (ifa_addr->sa_family == AF_INET6));
+    return ifa_addr->sa_family == AF_INET;
 }
 
 bool is_ib_netdev(const char *ifa_name) {

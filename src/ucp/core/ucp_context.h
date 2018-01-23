@@ -23,8 +23,10 @@
 enum {
     /* The flag indicates that the resource may be used for auxiliary
      * wireup communications only */
-    UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
-
+    UCP_TL_RSC_FLAG_AUX      = UCS_BIT(0),
+    /* The flag indicates that the resource may be used for client-server
+     * connection establishment with a sockaddr */
+    UCP_TL_RSC_FLAG_SOCKADDR = UCS_BIT(1)
 };
 
 
@@ -33,6 +35,9 @@ typedef struct ucp_context_config {
     size_t                                 bcopy_thresh;
     /** Threshold for switching UCP to rendezvous protocol */
     size_t                                 rndv_thresh;
+    /** Threshold for switching UCP to rendezvous protocol
+     *  in ucp_tag_send_nbr() */
+    size_t                                 rndv_send_nbr_thresh;
     /** Threshold for switching UCP to rendezvous protocol in case the calculated
      *  threshold is zero or negative */
     size_t                                 rndv_thresh_fallback;
@@ -47,9 +52,13 @@ typedef struct ucp_context_config {
     size_t                                 bcopy_bw;
     /** Segment size in the worker pre-registered memory pool */
     size_t                                 seg_size;
+    /** RNDV pipeline fragment size */
+    size_t                                 rndv_frag_size;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
+    /** Threshold for forcing tag matching offload capabilities */
+    size_t                                 tm_force_thresh;
     /** Tag matching offload status (try, on or off) */
     ucs_ternary_value_t                    tm_offload;
     /** Upper bound for posting tm offload receives with internal UCP
@@ -63,6 +72,8 @@ typedef struct ucp_context_config {
     int                                    use_mt_mutex;
     /** On-demand progress */
     int                                    adaptive_progress;
+    /** Eager-am multi-lane support */
+    unsigned                               max_eager_lanes;
     /** Rendezvous-get multi-lane support */
     unsigned                               max_rndv_lanes;
     /** Estimated number of endpoints */
@@ -88,10 +99,12 @@ struct ucp_config {
  * UCP communication resource descriptor
  */
 typedef struct ucp_tl_resource_desc {
-    uct_tl_resource_desc_t        tl_rsc;   /* UCT resource descriptor */
-    ucp_rsc_index_t               md_index; /* Memory domain index (within the context) */
+    uct_tl_resource_desc_t        tl_rsc;     /* UCT resource descriptor */
     uint16_t                      tl_name_csum; /* Checksum of transport name */
-    uint8_t                       flags; /* Flags that describe resource specifics */
+    ucp_rsc_index_t               md_index;   /* Memory domain index (within the context) */
+    ucp_rsc_index_t               dev_index;  /* Arbitrary device index. Resources
+                                                 with same index have same device name. */
+    uint8_t                       flags;      /* Flags that describe resource specifics */
 } ucp_tl_resource_desc_t;
 
 
@@ -127,6 +140,9 @@ typedef struct ucp_context {
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/
+
+    /* Mask of memory type communication resources */
+    uint64_t                      mem_type_tls[UCT_MD_MEM_TYPE_LAST];
 
     ucs_mpool_t                   rkey_mp;    /* Pool for memory keys */
 
@@ -207,6 +223,19 @@ typedef struct ucp_am_handler {
     }
 
 
+#define UCP_CHECK_PARAM_NON_NULL(_param, _status, _action) \
+    if ((_param) == NULL) { \
+        ucs_error("the parameter %s must not be NULL", #_param); \
+        (_status) = UCS_ERR_INVALID_PARAM; \
+        _action; \
+    };
+
+
+#define UCP_PARAM_VALUE(_obj, _params, _name, _flag, _default) \
+    (((_params)->field_mask & (UCP_##_obj##_PARAM_FIELD_##_flag)) ? \
+                    (_params)->_name : (_default))
+
+
 extern ucp_am_handler_t ucp_am_handlers[];
 
 
@@ -219,11 +248,28 @@ uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context);
 
 const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_csum);
 
-static inline double ucp_tl_iface_latency(ucp_context_h context,
-                                          const uct_iface_attr_t *iface_attr)
+static UCS_F_ALWAYS_INLINE double
+ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)
 {
     return iface_attr->latency.overhead +
            (iface_attr->latency.growth * context->config.est_num_eps);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
+                           uct_memory_type_t *mem_type_p)
+{
+    unsigned i, md_index;
+
+    for (i = 0; i < context->num_mem_type_mds; ++i) {
+        md_index = context->mem_type_tl_mds[i];
+        if (uct_md_is_mem_type_owned(context->tl_mds[md_index].md, addr, length)) {
+            *mem_type_p = context->tl_mds[md_index].attr.cap.mem_type;
+            return UCS_OK;
+        }
+    }
+    *mem_type_p = UCT_MD_MEM_TYPE_HOST;
+    return UCS_OK;
 }
 
 #endif

@@ -27,11 +27,11 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
     if (ucs_unlikely((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length))) {
         return NULL;
     } else if (ucs_unlikely(op_own & 0x80)) {
-        if (op_own >> 4 == MLX5_CQE_INVALID) {
-            return NULL; /* No CQE */
-        } else {
-            return uct_ib_mlx5_check_completion(iface, cq, cqe);
+        UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
+        if (ucs_unlikely((op_own >> 4) != MLX5_CQE_INVALID)) {
+            uct_ib_mlx5_check_completion(iface, cq, cqe);
         }
+        return NULL; /* No CQE */
     }
 
     cq->cq_ci = index + 1;
@@ -154,6 +154,18 @@ uct_ib_mlx5_txwq_wrap_any(uct_ib_mlx5_txwq_t *txwq, void *seg)
         seg -= (txwq->qend - txwq->qstart);
     }
     return uct_ib_mlx5_txwq_wrap_none(txwq, seg);
+}
+
+
+/* Wrapping of 'data' could happen, even past 'qend' boundary.
+ * Do not check for alignment. */
+static UCS_F_ALWAYS_INLINE void *
+uct_ib_mlx5_txwq_wrap_data(uct_ib_mlx5_txwq_t *txwq, void *data)
+{
+    if (ucs_unlikely(data >= txwq->qend)) {
+        data -= (txwq->qend - txwq->qstart);
+    }
+    return data;
 }
 
 

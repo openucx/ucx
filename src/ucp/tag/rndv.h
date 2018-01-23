@@ -41,6 +41,7 @@ typedef struct {
  */
 typedef struct {
     uintptr_t                 rreq_ptr; /* request on the rndv receiver side */
+    size_t                    offset;
 } UCS_S_PACKED ucp_rndv_data_hdr_t;
 
 
@@ -55,10 +56,5 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
                                   unsigned tl_flags);
 
 size_t ucp_tag_rndv_rts_pack(void *dest, void *arg);
-
-static inline size_t ucp_rndv_total_len(ucp_rndv_rts_hdr_t *hdr)
-{
-    return hdr->size;
-}
 
 #endif

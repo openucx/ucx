@@ -6,7 +6,9 @@
 
 #include "arbiter.h"
 
+#include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
+
 
 #define SENTINEL ((ucs_arbiter_elem_t*)0x1)
 

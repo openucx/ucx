@@ -149,7 +149,7 @@ struct ucs_class {
         obj = ucs_class_malloc(cls); \
         if (obj != NULL) { \
             status = UCS_CLASS_INIT(_type, obj, ## __VA_ARGS__); \
-            if ((status == UCS_OK) || (status == UCS_INPROGRESS)) { \
+            if (status == UCS_OK) { \
                 *(_obj) = (typeof(*(_obj)))obj; /* Success - assign pointer */ \
             } else { \
                 ucs_class_free(obj); /* Initialization failure */ \

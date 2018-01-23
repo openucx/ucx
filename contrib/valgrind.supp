@@ -54,3 +54,29 @@
    ...
    obj:*libcuda*.so*
 }
+{
+   gdr_get_info_ioctl
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:gdr_get_info
+}
+{
+   gdr_unpin_ioctl
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:gdr_unpin_buffer
+}
+{
+   gdr_copy_cond
+   Memcheck:Cond
+   ...
+   fun:gdr_copy_to_bar
+}
+{
+   gdr_copy_value8
+   Memcheck:Value8
+   ...
+   fun:gdr_copy_to_bar
+}

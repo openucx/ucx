@@ -7,6 +7,7 @@
 #include "dc_iface.h"
 #include "dc_ep.h"
 
+#include <uct/ib/base/ib_device.h>
 #include <ucs/async/async.h>
 
 
@@ -299,11 +300,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
 UCS_CLASS_DEFINE(uct_dc_iface_t, uct_rc_iface_t);
 
 ucs_status_t uct_dc_iface_query(uct_dc_iface_t *iface,
-                                uct_iface_attr_t *iface_attr)
+                                uct_iface_attr_t *iface_attr,
+                                size_t put_max_short, size_t max_inline,
+                                size_t am_max_hdr, size_t am_max_iov)
 {
     ucs_status_t status;
 
-    status = uct_rc_iface_query(&iface->super, iface_attr);
+    status = uct_rc_iface_query(&iface->super, iface_attr, put_max_short,
+                                max_inline, am_max_hdr, am_max_iov);
     if (status != UCS_OK) {
         return status;
     }
@@ -563,3 +567,19 @@ ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
 
     return ep_status;
 }
+
+#if IBV_EXP_HW_TM_DC
+void uct_dc_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,
+                                      struct ibv_exp_create_srq_attr *srq_attr,
+                                      struct ibv_exp_srq_dc_offload_params *dc_op)
+{
+    dc_op->timeout    = rc_iface->config.timeout;
+    dc_op->path_mtu   = rc_iface->config.path_mtu;
+    dc_op->pkey_index = 0;
+    dc_op->sl         = rc_iface->super.config.sl;
+    dc_op->dct_key    = UCT_IB_KEY;
+
+    srq_attr->comp_mask         = IBV_EXP_CREATE_SRQ_DC_OFFLOAD_PARAMS;
+    srq_attr->dc_offload_params = dc_op;
+}
+#endif

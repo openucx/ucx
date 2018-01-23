@@ -4,6 +4,9 @@
  * See file LICENSE for terms.
  */
 
+#ifndef UCP_REQUEST_INL_
+#define UCP_REQUEST_INL_
+
 #include "ucp_request.h"
 #include "ucp_worker.h"
 #include "ucp_ep.inl"
@@ -12,6 +15,7 @@
 #include <ucp/dt/dt.h>
 #include <ucs/debug/profile.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucp/dt/dt.inl>
 #include <inttypes.h>
 
 
@@ -26,6 +30,20 @@
     (((_flags) & UCP_REQUEST_FLAG_CALLBACK)        ? 'c' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_RECV)            ? 'r' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_SYNC)            ? 's' : '-')
+
+#define UCP_RECV_DESC_FMT \
+    "rdesc %p %c%c%c%c%c%c len %u+%u"
+
+#define UCP_RECV_DESC_ARG(_rdesc) \
+    (_rdesc), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_UCT_DESC)      ? 't' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_EAGER)         ? 'e' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_EAGER_ONLY)    ? 'o' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_EAGER_SYNC)    ? 's' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) ? 'f' : '-'), \
+    (((_rdesc)->flags & UCP_RECV_DESC_FLAG_RNDV)          ? 'r' : '-'), \
+    (_rdesc)->payload_offset, \
+    ((_rdesc)->length - (_rdesc)->payload_offset)
 
 
 /* defined as a macro to print the call site */
@@ -101,9 +119,9 @@ ucp_request_complete_stream_recv(ucp_request_t *req,
             ucs_queue_pull_elem_non_empty(&ep_stream->match_q, ucp_request_t,
                                           recv.queue);
     ucs_assert(check_req               == req);
-    ucs_assert(req->recv.state.offset  >  0);
+    ucs_assert(req->recv.stream.offset >  0);
 
-    req->recv.stream.length = req->recv.state.offset;
+    req->recv.stream.length = req->recv.stream.offset;
     ucs_trace_req("completing stream receive request %p (%p) "
                   UCP_REQUEST_FLAGS_FMT" count %zu, %s",
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
@@ -117,17 +135,17 @@ ucp_request_can_complete_stream_recv(ucp_request_t *req)
 {
     /* NOTE: first check is needed to avoid heavy "%" operation if request is
      *       completely filled */
-    if (req->recv.state.offset == req->recv.length) {
+    if (req->recv.stream.offset == req->recv.length) {
         return 1;
     }
 
     /* 0-length stream recv is meaningless if this was not requested explicitely */
-    if (req->recv.state.offset == 0) {
+    if (req->recv.stream.offset == 0) {
         return 0;
     }
 
     if (ucs_likely(UCP_DT_IS_CONTIG(req->recv.datatype))) {
-        return req->recv.state.offset %
+        return req->recv.stream.offset %
                ucp_contig_dt_elem_size(req->recv.datatype) == 0;
     }
 
@@ -322,9 +340,7 @@ ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
 {
     if (req->send.state.uct_comp.func) {
         req->send.state.dt.offset = req->send.length;
-        if (status == UCS_ERR_CANCELED) {
-            req->send.state.uct_comp.count = 0;
-        }
+        req->send.state.uct_comp.count = 0;
         req->send.state.uct_comp.func(&req->send.state.uct_comp, status);
     } else {
         ucp_request_complete_send(req, status);
@@ -343,6 +359,16 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_request_send_buffer_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
 {
     ucp_md_map_t md_map = UCS_BIT(ucp_ep_md_index(req->send.ep, lane));
+    return ucp_request_send_buffer_reg(req, md_map);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_send_request_add_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
+{
+    /* add new lane to registration map */
+    ucp_md_map_t md_map = UCS_BIT(ucp_ep_md_index(req->send.ep, lane)) |
+                          req->send.state.dt.dt.contig.md_map;
+    ucs_assert(ucs_count_one_bits(md_map) <= UCP_MAX_OP_MDS);
     return ucp_request_send_buffer_reg(req, md_map);
 }
 
@@ -373,3 +399,131 @@ ucp_request_wait_uct_comp(ucp_request_t *req)
         ucp_worker_progress(req->send.ep->worker);
     }
 }
+
+/**
+ * Unpack receive data to a request
+ *
+ * req - receive request
+ * data - data to unpack
+ * length -
+ * offset - offset of received data within the request, for OOO fragments
+ *
+ *
+ */
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
+                             size_t length, size_t offset, int last)
+{
+    ucp_dt_generic_t *dt_gen;
+    ucs_status_t status;
+
+    ucs_assert(req->status == UCS_OK);
+
+    ucp_trace_req(req, "unpack recv_data req_len %zu data_len %zu offset %zu last: %s",
+                  req->recv.length, length, offset, last ? "yes" : "no");
+
+    if (ucs_unlikely((length + offset) > req->recv.length)) {
+        ucs_debug("message truncated: recv_length %zu offset %zu buffer_size %zu",
+                  length, offset, req->recv.length);
+        if (UCP_DT_IS_GENERIC(req->recv.datatype)) {
+            dt_gen = ucp_dt_generic(req->recv.datatype);
+            UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish,
+                                         req->recv.state.dt.generic.state);
+        }
+        return UCS_ERR_MESSAGE_TRUNCATED;
+    }
+
+    switch (req->recv.datatype & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_CONTIG:
+        if (ucs_likely(UCP_MEM_IS_HOST(req->recv.mem_type))) {
+            UCS_PROFILE_NAMED_CALL("memcpy_recv", memcpy, req->recv.buffer + offset,
+                                   data, length);
+        } else {
+            ucp_mem_type_unpack(req->recv.worker, req->recv.buffer + offset,
+                                data, length, req->recv.mem_type);
+        }
+        return UCS_OK;;
+
+    case UCP_DATATYPE_IOV:
+        if (offset != req->recv.state.offset) {
+            ucp_dt_iov_seek(req->recv.buffer, req->recv.state.dt.iov.iovcnt,
+                            offset - req->recv.state.offset,
+                            &req->recv.state.dt.iov.iov_offset,
+                            &req->recv.state.dt.iov.iovcnt_offset);
+            req->recv.state.offset = offset;
+        }
+        UCS_PROFILE_CALL(ucp_dt_iov_scatter, req->recv.buffer,
+                         req->recv.state.dt.iov.iovcnt, data, length,
+                         &req->recv.state.dt.iov.iov_offset,
+                         &req->recv.state.dt.iov.iovcnt_offset);
+        req->recv.state.offset += length;
+        return UCS_OK;
+
+    case UCP_DATATYPE_GENERIC:
+        dt_gen = ucp_dt_generic(req->recv.datatype);
+        status = UCS_PROFILE_NAMED_CALL("dt_unpack", dt_gen->ops.unpack,
+                                        req->recv.state.dt.generic.state,
+                                        offset, data, length);
+        if (last || (status != UCS_OK)) {
+            UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish,
+                                        req->recv.state.dt.generic.state);
+        }
+        return status;
+
+    default:
+        ucs_fatal("unexpected datatype=%lx", req->recv.datatype);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
+                   unsigned am_flags, uint16_t hdr_len, uint16_t rdesc_flags,
+                   ucp_recv_desc_t **rdesc_p)
+{
+    ucp_recv_desc_t *rdesc;
+    ucs_status_t status;
+
+    if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
+        /* slowpath */
+        rdesc        = (ucp_recv_desc_t *)data - 1;
+        rdesc->flags = rdesc_flags | UCP_RECV_DESC_FLAG_UCT_DESC;
+        status       = UCS_INPROGRESS;
+    } else {
+        rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
+        if (rdesc == NULL) {
+            ucs_error("ucp recv descriptor is not allocated");
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        rdesc->flags = rdesc_flags;
+        memcpy(rdesc + 1, data, length);
+        status = UCS_OK;
+    }
+
+    rdesc->length         = length;
+    rdesc->payload_offset = hdr_len;
+    *rdesc_p              = rdesc;
+    return status;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_lane_index_t
+ucp_send_request_get_next_am_bw_lane(ucp_request_t *req)
+{
+    ucp_lane_index_t lane;
+
+    /* at least one lane must be initialized */
+    ucs_assert(ucp_ep_config(req->send.ep)->key.am_bw_lanes[0] != UCP_NULL_LANE);
+
+    lane = (req->send.tag.am_bw_index >= UCP_MAX_LANES) ?
+           UCP_NULL_LANE :
+           ucp_ep_config(req->send.ep)->key.am_bw_lanes[req->send.tag.am_bw_index];
+    if (lane != UCP_NULL_LANE) {
+        req->send.tag.am_bw_index++;
+        return lane;
+    } else {
+        req->send.tag.am_bw_index = 1;
+        return ucp_ep_config(req->send.ep)->key.am_bw_lanes[0];
+    }
+}
+
+#endif

@@ -11,6 +11,7 @@
 
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
+#include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug.h>
 #include <ucs/time/time.h>

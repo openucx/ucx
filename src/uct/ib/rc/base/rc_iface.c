@@ -112,9 +112,51 @@ static ucs_mpool_ops_t uct_rc_fc_pending_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
+static void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
+                                   uct_iface_attr_t *iface_attr,
+                                   size_t max_inline)
+{
+#if IBV_EXP_HW_TM
+    unsigned eager_hdr_size = sizeof(struct ibv_exp_tmh);
+    struct ibv_exp_port_attr* port_attr;
+
+    if (!UCT_RC_IFACE_TM_ENABLED(iface)) {
+        return;
+    }
+
+    iface_attr->cap.flags |= UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                             UCT_IFACE_FLAG_TAG_EAGER_ZCOPY |
+                             UCT_IFACE_FLAG_TAG_RNDV_ZCOPY;
+
+    if (max_inline >= eager_hdr_size) {
+        iface_attr->cap.tag.eager.max_short = max_inline - eager_hdr_size;
+        iface_attr->cap.flags              |= UCT_IFACE_FLAG_TAG_EAGER_SHORT;
+    }
+
+    iface_attr->cap.tag.eager.max_bcopy = iface->super.config.seg_size -
+                                          eager_hdr_size;
+    iface_attr->cap.tag.eager.max_zcopy = iface->super.config.seg_size -
+                                          eager_hdr_size;
+    iface_attr->cap.tag.eager.max_iov   = 1;
+
+    port_attr = uct_ib_iface_port_attr(&iface->super);
+    iface_attr->cap.tag.rndv.max_zcopy  = port_attr->max_msg_sz;
+
+    /* TMH can carry 2 additional bytes of private data */
+    iface_attr->cap.tag.rndv.max_hdr    = iface->tm.max_rndv_data + 2;
+    iface_attr->cap.tag.rndv.max_iov    = 1;
+
+    iface_attr->cap.tag.recv.max_zcopy       = port_attr->max_msg_sz;
+    iface_attr->cap.tag.recv.max_iov         = 1;
+    iface_attr->cap.tag.recv.min_recv        = 0;
+    iface_attr->cap.tag.recv.max_outstanding = iface->tm.num_tags;
+#endif
+}
 
 ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
-                                uct_iface_attr_t *iface_attr)
+                                uct_iface_attr_t *iface_attr,
+                                size_t put_max_short, size_t max_inline,
+                                size_t am_max_hdr, size_t am_max_iov)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     ucs_status_t status;
@@ -169,6 +211,34 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     iface_attr->cap.put.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
     iface_attr->cap.get.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
     iface_attr->cap.am.align_mtu  = uct_ib_mtu_value(iface->config.path_mtu);
+
+
+    /* PUT */
+    iface_attr->cap.put.max_short = put_max_short;
+    iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
+    iface_attr->cap.put.min_zcopy = 0;
+    iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
+    iface_attr->cap.put.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
+
+    /* GET */
+    iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
+    iface_attr->cap.get.min_zcopy = iface->super.config.max_inl_resp + 1;
+    iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
+    iface_attr->cap.get.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
+
+    /* AM */
+    iface_attr->cap.am.max_short  = max_inline - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.min_zcopy  = 0;
+    iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_hdr    = am_max_hdr - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_iov    = am_max_iov;
+
+    /* Error Handling */
+    iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+
+    /* Tag Offload */
+    uct_rc_iface_tag_query(iface, iface_attr, max_inline);
 
     return UCS_OK;
 }
@@ -429,6 +499,51 @@ static void uct_rc_iface_release_desc(uct_recv_desc_t *self, void *desc)
     void *ib_desc = (char*)desc - release->offset;
     ucs_mpool_put_inline(ib_desc);
 }
+
+ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
+                                      struct ibv_exp_tmh *tmh,
+                                      unsigned byte_len)
+{
+    uct_rc_iface_tmh_priv_data_t *priv = (uct_rc_iface_tmh_priv_data_t*)tmh->reserved;
+    uct_ib_md_t *ib_md                 = uct_ib_iface_md(&iface->super);
+    struct ibv_exp_tmh_rvh *rvh;
+    unsigned tm_hdrs_len;
+    unsigned rndv_usr_hdr_len;
+    size_t rndv_data_len;
+    void *rndv_usr_hdr;
+    void *rb;
+    char packed_rkey[UCT_MD_COMPONENT_NAME_MAX + UCT_IB_MD_PACKED_RKEY_SIZE];
+
+    rvh = (struct ibv_exp_tmh_rvh*)(tmh + 1);
+
+    /* RC uses two headers: TMH + RVH, DC uses three: TMH + RVH + RAVH.
+     * So, get actual RNDV hdrs len from offsets. */
+    tm_hdrs_len = sizeof(*tmh) +
+                  (iface->tm.rndv_desc.offset - iface->tm.eager_desc.offset);
+
+    rndv_usr_hdr     = (char*)tmh + tm_hdrs_len;
+    rndv_usr_hdr_len = byte_len - tm_hdrs_len;
+    rndv_data_len    = ntohl(rvh->len);
+
+    /* Private TMH data may contain the first bytes of the user header, so it
+       needs to be copied before that. Thus, either RVH (rc) or RAVH (dc)
+       will be overwritten. That's why we saved rvh->length before. */
+    ucs_assert(priv->length <= UCT_RC_IFACE_TMH_PRIV_LEN);
+
+    memcpy((char*)rndv_usr_hdr - priv->length, &priv->data, priv->length);
+
+    /* Create "packed" rkey to pass it in the callback */
+    rb = uct_md_fill_md_name(&ib_md->super, packed_rkey);
+    uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, rb);
+
+    /* Do not pass flags to cb, because rkey is allocated on stack */
+    return iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, 0,
+                                   be64toh(tmh->tag),
+                                   (char *)rndv_usr_hdr - priv->length,
+                                   rndv_usr_hdr_len + priv->length,
+                                   be64toh(rvh->va), rndv_data_len,
+                                   packed_rkey);
+}
 #endif
 
 static void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
@@ -487,7 +602,8 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
 {
 
 #if IBV_EXP_HW_TM
-    uct_ib_md_t *md = uct_ib_iface_md(&iface->super);
+    uct_ib_md_t *md       = uct_ib_iface_md(&iface->super);
+    unsigned tmh_hdrs_len = sizeof(struct ibv_exp_tmh) + rndv_hdr_len;
 
     if (!UCT_RC_IFACE_TM_ENABLED(iface)) {
         goto out_tm_disabled;
@@ -495,11 +611,15 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
 
     iface->tm.eager_desc.super.cb = uct_rc_iface_release_desc;
     iface->tm.eager_desc.offset   = sizeof(struct ibv_exp_tmh)
-                                    - sizeof(uct_rc_hdr_t) +
+                                    - sizeof(uct_rc_hdr_t)
                                     + iface->super.config.rx_headroom_offset;
 
     iface->tm.rndv_desc.super.cb  = uct_rc_iface_release_desc;
     iface->tm.rndv_desc.offset    = iface->tm.eager_desc.offset + rndv_hdr_len;
+
+    ucs_assert(IBV_DEVICE_TM_CAPS(&md->dev, max_rndv_hdr_size) >= tmh_hdrs_len);
+    iface->tm.max_rndv_data       = IBV_DEVICE_TM_CAPS(&md->dev, max_rndv_hdr_size) -
+                                    tmh_hdrs_len;
 
     /* Init ptr array to store completions of RNDV operations. Index in
      * ptr_array is used as operation ID and is passed in "app_context"
@@ -521,8 +641,8 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
      * There can be up to "max_cancel_sync_ops" SYNC ops during cancellation.
      * Also we assume that there can be up to two pending SYNC ops during
      * unexpected messages flow. */
-    srq_init_attr->tm_cap.max_ops = (2 * iface->tm.num_tags) +
-                                    max_cancel_sync_ops + 2;
+    iface->tm.cmd_qp_len = (2 * iface->tm.num_tags) + max_cancel_sync_ops + 2;
+    srq_init_attr->tm_cap.max_ops = iface->tm.cmd_qp_len;
     srq_init_attr->comp_mask     |= IBV_EXP_CREATE_SRQ_CQ |
                                     IBV_EXP_CREATE_SRQ_TM;
 
@@ -549,6 +669,12 @@ void uct_rc_iface_tag_cleanup(uct_rc_iface_t *iface)
         ucs_ptr_array_cleanup(&iface->tm.rndv_comps);
     }
 #endif
+}
+
+unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    return iface->progress(iface);
 }
 
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,

@@ -537,8 +537,12 @@ protected:
 
 UCS_TEST_P(test_async, timer_unset_from_handler) {
     local_timer_remove_handler lt(GetParam());
-    suspend_and_poll(&lt, COUNT);
+    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(10.0);
+    do {
+        suspend_and_poll(&lt, 1);
+    } while ((lt.count() == 0) && (ucs_get_time() < deadline));
     EXPECT_GE(lt.count(), 1);
+    suspend_and_poll(&lt, COUNT);
     EXPECT_LE(lt.count(), 5); /* timer could fire multiple times before we remove it */
     int count = lt.count();
     suspend_and_poll(&lt, COUNT);

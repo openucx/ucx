@@ -141,7 +141,7 @@ public:
 
     void test_flush_put_bcopy(flush_func_t flush) {
         const size_t length = 8;
-        check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+        check_caps(UCT_IFACE_FLAG_PUT_BCOPY);
         mapped_buffer sendbuf(length, SEED1, sender());
         mapped_buffer recvbuf(length, SEED2, receiver());
         sendbuf.pattern_fill(SEED3);

@@ -80,6 +80,7 @@ typedef enum {
     UCS_ERR_LAST                   = -100
 } UCS_S_PACKED ucs_status_t ;
 
+
 #define UCS_IS_LINK_ERROR(_code) \
     (((_code) <= UCS_ERR_FIRST_LINK_FAILURE) && \
      ((_code) >= UCS_ERR_LAST_LINK_FAILURE)

@@ -12,22 +12,16 @@
 #include <ucp/proto/proto.h>
 #include <ucs/datastruct/queue.h>
 
-/**
- * Header for SW RNDV request
- */
-typedef struct ucp_sw_rndv_hdr {
-    ucp_request_hdr_t super;
-    size_t            length;
-    uint16_t          flags;
-} UCS_S_PACKED ucp_sw_rndv_hdr_t;
 
 /**
- * Header for extended SW RNDV request
+ * Header for unexpected rendezvous
  */
-typedef struct ucp_sw_rndv_ext_hdr {
-    ucp_sw_rndv_hdr_t super;
-    uintptr_t         address;
-} UCS_S_PACKED ucp_sw_rndv_ext_hdr_t;
+typedef struct {
+    uint64_t       sender_uuid;  /* Sender worker uuid */
+    uintptr_t      reqptr;       /* Request pointer */
+    uint8_t        md_index;     /* md index */
+} UCS_S_PACKED ucp_tag_offload_unexp_rndv_hdr_t;
+
 
 /**
  * Header for sync send acknowledgment
@@ -81,16 +75,15 @@ static UCS_F_ALWAYS_INLINE void
 ucp_tag_offload_try_post(ucp_worker_t *worker, ucp_request_t *req,
                          ucp_request_queue_t *req_queue)
 {
-    if (ucs_unlikely((req->recv.length >= worker->tm.offload.thresh) &&
-                     (req->recv.state.offset == 0))) {
+    if (ucs_unlikely(req->recv.length >= worker->tm.offload.thresh)) {
         if (ucp_tag_offload_post(req, req_queue)) {
             return;
         }
     }
 
-    req->flags |= UCP_REQUEST_FLAG_BLOCK_OFFLOAD;
     ++worker->tm.expected.sw_all_count;
     ++req_queue->sw_count;
+    req_queue->block_count += !!(req->flags & UCP_REQUEST_FLAG_BLOCK_OFFLOAD);
 }
 
 static UCS_F_ALWAYS_INLINE void

@@ -9,6 +9,7 @@
 
 #include <ucs/datastruct/queue.h>
 #include <ucs/time/time.h>
+#include <ucs/type/status.h>
 #include <ucs/sys/preprocessor.h>
 #include <pthread.h>
 

@@ -29,16 +29,25 @@ static ucs_stats_class_t uct_ib_device_stats_class = {
 #endif
 
 static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
-  {0x02c9, 4099, "ConnectX-3",     UCT_IB_DEVICE_FLAG_MLX4_PRM, 10},
-  {0x02c9, 4103, "ConnectX-3 Pro", UCT_IB_DEVICE_FLAG_MLX4_PRM, 11},
-  {0x02c9, 4113, "Connect-IB",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 20},
-  {0x02c9, 4115, "ConnectX-4",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 30},
-  {0x02c9, 4116, "ConnectX-4",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 29},
-  {0x02c9, 4117, "ConnectX-4 LX",  UCT_IB_DEVICE_FLAG_MLX5_PRM, 28},
-  {0x02c9, 4119, "ConnectX-5",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 38},
-  {0x02c9, 4121, "ConnectX-5",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 40},
-  {0x02c9, 4120, "ConnectX-5",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 39},
-  {0,      0,    "Generic HCA",    0,                           0}
+  {0x02c9, 4099, "ConnectX-3",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX4_PRM, 10},
+  {0x02c9, 4103, "ConnectX-3 Pro",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX4_PRM, 11},
+  {0x02c9, 4113, "Connect-IB",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 20},
+  {0x02c9, 4115, "ConnectX-4",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 30},
+  {0x02c9, 4116, "ConnectX-4",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 29},
+  {0x02c9, 4117, "ConnectX-4 LX",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 28},
+  {0x02c9, 4119, "ConnectX-5",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 38},
+  {0x02c9, 4121, "ConnectX-5",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 40},
+  {0x02c9, 4120, "ConnectX-5",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 39},
+  {0, 0, "Generic HCA", 0, 0}
 };
 
 static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask)
@@ -758,22 +767,23 @@ uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num, unsigned gid_ind
 size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
 {
 #if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
+    const struct ibv_exp_device_attr *dev_attr = &dev->dev_attr;
     uint32_t required_ud_odp_caps = IBV_EXP_ODP_SUPPORT_SEND;
     uint32_t required_rc_odp_caps = IBV_EXP_ODP_SUPPORT_SEND |
                                     IBV_EXP_ODP_SUPPORT_WRITE |
                                     IBV_EXP_ODP_SUPPORT_READ;
 
     if (RUNNING_ON_VALGRIND ||
-        !IBV_EXP_HAVE_ODP(&dev->dev_attr) ||
-        !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev->dev_attr, rc), required_rc_odp_caps) ||
-        !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev->dev_attr, ud), required_ud_odp_caps))
+        !IBV_EXP_HAVE_ODP(dev_attr) ||
+        !ucs_test_all_flags(IBV_EXP_ODP_CAPS(dev_attr, rc), required_rc_odp_caps) ||
+        !ucs_test_all_flags(IBV_EXP_ODP_CAPS(dev_attr, ud), required_ud_odp_caps))
     {
         return 0;
     }
 
-    if (IBV_DEVICE_HAS_DC(&dev->dev_attr)
+    if (IBV_DEVICE_HAS_DC(dev_attr)
 #  if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS_PER_TRANSPORT_CAPS_DC_ODP_CAPS
-        && !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev->dev_attr, dc), required_rc_odp_caps)
+        && !ucs_test_all_flags(IBV_EXP_ODP_CAPS(dev_attr, dc), required_rc_odp_caps)
 #  endif
         )
     {
@@ -781,7 +791,7 @@ size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
     }
 
 #  if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_MR_MAX_SIZE
-    return dev->dev_attr.odp_mr_max_size;
+    return dev_attr->odp_mr_max_size;
 #  else
     return 1ul << 28; /* Limit ODP to 256 MB by default */
 #  endif /* HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_MR_MAX_SIZE */
@@ -789,4 +799,56 @@ size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
 #else
     return 0;
 #endif /* HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS */
+}
+
+static ucs_status_t
+uct_ib_device_parse_fw_ver_triplet(uct_ib_device_t *dev, unsigned *major,
+                                   unsigned *minor, unsigned *release)
+{
+    int ret;
+
+    ret = sscanf(dev->dev_attr.fw_ver, "%u.%u.%u", major, minor, release);
+    if (ret != 3) {
+        ucs_debug("failed to parse firmware version string '%s'",
+                  dev->dev_attr.fw_ver);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+int uct_ib_device_odp_has_global_mr(uct_ib_device_t *dev)
+{
+    unsigned fw_major, fw_minor, fw_release;
+    ucs_status_t status;
+
+    if (!uct_ib_device_odp_max_size(dev)) {
+        return 0;
+    }
+
+#if HAVE_DECL_IBV_EXP_ODP_SUPPORT_IMPLICIT
+    if (!(dev->dev_attr.odp_caps.general_odp_caps & IBV_EXP_ODP_SUPPORT_IMPLICIT)) {
+        return 0;
+    }
+#endif
+
+    if (uct_ib_device_spec(dev)->flags & UCT_IB_DEVICE_FLAG_MELLANOX) {
+        status = uct_ib_device_parse_fw_ver_triplet(dev, &fw_major, &fw_minor,
+                                                    &fw_release);
+        if (status != UCS_OK) {
+            return 0;
+        }
+
+        if ((fw_major < 12) || (fw_minor < 21)) {
+            return 0;
+        } else if (fw_minor == 21) {
+            return (fw_release >= 2031) && (fw_release <= 2099);
+        } else if (fw_minor == 22) {
+            return (fw_release >= 84);
+        } else {
+            return 1;
+        }
+    }
+
+    return 1;
 }

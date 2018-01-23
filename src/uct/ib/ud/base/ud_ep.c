@@ -1138,8 +1138,9 @@ void uct_ud_ep_pending_purge(uct_ep_h ep_h, uct_pending_purge_callback_t cb,
     uct_ud_leave(iface);
 }
 
-void  uct_ud_ep_disconnect(uct_ep_h ep)
+void  uct_ud_ep_disconnect(uct_ep_h tl_ep)
 {
+    uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
     /*
      * At the moment scedule flush and keep ep
      * until interface is destroyed. User should not send any
@@ -1152,10 +1153,11 @@ void  uct_ud_ep_disconnect(uct_ep_h ep)
 
     ucs_trace_func("");
     /* cancel user pending */
-    uct_ud_ep_pending_purge(ep, NULL, NULL);
+    uct_ud_ep_pending_purge(tl_ep, NULL, NULL);
 
-    /* scedule flush */
-    uct_ud_ep_flush(ep, 0, NULL);
+    /* schedule flush */
+    uct_ud_ep_flush(tl_ep, 0, NULL);
 
-    /* TODO: at leat in debug mode keep and check ep state  */
+    ep->flags |= UCT_UD_EP_FLAG_DISCONNECTED;
+    /* TODO: at least in debug mode keep and check tl_ep state  */
 }

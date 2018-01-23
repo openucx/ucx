@@ -26,8 +26,7 @@ protected:
 
     static ucs_log_func_rc_t
     log_handler(const char *file, unsigned line, const char *function,
-                ucs_log_level_t level, const char *prefix, const char *message,
-                va_list ap) {
+                ucs_log_level_t level, const char *message, va_list ap) {
         // Ignore errors that transport cannot reach peer
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
@@ -65,10 +64,9 @@ test_perf::test_spec test_ucp_perf::tests[] =
     0 },
 
   { "tag sync mr", "Mpps",
-    UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_API_UCP, UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000l,
-    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 100.0,
-    UCX_PERF_TEST_FLAG_TAG_SYNC },
+    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 100.0, 0},
 
   { "tag wild mr", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,

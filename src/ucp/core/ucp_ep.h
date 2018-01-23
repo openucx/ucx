@@ -35,7 +35,8 @@ enum {
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT    = UCS_BIT(8), /* DEBUG: Connection request was sent */
     UCP_EP_FLAG_CONNECT_REP_SENT    = UCS_BIT(9), /* DEBUG: Connection reply was sent */
-    UCP_EP_FLAG_CONNECT_ACK_SENT    = UCS_BIT(10) /* DEBUG: Connection ACK was sent */
+    UCP_EP_FLAG_CONNECT_ACK_SENT    = UCS_BIT(10),/* DEBUG: Connection ACK was sent */
+    UCP_EP_FLAG_DEST_UUID_PEER      = UCS_BIT(11) /* DEBUG: dest_uuid is of the remote worker */
 };
 
 
@@ -47,6 +48,14 @@ enum {
     UCP_EP_STAT_TAG_TX_EAGER_SYNC,
     UCP_EP_STAT_TAG_TX_RNDV,
     UCP_EP_STAT_LAST
+};
+
+
+/**
+ * Endpoint init flags
+ */
+enum {
+    UCP_EP_INIT_FLAG_MEM_TYPE          = UCS_BIT(0)  /**< Endpoint for local mem type transfers */
 };
 
 
@@ -83,6 +92,9 @@ typedef struct ucp_ep_config_key {
 
     /* Lanes for atomic operations, sorted by priority, highest first */
     ucp_lane_index_t       amo_lanes[UCP_MAX_LANES];
+
+    /* Lanes for high-bw active messages, sorted by priority, highest first */
+    ucp_lane_index_t       am_bw_lanes[UCP_MAX_LANES];
 
     /* Local memory domains to send remote keys for in high-bw rma protocols
      * NOTE: potentially it can be different than what is imposed by rma_bw_lanes,
@@ -182,6 +194,14 @@ typedef struct ucp_ep_config {
             size_t          rkey_size;
         } rndv;
 
+        /* special thresholds for the ucp_tag_send_nbr() */
+        struct {
+            /* Threshold for switching from eager to RMA based rendezvous */
+            size_t          rma_thresh;
+            /* Threshold for switching from eager to AM based rendezvous */
+            size_t          am_thresh;
+        } rndv_send_nbr;
+
         struct {
             /* Maximal iov count for RNDV offload */
             size_t          max_rndv_iov;
@@ -240,7 +260,7 @@ typedef struct ucp_ep {
     /* TODO allocate ep dynamically according to number of lanes */
     uct_ep_h                      uct_eps[UCP_MAX_LANES]; /* Transports for every lane */
 
-    /* Feature specific extentions allocated on demand */
+    /* Feature specific extensions allocated on demand */
     struct {
         ucp_ep_ext_stream_t       *stream;      /* UCP_FEATURE_STREAM */
     } ext;
@@ -248,6 +268,10 @@ typedef struct ucp_ep {
 
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
+
+void ucp_ep_add_to_hash(ucp_ep_h ep);
+
+void ucp_ep_delete_from_hash(ucp_ep_h ep);
 
 void ucp_ep_config_lane_info_str(ucp_context_h context,
                                  const ucp_ep_config_key_t *key,
@@ -260,17 +284,27 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
                         const char *peer_name, const char *message,
                         ucp_ep_h *ep_p);
 
+ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
+                                const ucp_ep_params_t *params,
+                                const char *peer_name, const char *message,
+                                ucp_ep_h *ep_p);
+
+ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
+                                          const ucp_ep_params_t *params,
+                                          unsigned ep_init_flags,
+                                          const char *message, ucp_ep_h *ep_p);
+
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_send_callback_t req_cb,
                                        unsigned req_flags,
                                        ucp_request_callback_t flushed_cb);
 
-ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
-                                const char *message, ucp_ep_h *ep_p);
+void ucp_ep_config_key_set_params(ucp_ep_config_key_t *key,
+                                  const ucp_ep_params_t *params);
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
 
-void ucp_ep_destroy_internal(ucp_ep_h ep, const char *message);
+void ucp_ep_destroy_internal(ucp_ep_h ep);
 
 int ucp_ep_is_stub(ucp_ep_h ep);
 
@@ -286,5 +320,7 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
                                            const uct_linear_growth_t *reg_cost,
                                            const ucp_context_h context,
                                            double bandwidth);
+
+ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
 
 #endif

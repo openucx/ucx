@@ -311,6 +311,8 @@ typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status
  *
  *  This callback routine is invoked on the server side upon creating a connection
  *  to a remote client. The user can pass an argument to this callback.
+ *  The user is responsible for releasing the @a ep handle using the
+ *  @ref ucp_ep_destroy "ucp_ep_destroy()" routine.
  *
  *  @param [in]  ep      Handle to a newly created endpoint which is connected
  *                       to the remote peer which has initiated the connection.

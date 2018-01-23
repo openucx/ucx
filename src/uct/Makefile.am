@@ -14,7 +14,7 @@ libuct_la_CPPFLAGS = $(BASE_CPPFLAGS) -I$(abs_top_srcdir)/src -I$(abs_top_buildd
 libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libuct_la_LIBADD   = $(LIBM) ../ucs/libucs.la
 libuct_ladir       = $(includedir)/uct
-libmlx5_ver        = \"`rpm -qf $(IBVERBS_DIR)/include/infiniband/mlx5_hw.h &>/dev/null && rpm -qf /usr/include/infiniband/mlx5_hw.h`\"
+libmlx5_ver        = \"`(rpm -qf $(IBVERBS_DIR)/include/infiniband/mlx5_hw.h &>/dev/null && rpm -qf /usr/include/infiniband/mlx5_hw.h) | head -1`\"
 
 nobase_dist_libuct_la_HEADERS = \
 	api/tl.h \

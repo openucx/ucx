@@ -11,7 +11,7 @@
 #  include "config.h"
 #endif
 
-#include <ucs/debug/log.h>
+#include <ucs/config/types.h>
 
 #include "ucm_config.h"
 

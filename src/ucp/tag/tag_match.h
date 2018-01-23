@@ -12,6 +12,7 @@
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/stats/stats.h>
 
 
 #define UCP_TAG_MASK_FULL     0xffffffffffffffffUL  /* All 1-s */
@@ -33,10 +34,25 @@ typedef struct {
  * Queue of expected requests
  */
 typedef struct {
-    ucs_queue_head_t      queue;      /* Requests queue */
-    unsigned              sw_count;   /* Number of requests in this queue which
-                                         are not posted to offload */
+    ucs_queue_head_t      queue;       /* Requests queue */
+    unsigned              sw_count;    /* Number of requests in this queue which
+                                          are not posted to offload */
+    unsigned              block_count; /* Number of requests which can't be
+                                          posted to offload. */
 } ucp_request_queue_t;
+
+
+/**
+ * Hash table entry for tag message fragments
+ */
+typedef union {
+    ucs_queue_head_t      unexp_q;    /* Queue of unexpected descriptors */
+    ucp_request_t         *exp_req;   /* Expected request */
+} ucp_tag_frag_match_t;
+
+
+KHASH_INIT(ucp_tag_frag_hash, uint64_t, ucp_tag_frag_match_t, 1,
+           kh_int64_hash_func, kh_int64_hash_equal);
 
 
 /**
@@ -59,6 +75,9 @@ typedef struct ucp_tag_match {
         ucs_list_link_t       *hash;      /* Hash table of unexpected tags */
     } unexpected;
 
+    /* Hash for fragment assembly, the key is a globally unique tag message id */
+    khash_t(ucp_tag_frag_hash) frag_hash;
+
     /* Tag offload fields */
     struct {
         ucs_queue_head_t      sync_reqs;        /* Outgoing sync send requests */
@@ -80,6 +99,10 @@ typedef struct ucp_tag_match {
                                                    capable interfaces */
     } offload;
 
+    struct {
+        uint64_t              message_id;       /* Unique ID for active messages */
+    } am;
+
 } ucp_tag_match_t;
 
 
@@ -93,6 +116,10 @@ int ucp_tag_unexp_is_empty(ucp_tag_match_t *tm);
 
 ucp_request_t*
 ucp_tag_exp_search_all(ucp_tag_match_t *tm, ucp_request_queue_t *req_queue,
-                       ucp_tag_t recv_tag, size_t recv_len, unsigned recv_flags);
+                       ucp_tag_t tag);
+
+void ucp_tag_frag_list_process_queue(ucp_tag_match_t *tm, ucp_request_t *req,
+                                     uint64_t msg_id
+                                     UCS_STATS_ARG(int counter_idx));
 
 #endif

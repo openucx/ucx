@@ -119,7 +119,9 @@ extern ucs_config_field_t uct_dc_iface_config_table[];
 
 ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface);
 
-ucs_status_t uct_dc_iface_query(uct_dc_iface_t *iface, uct_iface_attr_t *iface_attr);
+ucs_status_t uct_dc_iface_query(uct_dc_iface_t *iface, uct_iface_attr_t *iface_attr,
+                                size_t put_max_short, size_t max_inline,
+                                size_t am_max_hdr, size_t am_max_iov);
 
 ucs_status_t uct_dc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr);
 
@@ -144,6 +146,20 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
 
 ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
                                    ucs_status_t status);
+
+#if IBV_EXP_HW_TM_DC
+void uct_dc_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,
+                                      struct ibv_exp_create_srq_attr *srq_attr,
+                                      struct ibv_exp_srq_dc_offload_params *dc_op);
+
+static UCS_F_ALWAYS_INLINE void
+uct_dc_iface_fill_ravh(struct ibv_exp_tmh_ravh *ravh, uint32_t dct_num)
+{
+    ravh->sl_dct        = htobe32(dct_num);
+    ravh->dc_access_key = htobe64(UCT_IB_KEY);
+    ravh->reserved      = 0;
+}
+#endif
 
 /* TODO:
  * use a better seach algorithm (perfect hash, bsearch, hash) ???

@@ -7,6 +7,7 @@
 #include "pgtable.h"
 
 #include <ucs/arch/bitops.h>
+#include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>

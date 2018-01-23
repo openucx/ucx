@@ -111,7 +111,7 @@ enum {
 
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
-                             (_flags & UCP_RECV_DESC_FLAG_SYNC) ? \
+                             (_flags & UCP_RECV_DESC_FLAG_EAGER_SYNC) ? \
                              UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG : \
                              UCP_WORKER_STAT_TAG_RX_EAGER_MSG, 1);
 
@@ -148,9 +148,12 @@ struct ucp_worker_iface {
     ucs_list_link_t               arm_list;      /* Element in arm_ifaces list */
     ucp_rsc_index_t               rsc_index;     /* Resource index */
     int                           event_fd;      /* Event FD, or -1 if undefined */
-    unsigned                      activate_count;/* How times this iface has been activated */
+    unsigned                      activate_count;/* How many times this iface has
+                                                    been activated */
     int                           check_events_id;/* Callback id for check_events */
     unsigned                      proxy_recv_count;/* Counts active messages on proxy handler */
+    unsigned                      post_count;    /* Counts uncompleted requests which are
+                                                    offloaded to the transport */
     uint8_t                       flags;         /* Interface flags */
 };
 
@@ -184,15 +187,18 @@ typedef struct ucp_worker {
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
+    ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */
     ucp_mt_lock_t                 mt_lock;       /* Configuration of multi-threading support */
     ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
+    ucp_ep_h                      mem_type_ep[UCT_MD_MEM_TYPE_LAST];/* memory type eps */
 
     UCS_STATS_NODE_DECLARE(stats);
     UCS_STATS_NODE_DECLARE(tm_offload_stats);
 
-    unsigned                      ep_config_max; /* Maximal number of configurations */
-    unsigned                      ep_config_count;/* Current number of configurations */
-    ucp_ep_config_t               ep_config[0];  /* Array of transport limits and thresholds */
+    ucs_cpu_set_t                 cpu_mask;        /* Save CPU mask for subsequent calls to ucp_worker_listen */
+    unsigned                      ep_config_max;   /* Maximal number of configurations */
+    unsigned                      ep_config_count; /* Current number of configurations */
+    ucp_ep_config_t               ep_config[0];    /* Array of transport limits and thresholds */
 } ucp_worker_t;
 
 
@@ -202,6 +208,12 @@ ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid
 
 unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
                                   const ucp_ep_config_key_t *key);
+
+ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
+                                   uct_iface_params_t *iface_params,
+                                   ucp_worker_iface_t *wiface);
+
+void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface);
 
 void ucp_worker_iface_progress_ep(ucp_worker_iface_t *wiface);
 

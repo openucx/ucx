@@ -99,12 +99,7 @@ void test_ucp_tag::recv_callback(void *request, ucs_status_t status,
 
 void test_ucp_tag::wait(request *req, int buf_index)
 {
-    int worker_index = 0;
-    if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
-        worker_index = buf_index;
-    } else if (GetParam().thread_type == SINGLE_THREAD) {
-        ucs_assert((buf_index == 0) && (worker_index == 0));
-    }
+    int worker_index = get_worker_index(buf_index);
 
     if (is_external_request()) {
         ucp_tag_recv_info_t tag_info;
@@ -120,6 +115,10 @@ void test_ucp_tag::wait(request *req, int buf_index)
     } else {
         while (!req->completed) {
             progress(worker_index);
+            if ((req->external) &&
+                (ucp_request_check_status(req) == UCS_OK)) {
+                return;
+            }
         }
     }
 }
@@ -146,17 +145,23 @@ void test_ucp_tag::wait_for_unexpected_msg(ucp_worker_h worker, double sec)
     } while (ucp_tag_unexp_is_empty(&worker->tm) && (ucs_get_time() < timeout));
 }
 
-test_ucp_tag::request *
-test_ucp_tag::send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
-                      ucp_tag_t tag, int buf_index)
+int test_ucp_tag::get_worker_index(int buf_index)
 {
-    request *req;
     int worker_index = 0;
     if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
         worker_index = buf_index;
     } else if (GetParam().thread_type == SINGLE_THREAD) {
         ucs_assert((buf_index == 0) && (worker_index == 0));
     }
+    return worker_index;
+}
+
+test_ucp_tag::request *
+test_ucp_tag::send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
+                      ucp_tag_t tag, int buf_index)
+{
+    int worker_index = get_worker_index(buf_index);
+    request *req;
 
     req = (request*)ucp_tag_send_nb(sender().ep(worker_index), buffer, count, datatype,
                                     tag, send_callback);
@@ -166,19 +171,36 @@ test_ucp_tag::send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
     return req;
 }
 
+test_ucp_tag::request *
+test_ucp_tag::send_nbr(const void *buffer, size_t count,
+                            ucp_datatype_t datatype,
+                            ucp_tag_t tag, int buf_index)
+{
+    int worker_index = get_worker_index(buf_index);
+    ucs_status_t status;
+    request *req;
+
+    req = request_alloc();
+
+    status = ucp_tag_send_nbr(sender().ep(worker_index), buffer, count, datatype,
+                              tag, req);
+
+    ASSERT_UCS_OK_OR_INPROGRESS(status);
+    if (status == UCS_OK) {
+        request_free(req);
+        return (request *)UCS_STATUS_PTR(UCS_OK);
+    }
+    return req;
+}
+
+
 void test_ucp_tag::send_b(const void *buffer, size_t count, ucp_datatype_t datatype,
                           ucp_tag_t tag, int buf_index)
 {
-    int worker_index = 0;
-    if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
-        worker_index = buf_index;
-    } else if (GetParam().thread_type == SINGLE_THREAD) {
-        ucs_assert((buf_index == 0) && (worker_index == 0));
-    }
-
     request *req = send_nb(buffer, count, datatype, tag, buf_index);
+
     if (req != NULL) {
-        wait(req, worker_index);
+        wait(req, get_worker_index(buf_index));
         request_release(req);
     }
 }
@@ -187,12 +209,7 @@ test_ucp_tag::request *
 test_ucp_tag::send_sync_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
                            ucp_tag_t tag, int buf_index)
 {
-    int worker_index = 0;
-    if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
-        worker_index = buf_index;
-    } else if (GetParam().thread_type == SINGLE_THREAD) {
-        ucs_assert((buf_index == 0) && (worker_index == 0));
-    }
+    int worker_index = get_worker_index(buf_index);
 
     return (request*)ucp_tag_send_sync_nb(sender().ep(worker_index), buffer, count,
                                           datatype, tag, send_callback);
@@ -212,12 +229,7 @@ test_ucp_tag::recv_req_nb(void *buffer, size_t count, ucp_datatype_t dt,
                           ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index)
 {
     request *req = request_alloc();
-    int worker_index = 0;
-    if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
-        worker_index = buf_index;
-    } else if (GetParam().thread_type == SINGLE_THREAD) {
-        ucs_assert((buf_index == 0) && (worker_index == 0));
-    }
+    int worker_index = get_worker_index(buf_index);
 
     ucs_status_t status = ucp_tag_recv_nbr(receiver().worker(worker_index), buffer, count,
                                            dt, tag, tag_mask, req);
@@ -232,13 +244,7 @@ test_ucp_tag::request*
 test_ucp_tag::recv_cb_nb(void *buffer, size_t count, ucp_datatype_t dt,
                          ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index)
 {
-
-    int worker_index = 0;
-    if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
-        worker_index = buf_index;
-    } else if (GetParam().thread_type == SINGLE_THREAD) {
-        ucs_assert((buf_index == 0) && (worker_index == 0));
-    }
+    int worker_index = get_worker_index(buf_index);
 
     request *req = (request*) ucp_tag_recv_nb(receiver().worker(worker_index), buffer, count,
                                               dt, tag, tag_mask, recv_callback);
@@ -263,15 +269,9 @@ ucs_status_t test_ucp_tag::recv_cb_b(void *buffer, size_t count, ucp_datatype_t 
                                      ucp_tag_t tag, ucp_tag_t tag_mask,
                                      ucp_tag_recv_info_t *info, int buf_index)
 {
+    int worker_index = get_worker_index(buf_index);
     ucs_status_t status;
     request *req;
-
-    int worker_index = 0;
-    if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
-        worker_index = buf_index;
-    } else if (GetParam().thread_type == SINGLE_THREAD) {
-        ucs_assert((buf_index == 0) && (worker_index == 0));
-    }
 
     req = (request*)ucp_tag_recv_nb(receiver().worker(worker_index), buffer, count, datatype,
                                     tag, tag_mask, recv_callback);
@@ -292,14 +292,9 @@ ucs_status_t test_ucp_tag::recv_req_b(void *buffer, size_t count, ucp_datatype_t
                                       ucp_tag_t tag, ucp_tag_t tag_mask,
                                       ucp_tag_recv_info_t *info, int buf_index)
 {
-    int worker_index = 0;
-    if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
-        worker_index = buf_index;
-    } else if (GetParam().thread_type == SINGLE_THREAD) {
-        ucs_assert((buf_index == 0) && (worker_index == 0));
-    }
-
+    int worker_index = get_worker_index(buf_index);
     request *req = request_alloc();
+
     ucs_status_t status = ucp_tag_recv_nbr(receiver().worker(worker_index), buffer, count,
                                            datatype, tag, tag_mask, req);
     if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {

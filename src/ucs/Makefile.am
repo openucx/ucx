@@ -67,7 +67,7 @@ noinst_HEADERS = \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
 	datastruct/khash.h \
-	debug/check.h \
+	debug/assert.h \
 	debug/debug.h \
 	debug/log.h \
 	debug/memtrack.h \
@@ -103,6 +103,7 @@ libucs_la_SOURCES = \
 	datastruct/mpool.c \
 	datastruct/pgtable.c \
 	datastruct/ptr_array.c \
+	debug/assert.c \
 	debug/debug.c \
 	debug/log.c \
 	debug/memtrack.c \

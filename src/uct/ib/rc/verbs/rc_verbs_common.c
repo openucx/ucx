@@ -33,83 +33,6 @@ ucs_config_field_t uct_rc_verbs_iface_common_config_table[] = {
   {NULL}
 };
 
-static void uct_rc_verbs_iface_common_tag_query(uct_rc_verbs_iface_common_t *iface,
-                                                uct_rc_iface_t *rc_iface,
-                                                uct_iface_attr_t *iface_attr)
-{
-#if IBV_EXP_HW_TM
-    uct_ib_device_t *dev     = uct_ib_iface_device(&rc_iface->super);
-    unsigned eager_hdr_size  = sizeof(struct ibv_exp_tmh);
-    struct ibv_exp_port_attr* port_attr;
-
-    if (!UCT_RC_IFACE_TM_ENABLED(rc_iface)) {
-        return;
-    }
-
-    iface_attr->cap.flags        |= UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
-                                    UCT_IFACE_FLAG_TAG_EAGER_ZCOPY |
-                                    UCT_IFACE_FLAG_TAG_RNDV_ZCOPY;
-
-    iface_attr->cap.tag.eager.max_short =
-        ucs_max(0, iface->config.max_inline - eager_hdr_size);
-
-    if (iface_attr->cap.tag.eager.max_short > 0 ) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_TAG_EAGER_SHORT;
-    }
-
-    iface_attr->cap.tag.eager.max_bcopy = rc_iface->super.config.seg_size -
-                                          eager_hdr_size;
-    iface_attr->cap.tag.eager.max_zcopy = rc_iface->super.config.seg_size -
-                                          eager_hdr_size;
-    iface_attr->cap.tag.eager.max_iov   = 1;
-
-    port_attr = uct_ib_iface_port_attr(&rc_iface->super);
-    iface_attr->cap.tag.rndv.max_zcopy  = port_attr->max_msg_sz;
-    iface_attr->cap.tag.rndv.max_hdr    = IBV_DEVICE_TM_CAPS(dev, max_rndv_hdr_size);
-    iface_attr->cap.tag.rndv.max_iov    = 1;
-
-    iface_attr->cap.tag.recv.max_zcopy  = port_attr->max_msg_sz;
-    iface_attr->cap.tag.recv.max_iov    = 1;
-    iface_attr->cap.tag.recv.min_recv   = 0;
-#endif
-}
-
-void uct_rc_verbs_iface_common_query(uct_rc_verbs_iface_common_t *verbs_iface,
-                                     uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
-{
-    /* PUT */
-    iface_attr->cap.put.max_short = verbs_iface->config.max_inline;
-    iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
-    iface_attr->cap.put.min_zcopy = 0;
-    iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
-    iface_attr->cap.put.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
-
-    /* GET */
-    iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
-    iface_attr->cap.get.min_zcopy = iface->super.config.max_inl_resp + 1;
-    iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
-    iface_attr->cap.get.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
-
-    /* AM */
-    iface_attr->cap.am.max_short  = verbs_iface->config.max_inline - sizeof(uct_rc_hdr_t);
-    iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
-    iface_attr->cap.am.min_zcopy  = 0;
-    iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
-    /* The first IOV is reserved for the header */
-    iface_attr->cap.am.max_iov    = uct_ib_iface_get_max_iov(&iface->super) - 1;
-
-    /* TODO: may need to change for dc/rc */
-    iface_attr->cap.am.max_hdr    = verbs_iface->config.short_desc_size - sizeof(uct_rc_hdr_t);
-
-    iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
-
-    /* Software overhead */
-    iface_attr->overhead          = 75e-9;
-
-    /* TAG Offload */
-    uct_rc_verbs_iface_common_tag_query(verbs_iface, iface, iface_attr);
-}
-
 unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface, unsigned max)
 {
     struct ibv_recv_wr *bad_wr;
@@ -151,19 +74,19 @@ ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_iface_t *iface,
     return UCS_OK;
 }
 
-void uct_rc_verbs_iface_common_progress_enable(uct_rc_verbs_iface_common_t *iface,
-                                               uct_rc_iface_t *rc_iface,
-                                               unsigned flags)
+void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned flags)
 {
+    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+
     if (flags & UCT_PROGRESS_RECV) {
         /* ignore return value from prepost_recv, since it's not really possible
          * to handle here, and some receives were already pre-posted during iface
          * creation anyway.
          */
-        uct_rc_verbs_iface_common_prepost_recvs(rc_iface, UINT_MAX);
+        uct_rc_verbs_iface_common_prepost_recvs(iface, UINT_MAX);
     }
 
-    uct_base_iface_progress_enable_cb(&rc_iface->super.super, iface->progress,
+    uct_base_iface_progress_enable_cb(&iface->super.super, iface->progress,
                                       flags);
 }
 

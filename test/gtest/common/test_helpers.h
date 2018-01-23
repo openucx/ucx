@@ -11,11 +11,14 @@
 #include "gtest.h"
 
 #include <ucp/api/ucp.h>
+extern "C" {
 #include <ucp/dt/dt_contig.h>
 #include <ucp/dt/dt_iov.h>
+}
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
+#include <ucs/sys/string.h>
 #include <errno.h>
 #include <iostream>
 #include <stdexcept>
@@ -81,12 +84,6 @@ void safe_usleep(double usec);
 
 
 /**
- * Return the IP address of the given interface address.
- */
-std::string get_iface_ip(const struct sockaddr *ifa_addr);
-
-
-/**
  * Check if the given interface has an IPv4 or an IPv6 address.
  */
 bool is_inet_addr(const struct sockaddr* ifa_addr);
@@ -102,6 +99,17 @@ bool is_ib_netdev(const char *ifa_name);
  * Get an available port on the host.
  */
 uint16_t get_port();
+
+
+/**
+ * Return the IP address of the given interface address.
+ */
+template <typename S>
+std::string sockaddr_to_str(const S *saddr) {
+    char buffer[UCS_SOCKADDR_STRING_LEN];
+    return ::ucs_sockaddr_str(reinterpret_cast<const struct sockaddr*>(saddr),
+                              buffer, UCS_SOCKADDR_STRING_LEN);
+}
 
 
 /*
@@ -129,19 +137,18 @@ static inline int rand() {
     return ::rand();
 }
 
-template <typename OutputIterator>
-static void fill_random(OutputIterator begin, OutputIterator end) {
-    for (OutputIterator iter = begin; iter != end; ++iter) {
-        *iter = rand();
-    }
-}
-
 void fill_random(void *data, size_t size);
 
 /* C can be vector or string */
 template <typename C>
 static void fill_random(C& c) {
     fill_random(&c[0], sizeof(c[0]) * c.size());
+}
+
+/* C can be vector or string */
+template <typename C>
+static void fill_random(C& c, size_t size) {
+    fill_random(&c[0], sizeof(c[0]) * size);
 }
 
 template <typename T>
@@ -638,8 +645,9 @@ private:
 #define UCS_TEST_TIME_LIMIT(_seconds) \
     for (ucs_time_t _start_time = ucs_get_time(), _elapsed = 0; \
          _start_time != 0; \
-         (ucs_time_to_sec(_elapsed = ucs_get_time() - _start_time) >= \
-                         (_seconds) * ucs::test_time_multiplier()) \
+         ((ucs_time_to_sec(_elapsed = ucs_get_time() - _start_time) >= \
+                         (_seconds) * ucs::test_time_multiplier()) && \
+          (ucs::perf_retry_count > 0)) \
                          ? (GTEST_NONFATAL_FAILURE_("Time limit exceeded:") << \
                                          "Expected time: " << ((_seconds) * ucs::test_time_multiplier()) << " seconds\n" << \
                                          "Actual time: " << ucs_time_to_sec(_elapsed) << " seconds", 0) \

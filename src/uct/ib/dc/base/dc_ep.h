@@ -314,6 +314,19 @@ ucs_status_t uct_dc_ep_check_fc(uct_dc_iface_t *iface, uct_dc_ep_t *ep);
     }
 
 
+#define UCT_DC_CHECK_RES_PTR(_iface, _ep) \
+    { \
+        ucs_status_t status; \
+        status = uct_dc_iface_dci_get(_iface, _ep); \
+        if (ucs_unlikely(status != UCS_OK)) { \
+            return UCS_STATUS_PTR(status); \
+        } \
+        UCT_RC_CHECK_CQE_RET(&(_iface)->super, _ep, \
+                             &(_iface)->tx.dcis[(_ep)->dci].txqp, \
+                             UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)); \
+    }
+
+
 /* First, check whether we have FC window. If hard threshold is reached, credit
  * request will be sent by "fc_ctrl" as a separate message. TX resources
  * are checked after FC, because fc credits request may consume latest

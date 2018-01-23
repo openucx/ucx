@@ -158,8 +158,8 @@ public:
                                comp());
     }
 
-    void test_xfer_do(send_func_t send, size_t length, direction_t direction,
-                      uint32_t am_mode)
+    void test_xfer_do(send_func_t send, size_t length, unsigned flags,
+                      uint32_t am_mode, uct_memory_type_t mem_type)
     {
         ucs_status_t status;
 
@@ -171,8 +171,8 @@ public:
                                           this, am_mode);
         ASSERT_UCS_OK(status);
 
-        mapped_buffer sendbuf(length, SEED1, sender());
-        mapped_buffer recvbuf(0, 0, sender()); /* dummy */
+        mapped_buffer sendbuf(length, SEED1, sender(), 0, mem_type);
+        mapped_buffer recvbuf(0, 0, sender(), 0, mem_type); /* dummy */
 
         blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
         sendbuf.pattern_fill(SEED2);
@@ -182,7 +182,7 @@ public:
         }
 
         if (!(receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_DUP)) {
-            sender().flush();
+            flush();
             EXPECT_EQ(1u, m_am_count);
         } else {
             EXPECT_GE(m_am_count, 1u);
@@ -194,7 +194,7 @@ public:
 
         check_backlog();
 
-        if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
+        if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
             if (&sender() == &receiver()) {
                 EXPECT_UD_CHECK(2u, m_send_tracer.count, LE, EQ);
             } else {
@@ -204,13 +204,14 @@ public:
         }
     }
 
-    virtual void test_xfer(send_func_t send, size_t length, direction_t direction) {
+    virtual void test_xfer(send_func_t send, size_t length, unsigned flags,
+                           uct_memory_type_t mem_type) {
 
         if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_CB_SYNC) {
-            test_xfer_do(send, length, direction, UCT_CB_FLAG_SYNC);
+            test_xfer_do(send, length, flags, UCT_CB_FLAG_SYNC, mem_type);
         }
         if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_CB_ASYNC) {
-            test_xfer_do(send, length, direction, UCT_CB_FLAG_ASYNC);
+            test_xfer_do(send, length, flags, UCT_CB_FLAG_ASYNC, mem_type);
         }
     }
 
@@ -387,8 +388,7 @@ public:
 
     static ucs_log_func_rc_t
     no_rx_buffs_log_handler(const char *file, unsigned line, const char *function,
-                            ucs_log_level_t level, const char *prefix,
-                            const char *message, va_list ap)
+                            ucs_log_level_t level, const char *message, va_list ap)
     {
         /* Ignore warnings about empty memory pool */
         if ((level == UCS_LOG_LEVEL_WARN) &&
@@ -411,7 +411,7 @@ UCS_TEST_P(uct_p2p_am_test, am_short) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
                     sizeof(uint64_t),
                     sender().iface_attr().cap.am.max_short,
-                    DIRECTION_SEND_TO_RECV);
+                    TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
 UCS_TEST_P(uct_p2p_am_test, am_bcopy) {
@@ -419,7 +419,7 @@ UCS_TEST_P(uct_p2p_am_test, am_bcopy) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
                     0ul,
                     sender().iface_attr().cap.am.max_bcopy,
-                    DIRECTION_SEND_TO_RECV);
+                    TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
 UCS_TEST_P(uct_p2p_am_test, am_short_keep_data) {
@@ -428,7 +428,7 @@ UCS_TEST_P(uct_p2p_am_test, am_short_keep_data) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
                     sizeof(uint64_t),
                     sender().iface_attr().cap.am.max_short,
-                    DIRECTION_SEND_TO_RECV);
+                    TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
 UCS_TEST_P(uct_p2p_am_test, am_bcopy_keep_data) {
@@ -437,7 +437,7 @@ UCS_TEST_P(uct_p2p_am_test, am_bcopy_keep_data) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
                     sizeof(uint64_t),
                     sender().iface_attr().cap.am.max_bcopy,
-                    DIRECTION_SEND_TO_RECV);
+                    TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
 UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
@@ -445,7 +445,7 @@ UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_zcopy),
                     0ul,
                     sender().iface_attr().cap.am.max_zcopy,
-                    DIRECTION_SEND_TO_RECV);
+                    TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_test)
