@@ -21,7 +21,7 @@
    ...
    fun:rtnl_*_alloc_cache
    ...
-   fun:ibv_create_ah
+   fun:*ibv_create_ah*
 }
 
 {
