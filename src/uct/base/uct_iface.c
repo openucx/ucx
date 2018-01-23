@@ -368,8 +368,7 @@ ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
     ucs_debug("error %s was not handled for ep %p", ucs_status_string(status),
               tl_ep);
 
-    /* Suppress local errors, see GTEST uct_p2p_err_test */
-    return (status == UCS_ERR_ENDPOINT_TIMEOUT) ? status : UCS_OK;
+    return status;
 }
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
