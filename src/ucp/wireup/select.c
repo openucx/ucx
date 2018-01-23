@@ -960,10 +960,7 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
                                   UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  |
                                   UCT_IFACE_FLAG_GET_ZCOPY       |
                                   UCT_IFACE_FLAG_PENDING;
-
-    /* Use RMA score func for now (to target mid size messages).
-     * TODO: have to align to TM_THRESH value. */
-    criteria.calc_score         = ucp_wireup_rma_score_func;
+    criteria.calc_score         = ucp_wireup_am_score_func;
     criteria.tl_rsc_flags       = 0;
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
