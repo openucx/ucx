@@ -51,8 +51,10 @@ std::vector<const resource*> uct_p2p_test::enum_resources(const std::string& tl_
     return filter_resources(all_resources, tl_name);
 }
 
-uct_p2p_test::uct_p2p_test(size_t rx_headroom) :
+uct_p2p_test::uct_p2p_test(size_t rx_headroom,
+                           uct_error_handler_t err_handler) :
     m_rx_headroom(rx_headroom),
+    m_err_handler(err_handler),
     m_completion_count(0)
 {
     m_null_completion      = false;
@@ -69,14 +71,14 @@ void uct_p2p_test::init() {
 
     /* Create 2 connected endpoints */
     if (r->loopback) {
-        entity *e = uct_test::create_entity(m_rx_headroom);
+        entity *e = uct_test::create_entity(m_rx_headroom, m_err_handler);
         m_entities.push_back(e);
         e->connect(0, *e, 0);
     } else {
-        entity *e1 = uct_test::create_entity(m_rx_headroom);
+        entity *e1 = uct_test::create_entity(m_rx_headroom, m_err_handler);
         m_entities.push_back(e1);
 
-        entity *e2 = uct_test::create_entity(m_rx_headroom);
+        entity *e2 = uct_test::create_entity(m_rx_headroom, m_err_handler);
         m_entities.push_back(e2);
 
         e1->connect(0, *e2, 0);
