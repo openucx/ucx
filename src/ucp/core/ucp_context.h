@@ -59,8 +59,6 @@ typedef struct ucp_context_config {
     size_t                                 tm_thresh;
     /** Threshold for forcing tag matching offload capabilities */
     size_t                                 tm_force_thresh;
-    /** Tag matching offload status (try, on or off) */
-    ucs_ternary_value_t                    tm_offload;
     /** Upper bound for posting tm offload receives with internal UCP
      *  preregistered bounce buffers. */
     size_t                                 tm_max_bcopy;
