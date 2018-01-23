@@ -665,14 +665,15 @@ static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, const ucp_ep_params_t 
         return UCS_OK;
     }
 
-    criteria.title              = "remote %s memory access";
     criteria.local_md_flags     = 0;
     criteria.remote_md_flags    = 0;
 
     if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
+        criteria.title              = "copy across memory types";
         criteria.remote_iface_flags = UCT_IFACE_FLAG_PUT_SHORT;
         criteria.local_iface_flags  = criteria.remote_iface_flags;
     } else {
+        criteria.title              = "remote %s memory access";
         criteria.remote_iface_flags = UCT_IFACE_FLAG_PUT_SHORT |
                                       UCT_IFACE_FLAG_PUT_BCOPY |
                                       UCT_IFACE_FLAG_GET_BCOPY;
