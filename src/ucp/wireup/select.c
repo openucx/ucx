@@ -943,6 +943,7 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
     ucs_status_t status;
     unsigned addr_index;
     double score;
+    int is_proxy;
 
     if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) ||
         /* TODO: remove check below when UCP_ERR_HANDLING_MODE_PEER supports
@@ -970,12 +971,23 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
     status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
                                          -1, -1, -1, -1, 0, &rsc_index, &addr_index,
                                          &score);
-    if (status == UCS_OK) {
-         ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
-                                  address_list[addr_index].md_index, score,
-                                  UCP_WIREUP_LANE_USAGE_TAG, 0);
+    if (status != UCS_OK) {
+        goto out;
     }
 
+    /* If the remote side is not p2p and has only signaled wakeup, it may
+     * deactivate its interface and wait for signaled tag message to wake up.
+     * Use a proxy lane which would send the first tag message as signaled to
+     * make sure the remote interface will indeed wake up.
+     */
+    is_proxy = ucp_wireup_is_lane_proxy(ep, rsc_index,
+                                        address_list[addr_index].iface_attr.cap_flags);
+
+    ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
+                             address_list[addr_index].md_index, score,
+                             UCP_WIREUP_LANE_USAGE_TAG, is_proxy);
+
+out:
     return UCS_OK;
 }
 
