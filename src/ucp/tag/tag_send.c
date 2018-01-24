@@ -57,7 +57,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t count,
     ucs_status_t status;
     size_t zcopy_thresh;
 
-    if (enable_zcopy) {
+    if (enable_zcopy || ucs_unlikely(!UCP_MEM_IS_HOST(req->send.mem_type))) {
         zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, count,
                                                      rndv_thresh);
     } else {
