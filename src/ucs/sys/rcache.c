@@ -556,11 +556,11 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
 
     if (!ucs_is_pow2(params->alignment) ||
         (params->alignment < UCS_PGT_ADDR_ALIGN) ||
-        (params->alignment > ucs_get_page_size()))
+        (params->alignment > params->max_alignment))
     {
         ucs_error("invalid regcache alignment (%zu): must be a power of 2 "
                   "between %zu and %zu",
-                  params->alignment, UCS_PGT_ADDR_ALIGN, ucs_get_page_size());
+                  params->alignment, UCS_PGT_ADDR_ALIGN, params->max_alignment);
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }
