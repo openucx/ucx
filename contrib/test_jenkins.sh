@@ -417,7 +417,7 @@ run_ucx_perftest_mpi() {
 	# hack for perftest, no way to override params used in batch
 	# todo: fix in perftest
 	sed -s 's,-n [0-9]*,-n 1000,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
-	cat $ucx_inst_ptest/test_types | sort -R > $ucx_inst_ptest/test_types_short
+	cat $ucx_inst_ptest/test_types | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_short
 
 	UCX_PERFTEST="$ucx_inst/bin/ucx_perftest \
 					-b $ucx_inst_ptest/test_types_short \
@@ -441,6 +441,14 @@ run_ucx_perftest_mpi() {
 		echo "==== Running ucx_perf kit on $ucx_dev ===="
 		$MPIRUN -np 2 $AFFINITY $UCX_PERFTEST -d $ucx_dev $opt_transports
 	done
+
+	# run cuda tests
+	if (lsmod | grep -q "nv_peer_mem") && (lsmod | grep -q "gdrdrv")
+	then
+		cat $ucx_inst_ptest/test_types | grep cuda | sort -R > $ucx_inst_ptest/test_types_short
+		echo "==== Running ucx_perf with cuda memory===="
+		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy $AFFINITY $UCX_PERFTEST
+	fi
 }
 
 #
@@ -464,6 +472,11 @@ test_malloc_hooks_mpi() {
 #
 run_mpi_tests() {
 	echo "1..2" > mpi_tests.tap
+
+	#load cuda modules if available
+	module_load dev/cuda || true
+	module_load dev/gdrcopy || true
+
 	if module_load hpcx-gcc
 	then
 		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
