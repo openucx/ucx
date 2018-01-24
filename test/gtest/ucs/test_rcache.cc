@@ -35,6 +35,7 @@ protected:
         ucs_rcache_params_t params = {
             sizeof(region),
             UCS_PGT_ADDR_ALIGN,
+            ucs_get_page_size(),
             1000,
             &ops,
             reinterpret_cast<void*>(this)
