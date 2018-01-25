@@ -632,6 +632,29 @@ run_gtest() {
 	fi
 }
 
+#
+# Run the test suite (gtest) in release configuration
+#
+run_gtest_release() {
+
+	echo "1..1" > gtest_release.tap
+
+	../contrib/configure-release --prefix=$ucx_inst --enable-gtest
+	$MAKE clean
+	$MAKE
+
+	export GTEST_SHARD_INDEX=0
+	export GTEST_TOTAL_SHARDS=1
+	export GTEST_RANDOM_SEED=0
+	export GTEST_SHUFFLE=1
+	export GTEST_TAP=2
+	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
+
+	echo "==== Running unit tests (release configuration) ===="
+	env GTEST_FILTER=\*test_obj_size\* $AFFINITY $TIMEOUT make -C test/gtest test
+	echo "ok 1" >> gtest_release.tap
+}
+
 run_ucx_tl_check() {
 
 	echo "1..1" > ucx_tl_check.tap
@@ -676,6 +699,7 @@ run_tests() {
 	run_gtest
 
 	do_distributed_task 3 4 run_coverity
+	do_distributed_task 0 4 run_gtest_release
 }
 
 prepare
