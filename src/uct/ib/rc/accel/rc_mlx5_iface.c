@@ -15,7 +15,7 @@
 #include "rc_mlx5.h"
 
 ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
-  {"RC_", UCT_RC_IFACE_TM_OFF_STR, NULL,
+  {"RC_", "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 

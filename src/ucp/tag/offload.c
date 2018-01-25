@@ -21,12 +21,6 @@ int ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
     ucp_worker_t *worker   = iface->worker;
     ucp_context_t *context = worker->context;
 
-    if (ucs_unlikely(!context->config.ext.tm_offload)) {
-        /* Can happen when different processes have different configuration,
-         * which is very uncommon. */
-        return 0;
-    }
-
     if (!worker->tm.offload.num_ifaces) {
         ucs_assert(worker->tm.offload.thresh       == SIZE_MAX);
         ucs_assert(worker->tm.offload.zcopy_thresh == SIZE_MAX);
