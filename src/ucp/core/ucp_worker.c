@@ -1088,6 +1088,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->inprogress        = 0;
     worker->ep_config_max     = config_count;
     worker->ep_config_count   = 0;
+    worker->ep_session_id     = 0;
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_eps);
 
@@ -1288,6 +1289,7 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
 
     while ((count < max_eps) && !ucs_list_is_empty(&worker->stream_eps)) {
         ep                        = ucp_stream_worker_dequeue_ep_head(worker);
+        ucs_assert(ep->flags & UCP_EP_STREAM_FLAG_HAS_DATA);
         poll_eps[count].ep        = ep->ucp_ep;
         poll_eps[count].user_data = ep->ucp_ep->user_data;
         ++count;

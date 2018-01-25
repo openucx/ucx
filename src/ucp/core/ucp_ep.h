@@ -228,6 +228,10 @@ typedef struct ucp_ep_ext_stream {
     ucs_queue_head_t        match_q;
     /* EP which owns the extension */
     ucp_ep_h                ucp_ep;
+    /* TX session identifier */
+    uint64_t                tx_session_id;
+    /* RX session identifier */
+    uint64_t                rx_session_id;
     /* Describes the state */
     uint8_t                 flags;
 } ucp_ep_ext_stream_t;

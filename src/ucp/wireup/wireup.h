@@ -61,6 +61,7 @@ typedef struct ucp_wireup_msg {
     uint8_t                 type;         /* Message type */
     ucp_err_handling_mode_t err_mode;     /* Peer error handling mode */
     uint64_t                ep_uuid;      /* Peer endpoint dest_uuid */
+    uint64_t                session_id;   /* Session identifier */
 
     /* REQUEST - which p2p lanes must be connected
      * REPLY - which p2p lanes have been connected

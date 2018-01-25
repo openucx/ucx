@@ -115,8 +115,10 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
         }
 
         ucs_queue_head_init(&ep->ext.stream->match_q);
-        ep->ext.stream->ucp_ep  = ep;
-        ep->ext.stream->flags   = UCP_EP_STREAM_FLAG_VALID;
+        ep->ext.stream->ucp_ep         = ep;
+        ep->ext.stream->tx_session_id  = UINT64_MAX; /* initialized by API call */
+        ep->ext.stream->rx_session_id  = UINT64_MAX; /* initialized by wireup */
+        ep->ext.stream->flags          = 0;
     } else {
         ep->ext.stream = NULL;
     }
@@ -334,10 +336,6 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     ep = ucp_worker_ep_find(worker, dest_uuid);
     if (ep != NULL) {
         status = ucp_ep_adjust_params(ep, params);
-        if ((status == UCS_OK) && (ep->ext.stream != NULL)) {
-            ep->ext.stream->flags |= UCP_EP_STREAM_FLAG_VALID;
-        }
-
         goto out_free_address;
     }
 
@@ -431,7 +429,14 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
             goto out;
         }
 
-        if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
+        if (ep->ext.stream) {
+            ep->ext.stream->tx_session_id = ++worker->ep_session_id;
+            ucs_assertv_always(worker->ep_session_id != UINT64_MAX,
+                               "max currently supported number of stream sessions is reached");
+            ep->ext.stream->flags |= UCP_EP_STREAM_FLAG_LVALID;
+        }
+
+        if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) || ep->ext.stream) {
             /* send initial wireup message */
             status = ucp_wireup_send_request(ep, ep->dest_uuid);
             if (status != UCS_OK) {
@@ -542,7 +547,8 @@ static void ucp_ep_ext_stream_invalidate(ucp_ep_h ep)
         ucp_stream_data_release(ep, data);
     }
 
-    ep->ext.stream->flags &= ~UCP_EP_STREAM_FLAG_VALID;
+    ep->ext.stream->flags &= ~(UCP_EP_STREAM_FLAG_LVALID |
+                               UCP_EP_STREAM_FLAG_RVALID);
 }
 
 static void ucp_ep_disconnected(ucp_ep_h ep, int force)

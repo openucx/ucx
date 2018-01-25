@@ -12,6 +12,7 @@
 
 typedef struct {
     uint64_t    sender_uuid;
+    uint64_t    session_id;
 } UCS_S_PACKED ucp_stream_am_hdr_t;
 
 
@@ -19,7 +20,7 @@ typedef struct {
     union {
         ucp_stream_am_hdr_t  hdr;
         ucp_recv_desc_t     *rdesc;
-    };
+    } UCS_S_PACKED;
 } UCS_S_PACKED ucp_stream_am_data_t;
 
 
@@ -30,12 +31,11 @@ enum {
     UCP_EP_STREAM_FLAG_IS_QUEUED = UCS_BIT(0), /* EP is queued in stream list of
                                                   worker */
     UCP_EP_STREAM_FLAG_HAS_DATA  = UCS_BIT(1), /* EP has data in the match_q */
-    UCP_EP_STREAM_FLAG_VALID     = UCS_BIT(2)  /* EP is valid. EP can be
-                                                  invalidated by ucp_ep_close_cb
-                                                  (all incoming data will be
-                                                  dropped) then returned back by
-                                                  ucp_ep_create if internal
-                                                  connection is still alive */
+    UCP_EP_STREAM_FLAG_LVALID    = UCS_BIT(2), /* EP is valid locally, created
+                                                  and not closed (user visible). */
+    UCP_EP_STREAM_FLAG_RVALID    = UCS_BIT(3)  /* EP is valid remotely, wire is
+                                                  up and EP has valid RX session
+                                                  ID */
 };
 
 

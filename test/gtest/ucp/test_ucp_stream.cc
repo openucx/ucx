@@ -29,6 +29,8 @@ public:
 
 protected:
     ucs_status_ptr_t stream_send_nb(const ucp::data_type_desc_t& dt_desc);
+    bool stream_recv_n_data(std::vector<char>& dst, size_t pos, size_t n);
+
 };
 
 size_t test_ucp_stream_base::wait_stream_recv(void *request)
@@ -50,6 +52,43 @@ test_ucp_stream_base::stream_send_nb(const ucp::data_type_desc_t& dt_desc)
 {
     return ucp_stream_send_nb(sender().ep(), dt_desc.buf(), dt_desc.count(),
                               dt_desc.dt(), ucp_send_cb, 0);
+}
+
+bool
+test_ucp_stream_base::stream_recv_n_data(std::vector<char>& dst, size_t pos,
+                                         size_t n)
+{
+    size_t recv_length;
+    size_t iter = pos;
+
+    do {
+        void *rdata;
+
+        if (iter > dst.size()) {
+            return false;
+        }
+
+        do {
+            progress();
+            rdata = ucp_stream_recv_data_nb(receiver().ep(), &recv_length);
+        } while (rdata == NULL);
+        if (UCS_PTR_IS_ERR(rdata)) {
+            return false;
+        }
+
+        size_t  replace_count = std::min<size_t>(recv_length, dst.size() - iter);
+        char    *c_rdata      = (char *)rdata;
+
+        for (size_t i = 0; i < replace_count; ++i, ++iter) {
+            dst[iter] = c_rdata[i];
+        }
+        dst.insert(dst.end(), c_rdata + replace_count, c_rdata + recv_length);
+        iter += recv_length - replace_count;
+
+        ucp_stream_data_release(receiver().ep(), rdata);
+    } while ((iter - pos) < n);
+
+    return true;
 }
 
 class test_ucp_stream : public test_ucp_stream_base
@@ -92,22 +131,8 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
     }
 
     std::vector<char> rbuf(ssize, 'r');
-    size_t            roffset = 0;
-    ucs_status_ptr_t  rdata;
-    size_t length;
-    do {
-        progress();
-        rdata = ucp_stream_recv_data_nb(receiver().ep(), &length);
-        if (UCS_PTR_STATUS(rdata) == UCS_OK) {
-            continue;
-        }
-
-        memcpy(&rbuf[roffset], rdata, length);
-        roffset += length;
-        ucp_stream_data_release(receiver().ep(), rdata);
-    } while (roffset < ssize);
-
-    EXPECT_EQ(roffset, ssize);
+    EXPECT_TRUE(stream_recv_n_data(rbuf, 0, ssize));
+    EXPECT_EQ(rbuf.size(), ssize);
     EXPECT_EQ(check_pattern, rbuf);
 }
 
@@ -275,7 +300,7 @@ void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
 
         if ((++recv_i % 2) || ((ssize - roffset) < dt_elem_size)) {
             rdata = ucp_stream_recv_data_nb(receiver().ep(), &length);
-            if (UCS_PTR_STATUS(rdata) == UCS_OK) {
+            if (rdata == NULL) {
                 continue;
             }
 
@@ -296,6 +321,76 @@ void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
 
     EXPECT_EQ(roffset, ssize);
     EXPECT_EQ(check_pattern, rbuf);
+}
+
+UCS_TEST_P(test_ucp_stream, session_no_drop) {
+    skip_loopback();
+
+    size_t                 session_id = 0;
+    std::vector<char>      recv_data;
+    ucp::data_type_desc_t  dt_desc(DATATYPE, &session_id, sizeof(session_id));
+
+    void *sstatus = stream_send_nb(dt_desc);
+
+    EXPECT_TRUE(stream_recv_n_data(recv_data, recv_data.size(), sizeof(session_id)));
+    EXPECT_EQ(sizeof(session_id), recv_data.size())
+        << "This test is actual while UCP don't support stream coalescing";
+
+    wait(sstatus);
+
+    /* destroy connection */
+    entity::ep_destructor(sender().ep(),   &sender());
+    entity::ep_destructor(receiver().ep(), &receiver());
+    sender().revoke_ep();
+    receiver().revoke_ep();
+    recv_data.resize(0);
+
+    /* deliver message on 1 sided connection */
+    sender().connect(&receiver(), test_ucp_stream::get_ep_params());
+    ++session_id;
+    sstatus = stream_send_nb(dt_desc);
+    wait(sstatus);
+    while (progress());
+
+    /* connect 2-nd side and check the message */
+    receiver().connect(&sender(), test_ucp_stream::get_ep_params());
+    EXPECT_TRUE(stream_recv_n_data(recv_data, recv_data.size(), sizeof(session_id)));
+    EXPECT_EQ(sizeof(session_id), recv_data.size())
+        << "This test is actual while UCP don't support stream coalescing";
+    EXPECT_EQ(session_id, *reinterpret_cast<size_t *>(recv_data.data()));
+}
+
+UCS_TEST_P(test_ucp_stream, session_no_garbage) {
+    skip_loopback();
+
+    size_t                 session_id = 0;
+    std::vector<char>      recv_data;
+    ucp::data_type_desc_t  dt_desc(DATATYPE, &session_id, sizeof(session_id));
+
+    void *sstatus = stream_send_nb(dt_desc);
+
+    EXPECT_TRUE(stream_recv_n_data(recv_data, recv_data.size(), sizeof(session_id)));
+    EXPECT_EQ(sizeof(session_id), recv_data.size())
+        << "This test is actual while UCP don't support stream coalescing";
+
+    wait(sstatus);
+
+    sstatus = stream_send_nb(dt_desc);
+
+    entity::ep_destructor(receiver().ep(), &receiver());
+    receiver().revoke_ep();
+    receiver().connect(&sender(), test_ucp_stream::get_ep_params());
+    recv_data.resize(0);
+
+    entity::ep_destructor(sender().ep(), &sender());
+    sender().revoke_ep();
+    sender().connect(&sender(), test_ucp_stream::get_ep_params());
+
+    wait(sstatus);
+    while (progress());
+
+    size_t length;
+    EXPECT_EQ(NULL, ucp_stream_recv_data_nb(receiver().ep(), &length));
 }
 
 UCS_TEST_P(test_ucp_stream, send_recv_data) {
