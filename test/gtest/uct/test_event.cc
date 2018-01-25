@@ -63,6 +63,19 @@ public:
         return sizeof(uint64_t);
     }
 
+    void arm(entity *e, unsigned arm_flags) {
+        ucs_status_t status;
+        for (int i = 0; i < 10; ++i) {
+            /* have several retries for arming, in case a transport has spurious
+             * events */
+            status = uct_iface_event_arm(e->iface(), arm_flags);
+            if (status == UCS_OK) {
+                break;
+            }
+        }
+        ASSERT_EQ(UCS_OK, status);
+    }
+
 protected:
     entity *m_e1, *m_e2;
     static int m_am_count;
@@ -107,8 +120,7 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     wakeup_fd.events = POLLIN;
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
-    status = uct_iface_event_arm(m_e2->iface(), arm_flags);
-    ASSERT_EQ(UCS_OK, status);
+    arm(m_e2, arm_flags);
 
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
@@ -129,11 +141,7 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     }
     ASSERT_EQ(UCS_OK, status);
 
-    wakeup_fd.revents = 0;
-    EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
-
-    status = uct_iface_event_arm(m_e2->iface(), arm_flags);
-    ASSERT_EQ(UCS_OK, status);
+    arm(m_e2, arm_flags);
 
     /* send the data again */
     uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64, &send_data, send_flags);
