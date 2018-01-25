@@ -113,9 +113,9 @@ UCS_TEST_P(test_ud_slow_timer, retransmit1) {
     ep(m_e2)->rx.rx_hook = drop_packet;
     EXPECT_UCS_OK(tx(m_e1));
     short_progress_loop();
+    EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
     ep(m_e2)->rx.rx_hook = uct_ud_ep_null_hook;
     EXPECT_EQ(2, ep(m_e1)->tx.psn);
-    EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
     wait_for_rx_sn(1);
     EXPECT_EQ(2, ep(m_e1)->tx.psn);
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
@@ -133,9 +133,9 @@ UCS_TEST_P(test_ud_slow_timer, retransmitn) {
         EXPECT_UCS_OK(tx(m_e1));
     }
     short_progress_loop();
+    EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
     ep(m_e2)->rx.rx_hook = uct_ud_ep_null_hook;
     EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
-    EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
     wait_for_rx_sn(N);
     EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
     EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
@@ -156,9 +156,9 @@ UCS_TEST_P(test_ud_slow_timer, partial_drop) {
         EXPECT_UCS_OK(tx(m_e1));
     }
     short_progress_loop();
+    EXPECT_EQ(rx_limit, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
     ep(m_e2)->rx.rx_hook = uct_ud_ep_null_hook;
     EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
-    EXPECT_EQ(rx_limit, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
     orig_avail = iface(m_e1)->tx.available;
     /* allow only 6 outgoing packets. It will allow to get ack
      * from receiver
