@@ -291,7 +291,13 @@ public:
 
         ucp_perf_test_prepare_iov_buffers();
 
-        *((volatile uint8_t*)m_perf.recv_buffer + length - 1) = -1;
+	if (m_perf.params.mem_type == UCT_MD_MEM_TYPE_HOST) {
+            *((volatile uint8_t*)m_perf.recv_buffer + length - 1) = -1;
+	} else if (m_perf.params.mem_type == UCT_MD_MEM_TYPE_CUDA) {
+#if HAVE_CUDA
+            cudaMemset(((uint8_t*)m_perf.recv_buffer + length - 1), -1, 1);
+#endif
+        }
 
         rte_call(&m_perf, barrier);
 

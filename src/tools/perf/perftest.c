@@ -76,7 +76,7 @@ struct perftest_context {
     sock_rte_group_t             sock_rte_group;
 };
 
-#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oSCqMr:T:d:x:A:BU"
+#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oSCqMr:T:d:x:A:BUm:"
 
 
 test_type_t tests[] = {
@@ -355,6 +355,11 @@ static void usage(const struct perftest_context *ctx, const char *program)
 #if HAVE_MPI
     printf("     -P <0|1>       disable/enable MPI mode (%d)\n", ctx->mpi);
 #endif
+    printf("     -m <mem type>  memory type of messages\n");
+    printf("                        host - system memory(default)\n");
+#if HAVE_CUDA
+    printf("                        cuda - NVIDIA GPU memory\n");
+#endif
     printf("     -h             show this help message\n");
     printf("\n");
     printf("  Output format:\n");
@@ -480,6 +485,7 @@ static void init_test_params(ucx_perf_params_t *params)
     params->flags           = UCX_PERF_TEST_FLAG_VERBOSE;
     params->uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
     params->uct.data_layout = UCT_PERF_DATA_LAYOUT_SHORT;
+    params->mem_type        = UCT_MD_MEM_TYPE_HOST;
     params->msg_size_cnt    = 1;
     params->iov_stride      = 0;
     params->ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
@@ -612,6 +618,20 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         } else if (!strcmp(optarg, "recv")) {
             params->flags &= ~UCX_PERF_TEST_FLAG_STREAM_RECV_DATA;
             return UCS_OK;
+        }
+        return UCS_ERR_INVALID_PARAM;
+    case 'm':
+        if (!strcmp(optarg, "host")) {
+            params->mem_type = UCT_MD_MEM_TYPE_HOST;
+            return UCS_OK;
+        } else if(!strcmp(optarg, "cuda")) {
+#if HAVE_CUDA
+            params->mem_type = UCT_MD_MEM_TYPE_CUDA;
+            return UCS_OK;
+#else
+            ucs_error("not build with cuda support");
+            return UCS_ERR_INVALID_PARAM;
+#endif
         }
         return UCS_ERR_INVALID_PARAM;
     default:

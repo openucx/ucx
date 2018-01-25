@@ -767,11 +767,88 @@ static ucs_status_t ucp_perf_test_alloc_iov_mem(ucp_perf_datatype_t datatype,
     return UCS_OK;
 }
 
+static ucs_status_t
+ucp_perf_test_alloc_host(ucx_perf_context_t *perf, ucx_perf_params_t *params,
+                         void **addr, size_t length, ucp_mem_h *memh,
+                         int check_non_blk_flag)
+{
+    ucp_mem_map_params_t mem_map_params;
+    ucp_mem_attr_t mem_attr;
+    ucs_status_t status;
+
+    mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                                UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    mem_map_params.address    = *addr;
+    mem_map_params.length     = length;
+    mem_map_params.flags      = UCP_MEM_MAP_ALLOCATE;
+    if (check_non_blk_flag) {
+        mem_map_params.flags  |= (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
+                                 UCP_MEM_MAP_NONBLOCK : 0;
+    }
+
+    status = ucp_mem_map(perf->ucp.context, &mem_map_params, memh);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
+    status = ucp_mem_query(*memh, &mem_attr);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    *addr = mem_attr.address;
+
+    return UCS_OK;
+
+err:
+    return status;
+}
+
+static ucs_status_t
+ucp_perf_test_alloc_cuda(void **addr, size_t length)
+{
+#if HAVE_CUDA
+    cudaError_t cerr;
+
+    cerr = cudaMalloc(addr, length);
+    if (cerr != cudaSuccess) {
+        return UCS_ERR_NO_MEMORY;
+    }
+#endif
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_perf_test_alloc_contig(ucx_perf_context_t *perf, ucx_perf_params_t *params,
+                           void **addr, size_t length, ucp_mem_h *memh,
+                           int check_non_blk_flag)
+{
+    if (perf->params.mem_type == UCT_MD_MEM_TYPE_HOST) {
+        return ucp_perf_test_alloc_host(perf, params, addr, length, memh,
+                                        check_non_blk_flag);
+    } else if (perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA) {
+        return ucp_perf_test_alloc_cuda(addr, length);
+    }
+
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static void ucp_perf_test_free_contig(ucx_perf_context_t *perf, void *addr, ucp_mem_h memh)
+{
+    if (perf->params.mem_type == UCT_MD_MEM_TYPE_HOST) {
+        ucp_mem_unmap(perf->ucp.context, memh);
+    } else if (perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA) {
+#if HAVE_CUDA
+        cudaFree(addr);
+#endif
+    }
+}
+
 static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_params_t *params)
 {
     ucs_status_t status;
-    ucp_mem_map_params_t mem_map_params;
-    ucp_mem_attr_t mem_attr;
     size_t buffer_size;
 
     if (params->iov_stride) {
@@ -782,52 +859,21 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
 
     /* Allocate send buffer memory */
     perf->send_buffer         = NULL;
-
-    mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                                UCP_MEM_MAP_PARAM_FIELD_LENGTH |
-                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    mem_map_params.address    = perf->send_buffer;
-    mem_map_params.length     = buffer_size * params->thread_count;
-    mem_map_params.flags      = (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
-                                 UCP_MEM_MAP_NONBLOCK : 0;
-    mem_map_params.flags     |= UCP_MEM_MAP_ALLOCATE;
-
-    status = ucp_mem_map(perf->ucp.context, &mem_map_params,
-                         &perf->ucp.send_memh);
+    status = ucp_perf_test_alloc_contig(perf, params, &perf->send_buffer,
+                                        buffer_size * params->thread_count,
+                                        &perf->ucp.send_memh, 1);
     if (status != UCS_OK) {
         goto err;
     }
-
-    mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
-    status = ucp_mem_query(perf->ucp.send_memh, &mem_attr);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    perf->send_buffer = mem_attr.address;
 
     /* Allocate receive buffer memory */
     perf->recv_buffer = NULL;
-
-    mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                                UCP_MEM_MAP_PARAM_FIELD_LENGTH |
-                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    mem_map_params.address    = perf->recv_buffer;
-    mem_map_params.length     = buffer_size * params->thread_count;
-    mem_map_params.flags      = UCP_MEM_MAP_ALLOCATE;
-
-    status = ucp_mem_map(perf->ucp.context, &mem_map_params, &perf->ucp.recv_memh);
+    status = ucp_perf_test_alloc_contig(perf, params, &perf->recv_buffer,
+                                        buffer_size * params->thread_count,
+                                        &perf->ucp.recv_memh, 0);
     if (status != UCS_OK) {
         goto err_free_send_buffer;
     }
-
-    mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
-    status = ucp_mem_query(perf->ucp.recv_memh, &mem_attr);
-    if (status != UCS_OK) {
-        goto err_free_send_buffer;
-    }
-
-    perf->recv_buffer = mem_attr.address;
 
     /* Allocate IOV datatype memory */
     perf->params.msg_size_cnt = params->msg_size_cnt;
@@ -850,9 +896,9 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
 err_free_send_iov_buffers:
     free(perf->ucp.send_iov);
 err_free_buffers:
-    ucp_mem_unmap(perf->ucp.context, perf->ucp.recv_memh);
+    ucp_perf_test_free_contig(perf, perf->recv_buffer, perf->ucp.recv_memh);
 err_free_send_buffer:
-    ucp_mem_unmap(perf->ucp.context, perf->ucp.send_memh);
+    ucp_perf_test_free_contig(perf, perf->send_buffer, perf->ucp.send_memh);
 err:
     return UCS_ERR_NO_MEMORY;
 }
@@ -861,8 +907,8 @@ static void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
 {
     free(perf->ucp.recv_iov);
     free(perf->ucp.send_iov);
-    ucp_mem_unmap(perf->ucp.context, perf->ucp.recv_memh);
-    ucp_mem_unmap(perf->ucp.context, perf->ucp.send_memh);
+    ucp_perf_test_free_contig(perf, perf->recv_buffer, perf->ucp.recv_memh);
+    ucp_perf_test_free_contig(perf, perf->send_buffer, perf->ucp.send_memh);
 }
 
 static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf,
