@@ -172,7 +172,7 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
         status = ucp_ep_create(worker, &ep_params, &ep);
         ucp_worker_release_address(worker, address);
         if (status != UCS_OK) {
-            printf("<Failed to get create UCP endpoint>\n");
+            printf("<Failed to create UCP endpoint>\n");
             goto out_destroy_worker;
         }
 
