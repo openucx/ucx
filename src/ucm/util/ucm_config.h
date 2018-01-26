@@ -18,6 +18,7 @@ typedef struct ucm_config {
     int             enable_mmap_reloc;
     int             enable_malloc_hooks;
     int             enable_malloc_reloc;
+    int             enable_dynamic_mmap_thresh;
 #if HAVE_CUDA
     int             enable_cuda_hooks;
 #endif

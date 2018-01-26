@@ -55,6 +55,8 @@
 #define UCM_OPERATOR_VEC_NEW_SYMBOL    "_Znam"
 #define UCM_OPERATOR_VEC_DELETE_SYMBOL "_ZdaPv"
 
+/* Maximal size for mmap threshold - 32mb */
+#define UCM_DEFAULT_MMAP_THRESHOLD_MAX (4*1024*1024*sizeof(long))
 
 /* Take out 12 LSB's, since they are the page-offset on most systems */
 #define ucm_mmap_addr_hash(_addr) \
@@ -77,6 +79,8 @@ typedef struct ucm_malloc_hook_state {
     pthread_mutex_t       install_mutex; /* Protect hooks installation */
     int                   install_state; /* State of hook installation */
     int                   installed_events; /* Which events are working */
+    int                   mmap_thresh_set; /* mmap threshold set by user */
+    int                   trim_thresh_set; /* trim threshold set by user */
     int                   hook_called; /* Our malloc hook was called */
     size_t                (*usable_size)(void*); /* function pointer to get usable size */
 
@@ -111,6 +115,8 @@ static ucm_malloc_hook_state_t ucm_malloc_hook_state = {
     .install_mutex    = PTHREAD_MUTEX_INITIALIZER,
     .install_state    = 0,
     .installed_events = 0,
+    .mmap_thresh_set  = 0,
+    .trim_thresh_set  = 0,
     .hook_called      = 0,
     .usable_size      = malloc_usable_size,
     .free             = free,
@@ -122,6 +128,7 @@ static ucm_malloc_hook_state_t ucm_malloc_hook_state = {
     .num_env_strs     = 0
 };
 
+int ucm_dlmallopt_get(int); /* implemented in ptmalloc */
 
 static void ucm_malloc_mmaped_ptr_add(void *ptr)
 {
@@ -226,10 +233,36 @@ static void *ucm_malloc_impl(size_t size, const char *debug_name)
     return ptr;
 }
 
+static void ucm_malloc_adjust_thresholds(size_t size)
+{
+    static size_t max_released_size = 0;
+    size_t mmap_thresh;
+
+    if (size > max_released_size) {
+        if (ucm_global_config.enable_dynamic_mmap_thresh &&
+            !ucm_malloc_hook_state.trim_thresh_set &&
+            !ucm_malloc_hook_state.mmap_thresh_set) {
+            /* new mmap threshold is increased to the size of released block,
+             * new trim threshold is twice that size.
+             */
+            mmap_thresh = ucs_min(ucs_max(ucm_dlmallopt_get(M_MMAP_THRESHOLD), size),
+                                  UCM_DEFAULT_MMAP_THRESHOLD_MAX);
+            ucm_dlmallopt(M_MMAP_THRESHOLD, mmap_thresh);
+            ucm_dlmallopt(M_TRIM_THRESHOLD, mmap_thresh * 2);
+        }
+
+        /* avoid adjusting the threshold for every released block, do it only
+         * if the size is larger than ever before.
+         */
+        max_released_size = size;
+    }
+}
+
 static inline void ucm_mem_free(void *ptr, size_t size)
 {
     VALGRIND_FREELIKE_BLOCK(ptr, 0);
     VALGRIND_MAKE_MEM_UNDEFINED(ptr, size); /* Make memory accessible to ptmalloc3 */
+    ucm_malloc_adjust_thresholds(size);
     ucm_dlfree(ptr);
 }
 
@@ -562,6 +595,24 @@ static void ucm_malloc_install_symbols(ucm_reloc_patch_t *patches)
     }
 }
 
+static int ucm_malloc_mallopt(int param_number, int value)
+{
+    int success;
+
+    success = ucm_dlmallopt(param_number, value);
+    if (success) {
+        switch (param_number) {
+        case M_TRIM_THRESHOLD:
+            ucm_malloc_hook_state.trim_thresh_set = 1;
+            break;
+        case M_MMAP_THRESHOLD:
+            ucm_malloc_hook_state.mmap_thresh_set = 1;
+            break;
+        }
+    }
+    return success;
+}
+
 static ucm_reloc_patch_t ucm_malloc_symbol_patches[] = {
     { "free", ucm_free },
     { "realloc", ucm_realloc },
@@ -579,7 +630,7 @@ static ucm_reloc_patch_t ucm_malloc_symbol_patches[] = {
 };
 
 static ucm_reloc_patch_t ucm_malloc_optional_symbol_patches[] = {
-    { "mallopt", ucm_dlmallopt },
+    { "mallopt", ucm_malloc_mallopt },
     { "mallinfo", ucm_dlmallinfo },
     { "malloc_stats", ucm_dlmalloc_stats },
     { "malloc_trim", ucm_dlmalloc_trim },
@@ -605,13 +656,13 @@ static void ucm_malloc_install_mallopt()
     p = getenv("MALLOC_TRIM_THRESHOLD_");
     if (p) {
         ucm_debug("set trim_thresh to %d", atoi(p));
-        ucm_dlmallopt(M_TRIM_THRESHOLD, atoi(p));
+        ucm_malloc_mallopt(M_TRIM_THRESHOLD, atoi(p));
     }
 
     p = getenv("MALLOC_MMAP_THRESHOLD_");
     if (p) {
         ucm_debug("set mmap_thresh to %d", atoi(p));
-        ucm_dlmallopt(M_MMAP_THRESHOLD, atoi(p));
+        ucm_malloc_mallopt(M_MMAP_THRESHOLD, atoi(p));
     }
 }
 
