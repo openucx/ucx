@@ -11,4 +11,6 @@
 
 ucs_status_t ucm_malloc_install(int events);
 
+void ucm_malloc_state_reset(int default_mmap_thresh, int default_trim_thresh);
+
 #endif

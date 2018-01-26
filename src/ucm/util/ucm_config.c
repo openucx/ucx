@@ -9,6 +9,7 @@
 #include <ucm/util/log.h>
 #include <ucs/config/parser.h>
 #include <ucs/type/component.h>
+#include <ucs/sys/checker.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -205,6 +206,12 @@ static void ucm_config_set(const char *name)
 }
 
 UCS_STATIC_INIT {
+    if (RUNNING_ON_VALGRIND) {
+        /* Valgrind limits the size of brk() segments to 8mb, so must use mmap
+         * for large allocations.
+         */
+        ucm_global_config.enable_dynamic_mmap_thresh = 0;
+    }
     ucm_config_set(UCM_LOG_LEVEL_VAR);
     ucm_config_set(UCM_ALLOC_ALIGN_VAR);
     ucm_config_set(UCM_EN_EVENTS_VAR);

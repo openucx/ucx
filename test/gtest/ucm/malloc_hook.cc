@@ -18,6 +18,7 @@
 
 extern "C" {
 #include <ucs/time/time.h>
+#include <ucm/malloc/malloc_hook.h>
 #include <ucs/sys/sys.h>
 #include <malloc.h>
 }
@@ -52,6 +53,9 @@ protected:
         } while (free_space >= min_free_space + (small_alloc_count * small_alloc_size));
         UCS_TEST_MESSAGE << "Reduced heap free space to minimum: " << free_space <<
                             " after allocating " << alloc_size << " bytes";
+
+        malloc_trim(0);
+        ucm_malloc_state_reset(128 * 1024, 128 * 1024);
     }
 
 public:
@@ -424,6 +428,8 @@ UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
         std::vector<char> vec2(size, 0);
         std::vector<char> vec3(size, 0);
     }
+
+    malloc_trim(0);
 
     EXPECT_GE(m_unmapped_size, size * 3);
 

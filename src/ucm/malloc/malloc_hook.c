@@ -56,7 +56,7 @@
 #define UCM_OPERATOR_VEC_DELETE_SYMBOL "_ZdaPv"
 
 /* Maximal size for mmap threshold - 32mb */
-#define UCM_DEFAULT_MMAP_THRESHOLD_MAX (4*1024*1024*sizeof(long))
+#define UCM_DEFAULT_MMAP_THRESHOLD_MAX (4ul * 1024 * 1024 * sizeof(long))
 
 /* Take out 12 LSB's, since they are the page-offset on most systems */
 #define ucm_mmap_addr_hash(_addr) \
@@ -82,6 +82,7 @@ typedef struct ucm_malloc_hook_state {
     int                   mmap_thresh_set; /* mmap threshold set by user */
     int                   trim_thresh_set; /* trim threshold set by user */
     int                   hook_called; /* Our malloc hook was called */
+    size_t                max_freed_size; /* Maximal size released so far */
     size_t                (*usable_size)(void*); /* function pointer to get usable size */
 
     ucm_release_func_t    free; /* function pointer to release memory */
@@ -118,6 +119,7 @@ static ucm_malloc_hook_state_t ucm_malloc_hook_state = {
     .mmap_thresh_set  = 0,
     .trim_thresh_set  = 0,
     .hook_called      = 0,
+    .max_freed_size   = 0,
     .usable_size      = malloc_usable_size,
     .free             = free,
     .heap_start       = (void*)-1,
@@ -235,10 +237,9 @@ static void *ucm_malloc_impl(size_t size, const char *debug_name)
 
 static void ucm_malloc_adjust_thresholds(size_t size)
 {
-    static size_t max_released_size = 0;
-    size_t mmap_thresh;
+    int mmap_thresh;
 
-    if (size > max_released_size) {
+    if (size > ucm_malloc_hook_state.max_freed_size) {
         if (ucm_global_config.enable_dynamic_mmap_thresh &&
             !ucm_malloc_hook_state.trim_thresh_set &&
             !ucm_malloc_hook_state.mmap_thresh_set) {
@@ -247,6 +248,7 @@ static void ucm_malloc_adjust_thresholds(size_t size)
              */
             mmap_thresh = ucs_min(ucs_max(ucm_dlmallopt_get(M_MMAP_THRESHOLD), size),
                                   UCM_DEFAULT_MMAP_THRESHOLD_MAX);
+            ucm_trace("adjust mmap threshold to %d", mmap_thresh);
             ucm_dlmallopt(M_MMAP_THRESHOLD, mmap_thresh);
             ucm_dlmallopt(M_TRIM_THRESHOLD, mmap_thresh * 2);
         }
@@ -254,7 +256,7 @@ static void ucm_malloc_adjust_thresholds(size_t size)
         /* avoid adjusting the threshold for every released block, do it only
          * if the size is larger than ever before.
          */
-        max_released_size = size;
+        ucm_malloc_hook_state.max_freed_size = size;
     }
 }
 
@@ -646,7 +648,7 @@ static void ucm_malloc_install_optional_symbols()
     }
 }
 
-static void ucm_malloc_install_mallopt()
+static void ucm_malloc_set_env_mallopt()
 {
     /* copy values of M_MMAP_THRESHOLD and M_TRIM_THRESHOLD
      * if they were overriden by the user
@@ -749,12 +751,20 @@ ucs_status_t ucm_malloc_install(int events)
 
 out_install_opt_syms:
     ucm_malloc_install_optional_symbols();
-    ucm_malloc_install_mallopt();
+    ucm_malloc_set_env_mallopt();
 out_succ:
     status = UCS_OK;
 out_unlock:
     pthread_mutex_unlock(&ucm_malloc_hook_state.install_mutex);
     return status;
+}
+
+void ucm_malloc_state_reset(int default_mmap_thresh, int default_trim_thresh)
+{
+    ucm_malloc_hook_state.max_freed_size = 0;
+    ucm_dlmallopt(M_MMAP_THRESHOLD, default_mmap_thresh);
+    ucm_dlmallopt(M_TRIM_THRESHOLD, default_trim_thresh);
+    ucm_malloc_set_env_mallopt();
 }
 
 UCS_STATIC_INIT {
