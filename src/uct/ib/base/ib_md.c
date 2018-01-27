@@ -500,7 +500,7 @@ static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
     return exp_access;
 }
 
-#ifndef UCT_MD_DISABLE_NUMA
+#if HAVE_NUMA
 static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *memh)
 {
     int ret, old_policy, new_policy;

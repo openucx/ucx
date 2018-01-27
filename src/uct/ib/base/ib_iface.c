@@ -709,8 +709,10 @@ static ucs_status_t uct_ib_iface_get_numa_latency(uct_ib_iface_t *iface,
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uct_ib_md_t *md      = uct_ib_iface_md(iface);
     cpu_set_t temp_cpu_mask, process_affinity;
+#if HAVE_NUMA
     int distance, min_cpu_distance;
     int cpu, num_cpus;
+#endif
     int ret;
 
     if (!md->config.prefer_nearest_device) {
