@@ -119,6 +119,7 @@ typedef struct uct_ib_device {
     uint8_t                     first_port;      /* Number of first port (usually 1) */
     uint8_t                     num_ports;       /* Amount of physical ports */
     cpu_set_t                   local_cpus;      /* CPUs local to device */
+    int                         numa_node;       /* NUMA node of the device */
     int                         async_events;    /* Whether async events are handled */
     UCS_STATS_NODE_DECLARE(stats);
     struct ibv_exp_port_attr    port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */

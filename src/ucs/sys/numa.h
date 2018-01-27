@@ -45,6 +45,9 @@ struct bitmask {
 #endif /* HAVE_NUMA */
 
 
+#define UCS_NUMA_MIN_DISTANCE    10
+
+
 typedef enum {
     UCS_NUMA_POLICY_DEFAULT,
     UCS_NUMA_POLICY_BIND,
