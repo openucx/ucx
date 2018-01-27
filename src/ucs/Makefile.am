@@ -75,6 +75,7 @@ noinst_HEADERS = \
 	stats/stats.h \
 	sys/checker.h \
 	sys/compiler.h \
+	sys/numa.h \
 	sys/sys.h \
 	time/time.h \
 	time/timerq.h \
@@ -111,6 +112,7 @@ libucs_la_SOURCES = \
 	stats/stats.c \
 	sys/init.c \
 	sys/math.c \
+	sys/numa.c \
 	sys/rcache.c \
 	sys/string.c \
 	sys/sys.c \

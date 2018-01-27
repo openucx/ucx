@@ -13,6 +13,7 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/stats/stats.h>
+#include <ucs/sys/numa.h>
 #include <ucs/sys/rcache.h>
 
 
@@ -27,17 +28,6 @@ enum {
     UCT_IB_MD_STAT_MEM_REG,
     UCT_IB_MD_STAT_LAST
 };
-
-
-/*
- * NUMA policy
- */
-typedef enum {
-    UCT_IB_NUMA_POLICY_DEFAULT,
-    UCT_IB_NUMA_POLICY_BIND,
-    UCT_IB_NUMA_POLICY_PREFERRED,
-    UCT_IB_NUMA_POLICY_LAST
-} uct_ib_numa_policy_t;
 
 
 enum {
@@ -59,7 +49,7 @@ typedef struct uct_ib_md_ext_config {
     int                      enable_contig_pages; /** Enable contiguous pages */
 
     struct {
-        uct_ib_numa_policy_t numa_policy;  /**< NUMA policy flags for ODP */
+        ucs_numa_policy_t    numa_policy;  /**< NUMA policy flags for ODP */
         int                  prefetch;     /**< Auto-prefetch non-blocking memory
                                                 registrations / allocations */
         size_t               max_size;     /**< Maximal memory region size for ODP */
