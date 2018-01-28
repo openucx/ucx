@@ -178,6 +178,7 @@ UCS_TEST_P(test_ucp_mmap, reg) {
         size_t size = ucs::rand() % (1024 * 1024);
 
         void *ptr = malloc(size);
+        ucs::fill_random(ptr, size);
 
         ucp_mem_h memh;
         ucp_mem_map_params_t params;
@@ -291,6 +292,7 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     size_t size = 128 * 1024 * 1024;
 
     void *ptr = malloc(size);
+    ucs::fill_random(ptr, size);
 
     ucp_mem_h               memh;
     ucp_mem_map_params_t    params;
