@@ -34,28 +34,39 @@ protected:
         size_t free_space, min_free_space, prev_free_space, alloc_size;
         struct mallinfo mi;
 
+        ucm_malloc_state_reset(128 * 1024, 128 * 1024);
         malloc_trim(0);
 
         /* Take up free space so we would definitely get mmap events */
-        min_free_space  = 0;
-        prev_free_space = SIZE_MAX;
+        min_free_space  = SIZE_MAX;
         alloc_size      = 0;
-        do {
-            mi = mallinfo();
+        mi = mallinfo();
+        prev_free_space = mi.fsmblks + mi.fordblks;
+
+        while (alloc_size < (size_t)(prev_free_space * 0.90)) {
             m_pts.push_back(malloc(small_alloc_size));
             alloc_size += small_alloc_size;
-            free_space = mi.fsmblks + mi.fordblks;
-            if (free_space > prev_free_space) {
-                /* If the heap grew, the minimal size is the previous one */
-                min_free_space = prev_free_space;
-            }
-            prev_free_space = free_space;
-        } while (free_space >= min_free_space + (small_alloc_count * small_alloc_size));
-        UCS_TEST_MESSAGE << "Reduced heap free space to minimum: " << free_space <<
-                            " after allocating " << alloc_size << " bytes";
+        }
 
-        malloc_trim(0);
-        ucm_malloc_state_reset(128 * 1024, 128 * 1024);
+        for (;;) {
+            void *ptr = malloc(small_alloc_size);
+            mi = mallinfo();
+            free_space = mi.fsmblks + mi.fordblks;
+            if (free_space > min_free_space) {
+                /* If the heap grew, the minimal size is the previous one */
+                free(ptr);
+                min_free_space = free_space;
+                break;
+            } else {
+                m_pts.push_back(ptr);
+                alloc_size += small_alloc_size;
+                min_free_space = free_space;
+            }
+        }
+
+        UCS_TEST_MESSAGE << "Reduced heap free space from " << prev_free_space <<
+                            " to " << free_space << " after allocating " <<
+                            alloc_size << " bytes";
     }
 
 public:
@@ -259,6 +270,19 @@ void test_thread::test() {
      */
     pthread_barrier_wait(m_barrier);
 
+    /* This must be done when all other threads are inactive, otherwise we may leak */
+#if HAVE_MALLOC_STATES
+    if (!RUNNING_ON_VALGRIND) {
+        pthread_mutex_lock(&lock);
+        void *state = malloc_get_state();
+        malloc_set_state(state);
+        free(state);
+        pthread_mutex_unlock(&lock);
+    }
+#endif /* HAVE_MALLOC_STATES */
+
+    pthread_barrier_wait(m_barrier);
+
     /* Release new pointers  */
     new_ptrs.clear();
 
@@ -267,12 +291,6 @@ void test_thread::test() {
 
     ptr = malloc(large_alloc_size);
 
-#if HAVE_MALLOC_STATES
-    if (!RUNNING_ON_VALGRIND) {
-        void *state = malloc_get_state();
-        malloc_set_state(state);
-    }
-#endif /* HAVE_MALLOC_STATES */
     free(ptr);
 
     /* shmat/shmdt */
