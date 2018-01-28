@@ -19,6 +19,7 @@
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucm/malloc/malloc_hook.h>
+#include <ucm/util/ucm_config.h>
 #include <ucs/sys/sys.h>
 #include <malloc.h>
 }
@@ -378,7 +379,13 @@ UCS_TEST_F(malloc_hook, fork) {
 class malloc_hook_cplusplus : public malloc_hook {
 public:
 
-    malloc_hook_cplusplus() : m_mapped_size(0), m_unmapped_size(0) {
+    malloc_hook_cplusplus() :
+        m_mapped_size(0), m_unmapped_size(0),
+        m_dynamic_mmap_config(ucm_global_config.enable_dynamic_mmap_thresh) {
+    }
+
+    ~malloc_hook_cplusplus() {
+        ucm_global_config.enable_dynamic_mmap_thresh = m_dynamic_mmap_config;
     }
 
     void set() {
@@ -424,8 +431,43 @@ protected:
         return ucs_time_to_sec(ucs_get_time() - start_time);
     }
 
+    void test_dynamic_mmap_thresh()
+    {
+        const size_t size = 8 * UCS_MBYTE;
+
+        set();
+
+        std::vector<std::string> strs;
+
+        m_mapped_size = 0;
+        while (m_mapped_size < size) {
+            strs.push_back(std::string(size, 't'));
+        }
+
+        m_unmapped_size = 0;
+        strs.clear();
+        EXPECT_GE(m_unmapped_size, size);
+
+        m_mapped_size = 0;
+        while (m_mapped_size < size) {
+            strs.push_back(std::string());
+            strs.back().resize(size);
+        }
+
+        m_unmapped_size = 0;
+        strs.clear();
+        if (ucm_global_config.enable_dynamic_mmap_thresh) {
+            EXPECT_EQ(0ul, m_unmapped_size);
+        } else {
+            EXPECT_GE(m_unmapped_size, size);
+        }
+
+        unset();
+    }
+
     size_t m_mapped_size;
     size_t m_unmapped_size;
+    int    m_dynamic_mmap_config;
 };
 
 
@@ -452,6 +494,16 @@ UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
     EXPECT_GE(m_unmapped_size, size * 3);
 
     unset();
+}
+
+UCS_TEST_F(malloc_hook_cplusplus, dynamic_mmap_enable) {
+    EXPECT_TRUE(ucm_global_config.enable_dynamic_mmap_thresh);
+    test_dynamic_mmap_thresh();
+}
+
+UCS_TEST_F(malloc_hook_cplusplus, dynamic_mmap_disable) {
+    ucm_global_config.enable_dynamic_mmap_thresh = 0;
+    test_dynamic_mmap_thresh();
 }
 
 extern "C" {
