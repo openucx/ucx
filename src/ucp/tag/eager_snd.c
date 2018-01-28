@@ -52,6 +52,8 @@ static size_t ucp_tag_pack_eager_first_dt(void *dest, void *arg)
     ucp_request_t *req = arg;
     size_t length;
 
+    ucs_assert(req->send.lane == ucp_ep_get_am_lane(req->send.ep));
+
     length               = ucp_ep_get_max_bcopy(req->send.ep, req->send.lane) -
                            sizeof(*hdr);
     hdr->super.super.tag = req->send.tag.tag;
@@ -70,6 +72,8 @@ static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
     ucp_eager_sync_first_hdr_t *hdr = dest;
     ucp_request_t *req = arg;
     size_t length;
+
+    ucs_assert(req->send.lane == ucp_ep_get_am_lane(req->send.ep));
 
     length                        = ucp_ep_get_max_bcopy(req->send.ep, req->send.lane) -
                                     sizeof(*hdr);
