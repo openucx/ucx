@@ -12,14 +12,10 @@
 #define UCT_RDMACM_MAX_CONN_PRIV \
         (UCT_RDMACM_UDP_PRIV_DATA_LEN) - (sizeof(uct_rdmacm_priv_data_hdr_t))
 
-/* The ep was destroyed and shouldn't be accessed anymore */
-#define UCT_RDMACM_IFACE_BLOCKED_NO_EP \
-        ((void*)0x1)
-
 typedef struct uct_rdmacm_iface_config {
     uct_iface_config_t       super;
     unsigned                 backlog;
-    unsigned                 cm_id_quota_size;
+    unsigned                 cm_id_quota;
 } uct_rdmacm_iface_config_t;
 
 
@@ -38,11 +34,10 @@ struct uct_rdmacm_iface {
     /** Field used only for client side */
     ucs_list_link_t                      pending_eps_list;
     ucs_list_link_t                      used_cm_ids_list;
-    unsigned                             num_cm_id_in_quota;
+    int                                  cm_id_quota; /* num of cm_ids in the quota*/
 
     struct {
         double                           addr_resolve_timeout;
-        unsigned                         cm_id_quota_size;
     } config;
 };
 

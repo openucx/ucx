@@ -31,7 +31,7 @@ typedef struct uct_rdmacm_cm_id {
     struct rdma_cm_id  *cm_id;
     uct_rdmacm_ep_t    *ep;
     ucs_list_link_t    list;    /* for list of used cm_ids */
-} uct_rdmacm_cm_id_t;
+} uct_rdmacm_ctx_t;
 
 ucs_status_t uct_rdmacm_resolve_addr(struct rdma_cm_id *cm_id,
                                      struct sockaddr *addr, int timeout_ms,

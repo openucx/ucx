@@ -13,9 +13,9 @@ static ucs_config_field_t uct_rdmacm_iface_config_table[] = {
      "Maximum number of pending connections for an rdma_cm_id.",
      ucs_offsetof(uct_rdmacm_iface_config_t, backlog), UCS_CONFIG_TYPE_UINT},
 
-    {"CM_ID_QUOTA_SIZE", "16",
-     "Size of quota holding rdma_cm_ids.",
-     ucs_offsetof(uct_rdmacm_iface_config_t, cm_id_quota_size), UCS_CONFIG_TYPE_UINT},
+    {"CM_ID_QUOTA", "64",
+     "How many rdma_cm connections can progress simultaneously.",
+     ucs_offsetof(uct_rdmacm_iface_config_t, cm_id_quota), UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
@@ -106,11 +106,11 @@ void uct_rdmacm_iface_client_start_next_ep(uct_rdmacm_iface_t *iface)
         ep->is_on_pending = 0;
 
         status = uct_rdmacm_ep_resolve_addr(ep);
-        if (status != UCS_OK) {
-            uct_rdmacm_ep_set_failed(&iface->super.super, &ep->super.super);
-        } else {
+        if (status == UCS_OK) {
             break;
         }
+
+        uct_rdmacm_ep_set_failed(&iface->super.super, &ep->super.super);
     }
 
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
@@ -120,7 +120,7 @@ static void uct_rdmacm_client_handle_failure(uct_rdmacm_iface_t *iface,
                                              uct_rdmacm_ep_t *ep)
 {
     ucs_assert(!iface->is_server);
-    if (ep != UCT_RDMACM_IFACE_BLOCKED_NO_EP) {
+    if (ep != NULL) {
         uct_rdmacm_ep_set_failed(&iface->super.super, &ep->super.super);
     }
 }
@@ -166,18 +166,22 @@ static void uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
     rdma_destroy_id(event->id);
 }
 
-static void uct_rdmacm_iface_return_cm_id(uct_rdmacm_iface_t *iface,
-                                          uct_rdmacm_cm_id_t *rdmacm_cm_id)
+/**
+ * Release a cm_id. This function should be called when the async context
+ * is locked.
+ */
+static void uct_rdmacm_iface_release_cm_id(uct_rdmacm_iface_t *iface,
+                                          uct_rdmacm_ctx_t *rdmacm_ctx)
 {
-    ucs_debug("destroying cm_id %p", rdmacm_cm_id->cm_id);
+    ucs_debug("destroying cm_id %p", rdmacm_ctx->cm_id);
 
-    ucs_list_del(&rdmacm_cm_id->list);
-    if (rdmacm_cm_id->ep != UCT_RDMACM_IFACE_BLOCKED_NO_EP) {
-        rdmacm_cm_id->ep->is_on_cm_ids_list = 0;
+    ucs_list_del(&rdmacm_ctx->list);
+    if (rdmacm_ctx->ep != NULL) {
+        rdmacm_ctx->ep->cm_id_ctx = NULL;
     }
-    rdma_destroy_id(rdmacm_cm_id->cm_id);
-    ucs_free(rdmacm_cm_id);
-    iface->num_cm_id_in_quota++;
+    rdma_destroy_id(rdmacm_ctx->cm_id);
+    ucs_free(rdmacm_ctx);
+    iface->cm_id_quota++;
 }
 
 static int uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdma_cm_event *event)
@@ -187,29 +191,30 @@ static int uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdma
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     uct_rdmacm_priv_data_hdr_t *hdr;
     struct rdma_conn_param conn_param;
-    uct_rdmacm_cm_id_t *rdmacm_cm_id;
+    uct_rdmacm_ctx_t *rdmacm_ctx;
     uct_rdmacm_ep_t *ep = NULL;
     int destroy_cm_id = 0;
 
-    ucs_debug("rdmacm event (fd=%d cm_id %p) on %s: %s. Peer: %s.",
-              iface->event_ch->fd, event->id, (iface->is_server ? "server" : "client"),
-              rdma_event_str(event->event),
-              ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
 
     if (iface->is_server) {
         ucs_assert((iface->cm_id == event->id) ||
                    ((event->event == RDMA_CM_EVENT_CONNECT_REQUEST) &&
                     (iface->cm_id == event->listen_id)));
     } else {
-        rdmacm_cm_id = (uct_rdmacm_cm_id_t *)event->id->context;
-        ep = rdmacm_cm_id->ep;
+        rdmacm_ctx = event->id->context;
+        ep = rdmacm_ctx->ep;
     }
+
+    ucs_debug("rdmacm event (fd=%d cm_id %p) on %s (ep=%p): %s. Peer: %s.",
+              iface->event_ch->fd, event->id, (iface->is_server ? "server" : "client"),
+              ep, rdma_event_str(event->event),
+              ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
 
     /* The following applies for rdma_cm_id of type RDMA_PS_UDP only */
     switch (event->event) {
     case RDMA_CM_EVENT_ADDR_RESOLVED:
         /* Client - resolve the route to the server */
-        if (ep == UCT_RDMACM_IFACE_BLOCKED_NO_EP) {
+        if (ep == NULL) {
             /* received an event on an non-existing ep - an already destroyed ep */
             destroy_cm_id = 1;
         } else if (rdma_resolve_route(event->id, UCS_MSEC_PER_SEC * rdmacm_md->addr_resolve_timeout)) {
@@ -222,10 +227,10 @@ static int uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdma
 
     case RDMA_CM_EVENT_ROUTE_RESOLVED:
         /* Client - send a connection request to the server */
-        if (ep == UCT_RDMACM_IFACE_BLOCKED_NO_EP) {
+        if (ep == NULL) {
             /* received an event on an non-existing ep - an already destroyed ep */
             destroy_cm_id = 1;
-        } else if (ep != NULL) {
+        } else {
             hdr = (uct_rdmacm_priv_data_hdr_t*)ep->priv_data;
 
             memset(&conn_param, 0, sizeof(conn_param));
@@ -295,7 +300,7 @@ static void uct_rdmacm_iface_event_handler(int fd, void *arg)
     uct_rdmacm_iface_t *iface = arg;
     struct rdma_cm_event *event;
     int ret, destroy_cm_id;
-    uct_rdmacm_cm_id_t *rdmacm_cm_id = NULL;
+    uct_rdmacm_ctx_t *rdmacm_ctx = NULL;
 
     for (;;) {
         /* Fetch an event */
@@ -311,7 +316,7 @@ static void uct_rdmacm_iface_event_handler(int fd, void *arg)
 
         destroy_cm_id = uct_rdmacm_iface_process_event(iface, event);
         if (!iface->is_server) {
-            rdmacm_cm_id = (uct_rdmacm_cm_id_t *)event->id->context;
+            rdmacm_ctx = (uct_rdmacm_ctx_t *)event->id->context;
         }
 
         ret = rdma_ack_cm_event(event);
@@ -319,8 +324,8 @@ static void uct_rdmacm_iface_event_handler(int fd, void *arg)
             ucs_warn("rdma_ack_cm_event() failed: %m");
         }
 
-        if (destroy_cm_id && (rdmacm_cm_id != NULL)) {
-            uct_rdmacm_iface_return_cm_id(iface, rdmacm_cm_id);
+        if (destroy_cm_id && (rdmacm_ctx != NULL)) {
+            uct_rdmacm_iface_release_cm_id(iface, rdmacm_ctx);
             uct_rdmacm_iface_client_start_next_ep(iface);
         }
     }
@@ -411,12 +416,12 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
         self->conn_request_arg = params->mode.sockaddr.conn_request_arg;
         self->is_server        = 1;
     } else {
-        ucs_list_head_init(&self->pending_eps_list);
-        ucs_list_head_init(&self->used_cm_ids_list);
-        self->config.cm_id_quota_size = config->cm_id_quota_size;
-        self->num_cm_id_in_quota      = config->cm_id_quota_size;
         self->is_server               = 0;
     }
+
+    self->cm_id_quota = config->cm_id_quota;
+    ucs_list_head_init(&self->pending_eps_list);
+    ucs_list_head_init(&self->used_cm_ids_list);
 
     /* Server and client register an event handler for incoming messages */
     status = ucs_async_set_event_handler(self->super.worker->async->mode,
@@ -443,25 +448,25 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_iface_t)
 {
-    uct_rdmacm_cm_id_t *rdmacm_cm_id;
+    uct_rdmacm_ctx_t *rdmacm_ctx;
 
     ucs_async_remove_handler(self->event_ch->fd, 1);
     if (self->is_server) {
         rdma_destroy_id(self->cm_id);
-    } else {
-        UCS_ASYNC_BLOCK(self->super.worker->async);
-
-        while (!ucs_list_is_empty(&self->used_cm_ids_list)) {
-            rdmacm_cm_id = ucs_list_extract_head(&self->used_cm_ids_list,
-                                                 uct_rdmacm_cm_id_t, list);
-            rdma_destroy_id(rdmacm_cm_id->cm_id);
-            ucs_free(rdmacm_cm_id);
-            self->num_cm_id_in_quota++;
-        }
-        ucs_assert(self->num_cm_id_in_quota == self->config.cm_id_quota_size);
-
-        UCS_ASYNC_UNBLOCK(self->super.worker->async);
     }
+
+    UCS_ASYNC_BLOCK(self->super.worker->async);
+
+    while (!ucs_list_is_empty(&self->used_cm_ids_list)) {
+        rdmacm_ctx = ucs_list_extract_head(&self->used_cm_ids_list,
+                                             uct_rdmacm_ctx_t, list);
+        rdma_destroy_id(rdmacm_ctx->cm_id);
+        ucs_free(rdmacm_ctx);
+        self->cm_id_quota++;
+    }
+
+    UCS_ASYNC_UNBLOCK(self->super.worker->async);
+
     rdma_destroy_event_channel(self->event_ch);
 }
 

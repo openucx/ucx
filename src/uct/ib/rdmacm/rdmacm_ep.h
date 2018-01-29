@@ -14,9 +14,8 @@ struct uct_rdmacm_ep {
     ucs_list_link_t                    list_elem;       /* for the pending_eps_list*/
     struct sockaddr_storage            remote_addr;
     int                                is_on_pending;
-    int                                is_on_cm_ids_list;
     uct_worker_cb_id_t                 slow_prog_id;
-    uct_rdmacm_cm_id_t                 *rdmacm_cm_id;
+    uct_rdmacm_ctx_t                   *cm_id_ctx;
 };
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t, uct_iface_t*,

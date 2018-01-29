@@ -12,8 +12,8 @@ ucs_status_t uct_rdmacm_ep_resolve_addr(uct_rdmacm_ep_t *ep)
 
     UCS_ASYNC_BLOCK(iface->super.worker->async);
 
-    status = uct_rdmacm_resolve_addr(ep->rdmacm_cm_id->cm_id,
-                                    (struct sockaddr *)&(ep->remote_addr),
+    status = uct_rdmacm_resolve_addr(ep->cm_id_ctx->cm_id,
+                                    (struct sockaddr *)&ep->remote_addr,
                                     UCS_MSEC_PER_SEC * iface->config.addr_resolve_timeout,
                                     UCS_LOG_LEVEL_ERROR);
 
@@ -28,37 +28,48 @@ ucs_status_t uct_rdmacm_ep_set_cm_id(uct_rdmacm_iface_t *iface, uct_rdmacm_ep_t 
     UCS_ASYNC_BLOCK(iface->super.worker->async);
 
     /* create a cm_id for the client side */
-    if ((iface->num_cm_id_in_quota <= iface->config.cm_id_quota_size) &&
-        (iface->num_cm_id_in_quota > 0)) {
+    if (iface->cm_id_quota > 0) {
         /* Create an id for this interface. Events associated with this id will be
          * reported on the event_channel that was created on iface init. */
-        ep->rdmacm_cm_id = ucs_malloc(sizeof(uct_rdmacm_cm_id_t), "client rdmacm_cm_id");
-        if (ep->rdmacm_cm_id == NULL) {
+        ep->cm_id_ctx = ucs_malloc(sizeof(*ep->cm_id_ctx), "client rdmacm_cm_id");
+        if (ep->cm_id_ctx == NULL) {
             status = UCS_ERR_NO_MEMORY;
             goto out;
         }
-        if (rdma_create_id(iface->event_ch, &ep->rdmacm_cm_id->cm_id,
-                           ep->rdmacm_cm_id, RDMA_PS_UDP)) {
+
+        if (rdma_create_id(iface->event_ch, &ep->cm_id_ctx->cm_id,
+                           ep->cm_id_ctx, RDMA_PS_UDP)) {
             ucs_error("rdma_create_id() failed: %m");
-            ucs_free(ep->rdmacm_cm_id);
             status = UCS_ERR_IO_ERROR;
-            goto out;
+            goto out_free;
         }
-        ep->rdmacm_cm_id->ep = ep;
-        ucs_list_add_tail(&iface->used_cm_ids_list, &ep->rdmacm_cm_id->list);
-        ep->is_on_cm_ids_list = 1;
-        iface->num_cm_id_in_quota--;
+
+        ep->cm_id_ctx->ep = ep;
+        ucs_list_add_tail(&iface->used_cm_ids_list, &ep->cm_id_ctx->list);
+        iface->cm_id_quota--;
         ucs_debug("ep %p, new cm_id %p. cm_id_in_quota %d", ep,
-                   ep->rdmacm_cm_id->cm_id, iface->num_cm_id_in_quota);
+                   ep->cm_id_ctx->cm_id, iface->cm_id_quota);
         status = UCS_OK;
+        goto out;
     } else {
-        ep->is_on_cm_ids_list = 0;
+        ep->cm_id_ctx = NULL;
         status = UCS_ERR_NO_RESOURCE;
+        goto out;
     }
 
+out_free:
+    ucs_free(ep->cm_id_ctx);
 out:
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
     return status;
+}
+
+static inline void uct_rdmacm_ep_add_to_pending(uct_rdmacm_iface_t *iface, uct_rdmacm_ep_t *ep)
+{
+    UCS_ASYNC_BLOCK(iface->super.worker->async);
+    ucs_list_add_tail(&iface->pending_eps_list, &ep->list_elem);
+    ep->is_on_pending = 1;
+    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
@@ -125,13 +136,9 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
     goto out;
 
 add_to_pending:
-    /* Add the ep to the pending queue of eps which since there is no
+    /* Add the ep to the pending queue of eps since there is no
      * available cm_id for it */
-    UCS_ASYNC_BLOCK(iface->super.worker->async);
-    ucs_list_add_tail(&iface->pending_eps_list, &self->list_elem);
-    self->is_on_pending = 1;
-    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
-
+    uct_rdmacm_ep_add_to_pending(iface, self);
 out:
     ucs_debug("created an RDMACM endpoint on iface %p. event_channel: %p, "
               "iface cm_id: %p remote addr: %s",
@@ -149,7 +156,7 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
 {
     uct_rdmacm_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_rdmacm_iface_t);
-    uct_rdmacm_cm_id_t *rdmacm_cm_id;
+    uct_rdmacm_ctx_t *rdmacm_ctx;
 
     ucs_debug("rdmacm_ep %p: destroying", self);
 
@@ -166,10 +173,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
 
     /* mark this ep as destroyed so that arriving events on it won't try to
      * use it */
-    if (self->is_on_cm_ids_list) {
-        rdmacm_cm_id = (uct_rdmacm_cm_id_t *)self->rdmacm_cm_id->cm_id->context;
-        rdmacm_cm_id->ep = UCT_RDMACM_IFACE_BLOCKED_NO_EP;
-        ucs_debug("ep destroy: cm_id %p", rdmacm_cm_id->cm_id);
+    if (self->cm_id_ctx != NULL) {
+        rdmacm_ctx     = self->cm_id_ctx->cm_id->context;
+        rdmacm_ctx->ep = NULL;
+        ucs_debug("ep destroy: cm_id %p", rdmacm_ctx->cm_id);
     }
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 
