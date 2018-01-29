@@ -761,12 +761,12 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
         }
 
         if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_ERR)) {
-            ucs_assert(cdesc->ep->tx.err_skb_count > 0);
-            --cdesc->ep->tx.err_skb_count;
+            ucs_assert(ep->tx.err_skb_count > 0);
+            --ep->tx.err_skb_count;
             if ((ep->tx.err_skb_count == 0) &&
                 !(ep->flags & UCT_UD_EP_FLAG_DISCONNECTED)) {
                 status = iface->super.ops->set_ep_failed(&iface->super,
-                                                         &cdesc->ep->super.super,
+                                                         &ep->super.super,
                                                          skb->status);
                 ucs_assertv_always(status == UCS_OK,
                                    "send completion with error: %s",
