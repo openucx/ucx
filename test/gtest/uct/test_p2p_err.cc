@@ -25,13 +25,8 @@ public:
         size_t length;
     };
 
-    uct_p2p_err_test() : uct_p2p_test(0, error_handler) {
-    }
-
-    static ucs_status_t
-    error_handler(void *arg, uct_ep_h ep, ucs_status_t status)
-    {
-        return UCS_OK;
+    uct_p2p_err_test() :
+        uct_p2p_test(0, uct_error_handler_t(ucs_empty_function_return_success)) {
     }
 
     static size_t pack_cb(void *dest, void *arg)
