@@ -717,7 +717,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     cpu_set_t temp_cpu_mask, process_affinity;
     int ret;
     uct_ib_md_t *md = uct_ib_iface_md(iface);
-    
+
     active_width = uct_ib_iface_port_attr(iface)->active_width;
     active_speed = uct_ib_iface_port_attr(iface)->active_speed;
     active_mtu   = uct_ib_iface_port_attr(iface)->active_mtu;

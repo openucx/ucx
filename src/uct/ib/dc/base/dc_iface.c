@@ -219,11 +219,27 @@ void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config
                                 ucs_min(iface->super.config.tx_qp_len, config->quota);
 }
 
+static uint8_t uct_dc_version(uct_ib_device_t *dev)
+{
+    unsigned ver = uct_ib_device_spec(dev)->flags & UCT_IB_DEVICE_FLAG_DC;
+
+    if (ver & UCT_IB_DEVICE_FLAG_DC_V2) {
+        return UCT_DC_IFACE_ADDR_DC_VER2;
+    }
+
+    if (ver & UCT_IB_DEVICE_FLAG_DC_V1) {
+        return UCT_DC_IFACE_ADDR_DC_VER1;
+    }
+
+    return 0;
+}
+
 UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     unsigned rx_priv_len, uct_dc_iface_config_t *config,
                     int tm_cap_bit)
 {
+    uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     ucs_status_t status;
     ucs_trace_func("");
 
@@ -241,6 +257,9 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
                   UCT_DC_IFACE_MAX_DCIS, config->ndci);
         return UCS_ERR_INVALID_PARAM;
     }
+
+    self->version_flag = uct_dc_version(dev);
+    ucs_assert_always(self->version_flag != 0);
 
     self->tx.ndci                    = config->ndci;
     self->tx.policy                  = config->tx_policy;
@@ -323,14 +342,40 @@ ucs_status_t uct_dc_iface_query(uct_dc_iface_t *iface,
     return UCS_OK;
 }
 
+int uct_dc_iface_is_reachable(const uct_iface_h tl_iface,
+                              const uct_device_addr_t *dev_addr,
+                              const uct_iface_addr_t *iface_addr)
+{
+    uct_dc_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_iface,
+                                                        uct_dc_iface_t);
+    uct_dc_iface_addr_t *addr = (uct_dc_iface_addr_t *)iface_addr;
+
+    if ((iface_addr  != NULL) &&
+        (UCT_DC_IFACE_ADDR_TM_ENABLED(addr) !=
+         UCT_RC_IFACE_TM_ENABLED(&iface->super))) {
+        return 0;
+    }
+
+    if (!(addr->flags & iface->version_flag)) {
+        return 0;
+    }
+
+    return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
+}
+
 ucs_status_t
 uct_dc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
 {
-    uct_dc_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_iface_t);
-    uct_dc_iface_addr_t *addr = (uct_dc_iface_addr_t *)iface_addr;
+    uct_dc_iface_t      *iface = ucs_derived_of(tl_iface, uct_dc_iface_t);
+    uct_dc_iface_addr_t *addr  = (uct_dc_iface_addr_t *)iface_addr;
 
     uct_ib_pack_uint24(addr->qp_num, iface->rx.dct->dct_num);
     addr->atomic_mr_id = uct_ib_iface_get_atomic_mr_id(&iface->super.super);
+    addr->flags        = iface->version_flag;
+    if (UCT_RC_IFACE_TM_ENABLED(&iface->super)) {
+        addr->flags   |= UCT_DC_IFACE_ADDR_HW_TM;
+    }
+
     return UCS_OK;
 }
 
