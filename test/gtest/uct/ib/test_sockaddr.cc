@@ -79,10 +79,11 @@ public:
         return UCS_OK;
     }
 
-    static void err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
+    static ucs_status_t err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
     {
         test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr*>(arg);
         self->err_count++;
+        return UCS_OK;
     }
 
 protected:

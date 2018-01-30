@@ -93,7 +93,7 @@ struct uct_ib_iface_ops {
     ucs_status_t            (*arm_rx_cq)(uct_ib_iface_t *iface, int solicited_only);
     void                    (*handle_failure)(uct_ib_iface_t *iface, void *arg,
                                               ucs_status_t status);
-    void                    (*set_ep_failed)(uct_ib_iface_t *iface, uct_ep_h ep,
+    ucs_status_t            (*set_ep_failed)(uct_ib_iface_t *iface, uct_ep_h ep,
                                              ucs_status_t status);
 };
 

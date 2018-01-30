@@ -520,8 +520,8 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
     return UCS_OK;
 }
 
-void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
-                           ucs_status_t status)
+ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
+                                   ucs_status_t status)
 {
     uct_dc_iface_t     *iface  = ucs_derived_of(ib_iface, uct_dc_iface_t);
     uint8_t            dci     = uct_dc_iface_dci_find(iface, qp_num);
@@ -529,10 +529,11 @@ void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
     uct_dc_ep_t        *ep     = iface->tx.dcis[dci].ep;
     uct_dc_iface_ops_t *dc_ops = ucs_derived_of(iface->super.super.ops,
                                                 uct_dc_iface_ops_t);
+    ucs_status_t       ep_status;
     int16_t            outstanding;
 
     if (!ep) {
-        return;
+        return UCS_OK;
     }
 
     uct_rc_txqp_purge_outstanding(txqp, status, 0);
@@ -549,7 +550,8 @@ void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
     uct_dc_iface_dci_put(iface, dci);
     ucs_assert_always(ep->dci == UCT_DC_EP_NO_DCI);
 
-    iface->super.super.ops->set_ep_failed(ib_iface, &ep->super.super, status);
+    ep_status = iface->super.super.ops->set_ep_failed(ib_iface,
+                                                      &ep->super.super, status);
 
     status = dc_ops->reset_dci(iface, dci);
     if (status != UCS_OK) {
@@ -562,6 +564,8 @@ void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
         ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
                   iface, dci, txqp->qp->qp_num, ucs_status_string(status));
     }
+
+    return ep_status;
 }
 
 #if IBV_EXP_HW_TM_DC

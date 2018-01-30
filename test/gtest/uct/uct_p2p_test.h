@@ -14,7 +14,7 @@
  */
 class uct_p2p_test : public uct_test {
 public:
-    uct_p2p_test(size_t rx_headroom);
+    uct_p2p_test(size_t rx_headroom, uct_error_handler_t err_handler = NULL);
 
     static std::vector<const resource*> enum_resources(const std::string& tl_name);
 
@@ -71,10 +71,11 @@ private:
     static int             log_data_count;
     static ucs_log_level_t orig_log_level;
 
-    const size_t m_rx_headroom;
-    bool         m_null_completion;
-    completion   m_completion;
-    unsigned     m_completion_count;
+    const size_t        m_rx_headroom;
+    uct_error_handler_t m_err_handler;
+    bool                m_null_completion;
+    completion          m_completion;
+    unsigned            m_completion_count;
 };
 
 

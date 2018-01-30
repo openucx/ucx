@@ -774,18 +774,23 @@ static unsigned uct_dc_mlx5_iface_progress_tm(void *arg)
 static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
                                              void *arg, ucs_status_t status)
 {
-    struct mlx5_cqe64 *cqe   = arg;
-    uint32_t          qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+    struct mlx5_cqe64 *cqe    = arg;
+    uint32_t          qp_num  = ntohl(cqe->sop_drop_qpn) &
+                                UCS_MASK(UCT_IB_QPN_ORDER);
+    ucs_log_level_t   log_lvl = UCS_LOG_LEVEL_FATAL;
 
-    uct_ib_mlx5_completion_with_err(arg, UCS_LOG_LEVEL_ERROR);
-    uct_dc_handle_failure(ib_iface, qp_num, status);
+    if (uct_dc_handle_failure(ib_iface, qp_num, status) == UCS_OK) {
+        log_lvl = ib_iface->super.config.failure_level;
+    }
+
+    uct_ib_mlx5_completion_with_err(arg, log_lvl);
 }
 
-static void uct_dc_mlx5_ep_set_failed(uct_ib_iface_t *ib_iface, uct_ep_h ep,
-                                      ucs_status_t status)
+static ucs_status_t uct_dc_mlx5_ep_set_failed(uct_ib_iface_t *ib_iface,
+                                              uct_ep_h ep, ucs_status_t status)
 {
-    uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_mlx5_ep_t), ep,
-                      &ib_iface->super.super, status);
+    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_mlx5_ep_t), ep,
+                             &ib_iface->super.super, status);
 }
 
 ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
