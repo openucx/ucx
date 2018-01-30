@@ -171,16 +171,16 @@ static void uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
  * is locked.
  */
 static void uct_rdmacm_iface_release_cm_id(uct_rdmacm_iface_t *iface,
-                                          uct_rdmacm_ctx_t *rdmacm_ctx)
+                                          uct_rdmacm_ctx_t *cm_id_ctx)
 {
-    ucs_debug("destroying cm_id %p", rdmacm_ctx->cm_id);
+    ucs_debug("destroying cm_id %p", cm_id_ctx->cm_id);
 
-    ucs_list_del(&rdmacm_ctx->list);
-    if (rdmacm_ctx->ep != NULL) {
-        rdmacm_ctx->ep->cm_id_ctx = NULL;
+    ucs_list_del(&cm_id_ctx->list);
+    if (cm_id_ctx->ep != NULL) {
+        cm_id_ctx->ep->cm_id_ctx = NULL;
     }
-    rdma_destroy_id(rdmacm_ctx->cm_id);
-    ucs_free(rdmacm_ctx);
+    rdma_destroy_id(cm_id_ctx->cm_id);
+    ucs_free(cm_id_ctx);
     iface->cm_id_quota++;
 }
 
@@ -191,7 +191,7 @@ static int uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdma
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     uct_rdmacm_priv_data_hdr_t *hdr;
     struct rdma_conn_param conn_param;
-    uct_rdmacm_ctx_t *rdmacm_ctx;
+    uct_rdmacm_ctx_t *cm_id_ctx;
     uct_rdmacm_ep_t *ep = NULL;
     int destroy_cm_id = 0;
 
@@ -201,8 +201,8 @@ static int uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdma
                    ((event->event == RDMA_CM_EVENT_CONNECT_REQUEST) &&
                     (iface->cm_id == event->listen_id)));
     } else {
-        rdmacm_ctx = event->id->context;
-        ep = rdmacm_ctx->ep;
+        cm_id_ctx = event->id->context;
+        ep = cm_id_ctx->ep;
     }
 
     ucs_debug("rdmacm event (fd=%d cm_id %p) on %s (ep=%p): %s. Peer: %s.",
@@ -300,7 +300,7 @@ static void uct_rdmacm_iface_event_handler(int fd, void *arg)
     uct_rdmacm_iface_t *iface = arg;
     struct rdma_cm_event *event;
     int ret, destroy_cm_id;
-    uct_rdmacm_ctx_t *rdmacm_ctx = NULL;
+    uct_rdmacm_ctx_t *cm_id_ctx = NULL;
 
     for (;;) {
         /* Fetch an event */
@@ -316,7 +316,7 @@ static void uct_rdmacm_iface_event_handler(int fd, void *arg)
 
         destroy_cm_id = uct_rdmacm_iface_process_event(iface, event);
         if (!iface->is_server) {
-            rdmacm_ctx = (uct_rdmacm_ctx_t *)event->id->context;
+            cm_id_ctx = (uct_rdmacm_ctx_t *)event->id->context;
         }
 
         ret = rdma_ack_cm_event(event);
@@ -324,8 +324,8 @@ static void uct_rdmacm_iface_event_handler(int fd, void *arg)
             ucs_warn("rdma_ack_cm_event() failed: %m");
         }
 
-        if (destroy_cm_id && (rdmacm_ctx != NULL)) {
-            uct_rdmacm_iface_release_cm_id(iface, rdmacm_ctx);
+        if (destroy_cm_id && (cm_id_ctx != NULL)) {
+            uct_rdmacm_iface_release_cm_id(iface, cm_id_ctx);
             uct_rdmacm_iface_client_start_next_ep(iface);
         }
     }
@@ -448,7 +448,7 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_iface_t)
 {
-    uct_rdmacm_ctx_t *rdmacm_ctx;
+    uct_rdmacm_ctx_t *cm_id_ctx;
 
     ucs_async_remove_handler(self->event_ch->fd, 1);
     if (self->is_server) {
@@ -458,10 +458,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_iface_t)
     UCS_ASYNC_BLOCK(self->super.worker->async);
 
     while (!ucs_list_is_empty(&self->used_cm_ids_list)) {
-        rdmacm_ctx = ucs_list_extract_head(&self->used_cm_ids_list,
-                                             uct_rdmacm_ctx_t, list);
-        rdma_destroy_id(rdmacm_ctx->cm_id);
-        ucs_free(rdmacm_ctx);
+        cm_id_ctx = ucs_list_extract_head(&self->used_cm_ids_list,
+                                          uct_rdmacm_ctx_t, list);
+        rdma_destroy_id(cm_id_ctx->cm_id);
+        ucs_free(cm_id_ctx);
         self->cm_id_quota++;
     }
 

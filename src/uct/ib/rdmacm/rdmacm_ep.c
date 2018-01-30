@@ -31,7 +31,7 @@ ucs_status_t uct_rdmacm_ep_set_cm_id(uct_rdmacm_iface_t *iface, uct_rdmacm_ep_t 
     if (iface->cm_id_quota > 0) {
         /* Create an id for this interface. Events associated with this id will be
          * reported on the event_channel that was created on iface init. */
-        ep->cm_id_ctx = ucs_malloc(sizeof(*ep->cm_id_ctx), "client rdmacm_cm_id");
+        ep->cm_id_ctx = ucs_malloc(sizeof(*ep->cm_id_ctx), "client cm_id_ctx");
         if (ep->cm_id_ctx == NULL) {
             status = UCS_ERR_NO_MEMORY;
             goto out;
@@ -156,7 +156,7 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
 {
     uct_rdmacm_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_rdmacm_iface_t);
-    uct_rdmacm_ctx_t *rdmacm_ctx;
+    uct_rdmacm_ctx_t *cm_id_ctx;
 
     ucs_debug("rdmacm_ep %p: destroying", self);
 
@@ -174,9 +174,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
     /* mark this ep as destroyed so that arriving events on it won't try to
      * use it */
     if (self->cm_id_ctx != NULL) {
-        rdmacm_ctx     = self->cm_id_ctx->cm_id->context;
-        rdmacm_ctx->ep = NULL;
-        ucs_debug("ep destroy: cm_id %p", rdmacm_ctx->cm_id);
+        cm_id_ctx     = self->cm_id_ctx->cm_id->context;
+        cm_id_ctx->ep = NULL;
+        ucs_debug("ep destroy: cm_id %p", cm_id_ctx->cm_id);
     }
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 

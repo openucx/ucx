@@ -101,7 +101,9 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
     client->connect(0, *server, 0);
 
     /* wait for the server to connect */
-    while (server_recv_req == 0);
+    while (server_recv_req == 0) {
+        sched_yield();
+    }
     ASSERT_TRUE(server_recv_req == 1);
     /* since the transport may support a graceful exit in case of an error,
      * make sure that the error handling flow wasn't invoked (there were no
@@ -137,7 +139,9 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
         client_test->connect(i, *server, 0);
     }
 
-    while (server_recv_req < num_clients);
+    while (server_recv_req < num_clients){
+        sched_yield();
+    }
     ASSERT_TRUE(server_recv_req == num_clients);
     EXPECT_EQ(0, err_count);
 }
@@ -155,7 +159,9 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
         client->connect(i, *server, 0);
     }
 
-    while (server_recv_req < num_conns_on_client);
+    while (server_recv_req < num_conns_on_client) {
+        sched_yield();
+    }
     ASSERT_TRUE(server_recv_req == num_conns_on_client);
     EXPECT_EQ(0, err_count);
 }
