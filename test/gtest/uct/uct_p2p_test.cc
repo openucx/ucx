@@ -73,7 +73,7 @@ void uct_p2p_test::init() {
     if (r->loopback) {
         entity *e = uct_test::create_entity(m_rx_headroom, m_err_handler);
         m_entities.push_back(e);
-        e->connect(0, *e, 0);
+        e->connect(0, *e, 0, NULL);
     } else {
         entity *e1 = uct_test::create_entity(m_rx_headroom, m_err_handler);
         m_entities.push_back(e1);
@@ -81,8 +81,8 @@ void uct_p2p_test::init() {
         entity *e2 = uct_test::create_entity(m_rx_headroom, m_err_handler);
         m_entities.push_back(e2);
 
-        e1->connect(0, *e2, 0);
-        e2->connect(0, *e1, 0);
+        e1->connect(0, *e2, 0, NULL);
+        e2->connect(0, *e1, 0, NULL);
     }
 
     /* Allocate completion handle and set the callback */

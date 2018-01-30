@@ -36,8 +36,8 @@ public:
         entity *sender = uct_test::create_entity(0);
         m_entities.push_back(sender);
 
-        sender->connect(0, *receiver, 1);
-        receiver->connect(1, *sender, 0);
+        sender->connect(0, *receiver, 1, NULL);
+        receiver->connect(1, *sender, 0, NULL);
     }
 
     virtual void cleanup() {

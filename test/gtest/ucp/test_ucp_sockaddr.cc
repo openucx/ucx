@@ -39,6 +39,22 @@ public:
         UCS_TEST_SKIP_R("No interface for testing");
     }
 
+    void inaddr_any_addr(struct sockaddr_in *addr, in_port_t port)
+    {
+        memset(addr, 0, sizeof(struct sockaddr_in));
+        addr->sin_family      = AF_INET;
+        addr->sin_addr.s_addr = INADDR_ANY;
+        addr->sin_port        = port;
+    }
+
+    void start_listener(const struct sockaddr* addr)
+    {
+        ucs_status_t status = receiver().listen(addr, sizeof(*addr));
+        if (status == UCS_ERR_INVALID_ADDR) {
+            UCS_TEST_SKIP_R("cannot listen to " + ucs::sockaddr_to_str(addr));
+        }
+    }
+
     static void scomplete_cb(void *req, ucs_status_t status)
     {
         ASSERT_UCS_OK(status);
@@ -81,6 +97,27 @@ public:
         EXPECT_EQ(send_data, recv_data);
     }
 
+    void connect_and_send_recv(struct sockaddr *connect_addr)
+    {
+        ucp_ep_params_t ep_params = ucp_test::get_ep_params();
+        ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
+                                     UCP_EP_PARAM_FIELD_SOCK_ADDR |
+                                     UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
+        ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
+        ep_params.sockaddr.addr    = connect_addr;
+        ep_params.sockaddr.addrlen = sizeof(*connect_addr);
+        sender().connect(&receiver(), ep_params);
+
+        tag_send(sender(), receiver());
+
+        /* wait for reverse ep to appear */
+        while (receiver().get_num_eps() == 0) {
+            progress();
+        }
+        tag_send(receiver(), sender());
+    }
+
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
         test_ucp_sockaddr *self = reinterpret_cast<test_ucp_sockaddr*>(arg);
         self->err_handler_count++;
@@ -92,32 +129,26 @@ protected:
 
 UCS_TEST_P(test_ucp_sockaddr, listen) {
 
-    struct sockaddr_in listen_addr;
-    get_listen_addr(&listen_addr);
+    struct sockaddr_in connect_addr;
+    get_listen_addr(&connect_addr);
 
-    ucs_status_t status = receiver().listen((const struct sockaddr*)&listen_addr,
-                                            sizeof(listen_addr));
-    if (status == UCS_ERR_INVALID_ADDR) {
-        UCS_TEST_SKIP_R("cannot listen to " + ucs::sockaddr_to_str(&listen_addr));
-    }
+    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str((const struct sockaddr*)&connect_addr);
 
-    ucp_ep_params_t ep_params = ucp_test::get_ep_params();
-    ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
-                                 UCP_EP_PARAM_FIELD_SOCK_ADDR |
-                                 UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-    ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
-    ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
-    ep_params.sockaddr.addr    = (struct sockaddr*)&listen_addr;
-    ep_params.sockaddr.addrlen = sizeof(listen_addr);
-    sender().connect(&receiver(), ep_params);
+    start_listener((const struct sockaddr*)&connect_addr);
+    connect_and_send_recv((struct sockaddr*)&connect_addr);
+}
 
-    tag_send(sender(), receiver());
+UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
 
-    /* wait for reverse ep to appear */
-    while (receiver().get_num_eps() == 0) {
-        progress();
-    }
-    tag_send(receiver(), sender());
+    struct sockaddr_in connect_addr, inaddr_any_listen_addr;
+    get_listen_addr(&connect_addr);
+    inaddr_any_addr(&inaddr_any_listen_addr, connect_addr.sin_port);
+
+    UCS_TEST_MESSAGE << "Testing " <<
+                     ucs::sockaddr_to_str((const struct sockaddr*)&inaddr_any_listen_addr);
+
+    start_listener((const struct sockaddr*)&inaddr_any_listen_addr);
+    connect_and_send_recv((struct sockaddr*)&connect_addr);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, err_handle) {

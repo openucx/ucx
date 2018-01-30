@@ -92,7 +92,7 @@ UCS_TEST_P(test_many2one_am, am_bcopy, "MAX_BCOPY=16384")
         entity *sender = create_entity(0);
         mapped_buffer *buffer = new mapped_buffer(
                             sender->iface_attr().cap.am.max_bcopy, 0, *sender);
-        sender->connect(0, *receiver, i);
+        sender->connect(0, *receiver, i, NULL);
         m_entities.push_back(sender);
         buffers.push_back(buffer);
     }

@@ -87,7 +87,7 @@ public:
         p.open_mode = UCT_IFACE_OPEN_MODE_DEVICE;
         m_receivers.push_back(uct_test::create_entity(p));
         m_entities.push_back(m_receivers.back());
-        m_sender->connect(m_receivers.size() - 1, *m_receivers.back(), 0);
+        m_sender->connect(m_receivers.size() - 1, *m_receivers.back(), 0, NULL);
 
         m_entities.back()->check_caps(UCT_IFACE_FLAG_AM_SHORT   |
                                       UCT_IFACE_FLAG_PENDING    |

@@ -58,6 +58,58 @@ uct_test::~uct_test() {
     uct_config_release(m_md_config);
 }
 
+void uct_test::set_interface_rscs(char *md_name, cpu_set_t local_cpus,
+                                  struct ifaddrs *ifa,
+                                  std::vector<resource>& all_resources)
+{
+    int i;
+
+    /* Create two resources on the same interface. the first one will have the
+     * ip of the interface and the second one will have INADDR_ANY */
+    for (i = 0; i < 2; i++) {
+        resource rsc;
+        rsc.md_name    = md_name,
+        rsc.local_cpus = local_cpus,
+        rsc.tl_name    = "sockaddr",
+        rsc.dev_name   = ifa->ifa_name;
+        rsc.dev_type   = UCT_DEVICE_TYPE_NET;
+
+        if (i == 0) {
+            /* first rsc */
+            if (ifa->ifa_addr->sa_family == AF_INET) {
+                memcpy(&rsc.listen_if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in));
+                memcpy(&rsc.connect_if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in));
+            } else if (ifa->ifa_addr->sa_family == AF_INET6) {
+                memcpy(&rsc.listen_if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in6));
+                memcpy(&rsc.connect_if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in6));
+            } else {
+                UCS_TEST_ABORT("Unknown sa_family " << ifa->ifa_addr->sa_family);
+            }
+            all_resources.push_back(rsc);
+        } else {
+            /* second rsc */
+            if (ifa->ifa_addr->sa_family == AF_INET) {
+                struct sockaddr_in sin;
+                memset(&sin, 0, sizeof(struct sockaddr_in));
+                sin.sin_family      = AF_INET;
+                sin.sin_addr.s_addr = INADDR_ANY;
+                memcpy(&rsc.listen_if_addr, &sin, sizeof(struct sockaddr_in));
+                memcpy(&rsc.connect_if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in));
+            } else if (ifa->ifa_addr->sa_family == AF_INET6) {
+                struct sockaddr_in6 sin;
+                memset(&sin, 0, sizeof(struct sockaddr_in6));
+                sin.sin6_family     = AF_INET6;
+                sin.sin6_addr       = in6addr_any;
+                memcpy(&rsc.listen_if_addr, &sin, sizeof(struct sockaddr_in6));
+                memcpy(&rsc.connect_if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in6));
+            } else {
+                UCS_TEST_ABORT("Unknown sa_family " << ifa->ifa_addr->sa_family);
+            }
+            all_resources.push_back(rsc);
+        }
+    }
+}
+
 void uct_test::set_sockaddr_resources(uct_md_h md, char *md_name, cpu_set_t local_cpus,
                                       std::vector<resource>& all_resources) {
 
@@ -72,21 +124,8 @@ void uct_test::set_sockaddr_resources(uct_md_h md, char *md_name, cpu_set_t loca
         if (uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_LOCAL) &&
             uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_REMOTE) &&
             ucs_netif_is_active(ifa->ifa_name)) {
-            resource rsc;
-            rsc.md_name    = md_name,
-            rsc.local_cpus = local_cpus,
-            rsc.tl_name    = "sockaddr",
-            rsc.dev_name   = ifa->ifa_name;
-            rsc.dev_type   = UCT_DEVICE_TYPE_NET;
 
-            if (ifa->ifa_addr->sa_family == AF_INET) {
-                memcpy(&rsc.if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in));
-            } else if (ifa->ifa_addr->sa_family == AF_INET6) {
-                memcpy(&rsc.if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in6));
-            } else {
-                UCS_TEST_ABORT("Unknown sa_family " << ifa->ifa_addr->sa_family);
-            }
-            all_resources.push_back(rsc);
+            uct_test::set_interface_rscs(md_name, local_cpus, ifa, all_resources);
         }
     }
 
@@ -558,7 +597,8 @@ void uct_test::entity::destroy_eps() {
     }
 }
 
-void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other)
+void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
+                                           ucs_sock_addr_t *remote_addr)
 {
     uct_ep_h ep;
     ucs_status_t status;
@@ -571,8 +611,7 @@ void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other)
     ASSERT_TRUE(client_priv_data.length() <= other.iface_attr().max_conn_priv);
 
     /* Connect to the server */
-    status = uct_ep_create_sockaddr(iface(),
-                                    &other.iface_params().mode.sockaddr.listen_sockaddr,
+    status = uct_ep_create_sockaddr(iface(), remote_addr,
                                     client_priv_data.c_str(),
                                     client_priv_data.length(), &ep);
     ASSERT_UCS_OK(status);
@@ -639,14 +678,15 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
 }
 
 void uct_test::entity::connect(unsigned index, entity& other,
-                               unsigned other_index)
+                               unsigned other_index,
+                               ucs_sock_addr_t *remote_addr)
 {
     if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         connect_to_ep(index, other, other_index);
     } else if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         connect_to_iface(index, other);
     } else if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR) {
-        connect_to_sockaddr(index, other);
+        connect_to_sockaddr(index, other, remote_addr);
     } else {
         UCS_TEST_SKIP_R("cannot connect");
     }

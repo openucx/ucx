@@ -35,7 +35,8 @@ struct resource {
     std::string             tl_name;
     std::string             dev_name;
     uct_device_type_t       dev_type;
-    struct sockaddr_storage if_addr;
+    struct sockaddr_storage listen_if_addr;     /* sockaddr to listen on */
+    struct sockaddr_storage connect_if_addr;    /* sockaddr to connect to */
 };
 
 
@@ -89,11 +90,12 @@ protected:
         void create_ep(unsigned index);
         void destroy_ep(unsigned index);
         void destroy_eps();
-        void connect(unsigned index, entity& other, unsigned other_index);
+        void connect(unsigned index, entity& other, unsigned other_index,
+                     ucs_sock_addr_t *remote_addr);
         void connect_to_iface(unsigned index, entity& other);
         void connect_to_ep(unsigned index, entity& other,
                            unsigned other_index);
-        void connect_to_sockaddr(unsigned index, entity& other);
+        void connect_to_sockaddr(unsigned index, entity& other, ucs_sock_addr_t *remote_addr);
 
         void flush() const;
 
@@ -221,6 +223,9 @@ protected:
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;
     static void set_sockaddr_resources(uct_md_h pd, char *md_name, cpu_set_t local_cpus,
                                        std::vector<resource>& all_resources);
+    static void set_interface_rscs(char *md_name, cpu_set_t local_cpus,
+                                   struct ifaddrs *ifa,
+                                   std::vector<resource>& all_resources);
     static const char *uct_mem_type_names[];
 
     uct_test::entity* create_entity(size_t rx_headroom,

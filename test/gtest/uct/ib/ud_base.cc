@@ -35,8 +35,8 @@ void ud_base_test::short_progress_loop(double delta_ms) const
 
 void ud_base_test::connect() 
 {
-    m_e1->connect(0, *m_e2, 0);
-    m_e2->connect(0, *m_e1, 0);
+    m_e1->connect(0, *m_e2, 0, NULL);
+    m_e2->connect(0, *m_e1, 0, NULL);
 }
 
 void ud_base_test::cleanup() 
