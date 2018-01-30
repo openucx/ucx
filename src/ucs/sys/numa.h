@@ -59,4 +59,7 @@ typedef enum {
 extern const char *ucs_numa_policy_names[];
 
 
+int ucs_numa_node_of_cpu(int cpu);
+
+
 #endif

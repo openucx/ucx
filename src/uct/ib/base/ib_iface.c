@@ -732,11 +732,12 @@ static ucs_status_t uct_ib_iface_get_numa_latency(uct_ib_iface_t *iface,
         min_cpu_distance = INT_MAX;
         num_cpus         = ucs_min(CPU_SETSIZE, numa_num_configured_cpus());
         for (cpu = 0; cpu < num_cpus; ++cpu) {
-            if (CPU_ISSET(cpu, &process_affinity)) {
-                distance = numa_distance(numa_node_of_cpu(cpu), dev->numa_node);
-                if (distance >= UCS_NUMA_MIN_DISTANCE) {
-                    min_cpu_distance = ucs_min(min_cpu_distance, distance);
-                }
+            if (!CPU_ISSET(cpu, &process_affinity)) {
+                continue;
+            }
+            distance = numa_distance(ucs_numa_node_of_cpu(cpu), dev->numa_node);
+            if (distance >= UCS_NUMA_MIN_DISTANCE) {
+                min_cpu_distance = ucs_min(min_cpu_distance, distance);
             }
         }
 

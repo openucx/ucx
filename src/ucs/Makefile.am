@@ -11,7 +11,7 @@ libucs_la_CFLAGS    = $(BASE_CFLAGS)
 lib_LTLIBRARIES     = libucs.la
 bin_PROGRAMS        =
 
-libucs_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
+libucs_la_LDFLAGS  = -ldl $(NUMA_LIBS) -version-info $(SOVERSION)
 libucs_ladir       = $(includedir)/ucs
 libucs_la_LIBADD   = \
 	$(LIBM) \
