@@ -52,9 +52,10 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     size_t offset;
     int pending_adde_res;
 
-    req->send.lane = !enable_am_bw ? ucp_ep_get_am_lane(ep) :
-                                     ucp_send_request_get_next_am_bw_lane(req);
     offset         = req->send.state.dt.offset;
+    req->send.lane = (!enable_am_bw || !offset) ? /* first part of message must be sent */
+                     ucp_ep_get_am_lane(ep) :     /* via AM lane */
+                     ucp_send_request_get_next_am_bw_lane(req);
     uct_ep         = ep->uct_eps[req->send.lane];
     max_middle     = ucp_ep_get_max_bcopy(ep, req->send.lane) - hdr_size_middle;
 
@@ -223,7 +224,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     int pending_adde_res;
 
     if (UCP_DT_IS_CONTIG(req->send.datatype)) {
-        if (enable_am_bw) {
+        if (enable_am_bw && req->send.state.dt.offset) {
             req->send.lane = ucp_send_request_get_next_am_bw_lane(req);
             ucp_send_request_add_reg_lane(req, req->send.lane);
         } else {
@@ -256,6 +257,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
 
         if (offset == 0) {
             /* First stage */
+            ucs_assert(req->send.lane == ucp_ep_get_am_lane(ep));
             ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &state,
                                 req->send.buffer,  req->send.datatype,
                                 max_middle - hdr_size_first + hdr_size_middle,
