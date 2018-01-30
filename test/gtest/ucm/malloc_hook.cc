@@ -497,6 +497,9 @@ UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
 }
 
 UCS_TEST_F(malloc_hook_cplusplus, dynamic_mmap_enable) {
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
     EXPECT_TRUE(ucm_global_config.enable_dynamic_mmap_thresh);
     test_dynamic_mmap_thresh();
 }
