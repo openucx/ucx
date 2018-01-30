@@ -17,7 +17,7 @@ AS_IF([test "x$with_xpmem" != xno],
                                 AC_SUBST(XPMEM_LDFLAGS,   "$CRAY_XPMEM_LIBS")
                                 AC_DEFINE([HAVE_XPMEM], [1], [Enable the use of XPMEM])],
                                 # If Cray module failed try to search
-                                [with_xpmem=$(find /opt/xpmem /usr/local/include -name xpmem.h 2>/dev/null |
+                                [with_xpmem=$(find /opt/xpmem /usr/local/include /usr/local/xpmem -name xpmem.h 2>/dev/null |
                                               xargs dirname | head -1 | sed -e s,/include,,g)])],
                                 [])], [])
 
