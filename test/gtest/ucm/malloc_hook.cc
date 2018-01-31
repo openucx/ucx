@@ -18,6 +18,8 @@
 
 extern "C" {
 #include <ucs/time/time.h>
+#include <ucm/malloc/malloc_hook.h>
+#include <ucm/util/ucm_config.h>
 #include <ucs/sys/sys.h>
 #include <malloc.h>
 }
@@ -33,25 +35,39 @@ protected:
         size_t free_space, min_free_space, prev_free_space, alloc_size;
         struct mallinfo mi;
 
+        ucm_malloc_state_reset(128 * 1024, 128 * 1024);
         malloc_trim(0);
 
         /* Take up free space so we would definitely get mmap events */
-        min_free_space  = 0;
-        prev_free_space = SIZE_MAX;
+        min_free_space  = SIZE_MAX;
         alloc_size      = 0;
-        do {
-            mi = mallinfo();
+        mi = mallinfo();
+        prev_free_space = mi.fsmblks + mi.fordblks;
+
+        while (alloc_size < (size_t)(prev_free_space * 0.90)) {
             m_pts.push_back(malloc(small_alloc_size));
             alloc_size += small_alloc_size;
+        }
+
+        for (;;) {
+            void *ptr = malloc(small_alloc_size);
+            mi = mallinfo();
             free_space = mi.fsmblks + mi.fordblks;
-            if (free_space > prev_free_space) {
+            if (free_space > min_free_space) {
                 /* If the heap grew, the minimal size is the previous one */
-                min_free_space = prev_free_space;
+                free(ptr);
+                min_free_space = free_space;
+                break;
+            } else {
+                m_pts.push_back(ptr);
+                alloc_size += small_alloc_size;
+                min_free_space = free_space;
             }
-            prev_free_space = free_space;
-        } while (free_space >= min_free_space + (small_alloc_count * small_alloc_size));
-        UCS_TEST_MESSAGE << "Reduced heap free space to minimum: " << free_space <<
-                            " after allocating " << alloc_size << " bytes";
+        }
+
+        UCS_TEST_MESSAGE << "Reduced heap free space from " << prev_free_space <<
+                            " to " << free_space << " after allocating " <<
+                            alloc_size << " bytes";
     }
 
 public:
@@ -255,6 +271,19 @@ void test_thread::test() {
      */
     pthread_barrier_wait(m_barrier);
 
+    /* This must be done when all other threads are inactive, otherwise we may leak */
+#if HAVE_MALLOC_STATES
+    if (!RUNNING_ON_VALGRIND) {
+        pthread_mutex_lock(&lock);
+        void *state = malloc_get_state();
+        malloc_set_state(state);
+        free(state);
+        pthread_mutex_unlock(&lock);
+    }
+#endif /* HAVE_MALLOC_STATES */
+
+    pthread_barrier_wait(m_barrier);
+
     /* Release new pointers  */
     new_ptrs.clear();
 
@@ -263,12 +292,6 @@ void test_thread::test() {
 
     ptr = malloc(large_alloc_size);
 
-#if HAVE_MALLOC_STATES
-    if (!RUNNING_ON_VALGRIND) {
-        void *state = malloc_get_state();
-        malloc_set_state(state);
-    }
-#endif /* HAVE_MALLOC_STATES */
     free(ptr);
 
     /* shmat/shmdt */
@@ -356,7 +379,13 @@ UCS_TEST_F(malloc_hook, fork) {
 class malloc_hook_cplusplus : public malloc_hook {
 public:
 
-    malloc_hook_cplusplus() : m_mapped_size(0), m_unmapped_size(0) {
+    malloc_hook_cplusplus() :
+        m_mapped_size(0), m_unmapped_size(0),
+        m_dynamic_mmap_config(ucm_global_config.enable_dynamic_mmap_thresh) {
+    }
+
+    ~malloc_hook_cplusplus() {
+        ucm_global_config.enable_dynamic_mmap_thresh = m_dynamic_mmap_config;
     }
 
     void set() {
@@ -402,8 +431,43 @@ protected:
         return ucs_time_to_sec(ucs_get_time() - start_time);
     }
 
+    void test_dynamic_mmap_thresh()
+    {
+        const size_t size = 8 * UCS_MBYTE;
+
+        set();
+
+        std::vector<std::string> strs;
+
+        m_mapped_size = 0;
+        while (m_mapped_size < size) {
+            strs.push_back(std::string(size, 't'));
+        }
+
+        m_unmapped_size = 0;
+        strs.clear();
+        EXPECT_GE(m_unmapped_size, size);
+
+        m_mapped_size = 0;
+        while (m_mapped_size < size) {
+            strs.push_back(std::string());
+            strs.back().resize(size);
+        }
+
+        m_unmapped_size = 0;
+        strs.clear();
+        if (ucm_global_config.enable_dynamic_mmap_thresh) {
+            EXPECT_EQ(0ul, m_unmapped_size);
+        } else {
+            EXPECT_GE(m_unmapped_size, size);
+        }
+
+        unset();
+    }
+
     size_t m_mapped_size;
     size_t m_unmapped_size;
+    int    m_dynamic_mmap_config;
 };
 
 
@@ -425,9 +489,24 @@ UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
         std::vector<char> vec3(size, 0);
     }
 
+    malloc_trim(0);
+
     EXPECT_GE(m_unmapped_size, size * 3);
 
     unset();
+}
+
+UCS_TEST_F(malloc_hook_cplusplus, dynamic_mmap_enable) {
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+    EXPECT_TRUE(ucm_global_config.enable_dynamic_mmap_thresh);
+    test_dynamic_mmap_thresh();
+}
+
+UCS_TEST_F(malloc_hook_cplusplus, dynamic_mmap_disable) {
+    ucm_global_config.enable_dynamic_mmap_thresh = 0;
+    test_dynamic_mmap_thresh();
 }
 
 extern "C" {
