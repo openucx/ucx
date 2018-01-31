@@ -16,16 +16,16 @@
 #define UCT_DC_IFACE_MAX_DCIS   16
 
 #define UCT_DC_IFACE_ADDR_TM_ENABLED(_addr) \
-    (!!(_addr->flags & UCT_DC_IFACE_ADDR_HW_TM))
+    (!!((_addr)->flags & UCT_DC_IFACE_ADDR_HW_TM))
 
 typedef struct uct_dc_ep     uct_dc_ep_t;
 typedef struct uct_dc_iface  uct_dc_iface_t;
 
 
 typedef enum {
-    UCT_DC_IFACE_ADDR_HW_TM   = UCS_BIT(0),
-    UCT_DC_IFACE_ADDR_DC_VER1 = UCS_BIT(1),
-    UCT_DC_IFACE_ADDR_DC_VER2 = UCS_BIT(2)
+    UCT_DC_IFACE_ADDR_HW_TM = UCS_BIT(0),
+    UCT_DC_IFACE_ADDR_DC_V1 = UCS_BIT(1),
+    UCT_DC_IFACE_ADDR_DC_V2 = UCS_BIT(2)
 } uct_dc_iface_addr_flags_t;
 
 
