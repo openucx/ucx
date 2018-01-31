@@ -88,6 +88,7 @@ noinst_HEADERS = \
 libucs_la_SOURCES = \
 	algorithm/crc.c \
 	algorithm/qsort_r.c \
+	arch/aarch64/cpu.c \
 	arch/ppc64/timebase.c \
 	arch/x86_64/cpu.c \
 	async/async.c \
