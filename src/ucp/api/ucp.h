@@ -587,8 +587,8 @@ typedef struct ucp_params {
      * If a request should be reset before the next reuse, it can be done before
      * calling @ref ucp_request_free.
      *
-     * @e NULL can be used if no such function required, which is also the default
-     * if this field is not specified by @ref field_mask.
+     * @e NULL can be used if no such is function required, which is also the
+     * default if this field is not specified by @ref field_mask.
      */
     ucp_request_init_callback_t        request_init;
 
@@ -598,8 +598,8 @@ typedef struct ucp_params {
      * request is released. For some implementations, the cleanup call may be
      * delayed and only invoked at @ref ucp_worker_cleanup.
      *
-     * @e NULL can be used if no such function required, which is also the default
-     * if this field is not specified by @ref field_mask.
+     * @e NULL can be used if no such function is required, which is also the
+     * default if this field is not specified by @ref field_mask.
      */
     ucp_request_cleanup_callback_t     request_cleanup;
 
