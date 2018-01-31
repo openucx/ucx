@@ -736,14 +736,12 @@ void uct_test::mapped_buffer::pattern_fill_cuda(void *start, size_t length, uint
     temp = malloc(length);
     ASSERT_TRUE(temp != NULL);
 
-    cerr = cudaHostRegister(temp, length, cudaHostRegisterPortable);
-    ASSERT_TRUE(cerr == cudaSuccess);
-
     pattern_fill(temp, length, seed);
 
     cerr = cudaMemcpy(start, temp, length, cudaMemcpyHostToDevice);
     ASSERT_TRUE(cerr == cudaSuccess);
-    cerr = cudaHostUnregister(temp);
+    cerr = cudaDeviceSynchronize();
+    ASSERT_TRUE(cerr == cudaSuccess);
     free(temp);
 #endif
 }
