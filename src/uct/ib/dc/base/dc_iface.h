@@ -15,14 +15,25 @@
 
 #define UCT_DC_IFACE_MAX_DCIS   16
 
+#define UCT_DC_IFACE_ADDR_TM_ENABLED(_addr) \
+    (!!((_addr)->flags & UCT_DC_IFACE_ADDR_HW_TM))
+
 typedef struct uct_dc_ep     uct_dc_ep_t;
 typedef struct uct_dc_iface  uct_dc_iface_t;
+
+
+typedef enum {
+    UCT_DC_IFACE_ADDR_HW_TM = UCS_BIT(0),
+    UCT_DC_IFACE_ADDR_DC_V1 = UCS_BIT(1),
+    UCT_DC_IFACE_ADDR_DC_V2 = UCS_BIT(2)
+} uct_dc_iface_addr_flags_t;
 
 
 typedef struct uct_dc_iface_addr {
     uct_ib_uint24_t   qp_num;
     uint8_t           atomic_mr_id;
-} uct_dc_iface_addr_t;
+    uint8_t           flags;
+} UCS_S_PACKED uct_dc_iface_addr_t;
 
 
 typedef enum {
@@ -108,6 +119,8 @@ struct uct_dc_iface {
     struct {
         struct ibv_exp_dct        *dct;
     } rx;
+
+    uint8_t                       version_flag;
 };
 
 
@@ -122,6 +135,10 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface);
 ucs_status_t uct_dc_iface_query(uct_dc_iface_t *iface, uct_iface_attr_t *iface_attr,
                                 size_t put_max_short, size_t max_inline,
                                 size_t am_max_hdr, size_t am_max_iov);
+
+int uct_dc_iface_is_reachable(const uct_iface_h tl_iface,
+                              const uct_device_addr_t *dev_addr,
+                              const uct_iface_addr_t *iface_addr);
 
 ucs_status_t uct_dc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr);
 
@@ -144,8 +161,8 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
                                      uct_rc_hdr_t *hdr, unsigned length,
                                      uint32_t imm_data, uint16_t lid, unsigned flags);
 
-void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
-                           ucs_status_t status);
+ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
+                                   ucs_status_t status);
 
 #if IBV_EXP_HW_TM_DC
 void uct_dc_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,

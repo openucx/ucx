@@ -11,10 +11,11 @@
 struct uct_rdmacm_ep {
     uct_base_ep_t                      super;
     void                               *priv_data;
-    ucs_list_link_t                    list_elem;
+    ucs_list_link_t                    list_elem;       /* for the pending_eps_list*/
     struct sockaddr_storage            remote_addr;
     int                                is_on_pending;
     uct_worker_cb_id_t                 slow_prog_id;
+    uct_rdmacm_ctx_t                   *cm_id_ctx;
 };
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t, uct_iface_t*,

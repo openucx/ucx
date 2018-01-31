@@ -84,7 +84,7 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     }
 
     iface_attr->overhead       = 75e-9; /* Software overhead */
-    iface_attr->iface_addr_len = sizeof(uct_dc_verbs_iface_addr_t);
+    iface_attr->iface_addr_len = sizeof(uct_dc_iface_addr_t);
 
     return UCS_OK;
 }
@@ -607,11 +607,11 @@ static void uct_dc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_dc_handle_failure(ib_iface, wc->qp_num, status);
 }
 
-static void uct_dc_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
-                                       ucs_status_t status)
+static ucs_status_t uct_dc_verbs_ep_set_failed(uct_ib_iface_t *iface,
+                                               uct_ep_h ep, ucs_status_t status)
 {
-    uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_verbs_ep_t), ep,
-                      &iface->super.super, status);
+    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_verbs_ep_t), ep,
+                             &iface->super.super, status);
 }
 
 static ucs_status_t uct_dc_verbs_reset_dci(uct_dc_iface_t *dc_iface, int dci)
@@ -1002,40 +1002,6 @@ static void uct_dc_verbs_iface_tag_cleanup(uct_dc_verbs_iface_t *iface)
     uct_rc_iface_tag_cleanup(&iface->super.super);
 }
 
-static int uct_dc_verbs_iface_is_reachable(const uct_iface_h tl_iface,
-                                           const uct_device_addr_t *dev_addr,
-                                           const uct_iface_addr_t *iface_addr)
-{
-    uct_rc_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_iface,
-                                                        uct_rc_iface_t);
-    uct_dc_verbs_iface_addr_t *addr = (uct_dc_verbs_iface_addr_t *)iface_addr;
-
-    if ((iface_addr  != NULL) &&
-        (addr->hw_tm != UCT_RC_IFACE_TM_ENABLED(iface))) {
-        return 0;
-    }
-
-    return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
-}
-
-static ucs_status_t uct_dc_verbs_iface_get_address(uct_iface_h tl_iface,
-                                                   uct_iface_addr_t *iface_addr)
-{
-    uct_rc_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_iface,
-                                                        uct_rc_iface_t);
-    uct_dc_verbs_iface_addr_t *addr = (uct_dc_verbs_iface_addr_t *)iface_addr;
-    ucs_status_t status;
-
-    status = uct_dc_iface_get_address(tl_iface, iface_addr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    addr->hw_tm = UCT_RC_IFACE_TM_ENABLED(iface);
-
-    return UCS_OK;
-}
-
 static ucs_status_t
 uct_dc_verbs_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 {
@@ -1094,8 +1060,8 @@ static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t),
     .iface_query              = uct_dc_verbs_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_dc_verbs_iface_is_reachable,
-    .iface_get_address        = uct_dc_verbs_iface_get_address
+    .iface_is_reachable       = uct_dc_iface_is_reachable,
+    .iface_get_address        = uct_dc_iface_get_address
     },
     .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
     .arm_rx_cq                = uct_ib_iface_arm_rx_cq,

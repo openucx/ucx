@@ -230,12 +230,14 @@ void uct_test::stats_restore()
     ucs_stats_init();
 }
 
-uct_test::entity* uct_test::create_entity(size_t rx_headroom) {
+uct_test::entity* uct_test::create_entity(size_t rx_headroom,
+                                          uct_error_handler_t err_handler) {
     uct_iface_params_t iface_params;
 
     memset(&iface_params, 0, sizeof(iface_params));
     iface_params.rx_headroom = rx_headroom;
     iface_params.open_mode   = UCT_IFACE_OPEN_MODE_DEVICE;
+    iface_params.err_handler = err_handler;
     entity *new_ent = new entity(*GetParam(), m_iface_config, &iface_params,
                                  m_md_config);
     return new_ent;
