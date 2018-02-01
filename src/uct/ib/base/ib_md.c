@@ -1081,6 +1081,7 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, const uct_ib_md_config_t *md_config
         if (!strcasecmp(md_config->reg_methods.rmtd[i], "rcache")) {
             rcache_params.region_struct_size = sizeof(uct_ib_rcache_region_t);
             rcache_params.alignment          = md_config->rcache.alignment;
+            rcache_params.max_alignment      = ucs_get_page_size();
             rcache_params.ucm_event_priority = md_config->rcache.event_prio;
             rcache_params.context            = md;
             rcache_params.ops                = &uct_ib_rcache_ops;
