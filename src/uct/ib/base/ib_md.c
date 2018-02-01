@@ -13,10 +13,6 @@
 #include <ucs/debug/profile.h>
 #include <pthread.h>
 
-#ifndef UCT_MD_DISABLE_NUMA
-#include <numaif.h>
-#include <numa.h>
-#endif
 
 #define UCT_IB_MD_PREFIX         "ib"
 #define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
@@ -25,39 +21,6 @@
                                   IBV_ACCESS_REMOTE_ATOMIC)
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
-#ifndef UCT_MD_DISABLE_NUMA
-#if HAVE_STRUCT_BITMASK
-#  define numa_nodemask_p(_nm)            (_nm)->maskp
-#  define numa_nodemask_size(_nm)         (_nm)->size
-#  define numa_get_thread_node_mask(_nmp) \
-        { \
-            numa_free_nodemask(*(_nmp)); \
-            *(_nmp) = numa_get_run_node_mask(); \
-        }
-#else
-#  define numa_allocate_nodemask()        ucs_malloc(sizeof(nodemask_t), "nodemask")
-#  define numa_free_nodemask(_nm)         ucs_free(_nm)
-#  define numa_nodemask_p(_nm)            (_nm)->maskp.n
-#  define numa_nodemask_size(_nm)         ((size_t)NUMA_NUM_NODES)
-#  define numa_bitmask_clearall(_nm)      nodemask_zero(&(_nm)->maskp)
-#  define numa_bitmask_setbit(_nm, _n)    nodemask_set(&(_nm)->maskp, _n)
-#  define numa_get_thread_node_mask(_nmp) \
-        { \
-            (*(_nmp))->maskp = numa_get_run_node_mask(); \
-        }
-
-struct bitmask {
-    nodemask_t maskp;
-};
-#endif
-#endif /* UCT_MD_DISABLE_NUMA */
-
-static const char *uct_ib_numa_policy_names[] = {
-    [UCT_IB_NUMA_POLICY_DEFAULT]   = "default",
-    [UCT_IB_NUMA_POLICY_PREFERRED] = "preferred",
-    [UCT_IB_NUMA_POLICY_BIND]      = "bind",
-    [UCT_IB_NUMA_POLICY_LAST]      = NULL,
-};
 
 static ucs_config_field_t uct_ib_md_config_table[] = {
     {"", "", NULL,
@@ -105,7 +68,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "     If the numa node mask of the current thread is not defined, use the numa\n"
      "     nodes which correspond to its cpu affinity mask.",
      ucs_offsetof(uct_ib_md_config_t, ext.odp.numa_policy),
-     UCS_CONFIG_TYPE_ENUM(uct_ib_numa_policy_names)},
+     UCS_CONFIG_TYPE_ENUM(ucs_numa_policy_names)},
 
     {"ODP_PREFETCH", "n",
      "Force prefetch of memory regions created with ODP.\n",
@@ -537,7 +500,7 @@ static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
     return exp_access;
 }
 
-#ifndef UCT_MD_DISABLE_NUMA
+#if HAVE_NUMA
 static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *memh)
 {
     int ret, old_policy, new_policy;
@@ -546,7 +509,7 @@ static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *me
     ucs_status_t status;
 
     if (!(memh->flags & UCT_IB_MEM_FLAG_ODP) ||
-        (md->config.odp.numa_policy == UCT_IB_NUMA_POLICY_DEFAULT) ||
+        (md->config.odp.numa_policy == UCS_NUMA_POLICY_DEFAULT) ||
         (numa_available() < 0))
     {
         status = UCS_OK;
@@ -583,10 +546,10 @@ static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *me
     }
 
     switch (md->config.odp.numa_policy) {
-    case UCT_IB_NUMA_POLICY_BIND:
+    case UCS_NUMA_POLICY_BIND:
         new_policy = MPOL_BIND;
         break;
-    case UCT_IB_NUMA_POLICY_PREFERRED:
+    case UCS_NUMA_POLICY_PREFERRED:
         new_policy = MPOL_PREFERRED;
         break;
     default:

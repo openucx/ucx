@@ -139,6 +139,19 @@ ssize_t ucs_read_file(char *buffer, size_t max, int silent,
 
 
 /**
+ * Read file contents as a numeric value.
+ *
+ * @param value         Filled with the number read from the file.
+ * @param filename_fmt  File name printf-like format string.
+ *
+ * @return UCS_OK if successful, or error code otherwise.
+ */
+ucs_status_t ucs_read_file_number(long *value, int silent,
+                                  const char *filename_fmt, ...)
+    UCS_F_PRINTF(3, 4);
+
+
+/**
  * @return Regular _SC_IOV_MAX on the system.
  */
 size_t ucs_get_max_iov();
