@@ -22,8 +22,8 @@ UCS_TEST_P(test_zcopy_comp, issue1440)
     entity *receiver_large = create_entity(0);
     m_entities.push_back(receiver_large);
 
-    sender->connect(0, *receiver_small, 0, NULL);
-    sender->connect(1, *receiver_large, 0, NULL);
+    sender->connect(0, *receiver_small, 0);
+    sender->connect(1, *receiver_large, 0);
 
     check_caps(UCT_IFACE_FLAG_PUT_ZCOPY);
 

@@ -66,7 +66,7 @@ public:
         ASSERT_UCS_OK(status);
     }
 
-    void tag_send(entity& from, entity& to) {
+    void tag_send_recv(entity& from, entity& to) {
         uint64_t send_data = ucs_generate_uuid(0);
         void *send_req = ucp_tag_send_nb(from.ep(), &send_data, 1,
                                          ucp_dt_make_contig(sizeof(send_data)),
@@ -109,13 +109,13 @@ public:
         ep_params.sockaddr.addrlen = sizeof(*connect_addr);
         sender().connect(&receiver(), ep_params);
 
-        tag_send(sender(), receiver());
+        tag_send_recv(sender(), receiver());
 
         /* wait for reverse ep to appear */
         while (receiver().get_num_eps() == 0) {
             progress();
         }
-        tag_send(receiver(), sender());
+        tag_send_recv(receiver(), sender());
     }
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {

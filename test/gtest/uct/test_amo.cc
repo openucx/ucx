@@ -24,8 +24,8 @@ void uct_amo_test::init() {
     for (unsigned i = 0; i < num_senders(); ++i) {
         entity *sender = uct_test::create_entity(0);
         m_entities.push_back(sender);
-        sender->connect(0, *receiver, i, NULL);
-        receiver->connect(i, *sender, 0, NULL);
+        sender->connect(0, *receiver, i);
+        receiver->connect(i, *sender, 0);
     }
 }
 

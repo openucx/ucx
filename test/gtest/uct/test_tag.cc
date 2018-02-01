@@ -74,7 +74,7 @@ public:
             entity *e = uct_test::create_entity(params);
             m_entities.push_back(e);
 
-            e->connect(0, *e, 0, NULL);
+            e->connect(0, *e, 0);
         } else {
             entity *sender = uct_test::create_entity(params);
             m_entities.push_back(sender);

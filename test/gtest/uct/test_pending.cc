@@ -23,8 +23,8 @@ public:
         m_e2 = uct_test::create_entity(0);
         m_entities.push_back(m_e2);
 
-        m_e1->connect(0, *m_e2, 0, NULL);
-        m_e2->connect(0, *m_e1, 0, NULL);
+        m_e1->connect(0, *m_e2, 0);
+        m_e2->connect(0, *m_e1, 0);
     }
 
     typedef struct pending_send_request {
@@ -276,7 +276,7 @@ UCS_TEST_P(test_uct_pending, pending_fairness)
     /* idx 0 is setup in initialize(). only need to alloc request */
     reqs[0] = pending_alloc_simple(send_data, 0);
     for (i = 1; i < N; i++) {
-        m_e1->connect(i, *m_e2, i, NULL);
+        m_e1->connect(i, *m_e2, i);
         reqs[i] = pending_alloc_simple(send_data, i);
     }
 

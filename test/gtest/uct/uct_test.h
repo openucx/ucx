@@ -90,6 +90,7 @@ protected:
         void create_ep(unsigned index);
         void destroy_ep(unsigned index);
         void destroy_eps();
+        void connect(unsigned index, entity& other, unsigned other_index);
         void connect(unsigned index, entity& other, unsigned other_index,
                      ucs_sock_addr_t *remote_addr);
         void connect_to_iface(unsigned index, entity& other);

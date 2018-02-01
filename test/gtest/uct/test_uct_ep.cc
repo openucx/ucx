@@ -25,7 +25,7 @@ protected:
     }
 
     void connect() {
-        m_sender->connect(0, *m_receiver, 0, NULL);
+        m_sender->connect(0, *m_receiver, 0);
         short_progress_loop(10); /* Some transports need time to become ready */
     }
 

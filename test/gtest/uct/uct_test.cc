@@ -692,6 +692,11 @@ void uct_test::entity::connect(unsigned index, entity& other,
     }
 }
 
+void uct_test::entity::connect(unsigned index, entity& other, unsigned other_index)
+{
+    connect(index, other, other_index, NULL);
+}
+
 void uct_test::entity::flush() const {
     ucs_status_t status;
     do {
