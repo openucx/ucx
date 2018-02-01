@@ -802,8 +802,8 @@ static double ucp_wireup_am_bw_score_func(ucp_context_h context,
 
 static int ucp_wireup_is_ud_lane(ucp_context_h context, ucp_rsc_index_t rsc_index)
 {
-    return !strstr(context->tl_rscs[rsc_index].tl_rsc.tl_name, "ud") ||
-           !strstr(context->tl_rscs[rsc_index].tl_rsc.tl_name, "ud_mlx5");
+    return !strcmp(context->tl_rscs[rsc_index].tl_rsc.tl_name, "ud") ||
+           !strcmp(context->tl_rscs[rsc_index].tl_rsc.tl_name, "ud_mlx5");
 }
 
 static ucs_status_t ucp_wireup_add_bw_lanes(ucp_ep_h ep,

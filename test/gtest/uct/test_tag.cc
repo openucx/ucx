@@ -82,7 +82,7 @@ public:
             entity *receiver = uct_test::create_entity(params);
             m_entities.push_back(receiver);
 
-            sender->connect(0, *receiver, 0, NULL);
+            sender->connect(0, *receiver, 0);
         }
     }
 

@@ -31,7 +31,7 @@ public:
             entity *e = uct_test::create_entity(0);
             m_entities.push_back(e);
 
-            e->connect(0, *e, 0, NULL);
+            e->connect(0, *e, 0);
         } else {
             entity *m_sender = uct_test::create_entity(0);
             m_entities.push_back(m_sender);
@@ -39,7 +39,7 @@ public:
             entity *m_receiver = uct_test::create_entity(0);
             m_entities.push_back(m_receiver);
 
-            m_sender->connect(0, *m_receiver, 0, NULL);
+            m_sender->connect(0, *m_receiver, 0);
         }
         am_rx_count   = 0;
         m_flush_flags = 0;

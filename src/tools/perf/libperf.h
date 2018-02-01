@@ -10,6 +10,10 @@
 #define UCX_LIBPERF_H
 
 #include <ucs/sys/compiler.h>
+#if HAVE_CUDA
+#include <cuda.h>
+#include <cuda_runtime.h>
+#endif
 
 BEGIN_C_DECLS
 
@@ -83,6 +87,7 @@ enum ucx_perf_test_flags {
     UCX_PERF_TEST_FLAG_STREAM_RECV_DATA = UCS_BIT(8)  /* For stream tests, use recv data API */
 };
 
+
 enum {
     UCT_PERF_TEST_MAX_FC_WINDOW   = 127         /* Maximal flow-control window */
 };
@@ -150,6 +155,7 @@ typedef struct ucx_perf_params {
     unsigned               thread_count;    /* Number of threads in the test program */
     ucs_async_mode_t       async_mode;      /* how async progress and locking is done */
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
+    uct_memory_type_t      mem_type;        /* memory type */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 
     size_t                 *msg_size_list;  /* Test message sizes list. The size

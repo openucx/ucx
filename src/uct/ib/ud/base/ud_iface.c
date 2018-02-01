@@ -868,29 +868,33 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
     ucs_status_t status;
 
+    uct_ud_enter(iface);
+
     status = uct_ib_iface_pre_arm(&iface->super);
     if (status != UCS_OK) {
-        return status;
+        goto out;
     }
 
     /* Check if some receives were not delivered yet */
     if ((events & (UCT_EVENT_RECV | UCT_EVENT_RECV_SIG)) &&
         !ucs_queue_is_empty(&iface->rx.pending_q))
     {
-        return UCS_ERR_BUSY;
+        status = UCS_ERR_BUSY;
+        goto out;
     }
 
     /* Check if some send completions were not delivered yet */
     if ((events & UCT_EVENT_SEND_COMP) &&
         !ucs_queue_is_empty(&iface->tx.async_comp_q))
     {
-        return UCS_ERR_BUSY;
+        status = UCS_ERR_BUSY;
+        goto out;
     }
 
     if (events & UCT_EVENT_SEND_COMP) {
         status = iface->super.ops->arm_tx_cq(&iface->super);
         if (status != UCS_OK) {
-            return status;
+            goto out;
         }
     }
 
@@ -898,11 +902,14 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
         /* we may get send completion through ACKs as well */
         status = iface->super.ops->arm_rx_cq(&iface->super, 0);
         if (status != UCS_OK) {
-            return status;
+            goto out;
         }
     }
 
-    return UCS_OK;
+    status = UCS_OK;
+out:
+    uct_ud_leave(iface);
+    return status;
 }
 
 void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)

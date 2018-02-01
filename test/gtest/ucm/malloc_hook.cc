@@ -354,6 +354,9 @@ UCS_TEST_F(malloc_hook, fork) {
     std::vector<pid_t> pids;
     pid_t pid;
 
+    UCS_TEST_SKIP_R("broken");
+    /* coverity[unreachable] */
+
     for (int i = 0; i < num_processes; ++i) {
         pid = fork();
         if (pid == 0) {

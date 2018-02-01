@@ -25,6 +25,7 @@
 #include <net/if.h>
 #include <dirent.h>
 #include <sched.h>
+#include <ctype.h>
 
 
 /* Default huge page size is 2 MBytes */
@@ -295,17 +296,14 @@ ucs_open_output_stream(const char *config_str, ucs_log_level_t err_log_level,
     return UCS_OK;
 }
 
-ssize_t ucs_read_file(char *buffer, size_t max, int silent,
-                      const char *filename_fmt, ...)
+static ssize_t ucs_read_file_vararg(char *buffer, size_t max, int silent,
+                                    const char *filename_fmt, va_list ap)
 {
     char filename[MAXPATHLEN];
     ssize_t read_bytes;
-    va_list ap;
     int fd;
 
-    va_start(ap, filename_fmt);
     vsnprintf(filename, MAXPATHLEN, filename_fmt, ap);
-    va_end(ap);
 
     fd = open(filename, O_RDONLY);
     if (fd < 0) {
@@ -332,6 +330,47 @@ out_close:
     close(fd);
 out:
     return read_bytes;
+}
+
+ssize_t ucs_read_file(char *buffer, size_t max, int silent,
+                      const char *filename_fmt, ...)
+{
+    ssize_t read_bytes;
+    va_list ap;
+
+    va_start(ap, filename_fmt);
+    read_bytes = ucs_read_file_vararg(buffer, max, silent, filename_fmt, ap);
+    va_end(ap);
+
+    return read_bytes;
+}
+
+ucs_status_t ucs_read_file_number(long *value, int silent,
+                                  const char *filename_fmt, ...)
+{
+    char buffer[64], *tail;
+    ssize_t read_bytes;
+    va_list ap;
+    long n;
+
+    va_start(ap, filename_fmt);
+    read_bytes = ucs_read_file_vararg(buffer, sizeof(buffer) - 1, silent,
+                                      filename_fmt, ap);
+    va_end(ap);
+
+    if (read_bytes < 0) {
+        /* read error */
+        return UCS_ERR_IO_ERROR;
+    }
+
+    n = strtol(buffer, &tail, 0);
+    if ((*tail != '\0') && !isspace(*tail)) {
+        /* parse error */
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    *value = n;
+    return UCS_OK;
 }
 
 size_t ucs_get_max_iov()
@@ -458,19 +497,12 @@ int ucs_is_thp_enabled()
 #define UCS_PROC_SYS_SHMMAX_FILE "/proc/sys/kernel/shmmax"
 size_t ucs_get_shmmax()
 {
-    char buf[256];
-    size_t size = 0;
-    int rc;
+    ucs_status_t status;
+    long size;
 
-    rc = ucs_read_file(buf, sizeof(buf), 0, UCS_PROC_SYS_SHMMAX_FILE);
-    if (rc < 0) {
+    status = ucs_read_file_number(&size, 0, UCS_PROC_SYS_SHMMAX_FILE);
+    if (status != UCS_OK) {
         ucs_warn("failed to read %s:%m", UCS_PROC_SYS_SHMMAX_FILE);
-        return 0;
-    }
-
-    rc = sscanf(buf, "%zu", &size);
-    if (rc != 1) {
-        ucs_warn("failed to parse: %m");
         return 0;
     }
 
