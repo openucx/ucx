@@ -986,6 +986,36 @@ UCS_TEST_P(test_ucp_tag_stats, rndv_unexpected, "RNDV_THRESH=1000",
                       UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP);
 }
 
+UCS_TEST_P(test_ucp_tag_xfer, generic_exp_mlane_eager,
+           "MAX_EAGER_LANES=3") {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, generic_exp_mlane_rndv,
+           "MAX_RNDV_LANES=3") {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, generic_exp_mlane,
+           "MAX_EAGER_LANES=3", "MAX_RNDV_LANES=3") {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, generic_unexp_mlane_eager,
+           "MAX_EAGER_LANES=3") {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, generic_unexp_mlane_rndv,
+           "MAX_RNDV_LANES=3") {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, generic_unexp_mlane,
+           "MAX_EAGER_LANES=3", "MAX_RNDV_LANES=3") {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false, false, false);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_stats)
 
 #endif
