@@ -3,9 +3,10 @@
  * See file LICENSE for terms.
  */
 #include "request_util.h"
+#include "worker.h"
 
 void request_util::request_handler::request_init(void *request) {
     jucx_request* req   = (jucx_request*) request;
 
-    // Currently no initialization needed
+    req->request_worker = NULL;
 }
