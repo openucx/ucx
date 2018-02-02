@@ -108,7 +108,9 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
     } while (roffset < ssize);
 
     EXPECT_EQ(roffset, ssize);
-    EXPECT_EQ(check_pattern, rbuf);
+    if (!UCP_DT_IS_GENERIC(datatype)) { /* TODO: add check of packed data */
+        EXPECT_EQ(check_pattern, rbuf);
+    }
 }
 
 template <typename T>
@@ -306,6 +308,16 @@ UCS_TEST_P(test_ucp_stream, send_iov_recv_data) {
     do_send_recv_data_test(DATATYPE_IOV);
 }
 
+UCS_TEST_P(test_ucp_stream, send_generic_recv_data) {
+    ucp_datatype_t dt;
+    ucs_status_t status;
+
+    status = ucp_dt_create_generic(&ucp::test_dt_uint8_ops, NULL, &dt);
+    ASSERT_UCS_OK(status);
+    do_send_recv_data_test(dt);
+    ucp_dt_destroy(dt);
+}
+
 UCS_TEST_P(test_ucp_stream, send_recv_8) {
     do_send_recv_test<uint8_t>(ucp_dt_make_contig(sizeof(uint8_t)));
 }
@@ -476,7 +488,9 @@ void test_ucp_stream_many2one::do_send_worker_poll_test(ucp_datatype_t dt)
     } while (!sreqs.empty() || (total_len != 0));
 
     check_no_data();
-    check_recv_data(niter);
+    if (!UCP_DT_IS_GENERIC(dt)) { /* TODO: add check of packed data */
+        check_recv_data(niter);
+    }
 }
 
 void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
@@ -735,6 +749,16 @@ UCS_TEST_P(test_ucp_stream_many2one, send_worker_poll) {
 
 UCS_TEST_P(test_ucp_stream_many2one, send_worker_poll_iov) {
     do_send_worker_poll_test(DATATYPE_IOV);
+}
+
+UCS_TEST_P(test_ucp_stream_many2one, send_worker_poll_generic) {
+    ucp_datatype_t dt;
+    ucs_status_t status;
+
+    status = ucp_dt_create_generic(&ucp::test_dt_uint8_ops, NULL, &dt);
+    ASSERT_UCS_OK(status);
+    do_send_worker_poll_test(dt);
+    ucp_dt_destroy(dt);
 }
 
 UCS_TEST_P(test_ucp_stream_many2one, send_recv_nb) {

@@ -13,6 +13,7 @@
 #include <ucp/api/ucp.h>
 extern "C" {
 #include <ucp/dt/dt_contig.h>
+#include <ucp/dt/dt_generic.h>
 #include <ucp/dt/dt_iov.h>
 }
 
@@ -624,14 +625,14 @@ public:
     };
 
     data_type_desc_t(ucp_datatype_t datatype, const void *buf, size_t length)
-        : m_origin(uintptr_t(buf)), m_length(length), m_buf(NULL),
+        : m_origin(uintptr_t(buf)), m_length(length), m_dt(0), m_buf(NULL),
           m_iov_cnt_limit(sizeof(m_iov) / sizeof(m_iov[0])) {
         make(datatype, buf, length);
     }
 
     data_type_desc_t(ucp_datatype_t datatype, const void *buf, size_t length,
                      size_t iov_count)
-        : m_origin(uintptr_t(buf)), m_length(length), m_buf(NULL),
+        : m_origin(uintptr_t(buf)), m_length(length), m_dt(0), m_buf(NULL),
           m_iov_cnt_limit(sizeof(m_iov) / sizeof(m_iov[0])) {
         make(datatype, buf, length, iov_count);
     };
@@ -666,7 +667,7 @@ public:
     bool is_valid() const {
         return (m_buf != NULL) && (m_count != 0) &&
                (UCP_DT_IS_IOV(m_dt) ? (m_count <= m_iov_cnt_limit) :
-                UCP_DT_IS_CONTIG(m_dt));
+               (UCP_DT_IS_CONTIG(m_dt) || UCP_DT_IS_GENERIC(m_dt)));
     }
 
 private:
