@@ -179,7 +179,7 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
         *send_dt = DATATYPE;
     } else {
         /* the sender has a generic datatype */
-        status = ucp_dt_create_generic(&test_dt_uint8_ops, NULL, send_dt);
+        status = ucp_dt_create_generic(&ucp::test_dt_uint8_ops, NULL, send_dt);
         ASSERT_UCS_OK(status);
     }
 
@@ -188,7 +188,7 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
         *recv_dt = DATATYPE;
     } else {
         /* the receiver has a generic datatype */
-        status = ucp_dt_create_generic(&test_dt_uint8_ops, NULL, recv_dt);
+        status = ucp_dt_create_generic(&ucp::test_dt_uint8_ops, NULL, recv_dt);
         /* the recvbuf can be NULL because we only validate the received data in the
         * unpack function - we don't copy it to the recvbuf */
         ASSERT_UCS_OK(status);
@@ -207,8 +207,8 @@ void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
         skip_err_handling();
     }
 
-    dt_gen_start_count  = 0;
-    dt_gen_finish_count = 0;
+    ucp::dt_gen_start_count  = 0;
+    ucp::dt_gen_finish_count = 0;
 
     if (send_contig) {
         /* the sender has a contig datatype for the data buffer */
@@ -258,8 +258,8 @@ void test_ucp_tag_xfer::test_xfer_probe(bool send_contig, bool recv_contig,
         UCS_TEST_SKIP_R("loop-back unsupported");
     }
 
-    dt_gen_start_count  = 0;
-    dt_gen_finish_count = 0;
+    ucp::dt_gen_start_count  = 0;
+    ucp::dt_gen_finish_count = 0;
 
     sendbuf = (uint8_t*) malloc(count * sizeof(*sendbuf));
     recvbuf = (uint8_t*) malloc(count * sizeof(*recvbuf));
@@ -335,23 +335,23 @@ void test_ucp_tag_xfer::test_xfer_generic(size_t size, bool expected, bool sync,
     ucs_status_t status;
     size_t recvd;
 
-    dt_gen_start_count  = 0;
-    dt_gen_finish_count = 0;
+    ucp::dt_gen_start_count  = 0;
+    ucp::dt_gen_finish_count = 0;
 
     /* if count is zero, truncation has no effect */
     if ((truncated) && (!count)) {
         truncated = false;
     }
 
-    status = ucp_dt_create_generic(&test_dt_uint32_ops, this, &dt);
+    status = ucp_dt_create_generic(&ucp::test_dt_uint32_ops, this, &dt);
     ASSERT_UCS_OK(status);
 
     recvd = do_xfer(NULL, NULL, count, dt, dt, expected, sync, truncated);
     if (!truncated) {
         EXPECT_EQ(count * sizeof(uint32_t), recvd);
     }
-    EXPECT_EQ(2, dt_gen_start_count);
-    EXPECT_EQ(2, dt_gen_finish_count);
+    EXPECT_EQ(2, ucp::dt_gen_start_count);
+    EXPECT_EQ(2, ucp::dt_gen_finish_count);
 
     ucp_dt_destroy(dt);
 }
@@ -389,10 +389,10 @@ void test_ucp_tag_xfer::test_xfer_generic_err(size_t size, bool expected,
     ucs_status_t status;
     request *rreq, *sreq;
 
-    dt_gen_start_count  = 0;
-    dt_gen_finish_count = 0;
+    ucp::dt_gen_start_count  = 0;
+    ucp::dt_gen_finish_count = 0;
 
-    status = ucp_dt_create_generic(&test_dt_uint32_err_ops, this, &dt);
+    status = ucp_dt_create_generic(&ucp::test_dt_uint32_err_ops, this, &dt);
     ASSERT_UCS_OK(status);
 
     if (expected) {
@@ -417,8 +417,8 @@ void test_ucp_tag_xfer::test_xfer_generic_err(size_t size, bool expected,
     /* the generic unpack function is expected to fail */
     EXPECT_EQ(UCS_ERR_NO_MEMORY, rreq->status);
     request_release(rreq);
-    EXPECT_EQ(2, dt_gen_start_count);
-    EXPECT_EQ(2, dt_gen_finish_count);
+    EXPECT_EQ(2, ucp::dt_gen_start_count);
+    EXPECT_EQ(2, ucp::dt_gen_finish_count);
     ucp_dt_destroy(dt);
 }
 

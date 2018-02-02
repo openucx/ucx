@@ -31,6 +31,122 @@ extern "C" {
 #include <stdint.h>
 
 
+#ifndef UINT16_MAX
+#define UINT16_MAX (65535)
+#endif /* UINT16_MAX */
+
+
+/* Test output */
+#define UCS_TEST_MESSAGE \
+    ucs::detail::message_stream("INFO")
+
+
+/* Skip test */
+#define UCS_TEST_SKIP \
+    do { \
+        throw ucs::test_skip_exception(); \
+    } while(0)
+#define UCS_TEST_SKIP_R(_reason) \
+    do { \
+        throw ucs::test_skip_exception(_reason); \
+    } while(0)
+
+
+/* Abort test */
+#define UCS_TEST_ABORT(_message) \
+    do { \
+        std::stringstream ss; \
+        ss << _message; \
+        GTEST_MESSAGE_(ss.str().c_str(), ::testing::TestPartResult::kFatalFailure); \
+        throw ucs::test_abort_exception(); \
+    } while(0)
+
+
+/* UCS error check */
+#define EXPECT_UCS_OK(_expr) \
+    do { \
+        ucs_status_t _status = (_expr); \
+        EXPECT_EQ(UCS_OK, _status) << "Error: " << ucs_status_string(_status); \
+    } while (0)
+
+#define ASSERT_UCS_OK(_expr, ...) \
+    do { \
+        ucs_status_t _status = (_expr); \
+        if ((_status) != UCS_OK) { \
+            UCS_TEST_ABORT("Error: " << ucs_status_string(_status)  __VA_ARGS__); \
+        } \
+    } while (0)
+
+#define ASSERT_UCS_OK_OR_INPROGRESS(_expr) \
+    do { \
+        ucs_status_t _status = (_expr); \
+        if ((status) != UCS_OK && (_status) != UCS_INPROGRESS) { \
+            UCS_TEST_ABORT("Error: " << ucs_status_string(_status)); \
+        } \
+    } while (0)
+
+#define EXPECT_UD_CHECK(_val1, _val2, _exp_ud, _exp_non_ud) \
+    do { \
+        if ((GetParam()->tl_name == "ud") || (GetParam()->tl_name == "ud_mlx5")) { \
+            EXPECT_##_exp_ud(_val1, _val2); \
+        } else { \
+            EXPECT_##_exp_non_ud(_val1, _val2); \
+        } \
+    } while (0)
+
+
+/* Run code block with given time limit */
+#define UCS_TEST_TIME_LIMIT(_seconds) \
+    for (ucs_time_t _start_time = ucs_get_time(), _elapsed = 0; \
+         _start_time != 0; \
+         ((ucs_time_to_sec(_elapsed = ucs_get_time() - _start_time) >= \
+                         (_seconds) * ucs::test_time_multiplier()) && \
+          (ucs::perf_retry_count > 0)) \
+                         ? (GTEST_NONFATAL_FAILURE_("Time limit exceeded:") << \
+                                         "Expected time: " << ((_seconds) * ucs::test_time_multiplier()) << " seconds\n" << \
+                                         "Actual time: " << ucs_time_to_sec(_elapsed) << " seconds", 0) \
+                         : 0, \
+              _start_time = 0)
+
+
+/**
+ * Scoped exit for C++. Usage:
+ *
+ * UCS_TEST_SCOPE_EXIT() { <code> } UCS_TEST_SCOPE_EXIT_END
+ */
+#define _UCS_TEST_SCOPE_EXIT(_classname, ...) \
+    class _classname { \
+    public: \
+        _classname() {} \
+        ~_classname()
+#define UCS_TEST_SCOPE_EXIT(...) \
+    _UCS_TEST_SCOPE_EXIT(UCS_PP_APPEND_UNIQUE_ID(onexit), ## __VA_ARGS__)
+
+#define UCS_TEST_SCOPE_EXIT_END \
+    } UCS_PP_APPEND_UNIQUE_ID(onexit_var);
+
+/**
+ * Make uct_iov_t iov[iovcnt] array with pointer elements to original buffer
+ */
+#define UCS_TEST_GET_BUFFER_IOV(_name_iov, _name_iovcnt, _buffer_ptr, _buffer_length, _memh, _iovcnt) \
+        uct_iov_t _name_iov[_iovcnt]; \
+        const size_t _name_iovcnt = _iovcnt; \
+        const size_t _buffer_iov_length = _buffer_length / _name_iovcnt; \
+        size_t _buffer_iov_length_it = 0; \
+        for (size_t iov_it = 0; iov_it < _name_iovcnt; ++iov_it) { \
+            _name_iov[iov_it].buffer = (char *)(_buffer_ptr) + _buffer_iov_length_it; \
+            _name_iov[iov_it].count  = 1; \
+            _name_iov[iov_it].stride = 0; \
+            _name_iov[iov_it].memh   = _memh; \
+            if (iov_it == (_name_iovcnt - 1)) { /* Last iteration */ \
+                _name_iov[iov_it].length = _buffer_length - _buffer_iov_length_it; \
+            } else { \
+                _name_iov[iov_it].length = _buffer_iov_length; \
+                _buffer_iov_length_it += _buffer_iov_length; \
+            } \
+        }
+
+
 namespace ucs {
 
 class test_abort_exception : public std::exception {
@@ -521,9 +637,6 @@ public:
     };
 
     data_type_desc_t &make(ucp_datatype_t datatype, const void *buf,
-                           size_t length, size_t iov_count);
-
-    data_type_desc_t &make(ucp_datatype_t datatype, const void *buf,
                            size_t length) {
         return make(datatype, buf, length, m_iov_cnt_limit);
     };
@@ -557,6 +670,9 @@ public:
     }
 
 private:
+    data_type_desc_t &make(ucp_datatype_t datatype, const void *buf,
+                           size_t length, size_t iov_count);
+
     void invalidate() {
         EXPECT_TRUE(is_valid());
         m_buf   = NULL;
@@ -574,123 +690,20 @@ private:
     ucp_dt_iov_t    m_iov[40];
 };
 
+struct dt_gen_state {
+    size_t              count;
+    int                 started;
+    uint32_t            magic;
+};
+
+extern const uint32_t MAGIC;
+extern int dt_gen_start_count;
+extern int dt_gen_finish_count;
+extern ucp_generic_dt_ops test_dt_uint32_ops;
+extern ucp_generic_dt_ops test_dt_uint32_err_ops;
+extern ucp_generic_dt_ops test_dt_uint8_ops;
+
 } // ucp
 
 
-#ifndef UINT16_MAX
-#define UINT16_MAX (65535)
-#endif /* UINT16_MAX */
-
-
-/* Test output */
-#define UCS_TEST_MESSAGE \
-    ucs::detail::message_stream("INFO")
-
-
-/* Skip test */
-#define UCS_TEST_SKIP \
-    do { \
-        throw ucs::test_skip_exception(); \
-    } while(0)
-#define UCS_TEST_SKIP_R(_reason) \
-    do { \
-        throw ucs::test_skip_exception(_reason); \
-    } while(0)
-
-
-/* Abort test */
-#define UCS_TEST_ABORT(_message) \
-    do { \
-        std::stringstream ss; \
-        ss << _message; \
-        GTEST_MESSAGE_(ss.str().c_str(), ::testing::TestPartResult::kFatalFailure); \
-        throw ucs::test_abort_exception(); \
-    } while(0)
-
-
-/* UCS error check */
-#define EXPECT_UCS_OK(_expr) \
-    do { \
-        ucs_status_t _status = (_expr); \
-        EXPECT_EQ(UCS_OK, _status) << "Error: " << ucs_status_string(_status); \
-    } while (0)
-
-#define ASSERT_UCS_OK(_expr, ...) \
-    do { \
-        ucs_status_t _status = (_expr); \
-        if ((_status) != UCS_OK) { \
-            UCS_TEST_ABORT("Error: " << ucs_status_string(_status)  __VA_ARGS__); \
-        } \
-    } while (0)
-
-#define ASSERT_UCS_OK_OR_INPROGRESS(_expr) \
-    do { \
-        ucs_status_t _status = (_expr); \
-        if ((status) != UCS_OK && (_status) != UCS_INPROGRESS) { \
-            UCS_TEST_ABORT("Error: " << ucs_status_string(_status)); \
-        } \
-    } while (0)
-
-#define EXPECT_UD_CHECK(_val1, _val2, _exp_ud, _exp_non_ud) \
-    do { \
-        if ((GetParam()->tl_name == "ud") || (GetParam()->tl_name == "ud_mlx5")) { \
-            EXPECT_##_exp_ud(_val1, _val2); \
-        } else { \
-            EXPECT_##_exp_non_ud(_val1, _val2); \
-        } \
-    } while (0)
-
-
-/* Run code block with given time limit */
-#define UCS_TEST_TIME_LIMIT(_seconds) \
-    for (ucs_time_t _start_time = ucs_get_time(), _elapsed = 0; \
-         _start_time != 0; \
-         ((ucs_time_to_sec(_elapsed = ucs_get_time() - _start_time) >= \
-                         (_seconds) * ucs::test_time_multiplier()) && \
-          (ucs::perf_retry_count > 0)) \
-                         ? (GTEST_NONFATAL_FAILURE_("Time limit exceeded:") << \
-                                         "Expected time: " << ((_seconds) * ucs::test_time_multiplier()) << " seconds\n" << \
-                                         "Actual time: " << ucs_time_to_sec(_elapsed) << " seconds", 0) \
-                         : 0, \
-              _start_time = 0)
-
-
-/**
- * Scoped exit for C++. Usage:
- *
- * UCS_TEST_SCOPE_EXIT() { <code> } UCS_TEST_SCOPE_EXIT_END
- */
-#define _UCS_TEST_SCOPE_EXIT(_classname, ...) \
-    class _classname { \
-    public: \
-        _classname() {} \
-        ~_classname()
-#define UCS_TEST_SCOPE_EXIT(...) \
-    _UCS_TEST_SCOPE_EXIT(UCS_PP_APPEND_UNIQUE_ID(onexit), ## __VA_ARGS__)
-
-#define UCS_TEST_SCOPE_EXIT_END \
-    } UCS_PP_APPEND_UNIQUE_ID(onexit_var);
-
-/**
- * Make uct_iov_t iov[iovcnt] array with pointer elements to original buffer
- */
-#define UCS_TEST_GET_BUFFER_IOV(_name_iov, _name_iovcnt, _buffer_ptr, _buffer_length, _memh, _iovcnt) \
-        uct_iov_t _name_iov[_iovcnt]; \
-        const size_t _name_iovcnt = _iovcnt; \
-        const size_t _buffer_iov_length = _buffer_length / _name_iovcnt; \
-        size_t _buffer_iov_length_it = 0; \
-        for (size_t iov_it = 0; iov_it < _name_iovcnt; ++iov_it) { \
-            _name_iov[iov_it].buffer = (char *)(_buffer_ptr) + _buffer_iov_length_it; \
-            _name_iov[iov_it].count  = 1; \
-            _name_iov[iov_it].stride = 0; \
-            _name_iov[iov_it].memh   = _memh; \
-            if (iov_it == (_name_iovcnt - 1)) { /* Last iteration */ \
-                _name_iov[iov_it].length = _buffer_length - _buffer_iov_length_it; \
-            } else { \
-                _name_iov[iov_it].length = _buffer_iov_length; \
-                _buffer_iov_length_it += _buffer_iov_length; \
-            } \
-        }
-
-
-#endif
+#endif /* UCS_TEST_HELPERS_H */
