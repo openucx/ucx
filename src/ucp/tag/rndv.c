@@ -108,7 +108,8 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
     ucp_md_map_t md_map;
     ucs_status_t status;
 
-    ucp_trace_req(sreq, "start_rndv buffer %p length %zu", sreq->send.buffer,
+    ucp_trace_req(sreq, "start_rndv to %s buffer %p length %zu",
+                  ucp_ep_peer_name(ep), sreq->send.buffer,
                   sreq->send.length);
     UCS_PROFILE_REQUEST_EVENT(sreq, "start_rndv", sreq->send.length);
 
@@ -515,7 +516,7 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
 
         /* Cancel req in transport if it was offloaded, because it arrived
            as unexpected */
-        ucp_tag_offload_try_cancel(worker, rreq, 1);
+        ucp_tag_offload_try_cancel(worker, rreq, UCP_TAG_OFFLOAD_CANCEL_FORCE);
 
         UCP_WORKER_STAT_RNDV(worker, EXP);
         status = UCS_OK;
