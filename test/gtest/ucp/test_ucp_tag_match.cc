@@ -617,18 +617,13 @@ UCS_TEST_P(test_ucp_tag_match, rndv_exp_huge_mix) {
 
         ucs::fill_random(sendbuf);
 
-        /* receiver - put the receive request into expected */
         my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
         ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
         EXPECT_FALSE(my_recv_req->completed);
 
-        /* sender - send the RTS */
         my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
         ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
 
-        /* receiver - match the rts, perform rndv get and send an ack upon finishing */
-        short_progress_loop();
-        /* for UCTs that cannot perform real rndv and may do eager send-recv bcopy instead */
         wait(my_recv_req);
 
         EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
@@ -636,9 +631,8 @@ UCS_TEST_P(test_ucp_tag_match, rndv_exp_huge_mix) {
         EXPECT_TRUE(my_recv_req->completed);
         EXPECT_EQ(sendbuf, recvbuf);
 
-        /* sender - get the ATS and set send request to completed */
         wait_and_validate(my_send_req);
-        request_release(my_recv_req);
+        request_free(my_recv_req);
     }
 }
 
