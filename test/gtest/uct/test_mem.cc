@@ -114,7 +114,7 @@ UCS_TEST_P(test_mem, md_fixed) {
     const size_t            page_size   = ucs_get_page_size();
     const size_t            n_tryes     = 101;
     uct_alloc_method_t      meth;
-    uintptr_t               p_addr      = 0xFF000000;
+    void*                   p_addr      = ucs::mmap_fixed_address();
     size_t                  n_success;
 
     uct_allocated_memory_t  uct_mem;
@@ -141,24 +141,24 @@ UCS_TEST_P(test_mem, md_fixed) {
             for (j = 0; j < n_tryes; ++j) {
                 meth = UCT_ALLOC_METHOD_MD;
 
-                status = uct_mem_alloc((void *)p_addr, 1,
+                status = uct_mem_alloc(p_addr, 1,
                                        UCT_MD_MEM_FLAG_FIXED|
                                        UCT_MD_MEM_ACCESS_ALL,
                                        &meth, 1, &pd, 1, "test", &uct_mem);
                 if (status == UCS_OK) {
                     ++n_success;
                     EXPECT_EQ(meth, uct_mem.method);
-                    EXPECT_EQ(p_addr, (uintptr_t)uct_mem.address);
+                    EXPECT_EQ(p_addr, uct_mem.address);
                     EXPECT_GE(uct_mem.length, (size_t)1);
                     /* touch the page*/
                     memset(uct_mem.address, 'c', uct_mem.length);
-                    EXPECT_EQ(*(char *)p_addr, 'c');
+                    EXPECT_EQ(*(char*)p_addr, 'c');
                     status = uct_mem_free(&uct_mem);
                 } else {
                     EXPECT_EQ(status, UCS_ERR_NO_MEMORY);
                 }
 
-                p_addr += 2 * page_size;
+                p_addr = (char*)p_addr + (2 * page_size);
             }
 
             EXPECT_GT(n_success, (size_t)0);
@@ -177,7 +177,7 @@ UCS_TEST_P(test_mem, mmap_fixed) {
     const size_t            page_size   = ucs_get_page_size();
     const size_t            n_tryes     = 101;
     uct_alloc_method_t      meth;
-    uintptr_t               p_addr      = 0xFF000000;
+    void*                   p_addr      = ucs::mmap_fixed_address();
     size_t                  n_success;
 
     uct_allocated_memory_t  uct_mem;
@@ -188,22 +188,22 @@ UCS_TEST_P(test_mem, mmap_fixed) {
     for (i = 0; i < n_tryes; ++i) {
         meth = (i % 2) ? UCT_ALLOC_METHOD_MMAP : UCT_ALLOC_METHOD_HUGE;
 
-        status = uct_mem_alloc((void *)p_addr, 1,
+        status = uct_mem_alloc(p_addr, 1,
                                UCT_MD_MEM_FLAG_FIXED|UCT_MD_MEM_ACCESS_ALL,
                                &meth, 1, NULL, 0, "test", &uct_mem);
         if (status == UCS_OK) {
             ++n_success;
             EXPECT_EQ(meth, uct_mem.method);
-            EXPECT_EQ(p_addr, (uintptr_t)uct_mem.address);
+            EXPECT_EQ(p_addr, uct_mem.address);
             EXPECT_GE(uct_mem.length, (size_t)1);
             /* touch the page*/
             memset(uct_mem.address, 'c', uct_mem.length);
-            EXPECT_EQ(*(char *)p_addr, 'c');
+            EXPECT_EQ(*(char*)p_addr, 'c');
             status = uct_mem_free(&uct_mem);
         } else {
             EXPECT_EQ(status, UCS_ERR_NO_MEMORY);
         }
-        p_addr += 2 * page_size;
+        p_addr = (char*)p_addr + (2 * page_size);
     }
 }
 
