@@ -10,6 +10,10 @@
 #define UCX_LIBPERF_H
 
 #include <ucs/sys/compiler.h>
+#if HAVE_CUDA
+#include <cuda.h>
+#include <cuda_runtime.h>
+#endif
 
 BEGIN_C_DECLS
 
@@ -36,6 +40,7 @@ typedef enum {
     UCX_PERF_CMD_SWAP,
     UCX_PERF_CMD_CSWAP,
     UCX_PERF_CMD_TAG,
+    UCX_PERF_CMD_TAG_SYNC,
     UCX_PERF_CMD_STREAM,
     UCX_PERF_CMD_LAST
 } ucx_perf_cmd_t;
@@ -77,10 +82,11 @@ enum ucx_perf_test_flags {
                                                          the responder would not call progress(). */
     UCX_PERF_TEST_FLAG_MAP_NONBLOCK     = UCS_BIT(3), /* Map memory in non-blocking mode */
     UCX_PERF_TEST_FLAG_TAG_WILDCARD     = UCS_BIT(4), /* For tag tests, use wildcard mask */
-    UCX_PERF_TEST_FLAG_TAG_SYNC         = UCS_BIT(5), /* For tag tests, use sync send */
+    UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE  = UCS_BIT(5), /* For tag tests, use probe to get unexpected receive */
     UCX_PERF_TEST_FLAG_VERBOSE          = UCS_BIT(7), /* Print error messages */
     UCX_PERF_TEST_FLAG_STREAM_RECV_DATA = UCS_BIT(8)  /* For stream tests, use recv data API */
 };
+
 
 enum {
     UCT_PERF_TEST_MAX_FC_WINDOW   = 127         /* Maximal flow-control window */
@@ -149,6 +155,7 @@ typedef struct ucx_perf_params {
     unsigned               thread_count;    /* Number of threads in the test program */
     ucs_async_mode_t       async_mode;      /* how async progress and locking is done */
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
+    uct_memory_type_t      mem_type;        /* memory type */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 
     size_t                 *msg_size_list;  /* Test message sizes list. The size

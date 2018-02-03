@@ -261,10 +261,6 @@ void test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
     check_perf = check_perf &&
                  (ucs::test_time_multiplier() == 1) &&
                  (ucs::perf_retry_count > 0);
-    if (!check_perf) {
-        UCS_TEST_MESSAGE << "not validating performance";
-    }
-
     for (int i = 0; i < (ucs::perf_retry_count + 1); ++i) {
         test_result result = run_multi_threaded(test, flags, tl_name, dev_name,
                                                 cpus);
@@ -282,7 +278,11 @@ void test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
         snprintf(result_str, sizeof(result_str) - 1, "%s %25s : %.3f %s",
                  dev_name.c_str(), test.title, value, test.units);
         if (i == 0) {
-            UCS_TEST_MESSAGE << result_str;
+            if (check_perf) {
+                UCS_TEST_MESSAGE << result_str;
+            } else {
+                UCS_TEST_MESSAGE << result_str << " (performance not checked)";
+            }
         } else {
             UCS_TEST_MESSAGE << result_str << " (attempt " << i << ")";
         }

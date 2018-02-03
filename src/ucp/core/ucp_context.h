@@ -52,11 +52,13 @@ typedef struct ucp_context_config {
     size_t                                 bcopy_bw;
     /** Segment size in the worker pre-registered memory pool */
     size_t                                 seg_size;
+    /** RNDV pipeline fragment size */
+    size_t                                 rndv_frag_size;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
-    /** Tag matching offload status (try, on or off) */
-    ucs_ternary_value_t                    tm_offload;
+    /** Threshold for forcing tag matching offload capabilities */
+    size_t                                 tm_force_thresh;
     /** Upper bound for posting tm offload receives with internal UCP
      *  preregistered bounce buffers. */
     size_t                                 tm_max_bcopy;
@@ -136,6 +138,9 @@ typedef struct ucp_context {
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/
+
+    /* Mask of memory type communication resources */
+    uint64_t                      mem_type_tls[UCT_MD_MEM_TYPE_LAST];
 
     ucs_mpool_t                   rkey_mp;    /* Pool for memory keys */
 
@@ -241,11 +246,28 @@ uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context);
 
 const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_csum);
 
-static inline double ucp_tl_iface_latency(ucp_context_h context,
-                                          const uct_iface_attr_t *iface_attr)
+static UCS_F_ALWAYS_INLINE double
+ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)
 {
     return iface_attr->latency.overhead +
            (iface_attr->latency.growth * context->config.est_num_eps);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
+                           uct_memory_type_t *mem_type_p)
+{
+    unsigned i, md_index;
+
+    for (i = 0; i < context->num_mem_type_mds; ++i) {
+        md_index = context->mem_type_tl_mds[i];
+        if (uct_md_is_mem_type_owned(context->tl_mds[md_index].md, addr, length)) {
+            *mem_type_p = context->tl_mds[md_index].attr.cap.mem_type;
+            return UCS_OK;
+        }
+    }
+    *mem_type_p = UCT_MD_MEM_TYPE_HOST;
+    return UCS_OK;
 }
 
 #endif

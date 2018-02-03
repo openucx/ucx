@@ -47,10 +47,10 @@ UCS_TEST_F(test_time, get_time) {
     } while (current_time <= end_time);
 
     /* Check the sleep interval is correct */
-    ASSERT_NEAR(1.0, time(NULL) - system_start_time, 0.000001);
-
-    double nsec = (ucs_time_to_nsec(current_time - start_time)) / count;
     if (ucs::perf_retry_count) {
+        ASSERT_NEAR(1.0, time(NULL) - system_start_time, 0.000001);
+
+        double nsec = (ucs_time_to_nsec(current_time - start_time)) / count;
         EXPECT_LT(nsec, 40.0) << "ucs_get_time() performance is too bad";
     }
 }

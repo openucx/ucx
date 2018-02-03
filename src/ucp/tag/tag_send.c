@@ -57,7 +57,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t count,
     ucs_status_t status;
     size_t zcopy_thresh;
 
-    if (enable_zcopy) {
+    if (enable_zcopy || ucs_unlikely(!UCP_MEM_IS_HOST(req->send.mem_type))) {
         zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, count,
                                                      rndv_thresh);
     } else {
@@ -130,6 +130,8 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
                                            &req->send.state.dt);
+    ucp_memory_type_detect_mds(ep->worker->context, (void *)buffer,
+                               req->send.length, &req->send.mem_type);
     req->send.lane         = ucp_ep_config(ep)->tag.lane;
     req->send.pending_lane = UCP_NULL_LANE;
 }

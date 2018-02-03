@@ -34,29 +34,40 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {0x02c9, 4103, "ConnectX-3 Pro",
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX4_PRM, 11},
   {0x02c9, 4113, "Connect-IB",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 20},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V1, 20},
   {0x02c9, 4115, "ConnectX-4",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 30},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V1, 30},
   {0x02c9, 4116, "ConnectX-4",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 29},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V1, 29},
   {0x02c9, 4117, "ConnectX-4 LX",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 28},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V1, 28},
   {0x02c9, 4119, "ConnectX-5",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 38},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 38},
   {0x02c9, 4121, "ConnectX-5",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 40},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 40},
   {0x02c9, 4120, "ConnectX-5",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM, 39},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 39},
   {0, 0, "Generic HCA", 0, 0}
 };
 
-static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask)
+static void uct_ib_device_get_locailty(const char *dev_name, cpu_set_t *cpu_mask,
+                                       int *numa_node)
 {
-    char *p, buf[CPU_SETSIZE];
+    char *p, buf[ucs_max(CPU_SETSIZE, 10)];
+    ucs_status_t status;
     ssize_t nread;
     uint32_t word;
     int base, k;
+    long n;
 
+    /* Read list of CPUs close to the device */
     CPU_ZERO(cpu_mask);
     nread = ucs_read_file(buf, sizeof(buf) - 1, 1,
                           "/sys/class/infiniband/%s/device/local_cpus",
@@ -86,6 +97,12 @@ static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask
             CPU_SET(k, cpu_mask);
         }
     }
+
+    /* Read NUMA node number */
+    status = ucs_read_file_number(&n, 1,
+                                  "/sys/class/infiniband/%s/device/numa_node",
+                                  dev_name);
+    *numa_node = (status == UCS_OK) ? n : -1;
 }
 
 static void uct_ib_async_event_handler(int fd, void *arg)
@@ -238,7 +255,8 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     }
 
     /* Get device locality */
-    uct_ib_device_get_affinity(ibv_get_device_name(ibv_device), &dev->local_cpus);
+    uct_ib_device_get_locailty(ibv_get_device_name(ibv_device), &dev->local_cpus,
+                               &dev->numa_node);
 
     /* Query all ports */
     for (i = 0; i < dev->num_ports; ++i) {

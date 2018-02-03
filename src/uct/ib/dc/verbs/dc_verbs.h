@@ -12,11 +12,6 @@
 #include <uct/ib/rc/verbs/rc_verbs_common.h>
 
 
-typedef struct uct_dc_verbs_iface_addr {
-    uct_dc_iface_addr_t            super;
-    uint8_t                        hw_tm;
-} UCS_S_PACKED uct_dc_verbs_iface_addr_t;
-
 typedef struct uct_dc_verbs_iface_config {
     uct_dc_iface_config_t              super;
     uct_rc_verbs_iface_common_config_t verbs_common;

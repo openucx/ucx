@@ -435,9 +435,14 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
 
     switch (req->recv.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        UCS_PROFILE_NAMED_CALL("memcpy_recv", memcpy, req->recv.buffer + offset,
-                               data, length);
-        return UCS_OK;
+        if (ucs_likely(UCP_MEM_IS_HOST(req->recv.mem_type))) {
+            UCS_PROFILE_NAMED_CALL("memcpy_recv", memcpy, req->recv.buffer + offset,
+                                   data, length);
+        } else {
+            ucp_mem_type_unpack(req->recv.worker, req->recv.buffer + offset,
+                                data, length, req->recv.mem_type);
+        }
+        return UCS_OK;;
 
     case UCP_DATATYPE_IOV:
         if (offset != req->recv.state.offset) {

@@ -346,11 +346,11 @@ out:
     return num_wcs;
 }
 
-static void uct_ud_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
-                                       ucs_status_t status)
+static ucs_status_t uct_ud_verbs_ep_set_failed(uct_ib_iface_t *iface,
+                                               uct_ep_h ep, ucs_status_t status)
 {
-    uct_set_ep_failed(&UCS_CLASS_NAME(uct_ud_verbs_ep_t), ep,
-                      &iface->super.super, status);
+    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_ud_verbs_ep_t), ep,
+                             &iface->super.super, status);
 }
 
 static void uct_ud_verbs_iface_async_progress(uct_ud_iface_t *ud_iface)

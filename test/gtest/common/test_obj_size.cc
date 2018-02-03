@@ -44,15 +44,20 @@ UCS_TEST_F(test_obj_size, size) {
    UCS_TEST_SKIP_R("Statistic enabled");
 #else
     EXPECTED_SIZE(ucp_ep_t, 104);
-    EXPECTED_SIZE(ucp_request_t, 200);
+    EXPECTED_SIZE(ucp_request_t, 224);
     EXPECTED_SIZE(uct_ep_t, 8);
     EXPECTED_SIZE(uct_base_ep_t, 8);
     EXPECTED_SIZE(uct_rkey_bundle_t, 24);
     EXPECTED_SIZE(uct_self_ep_t, 8);
     EXPECTED_SIZE(uct_tcp_ep_t, 72);
 #  if HAVE_TL_RC
+#    if IBV_EXP_HW_TM
     EXPECTED_SIZE(uct_rc_ep_t, 88);
     EXPECTED_SIZE(uct_rc_verbs_ep_t, 96);
+#    else
+    EXPECTED_SIZE(uct_rc_ep_t, 80);
+    EXPECTED_SIZE(uct_rc_verbs_ep_t, 88);
+#    endif
 #  endif
 #  if HAVE_TL_DC
     EXPECTED_SIZE(uct_dc_ep_t, 24);

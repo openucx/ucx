@@ -32,10 +32,14 @@ ucp_iov_iov_tag_bw          -t tag_bw  -D iov,iov
 ucp_contig_contig_tag_bw    -t tag_bw  -D contig,contig
 #IOV with RNDV is not yet supported
 #ucp_contig_iov_tag_bw       -t tag_bw  -D contig,iov
-ucp_sync_tag_lat            -t tag_lat -S
+ucp_sync_tag_lat            -t tag_lat_sync
+ucp_unexp_tag_lat           -t tag_lat -U
 ucp_wild_tag_lat            -t tag_lat -C
 ucp_contig_stream_bw        -t stream_bw  -r recv_data
 ucp_contig_stream_lat       -t stream_lat -r recv_data
 ucp_contig_stream_bw        -t stream_bw  -r recv
 ucp_contig_stream_lat       -t stream_lat -r recv
+#CUDA
+ucp_contig_contig_cuda_tag_lat   -t tag_lat -D contig,contig -m cuda
+ucp_contig_contig_cuda_tag_bw    -t tag_bw  -D contig,contig -m cuda
 

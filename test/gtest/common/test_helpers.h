@@ -645,8 +645,9 @@ private:
 #define UCS_TEST_TIME_LIMIT(_seconds) \
     for (ucs_time_t _start_time = ucs_get_time(), _elapsed = 0; \
          _start_time != 0; \
-         (ucs_time_to_sec(_elapsed = ucs_get_time() - _start_time) >= \
-                         (_seconds) * ucs::test_time_multiplier()) \
+         ((ucs_time_to_sec(_elapsed = ucs_get_time() - _start_time) >= \
+                         (_seconds) * ucs::test_time_multiplier()) && \
+          (ucs::perf_retry_count > 0)) \
                          ? (GTEST_NONFATAL_FAILURE_("Time limit exceeded:") << \
                                          "Expected time: " << ((_seconds) * ucs::test_time_multiplier()) << " seconds\n" << \
                                          "Actual time: " << ucs_time_to_sec(_elapsed) << " seconds", 0) \

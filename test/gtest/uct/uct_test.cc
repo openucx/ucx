@@ -230,12 +230,14 @@ void uct_test::stats_restore()
     ucs_stats_init();
 }
 
-uct_test::entity* uct_test::create_entity(size_t rx_headroom) {
+uct_test::entity* uct_test::create_entity(size_t rx_headroom,
+                                          uct_error_handler_t err_handler) {
     uct_iface_params_t iface_params;
 
     memset(&iface_params, 0, sizeof(iface_params));
     iface_params.rx_headroom = rx_headroom;
     iface_params.open_mode   = UCT_IFACE_OPEN_MODE_DEVICE;
+    iface_params.err_handler = err_handler;
     entity *new_ent = new entity(*GetParam(), m_iface_config, &iface_params,
                                  m_md_config);
     return new_ent;
@@ -734,14 +736,12 @@ void uct_test::mapped_buffer::pattern_fill_cuda(void *start, size_t length, uint
     temp = malloc(length);
     ASSERT_TRUE(temp != NULL);
 
-    cerr = cudaHostRegister(temp, length, cudaHostRegisterPortable);
-    ASSERT_TRUE(cerr == cudaSuccess);
-
     pattern_fill(temp, length, seed);
 
     cerr = cudaMemcpy(start, temp, length, cudaMemcpyHostToDevice);
     ASSERT_TRUE(cerr == cudaSuccess);
-    cerr = cudaHostUnregister(temp);
+    cerr = cudaDeviceSynchronize();
+    ASSERT_TRUE(cerr == cudaSuccess);
     free(temp);
 #endif
 }

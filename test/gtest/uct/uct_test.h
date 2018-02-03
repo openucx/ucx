@@ -223,7 +223,8 @@ protected:
                                        std::vector<resource>& all_resources);
     static const char *uct_mem_type_names[];
 
-    uct_test::entity* create_entity(size_t rx_headroom);
+    uct_test::entity* create_entity(size_t rx_headroom,
+                                    uct_error_handler_t err_handler = NULL);
     uct_test::entity* create_entity(uct_iface_params_t &params);
 
     ucs::ptr_vector<entity> m_entities;

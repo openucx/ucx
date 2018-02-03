@@ -14,7 +14,7 @@
 #include <cuda_runtime.h>
 #include <cuda.h>
 
-#define UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN 4096
+#define UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN 65536
 
 static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
     {"", "", NULL,
@@ -414,6 +414,7 @@ static ucs_status_t uct_gdr_copy_md_open(const char *md_name,
     if (md_config->enable_rcache != UCS_NO) {
         rcache_params.region_struct_size = sizeof(uct_gdr_copy_rcache_region_t);
         rcache_params.alignment          = md_config->rcache.alignment;
+        rcache_params.max_alignment      = UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN;
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = md;
         rcache_params.ops                = &uct_gdr_copy_rcache_ops;

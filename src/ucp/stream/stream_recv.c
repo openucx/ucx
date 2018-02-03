@@ -195,8 +195,10 @@ ucp_stream_process_rdesc_inplace(ucp_recv_desc_t *rdesc, ucp_datatype_t dt,
     ucs_status_t status;
     ssize_t unpacked;
 
-    status   = ucp_dt_unpack_only(buffer, count, dt,
-                                  ucp_stream_rdesc_payload(rdesc), length, 0);
+    status   = ucp_dt_unpack_only(ep_stream->ucp_ep->worker, buffer, count, dt,
+                                  UCT_MD_MEM_TYPE_HOST, ucp_stream_rdesc_payload(rdesc),
+                                  length, 0);
+
     unpacked = ucs_likely(status == UCS_OK) ? length : status;
 
     return ucp_stream_rdesc_advance(rdesc, unpacked, ep_stream);
@@ -232,6 +234,7 @@ ucp_stream_recv_request_init(ucp_request_t *req, void *buffer, size_t count,
     req->recv.buffer   = buffer;
     req->recv.datatype = datatype;
     req->recv.length   = length;
+    req->recv.mem_type = UCT_MD_MEM_TYPE_HOST;
 
     ucp_dt_recv_state_init(&req->recv.state, buffer, datatype, count);
 }

@@ -11,7 +11,23 @@
 typedef uintptr_t native_ptr;
 
 extern "C" {
-    // JNI methods proto-types goes here. Will be added later
+
+/*
+ * Class:     org_ucx_jucx_Bridge
+ * Method:    createWorkerNative
+ * Signature: (ILorg/ucx/jucx/Worker/CompletionQueue;Lorg/ucx/jucx/Worker;)J
+ */
+JNIEXPORT jlong JNICALL Java_org_ucx_jucx_Bridge_createWorkerNative
+  (JNIEnv *, jclass, jint, jobject, jobject);
+
+
+/*
+ * Class:     org_ucx_jucx_Bridge
+ * Method:    releaseWorkerNative
+ * Signature: (J)V
+ */
+JNIEXPORT void JNICALL Java_org_ucx_jucx_Bridge_releaseWorkerNative
+  (JNIEnv *, jclass, jlong);
 }
 
 #endif

@@ -9,6 +9,7 @@
 #include <ucm/util/log.h>
 #include <ucs/config/parser.h>
 #include <ucs/type/component.h>
+#include <ucs/sys/checker.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -20,18 +21,20 @@
 #define UCM_EN_MMAP_RELOC_VAR    "MMAP_RELOC"
 #define UCM_EN_MALLOC_HOOKS_VAR  "MALLOC_HOOKS"
 #define UCM_EN_MALLOC_RELOC_VAR  "MALLOC_RELOC"
+#define UCM_EN_DYNAMIC_MMAP_VAR  "DYNAMIC_MMAP_THRESH"
 #define UCM_EN_CUDA_HOOKS_VAR    "CUDA_HOOKS"
 
 
 ucm_config_t ucm_global_config = {
-    .log_level            = UCS_LOG_LEVEL_WARN,
-    .alloc_alignment      = 16,
-    .enable_events        = 1,
-    .enable_mmap_reloc    = 1,
-    .enable_malloc_hooks  = 1,
-    .enable_malloc_reloc  = 0,
+    .log_level                  = UCS_LOG_LEVEL_WARN,
+    .alloc_alignment            = 16,
+    .enable_events              = 1,
+    .enable_mmap_reloc          = 1,
+    .enable_malloc_hooks        = 1,
+    .enable_malloc_reloc        = 0,
+    .enable_dynamic_mmap_thresh = 1,
 #if HAVE_CUDA
-    .enable_cuda_hooks    = 1
+    .enable_cuda_hooks          = 1
 #endif
 };
 
@@ -111,6 +114,18 @@ void ucm_config_print(FILE *stream, ucs_config_print_flags_t print_flags)
                               print_flags);
     fprintf(stream, "%s%s=%s\n", UCM_ENV_PREFIX, UCM_EN_MALLOC_RELOC_VAR,
             ucm_config_bool_to_string(ucm_global_config.enable_malloc_reloc));
+
+
+    ucm_config_print_bool_doc(stream,
+                              "Enable dynamic mmap threshold: for every released block, the\n"
+                              "mmap threshold is adjusted upward to the size of the size of\n"
+                              "the block, and trim threshold is adjust to twice the size of\n"
+                              "the dynamic mmap threshold.",
+                              print_flags);
+    fprintf(stream, "%s%s=%s\n", UCM_ENV_PREFIX, UCM_EN_DYNAMIC_MMAP_VAR,
+            ucm_config_bool_to_string(ucm_global_config.enable_dynamic_mmap_thresh));
+
+
 #if HAVE_CUDA
     fprintf(stream, "%s%s=%s\n", UCM_ENV_PREFIX, UCM_EN_CUDA_HOOKS_VAR,
             ucm_config_bool_to_string(ucm_global_config.enable_cuda_hooks));
@@ -165,6 +180,8 @@ ucs_status_t ucm_config_modify(const char *name, const char *value)
         ucm_config_set_value_bool(value, &ucm_global_config.enable_malloc_hooks);
     } else if (!strcmp(name, UCM_EN_MALLOC_RELOC_VAR)) {
         ucm_config_set_value_bool(value, &ucm_global_config.enable_malloc_reloc);
+    } else if (!strcmp(name, UCM_EN_DYNAMIC_MMAP_VAR)) {
+        ucm_config_set_value_bool(value, &ucm_global_config.enable_dynamic_mmap_thresh);
 #if HAVE_CUDA
     } else if (!strcmp(name, UCM_EN_CUDA_HOOKS_VAR)) {
         ucm_config_set_value_bool(value, &ucm_global_config.enable_cuda_hooks);
@@ -189,10 +206,17 @@ static void ucm_config_set(const char *name)
 }
 
 UCS_STATIC_INIT {
+    if (RUNNING_ON_VALGRIND) {
+        /* Valgrind limits the size of brk() segments to 8mb, so must use mmap
+         * for large allocations.
+         */
+        ucm_global_config.enable_dynamic_mmap_thresh = 0;
+    }
     ucm_config_set(UCM_LOG_LEVEL_VAR);
     ucm_config_set(UCM_ALLOC_ALIGN_VAR);
     ucm_config_set(UCM_EN_EVENTS_VAR);
     ucm_config_set(UCM_EN_MMAP_RELOC_VAR);
     ucm_config_set(UCM_EN_MALLOC_HOOKS_VAR);
     ucm_config_set(UCM_EN_MALLOC_RELOC_VAR);
+    ucm_config_set(UCM_EN_DYNAMIC_MMAP_VAR);
 }

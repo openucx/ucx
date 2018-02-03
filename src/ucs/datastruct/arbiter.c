@@ -136,8 +136,11 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
 
     do {
         group_head    = next_group;
+        ucs_assert(group_head != NULL);
         prev_group    = ucs_list_prev(&group_head->list, ucs_arbiter_elem_t, list);
         next_group    = ucs_list_next(&group_head->list, ucs_arbiter_elem_t, list);
+        ucs_assert(prev_group != NULL);
+        ucs_assert(next_group != NULL);
         ucs_assert(prev_group->list.next == &group_head->list);
         ucs_assert(next_group->list.prev == &group_head->list);
 

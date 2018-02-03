@@ -194,35 +194,18 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
                                   "self_msg_desc");
     if (UCS_OK != status) {
         ucs_error("Failed to create a memory pool for the loop-back transport");
-        goto err;
+        return status;
     }
 
-    /* set the message descriptor for the loop-back */
-    self->msg_cur_desc = ucs_mpool_get(&self->msg_desc_mp);
-    VALGRIND_MAKE_MEM_DEFINED(self->msg_cur_desc, sizeof(*(self->msg_cur_desc)));
-    if (NULL == self->msg_cur_desc) {
-        ucs_error("Failed to get the first descriptor in loop-back MP storage");
-        status = UCS_ERR_NO_RESOURCE;
-        goto destroy_mpool;
-    }
-
-    ucs_debug("Created a loop-back iface. id=0x%lx, desc=%p, len=%u, tx_hdr=%lu",
-              self->id, self->msg_cur_desc, self->data_length, self->rx_headroom);
+    ucs_debug("Created a loop-back iface. id=0x%lx, len=%u, tx_hdr=%lu",
+              self->id, self->data_length, self->rx_headroom);
     return UCS_OK;
-
-destroy_mpool:
-    ucs_mpool_cleanup(&self->msg_desc_mp, 1);
-err:
-    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_self_iface_t)
 {
     ucs_trace_func("self=%p", self);
 
-    if (self->msg_cur_desc) {
-        ucs_mpool_put(self->msg_cur_desc);
-    }
     ucs_mpool_cleanup(&self->msg_desc_mp, 1);
 }
 

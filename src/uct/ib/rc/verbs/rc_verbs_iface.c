@@ -38,9 +38,10 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
 static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                         ucs_status_t status)
 {
+    struct ibv_wc     *wc      = arg;
+    uct_rc_iface_t    *iface   = ucs_derived_of(ib_iface, uct_rc_iface_t);
+    ucs_log_level_t    log_lvl = UCS_LOG_LEVEL_FATAL;
     uct_rc_verbs_ep_t *ep;
-    struct ibv_wc     *wc    = arg;
-    uct_rc_iface_t    *iface = ucs_derived_of(ib_iface, uct_rc_iface_t);
 
     ep = ucs_derived_of(uct_rc_iface_lookup_ep(iface, wc->qp_num),
                         uct_rc_verbs_ep_t);
@@ -48,22 +49,25 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         return;
     }
 
-    ucs_log(iface->super.super.config.failure_level,
-            "Send completion with error: %s",
-            ibv_wc_status_str(wc->status));
-
     iface->tx.cq_available += ep->txcnt.pi - ep->txcnt.ci;
     /* Reset CI to prevent cq_available overrun on ep_destoroy */
     ep->txcnt.ci = ep->txcnt.pi;
     uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
-    ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super, status);
+
+    if (ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super,
+                                     status) == UCS_OK) {
+        log_lvl = iface->super.super.config.failure_level;
+    }
+
+    ucs_log(log_lvl, "send completion with error: %s",
+            ibv_wc_status_str(wc->status));
 }
 
-static void uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
-                                       ucs_status_t status)
+static ucs_status_t uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface,
+                                               uct_ep_h ep, ucs_status_t status)
 {
-    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_verbs_ep_t), ep,
-                      &iface->super.super, status);
+    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_verbs_ep_t), ep,
+                             &iface->super.super, status);
 }
 
 static UCS_F_ALWAYS_INLINE unsigned

@@ -21,12 +21,6 @@ int ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
     ucp_worker_t *worker   = iface->worker;
     ucp_context_t *context = worker->context;
 
-    if (ucs_unlikely(!context->config.ext.tm_offload)) {
-        /* Can happen when different processes have different configuration,
-         * which is very uncommon. */
-        return 0;
-    }
-
     if (!worker->tm.offload.num_ifaces) {
         ucs_assert(worker->tm.offload.thresh       == SIZE_MAX);
         ucs_assert(worker->tm.offload.zcopy_thresh == SIZE_MAX);
@@ -120,6 +114,7 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
 
     UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, MATCHED);
 out:
+    --req->recv.tag.wiface->post_count;
     ucp_request_complete_tag_recv(req, status);
 }
 
@@ -132,6 +127,7 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
 
     UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, MATCHED_SW_RNDV);
 
+    --req->recv.tag.wiface->post_count;
     if (ucs_unlikely(status != UCS_OK)) {
         ucp_tag_offload_release_buf(req);
         ucp_request_complete_tag_recv(req, status);
@@ -202,7 +198,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
 void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, int force)
 {
 
-    ucp_worker_iface_t *wiface = ucp_tag_offload_iface(worker, req->recv.tag.tag);
+    ucp_worker_iface_t *wiface = req->recv.tag.wiface;
     ucs_status_t status;
 
     ucs_assert(wiface != NULL);
@@ -217,48 +213,26 @@ void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, int force)
     /* if cancel is not forced, need to wait its completion */
     if (force) {
         ucp_tag_offload_release_buf(req);
+        --wiface->post_count;
     }
 }
 
-int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
+static UCS_F_ALWAYS_INLINE int
+ucp_tag_offload_do_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
 {
-    size_t length          = req->recv.length;
-    ucp_mem_desc_t *rdesc  = NULL;
     ucp_worker_t *worker   = req->recv.worker;
     ucp_context_t *context = worker->context;
+    size_t length          = req->recv.length;
+    ucp_mem_desc_t *rdesc  = NULL;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
     ucp_rsc_index_t mdi;
     uct_iov_t iov;
 
-    if (!UCP_DT_IS_CONTIG(req->recv.datatype)) {
-        /* Non-contig buffers not supported yet. */
-        UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_NON_CONTIG);
-        return 0;
-    }
-
-    if (req->recv.tag.tag_mask != UCP_TAG_MASK_FULL) {
-        if (!ucp_tag_is_specific_source(context, req->recv.tag.tag_mask)) {
-            /* Sender rank wildcard */
-            UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_WILDCARD);
-            return 0;
-        } else if (worker->tm.expected.sw_all_count) {
-            /* There are some requests which must be completed in SW.
-             * Do not post tags to HW until they are completed. */
-            UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_SW_PEND);
-            return 0;
-        }
-    } else if (worker->tm.expected.wildcard.sw_count ||
-               req_queue->sw_count) {
-        /* There are some requests which must be completed in SW */
-        UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_SW_PEND);
-        return 0;
-    }
-
     wiface = ucp_tag_offload_iface(worker, req->recv.tag.tag);
     if (ucs_unlikely(wiface == NULL)) {
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_NO_IFACE);
-        return 0;
+        return UCS_ERR_NO_RESOURCE;
     }
 
     mdi = context->tl_rscs[wiface->rsc_index].md_index;
@@ -278,7 +252,7 @@ int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
                                         length, req->recv.datatype,
                                         &req->recv.state, req);
         if (status != UCS_OK) {
-            return 0;
+            return status;
         }
 
         req->recv.tag.rdesc = NULL;
@@ -287,7 +261,7 @@ int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
     } else {
         rdesc = ucp_worker_mpool_get(worker);
         if (rdesc == NULL) {
-            return 0;
+            return UCS_ERR_NO_MEMORY;
         }
 
         iov.memh            = ucp_memh2uct(rdesc->memh, mdi);
@@ -310,12 +284,118 @@ int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
         /* No more matching entries in the transport. */
         ucp_tag_offload_release_buf(req);
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_TAG_EXCEED);
-        return 0;
+        return status;
     }
+
     UCP_WORKER_STAT_TAG_OFFLOAD(worker, POSTED);
-    req->flags |= UCP_REQUEST_FLAG_OFFLOADED;
+    req->flags          |= UCP_REQUEST_FLAG_OFFLOADED;
+    req->recv.tag.wiface = wiface;
+    ++wiface->post_count;
     ucs_trace_req("recv request %p (%p) was posted to transport (rsc %d)",
                   req, req + 1, wiface->rsc_index);
+    return UCS_OK;
+}
+
+/**
+ * @brief Offload all pending non-offloaded requests
+ *
+ * This routine tries to offload all pending non-offloaded requests on the
+ * specific queue of expected requests.
+ *
+ *
+ * @param [in]  req         Receive request being processed.
+ * @param [in]  req_queue   Specific request queue from the expected queues hash,
+ *                          which corresponds to the 'req' request tag.
+ * .
+ *
+ * @return 0 - Some (or all) pending requests can't be offloaded to the transport.
+ *         1 - All pending requests on the specific queue were offloaded to
+ *             the transport.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_tag_offload_post_sw_reqs(ucp_request_t *req, ucp_request_queue_t *req_queue)
+{
+    ucp_worker_t *worker = req->recv.worker;
+    ucs_queue_iter_t iter;
+    ucs_status_t status;
+    ucp_request_t *req_exp;
+    ucp_worker_iface_t *wiface;
+    size_t max_post;
+
+    /* If large enough buffer is being posted to the transport,
+     * try to post all unposted requests from the same TM queue before.
+     * Check that:
+     * 1. The receive buffer being posted is large enough (>= FORCE_THRESH)
+     * 2. There is no any request which can't be posted to the transport
+     *    (sender rank wildcard or non-contig type)
+     * 3. Transport tag list is big enough to fit all unposted requests plus
+     *    the one being posted */
+    if ((req->recv.length < worker->context->config.ext.tm_force_thresh) ||
+        req_queue->block_count) {
+        return 0;
+    }
+
+    wiface = ucp_tag_offload_iface(worker, req->recv.tag.tag);
+    if (ucs_unlikely(wiface == NULL)) {
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_NO_IFACE);
+        return 0;
+    }
+
+    max_post = wiface->attr.cap.tag.recv.max_outstanding - wiface->post_count;
+
+    if (req_queue->sw_count >= max_post) {
+        return 0;
+    }
+
+    ucs_queue_for_each_safe(req_exp, iter, &req_queue->queue, recv.queue) {
+        if (req_exp->flags & UCP_REQUEST_FLAG_OFFLOADED) {
+            continue;
+        }
+        ucs_assert(req_exp != req);
+        status = ucp_tag_offload_do_post(req_exp, req_queue);
+        if (status != UCS_OK) {
+            return 0;
+        }
+        --req_queue->sw_count;
+        --worker->tm.expected.sw_all_count;
+    }
+
+    return 1;
+}
+
+int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
+{
+    ucp_worker_t *worker   = req->recv.worker;
+    ucp_context_t *context = worker->context;
+
+    if (!UCP_DT_IS_CONTIG(req->recv.datatype)) {
+        /* Non-contig buffers not supported yet. */
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_NON_CONTIG);
+        return 0;
+    }
+
+    if (req->recv.tag.tag_mask != UCP_TAG_MASK_FULL) {
+        if (!ucp_tag_is_specific_source(context, req->recv.tag.tag_mask)) {
+            /* Sender rank wildcard */
+            UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_WILDCARD);
+            return 0;
+        } else if (worker->tm.expected.sw_all_count) {
+            /* There are some requests which must be completed in SW.
+             * Do not post tags to HW until they are completed. */
+            UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_SW_PEND);
+            return 0;
+        }
+    } else if (worker->tm.expected.wildcard.sw_count ||
+               (req_queue->sw_count && !ucp_tag_offload_post_sw_reqs(req, req_queue))) {
+        /* There are some requests which must be completed in SW */
+        UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_SW_PEND);
+        return 0;
+    }
+
+    if (ucp_tag_offload_do_post(req, req_queue) != UCS_OK) {
+        return 0;
+    }
+
     return 1;
 }
 
@@ -379,7 +459,7 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
     req->send.lane = ucp_ep_get_tag_lane(ep);
 
     ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &dt_state,
-                        req->send.buffer, req->send.datatype, req->send.length, 0);
+                        req->send.buffer, req->send.datatype, req->send.length, 0, NULL);
 
     status = uct_ep_tag_eager_zcopy(ep->uct_eps[req->send.lane], req->send.tag.tag,
                                     imm_data, iov, iovcnt, 0,
@@ -467,7 +547,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     ucs_assert_always(UCP_DT_IS_CONTIG(req->send.datatype));
 
     ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &dt_state,
-                        req->send.buffer, req->send.datatype, req->send.length, 0);
+                        req->send.buffer, req->send.datatype, req->send.length, 0, NULL);
 
     rndv_op = uct_ep_tag_rndv_zcopy(ep->uct_eps[req->send.lane], req->send.tag.tag,
                                     &rndv_hdr, sizeof(rndv_hdr), iov, iovcnt, 0,

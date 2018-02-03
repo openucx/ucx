@@ -417,7 +417,7 @@ run_ucx_perftest_mpi() {
 	# hack for perftest, no way to override params used in batch
 	# todo: fix in perftest
 	sed -s 's,-n [0-9]*,-n 1000,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
-	cat $ucx_inst_ptest/test_types | sort -R > $ucx_inst_ptest/test_types_short
+	cat $ucx_inst_ptest/test_types | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_short
 
 	UCX_PERFTEST="$ucx_inst/bin/ucx_perftest \
 					-b $ucx_inst_ptest/test_types_short \
@@ -441,6 +441,14 @@ run_ucx_perftest_mpi() {
 		echo "==== Running ucx_perf kit on $ucx_dev ===="
 		$MPIRUN -np 2 $AFFINITY $UCX_PERFTEST -d $ucx_dev $opt_transports
 	done
+
+	# run cuda tests
+	if (lsmod | grep -q "nv_peer_mem") && (lsmod | grep -q "gdrdrv")
+	then
+		cat $ucx_inst_ptest/test_types | grep cuda | sort -R > $ucx_inst_ptest/test_types_short
+		echo "==== Running ucx_perf with cuda memory===="
+		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy $AFFINITY $UCX_PERFTEST
+	fi
 }
 
 #
@@ -464,6 +472,11 @@ test_malloc_hooks_mpi() {
 #
 run_mpi_tests() {
 	echo "1..2" > mpi_tests.tap
+
+	#load cuda modules if available
+	module_load dev/cuda || true
+	module_load dev/gdrcopy || true
+
 	if module_load hpcx-gcc
 	then
 		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
@@ -632,6 +645,29 @@ run_gtest() {
 	fi
 }
 
+#
+# Run the test suite (gtest) in release configuration
+#
+run_gtest_release() {
+
+	echo "1..1" > gtest_release.tap
+
+	../contrib/configure-release --prefix=$ucx_inst --enable-gtest
+	$MAKE clean
+	$MAKE
+
+	export GTEST_SHARD_INDEX=0
+	export GTEST_TOTAL_SHARDS=1
+	export GTEST_RANDOM_SEED=0
+	export GTEST_SHUFFLE=1
+	export GTEST_TAP=2
+	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
+
+	echo "==== Running unit tests (release configuration) ===="
+	env GTEST_FILTER=\*test_obj_size\* $AFFINITY $TIMEOUT make -C test/gtest test
+	echo "ok 1" >> gtest_release.tap
+}
+
 run_ucx_tl_check() {
 
 	echo "1..1" > ucx_tl_check.tap
@@ -676,6 +712,7 @@ run_tests() {
 	run_gtest
 
 	do_distributed_task 3 4 run_coverity
+	do_distributed_task 0 4 run_gtest_release
 }
 
 prepare

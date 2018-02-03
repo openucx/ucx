@@ -20,7 +20,6 @@ public:
     void init()
     {
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
-        modify_config("TM_OFFLOAD", "y");
 
         test_ucp_tag::init();
         if (!(sender().ep()->flags & UCP_EP_FLAG_TAG_OFFLOAD_ENABLED)) {
@@ -178,6 +177,102 @@ UCS_TEST_P(test_ucp_tag_offload, post_dif_buckets)
     }
 }
 
+UCS_TEST_P(test_ucp_tag_offload, force_thresh_basic, "TM_FORCE_THRESH=4096",
+                                                     "TM_THRESH=1024")
+{
+    uint64_t small_val      = 0xFAFA;
+    const size_t big_size   = 5000;
+    int num_reqs            = 8;
+    int tag                 = 0x11;
+    std::vector<request*> reqs;
+    request *req;
+
+    activate_offload(sender());
+
+    for (int i = 0; i < num_reqs - 1; ++i) {
+        req = recv_nb_and_check(&small_val, sizeof(small_val), DATATYPE,
+                                tag, UCP_TAG_MASK_FULL);
+        reqs.push_back(req);
+    }
+
+    // No requests should be posted to the transport, because their sizes less
+    // than TM_THRESH
+    EXPECT_EQ(num_reqs - 1, receiver().worker()->tm.expected.sw_all_count);
+
+    std::vector<char> recvbuf_big(big_size, 0);
+
+    req = recv_nb(&recvbuf_big[0], recvbuf_big.size(), DATATYPE, tag,
+                  UCP_TAG_MASK_FULL);
+    reqs.push_back(req);
+
+    // Now, all requests should be posted to the transport, because receive
+    // buffer bigger than FORCE_THRESH has been posted
+    EXPECT_EQ(0, receiver().worker()->tm.expected.sw_all_count);
+
+    std::vector<request*>::const_iterator iter;
+    for (iter = reqs.begin(); iter != reqs.end(); ++iter) {
+        req_cancel(receiver(), *iter);
+    }
+}
+
+UCS_TEST_P(test_ucp_tag_offload, force_thresh_blocked, "TM_FORCE_THRESH=4096",
+                                                       "TM_THRESH=1024")
+{
+    uint64_t small_val      = 0xFAFA;
+    const size_t big_size   = 5000;
+    int num_reqs            = 8;
+    int tag                 = 0x11;
+    std::vector<request*> reqs;
+    request *req;
+    int i;
+
+    activate_offload(sender());
+
+    for (i = 0; i < num_reqs - 3; ++i) {
+        req = recv_nb_and_check(&small_val, sizeof(small_val), DATATYPE,
+                                tag, UCP_TAG_MASK_FULL);
+        reqs.push_back(req);
+    }
+
+    // Add request with noncontig dt
+    std::vector<char> buf(64, 0);
+    ucp::data_type_desc_t dt_desc(DATATYPE_IOV, buf.data(), buf.size(), 1);
+    req = recv_nb_and_check(dt_desc.buf(), dt_desc.count(), dt_desc.dt(),
+                            tag, UCP_TAG_MASK_FULL);
+    reqs.push_back(req);
+
+    // Add request with wildcard tag
+    req = recv_nb(&small_val, sizeof(small_val), DATATYPE, tag, 0);
+    reqs.push_back(req);
+
+    std::vector<char> recvbuf_big(big_size, 0);
+    // Check that offload is not forced while there are uncompleted blocking
+    // SW requests with the same tag
+    for (i = 0; i < 2; ++i) {
+        req = recv_nb_and_check(&recvbuf_big[0], recvbuf_big.size(), DATATYPE, tag,
+                                UCP_TAG_MASK_FULL);
+        EXPECT_EQ(num_reqs - i, receiver().worker()->tm.expected.sw_all_count);
+        req_cancel(receiver(), req);
+
+        req_cancel(receiver(), reqs.back());
+        reqs.pop_back();
+    }
+
+    req = recv_nb(&recvbuf_big[0], recvbuf_big.size(), DATATYPE, tag,
+                  UCP_TAG_MASK_FULL);
+    reqs.push_back(req);
+
+    // Now, all requests should be posted to the transport, because receive
+    // buffer bigger than FORCE_THRESH has been posted
+    EXPECT_EQ(0, receiver().worker()->tm.expected.sw_all_count);
+
+    std::vector<request*>::const_iterator iter;
+    for (iter = reqs.begin(); iter != reqs.end(); ++iter) {
+        req_cancel(receiver(), *iter);
+    }
+}
+
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_offload)
 
 
@@ -277,8 +372,7 @@ UCS_TEST_P(test_ucp_tag_offload_multi, recv_from_multi)
     post_recv_and_check(e(2), 0u, tag + 1, UCP_TAG_MASK_FULL);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, all_rcdc,
-                              "\\rc,\\dc,\\ud,rc_x,dc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, all, "all")
 
 
 #if ENABLE_STATS

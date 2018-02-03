@@ -233,7 +233,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg
     params.err_mode   = msg->err_mode;
 
     /* Initialize lanes (possible destroy existing lanes) */
-    status = ucp_wireup_init_lanes(ep, &params, address_count, address_list,
+    status = ucp_wireup_init_lanes(ep, &params, 0, address_count, address_list,
                                    addr_indices);
     if (status != UCS_OK) {
         return;
@@ -561,7 +561,7 @@ static void ucp_wireup_print_config(ucp_context_h context,
         return;
     }
 
-    ucs_log(log_level, "%s: am_lane %d wirep_lane %d reachable_mds 0x%lx",
+    ucs_log(log_level, "%s: am_lane %d wireup_lane %d reachable_mds 0x%lx",
               title, key->am_lane, key->wireup_lane,
               key->reachable_md_map);
 
@@ -574,7 +574,7 @@ static void ucp_wireup_print_config(ucp_context_h context,
 }
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
-                                   unsigned address_count,
+                                   unsigned ep_init_flags, unsigned address_count,
                                    const ucp_address_entry_t *address_list,
                                    uint8_t *addr_indices)
 {
@@ -587,8 +587,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 
     ucs_trace("ep %p: initialize lanes", ep);
 
-    status = ucp_wireup_select_lanes(ep, params, address_count, address_list,
-                                     addr_indices, &key);
+    status = ucp_wireup_select_lanes(ep, params, ep_init_flags, address_count,
+                                     address_list, addr_indices, &key);
     if (status != UCS_OK) {
         goto err;
     }

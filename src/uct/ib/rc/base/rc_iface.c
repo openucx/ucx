@@ -67,7 +67,7 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
 #endif
 
 #if IBV_EXP_HW_TM
-  {"TM_ENABLE", "y",
+  {"TM_ENABLE", "n",
    "Enable HW tag matching",
    ucs_offsetof(uct_rc_iface_config_t, tm.enable), UCS_CONFIG_TYPE_BOOL},
 
@@ -143,12 +143,14 @@ static void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
     iface_attr->cap.tag.rndv.max_zcopy  = port_attr->max_msg_sz;
 
     /* TMH can carry 2 additional bytes of private data */
-    iface_attr->cap.tag.rndv.max_hdr    = iface->tm.max_rndv_data + 2;
+    iface_attr->cap.tag.rndv.max_hdr    = iface->tm.max_rndv_data +
+                                          UCT_RC_IFACE_TMH_PRIV_LEN;
     iface_attr->cap.tag.rndv.max_iov    = 1;
 
-    iface_attr->cap.tag.recv.max_zcopy  = port_attr->max_msg_sz;
-    iface_attr->cap.tag.recv.max_iov    = 1;
-    iface_attr->cap.tag.recv.min_recv   = 0;
+    iface_attr->cap.tag.recv.max_zcopy       = port_attr->max_msg_sz;
+    iface_attr->cap.tag.recv.max_iov         = 1;
+    iface_attr->cap.tag.recv.min_recv        = 0;
+    iface_attr->cap.tag.recv.max_outstanding = iface->tm.num_tags;
 #endif
 }
 
