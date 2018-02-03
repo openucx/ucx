@@ -426,6 +426,7 @@ uct_rc_verbs_iface_tag_handle_exp(uct_rc_iface_t *iface, struct ibv_exp_wc *wc)
                                                     wc->exp_wc_flags &
                                                     IBV_EXP_WC_WITH_IMM);
 
+        VALGRIND_MAKE_MEM_DEFINED(priv->buffer, wc->byte_len);
         if (UCT_RC_VERBS_TM_IS_SW_RNDV(wc->exp_wc_flags, imm_data)) {
             ctx->rndv_cb(ctx, priv->tag, priv->buffer, wc->byte_len, UCS_OK);
         } else {
