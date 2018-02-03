@@ -102,6 +102,12 @@ uint16_t get_port();
 
 
 /**
+ * Address to use for mmap(FIXED)
+ */
+void *mmap_fixed_address();
+
+
+/**
  * Return the IP address of the given interface address.
  */
 template <typename S>
