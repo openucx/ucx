@@ -100,7 +100,7 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
-   buf = ucs_alloca(buffer_size + 1);
+    buf = ucs_alloca(buffer_size + 1);
     buf[buffer_size] = 0;
 
     vsnprintf(buf, buffer_size, format, ap);
