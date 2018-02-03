@@ -306,22 +306,39 @@ void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
     uint8_t fc_hdr    = uct_rc_fc_get_fc_hdr(rch->am_id);
     uint8_t am_wo_fc;
 
+#if IBV_EXP_HW_TM
+    if (rch->tmh_opcode != IBV_EXP_TMH_NO_TAG) {
+        struct ibv_exp_tmh *tmh = (void*)rch;
+        struct ibv_exp_tmh_rvh *rvh = (void*)(tmh + 1);
+
+        switch (rch->tmh_opcode) {
+        case IBV_EXP_TMH_EAGER:
+            snprintf(buffer, max, " EAGER tag %lx app_ctx %d",
+                     be64toh(tmh->tag), ntohl(tmh->app_ctx));
+            return;
+        case IBV_EXP_TMH_RNDV:
+            snprintf(buffer, max, " RNDV tag %lx app_ctx %d va 0x%lx len %d rkey %x",
+                     be64toh(tmh->tag), ntohl(tmh->app_ctx),
+                     be64toh(rvh->va), ntohl(rvh->len), ntohl(rvh->rkey));
+            return;
+        case IBV_EXP_TMH_FIN:
+            snprintf(buffer, max, " FIN tag %lx app_ctx %d",
+                     be64toh(tmh->tag), ntohl(tmh->app_ctx));
+            return;
+        default:
+            break;
+        }
+    }
+#endif
+
     /* Do not invoke AM tracer for auxiliary pure FC_GRANT message */
     if (fc_hdr != UCT_RC_EP_FC_PURE_GRANT) {
         am_wo_fc = rch->am_id & ~UCT_RC_EP_FC_MASK; /* mask out FC bits*/
-        snprintf(buffer, max, " %c%c am %d "
-#if IBV_EXP_HW_TM
-                 "tm_op %d "
-#endif
-                 ,
+        snprintf(buffer, max, " %c%c am %d ",
                  fc_hdr & UCT_RC_EP_FC_FLAG_SOFT_REQ ? 's' :
                  fc_hdr & UCT_RC_EP_FC_FLAG_HARD_REQ ? 'h' : '-',
                  fc_hdr & UCT_RC_EP_FC_FLAG_GRANT    ? 'g' : '-',
-                 am_wo_fc
-#if IBV_EXP_HW_TM
-                 , rch->tmh_opcode
-#endif
-                 );
+                 am_wo_fc);
         uct_iface_dump_am(iface, type, am_wo_fc, rch + 1, length - sizeof(*rch),
                           buffer + strlen(buffer), max - strlen(buffer));
     } else {

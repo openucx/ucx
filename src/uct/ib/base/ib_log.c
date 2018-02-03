@@ -9,10 +9,10 @@
 #include <ucs/sys/sys.h>
 
 
-void uct_ib_log_dump_opcode(uint32_t qp_num, uct_ib_opcode_t *op, int signal,
-                        int fence, int se, char *buf, size_t max)
+void uct_ib_log_dump_opcode(uint32_t qp_num, unsigned idx, uct_ib_opcode_t *op,
+                            int signal, int fence, int se, char *buf, size_t max)
 {
-    snprintf(buf, max, "%s qp 0x%x %c%c%c", op->name, qp_num,
+    snprintf(buf, max, "%s qp 0x%x %03d %c%c%c", op->name, qp_num, idx,
              signal ? 's' : '-', fence ? 'f' : '-', se ? 'e' : '-');
 }
 
@@ -109,10 +109,11 @@ void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, enum ibv_qp_type qp_
     }
 }
 
-static void uct_ib_dump_wr_opcode(struct ibv_qp *qp, uct_ib_opcode_t *op,
-                                  int send_flags, char *buf, size_t max)
+static void uct_ib_dump_wr_opcode(struct ibv_qp *qp, uint64_t wr_id,
+                                  uct_ib_opcode_t *op, int send_flags,
+                                  char *buf, size_t max)
 {
-    uct_ib_log_dump_opcode(qp->qp_num, op,
+    uct_ib_log_dump_opcode(qp->qp_num, wr_id, op,
                            send_flags & IBV_SEND_SIGNALED,
                            send_flags & IBV_SEND_FENCE,
                            send_flags & IBV_SEND_SOLICITED,
@@ -161,6 +162,7 @@ static void uct_ib_dump_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
         [IBV_WR_RDMA_WRITE]           = { "RDMA_WRITE", UCT_IB_OPCODE_FLAG_HAS_RADDR },
         [IBV_WR_RDMA_READ]            = { "RDMA_READ",  UCT_IB_OPCODE_FLAG_HAS_RADDR },
         [IBV_WR_SEND]                 = { "SEND",       0 },
+        [IBV_WR_SEND_WITH_IMM]        = { "SEND_IMM",   0 },
         [IBV_WR_ATOMIC_CMP_AND_SWP]   = { "CS",         UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
         [IBV_WR_ATOMIC_FETCH_AND_ADD] = { "FA",         UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
    };
@@ -169,7 +171,7 @@ static void uct_ib_dump_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
     char *ends          = buf + max;
     uct_ib_opcode_t *op = &opcodes[wr->opcode];
 
-    uct_ib_dump_wr_opcode(qp, op, wr->send_flags, s, ends - s);
+    uct_ib_dump_wr_opcode(qp, wr->wr_id, op, wr->send_flags, s, ends - s);
     s += strlen(s);
 
     uct_ib_dump_wr(qp, op, wr, s, ends - s);
@@ -225,6 +227,7 @@ static void uct_ib_dump_exp_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
         [IBV_EXP_WR_RDMA_WRITE]           = { "RDMA_WRITE", UCT_IB_OPCODE_FLAG_HAS_RADDR },
         [IBV_EXP_WR_RDMA_READ]            = { "RDMA_READ",  UCT_IB_OPCODE_FLAG_HAS_RADDR },
         [IBV_EXP_WR_SEND]                 = { "SEND",       0 },
+        [IBV_EXP_WR_SEND_WITH_IMM]        = { "SEND_IMM",   0 },
         [IBV_EXP_WR_ATOMIC_CMP_AND_SWP]   = { "CS",         UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
         [IBV_EXP_WR_ATOMIC_FETCH_AND_ADD] = { "FA",         UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
 #if HAVE_DECL_IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP
@@ -243,7 +246,7 @@ static void uct_ib_dump_exp_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
    UCS_STATIC_ASSERT((int)IBV_SEND_SIGNALED  == (int)IBV_EXP_SEND_SIGNALED);
    UCS_STATIC_ASSERT((int)IBV_SEND_FENCE     == (int)IBV_EXP_SEND_FENCE);
    UCS_STATIC_ASSERT((int)IBV_SEND_SOLICITED == (int)IBV_EXP_SEND_SOLICITED);
-   uct_ib_dump_wr_opcode(qp, op, wr->exp_send_flags, s, ends - s);
+   uct_ib_dump_wr_opcode(qp, wr->wr_id, op, wr->exp_send_flags, s, ends - s);
    s += strlen(s);
 
    /* TODO DC address handle */
