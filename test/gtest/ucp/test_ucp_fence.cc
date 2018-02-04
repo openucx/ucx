@@ -149,7 +149,7 @@ protected:
         params.length     = memheap_size;
         params.flags      = GetParam().variant;
         if (params.flags & UCP_MEM_MAP_FIXED) {
-            params.address  = (void *)(uintptr_t)0xFF000000;
+            params.address  = ucs::mmap_fixed_address();
             params.flags   |= UCP_MEM_MAP_ALLOCATE;
         } else {
             memheap = malloc(memheap_size);

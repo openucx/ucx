@@ -338,8 +338,7 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
         size_t size = (i + 1) * ((i % 2) ? 1000 : 1);
-        uintptr_t uptr = 0xFF000000;
-        void *ptr = (void *)uptr;
+        void *ptr = ucs::mmap_fixed_address();
 
         ucp_mem_h memh;
         ucp_mem_map_params_t params;
