@@ -32,6 +32,8 @@ public:
         } else if (GetParam().variant == VARIANT_RNDV_AUTO) {
             modify_config("RNDV_SCHEME", "auto");
         }
+        modify_config("MAX_EAGER_LANES", "2");
+        modify_config("MAX_RNDV_LANES", "2");
         test_ucp_tag::init();
     }
 
