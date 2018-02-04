@@ -134,6 +134,10 @@ uint16_t get_port() {
     return port;
 }
 
+void *mmap_fixed_address() {
+    return (void*)0xff0000000;
+}
+
 namespace detail {
 
 message_stream::message_stream(const std::string& title) {
