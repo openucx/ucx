@@ -1042,6 +1042,8 @@ uct_rc_mlx5_iface_handle_expected(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
         ucs_assert(byte_len <= priv->length);
         memcpy(priv->buffer, cqe - 1, byte_len);
+    } else {
+        VALGRIND_MAKE_MEM_DEFINED(priv->buffer, byte_len);
     }
 
     imm_data = uct_rc_iface_tag_imm_data_unpack(cqe->imm_inval_pkey, app_ctx,
