@@ -82,9 +82,15 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 
     /* send all msg sizes*/
     for (size_t i = 3; i < sbuf.size(); i *= 2) {
-        ucs::fill_random(sbuf, i);
-        check_pattern.insert(check_pattern.end(), sbuf.begin(),
-                             sbuf.begin() + i);
+        if (UCP_DT_IS_GENERIC(datatype)) {
+            for (size_t j = 0; j < i; ++j) {
+                check_pattern.push_back(char(j));
+            }
+        } else {
+            ucs::fill_random(sbuf, i);
+            check_pattern.insert(check_pattern.end(), sbuf.begin(),
+                                 sbuf.begin() + i);
+        }
         sstatus = stream_send_nb(ucp::data_type_desc_t(datatype, sbuf.data(), i));
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
         wait(sstatus);
@@ -108,9 +114,7 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
     } while (roffset < ssize);
 
     EXPECT_EQ(roffset, ssize);
-    if (!UCP_DT_IS_GENERIC(datatype)) { /* TODO: add check of packed data */
-        EXPECT_EQ(check_pattern, rbuf);
-    }
+    EXPECT_EQ(check_pattern, rbuf);
 }
 
 template <typename T>
@@ -415,7 +419,7 @@ protected:
     size_t send_all(ucp_datatype_t datatype, size_t n_iter);
     void check_no_data();
     std::set<ucp_ep_h> check_no_data(entity &e);
-    void check_recv_data(size_t n_iter);
+    void check_recv_data(size_t n_iter, ucp_datatype_t dt);
 
     std::vector<std::string>        m_msgs;
     std::vector<std::vector<char> > m_recv_data;
@@ -488,9 +492,7 @@ void test_ucp_stream_many2one::do_send_worker_poll_test(ucp_datatype_t dt)
     } while (!sreqs.empty() || (total_len != 0));
 
     check_no_data();
-    if (!UCP_DT_IS_GENERIC(dt)) { /* TODO: add check of packed data */
-        check_recv_data(niter);
-    }
+    check_recv_data(niter, dt);
 }
 
 void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
@@ -566,7 +568,7 @@ void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
     EXPECT_EQ(total_sdata, std::accumulate(roffsets.begin(),
                                            roffsets.end(), 0ul));
     check_no_data();
-    check_recv_data(niter);
+    check_recv_data(niter, dt);
 }
 
 ucs_status_ptr_t
@@ -667,11 +669,20 @@ std::set<ucp_ep_h> test_ucp_stream_many2one::check_no_data(entity &e)
     return ret;
 }
 
-void test_ucp_stream_many2one::check_recv_data(size_t n_iter)
+void test_ucp_stream_many2one::check_recv_data(size_t n_iter, ucp_datatype_t dt)
 {
     for (size_t i = 0; i < m_nsenders; ++i) {
-        const std::string test = std::string("sender_") + ucs::to_string(i);
+        std::string test = std::string("sender_") + ucs::to_string(i);
         const std::string str(&m_recv_data[i].front());
+        if (UCP_DT_IS_GENERIC(dt)) {
+            std::vector<char> test_gen;
+            for (size_t j = 0; j < test.length(); ++j) {
+                test_gen.push_back(char(j));
+            }
+            test_gen.push_back('\0');
+            test = std::string(test_gen.data());
+        }
+
         size_t            next = 0;
         for (size_t j = 0; j < n_iter; ++j) {
             size_t match = str.find(test, next);
