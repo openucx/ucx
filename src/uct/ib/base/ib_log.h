@@ -28,8 +28,8 @@ typedef struct uct_ib_opcode {
 } uct_ib_opcode_t;
 
 
-void uct_ib_log_dump_opcode(uint32_t qp_num, uct_ib_opcode_t *op, int signal,
-                            int fence, int se, char *buf, size_t max);
+void uct_ib_log_dump_opcode(uint32_t qp_num, unsigned idx, uct_ib_opcode_t *op,
+                            int signal, int fence, int se, char *buf, size_t max);
 
 void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
                              struct ibv_sge *sg_list, int num_sge,
