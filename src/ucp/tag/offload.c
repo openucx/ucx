@@ -66,11 +66,11 @@ ucp_tag_offload_iface(ucp_worker_t *worker, ucp_tag_t tag)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_offload_release_buf(ucp_request_t *req)
+ucp_tag_offload_release_buf(ucp_request_t *req, int dereg)
 {
     if (req->recv.tag.rdesc != NULL) {
         ucs_mpool_put_inline(req->recv.tag.rdesc);
-    } else {
+    } else if (dereg) {
         ucp_request_recv_buffer_dereg(req);
     }
 }
@@ -95,7 +95,7 @@ void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
     req->recv.tag.info.length     = length;
 
     if (ucs_unlikely(status != UCS_OK)) {
-        ucp_tag_offload_release_buf(req);
+        ucp_tag_offload_release_buf(req, 1);
         goto out;
     }
 
@@ -129,14 +129,14 @@ void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
 
     --req->recv.tag.wiface->post_count;
     if (ucs_unlikely(status != UCS_OK)) {
-        ucp_tag_offload_release_buf(req);
+        ucp_tag_offload_release_buf(req, 1);
         ucp_request_complete_tag_recv(req, status);
         return;
     }
 
     ucs_assert(header_length >= sizeof(ucp_rndv_rts_hdr_t));
     ucp_rndv_matched(req->recv.worker, req, header);
-    ucp_tag_offload_release_buf(req);
+    ucp_tag_offload_release_buf(req, 0);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
@@ -195,14 +195,15 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
     return UCS_OK;
 }
 
-void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, int force)
+void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, unsigned mode)
 {
 
     ucp_worker_iface_t *wiface = req->recv.tag.wiface;
     ucs_status_t status;
 
     ucs_assert(wiface != NULL);
-    status = uct_iface_tag_recv_cancel(wiface->iface, &req->recv.uct_ctx, force);
+    status = uct_iface_tag_recv_cancel(wiface->iface, &req->recv.uct_ctx,
+                                       mode & UCP_TAG_OFFLOAD_CANCEL_FORCE);
     if (status != UCS_OK) {
         ucs_error("Failed to cancel recv in the transport: %s",
                   ucs_status_string(status));
@@ -211,8 +212,8 @@ void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, int force)
     UCP_WORKER_STAT_TAG_OFFLOAD(worker, CANCELED);
 
     /* if cancel is not forced, need to wait its completion */
-    if (force) {
-        ucp_tag_offload_release_buf(req);
+    if (mode & UCP_TAG_OFFLOAD_CANCEL_FORCE) {
+        ucp_tag_offload_release_buf(req, mode & UCP_TAG_OFFLOAD_CANCEL_DEREG);
         --wiface->post_count;
     }
 }
@@ -248,8 +249,9 @@ ucp_tag_offload_do_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
             length = wiface->attr.cap.tag.recv.max_zcopy;
         }
 
+        /* register the whole buffer to support SW RNDV fallback */
         status = ucp_request_memory_reg(context, UCS_BIT(mdi), req->recv.buffer,
-                                        length, req->recv.datatype,
+                                        req->recv.length, req->recv.datatype,
                                         &req->recv.state, req);
         if (status != UCS_OK) {
             return status;
@@ -281,8 +283,9 @@ ucp_tag_offload_do_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
                                       req->recv.tag.tag_mask, &iov, 1,
                                       &req->recv.uct_ctx);
     if (status != UCS_OK) {
-        /* No more matching entries in the transport. */
-        ucp_tag_offload_release_buf(req);
+        /* No more matching entries in the transport.
+         * TODO keep registration in case SW RNDV protocol will be used */
+        ucp_tag_offload_release_buf(req, 1);
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_TAG_EXCEED);
         return status;
     }
@@ -584,17 +587,19 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
     /* should be set by ucp_tag_send_req_init() */
     ucs_assert(sreq->send.lane == ucp_ep_get_tag_lane(ep));
 
+    if (UCP_DT_IS_CONTIG(sreq->send.datatype)) {
+        status = ucp_request_send_buffer_reg_lane(sreq, sreq->send.lane);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
         (sreq->send.length <= ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) {
         ucp_request_send_state_reset(sreq, ucp_tag_offload_rndv_zcopy_completion,
                                      UCP_REQUEST_SEND_PROTO_RNDV_GET);
 
         /* contiguous buffer, offload can be used, but only a single lane */
-        status = ucp_request_send_buffer_reg_lane(sreq, sreq->send.lane);
-        if (status != UCS_OK) {
-            return status;
-        }
-
         sreq->send.uct.func = ucp_tag_offload_rndv_zcopy;
     } else {
         ucp_request_send_state_reset(sreq, NULL, UCP_REQUEST_SEND_PROTO_RNDV_GET);
