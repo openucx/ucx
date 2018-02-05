@@ -25,21 +25,6 @@ int test_time_multiplier()
     return factor;
 }
 
-std::ostream& operator<<(std::ostream& os, const std::vector<char>& vec) {
-    static const size_t LIMIT = 100;
-    size_t i = 0;
-    for (std::vector<char>::const_iterator iter = vec.begin(); iter != vec.end(); ++iter) {
-        if (i >= LIMIT) {
-            os << "...";
-            break;
-        }
-        int n = static_cast<unsigned char>(*iter);
-        os << "[" << i << "]=" << n << " ";
-        ++i;
-    }
-    return os << std::endl;
-}
-
 void fill_random(void *data, size_t size)
 {
     if (ucs::test_time_multiplier() > 1) {
@@ -120,9 +105,10 @@ uint16_t get_port() {
 
     do {
         addr_in.sin_port        = htons(0);
-        /* Ports below 1024 are considered "privileged" (can be used only by user root).
-         * Ports above and including 1024 can be used by anyone */
-        ret = bind(sock_fd, (struct sockaddr*)&addr_in, sizeof(struct sockaddr_in));
+        /* Ports below 1024 are considered "privileged" (can be used only by
+         * user root). Ports above and including 1024 can be used by anyone */
+        ret = bind(sock_fd, (struct sockaddr*)&addr_in,
+                   sizeof(struct sockaddr_in));
     } while (ret);
 
     ret = getsockname(sock_fd, (struct sockaddr*)&ret_addr, &len);
@@ -219,14 +205,17 @@ int dt_gen_finish_count = 0;
 static void* dt_common_start(size_t count)
 {
     dt_gen_state *dt_state = new dt_gen_state;
+
     dt_state->count   = count;
     dt_state->started = 1;
     dt_state->magic   = MAGIC;
     dt_gen_start_count++;
+
     return dt_state;
 }
 
-static void* dt_common_start_pack(void *context, const void *buffer, size_t count)
+static void* dt_common_start_pack(void *context, const void *buffer,
+                                  size_t count)
 {
     return dt_common_start(count);
 }
@@ -240,6 +229,7 @@ template <typename T>
 size_t dt_packed_size(void *state)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
+
     return dt_state->count * sizeof(T);
 }
 
@@ -266,7 +256,7 @@ size_t dt_pack(void *state, size_t offset, void *dest, size_t max_length)
 
 template <typename T>
 ucs_status_t dt_unpack(void *state, size_t offset, const void *src,
-                                     size_t length)
+                       size_t length)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
     uint32_t count;
@@ -289,7 +279,7 @@ ucs_status_t dt_unpack(void *state, size_t offset, const void *src,
 }
 
 static ucs_status_t dt_err_unpack(void *state, size_t offset, const void *src,
-                           size_t length)
+                                  size_t length)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
 
@@ -303,6 +293,7 @@ static ucs_status_t dt_err_unpack(void *state, size_t offset, const void *src,
 static void dt_common_finish(void *state)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
+
     --dt_state->started;
     EXPECT_EQ(0, dt_state->started);
     dt_gen_finish_count++;

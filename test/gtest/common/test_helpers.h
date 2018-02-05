@@ -47,6 +47,8 @@ extern "C" {
     do { \
         throw ucs::test_skip_exception(); \
     } while(0)
+
+
 #define UCS_TEST_SKIP_R(_reason) \
     do { \
         throw ucs::test_skip_exception(_reason); \
@@ -168,8 +170,8 @@ public:
 
 private:
     const bool m_failed;
-}
-;
+};
+
 
 class test_skip_exception : public std::exception {
 public:
@@ -236,7 +238,8 @@ template <typename T>
 static std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
     static const size_t LIMIT = 2000;
     size_t i = 0;
-    for (std::vector<char>::const_iterator iter = vec.begin(); iter != vec.end(); ++iter) {
+    for (std::vector<char>::const_iterator iter = vec.begin();
+         iter != vec.end(); ++iter) {
         if (i >= LIMIT) {
             os << "...";
             break;
@@ -270,7 +273,8 @@ static void fill_random(C& c, size_t size) {
 
 template <typename T>
 static inline T random_upper() {
-  return static_cast<T>((rand() / static_cast<double>(RAND_MAX)) * std::numeric_limits<T>::max());
+  return static_cast<T>((rand() / static_cast<double>(RAND_MAX)) *
+                        std::numeric_limits<T>::max());
 }
 
 template <typename T>
@@ -437,8 +441,9 @@ public:
         EXPECT_TRUE(value != NULL);
     }
 
-    handle(const handle& other) : m_initialized(false), m_value(NULL), m_dtor(NULL),
-                                  m_dtor_with_arg(NULL), m_dtor_arg(NULL) {
+    handle(const handle& other) : m_initialized(false), m_value(NULL),
+                                  m_dtor(NULL), m_dtor_with_arg(NULL),
+                                  m_dtor_arg(NULL) {
         *this = other;
     }
 
