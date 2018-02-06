@@ -48,7 +48,9 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
          * because it arrived either:
          * 1) via SW TM (e. g. peer doesn't support offload)
          * 2) as unexpected via HW TM */
-        ucp_tag_offload_try_cancel(worker, req, 1);
+        ucp_tag_offload_try_cancel(worker, req,
+                                   UCP_TAG_OFFLOAD_CANCEL_FORCE |
+                                   UCP_TAG_OFFLOAD_CANCEL_DEREG);
 
         if (flags & UCP_RECV_DESC_FLAG_EAGER_SYNC) {
             ucp_tag_eager_sync_send_ack(worker, data, flags);

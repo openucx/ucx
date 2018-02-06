@@ -9,6 +9,7 @@
 #
 #
 java_happy="no"
+mvn_args="-Dsources=\"**/dummy/**\" -DtestSources=\"**/jucx/**\" -Dmaven.test.skip=true -DskipCopy=true"
 AC_ARG_WITH([java],
             [AC_HELP_STRING([--with-java=(PATH)],
                             [Compile Java UCX (default is guess).])
@@ -21,8 +22,8 @@ AS_IF([test "x$with_java" != xno],
        AS_IF([test "x${MVNBIN}" == "xyes" -a "x${JAVABIN}" == "xyes"],
              [
               AC_MSG_CHECKING([mvn plugins and dependencies availability])
-              AC_SUBST([MVNAVAIL], [$(cd bindings/java && mvn -Dsources="**/dummy/**" -DtestSources="**/jucx/**" -DskipCopy="true" -q install >/dev/null && \
-                                                          mvn -Dsources="**/dummy/**" -DtestSources="**/jucx/**" -DskipCopy="true" -q clean   >/dev/null && \
+              AC_SUBST([MVNAVAIL], [$(cd bindings/java && mvn $(echo "${mvn_args}") install >/dev/null && \
+                                                          mvn $(echo "${mvn_args}") clean   >/dev/null && \
                                                           echo yes || echo no)])
               AC_MSG_RESULT([${MVNAVAIL}])
               AS_IF([test -n "$with_java" -a "x$with_java" != "xyes" -a "x$with_java" != "xguess"],

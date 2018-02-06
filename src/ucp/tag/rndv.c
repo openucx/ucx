@@ -108,7 +108,8 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
     ucp_md_map_t md_map;
     ucs_status_t status;
 
-    ucp_trace_req(sreq, "start_rndv buffer %p length %zu", sreq->send.buffer,
+    ucp_trace_req(sreq, "start_rndv to %s buffer %p length %zu",
+                  ucp_ep_peer_name(ep), sreq->send.buffer,
                   sreq->send.length);
     UCS_PROFILE_REQUEST_EVENT(sreq, "start_rndv", sreq->send.length);
 
@@ -515,7 +516,7 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
 
         /* Cancel req in transport if it was offloaded, because it arrived
            as unexpected */
-        ucp_tag_offload_try_cancel(worker, rreq, 1);
+        ucp_tag_offload_try_cancel(worker, rreq, UCP_TAG_OFFLOAD_CANCEL_FORCE);
 
         UCP_WORKER_STAT_RNDV(worker, EXP);
         status = UCS_OK;
@@ -573,7 +574,7 @@ static size_t ucp_rndv_pack_data(void *dest, void *arg)
     ucp_request_t *sreq = arg;
     size_t length;
 
-    hdr->rreq_ptr = sreq->send.rndv_data.rreq_ptr;
+    hdr->rreq_ptr = sreq->send.tag.rreq_ptr;
     hdr->offset   = sreq->send.state.dt.offset;
     length        = ucp_ep_get_max_bcopy(sreq->send.ep, sreq->send.lane) - sizeof(*hdr);
 
@@ -589,7 +590,7 @@ static size_t ucp_rndv_pack_data_last(void *dest, void *arg)
     size_t length, offset;
 
     offset        = sreq->send.state.dt.offset;
-    hdr->rreq_ptr = sreq->send.rndv_data.rreq_ptr;
+    hdr->rreq_ptr = sreq->send.tag.rreq_ptr;
     length        = sreq->send.length - offset;
     hdr->offset   = offset;
 
@@ -714,7 +715,7 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_single(uct_pending_req_t *self)
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_rndv_data_hdr_t hdr;
 
-    hdr.rreq_ptr = sreq->send.rndv_data.rreq_ptr;
+    hdr.rreq_ptr = sreq->send.tag.rreq_ptr;
     hdr.offset   = 0;
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_RNDV_DATA, &hdr, sizeof(hdr),
                                   ucp_rndv_am_zcopy_send_req_complete);
@@ -725,7 +726,7 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_multi(uct_pending_req_t *self)
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_rndv_data_hdr_t hdr;
 
-    hdr.rreq_ptr = sreq->send.rndv_data.rreq_ptr;
+    hdr.rreq_ptr = sreq->send.tag.rreq_ptr;
     hdr.offset   = sreq->send.state.dt.offset;
     return ucp_do_am_zcopy_multi(self,
                                  UCP_AM_ID_RNDV_DATA,
@@ -884,7 +885,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     }
 
     /* switch to AM */
-    sreq->send.rndv_data.rreq_ptr = rndv_rtr_hdr->rreq_ptr;
+    sreq->send.tag.rreq_ptr = rndv_rtr_hdr->rreq_ptr;
 
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
         (sreq->send.length >= ucp_ep_config(ep)->am.zcopy_thresh[0]))

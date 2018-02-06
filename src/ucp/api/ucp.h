@@ -1682,7 +1682,7 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream);
  *             ucp_worker_progress(worker);
  *             status = ucp_request_check_status(request);
  *         } while (status == UCS_INPROGRESS);
- *         ucp_request_release(request);
+ *         ucp_request_free(request);
  *         return status;
  *     }
  * }

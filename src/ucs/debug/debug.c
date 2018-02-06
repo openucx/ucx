@@ -975,6 +975,9 @@ void ucs_handle_error(const char *error_type, const char *message, ...)
     char *buffer;
     va_list ap;
 
+    ucs_debug_cleanup();
+    ucs_log_flush();
+
     buffer = ucs_alloca(buffer_size + 1);
     va_start(ap, message);
     vsnprintf(buffer, buffer_size, message, ap);
@@ -1134,6 +1137,7 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
            !strcmp(symbol, "ucs_debug_show_innermost_source_file") ||
            !strcmp(symbol, "ucs_log_default_handler") ||
            !strcmp(symbol, "__ucs_abort") ||
+           !strcmp(symbol, "ucs_log_dispatch") ||
            !strcmp(symbol, "__ucs_log") ||
            !strcmp(symbol, "ucs_debug_send_mail") ||
            (strstr(symbol, "_L_unlock_") == symbol) ||

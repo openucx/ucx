@@ -23,6 +23,15 @@
     <skipCopy>false</skipCopy>
   </properties>
 
+  <dependencies>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.12</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
   <build>
     <testResources>
       <testResource>
@@ -62,7 +71,7 @@
               <testExcludes>
                 <exclude>${testSources}</exclude>
               </testExcludes>
-            </configuration> 
+            </configuration>
             <goals>
               <goal>testCompile</goal>
             </goals>

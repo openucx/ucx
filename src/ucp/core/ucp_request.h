@@ -107,6 +107,8 @@ struct ucp_request {
                     ucp_tag_t        tag;
                     uint64_t         message_id;  /* message ID used in AM */
                     ucp_lane_index_t am_bw_index; /* AM BW lane index */
+                    uintptr_t        rreq_ptr;    /* receive request ptr on the
+                                                     recv side (used in AM rndv) */
                 } tag;
 
                 struct {
@@ -144,10 +146,6 @@ struct ucp_request {
                     ucp_rkey_h       rkey;           /* key for remote receive buffer */
                     uct_rkey_t       uct_rkey;       /* UCT remote key */
                 } rndv_put;
-
-                struct {
-                    uintptr_t     rreq_ptr;    /* receive request ptr on the recv side */
-                } rndv_data;
 
                 struct {
                     uintptr_t         remote_request; /* pointer to the send request on receiver side */
