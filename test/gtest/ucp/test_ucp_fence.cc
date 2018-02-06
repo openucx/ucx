@@ -5,6 +5,7 @@
 */
 
 #include "test_ucp_atomic.h"
+#include "common/gtest.h"
 
 class test_ucp_fence : public test_ucp_atomic {
 public:
@@ -65,7 +66,7 @@ public:
         }
 
         ~worker() {
-            ucs_assert(!running);
+            assert(!running);
         }
 
         static void *run(void *arg) {

@@ -502,7 +502,7 @@ unsigned ucp_test_base::entity::progress(int worker_index)
 }
 
 int ucp_test_base::entity::get_num_workers() const {
-    ucs_assert(m_workers.size() == size_t(num_workers));
+    assert(m_workers.size() == size_t(num_workers));
     return num_workers;
 }
 
