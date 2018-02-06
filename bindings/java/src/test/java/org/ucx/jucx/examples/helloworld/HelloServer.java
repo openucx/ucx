@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 package org.ucx.jucx.examples.helloworld;
@@ -32,23 +32,6 @@ public class HelloServer extends HelloWorld {
 
         sock.close();
     }
-
-    /**
-     * // TCP connect to peer in order to exchange worker address Socket sock =
-     * new Socket(host, port);
-     *
-     * // Print progress message only if not in quiet mode
-     * conditionalPrint(!quiet, "Connected to: " +
-     * sock.getInetAddress().getHostAddress());
-     *
-     * // Received remote address through TCP socket @SuppressWarnings("unused")
-     * byte[] remoteWorkerAddress = recvRemoteWorkerAddress(sock);
-     *
-     * // Send local Worker address through TCP socket
-     * sendLocalWorkerAddress(sock);
-     *
-     * sock.close();
-     */
 
     @Override
     protected void usage() {

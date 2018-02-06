@@ -8,7 +8,8 @@ if [ -z $1 ]; then
     exit 1
 fi
 
-classpath=.:../jucx-0.0.1-SNAPSHOT.jar
+jarfile=$(find $TOP_DIR/target -name jucx*.jar)
+classpath=.:$jarfile
 
 if [[ "server" == $1 ]]; then
 	cd $TOP_DIR/target/test-classes/ && java -cp $classpath org.ucx.jucx.examples.helloworld.HelloServer "${@:2}"
