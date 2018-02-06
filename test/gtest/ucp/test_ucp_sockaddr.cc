@@ -50,7 +50,7 @@ public:
     void start_listener(const struct sockaddr* addr)
     {
         ucs_status_t status = receiver().listen(addr, sizeof(*addr));
-        if (status == UCS_ERR_INVALID_ADDR) {
+        if (status == UCS_ERR_UNREACHABLE) {
             UCS_TEST_SKIP_R("cannot listen to " + ucs::sockaddr_to_str(addr));
         }
     }
@@ -160,7 +160,7 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
 
     ucs_status_t status = receiver().listen((const struct sockaddr*)&listen_addr,
                                             sizeof(listen_addr));
-    if (status == UCS_ERR_INVALID_ADDR) {
+    if (status == UCS_ERR_UNREACHABLE) {
         UCS_TEST_SKIP_R("cannot listen to " + ucs::sockaddr_to_str(&listen_addr));
     }
 

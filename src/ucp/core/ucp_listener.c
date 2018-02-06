@@ -167,7 +167,7 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
 
     ucs_error("none of the available transports can listen for connections on %s",
               ucs_sockaddr_str(params->sockaddr.addr, saddr_str, sizeof(saddr_str)));
-    status = UCS_ERR_INVALID_ADDR;
+    status = UCS_ERR_UNREACHABLE;
 
 err_free:
     ucs_free(listener);

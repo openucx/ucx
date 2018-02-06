@@ -476,8 +476,9 @@ ucs_status_t ucp_test_base::entity::listen(const struct sockaddr* saddr,
     restore_errors();
     if (status == UCS_OK) {
         m_listener.reset(listener, ucp_listener_destroy);
-    } else if (status != UCS_ERR_INVALID_ADDR) {
-        /* throw error if status is not (UCS_OK or UCS_ERR_INVALID_ADDR) */
+    } else if (status != UCS_ERR_UNREACHABLE) {
+        /* throw error if status is not (UCS_OK or UCS_ERR_UNREACHABLE).
+         * UCS_ERR_INVALID_PARAM may also return but then the test should fail */
         ASSERT_UCS_OK(status);
     }
     return status;
