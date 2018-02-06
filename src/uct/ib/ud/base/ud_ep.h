@@ -372,7 +372,10 @@ uct_ud_ep_ctl_op_isany(uct_ud_ep_t *ep)
 static UCS_F_ALWAYS_INLINE int
 uct_ud_ep_ctl_op_check_ex(uct_ud_ep_t *ep, uint32_t ops)
 {
-    return ep->tx.pending.ops == ops;
+    /* check that at least one the given ops is set and
+     * all ops not given are not set */
+    return (ep->tx.pending.ops & ops) &&
+           ((ep->tx.pending.ops & ~ops) == 0);
 }
 
 

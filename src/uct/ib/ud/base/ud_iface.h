@@ -128,9 +128,10 @@ struct uct_ud_iface {
         ucs_queue_head_t       resend_skbs;
         unsigned               resend_skbs_quota;
         ucs_arbiter_t          pending_q;
-        int                    pending_q_len;
-        int                    in_pending;
         ucs_queue_head_t       async_comp_q;
+        /* true if the pending_q could have been dispatched from the
+         * async progress */
+        uint8_t                pending_async_ev;
     } tx;
     struct {
         ucs_time_t           peer_timeout;
@@ -376,26 +377,33 @@ uct_ud_iface_get_async_time(uct_ud_iface_t *iface)
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_progress_pending(uct_ud_iface_t *iface, const uintptr_t is_async)
 {
+    iface->tx.pending_async_ev = 0;
 
     if (!uct_ud_iface_can_tx(iface)) {
         return;
     }
 
-    iface->tx.in_pending = 1;
-    ucs_arbiter_dispatch(&iface->tx.pending_q, 1,
-             uct_ud_ep_do_pending, (void *)is_async);
-    iface->tx.in_pending = 0;
+    ucs_arbiter_dispatch(&iface->tx.pending_q, 1, uct_ud_ep_do_pending,
+                         (void *)is_async);
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_ud_iface_progress_pending_tx(uct_ud_iface_t *iface)
+static UCS_F_ALWAYS_INLINE int
+uct_ud_iface_has_pending_async_ev(uct_ud_iface_t *iface)
 {
-    if (ucs_unlikely(iface->tx.pending_q_len > 0 &&
-                     iface->tx.in_pending == 0)) {
-        iface->tx.in_pending = 1;
-        ucs_arbiter_dispatch(&iface->tx.pending_q, 1,
-                             uct_ud_ep_do_pending, (void *)0);
-        iface->tx.in_pending = 0;
+    return ucs_unlikely(iface->tx.pending_async_ev);
+}
+
+#define UCT_UD_IFACE_CHECK_ASYNC_PENDING(iface, status) \
+    if (uct_ud_iface_has_pending_async_ev(iface)) { \
+        uct_ud_leave(iface); \
+        return status; \
+    }
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_iface_raise_pending_async_ev(uct_ud_iface_t *iface)
+{
+    if (!ucs_arbiter_is_empty(&iface->tx.pending_q)) {
+        iface->tx.pending_async_ev = 1;
     }
 }
 

@@ -145,7 +145,9 @@ ucs_status_t uct_ud_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                      0, iface->super.config.max_inline, "am_short");
 
     uct_ud_enter(&iface->super);
-    uct_ud_iface_progress_pending_tx(&iface->super);
+
+    UCT_UD_IFACE_CHECK_ASYNC_PENDING(&iface->super, UCS_ERR_NO_RESOURCE);
+
     status = uct_ud_am_common(&iface->super, &ep->super, id, &skb);
     if (status != UCS_OK) {
         uct_ud_leave(&iface->super);
@@ -180,7 +182,7 @@ static ssize_t uct_ud_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     size_t length;
 
     uct_ud_enter(&iface->super);
-    uct_ud_iface_progress_pending_tx(&iface->super);
+    UCT_UD_IFACE_CHECK_ASYNC_PENDING(&iface->super, UCS_ERR_NO_RESOURCE);
     status = uct_ud_am_common(&iface->super, &ep->super, id, &skb);
     if (status != UCS_OK) {
         uct_ud_leave(&iface->super);
@@ -217,7 +219,7 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                               uct_iov_total_length(iov, iovcnt));
 
     uct_ud_enter(&iface->super);
-    uct_ud_iface_progress_pending_tx(&iface->super);
+    UCT_UD_IFACE_CHECK_ASYNC_PENDING(&iface->super, UCS_ERR_NO_RESOURCE);
     status = uct_ud_am_common(&iface->super, &ep->super, id, &skb);
     if (status != UCS_OK) {
         uct_ud_leave(&iface->super);
@@ -256,7 +258,7 @@ ucs_status_t uct_ud_verbs_ep_put_short(uct_ep_h tl_ep,
 
     /* TODO: UCT_CHECK_LENGTH(length <= iface->config.max_inline, "put_short"); */
     uct_ud_enter(&iface->super);
-    uct_ud_iface_progress_pending_tx(&iface->super);
+    UCT_UD_IFACE_CHECK_ASYNC_PENDING(&iface->super, UCS_ERR_NO_RESOURCE);
     skb = uct_ud_ep_get_tx_skb(&iface->super, &ep->super);
     if (!skb) {
         uct_ud_leave(&iface->super);
@@ -382,8 +384,10 @@ static unsigned uct_ud_verbs_iface_progress(uct_iface_h tl_iface)
     } else {
         count = 0;
     }
+
     uct_ud_iface_progress_pending(&iface->super, 0);
     uct_ud_leave(&iface->super);
+
     return count;
 }
 
