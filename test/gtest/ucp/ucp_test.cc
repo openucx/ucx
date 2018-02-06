@@ -10,6 +10,10 @@
 #include <ucs/stats/stats.h>
 
 
+namespace ucp {
+const uint32_t MAGIC = 0xd7d7d7d7U;
+}
+
 std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
 {
     std::vector<std::string>::const_iterator iter;

@@ -7,12 +7,13 @@
 
 #include "test_ucp_tag.h"
 
+#include "ucp_datatype.h"
+
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/datastruct/queue.h>
 }
 
-#include <common/test_helpers.h>
 #include <iostream>
 
 

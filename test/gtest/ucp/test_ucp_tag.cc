@@ -7,7 +7,8 @@
 
 #include "test_ucp_tag.h"
 
-#include <common/test_helpers.h>
+#include "ucp_datatype.h"
+
 extern "C" {
 #include <ucp/core/ucp_worker.h>
 }

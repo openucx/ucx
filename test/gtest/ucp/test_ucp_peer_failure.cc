@@ -5,6 +5,7 @@
 */
 
 #include "test_ucp_tag.h"
+#include "ucp_datatype.h"
 
 extern "C" {
 #include <malloc.h>

@@ -9,8 +9,8 @@
 #include <set>
 #include <vector>
 
+#include "ucp_datatype.h"
 #include "ucp_test.h"
-#include <common/test_helpers.h>
 
 
 class test_ucp_stream_base : public ucp_test {
