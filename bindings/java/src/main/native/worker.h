@@ -26,6 +26,10 @@ public:
         return event_queue;
     }
 
+    uint32_t get_queue_size() const {
+        return queue_size;
+    }
+
     ucp_worker_h get_ucp_worker() const {
         return ucp_worker;
     }

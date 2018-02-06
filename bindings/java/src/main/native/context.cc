@@ -48,7 +48,7 @@ ucs_status_t context::create_context() {
         return status;
     }
 
-    uint64_t features   =   UCP_FEATURE_TAG;
+    uint64_t features   =   UCP_FEATURE_STREAM;
     uint64_t field_mask =   UCP_PARAM_FIELD_FEATURES        |
                             UCP_PARAM_FIELD_REQUEST_INIT    |
                             UCP_PARAM_FIELD_REQUEST_SIZE;

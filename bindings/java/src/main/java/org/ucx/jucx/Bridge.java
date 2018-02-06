@@ -31,9 +31,24 @@ public class Bridge {
         return createWorkerNative(maxCompletions, compQueue, worker);
     }
 
-    private static native void releaseWorkerNative(long workerNativeId);
+    private static native void destroyWorkerNative(long workerNativeId);
 
-    static void releaseWorker(final Worker worker) {
-        releaseWorkerNative(worker.getNativeId());
+    static void destroyWorker(final Worker worker) {
+        destroyWorkerNative(worker.getNativeId());
+    }
+
+    private static native long createEndPointNative(long localWorkerNativeId,
+                                                    byte[] remoteWorkerAddress);
+
+    static long createEndPoint(final Worker localWorker,
+                               final byte[] remoteWorkerAddress) {
+        return createEndPointNative(localWorker.getNativeId(),
+                                    remoteWorkerAddress);
+    }
+
+    private static native void destroyEndPointNative(long epNativeId);
+
+    static void destroyEndPoint(final EndPoint endPoint) {
+        destroyEndPointNative(endPoint.getNativeId());
     }
 }

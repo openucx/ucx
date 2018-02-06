@@ -23,10 +23,28 @@ JNIEXPORT jlong JNICALL Java_org_ucx_jucx_Bridge_createWorkerNative
 
 /*
  * Class:     org_ucx_jucx_Bridge
- * Method:    releaseWorkerNative
+ * Method:    destroyWorkerNative
  * Signature: (J)V
  */
-JNIEXPORT void JNICALL Java_org_ucx_jucx_Bridge_releaseWorkerNative
+JNIEXPORT void JNICALL Java_org_ucx_jucx_Bridge_destroyWorkerNative
+  (JNIEnv *, jclass, jlong);
+
+
+/*
+ * Class:     org_ucx_jucx_Bridge
+ * Method:    createEndPointNative
+ * Signature: (J[B)J
+ */
+JNIEXPORT jlong JNICALL Java_org_ucx_jucx_Bridge_createEndPointNative
+  (JNIEnv *, jclass, jlong, jbyteArray);
+
+
+/*
+ * Class:     org_ucx_jucx_Bridge
+ * Method:    destroyEndPointNative
+ * Signature: (J)V
+ */
+JNIEXPORT void JNICALL Java_org_ucx_jucx_Bridge_destroyEndPointNative
   (JNIEnv *, jclass, jlong);
 }
 

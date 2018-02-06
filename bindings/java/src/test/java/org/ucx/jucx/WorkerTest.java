@@ -67,7 +67,7 @@ public class WorkerTest {
     @Test(expected = IllegalArgumentException.class)
     public void testWorkerCbNullInitialization() {
         // Random legal event queue size
-        int maxEvents = new Random().nextInt(Worker.MAX_QUEUED_EVENTS) + 1;
+        int maxEvents = new Random().nextInt(Worker.MAX_QUEUED_COMPLETIONS) + 1;
         try {
             Worker worker = new Worker(null, maxEvents);
         } catch (IOException e) {
@@ -89,7 +89,7 @@ public class WorkerTest {
     @Test(expected = IllegalArgumentException.class)
     public void testWorkerQueueSizeExceedingInitialization() {
         try {
-            Worker worker = new Worker(cb, Worker.MAX_QUEUED_EVENTS + 1);
+            Worker worker = new Worker(cb, Worker.MAX_QUEUED_COMPLETIONS + 1);
         } catch (IOException e) {
             fail(e.getMessage());
         }
