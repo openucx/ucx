@@ -18,13 +18,13 @@ Features:
 - Multi-rail support for eager and rendezvous protocols
 - Added support for tag-matching communications with CUDA buffers
 - Added ucp_rkey_ptr() to obtain pointer for remote memory
-- Avoid progress overhead on unused transprots
+- Avoid progress overhead on unused transports
 - Improved scalability of software tag-matching by using a hash table
 - Added transparent huge-pages allocator
 - Added non-blocking flush and disconnect for UCP
 - Support fixed-address memory allocation via ucp_mem_map()
 - Added ucp_tag_send_nbr() API to avoid send request allocation
-- Support global addressing in all IB transprots
+- Support global addressing in all IB transports
 - Add support for external epoll fd and edge-triggered events
 - Added registration cache for knem
 - Initial support for Java bindings
