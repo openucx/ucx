@@ -5,8 +5,8 @@
  */
 
 
-#ifndef UCP_DATATYPE_H_
-#define UCP_DATATYPE_H_
+#ifndef UCP_DT_GENERIC_H_
+#define UCP_DT_GENERIC_H_
 
 #include <ucp/api/ucp.h>
 
@@ -28,4 +28,4 @@ static inline ucp_dt_generic_t* ucp_dt_generic(ucp_datatype_t datatype)
 #define UCP_DT_IS_GENERIC(_datatype) \
           (((_datatype) & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_GENERIC)
 
-#endif
+#endif /* UCP_DT_GENERIC_H_ */
