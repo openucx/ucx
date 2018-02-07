@@ -45,6 +45,10 @@ static const char * ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_LAST]      = NULL,
 };
 
+uct_memory_type_t ucm_to_uct_mem_type_map[] = {
+    [UCM_MEM_TYPE_CUDA] = UCT_MD_MEM_TYPE_CUDA,
+};
+
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which network device(s) to use. The order is not meaningful.\n"
@@ -194,6 +198,11 @@ static ucs_config_field_t ucp_config_table[] = {
   {"RNDV_FRAG_SIZE", "256k",
    "RNDV fragment size \n",
    ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+  /*TODO: pointer cache per memory type */
+  {"MEM_TYPE_PTR_CACHE", "y",
+   "Enable memory type(cuda) pointer cache \n",
+   ucs_offsetof(ucp_config_t, ctx.mem_type_ptr_cache), UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };
@@ -575,6 +584,10 @@ static void ucp_free_resources(ucp_context_t *context)
 {
     ucp_rsc_index_t i;
 
+    if (context->mem_type_ptrcache != NULL) {
+        ucs_ptrcache_destroy(context->mem_type_ptrcache);
+    }
+
     ucs_free(context->tl_rscs);
     for (i = 0; i < context->num_mds; ++i) {
         uct_md_close(context->tl_mds[i].md);
@@ -750,7 +763,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->num_mds     = 0;
     context->tl_rscs     = NULL;
     context->num_tls     = 0;
-    context->num_mem_type_mds = 0;
+    context->num_mem_type_mds  = 0;
+    context->mem_type_ptrcache = NULL;
 
     status = ucp_check_resource_config(config);
     if (status != UCS_OK) {
@@ -812,6 +826,14 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
             ucs_debug("closing md %s because it has no selected transport resources",
                       md_rscs[i].md_name);
             uct_md_close(context->tl_mds[md_index].md);
+        }
+    }
+
+    if (context->num_mem_type_mds && context->config.ext.mem_type_ptr_cache ) {
+        status = ucs_ptrcache_create("mem_type_ptr_cache", &context->mem_type_ptrcache);
+        if (status != UCS_OK) {
+            ucs_debug("could not create pointer cache for mem_type allocations");
+            goto err_free_context_resources;
         }
     }
 
