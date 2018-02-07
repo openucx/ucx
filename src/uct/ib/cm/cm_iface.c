@@ -56,6 +56,9 @@ static unsigned uct_cm_iface_progress(void *arg)
         ++count;
     }
 
+    iface->num_outstanding -= iface->num_completions;
+    iface->num_completions  = 0;
+
     /* Dispatch pending operations */
     uct_pending_queue_dispatch(priv, &iface->notify_q,
                                iface->num_outstanding < iface->config.max_outstanding);
@@ -154,7 +157,10 @@ static void uct_cm_iface_outstanding_remove(uct_cm_iface_t* iface,
     ucs_queue_for_each_safe(op, iter, &iface->outstanding_q, queue) {
         if (op->is_id && (op->id == id)) {
             ucs_queue_del_iter(&iface->outstanding_q, iter);
-            --iface->num_outstanding;
+            /* can not directly release resources from here because
+             * it will break pending ordering
+             */
+            ++iface->num_completions;
             ucs_free(op);
             return;
         }
@@ -273,6 +279,7 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     self->num_outstanding     = 0;
+    self->num_completions     = 0;
     self->service_id          = 0;
     self->config.timeout_ms   = (int)(config->timeout * 1e3 + 0.5);
     self->config.max_outstanding = config->max_outstanding;
