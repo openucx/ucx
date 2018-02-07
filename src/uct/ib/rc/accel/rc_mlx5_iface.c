@@ -91,7 +91,10 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     status = uct_rc_iface_query(iface, iface_attr,
                                 UCT_IB_MLX5_PUT_MAX_SHORT(0),
-                                UCT_IB_MLX5_AM_MAX_SHORT(0),
+#if HAVE_IBV_EXP_DM
+                                iface->dm.dm ? iface->dm.dm->seg_len :
+#endif
+                                               UCT_IB_MLX5_AM_MAX_SHORT(0),
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(0),
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_IOV);
     if (status != UCS_OK) {
@@ -265,6 +268,15 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
                              sizeof(struct mlx5_wqe_raddr_seg) -
                              sizeof(struct mlx5_wqe_ctrl_seg)) /
                              sizeof(struct mlx5_wqe_data_seg));
+
+#if HAVE_IBV_EXP_DM
+    self->super.dm.am_short  = self->super.dm.dm ? uct_rc_mlx5_ep_am_short_dm :
+                                                   uct_rc_mlx5_ep_am_short_inline;
+#if IBV_EXP_HW_TM
+    self->super.dm.tag_short = self->super.dm.dm ? uct_rc_mlx5_ep_tag_eager_short_dm :
+                                                   uct_rc_mlx5_ep_tag_eager_short_inline;
+#endif
+#endif
 
     return UCS_OK;
 }

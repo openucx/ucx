@@ -78,6 +78,12 @@ ucs_status_t uct_rc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
 
 ucs_status_t uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                      const void *payload, unsigned length);
+#if HAVE_IBV_EXP_DM
+ucs_status_t uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t header,
+                                            const void *payload, unsigned length);
+ucs_status_t uct_rc_mlx5_ep_am_short_dm(uct_ep_h tl_ep, uint8_t id, uint64_t header,
+                                        const void *payload, unsigned length);
+#endif
 
 ssize_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                 uct_pack_callback_t pack_cb, void *arg,
@@ -150,6 +156,14 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
                                              const void* header,
                                              unsigned header_length,
                                              unsigned flags);
+#if HAVE_IBV_EXP_DM
+ucs_status_t
+uct_rc_mlx5_ep_tag_eager_short_inline(uct_ep_h tl_ep, uct_tag_t tag,
+                                      const void *data, size_t length);
+ucs_status_t
+uct_rc_mlx5_ep_tag_eager_short_dm(uct_ep_h tl_ep, uct_tag_t tag,
+                                         const void *data, size_t length);
+#endif
 #endif
 
 #endif
