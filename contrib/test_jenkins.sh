@@ -408,6 +408,57 @@ run_uct_hello() {
 	rm -f ./uct_hello_world
 }
 
+run_client_server() {
+    dev=$1
+
+    test_name=ucp_client_server
+
+    if [ ! -x ${test_name} ]
+    then
+        gcc -o ${test_name} ${ucx_inst}/share/ucx/examples/${test_name}.c \
+        -lucp -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
+        -Wl,-rpath=${ucx_inst}/lib
+    fi
+
+    iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
+    server_ip=`ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}'`
+
+    # run server side
+    UCX_NET_DEVICES=${dev} UCX_TLS=rc ./${test_name} &
+    hw_server_pid=$!
+
+    sleep 5
+
+    # need to be ran in background to reflect application PID in $!
+    UCX_NET_DEVICES=${dev} UCX_TLS=rc ./${test_name} ${server_ip} &
+    hw_client_pid=$!
+
+    wait ${hw_client_pid} ${hw_server_pid}
+
+}
+
+run_ucp_client_server() {
+
+    if [ ! -r /dev/infiniband/rdma_cm  ]
+    then
+        exit 0
+    fi
+
+    which ibdev2netdev
+    if [ $? -eq 1 ]
+    then
+        exit 0
+    fi
+
+
+    for ucx_dev in $(get_active_ib_devices)
+    do
+        echo "==== Running UCP client-server  ===="
+        run_client_server ${ucx_dev}
+    done
+    rm -f ./ucp_client_server
+}
+
 #
 # Run UCX performance test with MPI
 #
@@ -706,6 +757,7 @@ run_tests() {
 
 	do_distributed_task 1 4 run_ucp_hello
 	do_distributed_task 2 4 run_uct_hello
+	do_distributed_task 1 4 run_ucp_client_server
 	do_distributed_task 3 4 test_profiling
 
 	# all are running gtest
