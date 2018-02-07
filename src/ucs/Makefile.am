@@ -36,6 +36,7 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/math.h \
 	sys/preprocessor.h \
 	sys/rcache.h \
+	sys/ptrcache.h \
 	sys/string.h \
 	time/time_def.h \
 	type/class.h \
@@ -116,6 +117,7 @@ libucs_la_SOURCES = \
 	sys/math.c \
 	sys/numa.c \
 	sys/rcache.c \
+	sys/ptrcache.c \
 	sys/string.c \
 	sys/sys.c \
 	time/time.c \
