@@ -15,6 +15,7 @@
 void ucs_arbiter_init(ucs_arbiter_t *arbiter)
 {
     arbiter->current = NULL;
+    UCS_ARBITER_GUARD_INIT(arbiter);
 }
 
 void ucs_arbiter_group_init(ucs_arbiter_group_t *group)
@@ -96,6 +97,8 @@ void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
     ucs_arbiter_elem_t *tail = group->tail;
     ucs_arbiter_elem_t *current, *head;
 
+    UCS_ARBITER_GUARD_CHECK(arbiter);
+
     ucs_assert(tail != NULL);
     head = tail->next;
 
@@ -164,7 +167,9 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
 
             ucs_assert(elem->group == group);
             ucs_trace_poll("dispatching arbiter element %p", elem);
+            UCS_ARBITER_GUARD_RAISE(arbiter);
             result = cb(arbiter, elem, cb_arg);
+            UCS_ARBITER_GUARD_LOWER(arbiter);
             ucs_trace_poll("dispatch result %d", result);
             ++group_dispatch_count;
 
