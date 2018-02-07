@@ -65,6 +65,7 @@
         EXPECT_EQ(UCS_OK, _status) << "Error: " << ucs_status_string(_status); \
     } while (0)
 
+
 #define ASSERT_UCS_OK(_expr, ...) \
     do { \
         ucs_status_t _status = (_expr); \
@@ -73,6 +74,7 @@
         } \
     } while (0)
 
+
 #define ASSERT_UCS_OK_OR_INPROGRESS(_expr) \
     do { \
         ucs_status_t _status = (_expr); \
@@ -80,6 +82,7 @@
             UCS_TEST_ABORT("Error: " << ucs_status_string(_status)); \
         } \
     } while (0)
+
 
 #define EXPECT_UD_CHECK(_val1, _val2, _exp_ud, _exp_non_ud) \
     do { \
@@ -118,8 +121,10 @@
 #define UCS_TEST_SCOPE_EXIT(...) \
     _UCS_TEST_SCOPE_EXIT(UCS_PP_APPEND_UNIQUE_ID(onexit), ## __VA_ARGS__)
 
+
 #define UCS_TEST_SCOPE_EXIT_END \
     } UCS_PP_APPEND_UNIQUE_ID(onexit_var);
+
 
 /**
  * Make uct_iov_t iov[iovcnt] array with pointer elements to original buffer
