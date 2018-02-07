@@ -515,7 +515,8 @@ ucp_send_request_get_next_am_bw_lane(ucp_request_t *req, int reset)
     ucs_assert(ucp_ep_config(req->send.ep)->key.am_bw_lanes[0] != UCP_NULL_LANE);
 
     if (req->send.pending_lane != UCP_NULL_LANE) {
-        /* if pending lane is not NULL - we are in pending mode,
+        /* FIXME:
+         * if pending lane is not NULL - we are in pending mode,
          * called from arbiter. do not allow change lane due
          * to arbiter data corruption */
         return req->send.pending_lane;
