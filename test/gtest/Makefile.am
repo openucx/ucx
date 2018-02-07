@@ -138,6 +138,7 @@ gtest_SOURCES = \
 	ucs/test_pgtable.cc \
 	ucs/test_profile.cc \
 	ucs/test_rcache.cc \
+	ucs/test_ptrcache.cc \
 	ucs/test_stats.cc \
 	ucs/test_sys.cc \
 	ucs/test_time.cc \
