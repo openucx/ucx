@@ -37,10 +37,22 @@ typedef enum ucm_event_type {
     UCM_EVENT_VM_MAPPED       = UCS_BIT(16),
     UCM_EVENT_VM_UNMAPPED     = UCS_BIT(17),
 
+    /* Pointer cache events */
+    UCM_EVENT_MEM_TYPE_ALLOC  = UCS_BIT(20),
+    UCM_EVENT_MEM_TYPE_FREE   = UCS_BIT(21),
+
     /* Auxiliary flags */
     UCM_EVENT_FLAG_NO_INSTALL = UCS_BIT(24)
 
 } ucm_event_type_t;
+
+/**
+ * @brief Memory types for alloc and free events
+ */
+typedef enum ucm_mem_type {
+    /*cuda memory */
+    UCM_MEM_TYPE_CUDA         = UCS_BIT(0)
+} ucm_mem_type_t;
 
 
 /**
@@ -127,6 +139,16 @@ typedef union ucm_event {
         void           *address;
         size_t         size;
     } vm_mapped, vm_unmapped;
+
+    /*
+     * memory type allocation and deallocation event
+     */
+
+    struct {
+        void           *address;
+        size_t         size;
+        ucm_mem_type_t mem_type;
+    } mem_type;
 
 } ucm_event_t;
 
