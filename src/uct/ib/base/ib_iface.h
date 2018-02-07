@@ -304,6 +304,9 @@ static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
         VALGRIND_MAKE_MEM_DEFINED(_hdr, _wc[i].byte_len); \
                1; }); ++_i)
 
+#define UCT_IB_MAX_ZCOPY_LOG_SGE(_iface) \
+    (uct_ib_iface_device(_iface)->max_zcopy_log_sge)
+
 /**
  * Fill ibv_sge data structure by data provided in uct_iov_t
  * The function avoids copying IOVs with zero length

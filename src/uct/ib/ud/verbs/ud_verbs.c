@@ -90,7 +90,7 @@ uct_ud_verbs_ep_tx_inlv(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep,
     ret = ibv_post_send(iface->super.qp, &iface->tx.wr_inl, &bad_wr);
     ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
     uct_ib_log_post_send(&iface->super.super, iface->super.qp, &iface->tx.wr_inl,
-                         uct_ud_dump_packet);
+                         INT_MAX, uct_ud_dump_packet);
     --iface->super.tx.available;
 }
 
@@ -109,7 +109,7 @@ uct_ud_verbs_ep_tx_skb(uct_ud_verbs_iface_t *iface,
     ret = ibv_post_send(iface->super.qp, &iface->tx.wr_skb, &bad_wr);
     ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
     uct_ib_log_post_send(&iface->super.super, iface->super.qp, &iface->tx.wr_skb,
-                         uct_ud_dump_packet);
+                         INT_MAX, uct_ud_dump_packet);
     --iface->super.tx.available;
 }
 
