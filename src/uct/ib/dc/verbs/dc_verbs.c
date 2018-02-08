@@ -733,12 +733,7 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
         iface->super.super.tx.cq_available++;
     }
 
-    if (uct_dc_iface_dci_can_alloc(&iface->super)) {
-        ucs_arbiter_dispatch(uct_dc_iface_dci_waitq(&iface->super), 1,
-                             uct_dc_iface_dci_do_pending_wait, NULL);
-    }
-    ucs_arbiter_dispatch(uct_dc_iface_tx_waitq(&iface->super), 1, 
-                         uct_dc_iface_dci_do_pending_tx, NULL);
+    uct_dc_iface_progress_pending(&iface->super);
     return num_wcs;
 }
 

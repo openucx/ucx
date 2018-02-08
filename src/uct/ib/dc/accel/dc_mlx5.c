@@ -569,12 +569,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     uct_dc_iface_dci_put(&iface->super, dci);
     uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
 
-    if (uct_dc_iface_dci_can_alloc(&iface->super)) {
-        ucs_arbiter_dispatch(uct_dc_iface_dci_waitq(&iface->super), 1,
-                             uct_dc_iface_dci_do_pending_wait, NULL);
-    }
-    ucs_arbiter_dispatch(uct_dc_iface_tx_waitq(&iface->super), 1, 
-                         uct_dc_iface_dci_do_pending_tx, NULL);
+    uct_dc_iface_progress_pending(&iface->super);
     return 1;
 }
 
