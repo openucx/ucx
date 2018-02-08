@@ -216,7 +216,7 @@ int ucp_ep_is_stub(ucp_ep_h ep)
 }
 
 static void
-ucp_ep_setup_err_handler(ucp_ep_h ep, ucp_err_handler_cb_t err_handler_cb)
+ucp_ep_setup_err_handler(ucp_ep_h ep, const ucp_err_handler_t *err_handler)
 {
     khiter_t hash_it;
     int hash_extra_status = 0;
@@ -227,7 +227,8 @@ ucp_ep_setup_err_handler(ucp_ep_h ep, ucp_err_handler_cb_t err_handler_cb)
         ucs_fatal("Hash failed on setup error handler of endpoint %p with status %d ",
                   ep, hash_extra_status);
     }
-    kh_value(&ep->worker->ep_errh_hash, hash_it) = err_handler_cb;
+    kh_value(&ep->worker->ep_errh_hash, hash_it) = err_handler->cb;
+    ep->user_data = err_handler->arg;
 }
 
 static ucs_status_t
@@ -243,11 +244,12 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
         }
     }
 
-    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER_CB) {
-        ucp_ep_setup_err_handler(ep, params->err_handler_cb);
+    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER) {
+        ucp_ep_setup_err_handler(ep, &params->err_handler);
     }
 
-    ep->user_data = UCP_PARAM_VALUE(EP, params, user_data, USER_DATA, NULL);
+    ep->user_data = UCP_PARAM_VALUE(EP, params, user_data, USER_DATA,
+                                    ep->user_data);
 
     return UCS_OK;
 }
