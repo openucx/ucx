@@ -769,8 +769,7 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
                                                          &ep->super.super,
                                                          skb->status);
                 if (status != UCS_OK) {
-                    ucs_fatal("send completion with error: %s",
-                              ucs_status_string(status));
+                    ucs_fatal("transport error: %s", ucs_status_string(status));
                 }
             }
         }
