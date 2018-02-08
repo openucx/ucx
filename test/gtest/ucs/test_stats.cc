@@ -149,7 +149,6 @@ public:
 
     void read_and_check_stats(ucs_stats_node_t *data_nodes[NUM_DATA_NODES]) {
         ucs_list_link_t *list = ucs_stats_server_get_stats(m_server);
-        ucs_assert(1ul == ucs_list_length(list));
         ASSERT_EQ(1ul, ucs_list_length(list));
         check_tree(ucs_list_head(list, ucs_stats_node_t, list), data_nodes);
         ucs_stats_server_purge_stats(m_server);

@@ -6,8 +6,6 @@
 
 #include "test_ucp_tag.h"
 
-#include <common/test_helpers.h>
-
 
 class test_ucp_tag_perf : public test_ucp_tag {
 public:
@@ -36,7 +34,7 @@ double test_ucp_tag_perf::check_perf(size_t count, bool is_exp)
 
         for (size_t i = 0; i < count; ++i) {
             request *rreq = recv_nb(NULL, 0, DATATYPE, i, TAG_MASK);
-            ucs_assert(!UCS_PTR_IS_ERR(rreq));
+            assert(!UCS_PTR_IS_ERR(rreq));
             EXPECT_FALSE(rreq->completed);
             rreqs.push_back(rreq);
         }
