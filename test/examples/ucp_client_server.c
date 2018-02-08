@@ -69,7 +69,7 @@ static void stream_recv_cb(void *request, ucs_status_t status, size_t length)
 }
 
 /**
- * The callback on the sendinf side, which is invoked after finishing sending
+ * The callback on the sending side, which is invoked after finishing sending
  * the stream message.
  */
 static void stream_send_cb(void *request, ucs_status_t status)
@@ -134,7 +134,7 @@ void set_listen_addr(struct sockaddr_in *listen_addr)
 }
 
 /**
- * Set and address to connect to. A given IP address on a well known port.
+ * Set an address to connect to. A given IP address on a well known port.
  */
 void set_connect_addr(const char *ip, struct sockaddr_in *connect_addr)
 {
@@ -183,6 +183,20 @@ static ucs_status_t start_client(ucp_worker_h ucp_worker, const char *ip,
 
     set_connect_addr(ip, &connect_addr);
 
+    /*
+     * Endpoint field mask bits:
+     * UCP_EP_PARAM_FIELD_FLAGS             - Use the value of the 'flags' field.
+     * UCP_EP_PARAM_FIELD_SOCK_ADDR         - Use a remote sockaddr to connect
+     *                                        to the remote peer.
+     * UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE - Error handling mode - this flag
+     *                                        is temporarily required since the
+     *                                        endpoint will be closed with
+     *                                        UCP_EP_CLOSE_MODE_FORCE which
+     *                                        requires this mode.
+     *                                        Once UCP_EP_CLOSE_MODE_FORCE is
+     *                                        removed, the error handling mode
+     *                                        will be removed.
+     */
     ep_params.field_mask       = UCP_EP_PARAM_FIELD_FLAGS     |
                                  UCP_EP_PARAM_FIELD_SOCK_ADDR |
                                  UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
@@ -202,11 +216,11 @@ static ucs_status_t start_client(ucp_worker_h ucp_worker, const char *ip,
 /**
  * Verify the received message on the server side and print the result.
  */
-static int verify_result(int *is_server, char *recv_message)
+static int verify_result(int is_server, char *recv_message)
 {
     int ret;
 
-    if (*is_server) {
+    if (is_server) {
         if (!strcmp(recv_message, test_message)) {
             printf("\n\n----- UCP TEST SUCCESS -------\n\n");
             printf("%s", recv_message);
@@ -237,14 +251,14 @@ static int verify_result(int *is_server, char *recv_message)
  * The client sends a message to the server and waits until the send it completed.
  * The server receives a message from the client and waits for its completion.
  */
-static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int *is_server)
+static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server)
 {
     char recv_message[TEST_STRING_LEN]= "";
     test_req_t *request;
     size_t length;
     int ret;
 
-    if (!(*is_server)) {
+    if (!is_server) {
         /* Client sends a message to the server using the stream API */
         request = ucp_stream_send_nb(ep, test_message, 1,
                                      ucp_dt_make_contig(TEST_STRING_LEN),
@@ -413,7 +427,7 @@ int main(int argc, char **argv)
     }
 
     /* Client-Server communication via Stream API */
-    ret = send_recv_stream(ucp_worker, ep, &is_server);
+    ret = send_recv_stream(ucp_worker, ep, is_server);
 
 
     /* Finalization or error flow */
