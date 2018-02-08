@@ -552,8 +552,6 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
             if (ep->dci == UCT_DC_EP_NO_DCI) {
                 ucs_arbiter_group_schedule(uct_dc_iface_dci_waitq(iface),
                                            &ep->arb_group);
-                ucs_arbiter_dispatch(uct_dc_iface_dci_waitq(iface), 1,
-                                     uct_dc_iface_dci_do_pending_wait, NULL);
             } else {
                 /* Need to schedule fake ep in TX arbiter, because it
                  * might have been descheduled due to lack of FC window. */
@@ -561,8 +559,7 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
                                            &ep->arb_group);
             }
 
-            ucs_arbiter_dispatch(uct_dc_iface_tx_waitq(iface), 1,
-                                 uct_dc_iface_dci_do_pending_tx, NULL);
+            uct_dc_iface_progress_pending(iface);
         }
     }
 
