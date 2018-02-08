@@ -305,6 +305,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     ucp_rsc_index_t rsc_index;
     ucp_dt_state_t state;
     uct_rkey_t uct_rkey;
+    size_t min_zcopy;
+    size_t max_zcopy;
+    size_t tail;
 
     if (ucp_ep_is_stub(ep)) {
         rndv_req->send.lane = 0;
@@ -336,6 +339,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     rsc_index = ucp_ep_get_rsc_index(rndv_req->send.ep, rndv_req->send.lane);
     align     = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.opt_zcopy_align;
     ucp_mtu   = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.align_mtu;
+    min_zcopy = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.min_zcopy;
+    max_zcopy = ucp_ep_config(rndv_req->send.ep)->tag.rndv.max_get_zcopy;
 
     offset    = rndv_req->send.state.dt.offset;
     remainder = (uintptr_t)rndv_req->send.buffer % align;
@@ -345,9 +350,31 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     } else {
         chunk = ucs_align_up(rndv_req->send.length /
                              rndv_req->send.rndv_get.lane_count, align);
-        length = ucs_min(ucs_min(chunk, rndv_req->send.length - offset),
-                         ucp_ep_config(rndv_req->send.ep)->tag.rndv.max_get_zcopy);
+        length = ucs_min(ucs_min(chunk, rndv_req->send.length - offset), max_zcopy);
     }
+
+    /* ensure that tail (rest of message) is over min_zcopy */
+    tail = rndv_req->send.length - (offset + length);
+    if (ucs_unlikely(tail && (tail < min_zcopy))) {
+        /* ok, tail is less get zcopy minimal & could not be processed as
+         * standalone operation */
+        /* check if we have room to increase current part and not
+         * step over max_zcopy */
+        if (length < (max_zcopy - tail)) {
+            /* if we can encrease length by min_zcopy - let's do it to
+             * avoid small tail (we have limitation on minimal get zcopy) */
+            length += tail;
+        } else {
+            /* reduce current length by align or min_zcopy value
+             * to process it on next round */
+            ucs_assert(length > ucs_max(min_zcopy, align));
+            length -= ucs_max(min_zcopy, align);
+        }
+    }
+
+    ucs_assert(length >= min_zcopy);
+    ucs_assert((rndv_req->send.length - (offset + length) == 0) ||
+               (rndv_req->send.length - (offset + length) >= min_zcopy));
 
     ucs_trace_data("req %p: offset %zu remainder %zu rma-get to %p len %zu lane %d",
                    rndv_req, offset, remainder, rndv_req->send.buffer + offset,
