@@ -487,6 +487,11 @@ public:
         return *this;
     }
 
+    message_stream& operator<< (const size_value& value) {
+            msg << value.value();
+            return *this;
+    }
+
     std::iostream::fmtflags flags() {
         return msg.flags();
     }
