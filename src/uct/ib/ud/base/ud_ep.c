@@ -467,7 +467,7 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
         ep = uct_ud_ep_create_passive(iface, ctl);
         ucs_assert_always(ep != NULL);
         ep->rx.ooo_pkts.head_sn = neth->psn;
-        uct_ud_peer_copy(&ep->peer, &ctl->peer);
+        uct_ud_peer_copy(&ep->peer, (void*)&ctl->peer);
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
         uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_PRIVATE);
     } else {
@@ -475,7 +475,7 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
             /* simultanuous CREQ */
             ep->dest_ep_id = uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id);
             ep->rx.ooo_pkts.head_sn = neth->psn;
-            uct_ud_peer_copy(&ep->peer, &ctl->peer);
+            uct_ud_peer_copy(&ep->peer, (void*)&ctl->peer);
             ucs_debug("simultanuous CREQ ep=%p"
                       "(iface=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
                       ep, iface, ep->conn_id, ep->ep_id,
@@ -521,7 +521,7 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     ep->rx.ooo_pkts.head_sn = neth->psn;
     ep->dest_ep_id = ctl->conn_rep.src_ep_id;
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
-    uct_ud_peer_copy(&ep->peer, &ctl->peer);
+    uct_ud_peer_copy(&ep->peer, (void*)&ctl->peer);
     uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREP_RCVD);
 }
 
@@ -564,7 +564,7 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
         return NULL;
     }
 
-    uct_ud_peer_name(&creq->peer);
+    uct_ud_peer_name((void*)&creq->peer);
 
     skb->len = sizeof(*neth) + sizeof(*creq) + iface->super.addr_size;
     return skb;
@@ -816,7 +816,7 @@ static uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
     crep->type               = UCT_UD_PACKET_CREP;
     crep->conn_rep.src_ep_id = ep->ep_id;
 
-    uct_ud_peer_name(&crep->peer);
+    uct_ud_peer_name((void*)&crep->peer);
 
     skb->len = sizeof(*neth) + sizeof(*crep);
     uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREP);
@@ -916,7 +916,7 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
         skb =  uct_ud_ep_resend(ep);
     } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK)) {
         if (uct_ud_ep_is_connected(ep)) {
-            skb = &iface->tx.skb_inl.super;
+            skb = (void*)&iface->tx.skb_inl.super;
             uct_ud_neth_ctl_ack(ep, skb->neth);
         } else {
             /* Do not send ACKs if not connected yet. It may happen if
@@ -926,7 +926,7 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
         }
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK);
     } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ)) {
-        skb = &iface->tx.skb_inl.super;
+        skb = (void*)&iface->tx.skb_inl.super;
         uct_ud_neth_ctl_ack_req(ep, skb->neth);
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
     } else if (uct_ud_ep_ctl_op_isany(ep)) {
