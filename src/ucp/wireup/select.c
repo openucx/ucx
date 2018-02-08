@@ -648,6 +648,7 @@ double ucp_wireup_amo_score_func(ucp_context_h context,
 }
 
 static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
+                                             unsigned ep_init_flags,
                                              unsigned address_count,
                                              const ucp_address_entry_t *address_list,
                                              ucp_wireup_lane_desc_t *lane_descs,
@@ -660,7 +661,8 @@ static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, const ucp_ep_params_t 
     uint64_t tl_bitmap;
 
     criteria.remote_iface_flags = ucp_context_uct_atomic_iface_flags(context);
-    if (criteria.remote_iface_flags == 0) {
+    if ((criteria.remote_iface_flags == 0) ||
+        (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) {
         return UCS_OK;
     }
 
@@ -1123,8 +1125,8 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
         return status;
     }
 
-    status = ucp_wireup_add_amo_lanes(ep, params, address_count, address_list,
-                                      lane_descs, &key->num_lanes);
+    status = ucp_wireup_add_amo_lanes(ep, params, ep_init_flags, address_count,
+                                      address_list, lane_descs, &key->num_lanes);
     if (status != UCS_OK) {
         return status;
     }
