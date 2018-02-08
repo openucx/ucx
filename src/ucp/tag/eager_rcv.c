@@ -223,19 +223,26 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
     ucp_eager_sync_hdr_t *sync_hdr;
     unsigned hdr_len;
 
+    hdr_len = ucs_unlikely(imm) ? sizeof(ucp_eager_sync_hdr_t) :
+                                  sizeof(ucp_eager_hdr_t);
+
+    if (ucs_unlikely(tl_flags & UCT_CB_PARAM_FLAG_DESC)) {
+        hdr = (ucp_eager_hdr_t*)((char*)data - hdr_len);
+    } else {
+        /* Can not shift back, no headroom */
+        hdr = ucs_alloca(length + hdr_len);
+        memcpy((char*)hdr + hdr_len, data, length);
+    }
+
+    hdr->super.tag = stag;
+
     if (ucs_unlikely(imm)) {
         /* It is a sync send, imm data contains sender uuid */
-        hdr_len  = sizeof(ucp_eager_sync_hdr_t);
-        hdr      = (ucp_eager_hdr_t*)((char*)data - hdr_len);
         sync_hdr = ucs_derived_of(hdr, ucp_eager_sync_hdr_t);
         flags   |= UCP_RECV_DESC_FLAG_EAGER_SYNC;
         sync_hdr->req.reqptr      = 0ul;
         sync_hdr->req.sender_uuid = imm;
-    } else {
-        hdr     = ((ucp_eager_hdr_t*)data) - 1;
-        hdr_len = sizeof(ucp_eager_hdr_t);
     }
-    hdr->super.tag = stag;
 
     UCP_WORKER_STAT_TAG_OFFLOAD(wiface->worker, RX_UNEXP_EGR);
 
