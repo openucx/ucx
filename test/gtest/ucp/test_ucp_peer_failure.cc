@@ -151,6 +151,8 @@ void test_ucp_peer_failure::init() {
     ucp_ep_params_t ep_params_mod = {0};
     ep_params_mod.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLER;
     ep_params_mod.err_handler.cb = err_cb_mod;
+    /* NOTE: using of ucp_ep_params_t::user_data field is more preferable but
+     *       need to test err_handler.arg as well */
     ep_params_mod.err_handler.arg = reinterpret_cast<void *>(uintptr_t(MAGIC));
 
     for (size_t i = 0; i < m_entities.size(); ++i) {
