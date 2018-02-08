@@ -5,6 +5,7 @@
 */
 
 #include "test_ucp_tag.h"
+#include "ucp/api/ucp_def.h"
 
 extern "C" {
 #include <malloc.h>
@@ -30,9 +31,10 @@ protected:
         ucp_ep_params_t params;
         memset(&params, 0, sizeof(params));
         params.field_mask      = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
-                                 UCP_EP_PARAM_FIELD_ERR_HANDLER_CB;
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER;
         params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
-        params.err_handler_cb  = err_cb;
+        params.err_handler.cb  = err_cb;
+        params.err_handler.arg = NULL;
         return params;
     }
 
@@ -147,10 +149,9 @@ void test_ucp_peer_failure::init() {
     wrap_errors();
 
     ucp_ep_params_t ep_params_mod = {0};
-    ep_params_mod.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLER_CB |
-                               UCP_EP_PARAM_FIELD_USER_DATA;
-    ep_params_mod.err_handler_cb = err_cb_mod;
-    ep_params_mod.user_data      = reinterpret_cast<void *>(uintptr_t(MAGIC));
+    ep_params_mod.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLER;
+    ep_params_mod.err_handler.cb = err_cb_mod;
+    ep_params_mod.err_handler.arg = reinterpret_cast<void *>(uintptr_t(MAGIC));
 
     for (size_t i = 0; i < m_entities.size(); ++i) {
         for (int widx = 0; widx < e(i).get_num_workers(); ++widx) {
