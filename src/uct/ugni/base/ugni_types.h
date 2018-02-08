@@ -10,7 +10,6 @@
 #include <uct/base/uct_md.h>
 #include <ucs/datastruct/arbiter.h>
 #include <gni_pub.h>
-#include <stdbool.h>
 
 typedef struct uct_ugni_device {
     gni_nic_device_t type;                      /**< Device type */
