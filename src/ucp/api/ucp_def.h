@@ -313,9 +313,9 @@ typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status
 typedef struct ucp_err_handler {
     ucp_err_handler_cb_t cb;       /**< Error handler callback */
     void                 *arg;     /**< User defined argument associated with
-                                        an endpoint, it will be redefined by
-                                        @ref ucp_ep_params_t::user_data if set
-                                        both */
+                                        an endpoint, it will be overridden by
+                                        @ref ucp_ep_params_t::user_data if both
+                                        are set */
 } ucp_err_handler_t;
 
 
