@@ -507,14 +507,22 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
 }
 
 static UCS_F_ALWAYS_INLINE ucp_lane_index_t
-ucp_send_request_get_next_am_bw_lane(ucp_request_t *req)
+ucp_send_request_get_next_am_bw_lane(ucp_request_t *req, int reset)
 {
     ucp_lane_index_t lane;
 
     /* at least one lane must be initialized */
     ucs_assert(ucp_ep_config(req->send.ep)->key.am_bw_lanes[0] != UCP_NULL_LANE);
 
-    lane = (req->send.tag.am_bw_index >= UCP_MAX_LANES) ?
+    if (req->send.pending_lane != UCP_NULL_LANE) {
+        /* FIXME:
+         * if pending lane is not NULL - we are in pending mode,
+         * called from arbiter. do not allow change lane due
+         * to arbiter data corruption */
+        return req->send.pending_lane;
+    }
+
+    lane = (reset || (req->send.tag.am_bw_index >= UCP_MAX_LANES)) ?
            UCP_NULL_LANE :
            ucp_ep_config(req->send.ep)->key.am_bw_lanes[req->send.tag.am_bw_index];
     if (lane != UCP_NULL_LANE) {
