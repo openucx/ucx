@@ -40,7 +40,7 @@ size_t test_ucp_stream_base::wait_stream_recv(void *request)
         status = ucp_stream_recv_request_test(request, &length);
     } while (status == UCS_INPROGRESS);
     ASSERT_UCS_OK(status);
-    ucp_request_release(request);
+    ucp_request_free(request);
 
     return length;
 }
@@ -682,7 +682,7 @@ test_ucp_stream_many2one::erase_completed_reqs(std::vector<request_wrapper_t> &r
         ucs_status_t status = ucp_request_check_status(i->m_req);
         if (status != UCS_INPROGRESS) {
             EXPECT_EQ(UCS_OK, status);
-            ucp_request_release(i->m_req);
+            ucp_request_free(i->m_req);
             delete i->m_dt_desc;
             i = reqs.erase(i);
         } else {
@@ -706,6 +706,18 @@ UCS_TEST_P(test_ucp_stream_many2one, drop_data) {
                           &m_entities.at(0));
     m_entities.at(0).revoke_ep();
     m_entities.at(m_receiver_idx).revoke_ep(0, 0);
+
+    /* wait for 1-st byte on the last EP to be sure the network packets have
+       been arrived */
+    uint8_t check;
+    size_t  check_length;
+    ucp_ep_h last_ep = m_entities.at(m_receiver_idx).ep(0, m_nsenders - 1);
+    void *check_req  = ucp_stream_recv_nb(last_ep, &check, 1, DATATYPE,
+                                          ucp_recv_cb, &check_length, 0);
+    EXPECT_FALSE(UCS_PTR_IS_ERR(check_req));
+    if (UCS_PTR_IS_PTR(check_req)) {
+        wait_stream_recv(check_req);
+    }
 
     /* data from disconnected EP should be dropped */
     std::set<ucp_ep_h> others = check_no_data(m_entities.at(0));
