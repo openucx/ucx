@@ -16,6 +16,7 @@
 #include <uct/api/uct.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
+#include <ucs/sys/ptrcache.h>
 #include <ucs/type/component.h>
 #include <ucs/type/spinlock.h>
 
@@ -76,6 +77,8 @@ typedef struct ucp_context_config {
     unsigned                               max_rndv_lanes;
     /** Estimated number of endpoints */
     size_t                                 estimated_num_eps;
+    /** Mem type pointer cache */
+    int                                    mem_type_ptr_cache;
 } ucp_context_config_t;
 
 
@@ -135,6 +138,7 @@ typedef struct ucp_context {
     /* List of MDs which detect non host memory type */
     ucp_rsc_index_t               mem_type_tl_mds[UCT_MD_MEM_TYPE_LAST];
     ucp_rsc_index_t               num_mem_type_mds;  /* Number of mem type MDs */
+    ucs_ptrcache_t                *mem_type_ptrcache;/* mem type allocation cache*/
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/
@@ -252,18 +256,26 @@ ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)
     return iface_attr->latency.overhead +
            (iface_attr->latency.growth * context->config.est_num_eps);
 }
+extern uct_memory_type_t ucm_to_uct_mem_type_map[];
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
                            uct_memory_type_t *mem_type_p)
 {
     unsigned i, md_index;
-
-    for (i = 0; i < context->num_mem_type_mds; ++i) {
-        md_index = context->mem_type_tl_mds[i];
-        if (uct_md_is_mem_type_owned(context->tl_mds[md_index].md, addr, length)) {
-            *mem_type_p = context->tl_mds[md_index].attr.cap.mem_type;
+    ucm_mem_type_t ucm_mem_type;
+    if (ucs_likely(context->mem_type_ptrcache != NULL)) {
+        if (ucs_ptrcache_lookup(context->mem_type_ptrcache, addr, length, &ucm_mem_type)) {
+            *mem_type_p = ucm_to_uct_mem_type_map[ucm_mem_type];
             return UCS_OK;
+        }
+    } else {
+        for (i = 0; i < context->num_mem_type_mds; ++i) {
+            md_index = context->mem_type_tl_mds[i];
+            if (uct_md_is_mem_type_owned(context->tl_mds[md_index].md, addr, length)) {
+                *mem_type_p = context->tl_mds[md_index].attr.cap.mem_type;
+                return UCS_OK;
+            }
         }
     }
     *mem_type_p = UCT_MD_MEM_TYPE_HOST;

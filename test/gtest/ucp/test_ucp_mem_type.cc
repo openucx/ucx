@@ -5,9 +5,11 @@
 */
 
 #include "ucp_test.h"
+extern "C" {
 #include "uct/api/uct.h"
 #include "ucp/core/ucp_context.h"
 #include "ucp/core/ucp_mm.h"
+}
 
 
 class test_ucp_mem_type : public ucp_test {
