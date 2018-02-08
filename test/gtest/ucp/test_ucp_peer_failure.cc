@@ -5,7 +5,7 @@
 */
 
 #include "test_ucp_tag.h"
-#include "ucp/api/ucp_def.h"
+#include "ucp_datatype.h"
 
 extern "C" {
 #include <malloc.h>
@@ -118,7 +118,7 @@ protected:
     }
 
     static void err_cb_mod(void *arg, ucp_ep_h ep, ucs_status_t status) {
-        EXPECT_EQ(uintptr_t(MAGIC), uintptr_t(arg));
+        EXPECT_EQ(uintptr_t(ucp::MAGIC), uintptr_t(arg));
         err_cb(arg, ep, status);
         m_err_cb_mod = true;
     }
@@ -153,7 +153,7 @@ void test_ucp_peer_failure::init() {
     ep_params_mod.err_handler.cb = err_cb_mod;
     /* NOTE: using of ucp_ep_params_t::user_data field is more preferable but
      *       need to test err_handler.arg as well */
-    ep_params_mod.err_handler.arg = reinterpret_cast<void *>(uintptr_t(MAGIC));
+    ep_params_mod.err_handler.arg = reinterpret_cast<void *>(uintptr_t(ucp::MAGIC));
 
     for (size_t i = 0; i < m_entities.size(); ++i) {
         for (int widx = 0; widx < e(i).get_num_workers(); ++widx) {

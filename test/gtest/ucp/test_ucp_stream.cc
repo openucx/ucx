@@ -9,8 +9,8 @@
 #include <set>
 #include <vector>
 
+#include "ucp_datatype.h"
 #include "ucp_test.h"
-#include <common/test_helpers.h>
 
 
 class test_ucp_stream_base : public ucp_test {
@@ -82,9 +82,15 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 
     /* send all msg sizes*/
     for (size_t i = 3; i < sbuf.size(); i *= 2) {
-        ucs::fill_random(sbuf, i);
-        check_pattern.insert(check_pattern.end(), sbuf.begin(),
-                             sbuf.begin() + i);
+        if (UCP_DT_IS_GENERIC(datatype)) {
+            for (size_t j = 0; j < i; ++j) {
+                check_pattern.push_back(char(j));
+            }
+        } else {
+            ucs::fill_random(sbuf, i);
+            check_pattern.insert(check_pattern.end(), sbuf.begin(),
+                                 sbuf.begin() + i);
+        }
         sstatus = stream_send_nb(ucp::data_type_desc_t(datatype, sbuf.data(), i));
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
         wait(sstatus);
@@ -306,6 +312,16 @@ UCS_TEST_P(test_ucp_stream, send_iov_recv_data) {
     do_send_recv_data_test(DATATYPE_IOV);
 }
 
+UCS_TEST_P(test_ucp_stream, send_generic_recv_data) {
+    ucp_datatype_t dt;
+    ucs_status_t status;
+
+    status = ucp_dt_create_generic(&ucp::test_dt_uint8_ops, NULL, &dt);
+    ASSERT_UCS_OK(status);
+    do_send_recv_data_test(dt);
+    ucp_dt_destroy(dt);
+}
+
 UCS_TEST_P(test_ucp_stream, send_recv_8) {
     do_send_recv_test<uint8_t>(ucp_dt_make_contig(sizeof(uint8_t)));
 }
@@ -403,7 +419,7 @@ protected:
     size_t send_all(ucp_datatype_t datatype, size_t n_iter);
     void check_no_data();
     std::set<ucp_ep_h> check_no_data(entity &e);
-    void check_recv_data(size_t n_iter);
+    void check_recv_data(size_t n_iter, ucp_datatype_t dt);
 
     std::vector<std::string>        m_msgs;
     std::vector<std::vector<char> > m_recv_data;
@@ -476,7 +492,7 @@ void test_ucp_stream_many2one::do_send_worker_poll_test(ucp_datatype_t dt)
     } while (!sreqs.empty() || (total_len != 0));
 
     check_no_data();
-    check_recv_data(niter);
+    check_recv_data(niter, dt);
 }
 
 void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
@@ -552,7 +568,7 @@ void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
     EXPECT_EQ(total_sdata, std::accumulate(roffsets.begin(),
                                            roffsets.end(), 0ul));
     check_no_data();
-    check_recv_data(niter);
+    check_recv_data(niter, dt);
 }
 
 ucs_status_ptr_t
@@ -653,11 +669,20 @@ std::set<ucp_ep_h> test_ucp_stream_many2one::check_no_data(entity &e)
     return ret;
 }
 
-void test_ucp_stream_many2one::check_recv_data(size_t n_iter)
+void test_ucp_stream_many2one::check_recv_data(size_t n_iter, ucp_datatype_t dt)
 {
     for (size_t i = 0; i < m_nsenders; ++i) {
-        const std::string test = std::string("sender_") + ucs::to_string(i);
+        std::string test = std::string("sender_") + ucs::to_string(i);
         const std::string str(&m_recv_data[i].front());
+        if (UCP_DT_IS_GENERIC(dt)) {
+            std::vector<char> test_gen;
+            for (size_t j = 0; j < test.length(); ++j) {
+                test_gen.push_back(char(j));
+            }
+            test_gen.push_back('\0');
+            test = std::string(test_gen.data());
+        }
+
         size_t            next = 0;
         for (size_t j = 0; j < n_iter; ++j) {
             size_t match = str.find(test, next);
@@ -735,6 +760,16 @@ UCS_TEST_P(test_ucp_stream_many2one, send_worker_poll) {
 
 UCS_TEST_P(test_ucp_stream_many2one, send_worker_poll_iov) {
     do_send_worker_poll_test(DATATYPE_IOV);
+}
+
+UCS_TEST_P(test_ucp_stream_many2one, send_worker_poll_generic) {
+    ucp_datatype_t dt;
+    ucs_status_t status;
+
+    status = ucp_dt_create_generic(&ucp::test_dt_uint8_ops, NULL, &dt);
+    ASSERT_UCS_OK(status);
+    do_send_worker_poll_test(dt);
+    ucp_dt_destroy(dt);
 }
 
 UCS_TEST_P(test_ucp_stream_many2one, send_recv_nb) {

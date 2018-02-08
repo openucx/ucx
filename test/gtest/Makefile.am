@@ -121,6 +121,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_fence.cc \
 	ucp/test_ucp_sockaddr.cc \
 	ucp/ucp_test.cc \
+	ucp/ucp_datatype.cc \
 	\
 	ucs/test_algorithm.cc \
 	ucs/test_arbiter.cc \
@@ -200,7 +201,8 @@ noinst_HEADERS = \
 	ucp/test_ucp_atomic.h \
 	ucp/test_ucp_memheap.h \
 	ucp/test_ucp_tag.h \
-	ucp/ucp_test.h
+	ucp/ucp_test.h \
+	ucp/ucp_datatype.cc
 
 .PHONY: test test gdb valgrind fix_rpath ucx
 

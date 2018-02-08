@@ -10,6 +10,10 @@
 #include <ucs/stats/stats.h>
 
 
+namespace ucp {
+const uint32_t MAGIC = 0xd7d7d7d7U;
+}
+
 std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
 {
     std::vector<std::string>::const_iterator iter;
@@ -498,7 +502,7 @@ unsigned ucp_test_base::entity::progress(int worker_index)
 }
 
 int ucp_test_base::entity::get_num_workers() const {
-    ucs_assert(m_workers.size() == size_t(num_workers));
+    assert(m_workers.size() == size_t(num_workers));
     return num_workers;
 }
 

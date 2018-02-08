@@ -30,12 +30,6 @@ protected:
         ucp_tag_recv_info_t info;
     };
 
-    struct dt_gen_state {
-        size_t              count;
-        int                 started;
-        uint32_t            magic;
-    };
-
     virtual void init();
 
     static void request_init(void *request);
@@ -113,12 +107,6 @@ protected:
 
     virtual bool is_external_request();
 
-    static const uint32_t MAGIC = 0xd7d7d7d7U;
-    static ucp_generic_dt_ops test_dt_uint32_ops;
-    static ucp_generic_dt_ops test_dt_uint32_err_ops;
-    static ucp_generic_dt_ops test_dt_uint8_ops;
-    static int dt_gen_start_count;
-    static int dt_gen_finish_count;
     static ucp_context_attr_t ctx_attr;
 private:
     int get_worker_index(int buf_index);
