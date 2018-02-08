@@ -768,9 +768,9 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
                 status = iface->super.ops->set_ep_failed(&iface->super,
                                                          &ep->super.super,
                                                          skb->status);
-                ucs_assertv_always(status == UCS_OK,
-                                   "send completion with error: %s",
-                                   ucs_status_string(status));
+                if (status != UCS_OK) {
+                    ucs_fatal("transport error: %s", ucs_status_string(status));
+                }
             }
         }
 
