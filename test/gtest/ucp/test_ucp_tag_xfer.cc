@@ -495,8 +495,8 @@ void test_ucp_tag_xfer::test_xfer_len_offset()
     const size_t length_step = 16;
     const size_t buf_size    = max_length + max_offset + 2;
     ucp_datatype_t type      = ucp_dt_make_contig(1);
-    void *send_buf;
-    void *recv_buf;
+    void *send_buf           = 0;
+    void *recv_buf           = 0;;
     size_t offset;
     size_t length;
     ucs::detail::message_stream *ms;
@@ -508,6 +508,9 @@ void test_ucp_tag_xfer::test_xfer_len_offset()
 
     EXPECT_EQ(posix_memalign(&send_buf, 8192, buf_size), 0);
     EXPECT_EQ(posix_memalign(&recv_buf, 8192, buf_size), 0);
+
+    memset(send_buf, 0, buf_size);
+    memset(recv_buf, 0, buf_size);
 
     for (offset = 0; offset <= max_offset; offset += offset_step) {
         if (!offset || ucs_is_pow2(offset)) {
