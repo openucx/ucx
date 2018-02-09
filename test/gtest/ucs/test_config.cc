@@ -267,7 +267,7 @@ UCS_TEST_F(test_config, performance) {
     }
 
     /* Now test the time */
-    UCS_TEST_TIME_LIMIT(0.005) {
+    UCS_TEST_TIME_LIMIT(0.05) {
         car_opts opts(NULL, NULL);
     }
 }
