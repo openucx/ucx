@@ -197,7 +197,7 @@ UCS_TEST_P(test_ucp_tag_offload, force_thresh_basic, "TM_FORCE_THRESH=4096",
 
     // No requests should be posted to the transport, because their sizes less
     // than TM_THRESH
-    EXPECT_EQ(num_reqs - 1, receiver().worker()->tm.expected.sw_all_count);
+    EXPECT_EQ((unsigned)(num_reqs - 1), receiver().worker()->tm.expected.sw_all_count);
 
     std::vector<char> recvbuf_big(big_size, 0);
 
@@ -207,7 +207,7 @@ UCS_TEST_P(test_ucp_tag_offload, force_thresh_basic, "TM_FORCE_THRESH=4096",
 
     // Now, all requests should be posted to the transport, because receive
     // buffer bigger than FORCE_THRESH has been posted
-    EXPECT_EQ(0, receiver().worker()->tm.expected.sw_all_count);
+    EXPECT_EQ((unsigned)0, receiver().worker()->tm.expected.sw_all_count);
 
     std::vector<request*>::const_iterator iter;
     for (iter = reqs.begin(); iter != reqs.end(); ++iter) {
@@ -251,7 +251,7 @@ UCS_TEST_P(test_ucp_tag_offload, force_thresh_blocked, "TM_FORCE_THRESH=4096",
     for (i = 0; i < 2; ++i) {
         req = recv_nb_and_check(&recvbuf_big[0], recvbuf_big.size(), DATATYPE, tag,
                                 UCP_TAG_MASK_FULL);
-        EXPECT_EQ(num_reqs - i, receiver().worker()->tm.expected.sw_all_count);
+        EXPECT_EQ((unsigned)(num_reqs - i), receiver().worker()->tm.expected.sw_all_count);
         req_cancel(receiver(), req);
 
         req_cancel(receiver(), reqs.back());
@@ -264,7 +264,7 @@ UCS_TEST_P(test_ucp_tag_offload, force_thresh_blocked, "TM_FORCE_THRESH=4096",
 
     // Now, all requests should be posted to the transport, because receive
     // buffer bigger than FORCE_THRESH has been posted
-    EXPECT_EQ(0, receiver().worker()->tm.expected.sw_all_count);
+    EXPECT_EQ((unsigned)0, receiver().worker()->tm.expected.sw_all_count);
 
     std::vector<request*>::const_iterator iter;
     for (iter = reqs.begin(); iter != reqs.end(); ++iter) {
