@@ -502,6 +502,9 @@ void test_ucp_tag_xfer::test_xfer_len_offset()
     ucs::detail::message_stream *ms;
 
     skip_err_handling();
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("valgrind");
+    }
 
     EXPECT_EQ(posix_memalign(&send_buf, 8192, buf_size), 0);
     EXPECT_EQ(posix_memalign(&recv_buf, 8192, buf_size), 0);
