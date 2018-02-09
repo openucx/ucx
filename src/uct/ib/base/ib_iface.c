@@ -394,6 +394,35 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
+static int uct_ib_max_cqe_size()
+{
+    static int max_cqe_size = -1;
+
+    if (max_cqe_size == -1) {
+#ifdef __aarch64__
+        char arm_board_vendor[128];
+        ucs_aarch64_cpuid_t cpuid;
+        ucs_aarch64_cpuid(&cpuid);
+
+        arm_board_vendor[0] = '\0';
+        ucs_read_file(arm_board_vendor, sizeof(arm_board_vendor), 0,
+                      "/sys/devices/virtual/dmi/id/board_vendor");
+        ucs_debug("arm_board_vendor is '%s'", arm_board_vendor);
+
+        max_cqe_size = ((strcasestr(arm_board_vendor, "Huawei")) &&
+                        (cpuid.implementer == 0x41) && (cpuid.architecture == 8) &&
+                        (cpuid.variant == 0)        && (cpuid.part == 0xd08)     &&
+                        (cpuid.revision == 2))
+                       ? 64 : 128;
+#else
+        max_cqe_size = 128;
+#endif
+        ucs_debug("max IB CQE size is %d", max_cqe_size);
+    }
+
+    return max_cqe_size;
+}
+
 static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
                                            size_t *inl, int preferred_cpu,
                                            struct ibv_cq **cq_p)
@@ -425,7 +454,7 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
          */
         cqe_size = ucs_max(cqe_size_min, UCS_SYS_CACHE_LINE_SIZE);
         cqe_size = ucs_max(cqe_size, 64);  /* at least 64 */
-        cqe_size = ucs_min(cqe_size, 128); /* at most 128 */
+        cqe_size = ucs_min(cqe_size, uct_ib_max_cqe_size());
         snprintf(cqe_size_buf, sizeof(cqe_size_buf),"%zu", cqe_size);
         ucs_debug("%s: setting %s=%s", uct_ib_device_name(dev), cqe_size_env_var,
                   cqe_size_buf);

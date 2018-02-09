@@ -194,7 +194,7 @@ enum ucp_ep_params_field {
                                                             peer */
     UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE = UCS_BIT(1), /**< Error handling mode.
                                                             @ref ucp_err_handling_mode_t */
-    UCP_EP_PARAM_FIELD_ERR_HANDLER_CB    = UCS_BIT(2), /**< Handler to process
+    UCP_EP_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(2), /**< Handler to process
                                                             transport level errors */
     UCP_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(3), /**< User data pointer */
     UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(4), /**< Socket address field */
@@ -829,14 +829,13 @@ typedef struct ucp_ep_params {
     ucp_err_handling_mode_t err_mode;
 
     /**
-     * Error handler callback, will be called with @ref user_data as an argument
-     * if set.
+     * Handler to process transport level failure.
      */
-    ucp_err_handler_cb_t    err_handler_cb;
+    ucp_err_handler_t       err_handler;
 
     /**
      * User data associated with an endpoint. See @ref ucp_stream_poll_ep_t and
-     * @ref err_handler_cb
+     * @ref ucp_err_handler_t
      */
     void                    *user_data;
 
@@ -1682,7 +1681,7 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream);
  *             ucp_worker_progress(worker);
  *             status = ucp_request_check_status(request);
  *         } while (status == UCS_INPROGRESS);
- *         ucp_request_release(request);
+ *         ucp_request_free(request);
  *         return status;
  *     }
  * }

@@ -140,10 +140,11 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
     ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
                                  UCP_EP_PARAM_FIELD_SOCK_ADDR |
                                  UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
-                                 UCP_EP_PARAM_FIELD_ERR_HANDLER_CB |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER |
                                  UCP_EP_PARAM_FIELD_USER_DATA;
     ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
-    ep_params.err_handler_cb   = err_handler_cb;
+    ep_params.err_handler.cb   = err_handler_cb;
+    ep_params.err_handler.arg  = NULL;
     ep_params.user_data        = reinterpret_cast<void*>(this);
     ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
     ep_params.sockaddr.addr    = (struct sockaddr*)&listen_addr;

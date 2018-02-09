@@ -604,4 +604,36 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
     request_release(my_recv_req);
 }
 
+UCS_TEST_P(test_ucp_tag_match, rndv_exp_huge_mix) {
+    const size_t sizes[] = { 1000, 2000, 2500ul * 1024 * 1024 };
+
+    /* small sizes should warm-up tag cache */
+    for (int i = 0; i < 3; ++i) {
+        const size_t size = sizes[i] / ucs::test_time_multiplier();
+        request *my_send_req, *my_recv_req;
+
+        std::vector<char> sendbuf(size, 0);
+        std::vector<char> recvbuf(size, 0);
+
+        ucs::fill_random(sendbuf);
+
+        my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
+        ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
+        EXPECT_FALSE(my_recv_req->completed);
+
+        my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+        ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
+
+        wait(my_recv_req);
+
+        EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
+        EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+        EXPECT_TRUE(my_recv_req->completed);
+        EXPECT_EQ(sendbuf, recvbuf);
+
+        wait_and_validate(my_send_req);
+        request_free(my_recv_req);
+    }
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_match)

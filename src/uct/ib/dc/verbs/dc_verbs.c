@@ -110,7 +110,8 @@ uct_dc_verbs_iface_post_send_to_dci(uct_dc_verbs_iface_t* iface,
     wr->dc.dct_access_key = UCT_IB_KEY;
 
     uct_ib_log_exp_post_send(&iface->super.super.super, txqp->qp, wr,
-                             (wr->exp_opcode == IBV_EXP_WR_SEND) ?
+                             ((wr->exp_opcode == IBV_EXP_WR_SEND) ||
+                              (wr->exp_opcode == IBV_EXP_WR_SEND_WITH_IMM)) ?
                              uct_rc_ep_am_packet_dump : NULL);
 
     ret = ibv_exp_post_send(txqp->qp, wr, &bad_wr);

@@ -25,21 +25,6 @@ int test_time_multiplier()
     return factor;
 }
 
-std::ostream& operator<<(std::ostream& os, const std::vector<char>& vec) {
-    static const size_t LIMIT = 100;
-    size_t i = 0;
-    for (std::vector<char>::const_iterator iter = vec.begin(); iter != vec.end(); ++iter) {
-        if (i >= LIMIT) {
-            os << "...";
-            break;
-        }
-        int n = static_cast<unsigned char>(*iter);
-        os << "[" << i << "]=" << n << " ";
-        ++i;
-    }
-    return os << std::endl;
-}
-
 void fill_random(void *data, size_t size)
 {
     if (ucs::test_time_multiplier() > 1) {
@@ -120,9 +105,10 @@ uint16_t get_port() {
 
     do {
         addr_in.sin_port        = htons(0);
-        /* Ports below 1024 are considered "privileged" (can be used only by user root).
-         * Ports above and including 1024 can be used by anyone */
-        ret = bind(sock_fd, (struct sockaddr*)&addr_in, sizeof(struct sockaddr_in));
+        /* Ports below 1024 are considered "privileged" (can be used only by
+         * user root). Ports above and including 1024 can be used by anyone */
+        ret = bind(sock_fd, (struct sockaddr*)&addr_in,
+                   sizeof(struct sockaddr_in));
     } while (ret);
 
     ret = getsockname(sock_fd, (struct sockaddr*)&ret_addr, &len);
@@ -132,6 +118,10 @@ uint16_t get_port() {
     port = ret_addr.sin_port;
     close(sock_fd);
     return port;
+}
+
+void *mmap_fixed_address() {
+    return (void*)0xff0000000;
 }
 
 namespace detail {
@@ -153,59 +143,3 @@ message_stream::~message_stream() {
 } // detail
 
 } // ucs
-
-namespace ucp {
-
-
-data_type_desc_t &
-data_type_desc_t::make(ucp_datatype_t datatype, const void *buf, size_t length,
-                       size_t iov_cnt)
-{
-    EXPECT_FALSE(is_valid());
-
-    if (m_length == 0) {
-        m_length = length;
-    }
-
-    if (m_origin == uintptr_t(NULL)) {
-        m_origin = uintptr_t(buf);
-    }
-
-    m_dt = datatype;
-    memset(m_iov, 0, sizeof(m_iov));
-
-    switch (m_dt & UCP_DATATYPE_CLASS_MASK) {
-    case UCP_DATATYPE_CONTIG:
-        m_buf   = buf;
-        m_count = length / ucp_contig_dt_elem_size(datatype);
-        break;
-    case UCP_DATATYPE_IOV:
-    {
-        const size_t iov_length = (length > iov_cnt) ?
-            ucs::rand() % (length / iov_cnt) : 0;
-        size_t iov_length_it = 0;
-        for (size_t iov_it = 0; iov_it < iov_cnt - 1; ++iov_it) {
-            m_iov[iov_it].buffer = (char *)(buf) + iov_length_it;
-            m_iov[iov_it].length = iov_length;
-            iov_length_it += iov_length;
-        }
-
-        /* Last entry */
-        m_iov[iov_cnt - 1].buffer = (char *)(buf) + iov_length_it;
-        m_iov[iov_cnt - 1].length = length - iov_length_it;
-
-        m_buf   = m_iov;
-        m_count = iov_cnt;
-        break;
-    }
-    default:
-        m_buf   = NULL;
-        m_count = 0;
-        EXPECT_TRUE(false) << "Unsupported datatype";
-        break;
-    }
-
-    return *this;
-}
-
-} // ucp

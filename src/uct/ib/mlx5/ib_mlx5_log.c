@@ -108,7 +108,7 @@ ucs_status_t uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe,
         break;
     }
 
-    ucs_log(log_level, "Error on QP 0x%x wqe[%d]: %s (synd 0x%x vend 0x%x) opcode %s",
+    ucs_log(log_level, "Error on QP 0x%x wqe[%03d]: %s (synd 0x%x vend 0x%x) opcode %s",
             qp_num, wqe_counter, info, ecqe->syndrome, ecqe->vendor_err_synd,
             uct_ib_mlx5_cqe_err_opcode(ecqe));
     return status;
@@ -220,7 +220,7 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
     void *seg;
 
     /* QP number and opcode name */
-    uct_ib_log_dump_opcode(qp_num, op,
+    uct_ib_log_dump_opcode(qp_num, (wqe - qstart) / MLX5_SEND_WQE_BB, op,
                            ctrl->fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE,
                            ctrl->fm_ce_se & MLX5_WQE_CTRL_FENCE,
                            ctrl->fm_ce_se & (1 << 1),

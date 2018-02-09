@@ -28,9 +28,6 @@ void ucs_fatal_error(const char *error_type, const char *file, unsigned line,
     vsnprintf(buffer, buffer_size, format, ap);
     va_end(ap);
 
-    ucs_debug_cleanup();
-    ucs_log_flush();
-
     short_file = strrchr(file, '/');
     short_file = (short_file == NULL) ? file : short_file + 1;
     ucs_handle_error(error_type, "%13s:%-4u %s", short_file, line, buffer);

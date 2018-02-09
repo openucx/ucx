@@ -6,7 +6,10 @@
 */
 
 #include "test_ucp_memheap.h"
+
+#include <common/test_helpers.h>
 #include <ucs/sys/sys.h>
+
 
 std::vector<ucp_test_param>
 test_ucp_memheap::enum_test_params(const ucp_params_t& ctx_params,
@@ -59,7 +62,7 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
         params.address = memheap;
         params.flags   = params.flags & (~(UCP_MEM_MAP_ALLOCATE|UCP_MEM_MAP_FIXED));
     } else if (params.flags & UCP_MEM_MAP_FIXED) {
-        params.address = (void *)(uintptr_t)0xFF000000;
+        params.address = ucs::mmap_fixed_address();
     } else {
         params.address = NULL;
         params.flags  |= UCP_MEM_MAP_ALLOCATE;
@@ -169,7 +172,7 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
         params.address = memheap;
         params.flags   = params.flags & (~(UCP_MEM_MAP_ALLOCATE|UCP_MEM_MAP_FIXED));
     } else if (params.flags & UCP_MEM_MAP_FIXED) {
-        params.address = (void *)(uintptr_t)0xFF000000;
+        params.address = ucs::mmap_fixed_address();
         params.flags |= UCP_MEM_MAP_ALLOCATE;
     } else {
         params.address = NULL;
