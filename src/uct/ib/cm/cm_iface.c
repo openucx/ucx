@@ -164,7 +164,7 @@ static void uct_cm_iface_outstanding_remove(uct_cm_iface_t* iface,
              * pending ops:
              * bcopy() -> no resources
              * pending_add() -> ok
-             * <-- async event: resos available
+             * <-- async event: resources available
              * bcopy() --> ok. oops this is out of order send
              *
              * save the number and do actual release in the
