@@ -94,19 +94,19 @@ typedef enum {
 } ucs_arbiter_cb_result_t;
 
 #if ENABLE_ASSERT
-#define UCS_ARBITER_GUARD  int guard
-#define UCS_ARBITER_GUARD_INIT(arbiter)     (arbiter)->guard = 0
-#define UCS_ARBITER_GUARD_RAISE(arbiter)    (arbiter)->guard++
-#define UCS_ARBITER_GUARD_LOWER(arbiter)    (arbiter)->guard--
-#define UCS_ARBITER_GUARD_CHECK(arbiter) \
-    ucs_assertv((arbiter)->guard == 0, \
+#define UCS_ARBITER_GUARD                   int guard
+#define UCS_ARBITER_GUARD_INIT(_arbiter)    (_arbiter)->guard = 0
+#define UCS_ARBITER_GUARD_ENTER(_arbiter)   (_arbiter)->guard++
+#define UCS_ARBITER_GUARD_EXIT(_arbiter)    (_arbiter)->guard--
+#define UCS_ARBITER_GUARD_CHECK(_arbiter) \
+    ucs_assertv((_arbiter)->guard == 0, \
                 "scheduling group from the arbiter callback")
 #else
 #define UCS_ARBITER_GUARD
-#define UCS_ARBITER_GUARD_INIT(arbiter)
-#define UCS_ARBITER_GUARD_RAISE(arbiter)
-#define UCS_ARBITER_GUARD_LOWER(arbiter)
-#define UCS_ARBITER_GUARD_CHECK(arbiter)
+#define UCS_ARBITER_GUARD_INIT(_arbiter)
+#define UCS_ARBITER_GUARD_ENTER(_arbiter)
+#define UCS_ARBITER_GUARD_EXIT(_arbiter)
+#define UCS_ARBITER_GUARD_CHECK(_arbiter)
 #endif
 
 

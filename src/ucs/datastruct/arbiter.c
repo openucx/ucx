@@ -167,9 +167,9 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
 
             ucs_assert(elem->group == group);
             ucs_trace_poll("dispatching arbiter element %p", elem);
-            UCS_ARBITER_GUARD_RAISE(arbiter);
+            UCS_ARBITER_GUARD_ENTER(arbiter);
             result = cb(arbiter, elem, cb_arg);
-            UCS_ARBITER_GUARD_LOWER(arbiter);
+            UCS_ARBITER_GUARD_EXIT(arbiter);
             ucs_trace_poll("dispatch result %d", result);
             ++group_dispatch_count;
 
