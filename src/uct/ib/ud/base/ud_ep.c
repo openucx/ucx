@@ -792,7 +792,10 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
         return UCS_OK;
     }
 
-    UCT_UD_IFACE_CHECK_ASYNC_PENDING(iface, UCS_ERR_NO_RESOURCE);
+    if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
+        uct_ud_leave(iface);
+        return UCS_ERR_NO_RESOURCE;
+    }
 
     status = uct_ud_ep_flush_nolock(iface, ep, comp);
     if (status == UCS_OK) {
@@ -1089,7 +1092,7 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req)
      * So we must skip a resource check and add a pending op in order to
      * avoid a deadlock.
      */
-    if (uct_ud_iface_has_pending_async_ev(iface)) {
+    if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
         goto add_req;
     }
 

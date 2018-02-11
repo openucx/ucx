@@ -103,7 +103,7 @@ static inline ucs_status_t uct_ud_iface_null_hook(uct_ud_iface_t *iface,
 
 typedef struct uct_ud_iface_ops {
     uct_ib_iface_ops_t        super;
-    void                      (*async_progress)(uct_ud_iface_t *iface);
+    unsigned                  (*async_progress)(uct_ud_iface_t *iface);
     void                      (*tx_skb)(uct_ud_ep_t *ep, uct_ud_send_skb_t *skb,
                                         int solicited);
 } uct_ud_iface_ops_t;
@@ -122,6 +122,8 @@ struct uct_ud_iface {
         uct_ud_send_skb_t     *skb; /* ready to use skb */
         uct_ud_send_skb_inl_t  skb_inl;
         ucs_mpool_t            mp;
+        /* got async events but pending queue was not dispatched */
+        uint8_t                async_before_pending;
         int16_t                available;
         unsigned               unsignaled;
         /* pool of skbs that are reserved for retransmissions */
@@ -129,9 +131,6 @@ struct uct_ud_iface {
         unsigned               resend_skbs_quota;
         ucs_arbiter_t          pending_q;
         ucs_queue_head_t       async_comp_q;
-        /* true if the pending_q could have been dispatched from the
-         * async progress */
-        uint8_t                pending_async_ev;
     } tx;
     struct {
         ucs_time_t           peer_timeout;
@@ -377,7 +376,9 @@ uct_ud_iface_get_async_time(uct_ud_iface_t *iface)
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_progress_pending(uct_ud_iface_t *iface, const uintptr_t is_async)
 {
-    iface->tx.pending_async_ev = 0;
+    if (!is_async) {
+        iface->tx.async_before_pending = 0;
+    }
 
     if (!uct_ud_iface_can_tx(iface)) {
         return;
@@ -390,20 +391,14 @@ uct_ud_iface_progress_pending(uct_ud_iface_t *iface, const uintptr_t is_async)
 static UCS_F_ALWAYS_INLINE int
 uct_ud_iface_has_pending_async_ev(uct_ud_iface_t *iface)
 {
-    return ucs_unlikely(iface->tx.pending_async_ev);
+    return iface->tx.async_before_pending;
 }
-
-#define UCT_UD_IFACE_CHECK_ASYNC_PENDING(iface, status) \
-    if (uct_ud_iface_has_pending_async_ev(iface)) { \
-        uct_ud_leave(iface); \
-        return status; \
-    }
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_raise_pending_async_ev(uct_ud_iface_t *iface)
 {
     if (!ucs_arbiter_is_empty(&iface->tx.pending_q)) {
-        iface->tx.pending_async_ev = 1;
+        iface->tx.async_before_pending = 1;
     }
 }
 

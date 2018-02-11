@@ -71,7 +71,8 @@ static UCS_F_ALWAYS_INLINE uct_ud_send_skb_t *
 uct_ud_ep_get_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     if (ucs_unlikely(!uct_ud_ep_is_connected(ep) ||
-                     uct_ud_ep_no_window(ep))) {
+                     uct_ud_ep_no_window(ep) ||
+                     uct_ud_iface_has_pending_async_ev(iface))) {
         ucs_trace_data("iface=%p ep=%p (%d->%d) no ep resources (psn=%u max_psn=%u)",
                        iface, ep, ep->ep_id, ep->dest_ep_id,
                        (unsigned)ep->tx.psn,

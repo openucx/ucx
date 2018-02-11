@@ -95,7 +95,7 @@ public:
     static ucs_status_t pending_send_op_bcopy(uct_pending_req_t *self) {
 
         pending_send_request_t *req = ucs_container_of(self, pending_send_request_t, uct);
-        size_t packed_len;
+        ssize_t packed_len;
 
         packed_len = uct_ep_am_bcopy(req->ep, 0, mapped_buffer::pack, req->buf, 0);
         if (packed_len > 0) {
@@ -288,7 +288,7 @@ UCS_TEST_P(test_uct_pending, pending_async)
 {
     pending_send_request_t *req = NULL;
     ucs_status_t status;
-    size_t packed_len;
+    ssize_t packed_len;
 
     initialize();
     check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_PENDING);
@@ -306,9 +306,9 @@ UCS_TEST_P(test_uct_pending, pending_async)
     do {
         packed_len = uct_ep_am_bcopy(m_e1->ep(0), 0, mapped_buffer::pack,
                                      &sbuf, 0);
-    } while ((int)packed_len >= 0);
+    } while (packed_len >= 0);
 
-    EXPECT_TRUE((int)packed_len == UCS_ERR_NO_RESOURCE);
+    EXPECT_TRUE(packed_len == UCS_ERR_NO_RESOURCE);
 
     status = uct_ep_pending_add(m_e1->ep(0), &req->uct);
     EXPECT_UCS_OK(status);
@@ -321,7 +321,7 @@ UCS_TEST_P(test_uct_pending, pending_async)
 
     packed_len = uct_ep_am_bcopy(m_e1->ep(0), 0, mapped_buffer::pack, &sbuf, 0);
     EXPECT_EQ(1, n_pending);
-    EXPECT_GT(0, (int)packed_len);
+    EXPECT_GT(0, packed_len);
 
     wait_for_value(&n_pending, 0, true);
     EXPECT_EQ(0, n_pending);

@@ -523,7 +523,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     ucs_queue_head_init(&self->rx.pending_q);
 
-    self->tx.pending_async_ev = 0;
+    self->tx.async_before_pending = 0;
 
     uct_ud_iface_calc_gid_len(self);
 
@@ -663,7 +663,10 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
     uct_ud_enter(iface);
 
-    UCT_UD_IFACE_CHECK_ASYNC_PENDING(iface, UCS_INPROGRESS);
+    if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
+        uct_ud_leave(iface);
+        return UCS_INPROGRESS;
+    }
 
     count = 0;
     ucs_ptr_array_for_each(ep, i, &iface->eps) {
@@ -827,9 +830,9 @@ static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface)
     }
 }
 
-static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
+static inline unsigned uct_ud_iface_async_progress(uct_ud_iface_t *iface)
 {
-    ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->async_progress(iface);
+    return ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->async_progress(iface);
 }
 
 static void uct_ud_iface_timer(int timer_id, void *arg)
@@ -841,8 +844,10 @@ static void uct_ud_iface_timer(int timer_id, void *arg)
     now = uct_ud_iface_get_async_time(iface);
     ucs_trace_async("iface(%p) slow_timer_sweep: now %lu", iface, now);
     ucs_twheel_sweep(&iface->async.slow_timer, now);
-    uct_ud_iface_async_progress(iface);
-    uct_ud_iface_raise_pending_async_ev(iface);
+
+    if (uct_ud_iface_async_progress(iface) > 0) {
+        uct_ud_iface_raise_pending_async_ev(iface);
+    }
 
     uct_ud_leave(iface);
 }
