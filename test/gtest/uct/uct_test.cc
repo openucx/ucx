@@ -58,6 +58,13 @@ uct_test::~uct_test() {
     uct_config_release(m_md_config);
 }
 
+void uct_test::init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
+                                 struct sockaddr *connect_addr, size_t size)
+{
+    memcpy(&rsc->listen_if_addr,  listen_addr,  size);
+    memcpy(&rsc->connect_if_addr, connect_addr, size);
+}
+
 void uct_test::set_interface_rscs(char *md_name, cpu_set_t local_cpus,
                                   struct ifaddrs *ifa,
                                   std::vector<resource>& all_resources)
@@ -77,11 +84,11 @@ void uct_test::set_interface_rscs(char *md_name, cpu_set_t local_cpus,
         if (i == 0) {
             /* first rsc */
             if (ifa->ifa_addr->sa_family == AF_INET) {
-                memcpy(&rsc.listen_if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in));
-                memcpy(&rsc.connect_if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in));
+                uct_test::init_sockaddr_rsc(&rsc, ifa->ifa_addr, ifa->ifa_addr,
+                                            sizeof(struct sockaddr_in));
             } else if (ifa->ifa_addr->sa_family == AF_INET6) {
-                memcpy(&rsc.listen_if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in6));
-                memcpy(&rsc.connect_if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in6));
+                uct_test::init_sockaddr_rsc(&rsc, ifa->ifa_addr, ifa->ifa_addr,
+                                            sizeof(struct sockaddr_in6));
             } else {
                 UCS_TEST_ABORT("Unknown sa_family " << ifa->ifa_addr->sa_family);
             }
@@ -93,15 +100,15 @@ void uct_test::set_interface_rscs(char *md_name, cpu_set_t local_cpus,
                 memset(&sin, 0, sizeof(struct sockaddr_in));
                 sin.sin_family      = AF_INET;
                 sin.sin_addr.s_addr = INADDR_ANY;
-                memcpy(&rsc.listen_if_addr, &sin, sizeof(struct sockaddr_in));
-                memcpy(&rsc.connect_if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in));
+                uct_test::init_sockaddr_rsc(&rsc, (struct sockaddr*)&sin,
+                                            ifa->ifa_addr, sizeof(struct sockaddr_in));
             } else if (ifa->ifa_addr->sa_family == AF_INET6) {
                 struct sockaddr_in6 sin;
                 memset(&sin, 0, sizeof(struct sockaddr_in6));
                 sin.sin6_family     = AF_INET6;
                 sin.sin6_addr       = in6addr_any;
-                memcpy(&rsc.listen_if_addr, &sin, sizeof(struct sockaddr_in6));
-                memcpy(&rsc.connect_if_addr, ifa->ifa_addr, sizeof(struct sockaddr_in6));
+                uct_test::init_sockaddr_rsc(&rsc, (struct sockaddr*)&sin,
+                                            ifa->ifa_addr, sizeof(struct sockaddr_in6));
             } else {
                 UCS_TEST_ABORT("Unknown sa_family " << ifa->ifa_addr->sa_family);
             }

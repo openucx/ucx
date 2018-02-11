@@ -227,6 +227,8 @@ protected:
     static void set_interface_rscs(char *md_name, cpu_set_t local_cpus,
                                    struct ifaddrs *ifa,
                                    std::vector<resource>& all_resources);
+    static void init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
+                                  struct sockaddr *connect_addr, size_t size);
     static const char *uct_mem_type_names[];
 
     uct_test::entity* create_entity(size_t rx_headroom,

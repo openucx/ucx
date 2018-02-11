@@ -113,7 +113,7 @@ public:
 
         /* wait for reverse ep to appear */
         while (receiver().get_num_eps() == 0) {
-            progress();
+            short_progress_loop();
         }
         tag_send_recv(receiver(), sender());
     }
