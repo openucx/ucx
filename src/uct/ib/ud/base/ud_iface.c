@@ -830,9 +830,16 @@ static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface)
     }
 }
 
-static inline unsigned uct_ud_iface_async_progress(uct_ud_iface_t *iface)
+static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
 {
-    return ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->async_progress(iface);
+    unsigned ev_count;
+    uct_ud_iface_ops_t *ops;
+
+    ops = ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t);
+    ev_count = ops->async_progress(iface);
+    if (ev_count > 0) {
+        uct_ud_iface_raise_pending_async_ev(iface);
+    }
 }
 
 static void uct_ud_iface_timer(int timer_id, void *arg)
@@ -844,11 +851,7 @@ static void uct_ud_iface_timer(int timer_id, void *arg)
     now = uct_ud_iface_get_async_time(iface);
     ucs_trace_async("iface(%p) slow_timer_sweep: now %lu", iface, now);
     ucs_twheel_sweep(&iface->async.slow_timer, now);
-
-    if (uct_ud_iface_async_progress(iface) > 0) {
-        uct_ud_iface_raise_pending_async_ev(iface);
-    }
-
+    uct_ud_iface_async_progress(iface);
     uct_ud_leave(iface);
 }
 

@@ -787,14 +787,13 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
         uct_ep_pending_purge(ep_h, NULL, 0);
         /* Open window after cancellation for next sending */
         uct_ud_ep_ca_ack(ep);
-
-        uct_ud_leave(iface);
-        return UCS_OK;
+        status = UCS_OK;
+        goto out;
     }
 
     if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
-        uct_ud_leave(iface);
-        return UCS_ERR_NO_RESOURCE;
+        status = UCS_ERR_NO_RESOURCE;
+        goto out;
     }
 
     status = uct_ud_ep_flush_nolock(iface, ep, comp);
@@ -803,6 +802,8 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
     } else if (status == UCS_INPROGRESS) {
         UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
     }
+
+out:
     uct_ud_leave(iface);
     return status;
 }
