@@ -527,11 +527,14 @@ UCS_TEST_P(uct_p2p_am_misc, am_max_short_multi) {
         ASSERT_UCS_OK(status);
     }
 
-    /* do some progress */
-    short_progress_loop(50);
-
-    /* should be able to send again */
-    status = uct_ep_am_short(sender_ep(), AM_ID, SEED1, NULL, 0);
+    /* should be able to send again after a while */
+    ucs_time_t deadline = ucs_get_time() +
+                    (ucs::test_time_multiplier() *
+                     ucs_time_from_sec(DEFAULT_TIMEOUT_SEC));
+    do {
+        progress();
+        status = uct_ep_am_short(sender_ep(), AM_ID, SEED1, NULL, 0);
+    } while ((status == UCS_ERR_NO_RESOURCE) && (ucs_get_time() < deadline));
     EXPECT_EQ(UCS_OK, status);
 }
 
