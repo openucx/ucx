@@ -56,6 +56,7 @@ static unsigned uct_cm_iface_progress(void *arg)
         ++count;
     }
 
+    /* we are in the progress() context. Now it is safe to release resources. */
     iface->num_outstanding -= iface->num_completions;
     iface->num_completions  = 0;
 
