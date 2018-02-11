@@ -158,8 +158,17 @@ static void uct_cm_iface_outstanding_remove(uct_cm_iface_t* iface,
     ucs_queue_for_each_safe(op, iter, &iface->outstanding_q, queue) {
         if (op->is_id && (op->id == id)) {
             ucs_queue_del_iter(&iface->outstanding_q, iter);
-            /* can not directly release resources from here because
-             * it will break pending ordering
+            /* Must not release resources from the async context
+             * because it will break pending op ordering.
+             * For example bcopy() may succeed while there are queued
+             * pending ops:
+             * bcopy() -> no resources
+             * pending_add() -> ok
+             * <-- async event: resos available
+             * bcopy() --> ok. oops this is out of order send
+             *
+             * save the number and do actual release in the
+             * progress() context.
              */
             ++iface->num_completions;
             ucs_free(op);
