@@ -1020,11 +1020,9 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     ucp_get_version(&major_version, &minor_version, &release_number);
 
     if ((api_major_version != major_version) || (api_minor_version != minor_version)) {
-        ucs_error("UCP version is incompatible, required: %d.%d, actual: %d.%d (release %d)",
+        ucs_warn("UCP version is incompatible, required: %d.%d, actual: %d.%d (release %d)",
                   api_major_version, api_minor_version,
                   major_version, minor_version, release_number);
-        status = UCS_ERR_NOT_IMPLEMENTED;
-        goto err;
     }
 
     /* allocate a ucp context */
