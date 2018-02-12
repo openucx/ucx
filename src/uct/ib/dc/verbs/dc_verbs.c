@@ -671,7 +671,7 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
 
         status = uct_dc_verbs_iface_create_ah(
                     &iface->super, dc_req->lid,
-                    dc_req->sender.global.is_global ? &dc_req->sender.global.gid : NULL,
+                    dc_req->sender.global.is_global ? (void*)&dc_req->sender.global.gid : NULL,
                     &ah);
         if (status != UCS_OK) {
             return status;

@@ -100,6 +100,8 @@ protected:
     void test_xfer_probe(bool send_contig, bool recv_contig,
                          bool expected, bool sync);
 
+    void test_xfer_len_offset();
+
 private:
     size_t do_xfer(const void *sendbuf, void *recvbuf, size_t count,
                    ucp_datatype_t send_dt, ucp_datatype_t recv_dt,
@@ -483,6 +485,60 @@ size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf,
 
     request_release(rreq);
     return recvd;
+}
+
+void test_ucp_tag_xfer::test_xfer_len_offset()
+{
+    const size_t max_offset  = 128;
+    const size_t max_length  = 64 * 1024;
+    const size_t min_length  = 1024;
+    const size_t offset_step = 16;
+    const size_t length_step = 16;
+    const size_t buf_size    = max_length + max_offset + 2;
+    ucp_datatype_t type      = ucp_dt_make_contig(1);
+    void *send_buf           = 0;
+    void *recv_buf           = 0;;
+    size_t offset;
+    size_t length;
+    ucs::detail::message_stream *ms;
+
+    skip_err_handling();
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("valgrind");
+    }
+
+    EXPECT_EQ(posix_memalign(&send_buf, 8192, buf_size), 0);
+    EXPECT_EQ(posix_memalign(&recv_buf, 8192, buf_size), 0);
+
+    memset(send_buf, 0, buf_size);
+    memset(recv_buf, 0, buf_size);
+
+    for (offset = 0; offset <= max_offset; offset += offset_step) {
+        if (!offset || ucs_is_pow2(offset)) {
+            ms = new ucs::detail::message_stream("INFO");
+            *ms << "offset: " << offset << ": ";
+        } else {
+            ms = NULL;
+        }
+        for (length = min_length; length <= max_length; length += length_step) {
+            if (ms && ucs_is_pow2(length)) {
+                *ms << length << " ";
+                fflush(stdout);
+            }
+
+            do_xfer((char*)send_buf + offset, (char*)recv_buf + offset,
+                    length, type, type, true, true, false);
+            do_xfer((char*)send_buf + max_offset - offset,
+                    (char*)recv_buf + max_offset - offset,
+                    length, type, type, true, true, false);
+        }
+        if (ms) {
+            delete(ms);
+        }
+    }
+
+    free(recv_buf);
+    free(send_buf);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, contig_exp) {
@@ -879,6 +935,10 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync_rndv_truncated
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_probe_zcopy, "RNDV_THRESH=1000",
                                                                              "ZCOPY_THRESH=1000") {
     test_xfer_probe(true, false, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, test_xfer_len_offset, "RNDV_THRESH=1000") {
+    test_xfer_len_offset();
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_xfer)
