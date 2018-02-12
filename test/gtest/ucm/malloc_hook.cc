@@ -585,6 +585,7 @@ UCS_TEST_F(malloc_hook_cplusplus, mmap_ptrs) {
         UCS_TEST_SKIP_R("skipping on valgrind");
     }
 
+    ucm_global_config.enable_dynamic_mmap_thresh = 0;
     set();
 
     const size_t   size    = ucm_dlmallopt_get(M_MMAP_THRESHOLD) * 2;
@@ -605,6 +606,11 @@ UCS_TEST_F(malloc_hook_cplusplus, mmap_ptrs) {
         ++large_blocks;
     }
 
+    /* Remove memory off the heap top, to ensure the following large allocations
+     * will use mmap()
+     */
+    malloc_trim(0);
+
     /* Measure allocation time with "clear" heap state */
     double alloc_time = measure_alloc_time(size, iters);
     UCS_TEST_MESSAGE << "With " << large_blocks << " large blocks:"
@@ -612,9 +618,9 @@ UCS_TEST_F(malloc_hook_cplusplus, mmap_ptrs) {
                      << " bytes in " << alloc_time << " sec";
 
     /* Allocate many large strings to trigger mmap() based allocation. */
+    ptrs.resize(count);
     for (unsigned i = 0; i < count; ++i) {
-        std::vector<char> str(size, 't');
-        ptrs.push_back(str);
+        ptrs[i].resize(size, 't');
         ++large_blocks;
     }
 
