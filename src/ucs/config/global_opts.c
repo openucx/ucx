@@ -85,7 +85,12 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, mpool_fifo), UCS_CONFIG_TYPE_BOOL},
 #endif
 
- {"HANDLE_ERRORS", "bt",
+ {"HANDLE_ERRORS",
+#if ENABLE_DEBUG_DATA
+  "bt,freeze",
+#else
+  "bt",
+#endif
   "Error handling mode. A combination of: 'bt' (print backtrace),\n"
   "'freeze' (freeze and wait for a debugger), 'debug' (attach debugger)",
   ucs_offsetof(ucs_global_opts_t, handle_errors),
