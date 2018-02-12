@@ -513,6 +513,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
         goto out;
     }
 
+    rndv_req->send.pending_lane = UCP_NULL_LANE;
+
     /* if the receive side is not connected yet then the RTS was received on a stub ep */
     ep = rndv_req->send.ep;
     if (ucp_ep_is_stub(ep)) {
