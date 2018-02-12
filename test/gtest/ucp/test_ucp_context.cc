@@ -79,13 +79,14 @@ UCS_TEST_P(test_ucp_version, wrong_api_version) {
     ucp_context_h ucph;
     ucs_status_t status;
     {
-        wrap_errors();
+        hide_warnings();
         status = ucp_init_version(99, 99, &params, config.get(), &ucph);
         restore_errors();
     }
-    if (status == UCS_OK) {
+    if (status != UCS_OK) {
+        ADD_FAILURE() << "Failed to create UCP with wrong version";
+    } else {
         ucp_cleanup(ucph);
-        ADD_FAILURE() << "Created UCP with wrong version";
     }
 }
 
