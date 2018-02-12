@@ -74,6 +74,7 @@ protected:
     static unsigned                 m_total_errors;
     static unsigned                 m_total_warnings;
     static std::vector<std::string> m_errors;
+    static std::vector<std::string> m_warnings;
 
 private:
     void skipped(const test_skip_exception& e);

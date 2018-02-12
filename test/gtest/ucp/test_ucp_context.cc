@@ -78,14 +78,19 @@ UCS_TEST_P(test_ucp_version, wrong_api_version) {
     ucp_params_t params = get_ctx_params();
     ucp_context_h ucph;
     ucs_status_t status;
+    size_t warn_count;
     {
         hide_warnings();
+        warn_count = m_warnings.size();
         status = ucp_init_version(99, 99, &params, config.get(), &ucph);
         restore_errors();
     }
     if (status != UCS_OK) {
         ADD_FAILURE() << "Failed to create UCP with wrong version";
     } else {
+        if (m_warnings.size() == warn_count) {
+            ADD_FAILURE() << "Missing wrong version warning";
+        }
         ucp_cleanup(ucph);
     }
 }

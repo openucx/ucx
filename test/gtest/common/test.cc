@@ -16,6 +16,7 @@ pthread_mutex_t test_base::m_logger_mutex = PTHREAD_MUTEX_INITIALIZER;
 unsigned test_base::m_total_warnings = 0;
 unsigned test_base::m_total_errors   = 0;
 std::vector<std::string> test_base::m_errors;
+std::vector<std::string> test_base::m_warnings;
 
 test_base::test_base() :
                 m_state(NEW),
@@ -188,7 +189,7 @@ test_base::hide_warns_logger(const char *file, unsigned line, const char *functi
         pthread_mutex_lock(&m_logger_mutex);
         va_list ap2;
         va_copy(ap2, ap);
-        m_errors.push_back(format_message(message, ap2));
+        m_warnings.push_back(format_message(message, ap2));
         va_end(ap2);
         level = UCS_LOG_LEVEL_DEBUG;
         pthread_mutex_unlock(&m_logger_mutex);
