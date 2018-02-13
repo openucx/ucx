@@ -537,7 +537,7 @@ void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
         count = ucp_stream_worker_poll(e(m_receiver_idx).worker(),
                                        poll_eps, max_eps, 0);
         EXPECT_LE(0, count);
-        EXPECT_LE(count, m_nsenders);
+        EXPECT_LE(size_t(count), m_nsenders);
 
         for (ssize_t i = 0; i < count; ++i) {
             bool again = true;
@@ -555,7 +555,7 @@ void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
                                                 ucp_recv_cb, &length, 0);
                 EXPECT_FALSE(UCS_PTR_IS_ERR(rreq));
                 if (rreq == NULL) {
-                    EXPECT_LT(0, length);
+                    EXPECT_LT(size_t(0), length);
                     roffset += length;
                     if (ssize_t(length) < dt_desc.buf_length()) {
                         continue; /* Need to drain the EP */
