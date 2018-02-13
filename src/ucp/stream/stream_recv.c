@@ -258,12 +258,11 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
     size_t              dt_length;
     ucp_request_t       *req;
     ucp_recv_desc_t     *rdesc;
-    ucp_dt_state_t      dt_state;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
     if (ucs_likely(!UCP_DT_IS_GENERIC(datatype))) {
-        dt_length = ucp_dt_length(datatype, count, buffer, &dt_state);
+        dt_length = ucp_dt_length(datatype, count, buffer, NULL);
         if (ucs_likely(ucp_stream_recv_nb_is_inplace(ep_stream, dt_length))) {
             status = ucp_stream_process_rdesc_inplace(ucp_stream_rdesc_get(ep_stream),
                                                       datatype, buffer, count,
@@ -271,6 +270,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
             *length = dt_length;
             goto out_status;
         }
+    } else {
+        dt_length = 0; /* Suppress warnings of paranoid compilers */
     }
 
     req = ucp_request_get(ep->worker);
