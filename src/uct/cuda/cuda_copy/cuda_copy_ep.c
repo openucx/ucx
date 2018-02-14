@@ -55,15 +55,13 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t 
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = CUDA_FUNC(cudaMemcpyAsync(dst, src, length, direction, stream));
+    status = UCT_CUDA_FUNC(cudaMemcpyAsync(dst, src, length, direction, stream));
     if (UCS_OK != status) {
-        ucs_error("cudaMemcpyAsync Failed ");
         return UCS_ERR_IO_ERROR;
     }
 
-    status = CUDA_FUNC(cudaEventRecord(cuda_event->event, stream));
+    status = UCT_CUDA_FUNC(cudaEventRecord(cuda_event->event, stream));
     if (UCS_OK != status) {
-        ucs_error("cudaEventRecord Failed ");
         return UCS_ERR_IO_ERROR;
     }
     ucs_queue_push(outstanding_queue, &cuda_event->queue);
@@ -80,6 +78,14 @@ ucs_status_t uct_cuda_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
+
+    if (iface->stream_d2h == 0) {
+        status = UCT_CUDA_FUNC(cudaStreamCreateWithFlags(&iface->stream_d2h,
+                               cudaStreamNonBlocking));
+        if (UCS_OK != status) {
+            return UCS_ERR_IO_ERROR;
+        }
+    }
 
     status = uct_cuda_copy_post_cuda_async_copy(tl_ep, iov[0].buffer, (void *)remote_addr,
                                                 iov[0].length, cudaMemcpyDeviceToHost,
@@ -100,6 +106,14 @@ ucs_status_t uct_cuda_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
 
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
+
+    if (iface->stream_h2d == 0) {
+        status = UCT_CUDA_FUNC(cudaStreamCreateWithFlags(&iface->stream_h2d,
+                               cudaStreamNonBlocking));
+        if (UCS_OK != status) {
+            return UCS_ERR_IO_ERROR;
+        }
+    }
 
     status = uct_cuda_copy_post_cuda_async_copy(tl_ep, (void *)remote_addr,  iov[0].buffer,
                                                 iov[0].length, cudaMemcpyHostToDevice,
