@@ -823,7 +823,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         /* TODO: look at common code with uct_ud_mlx5_iface_get_av */
         if (dc_req->sender.global.is_global) {
             uct_ib_iface_fill_ah_attr_from_gid_lid(ib_iface, dc_req->lid,
-                                                   (void*)&dc_req->sender.global.gid,
+                                                   ucs_unaligned_ptr(&dc_req->sender.global.gid),
                                                    ib_iface->path_bits[0], &ah_attr);
 
             status = uct_ib_iface_create_ah(ib_iface, &ah_attr, &ah);
