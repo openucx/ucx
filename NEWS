@@ -38,7 +38,6 @@ Tested configurations:
 Known issues:
   #2047 - UCP: ucp_do_am_bcopy_multi drops data on UCS_ERROR_NO_RESOURCE
   #2047 - failure in ud/uct_flush_test.am_zcopy_flush_ep_nb/1
-  #2025 - Data corruption on some ARM machines
   #1977 - failure in shm/test_ucp_rma.blocking_small/0
   #1926 - Timeout in mpi_test_suite with HW TM
   #1920 - transport retry count exceeded in many-to-one tests
