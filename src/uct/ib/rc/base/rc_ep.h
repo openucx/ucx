@@ -306,7 +306,10 @@ static UCS_F_ALWAYS_INLINE void uct_rc_txqp_check(uct_rc_txqp_t *txqp)
 
 static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
 {
-    return ((ep->txqp.available > 0) && (ep->fc.fc_wnd > 0));
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
+
+    return (ep->txqp.available > 0) &&
+           ((ep->fc.fc_wnd > 0) || !iface->config.fc_enabled);
 }
 
 static UCS_F_ALWAYS_INLINE void
