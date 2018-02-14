@@ -46,7 +46,8 @@ uct_ud_mlx5_ep_ctrl_av_size(uct_ud_mlx5_ep_t *ep)
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
-                      uint8_t se, struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size)
+                      uint8_t se, struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
+                      int max_log_sge)
 {
     struct mlx5_wqe_datagram_seg *dgram = (void*)(ctrl + 1);
 
@@ -58,7 +59,7 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
 
     uct_ib_mlx5_log_tx(&iface->super.super, IBV_QPT_UD, ctrl,
                        iface->tx.wq.qstart, iface->tx.wq.qend,
-                       uct_ud_dump_packet);
+                       max_log_sge, uct_ud_dump_packet);
     iface->super.tx.available -= uct_ib_mlx5_post_send(&iface->tx.wq, ctrl,
                                                        wqe_size);
     ucs_assert((int16_t)iface->tx.wq.bb_max >= iface->super.tx.available);
@@ -66,7 +67,7 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_mlx5_ep_tx_skb(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
-                      uct_ud_send_skb_t *skb, uint8_t se)
+                      uct_ud_send_skb_t *skb, uint8_t se, int max_log_sge)
 {
     size_t ctrl_av_size = uct_ud_mlx5_ep_ctrl_av_size(ep);
     struct mlx5_wqe_ctrl_seg *ctrl;
@@ -76,7 +77,7 @@ uct_ud_mlx5_ep_tx_skb(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     dptr = uct_ib_mlx5_txwq_wrap_exact(&iface->tx.wq, (void*)ctrl + ctrl_av_size);
     uct_ib_mlx5_set_data_seg(dptr, skb->neth, skb->len, skb->lkey);
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, skb->neth);
-    uct_ud_mlx5_post_send(iface, ep, se, ctrl, ctrl_av_size + sizeof(*dptr));
+    uct_ud_mlx5_post_send(iface, ep, se, ctrl, ctrl_av_size + sizeof(*dptr), max_log_sge);
 }
 
 static inline void
@@ -93,7 +94,7 @@ uct_ud_mlx5_ep_tx_inl(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     uct_ib_mlx5_inline_copy(inl + 1, buf, length, &iface->tx.wq);
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, (uct_ud_neth_t *)buf);
     uct_ud_mlx5_post_send(iface, ep, se, ctrl,
-                          ctrl_av_size + sizeof(*inl) + length);
+                          ctrl_av_size + sizeof(*inl) + length, INT_MAX);
 }
 
 
@@ -107,7 +108,7 @@ static void uct_ud_mlx5_ep_tx_ctl_skb(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb
 
     se = solicited ? MLX5_WQE_CTRL_SOLICITED : 0;
     if (skb->len >= iface->super.config.max_inline) {
-        uct_ud_mlx5_ep_tx_skb(iface, ep, skb, se);
+        uct_ud_mlx5_ep_tx_skb(iface, ep, skb, se, INT_MAX);
     } else {
         uct_ud_mlx5_ep_tx_inl(iface, ep, skb->neth, skb->len, se);
     }
@@ -211,7 +212,7 @@ uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     UCT_CHECK_LENGTH(wqe_size, 0, UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
                      "am_short");
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
-    uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size);
+    uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size, INT_MAX);
 
     skb->len = sizeof(*neth) + sizeof(*am);
     memcpy(skb->neth, neth, skb->len);
@@ -244,7 +245,7 @@ static ssize_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     length = uct_ud_skb_bcopy(skb, pack_cb, arg);
     UCT_UD_CHECK_BCOPY_LENGTH(&iface->super, length);
 
-    uct_ud_mlx5_ep_tx_skb(iface, ep, skb, 0);
+    uct_ud_mlx5_ep_tx_skb(iface, ep, skb, 0, INT_MAX);
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     uct_ud_leave(&iface->super);
@@ -302,7 +303,8 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     ucs_assert(wqe_size <= (UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB));
 
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
-    uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size);
+    uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size,
+                          UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super));
 
     skb->len = sizeof(*neth) + header_length;
     memcpy(skb->neth, neth, sizeof(*neth));
@@ -361,7 +363,7 @@ uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
     UCT_CHECK_LENGTH(wqe_size, 0, UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
                      "put_short");
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
-    uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size);
+    uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size, INT_MAX);
 
     skb->len = sizeof(*neth) + sizeof(*put_hdr);
     memcpy(skb->neth, neth, skb->len);
