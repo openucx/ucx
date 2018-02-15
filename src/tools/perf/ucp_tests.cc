@@ -320,7 +320,6 @@ public:
         recv_datatype = ucp_perf_test_get_datatype(m_perf.params.ucp.recv_datatype,
                                                    m_perf.ucp.recv_iov, &recv_length,
                                                    &recv_buffer);
-        force_connection(ep);
 
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
@@ -382,7 +381,6 @@ public:
         recv_datatype = ucp_perf_test_get_datatype(m_perf.params.ucp.recv_datatype,
                                                    m_perf.ucp.recv_iov, &recv_length,
                                                    &recv_buffer);
-        force_connection(ep);
 
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
@@ -425,16 +423,6 @@ public:
     }
 
 private:
-    void force_connection(ucp_ep_h ep)
-    {
-        /* for one sided test make sure that eps
-         * are connected
-         */
-        if (FLAGS & UCX_PERF_TEST_FLAG_ONE_SIDED) {
-            ucp_ep_flush(ep);
-        }
-    }
-
     ucs_status_t UCS_F_ALWAYS_INLINE
     recv_stream_data(ucp_ep_h ep, unsigned length, ucp_datatype_t datatype,
                      uint8_t sn)
