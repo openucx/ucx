@@ -7,11 +7,67 @@
 ##
 #
 
-## Next Release
-Supported platforms:
+## 1.3.0 (February 15, 2018)
+
 Features:
+- Added stream-based communication API to UCP
+- Added support for GPU platforms: Nvidia CUDA and AMD ROCM software stacks
+- Added API for client/server based connection establishment
+- Added support for TCP transport
+- Support for InfiniBand tag-matching offload for DC and accelerated transports
+- Multi-rail support for eager and rendezvous protocols
+- Added support for tag-matching communications with CUDA buffers
+- Added ucp_rkey_ptr() to obtain pointer for shared memory region
+- Avoid progress overhead on unused transports
+- Improved scalability of software tag-matching by using a hash table
+- Added transparent huge-pages allocator
+- Added non-blocking flush and disconnect for UCP
+- Support fixed-address memory allocation via ucp_mem_map()
+- Added ucp_tag_send_nbr() API to avoid send request allocation
+- Support global addressing in all IB transports
+- Add support for external epoll fd and edge-triggered events
+- Added registration cache for knem
+- Initial support for Java bindings
 Bugfixes:
+- Multiple bugfixes (full list on githib)
+Tested configurations:
+- InfiniBand: MLNX_OFED 4.2, inbox OFED drivers.
+- CUDA: gdrcopy 1.2, cuda 9.1.85
+- XPMEM: 2.6.2
+- KNEM: 1.1.2
 Known issues:
+  #2047 - UCP: ucp_do_am_bcopy_multi drops data on UCS_ERROR_NO_RESOURCE
+  #2047 - failure in ud/uct_flush_test.am_zcopy_flush_ep_nb/1
+  #1977 - failure in shm/test_ucp_rma.blocking_small/0
+  #1926 - Timeout in mpi_test_suite with HW TM
+  #1920 - transport retry count exceeded in many-to-one tests
+  #1689 - Segmentation fault on memory hooks test in jenkins
+
+
+## 1.2.2 (January 4, 2018)
+
+Main:
+- Support including UCX API headers from C++ code
+- UD transport to handle unicast flood on RoCE fabric
+- Compilation fixes for gcc 7.1.1, clang 3.6, clang 5
+
+Details:
+- When UD transport is used with RoCE, packets intended for other peers may
+  arrive on different adapters (as a result of unicast flooding).
+- This change adds packet filtering based on destination GIDs. Now the packet
+  is silently dropped, if its destination GID does not match the local GID.
+- Added a new device ID for InfiniBand HCA
+- [packaging] Move `examples/` and `perftest/` into doc
+- [packaging] Update spec to work on old distros while complaint with Fedora
+  guidelines
+- [cleanup] Removed unused ptmalloc version (2.83)
+- [cleanup] Fixup license headers
+
+## 1.2.1 (August 28, 2017)
+
+- Compilation fixes for gcc 7.1
+- Spec file cleanups
+- Versioning cleanups
 
 ## 1.2.0 (June 15, 2017)
 
