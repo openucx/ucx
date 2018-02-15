@@ -167,7 +167,7 @@ static inline int uct_dc_iface_dci_ep_can_send(uct_dc_ep_t *ep)
 {
     uct_dc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_iface_t);
     return (!(ep->flags & UCT_DC_EP_FLAG_TX_WAIT)) &&
-           (ep->fc.fc_wnd > 0) &&
+           uct_rc_fc_has_resources(&iface->super, &ep->fc) &&
            uct_dc_iface_dci_has_tx_resources(iface, ep->dci);
 }
 
@@ -176,7 +176,7 @@ void uct_dc_iface_schedule_dci_alloc(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
 {
     /* If FC window is empty the group will be scheduled when
      * grant is received */
-    if ((ep->fc.fc_wnd > 0) || !iface->super.config.fc_enabled) {
+    if (uct_rc_fc_has_resources(&iface->super, &ep->fc)) {
         ucs_arbiter_group_schedule(uct_dc_iface_dci_waitq(iface), &ep->arb_group);
     }
 }

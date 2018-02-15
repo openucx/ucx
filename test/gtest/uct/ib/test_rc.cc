@@ -67,7 +67,6 @@ UCS_TEST_P(test_rc_max_wr, send_limit)
 UCT_RC_INSTANTIATE_TEST_CASE(test_rc_max_wr)
 
 
-int test_rc_flow_control::m_req_count        = 0;
 uint32_t test_rc_flow_control::m_am_rx_count = 0;
 
 void test_rc_flow_control::init()
@@ -147,24 +146,48 @@ void test_rc_flow_control::test_pending_grant(int wnd)
     send_am_messages(m_e1, 1, UCS_OK);
 }
 
+void test_rc_flow_control::test_flush_fc_disabled()
+{
+    set_fc_disabled(m_e1);
+    ucs_status_t status;
+
+    /* If FC is disabled, wnd=0 should not prevent the flush */
+    get_fc_ptr(m_e1)->fc_wnd = 0;
+    status = uct_ep_flush(m_e1->ep(0), 0, NULL);
+    EXPECT_EQ(UCS_OK, status);
+
+    /* send active message should be OK */
+    get_fc_ptr(m_e1)->fc_wnd = 1;
+    status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(0, get_fc_ptr(m_e1)->fc_wnd);
+
+    /* flush must have resources */
+    status = uct_ep_flush(m_e1->ep(0), 0, NULL);
+    EXPECT_FALSE(UCS_STATUS_IS_ERR(status)) << ucs_status_string(status);
+}
+
 void test_rc_flow_control::test_pending_purge(int wnd, int num_pend_sends)
 {
-    uct_pending_req_t reqs[num_pend_sends];
+    pending_send_request_t reqs[num_pend_sends];
 
     disable_entity(m_e2);
     set_fc_attributes(m_e1, true, wnd, wnd, 1);
 
-    m_req_count = 0;
     send_am_and_flush(m_e1, wnd);
 
     /* Now m2 ep should have FC grant message in the pending queue.
      * Add some user pending requests as well */
-    for (int i = 0; i < num_pend_sends; i ++) {
-        reqs[i].func = NULL; /* make valgrind happy */
-        EXPECT_EQ(uct_ep_pending_add(m_e2->ep(0), &reqs[i]), UCS_OK);
+    for (int i = 0; i < num_pend_sends; i++) {
+        reqs[i].uct.func    = NULL; /* make valgrind happy */
+        reqs[i].purge_count = 0;
+        EXPECT_EQ(uct_ep_pending_add(m_e2->ep(0), &reqs[i].uct), UCS_OK);
     }
     uct_ep_pending_purge(m_e2->ep(0), purge_cb, NULL);
-    EXPECT_EQ(num_pend_sends, m_req_count);
+
+    for (int i = 0; i < num_pend_sends; i++) {
+        EXPECT_EQ(1, reqs[i].purge_count);
+    }
 }
 
 
@@ -204,6 +227,11 @@ UCS_TEST_P(test_rc_flow_control, pending_purge)
 UCS_TEST_P(test_rc_flow_control, pending_grant)
 {
     test_pending_grant(5);
+}
+
+UCS_TEST_P(test_rc_flow_control, fc_disabled_flush)
+{
+    test_flush_fc_disabled();
 }
 
 UCT_RC_INSTANTIATE_TEST_CASE(test_rc_flow_control)
