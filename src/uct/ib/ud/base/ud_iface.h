@@ -213,7 +213,7 @@ uct_ud_send_skb_t *uct_ud_iface_resend_skb_get(uct_ud_iface_t *iface);
 static inline void
 uct_ud_iface_resend_skb_put(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb)
 {
-    if (skb != (void*)&iface->tx.skb_inl.super) {
+    if (skb != ucs_unaligned_ptr(&iface->tx.skb_inl.super)) {
         ucs_queue_push(&iface->tx.resend_skbs, &skb->queue);
     }
 }
