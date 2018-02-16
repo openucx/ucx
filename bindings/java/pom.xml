@@ -18,6 +18,7 @@
     <ucs.lib.path>${ucx.src.dir}/ucs/.libs</ucs.lib.path>
     <uct.lib.path>${ucx.src.dir}/uct/.libs</uct.lib.path>
     <ucp.lib.path>${ucx.src.dir}/ucp/.libs</ucp.lib.path>
+    <junit.version>4.12</junit.version>
     <sources>**/jucx/**</sources>
     <testSources>**/dummy/**</testSources>
     <skipCopy>false</skipCopy>
@@ -27,7 +28,7 @@
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      <version>4.12</version>
+      <version>${junit.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
