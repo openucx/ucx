@@ -371,8 +371,8 @@ class test_dc_flow_control : public test_rc_flow_control {
 public:
 
     /* virtual */
-    uct_rc_fc_t* get_fc_ptr(entity *e) {
-        return &ucs_derived_of(e->ep(0), uct_dc_ep_t)->fc;
+    uct_rc_fc_t* get_fc_ptr(entity *e, int ep_idx = 0) {
+        return &ucs_derived_of(e->ep(ep_idx), uct_dc_ep_t)->fc;
     }
 };
 
@@ -393,6 +393,41 @@ UCS_TEST_P(test_dc_flow_control, pending_grant)
 {
     test_pending_grant(5);
     flush();
+}
+
+UCS_TEST_P(test_dc_flow_control, fc_disabled_flush)
+{
+    test_flush_fc_disabled();
+}
+
+UCS_TEST_P(test_dc_flow_control, fc_disabled_pending_no_dci) {
+
+    pending_send_request_t pending_req;
+    pending_req.uct.func = pending_cb;
+    pending_req.cb_count = 0;
+
+    set_fc_disabled(m_e1);
+
+    /* Send on new endpoints until out of DCIs */
+    for (int ep_index = 0; ep_index < 20; ++ep_index) {
+        m_e1->connect(ep_index, *m_e2, ep_index);
+
+        ucs_status_t status = uct_ep_am_short(m_e1->ep(ep_index), 0, 0, NULL, 0);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            /* if FC is disabled, it should be OK to set fc_wnd to 0 */
+            get_fc_ptr(m_e1, ep_index)->fc_wnd = 0;
+
+            /* Add to pending */
+            status = uct_ep_pending_add(m_e1->ep(ep_index), &pending_req.uct);
+            ASSERT_UCS_OK(status);
+
+            wait_for_flag(&pending_req.cb_count);
+            EXPECT_EQ(1, pending_req.cb_count);
+            break;
+        }
+
+        ASSERT_UCS_OK(status);
+    }
 }
 
 /* Check that soft request is not handled by DC */
@@ -487,8 +522,8 @@ public:
         test_rc_flow_control_stats::init();
     }
 
-    uct_rc_fc_t* get_fc_ptr(entity *e) {
-        return &ucs_derived_of(e->ep(0), uct_dc_ep_t)->fc;
+    uct_rc_fc_t* get_fc_ptr(entity *e, int ep_idx = 0) {
+        return &ucs_derived_of(e->ep(ep_idx), uct_dc_ep_t)->fc;
     }
 
     uct_rc_fc_t* fake_ep_fc_ptr(entity *e) {
