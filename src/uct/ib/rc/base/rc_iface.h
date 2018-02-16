@@ -377,9 +377,9 @@ typedef struct uct_rc_am_short_hdr {
 #  define UCT_RC_IFACE_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, _hdr) \
       { \
           UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
-          hdr = _desc + 1; \
+          _hdr = _desc + 1; \
           uct_rc_iface_fill_tmh(_hdr, _tag, _app_ctx, IBV_EXP_TMH_EAGER); \
-          hdr += sizeof(struct ibv_exp_tmh); \
+          _hdr += sizeof(struct ibv_exp_tmh); \
       }
 
 #  define UCT_RC_IFACE_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
