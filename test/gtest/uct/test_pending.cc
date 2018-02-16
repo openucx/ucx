@@ -34,6 +34,7 @@ public:
         uct_pending_req_t uct;
         int               active;
         int               id;
+        mapped_buffer    *buf;
     } pending_send_request_t;
 
     static ucs_status_t am_handler(void *arg, void *data, size_t length,
@@ -91,6 +92,21 @@ public:
         return status;
     }
 
+    static ucs_status_t pending_send_op_bcopy(uct_pending_req_t *self) {
+
+        pending_send_request_t *req = ucs_container_of(self, pending_send_request_t, uct);
+        ssize_t packed_len;
+
+        packed_len = uct_ep_am_bcopy(req->ep, 0, mapped_buffer::pack, req->buf, 0);
+        if (packed_len > 0) {
+            req->countdown ++;
+            n_pending--;
+            req->active = 0;
+            return UCS_OK;
+        }
+        return (ucs_status_t)packed_len;
+    }
+
     pending_send_request_t* pending_alloc(uint64_t send_data) {
         pending_send_request_t *req =  new pending_send_request_t();
         req->ep        = m_e1->ep(0);
@@ -106,6 +122,17 @@ public:
         req->data      = send_data;
         req->countdown = 0;
         req->uct.func  = pending_send_op_simple;
+        req->active    = 0;
+        req->id        = idx;
+        return req;
+    }
+
+    pending_send_request_t* pending_alloc_simple(mapped_buffer *sbuf, int idx) {
+        pending_send_request_t *req =  new pending_send_request_t();
+        req->ep        = m_e1->ep(idx);
+        req->buf       = sbuf;
+        req->countdown = 0;
+        req->uct.func  = pending_send_op_bcopy;
         req->active    = 0;
         req->id        = idx;
         return req;
@@ -252,6 +279,53 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
     unsigned exp_counter = send_data - 0xdeadbeefUL;
     wait_for_value(&counter, exp_counter, true);
     EXPECT_EQ(exp_counter, counter);
+}
+
+/*
+ * test that the pending op callback is only called from the progress()
+ */
+UCS_TEST_P(test_uct_pending, pending_async)
+{
+    pending_send_request_t *req = NULL;
+    ucs_status_t status;
+    ssize_t packed_len;
+
+    initialize();
+    check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_PENDING);
+
+    mapped_buffer sbuf(ucs_min(64ul, m_e1->iface_attr().cap.am.max_bcopy), 0,
+                       *m_e1);
+
+    req = pending_alloc_simple(&sbuf, 0);
+
+    /* set a callback for the uct to invoke when receiving the data */
+    install_handler_sync_or_async(m_e2->iface(), 0, am_handler_simple, 0);
+
+    /* send while resources are available */
+    n_pending = 0;
+    do {
+        packed_len = uct_ep_am_bcopy(m_e1->ep(0), 0, mapped_buffer::pack,
+                                     &sbuf, 0);
+    } while (packed_len >= 0);
+
+    EXPECT_TRUE(packed_len == UCS_ERR_NO_RESOURCE);
+
+    status = uct_ep_pending_add(m_e1->ep(0), &req->uct);
+    EXPECT_UCS_OK(status);
+    n_pending++;
+
+    /* pending op must not be called either asynchronously or from the
+     * uct_ep_am_bcopy() */
+    twait(300);
+    EXPECT_EQ(1, n_pending);
+
+    packed_len = uct_ep_am_bcopy(m_e1->ep(0), 0, mapped_buffer::pack, &sbuf, 0);
+    EXPECT_EQ(1, n_pending);
+    EXPECT_GT(0, packed_len);
+
+    wait_for_value(&n_pending, 0, true);
+    EXPECT_EQ(0, n_pending);
+    delete req;
 }
 
 UCS_TEST_P(test_uct_pending, pending_fairness)

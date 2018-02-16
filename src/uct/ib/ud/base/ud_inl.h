@@ -7,7 +7,6 @@
 static UCS_F_ALWAYS_INLINE void
 uct_ud_ep_ctl_op_schedule(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
-    ucs_assert(!iface->tx.in_pending);
     ucs_arbiter_group_push_elem(&ep->tx.pending.group,
                                 &ep->tx.pending.elem);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
@@ -21,15 +20,6 @@ uct_ud_ep_ctl_op_add(uct_ud_iface_t *iface, uct_ud_ep_t *ep, int op)
 {
     ep->tx.pending.ops |= op;
     uct_ud_ep_ctl_op_schedule(iface, ep);
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_ud_ep_ctl_op_add_safe(uct_ud_iface_t *iface, uct_ud_ep_t *ep, int op)
-{
-    ep->tx.pending.ops |= op;
-    if (!iface->tx.in_pending) {
-        uct_ud_ep_ctl_op_schedule(iface, ep);
-    }
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -81,7 +71,8 @@ static UCS_F_ALWAYS_INLINE uct_ud_send_skb_t *
 uct_ud_ep_get_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     if (ucs_unlikely(!uct_ud_ep_is_connected(ep) ||
-                     uct_ud_ep_no_window(ep))) {
+                     uct_ud_ep_no_window(ep) ||
+                     uct_ud_iface_has_pending_async_ev(iface))) {
         ucs_trace_data("iface=%p ep=%p (%d->%d) no ep resources (psn=%u max_psn=%u)",
                        iface, ep, ep->ep_id, ep->dest_ep_id,
                        (unsigned)ep->tx.psn,

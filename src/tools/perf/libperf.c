@@ -1081,6 +1081,13 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
     if (status != UCS_OK) {
         ucp_perf_test_destroy_eps(perf, group_size);
     }
+
+    /* force wireup completion */
+    status = ucp_worker_flush(perf->ucp.worker);
+    if (status != UCS_OK) {
+        ucs_warn("ucp_worker_flush() failed: %s", ucs_status_string(status));
+    }
+
     return status;
 
 err_free_buffer:

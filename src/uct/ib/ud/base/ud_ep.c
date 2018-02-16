@@ -13,6 +13,8 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 
+static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface);
+
 static void uct_ud_peer_name(uct_ud_peer_name_t *peer)
 {
     gethostname(peer->name, sizeof(peer->name));
@@ -176,7 +178,6 @@ uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
 {
     uct_ud_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem),
                                        uct_ud_ep_t, tx.pending.group);
-    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_pending_req_t *req;
 
     /* we may have pending op on ep */
@@ -188,7 +189,6 @@ uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
     /* uct user should not have anything pending */
     req = ucs_container_of(elem, uct_pending_req_t, priv);
     ucs_warn("ep=%p removing user pending req=%p", ep, req);
-    iface->tx.pending_q_len--;
 
     /* return ignored by arbiter */
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
@@ -709,11 +709,24 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
         skb = ucs_queue_tail_elem_non_empty(&ep->tx.window, uct_ud_send_skb_t, queue);
         psn = skb->neth->psn;
         if (!(skb->flags & UCT_UD_SEND_SKB_FLAG_ACK_REQ)) {
-            /* If we didn't ask for ACK on last skb, schedule an ACK message.
+            /* If we didn't ask for ACK on last skb, send an ACK_REQ message.
+             * It will speed up the flush because we will not have to wait untill
+             * retransmit is triggered.
              * Also, prevent from sending more control messages like this after
              * first time by turning on the flag on the last skb.
              */
-            uct_ud_ep_ctl_op_add_safe(iface, ep, UCT_UD_SEND_SKB_FLAG_ACK_REQ);
+
+            /* Since the function can be called from the arbiter context it is
+             * impossible to schedule a control operation. So just raise a
+             * flag and if there is no other control send ACK_REQ directly.
+             *
+             * If there is other control arbiter will take care of it.
+             */
+            ep->tx.pending.ops |= UCT_UD_EP_OP_ACK_REQ;
+            if (uct_ud_ep_ctl_op_check_ex(ep, UCT_UD_EP_OP_ACK_REQ)) {
+                uct_ud_ep_do_pending_ctl(ep, iface);
+            }
+
             skb->flags |= UCT_UD_SEND_SKB_FLAG_ACK_REQ;
         }
 
@@ -774,18 +787,23 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
         uct_ep_pending_purge(ep_h, NULL, 0);
         /* Open window after cancellation for next sending */
         uct_ud_ep_ca_ack(ep);
-
-        uct_ud_leave(iface);
-        return UCS_OK;
+        status = UCS_OK;
+        goto out;
     }
 
-    uct_ud_iface_progress_pending_tx(iface);
+    if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
+        status = UCS_ERR_NO_RESOURCE;
+        goto out;
+    }
+
     status = uct_ud_ep_flush_nolock(iface, ep, comp);
     if (status == UCS_OK) {
         UCT_TL_EP_STAT_FLUSH(&ep->super);
     } else if (status == UCS_INPROGRESS) {
         UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
     }
+
+out:
     uct_ud_leave(iface);
     return status;
 }
@@ -1035,8 +1053,9 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
      * - there are only low priority ctl pending or not ctl at all
      */
     if (!in_async_progress &&
-            (uct_ud_ep_ctl_op_check_ex(ep, UCT_UD_EP_OP_CTL_LOW_PRIO) ||
-             !uct_ud_ep_ctl_op_isany(ep))) {
+        (uct_ud_ep_ctl_op_check_ex(ep, UCT_UD_EP_OP_CTL_LOW_PRIO) ||
+        !uct_ud_ep_ctl_op_isany(ep))) {
+
         uct_pending_req_t *req;
         ucs_status_t status;
 
@@ -1053,7 +1072,6 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
             uct_ud_ep_do_pending_ctl(ep, iface);
             return uct_ud_ep_ctl_op_next(ep);
         }
-        iface->tx.pending_q_len--;
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
     /* try to send ctl messages */
@@ -1069,8 +1087,15 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req)
 
     uct_ud_enter(iface);
 
-    /* try to flush pending queue first */
-    uct_ud_iface_progress_pending(iface, 0);
+    /* if there was an async progress all 'send' ops return
+     * UCS_ERR_NO_RESOURCE. If we return UCS_ERR_BUSY there will
+     * be a deadlock.
+     * So we must skip a resource check and add a pending op in order to
+     * avoid a deadlock.
+     */
+    if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
+        goto add_req;
+    }
 
     if (uct_ud_iface_can_tx(iface) &&
         uct_ud_iface_has_skbs(iface) &&
@@ -1081,12 +1106,12 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req)
         return UCS_ERR_BUSY;
     }
 
+add_req:
     ucs_arbiter_elem_init((ucs_arbiter_elem_t *)req->priv);
     ucs_arbiter_group_push_elem(&ep->tx.pending.group,
                                 (ucs_arbiter_elem_t *)req->priv);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
 
-    iface->tx.pending_q_len++;
     uct_ud_leave(iface);
     return UCS_OK;
 }
@@ -1097,10 +1122,9 @@ uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
 {
     uct_ud_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem),
                                        uct_ud_ep_t, tx.pending.group);
-    uct_pending_req_t *req;
-    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_purge_cb_args_t *cb_args    = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;
+    uct_pending_req_t *req;
 
     if (&ep->tx.pending.elem == elem) {
         /* return ignored by arbiter */
@@ -1112,7 +1136,6 @@ uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
     } else {
         ucs_debug("ep=%p cancelling user pending request %p", ep, req);
     }
-    iface->tx.pending_q_len--;
 
     /* return ignored by arbiter */
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;

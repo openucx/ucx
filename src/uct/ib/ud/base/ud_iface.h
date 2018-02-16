@@ -103,7 +103,7 @@ static inline ucs_status_t uct_ud_iface_null_hook(uct_ud_iface_t *iface,
 
 typedef struct uct_ud_iface_ops {
     uct_ib_iface_ops_t        super;
-    void                      (*async_progress)(uct_ud_iface_t *iface);
+    unsigned                  (*async_progress)(uct_ud_iface_t *iface);
     void                      (*tx_skb)(uct_ud_ep_t *ep, uct_ud_send_skb_t *skb,
                                         int solicited);
 } uct_ud_iface_ops_t;
@@ -122,14 +122,14 @@ struct uct_ud_iface {
         uct_ud_send_skb_t     *skb; /* ready to use skb */
         uct_ud_send_skb_inl_t  skb_inl;
         ucs_mpool_t            mp;
+        /* got async events but pending queue was not dispatched */
+        uint8_t                async_before_pending;
         int16_t                available;
         unsigned               unsignaled;
         /* pool of skbs that are reserved for retransmissions */
         ucs_queue_head_t       resend_skbs;
         unsigned               resend_skbs_quota;
         ucs_arbiter_t          pending_q;
-        int                    pending_q_len;
-        int                    in_pending;
         ucs_queue_head_t       async_comp_q;
     } tx;
     struct {
@@ -376,26 +376,29 @@ uct_ud_iface_get_async_time(uct_ud_iface_t *iface)
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_progress_pending(uct_ud_iface_t *iface, const uintptr_t is_async)
 {
+    if (!is_async) {
+        iface->tx.async_before_pending = 0;
+    }
 
     if (!uct_ud_iface_can_tx(iface)) {
         return;
     }
 
-    iface->tx.in_pending = 1;
-    ucs_arbiter_dispatch(&iface->tx.pending_q, 1,
-             uct_ud_ep_do_pending, (void *)is_async);
-    iface->tx.in_pending = 0;
+    ucs_arbiter_dispatch(&iface->tx.pending_q, 1, uct_ud_ep_do_pending,
+                         (void *)is_async);
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ud_iface_has_pending_async_ev(uct_ud_iface_t *iface)
+{
+    return iface->tx.async_before_pending;
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_iface_progress_pending_tx(uct_ud_iface_t *iface)
+uct_ud_iface_raise_pending_async_ev(uct_ud_iface_t *iface)
 {
-    if (ucs_unlikely(iface->tx.pending_q_len > 0 &&
-                     iface->tx.in_pending == 0)) {
-        iface->tx.in_pending = 1;
-        ucs_arbiter_dispatch(&iface->tx.pending_q, 1,
-                             uct_ud_ep_do_pending, (void *)0);
-        iface->tx.in_pending = 0;
+    if (!ucs_arbiter_is_empty(&iface->tx.pending_q)) {
+        iface->tx.async_before_pending = 1;
     }
 }
 
