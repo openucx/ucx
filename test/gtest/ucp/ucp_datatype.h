@@ -62,6 +62,21 @@ public:
         return const_cast<void *>(m_buf);
     };
 
+    ssize_t buf_length() const {
+        EXPECT_TRUE(is_valid());
+        if (UCP_DT_IS_CONTIG(m_dt) || UCP_DT_IS_GENERIC(m_dt)) {
+            return m_length - (uintptr_t(m_buf) - m_origin);
+        } else if (UCP_DT_IS_IOV(m_dt)) {
+            size_t length = 0;
+            for (size_t i = 0; i < count(); ++i) {
+                length += m_iov[i].length;
+            }
+            return length;
+        }
+        ADD_FAILURE() << "Not supported datatype";
+        return -1;
+    }
+
     size_t count() const {
         EXPECT_TRUE(is_valid());
         return m_count;
