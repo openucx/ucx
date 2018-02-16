@@ -77,11 +77,22 @@ void test_rc_flow_control::init()
     }
     test_rc::init();
 
+    ucs_assert(rc_iface(m_e1)->config.fc_enabled);
+    ucs_assert(rc_iface(m_e2)->config.fc_enabled);
+
     uct_iface_set_am_handler(m_e1->iface(), FLUSH_AM_ID, am_handler,
                              NULL, UCT_CB_FLAG_SYNC);
     uct_iface_set_am_handler(m_e2->iface(), FLUSH_AM_ID, am_handler,
                              NULL, UCT_CB_FLAG_SYNC);
 
+}
+
+void test_rc_flow_control::cleanup()
+{
+    /* Restore FC state to enabled, so iface cleanup will destroy the grant mpool */
+    rc_iface(m_e1)->config.fc_enabled = 1;
+    rc_iface(m_e2)->config.fc_enabled = 1;
+    test_rc::cleanup();
 }
 
 void test_rc_flow_control::send_am_and_flush(entity *e, int num_msg)

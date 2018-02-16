@@ -60,6 +60,7 @@ public:
     } pending_send_request_t;
 
     void init();
+    void cleanup();
 
     virtual uct_rc_fc_t* get_fc_ptr(entity *e, int ep_idx = 0) {
         return &rc_ep(e, ep_idx)->fc;
@@ -87,7 +88,7 @@ public:
 
     void set_fc_disabled(entity *e) {
         /* same as default settings in rc_iface_init */
-        set_fc_attributes(m_e1, false, std::numeric_limits<int16_t>::max(), 0, 0);
+        set_fc_attributes(e, false, std::numeric_limits<int16_t>::max(), 0, 0);
     }
 
     void send_am_and_flush(entity *e, int num_msg);
