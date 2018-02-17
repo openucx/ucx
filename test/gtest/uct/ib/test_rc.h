@@ -26,8 +26,8 @@ public:
         return ucs_derived_of(e->iface(), uct_rc_iface_t);
     }
 
-    uct_rc_ep_t* rc_ep(entity *e) {
-        return ucs_derived_of(e->ep(0), uct_rc_ep_t);
+    uct_rc_ep_t* rc_ep(entity *e, int ep_idx = 0) {
+        return ucs_derived_of(e->ep(ep_idx), uct_rc_ep_t);
     }
 
     void send_am_messages(entity *e, int wnd, ucs_status_t expected,
@@ -54,14 +54,16 @@ protected:
 class test_rc_flow_control : public test_rc {
 public:
     typedef struct pending_send_request {
-        uct_ep_h          ep;
         uct_pending_req_t uct;
+        int               cb_count;
+        int               purge_count;
     } pending_send_request_t;
 
     void init();
+    void cleanup();
 
-    virtual uct_rc_fc_t* get_fc_ptr(entity *e) {
-        return &rc_ep(e)->fc;
+    virtual uct_rc_fc_t* get_fc_ptr(entity *e, int ep_idx = 0) {
+        return &rc_ep(e, ep_idx)->fc;
     }
 
     virtual void disable_entity(entity *e) {
@@ -84,6 +86,11 @@ public:
 
     }
 
+    void set_fc_disabled(entity *e) {
+        /* same as default settings in rc_iface_init */
+        set_fc_attributes(e, false, std::numeric_limits<int16_t>::max(), 0, 0);
+    }
+
     void send_am_and_flush(entity *e, int num_msg);
 
     void progress_loop(double delta_ms=10.0) {
@@ -102,7 +109,18 @@ public:
     }
 
     static void purge_cb(uct_pending_req_t *self, void *arg) {
-        m_req_count++;
+        pending_send_request_t *req = ucs_container_of(self,
+                                                       pending_send_request_t,
+                                                       uct);
+        ++req->purge_count;
+    }
+
+    static ucs_status_t pending_cb(uct_pending_req_t *self) {
+        pending_send_request_t *req = ucs_container_of(self,
+                                                       pending_send_request_t,
+                                                       uct);
+        ++req->cb_count;
+        return UCS_OK;
     }
 
     void validate_grant(entity *e);
@@ -113,8 +131,9 @@ public:
 
     void test_pending_purge(int wnd, int num_pend_sends);
 
+    void test_flush_fc_disabled();
+
 protected:
-    static int m_req_count;
     static const uint8_t FLUSH_AM_ID = 1;
     static uint32_t m_am_rx_count;
 };

@@ -120,6 +120,7 @@ enum {
 
 #define UCT_RC_UPDATE_FC_WND(_iface, _fc) \
     { \
+        /* For performance reasons, prefer to update fc_wnd unconditionally */ \
         (_fc)->fc_wnd--; \
         \
         if ((_iface)->config.fc_enabled) { \
@@ -304,9 +305,19 @@ static UCS_F_ALWAYS_INLINE void uct_rc_txqp_check(uct_rc_txqp_t *txqp)
                 txqp->qp->qp_num, txqp->qp->state);
 }
 
+static UCS_F_ALWAYS_INLINE
+int uct_rc_fc_has_resources(uct_rc_iface_t *iface, uct_rc_fc_t *fc)
+{
+    /* When FC is disabled, fc_wnd may still become 0 because it's decremented
+     * unconditionally (for performance reasons) */
+    return (fc->fc_wnd > 0) || !iface->config.fc_enabled;
+}
+
 static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
 {
-    return ((ep->txqp.available > 0) && (ep->fc.fc_wnd > 0));
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
+
+    return (ep->txqp.available > 0) && uct_rc_fc_has_resources(iface, &ep->fc);
 }
 
 static UCS_F_ALWAYS_INLINE void
