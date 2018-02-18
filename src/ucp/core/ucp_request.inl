@@ -13,7 +13,7 @@
 
 #include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt.h>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucp/dt/dt.inl>
 #include <inttypes.h>

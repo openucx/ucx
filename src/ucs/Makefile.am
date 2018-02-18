@@ -30,6 +30,9 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/mpool.h \
 	datastruct/pgtable.h \
 	datastruct/queue_types.h \
+	profile/profile_defs.h \
+	profile/profile_off.h \
+	profile/profile_on.h \
 	stats/stats_fwd.h \
 	stats/libstats.h \
 	sys/compiler_def.h\
@@ -71,7 +74,7 @@ noinst_HEADERS = \
 	debug/debug.h \
 	debug/log.h \
 	debug/memtrack.h \
-	debug/profile.h \
+	profile/profile.h \
 	stats/stats.h \
 	sys/checker.h \
 	sys/compiler.h \
@@ -109,7 +112,7 @@ libucs_la_SOURCES = \
 	debug/debug.c \
 	debug/log.c \
 	debug/memtrack.c \
-	debug/profile.c \
+	profile/profile.c \
 	stats/stats.c \
 	sys/init.c \
 	sys/math.c \

@@ -6,7 +6,7 @@
 
 #include "dt_contig.h"
 
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 #include <string.h>
 
 

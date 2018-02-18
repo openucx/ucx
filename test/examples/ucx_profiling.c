@@ -4,10 +4,9 @@
  * See file LICENSE for terms.
  */
 
-#define HAVE_PROFILING 1
-#include <ucs/debug/profile.h>
-
+#include <ucs/profile/profile_on.h>
 #include <stdio.h>
+#include <math.h>
 
 
 /* calc_pi() would be profiled */

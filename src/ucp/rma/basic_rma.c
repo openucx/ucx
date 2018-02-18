@@ -11,7 +11,7 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/dt/dt_contig.h>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 
 #include <ucp/proto/proto_am.inl>
 #include <ucs/datastruct/mpool.inl>

@@ -7,7 +7,8 @@
 #include <common/test.h>
 extern "C" {
 #include <ucs/sys/sys.h>
-#include <ucs/debug/profile.h>
+#include <ucs/time/time.h>
+#include <ucs/profile/profile.h>
 }
 
 #include <fstream>

@@ -8,7 +8,7 @@
 
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.h>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 
 size_t ucp_dt_pack(ucp_datatype_t datatype, void *dest, const void *src,
                    ucp_dt_state_t *state, size_t length)
