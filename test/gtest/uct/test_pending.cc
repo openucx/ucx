@@ -107,6 +107,14 @@ public:
         return (ucs_status_t)packed_len;
     }
 
+    static ucs_status_t pending_send_op_ok(uct_pending_req_t *self) {
+        pending_send_request_t *req = ucs_container_of(self, pending_send_request_t, uct);
+
+        delete req;
+        n_pending--;
+        return UCS_OK;
+    }
+
     pending_send_request_t* pending_alloc(uint64_t send_data) {
         pending_send_request_t *req =  new pending_send_request_t();
         req->ep        = m_e1->ep(0);
@@ -327,6 +335,69 @@ UCS_TEST_P(test_uct_pending, pending_async)
     EXPECT_EQ(0, n_pending);
     delete req;
 }
+
+/*
+ * test that arbiter does not block when ucs_ok is returned
+ * The issue is a dc transport specific but test may be also useful
+ * for other transports
+ */
+UCS_TEST_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug)
+{
+    ucs_status_t status;
+    ssize_t packed_len;
+    int N;
+    int i;
+
+    initialize();
+    check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_PENDING);
+
+    mapped_buffer sbuf(ucs_min(64ul, m_e1->iface_attr().cap.am.max_bcopy), 0,
+                       *m_e1);
+
+    /* set a callback for the uct to invoke when receiving the data */
+    install_handler_sync_or_async(m_e2->iface(), 0, am_handler_simple, 0);
+
+    if (m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+        N = 2048;
+    } else {
+        N = 128;
+    }
+
+    if (RUNNING_ON_VALGRIND) {
+        N = 64;
+    }
+
+    /* idx 0 is setup in initialize(). only need to alloc request */
+    for (i = 1; i < N; i++) {
+        m_e1->connect(i, *m_e2, i);
+    }
+    /* give a chance to finish connection for some transports (ud) */
+    short_progress_loop();
+
+    n_pending = 0;
+
+    /* try to exaust global resources and create a pending queue */
+    for (i = 0; i < N; i++) {
+        packed_len = uct_ep_am_bcopy(m_e1->ep(i), 0, mapped_buffer::pack,
+                                     &sbuf, 0);
+
+        if (packed_len == UCS_ERR_NO_RESOURCE) {
+            pending_send_request_t *req = pending_alloc(i);
+
+            req->uct.func = pending_send_op_ok;
+            status = uct_ep_pending_add(m_e1->ep(i), &req->uct);
+            EXPECT_UCS_OK(status);
+            n_pending++;
+            /* coverity[leaked_storage] */
+        }
+    }
+
+    UCS_TEST_MESSAGE << "pending queue len: " << n_pending;
+
+    wait_for_value(&n_pending, 0, true);
+    EXPECT_EQ(0, n_pending);
+}
+
 
 UCS_TEST_P(test_uct_pending, pending_fairness)
 {
