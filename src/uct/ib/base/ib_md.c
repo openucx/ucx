@@ -1227,6 +1227,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     ucs_status_t status;
     int i, num_devices, ret;
     uct_ib_md_t *md;
+    uct_md_attr_t md_attr;
 
     /* Get device list from driver */
     ib_device_list = ibv_get_device_list(&num_devices);
@@ -1322,6 +1323,16 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     status = uct_ib_md_parse_device_config(md, md_config);
     if (status != UCS_OK) {
         goto err_release_reg_method;
+    }
+
+    status = uct_md_query(&md->super, &md_attr);
+    if (status != UCS_OK) {
+        goto err_release_reg_method;
+    }
+
+    md->dev.max_zcopy_log_sge = INT_MAX;
+    if (md_attr.cap.reg_mem_types & ~UCS_BIT(UCT_MD_MEM_TYPE_HOST)) {
+        md->dev.max_zcopy_log_sge = 1;
     }
 
     *md_p = &md->super;

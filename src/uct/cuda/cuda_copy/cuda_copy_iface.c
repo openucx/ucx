@@ -177,7 +177,8 @@ static void uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chun
     ucs_status_t status;
 
     memset(base, 0 , sizeof(*base));
-    status = CUDA_FUNC(cudaEventCreateWithFlags(&(base->event), cudaEventDisableTiming));
+    status = UCT_CUDA_FUNC(cudaEventCreateWithFlags(&(base->event),
+                           cudaEventDisableTiming));
     if (UCS_OK != status) {
         ucs_error("cudaEventCreateWithFlags Failed");
     }
@@ -188,7 +189,7 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
     uct_cuda_copy_event_desc_t *base = (uct_cuda_copy_event_desc_t *) obj;
     ucs_status_t status;
 
-    status = CUDA_FUNC(cudaEventDestroy(base->event));
+    status = UCT_CUDA_FUNC(cudaEventDestroy(base->event));
     if (UCS_OK != status) {
         ucs_error("cudaEventDestroy Failed");
     }
@@ -215,7 +216,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
 
     if (strncmp(params->mode.device.dev_name,
                 UCT_CUDA_DEV_NAME, strlen(UCT_CUDA_DEV_NAME)) != 0) {
-        ucs_error("No device was found: %s", params->mode.device.dev_name);
+        ucs_error("no device was found: %s", params->mode.device.dev_name);
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -232,20 +233,12 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
                             "CUDA EVENT objects");
 
     if (UCS_OK != status) {
-        ucs_error("Mpool creation failed");
+        ucs_error("mpool creation failed");
         return UCS_ERR_IO_ERROR;
     }
 
-    status = CUDA_FUNC(cudaStreamCreateWithFlags(&self->stream_d2h, cudaStreamNonBlocking));
-    if (UCS_OK != status) {
-        ucs_error("cudaStreamCreateWithFlags creation failed");
-        return UCS_ERR_IO_ERROR;
-    }
-    status = CUDA_FUNC(cudaStreamCreateWithFlags(&self->stream_h2d, cudaStreamNonBlocking));
-    if (UCS_OK != status) {
-        ucs_error("cudaStreamCreateWithFlags creation failed");
-        return UCS_ERR_IO_ERROR;
-    }
+    self->stream_d2h = 0;
+    self->stream_h2d = 0;
 
     ucs_queue_head_init(&self->outstanding_d2h_cuda_event_q);
     ucs_queue_head_init(&self->outstanding_h2d_cuda_event_q);
@@ -257,6 +250,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 {
     uct_base_iface_progress_disable(&self->super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+    if (self->stream_h2d != 0) {
+        UCT_CUDA_FUNC(cudaStreamDestroy(self->stream_h2d));
+    }
+
+    if (self->stream_d2h != 0) {
+        UCT_CUDA_FUNC(cudaStreamDestroy(self->stream_d2h));
+    }
+
     ucs_mpool_cleanup(&self->cuda_event_desc, 1);
 }
 

@@ -518,12 +518,12 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->tx.resend_skbs_quota = 0;
 
     ucs_arbiter_init(&self->tx.pending_q);
-    self->tx.pending_q_len = 0;
 
     ucs_queue_head_init(&self->tx.async_comp_q);
-    self->tx.in_pending = 0;
 
     ucs_queue_head_init(&self->rx.pending_q);
+
+    self->tx.async_before_pending = 0;
 
     uct_ud_iface_calc_gid_len(self);
 
@@ -563,7 +563,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_debug("iface(%p): ptr_array cleanup", self);
     ucs_ptr_array_cleanup(&self->eps);
     ucs_arbiter_cleanup(&self->tx.pending_q);
-    ucs_assert(self->tx.pending_q_len == 0);
     UCS_STATS_NODE_FREE(self->stats);
     uct_ud_leave(self);
 }
@@ -664,7 +663,10 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
     uct_ud_enter(iface);
 
-    uct_ud_iface_progress_pending_tx(iface);
+    if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
+        uct_ud_leave(iface);
+        return UCS_INPROGRESS;
+    }
 
     count = 0;
     ucs_ptr_array_for_each(ep, i, &iface->eps) {
@@ -768,9 +770,9 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
                 status = iface->super.ops->set_ep_failed(&iface->super,
                                                          &ep->super.super,
                                                          skb->status);
-                ucs_assertv_always(status == UCS_OK,
-                                   "send completion with error: %s",
-                                   ucs_status_string(status));
+                if (status != UCS_OK) {
+                    ucs_fatal("transport error: %s", ucs_status_string(status));
+                }
             }
         }
 
@@ -830,7 +832,14 @@ static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface)
 
 static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
 {
-    ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->async_progress(iface);
+    unsigned ev_count;
+    uct_ud_iface_ops_t *ops;
+
+    ops = ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t);
+    ev_count = ops->async_progress(iface);
+    if (ev_count > 0) {
+        uct_ud_iface_raise_pending_async_ev(iface);
+    }
 }
 
 static void uct_ud_iface_timer(int timer_id, void *arg)

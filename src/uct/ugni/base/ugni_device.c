@@ -26,7 +26,7 @@ typedef struct uct_ugni_job_info {
     int                 pmi_rank_id;                    /**< rank id assigned by PMI */
     int                 num_devices;                    /**< Number of devices */
     uct_ugni_device_t   devices[UCT_UGNI_MAX_DEVICES];  /**< Array of devices */
-    bool                initialized;                    /**< Info status */
+    int                 initialized;                    /**< Info status */
 } uct_ugni_job_info_t;
 
 static uct_ugni_job_info_t job_info = {
@@ -35,7 +35,7 @@ static uct_ugni_job_info_t job_info = {
     .pmi_num_of_ranks   = 0,
     .pmi_rank_id        = 0,
     .num_devices        = -1,
-    .initialized        = false,
+    .initialized        = 0,
 };
 
 uint32_t ugni_domain_counter = 0;
@@ -167,7 +167,7 @@ static ucs_status_t uct_ugni_fetch_pmi()
     ucs_debug("PMI cookie %d", job_info.cookie);
 
     /* Context and domain is activated */
-    job_info.initialized = true;
+    job_info.initialized = 1;
     ucs_debug("UGNI job info was activated");
     return UCS_OK;
 }

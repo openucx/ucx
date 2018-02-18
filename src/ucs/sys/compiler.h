@@ -67,6 +67,11 @@
         alloca(_size); \
     })
 
+/**
+ * suppress unaligned pointer warning (actual on armclang5 platform)
+ */
+#define ucs_unaligned_ptr(_ptr) ((void*)(_ptr))
+
 
 /**
  * Define cache-line padding variable inside a structure

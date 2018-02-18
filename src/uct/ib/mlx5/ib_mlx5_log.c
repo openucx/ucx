@@ -190,7 +190,7 @@ static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg)
 }
 
 static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
-                                 void *wqe, void *qstart, void *qend,
+                                 void *wqe, void *qstart, void *qend, int max_sge,
                                  uct_log_data_dump_func_t packet_dump_cb,
                                  char *buffer, size_t max)
 {
@@ -325,17 +325,18 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
         s += strlen(s);
     }
 
-    uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, sg_list, i,
+    uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, sg_list,
+                            ucs_min(i, max_sge),
                             inline_bitmap, packet_dump_cb, s, ends - s);
 }
 
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
                           uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
-                          void *wqe, void *qstart, void *qend,
+                          void *wqe, void *qstart, void *qend, int max_sge,
                           uct_log_data_dump_func_t packet_dump_cb)
 {
     char buf[256] = {0};
-    uct_ib_mlx5_wqe_dump(iface, qp_type, wqe, qstart, qend, packet_dump_cb,
+    uct_ib_mlx5_wqe_dump(iface, qp_type, wqe, qstart, qend, max_sge, packet_dump_cb,
                          buf, sizeof(buf) - 1);
     uct_log_data(file, line, function, buf);
 }

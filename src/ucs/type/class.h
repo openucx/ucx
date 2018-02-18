@@ -184,8 +184,6 @@ struct ucs_class {
  */
 #define UCS_CLASS_CALL_SUPER_INIT(_superclass, ...) \
     { \
-        ucs_assert(*_init_count >= 1); \
-        ucs_assert(&_UCS_CLASS_DECL_NAME(_superclass) == _myclass->superclass); \
         { \
             ucs_status_t status = _UCS_CLASS_INIT_NAME(_superclass)\
                     (&self->super, _myclass->superclass, _init_count, ## __VA_ARGS__); \

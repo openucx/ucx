@@ -10,6 +10,10 @@
 #include <ucs/stats/stats.h>
 
 
+namespace ucp {
+const uint32_t MAGIC = 0xd7d7d7d7U;
+}
+
 std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
 {
     std::vector<std::string>::const_iterator iter;
@@ -476,9 +480,10 @@ ucs_status_t ucp_test_base::entity::listen(const struct sockaddr* saddr,
     restore_errors();
     if (status == UCS_OK) {
         m_listener.reset(listener, ucp_listener_destroy);
-    } else if (status != UCS_ERR_INVALID_ADDR) {
-        /* throw error if status is not (UCS_OK or UCS_ERR_INVALID_ADDR) */
-        ASSERT_UCS_OK(status);
+    } else {
+        /* throw error if status is not (UCS_OK or UCS_ERR_UNREACHABLE).
+         * UCS_ERR_INVALID_PARAM may also return but then the test should fail */
+        EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
     }
     return status;
 }
@@ -498,7 +503,7 @@ unsigned ucp_test_base::entity::progress(int worker_index)
 }
 
 int ucp_test_base::entity::get_num_workers() const {
-    ucs_assert(m_workers.size() == size_t(num_workers));
+    assert(m_workers.size() == size_t(num_workers));
     return num_workers;
 }
 

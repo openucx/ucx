@@ -16,6 +16,7 @@ pthread_mutex_t test_base::m_logger_mutex = PTHREAD_MUTEX_INITIALIZER;
 unsigned test_base::m_total_warnings = 0;
 unsigned test_base::m_total_errors   = 0;
 std::vector<std::string> test_base::m_errors;
+std::vector<std::string> test_base::m_warnings;
 
 test_base::test_base() :
                 m_state(NEW),
@@ -126,6 +127,11 @@ void test_base::hide_errors()
     ucs_log_push_handler(hide_errors_logger);
 }
 
+void test_base::hide_warnings()
+{
+    ucs_log_push_handler(hide_warns_logger);
+}
+
 void test_base::wrap_errors()
 {
     ucs_log_push_handler(wrap_errors_logger);
@@ -166,6 +172,24 @@ test_base::hide_errors_logger(const char *file, unsigned line, const char *funct
         va_list ap2;
         va_copy(ap2, ap);
         m_errors.push_back(format_message(message, ap2));
+        va_end(ap2);
+        level = UCS_LOG_LEVEL_DEBUG;
+        pthread_mutex_unlock(&m_logger_mutex);
+    }
+
+    ucs_log_default_handler(file, line, function, level, message, ap);
+    return UCS_LOG_FUNC_RC_STOP;
+}
+
+ucs_log_func_rc_t
+test_base::hide_warns_logger(const char *file, unsigned line, const char *function,
+                             ucs_log_level_t level, const char *message, va_list ap)
+{
+    if (level == UCS_LOG_LEVEL_WARN) {
+        pthread_mutex_lock(&m_logger_mutex);
+        va_list ap2;
+        va_copy(ap2, ap);
+        m_warnings.push_back(format_message(message, ap2));
         va_end(ap2);
         level = UCS_LOG_LEVEL_DEBUG;
         pthread_mutex_unlock(&m_logger_mutex);

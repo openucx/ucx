@@ -93,7 +93,8 @@ static UCS_F_ALWAYS_INLINE void
 uct_dc_verbs_iface_post_send_to_dci(uct_dc_verbs_iface_t* iface,
                                     struct ibv_exp_send_wr *wr,
                                     uint8_t dci, struct ibv_ah *ah,
-                                    uint32_t dct_num, uint64_t send_flags)
+                                    uint32_t dct_num, uint64_t send_flags,
+                                    int max_log_sge)
 {
     struct ibv_exp_send_wr *bad_wr;
     int ret;
@@ -109,7 +110,7 @@ uct_dc_verbs_iface_post_send_to_dci(uct_dc_verbs_iface_t* iface,
     wr->dc.dct_number     = dct_num;
     wr->dc.dct_access_key = UCT_IB_KEY;
 
-    uct_ib_log_exp_post_send(&iface->super.super.super, txqp->qp, wr,
+    uct_ib_log_exp_post_send(&iface->super.super.super, txqp->qp, wr, max_log_sge,
                              ((wr->exp_opcode == IBV_EXP_WR_SEND) ||
                               (wr->exp_opcode == IBV_EXP_WR_SEND_WITH_IMM)) ?
                              uct_rc_ep_am_packet_dump : NULL);
@@ -125,20 +126,22 @@ uct_dc_verbs_iface_post_send_to_dci(uct_dc_verbs_iface_t* iface,
 
 static UCS_F_ALWAYS_INLINE void
 uct_dc_verbs_iface_post_send(uct_dc_verbs_iface_t* iface, uct_dc_verbs_ep_t *ep,
-                             struct ibv_exp_send_wr *wr, uint64_t send_flags)
+                             struct ibv_exp_send_wr *wr, uint64_t send_flags,
+                             int max_log_sge)
 {
     uct_dc_verbs_iface_post_send_to_dci(iface, wr, ep->super.dci, ep->ah,
-                                        ep->dest_qpn, send_flags);
+                                        ep->dest_qpn, send_flags, max_log_sge);
 }
 
 static UCS_F_ALWAYS_INLINE void
 uct_dc_verbs_iface_post_send_desc(uct_dc_verbs_iface_t *iface,
                                   uct_dc_verbs_ep_t *ep,
                                   struct ibv_exp_send_wr *wr,
-                                  uct_rc_iface_send_desc_t *desc, uint64_t send_flags)
+                                  uct_rc_iface_send_desc_t *desc,
+                                  uint64_t send_flags, int max_log_sge)
 {
     UCT_RC_VERBS_FILL_DESC_WR(wr, desc);
-    uct_dc_verbs_iface_post_send(iface, ep, wr, send_flags);
+    uct_dc_verbs_iface_post_send(iface, ep, wr, send_flags, max_log_sge);
     uct_rc_txqp_add_send_op_sn(&iface->super.tx.dcis[ep->super.dci].txqp, &desc->super,
                                iface->dcis_txcnt[ep->super.dci].pi);
 }
@@ -171,7 +174,8 @@ uct_dc_verbs_ep_rdma_zcopy(uct_dc_verbs_ep_t *ep, const uct_iov_t *iov,
                                   remote_addr, rkey);
     wr.next = NULL;
 
-    uct_dc_verbs_iface_post_send(iface, ep, &wr, IBV_SEND_SIGNALED);
+    uct_dc_verbs_iface_post_send(iface, ep, &wr, IBV_SEND_SIGNALED,
+                                 UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super.super));
     uct_dc_verbs_iface_add_send_comp(iface, ep, comp);
     return UCS_INPROGRESS;
 }
@@ -196,7 +200,7 @@ ucs_status_t uct_dc_verbs_ep_get_bcopy(uct_ep_h tl_ep,
     UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.exp_opcode, IBV_EXP_WR_RDMA_READ, sge,
                               length, remote_addr, rkey);
     UCT_TL_EP_STAT_OP(&ep->super.super, GET, BCOPY, length);
-    uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, IBV_SEND_SIGNALED);
+    uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, IBV_SEND_SIGNALED, INT_MAX);
 
     return UCS_INPROGRESS;
 }
@@ -237,7 +241,7 @@ ucs_status_t uct_dc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     UCT_RC_VERBS_FILL_INL_PUT_WR(iface, remote_addr, rkey, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     uct_dc_verbs_iface_post_send(iface, ep, &iface->inl_rwrite_wr,
-                                 IBV_SEND_INLINE|IBV_SEND_SIGNALED);
+                                 IBV_SEND_INLINE|IBV_SEND_SIGNALED, INT_MAX);
 
     return UCS_OK;
 }
@@ -258,7 +262,7 @@ ssize_t uct_dc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.exp_opcode, IBV_EXP_WR_RDMA_WRITE, sge,
                               length, remote_addr, rkey);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, BCOPY, length);
-    uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, IBV_SEND_SIGNALED);
+    uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, IBV_SEND_SIGNALED, INT_MAX);
 
     return length;
 }
@@ -296,7 +300,7 @@ ucs_status_t uct_dc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_rc_verbs_iface_fill_inl_am_sge(verbs_common, id, hdr, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_dc_verbs_iface_post_send(iface, ep, &iface->inl_am_wr,
-                                 IBV_SEND_INLINE | IBV_SEND_SOLICITED);
+                                 IBV_SEND_INLINE | IBV_SEND_SOLICITED, INT_MAX);
     UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->super.fc);
 
     return UCS_OK;
@@ -322,7 +326,7 @@ ssize_t uct_dc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     UCT_RC_VERBS_FILL_AM_BCOPY_WR(wr, sge, length + sizeof(uct_rc_hdr_t),
                                   wr.exp_opcode);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
-    uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, IBV_SEND_SOLICITED);
+    uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, IBV_SEND_SOLICITED, INT_MAX);
     UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->super.fc);
 
     return length;
@@ -361,7 +365,8 @@ ucs_status_t uct_dc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY,
                       header_length + uct_iov_total_length(iov, iovcnt));
     uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc,
-                                      send_flags | IBV_SEND_SOLICITED);
+                                      send_flags | IBV_SEND_SOLICITED,
+                                      UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super.super));
     UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->super.fc);
 
     return UCS_INPROGRESS;
@@ -382,7 +387,7 @@ uct_dc_verbs_iface_atomic_post(uct_dc_verbs_iface_t *iface, uct_dc_verbs_ep_t *e
     UCT_RC_VERBS_FILL_ATOMIC_WR(wr, wr.exp_opcode, sge, opcode, compare_add,
                                 swap, remote_addr, ib_rkey);
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
-    uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, force_sig);
+    uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, force_sig, INT_MAX);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -416,7 +421,8 @@ uct_dc_verbs_iface_ext_atomic_post(uct_dc_verbs_iface_t *iface, uct_dc_verbs_ep_
     uct_rc_verbs_fill_ext_atomic_wr(&wr, &sge, opcode, length, compare_mask,
                                     compare_add, swap, remote_addr, rkey, ep->super.atomic_mr_offset);
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
-    uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, force_sig|IBV_EXP_SEND_EXT_ATOMIC_INLINE);
+    uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc,
+                                      force_sig|IBV_EXP_SEND_EXT_ATOMIC_INLINE, INT_MAX);
 }
 
 
@@ -671,7 +677,8 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
 
         status = uct_dc_verbs_iface_create_ah(
                     &iface->super, dc_req->lid,
-                    dc_req->sender.global.is_global ? &dc_req->sender.global.gid : NULL,
+                    dc_req->sender.global.is_global ?
+                        ucs_unaligned_ptr(&dc_req->sender.global.gid) : NULL,
                     &ah);
         if (status != UCS_OK) {
             return status;
@@ -681,7 +688,7 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
         iface->verbs_common.inl_sge[1].length = sizeof(dc_req->sender.ep);
         uct_dc_verbs_iface_post_send_to_dci(iface, &wr, dc_ep->dci, ah,
                                             dc_req->dct_num,
-                                            IBV_SEND_INLINE | IBV_SEND_SIGNALED);
+                                            IBV_SEND_INLINE | IBV_SEND_SIGNALED, INT_MAX);
         ibv_destroy_ah(ah);
     } else {
         ucs_assert(op == UCT_RC_EP_FC_FLAG_HARD_REQ);
@@ -696,7 +703,7 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
         dc_verbs_ep = ucs_derived_of(dc_ep, uct_dc_verbs_ep_t);
         uct_dc_verbs_iface_post_send(iface, dc_verbs_ep, &wr,
                                      IBV_SEND_INLINE | IBV_SEND_SIGNALED |
-                                     IBV_SEND_SOLICITED) ;
+                                     IBV_SEND_SOLICITED, INT_MAX) ;
         UCS_STATS_UPDATE_COUNTER(dc_ep->fc.stats,
                                  UCT_RC_FC_STAT_TX_HARD_REQ, 1);
     }
@@ -733,12 +740,7 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
         iface->super.super.tx.cq_available++;
     }
 
-    if (uct_dc_iface_dci_can_alloc(&iface->super)) {
-        ucs_arbiter_dispatch(uct_dc_iface_dci_waitq(&iface->super), 1,
-                             uct_dc_iface_dci_do_pending_wait, NULL);
-    }
-    ucs_arbiter_dispatch(uct_dc_iface_tx_waitq(&iface->super), 1, 
-                         uct_dc_iface_dci_do_pending_tx, NULL);
+    uct_dc_iface_progress_pending(&iface->super);
     return num_wcs;
 }
 
@@ -771,7 +773,7 @@ ucs_status_t uct_dc_verbs_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
     uct_rc_verbs_iface_fill_inl_sge(&iface->verbs_common, &tmh, sizeof(tmh),
                                     data, length);
     uct_dc_verbs_iface_post_send(iface, ep, &iface->inl_am_wr,
-                                 IBV_SEND_INLINE | IBV_SEND_SOLICITED);
+                                 IBV_SEND_INLINE | IBV_SEND_SOLICITED, INT_MAX);
 
     return UCS_OK;
 }
@@ -798,7 +800,7 @@ ssize_t uct_dc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                    &iface->super.super.tx.mp, desc,
                                    tag, app_ctx, pack_cb, arg, length);
     UCT_RC_VERBS_FILL_SGE(wr, sge, length + sizeof(struct ibv_exp_tmh));
-    uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, IBV_SEND_SOLICITED);
+    uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, IBV_SEND_SOLICITED, INT_MAX);
 
     return length;
 }
@@ -835,7 +837,8 @@ ucs_status_t uct_dc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
     wr.num_sge = sge_cnt + 1;
     wr.sg_list = sge;
     uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc,
-                                      send_flags | IBV_SEND_SOLICITED);
+                                      send_flags | IBV_SEND_SOLICITED,
+                                      UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super.super));
 
     return UCS_INPROGRESS;
 }
@@ -873,7 +876,8 @@ ucs_status_ptr_t uct_dc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                            iface->super.rx.dct->dct_num);
 
     uct_dc_verbs_iface_post_send(iface, ep, &iface->inl_am_wr,
-                                 IBV_SEND_INLINE | IBV_SEND_SOLICITED);
+                                 IBV_SEND_INLINE | IBV_SEND_SOLICITED,
+                                 UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super.super));
     return (ucs_status_ptr_t)((uint64_t)rndv_idx);
 }
 
@@ -904,8 +908,8 @@ ucs_status_t uct_dc_verbs_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
     uct_rc_iface_fill_tmh(&tmh, tag, app_ctx, IBV_EXP_TMH_EAGER);
     uct_rc_verbs_iface_fill_inl_sge(&iface->verbs_common, &tmh, sizeof(tmh),
                                     header, header_length);
-    uct_dc_verbs_iface_post_send(iface, ep, &wr,
-                                 IBV_SEND_INLINE | IBV_SEND_SOLICITED);
+    uct_dc_verbs_iface_post_send(iface, ep, &wr, IBV_SEND_INLINE | IBV_SEND_SOLICITED,
+                                 UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super.super));
 
     return UCS_OK;
 }

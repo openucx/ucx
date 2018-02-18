@@ -279,9 +279,10 @@ protected:
             return NULL;
         } else {
             ucs_pgt_region_t *region = *iter;
-            ucs_assertv(address < region->end,
-                        "address=0x%lx region 0x%lx..0x%lx", address,
-                        region->start, region->end);
+            EXPECT_LT(address, region->end) << std::hex << "address="
+                                            << address << " region "
+                                            << region->start << ".."
+                                            << region->end << std::dec;
             return (address >= region->start) ? region : NULL;
         }
     }

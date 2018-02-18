@@ -11,6 +11,7 @@
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
 #include <stdio.h>
+#include <ucs/debug/assert.h>
 
 /*
  *  A mechanism to arbitrate among groups of queued work elements, which attempts
@@ -92,6 +93,22 @@ typedef enum {
                                            will start from the group that returned STOP */
 } ucs_arbiter_cb_result_t;
 
+#if ENABLE_ASSERT
+#define UCS_ARBITER_GUARD                   int guard
+#define UCS_ARBITER_GUARD_INIT(_arbiter)    (_arbiter)->guard = 0
+#define UCS_ARBITER_GUARD_ENTER(_arbiter)   (_arbiter)->guard++
+#define UCS_ARBITER_GUARD_EXIT(_arbiter)    (_arbiter)->guard--
+#define UCS_ARBITER_GUARD_CHECK(_arbiter) \
+    ucs_assertv((_arbiter)->guard == 0, \
+                "scheduling group from the arbiter callback")
+#else
+#define UCS_ARBITER_GUARD
+#define UCS_ARBITER_GUARD_INIT(_arbiter)
+#define UCS_ARBITER_GUARD_ENTER(_arbiter)
+#define UCS_ARBITER_GUARD_EXIT(_arbiter)
+#define UCS_ARBITER_GUARD_CHECK(_arbiter)
+#endif
+
 
 /**
  * Arbiter callback function.
@@ -112,6 +129,7 @@ typedef ucs_arbiter_cb_result_t (*ucs_arbiter_callback_t)(ucs_arbiter_t *arbiter
  */
 struct ucs_arbiter {
     ucs_arbiter_elem_t      *current;
+    UCS_ARBITER_GUARD;
 };
 
 

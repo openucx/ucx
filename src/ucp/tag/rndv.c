@@ -305,6 +305,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     ucp_rsc_index_t rsc_index;
     ucp_dt_state_t state;
     uct_rkey_t uct_rkey;
+    size_t min_zcopy;
+    size_t max_zcopy;
+    size_t tail;
 
     if (ucp_ep_is_stub(ep)) {
         rndv_req->send.lane = 0;
@@ -336,6 +339,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     rsc_index = ucp_ep_get_rsc_index(rndv_req->send.ep, rndv_req->send.lane);
     align     = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.opt_zcopy_align;
     ucp_mtu   = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.align_mtu;
+    min_zcopy = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.min_zcopy;
+    max_zcopy = ucp_ep_config(rndv_req->send.ep)->tag.rndv.max_get_zcopy;
 
     offset    = rndv_req->send.state.dt.offset;
     remainder = (uintptr_t)rndv_req->send.buffer % align;
@@ -345,9 +350,31 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     } else {
         chunk = ucs_align_up(rndv_req->send.length /
                              rndv_req->send.rndv_get.lane_count, align);
-        length = ucs_min(ucs_min(chunk, rndv_req->send.length - offset),
-                         ucp_ep_config(rndv_req->send.ep)->tag.rndv.max_get_zcopy);
+        length = ucs_min(ucs_min(chunk, rndv_req->send.length - offset), max_zcopy);
     }
+
+    /* ensure that tail (rest of message) is over min_zcopy */
+    tail = rndv_req->send.length - (offset + length);
+    if (ucs_unlikely(tail && (tail < min_zcopy))) {
+        /* ok, tail is less get zcopy minimal & could not be processed as
+         * standalone operation */
+        /* check if we have room to increase current part and not
+         * step over max_zcopy */
+        if (length < (max_zcopy - tail)) {
+            /* if we can encrease length by min_zcopy - let's do it to
+             * avoid small tail (we have limitation on minimal get zcopy) */
+            length += tail;
+        } else {
+            /* reduce current length by align or min_zcopy value
+             * to process it on next round */
+            ucs_assert(length > ucs_max(min_zcopy, align));
+            length -= ucs_max(min_zcopy, align);
+        }
+    }
+
+    ucs_assert(length >= min_zcopy);
+    ucs_assert((rndv_req->send.length - (offset + length) == 0) ||
+               (rndv_req->send.length - (offset + length) >= min_zcopy));
 
     ucs_trace_data("req %p: offset %zu remainder %zu rma-get to %p len %zu lane %d",
                    rndv_req, offset, remainder, rndv_req->send.buffer + offset,
@@ -362,25 +389,39 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
                         ucp_ep_md_index(rndv_req->send.ep, rndv_req->send.lane),
                         rndv_req->send.mdesc);
 
-    status = uct_ep_get_zcopy(ep->uct_eps[rndv_req->send.lane],
-                              iov, iovcnt,
-                              rndv_req->send.rndv_get.remote_address + offset,
-                              uct_rkey,
-                              &rndv_req->send.state.uct_comp);
-    ucp_request_send_state_advance(rndv_req, &state,
-                                   UCP_REQUEST_SEND_PROTO_RNDV_GET,
-                                   status);
-    if (rndv_req->send.state.dt.offset == rndv_req->send.length) {
-        if (rndv_req->send.state.uct_comp.count == 0) {
-            ucp_rndv_complete_rma_get_zcopy(rndv_req);
+    for (;;) {
+        status = uct_ep_get_zcopy(ep->uct_eps[rndv_req->send.lane],
+                                  iov, iovcnt,
+                                  rndv_req->send.rndv_get.remote_address + offset,
+                                  uct_rkey,
+                                  &rndv_req->send.state.uct_comp);
+        ucp_request_send_state_advance(rndv_req, &state,
+                                       UCP_REQUEST_SEND_PROTO_RNDV_GET,
+                                       status);
+        if (rndv_req->send.state.dt.offset == rndv_req->send.length) {
+            if (rndv_req->send.state.uct_comp.count == 0) {
+                ucp_rndv_complete_rma_get_zcopy(rndv_req);
+            }
+            return UCS_OK;
+        } else if (!UCS_STATUS_IS_ERR(status)) {
+            /* in case if not all chunks are transmitted - return in_progress
+             * status */
+            return UCS_INPROGRESS;
+        } else {
+            if (status == UCS_ERR_NO_RESOURCE) {
+                if (rndv_req->send.lane != rndv_req->send.pending_lane) {
+                    /* switch to new pending lane */
+                    int pending_adde_res = ucp_request_pending_add(rndv_req, &status);
+                    if (!pending_adde_res) {
+                        /* failed to switch req to pending queue, try again */
+                        continue;
+                    }
+                    ucs_assert(status == UCS_INPROGRESS);
+                    return UCS_OK;
+                }
+            }
+            return status;
         }
-        return UCS_OK;
-    } else if (!UCS_STATUS_IS_ERR(status)) {
-        /* in case if not all chunks are transmitted - return in_progress
-         * status */
-        return UCS_INPROGRESS;
-    } else {
-        return status;
     }
 }
 
@@ -471,6 +512,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
         ucp_rndv_zcopy_recv_req_complete(rreq, UCS_ERR_MESSAGE_TRUNCATED);
         goto out;
     }
+
+    rndv_req->send.pending_lane = UCP_NULL_LANE;
 
     /* if the receive side is not connected yet then the RTS was received on a stub ep */
     ep = rndv_req->send.ep;

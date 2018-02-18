@@ -3,6 +3,7 @@
 # Testing script for OpenUCX, to run from Jenkins CI
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+# Copyright (C) ARM Ltd. 2016-2018.  ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -312,6 +313,25 @@ build_clang() {
 		echo "==== Not building with clang compiler ===="
 		echo "ok 1 - # SKIP because clang not installed" >> build_clang.tap
 	fi
+}
+
+#
+# Build with armclang compiler
+#
+build_armclang() {
+    echo 1..1 > build_armclang.tap
+    if module_load arm-compiler/latest
+    then
+        echo "==== Build with armclang compiler ===="
+        ../contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
+        $MAKE clean
+        $MAKE
+        $MAKE distclean
+        echo "ok 1 - build successful " >> build_armclang.tap
+    else
+        echo "==== Not building with armclang compiler ===="
+        echo "ok 1 - # SKIP because armclang not installed" >> build_armclang.tap
+    fi
 }
 
 check_inst_headers() {
@@ -745,6 +765,7 @@ run_tests() {
 	do_distributed_task 1 4 build_debug
 	do_distributed_task 2 4 build_cuda
 	do_distributed_task 3 4 build_clang
+	do_distributed_task 0 4 build_armclang
 
 	# all are running mpi tests
 	run_mpi_tests

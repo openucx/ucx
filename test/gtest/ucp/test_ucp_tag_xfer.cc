@@ -7,12 +7,13 @@
 
 #include "test_ucp_tag.h"
 
+#include "ucp_datatype.h"
+
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/datastruct/queue.h>
 }
 
-#include <common/test_helpers.h>
 #include <iostream>
 
 
@@ -99,6 +100,8 @@ protected:
     void test_xfer_probe(bool send_contig, bool recv_contig,
                          bool expected, bool sync);
 
+    void test_xfer_len_offset();
+
 private:
     size_t do_xfer(const void *sendbuf, void *recvbuf, size_t count,
                    ucp_datatype_t send_dt, ucp_datatype_t recv_dt,
@@ -181,7 +184,7 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
         *send_dt = DATATYPE;
     } else {
         /* the sender has a generic datatype */
-        status = ucp_dt_create_generic(&test_dt_uint8_ops, NULL, send_dt);
+        status = ucp_dt_create_generic(&ucp::test_dt_uint8_ops, NULL, send_dt);
         ASSERT_UCS_OK(status);
     }
 
@@ -190,7 +193,7 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
         *recv_dt = DATATYPE;
     } else {
         /* the receiver has a generic datatype */
-        status = ucp_dt_create_generic(&test_dt_uint8_ops, NULL, recv_dt);
+        status = ucp_dt_create_generic(&ucp::test_dt_uint8_ops, NULL, recv_dt);
         /* the recvbuf can be NULL because we only validate the received data in the
         * unpack function - we don't copy it to the recvbuf */
         ASSERT_UCS_OK(status);
@@ -209,8 +212,8 @@ void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
         skip_err_handling();
     }
 
-    dt_gen_start_count  = 0;
-    dt_gen_finish_count = 0;
+    ucp::dt_gen_start_count  = 0;
+    ucp::dt_gen_finish_count = 0;
 
     if (send_contig) {
         /* the sender has a contig datatype for the data buffer */
@@ -260,8 +263,8 @@ void test_ucp_tag_xfer::test_xfer_probe(bool send_contig, bool recv_contig,
         UCS_TEST_SKIP_R("loop-back unsupported");
     }
 
-    dt_gen_start_count  = 0;
-    dt_gen_finish_count = 0;
+    ucp::dt_gen_start_count  = 0;
+    ucp::dt_gen_finish_count = 0;
 
     sendbuf = (uint8_t*) malloc(count * sizeof(*sendbuf));
     recvbuf = (uint8_t*) malloc(count * sizeof(*recvbuf));
@@ -337,23 +340,23 @@ void test_ucp_tag_xfer::test_xfer_generic(size_t size, bool expected, bool sync,
     ucs_status_t status;
     size_t recvd;
 
-    dt_gen_start_count  = 0;
-    dt_gen_finish_count = 0;
+    ucp::dt_gen_start_count  = 0;
+    ucp::dt_gen_finish_count = 0;
 
     /* if count is zero, truncation has no effect */
     if ((truncated) && (!count)) {
         truncated = false;
     }
 
-    status = ucp_dt_create_generic(&test_dt_uint32_ops, this, &dt);
+    status = ucp_dt_create_generic(&ucp::test_dt_uint32_ops, this, &dt);
     ASSERT_UCS_OK(status);
 
     recvd = do_xfer(NULL, NULL, count, dt, dt, expected, sync, truncated);
     if (!truncated) {
         EXPECT_EQ(count * sizeof(uint32_t), recvd);
     }
-    EXPECT_EQ(2, dt_gen_start_count);
-    EXPECT_EQ(2, dt_gen_finish_count);
+    EXPECT_EQ(2, ucp::dt_gen_start_count);
+    EXPECT_EQ(2, ucp::dt_gen_finish_count);
 
     ucp_dt_destroy(dt);
 }
@@ -391,10 +394,10 @@ void test_ucp_tag_xfer::test_xfer_generic_err(size_t size, bool expected,
     ucs_status_t status;
     request *rreq, *sreq;
 
-    dt_gen_start_count  = 0;
-    dt_gen_finish_count = 0;
+    ucp::dt_gen_start_count  = 0;
+    ucp::dt_gen_finish_count = 0;
 
-    status = ucp_dt_create_generic(&test_dt_uint32_err_ops, this, &dt);
+    status = ucp_dt_create_generic(&ucp::test_dt_uint32_err_ops, this, &dt);
     ASSERT_UCS_OK(status);
 
     if (expected) {
@@ -419,8 +422,8 @@ void test_ucp_tag_xfer::test_xfer_generic_err(size_t size, bool expected,
     /* the generic unpack function is expected to fail */
     EXPECT_EQ(UCS_ERR_NO_MEMORY, rreq->status);
     request_release(rreq);
-    EXPECT_EQ(2, dt_gen_start_count);
-    EXPECT_EQ(2, dt_gen_finish_count);
+    EXPECT_EQ(2, ucp::dt_gen_start_count);
+    EXPECT_EQ(2, ucp::dt_gen_finish_count);
     ucp_dt_destroy(dt);
 }
 
@@ -482,6 +485,60 @@ size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf,
 
     request_release(rreq);
     return recvd;
+}
+
+void test_ucp_tag_xfer::test_xfer_len_offset()
+{
+    const size_t max_offset  = 128;
+    const size_t max_length  = 64 * 1024;
+    const size_t min_length  = 1024;
+    const size_t offset_step = 16;
+    const size_t length_step = 16;
+    const size_t buf_size    = max_length + max_offset + 2;
+    ucp_datatype_t type      = ucp_dt_make_contig(1);
+    void *send_buf           = 0;
+    void *recv_buf           = 0;;
+    size_t offset;
+    size_t length;
+    ucs::detail::message_stream *ms;
+
+    skip_err_handling();
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("valgrind");
+    }
+
+    EXPECT_EQ(posix_memalign(&send_buf, 8192, buf_size), 0);
+    EXPECT_EQ(posix_memalign(&recv_buf, 8192, buf_size), 0);
+
+    memset(send_buf, 0, buf_size);
+    memset(recv_buf, 0, buf_size);
+
+    for (offset = 0; offset <= max_offset; offset += offset_step) {
+        if (!offset || ucs_is_pow2(offset)) {
+            ms = new ucs::detail::message_stream("INFO");
+            *ms << "offset: " << offset << ": ";
+        } else {
+            ms = NULL;
+        }
+        for (length = min_length; length <= max_length; length += length_step) {
+            if (ms && ucs_is_pow2(length)) {
+                *ms << length << " ";
+                fflush(stdout);
+            }
+
+            do_xfer((char*)send_buf + offset, (char*)recv_buf + offset,
+                    length, type, type, true, true, false);
+            do_xfer((char*)send_buf + max_offset - offset,
+                    (char*)recv_buf + max_offset - offset,
+                    length, type, type, true, true, false);
+        }
+        if (ms) {
+            delete(ms);
+        }
+    }
+
+    free(recv_buf);
+    free(send_buf);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, contig_exp) {
@@ -878,6 +935,10 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync_rndv_truncated
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_probe_zcopy, "RNDV_THRESH=1000",
                                                                              "ZCOPY_THRESH=1000") {
     test_xfer_probe(true, false, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, test_xfer_len_offset, "RNDV_THRESH=1000") {
+    test_xfer_len_offset();
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_xfer)

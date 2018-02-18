@@ -231,12 +231,13 @@ ucp_stream_recv_request_init(ucp_request_t *req, void *buffer, size_t count,
     req->recv.stream.length = 0;
     req->recv.stream.offset = 0;
 
+    ucp_dt_recv_state_init(&req->recv.state, buffer, datatype, count);
+
     req->recv.buffer   = buffer;
     req->recv.datatype = datatype;
-    req->recv.length   = length;
+    req->recv.length   = ucs_likely(!UCP_DT_IS_GENERIC(datatype)) ? length :
+                         ucp_dt_length(datatype, count, NULL, &req->recv.state);
     req->recv.mem_type = UCT_MD_MEM_TYPE_HOST;
-
-    ucp_dt_recv_state_init(&req->recv.state, buffer, datatype, count);
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -256,24 +257,21 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
     ucp_ep_ext_stream_t *ep_stream = ep->ext.stream;
     size_t              dt_length;
     ucp_request_t       *req;
-    ucs_status_ptr_t    rdesc;
-    ucp_dt_state_t      dt_state;
-
-    if (UCP_DT_IS_GENERIC(datatype)) {
-        ucs_error("ucp_stream_recv_nb doesn't support generic datatype");
-        return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
-    }
-
-    dt_length = ucp_dt_length(datatype, count, buffer, &dt_state);
+    ucp_recv_desc_t     *rdesc;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
-    if (ucs_likely(ucp_stream_recv_nb_is_inplace(ep_stream, dt_length))) {
-        status = ucp_stream_process_rdesc_inplace(ucp_stream_rdesc_get(ep_stream),
-                                                  datatype, buffer, count,
-                                                  dt_length, ep_stream);
-        *length = dt_length;
-        goto out_status;
+    if (ucs_likely(!UCP_DT_IS_GENERIC(datatype))) {
+        dt_length = ucp_dt_length(datatype, count, buffer, NULL);
+        if (ucs_likely(ucp_stream_recv_nb_is_inplace(ep_stream, dt_length))) {
+            status = ucp_stream_process_rdesc_inplace(ucp_stream_rdesc_get(ep_stream),
+                                                      datatype, buffer, count,
+                                                      dt_length, ep_stream);
+            *length = dt_length;
+            goto out_status;
+        }
+    } else {
+        dt_length = 0; /* Suppress warnings of paranoid compilers */
     }
 
     req = ucp_request_get(ep->worker);
@@ -292,6 +290,14 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
         status = ucp_stream_process_rdesc(rdesc, ep_stream, req);
         if (ucs_unlikely(status != UCS_OK)) {
             goto out_put_request;
+        }
+
+        /*
+         * NOTE: generic datatype can be completed with any amount of data to
+         *       avoid extra logic in ucp_stream_process_rdesc
+         */
+        if (ucs_unlikely(UCP_DT_IS_GENERIC(req->recv.datatype))) {
+            break;
         }
     }
 
