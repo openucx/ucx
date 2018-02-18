@@ -12,9 +12,11 @@ dist_examples_DATA = \
 	uct_hello_world.c \
 	ucp_client_server.c
 
+EXAMPLE_CC_FLAGS = -lucs -I$(includedir) -L$(libdir) -pedantic -Werror -Wl,-rpath,$(libdir)
+
 installcheck-local:
 	@echo "INSTALLCHECK: Compiling examples with installed library"
-	$(CC) -o uct_hello_world   $(examplesdir)/uct_hello_world.c   -luct -lucs -I$(includedir) -L$(libdir) -pedantic -Werror -Wl,-rpath,$(libdir)
-	$(CC) -o ucp_hello_world   $(examplesdir)/ucp_hello_world.c   -lucp -lucs -I$(includedir) -L$(libdir) -pedantic -Werror -Wl,-rpath,$(libdir)
-	$(CC) -o ucp_client_server $(examplesdir)/ucp_client_server.c -lucp -lucs -I$(includedir) -L$(libdir) -pedantic -Werror -Wl,-rpath,$(libdir)
+	$(CC) -o uct_hello_world   $(examplesdir)/uct_hello_world.c   -luct $(EXAMPLE_CC_FLAGS)
+	$(CC) -o ucp_hello_world   $(examplesdir)/ucp_hello_world.c   -lucp $(EXAMPLE_CC_FLAGS)
+	$(CC) -o ucp_client_server $(examplesdir)/ucp_client_server.c -lucp $(EXAMPLE_CC_FLAGS)
 	$(RM) *.o uct_hello_world ucp_hello_world ucp_client_server

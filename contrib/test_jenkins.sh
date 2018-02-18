@@ -356,8 +356,8 @@ run_hello() {
 	if [ ! -x ${test_name} ]
 	then
 		gcc -o ${test_name} ${ucx_inst}/share/ucx/examples/${test_name}.c \
-		-l${api} -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
-		-Wl,-rpath=${ucx_inst}/lib
+		    -l${api} -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
+		    -Wl,-rpath=${ucx_inst}/lib
 	fi
 
 	# set smaller timeouts so the test will complete faster
@@ -436,21 +436,28 @@ run_client_server() {
     if [ ! -x ${test_name} ]
     then
         gcc -o ${test_name} ${ucx_inst}/share/ucx/examples/${test_name}.c \
-        -lucp -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
-        -Wl,-rpath=${ucx_inst}/lib
+            -lucp -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
+            -Wl,-rpath=${ucx_inst}/lib
     fi
 
     iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
-    server_ip=`ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}'`
+    if [ -n "$iface" ]
+    then
+        server_ip=`ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}'`
+    else
+        exit 0
+    fi
+
+    server_port=$((10000 + EXECUTOR_NUMBER))
 
     # run server side
-    UCX_NET_DEVICES=${dev} UCX_TLS=rc ./${test_name} &
+    UCX_NET_DEVICES=${dev} UCX_TLS=rc ./${test_name} -p ${server_port} &
     hw_server_pid=$!
 
     sleep 5
 
     # need to be ran in background to reflect application PID in $!
-    UCX_NET_DEVICES=${dev} UCX_TLS=rc ./${test_name} ${server_ip} &
+    UCX_NET_DEVICES=${dev} UCX_TLS=rc ./${test_name} -a ${server_ip} -p ${server_port} &
     hw_client_pid=$!
 
     wait ${hw_client_pid} ${hw_server_pid}
@@ -464,12 +471,11 @@ run_ucp_client_server() {
         exit 0
     fi
 
-    which ibdev2netdev
-    if [ $? -eq 1 ]
+    ret=`which ibdev2netdev`
+    if [ -z "$ret" ]
     then
         exit 0
     fi
-
 
     for ucx_dev in $(get_active_ib_devices)
     do
