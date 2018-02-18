@@ -16,7 +16,7 @@
 #include <ucp/core/ucp_types.h>
 #include <uct/api/tl.h>
 #include <uct/base/uct_iface.h>
-#include <uct/sm/self/self_ep.h>
+#include <uct/sm/self/self.h>
 #include <uct/tcp/tcp.h>
 #if HAVE_TL_RC
 #  include <uct/ib/rc/verbs/rc_verbs.h>
