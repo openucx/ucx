@@ -1,0 +1,30 @@
+/**
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
+ * See file LICENSE for terms.
+ */
+
+#ifndef UCT_SELF_H
+#define UCT_SELF_H
+
+#include <uct/base/uct_iface.h>
+#include <uct/base/uct_md.h>
+
+
+typedef uint64_t uct_self_iface_addr_t;
+
+
+typedef struct uct_self_iface {
+    uct_base_iface_t      super;
+    uct_self_iface_addr_t id;           /* Unique identifier for the instance */
+    size_t                send_size;    /* Maximum size for payload */
+    void                  *send_buffer; /* Send buffer */
+} uct_self_iface_t;
+
+
+typedef struct uct_self_ep {
+    uct_base_ep_t         super;
+} uct_self_ep_t;
+
+
+#endif

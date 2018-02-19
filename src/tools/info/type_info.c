@@ -23,7 +23,7 @@
 #include <ucs/type/class.h>
 #include <uct/base/uct_md.h>
 #include <uct/base/uct_iface.h>
-#include <uct/sm/self/self_ep.h>
+#include <uct/sm/self/self.h>
 #include <uct/tcp/tcp.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
