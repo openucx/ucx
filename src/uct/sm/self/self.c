@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -102,19 +102,14 @@ static ucs_status_t uct_self_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static int uct_self_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev_addr,
+static int uct_self_iface_is_reachable(const uct_iface_h tl_iface,
+                                       const uct_device_addr_t *dev_addr,
                                        const uct_iface_addr_t *iface_addr)
 {
-    const uct_self_iface_t *self_iface = NULL;
-    const uct_self_iface_addr_t *self_addr = NULL;
+    const uct_self_iface_t     *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
+    const uct_self_iface_addr_t *addr = (const uct_self_iface_addr_t*)iface_addr;
 
-    if (NULL == iface_addr) {
-        return 0;
-    }
-
-    self_iface = ucs_derived_of(iface, uct_self_iface_t);
-    self_addr  = (const uct_self_iface_addr_t *)iface_addr;
-    return self_iface->id == *self_addr;
+    return (addr != NULL) && (iface->id == *addr);
 }
 
 static void uct_self_iface_sendrecv_am(uct_self_iface_t *iface, uint8_t am_id,
