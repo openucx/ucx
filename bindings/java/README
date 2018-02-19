@@ -44,3 +44,54 @@ $ ./scripts/hello_world.sh client 40.40.40.12 -p 29592
 ```
 </li>
 </ol>
+
+## Benchmarks:
+### Java UCX performance test:
+A 2 mode client-server application - latency and bandwidth. In each mode 10K warmup iterations and 1M time samples iterations are performed. Each iteration includes data exchange between the two sides.
+#### Latency test
+<ul>
+<li>Server and client exchanges worker addresses through a TCP connection.</li>
+<li>Each iteration:
+    <ul>
+    <li>Client posts a single send request to the server and server posts a receive request.</li>
+    <li>Client waits for a response from the server (i.e., client posts a receive request and server - a send request).</li>
+    <li>Client measures RTT, then calculates latency (&frac12;RTT).</li>
+    </ul>
+</li>
+<li>Both sides closes the connection, and client prints the results.</li>
+</ul>
+
+#### Bandwidth test
+<ul>
+<li>Server and client exchanges worker addresses through a TCP connection.</li>
+<li>Each iteration:
+    <ul>
+    <li>Client posts a single send request to the server and server posts a receive request.</li>
+    <li>Client measures time difference between two consecutive sends.</li>
+    </ul>
+</li>
+<li>Both sides closes the connection, and client prints the results.</li>
+</ul>
+
+#### Run benchmarks:
+##### Server:
+```sh
+$ ./scripts/perftest.sh
+```
+##### Client:
+<ul>
+<li>
+Latency (default): ./scripts/perftest.sh [&lt;Host_IP_address&gt;] [OPTIONS], e.g.,
+
+```sh
+$ ./scripts/perftest.sh client 40.40.40.12 -s 512 -w 100 -n 100000
+```
+</li>
+<li>
+Bandwidth: ./scripts/perftest.sh [&lt;Host_IP_address&gt;] -b [OPTIONS], e.g.,
+
+```sh
+$ ./scripts/perftest.sh client 40.40.40.12 -b -s 512 -w 100 -n 100000
+```
+</li>
+</ul>
