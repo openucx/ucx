@@ -1,0 +1,11 @@
+Open Items:
+* ucp_stream_worker_poll Java implementation.
+* RMDA support [ucp_get(), ucp_put()].
+* Higher abstraction layers:
+    - SelectableChannel API.
+    - AsynchronousChannel API.
+    - InputStream/OutputStream.
+    - etc.
+
+Known issues:
+* Once every few exeuctions of benchmark - seg fault caught in UCX.
