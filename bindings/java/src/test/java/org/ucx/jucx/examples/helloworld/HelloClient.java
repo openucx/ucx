@@ -16,8 +16,7 @@ public class HelloClient extends HelloWorld {
         Socket sock = new Socket(host, port);
 
         // Print progress message only if not in quiet mode
-        conditionalPrint(!quiet, "Connected to: " +
-                         sock.getInetAddress().getHostAddress());
+        conditionalPrint("Connected to: " + sock.getInetAddress().getHostAddress());
 
         // Received remote address through TCP socket
         @SuppressWarnings("unused")
@@ -31,7 +30,7 @@ public class HelloClient extends HelloWorld {
 
     @Override
     protected void usage() {
-        System.out.println("Usage: ./runHelloWorld.sh client "
+        System.out.println("Usage: ./scripts/hello_world.sh client "
                            + "[<Host_IP_address>] [OPTION]...");
         System.out.println("Default Host_IP_address: 127.0.0.1");
         super.usage();
@@ -50,7 +49,7 @@ public class HelloClient extends HelloWorld {
         HelloClient client = new HelloClient();
         try {
             client.run(args);
-            client.conditionalPrint(!client.quiet, "[SUCCESS] Exiting...");
+            client.conditionalPrint("[SUCCESS] Exiting...");
         } catch (IOException e) {
             e.printStackTrace();
         }

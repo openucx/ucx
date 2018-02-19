@@ -17,7 +17,7 @@ public class ExampleTest {
     private boolean     failed;
 
     @Before
-    public void setUpHelloWorld() {
+    public void setUpHelloWorld() throws IOException {
         server = new HelloServer();
         client = new HelloClient();
         failed = false;

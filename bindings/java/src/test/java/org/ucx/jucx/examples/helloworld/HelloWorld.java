@@ -121,8 +121,8 @@ public abstract class HelloWorld {
         worker.close();
     }
 
-    protected void conditionalPrint(boolean cond, String message) {
-        if (cond) {
+    protected void conditionalPrint(String message) {
+        if (!quiet) {
             System.out.println(message);
         }
     }

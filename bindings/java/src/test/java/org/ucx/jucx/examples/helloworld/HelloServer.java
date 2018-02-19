@@ -9,18 +9,22 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 public class HelloServer extends HelloWorld {
+    private ServerSocket serv;
+
+    public HelloServer() throws IOException {
+        serv = new ServerSocket(port);
+        serv.setReuseAddress(true);
+    }
+
     @Override
     protected void exchangeWorkerAddress() throws IOException {
-        ServerSocket serv = new ServerSocket(port);
-        serv.setReuseAddress(true);
-
         // Print progress message only if not in quiet mode
-        conditionalPrint(!quiet, "Waiting for connections...");
+        conditionalPrint("Waiting for connections...");
 
         Socket sock = serv.accept();
         serv.close();
 
-        conditionalPrint(!quiet, "Connected to: " +
+        conditionalPrint("Connected to: " +
                          sock.getInetAddress().getHostAddress());
 
         // Send local Worker address through TCP socket
@@ -35,15 +39,15 @@ public class HelloServer extends HelloWorld {
 
     @Override
     protected void usage() {
-        System.out.println("Usage: ./runHelloWorld.sh server [OPTION]...");
+        System.out.println("Usage: ./scripts/hello_world.sh server [OPTION]...");
         super.usage();
     }
 
     public static void main(String[] args) {
-        HelloServer server = new HelloServer();
         try {
+            HelloServer server = new HelloServer();
             server.run(args);
-            server.conditionalPrint(!server.quiet, "[SUCCESS] Exiting...");
+            server.conditionalPrint("[SUCCESS] Exiting...");
         } catch (IOException e) {
             e.printStackTrace();
         }
