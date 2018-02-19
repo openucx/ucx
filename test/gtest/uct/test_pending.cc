@@ -71,7 +71,7 @@ public:
         status = uct_ep_am_short(req->ep, 0, test_pending_hdr, &req->data,
                                  sizeof(req->data));
         if (status == UCS_OK) {
-            delete req;
+            pending_delete(req);
         }
         return status;
     }
@@ -110,7 +110,7 @@ public:
     static ucs_status_t pending_send_op_ok(uct_pending_req_t *self) {
         pending_send_request_t *req = ucs_container_of(self, pending_send_request_t, uct);
 
-        delete req;
+        pending_delete(req);
         n_pending--;
         return UCS_OK;
     }
@@ -146,6 +146,9 @@ public:
         return req;
     }
 
+    static void pending_delete(pending_send_request_t *req) {
+        delete req;
+    }
 
 protected:
     static const uint64_t test_pending_hdr = 0xabcd;
@@ -198,7 +201,7 @@ UCS_TEST_P(test_uct_pending, pending_op)
                 if (status != UCS_OK) {
                     /* the request wasn't added to the pending data structure
                      * since resources became available. retry sending this message */
-                    delete req;
+                    pending_delete(req);
                 } else {
                     /* the request was added to the pending data structure */
                     send_data += 1;
@@ -246,7 +249,7 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
 
             status_pend = uct_ep_pending_add(m_e1->ep(0), &req->uct);
             if (status_pend == UCS_ERR_BUSY) {
-                delete req;
+                pending_delete(req);
             } else {
                 /* coverity[leaked_storage] */
                 ++send_data;
@@ -333,7 +336,7 @@ UCS_TEST_P(test_uct_pending, pending_async)
 
     wait_for_value(&n_pending, 0, true);
     EXPECT_EQ(0, n_pending);
-    delete req;
+    pending_delete(req);
 }
 
 /*
@@ -357,14 +360,12 @@ UCS_TEST_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug)
     /* set a callback for the uct to invoke when receiving the data */
     install_handler_sync_or_async(m_e2->iface(), 0, am_handler_simple, 0);
 
-    if (m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+    if (RUNNING_ON_VALGRIND) {
+        N = 64;
+    } else if (m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         N = 2048;
     } else {
         N = 128;
-    }
-
-    if (RUNNING_ON_VALGRIND) {
-        N = 64;
     }
 
     /* idx 0 is setup in initialize(). only need to alloc request */
@@ -488,7 +489,7 @@ UCS_TEST_P(test_uct_pending, pending_fairness)
     flush();
 
     for (i = 0; i < N; i++) {
-        delete reqs[i];
+        pending_delete(reqs[i]);
     }
 
     /* there must be no starvation */
