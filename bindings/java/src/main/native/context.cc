@@ -8,7 +8,7 @@
 ucs_status_t context::ref_context() {
     ucs_status_t status = UCS_OK;
     {   // Lock before checking context and updating reference counter
-        std::lock_guard<std::mutex> lk(ref_lock);
+        JUCX_LOCK(ref_lock);
         if (ucp_context == nullptr) {
             status = create_context();
         }
@@ -22,11 +22,11 @@ ucs_status_t context::ref_context() {
 }
 
 void context::deref_context() {
-    std::lock_guard<std::mutex> lk(ref_lock);
+    JUCX_LOCK(ref_lock);    // Lock
     if (--ref_count == 0) { // All workers released
         release_context();
     }
-}
+}                           // Unlock
 
 context::~context() {
     if (ucp_context) {
@@ -48,10 +48,15 @@ ucs_status_t context::create_context() {
         return status;
     }
 
-    uint64_t features   =   UCP_FEATURE_TAG;
+    uint64_t features   =   UCP_FEATURE_STREAM;
     uint64_t field_mask =   UCP_PARAM_FIELD_FEATURES        |
                             UCP_PARAM_FIELD_REQUEST_INIT    |
                             UCP_PARAM_FIELD_REQUEST_SIZE;
+
+#if ENABLE_MT
+    field_mask |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
+    ucp_params.mt_workers_shared = 1;
+#endif
 
     ucp_params.features     = features;
     ucp_params.field_mask   = field_mask;
