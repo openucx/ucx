@@ -344,15 +344,92 @@ cudaError_t ucm_cudaFree(void *addr)
 
     ucm_event_enter();
 
-    ucm_trace("ucm_cudaFree(addr=%p )", addr);
+    ucm_trace("ucm_cudaFree(devPtr=%p )", devPtr);
 
-    ucm_dispatch_vm_munmap(addr, 0);
-    ret = ucm_orig_cudaFree(addr);
+    ucm_dispatch_vm_munmap(devPtr, 0);
+
+    ret = ucm_orig_cudaFree(devPtr);
 
     ucm_event_leave();
 
     return ret;
 }
+
+cudaError_t ucm_cudaFreeHost(void *ptr)
+{
+    cudaError_t ret;
+
+    ucm_event_enter();
+
+    ucm_trace("ucm_cudaFreeHost(ptr=%p )", ptr);
+
+    ret = ucm_orig_cudaFreeHost(ptr);
+
+    ucm_event_leave();
+    return ret;
+}
+
+cudaError_t ucm_cudaMalloc(void **devPtr, size_t size)
+{
+    cudaError_t ret;
+
+    ucm_event_enter();
+
+    ret = ucm_orig_cudaMalloc(devPtr, size);
+    if (ret == cudaSuccess) {
+        ucm_trace("ucm_cudaMalloc(devPtr=%p size:%lu)", *devPtr, size);
+    }
+
+    ucm_event_leave();
+
+    return ret;
+}
+
+cudaError_t ucm_cudaMallocPitch(void **devPtr, size_t *pitch,
+                                size_t width, size_t height)
+{
+    cudaError_t ret;
+
+    ucm_event_enter();
+
+    ret = ucm_orig_cudaMallocPitch(devPtr, pitch, width, height);
+    if (ret == cudaSuccess) {
+        ucm_trace("ucm_cudaMallocPitch(devPtr=%p size:%lu)",*devPtr, (width * height));
+    }
+
+    ucm_event_leave();
+    return ret;
+}
+
+cudaError_t ucm_cudaHostGetDevicePointer(void **pDevice, void *pHost, unsigned int flags)
+{
+    cudaError_t ret;
+
+    ucm_event_enter();
+
+    ret = ucm_orig_cudaHostGetDevicePointer(pDevice, pHost, flags);
+    if (ret == cudaSuccess) {
+        ucm_trace("ucm_cuMemHostGetDevicePointer(pDevice=%p pHost=%p)", pDevice, pHost);
+    }
+
+    ucm_event_leave();
+    return ret;
+}
+
+cudaError_t ucm_cudaHostUnregister(void *ptr)
+{
+    cudaError_t ret;
+
+    ucm_event_enter();
+
+    ucm_trace("ucm_cudaHostUnregister(ptr=%p )", ptr);
+
+    ret = ucm_orig_cudaHostUnregister(ptr);
+
+    ucm_event_leave();
+    return ret;
+}
+
 #endif
 
 void ucm_event_handler_add(ucm_event_handler_t *handler)
