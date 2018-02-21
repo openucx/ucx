@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 package org.ucx.jucx;
@@ -8,6 +8,8 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Worker is the object representing a local communication resource such as a
@@ -15,14 +17,15 @@ import java.nio.ByteOrder;
  */
 @SuppressWarnings("unused")
 public class Worker implements Closeable {
-    public static final int MAX_QUEUED_EVENTS = (1 << 20);
+    public static final int MAX_QUEUED_COMPLETIONS = (1 << 20);
 
     private long            nativeId;
     private CompletionQueue compQueue;
     private byte[]          workerAddress;
     private Callback        callback;
-    private int             maxEvents;
+    private int             maxCompletions;
     private boolean         closed;
+    private Set<EndPoint>   endPoints;
 
     /**
      * Creates a new Worker.
@@ -30,12 +33,12 @@ public class Worker implements Closeable {
      * @param cb
      *            Implementation of Worker.Callback interface
      *
-     * @param maxEvents
+     * @param maxCompletions
      *            Number of maximum queued completed events
      *
      * @throws IllegalArgumentException
-     *             In case cb == null or maxEvents <= 0 or
-     *             maxEvents > MAX_QUEUED_EVENTS
+     *             In case cb == null or maxCompletions <= 0 or maxCompletions >
+     *             MAX_QUEUED_COMPLETIONS
      *
      * @throws UnsatisfiedLinkError
      *             In case an error while loading native libraries
@@ -43,8 +46,9 @@ public class Worker implements Closeable {
      * @throws IOException
      *             In case native Worker creation failed
      */
-    public Worker(Callback cb, int maxEvents) throws IOException {
-        if (cb == null || maxEvents <= 0 || maxEvents > MAX_QUEUED_EVENTS) {
+    public Worker(Callback cb, int maxCompletions) throws IOException {
+        if (cb == null || maxCompletions <= 0 ||
+            maxCompletions > MAX_QUEUED_COMPLETIONS) {
             throw new IllegalArgumentException();
         }
 
@@ -54,18 +58,68 @@ public class Worker implements Closeable {
         }
 
         this.callback       = cb;
-        this.closed         = false;
-        this.maxEvents      = maxEvents;
+        this.maxCompletions = maxCompletions;
         this.workerAddress  = null;
         this.compQueue      = new CompletionQueue(); // Shared queue wrapper
-        this.nativeId       = Bridge.createWorker(maxEvents, compQueue, this);
+        this.endPoints      = new HashSet<>();
+        this.nativeId       = Bridge.createWorker(maxCompletions, compQueue, this);
         if (nativeId == 0) {
             throw new IOException("Failed to create Worker");
         }
+        this.closed         = false;
 
         // align Java side shared queue operations endianness to be as
         // allocated in native (C) code, in nativeCreateWorker()
         this.compQueue.setEndianness();
+    }
+
+
+    /**
+     * Create a new EndPoint object linked to this Worker.
+     *
+     * @param workerAddress
+     *            Address of the remote worker the new EndPoint will be
+     *            connected to
+     *
+     * @return new EndPoint object
+     *
+     * @throws IOException
+     *             In case native EndPoint creation fails
+     */
+    public EndPoint createEndPoint(byte[] workerAddress) throws IOException {
+        EndPoint endPoint = new EndPoint(this, workerAddress);
+        addEndPoint(endPoint);
+        return endPoint;
+    }
+
+    /**
+     * Destroy EndPoint object associated with this Worker, and release all
+     * allocated native resources.
+     * <p>
+     * Note: endPoint shouldn't be used after calling this function.
+     * </p>
+     *
+     * @param endPoint
+     *            EndPoint to release
+     *
+     * @throws IllegalArgumentException
+     *             In case passed endPoint is not associated with this Worker
+     */
+    public void destroyEndPoint(EndPoint endPoint) {
+        if (!endPoints.contains(endPoint)) {
+            throw new IllegalArgumentException("endPoint not associated with this Worker");
+        }
+
+        endPoint.close();
+        removeEndPoint(endPoint);
+    }
+
+    private void addEndPoint(EndPoint ep) {
+        endPoints.add(ep);
+    }
+
+    private void removeEndPoint(EndPoint ep) {
+        endPoints.remove(ep);
     }
 
     /**
@@ -87,13 +141,29 @@ public class Worker implements Closeable {
     }
 
     /**
+     * Getter for this Worker's maxCompletions (maximum outstanding requests).
+     *
+     * @return Maximum number of possible outstanding requests for this Worker
+     */
+    public int getMaxCompletions() {
+        return maxCompletions;
+    }
+
+    /**
      * Frees all resources associated with this Worker.</br>
      * Worker should not be used after calling this method.
      */
     @Override
-    public void close() {
+    public synchronized void close() {
+        if (closed) {
+            return;
+        }
+
+        for (EndPoint ep : endPoints) {
+            destroyEndPoint(ep);
+        }
         closed = true;
-        Bridge.releaseWorker(this);
+        Bridge.destroyWorker(this);
     }
 
     /**
@@ -102,9 +172,7 @@ public class Worker implements Closeable {
      */
     @Override
     protected void finalize() throws Throwable {
-        if (!closed) {
-            close();
-        }
+        close();
     }
 
 

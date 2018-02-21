@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -12,9 +12,9 @@
 #include <iostream>
 
 
-#define ERR_EXIT(_msg, _ret)  do {                   \
-                                print_error(_msg);   \
-                                return _ret;         \
+#define ERR_EXIT(_msg, _ret)  do {                      \
+                                  print_error(_msg);    \
+                                  return _ret;          \
                               } while(0)
 
 #define ERR_JUMP(_msg, _label)  do {                    \
@@ -95,7 +95,7 @@ Java_org_ucx_jucx_Bridge_createWorkerNative(JNIEnv *env, jclass cls,
     }
 
     status = worker_ptr->extract_worker_address(&local_addr, local_addr_len);
-    if (!local_addr) {
+    if (status != UCS_OK) {
         ERR_JUMP("Failed to get ucp worker native address", err_worker);
     }
 
@@ -117,7 +117,8 @@ Java_org_ucx_jucx_Bridge_createWorkerNative(JNIEnv *env, jclass cls,
     // Set the Java workerAddress field
     env->SetObjectField(jworker, field_worker_addr_arr, jaddr_arr);
 
-    jbyte_buff = env->NewDirectByteBuffer(worker_ptr->get_event_queue(), cap);
+    jbyte_buff = env->NewDirectByteBuffer(worker_ptr->get_event_queue(),
+                                          worker_ptr->get_queue_size());
     if (!jbyte_buff) {
         env->ExceptionClear();
         ERR_JUMP("Failed to create Java ByteBuffer object", err_worker);
@@ -139,8 +140,52 @@ err:
 }
 
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_Bridge_releaseWorkerNative(JNIEnv *env, jclass cls,
+Java_org_ucx_jucx_Bridge_destroyWorkerNative(JNIEnv *env, jclass cls,
                                              jlong worker_id) {
-    worker* worker_ptr = (worker*) worker_id;
+    worker* worker_ptr = reinterpret_cast<worker*>(worker_id);
     delete worker_ptr;
+}
+
+JNIEXPORT jlong JNICALL
+Java_org_ucx_jucx_Bridge_createEndPointNative(JNIEnv *env, jclass cls,
+                                              jlong worker_id,
+                                              jbyteArray jremote_address) {
+    worker* worker_ptr = reinterpret_cast<worker*>(worker_id);
+    ucs_status_t status;
+    ucp_worker_h ucp_worker = worker_ptr->get_ucp_worker();
+    ucp_ep_params_t ep_params = { 0 };
+    ucp_ep_h ep = NULL;
+
+    jsize len = env->GetArrayLength(jremote_address);
+    ucp_address_t* remote_address = reinterpret_cast<ucp_address_t*>(new char[len]);
+    if (!remote_address) {
+        ERR_JUMP("Allocation failure", err);
+    }
+
+    env->GetByteArrayRegion(jremote_address, 0, len, (jbyte*) remote_address);
+    if (env->ExceptionCheck()) { // JNI exception thrown
+        env->ExceptionClear();
+        ERR_JUMP("Failed to get remote address", err_addr);
+    }
+
+    ep_params.field_mask    = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.address       = remote_address;
+
+    status = ucp_ep_create(ucp_worker, &ep_params, &ep);
+    if (status != UCS_OK) {
+        ERR_JUMP("Failed to intialize ucp native endpoint", err_addr);
+    }
+
+err_addr:
+    free(remote_address);
+
+err:
+    return (native_ptr) ep;
+}
+
+JNIEXPORT void JNICALL
+Java_org_ucx_jucx_Bridge_destroyEndPointNative(JNIEnv *env, jclass cls,
+                                               jlong endpoint_id) {
+    ucp_ep_h endpoint = reinterpret_cast<ucp_ep_h>(endpoint_id);
+    ucp_ep_close_nb(endpoint, UCP_EP_CLOSE_MODE_FORCE);
 }

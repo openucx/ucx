@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 #ifndef SRC_WORKER_H_
@@ -24,6 +24,10 @@ public:
 
     char *get_event_queue() const {
         return event_queue;
+    }
+
+    uint32_t get_queue_size() const {
+        return queue_size;
     }
 
     ucp_worker_h get_ucp_worker() const {
