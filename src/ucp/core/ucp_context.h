@@ -29,6 +29,13 @@ enum {
     UCP_TL_RSC_FLAG_SOCKADDR = UCS_BIT(1)
 };
 
+typedef enum {
+    UCP_VERSION_CHECK_ERROR,
+    UCP_VERSION_CHECK_WARNING,
+    UCP_VERSION_CHECK_IGNORE,
+    UCP_VERSION_CHECK_LAST
+} ucp_version_error_mode_t;
+
 
 typedef struct ucp_context_config {
     /** Threshold for switching UCP to buffered copy(bcopy) protocol */
@@ -90,6 +97,8 @@ struct ucp_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
+    /** Version mismatch processing */
+    ucp_version_error_mode_t               version_error_mode;
 };
 
 
