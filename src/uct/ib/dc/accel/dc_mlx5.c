@@ -1046,7 +1046,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_mlx5_iface_ops, md,
                               worker, params, 0, &config->super,
-                              IBV_EXP_TM_CAP_DC);
+                              IBV_EXP_TM_CAP_DC, UCT_IB_MLX5_RES_DOMAIN_KEY);
 
     status = uct_dc_mlx5_iface_tag_init(self, &config->super.super);
     if (status != UCS_OK) {

@@ -534,6 +534,60 @@ static ucs_status_t uct_ib_iface_set_moderation(struct ibv_cq *cq,
     return UCS_OK;
 }
 
+static int uct_ib_iface_res_domain_cmp(uct_ib_iface_res_domain_t *res_domain,
+                                       uct_ib_iface_t *iface)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+
+    return res_domain->ibv_domain->context == dev->ibv_context;
+}
+
+static ucs_status_t
+uct_ib_iface_res_domain_init(uct_ib_iface_res_domain_t *res_domain,
+                             uct_ib_iface_t *iface)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    struct ibv_exp_res_domain_init_attr attr;
+
+    attr.comp_mask    = IBV_EXP_RES_DOMAIN_THREAD_MODEL |
+                        IBV_EXP_RES_DOMAIN_MSG_MODEL;
+    attr.msg_model    = IBV_EXP_MSG_LOW_LATENCY;
+
+    switch (iface->super.worker->thread_mode) {
+    case UCS_THREAD_MODE_SINGLE:
+        attr.thread_model = IBV_EXP_THREAD_SINGLE;
+        break;
+    case UCS_THREAD_MODE_SERIALIZED:
+        attr.thread_model = IBV_EXP_THREAD_UNSAFE;
+        break;
+    default:
+        attr.thread_model = IBV_EXP_THREAD_SAFE;
+        break;
+    }
+
+    res_domain->ibv_domain = ibv_exp_create_res_domain(dev->ibv_context, &attr);
+    if (res_domain->ibv_domain == NULL) {
+        ucs_error("ibv_exp_create_res_domain() on %s failed: %m",
+                  uct_ib_device_name(dev));
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+static void uct_ib_iface_res_domain_cleanup(uct_ib_iface_res_domain_t *res_domain)
+{
+    struct ibv_exp_destroy_res_domain_attr attr;
+    int ret;
+
+    attr.comp_mask = 0;
+    ret = ibv_exp_destroy_res_domain(res_domain->ibv_domain->context,
+                                     res_domain->ibv_domain, &attr);
+    if (ret != 0) {
+        ucs_warn("ibv_exp_destroy_res_domain() failed: %m");
+    }
+}
+
 /**
  * @param rx_headroom   Headroom requested by the user.
  * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
@@ -544,7 +598,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     unsigned rx_priv_len, unsigned rx_hdr_len,
                     unsigned tx_cq_len, unsigned rx_cq_len, size_t mss,
-                    const uct_ib_iface_config_t *config)
+                    uint32_t res_domain_key, const uct_ib_iface_config_t *config)
 {
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     int preferred_cpu = ucs_cpu_set_find_lcs(&params->cpu_mask);
@@ -607,11 +661,26 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
+    if (res_domain_key == UCT_IB_IFACE_NULL_RES_DOMAIN_KEY) {
+        self->res_domain = NULL;
+    } else {
+        self->res_domain = uct_worker_tl_data_get(self->super.worker,
+                                                  res_domain_key,
+                                                  uct_ib_iface_res_domain_t,
+                                                  uct_ib_iface_res_domain_cmp,
+                                                  uct_ib_iface_res_domain_init,
+                                                  self);
+        if (UCS_PTR_IS_ERR(self->res_domain)) {
+            status = UCS_PTR_STATUS(self->res_domain);
+            goto err_free_path_bits;
+        }
+    }
+
     self->comp_channel = ibv_create_comp_channel(dev->ibv_context);
     if (self->comp_channel == NULL) {
         ucs_error("ibv_create_comp_channel() failed: %m");
         status = UCS_ERR_IO_ERROR;
-        goto err_free_path_bits;
+        goto err_put_res_domain;
     }
 
     status = ucs_sys_fcntl_modfl(self->comp_channel->fd, O_NONBLOCK, 0);
@@ -675,6 +744,10 @@ err_destroy_send_cq:
     ibv_destroy_cq(self->send_cq);
 err_destroy_comp_channel:
     ibv_destroy_comp_channel(self->comp_channel);
+err_put_res_domain:
+    if (self->res_domain != NULL) {
+        uct_worker_tl_data_put(self->res_domain, uct_ib_iface_res_domain_cleanup);
+    }
 err_free_path_bits:
     ucs_free(self->path_bits);
 err:
@@ -700,6 +773,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
         ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m", ret);
     }
 
+    if (self->res_domain != NULL) {
+        uct_worker_tl_data_put(self->res_domain, uct_ib_iface_res_domain_cleanup);
+    }
     ucs_free(self->path_bits);
 }
 

@@ -125,8 +125,7 @@ static void uct_rc_ep_tag_qp_destroy(uct_rc_ep_t *ep)
 #endif
 }
 
-static ucs_status_t uct_rc_ep_tag_qp_create(uct_rc_iface_t *iface,
-                                            uct_rc_ep_t *ep)
+static ucs_status_t uct_rc_ep_tag_qp_create(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
 {
 #if IBV_EXP_HW_TM
     struct ibv_qp_cap cap;

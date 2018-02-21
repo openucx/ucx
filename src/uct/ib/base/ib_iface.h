@@ -16,7 +16,9 @@
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/sys/math.h>
 
-#define UCT_IB_MAX_IOV         8UL
+#define UCT_IB_MAX_IOV                     8UL
+#define UCT_IB_IFACE_NULL_RES_DOMAIN_KEY   0u
+
 
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
@@ -98,6 +100,12 @@ struct uct_ib_iface_ops {
 };
 
 
+typedef struct uct_ib_iface_res_domain {
+    uct_worker_tl_data_t        super;
+    struct ibv_exp_res_domain   *ibv_domain;
+} uct_ib_iface_res_domain_t;
+
+
 struct uct_ib_iface {
     uct_base_iface_t        super;
 
@@ -113,6 +121,7 @@ struct uct_ib_iface {
     uct_ib_address_type_t   addr_type;
     uint8_t                 addr_size;
     union ibv_gid           gid;
+    uct_ib_iface_res_domain_t *res_domain;
 
     struct {
         unsigned            rx_payload_offset;   /* offset from desc to payload */
@@ -135,7 +144,7 @@ struct uct_ib_iface {
 };
 UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, unsigned, unsigned, unsigned,
-                  unsigned, size_t, const uct_ib_iface_config_t*)
+                  unsigned, size_t, uint32_t, const uct_ib_iface_config_t*)
 
 
 /*

@@ -155,6 +155,16 @@ AS_IF([test "x$with_ib" == xyes],
                                [[#include <infiniband/mlx5_hw.h>]])],
              [])
 
+       AC_CHECK_DECLS([IBV_EXP_QP_INIT_ATTR_RES_DOMAIN,
+                       IBV_EXP_RES_DOMAIN_THREAD_MODEL,
+                       ibv_exp_create_res_domain,
+                       ibv_exp_destroy_res_domain],
+                      [AC_DEFINE([HAVE_IBV_EXP_RES_DOMAIN], 1, [IB resource domain])],
+                      [AC_MSG_WARN([Cannot use mlx5 accel because resource domains are not supported])
+                       AC_MSG_WARN([Please upgrade MellanoxOFED to 3.1 or above])
+                       with_mlx5_hw=no],
+                      [[#include <infiniband/verbs_exp.h>]])
+
        AS_IF([test "x$with_mlx5_hw" == xyes],
              [AC_MSG_NOTICE([Compiling with mlx5 bare-metal support])
               AC_DEFINE([HAVE_MLX5_HW], 1, [mlx5 bare-metal support])],
