@@ -40,7 +40,6 @@
 #include <string.h>    /* memset */
 #include <arpa/inet.h> /* inet_addr */
 #include <unistd.h>    /* getopt */
-#include <ctype.h>     /* isprint */
 #include <stdlib.h>    /* atoi */
 
 
@@ -51,7 +50,7 @@ static uint16_t server_port = 13337;
 
 
 /**
- * The server's context to be used in the user's accept callback.
+ * Server context to be used in the user's accept callback.
  * It holds the server's endpoint which will be created upon accepting a
  * connection request from the client.
  */
@@ -61,7 +60,7 @@ typedef struct ucx_server_ctx {
 
 
 /**
- * The user's request context. Holds a value to indicate whether or not the
+ * Stream request context. Holds a value to indicate whether or not the
  * request is completed.
  */
 typedef struct test_req {
@@ -79,7 +78,7 @@ static void stream_recv_cb(void *request, ucs_status_t status, size_t length)
 
     req->complete = 1;
 
-    printf("stream_recv_cb called with status %d (%s), length: %lu\n",
+    printf("stream_recv_cb returned with status %d (%s), length: %lu\n",
            status, ucs_status_string(status), length);
 }
 
@@ -93,7 +92,7 @@ static void stream_send_cb(void *request, ucs_status_t status)
 
     req->complete = 1;
 
-    printf("stream_send_cb called with status %d (%s)\n",
+    printf("stream_send_cb returned with status %d (%s)\n",
            status, ucs_status_string(status));
 }
 
@@ -330,8 +329,8 @@ static int usage()
     fprintf(stderr, "UCP client-server example utility\n");
     fprintf(stderr, "\nParameters are:\n");
     fprintf(stderr, " -a Set IP address of the server "
-                    "(required for client and should be ignored "
-                    "for server)\n");
+                    "(required for client and should not be specified "
+                    "for the server)\n");
     fprintf(stderr, " -p Set alternative server port (default:13337)\n");
     fprintf(stderr, "\n");
 }
@@ -383,7 +382,7 @@ static int init_context(ucp_context_h *ucp_context, ucp_worker_h *ucp_worker)
     /* UCP initialization */
     status = ucp_config_read(NULL, NULL, &config);
     if (status != UCS_OK) {
-        fprintf(stderr, "Failed to ucp_config_read\n");
+        fprintf(stderr, "failed to ucp_config_read (%s)\n", ucs_status_string(status));
         ret = -1;
         goto err;
     }
@@ -399,7 +398,7 @@ static int init_context(ucp_context_h *ucp_context, ucp_worker_h *ucp_worker)
     status = ucp_init(&ucp_params, config, ucp_context);
     ucp_config_release(config);
     if (status != UCS_OK) {
-        fprintf(stderr, "Failed to ucp_init\n");
+        fprintf(stderr, "failed to ucp_init (%s)\n", ucs_status_string(status));
         ret = -1;
         goto err;
     }
@@ -409,7 +408,7 @@ static int init_context(ucp_context_h *ucp_context, ucp_worker_h *ucp_worker)
 
     status = ucp_worker_create(*ucp_context, &worker_params, ucp_worker);
     if (status != UCS_OK) {
-        fprintf(stderr, "Failed to ucp_worker_create\n");
+        fprintf(stderr, "failed to ucp_worker_create (%s)\n", ucs_status_string(status));
         ret = -1;
         goto err_cleanup;
     }
@@ -456,7 +455,7 @@ int main(int argc, char **argv)
         is_server = 1;
         status = start_server(ucp_worker, &context, &listener);
         if (status != UCS_OK) {
-            fprintf(stderr, "Failed to start server\n");
+            fprintf(stderr, "failed to start server\n");
             goto err_worker;
         }
 
@@ -466,7 +465,7 @@ int main(int argc, char **argv)
         is_server = 0;
         status = start_client(ucp_worker, server_addr, &ep);
         if (status != UCS_OK) {
-            fprintf(stderr, "Failed to start client\n");
+            fprintf(stderr, "failed to start client\n");
             goto err_worker;
         }
     }

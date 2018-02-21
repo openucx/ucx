@@ -445,7 +445,7 @@ run_client_server() {
     then
         server_ip=`ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}'`
     else
-        exit 0
+        return
     fi
 
     server_port=$((10000 + EXECUTOR_NUMBER))
@@ -468,13 +468,13 @@ run_ucp_client_server() {
 
     if [ ! -r /dev/infiniband/rdma_cm  ]
     then
-        exit 0
+        return
     fi
 
     ret=`which ibdev2netdev`
     if [ -z "$ret" ]
     then
-        exit 0
+        return
     fi
 
     for ucx_dev in $(get_active_ib_devices)
