@@ -45,13 +45,6 @@ static const char * ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_LAST]      = NULL,
 };
 
-static const char *ucp_version_check_modes[] = {
-    [UCP_VERSION_CHECK_ERROR]   = "error",
-    [UCP_VERSION_CHECK_WARNING] = "warning",
-    [UCP_VERSION_CHECK_IGNORE]  = "ignore",
-    [UCP_VERSION_CHECK_LAST]    = NULL
-};
-
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which network device(s) to use. The order is not meaningful.\n"
@@ -201,13 +194,6 @@ static ucs_config_field_t ucp_config_table[] = {
   {"RNDV_FRAG_SIZE", "256k",
    "RNDV fragment size \n",
    ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"VERSION_MISMATCH", "warning",
-   "Version mismatch action.\n"
-   " warning - prompt warning message and continue.\n"
-   " error   - prompt error message and exit.\n"
-   " ignore  - completely ignore version mismatch.",
-   ucs_offsetof(ucp_config_t, version_error_mode), UCS_CONFIG_TYPE_ENUM(ucp_version_check_modes)},
 
   {NULL}
 };
@@ -1030,9 +1016,15 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     unsigned major_version, minor_version, release_number;
     ucp_context_t *context;
     ucs_status_t status;
-    const char *version_mismatch_format;
 
     ucp_get_version(&major_version, &minor_version, &release_number);
+
+    if ((api_major_version != major_version) ||
+        ((api_major_version == major_version) && (api_minor_version > minor_version))) {
+        ucs_warn("UCP version is incompatible, required: %d.%d, actual: %d.%d (release %d)",
+                  api_major_version, api_minor_version,
+                  major_version, minor_version, release_number);
+    }
 
     /* allocate a ucp context */
     context = ucs_calloc(1, sizeof(*context), "ucp context");
@@ -1044,25 +1036,6 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     status = ucp_fill_config(context, params, config);
     if (status != UCS_OK) {
         goto err_free_ctx;
-    }
-
-    if (config->version_error_mode != UCP_VERSION_CHECK_IGNORE) {
-        if ((api_major_version != major_version) || (api_minor_version != minor_version)) {
-            version_mismatch_format =
-                "UCP version is incompatible, required: %d.%d, actual: %d.%d (release %d)";
-            if (config->version_error_mode == UCP_VERSION_CHECK_WARNING) {
-                ucs_warn(version_mismatch_format,
-                         api_major_version, api_minor_version,
-                         major_version, minor_version, release_number);
-            } else {
-                ucs_assert(config->version_error_mode == UCP_VERSION_CHECK_ERROR);
-                ucs_error(version_mismatch_format,
-                          api_major_version, api_minor_version,
-                          major_version, minor_version, release_number);
-                status = UCS_ERR_NOT_IMPLEMENTED;
-                goto err_free_ctx;
-            }
-        }
     }
 
     /* fill resources we should use */
