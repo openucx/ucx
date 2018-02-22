@@ -187,7 +187,7 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
     } while (roffset < ssize);
 
     /* waitall flag requires completion by single request */
-    if (recv_flags & UCP_RECV_FLAG_WAITALL) {
+    if (recv_flags & UCP_STREAM_RECV_FLAG_WAITALL) {
         EXPECT_EQ(size_t(1), counter);
     }
 
@@ -263,7 +263,7 @@ void test_ucp_stream::do_send_exp_recv_test(ucp_datatype_t datatype)
     EXPECT_EQ(scount, rcount);
 
     /* waitall flag requires completion by single request */
-    if (recv_flags & UCP_RECV_FLAG_WAITALL) {
+    if (recv_flags & UCP_STREAM_RECV_FLAG_WAITALL) {
         EXPECT_EQ(size_t(0), counter);
     }
 
@@ -358,33 +358,33 @@ UCS_TEST_P(test_ucp_stream, send_recv_8) {
     ucp_datatype_t datatype = ucp_dt_make_contig(sizeof(uint8_t));
 
     do_send_recv_test<uint8_t, 0>(datatype);
-    do_send_recv_test<uint8_t, UCP_RECV_FLAG_WAITALL>(datatype);
+    do_send_recv_test<uint8_t, UCP_STREAM_RECV_FLAG_WAITALL>(datatype);
 }
 
 UCS_TEST_P(test_ucp_stream, send_recv_16) {
     ucp_datatype_t datatype = ucp_dt_make_contig(sizeof(uint16_t));
 
     do_send_recv_test<uint16_t, 0>(datatype);
-    do_send_recv_test<uint16_t, UCP_RECV_FLAG_WAITALL>(datatype);
+    do_send_recv_test<uint16_t, UCP_STREAM_RECV_FLAG_WAITALL>(datatype);
 }
 
 UCS_TEST_P(test_ucp_stream, send_recv_32) {
     ucp_datatype_t datatype = ucp_dt_make_contig(sizeof(uint32_t));
 
     do_send_recv_test<uint32_t, 0>(datatype);
-    do_send_recv_test<uint32_t, UCP_RECV_FLAG_WAITALL>(datatype);
+    do_send_recv_test<uint32_t, UCP_STREAM_RECV_FLAG_WAITALL>(datatype);
 }
 
 UCS_TEST_P(test_ucp_stream, send_recv_64) {
     ucp_datatype_t datatype = ucp_dt_make_contig(sizeof(uint64_t));
 
     do_send_recv_test<uint64_t, 0>(datatype);
-    do_send_recv_test<uint64_t, UCP_RECV_FLAG_WAITALL>(datatype);
+    do_send_recv_test<uint64_t, UCP_STREAM_RECV_FLAG_WAITALL>(datatype);
 }
 
 UCS_TEST_P(test_ucp_stream, send_recv_iov) {
     do_send_recv_test<uint8_t, 0>(DATATYPE_IOV);
-    do_send_recv_test<uint8_t, UCP_RECV_FLAG_WAITALL>(DATATYPE_IOV);
+    do_send_recv_test<uint8_t, UCP_STREAM_RECV_FLAG_WAITALL>(DATATYPE_IOV);
 }
 
 UCS_TEST_P(test_ucp_stream, send_recv_generic) {
@@ -393,7 +393,7 @@ UCS_TEST_P(test_ucp_stream, send_recv_generic) {
 
     status = ucp_dt_create_generic(&ucp::test_dt_uint8_ops, &context, &dt);
     ASSERT_UCS_OK(status);
-    do_send_recv_test<uint8_t, UCP_RECV_FLAG_WAITALL>(dt);
+    do_send_recv_test<uint8_t, UCP_STREAM_RECV_FLAG_WAITALL>(dt);
     ucp_dt_destroy(dt);
 
 }
@@ -402,33 +402,33 @@ UCS_TEST_P(test_ucp_stream, send_exp_recv_8) {
     ucp_datatype_t datatype = ucp_dt_make_contig(sizeof(uint8_t));
 
     do_send_exp_recv_test<uint8_t, 0>(datatype);
-    do_send_exp_recv_test<uint8_t, UCP_RECV_FLAG_WAITALL>(datatype);
+    do_send_exp_recv_test<uint8_t, UCP_STREAM_RECV_FLAG_WAITALL>(datatype);
 }
 
 UCS_TEST_P(test_ucp_stream, send_exp_recv_16) {
     ucp_datatype_t datatype = ucp_dt_make_contig(sizeof(uint16_t));
 
     do_send_exp_recv_test<uint16_t, 0>(datatype);
-    do_send_exp_recv_test<uint16_t, UCP_RECV_FLAG_WAITALL>(datatype);
+    do_send_exp_recv_test<uint16_t, UCP_STREAM_RECV_FLAG_WAITALL>(datatype);
 }
 
 UCS_TEST_P(test_ucp_stream, send_exp_recv_32) {
     ucp_datatype_t datatype = ucp_dt_make_contig(sizeof(uint32_t));
 
     do_send_exp_recv_test<uint32_t, 0>(datatype);
-    do_send_exp_recv_test<uint32_t, UCP_RECV_FLAG_WAITALL>(datatype);
+    do_send_exp_recv_test<uint32_t, UCP_STREAM_RECV_FLAG_WAITALL>(datatype);
 }
 
 UCS_TEST_P(test_ucp_stream, send_exp_recv_64) {
     ucp_datatype_t datatype = ucp_dt_make_contig(sizeof(uint64_t));
 
     do_send_exp_recv_test<uint64_t, 0>(datatype);
-    do_send_exp_recv_test<uint64_t, UCP_RECV_FLAG_WAITALL>(datatype);
+    do_send_exp_recv_test<uint64_t, UCP_STREAM_RECV_FLAG_WAITALL>(datatype);
 }
 
 UCS_TEST_P(test_ucp_stream, send_exp_recv_iov) {
     do_send_exp_recv_test<uint8_t, 0>(DATATYPE_IOV);
-    do_send_exp_recv_test<uint8_t, UCP_RECV_FLAG_WAITALL>(DATATYPE_IOV);
+    do_send_exp_recv_test<uint8_t, UCP_STREAM_RECV_FLAG_WAITALL>(DATATYPE_IOV);
 }
 
 UCS_TEST_P(test_ucp_stream, send_recv_data_recv_8) {

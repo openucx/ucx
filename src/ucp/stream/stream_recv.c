@@ -290,7 +290,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
     }
 
     ucp_stream_recv_request_init(req, buffer, count, dt_length, datatype, cb,
-                                 (flags & UCP_RECV_FLAG_WAITALL) ?
+                                 (flags & UCP_STREAM_RECV_FLAG_WAITALL) ?
                                  UCP_REQUEST_FLAG_RECV_WAITALL : 0);
 
     /* OK, lets obtain all arrived data which matches the recv size */
