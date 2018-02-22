@@ -464,7 +464,11 @@ UCS_TEST_P(test_dc_flow_control, flush_destroy)
 
     send_am_and_flush(m_e1, wnd);
 
+    /* At this point m_e1 sent grant request to m_e2, m_e2 received all
+     * messages and added grant to m_e1 to pending queue
+     * (because it does not have tx resources yet) */
 
+    /* Invoke flush in a loop, because some send completions may not be polled yet */
     ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(DEFAULT_TIMEOUT_SEC);
     do {
         short_progress_loop();
@@ -475,8 +479,9 @@ UCS_TEST_P(test_dc_flow_control, flush_destroy)
 
     m_e1->destroy_eps();
 
-    /* Enable send capabilities of m_e2 and send AM message
-     * to force pending queue dispatch */
+    /* Enable send capabilities of m_e2 and send AM message to force pending queue
+     * dispatch. Thus, pending grant will be sent to m_e1. There should not be
+     * any warning/error and/or crash. */
     enable_entity(m_e2);
     set_tx_moderation(m_e2, 0);
     send_am_and_flush(m_e2, 1);
