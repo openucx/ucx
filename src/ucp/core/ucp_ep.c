@@ -21,6 +21,12 @@
 #include <string.h>
 
 
+typedef struct {
+    double reg_growth;
+    double reg_overhead;
+    size_t bw;
+} ucp_ep_thresh_params_t;
+
 extern const ucp_proto_t ucp_stream_am_proto;
 
 static void ucp_ep_cleanup_lanes(ucp_ep_h ep);
@@ -693,60 +699,86 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     return 1;
 }
 
-static size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
-                                             uct_iface_attr_t *iface_attr,
-                                             uct_md_attr_t *md_attr,
-                                             size_t bcopy_bw, int recv_reg_cost)
+static void ucp_ep_config_calc_thresh_params(ucp_worker_h worker,
+                                             ucp_ep_config_t *config,
+                                             ucp_lane_index_t *lanes,
+                                             ucp_ep_thresh_params_t *params)
 {
-    double numerator, denumerator, md_reg_growth, md_reg_overhead;
-    double diff_percent = 1.0 - context->config.ext.rndv_perf_diff / 100.0;
+    ucp_context_h context = worker->context;
+    ucp_md_map_t md_map   = 0;
+    ucp_lane_index_t lane;
+    ucp_rsc_index_t rsc_index;
+    ucp_md_index_t md_index;
+    uct_md_attr_t *md_attr;
+    int i;
 
-    /* We calculate the Rendezvous threshold by finding the message size at which:
-     * AM/RMA rndv's latency is worse than the eager_zcopy
-     * latency by a small percentage (that is set by the user).
-     * Starting this message size (rndv_thresh), rndv may be used.
-     *
-     * The latency function for eager_zcopy is:
-     * [ reg_cost.overhead + size * md_attr->reg_cost.growth +
-     * max(size/bw , size/bcopy_bw) + overhead ]
-     *
-     * The latency function for Active message Rendezvous is:
-     * [ latency + overhead + reg_cost.overhead +
-     * size * md_attr->reg_cost.growth + overhead + latency +
-     * max(size/bw , size/bcopy_bw) + latency + overhead + latency ]
-     *
-     * The latency function for RMA (get_zcopy) Rendezvous is:
-     * [ reg_cost.overhead + size * md_attr->reg_cost.growth + latency + overhead +
-     *   reg_cost.overhead + size * md_attr->reg_cost.growth + overhead + latency +
-     *   size/bw + latency + overhead + latency ]
-     *
-     * Isolating the 'size' yields the rndv_thresh.
-     * The used latency functions for eager_zcopy and rndv are also specified in
-     * the UCX wiki */
+    for(i = 0; lanes[i] != UCP_NULL_LANE; i++) {
+        lane      = lanes[i];
+        rsc_index = config->key.lanes[lane].rsc_index;
+        md_index  = config->md_index[lane];
 
-    if (md_attr->cap.flags & UCT_MD_FLAG_REG) {
-        md_reg_growth   = md_attr->reg_cost.growth;
-        md_reg_overhead = md_attr->reg_cost.overhead;
-    } else {
-        md_reg_growth   = 0;
-        md_reg_overhead = 0;
+        if (!(md_map & UCS_BIT(md_index))) {
+            md_map |= UCS_BIT(md_index);
+            md_attr = &context->tl_mds[md_index].attr;
+            if (md_attr->cap.flags & UCT_MD_FLAG_REG) {
+                params->reg_growth   += md_attr->reg_cost.growth;
+                params->reg_overhead += md_attr->reg_cost.overhead;
+            }
+        }
+        params->bw += worker->ifaces[rsc_index].attr.bandwidth;
+    }
+}
+
+static size_t ucp_ep_config_calc_rndv_thresh(ucp_worker_t *worker,
+                                             ucp_ep_config_t *config,
+                                             ucp_lane_index_t *eager_lanes,
+                                             ucp_lane_index_t *rndv_lanes,
+                                             int recv_reg_cost)
+{
+    ucp_context_h context        = worker->context;
+    ucp_ep_thresh_params_t eager = {0};
+    ucp_ep_thresh_params_t rndv  = {0};
+    double diff_percent          = 1.0 - context->config.ext.rndv_perf_diff / 100.0;
+    double eager_latency;
+    double rndv_latency;
+    double eager_overhead;
+    double rndv_overhead;
+    double numerator, denumerator;
+    ucp_rsc_index_t rsc_index;
+    uct_iface_attr_t *iface_attr;
+
+    ucp_ep_config_calc_thresh_params(worker, config, eager_lanes, &eager);
+    ucp_ep_config_calc_thresh_params(worker, config, rndv_lanes, &rndv);
+
+    if (!eager.bw || !rndv.bw) {
+        goto fallback;
     }
 
-    numerator = diff_percent * ((4 * ucp_tl_iface_latency(context, iface_attr)) +
-                (3 * iface_attr->overhead) +
-                (md_reg_overhead * (1 + recv_reg_cost))) -
-                 md_reg_overhead - iface_attr->overhead;
+    rsc_index  = config->key.lanes[eager_lanes[0]].rsc_index;
+    iface_attr = &worker->ifaces[rsc_index].attr;
 
-    denumerator = md_reg_growth +
-                  ucs_max((1.0 / iface_attr->bandwidth), (1.0 / context->config.ext.bcopy_bw)) -
-                  (diff_percent * (ucs_max((1.0 / iface_attr->bandwidth), (1.0 / bcopy_bw)) +
-                   md_reg_growth * (1 + recv_reg_cost)));
+    /* we always using AM lane (eager_lanes[0]) for signal message (RTS/RTR/ATS),
+     * that is why eager lateny/overhead are equal to rndv latency/overhead */
+    eager_latency  = ucp_tl_iface_latency(context, iface_attr);
+    rndv_latency   = eager_latency;
+    eager_overhead = iface_attr->overhead;
+    rndv_overhead  = eager_overhead;
+
+    numerator = diff_percent * (rndv.reg_overhead * (1 + recv_reg_cost) +
+                                4 * rndv_latency + 3 * rndv_overhead) -
+                eager.reg_overhead - eager_overhead;
+
+    denumerator = eager.reg_growth +
+                  1.0 / ucs_min(eager.bw, context->config.ext.bcopy_bw) -
+                  diff_percent *
+                  (rndv.reg_growth * (1 + recv_reg_cost) + 1.0 / rndv.bw);
 
     if ((numerator > 0) && (denumerator > 0)) {
-        return (numerator / denumerator);
-    } else {
-        return context->config.ext.rndv_thresh_fallback;
+        return ucs_max(numerator / denumerator, iface_attr->cap.am.max_bcopy);
     }
+
+fallback:
+    return context->config.ext.rndv_thresh_fallback;
 }
 
 static void
@@ -766,10 +798,11 @@ ucp_ep_config_set_am_rndv_send_nbr_thresh(ucp_context_h context,
     config->tag.rndv_send_nbr.am_thresh = rndv_thresh;
 }
 
-static void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_attr_t *iface_attr,
+static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker, uct_iface_attr_t *iface_attr,
                                              uct_md_attr_t *md_attr, ucp_ep_config_t *config,
                                              size_t adjust_min_val)
 {
+    ucp_context_h context = worker->context;
     size_t rndv_thresh;
 
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
@@ -780,8 +813,9 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_at
         rndv_thresh = SIZE_MAX;
     } else if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the AM rndv threshold on its own.*/
-        rndv_thresh = ucp_ep_config_calc_rndv_thresh(context, iface_attr, md_attr,
-                                                     context->config.ext.bcopy_bw,
+        rndv_thresh = ucp_ep_config_calc_rndv_thresh(worker, config,
+                                                     config->key.am_bw_lanes,
+                                                     config->key.am_bw_lanes,
                                                      0);
         ucs_trace("Active Message rendezvous threshold is %zu", rndv_thresh);
     } else {
@@ -812,15 +846,15 @@ ucp_ep_config_set_rndv_send_nbr_thresh(ucp_context_h context,
 
 static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
                                           ucp_ep_config_t *config,
-                                          ucp_lane_index_t lane,
+                                          ucp_lane_index_t *lanes,
                                           uint64_t rndv_cap_flag,
                                           size_t adjust_min_val)
 {
     ucp_context_t *context = worker->context;
+    ucp_lane_index_t lane = lanes[0];
     ucp_rsc_index_t rsc_index;
     size_t rndv_thresh;
     uct_iface_attr_t *iface_attr;
-    uct_md_attr_t *md_attr;
 
     if (lane == UCP_NULL_LANE) {
         ucs_debug("rendezvous (get_zcopy) protocol is not supported");
@@ -833,13 +867,13 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
     }
 
     iface_attr = &worker->ifaces[rsc_index].attr;
-    md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
     ucs_assert_always(iface_attr->cap.flags & rndv_cap_flag);
 
     if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
-        rndv_thresh = ucp_ep_config_calc_rndv_thresh(context, iface_attr,
-                                                     md_attr, SIZE_MAX, 1);
+        rndv_thresh = ucp_ep_config_calc_rndv_thresh(worker, config,
+                                                     config->key.am_bw_lanes,
+                                                     lanes, 1);
     } else {
         rndv_thresh = context->config.ext.rndv_thresh;
     }
@@ -907,6 +941,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
 void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 {
     ucp_context_h context = worker->context;
+    ucp_lane_index_t tag_lanes[2] = {UCP_NULL_LANE, UCP_NULL_LANE};
     ucp_ep_rma_config_t *rma_config;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_t *md_attr;
@@ -981,7 +1016,8 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
             if (config->key.am_lane != UCP_NULL_LANE) {
                 /* Must have active messages for using rendezvous */
-                ucp_ep_config_set_rndv_thresh(worker, config, lane,
+                tag_lanes[0] = lane;
+                ucp_ep_config_set_rndv_thresh(worker, config, tag_lanes,
                                               UCT_IFACE_FLAG_TAG_RNDV_ZCOPY,
                                               max_rndv_thresh);
             }
@@ -1006,7 +1042,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
             /* Calculate rndv threshold for AM Rendezvous, which may be used by
              * any tag-matching protocol (AM and offload). */
-            ucp_ep_config_set_am_rndv_thresh(context, iface_attr, md_attr, config,
+            ucp_ep_config_set_am_rndv_thresh(worker, iface_attr, md_attr, config,
                                              max_am_rndv_thresh);
 
             /* All keys must fit in RNDV packet.
@@ -1019,7 +1055,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                  * tag-matching protocols */
                 /* TODO: set threshold level based on all available lanes */
                 ucp_ep_config_set_rndv_thresh(worker, config,
-                                              config->key.rma_bw_lanes[0],
+                                              config->key.rma_bw_lanes,
                                               UCT_IFACE_FLAG_GET_ZCOPY,
                                               max_rndv_thresh);
                 config->tag.eager      = config->am;
