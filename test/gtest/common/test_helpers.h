@@ -83,6 +83,14 @@
         } \
     } while (0)
 
+#define ASSERT_UCS_PTR_OK(_expr) \
+    do { \
+        ucs_status_ptr_t _status = (_expr); \
+        if (UCS_PTR_IS_ERR(_status)) { \
+            UCS_TEST_ABORT("Error: " << ucs_status_string(UCS_PTR_STATUS(_status))); \
+        } \
+    } while (0)
+
 
 #define EXPECT_UD_CHECK(_val1, _val2, _exp_ud, _exp_non_ud) \
     do { \
