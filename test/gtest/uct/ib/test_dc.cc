@@ -371,8 +371,8 @@ class test_dc_flow_control : public test_rc_flow_control {
 public:
 
     /* virtual */
-    uct_rc_fc_t* get_fc_ptr(entity *e) {
-        return &ucs_derived_of(e->ep(0), uct_dc_ep_t)->fc;
+    uct_rc_fc_t* get_fc_ptr(entity *e, int ep_idx = 0) {
+        return &ucs_derived_of(e->ep(ep_idx), uct_dc_ep_t)->fc;
     }
 };
 
@@ -395,6 +395,41 @@ UCS_TEST_P(test_dc_flow_control, pending_grant)
     flush();
 }
 
+UCS_TEST_P(test_dc_flow_control, fc_disabled_flush)
+{
+    test_flush_fc_disabled();
+}
+
+UCS_TEST_P(test_dc_flow_control, fc_disabled_pending_no_dci) {
+
+    pending_send_request_t pending_req;
+    pending_req.uct.func = pending_cb;
+    pending_req.cb_count = 0;
+
+    set_fc_disabled(m_e1);
+
+    /* Send on new endpoints until out of DCIs */
+    for (int ep_index = 0; ep_index < 20; ++ep_index) {
+        m_e1->connect(ep_index, *m_e2, ep_index);
+
+        ucs_status_t status = uct_ep_am_short(m_e1->ep(ep_index), 0, 0, NULL, 0);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            /* if FC is disabled, it should be OK to set fc_wnd to 0 */
+            get_fc_ptr(m_e1, ep_index)->fc_wnd = 0;
+
+            /* Add to pending */
+            status = uct_ep_pending_add(m_e1->ep(ep_index), &pending_req.uct);
+            ASSERT_UCS_OK(status);
+
+            wait_for_flag(&pending_req.cb_count);
+            EXPECT_EQ(1, pending_req.cb_count);
+            break;
+        }
+
+        ASSERT_UCS_OK(status);
+    }
+}
+
 /* Check that soft request is not handled by DC */
 UCS_TEST_P(test_dc_flow_control, soft_request)
 {
@@ -413,10 +448,13 @@ UCS_TEST_P(test_dc_flow_control, soft_request)
     EXPECT_EQ(get_fc_ptr(m_e1)->fc_wnd, s_thresh - 1);
 }
 
-/* Check that flush returns UCS_OK even if there is an outgoing grant request */
+/* Check that:
+ * 1) flush returns UCS_OK even if there is an outgoing grant request
+ * 2) No crash when grant for destroyed ep arrives */
 UCS_TEST_P(test_dc_flow_control, flush_destroy)
 {
     int wnd = 5;
+    ucs_status_t status;
 
     disable_entity(m_e2);
 
@@ -426,11 +464,24 @@ UCS_TEST_P(test_dc_flow_control, flush_destroy)
 
     send_am_and_flush(m_e1, wnd);
 
-    EXPECT_UCS_OK(uct_ep_flush(m_e1->ep(0), 0, NULL));
+    /* At this point m_e1 sent grant request to m_e2, m_e2 received all
+     * messages and added grant to m_e1 to pending queue
+     * (because it does not have tx resources yet) */
+
+    /* Invoke flush in a loop, because some send completions may not be polled yet */
+    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(DEFAULT_TIMEOUT_SEC);
+    do {
+        short_progress_loop();
+        status = uct_ep_flush(m_e1->ep(0), 0, NULL);
+    } while (((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) &&
+             (ucs_get_time() < timeout));
+    ASSERT_UCS_OK(status);
+
     m_e1->destroy_eps();
 
-    /* Enable send capabilities of m_e2 and send AM message
-     * to force pending queue dispatch */
+    /* Enable send capabilities of m_e2 and send AM message to force pending queue
+     * dispatch. Thus, pending grant will be sent to m_e1. There should not be
+     * any warning/error and/or crash. */
     enable_entity(m_e2);
     set_tx_moderation(m_e2, 0);
     send_am_and_flush(m_e2, 1);
@@ -487,8 +538,8 @@ public:
         test_rc_flow_control_stats::init();
     }
 
-    uct_rc_fc_t* get_fc_ptr(entity *e) {
-        return &ucs_derived_of(e->ep(0), uct_dc_ep_t)->fc;
+    uct_rc_fc_t* get_fc_ptr(entity *e, int ep_idx = 0) {
+        return &ucs_derived_of(e->ep(ep_idx), uct_dc_ep_t)->fc;
     }
 
     uct_rc_fc_t* fake_ep_fc_ptr(entity *e) {

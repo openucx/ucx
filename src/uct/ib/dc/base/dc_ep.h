@@ -9,6 +9,7 @@
 
 #include <uct/api/uct.h>
 #include <ucs/datastruct/arbiter.h>
+#include <ucs/sys/compiler_def.h>
 
 #include "dc_iface.h"
 
@@ -132,16 +133,41 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_dc_ep_basic_init(uct_dc_iface_t *ifa
                           UCS_STATS_ARG(ep->super.stats));
 }
 
-static inline int uct_dc_iface_dci_can_alloc_dcs(uct_dc_iface_t *iface)
+static UCS_F_ALWAYS_INLINE int
+uct_dc_iface_dci_can_alloc_dcs(uct_dc_iface_t *iface)
 {
     return iface->tx.stack_top < iface->tx.ndci;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_dc_iface_progress_pending(uct_dc_iface_t *iface)
+{
+    do {
+        /**
+         * Pending op on the tx_waitq can complete with the UCS_OK
+         * status without actually sending anything on the dci.
+         * In this case pending ops on the waitq may never be
+         * scdeduled.
+         *
+         * So we keep progressing pending while dci_waitq is not
+         * empty and it is possible to allocate a dci.
+         */
+        if (uct_dc_iface_dci_can_alloc(iface)) {
+            ucs_arbiter_dispatch(uct_dc_iface_dci_waitq(iface), 1,
+                                 uct_dc_iface_dci_do_pending_wait, NULL);
+        }
+        ucs_arbiter_dispatch(uct_dc_iface_tx_waitq(iface), 1,
+                             uct_dc_iface_dci_do_pending_tx, NULL);
+
+    } while (ucs_unlikely(!ucs_arbiter_is_empty(uct_dc_iface_dci_waitq(iface)) &&
+                           uct_dc_iface_dci_can_alloc_dcs(iface)));
 }
 
 static inline int uct_dc_iface_dci_ep_can_send(uct_dc_ep_t *ep)
 {
     uct_dc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_iface_t);
     return (!(ep->flags & UCT_DC_EP_FLAG_TX_WAIT)) &&
-           (ep->fc.fc_wnd > 0) &&
+           uct_rc_fc_has_resources(&iface->super, &ep->fc) &&
            uct_dc_iface_dci_has_tx_resources(iface, ep->dci);
 }
 
@@ -150,7 +176,7 @@ void uct_dc_iface_schedule_dci_alloc(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
 {
     /* If FC window is empty the group will be scheduled when
      * grant is received */
-    if (ep->fc.fc_wnd > 0) {
+    if (uct_rc_fc_has_resources(&iface->super, &ep->fc)) {
         ucs_arbiter_group_schedule(uct_dc_iface_dci_waitq(iface), &ep->arb_group);
     }
 }

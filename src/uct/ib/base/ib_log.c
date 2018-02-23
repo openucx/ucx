@@ -39,16 +39,19 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
                      sg_list[i].addr, sg_list[i].length, sg_list[i].lkey);
         }
 
-        len = ucs_min(sg_list[i].length, (void*)data + sizeof(data) - md);
-        memcpy(md, (void*)sg_list[i].addr, len);
-
         s               += strlen(s);
-        md              += len;
-        total_len       += len;
-        total_valid_len += sg_list[i].length;
+
+        if (data_dump) {
+            len = ucs_min(sg_list[i].length, (void*)data + sizeof(data) - md);
+            memcpy(md, (void*)sg_list[i].addr, len);
+
+            md              += len;
+            total_len       += len;
+            total_valid_len += sg_list[i].length;
+        }
     }
 
-    if (data_dump != NULL) {
+    if (data_dump) {
         data_dump(&iface->super, type, data, total_len, total_valid_len, s, ends - s);
     }
 }
@@ -154,7 +157,7 @@ static void uct_ib_dump_wr(struct ibv_qp *qp, uct_ib_opcode_t *op,
 }
 
 static void uct_ib_dump_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
-                                struct ibv_send_wr *wr,
+                                struct ibv_send_wr *wr, int max_sge,
                                 uct_log_data_dump_func_t data_dump,
                                 char *buf, size_t max)
 {
@@ -177,19 +180,20 @@ static void uct_ib_dump_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
     uct_ib_dump_wr(qp, op, wr, s, ends - s);
     s += strlen(s);
 
-    uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, wr->sg_list, wr->num_sge,
+    uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, wr->sg_list,
+                            ucs_min(wr->num_sge, max_sge),
                             (wr->send_flags & IBV_SEND_INLINE) ? -1 : 0,
                             data_dump, s, ends - s);
 }
 
 void __uct_ib_log_post_send(const char *file, int line, const char *function,
                             uct_ib_iface_t *iface, struct ibv_qp *qp,
-                            struct ibv_send_wr *wr,
+                            struct ibv_send_wr *wr, int max_sge,
                             uct_log_data_dump_func_t data_dump_cb)
 {
     char buf[256] = {0};
     while (wr != NULL) {
-        uct_ib_dump_send_wr(iface, qp, wr, data_dump_cb, buf, sizeof(buf) - 1);
+        uct_ib_dump_send_wr(iface, qp, wr, max_sge, data_dump_cb, buf, sizeof(buf) - 1);
         uct_log_data(file, line, function, buf);
         wr = wr->next;
     }
@@ -216,7 +220,7 @@ void __uct_ib_log_recv_completion(const char *file, int line, const char *functi
 
 #if HAVE_DECL_IBV_EXP_POST_SEND
 static void uct_ib_dump_exp_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
-                                    struct ibv_exp_send_wr *wr,
+                                    struct ibv_exp_send_wr *wr, int max_sge,
                                     uct_log_data_dump_func_t data_dump_cb,
                                     char *buf, size_t max)
 {
@@ -286,19 +290,21 @@ static void uct_ib_dump_exp_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
    }
 #endif
 
-   uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, wr->sg_list, wr->num_sge,
+   uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, wr->sg_list,
+                           ucs_min(wr->num_sge, max_sge),
                            (wr->exp_send_flags & IBV_EXP_SEND_INLINE) ? -1 : 0,
                            data_dump_cb, s, ends - s);
 }
 
 void __uct_ib_log_exp_post_send(const char *file, int line, const char *function,
                                 uct_ib_iface_t *iface, struct ibv_qp *qp,
-                                struct ibv_exp_send_wr *wr,
+                                struct ibv_exp_send_wr *wr, int max_sge,
                                 uct_log_data_dump_func_t packet_dump_cb)
 {
     char buf[256] = {0};
     while (wr != NULL) {
-        uct_ib_dump_exp_send_wr(iface, qp, wr, packet_dump_cb, buf, sizeof(buf) - 1);
+        uct_ib_dump_exp_send_wr(iface, qp, wr, max_sge, packet_dump_cb,
+                                buf, sizeof(buf) - 1);
         uct_log_data(file, line, function, buf);
         wr = wr->next;
     }

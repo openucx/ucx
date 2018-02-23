@@ -59,7 +59,7 @@ void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, enum ibv_qp_type qp_
 
 void __uct_ib_log_post_send(const char *file, int line, const char *function,
                             uct_ib_iface_t *iface, struct ibv_qp *qp,
-                            struct ibv_send_wr *wr,
+                            struct ibv_send_wr *wr, int max_sge,
                             uct_log_data_dump_func_t packet_dump_cb);
 
 void __uct_ib_log_recv_completion(const char *file, int line, const char *function,
@@ -70,14 +70,15 @@ void __uct_ib_log_recv_completion(const char *file, int line, const char *functi
 #if HAVE_DECL_IBV_EXP_POST_SEND
 void __uct_ib_log_exp_post_send(const char *file, int line, const char *function,
                                 uct_ib_iface_t *iface, struct ibv_qp *qp,
-                                struct ibv_exp_send_wr *wr,
+                                struct ibv_exp_send_wr *wr, int max_sge,
                                 uct_log_data_dump_func_t packet_dump_cb);
 #endif
 
 
-#define uct_ib_log_post_send(_iface, _qp, _wr, _dump_cb) \
+#define uct_ib_log_post_send(_iface, _qp, _wr, _max_sge, _dump_cb) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
-        __uct_ib_log_post_send(__FILE__, __LINE__, __FUNCTION__, _iface, _qp, _wr, _dump_cb); \
+        __uct_ib_log_post_send(__FILE__, __LINE__, __FUNCTION__, \
+                                _iface, _qp, _wr, _max_sge, _dump_cb); \
     }
 
 /* Suitable for both: regular and exp wcs */
@@ -88,9 +89,10 @@ void __uct_ib_log_exp_post_send(const char *file, int line, const char *function
                                      _data, _length, _dump_cb, ## __VA_ARGS__); \
     }
 
-#define uct_ib_log_exp_post_send(_iface, _qp, _wr, _dump_cb) \
+#define uct_ib_log_exp_post_send(_iface, _qp, _wr, _max_sge,_dump_cb) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
-        __uct_ib_log_exp_post_send(__FILE__, __LINE__, __FUNCTION__, _iface, _qp, _wr, _dump_cb); \
+        __uct_ib_log_exp_post_send(__FILE__, __LINE__, __FUNCTION__, \
+                                   _iface, _qp, _wr, _max_sge, _dump_cb); \
     }
 
 #endif

@@ -511,7 +511,7 @@ void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
         m_recv_data[i].resize(m_msgs[i].length() * niter + 1);
         ucp::data_type_desc_t &rdesc = dt_rdescs[i].make(dt,
                                                          &m_recv_data[i][roffsets[i]],
-                                             m_recv_data[i].size());
+                                                         m_recv_data[i].size());
         size_t length;
         void *rreq = ucp_stream_recv_nb(e(m_receiver_idx).ep(0, i),
                                         rdesc.buf(), rdesc.count(), rdesc.dt(),
@@ -530,35 +530,44 @@ void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
             roffsets[rreqs[i].first] += wait_stream_recv(rreqs[i].second.m_req);
         }
         rreqs.clear();
+        progress();
 
-        do {
-            const size_t max_eps = 10;
-            ucp_stream_poll_ep_t poll_eps[max_eps];
-            progress();
-            count = ucp_stream_worker_poll(e(m_receiver_idx).worker(),
-                                           poll_eps, max_eps, 0);
-            EXPECT_LE(0, count);
+        const size_t max_eps = 10;
+        ucp_stream_poll_ep_t poll_eps[max_eps];
+        count = ucp_stream_worker_poll(e(m_receiver_idx).worker(),
+                                       poll_eps, max_eps, 0);
+        EXPECT_LE(0, count);
+        EXPECT_LE(size_t(count), m_nsenders);
 
-            for (ssize_t i = 0; i < count; ++i) {
+        for (ssize_t i = 0; i < count; ++i) {
+            bool again = true;
+            while (again) {
                 size_t sender_idx = uintptr_t(poll_eps[i].user_data);
                 size_t &roffset   = roffsets[sender_idx];
                 ucp::data_type_desc_t &dt_desc =
                     dt_rdescs[sender_idx].forward_to(roffset);
                 EXPECT_TRUE(dt_desc.is_valid());
                 size_t length;
-                void *rreq = ucp_stream_recv_nb(poll_eps[i].ep, dt_desc.buf(),
-                                                dt_desc.count(), dt_desc.dt(),
+                void *rreq = ucp_stream_recv_nb(poll_eps[i].ep,
+                                                dt_desc.buf(),
+                                                dt_desc.count(),
+                                                dt_desc.dt(),
                                                 ucp_recv_cb, &length, 0);
-                if (UCS_PTR_STATUS(rreq) == UCS_OK) {
+                EXPECT_FALSE(UCS_PTR_IS_ERR(rreq));
+                if (rreq == NULL) {
+                    EXPECT_LT(size_t(0), length);
                     roffset += length;
+                    if (ssize_t(length) < dt_desc.buf_length()) {
+                        continue; /* Need to drain the EP */
+                    }
                 } else {
                     rreqs.push_back(std::make_pair(sender_idx,
                                                    request_wrapper_t(rreq,
                                                                      &dt_desc)));
                 }
-                EXPECT_FALSE(UCS_PTR_IS_ERR(rreq));
+                again = false;
             }
-        } while (count > 0);
+        }
 
         erase_completed_reqs(sreqs);
     } while (!rreqs.empty() || !sreqs.empty() ||
@@ -686,8 +695,8 @@ void test_ucp_stream_many2one::check_recv_data(size_t n_iter, ucp_datatype_t dt)
         size_t            next = 0;
         for (size_t j = 0; j < n_iter; ++j) {
             size_t match = str.find(test, next);
-            EXPECT_NE(std::string::npos, match) << "failed on " << j
-                                                << " iteration";
+            EXPECT_NE(std::string::npos, match) << "failed on sender " << i
+                                                << " iteration " << j;
             if (match == std::string::npos) {
                 break;
             }
@@ -790,6 +799,16 @@ UCS_TEST_P(test_ucp_stream_many2one, send_recv_nb) {
 
 UCS_TEST_P(test_ucp_stream_many2one, send_recv_nb_iov) {
     do_send_recv_test(DATATYPE_IOV);
+}
+
+UCS_TEST_P(test_ucp_stream_many2one, send_recv_nb_generic) {
+    ucp_datatype_t dt;
+    ucs_status_t status;
+
+    status = ucp_dt_create_generic(&ucp::test_dt_uint8_ops, NULL, &dt);
+    ASSERT_UCS_OK(status);
+    do_send_recv_test(dt);
+    ucp_dt_destroy(dt);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_stream_many2one)

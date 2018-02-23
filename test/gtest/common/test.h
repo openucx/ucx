@@ -39,6 +39,7 @@ public:
     virtual void pop_config();
 
     static void hide_errors();
+    static void hide_warnings();
     static void wrap_errors();
     static void restore_errors();
 
@@ -73,6 +74,7 @@ protected:
     static unsigned                 m_total_errors;
     static unsigned                 m_total_warnings;
     static std::vector<std::string> m_errors;
+    static std::vector<std::string> m_warnings;
 
 private:
     void skipped(const test_skip_exception& e);
@@ -86,6 +88,10 @@ private:
     static ucs_log_func_rc_t
     hide_errors_logger(const char *file, unsigned line, const char *function,
                        ucs_log_level_t level, const char *message, va_list ap);
+
+    static ucs_log_func_rc_t
+    hide_warns_logger(const char *file, unsigned line, const char *function,
+                      ucs_log_level_t level, const char *message, va_list ap);
 
     static ucs_log_func_rc_t
     wrap_errors_logger(const char *file, unsigned line, const char *function,

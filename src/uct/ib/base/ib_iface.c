@@ -18,7 +18,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <poll.h>
-#include <numa.h>
 
 
 static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,

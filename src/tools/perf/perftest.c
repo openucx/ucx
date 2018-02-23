@@ -629,7 +629,7 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
             params->mem_type = UCT_MD_MEM_TYPE_CUDA;
             return UCS_OK;
 #else
-            ucs_error("not build with cuda support");
+            ucs_error("not built with cuda support");
             return UCS_ERR_INVALID_PARAM;
 #endif
         }
@@ -639,7 +639,8 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
     }
 }
 
-static ucs_status_t read_batch_file(FILE *batch_file, ucx_perf_params_t *params,
+static ucs_status_t read_batch_file(FILE *batch_file, const char *file_name,
+                                    int *line_num, ucx_perf_params_t *params,
                                     char** test_name_p)
 {
 #define MAX_SIZE 256
@@ -655,6 +656,7 @@ static ucs_status_t read_batch_file(FILE *batch_file, ucx_perf_params_t *params,
         if (fgets(buf, sizeof(buf) - 1, batch_file) == NULL) {
             return UCS_ERR_NO_ELEM;
         }
+        ++(*line_num);
 
         argc = 0;
         p = strtok(buf, " \t\n\r");
@@ -665,13 +667,12 @@ static ucs_status_t read_batch_file(FILE *batch_file, ucx_perf_params_t *params,
         argv[argc] = NULL;
     } while ((argc == 0) || (argv[0][0] == '#'));
 
-
     optind = 1;
     while ((c = getopt (argc, argv, TEST_PARAMS_ARGS)) != -1) {
         status = parse_test_params(params, c, optarg);
         if (status != UCS_OK) {
-            ucs_error("Invalid argument in batch file: -%c, status(%d):\"%s\"",
-                      c, status, ucs_status_string(status));
+            ucs_error("in batch file '%s' line %d: -%c %s: %s",
+                      file_name, *line_num, c, optarg, ucs_status_string(status));
             return status;
         }
     }
@@ -1263,6 +1264,7 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
     ucx_perf_result_t result;
     ucs_status_t status;
     FILE *batch_file;
+    int line_num;
 
     ucs_trace_func("depth=%u, num_files=%u", depth, ctx->num_batch_files);
 
@@ -1277,8 +1279,11 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
         return UCS_ERR_IO_ERROR;
     }
 
-    params = *parent_params;
-    while ((status = read_batch_file(batch_file, &params, &ctx->test_names[depth])) == UCS_OK) {
+    params   = *parent_params;
+    line_num = 0;
+    while ((status = read_batch_file(batch_file, ctx->batch_files[depth],
+                                     &line_num, &params,
+                                     &ctx->test_names[depth])) == UCS_OK) {
         status = run_test_recurs(ctx, &params, depth + 1);
         free(ctx->test_names[depth]);
         if ((NULL == parent_params->msg_size_list) &&

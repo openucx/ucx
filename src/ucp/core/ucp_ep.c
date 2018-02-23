@@ -283,6 +283,9 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
             goto err_cleanup_eps;
         }
 
+        /*reset uuid to mem_type id*/
+        *(uint64_t*)address = mem_type;
+
         params.address    = (ucp_address_t*)address;
 
         status = ucp_ep_create_to_worker_addr(worker, &params, UCP_EP_INIT_FLAG_MEM_TYPE,

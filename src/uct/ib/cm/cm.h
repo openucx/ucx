@@ -50,6 +50,7 @@ typedef struct uct_cm_iface {
     struct ib_cm_id          *listen_id;       /* Listening "socket" */
     ucs_queue_head_t          notify_q;        /* Notification queue */
     uint32_t                  num_outstanding; /* Number of outstanding sends */
+    uint32_t                  num_completions; /* Number of completed sends */
     ucs_queue_head_t          outstanding_q;   /* Outstanding operations queue */
     uct_worker_cb_id_t        slow_prog_id;    /* Callback id for slowpath progress */
 

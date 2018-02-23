@@ -28,7 +28,7 @@ uct_rc_mlx5_txqp_bcopy_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_m
                                opcode, desc + 1, length, &desc->lkey,
                                rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
                                0, 0, 0,
-                               NULL, NULL, 0, fm_ce_se, imm_val_be);
+                               NULL, NULL, 0, fm_ce_se, imm_val_be, INT_MAX);
     uct_rc_txqp_add_send_op(txqp, &desc->super);
 }
 
@@ -58,7 +58,8 @@ uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep,
                                    rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
                                    tag, app_ctx, ib_imm_be,
                                    NULL, NULL, 0,
-                                   (comp == NULL) ? force_sig : MLX5_WQE_CTRL_CQ_UPDATE);
+                                   (comp == NULL) ? force_sig : MLX5_WQE_CTRL_CQ_UPDATE,
+                                   UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super));
 
     uct_rc_txqp_add_send_comp(iface, &ep->super.txqp, comp, sn);
     return UCS_INPROGRESS;
@@ -82,7 +83,7 @@ uct_rc_mlx5_ep_atomic_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
                                opcode, desc + 1, length, &desc->lkey,
                                remote_addr, ib_rkey,
                                compare_mask, compare, swap_add,
-                               NULL, NULL, 0, signal, 0);
+                               NULL, NULL, 0, signal, 0, INT_MAX);
 
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_rc_txqp_add_send_op(&ep->super.txqp, &desc->super);
@@ -138,7 +139,7 @@ ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsign
                                  MLX5_OPCODE_RDMA_WRITE,
                                  buffer, length, 0, 0, 0,
                                  remote_addr, uct_ib_md_direct_rkey(rkey),
-                                 NULL, NULL, 0, 0);
+                                 NULL, NULL, 0, 0, INT_MAX);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     return UCS_OK;
 }
@@ -245,7 +246,8 @@ ucs_status_t uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                  id, hdr, 0,
                                  0, 0,
                                  NULL, NULL, 0,
-                                 MLX5_WQE_CTRL_SOLICITED);
+                                 MLX5_WQE_CTRL_SOLICITED,
+                                 INT_MAX);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     UCT_RC_UPDATE_FC(iface, &ep->super, id);
     return UCS_OK;
@@ -395,7 +397,8 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                      MLX5_OPCODE_NOP, NULL, 0,
                                      0, 0, 0,
                                      0, 0,
-                                     NULL, NULL, 0, 0);
+                                     NULL, NULL, 0, 0,
+                                     INT_MAX);
     } else {
         sn = ep->tx.wq.sig_pi;
     }
@@ -422,7 +425,8 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                  NULL, 0,
                                  UCT_RC_EP_FC_PURE_GRANT, 0, 0,
                                  0, 0,
-                                 NULL, NULL, 0, 0);
+                                 NULL, NULL, 0, 0,
+                                 INT_MAX);
     return UCS_OK;
 }
 
