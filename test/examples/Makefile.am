@@ -12,7 +12,7 @@ dist_examples_DATA = \
 	uct_hello_world.c \
 	ucp_client_server.c
 
-EXAMPLE_CC_FLAGS = -lucs -I$(includedir) -L$(libdir) -pedantic -Werror -Wl,-rpath,$(libdir)
+EXAMPLE_CC_FLAGS = -lucs -I$(includedir) -L$(libdir) -pedantic -Wall -Werror -Wl,-rpath,$(libdir)
 
 installcheck-local:
 	@echo "INSTALLCHECK: Compiling examples with installed library"
