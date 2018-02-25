@@ -1,10 +1,9 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
 
-#include "rcache.h"
 
 #include <ucs/arch/atomic.h>
 #include <ucs/type/class.h>
@@ -16,6 +15,8 @@
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
 
+#include "rcache.h"
+#include "rcache_int.h"
 
 #define ucs_rcache_region_log(_level, _message, ...) \
     do { \
@@ -41,6 +42,7 @@ typedef struct ucs_rcache_inv_entry {
     ucs_pgt_addr_t           end;
 } ucs_rcache_inv_entry_t;
 
+
 #if ENABLE_STATS
 static ucs_stats_class_t ucs_rcache_stats_class = {
     .name = "rcache",
@@ -59,6 +61,7 @@ static ucs_stats_class_t ucs_rcache_stats_class = {
     }
 };
 #endif
+
 
 static void __ucs_rcache_region_log(const char *file, int line, const char *function,
                                     ucs_log_level_t level, ucs_rcache_t *rcache,

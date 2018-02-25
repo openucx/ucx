@@ -8,7 +8,9 @@
 extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/sys/math.h>
+#include <ucs/stats/stats.h>
 #include <ucs/sys/rcache.h>
+#include <ucs/sys/rcache_int.h>
 #include <ucs/sys/sys.h>
 }
 
