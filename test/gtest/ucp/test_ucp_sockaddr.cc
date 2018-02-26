@@ -15,7 +15,8 @@ public:
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
         params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features     = UCP_FEATURE_TAG;
+        params.features     = UCP_FEATURE_TAG |
+                              UCP_FEATURE_WAKEUP;
         return params;
     }
 
@@ -66,7 +67,16 @@ public:
         ASSERT_UCS_OK(status);
     }
 
-    void tag_send_recv(entity& from, entity& to) {
+    void wait(ucp_worker_h worker, void *request)
+    {
+        do {
+            ucp_worker_wait(worker);
+            while (progress());
+        } while (!ucp_request_is_completed(request));
+    }
+
+    void tag_send_recv(entity& from, entity& to, int wakeup)
+    {
         uint64_t send_data = ucs_generate_uuid(0);
         void *send_req = ucp_tag_send_nb(from.ep(), &send_data, 1,
                                          ucp_dt_make_contig(sizeof(send_data)),
@@ -75,8 +85,13 @@ public:
         } else if (UCS_PTR_IS_ERR(send_req)) {
             ASSERT_UCS_OK(UCS_PTR_STATUS(send_req));
         } else {
-            while (!ucp_request_is_completed(send_req)) {
-                progress();
+            if (wakeup) {
+                /* wait for send completion */
+                wait(from.worker(), send_req);
+            } else {
+                while (!ucp_request_is_completed(send_req)) {
+                    progress();
+                }
             }
             ucp_request_free(send_req);
         }
@@ -88,8 +103,13 @@ public:
         if (UCS_PTR_IS_ERR(recv_req)) {
             ASSERT_UCS_OK(UCS_PTR_STATUS(recv_req));
         } else {
-            while (!ucp_request_is_completed(recv_req)) {
-                progress();
+            if (wakeup) {
+                /* wait for receive completion */
+                wait(to.worker(), recv_req);
+            } else {
+                while (!ucp_request_is_completed(recv_req)) {
+                    progress();
+                }
             }
             ucp_request_free(recv_req);
         }
@@ -97,7 +117,7 @@ public:
         EXPECT_EQ(send_data, recv_data);
     }
 
-    void connect_and_send_recv(struct sockaddr *connect_addr)
+    void connect_and_send_recv(struct sockaddr *connect_addr, int wakeup)
     {
         ucp_ep_params_t ep_params = ucp_test::get_ep_params();
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
@@ -109,13 +129,36 @@ public:
         ep_params.sockaddr.addrlen = sizeof(*connect_addr);
         sender().connect(&receiver(), ep_params);
 
-        tag_send_recv(sender(), receiver());
+        if (wakeup) {
+            /* first wait for an event on the server side -
+             * accepting a connection request from the client */
+            ucp_worker_wait(receiver().worker());
+            /* server - process the connection request
+             * (and create an ep to the client) */
+            while (progress());
 
-        /* wait for reverse ep to appear */
-        while (receiver().get_num_eps() == 0) {
-            short_progress_loop();
+            tag_send_recv(sender(), receiver() ,1);
+            tag_send_recv(receiver(), sender(), 1);
+        } else {
+            tag_send_recv(sender(), receiver(), 0);
+
+            /* wait for reverse ep to appear */
+            while (receiver().get_num_eps() == 0) {
+                short_progress_loop();
+            }
+            tag_send_recv(receiver(), sender(), 0);
         }
-        tag_send_recv(receiver(), sender());
+    }
+
+    void listen_and_communicate(int wakeup)
+    {
+        struct sockaddr_in connect_addr;
+        get_listen_addr(&connect_addr);
+
+        UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str((const struct sockaddr*)&connect_addr);
+
+        start_listener((const struct sockaddr*)&connect_addr);
+        connect_and_send_recv((struct sockaddr*)&connect_addr, wakeup);
     }
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
@@ -128,14 +171,11 @@ protected:
 };
 
 UCS_TEST_P(test_ucp_sockaddr, listen) {
+    listen_and_communicate(0);
+}
 
-    struct sockaddr_in connect_addr;
-    get_listen_addr(&connect_addr);
-
-    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str((const struct sockaddr*)&connect_addr);
-
-    start_listener((const struct sockaddr*)&connect_addr);
-    connect_and_send_recv((struct sockaddr*)&connect_addr);
+UCS_TEST_P(test_ucp_sockaddr, wakeup) {
+    listen_and_communicate(1);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
@@ -148,7 +188,7 @@ UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
                      ucs::sockaddr_to_str((const struct sockaddr*)&inaddr_any_listen_addr);
 
     start_listener((const struct sockaddr*)&inaddr_any_listen_addr);
-    connect_and_send_recv((struct sockaddr*)&connect_addr);
+    connect_and_send_recv((struct sockaddr*)&connect_addr, 0);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, err_handle) {
