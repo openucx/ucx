@@ -13,9 +13,43 @@
 
 ucs_status_t ucm_cudamem_install();
 
-cudaError_t ucm_override_cudaFree(void *addr);
-cudaError_t ucm_orig_cudaFree(void *address);
-cudaError_t ucm_cudaFree(void *address);
+/*cuMemFree */
+CUresult ucm_override_cuMemFree(CUdeviceptr dptr);
+CUresult ucm_orig_cuMemFree(CUdeviceptr dptr);
+CUresult ucm_cuMemFree(CUdeviceptr dptr);
+
+/*cuMemFreeHost */
+CUresult ucm_override_cuMemFreeHost(void *p);
+CUresult ucm_orig_cuMemFreeHost(void *p);
+CUresult ucm_cuMemFreeHost(void *p);
+
+/*cuMemAlloc*/
+CUresult ucm_override_cuMemAlloc(CUdeviceptr *dptr, size_t size);
+CUresult ucm_orig_cuMemAlloc(CUdeviceptr *dptr, size_t size);
+CUresult ucm_cuMemAlloc(CUdeviceptr *dptr, size_t size);
+
+/*cuMemAllocPitch*/
+CUresult ucm_override_cuMemAllocPitch(CUdeviceptr *dptr, size_t *pPitch,
+                                      size_t WidthInBytes, size_t Height,
+                                      unsigned int ElementSizeBytes);
+CUresult ucm_orig_cuMemAllocPitch(CUdeviceptr *dptr, size_t *pPitch,
+                                  size_t WidthInBytes, size_t Height,
+                                  unsigned int ElementSizeBytes);
+CUresult ucm_cuMemAllocPitch(CUdeviceptr *dptr, size_t *pPitch,
+                             size_t WidthInBytes, size_t Height,
+                             unsigned int ElementSizeBytes);
+
+/*cuMemHostGetDevicePointer*/
+CUresult ucm_override_cuMemHostGetDevicePointer(CUdeviceptr *pdptr, void *p,
+                                                unsigned int Flags);
+CUresult ucm_orig_cuMemHostGetDevicePointer(CUdeviceptr *pdptr, void *p,
+                                            unsigned int Flags);
+CUresult ucm_cuMemHostGetDevicePointer(CUdeviceptr *pdptr, void *p, unsigned int Flags);
+
+/*cuMemHostUnregister */
+CUresult ucm_override_cuMemHostUnregister(void *p);
+CUresult ucm_orig_cuMemHostUnregister(void *p);
+CUresult ucm_cuMemHostUnregister(void *p);
 
 /*cudaFree*/
 cudaError_t ucm_override_cudaFree(void *devPtr);
