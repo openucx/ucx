@@ -139,7 +139,7 @@ ucp_request_can_complete_stream_recv(ucp_request_t *req)
         return 1;
     }
 
-    if (req->flags & UCP_REQUEST_FLAG_RECV_WAITALL) {
+    if (req->flags & UCP_REQUEST_FLAG_STREAM_RECV_WAITALL) {
         return 0;
     }
 

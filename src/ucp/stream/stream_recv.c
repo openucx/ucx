@@ -161,7 +161,7 @@ ucp_stream_rdata_unpack(const void *rdata, size_t length, ucp_request_t *dst_req
         last = (valid_len == length);
     } else {
         valid_len = length;
-        last      = !(dst_req->flags & UCP_REQUEST_FLAG_RECV_WAITALL);
+        last      = !(dst_req->flags & UCP_REQUEST_FLAG_STREAM_RECV_WAITALL);
     }
 
     status = ucp_request_recv_data_unpack(dst_req, rdata, valid_len,
@@ -291,7 +291,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
 
     ucp_stream_recv_request_init(req, buffer, count, dt_length, datatype, cb,
                                  (flags & UCP_STREAM_RECV_FLAG_WAITALL) ?
-                                 UCP_REQUEST_FLAG_RECV_WAITALL : 0);
+                                 UCP_REQUEST_FLAG_STREAM_RECV_WAITALL : 0);
 
     /* OK, lets obtain all arrived data which matches the recv size */
     while ((req->recv.stream.offset < req->recv.length) &&
@@ -309,7 +309,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
          *       WAITALL flag
          */
         if (ucs_unlikely(UCP_DT_IS_GENERIC(req->recv.datatype)) &&
-            !(req->flags & UCP_REQUEST_FLAG_RECV_WAITALL)) {
+            !(req->flags & UCP_REQUEST_FLAG_STREAM_RECV_WAITALL)) {
             break;
         }
     }
