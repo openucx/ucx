@@ -113,12 +113,14 @@ uct_ib_mlx5_inline_copy(void *restrict dest, const void *restrict src, unsigned
 {
     ptrdiff_t n;
 
-    if (dest + length <= wq->qend) {
-        memcpy(dest, src, length);
-    } else {
-        n = wq->qend - dest;
-        memcpy(dest, src, n);
-        memcpy(wq->qstart, src + n, length - n);
+    if (length) {
+        if (dest + length <= wq->qend) {
+            memcpy(dest, src, length);
+        } else {
+            n = wq->qend - dest;
+            memcpy(dest, src, n);
+            memcpy(wq->qstart, src + n, length - n);
+        }
     }
 }
 
