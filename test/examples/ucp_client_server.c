@@ -323,7 +323,7 @@ static void request_init(void *request)
 /**
  * Print this application's usage help message.
  */
-static int usage()
+static void usage()
 {
     fprintf(stderr, "Usage: ucp_client_server [parameters]\n");
     fprintf(stderr, "UCP client-server example utility\n");
@@ -426,8 +426,6 @@ err:
 int main(int argc, char **argv)
 {
     ucx_server_ctx_t context;
-    size_t length;
-    char recv_message[TEST_STRING_LEN]= "";
     int is_server, ret;
     char *server_addr = NULL;
 
@@ -475,18 +473,15 @@ int main(int argc, char **argv)
 
 
     /* Finalization or error flow */
-err_listener:
     if (is_server) {
         ucp_listener_destroy(listener);
     }
 
-err_ep:
     ep_close(ucp_worker, ep);
 
 err_worker:
     ucp_worker_destroy(ucp_worker);
 
-err_cleanup:
     ucp_cleanup(ucp_context);
 
 err:
