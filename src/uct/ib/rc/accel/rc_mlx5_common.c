@@ -305,18 +305,23 @@ void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_
     const size_t cqe_sz       = 1ul << mlx5_cq->cqe_size_log;
     struct mlx5_cqe64 *cqe, *dest;
     uct_ib_mlx5_srq_seg_t *seg;
-    unsigned ci, pi, idx;
+    unsigned pi, idx;
     uint8_t owner_bit;
     int nfreed;
 
-    pi = ci = mlx5_cq->cq_ci;
-    while (uct_ib_mlx5_poll_cq(&rc_iface->super, mlx5_cq)) {
-        if (pi == ci + mlx5_cq->cq_length - 1) {
+    pi = mlx5_cq->cq_ci;
+    for (;;) {
+        cqe = uct_ib_mlx5_get_cqe(mlx5_cq, pi);
+        if (((cqe->op_own & MLX5_CQE_OWNER_MASK) == !(pi & mlx5_cq->cq_length)) ||
+            ((cqe->op_own >> 4) == MLX5_CQE_INVALID)) {
             break;
         }
+
         ++pi;
+        if (pi == (mlx5_cq->cq_ci + mlx5_cq->cq_length - 1)) {
+            break;
+        }
     }
-    ucs_assert(pi == mlx5_cq->cq_ci);
 
     ucs_memory_cpu_load_fence();
 
@@ -324,7 +329,7 @@ void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_
      * to remove them itself, creating a mess with the free-list.
      */
     nfreed = 0;
-    while ((int)--pi - (int)ci >= 0) {
+    while ((int)--pi - (int)mlx5_cq->cq_ci >= 0) {
         cqe = uct_ib_mlx5_get_cqe(mlx5_cq, pi);
         if ((ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER)) == qpn) {
             idx = ntohs(cqe->wqe_counter);
@@ -334,14 +339,13 @@ void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_
                       mlx5_common_iface, idx, qpn);
             ++nfreed;
         } else if (nfreed) {
-            /* push the CQEs we want to keep to cq_ci, and move cq_ci backwards */
-            dest = uct_ib_mlx5_get_cqe(mlx5_cq, mlx5_cq->cq_ci);
+            dest = uct_ib_mlx5_get_cqe(mlx5_cq, pi + nfreed);
             owner_bit = dest->op_own & MLX5_CQE_OWNER_MASK;
             memcpy((void*)(dest + 1) - cqe_sz, (void*)(cqe + 1) - cqe_sz, cqe_sz);
             dest->op_own = (dest->op_own & ~MLX5_CQE_OWNER_MASK) | owner_bit;
-            --mlx5_cq->cq_ci;
         }
     }
 
+    mlx5_cq->cq_ci             += nfreed;
     rc_iface->rx.srq.available += nfreed;
 }
