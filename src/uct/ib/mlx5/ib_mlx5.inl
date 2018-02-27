@@ -113,7 +113,10 @@ uct_ib_mlx5_inline_copy(void *restrict dest, const void *restrict src, unsigned
 {
     ptrdiff_t n;
 
-    if (length) {
+#if defined(__aarch64__)
+    if (length)
+#endif
+    {
         if (dest + length <= wq->qend) {
             memcpy(dest, src, length);
         } else {
