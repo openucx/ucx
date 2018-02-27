@@ -383,7 +383,7 @@ typedef struct uct_rc_am_short_hdr {
       }
 
 #  define UCT_RC_IFACE_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
-                                       _pack_cb, _arg, _length) \
+                                         _pack_cb, _arg, _length) \
        { \
            void *hdr; \
            UCT_RC_IFACE_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, hdr) \
