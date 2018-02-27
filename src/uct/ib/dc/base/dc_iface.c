@@ -321,8 +321,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
         uct_dc_ep_release(ep);
     }
     uct_dc_iface_dcis_destroy(self, self->tx.ndci);
-    ucs_arbiter_cleanup(&self->tx.dci_arbiter);
     uct_dc_iface_cleanup_fc_ep(self);
+    ucs_arbiter_cleanup(&self->tx.dci_arbiter);
 }
 
 UCS_CLASS_DEFINE(uct_dc_iface_t, uct_rc_iface_t);
