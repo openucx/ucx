@@ -786,6 +786,7 @@ static ucs_status_t uct_rc_iface_init_dm_tl(uct_mlx5_dm_data_t *data,
     } else {
         /* TODO: prompt warning? */
         ucs_debug("ibv_exp_alloc_dm() error - On Device Memory allocation failed, %d %m", errno);
+        return UCS_OK;
     }
 
     status = ucs_mpool_init(&data->mp, sizeof(uct_iface_dm_mp_priv_t),
