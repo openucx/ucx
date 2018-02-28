@@ -239,6 +239,10 @@ static int uct_is_gdr_copy_mem_type_owned(uct_md_h md, void *addr, size_t length
     } else if (memory_type == CU_MEMORYTYPE_DEVICE) {
         return 1;
     }
+
+    /*reset cuda error if it is failed to get pointer attributes*/
+    cudaGetLastError();
+
     return 0;
 }
 
