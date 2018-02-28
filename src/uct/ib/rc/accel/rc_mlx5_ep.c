@@ -238,8 +238,8 @@ typedef struct uct_rc_mlx5_dm_pack_data {
 typedef union uct_rc_mlx5_dm_copy_data {
     uct_rc_am_short_hdr_t am_hdr;
     struct ibv_exp_tmh    tm_hdr;
-    uint64_t              data[2];
-    char                  tail[sizeof(uint64_t) * 2];
+    uint64_t              out[2];
+    char                  in[sizeof(uint64_t) * 2];
 } UCS_S_PACKED uct_rc_mlx5_dm_copy_data_t;
 
 static size_t uct_rc_mlx5_ep_am_short_dm_pack(void *dest, void *arg)
@@ -266,13 +266,14 @@ uct_rc_mlx5_ep_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len,
     ucs_assert(sizeof(*cache) >= hdr_len);
 
     /* copy head of payload to tail of cache */
-    memcpy(cache->tail + hdr_len, payload, ucs_min(len, length));
+    memcpy(cache->in + hdr_len, payload, ucs_min(len, length));
 
-    UCS_STATIC_ASSERT(sizeof(*cache) <= sizeof(cache->data));
+    UCS_STATIC_ASSERT(sizeof(*cache) == sizeof(cache->out));
+    UCS_STATIC_ASSERT(sizeof(cache->in) == sizeof(cache->out));
 
     /* atomically by 8 bytes copy data to DM */
-    *(dst++) = cache->data[0];
-    *(dst++) = cache->data[1];
+    *(dst++) = cache->out[0];
+    *(dst++) = cache->out[1];
 
     for (; len < length; len += sizeof(*dst)) {
         *(dst++) = *(src++);
@@ -612,7 +613,7 @@ uct_rc_mlx5_ep_tag_eager_short_dm(uct_ep_h tl_ep, uct_tag_t tag,
         }
 
         ucs_assert(desc->super.buffer != NULL);
-        UCS_STATIC_ASSERT(sizeof(cache) == sizeof(cache.data));
+        UCS_STATIC_ASSERT(sizeof(cache) == sizeof(cache.out));
         uct_rc_iface_fill_tmh(ucs_unaligned_ptr(&cache.tm_hdr), tag, app_ctx, IBV_EXP_TMH_EAGER);
         uct_rc_mlx5_ep_copy_to_dm(&cache, sizeof(cache.tm_hdr), data, length, desc->super.buffer);
 
