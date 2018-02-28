@@ -493,7 +493,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                              _IMM);
 
     return uct_rc_mlx5_ep_zcopy_post(ep, opcode|UCT_RC_MLX5_OPCODE_FLAG_TM,
-                                     iov, iovcnt, 0, NULL, 0, 0, 0,
+                                     iov, iovcnt, 0, "", 0, 0, 0,
                                      tag, app_ctx, ib_imm,
                                      MLX5_WQE_CTRL_SOLICITED, comp);
 }
