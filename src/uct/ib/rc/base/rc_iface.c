@@ -84,11 +84,11 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
 
 #if HAVE_IBV_EXP_DM
   {"DM_SEG_SIZE", "0",
-   "DM segment size",
+   "Device Memory segment size (0 - disabled)",
    ucs_offsetof(uct_rc_iface_config_t, tx.dm_seg_len), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"DM_SEG_NUM", "0",
-   "DM segments count",
+   "Device Memory segments count (0 - disabled)",
    ucs_offsetof(uct_rc_iface_config_t, tx.dm_seg_count), UCS_CONFIG_TYPE_UINT},
 #endif
 
@@ -810,7 +810,6 @@ failed_mpool:
 failed_mr:
     ibv_exp_free_dm(data->dm);
     data->dm = NULL;
-
     goto complete;
 }
 
@@ -1019,10 +1018,10 @@ err_destroy_srq:
     }
 err_free_tx_ops:
     uct_rc_iface_tx_ops_cleanup(self);
-err_destroy_tx_mp:
-    ucs_mpool_cleanup(&self->tx.mp, 1);
 err_destroy_dm:
     uct_rc_iface_dm_cleanup(self);
+err_destroy_tx_mp:
+    ucs_mpool_cleanup(&self->tx.mp, 1);
 err_destroy_rx_mp:
     ucs_mpool_cleanup(&self->rx.mp, 1);
 err:

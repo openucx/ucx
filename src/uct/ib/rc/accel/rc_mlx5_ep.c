@@ -343,8 +343,7 @@ uct_rc_mlx5_ep_am_short_dm(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 ucs_status_t
 #else
 /* in case if DM is not enabled - force inline this call */
-static ucs_status_t
-UCS_F_ALWAYS_INLINE
+static ucs_status_t UCS_F_ALWAYS_INLINE
 #endif
 uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                const void *payload, unsigned length)
@@ -632,8 +631,7 @@ uct_rc_mlx5_ep_tag_eager_short_dm(uct_ep_h tl_ep, uct_tag_t tag,
 ucs_status_t
 #else
 /* in case if DM is not enabled - force inline this call */
-static ucs_status_t
-UCS_F_ALWAYS_INLINE
+static ucs_status_t UCS_F_ALWAYS_INLINE
 #endif
 uct_rc_mlx5_ep_tag_eager_short_inline(uct_ep_h tl_ep, uct_tag_t tag,
                                       const void *data, size_t length)

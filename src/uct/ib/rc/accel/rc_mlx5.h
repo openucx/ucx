@@ -162,7 +162,7 @@ uct_rc_mlx5_ep_tag_eager_short_inline(uct_ep_h tl_ep, uct_tag_t tag,
                                       const void *data, size_t length);
 ucs_status_t
 uct_rc_mlx5_ep_tag_eager_short_dm(uct_ep_h tl_ep, uct_tag_t tag,
-                                         const void *data, size_t length);
+                                  const void *data, size_t length);
 #endif
 #endif
 
