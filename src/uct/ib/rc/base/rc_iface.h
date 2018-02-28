@@ -658,11 +658,7 @@ static inline void uct_rc_zcopy_desc_set_header(uct_rc_hdr_t *rch,
 static inline int uct_rc_iface_has_tx_resources(uct_rc_iface_t *iface)
 {
     return uct_rc_iface_have_tx_cqe_avail(iface) &&
-           !ucs_mpool_is_empty(&iface->tx.mp)
-#if HAVE_IBV_EXP_DM
-           && (!iface->dm.dm || !ucs_mpool_is_empty(&iface->dm.dm->mp))
-#endif
-           ;
+           !ucs_mpool_is_empty(&iface->tx.mp);
 }
 
 static UCS_F_ALWAYS_INLINE uct_rc_send_handler_t

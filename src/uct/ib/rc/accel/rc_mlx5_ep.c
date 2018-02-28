@@ -609,7 +609,7 @@ uct_rc_mlx5_ep_tag_eager_short_dm(uct_ep_h tl_ep, uct_tag_t tag,
 
         ucs_assert(desc->super.buffer != NULL);
         UCS_STATIC_ASSERT(sizeof(cache) == sizeof(cache.data));
-        uct_rc_iface_fill_tmh(&cache.tm_hdr, tag, app_ctx, IBV_EXP_TMH_EAGER);
+        uct_rc_iface_fill_tmh(ucs_unaligned_ptr(&cache.tm_hdr), tag, app_ctx, IBV_EXP_TMH_EAGER);
         uct_rc_mlx5_ep_copy_to_dm(&cache, sizeof(cache.tm_hdr), data, length, desc->super.buffer);
 
         uct_rc_mlx5_txqp_bcopy_post(iface, &ep->super.txqp, &ep->tx.wq,
