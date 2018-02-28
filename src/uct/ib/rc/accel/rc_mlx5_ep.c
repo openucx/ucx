@@ -251,6 +251,10 @@ static size_t uct_rc_mlx5_ep_am_short_dm_pack(void *dest, void *arg)
     return sizeof(data->hdr) + data->length;
 }
 
+/* DM memory should be written by 8 bytes (int64) to eliminate
+ * processor cache issues. to make this used uct_rc_mlx5_dm_copy_data_t
+ * structure where first hdr_len bytes are filled by message header
+ * and tail is filled by head of message */
 static void UCS_F_ALWAYS_INLINE
 uct_rc_mlx5_ep_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len,
                           const void *payload, size_t length, void *dm)

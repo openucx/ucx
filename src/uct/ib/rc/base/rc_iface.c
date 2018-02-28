@@ -700,11 +700,11 @@ typedef struct {
     int                count;
 } uct_iface_dm_mp_priv_t;
 
-typedef struct vma_mlx5_dm {
+typedef struct ucx_vma_mlx5_dm {
     struct ibv_exp_dm  ibv_dm;
     size_t             length;
     uint64_t           *start_va;
-} vma_mlx5_dm_t;
+} ucx_vma_mlx5_dm_t;
 
 static ucs_status_t
 ucs_iface_dm_mpool_chunk_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
@@ -729,10 +729,10 @@ static void uct_iface_dm_mp_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
     uct_mlx5_dm_data_t *dm         = uct_iface_dm_mp_priv(mp)->dm;
     uct_rc_iface_send_desc_t* desc = (uct_rc_iface_send_desc_t*)obj;
 
-    if (desc->super.buffer == NULL && uct_iface_dm_mp_priv(mp)->count < dm->seg_count) {
+    if ((desc->super.buffer == NULL) && (uct_iface_dm_mp_priv(mp)->count < dm->seg_count)) {
         desc->lkey          = dm->mr->lkey;
-        desc->super.buffer  = (void*)((intptr_t)dm->start_va +
-                              (uct_iface_dm_mp_priv(mp)->count * dm->seg_len));
+        desc->super.buffer  = UCS_PTR_BYTE_OFFSET(dm->start_va,
+                                                  uct_iface_dm_mp_priv(mp)->count * dm->seg_len);
         desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
         uct_iface_dm_mp_priv(mp)->count++;
     }
@@ -781,7 +781,7 @@ static ucs_status_t uct_rc_iface_init_dm_tl(uct_mlx5_dm_data_t *data,
             ucs_warn("ibv_exp_reg_mr() error - On Device Memory registration failed, %d %m", errno);
             goto failed_mr;
         } else {
-            data->start_va = ((struct vma_mlx5_dm*)data->dm)->start_va;
+            data->start_va = ((struct ucx_vma_mlx5_dm*)data->dm)->start_va;
         }
     } else {
         /* TODO: prompt warning? */
