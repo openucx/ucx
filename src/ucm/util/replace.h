@@ -55,7 +55,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
     }
 
 #define UCM_OVERRIDE_FUNC(_name, _rettype) \
-    _rettype _name() __attribute__ ((alias ("ucm_override_" UCS_PP_QUOTE(_name)))); \
+    _rettype _name() __attribute__ ((alias (UCS_PP_QUOTE(ucm_override_##_name)))); \
 
 
 /*

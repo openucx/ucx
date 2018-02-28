@@ -338,21 +338,259 @@ void *ucm_sbrk(intptr_t increment)
 }
 
 #if HAVE_CUDA
-cudaError_t ucm_cudaFree(void *addr)
+static UCS_F_ALWAYS_INLINE void
+ucm_dispatch_mem_type_alloc(void *addr, size_t length, ucm_mem_type_t mem_type)
+{
+    ucm_event_t event;
+
+    event.mem_type.address  = addr;
+    event.mem_type.size     = length;
+    event.mem_type.mem_type = mem_type;
+    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucm_dispatch_mem_type_free(void *addr, size_t length, ucm_mem_type_t mem_type)
+{
+    ucm_event_t event;
+
+    event.mem_type.address  = addr;
+    event.mem_type.size     = length;
+    event.mem_type.mem_type = mem_type;
+    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
+}
+
+CUresult ucm_cuMemFree(CUdeviceptr dptr)
+{
+    CUresult ret;
+
+    ucm_event_enter();
+
+    ucm_trace("ucm_cuMemFree(dptr=%p)",(void *)dptr);
+
+    ucm_dispatch_vm_munmap((void *)dptr, 0);
+    ucm_dispatch_mem_type_free((void *)dptr, 0, UCM_MEM_TYPE_CUDA);
+
+    ret = ucm_orig_cuMemFree(dptr);
+
+    ucm_event_leave();
+    return ret;
+}
+
+CUresult ucm_cuMemFreeHost(void *p)
+{
+    CUresult ret;
+    CUdeviceptr dptr;
+
+    ucm_event_enter();
+
+    ucm_trace("ucm_cuMemFreeHost(ptr=%p)", p);
+    ret = ucm_cuMemHostGetDevicePointer(&dptr, p, 0);
+    if (ret == CUDA_SUCCESS) {
+        ucm_dispatch_vm_munmap((void *)dptr, 0);
+        ucm_dispatch_mem_type_free((void *)dptr, 0, UCM_MEM_TYPE_CUDA);
+    } else {
+        ucm_warn("ucm_cuMemHostGetDevicePointer failed. ret:%d", ret);
+    }
+
+    ret = ucm_orig_cuMemFreeHost(p);
+
+    ucm_event_leave();
+    return ret;
+}
+
+CUresult ucm_cuMemAlloc(CUdeviceptr *dptr, size_t size)
+{
+    CUresult ret;
+
+    ucm_event_enter();
+
+    ret = ucm_orig_cuMemAlloc(dptr, size);
+    if (ret == CUDA_SUCCESS) {
+        ucm_trace("ucm_cuMemAlloc(dptr=%p size:%lu)",(void *)*dptr, size);
+        ucm_dispatch_mem_type_alloc((void *)*dptr, size, UCM_MEM_TYPE_CUDA);
+    }
+
+    ucm_event_leave();
+    return ret;
+}
+
+CUresult ucm_cuMemAllocPitch(CUdeviceptr *dptr, size_t *pPitch,
+                             size_t WidthInBytes, size_t Height,
+                             unsigned int ElementSizeBytes)
+{
+    CUresult ret;
+
+    ucm_event_enter();
+
+    ret = ucm_orig_cuMemAllocPitch(dptr, pPitch, WidthInBytes, Height, ElementSizeBytes);
+    if (ret == CUDA_SUCCESS) {
+        ucm_trace("ucm_cuMemAllocPitch(dptr=%p size:%lu)",(void *)*dptr,
+                  (WidthInBytes * Height));
+        ucm_dispatch_mem_type_alloc((void *)*dptr, WidthInBytes * Height,
+                                    UCM_MEM_TYPE_CUDA);
+    }
+
+    ucm_event_leave();
+    return ret;
+}
+
+CUresult ucm_cuMemHostGetDevicePointer(CUdeviceptr *pdptr, void *p, unsigned int Flags)
+{
+    CUresult ret;
+    size_t psize;
+
+    ucm_event_enter();
+
+    ret = ucm_orig_cuMemHostGetDevicePointer(pdptr, p, Flags);
+    if (ret == CUDA_SUCCESS) {
+        ucm_trace("ucm_cuMemHostGetDevicePointer(pdptr=%p p=%p)",(void *)*pdptr, p);
+        if (cuMemGetAddressRange(NULL, &psize, *pdptr) == CUDA_SUCCESS) {
+            ucm_dispatch_mem_type_alloc((void *)*pdptr, psize, UCM_MEM_TYPE_CUDA);
+        }
+    }
+
+    ucm_event_leave();
+    return ret;
+}
+
+CUresult ucm_cuMemHostUnregister(void *p)
+{
+    CUresult ret;
+    CUdeviceptr dptr;
+
+    ucm_event_enter();
+
+    ucm_trace("ucm_cuMemHostUnregister(ptr=%p)", p);
+    ret = ucm_cuMemHostGetDevicePointer(&dptr, p, 0);
+    if (ret == CUDA_SUCCESS) {
+        ucm_dispatch_vm_munmap((void *)dptr, 0);
+        ucm_dispatch_mem_type_free((void *)dptr, 0, UCM_MEM_TYPE_CUDA);
+    } else {
+        ucm_warn("ucm_cuMemHostGetDevicePointer failed. ret:%d", ret);
+    }
+
+    ret = ucm_orig_cuMemHostUnregister(p);
+
+    ucm_event_leave();
+    return ret;
+}
+
+cudaError_t ucm_cudaFree(void *devPtr)
 {
     cudaError_t ret;
 
     ucm_event_enter();
 
-    ucm_trace("ucm_cudaFree(addr=%p )", addr);
+    ucm_trace("ucm_cudaFree(devPtr=%p)", devPtr);
 
-    ucm_dispatch_vm_munmap(addr, 0);
-    ret = ucm_orig_cudaFree(addr);
+    ucm_dispatch_vm_munmap(devPtr, 0);
+    ucm_dispatch_mem_type_free(devPtr, 0, UCM_MEM_TYPE_CUDA);
+
+    ret = ucm_orig_cudaFree(devPtr);
 
     ucm_event_leave();
 
     return ret;
 }
+
+cudaError_t ucm_cudaFreeHost(void *ptr)
+{
+    cudaError_t ret;
+    void *pDevice;
+
+    ucm_event_enter();
+
+    ucm_trace("ucm_cudaFreeHost(ptr=%p)", ptr);
+    ret = ucm_cudaHostGetDevicePointer(&pDevice, ptr, 0);
+    if (ret == cudaSuccess) {
+        ucm_dispatch_vm_munmap(pDevice, 0);
+        ucm_dispatch_mem_type_free(pDevice, 0, UCM_MEM_TYPE_CUDA);
+    } else {
+        ucm_warn("ucm_cudaHostGetDevicePointer failed. ret:%d", ret);
+    }
+
+    ret = ucm_orig_cudaFreeHost(ptr);
+
+    ucm_event_leave();
+    return ret;
+}
+
+cudaError_t ucm_cudaMalloc(void **devPtr, size_t size)
+{
+    cudaError_t ret;
+
+    ucm_event_enter();
+
+    ret = ucm_orig_cudaMalloc(devPtr, size);
+    if (ret == cudaSuccess) {
+        ucm_trace("ucm_cudaMalloc(devPtr=%p size:%lu)", *devPtr, size);
+        ucm_dispatch_mem_type_alloc(*devPtr, size, UCM_MEM_TYPE_CUDA);
+    }
+
+    ucm_event_leave();
+
+    return ret;
+}
+
+cudaError_t ucm_cudaMallocPitch(void **devPtr, size_t *pitch,
+                                size_t width, size_t height)
+{
+    cudaError_t ret;
+
+    ucm_event_enter();
+
+    ret = ucm_orig_cudaMallocPitch(devPtr, pitch, width, height);
+    if (ret == cudaSuccess) {
+        ucm_trace("ucm_cudaMallocPitch(devPtr=%p size:%lu)",*devPtr, (width * height));
+        ucm_dispatch_mem_type_alloc(*devPtr, (width * height), UCM_MEM_TYPE_CUDA);
+    }
+
+    ucm_event_leave();
+    return ret;
+}
+
+cudaError_t ucm_cudaHostGetDevicePointer(void **pDevice, void *pHost, unsigned int flags)
+{
+    cudaError_t ret;
+    size_t psize;
+
+    ucm_event_enter();
+
+    ret = ucm_orig_cudaHostGetDevicePointer(pDevice, pHost, flags);
+    if (ret == cudaSuccess) {
+        ucm_trace("ucm_cuMemHostGetDevicePointer(pDevice=%p pHost=%p)", pDevice, pHost);
+        if (cuMemGetAddressRange(NULL, &psize, (CUdeviceptr)*pDevice) == CUDA_SUCCESS) {
+            ucm_dispatch_mem_type_alloc(*pDevice, psize, UCM_MEM_TYPE_CUDA);
+        }
+    }
+
+    ucm_event_leave();
+    return ret;
+}
+
+cudaError_t ucm_cudaHostUnregister(void *ptr)
+{
+    cudaError_t ret;
+    void *pDevice;
+
+    ucm_event_enter();
+
+    ucm_trace("ucm_cudaHostUnregister(ptr=%p)", ptr);
+    ret = ucm_cudaHostGetDevicePointer(&pDevice, ptr, 0);
+    if (ret == cudaSuccess) {
+        ucm_dispatch_vm_munmap(pDevice, 0);
+        ucm_dispatch_mem_type_free(pDevice, 0, UCM_MEM_TYPE_CUDA);
+    } else {
+        ucm_warn("ucm_cudaHostGetDevicePointer failed. ret:%d", ret);
+    }
+
+    ret = ucm_orig_cudaHostUnregister(ptr);
+
+    ucm_event_leave();
+    return ret;
+}
+
 #endif
 
 void ucm_event_handler_add(ucm_event_handler_t *handler)
@@ -385,7 +623,8 @@ static ucs_status_t ucm_event_install(int events)
     int native_events;
 
     /* Replace aggregate events with the native events which make them */
-    native_events = events & ~(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED);
+    native_events = events & ~(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED |
+                               UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE);
     if (events & UCM_EVENT_VM_MAPPED) {
         native_events |= UCM_EVENT_MMAP | UCM_EVENT_MREMAP |
                          UCM_EVENT_SHMAT | UCM_EVENT_SBRK;

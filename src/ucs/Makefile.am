@@ -79,6 +79,7 @@ noinst_HEADERS = \
 	sys/checker.h \
 	sys/compiler.h \
 	sys/numa.h \
+	sys/rcache_int.h \
 	sys/sys.h \
 	time/time.h \
 	time/timerq.h \

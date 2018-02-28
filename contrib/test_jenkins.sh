@@ -550,9 +550,11 @@ test_malloc_hooks_mpi() {
 run_mpi_tests() {
 	echo "1..2" > mpi_tests.tap
 
-	#load cuda modules if available
-	module_load dev/cuda || true
-	module_load dev/gdrcopy || true
+	#try load cuda modules if nvidia driver is installed
+	if [ -f "/proc/driver/nvidia/version" ]; then
+		module_load dev/cuda || true
+		module_load dev/gdrcopy || true
+	fi
 
 	if module_load hpcx-gcc
 	then
