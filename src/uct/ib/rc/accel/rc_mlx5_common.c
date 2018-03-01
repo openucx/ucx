@@ -67,6 +67,8 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
     }
 
     count = index - srq->sw_pi;
+    ucs_assert(iface->rx.srq.available >= count);
+
     if (count > 0) {
         srq->ready_idx           = index;
         srq->sw_pi               = index;
