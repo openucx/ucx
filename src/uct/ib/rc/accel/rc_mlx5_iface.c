@@ -23,6 +23,10 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_config_t, fc),
    UCS_CONFIG_TYPE_TABLE(uct_rc_fc_config_table)},
 
+  {"", "", NULL,
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, mlx5_common),
+   UCS_CONFIG_TYPE_TABLE(uct_common_mlx5_config_table)},
+
   {"TX_MAX_BB", "-1",
    "Limits the number of outstanding WQE building blocks. The actual limit is\n"
    "a minimum between this value and the number of building blocks in the TX QP.\n"
@@ -253,7 +257,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
         return status;
     }
 
-    status = uct_rc_mlx5_iface_common_init(&self->mlx5_common, &self->super, &config->super);
+    status = uct_rc_mlx5_iface_common_init(&self->mlx5_common, &self->super,
+                                           &config->super, &config->mlx5_common);
     if (status != UCS_OK) {
         uct_rc_mlx5_iface_common_tag_cleanup(&self->mlx5_common, &self->super);
         return status;

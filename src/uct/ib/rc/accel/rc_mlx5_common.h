@@ -75,6 +75,15 @@ enum {
            return UCS_ERR_EXCEEDS_LIMIT; \
        }
 
+typedef struct uct_common_mlx5_iface_config {
+#if HAVE_IBV_EXP_DM
+    struct {
+        size_t               seg_len;
+        unsigned             seg_count;
+    } dm;
+#endif
+} uct_common_mlx5_iface_config_t;
+
 
 /* TODO: Remove this struct when mlx5dv.h is included! */
 typedef struct uct_rc_mlx5_wqe_tm_seg {
@@ -137,6 +146,7 @@ typedef struct uct_rc_mlx5_iface_common {
     UCS_STATS_NODE_DECLARE(stats);
 } uct_rc_mlx5_iface_common_t;
 
+extern ucs_config_field_t uct_common_mlx5_config_table[];
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq);
 
@@ -145,7 +155,8 @@ void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_iface_t *iface,
 
 ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                            uct_rc_iface_t *rc_iface,
-                                           uct_rc_iface_config_t *config);
+                                           uct_rc_iface_config_t *config,
+                                           uct_common_mlx5_iface_config_t *common_config);
 
 void uct_rc_mlx5_iface_common_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
