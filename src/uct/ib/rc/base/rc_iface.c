@@ -693,7 +693,7 @@ unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface)
 }
 
 #if HAVE_IBV_EXP_DM
-const uint32_t uct_rc_mlx5_dm_key = 1245;
+const uint32_t uct_rc_mlx5_dm_key = 1245; /* magic number */
 
 typedef struct {
     uct_mlx5_dm_data_t *dm;

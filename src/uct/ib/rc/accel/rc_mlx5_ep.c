@@ -247,6 +247,7 @@ static size_t uct_rc_mlx5_ep_am_short_dm_pack(void *dest, void *arg)
     uct_rc_mlx5_dm_pack_data_t *data = (uct_rc_mlx5_dm_pack_data_t*)arg;
     uint64_t *dst = dest;
     *dst = data->hdr;
+
     memcpy(dst + 1, data->payload, data->length);
     return sizeof(data->hdr) + data->length;
 }
@@ -651,6 +652,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
 {
 #if HAVE_IBV_EXP_DM
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+
     ucs_assert(iface->dm.tag_short != NULL);
     return iface->dm.tag_short(tl_ep, tag, data, length);
 #else
