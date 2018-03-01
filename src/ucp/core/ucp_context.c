@@ -197,6 +197,8 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {NULL}
 };
+UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
+
 
 static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "mm", "knem", "cma", NULL } },

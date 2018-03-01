@@ -196,6 +196,9 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 
  {NULL}
 };
+UCS_CONFIG_REGISTER_TABLE(ucs_global_opts_table, "UCS global", NULL,
+                          ucs_global_opts_t)
+
 
 void ucs_global_opts_init()
 {
