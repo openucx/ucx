@@ -25,7 +25,7 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
 
   {"", "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_config_t, mlx5_common),
-   UCS_CONFIG_TYPE_TABLE(uct_common_mlx5_config_table)},
+   UCS_CONFIG_TYPE_TABLE(uct_mlx5_common_config_table)},
 
   {"TX_MAX_BB", "-1",
    "Limits the number of outstanding WQE building blocks. The actual limit is\n"

@@ -290,15 +290,10 @@ AS_IF([test "x$with_ib" == xyes],
 
        # Device Memory support
        AS_IF([test "x$with_dm" != xno],
-           [AC_TRY_COMPILE([#include <infiniband/verbs_exp.h>],
-               [
-                   void* a1 = ibv_exp_alloc_dm;
-                   void* a2 = ibv_exp_reg_mr;
-                   void* a3 = ibv_dereg_mr;
-                   void* a4 = ibv_exp_free_dm;
-               ],
+           [AC_CHECK_DECLS([ibv_exp_alloc_dm, ibv_exp_reg_mr, ibv_dereg_mr, ibv_exp_free_dm],
                [AC_DEFINE([HAVE_IBV_EXP_DM], 1, [Device Memory support])],
-               [])
+               [],
+               [infiniband/verbs_exp.h])
            ])
 
 

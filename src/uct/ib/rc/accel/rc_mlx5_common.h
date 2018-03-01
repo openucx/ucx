@@ -79,7 +79,7 @@ typedef struct uct_common_mlx5_iface_config {
 #if HAVE_IBV_EXP_DM
     struct {
         size_t               seg_len;
-        unsigned             seg_count;
+        unsigned             count;
     } dm;
 #endif
 } uct_common_mlx5_iface_config_t;
@@ -146,7 +146,7 @@ typedef struct uct_rc_mlx5_iface_common {
     UCS_STATS_NODE_DECLARE(stats);
 } uct_rc_mlx5_iface_common_t;
 
-extern ucs_config_field_t uct_common_mlx5_config_table[];
+extern ucs_config_field_t uct_mlx5_common_config_table[];
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq);
 

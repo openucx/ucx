@@ -23,16 +23,16 @@ ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
 #endif
 
 
-ucs_config_field_t uct_common_mlx5_config_table[] = {
+ucs_config_field_t uct_mlx5_common_config_table[] = {
 #if HAVE_IBV_EXP_DM
-    {"DM_SEG_SIZE", "1k",
+    {"DM_SIZE", "1k",
      "Device Memory segment size (0 - disabled)",
      ucs_offsetof(uct_common_mlx5_iface_config_t, dm.seg_len), UCS_CONFIG_TYPE_MEMUNITS},
-    {"DM_SEG_NUM", "1",
+    {"DM_COUNT", "1",
      "Device Memory segments count (0 - disabled)",
-     ucs_offsetof(uct_common_mlx5_iface_config_t, dm.seg_count), UCS_CONFIG_TYPE_UINT},
-  {NULL}
+     ucs_offsetof(uct_common_mlx5_iface_config_t, dm.count), UCS_CONFIG_TYPE_UINT},
 #endif
+    {NULL}
 };
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq)
