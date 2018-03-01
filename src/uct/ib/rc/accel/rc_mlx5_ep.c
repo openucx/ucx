@@ -260,8 +260,8 @@ uct_rc_mlx5_ep_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len,
                           const void *payload, size_t length, void *dm)
 {
     size_t len          = sizeof(*cache) - hdr_len;
-    const uint64_t* src = payload + len;
-    uint64_t* dst       = dm;
+    const uint64_t *src = payload + len;
+    uint64_t *dst       = dm;
 
     ucs_assert(sizeof(*cache) >= hdr_len);
 
