@@ -165,9 +165,7 @@ int main(int argc, char **argv)
     }
 
     if (print_flags & UCS_CONFIG_PRINT_CONFIG) {
-        ucs_global_opts_print(stdout, print_flags);
-        print_ucp_config(print_flags);
-        print_uct_config(print_flags, tl_name);
+        ucs_config_parser_print_all_opts(stdout, print_flags);
         ucm_config_print(stdout, print_flags);
     }
 
