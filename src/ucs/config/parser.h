@@ -36,27 +36,27 @@ BEGIN_C_DECLS
  */
 
 typedef struct ucs_config_parser {
-    int              (*read) (const char *buf, void *dest, const void *arg);
-    int              (*write)(char *buf, size_t max, void *src, const void *arg);
-    ucs_status_t     (*clone)(void *src, void *dest, const void *arg);
-    void             (*release)(void *ptr, const void *arg);
-    void             (*help)(char *buf, size_t max, const void *arg);
-    const void       *arg;
+    int                      (*read) (const char *buf, void *dest, const void *arg);
+    int                      (*write)(char *buf, size_t max, void *src, const void *arg);
+    ucs_status_t             (*clone)(void *src, void *dest, const void *arg);
+    void                     (*release)(void *ptr, const void *arg);
+    void                     (*help)(char *buf, size_t max, const void *arg);
+    const void               *arg;
 } ucs_config_parser_t;
 
 
 typedef struct ucs_config_array {
-    size_t              elem_size;
-    ucs_config_parser_t parser;
+    size_t                   elem_size;
+    ucs_config_parser_t      parser;
 } ucs_config_array_t;
 
 
 typedef struct ucs_config_field {
-    const char           *name;
-    const char           *dfl_value;
-    const char           *doc;
-    size_t               offset;
-    ucs_config_parser_t  parser;
+    const char               *name;
+    const char               *dfl_value;
+    const char               *doc;
+    size_t                   offset;
+    ucs_config_parser_t      parser;
 } ucs_config_field_t;
 
 
@@ -67,8 +67,8 @@ typedef struct ucs_ib_port_spec {
 
 
 typedef struct ucs_range_spec {
-    unsigned    first;  /* the first value in the range */
-    unsigned    last;   /* the last value in the range */
+    unsigned                 first;  /* the first value in the range */
+    unsigned                 last;   /* the last value in the range */
 } ucs_range_spec_t;
 
 
