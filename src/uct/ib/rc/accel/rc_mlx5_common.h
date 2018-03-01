@@ -75,15 +75,6 @@ enum {
            return UCS_ERR_EXCEEDS_LIMIT; \
        }
 
-typedef struct uct_common_mlx5_iface_config {
-#if HAVE_IBV_EXP_DM
-    struct {
-        size_t               seg_len;
-        unsigned             count;
-    } dm;
-#endif
-} uct_common_mlx5_iface_config_t;
-
 
 /* TODO: Remove this struct when mlx5dv.h is included! */
 typedef struct uct_rc_mlx5_wqe_tm_seg {
@@ -124,6 +115,15 @@ typedef struct uct_rc_mlx5_cmd_wq {
 } uct_rc_mlx5_cmd_wq_t;
 
 #endif /* IBV_EXP_HW_TM  */
+
+typedef struct uct_common_mlx5_iface_config {
+#if HAVE_IBV_EXP_DM
+    struct {
+        size_t               seg_len;
+        unsigned             count;
+    } dm;
+#endif
+} uct_common_mlx5_iface_config_t;
 
 typedef struct uct_rc_mlx5_iface_common {
     struct {
