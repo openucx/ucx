@@ -67,15 +67,21 @@ public:
         ASSERT_UCS_OK(status);
     }
 
-    void wait(ucp_worker_h worker, void *request)
+    void wait(ucp_worker_h worker, void *request, bool wakeup)
     {
-        do {
-            ucp_worker_wait(worker);
-            while (progress());
-        } while (!ucp_request_is_completed(request));
+        if (wakeup) {
+            do {
+                ucp_worker_wait(worker);
+                while (progress());
+            } while (!ucp_request_is_completed(request));
+        } else {
+            while (!ucp_request_is_completed(request)) {
+                progress();
+            }
+        }
     }
 
-    void tag_send_recv(entity& from, entity& to, int wakeup)
+    void tag_send_recv(entity& from, entity& to, bool wakeup)
     {
         uint64_t send_data = ucs_generate_uuid(0);
         void *send_req = ucp_tag_send_nb(from.ep(), &send_data, 1,
@@ -85,14 +91,7 @@ public:
         } else if (UCS_PTR_IS_ERR(send_req)) {
             ASSERT_UCS_OK(UCS_PTR_STATUS(send_req));
         } else {
-            if (wakeup) {
-                /* wait for send completion */
-                wait(from.worker(), send_req);
-            } else {
-                while (!ucp_request_is_completed(send_req)) {
-                    progress();
-                }
-            }
+            wait(from.worker(), send_req, wakeup);
             ucp_request_free(send_req);
         }
 
@@ -103,21 +102,14 @@ public:
         if (UCS_PTR_IS_ERR(recv_req)) {
             ASSERT_UCS_OK(UCS_PTR_STATUS(recv_req));
         } else {
-            if (wakeup) {
-                /* wait for receive completion */
-                wait(to.worker(), recv_req);
-            } else {
-                while (!ucp_request_is_completed(recv_req)) {
-                    progress();
-                }
-            }
+            wait(to.worker(), recv_req, wakeup);
             ucp_request_free(recv_req);
         }
 
         EXPECT_EQ(send_data, recv_data);
     }
 
-    void connect_and_send_recv(struct sockaddr *connect_addr, int wakeup)
+    void connect_and_send_recv(struct sockaddr *connect_addr, bool wakeup)
     {
         ucp_ep_params_t ep_params = ucp_test::get_ep_params();
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
@@ -136,21 +128,24 @@ public:
             /* server - process the connection request
              * (and create an ep to the client) */
             while (progress());
+            /* make sure that both sides are connected to each other before
+             * starting send-recv */
+            short_progress_loop();
 
-            tag_send_recv(sender(), receiver() ,1);
-            tag_send_recv(receiver(), sender(), 1);
+            tag_send_recv(sender(), receiver() ,true);
+            tag_send_recv(receiver(), sender(), true);
         } else {
-            tag_send_recv(sender(), receiver(), 0);
+            tag_send_recv(sender(), receiver(), false);
 
             /* wait for reverse ep to appear */
             while (receiver().get_num_eps() == 0) {
                 short_progress_loop();
             }
-            tag_send_recv(receiver(), sender(), 0);
+            tag_send_recv(receiver(), sender(), false);
         }
     }
 
-    void listen_and_communicate(int wakeup)
+    void listen_and_communicate(bool wakeup)
     {
         struct sockaddr_in connect_addr;
         get_listen_addr(&connect_addr);
@@ -171,11 +166,11 @@ protected:
 };
 
 UCS_TEST_P(test_ucp_sockaddr, listen) {
-    listen_and_communicate(0);
+    listen_and_communicate(false);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, wakeup) {
-    listen_and_communicate(1);
+    listen_and_communicate(true);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
@@ -188,7 +183,7 @@ UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
                      ucs::sockaddr_to_str((const struct sockaddr*)&inaddr_any_listen_addr);
 
     start_listener((const struct sockaddr*)&inaddr_any_listen_addr);
-    connect_and_send_recv((struct sockaddr*)&connect_addr, 0);
+    connect_and_send_recv((struct sockaddr*)&connect_addr, false);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, err_handle) {

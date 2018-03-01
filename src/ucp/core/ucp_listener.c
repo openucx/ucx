@@ -163,7 +163,9 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
 
         if ((context->config.features & UCP_FEATURE_WAKEUP) &&
             !(listener->wiface.attr.cap.flags & UCT_IFACE_FLAG_CB_ASYNC)) {
-            goto err_iface_cleanup;
+            ucp_worker_iface_cleanup(&listener->wiface);
+            ucs_free(listener);
+            continue;
         }
 
         ucs_trace("listener %p: accepting connections on %s", listener,
@@ -177,10 +179,7 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
     ucs_error("none of the available transports can listen for connections on %s",
               ucs_sockaddr_str(params->sockaddr.addr, saddr_str, sizeof(saddr_str)));
     status = UCS_ERR_UNREACHABLE;
-    goto out;
 
-err_iface_cleanup:
-    ucp_worker_iface_cleanup(&listener->wiface);
 err_free:
     ucs_free(listener);
 out:
