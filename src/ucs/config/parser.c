@@ -11,6 +11,7 @@
 
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
+#include <ucs/datastruct/list.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug.h>
@@ -23,6 +24,9 @@ typedef UCS_CONFIG_ARRAY_FIELD(void, data) ucs_config_array_field_t;
 
 /* Process environment variables */
 extern char **environ;
+
+
+UCS_LIST_HEAD(ucs_config_global_list);
 
 
 const char *ucs_async_mode_names[] = {
@@ -1177,6 +1181,34 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *o
 
     if (flags & UCS_CONFIG_PRINT_HEADER) {
         fprintf(stream, "\n");
+    }
+}
+
+void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t flags)
+{
+    const ucs_config_global_list_entry_t *entry;
+    ucs_status_t status;
+    char title[64];
+    void *opts;
+
+    ucs_list_for_each(entry, &ucs_config_global_list, list) {
+        opts = ucs_malloc(entry->size, "tmp_opts");
+        if (opts == NULL) {
+            ucs_error("could not allocate configuration of size %zu", entry->size);
+            continue;
+        }
+
+        status = ucs_config_parser_fill_opts(opts, entry->fields, entry->prefix,
+                                             NULL, 0);
+        if (status != UCS_OK) {
+            ucs_free(opts);
+            continue;
+        }
+
+        snprintf(title, sizeof(title), "%s configuration", entry->name);
+        ucs_config_parser_print_opts(stream, title, opts, entry->fields,
+                                     entry->prefix, flags);
+        ucs_free(opts);
     }
 }
 
