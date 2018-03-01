@@ -584,8 +584,6 @@ uct_rc_mlx5_ep_tag_eager_short_dm(uct_ep_h tl_ep, uct_tag_t tag,
     uct_rc_iface_send_desc_t *desc;
     uct_rc_mlx5_tm_dm_pack_data_t pack_data;
     uct_rc_mlx5_dm_copy_data_t cache;
-    uint32_t app_ctx, ib_imm;
-    int opcode;
     size_t len;
 
     if (length + sizeof(struct ibv_exp_tmh) < UCT_IB_MLX5_AM_MAX_SHORT(0)) {
@@ -594,32 +592,30 @@ uct_rc_mlx5_ep_tag_eager_short_dm(uct_ep_h tl_ep, uct_tag_t tag,
         UCT_CHECK_LENGTH(length + sizeof(struct ibv_exp_tmh), 0,
                          iface->dm.seg_len, "tag_short");
         UCT_RC_CHECK_RES(iface, &ep->super);
-        UCT_RC_IFACE_FILL_TM_IMM(0, app_ctx, ib_imm, opcode, MLX5_OPCODE_SEND,
-                                 _IMM);
 
         desc = ucs_mpool_get_inline(&iface->dm.dm->mp);
         if (ucs_unlikely(desc == NULL)) {
             /* fallback to bcopy */
             pack_data.payload = data;
             pack_data.length  = length;
-            UCT_RC_IFACE_GET_TM_BCOPY_DESC(iface, &iface->tx.mp, desc, tag, app_ctx,
+            UCT_RC_IFACE_GET_TM_BCOPY_DESC(iface, &iface->tx.mp, desc, tag, 0,
                                            uct_rc_mlx5_ep_tm_short_dm_pack, &pack_data, len);
 
             uct_rc_mlx5_txqp_bcopy_post(iface, &ep->super.txqp, &ep->tx.wq,
-                                        opcode, sizeof(struct ibv_exp_tmh) + len,
-                                        0, 0, MLX5_WQE_CTRL_SOLICITED, ib_imm, desc, desc + 1);
+                                        MLX5_OPCODE_SEND, sizeof(struct ibv_exp_tmh) + len,
+                                        0, 0, MLX5_WQE_CTRL_SOLICITED, 0, desc, desc + 1);
             return UCS_OK;
         }
 
         ucs_assert(desc->super.buffer != NULL);
         UCS_STATIC_ASSERT(sizeof(cache) == sizeof(cache.out));
-        uct_rc_iface_fill_tmh(ucs_unaligned_ptr(&cache.tm_hdr), tag, app_ctx, IBV_EXP_TMH_EAGER);
+        uct_rc_iface_fill_tmh(ucs_unaligned_ptr(&cache.tm_hdr), tag, 0, IBV_EXP_TMH_EAGER);
         uct_rc_mlx5_ep_copy_to_dm(&cache, sizeof(cache.tm_hdr), data, length, desc->super.buffer);
 
         uct_rc_mlx5_txqp_bcopy_post(iface, &ep->super.txqp, &ep->tx.wq,
-                                    opcode, sizeof(struct ibv_exp_tmh) + length,
+                                    MLX5_OPCODE_SEND, sizeof(struct ibv_exp_tmh) + length,
                                     0, 0, MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE,
-                                    ib_imm, desc,
+                                    0, desc,
                                     (void*)(desc->super.buffer - iface->dm.dm->start_va));
     }
     return UCS_OK;
