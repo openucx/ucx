@@ -341,7 +341,7 @@ void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_
 
     ucs_memory_cpu_load_fence();
 
-    /* Remove CQEs of the destroyed QP, so the drive would not see them and try
+    /* Remove CQEs of the destroyed QP, so the driver would not see them and try
      * to remove them itself, creating a mess with the free-list.
      */
     nfreed = 0;
