@@ -10,7 +10,8 @@
 #include "ib_device.h"
 
 #include <ucs/arch/atomic.h>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
+#include <ucs/sys/math.h>
 #include <pthread.h>
 
 

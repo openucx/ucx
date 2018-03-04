@@ -9,9 +9,10 @@
 #include <ucs/type/class.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/stats/stats.h>
+#include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
 

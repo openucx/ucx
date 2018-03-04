@@ -9,7 +9,7 @@
 #include <ucs/debug/debug.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 #include <ucs/stats/stats.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/sys.h>

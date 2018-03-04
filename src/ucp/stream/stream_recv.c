@@ -12,7 +12,7 @@
 #include <ucp/stream/stream.h>
 
 #include <ucs/datastruct/mpool.inl>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 
 #include <ucp/tag/eager.h> /* TODO: remove ucp_eager_sync_hdr_t usage */
 
