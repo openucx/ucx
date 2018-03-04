@@ -26,6 +26,10 @@ static ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
    ucs_offsetof(uct_dc_mlx5_iface_config_t, ud_common),
    UCS_CONFIG_TYPE_TABLE(uct_ud_mlx5_iface_common_config_table)},
 
+  {"", "", NULL,
+   ucs_offsetof(uct_dc_mlx5_iface_config_t, mlx5_common),
+   UCS_CONFIG_TYPE_TABLE(uct_mlx5_common_config_table)},
+
   {NULL}
 };
 
@@ -1054,7 +1058,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     }
 
     status = uct_rc_mlx5_iface_common_init(&self->mlx5_common, &self->super.super,
-                                           &config->super.super);
+                                           &config->super.super, &config->mlx5_common);
     if (status != UCS_OK) {
         goto err_rc_mlx5_tag_cleanup;
     }
