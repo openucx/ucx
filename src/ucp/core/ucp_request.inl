@@ -139,6 +139,10 @@ ucp_request_can_complete_stream_recv(ucp_request_t *req)
         return 1;
     }
 
+    if (req->flags & UCP_REQUEST_FLAG_STREAM_RECV_WAITALL) {
+        return 0;
+    }
+
     /* 0-length stream recv is meaningless if this was not requested explicitely */
     if (req->recv.stream.offset == 0) {
         return 0;

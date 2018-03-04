@@ -348,7 +348,7 @@ void test_ucp_tag_xfer::test_xfer_generic(size_t size, bool expected, bool sync,
         truncated = false;
     }
 
-    status = ucp_dt_create_generic(&ucp::test_dt_uint32_ops, this, &dt);
+    status = ucp_dt_create_generic(&ucp::test_dt_uint32_ops, NULL, &dt);
     ASSERT_UCS_OK(status);
 
     recvd = do_xfer(NULL, NULL, count, dt, dt, expected, sync, truncated);

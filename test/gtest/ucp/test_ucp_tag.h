@@ -84,27 +84,6 @@ protected:
 
     void wait_for_unexpected_msg(ucp_worker_h worker, double sec);
 
-    static void* dt_common_start(size_t count);
-
-    static void* dt_common_start_pack(void *context, const void *buffer, size_t count);
-
-    static void* dt_common_start_unpack(void *context, void *buffer, size_t count);
-
-    template <typename T>
-    static size_t dt_packed_size(void *state);
-
-    template <typename T>
-    static size_t dt_pack(void *state, size_t offset, void *dest, size_t max_length);
-
-    template <typename T>
-    static ucs_status_t dt_unpack(void *state, size_t offset, const void *src,
-                                  size_t length);
-
-    static ucs_status_t dt_err_unpack(void *state, size_t offset, const void *src,
-                                      size_t length);
-
-    static void dt_common_finish(void *state);
-
     virtual bool is_external_request();
 
     static ucp_context_attr_t ctx_attr;

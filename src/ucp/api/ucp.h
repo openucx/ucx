@@ -378,6 +378,22 @@ typedef enum {
 
 
 /**
+ * @ingroup UCP_COMM
+ * @brief Flags to define behavior of @ref ucp_stream_recv_nb function
+ *
+ * This enumeration defines behavior of @ref ucp_stream_recv_nb function.
+ */
+typedef enum {
+    UCP_STREAM_RECV_FLAG_WAITALL = UCS_BIT(0)  /**< This flag requests that
+                                                    operation will not be
+                                                    completed untill all amout
+                                                    of requested data is
+                                                    received and placed in the
+                                                    user buffer. */
+} ucp_stream_recv_flags_t;
+
+
+/**
  * @ingroup UCP_DATATYPE
  * @brief Generate an identifier for contiguous data type.
  *
@@ -2235,7 +2251,7 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  *                          valid only if return code is UCS_OK.
  * @note                    The amount of data received, in bytes, is always an
  *                          integral multiple of the @a datatype size.
- * @param [in]     flags    Reserved for future use.
+ * @param [in]     flags    Flags defined in @ref ucp_stream_recv_flags_t.
  *
  * @return UCS_OK               - The receive operation was completed
  *                                immediately.
