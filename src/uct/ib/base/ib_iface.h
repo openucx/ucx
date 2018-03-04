@@ -260,9 +260,6 @@ typedef struct uct_ib_recv_wr {
 int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
                                 uct_ib_recv_wr_t *wrs, unsigned n);
 
-void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib_addr,
-                               uint8_t src_path_bits, struct ibv_ah_attr *ah_attr);
-
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
                                     struct ibv_ah **ah_p);
