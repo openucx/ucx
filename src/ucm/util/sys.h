@@ -54,4 +54,14 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg);
 size_t ucm_get_shm_seg_size(const void *shmaddr);
 
 
+/**
+ * @brief Convert a errno number to error string
+ *
+ *  @param [in]  en    errno value
+ *  @param [out] buf   Buffer to put the error string in
+ *  @param [in]  max   Size of the buffer
+ */
+void ucm_strerror(int eno, char *buf, size_t max);
+
+
 #endif
