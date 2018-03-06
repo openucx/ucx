@@ -6,6 +6,10 @@
 
 #include "sys.h"
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
 #include <ucs/sys/math.h>
@@ -228,4 +232,16 @@ size_t ucm_get_shm_seg_size(const void *shmaddr)
     ucm_get_shm_seg_size_ctx_t ctx = { shmaddr, 0 };
     ucm_parse_proc_self_maps(ucm_get_shm_seg_size_cb, &ctx);
     return ctx.seg_size;
+}
+
+void ucm_strerror(int eno, char *buf, size_t max)
+{
+#if STRERROR_R_CHAR_P
+    char *ret = strerror_r(eno, buf, max);
+    if (ret != buf) {
+        strncpy(buf, ret, max);
+    }
+#else
+    (void)strerror_r(eno, buf, max);
+#endif
 }
