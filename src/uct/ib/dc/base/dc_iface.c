@@ -219,8 +219,7 @@ void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config
                                 ucs_min(iface->super.config.tx_qp_len, config->quota);
 }
 
-static ucs_status_t uct_dc_iface_init_version(uct_dc_iface_t *iface,
-                                              uct_md_h md)
+static void uct_dc_iface_init_version(uct_dc_iface_t *iface, uct_md_h md)
 {
     uct_ib_device_t *dev;
     unsigned         ver;
@@ -230,16 +229,13 @@ static ucs_status_t uct_dc_iface_init_version(uct_dc_iface_t *iface,
 
     if (ver & UCT_IB_DEVICE_FLAG_DC_V2) {
         iface->version_flag = UCT_DC_IFACE_ADDR_DC_V2;
-        return UCS_OK;
     }
 
     if (ver & UCT_IB_DEVICE_FLAG_DC_V1) {
         iface->version_flag = UCT_DC_IFACE_ADDR_DC_V1;
-        return UCS_OK;
     }
 
     iface->version_flag = 0;
-    return UCS_ERR_UNSUPPORTED;
 }
 
 UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
@@ -265,10 +261,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    status = uct_dc_iface_init_version(self, md);
-    if (status != UCS_OK) {
-        return status;
-    }
+    uct_dc_iface_init_version(self, md);
 
     self->tx.ndci                    = config->ndci;
     self->tx.policy                  = config->tx_policy;
@@ -358,10 +351,11 @@ int uct_dc_iface_is_reachable(const uct_iface_h tl_iface,
     uct_dc_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_iface,
                                                         uct_dc_iface_t);
     uct_dc_iface_addr_t *addr = (uct_dc_iface_addr_t *)iface_addr;
+    uint8_t dc_ver_mask = UCT_DC_IFACE_ADDR_DC_V1 | UCT_DC_IFACE_ADDR_DC_V2;
 
     ucs_assert_always(iface_addr != NULL);
 
-    return (addr->flags & iface->version_flag) &&
+    return ((addr->flags & dc_ver_mask) == (iface->version_flag & dc_ver_mask)) &&
            (UCT_DC_IFACE_ADDR_TM_ENABLED(addr) ==
             UCT_RC_IFACE_TM_ENABLED(&iface->super)) &&
            uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
