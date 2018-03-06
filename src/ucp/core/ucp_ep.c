@@ -757,7 +757,7 @@ static size_t ucp_ep_thresh(size_t thresh_value, size_t min_value,
     ucs_assert(min_value <= max_value);
 
     thresh = ucs_max(min_value, thresh_value);
-    thresh = ucs_min(max_value, thresh_value);
+    thresh = ucs_min(max_value, thresh);
 
     return thresh;
 }
