@@ -72,7 +72,7 @@ ucp_request_release_common(void *request, uint8_t cb_flag, const char *debug_nam
     ucs_trace_req("%s request %p (%p) "UCP_REQUEST_FLAGS_FMT, debug_name,
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(flags));
 
-    ucs_assert(!(flags & UCP_REQUEST_DEBUG_FLAG_EXTERNAL));
+    ucs_assert(!(flags & UCP_REQUEST_FLAG_EXTERNAL));
     ucs_assert(!(flags & UCP_REQUEST_FLAG_RELEASED));
 
     if (ucs_likely(flags & UCP_REQUEST_FLAG_COMPLETED)) {

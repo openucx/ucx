@@ -219,13 +219,14 @@ const ucp_proto_t ucp_tag_eager_proto = {
 
 /* eager sync */
 
-void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag,
+void ucp_tag_eager_sync_completion(ucp_request_t *req, uint64_t flag,
                                    ucs_status_t status)
 {
-    static const uint16_t all_completed = UCP_REQUEST_FLAG_LOCAL_COMPLETED |
+    static const uint64_t all_completed = UCP_REQUEST_FLAG_LOCAL_COMPLETED |
                                           UCP_REQUEST_FLAG_REMOTE_COMPLETED;
 
-    ucs_assertv(!(req->flags & flag), "req->flags=%d flag=%d", req->flags, flag);
+    ucs_assertv(!(req->flags & flag), "req->flags=%"PRIu64" flag=%"PRIu64,
+                req->flags, flag);
     req->flags |= flag;
     if (ucs_test_all_flags(req->flags, all_completed)) {
         ucp_request_complete_send(req, status);

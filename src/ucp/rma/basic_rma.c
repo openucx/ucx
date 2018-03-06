@@ -90,7 +90,8 @@ static void ucp_rma_request_zcopy_completion(uct_completion_t *self,
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer, 
                      size_t length, uint64_t remote_addr, ucp_rkey_h rkey,
-                     uct_pending_callback_t cb, size_t zcopy_thresh, int flags)
+                     uct_pending_callback_t cb, size_t zcopy_thresh,
+                     uint64_t flags)
 {
     req->flags                = flags; /* Implicit release */
     req->send.ep              = ep;

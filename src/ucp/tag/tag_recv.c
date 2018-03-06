@@ -33,10 +33,10 @@ ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                     uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
-                    ucp_request_t *req, uint16_t req_flags, ucp_tag_recv_callback_t cb,
+                    ucp_request_t *req, uint64_t req_flags, ucp_tag_recv_callback_t cb,
                     ucp_recv_desc_t *rdesc, const char *debug_name)
 {
-    unsigned common_flags = UCP_REQUEST_FLAG_RECV | UCP_REQUEST_FLAG_EXPECTED;
+    uint64_t common_flags = UCP_REQUEST_FLAG_RECV | UCP_REQUEST_FLAG_EXPECTED;
     ucp_eager_first_hdr_t *eagerf_hdr;
     ucp_request_queue_t *req_queue;
     uct_memory_type_t mem_type;
@@ -164,7 +164,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,
 
     rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 1, "recv_nbr");
     ucp_tag_recv_common(worker, buffer, count, datatype, tag, tag_mask,
-                        req, UCP_REQUEST_DEBUG_FLAG_EXTERNAL, NULL, rdesc,
+                        req, UCP_REQUEST_FLAG_EXTERNAL, NULL, rdesc,
                         "recv_nbr");
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);

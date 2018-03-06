@@ -20,6 +20,18 @@
 
 BEGIN_C_DECLS
 
+extern size_t ucp_request_total_size;
+
+#define UCP_REQUEST_ALLOCA(_headroom) \
+    (ucp_request_desc_t *)((char *)alloca((_headroom) + \
+                                     ucp_request_total_size) + \
+                              (_headroom) + ucp_request_total_size - \
+                              sizeof(ucp_request_desc_t));
+
+
+#define UCP_REQUEST_CONTEXT(_request) \
+    ((ucp_request_desc_t *)(_request) - 1)->context;
+
 /**
  * @defgroup UCP_API Unified Communication Protocol (UCP) API
  * @{
@@ -2017,6 +2029,70 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p);
  */
 void ucp_rkey_destroy(ucp_rkey_h rkey);
 
+/**
+ * @ingroup UCP_COMM
+ * @brief Flags to define @ref ucp_request_desc_t::flags
+ *
+ * @ref ucp_request_desc_t::flags should be ORed by these flags to determine behavior
+ * of ucp_<tag|stream>_<send|recv>_nbx functions.
+ */
+typedef enum ucp_request_desc_flags {
+    /**
+     * Return request pointer if operation was successfully completed
+     * immediately. Status of request can be observed with
+     * @ref ucp_request_check_status or similar API. If flag is not present and
+     * operation was successfully completed immediately, called function will
+     * return NULL.
+     * @note If operation was failed immediately, error code will be returned
+     * despite of this flag.
+     * @note This flag is valid only for @ref ucp_tag_recv_nbx.
+     */
+    UCP_REQUEST_FLAG_NO_IMM_COMPLETION      = UCS_BIT(0),
+
+    /**
+     * Operation will be completed with callback.
+     * @note For performance reason, callback won't be invoked if operation
+     * returns NULL. Can be used in combination with
+     * @ref UCP_REQUEST_FLAG_NO_IMM_COMPLETION flag to invoke callback for
+     * immediately completed operation.
+     */
+    UCP_REQUEST_FLAG_CALLBACK               = UCS_BIT(1),
+
+    /**
+     * Must be set if request was allocated by user for performance reason.
+     * @note UCP provides a helper macro @ref UCP_REQUEST_ALLOCA for allocation
+     * the request on stack.
+     */
+    UCP_REQUEST_FLAG_EXTERNAL               = UCS_BIT(2),
+
+    /**
+     * TODO:
+     */
+    UCP_REQUEST_FLAG_STREAM_RECV_WAITALL    = UCS_BIT(3),
+
+    /**
+     * High-order bits are reserved for internal needs.
+     */
+    UCP_REQUEST_FLAG_LAST                   = UCS_BIT(31)
+} ucp_request_desc_flags_t;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Request descroptor for ucp_<tag|stream>_<send|recv>_nbx functions.
+ */
+typedef struct ucp_request_desc {
+    uint64_t flags;                                 /* ORed flags defined in
+                                                     * @ref ucp_request_desc_flags_t */
+    union {
+        ucp_send_callback_t         send_cb;        /* Send compleion callback */
+        ucp_tag_recv_callback_t     tag_recv_cb;    /* TAG receive completion callback */
+        ucp_stream_recv_callback_t  stream_recv_cb; /* STREAM receive completion callback */
+    };
+    void                            *context;       /* User defined context for operation.
+                                                       Use @ref UCP_REQUEST_CONTEXT helper
+                                                       macro to get access from a callback. */
+} ucp_request_desc_t;
 
 /**
  * @ingroup UCP_COMM
@@ -2063,6 +2139,42 @@ ucs_status_ptr_t ucp_stream_send_nb(ucp_ep_h ep, const void *buffer, size_t coun
 
 /**
  * @ingroup UCP_COMM
+ * @brief Non-blocking stream send operation.
+ *
+ * This routine sends data that is described by the local address @a buffer,
+ * size @a count, and @a datatype object to the destination endpoint @a ep.
+ * The routine is non-blocking and therefore returns immediately, however
+ * the actual send operation may be delayed. The send operation is considered
+ * completed when it is safe to reuse the source @e buffer. Return value and
+ * completion behavior is determined by @a request.
+ *
+ * @note The user should not modify any part of the @a buffer after this
+ *       operation is called, until the operation completes.
+ *
+ * @param [in]  ep          Destination endpoint handle.
+ * @param [in]  buffer      Pointer to the message buffer (payload).
+ * @param [in]  count       Number of elements to send.
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
+ * @param [in]  rdesc       Request descriptor to determine the function behavior.
+ *
+ * @return UCS_OK           - The send operation was completed immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
+ * @return otherwise        - Operation was scheduled for send and can be
+ *                          completed in any point in time. The request handle
+ *                          is returned to the application in order to track
+ *                          progress of the message. The application is
+ *                          responsible to release the handle using
+ *                          @ref ucp_request_free routine if
+ *                          @ref ucp_request_desc_t::UCP_REQUEST_FLAG_EXTERNAL flag
+ *                          was not set in @ref ucp_request_desc_t::flags.
+ */
+ucs_status_ptr_t ucp_stream_send_nbx(ucp_ep_h ep, const void *buffer,
+                                     size_t count, ucp_datatype_t datatype,
+                                     ucp_request_desc_t *rdesc);
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Non-blocking tagged-send operations
  *
  * This routine sends a messages that is described by the local address @a
@@ -2104,6 +2216,45 @@ ucs_status_ptr_t ucp_stream_send_nb(ucp_ep_h ep, const void *buffer, size_t coun
 ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
                                  ucp_datatype_t datatype, ucp_tag_t tag,
                                  ucp_send_callback_t cb);
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Non-blocking tagged-send operations
+ *
+ * This routine sends a messages that is described by the local address @a
+ * buffer, size @a count, and @a datatype object to the destination endpoint
+ * @a ep. Each message is associated with a @a tag value that is used for
+ * message matching on the @ref ucp_tag_recv_nbx "receiver". The routine is
+ * non-blocking and therefore returns immediately, however the actual send
+ * operation may be delayed. The send operation is considered completed when
+ * it is safe to reuse the source @e buffer. Return value and completion
+ * behavior is determined by @a request.
+ *
+ * @note The user should not modify any part of the @a buffer after this
+ *       operation is called, until the operation completes.
+ *
+ * @param [in]  ep          Destination endpoint handle.
+ * @param [in]  buffer      Pointer to the message buffer (payload).
+ * @param [in]  count       Number of elements to send
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
+ * @param [in]  tag         Message tag.
+ * @param [in]  rdesc       Request descroptor to determine the function
+ *                          behavior.
+ *
+ * @return UCS_OK           - The send operation was completed immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
+ * @return otherwise        - Operation was scheduled for send and can be
+ *                          completed in any point in time. The request handle
+ *                          is returned to the application in order to track
+ *                          progress of the message. The application is
+ *                          responsible to release the handle using
+ *                          @ref ucp_request_free routine if
+ *                          @ref ucp_request_desc_t::UCP_REQUEST_FLAG_EXTERNAL
+ *                          flag was not set in @ref ucp_request_desc_t::flags.
+ */
+ucs_status_ptr_t ucp_tag_send_nbx(ucp_ep_h ep, const void *buffer, size_t count,
+                                  ucp_datatype_t datatype, ucp_tag_t tag,
+                                  ucp_request_desc_t *rdesc);
 
 /**
  * @ingroup UCP_COMM
@@ -2271,6 +2422,47 @@ ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t count,
 
 /**
  * @ingroup UCP_COMM
+ * @brief Non-blocking stream receive operation of structured data into a
+ *        user-supplied buffer.
+ *
+ * This routine receives data that is described by the local address @a buffer,
+ * size @a count, and @a datatype object on the endpoint @a ep. The routine is
+ * non-blocking and therefore returns immediately. The receive operation is
+ * considered complete when the message is delivered to the buffer. If data is
+ * not immediately available, the operation will be scheduled for receive and
+ * a request handle will be returned. Return value and completion
+ * behavior is determined by @a request.
+ *
+ * @param [in]     ep       UCP endpoint that is used for the receive operation.
+ * @param [in]     buffer   Pointer to the buffer to receive the data to.
+ * @param [in]     count    Number of elements to receive into @a buffer.
+ * @param [in]     datatype Datatype descriptor for the elements in the buffer.
+ * @param [out]    length   Size of the received data in bytes. The value is
+ *                          valid only if return code is UCS_OK.
+ * @note                    The amount of data received, in bytes, is always an
+ *                          integral multiple of the @a datatype size.
+ * @param [in]     rdesc    Request descriptor to determine the function
+ *                          behavior.
+ *
+ * @return UCS_OK               - The receive operation was completed
+ *                                immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
+ * @return otherwise        - Operation was scheduled for send and can be
+ *                          completed in any point in time. The request handle
+ *                          is returned to the application in order to track
+ *                          progress of the message. The application is
+ *                          responsible to release the handle using
+ *                          @ref ucp_request_free routine if
+ *                          @ref ucp_request_desc_t::UCP_REQUEST_FLAG_EXTERNAL
+ *                          flag was not set in @ref ucp_request_desc_t::flags.
+ */
+ucs_status_ptr_t ucp_stream_recv_nbx(ucp_ep_h ep, void *buffer, size_t count,
+                                     ucp_datatype_t datatype, size_t *length,
+                                     ucp_request_desc_t *rdesc);
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Non-blocking stream receive operation of unstructured data into
  *        a UCP-supplied buffer.
  *
@@ -2345,6 +2537,47 @@ ucs_status_ptr_t ucp_stream_recv_data_nb(ucp_ep_h ep, size_t *length);
 ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count,
                                  ucp_datatype_t datatype, ucp_tag_t tag,
                                  ucp_tag_t tag_mask, ucp_tag_recv_callback_t cb);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Non-blocking tagged-receive operation.
+ *
+ * This routine receives a messages that is described by the local address @a
+ * buffer, size @a count, and @a datatype object on the @a worker.  The tag
+ * value of the receive message has to match the @a tag and @a tag_mask values,
+ * where the @a tag_mask indicates what bits of the tag have to be matched. The
+ * routine is a non-blocking and therefore returns immediately. The receive
+ * operation is considered completed when the message is delivered to the @a
+ * buffer.  Return value and completion behavior is determined by @a request.
+ *
+ * @param [in]  worker      UCP worker that is used for the receive operation.
+ * @param [in]  buffer      Pointer to the buffer to receive the data to.
+ * @param [in]  count       Number of elements to receive
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
+ * @param [in]  tag         Message tag to expect.
+ * @param [in]  tag_mask    Bit mask that indicates the bits that are used for
+ *                          the matching of the incoming tag
+ *                          against the expected tag.
+ * @param [in]  rdesc       Request descriptor to determine the function
+ *                          behavior.
+ *
+ * @return UCS_OK               - The receive operation was completed
+ *                                immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
+ * @return otherwise        - Operation was scheduled for send and can be
+ *                          completed in any point in time. The request handle
+ *                          is returned to the application in order to track
+ *                          progress of the message. The application is
+ *                          responsible to release the handle using
+ *                          @ref ucp_request_free routine if
+ *                          @ref ucp_request_desc_t::UCP_REQUEST_FLAG_EXTERNAL flag
+ *                          was not set in @ref ucp_request_desc_t::flags.
+ */
+ucs_status_ptr_t ucp_tag_recv_nbx(ucp_worker_h worker, void *buffer,
+                                  size_t count, ucp_datatype_t datatype,
+                                  ucp_tag_t tag, ucp_tag_t tag_mask,
+                                  ucp_request_desc_t *rdesc);
 
 
 /**
@@ -2918,10 +3151,10 @@ ucs_status_t ucp_request_check_status(void *request);
 /**
  * @ingroup UCP_COMM
  * @brief Check the status and currently available state of non-blocking request
- *        returned from @ref ucp_tag_recv_nb routine.
+ *        returned from @ref ucp_tag_recv_nbx routine.
  *
  * This routine checks the state and returns current status of the request
- * returned from @ref ucp_tag_recv_nb routine or the user allocated request
+ * returned from @ref ucp_tag_recv_nbx routine or the user allocated request
  * for @ref ucp_tag_recv_nbr. Any value different from UCS_INPROGRESS means
  * that the request is in a completed state.
  *

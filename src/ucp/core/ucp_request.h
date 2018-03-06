@@ -25,27 +25,19 @@
 
 
 /**
- * Request flags
+ * Internal request flags
  */
 enum {
-    UCP_REQUEST_FLAG_COMPLETED            = UCS_BIT(0),
-    UCP_REQUEST_FLAG_RELEASED             = UCS_BIT(1),
-    UCP_REQUEST_FLAG_EXPECTED             = UCS_BIT(3),
-    UCP_REQUEST_FLAG_LOCAL_COMPLETED      = UCS_BIT(4),
-    UCP_REQUEST_FLAG_REMOTE_COMPLETED     = UCS_BIT(5),
-    UCP_REQUEST_FLAG_CALLBACK             = UCS_BIT(6),
-    UCP_REQUEST_FLAG_RECV                 = UCS_BIT(7),
-    UCP_REQUEST_FLAG_SYNC                 = UCS_BIT(8),
-    UCP_REQUEST_FLAG_OFFLOADED            = UCS_BIT(10),
-    UCP_REQUEST_FLAG_BLOCK_OFFLOAD        = UCS_BIT(11),
-    UCP_REQUEST_FLAG_STREAM_RECV_WAITALL  = UCS_BIT(12),
-
-#if ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(14),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(15)
-#else
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0
-#endif
+    UCP_REQUEST_FLAG_COMPLETED            = UCS_BIT(31),
+    UCP_REQUEST_FLAG_RELEASED             = UCS_BIT(32),
+    UCP_REQUEST_FLAG_EXPECTED             = UCS_BIT(33),
+    UCP_REQUEST_FLAG_LOCAL_COMPLETED      = UCS_BIT(34),
+    UCP_REQUEST_FLAG_REMOTE_COMPLETED     = UCS_BIT(35),
+    UCP_REQUEST_FLAG_SYNC                 = UCS_BIT(36),
+    UCP_REQUEST_FLAG_RECV                 = UCS_BIT(37),
+    UCP_REQUEST_FLAG_OFFLOADED            = UCS_BIT(38),
+    UCP_REQUEST_FLAG_BLOCK_OFFLOAD        = UCS_BIT(39),
+    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(40),
 };
 
 
@@ -88,7 +80,7 @@ enum {
  */
 struct ucp_request {
     ucs_status_t                  status;  /* Operation status */
-    uint16_t                      flags;   /* Request flags */
+    uint64_t                      flags;   /* Request flags */
 
     union {
         struct {

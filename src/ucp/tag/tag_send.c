@@ -119,7 +119,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t count,
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
                       uintptr_t datatype, size_t count, ucp_tag_t tag,
-                      uint16_t flags)
+                      uint64_t flags)
 {
     req->flags             = flags;
     req->send.ep           = ep;
