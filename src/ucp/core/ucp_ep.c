@@ -766,8 +766,7 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_at
                                              uct_md_attr_t *md_attr, ucp_ep_config_t *config,
                                              size_t max_rndv_thresh)
 {
-    size_t rndv_nbr_thresh = context->config.ext.rndv_send_nbr_thresh;
-    size_t rndv_thresh;
+    size_t rndv_thresh, rndv_nbr_thresh;
 
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
     ucs_assert(config->key.lanes[config->key.am_lane].rsc_index != UCP_NULL_RESOURCE);
@@ -777,11 +776,13 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_at
         rndv_thresh = rndv_nbr_thresh = SIZE_MAX;
     } else if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the AM rndv threshold on its own.*/
-        rndv_thresh = ucp_ep_config_calc_rndv_thresh(context, iface_attr, md_attr,
-                                                     context->config.ext.bcopy_bw,
-                                                     0);
+        rndv_thresh     = ucp_ep_config_calc_rndv_thresh(context, iface_attr, md_attr,
+                                                         context->config.ext.bcopy_bw,
+                                                         0);
+        rndv_nbr_thresh = context->config.ext.rndv_send_nbr_thresh;
     } else {
-        rndv_thresh = context->config.ext.rndv_thresh;
+        rndv_thresh     = context->config.ext.rndv_thresh;
+        rndv_nbr_thresh = context->config.ext.rndv_thresh;
     }
 
     config->tag.rndv.am_thresh = ucp_ep_thresh(rndv_thresh,
@@ -804,7 +805,7 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
 {
     ucp_context_t *context = worker->context;
     ucp_rsc_index_t rsc_index;
-    size_t rndv_thresh;
+    size_t rndv_thresh, rndv_nbr_thresh;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_t *md_attr;
 
@@ -824,10 +825,12 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
 
     if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
-        rndv_thresh = ucp_ep_config_calc_rndv_thresh(context, iface_attr,
-                                                     md_attr, SIZE_MAX, 1);
+        rndv_thresh     = ucp_ep_config_calc_rndv_thresh(context, iface_attr,
+                                                         md_attr, SIZE_MAX, 1);
+        rndv_nbr_thresh = context->config.ext.rndv_send_nbr_thresh;
     } else {
-        rndv_thresh = context->config.ext.rndv_thresh;
+        rndv_thresh     = context->config.ext.rndv_thresh;
+        rndv_nbr_thresh = context->config.ext.rndv_thresh;
     }
 
     config->tag.rndv.max_get_zcopy = iface_attr->cap.get.max_zcopy;
@@ -836,7 +839,7 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
                                                    iface_attr->cap.get.min_zcopy,
                                                    max_rndv_thresh);
 
-    config->tag.rndv_send_nbr.rma_thresh = ucp_ep_thresh(context->config.ext.rndv_send_nbr_thresh,
+    config->tag.rndv_send_nbr.rma_thresh = ucp_ep_thresh(rndv_nbr_thresh,
                                                          iface_attr->cap.get.min_zcopy,
                                                          max_rndv_thresh);
 
