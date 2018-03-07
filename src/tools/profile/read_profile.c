@@ -7,8 +7,8 @@
 #include <ucs/profile/profile.h>
 #include <ucs/datastruct/khash.h>
 
-#include <sys/signal.h>
-#include <sys/fcntl.h>
+#include <signal.h>
+#include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
