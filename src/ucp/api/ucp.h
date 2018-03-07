@@ -20,17 +20,6 @@
 
 BEGIN_C_DECLS
 
-extern size_t ucp_request_total_size;
-
-#define UCP_REQUEST_ALLOCA(_headroom) \
-    (ucp_request_desc_t *)((char *)alloca((_headroom) + \
-                                     ucp_request_total_size) + \
-                              (_headroom) + ucp_request_total_size - \
-                              sizeof(ucp_request_desc_t));
-
-
-#define UCP_REQUEST_CONTEXT(_request) \
-    ((ucp_request_desc_t *)(_request) - 1)->context;
 
 /**
  * @defgroup UCP_API Unified Communication Protocol (UCP) API
@@ -117,6 +106,50 @@ extern size_t ucp_request_total_size;
  * UCP Data type routines
  * @}
  */
+
+
+/**
+ * For internal use only.
+ */
+extern size_t ucp_request_internal_size;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief A helper macro to allocate request on stack.
+ *
+ * A helper macro to allocate request on stack. In this case,
+ * @ref UCP_REQUEST_FLAG_EXTERNAL should be added to @ref ucp_request_t::flags
+ * initialization to hint UCP library.
+ *
+ * @note Useful for implementation of blocking operations like MPI_Send/MPI_Recv.
+ *
+ * @param [in]  _request_size   Request size initialized by
+ *                              @ref ucp_context_attr_t::requst_size.
+ *
+ * @return Pointer to ucp_request_desc_t for initialization.
+ */
+#define UCP_REQUEST_ALLOCA(_request_size) \
+    (ucp_request_desc_t *)((char *)alloca((_request_size) + \
+                                          ucp_request_internal_size) + \
+                           (_request_size) + ucp_request_internal_size - \
+                           sizeof(ucp_request_desc_t));
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief A helper macro to get access to context associated with @a _request.
+ *
+ * A helper macro to get access to context associated with @a _request returned
+ * by ucp_<tag|stream>_<send|recv>_nbx function as return value or passed to
+ * completion callback.
+ * 
+ * @param [in]  _request       Request handle.
+ *
+ * @return Pointer to user context.
+ */
+#define UCP_REQUEST_CONTEXT(_request) \
+    ((ucp_request_t *)(_request) - 1)->context;
 
 
 /**
@@ -2029,21 +2062,22 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p);
  */
 void ucp_rkey_destroy(ucp_rkey_h rkey);
 
+
 /**
  * @ingroup UCP_COMM
  * @brief Flags to define @ref ucp_request_desc_t::flags
  *
- * @ref ucp_request_desc_t::flags should be ORed by these flags to determine behavior
- * of ucp_<tag|stream>_<send|recv>_nbx functions.
+ * @ref ucp_request_desc_t::flags is a combination of these flags to determine
+ * behavior of ucp_<tag|stream>_<send|recv>_nbx functions.
  */
 typedef enum ucp_request_desc_flags {
     /**
      * Return request pointer if operation was successfully completed
-     * immediately. Status of request can be observed with
-     * @ref ucp_request_check_status or similar API. If flag is not present and
-     * operation was successfully completed immediately, called function will
-     * return NULL.
-     * @note If operation was failed immediately, error code will be returned
+     * immediately. Request status can be observed with
+     * @ref ucp_request_check_status. If flag is not present and operation was
+     * successfully completed immediately, ucp_<tag|stream>_<send|recv>_nbx
+     * will return NULL.
+     * @note If operation failed to start, an error code will be returned
      * despite of this flag.
      * @note This flag is valid only for @ref ucp_tag_recv_nbx.
      */
@@ -2066,14 +2100,16 @@ typedef enum ucp_request_desc_flags {
     UCP_REQUEST_FLAG_EXTERNAL               = UCS_BIT(2),
 
     /**
-     * TODO:
+     * This flag requests that operation will not be completed until all amout
+     * of requested data is received and placed in the user buffer.
+     * @note This flag is actual only for @ref ucp_stream_recv_nbx function.
      */
     UCP_REQUEST_FLAG_STREAM_RECV_WAITALL    = UCS_BIT(3),
 
     /**
      * High-order bits are reserved for internal needs.
      */
-    UCP_REQUEST_FLAG_LAST                   = UCS_BIT(31)
+    UCP_REQUEST_FLAG_LAST                   = UCS_BIT(30)
 } ucp_request_desc_flags_t;
 
 
@@ -2082,7 +2118,7 @@ typedef enum ucp_request_desc_flags {
  * @brief Request descroptor for ucp_<tag|stream>_<send|recv>_nbx functions.
  */
 typedef struct ucp_request_desc {
-    uint64_t flags;                                 /* ORed flags defined in
+    uint64_t                        flags;          /* ORed flags defined in
                                                      * @ref ucp_request_desc_flags_t */
     union {
         ucp_send_callback_t         send_cb;        /* Send compleion callback */
@@ -2091,7 +2127,7 @@ typedef struct ucp_request_desc {
     };
     void                            *context;       /* User defined context for operation.
                                                        Use @ref UCP_REQUEST_CONTEXT helper
-                                                       macro to get access from a callback. */
+                                                       macro to get access by request handle. */
 } ucp_request_desc_t;
 
 /**
