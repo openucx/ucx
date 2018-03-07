@@ -32,7 +32,7 @@ static inline ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock)
     }
 
     lock->count = 0;
-    lock->owner = 0xfffffffful;
+    lock->owner = (pthread_t)0xfffffffful;
     return UCS_OK;
 }
 
@@ -89,7 +89,7 @@ static inline void ucs_spin_unlock(ucs_spinlock_t *lock)
 {
     --lock->count;
     if (lock->count == 0) {
-        lock->owner = 0xfffffffful;
+        lock->owner = (pthread_t)0xfffffffful;
         pthread_spin_unlock(&lock->lock);
     }
 }

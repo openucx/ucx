@@ -12,6 +12,9 @@
 #include <ucs/type/status.h>
 #include <ucs/sys/sys.h> /* for ucs_get_tid() */
 #include <pthread.h>
+#include <time.h>
+#include <unistd.h>
+#include <sys/syscall.h>
 
 
 typedef struct ucs_async_signal_context {
@@ -34,5 +37,19 @@ typedef struct ucs_async_signal_context {
         ucs_memory_cpu_fence(); \
         --(_async)->signal.block_count; \
     }
+
+#ifndef SIGEV_THREAD_ID
+#define SIGEV_THREAD_ID 4
+#endif
+
+struct ksigevent {
+    union sigval sigev_value;
+    int sigev_signo;
+    int sigev_notify;
+    union {
+       int _pad[64-sizeof(int) * 2 + sizeof(union sigval)];
+       int _tid;
+    } _sigev_un;
+};
 
 #endif

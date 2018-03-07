@@ -94,6 +94,14 @@ m4_ifdef([AS_VAR_APPEND],
 [m4_define([ucx_AS_VAR_APPEND],
 [AS_VAR_SET([$1], [AS_VAR_GET([$1])$2])])])
 
+
+#
+# Check for GNU libc specific features not present in musl libc.
+#
+AC_CHECK_FUNCS_ONCE(malloc_trim)
+AC_CHECK_HEADERS([execinfo.h])
+
+
 #
 # Configure modules
 #
