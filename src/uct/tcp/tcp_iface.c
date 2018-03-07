@@ -9,7 +9,7 @@
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
 #include <sys/socket.h>
-#include <sys/poll.h>
+#include <poll.h>
 #include <netinet/tcp.h>
 #include <dirent.h>
 

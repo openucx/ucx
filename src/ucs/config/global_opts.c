@@ -11,7 +11,7 @@
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
-#include <sys/signal.h>
+#include <signal.h>
 
 
 ucs_global_opts_t ucs_global_opts = {
