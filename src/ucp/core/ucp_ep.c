@@ -843,7 +843,7 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
                                                          iface_attr->cap.get.min_zcopy,
                                                          max_rndv_thresh);
 
-    ucs_trace("Rndv threshold is %zu (send_nbr: %zu)",
+    ucs_trace("rndv threshold is %zu (send_nbr: %zu)",
               config->tag.rndv.rma_thresh, config->tag.rndv_send_nbr.rma_thresh);
 }
 
