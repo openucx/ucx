@@ -14,7 +14,6 @@
 #include <ucm/event/event.h>
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
-#include <ucm/util/ucm_config.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/preprocessor.h>
 
@@ -46,7 +45,7 @@ ucs_status_t ucm_cudamem_install()
     ucm_reloc_patch_t *patch;
     ucs_status_t status;
 
-    if (!ucm_global_config.enable_cuda_hooks) {
+    if (!ucm_global_opts.enable_cuda_reloc) {
         ucm_debug("installing cudamem relocations is disabled by configuration");
         return UCS_ERR_UNSUPPORTED;
     }

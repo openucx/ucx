@@ -116,6 +116,20 @@ typedef struct uct_rc_mlx5_cmd_wq {
 
 #endif /* IBV_EXP_HW_TM  */
 
+#if HAVE_IBV_EXP_DM
+typedef struct uct_mlx5_dm_data {
+    uct_worker_tl_data_t super;
+    ucs_mpool_t          mp;
+    struct ibv_mr        *mr;
+    struct ibv_exp_dm    *dm;
+    void                 *start_va;
+    size_t               seg_len;
+    unsigned             seg_count;
+    unsigned             seg_attached;
+    uct_ib_device_t      *device;
+} uct_mlx5_dm_data_t;
+#endif
+
 typedef struct uct_common_mlx5_iface_config {
 #if HAVE_IBV_EXP_DM
     struct {
@@ -142,6 +156,18 @@ typedef struct uct_rc_mlx5_iface_common {
         uct_rc_mlx5_tag_entry_t   *tail;
         uct_rc_mlx5_tag_entry_t   *list;
     } tm;
+#endif
+#if HAVE_IBV_EXP_DM
+    struct {
+        uct_mlx5_dm_data_t        *dm;
+        size_t                    seg_len; /* cached value to avoid double-pointer access */
+        ucs_status_t              (*am_short)(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
+                                              const void *payload, unsigned length);
+#if IBV_EXP_HW_TM
+        ucs_status_t              (*tag_short)(uct_ep_h tl_ep, uct_tag_t tag,
+                                               const void *data, size_t length);
+#endif
+    } dm;
 #endif
     UCS_STATS_NODE_DECLARE(stats);
 } uct_rc_mlx5_iface_common_t;

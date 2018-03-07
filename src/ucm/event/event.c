@@ -16,7 +16,6 @@
 #if HAVE_CUDA
 #include <ucm/cuda/cudamem.h>
 #endif
-#include <ucm/util/ucm_config.h>
 #include <ucm/util/log.h>
 #include <ucm/util/sys.h>
 #include <ucs/arch/cpu.h>
@@ -673,7 +672,7 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
     ucm_event_handler_t *handler;
     ucs_status_t status;
 
-    if (!ucm_global_config.enable_events) {
+    if (!ucm_global_opts.enable_events) {
         return UCS_ERR_UNSUPPORTED;
     }
 

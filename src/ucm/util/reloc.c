@@ -19,7 +19,6 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/type/component.h>
 #include <ucm/util/log.h>
-#include <ucm/util/ucm_config.h>
 
 #include <sys/fcntl.h>
 #include <sys/mman.h>

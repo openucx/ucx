@@ -25,15 +25,27 @@ ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
 
 ucs_config_field_t uct_mlx5_common_config_table[] = {
 #if HAVE_IBV_EXP_DM
-    {"DM_SIZE", "1k",
+    /* TODO: set 1k limit */
+    {"DM_SIZE", "0",
      "Device Memory segment size (0 - disabled)",
      ucs_offsetof(uct_common_mlx5_iface_config_t, dm.seg_len), UCS_CONFIG_TYPE_MEMUNITS},
-    {"DM_COUNT", "1",
+    /* TODO: set 1 buffer limit */
+    {"DM_COUNT", "0",
      "Device Memory segments count (0 - disabled)",
      ucs_offsetof(uct_common_mlx5_iface_config_t, dm.count), UCS_CONFIG_TYPE_UINT},
 #endif
     {NULL}
 };
+
+#if HAVE_IBV_EXP_DM
+/* uct_mlx5_dm_va is used to get pointer to DM mapped into process address space */
+typedef struct uct_mlx5_dm_va {
+    struct ibv_exp_dm  ibv_dm;
+    size_t             length;
+    uint64_t           *start_va;
+} uct_mlx5_dm_va_t;
+#endif
+
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq)
 {
@@ -220,6 +232,159 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface,
 #endif
 }
 
+
+#if HAVE_IBV_EXP_DM
+static ucs_status_t
+ucs_iface_dm_mpool_chunk_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+{
+    ucs_status_t status;
+
+    status = ucs_mpool_chunk_malloc(mp, size_p, chunk_p);
+    if (status == UCS_OK) {
+        memset(*chunk_p, 0, *size_p);
+    }
+
+    return status;
+}
+
+static void uct_iface_dm_mp_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    uct_mlx5_dm_data_t *dm         = ucs_container_of(mp, uct_mlx5_dm_data_t, mp);
+    uct_rc_iface_send_desc_t* desc = (uct_rc_iface_send_desc_t*)obj;
+
+    ucs_assert(desc->super.buffer == NULL);
+    ucs_assert(dm->seg_attached < dm->seg_count);
+
+    desc->lkey          = dm->mr->lkey;
+    desc->super.buffer  = UCS_PTR_BYTE_OFFSET(dm->start_va, dm->seg_attached * dm->seg_len);
+    desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
+    dm->seg_attached++;
+}
+
+static ucs_mpool_ops_t uct_dm_iface_mpool_ops = {
+    .chunk_alloc   = ucs_iface_dm_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = uct_iface_dm_mp_obj_init,
+    .obj_cleanup   = NULL
+};
+
+
+static int uct_mlx5_iface_dm_device_cmp(uct_mlx5_dm_data_t *dm_data,
+                                        uct_rc_iface_t *iface,
+                                        const uct_common_mlx5_iface_config_t *config)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+
+    return dm_data->device->ibv_context == dev->ibv_context;
+}
+
+static ucs_status_t uct_mlx5_iface_init_dm_tl(uct_mlx5_dm_data_t *data,
+                                              uct_rc_iface_t *iface,
+                                              const uct_common_mlx5_iface_config_t *config)
+{
+    ucs_status_t status;
+    struct ibv_exp_alloc_dm_attr dm_attr;
+    struct ibv_exp_reg_mr_in mr_in;
+
+    data->seg_len      = ucs_align_up(config->dm.seg_len, 8);
+    data->seg_count    = config->dm.count;
+    data->seg_attached = 0;
+    data->device       = uct_ib_iface_device(&iface->super);
+
+    dm_attr.length     = data->seg_len * data->seg_count;
+    dm_attr.comp_mask  = 0;
+    data->dm           = ibv_exp_alloc_dm(data->device->ibv_context, &dm_attr);
+
+    if (data->dm == NULL) {
+        /* TODO: prompt warning? */
+        ucs_debug("ibv_exp_alloc_dm(dev=%s length=%zu) failed: %m",
+                  uct_ib_device_name(data->device), dm_attr.length);
+        return UCS_OK;
+    }
+
+    memset(&mr_in, 0, sizeof(mr_in));
+    mr_in.pd           = uct_ib_iface_md(&iface->super)->pd;
+    mr_in.comp_mask    = IBV_EXP_REG_MR_DM;
+    mr_in.dm           = data->dm;
+    mr_in.length       = dm_attr.length;
+    data->mr           = ibv_exp_reg_mr(&mr_in);
+    if (data->mr == NULL) {
+        ucs_warn("ibv_exp_reg_mr() error - On Device Memory registration failed, %d %m", errno);
+        goto failed_mr;
+    }
+
+    data->start_va = ((uct_mlx5_dm_va_t*)data->dm)->start_va;
+
+    status = ucs_mpool_init(&data->mp, 0,
+                            sizeof(uct_rc_iface_send_desc_t), 0, UCS_SYS_CACHE_LINE_SIZE,
+                            data->seg_count, data->seg_count,
+                            &uct_dm_iface_mpool_ops, "mlx5_dm_desc");
+    if (status != UCS_OK) {
+        goto failed_mpool;
+    }
+
+    /* DM initialization may fail due to any reason, just
+     * free resources & continue without DM */
+    return UCS_OK;
+
+failed_mpool:
+    ibv_dereg_mr(data->mr);
+failed_mr:
+    ibv_exp_free_dm(data->dm);
+    data->dm = NULL;
+    return UCS_OK;
+}
+
+static void uct_mlx5_iface_cleanup_dm_tl(uct_mlx5_dm_data_t *data)
+{
+    ucs_assert(data->dm != NULL);
+    ucs_assert(data->mr != NULL);
+
+    ucs_mpool_cleanup(&data->mp, 1);
+    ibv_dereg_mr(data->mr);
+    ibv_exp_free_dm(data->dm);
+}
+#endif
+
+static ucs_status_t uct_mlx5_iface_init_dm(uct_rc_mlx5_iface_common_t *iface,
+                                           uct_rc_iface_t *rc_iface,
+                                           const uct_common_mlx5_iface_config_t *config)
+{
+#if HAVE_IBV_EXP_DM
+    if ((config->dm.seg_len * config->dm.count) == 0) {
+        iface->dm.dm = NULL;
+        return UCS_OK;
+    }
+
+    iface->dm.dm = uct_worker_tl_data_get(rc_iface->super.super.worker,
+                                          UCT_IB_MLX5_WORKER_DM_KEY,
+                                          uct_mlx5_dm_data_t,
+                                          uct_mlx5_iface_dm_device_cmp,
+                                          uct_mlx5_iface_init_dm_tl, rc_iface, config);
+    if (iface->dm.dm == NULL) {
+        return UCS_OK;
+    }
+
+    if (iface->dm.dm->dm == NULL) {
+        /* failed to initialize DM. put back object */
+        uct_worker_tl_data_put(iface->dm.dm, uct_mlx5_iface_cleanup_dm_tl);
+        iface->dm.dm = NULL;
+    } else {
+        iface->dm.seg_len = iface->dm.dm->seg_len;
+    }
+#endif
+    return UCS_OK;
+}
+
+static void uct_mlx_iface_dm_cleanup(uct_rc_mlx5_iface_common_t *iface)
+{
+#if HAVE_IBV_EXP_DM
+    if (iface->dm.dm) {
+        uct_worker_tl_data_put(iface->dm.dm, uct_mlx5_iface_cleanup_dm_tl);
+    }
+#endif
+}
+
 ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                            uct_rc_iface_t *rc_iface,
                                            uct_rc_iface_config_t *config,
@@ -243,6 +408,11 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
         return status;
     }
 
+    status = uct_mlx5_iface_init_dm(iface, rc_iface, common_config);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     rc_iface->rx.srq.quota = iface->rx.srq.mask + 1;
 
     /* By default set to something that is always in cache */
@@ -251,7 +421,7 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
     status = UCS_STATS_NODE_ALLOC(&iface->stats, &uct_rc_mlx5_iface_stats_class,
                                   rc_iface->stats);
     if (status != UCS_OK) {
-        return status;
+        goto cleanup_dm;
     }
 
     status = uct_iface_mpool_init(&rc_iface->super.super,
@@ -265,6 +435,7 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                   "rc_mlx5_atomic_desc");
     if (status != UCS_OK) {
         UCS_STATS_NODE_FREE(iface->stats);
+        goto cleanup_dm;
     }
 
     /* For little-endian atomic reply, override the default functions, to still
@@ -280,6 +451,10 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
        rc_iface->config.atomic64_ext_handler = uct_rc_mlx5_common_atomic64_le_handler;
     }
 
+    return UCS_OK;
+
+cleanup_dm:
+    uct_mlx_iface_dm_cleanup(iface);
     return status;
 }
 
@@ -287,6 +462,7 @@ void uct_rc_mlx5_iface_common_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
     UCS_STATS_NODE_FREE(iface->stats);
     ucs_mpool_cleanup(&iface->tx.atomic_desc_mp, 1);
+    uct_mlx_iface_dm_cleanup(iface);
 }
 
 void uct_rc_mlx5_iface_common_query(uct_iface_attr_t *iface_attr)
