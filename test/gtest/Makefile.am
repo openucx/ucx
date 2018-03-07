@@ -10,7 +10,6 @@
 # Set default configuration for running tests
 UCX_HANDLE_ERRORS        ?= freeze
 UCX_LOG_LEVEL            ?= info
-UCX_MEM_LOG_LEVEL        ?= info
 UCX_LOG_PRINT_ENABLE     ?= y
 GTEST_FILTER             ?= *
 GTEST_EXTRA_ARGS         ?=
@@ -19,7 +18,6 @@ VALGRIND_EXTRA_ARGS      ?=
 
 export UCX_HANDLE_ERRORS
 export UCX_LOG_LEVEL
-export UCX_MEM_LOG_LEVEL
 export UCX_LOG_PRINT_ENABLE
 
 GTEST_ARGS = \
@@ -247,7 +245,6 @@ test: ucx gtest
 test_gdb: ucx gtest
 	echo -e 'r\ninit-if-undefined $$_exitcode=-1\nif $$_exitcode>=0\n\tq\nend' > .gdbcommands
 	$(LAUNCHER) env UCX_HANDLE_ERRORS=none \
-		UCX_GDB_PATH="" \
 		gdb -x .gdbcommands --args $(GDB_ARGS) \
 			$(abs_builddir)/gtest $(GTEST_ARGS)
 
