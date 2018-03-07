@@ -166,7 +166,6 @@ int main(int argc, char **argv)
 
     if (print_flags & UCS_CONFIG_PRINT_CONFIG) {
         ucs_config_parser_print_all_opts(stdout, print_flags);
-        ucm_config_print(stdout, print_flags);
     }
 
     if (print_opts & PRINT_DEVICES) {

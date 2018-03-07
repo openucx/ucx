@@ -11,13 +11,12 @@
 #  include "config.h"
 #endif
 
+#include <ucm/api/ucm.h>
 #include <ucs/config/types.h>
-
-#include "ucm_config.h"
 
 
 #define ucm_log(_level, _message, ...) \
-    if (((_level) <= UCS_MAX_LOG_LEVEL) && ((_level) <= ucm_global_config.log_level)) { \
+    if (((_level) <= UCS_MAX_LOG_LEVEL) && ((_level) <= ucm_global_opts.log_level)) { \
         __ucm_log(__FILE__, __LINE__, __FUNCTION__, (_level), _message, \
                   ## __VA_ARGS__); \
     }

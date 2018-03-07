@@ -13,6 +13,7 @@
 #include <dlfcn.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define CHKERR_JUMP(cond, msg, label) \
     do { \
@@ -78,7 +79,7 @@ static void event_callback(ucm_event_type_t event_type, ucm_event_t *event,
     }
 }
 
-static ucs_status_t set_event_handler (void *dl, int events)
+static ucs_status_t set_event_handler(void *dl, int events)
 {
     ucs_status_t (*set_handler)(int events, int priority,
                                 ucm_event_callback_t cb, void *arg);
@@ -91,18 +92,9 @@ static ucs_status_t set_event_handler (void *dl, int events)
 
 static ucs_status_t disable_memory_hooks(void *dl)
 {
-    ucs_status_t (*modify_cfg)(const char *name, const char *val);
-    ucs_status_t status;
-
-    DL_FIND_FUNC(dl, "ucm_config_modify", modify_cfg,
-                 return UCS_ERR_UNSUPPORTED);
-
-    status = modify_cfg("MALLOC_HOOKS", "no");
-    if (status == UCS_OK) {
-        status = modify_cfg("MMAP_RELOC", "no");
-    }
-
-    return status;
+    setenv("UCX_MEM_MALLOC_HOOKS", "n", 1);
+    setenv("UCX_MEM_MMAP_RELOC",   "n", 1);
+    return UCS_OK;
 }
 
 void* open_dyn_lib(const char *lib_path)

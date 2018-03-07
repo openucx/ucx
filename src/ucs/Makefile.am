@@ -101,6 +101,7 @@ libucs_la_SOURCES = \
 	async/pipe.c \
 	async/thread.c \
 	config/global_opts.c \
+	config/ucm_opts.c \
 	config/parser.c \
 	datastruct/arbiter.c \
 	datastruct/callbackq.c \
