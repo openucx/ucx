@@ -80,3 +80,9 @@
    ...
    fun:gdr_copy_to_bar
 }
+{
+   res_domain_leak
+   Memcheck:Leak
+   ...
+   fun:ibv_exp_create_res_domain
+}
