@@ -537,15 +537,20 @@ static ucs_status_t uct_ib_iface_set_moderation(struct ibv_cq *cq,
 static int uct_ib_iface_res_domain_cmp(uct_ib_iface_res_domain_t *res_domain,
                                        uct_ib_iface_t *iface)
 {
+#if HAVE_IBV_EXP_RES_DOMAIN
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
 
     return res_domain->ibv_domain->context == dev->ibv_context;
+#else
+    return 1;
+#endif
 }
 
 static ucs_status_t
 uct_ib_iface_res_domain_init(uct_ib_iface_res_domain_t *res_domain,
                              uct_ib_iface_t *iface)
 {
+#if HAVE_IBV_EXP_RES_DOMAIN
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     struct ibv_exp_res_domain_init_attr attr;
 
@@ -571,12 +576,13 @@ uct_ib_iface_res_domain_init(uct_ib_iface_res_domain_t *res_domain,
                   uct_ib_device_name(dev));
         return UCS_ERR_IO_ERROR;
     }
-
+#endif
     return UCS_OK;
 }
 
 static void uct_ib_iface_res_domain_cleanup(uct_ib_iface_res_domain_t *res_domain)
 {
+#if HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_destroy_res_domain_attr attr;
     int ret;
 
@@ -586,6 +592,7 @@ static void uct_ib_iface_res_domain_cleanup(uct_ib_iface_res_domain_t *res_domai
     if (ret != 0) {
         ucs_warn("ibv_exp_destroy_res_domain() failed: %m");
     }
+#endif
 }
 
 /**

@@ -920,7 +920,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 
 #  if HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE
     if (dev->dev_attr.exp_atomic_cap == IBV_EXP_ATOMIC_HCA_REPLY_BE) {
-        qp_init_attr.comp_mask      |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
+        qp_init_attr.comp_mask       |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
         qp_init_attr.exp_create_flags = IBV_EXP_QP_CREATE_ATOMIC_BE_REPLY;
     }
 #  endif
