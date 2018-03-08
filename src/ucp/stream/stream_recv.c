@@ -12,7 +12,7 @@
 #include <ucp/stream/stream.h>
 
 #include <ucs/datastruct/mpool.inl>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 
 #include <ucp/tag/eager.h> /* TODO: remove ucp_eager_sync_hdr_t usage */
 
@@ -151,13 +151,21 @@ UCS_PROFILE_FUNC_VOID(ucp_stream_data_release, (ep, data),
 static UCS_F_ALWAYS_INLINE ssize_t
 ucp_stream_rdata_unpack(const void *rdata, size_t length, ucp_request_t *dst_req)
 {
-    /* Truncated error is not actual for stream, need to adjust */
-    size_t       valid_len = ucs_min((dst_req->recv.length -
-                                      dst_req->recv.stream.offset), length);
+    size_t       valid_len;
+    int          last;
     ucs_status_t status;
 
+    /* Truncated error is not actual for stream, need to adjust */
+    valid_len = dst_req->recv.length - dst_req->recv.stream.offset;
+    if (valid_len <= length) {
+        last = (valid_len == length);
+    } else {
+        valid_len = length;
+        last      = !(dst_req->flags & UCP_REQUEST_FLAG_STREAM_RECV_WAITALL);
+    }
+
     status = ucp_request_recv_data_unpack(dst_req, rdata, valid_len,
-                                          dst_req->recv.stream.offset, 1);
+                                          dst_req->recv.stream.offset, last);
     if (ucs_likely(status == UCS_OK)) {
         dst_req->recv.stream.offset += valid_len;
         ucs_trace_data("unpacked %zd bytes of stream data %p",
@@ -220,11 +228,12 @@ ucp_stream_process_rdesc(ucp_recv_desc_t *rdesc, ucp_ep_ext_stream_t *ep_stream,
 static UCS_F_ALWAYS_INLINE void
 ucp_stream_recv_request_init(ucp_request_t *req, void *buffer, size_t count,
                              size_t length, ucp_datatype_t datatype,
-                             ucp_stream_recv_callback_t cb)
+                             ucp_stream_recv_callback_t cb,
+                             uint16_t request_flags)
 {
-    req->flags              = UCP_REQUEST_FLAG_CALLBACK |
-                              UCP_REQUEST_FLAG_STREAM_RECV;
+    req->flags              = UCP_REQUEST_FLAG_CALLBACK | request_flags;
 #if ENABLE_ASSERT
+    req->flags             |= UCP_REQUEST_FLAG_STREAM_RECV;
     req->status             = UCS_OK; /* for ucp_request_recv_data_unpack() */
 #endif
     req->recv.stream.cb     = cb;
@@ -280,7 +289,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
         goto out_status;
     }
 
-    ucp_stream_recv_request_init(req, buffer, count, dt_length, datatype, cb);
+    ucp_stream_recv_request_init(req, buffer, count, dt_length, datatype, cb,
+                                 (flags & UCP_STREAM_RECV_FLAG_WAITALL) ?
+                                 UCP_REQUEST_FLAG_STREAM_RECV_WAITALL : 0);
 
     /* OK, lets obtain all arrived data which matches the recv size */
     while ((req->recv.stream.offset < req->recv.length) &&
@@ -294,9 +305,11 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
 
         /*
          * NOTE: generic datatype can be completed with any amount of data to
-         *       avoid extra logic in ucp_stream_process_rdesc
+         *       avoid extra logic in ucp_stream_process_rdesc, exception is
+         *       WAITALL flag
          */
-        if (ucs_unlikely(UCP_DT_IS_GENERIC(req->recv.datatype))) {
+        if (ucs_unlikely(UCP_DT_IS_GENERIC(req->recv.datatype)) &&
+            !(req->flags & UCP_REQUEST_FLAG_STREAM_RECV_WAITALL)) {
             break;
         }
     }

@@ -401,14 +401,6 @@ void uct_config_release(void *config)
     ucs_free(bundle);
 }
 
-void uct_config_print(const void *config, FILE *stream, const char *title,
-                      ucs_config_print_flags_t print_flags)
-{
-    uct_config_bundle_t *bundle = (uct_config_bundle_t *)config - 1;
-    ucs_config_parser_print_opts(stream, title, bundle->data, bundle->table,
-                                 bundle->table_prefix, print_flags);
-}
-
 ucs_status_t uct_config_get(void *config, const char *name, char *value,
                             size_t max)
 {
@@ -421,28 +413,6 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
 {
     uct_config_bundle_t *bundle = (uct_config_bundle_t *)config - 1;
     return ucs_config_parser_set_value(bundle->data, bundle->table, name, value);
-}
-
-void uct_md_component_config_print(ucs_config_print_flags_t print_flags)
-{
-    uct_md_component_t *mdc;
-    uct_md_config_t *md_config;
-    char cfg_title[UCT_TL_NAME_MAX + 128];
-    ucs_status_t status;
-
-    /* go over the list of md components and print the config table per each */
-    ucs_list_for_each(mdc, &uct_md_components_list, list)
-    {
-        snprintf(cfg_title, sizeof(cfg_title), "%s MD component configuration",
-                 mdc->name);
-        status = uct_md_config_read(mdc->name, NULL, NULL, &md_config);
-        if (status != UCS_OK) {
-            ucs_error("Failed to read md_config for MD component %s", mdc->name);
-            continue;
-        }
-        uct_config_print(md_config, stdout, cfg_title, print_flags);
-        uct_config_release(md_config);
-    }
 }
 
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)

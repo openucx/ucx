@@ -1,13 +1,12 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
 
-#define HAVE_PROFILING 1
-#include <ucs/debug/profile.h>
-
+#include <ucs/profile/profile_on.h>
 #include <stdio.h>
+#include <math.h>
 
 
 /* calc_pi() would be profiled */

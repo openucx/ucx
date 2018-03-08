@@ -383,12 +383,12 @@ typedef struct uct_rc_am_short_hdr {
       }
 
 #  define UCT_RC_IFACE_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
-                                       _pack_cb, _arg, _length) \
+                                         _pack_cb, _arg, _length) \
        { \
            void *hdr; \
            UCT_RC_IFACE_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, hdr) \
            (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
-           _length = pack_cb(hdr, arg); \
+           _length = _pack_cb(hdr, _arg); \
        }
 
 ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,

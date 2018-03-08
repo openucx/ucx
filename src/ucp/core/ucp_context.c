@@ -197,6 +197,8 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {NULL}
 };
+UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
+
 
 static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "mm", "knem", "cma", NULL } },
@@ -1019,7 +1021,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
 
     ucp_get_version(&major_version, &minor_version, &release_number);
 
-    if ((api_major_version != major_version) || (api_minor_version != minor_version)) {
+    if ((api_major_version != major_version) ||
+        ((api_major_version == major_version) && (api_minor_version > minor_version))) {
         ucs_warn("UCP version is incompatible, required: %d.%d, actual: %d.%d (release %d)",
                   api_major_version, api_minor_version,
                   major_version, minor_version, release_number);

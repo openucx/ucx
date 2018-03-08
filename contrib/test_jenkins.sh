@@ -356,8 +356,8 @@ run_hello() {
 	if [ ! -x ${test_name} ]
 	then
 		gcc -o ${test_name} ${ucx_inst}/share/ucx/examples/${test_name}.c \
-		-l${api} -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
-		-Wl,-rpath=${ucx_inst}/lib
+		    -l${api} -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
+		    -Wl,-rpath=${ucx_inst}/lib
 	fi
 
 	# set smaller timeouts so the test will complete faster
@@ -428,6 +428,63 @@ run_uct_hello() {
 	rm -f ./uct_hello_world
 }
 
+run_client_server() {
+    dev=$1
+
+    test_name=ucp_client_server
+
+    if [ ! -x ${test_name} ]
+    then
+        gcc -o ${test_name} ${ucx_inst}/share/ucx/examples/${test_name}.c \
+            -lucp -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
+            -Wl,-rpath=${ucx_inst}/lib
+    fi
+
+    iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
+    if [ -n "$iface" ]
+    then
+        server_ip=`ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}'`
+    else
+        return
+    fi
+
+    server_port=$((10000 + EXECUTOR_NUMBER))
+
+    # run server side
+    UCX_NET_DEVICES=${dev} UCX_TLS=rc ./${test_name} -p ${server_port} &
+    hw_server_pid=$!
+
+    sleep 5
+
+    # need to be ran in background to reflect application PID in $!
+    UCX_NET_DEVICES=${dev} UCX_TLS=rc ./${test_name} -a ${server_ip} -p ${server_port} &
+    hw_client_pid=$!
+
+    wait ${hw_client_pid} ${hw_server_pid}
+
+}
+
+run_ucp_client_server() {
+
+    if [ ! -r /dev/infiniband/rdma_cm  ]
+    then
+        return
+    fi
+
+    ret=`which ibdev2netdev`
+    if [ -z "$ret" ]
+    then
+        return
+    fi
+
+    for ucx_dev in $(get_active_ib_devices)
+    do
+        echo "==== Running UCP client-server  ===="
+        run_client_server ${ucx_dev}
+    done
+    rm -f ./ucp_client_server
+}
+
 #
 # Run UCX performance test with MPI
 #
@@ -493,9 +550,11 @@ test_malloc_hooks_mpi() {
 run_mpi_tests() {
 	echo "1..2" > mpi_tests.tap
 
-	#load cuda modules if available
-	module_load dev/cuda || true
-	module_load dev/gdrcopy || true
+	#try load cuda modules if nvidia driver is installed
+	if [ -f "/proc/driver/nvidia/version" ]; then
+		module_load dev/cuda || true
+		module_load dev/gdrcopy || true
+	fi
 
 	if module_load hpcx-gcc
 	then
@@ -533,17 +592,39 @@ run_mpi_tests() {
 # Test profiling infrastructure
 #
 test_profiling() {
-	echo "==== Running profiling test ===="
-	UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./test/apps/test_profiling
+	echo "==== Running profiling example  ===="
+
+	# configure release mode, application profiling should work
+	../contrib/configure-release --prefix=$ucx_inst
+	$MAKE clean
+	$MAKE
+
+	# compile the profiling example code
+	gcc -o ucx_profiling ${ucx_inst}/share/ucx/examples/ucx_profiling.c \
+		-lm -lucs -I${ucx_inst}/include -L${ucx_inst}/lib -Wl,-rpath=${ucx_inst}/lib
+
+	UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./ucx_profiling
 
 	UCX_READ_PROFILE=${ucx_inst}/bin/ucx_read_profile
 	$UCX_READ_PROFILE -r ucx_jenkins.prof | grep "printf" -C 20
 	$UCX_READ_PROFILE -r ucx_jenkins.prof | grep -q "calc_pi"
 	$UCX_READ_PROFILE -r ucx_jenkins.prof | grep -q "print_pi"
+}
+
+test_dlopen() {
+	../contrib/configure-release --prefix=$ucx_inst
+	$MAKE clean
+	$MAKE
 
 	echo "==== Running dlopen test ===="
-	strace ./test/apps/test_profiling &> strace.log
+	strace ./ucx_profiling &> strace.log
 	! grep '^socket' strace.log
+}
+
+test_memtrack() {
+	../contrib/configure-devel --prefix=$ucx_inst
+	$MAKE clean
+	$MAKE
 
 	echo "==== Running memtrack test ===="
 	UCX_MEMTRACK_DEST=stdout ./test/gtest/gtest --gtest_filter=test_memtrack.sanity
@@ -727,7 +808,10 @@ run_tests() {
 
 	do_distributed_task 1 4 run_ucp_hello
 	do_distributed_task 2 4 run_uct_hello
+	do_distributed_task 1 4 run_ucp_client_server
 	do_distributed_task 3 4 test_profiling
+	do_distributed_task 3 4 test_dlopen
+	do_distributed_task 3 4 test_memtrack
 
 	# all are running gtest
 	run_gtest

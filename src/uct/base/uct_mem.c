@@ -8,7 +8,8 @@
 #include "uct_md.h"
 
 #include <ucs/arch/cpu.h>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
+#include <ucs/sys/math.h>
 
 
 typedef struct {

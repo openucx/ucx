@@ -18,6 +18,7 @@
 #include <ucs/datastruct/pgtable.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/sys/rcache.h>
+#include <ucs/sys/rcache_int.h>
 #include <ucs/time/timerq.h>
 #include <ucs/time/timer_wheel.h>
 #include <ucs/type/class.h>

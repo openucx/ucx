@@ -254,10 +254,6 @@ ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
         return UCS_OK;
     }
 
-    /* If waiting for FC grant, return NO_RESOURCE to prevent ep destruction.
-     * Otherwise grant for destroyed ep will arrive and there will be a
-     * segfault when we will try to access the ep by address from the grant
-     * message. */
     if (!uct_rc_iface_has_tx_resources(&iface->super)) {
         return UCS_ERR_NO_RESOURCE;
     }

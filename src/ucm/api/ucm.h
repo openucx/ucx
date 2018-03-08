@@ -37,10 +37,22 @@ typedef enum ucm_event_type {
     UCM_EVENT_VM_MAPPED       = UCS_BIT(16),
     UCM_EVENT_VM_UNMAPPED     = UCS_BIT(17),
 
+    /* Non-accessible memory alloc/free events */
+    UCM_EVENT_MEM_TYPE_ALLOC  = UCS_BIT(20),
+    UCM_EVENT_MEM_TYPE_FREE   = UCS_BIT(21),
+
     /* Auxiliary flags */
     UCM_EVENT_FLAG_NO_INSTALL = UCS_BIT(24)
 
 } ucm_event_type_t;
+
+/**
+ * @brief Memory types for alloc and free events
+ */
+typedef enum ucm_mem_type {
+    /*cuda memory */
+    UCM_MEM_TYPE_CUDA         = UCS_BIT(0)
+} ucm_mem_type_t;
 
 
 /**
@@ -128,7 +140,37 @@ typedef union ucm_event {
         size_t         size;
     } vm_mapped, vm_unmapped;
 
+    /*
+     * memory type allocation and deallocation event
+     */
+    struct {
+        void           *address;
+        size_t         size;
+        ucm_mem_type_t mem_type;
+    } mem_type;
+
 } ucm_event_t;
+
+
+/**
+ * @brief Global UCM configuration.
+ *
+ * Can be safely modified before using UCM functions.
+ */
+typedef struct ucm_global_config {
+    ucs_log_level_t log_level;                   /* Logging level */
+    int             enable_events;               /* Enable memory events */
+    int             enable_mmap_reloc;           /* Enable installing mmap relocations */
+    int             enable_malloc_hooks;         /* Enable installing malloc hooks */
+    int             enable_malloc_reloc;         /* Enable installing malloc relocations */
+    int             enable_cuda_reloc;           /* Enable installing CUDA relocations */
+    int             enable_dynamic_mmap_thresh;  /* Enable adaptive mmap threshold */
+    size_t          alloc_alignment;             /* Alignment for memory allocations */
+} ucm_global_config_t;
+
+
+/* Global UCM configuration */
+extern ucm_global_config_t ucm_global_opts;
 
 
 /**
@@ -167,27 +209,6 @@ typedef union ucm_event {
  */
 typedef void (*ucm_event_callback_t)(ucm_event_type_t event_type,
                                      ucm_event_t *event, void *arg);
-
-
-
-/**
- * @brief Print UCM global configuration to a stream.
- *
- * @param [in]  stream        Output stream to print to.
- * @param [in]  print_flags   Controls how the configuration is printed.
- */
-void ucm_config_print(FILE *stream, ucs_config_print_flags_t print_flags);
-
-
-/**
- * @brief Modify UCM global configuration.
- *
- * @param [in]  name          Configuration variable name.
- * @param [in]  value         Value to set.
- *
- * @return Error code.
- */
-ucs_status_t ucm_config_modify(const char *name, const char *value);
 
 
 /**

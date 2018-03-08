@@ -5,12 +5,14 @@
  */
 
 #include "log.h"
+#include "sys.h"
 
 #include <ucs/type/component.h>
 #include <sys/time.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -110,7 +112,7 @@ out:
 static void ucm_log_vsnprintf(char *buf, size_t max, const char *fmt, va_list ap)
 {
     const char *pf;
-    char *pb, *endb, *ps;
+    char *pb, *endb;
     union {
         char          *s;
         long          d;
@@ -147,10 +149,7 @@ static void ucm_log_vsnprintf(char *buf, size_t max, const char *fmt, va_list ap
 
             /* Error message */
             case 'm':
-                ps = strerror_r(eno, pb, endb - pb);
-                if (ps != pb) {
-                    strncpy(pb, ps, endb - pb);
-                }
+                ucm_strerror(eno, pb, endb - pb);
                 pb += strlen(pb);
                 goto done;
 

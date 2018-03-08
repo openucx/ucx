@@ -102,7 +102,9 @@ typedef struct uct_md_registered_tl {
     }; \
     UCS_STATIC_INIT { \
         ucs_list_add_tail(&uct_md_components_list, &_mdc.list); \
-    }
+    } \
+    UCS_CONFIG_REGISTER_TABLE(_cfg_table, _name" memory domain", _cfg_prefix, \
+                              _cfg_struct)
 
 
 /**

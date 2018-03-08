@@ -1,21 +1,23 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
 
-#include "rcache.h"
 
 #include <ucs/arch/atomic.h>
 #include <ucs/type/class.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/stats/stats.h>
+#include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
 
+#include "rcache.h"
+#include "rcache_int.h"
 
 #define ucs_rcache_region_log(_level, _message, ...) \
     do { \
@@ -40,6 +42,26 @@ typedef struct ucs_rcache_inv_entry {
     ucs_pgt_addr_t           start;
     ucs_pgt_addr_t           end;
 } ucs_rcache_inv_entry_t;
+
+
+#if ENABLE_STATS
+static ucs_stats_class_t ucs_rcache_stats_class = {
+    .name = "rcache",
+    .num_counters = UCS_RCACHE_STAT_LAST,
+    .counter_names = {
+        [UCS_RCACHE_GETS]               = "gets",
+        [UCS_RCACHE_HITS_FAST]          = "hits_fast",
+        [UCS_RCACHE_HITS_SLOW]          = "hits_slow",
+        [UCS_RCACHE_MISSES]             = "misses",
+        [UCS_RCACHE_MERGES]             = "regions_merged",
+        [UCS_RCACHE_UNMAPS]             = "unmap_events",
+        [UCS_RCACHE_UNMAP_INVALIDATES]  = "regions_inv_unmap",
+        [UCS_RCACHE_PUTS]               = "puts",
+        [UCS_RCACHE_REGS]               = "mem_regs",
+        [UCS_RCACHE_DEREGS]             = "mem_deregs",
+    }
+};
+#endif
 
 
 static void __ucs_rcache_region_log(const char *file, int line, const char *function,
@@ -156,6 +178,7 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
     ucs_assert(!(region->flags & UCS_RCACHE_REGION_FLAG_PGTABLE));
 
     if (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) {
+        UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_DEREGS, 1);
         UCS_PROFILE_CODE("mem_dereg") {
             rcache->params.ops->mem_dereg(rcache->params.context, rcache, region);
         }
@@ -223,6 +246,7 @@ static void ucs_rcache_invalidate_range(ucs_rcache_t *rcache, ucs_pgt_addr_t sta
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
         /* all regions on the list are in the page table */
         ucs_rcache_region_invalidate(rcache, region, 1, 0);
+        UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_UNMAP_INVALIDATES, 1);
     }
 }
 
@@ -273,6 +297,7 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
         entry->start = start;
         entry->end   = end;
         ucs_queue_push(&rcache->inv_q, &entry->queue);
+        UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_UNMAPS, 1);
     } else {
         ucs_error("Failed to allocate invalidation entry for 0x%lx..0x%lx, "
                   "data corruption may occur", start, end);
@@ -341,6 +366,7 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
             return UCS_ERR_ALREADY_EXISTS;
         }
 
+        UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_MERGES, 1);
         /*
          * If we don't provide some of the permissions the other region had,
          * we might want to expand our permissions to support them. We can
@@ -427,6 +453,7 @@ retry:
          * the lock)
          */
         status = region->status;
+        UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_HITS_SLOW, 1);
         goto out_set_region;
     } else if (status != UCS_OK) {
         /* Could not create a region because there are overlapping regions which
@@ -458,6 +485,8 @@ retry:
     /* If memory registration failed, keep the region and mark it as invalid,
      * to avoid numerous retries of registering the region.
      */
+    UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_REGS, 1);
+
     region->prot     = prot;
     region->flags    = UCS_RCACHE_REGION_FLAG_PGTABLE;
     region->refcount = 1;
@@ -486,6 +515,8 @@ retry:
     region->flags   |= UCS_RCACHE_REGION_FLAG_REGISTERED;
     region->refcount = 2; /* Page-table + user */
 
+    UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_MISSES, 1);
+
     ucs_rcache_region_trace(rcache, region, "created");
 
 out_set_region:
@@ -512,6 +543,7 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
                    length);
 
     pthread_rwlock_rdlock(&rcache->lock);
+    UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_GETS, 1);
     if (ucs_queue_is_empty(&rcache->inv_q)) {
         pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &rcache->pgtable,
                                       start);
@@ -522,6 +554,7 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
             {
                 ucs_rcache_region_hold(rcache, region);
                 *region_p = region;
+                UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_HITS_FAST, 1);
                 pthread_rwlock_unlock(&rcache->lock);
                 return UCS_OK;
             }
@@ -541,6 +574,7 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
 void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
     ucs_rcache_region_put_internal(rcache, region, 1, 0);
+    UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_PUTS, 1);
 }
 
 static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
@@ -565,12 +599,18 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
         goto err;
     }
 
+    status = UCS_STATS_NODE_ALLOC(&self->stats, &ucs_rcache_stats_class,
+                                  stats_parent);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
     self->params = *params;
 
     self->name = strdup(name);
     if (self->name == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto err_destroy_stats;
     }
 
     ret = pthread_rwlock_init(&self->lock, NULL);
@@ -618,6 +658,8 @@ err_destroy_rwlock:
     pthread_rwlock_destroy(&self->lock);
 err_free_name:
     free(self->name);
+err_destroy_stats:
+    UCS_STATS_NODE_FREE(self->stats);
 err:
     return status;
 }
@@ -633,6 +675,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
     ucs_pgtable_cleanup(&self->pgtable);
     pthread_spin_destroy(&self->inv_lock);
     pthread_rwlock_destroy(&self->lock);
+    UCS_STATS_NODE_FREE(self->stats);
     free(self->name);
 }
 

@@ -1005,19 +1005,6 @@ void uct_config_release(void *config);
 
 
 /**
- * @ingroup UCT_RESOURCE
- * @brief Print interface/MD configuration to a stream.
- *
- * @param [in]  config        Configuration to print.
- * @param [in]  stream        Output stream to print to.
- * @param [in]  title         Title to the output.
- * @param [in]  print_flags   Controls how the configuration is printed.
- */
-void uct_config_print(const void *config, FILE *stream, const char *title,
-                      ucs_config_print_flags_t print_flags);
-
-
-/**
  * @ingroup UCT_CONTEXT
  * @brief Get value by name from interface/MD configuration.
  *

@@ -69,13 +69,14 @@ data_type_desc_t::make(ucp_datatype_t datatype, const void *buf, size_t length,
 int dt_gen_start_count  = 0;
 int dt_gen_finish_count = 0;
 
-static void* dt_common_start(size_t count)
+static void* dt_common_start(void *context, size_t count)
 {
     dt_gen_state *dt_state = new dt_gen_state;
 
     dt_state->count   = count;
     dt_state->started = 1;
     dt_state->magic   = ucp::MAGIC;
+    dt_state->context = context;
     dt_gen_start_count++;
 
     return dt_state;
@@ -84,12 +85,12 @@ static void* dt_common_start(size_t count)
 static void* dt_common_start_pack(void *context, const void *buffer,
                                   size_t count)
 {
-    return dt_common_start(count);
+    return dt_common_start(NULL, count);
 }
 
 static void* dt_common_start_unpack(void *context, void *buffer, size_t count)
 {
-    return dt_common_start(count);
+    return dt_common_start(context, count);
 }
 
 template <typename T>
@@ -126,15 +127,18 @@ ucs_status_t dt_unpack(void *state, size_t offset, const void *src,
                        size_t length)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
+    std::vector<T> *ctx;
     uint32_t count;
 
     EXPECT_GT(dt_gen_start_count, dt_gen_finish_count);
     EXPECT_EQ(1, dt_state->started);
     EXPECT_EQ(uint32_t(MAGIC), dt_state->magic);
 
+    ctx = reinterpret_cast<std::vector<T>*>(dt_state->context);
     count = length / sizeof(T);
     for (unsigned i = 0; i < count; ++i) {
-        T expected = (offset / sizeof(T)) + i;
+        T expected = ctx ? (*ctx)[offset / sizeof(T) + i] :
+                     (offset / sizeof(T)) + i;
         T actual   = ((T*)src)[i];
         if (actual != expected) {
             UCS_TEST_ABORT("Invalid data at index " << i << ". expected: " <<

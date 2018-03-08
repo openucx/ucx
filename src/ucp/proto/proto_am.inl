@@ -9,7 +9,7 @@
 #include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/dt.h>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 
 #define UCP_STATUS_PENDING_SWITCH (UCS_ERR_LAST - 1)
 

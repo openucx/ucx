@@ -653,7 +653,7 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
         return UCS_ERR_IO_ERROR;
     }
 
-    iface->rx.srq.available   = srq_init_attr->base.attr.max_wr;
+    iface->rx.srq.quota = srq_init_attr->base.attr.max_wr;
 
     ucs_debug("Tag Matching enabled: tag list size %d", iface->tm.num_tags);
 

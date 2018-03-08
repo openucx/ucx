@@ -493,7 +493,11 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
     ucs_assert_always(ctl->conn_req.conn_id == ep->conn_id);
     ucs_assert_always(uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id) == ep->dest_ep_id);
     /* creq must always have same psn */
-    ucs_assert_always(ep->rx.ooo_pkts.head_sn == neth->psn);
+    ucs_assertv_always(ep->rx.ooo_pkts.head_sn == neth->psn,
+                       "iface=%p ep=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
+                       "neth_psn=%u ep_flags=0x%x",
+                       iface, ep, ep->conn_id, ep->ep_id, ep->dest_ep_id,
+                       ep->rx.ooo_pkts.head_sn, neth->psn, ep->flags);
     /* scedule connection reply op */
     UCT_UD_EP_HOOK_CALL_RX(ep, neth, sizeof(*neth) + sizeof(*ctl));
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ)) {

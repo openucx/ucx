@@ -8,7 +8,9 @@
 extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/sys/math.h>
+#include <ucs/stats/stats.h>
 #include <ucs/sys/rcache.h>
+#include <ucs/sys/rcache_int.h>
 #include <ucs/sys/sys.h>
 }
 
@@ -41,7 +43,7 @@ protected:
             reinterpret_cast<void*>(this)
         };
         UCS_TEST_CREATE_HANDLE(ucs_rcache_t*, m_rcache, ucs_rcache_destroy,
-                               ucs_rcache_create, &params, "test", NULL);
+                               ucs_rcache_create, &params, "test", ucs_stats_get_root());
     }
 
     virtual void cleanup() {
@@ -602,3 +604,164 @@ UCS_MT_TEST_F(test_rcache_no_register, merge_invalid_prot_slow, 5)
 
     munmap(mem, size1+size2);
 }
+
+#if ENABLE_STATS
+class test_rcache_stats : public test_rcache {
+protected:
+
+    virtual void init() {
+        ucs_stats_cleanup();
+        push_config();
+        modify_config("STATS_DEST",    "file:/dev/null");
+        modify_config("STATS_TRIGGER", "exit");
+        ucs_stats_init();
+        ASSERT_TRUE(ucs_stats_is_active());
+        test_rcache::init();
+    }
+
+    virtual void cleanup() {
+        test_rcache::cleanup();
+        ucs_stats_cleanup();
+        pop_config();
+        ucs_stats_init();
+    }
+
+    int get_counter(int stat) {
+        return (int)UCS_STATS_GET_COUNTER(m_rcache.get()->stats, stat);
+    }
+
+    /* a helper function for stats tests debugging */
+    void dump_stats() {
+        printf("gets %d hf %d hs %d misses %d merges %d unmaps %d"
+               " unmaps_inv %d puts %d regs %d deregs %d\n",
+               get_counter(UCS_RCACHE_GETS),
+               get_counter(UCS_RCACHE_HITS_FAST),
+               get_counter(UCS_RCACHE_HITS_SLOW),
+               get_counter(UCS_RCACHE_MISSES),
+               get_counter(UCS_RCACHE_MERGES),
+               get_counter(UCS_RCACHE_UNMAPS),
+               get_counter(UCS_RCACHE_UNMAP_INVALIDATES),
+               get_counter(UCS_RCACHE_PUTS),
+               get_counter(UCS_RCACHE_REGS),
+               get_counter(UCS_RCACHE_DEREGS));
+    }
+};
+
+UCS_TEST_F(test_rcache_stats, basic) {
+    static const size_t size = 4096;
+    void *ptr = malloc(size);
+    region *r1, *r2;
+
+    r1 = get(ptr, size);
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_GETS));
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_MISSES));
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_REGS));
+
+    r2 = get(ptr, size);
+    EXPECT_EQ(2, get_counter(UCS_RCACHE_GETS));
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_HITS_FAST));
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_MISSES));
+
+    put(r1);
+    EXPECT_EQ(2, get_counter(UCS_RCACHE_GETS));
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_PUTS));
+
+    put(r2);
+    EXPECT_EQ(2, get_counter(UCS_RCACHE_GETS));
+    EXPECT_EQ(2, get_counter(UCS_RCACHE_PUTS));
+
+    free(ptr);
+    EXPECT_EQ(2, get_counter(UCS_RCACHE_GETS));
+    EXPECT_EQ(2, get_counter(UCS_RCACHE_PUTS));
+    EXPECT_EQ(0, get_counter(UCS_RCACHE_DEREGS));
+    EXPECT_EQ(0, get_counter(UCS_RCACHE_UNMAPS));
+}
+
+UCS_TEST_F(test_rcache_stats, unmap_dereg) {
+    static const size_t size1 = 1024 * 1024;
+    void *mem = alloc_pages(size1, PROT_READ|PROT_WRITE);
+    region *r1;
+
+    r1 = get(mem, size1);
+    put(r1);
+
+    /* should generate umap event but no
+     * dereg or unmap invalidation
+     */
+    munmap(mem, size1);
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAPS));
+    EXPECT_EQ(0, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
+    EXPECT_EQ(0, get_counter(UCS_RCACHE_DEREGS));
+
+    mem = alloc_pages(size1, PROT_READ|PROT_WRITE);
+    /* adding a new region shall force a processing
+     * of invalidation queue and dereg
+     */
+    r1 = get(mem, size1);
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAPS));
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_DEREGS));
+
+    /* cleanup */
+    put(r1);
+    munmap(mem, size1);
+}
+
+UCS_TEST_F(test_rcache_stats, merge) {
+    static const size_t size1 = 1024 * 1024;
+    void *mem = alloc_pages(size1, PROT_READ|PROT_WRITE);
+    region *r1, *r2;
+
+    r1 = get(mem, 8192);
+    /* should trigger merge of the two regions */
+    r2 = get((char *)mem + 4096, 8192);
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_MERGES));
+
+    EXPECT_EQ(2, get_counter(UCS_RCACHE_GETS));
+    EXPECT_EQ(2, get_counter(UCS_RCACHE_MISSES));
+
+    put(r1);
+    put(r2);
+    munmap(mem, size1);
+}
+
+UCS_TEST_F(test_rcache_stats, hits_slow) {
+    static const size_t size1 = 1024 * 1024;
+    region *r1, *r2;
+    void *mem1, *mem2;
+
+    mem1 = alloc_pages(size1, PROT_READ|PROT_WRITE);
+    r1 = get(mem1, size1);
+    put(r1);
+
+    mem2 = alloc_pages(size1, PROT_READ|PROT_WRITE);
+    r1 = get(mem2, size1);
+
+    /* generate unmap event */
+    munmap(mem1, size1);
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAPS));
+
+    EXPECT_EQ(2, get_counter(UCS_RCACHE_GETS));
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_PUTS));
+    EXPECT_EQ(2, get_counter(UCS_RCACHE_MISSES));
+    EXPECT_EQ(0, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
+    EXPECT_EQ(0, get_counter(UCS_RCACHE_DEREGS));
+    /* it should produce a slow hit because there is
+     * a pending unmap event
+     */
+    r2 = get(mem2, size1);
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_HITS_SLOW));
+
+    EXPECT_EQ(3, get_counter(UCS_RCACHE_GETS));
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_PUTS));
+    EXPECT_EQ(2, get_counter(UCS_RCACHE_MISSES));
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAPS));
+    /* unmap event processed */
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_DEREGS));
+
+    put(r1);
+    put(r2);
+    munmap(mem2, size1);
+}
+#endif
