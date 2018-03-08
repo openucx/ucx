@@ -1200,8 +1200,8 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
             continue;
         }
 
-        status = ucs_config_parser_fill_opts(opts, entry->fields, entry->prefix,
-                                             NULL, 0);
+        status = ucs_config_parser_fill_opts(opts, entry->fields, NULL,
+                                             entry->prefix, 0);
         if (status != UCS_OK) {
             ucs_free(opts);
             continue;
@@ -1232,7 +1232,7 @@ void ucs_config_parser_check_env_vars()
         }
 
         var_name = strtok_r(envstr, "=", &saveptr);
-        if (strncmp(var_name, UCS_CONFIG_PREFIX, prefix_len)) {
+        if (!var_name || strncmp(var_name, UCS_CONFIG_PREFIX, prefix_len)) {
             ucs_free(envstr);
             continue; /* Not UCX */
         }
@@ -1240,8 +1240,9 @@ void ucs_config_parser_check_env_vars()
         field_name = var_name + prefix_len;
         found = 0;
         ucs_list_for_each(entry, &ucs_config_global_list, list) {
-            status = ucs_config_parser_set_value(NULL, entry->fields, field_name,
-                                                 NULL);
+            status = ucs_config_parser_set_value_internal(NULL, entry->fields,
+                                                          field_name, NULL,
+                                                          entry->prefix, 1);
             if (status == UCS_OK) {
                 found = 1;
                 break;
