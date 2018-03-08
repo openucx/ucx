@@ -2109,7 +2109,7 @@ typedef enum ucp_request_desc_flags {
     /**
      * High-order bits are reserved for internal needs.
      */
-    UCP_REQUEST_FLAG_LAST                   = UCS_BIT(30)
+    UCP_REQUEST_FLAG_LAST                   = UCS_BIT(31)
 } ucp_request_desc_flags_t;
 
 
