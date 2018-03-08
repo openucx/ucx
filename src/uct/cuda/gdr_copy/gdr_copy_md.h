@@ -7,6 +7,7 @@
 #define UCT_GDR_COPY_MD_H
 
 #include <uct/base/uct_md.h>
+#include <uct/cuda/base/cuda_md.h>
 #include <ucs/sys/rcache.h>
 #include "gdrapi.h"
 

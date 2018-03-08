@@ -219,11 +219,13 @@ libuct_la_SOURCES += \
     cuda/gdr_copy/gdr_copy_ep.c
 endif
 noinst_HEADERS += \
+    cuda/base/cuda_md.h \
     cuda/cuda_copy/cuda_copy_md.h \
     cuda/cuda_copy/cuda_copy_iface.h \
     cuda/cuda_copy/cuda_copy_ep.h
 
 libuct_la_SOURCES += \
+    cuda/base/cuda_md.c \
     cuda/cuda_copy/cuda_copy_md.c \
     cuda/cuda_copy/cuda_copy_iface.c \
     cuda/cuda_copy/cuda_copy_ep.c

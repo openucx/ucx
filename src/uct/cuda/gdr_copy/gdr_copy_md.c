@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2017-2018.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -215,37 +215,6 @@ static ucs_status_t uct_gdr_copy_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
     return status;
 }
 
-static int uct_is_gdr_copy_mem_type_owned(uct_md_h md, void *addr, size_t length)
-{
-    int memory_type;
-    struct cudaPointerAttributes attributes;
-    cudaError_t cuda_err;
-    CUresult cu_err;
-
-    if (addr == NULL) {
-        return 0;
-    }
-
-    cu_err = cuPointerGetAttribute(&memory_type,
-                                   CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
-                                   (CUdeviceptr)addr);
-    if (cu_err != CUDA_SUCCESS) {
-        cuda_err = cudaPointerGetAttributes (&attributes, addr);
-        if (cuda_err == cudaSuccess) {
-            if (attributes.memoryType == cudaMemoryTypeDevice) {
-                return 1;
-            }
-        }
-    } else if (memory_type == CU_MEMORYTYPE_DEVICE) {
-        return 1;
-    }
-
-    /*reset cuda error if it is failed to get pointer attributes*/
-    cudaGetLastError();
-
-    return 0;
-}
-
 static ucs_status_t uct_gdr_copy_query_md_resources(uct_md_resource_desc_t **resources_p,
                                                     unsigned *num_resources_p)
 {
@@ -297,7 +266,7 @@ static uct_md_ops_t md_ops = {
     .mkey_pack          = uct_gdr_copy_mkey_pack,
     .mem_reg            = uct_gdr_copy_mem_reg,
     .mem_dereg          = uct_gdr_copy_mem_dereg,
-    .is_mem_type_owned  = uct_is_gdr_copy_mem_type_owned,
+    .is_mem_type_owned  = uct_cuda_is_mem_type_owned,
 };
 
 static inline uct_gdr_copy_rcache_region_t*
@@ -342,7 +311,7 @@ static uct_md_ops_t md_rcache_ops = {
     .mkey_pack          = uct_gdr_copy_mkey_pack,
     .mem_reg            = uct_gdr_copy_mem_rcache_reg,
     .mem_dereg          = uct_gdr_copy_mem_rcache_dereg,
-    .is_mem_type_owned  = uct_is_gdr_copy_mem_type_owned,
+    .is_mem_type_owned  = uct_cuda_is_mem_type_owned,
 };
 
 static ucs_status_t
