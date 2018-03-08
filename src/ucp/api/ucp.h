@@ -2121,10 +2121,10 @@ typedef struct ucp_request_desc {
     uint64_t                        flags;          /* ORed flags defined in
                                                      * @ref ucp_request_desc_flags_t */
     union {
-        ucp_send_callback_t         send_cb;        /* Send compleion callback */
-        ucp_tag_recv_callback_t     tag_recv_cb;    /* TAG receive completion callback */
-        ucp_stream_recv_callback_t  stream_recv_cb; /* STREAM receive completion callback */
-    };
+        ucp_send_callback_t         send;           /* Send compleion callback */
+        ucp_tag_recv_callback_t     tag_recv;       /* TAG receive completion callback */
+        ucp_stream_recv_callback_t  stream_recv;    /* STREAM receive completion callback */
+    } cb;
     void                            *context;       /* User defined context for operation.
                                                        Use @ref UCP_REQUEST_CONTEXT helper
                                                        macro to get access by request handle. */
