@@ -64,7 +64,7 @@ ucp_request_release_common(void *request, uint8_t cb_flag, const char *debug_nam
     ucp_request_t *req = (ucp_request_t*)request - 1;
     ucp_worker_h UCS_V_UNUSED worker = ucs_container_of(ucs_mpool_obj_owner(req),
                                                         ucp_worker_t, req_mp);
-    uint16_t flags;
+    uint64_t flags;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 

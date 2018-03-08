@@ -26,7 +26,7 @@ ucp_stream_send_am_short(ucp_ep_t *ep, const void *buffer, size_t length)
 
 static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
                                      const void* buffer, uintptr_t datatype,
-                                     size_t count, uint16_t flags)
+                                     size_t count, uint64_t flags)
 {
     req->flags             = flags;
     req->send.ep           = ep;
