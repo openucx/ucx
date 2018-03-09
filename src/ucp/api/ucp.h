@@ -124,16 +124,16 @@ extern size_t ucp_request_internal_size;
  *
  * @note Useful for implementation of blocking operations like MPI_Send/MPI_Recv.
  *
- * @param [in]  _request_size   Request size initialized by
+ * @param [in]  _request_size   User request size, e.g. equal to
  *                              @ref ucp_context_attr_t::requst_size.
  *
- * @return Pointer to ucp_request_desc_t for initialization.
+ * @return Pointer to ucp_request_attr_t for initialization.
  */
 #define UCP_REQUEST_ALLOCA(_request_size) \
-    (ucp_request_desc_t *)((char *)alloca((_request_size) + \
+    (ucp_request_attr_t *)((char *)alloca((_request_size) + \
                                           ucp_request_internal_size) + \
                            (_request_size) + ucp_request_internal_size - \
-                           sizeof(ucp_request_desc_t));
+                           sizeof(ucp_request_attr_t));
 
 
 /**
@@ -2065,12 +2065,12 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
 
 /**
  * @ingroup UCP_COMM
- * @brief Flags to define @ref ucp_request_desc_t::flags
+ * @brief Flags to define @ref ucp_request_attr_t::flags
  *
- * @ref ucp_request_desc_t::flags is a combination of these flags to determine
+ * @ref ucp_request_attr_t::flags is a combination of these flags to determine
  * behavior of ucp_<tag|stream>_<send|recv>_nbx functions.
  */
-typedef enum ucp_request_desc_flags {
+typedef enum ucp_request_attr_flags {
     /**
      * Return request pointer if operation was successfully completed
      * immediately. Request status can be observed with
@@ -2084,18 +2084,35 @@ typedef enum ucp_request_desc_flags {
     UCP_REQUEST_FLAG_NO_IMM_COMPLETION      = UCS_BIT(0),
 
     /**
-     * Operation will be completed with callback.
-     * @note For performance reason, callback won't be invoked if operation
-     * returns NULL. Can be used in combination with
-     * @ref UCP_REQUEST_FLAG_NO_IMM_COMPLETION flag to invoke callback for
-     * immediately completed operation.
+     * Operation will be completed with callback if
+     * ucp_<tag|stream>_<send|recv>_nbx returns a request handler.
+     * @note @ref UCP_REQUEST_FLAG_NO_IMM_COMPLETION can be used in combination
+     * with this flag to invoke callback for immediately completed operation.
      */
     UCP_REQUEST_FLAG_CALLBACK               = UCS_BIT(1),
 
     /**
-     * Must be set if request was allocated by user for performance reason.
+     * ucp_<tag|stream>_<send|recv>_nbx will perform operation using the request
+     * allocated by user and the attributes is a part of this memory.
      * @note UCP provides a helper macro @ref UCP_REQUEST_ALLOCA for allocation
-     * the request on stack.
+     * the request on stack with the following layout:
+       @verbatim
+                              P1     P2
+                              |      |
+       |----------------------|------|-----------------------------------------|
+       | Opaque UCP request   | attr | user memory associated with the request |
+       |----------------------|------|-----------------------------------------|
+       | ucp_request_size returned   | ucp_params_t::request_size or any       |
+       | by ucp_context_query()      | other required size to perform the      |
+       |                             | operation                               |
+       |-----------------------------|-----------------------------------------|
+       @endverbatim
+     * Where:
+     * - @a P1 is a pointer to @ref ucp_request_attr_t which should be
+     * initialized properly and passed to ucp_<tag|stream>_<send|recv>_nbx
+     * - @a P2 is a pointer which will be returned if the operation is not
+     * competed immediately
+     * 
      */
     UCP_REQUEST_FLAG_EXTERNAL               = UCS_BIT(2),
 
@@ -2110,16 +2127,16 @@ typedef enum ucp_request_desc_flags {
      * High-order bits are reserved for internal needs.
      */
     UCP_REQUEST_FLAG_LAST                   = UCS_BIT(30)
-} ucp_request_desc_flags_t;
+} ucp_request_attr_flags_t;
 
 
 /**
  * @ingroup UCP_COMM
- * @brief Request descroptor for ucp_<tag|stream>_<send|recv>_nbx functions.
+ * @brief Request attributes for ucp_<tag|stream>_<send|recv>_nbx functions.
  */
-typedef struct ucp_request_desc {
+typedef struct ucp_request_attr {
     uint64_t                        flags;          /* ORed flags defined in
-                                                     * @ref ucp_request_desc_flags_t */
+                                                     * @ref ucp_request_attr_flags_t */
     union {
         ucp_send_callback_t         send;           /* Send compleion callback */
         ucp_tag_recv_callback_t     tag_recv;       /* TAG receive completion callback */
@@ -2128,7 +2145,7 @@ typedef struct ucp_request_desc {
     void                            *context;       /* User defined context for operation.
                                                        Use @ref UCP_REQUEST_CONTEXT helper
                                                        macro to get access by request handle. */
-} ucp_request_desc_t;
+} ucp_request_attr_t;
 
 /**
  * @ingroup UCP_COMM
@@ -2191,7 +2208,7 @@ ucs_status_ptr_t ucp_stream_send_nb(ucp_ep_h ep, const void *buffer, size_t coun
  * @param [in]  buffer      Pointer to the message buffer (payload).
  * @param [in]  count       Number of elements to send.
  * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
- * @param [in]  rdesc       Request descriptor to determine the function behavior.
+ * @param [in]  attr        Request attributes to determine the function behavior.
  *
  * @return UCS_OK           - The send operation was completed immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
@@ -2201,12 +2218,12 @@ ucs_status_ptr_t ucp_stream_send_nb(ucp_ep_h ep, const void *buffer, size_t coun
  *                          progress of the message. The application is
  *                          responsible to release the handle using
  *                          @ref ucp_request_free routine if
- *                          @ref ucp_request_desc_t::UCP_REQUEST_FLAG_EXTERNAL flag
- *                          was not set in @ref ucp_request_desc_t::flags.
+ *                          @ref ucp_request_attr_t::UCP_REQUEST_FLAG_EXTERNAL flag
+ *                          was not set in @ref ucp_request_attr_t::flags.
  */
 ucs_status_ptr_t ucp_stream_send_nbx(ucp_ep_h ep, const void *buffer,
                                      size_t count, ucp_datatype_t datatype,
-                                     ucp_request_desc_t *rdesc);
+                                     ucp_request_attr_t *attr);
 
 
 /**
@@ -2274,7 +2291,7 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  * @param [in]  count       Number of elements to send
  * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
  * @param [in]  tag         Message tag.
- * @param [in]  rdesc       Request descroptor to determine the function
+ * @param [in]  attr        Request attributes to determine the function
  *                          behavior.
  *
  * @return UCS_OK           - The send operation was completed immediately.
@@ -2285,12 +2302,12 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  *                          progress of the message. The application is
  *                          responsible to release the handle using
  *                          @ref ucp_request_free routine if
- *                          @ref ucp_request_desc_t::UCP_REQUEST_FLAG_EXTERNAL
- *                          flag was not set in @ref ucp_request_desc_t::flags.
+ *                          @ref ucp_request_attr_t::UCP_REQUEST_FLAG_EXTERNAL
+ *                          flag was not set in @ref ucp_request_attr_t::flags.
  */
 ucs_status_ptr_t ucp_tag_send_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                                   ucp_datatype_t datatype, ucp_tag_t tag,
-                                  ucp_request_desc_t *rdesc);
+                                  ucp_request_attr_t *attr);
 
 /**
  * @ingroup UCP_COMM
@@ -2477,7 +2494,7 @@ ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t count,
  *                          valid only if return code is UCS_OK.
  * @note                    The amount of data received, in bytes, is always an
  *                          integral multiple of the @a datatype size.
- * @param [in]     rdesc    Request descriptor to determine the function
+ * @param [in]     attr     Request attributes to determine the function
  *                          behavior.
  *
  * @return UCS_OK               - The receive operation was completed
@@ -2489,12 +2506,12 @@ ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t count,
  *                          progress of the message. The application is
  *                          responsible to release the handle using
  *                          @ref ucp_request_free routine if
- *                          @ref ucp_request_desc_t::UCP_REQUEST_FLAG_EXTERNAL
- *                          flag was not set in @ref ucp_request_desc_t::flags.
+ *                          @ref ucp_request_attr_t::UCP_REQUEST_FLAG_EXTERNAL
+ *                          flag was not set in @ref ucp_request_attr_t::flags.
  */
 ucs_status_ptr_t ucp_stream_recv_nbx(ucp_ep_h ep, void *buffer, size_t count,
                                      ucp_datatype_t datatype, size_t *length,
-                                     ucp_request_desc_t *rdesc);
+                                     ucp_request_attr_t *attr);
 
 
 /**
@@ -2607,13 +2624,13 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  *                          progress of the message. The application is
  *                          responsible to release the handle using
  *                          @ref ucp_request_free routine if
- *                          @ref ucp_request_desc_t::UCP_REQUEST_FLAG_EXTERNAL flag
- *                          was not set in @ref ucp_request_desc_t::flags.
+ *                          @ref ucp_request_attr_t::UCP_REQUEST_FLAG_EXTERNAL flag
+ *                          was not set in @ref ucp_request_attr_t::flags.
  */
 ucs_status_ptr_t ucp_tag_recv_nbx(ucp_worker_h worker, void *buffer,
                                   size_t count, ucp_datatype_t datatype,
                                   ucp_tag_t tag, ucp_tag_t tag_mask,
-                                  ucp_request_desc_t *rdesc);
+                                  ucp_request_attr_t *attr);
 
 
 /**
