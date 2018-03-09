@@ -13,7 +13,7 @@
 
 #include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt.h>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucp/dt/dt.inl>
 #include <inttypes.h>
@@ -137,6 +137,10 @@ ucp_request_can_complete_stream_recv(ucp_request_t *req)
      *       completely filled */
     if (req->recv.stream.offset == req->recv.length) {
         return 1;
+    }
+
+    if (req->flags & UCP_REQUEST_FLAG_STREAM_RECV_WAITALL) {
+        return 0;
     }
 
     /* 0-length stream recv is meaningless if this was not requested explicitely */

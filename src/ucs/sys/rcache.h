@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -113,26 +113,6 @@ struct ucs_rcache_region {
     ucs_status_t           status;   /**< Current status code */
     uint8_t                prot;     /**< Protection bits */
     uint16_t               flags;    /**< Status flags. Protected by page table lock. */
-};
-
-
-struct ucs_rcache {
-    ucs_rcache_params_t    params;   /**< rcache parameters (immutable) */
-    pthread_rwlock_t       lock;     /**< Protects the page table and all regions
-                                          whose refcount is 0 */
-    ucs_pgtable_t          pgtable;  /**< page table to hold the regions */
-
-    pthread_spinlock_t     inv_lock; /**< Lock for inv_q and inv_mp. This is a
-                                          separate lock because we may want to put
-                                          regions on inv_q while the page table
-                                          lock is held by the calling context */
-    ucs_queue_head_t       inv_q;    /**< Regions which were invalidated during
-                                          memory events */
-    ucs_mpool_t            inv_mp;   /**< Memory pool to allocate entries for inv_q,
-                                          since we cannot use regulat malloc().
-                                          The backing storage is original mmap()
-                                          which does not generate memory events */
-    char                   *name;
 };
 
 

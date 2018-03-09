@@ -219,27 +219,24 @@ void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config
                                 ucs_min(iface->super.config.tx_qp_len, config->quota);
 }
 
-static ucs_status_t uct_dc_iface_init_version(uct_dc_iface_t *iface,
-                                              uct_md_h md)
+static void uct_dc_iface_init_version(uct_dc_iface_t *iface, uct_md_h md)
 {
     uct_ib_device_t *dev;
     unsigned         ver;
 
     dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     ver = uct_ib_device_spec(dev)->flags & UCT_IB_DEVICE_FLAG_DC;
+    ucs_assert(ver != UCT_IB_DEVICE_FLAG_DC);
+
+    iface->version_flag = 0;
 
     if (ver & UCT_IB_DEVICE_FLAG_DC_V2) {
         iface->version_flag = UCT_DC_IFACE_ADDR_DC_V2;
-        return UCS_OK;
     }
 
     if (ver & UCT_IB_DEVICE_FLAG_DC_V1) {
         iface->version_flag = UCT_DC_IFACE_ADDR_DC_V1;
-        return UCS_OK;
     }
-
-    iface->version_flag = 0;
-    return UCS_ERR_UNSUPPORTED;
 }
 
 UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
@@ -265,10 +262,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    status = uct_dc_iface_init_version(self, md);
-    if (status != UCS_OK) {
-        return status;
-    }
+    uct_dc_iface_init_version(self, md);
 
     self->tx.ndci                    = config->ndci;
     self->tx.policy                  = config->tx_policy;
@@ -321,8 +315,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
         uct_dc_ep_release(ep);
     }
     uct_dc_iface_dcis_destroy(self, self->tx.ndci);
-    ucs_arbiter_cleanup(&self->tx.dci_arbiter);
     uct_dc_iface_cleanup_fc_ep(self);
+    ucs_arbiter_cleanup(&self->tx.dci_arbiter);
 }
 
 UCS_CLASS_DEFINE(uct_dc_iface_t, uct_rc_iface_t);
@@ -361,7 +355,7 @@ int uct_dc_iface_is_reachable(const uct_iface_h tl_iface,
 
     ucs_assert_always(iface_addr != NULL);
 
-    return (addr->flags & iface->version_flag) &&
+    return ((addr->flags & UCT_DC_IFACE_ADDR_DC_VERS) == iface->version_flag) &&
            (UCT_DC_IFACE_ADDR_TM_ENABLED(addr) ==
             UCT_RC_IFACE_TM_ENABLED(&iface->super)) &&
            uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);

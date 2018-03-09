@@ -7,7 +7,7 @@
 #include "global_opts.h"
 
 #include <ucs/config/parser.h>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
@@ -176,7 +176,6 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, memtrack_dest), UCS_CONFIG_TYPE_STRING},
 #endif
 
-#if HAVE_PROFILING
   {"PROFILE_MODE", "",
    "Profile collection modes. If none is specified, profiling is disabled.\n"
    " - log   - Record all timestamps.\n"
@@ -192,10 +191,12 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   {"PROFILE_LOG_SIZE", "4m",
    "Maximal size of profiling log. New records will replace old records.",
    ucs_offsetof(ucs_global_opts_t, profile_log_size), UCS_CONFIG_TYPE_MEMUNITS},
-#endif
 
  {NULL}
 };
+UCS_CONFIG_REGISTER_TABLE(ucs_global_opts_table, "UCS global", NULL,
+                          ucs_global_opts_t)
+
 
 void ucs_global_opts_init()
 {

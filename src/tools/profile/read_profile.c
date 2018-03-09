@@ -4,7 +4,7 @@
  * See file LICENSE for terms.
  */
 
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 #include <ucs/datastruct/khash.h>
 
 #include <sys/signal.h>

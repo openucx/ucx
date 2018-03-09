@@ -10,7 +10,7 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 #include <inttypes.h>
 
 #define UCP_AMO_WITH_RESULT(_ep, _params, _remote_addr, _rkey, _result, _uct_func, _size) \

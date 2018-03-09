@@ -14,7 +14,6 @@
 #include <ucm/event/event.h>
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
-#include <ucm/util/ucm_config.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/preprocessor.h>
 
@@ -24,6 +23,12 @@
 #include <pthread.h>
 
 static ucm_reloc_patch_t patches[] = {
+    {UCS_PP_MAKE_STRING(cuMemFree),                 ucm_override_cuMemFree},
+    {UCS_PP_MAKE_STRING(cuMemFreeHost),             ucm_override_cuMemFreeHost},
+    {UCS_PP_MAKE_STRING(cuMemAlloc),                ucm_override_cuMemAlloc},
+    {UCS_PP_MAKE_STRING(cuMemAllocPitch),           ucm_override_cuMemAllocPitch},
+    {UCS_PP_MAKE_STRING(cuMemHostGetDevicePointer), ucm_override_cuMemHostGetDevicePointer},
+    {UCS_PP_MAKE_STRING(cuMemHostUnregister),       ucm_override_cuMemHostUnregister},
     {UCS_PP_MAKE_STRING(cudaFree),                  ucm_override_cudaFree},
     {UCS_PP_MAKE_STRING(cudaFreeHost),              ucm_override_cudaFreeHost},
     {UCS_PP_MAKE_STRING(cudaMalloc),                ucm_override_cudaMalloc},
@@ -40,7 +45,7 @@ ucs_status_t ucm_cudamem_install()
     ucm_reloc_patch_t *patch;
     ucs_status_t status;
 
-    if (!ucm_global_config.enable_cuda_hooks) {
+    if (!ucm_global_opts.enable_cuda_reloc) {
         ucm_debug("installing cudamem relocations is disabled by configuration");
         return UCS_ERR_UNSUPPORTED;
     }

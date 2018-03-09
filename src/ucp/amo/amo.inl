@@ -14,7 +14,7 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 
 static inline
 ucs_status_t ucp_amo_check_send_status(ucp_request_t *req, ucs_status_t status);

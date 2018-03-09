@@ -9,6 +9,8 @@
 
 #include "types.h"
 
+#include <ucs/datastruct/list_types.h>
+#include <ucs/type/component.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/compiler_def.h>
 #include <stdio.h>
@@ -34,27 +36,27 @@ BEGIN_C_DECLS
  */
 
 typedef struct ucs_config_parser {
-    int              (*read) (const char *buf, void *dest, const void *arg);
-    int              (*write)(char *buf, size_t max, void *src, const void *arg);
-    ucs_status_t     (*clone)(void *src, void *dest, const void *arg);
-    void             (*release)(void *ptr, const void *arg);
-    void             (*help)(char *buf, size_t max, const void *arg);
-    const void       *arg;
+    int                      (*read) (const char *buf, void *dest, const void *arg);
+    int                      (*write)(char *buf, size_t max, void *src, const void *arg);
+    ucs_status_t             (*clone)(void *src, void *dest, const void *arg);
+    void                     (*release)(void *ptr, const void *arg);
+    void                     (*help)(char *buf, size_t max, const void *arg);
+    const void               *arg;
 } ucs_config_parser_t;
 
 
 typedef struct ucs_config_array {
-    size_t              elem_size;
-    ucs_config_parser_t parser;
+    size_t                   elem_size;
+    ucs_config_parser_t      parser;
 } ucs_config_array_t;
 
 
 typedef struct ucs_config_field {
-    const char           *name;
-    const char           *dfl_value;
-    const char           *doc;
-    size_t               offset;
-    ucs_config_parser_t  parser;
+    const char               *name;
+    const char               *dfl_value;
+    const char               *doc;
+    size_t                   offset;
+    ucs_config_parser_t      parser;
 } ucs_config_field_t;
 
 
@@ -65,9 +67,30 @@ typedef struct ucs_ib_port_spec {
 
 
 typedef struct ucs_range_spec {
-    unsigned    first;  /* the first value in the range */
-    unsigned    last;   /* the last value in the range */
+    unsigned                 first;  /* the first value in the range */
+    unsigned                 last;   /* the last value in the range */
 } ucs_range_spec_t;
+
+
+typedef struct ucs_config_global_list_entry {
+    ucs_list_link_t          list;
+    const char               *name;
+    const char               *prefix;
+    ucs_config_field_t       *fields;
+    size_t                   size;
+} ucs_config_global_list_entry_t;
+
+
+#define UCS_CONFIG_REGISTER_TABLE(_fields, _name, _prefix, _type) \
+    UCS_STATIC_INIT { \
+        extern ucs_list_link_t ucs_config_global_list; \
+        static ucs_config_global_list_entry_t entry; \
+        entry.fields = _fields; \
+        entry.name   = _name; \
+        entry.prefix = _prefix; \
+        entry.size   = sizeof(_type); \
+        ucs_list_add_tail(&ucs_config_global_list, &entry.list); \
+    }
 
 
 /*
@@ -292,6 +315,14 @@ void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields);
 void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *opts,
                                   ucs_config_field_t *fields, const char *table_prefix,
                                   ucs_config_print_flags_t flags);
+
+/**
+ * Print all options defined in the library - names, values, documentation.
+ *
+ * @param stream         Output stream to print to.
+ * @param flags          Flags which control the output.
+ */
+void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t flags);
 
 /**
  * Read a value from options structure.

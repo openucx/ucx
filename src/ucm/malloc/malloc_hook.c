@@ -21,7 +21,6 @@
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/sys.h>
-#include <ucm/util/ucm_config.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/component.h>
 #include <ucs/type/spinlock.h>
@@ -226,8 +225,8 @@ static void *ucm_malloc_impl(size_t size, const char *debug_name)
     void *ptr;
 
     ucm_malloc_hook_state.hook_called = 1;
-    if (ucm_global_config.alloc_alignment > 1) {
-        ptr = ucm_dlmemalign(ucm_global_config.alloc_alignment, size);
+    if (ucm_global_opts.alloc_alignment > 1) {
+        ptr = ucm_dlmemalign(ucm_global_opts.alloc_alignment, size);
     } else {
         ptr = ucm_dlmalloc(size);
     }
@@ -240,7 +239,11 @@ static void ucm_malloc_adjust_thresholds(size_t size)
     int mmap_thresh;
 
     if (size > ucm_malloc_hook_state.max_freed_size) {
-        if (ucm_global_config.enable_dynamic_mmap_thresh &&
+        /* Valgrind limits the size of brk() segments to 8mb, so must use mmap
+         * for large allocations.
+         */
+        if (!RUNNING_ON_VALGRIND &&
+            ucm_global_opts.enable_dynamic_mmap_thresh &&
             !ucm_malloc_hook_state.trim_thresh_set &&
             !ucm_malloc_hook_state.mmap_thresh_set) {
             /* new mmap threshold is increased to the size of released block,
@@ -287,7 +290,7 @@ static void *ucm_memalign_impl(size_t alignment, size_t size, const char *debug_
     void *ptr;
 
     ucm_malloc_hook_state.hook_called = 1;
-    ptr = ucm_dlmemalign(ucs_max(alignment, ucm_global_config.alloc_alignment), size);
+    ptr = ucm_dlmemalign(ucs_max(alignment, ucm_global_opts.alloc_alignment), size);
     ucm_malloc_allocated(ptr, size, debug_name);
     return ptr;
 }
@@ -702,7 +705,7 @@ ucs_status_t ucm_malloc_install(int events)
      * valgrind anyway.
      */
 #if HAVE_MALLOC_HOOK
-    if (ucm_global_config.enable_malloc_hooks) {
+    if (ucm_global_opts.enable_malloc_hooks) {
         /* Install using malloc hooks.
          * TODO detect glibc support in configure-time.
          */
@@ -727,7 +730,7 @@ ucs_status_t ucm_malloc_install(int events)
     }
 
     /* Install using malloc symbols */
-    if (ucm_global_config.enable_malloc_reloc) {
+    if (ucm_global_opts.enable_malloc_reloc) {
         if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_MALL_SYMS)) {
             ucm_debug("installing malloc relocations");
             ucm_malloc_populate_glibc_cache();

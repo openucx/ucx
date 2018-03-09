@@ -98,7 +98,8 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_SEND_NBR_THRESH", "256k",
-   "Threshold for switching from eager to rendezvous protocol in ucp_tag_send_nbr()",
+   "Threshold for switching from eager to rendezvous protocol in ucp_tag_send_nbr().\n"
+   "Relevant only if UCX_RNDV_THRESH is set to \"auto\".",
    ucs_offsetof(ucp_config_t, ctx.rndv_send_nbr_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_THRESH_FALLBACK", "inf",
@@ -197,6 +198,8 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {NULL}
 };
+UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
+
 
 static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "mm", "knem", "cma", NULL } },

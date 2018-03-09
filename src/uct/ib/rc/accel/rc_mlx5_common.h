@@ -116,6 +116,29 @@ typedef struct uct_rc_mlx5_cmd_wq {
 
 #endif /* IBV_EXP_HW_TM  */
 
+#if HAVE_IBV_EXP_DM
+typedef struct uct_mlx5_dm_data {
+    uct_worker_tl_data_t super;
+    ucs_mpool_t          mp;
+    struct ibv_mr        *mr;
+    struct ibv_exp_dm    *dm;
+    void                 *start_va;
+    size_t               seg_len;
+    unsigned             seg_count;
+    unsigned             seg_attached;
+    uct_ib_device_t      *device;
+} uct_mlx5_dm_data_t;
+#endif
+
+typedef struct uct_common_mlx5_iface_config {
+#if HAVE_IBV_EXP_DM
+    struct {
+        size_t               seg_len;
+        unsigned             count;
+    } dm;
+#endif
+} uct_common_mlx5_iface_config_t;
+
 typedef struct uct_rc_mlx5_iface_common {
     struct {
         uct_ib_mlx5_cq_t          cq;
@@ -134,9 +157,22 @@ typedef struct uct_rc_mlx5_iface_common {
         uct_rc_mlx5_tag_entry_t   *list;
     } tm;
 #endif
+#if HAVE_IBV_EXP_DM
+    struct {
+        uct_mlx5_dm_data_t        *dm;
+        size_t                    seg_len; /* cached value to avoid double-pointer access */
+        ucs_status_t              (*am_short)(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
+                                              const void *payload, unsigned length);
+#if IBV_EXP_HW_TM
+        ucs_status_t              (*tag_short)(uct_ep_h tl_ep, uct_tag_t tag,
+                                               const void *data, size_t length);
+#endif
+    } dm;
+#endif
     UCS_STATS_NODE_DECLARE(stats);
 } uct_rc_mlx5_iface_common_t;
 
+extern ucs_config_field_t uct_mlx5_common_config_table[];
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq);
 
@@ -145,7 +181,8 @@ void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_iface_t *iface,
 
 ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                            uct_rc_iface_t *rc_iface,
-                                           uct_rc_iface_config_t *config);
+                                           uct_rc_iface_config_t *config,
+                                           uct_common_mlx5_iface_config_t *common_config);
 
 void uct_rc_mlx5_iface_common_cleanup(uct_rc_mlx5_iface_common_t *iface);
 

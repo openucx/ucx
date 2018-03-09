@@ -153,6 +153,27 @@ typedef union ucm_event {
 
 
 /**
+ * @brief Global UCM configuration.
+ *
+ * Can be safely modified before using UCM functions.
+ */
+typedef struct ucm_global_config {
+    ucs_log_level_t log_level;                   /* Logging level */
+    int             enable_events;               /* Enable memory events */
+    int             enable_mmap_reloc;           /* Enable installing mmap relocations */
+    int             enable_malloc_hooks;         /* Enable installing malloc hooks */
+    int             enable_malloc_reloc;         /* Enable installing malloc relocations */
+    int             enable_cuda_reloc;           /* Enable installing CUDA relocations */
+    int             enable_dynamic_mmap_thresh;  /* Enable adaptive mmap threshold */
+    size_t          alloc_alignment;             /* Alignment for memory allocations */
+} ucm_global_config_t;
+
+
+/* Global UCM configuration */
+extern ucm_global_config_t ucm_global_opts;
+
+
+/**
  * @brief Memory event callback.
  *
  *  This type describes a callback which handles memory events in the current process.
@@ -188,27 +209,6 @@ typedef union ucm_event {
  */
 typedef void (*ucm_event_callback_t)(ucm_event_type_t event_type,
                                      ucm_event_t *event, void *arg);
-
-
-
-/**
- * @brief Print UCM global configuration to a stream.
- *
- * @param [in]  stream        Output stream to print to.
- * @param [in]  print_flags   Controls how the configuration is printed.
- */
-void ucm_config_print(FILE *stream, ucs_config_print_flags_t print_flags);
-
-
-/**
- * @brief Modify UCM global configuration.
- *
- * @param [in]  name          Configuration variable name.
- * @param [in]  value         Value to set.
- *
- * @return Error code.
- */
-ucs_status_t ucm_config_modify(const char *name, const char *value);
 
 
 /**

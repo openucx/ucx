@@ -24,10 +24,6 @@ enum {
 };
 
 
-void print_ucp_config(ucs_config_print_flags_t print_flags);
-
-void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name);
-
 void print_version();
 
 void print_sys_info();
@@ -42,13 +38,5 @@ void print_type_info(const char * tl_name);
 void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
                     uint64_t features, size_t estimated_num_eps,
                     unsigned dev_type_bitmap);
-
-/**
- * @ingroup RESOURCE
- * @brief Print MD component configuration to a stream.
- *
- * @param [in]  print_flags   Controls how the configuration is printed.
- */
-void uct_md_component_config_print(ucs_config_print_flags_t print_flags);
 
 #endif

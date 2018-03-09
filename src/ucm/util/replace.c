@@ -44,6 +44,14 @@ UCM_OVERRIDE_FUNC(sbrk, void)
 
 #if HAVE_CUDA
 
+UCM_DEFINE_REPLACE_FUNC(cuMemFree, CUresult,-1, CUdeviceptr)
+UCM_DEFINE_REPLACE_FUNC(cuMemFreeHost, CUresult, -1, void *)
+UCM_DEFINE_REPLACE_FUNC(cuMemAlloc, CUresult, -1, CUdeviceptr *, size_t)
+UCM_DEFINE_REPLACE_FUNC(cuMemAllocPitch, CUresult, -1, CUdeviceptr *, size_t *,
+                        size_t, size_t, unsigned int)
+UCM_DEFINE_REPLACE_FUNC(cuMemHostGetDevicePointer, CUresult, -1, CUdeviceptr *,
+                        void *, unsigned int)
+UCM_DEFINE_REPLACE_FUNC(cuMemHostUnregister, CUresult, -1, void *)
 UCM_DEFINE_REPLACE_FUNC(cudaFree, cudaError_t, -1, void*)
 UCM_DEFINE_REPLACE_FUNC(cudaFreeHost, cudaError_t, -1, void*)
 UCM_DEFINE_REPLACE_FUNC(cudaMalloc, cudaError_t, -1, void**, size_t)
@@ -54,6 +62,12 @@ UCM_DEFINE_REPLACE_FUNC(cudaHostGetDevicePointer, cudaError_t, -1, void**,
 UCM_DEFINE_REPLACE_FUNC(cudaHostUnregister, cudaError_t, -1, void*)
 
 #if ENABLE_SYMBOL_OVERRIDE
+UCM_OVERRIDE_FUNC(cuMemFree,                 CUresult)
+UCM_OVERRIDE_FUNC(cuMemFreeHost,             CUresult)
+UCM_OVERRIDE_FUNC(cuMemAlloc,                CUresult)
+UCM_OVERRIDE_FUNC(cuMemAllocPitch,           CUresult)
+UCM_OVERRIDE_FUNC(cuMemHostGetDevicePointer, CUresult)
+UCM_OVERRIDE_FUNC(cuMemHostUnregister,       CUresult)
 UCM_OVERRIDE_FUNC(cudaFree,                  cudaError_t)
 UCM_OVERRIDE_FUNC(cudaFreeHost,              cudaError_t)
 UCM_OVERRIDE_FUNC(cudaMalloc,                cudaError_t)
