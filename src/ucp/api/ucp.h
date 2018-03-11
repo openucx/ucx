@@ -2,6 +2,7 @@
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -375,6 +376,22 @@ typedef enum {
     UCP_ATOMIC_FETCH_OP_CSWAP, /**< Atomic conditional swap */
     UCP_ATOMIC_FETCH_OP_LAST
 } ucp_atomic_fetch_op_t;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Flags to define behavior of @ref ucp_stream_recv_nb function
+ *
+ * This enumeration defines behavior of @ref ucp_stream_recv_nb function.
+ */
+typedef enum {
+    UCP_STREAM_RECV_FLAG_WAITALL = UCS_BIT(0)  /**< This flag requests that
+                                                    operation will not be
+                                                    completed untill all amout
+                                                    of requested data is
+                                                    received and placed in the
+                                                    user buffer. */
+} ucp_stream_recv_flags_t;
 
 
 /**
@@ -2235,7 +2252,7 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  *                          valid only if return code is UCS_OK.
  * @note                    The amount of data received, in bytes, is always an
  *                          integral multiple of the @a datatype size.
- * @param [in]     flags    Reserved for future use.
+ * @param [in]     flags    Flags defined in @ref ucp_stream_recv_flags_t.
  *
  * @return UCS_OK               - The receive operation was completed
  *                                immediately.
@@ -2502,6 +2519,53 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
 ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
                          uint64_t remote_addr, ucp_rkey_h rkey);
 
+/**
+ * @ingroup UCP_COMM
+ * @brief Non-blocking remote memory put operation.
+ *
+ * This routine initiates a storage of contiguous block of data that is
+ * described by the local address @a buffer in the remote contiguous memory
+ * region described by @a remote_addr address and the @ref ucp_rkey_h "memory
+ * handle" @a rkey.  The routine returns immediately and @b does @b not
+ * guarantee re-usability of the source address @e buffer. If the operation is
+ * completed immediately the routine return UCS_OK, otherwise UCS_INPROGRESS
+ * or an error is returned to user. If the put operation completes immediately,
+ * the routine returns UCS_OK and the call-back routine @a cb is @b not
+ * invoked. If the operation is @b not completed immediately and no error is
+ * reported, then the UCP library will schedule invocation of the call-back
+ * routine @a cb upon completion of the put operation. In other words, the
+ * completion of a put operation can be signaled by the return code or
+ * execution of the call-back.
+ *
+ * @note A user can use @ref ucp_worker_flush_nb "ucp_worker_flush_nb()"
+ * in order to guarantee re-usability of the source address @e buffer.
+ *
+ * @param [in]  ep           Remote endpoint handle.
+ * @param [in]  buffer       Pointer to the local source address.
+ * @param [in]  length       Length of the data (in bytes) stored under the
+ *                           source address.
+ * @param [in]  remote_addr  Pointer to the destination remote address
+ *                           to write to.
+ * @param [in]  rkey         Remote memory key associated with the
+ *                           remote address.
+ * @param [in]  cb           Call-back function that is invoked whenever the
+ *                           put operation is completed and the local buffer
+ *                           can be modified. Does not guarantee remote
+ *                           completion.
+ *
+ * @return UCS_OK               - The operation was completed immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The operation failed.
+ * @return otherwise            - Operation was scheduled and can be
+ *                              completed at any point in time. The request handle
+ *                              is returned to the application in order to track
+ *                              progress of the operation. The application is
+ *                              responsible for releasing the handle using
+ *                              @ref ucp_request_free "ucp_request_free()" routine.
+ */
+ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
+                            uint64_t remote_addr, ucp_rkey_h rkey,
+                            ucp_send_callback_t cb);
+
 
 /**
  * @ingroup UCP_COMM
@@ -2557,6 +2621,51 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
 ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
                          uint64_t remote_addr, ucp_rkey_h rkey);
 
+/**
+ * @ingroup UCP_COMM
+ * @brief Non-blocking remote memory get operation.
+ *
+ * This routine initiates a load of a contiguous block of data that is
+ * described by the remote address @a remote_addr and the @ref ucp_rkey_h
+ * "memory handle" @a rkey in the local contiguous memory region described
+ * by @a buffer address. The routine returns immediately and @b does @b not
+ * guarantee that remote data is loaded and stored under the local address @e
+ * buffer. If the operation is completed immediately the routine return UCS_OK,
+ * otherwise UCS_INPROGRESS or an error is returned to user. If the get
+ * operation completes immediately, the routine returns UCS_OK and the
+ * call-back routine @a cb is @b not invoked. If the operation is @b not
+ * completed immediately and no error is reported, then the UCP library will
+ * schedule invocation of the call-back routine @a cb upon completion of the
+ * get operation. In other words, the completion of a get operation can be
+ * signaled by the return code or execution of the call-back.
+ *
+ * @note A user can use @ref ucp_worker_flush_nb "ucp_worker_flush_nb()"
+ * in order to guarantee re-usability of the source address @e buffer.
+ *
+ * @param [in]  ep           Remote endpoint handle.
+ * @param [in]  buffer       Pointer to the local source address.
+ * @param [in]  length       Length of the data (in bytes) stored under the
+ *                           source address.
+ * @param [in]  remote_addr  Pointer to the destination remote address
+ *                           to write to.
+ * @param [in]  rkey         Remote memory key associated with the
+ *                           remote address.
+ * @param [in]  cb           Call-back function that is invoked whenever the
+ *                           get operation is completed and the data is
+ *                           visible to the local process.
+ *
+ * @return UCS_OK               - The operation was completed immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The operation failed.
+ * @return otherwise            - Operation was scheduled and can be
+ *                              completed at any point in time. The request handle
+ *                              is returned to the application in order to track
+ *                              progress of the operation. The application is
+ *                              responsible for releasing the handle using
+ *                              @ref ucp_request_free "ucp_request_free()" routine.
+ */
+ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
+                            uint64_t remote_addr, ucp_rkey_h rkey,
+                            ucp_send_callback_t cb);
 
 /**
  * @ingroup UCP_COMM

@@ -19,7 +19,6 @@
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucm/malloc/malloc_hook.h>
-#include <ucm/util/ucm_config.h>
 #include <ucs/sys/sys.h>
 #include <malloc.h>
 }
@@ -384,11 +383,11 @@ public:
 
     malloc_hook_cplusplus() :
         m_mapped_size(0), m_unmapped_size(0),
-        m_dynamic_mmap_config(ucm_global_config.enable_dynamic_mmap_thresh) {
+        m_dynamic_mmap_config(ucm_global_opts.enable_dynamic_mmap_thresh) {
     }
 
     ~malloc_hook_cplusplus() {
-        ucm_global_config.enable_dynamic_mmap_thresh = m_dynamic_mmap_config;
+        ucm_global_opts.enable_dynamic_mmap_thresh = m_dynamic_mmap_config;
     }
 
     void set() {
@@ -459,7 +458,7 @@ protected:
 
         m_unmapped_size = 0;
         strs.clear();
-        if (ucm_global_config.enable_dynamic_mmap_thresh) {
+        if (ucm_global_opts.enable_dynamic_mmap_thresh) {
             EXPECT_EQ(0ul, m_unmapped_size);
         } else {
             EXPECT_GE(m_unmapped_size, size);
@@ -503,12 +502,12 @@ UCS_TEST_F(malloc_hook_cplusplus, dynamic_mmap_enable) {
     if (RUNNING_ON_VALGRIND) {
         UCS_TEST_SKIP_R("skipping on valgrind");
     }
-    EXPECT_TRUE(ucm_global_config.enable_dynamic_mmap_thresh);
+    EXPECT_TRUE(ucm_global_opts.enable_dynamic_mmap_thresh);
     test_dynamic_mmap_thresh();
 }
 
 UCS_TEST_F(malloc_hook_cplusplus, dynamic_mmap_disable) {
-    ucm_global_config.enable_dynamic_mmap_thresh = 0;
+    ucm_global_opts.enable_dynamic_mmap_thresh = 0;
     test_dynamic_mmap_thresh();
 }
 
@@ -585,7 +584,7 @@ UCS_TEST_F(malloc_hook_cplusplus, mmap_ptrs) {
         UCS_TEST_SKIP_R("skipping on valgrind");
     }
 
-    ucm_global_config.enable_dynamic_mmap_thresh = 0;
+    ucm_global_opts.enable_dynamic_mmap_thresh = 0;
     set();
 
     const size_t   size    = ucm_dlmallopt_get(M_MMAP_THRESHOLD) * 2;

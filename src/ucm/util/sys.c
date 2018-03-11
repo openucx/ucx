@@ -6,6 +6,10 @@
 
 #include "sys.h"
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
 #include <ucs/sys/math.h>
@@ -20,6 +24,16 @@
 
 #define UCM_PROC_SELF_MAPS "/proc/self/maps"
 
+ucm_global_config_t ucm_global_opts = {
+    .log_level                  = UCS_LOG_LEVEL_WARN,
+    .enable_events              = 1,
+    .enable_mmap_reloc          = 1,
+    .enable_malloc_hooks        = 1,
+    .enable_malloc_reloc        = 0,
+    .enable_cuda_reloc          = 1,
+    .enable_dynamic_mmap_thresh = 1,
+    .alloc_alignment            = 16
+};
 
 static size_t ucm_get_page_size()
 {
@@ -228,4 +242,16 @@ size_t ucm_get_shm_seg_size(const void *shmaddr)
     ucm_get_shm_seg_size_ctx_t ctx = { shmaddr, 0 };
     ucm_parse_proc_self_maps(ucm_get_shm_seg_size_cb, &ctx);
     return ctx.seg_size;
+}
+
+void ucm_strerror(int eno, char *buf, size_t max)
+{
+#if STRERROR_R_CHAR_P
+    char *ret = strerror_r(eno, buf, max);
+    if (ret != buf) {
+        strncpy(buf, ret, max);
+    }
+#else
+    (void)strerror_r(eno, buf, max);
+#endif
 }

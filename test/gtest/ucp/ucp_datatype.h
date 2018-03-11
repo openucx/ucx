@@ -113,6 +113,7 @@ struct dt_gen_state {
     size_t              count;
     int                 started;
     uint32_t            magic;
+    void                *context;
 };
 
 extern int dt_gen_start_count;

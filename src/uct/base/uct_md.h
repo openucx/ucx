@@ -102,7 +102,9 @@ typedef struct uct_md_registered_tl {
     }; \
     UCS_STATIC_INIT { \
         ucs_list_add_tail(&uct_md_components_list, &_mdc.list); \
-    }
+    } \
+    UCS_CONFIG_REGISTER_TABLE(_cfg_table, _name" memory domain", _cfg_prefix, \
+                              _cfg_struct)
 
 
 /**
@@ -144,6 +146,7 @@ struct uct_md_ops {
 
     int          (*is_sockaddr_accessible)(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                            uct_sockaddr_accessibility_t mode);
+
     int          (*is_mem_type_owned)(uct_md_h md, void *addr, size_t length);
 };
 

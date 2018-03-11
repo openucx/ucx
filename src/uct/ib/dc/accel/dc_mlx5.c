@@ -26,6 +26,10 @@ static ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
    ucs_offsetof(uct_dc_mlx5_iface_config_t, ud_common),
    UCS_CONFIG_TYPE_TABLE(uct_ud_mlx5_iface_common_config_table)},
 
+  {"", "", NULL,
+   ucs_offsetof(uct_dc_mlx5_iface_config_t, mlx5_common),
+   UCS_CONFIG_TYPE_TABLE(uct_mlx5_common_config_table)},
+
   {NULL}
 };
 
@@ -767,6 +771,13 @@ static unsigned uct_dc_mlx5_iface_progress_tm(void *arg)
 }
 #endif
 
+static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+
+    uct_base_iface_progress_enable_cb(&iface->super.super, iface->progress, flags);
+}
+
 static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
                                              void *arg, ucs_status_t status)
 {
@@ -940,7 +951,7 @@ static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
 #endif
     .iface_flush              = uct_dc_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = uct_base_iface_progress_enable,
+    .iface_progress_enable    = uct_dc_mlx5_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
@@ -1054,7 +1065,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     }
 
     status = uct_rc_mlx5_iface_common_init(&self->mlx5_common, &self->super.super,
-                                           &config->super.super);
+                                           &config->super.super, &config->mlx5_common);
     if (status != UCS_OK) {
         goto err_rc_mlx5_tag_cleanup;
     }

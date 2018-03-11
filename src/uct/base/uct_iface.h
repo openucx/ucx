@@ -245,7 +245,9 @@ typedef struct uct_tl_component {
         .cfg_prefix          = _cfg_prefix, \
         .iface_config_table  = _cfg_table, \
         .iface_config_size   = sizeof(_cfg_struct) \
-    };
+    }; \
+    UCS_CONFIG_REGISTER_TABLE(_cfg_table, _name" transport", _cfg_prefix, \
+                              _cfg_struct)
 
 
 /**

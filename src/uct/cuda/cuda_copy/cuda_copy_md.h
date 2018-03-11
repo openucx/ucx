@@ -7,6 +7,7 @@
 #define UCT_CUDA_COPY_MD_H
 
 #include <uct/base/uct_md.h>
+#include <uct/cuda/base/cuda_md.h>
 
 #define UCT_CUDA_COPY_MD_NAME           "cuda_cpy"
 

@@ -23,9 +23,11 @@ typedef struct uct_dc_iface  uct_dc_iface_t;
 
 
 typedef enum {
-    UCT_DC_IFACE_ADDR_HW_TM = UCS_BIT(0),
-    UCT_DC_IFACE_ADDR_DC_V1 = UCS_BIT(1),
-    UCT_DC_IFACE_ADDR_DC_V2 = UCS_BIT(2)
+    UCT_DC_IFACE_ADDR_HW_TM   = UCS_BIT(0),
+    UCT_DC_IFACE_ADDR_DC_V1   = UCS_BIT(1),
+    UCT_DC_IFACE_ADDR_DC_V2   = UCS_BIT(2),
+    UCT_DC_IFACE_ADDR_DC_VERS = UCT_DC_IFACE_ADDR_DC_V1 |
+                                UCT_DC_IFACE_ADDR_DC_V2
 } uct_dc_iface_addr_flags_t;
 
 

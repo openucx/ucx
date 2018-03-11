@@ -15,7 +15,6 @@
 #include <ucm/event/event.h>
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
-#include <ucm/util/ucm_config.h>
 #include <ucs/sys/math.h>
 
 #include <sys/mman.h>
@@ -107,7 +106,7 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
     ucm_mmap_func_t *entry;
     ucs_status_t status;
 
-    if (!ucm_global_config.enable_mmap_reloc) {
+    if (!ucm_global_opts.enable_mmap_reloc) {
         ucm_debug("installing mmap relocations is disabled by configuration");
         return UCS_ERR_UNSUPPORTED;
     }

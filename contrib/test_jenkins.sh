@@ -592,17 +592,39 @@ run_mpi_tests() {
 # Test profiling infrastructure
 #
 test_profiling() {
-	echo "==== Running profiling test ===="
-	UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./test/apps/test_profiling
+	echo "==== Running profiling example  ===="
+
+	# configure release mode, application profiling should work
+	../contrib/configure-release --prefix=$ucx_inst
+	$MAKE clean
+	$MAKE
+
+	# compile the profiling example code
+	gcc -o ucx_profiling ${ucx_inst}/share/ucx/examples/ucx_profiling.c \
+		-lm -lucs -I${ucx_inst}/include -L${ucx_inst}/lib -Wl,-rpath=${ucx_inst}/lib
+
+	UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./ucx_profiling
 
 	UCX_READ_PROFILE=${ucx_inst}/bin/ucx_read_profile
 	$UCX_READ_PROFILE -r ucx_jenkins.prof | grep "printf" -C 20
 	$UCX_READ_PROFILE -r ucx_jenkins.prof | grep -q "calc_pi"
 	$UCX_READ_PROFILE -r ucx_jenkins.prof | grep -q "print_pi"
+}
+
+test_dlopen() {
+	../contrib/configure-release --prefix=$ucx_inst
+	$MAKE clean
+	$MAKE
 
 	echo "==== Running dlopen test ===="
-	strace ./test/apps/test_profiling &> strace.log
+	strace ./ucx_profiling &> strace.log
 	! grep '^socket' strace.log
+}
+
+test_memtrack() {
+	../contrib/configure-devel --prefix=$ucx_inst
+	$MAKE clean
+	$MAKE
 
 	echo "==== Running memtrack test ===="
 	UCX_MEMTRACK_DEST=stdout ./test/gtest/gtest --gtest_filter=test_memtrack.sanity
@@ -788,6 +810,8 @@ run_tests() {
 	do_distributed_task 2 4 run_uct_hello
 	do_distributed_task 1 4 run_ucp_client_server
 	do_distributed_task 3 4 test_profiling
+	do_distributed_task 3 4 test_dlopen
+	do_distributed_task 3 4 test_memtrack
 
 	# all are running gtest
 	run_gtest

@@ -7,7 +7,7 @@
 #ifndef UCP_DT_INL_
 #define UCP_DT_INL_
 
-#include <ucs/debug/profile.h>
+#include <ucs/profile/profile.h>
 
 /**
  * Get the total length of the data

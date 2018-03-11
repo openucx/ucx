@@ -74,6 +74,15 @@ AC_ARG_WITH([ib-hw-tm],
 
 
 #
+# DM Support
+#
+AC_ARG_WITH([dm],
+            [AC_HELP_STRING([--with-dm], [Compile with Device Memory support])],
+            [],
+            [with_dm=yes])
+
+
+#
 # Check basic IB support: User wanted at least one IB transport, and we found
 # verbs header file and library.
 #
@@ -278,6 +287,22 @@ AS_IF([test "x$with_ib" == xyes],
                              [AC_DEFINE([IBV_EXP_HW_TM_DC], 1, [DC Tag Matching support])],
                              [], [#include <infiniband/verbs_exp.h>])
            ])
+
+       # Device Memory support
+       AS_IF([test "x$with_dm" != xno],
+           [AC_TRY_COMPILE([#include <infiniband/verbs_exp.h>],
+               [
+                   struct ibv_exp_dm ibv_dm;
+                   struct ibv_exp_alloc_dm_attr dm_attr;
+                   void* a1 = ibv_exp_alloc_dm;
+                   void* a2 = ibv_exp_reg_mr;
+                   void* a3 = ibv_dereg_mr;
+                   void* a4 = ibv_exp_free_dm;
+               ],
+               [AC_DEFINE([HAVE_IBV_EXP_DM], 1, [Device Memory support])],
+               [])
+           ])
+
 
        mlnx_valg_libdir=$with_verbs/lib${libsuff}/mlnx_ofed/valgrind
        AC_MSG_NOTICE([Checking OFED valgrind libs $mlnx_valg_libdir])
