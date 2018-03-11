@@ -9,6 +9,7 @@
 #include <common/test_helpers.h>
 #include <ucs/sys/sys.h>
 #include <ifaddrs.h>
+#include <sys/poll.h>
 
 class test_ucp_sockaddr : public ucp_test {
 public:
@@ -67,17 +68,49 @@ public:
         ASSERT_UCS_OK(status);
     }
 
-    void wait(ucp_worker_h worker, void *request, bool wakeup)
+    static void handle_wakeup(ucp_worker_h send_worker, ucp_worker_h recv_worker)
     {
+        int ret, send_efd, recv_efd;
+        ucs_status_t status;
+
+        ASSERT_UCS_OK(ucp_worker_get_efd(send_worker, &send_efd));
+        ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &recv_efd));
+
+        status = ucp_worker_arm(recv_worker);
+        if (status == UCS_ERR_BUSY) {
+            return;
+        }
+        ASSERT_UCS_OK(status);
+
+        status = ucp_worker_arm(send_worker);
+        if (status == UCS_ERR_BUSY) {
+            return;
+        }
+        ASSERT_UCS_OK(status);
+
+        do {
+            struct pollfd pfd[2];
+            pfd[0].fd     = send_efd;
+            pfd[1].fd     = recv_efd;
+            pfd[0].events = POLLIN;
+            pfd[1].events = POLLIN;
+            ret = poll(pfd, 2, -1);
+        } while ((ret < 0) && (errno == EINTR));
+        if (ret < 0) {
+            UCS_TEST_MESSAGE << "poll() failed: " << strerror(errno);
+        }
+
+        EXPECT_GE(ret, 1);
+    }
+
+    void wait(ucp_worker_h send_worker, ucp_worker_h recv_worker, bool wakeup)
+    {
+        if (progress()) {
+            return;
+        }
+
         if (wakeup) {
-            do {
-                ucp_worker_wait(worker);
-                while (progress());
-            } while (!ucp_request_is_completed(request));
-        } else {
-            while (!ucp_request_is_completed(request)) {
-                progress();
-            }
+            handle_wakeup(send_worker, recv_worker);
         }
     }
 
@@ -91,7 +124,9 @@ public:
         } else if (UCS_PTR_IS_ERR(send_req)) {
             ASSERT_UCS_OK(UCS_PTR_STATUS(send_req));
         } else {
-            wait(from.worker(), send_req, wakeup);
+            while (!ucp_request_is_completed(send_req)) {
+                wait(from.worker(), to.worker(), wakeup);
+            }
             ucp_request_free(send_req);
         }
 
@@ -102,7 +137,9 @@ public:
         if (UCS_PTR_IS_ERR(recv_req)) {
             ASSERT_UCS_OK(UCS_PTR_STATUS(recv_req));
         } else {
-            wait(to.worker(), recv_req, wakeup);
+            while (!ucp_request_is_completed(recv_req)) {
+                wait(from.worker(), to.worker(), wakeup);
+            }
             ucp_request_free(recv_req);
         }
 
@@ -121,28 +158,13 @@ public:
         ep_params.sockaddr.addrlen = sizeof(*connect_addr);
         sender().connect(&receiver(), ep_params);
 
-        if (wakeup) {
-            /* first wait for an event on the server side -
-             * accepting a connection request from the client */
-            ucp_worker_wait(receiver().worker());
-            /* server - process the connection request
-             * (and create an ep to the client) */
-            while (progress());
-            /* make sure that both sides are connected to each other before
-             * starting send-recv */
-            short_progress_loop();
+        tag_send_recv(sender(), receiver(), wakeup);
 
-            tag_send_recv(sender(), receiver() ,true);
-            tag_send_recv(receiver(), sender(), true);
-        } else {
-            tag_send_recv(sender(), receiver(), false);
-
-            /* wait for reverse ep to appear */
-            while (receiver().get_num_eps() == 0) {
-                short_progress_loop();
-            }
-            tag_send_recv(receiver(), sender(), false);
+        while (receiver().get_num_eps() == 0) {
+            wait(sender().worker(), receiver().worker(), wakeup);
         }
+
+        tag_send_recv(receiver(), sender(), wakeup);
     }
 
     void listen_and_communicate(bool wakeup)
