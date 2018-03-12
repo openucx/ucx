@@ -276,13 +276,15 @@ void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
 
 static int uct_ib_mlx5_bf_cmp(uct_ib_mlx5_bf_t *bf, uintptr_t addr, unsigned bf_size)
 {
-    return ((bf->reg.addr & ~UCT_IB_MLX5_BF_REG_SIZE) == (addr & ~UCT_IB_MLX5_BF_REG_SIZE));
+    return (bf->reg.addr & ~UCT_IB_MLX5_BF_REG_SIZE) == (addr & ~UCT_IB_MLX5_BF_REG_SIZE);
 }
 
-static void uct_ib_mlx5_bf_init(uct_ib_mlx5_bf_t *bf, uintptr_t addr, unsigned bf_size)
+static ucs_status_t uct_ib_mlx5_bf_init(uct_ib_mlx5_bf_t *bf, uintptr_t addr,
+                                        unsigned bf_size)
 {
     bf->reg.addr  = addr;
     bf->enable_bf = bf_size;
+    return UCS_OK;
 }
 
 static void uct_ib_mlx5_bf_cleanup(uct_ib_mlx5_bf_t *bf)
@@ -334,6 +336,10 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                             uct_ib_mlx5_bf_init,
                                             (uintptr_t)qp_info.bf.reg,
                                             qp_info.bf.size);
+    if (UCS_PTR_IS_ERR(txwq->bf)) {
+        return UCS_PTR_STATUS(txwq->bf);
+    }
+
     txwq->dbrec    = &qp_info.dbrec[MLX5_SND_DBR];
     /* need to reserve 2x because:
      *  - on completion we only get the index of last wqe and we do not
