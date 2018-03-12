@@ -22,6 +22,8 @@
 
 #define UCP_RSC_CONFIG_ALL    "all"
 
+size_t ucp_request_internal_size = sizeof(ucp_request_t);
+
 ucp_am_handler_t ucp_am_handlers[UCP_AM_ID_LAST] = {{0, NULL, NULL}};
 
 static const char *ucp_atomic_modes[] = {
@@ -1116,7 +1118,7 @@ uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context)
 ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
 {
     if (attr->field_mask & UCP_ATTR_FIELD_REQUEST_SIZE) {
-        attr->request_size = sizeof(ucp_request_t);
+        attr->request_size = ucp_request_internal_size;
     }
     if (attr->field_mask & UCP_ATTR_FIELD_THREAD_MODE) {
         if (UCP_THREAD_IS_REQUIRED(&context->mt_lock)) {

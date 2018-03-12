@@ -133,7 +133,7 @@ extern size_t ucp_request_internal_size;
     (ucp_request_attr_t *)((char *)alloca((_request_size) + \
                                           ucp_request_internal_size) + \
                            (_request_size) + ucp_request_internal_size - \
-                           sizeof(ucp_request_attr_t));
+                           sizeof(ucp_request_attr_t))
 
 
 /**
@@ -149,7 +149,7 @@ extern size_t ucp_request_internal_size;
  * @return Pointer to user context.
  */
 #define UCP_REQUEST_CONTEXT(_request) \
-    ((ucp_request_t *)(_request) - 1)->context;
+    ((ucp_request_attr_t *)(_request) - 1)->context
 
 
 /**
