@@ -649,7 +649,8 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
 
     iface->rx.srq.srq = ibv_exp_create_srq(md->dev.ibv_context, srq_init_attr);
     if (iface->rx.srq.srq == NULL) {
-        ucs_error("Failed to create TM XRQ: %m");
+        ucs_error("ibv_exp_create_srq(device=%s) failed: %m",
+                  uct_ib_device_name(&md->dev));
         return UCS_ERR_IO_ERROR;
     }
 
