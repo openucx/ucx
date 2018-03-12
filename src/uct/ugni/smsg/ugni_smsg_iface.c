@@ -32,9 +32,9 @@ static ucs_status_t progress_local_cq(uct_ugni_smsg_iface_t *iface){
     uct_ugni_smsg_desc_t message_data;
     uct_ugni_smsg_desc_t *message_pointer;
 
-    uct_ugni_device_lock(&iface->super.cdm);
+    uct_ugni_cdm_lock(&iface->super.cdm);
     ugni_rc = GNI_CqGetEvent(iface->super.local_cq, &event_data);
-    uct_ugni_device_unlock(&iface->super.cdm);
+    uct_ugni_cdm_unlock(&iface->super.cdm);
     if(GNI_RC_NOT_DONE == ugni_rc){
         return UCS_OK;
     }
@@ -69,9 +69,9 @@ static void process_mbox(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_ep_t *ep){
     }
     while(1){
         tag = GNI_SMSG_ANY_TAG;
-        uct_ugni_device_lock(&iface->super.cdm);
+        uct_ugni_cdm_lock(&iface->super.cdm);
         ugni_rc = GNI_SmsgGetNextWTag(ep->super.ep, (void **)&data_ptr, &tag);
-        uct_ugni_device_unlock(&iface->super.cdm);
+        uct_ugni_cdm_unlock(&iface->super.cdm);
         /* Yes, GNI_RC_NOT_DONE means that you're done with the smsg mailbox */
         if(GNI_RC_NOT_DONE == ugni_rc){
             break;
@@ -92,9 +92,9 @@ static void process_mbox(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_ep_t *ep){
 
         uct_iface_invoke_am(&iface->super.super, tag, user_data,
                             header->length, 0);
-        uct_ugni_device_lock(&iface->super.cdm);
+        uct_ugni_cdm_lock(&iface->super.cdm);
         ugni_rc = GNI_SmsgRelease(ep->super.ep);
-        uct_ugni_device_unlock(&iface->super.cdm);
+        uct_ugni_cdm_unlock(&iface->super.cdm);
         if(GNI_RC_SUCCESS != ugni_rc){
             ucs_error("Unhandled smsg error in GNI_SmsgRelease: %s %d", gni_err_str[ugni_rc], ugni_rc);
             break;
@@ -111,11 +111,11 @@ static void uct_ugni_smsg_handle_remote_overflow(uct_ugni_smsg_iface_t *iface){
     uct_ugni_smsg_ep_t *ep;
 
     /* We don't know which EP dropped a completion entry, so flush everything */
-    uct_ugni_device_lock(&iface->super.cdm);
+    uct_ugni_cdm_lock(&iface->super.cdm);
     do{
         ugni_rc = GNI_CqGetEvent(iface->remote_cq, &event_data);
     } while(GNI_RC_NOT_DONE != ugni_rc);
-    uct_ugni_device_unlock(&iface->super.cdm);
+    uct_ugni_cdm_unlock(&iface->super.cdm);
     current_ep = sglib_hashed_uct_ugni_ep_t_it_init(&ep_iterator, iface->super.eps);
 
     while(NULL != current_ep){
@@ -133,9 +133,9 @@ ucs_status_t progress_remote_cq(uct_ugni_smsg_iface_t *iface)
     uct_ugni_ep_t *ugni_ep;
     uct_ugni_smsg_ep_t *ep;
 
-    uct_ugni_device_lock(&iface->super.cdm);
+    uct_ugni_cdm_lock(&iface->super.cdm);
     ugni_rc = GNI_CqGetEvent(iface->remote_cq, &event_data);
-    uct_ugni_device_unlock(&iface->super.cdm);
+    uct_ugni_cdm_unlock(&iface->super.cdm);
     if(GNI_RC_NOT_DONE == ugni_rc){
         return UCS_OK;
     }
