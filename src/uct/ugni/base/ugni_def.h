@@ -1,5 +1,6 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
+ * Copyright (c) Los Alamos National Security, LLC. 2018. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -45,23 +46,23 @@ do {\
 
 #if ENABLE_MT
 #define uct_ugni_check_lock_needed(_cdm) UCS_THREAD_MODE_MULTI == (_cdm)->thread_mode
-#define uct_ugni_device_init_lock(_dev) ucs_spinlock_init(&(_dev)->lock)
-#define uct_ugni_device_destroy_lock(_dev) ucs_spinlock_destroy(&(_dev)->lock)
-#define uct_ugni_device_lock(_cdm) \
+#define uct_ugni_cdm_init_lock(_cdm) ucs_spinlock_init(&(_cdm)->lock)
+#define uct_ugni_cdm_destroy_lock(_cdm) ucs_spinlock_destroy(&(_cdm)->lock)
+#define uct_ugni_cdm_lock(_cdm) \
 if (uct_ugni_check_lock_needed(_cdm)) {  \
     ucs_trace_async("Taking lock");      \
-    ucs_spin_lock(&(_cdm)->dev->lock);   \
+    ucs_spin_lock(&(_cdm)->lock);   \
 }
-#define uct_ugni_device_unlock(_cdm) \
+#define uct_ugni_cdm_unlock(_cdm) \
 if (uct_ugni_check_lock_needed(_cdm)) {    \
     ucs_trace_async("Releasing lock");        \
-    ucs_spin_unlock(&(_cdm)->dev->lock);   \
+    ucs_spin_unlock(&(_cdm)->lock);   \
 }
 #else
-#define uct_ugni_device_init_lock(x) UCS_OK
-#define uct_ugni_device_destroy_lock(x) UCS_OK
-#define uct_ugni_device_lock(x)
-#define uct_ugni_device_unlock(x)
+#define uct_ugni_cdm_init_lock(x) UCS_OK
+#define uct_ugni_cdm_destroy_lock(x) UCS_OK
+#define uct_ugni_cdm_lock(x)
+#define uct_ugni_cdm_unlock(x)
 #define uct_ugni_check_lock_needed(x) 0
 #endif
 
