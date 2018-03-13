@@ -40,6 +40,8 @@ typedef struct uct_worker_progress {
 #define uct_worker_tl_data_get(_worker, _key, _type, _cmp_fn, _init_fn, ...) \
     ({ \
         uct_worker_tl_data_t *data; \
+        _type *result; \
+        ucs_status_t status; \
         \
         ucs_list_for_each(data, &(_worker)->tl_data, list) { \
             if ((data->key == (_key)) && _cmp_fn(ucs_derived_of(data, _type), \
@@ -50,16 +52,26 @@ typedef struct uct_worker_progress {
             } \
         } \
         \
-        if (&data->list == &(_worker)->tl_data) { \
+        if (&data->list == &(_worker)->tl_data) { /* not found */ \
             data = ucs_malloc(sizeof(_type), UCS_PP_QUOTE(_type)); \
-            if (data != NULL) { \
+            if (data == NULL) { \
+                result = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY); \
+            } else { \
                 data->key      = (_key); \
                 data->refcount = 1; \
-                _init_fn(ucs_derived_of(data, _type), ## __VA_ARGS__); \
-                ucs_list_add_tail(&(_worker)->tl_data, &data->list); \
+                status = _init_fn(ucs_derived_of(data, _type), ## __VA_ARGS__); \
+                if (status != UCS_OK) { \
+                    ucs_free(data); \
+                    result = UCS_STATUS_PTR(status); \
+                } else { \
+                    ucs_list_add_tail(&(_worker)->tl_data, &data->list); \
+                    result = ucs_derived_of(data, _type); \
+                } \
             } \
+        } else { \
+            result = ucs_derived_of(data, _type); \
         } \
-        ucs_derived_of(data, _type); \
+        result; \
     })
 
 
