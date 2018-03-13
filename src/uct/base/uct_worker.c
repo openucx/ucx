@@ -31,6 +31,10 @@ static UCS_CLASS_INIT_FUNC(uct_priv_worker_t, ucs_async_context_t *async,
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_worker_t);
 
+    if (async == NULL) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     self->async       = async;
     self->thread_mode = thread_mode;
     ucs_list_head_init(&self->tl_data);
