@@ -835,10 +835,12 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
         } else if (((table_prefix == NULL) || !strncmp(name, table_prefix, prefix_len)) &&
                    !strcmp(name + prefix_len, field->name))
         {
-            ucs_config_parser_release_field(field, var);
-            status = ucs_config_parser_parse_field(field, value, var);
-            if (status != UCS_OK) {
-                return status;
+            if (value != NULL) {
+                ucs_config_parser_release_field(field, var);
+                status = ucs_config_parser_parse_field(field, value, var);
+                if (status != UCS_OK) {
+                    return status;
+                }
             }
             ++count;
         }
@@ -1198,8 +1200,8 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
             continue;
         }
 
-        status = ucs_config_parser_fill_opts(opts, entry->fields, entry->prefix,
-                                             NULL, 0);
+        status = ucs_config_parser_fill_opts(opts, entry->fields, NULL,
+                                             entry->prefix, 0);
         if (status != UCS_OK) {
             ucs_free(opts);
             continue;
@@ -1209,6 +1211,49 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
         ucs_config_parser_print_opts(stream, title, opts, entry->fields,
                                      entry->prefix, flags);
         ucs_free(opts);
+    }
+}
+
+void ucs_config_parser_check_env_vars()
+{
+    const ucs_config_global_list_entry_t *entry;
+    ucs_status_t status;
+    const char *var_name, *field_name;
+    char **envp, *envstr;
+    size_t prefix_len;
+    char *saveptr;
+    int found;
+
+    prefix_len = strlen(UCS_CONFIG_PREFIX);
+    for (envp = environ; *envp != NULL; ++envp) {
+        envstr = ucs_strdup(*envp, "env_str");
+        if (envstr == NULL) {
+            continue;
+        }
+
+        var_name = strtok_r(envstr, "=", &saveptr);
+        if (!var_name || strncmp(var_name, UCS_CONFIG_PREFIX, prefix_len)) {
+            ucs_free(envstr);
+            continue; /* Not UCX */
+        }
+
+        field_name = var_name + prefix_len;
+        found = 0;
+        ucs_list_for_each(entry, &ucs_config_global_list, list) {
+            status = ucs_config_parser_set_value_internal(NULL, entry->fields,
+                                                          field_name, NULL,
+                                                          entry->prefix, 1);
+            if (status == UCS_OK) {
+                found = 1;
+                break;
+            }
+        }
+
+        if (!found) {
+            ucs_warn("invalid configuration variable '%s'", var_name);
+        }
+
+        ucs_free(envstr);
     }
 }
 

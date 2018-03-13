@@ -348,6 +348,12 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
                                          const char *name, const char *value);
 
 /**
+ * Check all UCX_ environment variables and make sure they specify valid
+ * configuration options. If not, issue a warning.
+ */
+void ucs_config_parser_check_env_vars();
+
+/**
  * Translate configuration value of "MEMUNITS" type to actual value.
  *
  * @param config_size  Size specified by configuration.

@@ -230,6 +230,8 @@ ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
     ucp_config_t *config;
     ucs_status_t status;
 
+    ucs_config_parser_check_env_vars();
+
     config = ucs_malloc(sizeof(*config), "ucp config");
     if (config == NULL) {
         status = UCS_ERR_NO_MEMORY;
