@@ -99,27 +99,14 @@ static ucs_status_t uct_rocm_cma_mem_reg(uct_md_h md, void *address, size_t leng
     /* Assume memory is already GPU accessible */
     key->is_locked = 0;
 
-    /* Check if memory is already GPU accessible. If yes then GPU
-     * address will be returned.
-     * Note that we could have case of "malloc"-ed memory which
-     * was "locked" outside of UCX. In this case CPU address may be 
-     * not the same as GPU one.
-     */
-    if (!uct_rocm_is_ptr_gpu_accessible(address, &gpu_address)) {
-        if (!rocm_md->any_memory) {
-            ucs_warn("Address %p is not GPU allocated.", address);
-            return UCS_ERR_INVALID_ADDR;
-        } else {
-            status = uct_rocm_memory_lock(address, length, &gpu_address);
-
-            if (status != HSA_STATUS_SUCCESS) {
-                ucs_error("Could not lock  %p. Status %d", address, status);
-                return UCS_ERR_INVALID_ADDR;
-            } else {
-                ucs_trace("Lock address %p as GPU %p", address, gpu_address);
-                key->is_locked = 1; /* Set flag that memory was locked by us */
-            }
-        }
+    status = uct_rocm_cma_ptr_to_gpu_ptr(address, &gpu_address,
+                                         length, rocm_md->any_memory,
+                                         &key->is_locked);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_error("Failed to convert cma %p for gpu access", address);
+        *memh_p = NULL;
+        ucs_free(key);
+        return UCS_ERR_INVALID_ADDR;
     }
 
     key->length         = length;

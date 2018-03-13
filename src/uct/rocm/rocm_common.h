@@ -20,16 +20,19 @@ hsa_status_t uct_rocm_init();
 
 
 /**
- * @brief Check if memory is GPU accessible
+ * @brief Convert pointer to pointer which could be used for GPU access
  *
  * @param [in] ptr Pointer to memory
  * @param [out] gpu_ptr If not NULL return host address to be used for
  *                      GPU access.
- *
- * @return  true if GPU accessible false otherwise
+ * @param [out] indicates if memory is locked for GPU access. If locked
+ *              then hsa_amd_unlock() should be called
+ * @return  HSA status
  *
 */
-int uct_rocm_is_ptr_gpu_accessible(void *ptr, void **gpu_ptr);
+hsa_status_t uct_rocm_cma_ptr_to_gpu_ptr(void *ptr, void **gpu_address,
+                                         size_t size, int any_memory,
+                                         int *locked);
 
 
 /**
