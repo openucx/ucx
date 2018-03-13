@@ -15,16 +15,14 @@
 #define UCT_SELF_NAME "self"
 
 #define UCT_SELF_IFACE_SEND_BUFFER_GET(_iface) \
-    ({ \
+    ({ /* use buffers from mpool to avoid buffer re-usage */ \
+       /* till operation completes */ \
         void *ptr = ucs_mpool_get_inline(&(_iface)->msg_mp); \
         if (ucs_unlikely(ptr == NULL)) { \
                 return UCS_ERR_NO_MEMORY; \
         } \
         ptr; \
     })
-
-#define UCT_SELF_IFACE_SEND_BUFFER_PUT(_buffer) \
-    ucs_mpool_put_inline(_buffer)
 
 
 /* Forward declarations */
@@ -127,7 +125,7 @@ static void uct_self_iface_sendrecv_am(uct_self_iface_t *iface, uint8_t am_id,
     status = uct_iface_invoke_am(&iface->super, am_id, buffer,
                                  length, 0);
     ucs_assert(status == UCS_OK);
-    UCT_SELF_IFACE_SEND_BUFFER_PUT(buffer);
+    ucs_mpool_put_inline(buffer);
 }
 
 static ucs_mpool_ops_t uct_self_iface_mpool_ops = {
