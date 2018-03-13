@@ -537,7 +537,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
             goto out;
         } else if (rndv_mode != UCP_RNDV_MODE_GET_ZCOPY) {
             /* put protocol is allowed - register receive buffer memory for rma */
-            ucp_request_recv_buffer_reg(rreq, ucp_ep_config(ep)->key.rma_bw_md_map);
+            ucp_request_recv_buffer_reg(rreq, ucp_ep_config(ep)->key.rma_bw_md_map,
+                                        ucs_min(rreq->recv.length, rndv_rts_hdr->size));
         }
     }
 
