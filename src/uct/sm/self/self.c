@@ -8,21 +8,23 @@
 #include <uct/sm/base/sm_ep.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
+#include <ucs/arch/cpu.h>
 #include "self.h"
 
 
 #define UCT_SELF_NAME "self"
 
 #define UCT_SELF_IFACE_SEND_BUFFER_GET(_iface) \
-    { \
-        if ((_iface)->send_buffer == NULL) { \
-            (_iface)->send_buffer = ucs_malloc((_iface)->send_size, \
-                                               "self_send_buffer"); \
-            if ((_iface)->send_buffer == NULL) { \
+    ({ \
+        void *ptr = ucs_mpool_get_inline(&(_iface)->msg_mp); \
+        if (ucs_unlikely(ptr == NULL)) { \
                 return UCS_ERR_NO_MEMORY; \
-            } \
         } \
-    }
+        ptr; \
+    })
+
+#define UCT_SELF_IFACE_SEND_BUFFER_PUT(_buffer) \
+    ucs_mpool_put_inline(_buffer)
 
 
 /* Forward declarations */
@@ -113,19 +115,27 @@ static int uct_self_iface_is_reachable(const uct_iface_h tl_iface,
 }
 
 static void uct_self_iface_sendrecv_am(uct_self_iface_t *iface, uint8_t am_id,
-                                       size_t length, const char *title)
+                                       void *buffer, size_t length, const char *title)
 {
     ucs_status_t UCS_V_UNUSED status;
 
     uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, am_id,
-                       iface->send_buffer, length, "TX: AM_%s", title);
+                       buffer, length, "TX: AM_%s", title);
     uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, am_id,
-                       iface->send_buffer, length, "RX: AM_%s", title);
+                       buffer, length, "RX: AM_%s", title);
 
-    status = uct_iface_invoke_am(&iface->super, am_id, iface->send_buffer,
+    status = uct_iface_invoke_am(&iface->super, am_id, buffer,
                                  length, 0);
     ucs_assert(status == UCS_OK);
+    UCT_SELF_IFACE_SEND_BUFFER_PUT(buffer);
 }
+
+static ucs_mpool_ops_t uct_self_iface_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL
+};
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_self_iface_t, uct_iface_t);
 
@@ -133,6 +143,8 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
+    ucs_status_t status;
+
     if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
         return UCS_ERR_INVALID_PARAM;
     }
@@ -148,7 +160,15 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
 
     self->id          = ucs_generate_uuid((uintptr_t)self);
     self->send_size   = tl_config->max_bcopy;
-    self->send_buffer = NULL;
+
+    status = ucs_mpool_init(&self->msg_mp, 0, self->send_size, 0,
+                            UCS_SYS_CACHE_LINE_SIZE,
+                            2, /* 2 elements are enough for most of communications */
+                            UINT_MAX, &uct_self_iface_mpool_ops, "self_msg_desc");
+
+    if (UCS_STATUS_IS_ERR(status)) {
+        return status;
+    }
 
     ucs_debug("created self iface id 0x%lx send_size %zu", self->id,
               self->send_size);
@@ -157,7 +177,7 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
 
 static UCS_CLASS_CLEANUP_FUNC(uct_self_iface_t)
 {
-    ucs_free(self->send_buffer);
+    ucs_mpool_cleanup(&self->msg_mp, 1);
 }
 
 UCS_CLASS_DEFINE(uct_self_iface_t, uct_base_iface_t);
@@ -216,18 +236,19 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     uct_self_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_self_iface_t);
     uct_self_ep_t UCS_V_UNUSED *ep = ucs_derived_of(tl_ep, uct_self_ep_t);
     size_t total_length;
+    void *send_buffer;
 
     UCT_CHECK_AM_ID(id);
 
     total_length = length + sizeof(header);
     UCT_CHECK_LENGTH(total_length, 0, iface->send_size, "am_short");
 
-    UCT_SELF_IFACE_SEND_BUFFER_GET(iface);
-    *(uint64_t*)iface->send_buffer = header;
-    memcpy(iface->send_buffer + sizeof(uint64_t), payload, length);
+    send_buffer = UCT_SELF_IFACE_SEND_BUFFER_GET(iface);
+    *(uint64_t*)send_buffer = header;
+    memcpy(send_buffer + sizeof(uint64_t), payload, length);
 
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, total_length);
-    uct_self_iface_sendrecv_am(iface, id, total_length, "SHORT");
+    uct_self_iface_sendrecv_am(iface, id, send_buffer, total_length, "SHORT");
     return UCS_OK;
 }
 
@@ -238,16 +259,17 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     uct_self_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_self_iface_t);
     uct_self_ep_t UCS_V_UNUSED *ep = ucs_derived_of(tl_ep, uct_self_ep_t);
     size_t length;
+    void *send_buffer;
 
     UCT_CHECK_AM_ID(id);
 
-    UCT_SELF_IFACE_SEND_BUFFER_GET(iface);
-    length = pack_cb(iface->send_buffer, arg);
+    send_buffer = UCT_SELF_IFACE_SEND_BUFFER_GET(iface);
+    length = pack_cb(send_buffer, arg);
 
     UCT_CHECK_LENGTH(length, 0, iface->send_size, "am_bcopy");
     UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, length);
 
-    uct_self_iface_sendrecv_am(iface, id, length, "BCOPY");
+    uct_self_iface_sendrecv_am(iface, id, send_buffer, length, "BCOPY");
     return length;
 }
 
