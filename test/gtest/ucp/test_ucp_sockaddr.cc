@@ -68,7 +68,7 @@ public:
         ASSERT_UCS_OK(status);
     }
 
-    static void handle_wakeup(ucp_worker_h send_worker, ucp_worker_h recv_worker)
+    static void wait_for_wakeup(ucp_worker_h send_worker, ucp_worker_h recv_worker)
     {
         int ret, send_efd, recv_efd;
         ucs_status_t status;
@@ -103,14 +103,14 @@ public:
         EXPECT_GE(ret, 1);
     }
 
-    void wait(ucp_worker_h send_worker, ucp_worker_h recv_worker, bool wakeup)
+    void check_events(ucp_worker_h send_worker, ucp_worker_h recv_worker, bool wakeup)
     {
         if (progress()) {
             return;
         }
 
         if (wakeup) {
-            handle_wakeup(send_worker, recv_worker);
+            wait_for_wakeup(send_worker, recv_worker);
         }
     }
 
@@ -125,7 +125,7 @@ public:
             ASSERT_UCS_OK(UCS_PTR_STATUS(send_req));
         } else {
             while (!ucp_request_is_completed(send_req)) {
-                wait(from.worker(), to.worker(), wakeup);
+                check_events(from.worker(), to.worker(), wakeup);
             }
             ucp_request_free(send_req);
         }
@@ -138,7 +138,7 @@ public:
             ASSERT_UCS_OK(UCS_PTR_STATUS(recv_req));
         } else {
             while (!ucp_request_is_completed(recv_req)) {
-                wait(from.worker(), to.worker(), wakeup);
+                check_events(from.worker(), to.worker(), wakeup);
             }
             ucp_request_free(recv_req);
         }
@@ -161,7 +161,7 @@ public:
         tag_send_recv(sender(), receiver(), wakeup);
 
         while (receiver().get_num_eps() == 0) {
-            wait(sender().worker(), receiver().worker(), wakeup);
+            check_events(sender().worker(), receiver().worker(), wakeup);
         }
 
         tag_send_recv(receiver(), sender(), wakeup);
