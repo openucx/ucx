@@ -18,7 +18,7 @@ typedef struct uct_self_iface {
     uct_base_iface_t      super;
     uct_self_iface_addr_t id;           /* Unique identifier for the instance */
     size_t                send_size;    /* Maximum size for payload */
-    void                  *send_buffer; /* Send buffer */
+    ucs_mpool_t           msg_mp;       /* Messages memory pool */
 } uct_self_iface_t;
 
 
