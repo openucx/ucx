@@ -132,9 +132,9 @@ extern size_t ucp_request_internal_size;
  * @return Pointer to ucp_request_attr_t for initialization.
  */
 #define UCP_REQUEST_ALLOCA(_request_size) \
-    (ucp_request_attr_t *)((char *)alloca((_request_size) + \
-                                          ucp_request_internal_size) + \
-                           (_request_size) + ucp_request_internal_size - \
+    (ucp_request_attr_t *)((char *)alloca(ucp_request_internal_size + \
+                                          (_request_size)) + \
+                           ucp_request_internal_size - \
                            sizeof(ucp_request_attr_t))
 
 
@@ -2218,9 +2218,11 @@ ucs_status_ptr_t ucp_stream_send_nb(ucp_ep_h ep, const void *buffer, size_t coun
  * @return otherwise        - Operation was scheduled for send and can be
  *                          completed in any point in time. The request handle
  *                          is returned to the application in order to track
- *                          progress of the message. The application is
- *                          responsible to release the handle using
- *                          @ref ucp_request_free routine.
+ *                          progress of the message. If the @ref
+ *                          ucp_request_attr_t::UCP_REQUEST_FLAG_EXTERNAL flag
+ *                          was set, releasing the request handle should be done
+ *                          according to the external allocation method,
+ *                          otherwise, using the @ref ucp_request_free routine.
  */
 ucs_status_ptr_t ucp_stream_send_nbx(ucp_ep_h ep, const void *buffer,
                                      size_t count, ucp_datatype_t datatype,
@@ -2300,9 +2302,11 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  * @return otherwise        - Operation was scheduled for send and can be
  *                          completed in any point in time. The request handle
  *                          is returned to the application in order to track
- *                          progress of the message. The application is
- *                          responsible to release the handle using
- *                          @ref ucp_request_free routine.
+ *                          progress of the message. If the @ref
+ *                          ucp_request_attr_t::UCP_REQUEST_FLAG_EXTERNAL flag
+ *                          was set, releasing the request handle should be done
+ *                          according to the external allocation method,
+ *                          otherwise, using the @ref ucp_request_free routine.
  */
 ucs_status_ptr_t ucp_tag_send_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                                   ucp_datatype_t datatype, ucp_tag_t tag,
@@ -2502,9 +2506,11 @@ ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t count,
  * @return otherwise        - Operation was scheduled for send and can be
  *                          completed in any point in time. The request handle
  *                          is returned to the application in order to track
- *                          progress of the message. The application is
- *                          responsible to release the handle using
- *                          @ref ucp_request_free routine.
+ *                          progress of the message. If the @ref
+ *                          ucp_request_attr_t::UCP_REQUEST_FLAG_EXTERNAL flag
+ *                          was set, releasing the request handle should be done
+ *                          according to the external allocation method,
+ *                          otherwise, using the @ref ucp_request_free routine.
  */
 ucs_status_ptr_t ucp_stream_recv_nbx(ucp_ep_h ep, void *buffer, size_t count,
                                      ucp_datatype_t datatype, size_t *length,
@@ -2618,11 +2624,11 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  * @return otherwise        - Operation was scheduled for send and can be
  *                          completed in any point in time. The request handle
  *                          is returned to the application in order to track
- *                          progress of the message. The application is
- *                          responsible to release the handle using
- *                          @ref ucp_request_free routine if
- *                          @ref ucp_request_attr_t::UCP_REQUEST_FLAG_EXTERNAL flag
- *                          was not set in @ref ucp_request_attr_t::flags.
+ *                          progress of the message. If the @ref
+ *                          ucp_request_attr_t::UCP_REQUEST_FLAG_EXTERNAL flag
+ *                          was set, releasing the request handle should be done
+ *                          according to the external allocation method,
+ *                          otherwise, using the @ref ucp_request_free routine.
  */
 ucs_status_ptr_t ucp_tag_recv_nbx(ucp_worker_h worker, void *buffer,
                                   size_t count, ucp_datatype_t datatype,
