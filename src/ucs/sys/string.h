@@ -87,6 +87,17 @@ void ucs_memunits_to_str(size_t value, char *buf, size_t max);
  */
 const char* ucs_sockaddr_str(const struct sockaddr *sock_addr, char *ip_str, size_t max_size);
 
+/**
+ * Copy string limited by len bytes. Destination string is always ended by '\0'
+ *
+ * @param dst Destination buffer
+ * @param src Source string
+ * @param len Maximum string length to copy
+ *
+ * @return address of destination buffer
+ */
+char* ucs_strncpy_safe(char *dst, const char *src, size_t len);
+
 END_C_DECLS
 
 #endif
