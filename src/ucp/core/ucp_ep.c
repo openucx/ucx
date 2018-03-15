@@ -1053,6 +1053,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                 rma_config->put_zcopy_thresh = ucs_max(rma_config->put_zcopy_thresh,
                                                        iface_attr->cap.put.min_zcopy);
             }
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_SHORT) {
+                rma_config->max_get_short = iface_attr->cap.get.max_short;
+            }
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) {
                 rma_config->max_get_bcopy = iface_attr->cap.get.max_bcopy;
             }

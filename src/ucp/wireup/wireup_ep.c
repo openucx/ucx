@@ -290,6 +290,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
         .ep_put_short         = (void*)ucs_empty_function_return_no_resource,
         .ep_put_bcopy         = (void*)ucp_wireup_ep_bcopy_send_func,
         .ep_put_zcopy         = (void*)ucs_empty_function_return_no_resource,
+        .ep_get_short         = (void*)ucs_empty_function_return_no_resource,
         .ep_get_bcopy         = (void*)ucs_empty_function_return_no_resource,
         .ep_get_zcopy         = (void*)ucs_empty_function_return_no_resource,
         .ep_am_short          = (void*)ucs_empty_function_return_no_resource,
