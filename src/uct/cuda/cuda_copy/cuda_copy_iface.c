@@ -32,17 +32,20 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_iface_t)(uct_iface_t*);
 static ucs_status_t uct_cuda_copy_iface_get_address(uct_iface_h tl_iface,
                                                     uct_iface_addr_t *iface_addr)
 {
-    int *cuda_copy_addr = (int*)iface_addr;
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
 
-    *cuda_copy_addr = 0;
+    *(uct_cuda_copy_iface_addr_t*)iface_addr = iface->id;
     return UCS_OK;
 }
 
-static int uct_cuda_copy_iface_is_reachable(const uct_iface_h iface,
+static int uct_cuda_copy_iface_is_reachable(const uct_iface_h tl_iface,
                                             const uct_device_addr_t *dev_addr,
                                             const uct_iface_addr_t *iface_addr)
 {
-    return 1;
+    uct_cuda_copy_iface_t  *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
+    uct_cuda_copy_iface_addr_t *addr = (uct_cuda_copy_iface_addr_t*)iface_addr;
+
+    return (addr != NULL) && (iface->id == *addr);
 }
 
 static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h iface,
@@ -50,7 +53,7 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h iface,
 {
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
-    iface_attr->iface_addr_len          = sizeof(int);
+    iface_attr->iface_addr_len          = sizeof(uct_cuda_copy_iface_addr_t);
     iface_attr->device_addr_len         = 0;
     iface_attr->ep_addr_len             = 0;
     iface_attr->cap.flags               = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
@@ -220,6 +223,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
         return UCS_ERR_NO_DEVICE;
     }
 
+    self->id              = ucs_generate_uuid((uintptr_t)self);
     self->config.max_poll = config->max_poll;
 
     status = ucs_mpool_init(&self->cuda_event_desc,
