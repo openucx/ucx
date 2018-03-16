@@ -863,6 +863,7 @@ static ucs_status_t ucp_wireup_add_bw_lanes(ucp_ep_h ep,
 
     return UCS_OK;
 }
+
 static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                                unsigned ep_init_flags, unsigned address_count,
                                                const ucp_address_entry_t *address_list,
@@ -942,7 +943,7 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
         bw_info.criteria.remote_md_flags = bw_info.criteria.local_md_flags = UCT_MD_FLAG_REG;
     }
 
-    bw_info.criteria.title              = "high-bw remote %s memory access";
+    bw_info.criteria.title              = "high-bw remote memory access";
     bw_info.criteria.remote_iface_flags = UCT_IFACE_FLAG_GET_ZCOPY |
                                           UCT_IFACE_FLAG_PUT_ZCOPY;
     bw_info.criteria.local_iface_flags  = bw_info.criteria.remote_iface_flags |
