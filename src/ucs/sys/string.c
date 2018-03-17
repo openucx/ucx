@@ -146,3 +146,19 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr, char *str, size_t
         return "Invalid string";
     }
 }
+
+char* ucs_strncpy_safe(char *dst, const char *src, size_t len)
+{
+    size_t length;
+
+    if (!len) {
+        return dst;
+    }
+
+    /* copy string into dst including null terminator */
+    length = ucs_min(len, strnlen(src, len) + 1);
+
+    memcpy(dst, src, length);
+    dst[length - 1] = '\0';
+    return dst;
+}
