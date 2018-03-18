@@ -6,6 +6,9 @@
 
 #include "rc_mlx5.h"
 
+#if HAVE_DECL_IBV_CMD_MODIFY_QP
+#include <infiniband/driver.h>
+#endif
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/sys/compiler.h>
@@ -567,6 +570,32 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
     return UCS_OK;
 }
 
+static void uct_rc_mlx5_ep_reset_qp(uct_rc_mlx5_ep_t *ep)
+{
+    uct_rc_txqp_t *txqp = &ep->super.txqp;
+
+    /* Make the HW generate CQEs for all in-progress SRQ receives from the QP,
+     * so we clean them all before ibv_modify_qp() can see them.
+     */
+#if HAVE_DECL_IBV_CMD_MODIFY_QP
+    struct ibv_qp_attr qp_attr;
+    struct ibv_modify_qp cmd;
+    int ret;
+
+    /* Bypass mlx5 driver, and go directly to command interface, to avoid
+     * cleaning the CQ in mlx5 driver
+     */
+    memset(&qp_attr, 0, sizeof(qp_attr));
+    qp_attr.qp_state = IBV_QPS_RESET;
+    ret = ibv_cmd_modify_qp(txqp->qp, &qp_attr, IBV_QP_STATE, &cmd, sizeof(cmd));
+    if (ret) {
+        ucs_warn("modify qp 0x%x to RESET failed: %m", txqp->qp->qp_num);
+    }
+#else
+    (void)uct_rc_modify_qp(txqp, IBV_QPS_ERR);
+#endif
+}
+
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 {
     uct_rc_mlx5_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
@@ -574,11 +603,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 
     uct_ib_mlx5_txwq_cleanup(&self->tx.wq);
 
-    /* Modify QP to error to make HW generate CQEs for all in-progress SRQ
-     * receives from the QP, so we clean them all before ibv_modify_qp() can
-     * see them.
-     */
-    (void)uct_rc_modify_qp(&self->super.txqp, IBV_QPS_ERR);
+    uct_rc_mlx5_ep_reset_qp(self);
     uct_rc_mlx5_iface_commom_clean_srq(&iface->mlx5_common, &iface->super,
                                        self->qp_num);
 
