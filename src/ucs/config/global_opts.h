@@ -17,6 +17,7 @@
 
 BEGIN_C_DECLS
 
+#define UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG    "WARN_UNUSED_ENV_VARS"
 
 /**
  * UCS global options.
@@ -62,6 +63,9 @@ typedef struct {
 
     /* Log level to trigger error handling */
     ucs_log_level_t          log_level_trigger;
+
+    /* Issue warning about UCX_ env vars which were not used by config parser */
+    int                      warn_unused_env_vars;
 
     /* Max. events per context, will be removed in the future */
     unsigned                 async_max_events;
