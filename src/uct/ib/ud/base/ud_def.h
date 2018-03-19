@@ -173,8 +173,8 @@ typedef struct uct_ud_zcopy_desc {
 
 typedef struct uct_ud_send_skb_inl {
     uct_ud_send_skb_t  super;
-    uct_ud_neth_t      neth;
-} UCS_S_PACKED uct_ud_send_skb_inl_t;
+    uct_ud_neth_t      neth; /* placeholder for super.neth, should not be used directly */
+} uct_ud_send_skb_inl_t;
 
 
 typedef struct uct_ud_recv_skb {
