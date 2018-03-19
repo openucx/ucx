@@ -9,6 +9,13 @@
 #include <string>
 #include <vector>
 
+
+#if HAVE_IBV_EXP_DM
+#  define DM_COUNT "DM_COUNT?=0"
+#else
+#  define DM_COUNT NULL
+#endif
+
 class uct_p2p_am_test : public uct_p2p_test
 {
 public:
@@ -406,7 +413,7 @@ public:
 };
 
 
-UCS_TEST_P(uct_p2p_am_test, am_short) {
+UCS_TEST_P(uct_p2p_am_test, am_short, DM_COUNT) {
     check_caps(UCT_IFACE_FLAG_AM_SHORT);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
                     sizeof(uint64_t),
@@ -422,7 +429,7 @@ UCS_TEST_P(uct_p2p_am_test, am_bcopy) {
                     TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
-UCS_TEST_P(uct_p2p_am_test, am_short_keep_data) {
+UCS_TEST_P(uct_p2p_am_test, am_short_keep_data, DM_COUNT) {
     check_caps(UCT_IFACE_FLAG_AM_SHORT, UCT_IFACE_FLAG_AM_DUP);
     set_keep_data(true);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
