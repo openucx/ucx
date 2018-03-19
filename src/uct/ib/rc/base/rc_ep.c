@@ -291,8 +291,8 @@ ucs_status_t uct_rc_modify_qp(uct_rc_txqp_t *txqp, enum ibv_qp_state state)
     memset(&qp_attr, 0, sizeof(qp_attr));
     qp_attr.qp_state = state;
     if (ibv_modify_qp(txqp->qp, &qp_attr, IBV_QP_STATE)) {
-        ucs_warn("modify qp 0x%x to state %d failed: %m", state,
-                 txqp->qp->qp_num);
+        ucs_warn("modify qp 0x%x to state %d failed: %m", txqp->qp->qp_num,
+                 state);
         return UCS_ERR_IO_ERROR;
     }
 
