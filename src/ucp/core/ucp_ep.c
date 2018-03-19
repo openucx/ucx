@@ -934,6 +934,8 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     config->tag.rndv.max_get_zcopy      = SIZE_MAX;
     config->tag.rndv.max_put_zcopy      = SIZE_MAX;
     config->tag.rndv.am_thresh          = SIZE_MAX;
+    config->tag.rndv_send_nbr.am_thresh = SIZE_MAX;
+    config->tag.rndv_send_nbr.rma_thresh = SIZE_MAX;
     config->tag.rndv.rkey_size          = ucp_rkey_packed_size(context,
                                                                config->key.rma_bw_md_map);
     config->stream.proto                = &ucp_stream_am_proto;
