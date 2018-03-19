@@ -759,9 +759,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
     return UCS_OK;
 }
 
-static void uct_rc_mlx5_ep_reset_qp(uct_rc_mlx5_ep_t *ep)
+static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, struct ibv_qp *qp)
 {
-    uct_rc_txqp_t *txqp = &ep->super.txqp;
+    uct_rc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
+                                                uct_rc_mlx5_iface_t);
 
     /* Make the HW generate CQEs for all in-progress SRQ receives from the QP,
      * so we clean them all before ibv_modify_qp() can see them.
@@ -776,13 +777,23 @@ static void uct_rc_mlx5_ep_reset_qp(uct_rc_mlx5_ep_t *ep)
      */
     memset(&qp_attr, 0, sizeof(qp_attr));
     qp_attr.qp_state = IBV_QPS_RESET;
-    ret = ibv_cmd_modify_qp(txqp->qp, &qp_attr, IBV_QP_STATE, &cmd, sizeof(cmd));
+    ret = ibv_cmd_modify_qp(qp, &qp_attr, IBV_QP_STATE, &cmd, sizeof(cmd));
     if (ret) {
-        ucs_warn("modify qp 0x%x to RESET failed: %m", txqp->qp->qp_num);
+        ucs_warn("modify qp 0x%x to RESET failed: %m", qp->qp_num);
     }
 #else
-    (void)uct_rc_modify_qp(txqp, IBV_QPS_ERR);
+    (void)uct_ib_modify_qp(qp, IBV_QPS_ERR);
 #endif
+
+    uct_rc_mlx5_iface_commom_clean_srq(&iface->mlx5_common, &iface->super,
+                                       qp->qp_num);
+
+    /* Synchronize CQ index with the driver, since it would remove pending
+     * completions for this QP (both send and receive) during ibv_destroy_qp().
+     */
+    uct_rc_mlx5_iface_common_update_cqs_ci(&iface->mlx5_common, &iface->super.super);
+    (void)uct_ib_modify_qp(qp, IBV_QPS_RESET);
+    uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->mlx5_common, &iface->super.super);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
@@ -791,17 +802,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
                                                 uct_rc_mlx5_iface_t);
 
     uct_ib_mlx5_txwq_cleanup(&self->tx.wq);
-
-    uct_rc_mlx5_ep_reset_qp(self);
-    uct_rc_mlx5_iface_commom_clean_srq(&iface->mlx5_common, &iface->super,
-                                       self->qp_num);
-
-    /* Synchronize CQ index with the driver, since it would remove pending
-     * completions for this QP (both send and receive) during ibv_destroy_qp().
-     */
-    uct_rc_mlx5_iface_common_update_cqs_ci(&iface->mlx5_common, &iface->super.super);
-    (void)uct_rc_modify_qp(&self->super.txqp, IBV_QPS_RESET);
-    uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->mlx5_common, &iface->super.super);
+    uct_rc_mlx5_ep_clean_qp(self, self->super.txqp.qp);
+#if IBV_EXP_HW_TM
+    if (UCT_RC_IFACE_TM_ENABLED(&iface->super)) {
+        uct_rc_mlx5_ep_clean_qp(self, self->super.tm_qp);
+    }
+#endif
 
     /* Return all credits if user do flush(UCT_FLUSH_FLAG_CANCEL) before
      * ep_destroy.

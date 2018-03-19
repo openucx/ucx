@@ -631,7 +631,7 @@ static ucs_status_t uct_dc_verbs_reset_dci(uct_dc_iface_t *dc_iface, int dci)
               iface->dcis_txcnt[dci].ci, new_ci);
     iface->dcis_txcnt[dci].ci = new_ci;
 
-    return uct_rc_modify_qp(&dc_iface->tx.dcis[dci].txqp, IBV_QPS_RESET);
+    return uct_ib_modify_qp(dc_iface->tx.dcis[dci].txqp.qp, IBV_QPS_RESET);
 }
 
 /* Send either request for grants or grant message. Request includes ep
