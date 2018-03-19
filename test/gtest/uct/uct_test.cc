@@ -615,12 +615,12 @@ void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
         return; /* Already connected */
     }
 
-    ASSERT_TRUE(client_priv_data.length() <= other.iface_attr().max_conn_priv);
+    ASSERT_TRUE(1 + client_priv_data.length() <= other.iface_attr().max_conn_priv);
 
     /* Connect to the server */
     status = uct_ep_create_sockaddr(iface(), remote_addr,
                                     client_priv_data.c_str(),
-                                    client_priv_data.length(), &ep);
+                                    1 + client_priv_data.length(), &ep);
     ASSERT_UCS_OK(status);
 
     m_eps[index].reset(ep, uct_ep_destroy);

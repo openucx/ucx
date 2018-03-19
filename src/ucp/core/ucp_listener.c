@@ -14,10 +14,26 @@
 static unsigned ucp_listener_conn_request_progress(void *arg)
 {
     ucp_listener_accept_t *accept = arg;
+    ucp_ep_h ep = accept->ep;
+    ucs_status_t status;
 
-    ucs_trace_func("listener=%p ep=%p", accept->listener, accept->ep);
+    ucs_trace_func("listener=%p ep=%p", accept->listener, ep);
 
-    accept->listener->cb(accept->ep, accept->listener->arg);
+    /* send wireup request message, to connect the client to the server's new endpoint */
+    status = ucp_wireup_send_request(accept->ep, accept->ep_uuid);
+    if (status != UCS_OK) {
+        goto err_destroy_ep;
+    }
+
+    if (accept->listener->cb != NULL) {
+        accept->listener->cb(ep, accept->listener->arg);
+    }
+
+    goto out;
+
+err_destroy_ep:
+    ucp_ep_destroy_internal(ep);
+out:
     ucs_free(accept);
     return 0;
 }
@@ -56,33 +72,24 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
         goto err;
     }
 
-    /* send wireup request message, to connect the client to the new endpoint */
-    status = ucp_wireup_send_request(ep, client_data->ep_uuid);
-    if (status != UCS_OK) {
+    /* Defer wireup init and user's callback to be invoked from the main thread */
+    accept = ucs_malloc(sizeof(*accept), "ucp_listener_accept");
+    if (accept == NULL) {
+        ucs_error("failed to allocate listener accept context");
+        status = UCS_ERR_NO_MEMORY;
         goto err_destroy_ep;
     }
 
-    /* if user provided a callback for accepting new connection, launch it on
-     * the main thread
-     */
-    if (listener->cb != NULL) {
-        accept = ucs_malloc(sizeof(*accept), "ucp_listener_accept");
-        if (accept == NULL) {
-            ucs_error("failed to allocate listener accept context");
-            status = UCS_ERR_NO_MEMORY;
-            goto err_destroy_ep;
-        }
+    accept->listener = listener;
+    accept->ep       = ep;
+    accept->ep_uuid  = client_data->ep_uuid;
 
-        accept->listener = listener;
-        accept->ep       = ep;
+    prog_id = UCS_CALLBACKQ_ID_NULL;
+    uct_worker_progress_register_safe(listener->wiface.worker->uct,
+                                      ucp_listener_conn_request_progress,
+                                      accept, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
 
-        /* defer user callback to be invoked from the main thread */
-        prog_id = UCS_CALLBACKQ_ID_NULL;
-        uct_worker_progress_register_safe(listener->wiface.worker->uct,
-                                          ucp_listener_conn_request_progress,
-                                          accept, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                          &prog_id);
-    }
 
     return UCS_OK;
 
