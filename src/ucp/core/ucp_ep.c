@@ -1175,7 +1175,7 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
         } else {
             desc_str = "";
         }
-        snprintf(p, endp - p, "lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT " md[%d]%s %-*c-> ",
+        snprintf(p, endp - p, "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT " md[%d]%s %-*c-> ",
                  lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc),
                  context->tl_rscs[rsc_index].md_index, desc_str,
                  20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name) + strlen(desc_str)),
@@ -1310,6 +1310,7 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
 void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 {
     ucp_rsc_index_t aux_rsc_index;
+    ucp_lane_index_t wireup_lane;
     uct_ep_h wireup_ep;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
@@ -1326,11 +1327,14 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 #endif
             ep->dest_uuid);
 
-    wireup_ep = ep->uct_eps[ucp_ep_get_wireup_msg_lane(ep)];
-    if (ucp_wireup_ep_test(wireup_ep)) {
-        aux_rsc_index = ucp_wireup_ep_get_aux_rsc_index(wireup_ep);
-    } else {
-        aux_rsc_index = UCP_NULL_RESOURCE;
+    /* if there is a wireup lane, set aux_rsc_index to the stub ep resource */
+    aux_rsc_index = UCP_NULL_RESOURCE;
+    wireup_lane   = ucp_ep_config(ep)->key.wireup_lane;
+    if (wireup_lane != UCP_NULL_LANE) {
+        wireup_ep = ep->uct_eps[wireup_lane];
+        if (ucp_wireup_ep_test(wireup_ep)) {
+            aux_rsc_index = ucp_wireup_ep_get_aux_rsc_index(wireup_ep);
+        }
     }
 
     ucp_ep_config_print(stream, ep->worker, ucp_ep_config(ep), NULL,
