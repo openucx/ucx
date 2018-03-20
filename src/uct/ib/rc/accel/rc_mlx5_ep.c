@@ -234,6 +234,9 @@ uct_rc_mlx5_ep_short_dm(uct_rc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
         }
         memcpy(UCS_PTR_BYTE_OFFSET(desc + 1, hdr_len), payload, length);
     } else {
+        /* desc must be partially initialized by mpool.
+         * hint to valgrind to make it defined */
+        VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
         ucs_assert(desc->super.buffer != NULL);
         buffer = (void*)(desc->super.buffer - iface->mlx5_common.dm.dm->start_va);
 
