@@ -91,6 +91,10 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
                                       &prog_id);
 
 
+    /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
+     * that he can wake-up on this event */
+    ucp_worker_signal_internal(listener->wiface.worker);
+
     return UCS_OK;
 
 err_destroy_ep:
@@ -164,6 +168,13 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
             goto err_free;
         }
 
+        if ((context->config.features & UCP_FEATURE_WAKEUP) &&
+            !(listener->wiface.attr.cap.flags & UCT_IFACE_FLAG_CB_ASYNC)) {
+            ucp_worker_iface_cleanup(&listener->wiface);
+            ucs_free(listener);
+            continue;
+        }
+
         ucs_trace("listener %p: accepting connections on %s", listener,
                   tl_md->rsc.md_name);
 
@@ -175,6 +186,7 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
     ucs_error("none of the available transports can listen for connections on %s",
               ucs_sockaddr_str(params->sockaddr.addr, saddr_str, sizeof(saddr_str)));
     status = UCS_ERR_UNREACHABLE;
+    goto out;
 
 err_free:
     ucs_free(listener);

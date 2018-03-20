@@ -1146,8 +1146,8 @@ ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
  * @ingroup UCT_RESOURCE
  * @brief Obtain a notification file descriptor for polling.
  *
- * Only interfaces supporting the @ref UCT_IFACE_FLAG_EVENT_FD implement this
- * function.
+ * Only interfaces that support at least one of the UCT_IFACE_FLAG_EVENT* flags
+ * will implement this function.
  *
  * @param [in]  iface      Interface to get the notification descriptor.
  * @param [out] fd_p       Location to write the notification file descriptor.
