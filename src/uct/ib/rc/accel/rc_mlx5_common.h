@@ -426,7 +426,8 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                              uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                              uint8_t opcode, uint8_t opmod, uint8_t fm_ce_se,
                              size_t wqe_size, uct_ib_mlx5_base_av_t *av,
-                             struct mlx5_grh_av *grh_av, uint32_t imm, int max_log_sge)
+                             struct mlx5_grh_av *grh_av, uint32_t imm, int max_log_sge,
+                             uct_ib_log_sge_t *log_sge)
 {
     struct mlx5_wqe_ctrl_seg *ctrl;
     uint16_t posted;
@@ -446,7 +447,8 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
         uct_ib_mlx5_set_dgram_seg((void*)(ctrl + 1), av, grh_av, qp_type);
     }
 
-    uct_ib_mlx5_log_tx(&iface->super, qp_type, ctrl, txwq->qstart, txwq->qend, max_log_sge,
+    uct_ib_mlx5_log_tx(&iface->super, qp_type, ctrl, txwq->qstart,
+                       txwq->qend, max_log_sge, log_sge,
                        ((opcode == MLX5_OPCODE_SEND) || (opcode == MLX5_OPCODE_SEND_IMM)) ?
                        uct_rc_ep_am_packet_dump : NULL);
 
@@ -482,7 +484,8 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                   /* SEND */ uint8_t am_id, uint64_t am_hdr, uint32_t imm_val_be,
                   /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
                   /* AV   */ uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
-                             size_t av_size, unsigned fm_ce_se, int max_log_sge)
+                             size_t av_size, unsigned fm_ce_se, int max_log_sge,
+                             uct_ib_log_sge_t *log_sge)
 {
     struct mlx5_wqe_ctrl_seg     *ctrl;
     struct mlx5_wqe_raddr_seg    *raddr;
@@ -549,7 +552,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     }
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq, opcode, 0, fm_ce_se,
-                                 wqe_size, av, grh_av, imm_val_be, max_log_sge);
+                                 wqe_size, av, grh_av, imm_val_be, max_log_sge, log_sge);
 }
 
 /*
@@ -579,7 +582,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
          /* ATOMIC      */ uint64_t compare_mask, uint64_t compare, uint64_t swap_add,
          /* AV          */ uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
                            size_t av_size, uint8_t fm_ce_se, uint32_t imm_val_be,
-                           int max_log_sge)
+                           int max_log_sge, uct_ib_log_sge_t *log_sge)
 {
     struct mlx5_wqe_ctrl_seg                     *ctrl;
     struct mlx5_wqe_raddr_seg                    *raddr;
@@ -709,7 +712,8 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq,
                                  (opcode_flags & UCT_RC_MLX5_OPCODE_MASK), opmod,
-                                 fm_ce_se, wqe_size, av, grh_av, imm_val_be, max_log_sge);
+                                 fm_ce_se, wqe_size, av, grh_av, imm_val_be,
+                                 max_log_sge, log_sge);
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -801,7 +805,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, enum ibv_qp_type qp_t
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq,
                                  opcode_flags & UCT_RC_MLX5_OPCODE_MASK,
                                  0, fm_ce_se, wqe_size, av, grh_av, ib_imm_be,
-                                 max_log_sge);
+                                 max_log_sge, NULL);
 }
 
 #if IBV_EXP_HW_TM
@@ -927,7 +931,7 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type
     fm_ce_se |= uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq, opcode, 0, fm_ce_se,
-                                 wqe_size, av, grh_av, imm_val_be, INT_MAX);
+                                 wqe_size, av, grh_av, imm_val_be, INT_MAX, NULL);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -1304,13 +1308,15 @@ done:
  * and tail is filled by head of message. */
 static void UCS_F_ALWAYS_INLINE
 uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len,
-                                    const void *payload, size_t length, void *dm)
+                                    const void *payload, size_t length, void *dm,
+                                    uct_ib_log_sge_t *log_sge)
 {
     size_t head         = (cache && hdr_len) ? ucs_min(length, sizeof(*cache) - hdr_len) : 0;
     size_t body         = ucs_align_down(length - head, sizeof(uint64_t));
     size_t tail         = length - (head + body);
     uint64_t *dst       = dm;
     uint64_t padding    = 0; /* init by 0 to suppress valgrind error */
+    int i               = 0;
 
     ucs_assert(sizeof(*cache) >= hdr_len);
     ucs_assert(head + body + tail == length);
@@ -1327,7 +1333,13 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
         /* atomically by 8 bytes copy data to DM */
         *(dst++) = cache->out[0];
         *(dst++) = cache->out[1];
+        log_sge->sg_list[0].addr   = (uint64_t)cache;
+        log_sge->sg_list[0].length = (uint64_t)hdr_len;
+        i++;
     }
+    log_sge->sg_list[i].addr   = (uint64_t)payload;
+    log_sge->sg_list[i].length = (uint64_t)length;
+    log_sge->num_sge = i + 1;
 
     UCS_WORD_COPY(dst, payload + head, uint64_t, body);
     if (tail) {
@@ -1343,12 +1355,13 @@ uct_rc_mlx5_common_make_data(uct_rc_mlx5_iface_common_t *iface,
                              size_t hdr_len, const void *payload,
                              unsigned length,
                              uct_rc_iface_send_desc_t **desc_p,
-                             void **buffer_p)
+                             void **buffer_p, uct_ib_log_sge_t *log_sge)
 {
     uct_rc_iface_send_desc_t *desc;
     void *buffer;
 
     ucs_assert(iface->dm.dm != NULL);
+    ucs_assert(log_sge != NULL);
 
     desc = ucs_mpool_get_inline(&iface->dm.dm->mp);
     if (ucs_unlikely(desc == NULL)) {
@@ -1362,12 +1375,15 @@ uct_rc_mlx5_common_make_data(uct_rc_mlx5_iface_common_t *iface,
             memcpy(buffer, cache->out, hdr_len);
         }
         memcpy(UCS_PTR_BYTE_OFFSET(buffer, hdr_len), payload, length);
+        log_sge->num_sge = 0;
     } else {
         ucs_assert(desc->super.buffer != NULL);
         buffer = (void*)(desc->super.buffer - iface->dm.dm->start_va);
 
         uct_rc_mlx5_iface_common_copy_to_dm(cache, hdr_len, payload,
-                                            length, desc->super.buffer);
+                                            length, desc->super.buffer, log_sge);
+        log_sge->sg_list[0].lkey = log_sge->sg_list[1].lkey = desc->lkey;
+        log_sge->inline_bitmap = 0;
     }
 
     *desc_p   = desc;
