@@ -128,6 +128,15 @@ typedef struct uct_mlx5_dm_data {
     unsigned             seg_attached;
     uct_ib_device_t      *device;
 } uct_mlx5_dm_data_t;
+
+typedef union uct_rc_mlx5_dm_copy_data {
+    uct_rc_am_short_hdr_t am_hdr;
+#if IBV_EXP_HW_TM
+    struct ibv_exp_tmh    tm_hdr;
+#endif
+    uint64_t              out[2];
+    char                  in[sizeof(uint64_t) * 2];
+} UCS_S_PACKED uct_rc_mlx5_dm_copy_data_t;
 #endif
 
 typedef struct uct_common_mlx5_iface_config {

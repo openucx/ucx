@@ -151,7 +151,13 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.atomic_mode), UCS_CONFIG_TYPE_ENUM(ucp_atomic_modes)},
 
   {"MAX_WORKER_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_NAME_MAX),
-   "Maximal length of worker name. Affects the size of worker address in debug builds.",
+   "Maximal length of worker name. "
+#if ENABLE_DEBUG_DATA
+   "Sent to remote peer as part of worker address."
+#else
+   "Not sent to remote peer per build configuration."
+#endif
+   ,
    ucs_offsetof(ucp_config_t, ctx.max_worker_name), UCS_CONFIG_TYPE_UINT},
 
   {"USE_MT_MUTEX", "n", "Use mutex for multithreading support in UCP.\n"

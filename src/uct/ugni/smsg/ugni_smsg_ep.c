@@ -52,12 +52,12 @@ static ucs_status_t uct_ugni_smsg_mbox_reg(uct_ugni_smsg_iface_t *iface, uct_ugn
         return UCS_ERR_INVALID_PARAM;
     }
 
-    uct_ugni_device_lock(&iface->super.cdm);
+    uct_ugni_cdm_lock(&iface->super.cdm);
     ugni_rc = GNI_MemRegister(uct_ugni_iface_nic_handle(&iface->super), (uint64_t)address,
                               iface->bytes_per_mbox, iface->remote_cq,
                               GNI_MEM_READWRITE,
                               -1, &(mbox->gni_mem));
-    uct_ugni_device_unlock(&iface->super.cdm);
+    uct_ugni_cdm_unlock(&iface->super.cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_MemRegister failed (addr %p, size %zu), Error status: %s %d",
                   address, iface->bytes_per_mbox, gni_err_str[ugni_rc], ugni_rc);
@@ -72,9 +72,9 @@ static ucs_status_t uct_ugni_smsg_mbox_reg(uct_ugni_smsg_iface_t *iface, uct_ugn
 static ucs_status_t uct_ugni_smsg_mbox_dereg(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_mbox_t *mbox){
     gni_return_t ugni_rc;
 
-    uct_ugni_device_lock(&iface->super.cdm);
+    uct_ugni_cdm_lock(&iface->super.cdm);
     ugni_rc = GNI_MemDeregister(uct_ugni_iface_nic_handle(&iface->super), &mbox->gni_mem);
-    uct_ugni_device_unlock(&iface->super.cdm);
+    uct_ugni_cdm_unlock(&iface->super.cdm);
 
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_MemDeregister failed Error status: %s %d",
@@ -162,9 +162,9 @@ ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
         ucs_error("Could not connect ep in smsg");
         return rc;
     }
-    uct_ugni_device_lock(&iface->cdm);
+    uct_ugni_cdm_lock(&iface->cdm);
     gni_rc = GNI_SmsgInit(ep->super.ep, local_attr, &remote_attr);
-    uct_ugni_device_unlock(&iface->cdm);
+    uct_ugni_cdm_unlock(&iface->cdm);
 
     if(GNI_RC_SUCCESS != gni_rc){
         ucs_error("Failed to initalize smsg. %s [%i]", gni_err_str[gni_rc], gni_rc);
@@ -176,9 +176,9 @@ ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
     }
 
     ep_hash = (uint32_t)iface_addr->ep_hash;
-    uct_ugni_device_lock(&iface->cdm);
+    uct_ugni_cdm_lock(&iface->cdm);
     gni_rc = GNI_EpSetEventData(ep->super.ep, iface->cdm.domain_id, ep_hash);
-    uct_ugni_device_unlock(&iface->cdm);
+    uct_ugni_cdm_unlock(&iface->cdm);
 
     if(GNI_RC_SUCCESS != gni_rc){
         ucs_error("Could not set GNI_EpSetEventData!");
@@ -199,10 +199,10 @@ uct_ugni_smsg_ep_am_common_send(uct_ugni_smsg_ep_t *ep, uct_ugni_smsg_iface_t *i
 
     desc->msg_id = iface->smsg_id++;
     desc->flush_group = ep->super.flush_group;
-    uct_ugni_device_lock(&iface->super.cdm);
+    uct_ugni_cdm_lock(&iface->super.cdm);
     gni_rc = GNI_SmsgSendWTag(ep->super.ep, header, header_length, 
                               payload, payload_length, desc->msg_id, am_id);
-    uct_ugni_device_unlock(&iface->super.cdm);
+    uct_ugni_cdm_unlock(&iface->super.cdm);
     if(GNI_RC_SUCCESS != gni_rc){
         goto exit_no_res;
     }

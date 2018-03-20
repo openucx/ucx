@@ -171,7 +171,7 @@ static uint64_t __sumup_host_name(unsigned prime_index)
     p = ucs_get_host_name();
     while (*p != '\0') {
         n = 0;
-        strncpy((char*)&n, p, sizeof(n));
+        memcpy(&n, p, strnlen(p, sizeof(n)));
         sum += ucs_get_prime(i) * n;
         ++i;
         p += ucs_min(sizeof(n), strlen(p));

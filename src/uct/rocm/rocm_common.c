@@ -200,12 +200,17 @@ end:
     return status;
 }
 
-int uct_rocm_is_ptr_gpu_accessible(void *ptr, void **gpu_ptr)
+/* Checks if ptr is ROCm allocated, if so then set need_lock to 0 */
+static hsa_status_t uct_rocm_check_ptr_info(void *ptr, void **gpu_ptr,
+                                            int *need_lock)
 {
+    hsa_status_t status;
     hsa_amd_pointer_info_t info;
     info.size = sizeof(hsa_amd_pointer_info_t);
 
-    hsa_status_t status = hsa_amd_pointer_info(ptr, (hsa_amd_pointer_info_t *)&info,
+    *need_lock = 1;
+    *gpu_ptr = 0;
+    status = hsa_amd_pointer_info(ptr, (hsa_amd_pointer_info_t *)&info,
                                                NULL, NULL, NULL);
 
     if (status == HSA_STATUS_SUCCESS) {
@@ -224,26 +229,27 @@ int uct_rocm_is_ptr_gpu_accessible(void *ptr, void **gpu_ptr)
                 else if (info.type == HSA_EXT_POINTER_TYPE_HSA) {
                     /* This is the GPU pointer */
                     *gpu_ptr += ptr - info.agentBaseAddress;
+                    *need_lock = 0;
                 }
                 else {
                     /* Assume that "ptr" is GPU pointer */
                     *gpu_ptr += ptr - info.agentBaseAddress;
+                    *need_lock = 0;
                 }
             }
-
-            ucs_trace("%p is GPU accessible (agent addr %p, Host Base %p)",
+            ucs_trace("%p info (agent addr %p, Host Base %p)",
                       ptr, info.agentBaseAddress, info.hostBaseAddress);
-            return 1;
         }
     }
 
     ucs_trace_func("%p is not GPU accessible", ptr);
-    return 0;
+    return status;
 }
 
 
 hsa_status_t uct_rocm_memory_lock(void *ptr, size_t size, void **gpu_ptr)
 {
+
     /* We need to lock / register memory on all GPUs because we do not know
        the location of other memory */
     hsa_status_t status = hsa_amd_memory_lock(ptr, size,
@@ -253,6 +259,44 @@ hsa_status_t uct_rocm_memory_lock(void *ptr, size_t size, void **gpu_ptr)
 
     if (status != HSA_STATUS_SUCCESS) {
         ucs_error("Failed to lock memory (%p): 0x%x\n", ptr, status);
+    }
+
+    return status;
+}
+
+/** Convert pointer to pointer which could be used for GPU access.
+*/
+hsa_status_t uct_rocm_cma_ptr_to_gpu_ptr(void *ptr, void **gpu_address,
+                                         size_t size, int any_memory,
+                                         int *locked)
+{
+    hsa_status_t status;
+    int need_lock = 0;
+
+    /* Assume that we do not need to lock memory */
+    *locked = 0;
+
+    if (!any_memory) {
+        /* We do not want to deal with memory about which
+         * ROCm stack is not aware */
+        ucs_warn("Address %p is not GPU registered", ptr);
+        return HSA_STATUS_ERROR;
+    }
+
+    status = uct_rocm_check_ptr_info(ptr, gpu_address, &need_lock);
+    if (status != HSA_STATUS_SUCCESS || !need_lock)
+        return status;
+
+    /* Register / lock this memory for GPU access */
+    status =  uct_rocm_memory_lock(ptr, size, gpu_address);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_error("Could not lock  %p. Status %d", ptr, status);
+        return status;
+    } else {
+        ucs_trace("Lock address %p as GPU %p", ptr, *gpu_address);
+        /* We locked this memory. Set the flag to be aware that
+         * we need to unlock it later */
+        *locked = 1;
     }
 
     return status;

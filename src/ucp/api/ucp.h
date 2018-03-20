@@ -1457,26 +1457,31 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
  *
  * @code {.c}
  * void application_initialization() {
+ * // should be called once in application init flow and before
+ * // process_comminucation() is used
  *     ...
  *     status = ucp_worker_get_efd(worker, &fd);
  *     ...
  * }
  *
  * void process_comminucation() {
+ * // should be called every time need to wait for some condition such as
+ * // ucp request completion in sleep mode.
+ *
  *     for (;;) {
- *         // check for events as long as progress is made
+ *         // check for stop condition as long as progress is made
  *         if (check_for_events()) {
- *              break;                    // got something interesting, exit
+ *              break;
  *         } else if (ucp_worker_progress(worker)) {
- *              continue;                 // got something uninteresting, retry
+ *              continue;                 // some progress happened but condition not met
  *         }
  *
  *         // arm the worker and clean-up fd
  *         status = ucp_worker_arm(worker);
  *         if (UCS_OK == status) {
- *             poll(&fds, nfds, timeout);  // wait for events
+ *             poll(&fds, nfds, timeout);  // wait for events (sleep mode)
  *         } else if (UCS_ERR_BUSY == status) {
- *             continue;                   // poll for more events
+ *             continue;                   // could not arm, need to progress more
  *         } else {
  *             abort();
  *         }

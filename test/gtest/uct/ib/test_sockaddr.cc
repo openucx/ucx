@@ -79,7 +79,7 @@ public:
                               (uct_test::entity::client_priv_data.c_str())),
                   std::string(reinterpret_cast<const char *>(conn_priv_data)));
 
-        EXPECT_EQ(uct_test::entity::client_priv_data.length(), length);
+        EXPECT_EQ(1 + uct_test::entity::client_priv_data.length(), length);
         self->server_recv_req++;
         return UCS_OK;
     }
@@ -108,7 +108,7 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
 
     /* wait for the server to connect */
     while (server_recv_req == 0) {
-        sched_yield();
+        progress();
     }
     ASSERT_TRUE(server_recv_req == 1);
     /* since the transport may support a graceful exit in case of an error,
@@ -147,7 +147,7 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
     }
 
     while (server_recv_req < num_clients){
-        sched_yield();
+        progress();
     }
     ASSERT_TRUE(server_recv_req == num_clients);
     EXPECT_EQ(0, err_count);
@@ -168,7 +168,7 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
     }
 
     while (server_recv_req < num_conns_on_client) {
-        sched_yield();
+        progress();
     }
     ASSERT_TRUE(server_recv_req == num_conns_on_client);
     EXPECT_EQ(0, err_count);

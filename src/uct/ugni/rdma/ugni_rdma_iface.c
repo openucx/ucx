@@ -114,21 +114,21 @@ unsigned uct_ugni_progress(void *arg)
     unsigned count = 0;
 
     while (1) {
-        uct_ugni_device_lock(&iface->cdm);
+        uct_ugni_cdm_lock(&iface->cdm);
         ugni_rc = GNI_CqGetEvent(iface->local_cq, &event_data);
         if (GNI_RC_NOT_DONE == ugni_rc) {
-            uct_ugni_device_unlock(&iface->cdm);
+            uct_ugni_cdm_unlock(&iface->cdm);
             break;
         }
         if ((GNI_RC_SUCCESS != ugni_rc && !event_data) || GNI_CQ_OVERRUN(event_data)) {
-            uct_ugni_device_unlock(&iface->cdm);
+            uct_ugni_cdm_unlock(&iface->cdm);
             ucs_error("GNI_CqGetEvent falied. Error status %s %d ",
                       gni_err_str[ugni_rc], ugni_rc);
             return count;
         }
 
         ugni_rc = GNI_GetCompleted(iface->local_cq, event_data, &event_post_desc_ptr);
-        uct_ugni_device_unlock(&iface->cdm);
+        uct_ugni_cdm_unlock(&iface->cdm);
         if (GNI_RC_SUCCESS != ugni_rc && GNI_RC_TRANSACTION_ERROR != ugni_rc) {
             ucs_error("GNI_GetCompleted falied. Error status %s %d",
                       gni_err_str[ugni_rc], ugni_rc);
