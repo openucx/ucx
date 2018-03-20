@@ -606,6 +606,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     case MLX5_OPCODE_SEND:
         /* Data segment only */
         ucs_assert(length < (2ul << 30));
+        ucs_assert(length <= iface->super.config.seg_size);
 
         wqe_size = ctrl_av_size + sizeof(struct mlx5_wqe_data_seg);
         uct_ib_mlx5_set_data_seg(next_seg, buffer, length, *lkey_p);
