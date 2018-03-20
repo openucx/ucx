@@ -1377,6 +1377,9 @@ uct_rc_mlx5_common_make_data(uct_rc_mlx5_iface_common_t *iface,
         memcpy(UCS_PTR_BYTE_OFFSET(buffer, hdr_len), payload, length);
         log_sge->num_sge = 0;
     } else {
+        /* desc must be partially initialized by mpool.
+         * hint to valgrind to make it defined */
+        VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
         ucs_assert(desc->super.buffer != NULL);
         buffer = (void*)(desc->super.buffer - iface->dm.dm->start_va);
 
