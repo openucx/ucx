@@ -25,12 +25,10 @@ ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
 
 ucs_config_field_t uct_mlx5_common_config_table[] = {
 #if HAVE_IBV_EXP_DM
-    /* TODO: set 1k limit */
-    {"DM_SIZE", "0",
+    {"DM_SIZE", "2k",
      "Device Memory segment size (0 - disabled)",
      ucs_offsetof(uct_common_mlx5_iface_config_t, dm.seg_len), UCS_CONFIG_TYPE_MEMUNITS},
-    /* TODO: set 1 buffer limit */
-    {"DM_COUNT", "0",
+    {"DM_COUNT", "1",
      "Device Memory segments count (0 - disabled)",
      ucs_offsetof(uct_common_mlx5_iface_config_t, dm.count), UCS_CONFIG_TYPE_UINT},
 #endif
@@ -287,8 +285,9 @@ uct_rc_mlx5_iface_common_dm_tl_init(uct_mlx5_dm_data_t *data,
     struct ibv_exp_alloc_dm_attr dm_attr;
     struct ibv_exp_reg_mr_in mr_in;
 
-    data->seg_len      = ucs_align_up(config->dm.seg_len,
-                                      sizeof(uct_rc_mlx5_dm_copy_data_t));
+    data->seg_len      = ucs_min(ucs_align_up(config->dm.seg_len,
+                                              sizeof(uct_rc_mlx5_dm_copy_data_t)),
+                                 iface->super.config.seg_size);
     data->seg_count    = config->dm.count;
     data->seg_attached = 0;
     data->device       = uct_ib_iface_device(&iface->super);
