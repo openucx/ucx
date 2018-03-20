@@ -175,44 +175,6 @@ uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 }
 
 #if HAVE_IBV_EXP_DM
-/* DM memory should be written by 8 bytes (int64) to eliminate
- * processor cache issues. To make this used uct_rc_mlx5_dm_copy_data_t
- * datatype where first hdr_len bytes are filled by message header
- * and tail is filled by head of message. */
-static void UCS_F_ALWAYS_INLINE
-uct_rc_mlx5_ep_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len,
-                          const void *payload, size_t length, void *dm)
-{
-    size_t head         = (cache && hdr_len) ? ucs_min(length, sizeof(*cache) - hdr_len) : 0;
-    size_t body         = ucs_align_down(length - head, sizeof(uint64_t));
-    size_t tail         = length - (head + body);
-    uint64_t *dst       = dm;
-    uint64_t padding    = 0; /* init by 0 to suppress valgrind error */
-
-    ucs_assert(sizeof(*cache) >= hdr_len);
-    ucs_assert(head + body + tail == length);
-    ucs_assert(tail < sizeof(uint64_t));
-
-    /* copy head of payload to tail of cache */
-    memcpy(cache->in + hdr_len, payload, head);
-
-    UCS_STATIC_ASSERT(sizeof(*cache) == sizeof(cache->out));
-    UCS_STATIC_ASSERT(sizeof(cache->in) == sizeof(cache->out));
-
-    /* condition is static-evaluated */
-    if (cache && hdr_len) {
-        /* atomically by 8 bytes copy data to DM */
-        *(dst++) = cache->out[0];
-        *(dst++) = cache->out[1];
-    }
-
-    UCS_WORD_COPY(dst, payload + head, uint64_t, body);
-    if (tail) {
-        memcpy(&padding, payload + head + body, tail);
-        *(dst + (body / sizeof(uint64_t))) = padding;
-    }
-}
-
 static ucs_status_t UCS_F_ALWAYS_INLINE
 uct_rc_mlx5_ep_short_dm(uct_rc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
                         size_t hdr_len, const void *payload, unsigned length,
@@ -223,26 +185,12 @@ uct_rc_mlx5_ep_short_dm(uct_rc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
     uct_rc_iface_t *rc_iface   = &iface->super;
     uct_rc_iface_send_desc_t *desc;
     void *buffer;
+    ucs_status_t status;
 
-    desc = ucs_mpool_get_inline(&iface->mlx5_common.dm.dm->mp);
-    if (ucs_unlikely(desc == NULL)) {
-        /* in case if no resources available - fallback to bcopy */
-        UCT_RC_IFACE_GET_TX_DESC(rc_iface, &rc_iface->tx.mp, desc);
-        desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
-        buffer = desc + 1;
-
-        /* condition is static-evaluated, no performance penalty */
-        if (cache && hdr_len) {
-            memcpy(desc + 1, cache->out, hdr_len);
-        }
-        memcpy(UCS_PTR_BYTE_OFFSET(desc + 1, hdr_len), payload, length);
-    } else {
-        ucs_assert(desc->super.buffer != NULL);
-        buffer = (void*)(desc->super.buffer - iface->mlx5_common.dm.dm->start_va);
-
-        uct_rc_mlx5_ep_copy_to_dm(cache, hdr_len, payload,
-                                  length, desc->super.buffer);
-
+    status = uct_rc_mlx5_common_make_data(&iface->mlx5_common, &iface->super,
+                                          cache, hdr_len, payload, length, &desc, &buffer);
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        return status;
     }
     uct_rc_mlx5_txqp_bcopy_post(rc_iface, &ep->super.txqp, &ep->tx.wq,
                                 opcode, hdr_len + length,
@@ -615,7 +563,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
     uct_rc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     uct_rc_mlx5_dm_copy_data_t cache;
 
-    if (ucs_likely((sizeof(uct_rc_am_short_hdr_t) + length <= UCT_IB_MLX5_AM_MAX_SHORT(0)) ||
+    if (ucs_likely((sizeof(struct ibv_exp_tmh) + length <= UCT_IB_MLX5_AM_MAX_SHORT(0)) ||
                    !iface->mlx5_common.dm.dm)) {
 #endif
         return uct_rc_mlx5_ep_tag_eager_short_inline(tl_ep, tag, data, length);

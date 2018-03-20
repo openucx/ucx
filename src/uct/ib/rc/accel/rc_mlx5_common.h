@@ -1297,4 +1297,83 @@ done:
     return count;
 }
 
+#if HAVE_IBV_EXP_DM
+/* DM memory should be written by 8 bytes (int64) to eliminate
+ * processor cache issues. To make this used uct_rc_mlx5_dm_copy_data_t
+ * datatype where first hdr_len bytes are filled by message header
+ * and tail is filled by head of message. */
+static void UCS_F_ALWAYS_INLINE
+uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len,
+                                    const void *payload, size_t length, void *dm)
+{
+    size_t head         = (cache && hdr_len) ? ucs_min(length, sizeof(*cache) - hdr_len) : 0;
+    size_t body         = ucs_align_down(length - head, sizeof(uint64_t));
+    size_t tail         = length - (head + body);
+    uint64_t *dst       = dm;
+    uint64_t padding    = 0; /* init by 0 to suppress valgrind error */
+
+    ucs_assert(sizeof(*cache) >= hdr_len);
+    ucs_assert(head + body + tail == length);
+    ucs_assert(tail < sizeof(uint64_t));
+
+    /* copy head of payload to tail of cache */
+    memcpy(cache->in + hdr_len, payload, head);
+
+    UCS_STATIC_ASSERT(sizeof(*cache) == sizeof(cache->out));
+    UCS_STATIC_ASSERT(sizeof(cache->in) == sizeof(cache->out));
+
+    /* condition is static-evaluated */
+    if (cache && hdr_len) {
+        /* atomically by 8 bytes copy data to DM */
+        *(dst++) = cache->out[0];
+        *(dst++) = cache->out[1];
+    }
+
+    UCS_WORD_COPY(dst, payload + head, uint64_t, body);
+    if (tail) {
+        memcpy(&padding, payload + head + body, tail);
+        *(dst + (body / sizeof(uint64_t))) = padding;
+    }
+}
+
+static ucs_status_t UCS_F_ALWAYS_INLINE
+uct_rc_mlx5_common_make_data(uct_rc_mlx5_iface_common_t *iface,
+                             uct_rc_iface_t *rc_iface,
+                             uct_rc_mlx5_dm_copy_data_t *cache,
+                             size_t hdr_len, const void *payload,
+                             unsigned length,
+                             uct_rc_iface_send_desc_t **desc_p,
+                             void **buffer_p)
+{
+    uct_rc_iface_send_desc_t *desc;
+    void *buffer;
+
+    ucs_assert(iface->dm.dm != NULL);
+
+    desc = ucs_mpool_get_inline(&iface->dm.dm->mp);
+    if (ucs_unlikely(desc == NULL)) {
+        /* in case if no resources available - fallback to bcopy */
+        UCT_RC_IFACE_GET_TX_DESC(rc_iface, &rc_iface->tx.mp, desc);
+        desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
+        buffer = desc + 1;
+
+        /* condition is static-evaluated, no performance penalty */
+        if (cache && hdr_len) {
+            memcpy(buffer, cache->out, hdr_len);
+        }
+        memcpy(UCS_PTR_BYTE_OFFSET(buffer, hdr_len), payload, length);
+    } else {
+        ucs_assert(desc->super.buffer != NULL);
+        buffer = (void*)(desc->super.buffer - iface->dm.dm->start_va);
+
+        uct_rc_mlx5_iface_common_copy_to_dm(cache, hdr_len, payload,
+                                            length, desc->super.buffer);
+    }
+
+    *desc_p   = desc;
+    *buffer_p = buffer;
+    return UCS_OK;
+}
+#endif
+
 #endif
