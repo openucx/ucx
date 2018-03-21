@@ -460,8 +460,8 @@ run_client_server() {
     UCX_NET_DEVICES=${dev} UCX_TLS=rc ./${test_name} -a ${server_ip} -p ${server_port} &
     hw_client_pid=$!
 
-    wait ${hw_client_pid} ${hw_server_pid}
-
+    wait ${hw_client_pid}
+    kill -9 ${hw_server_pid}
 }
 
 run_ucp_client_server() {
