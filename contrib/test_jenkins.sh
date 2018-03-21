@@ -631,6 +631,11 @@ test_memtrack() {
 	UCX_MEMTRACK_DEST=stdout ./test/gtest/gtest --gtest_filter=test_memtrack.sanity
 }
 
+test_unused_env_var() {
+	echo "==== Running ucx_info env vars test ===="
+	UCX_TLS=dc ./src/tools/info/ucx_info -v | grep "unused" | grep -q "UCX_TLS"
+}
+
 #
 # Run Coverity and report errors
 #
@@ -813,6 +818,7 @@ run_tests() {
 	do_distributed_task 3 4 test_profiling
 	do_distributed_task 3 4 test_dlopen
 	do_distributed_task 3 4 test_memtrack
+	do_distributed_task 0 4 test_unused_env_var
 
 	# all are running gtest
 	run_gtest

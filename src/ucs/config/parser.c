@@ -12,6 +12,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 #include <ucs/datastruct/list.h>
+#include <ucs/datastruct/khash.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug.h>
@@ -21,12 +22,15 @@
 
 typedef UCS_CONFIG_ARRAY_FIELD(void, data) ucs_config_array_field_t;
 
+KHASH_SET_INIT_STR(ucs_config_env_vars)
+
 
 /* Process environment variables */
 extern char **environ;
 
 
 UCS_LIST_HEAD(ucs_config_global_list);
+static khash_t(ucs_config_env_vars) ucs_config_parser_env_vars;
 
 
 const char *ucs_async_mode_names[] = {
@@ -835,18 +839,45 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
         } else if (((table_prefix == NULL) || !strncmp(name, table_prefix, prefix_len)) &&
                    !strcmp(name + prefix_len, field->name))
         {
-            if (value != NULL) {
-                ucs_config_parser_release_field(field, var);
-                status = ucs_config_parser_parse_field(field, value, var);
-                if (status != UCS_OK) {
-                    return status;
-                }
+            ucs_config_parser_release_field(field, var);
+            status = ucs_config_parser_parse_field(field, value, var);
+            if (status != UCS_OK) {
+                return status;
             }
             ++count;
         }
     }
 
     return (count == 0) ? UCS_ERR_NO_ELEM : UCS_OK;
+}
+
+static void ucs_config_parser_mark_env_var_used(const char *name)
+{
+    static pthread_mutex_t hash_lock = PTHREAD_MUTEX_INITIALIZER;
+    khiter_t iter;
+    char *key;
+    int ret;
+
+    if (!ucs_global_opts.warn_unused_env_vars) {
+        return;
+    }
+
+    pthread_mutex_lock(&hash_lock);
+
+    iter = kh_get(ucs_config_env_vars, &ucs_config_parser_env_vars, name);
+    if (iter != kh_end(&ucs_config_parser_env_vars)) {
+        goto out; /* already exists */
+    }
+
+    key = ucs_strdup(name, "config_parser_env_var");
+    if (key == NULL) {
+        ucs_error("strdup(%s) failed", name);
+        goto out;
+    }
+
+    kh_put(ucs_config_env_vars, &ucs_config_parser_env_vars, key, &ret);
+out:
+    pthread_mutex_unlock(&hash_lock);
 }
 
 static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fields,
@@ -895,6 +926,7 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
             env_value = getenv(buf);
             if (env_value != NULL) {
                 ucs_config_parser_release_field(field, var);
+                ucs_config_parser_mark_env_var_used(buf);
                 status = ucs_config_parser_parse_field(field, env_value, var);
                 if (status != UCS_OK) {
                     /* If set to ignore errors, restore the default value */
@@ -1210,22 +1242,37 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
         snprintf(title, sizeof(title), "%s configuration", entry->name);
         ucs_config_parser_print_opts(stream, title, opts, entry->fields,
                                      entry->prefix, flags);
+
+        ucs_config_parser_release_opts(opts, entry->fields);
         ucs_free(opts);
     }
 }
 
-void ucs_config_parser_check_env_vars()
+void ucs_config_parser_warn_unused_env_vars()
 {
-    const ucs_config_global_list_entry_t *entry;
-    ucs_status_t status;
-    const char *var_name, *field_name;
+    char unused_env_vars_names[40];
+    int num_unused_vars;
     char **envp, *envstr;
     size_t prefix_len;
+    char *var_name;
+    char *p, *endp;
+    khiter_t iter;
     char *saveptr;
-    int found;
+    int truncated;
+    int ret;
 
-    prefix_len = strlen(UCS_CONFIG_PREFIX);
-    for (envp = environ; *envp != NULL; ++envp) {
+    if (!ucs_global_opts.warn_unused_env_vars) {
+        return;
+    }
+
+    prefix_len      = strlen(UCS_CONFIG_PREFIX);
+    p               = unused_env_vars_names;
+    endp            = p + sizeof(unused_env_vars_names) - 1;
+    *endp           = '\0';
+    truncated       = 0;
+    num_unused_vars = 0;
+
+    for (envp = environ; !truncated && (*envp != NULL); ++envp) {
         envstr = ucs_strdup(*envp, "env_str");
         if (envstr == NULL) {
             continue;
@@ -1237,23 +1284,29 @@ void ucs_config_parser_check_env_vars()
             continue; /* Not UCX */
         }
 
-        field_name = var_name + prefix_len;
-        found = 0;
-        ucs_list_for_each(entry, &ucs_config_global_list, list) {
-            status = ucs_config_parser_set_value_internal(NULL, entry->fields,
-                                                          field_name, NULL,
-                                                          entry->prefix, 1);
-            if (status == UCS_OK) {
-                found = 1;
-                break;
+        iter = kh_get(ucs_config_env_vars, &ucs_config_parser_env_vars, var_name);
+        if (iter == kh_end(&ucs_config_parser_env_vars)) {
+            ret = snprintf(p, endp - p, " %s,", var_name);
+            if (ret > endp - p) {
+                truncated = 1;
+                *p = '\0';
+            } else {
+                p += strlen(p);
+                ++num_unused_vars;
             }
         }
 
-        if (!found) {
-            ucs_warn("invalid configuration variable '%s'", var_name);
-        }
-
         ucs_free(envstr);
+    }
+
+    if (num_unused_vars > 0) {
+        if (!truncated) {
+            p[-1] = '\0'; /* remove trailing comma */
+        }
+        ucs_warn("unused env variable%s:%s%s (set %s%s=n to suppress this warning)",
+                 num_unused_vars > 1 ? "s" : "", unused_env_vars_names,
+                 truncated ? "..." : "", UCS_CONFIG_PREFIX,
+                 UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
     }
 }
 
@@ -1281,3 +1334,16 @@ int ucs_config_names_search(ucs_config_names_array_t config_names,
     return -1;
 }
 
+UCS_STATIC_INIT {
+    kh_init_inplace(ucs_config_env_vars, &ucs_config_parser_env_vars);
+}
+
+UCS_STATIC_CLEANUP {
+    int UCS_V_UNUSED dummy;
+    const char *key;
+
+    kh_foreach(&ucs_config_parser_env_vars, key, dummy, {
+        ucs_free((void*)key);
+    })
+    kh_destroy_inplace(ucs_config_env_vars, &ucs_config_parser_env_vars);
+}
