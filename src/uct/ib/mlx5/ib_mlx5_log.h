@@ -15,7 +15,7 @@
 typedef struct uct_ib_log_sge {
     int            num_sge;
     uint64_t       inline_bitmap;
-    struct ibv_sge sg_list[16];
+    struct ibv_sge sg_list[2];
 } uct_ib_log_sge_t;
 
 ucs_status_t uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe,

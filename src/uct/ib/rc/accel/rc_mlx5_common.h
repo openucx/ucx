@@ -1392,8 +1392,10 @@ uct_rc_mlx5_common_make_data(uct_rc_mlx5_iface_common_t *iface,
 
         uct_rc_mlx5_iface_common_copy_to_dm(cache, hdr_len, payload,
                                             length, desc->super.buffer, log_sge);
-        log_sge->sg_list[0].lkey = log_sge->sg_list[1].lkey = desc->lkey;
-        log_sge->inline_bitmap = 0;
+        if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
+            log_sge->sg_list[0].lkey = log_sge->sg_list[1].lkey = desc->lkey;
+            log_sge->inline_bitmap = 0;
+        }
     }
 
     *desc_p   = desc;

@@ -314,7 +314,7 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
     }
 
     /* Data segments*/
-    if (ucs_likely(log_sge == NULL)) {
+    if (log_sge == NULL) {
         i = 0;
         inline_bitmap = 0;
 

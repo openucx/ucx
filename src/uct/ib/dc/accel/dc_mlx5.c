@@ -416,7 +416,8 @@ ucs_status_t uct_dc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     ucs_status_t status;
     uct_rc_mlx5_dm_copy_data_t cache;
 
-    if (ucs_likely((sizeof(uct_rc_am_short_hdr_t) + length <= UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE)) ||
+    if (ucs_likely((sizeof(uct_rc_am_short_hdr_t) + length <=
+                    UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE)) ||
                    !iface->mlx5_common.dm.dm)) {
 #endif
         return uct_dc_mlx5_ep_am_short_inline(tl_ep, id, hdr, buffer, length);
@@ -735,7 +736,8 @@ ucs_status_t uct_dc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     uct_rc_mlx5_dm_copy_data_t cache;
 
-    if (ucs_likely((sizeof(struct ibv_exp_tmh) + length <= UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE)) ||
+    if (ucs_likely((sizeof(struct ibv_exp_tmh) + length <=
+                    UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE)) ||
                    !iface->mlx5_common.dm.dm)) {
 #endif
         return uct_dc_mlx5_ep_tag_eager_short_inline(tl_ep, tag, data, length);
