@@ -13,8 +13,12 @@
 #define UCT_CUDA_DEV_NAME   "gdrcopy0"
 
 
+typedef uint64_t uct_gdr_copy_iface_addr_t;
+
+
 typedef struct uct_gdr_copy_iface {
-    uct_base_iface_t        super;
+    uct_base_iface_t            super;
+    uct_gdr_copy_iface_addr_t   id;
 } uct_gdr_copy_iface_t;
 
 
