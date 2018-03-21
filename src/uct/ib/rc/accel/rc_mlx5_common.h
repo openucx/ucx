@@ -1336,13 +1336,13 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
         *(dst++) = cache->out[1];
         if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
             log_sge->sg_list[0].addr   = (uint64_t)cache;
-            log_sge->sg_list[0].length = (uint64_t)hdr_len;
+            log_sge->sg_list[0].length = (uint32_t)hdr_len;
             i++;
         }
     }
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
         log_sge->sg_list[i].addr   = (uint64_t)payload;
-        log_sge->sg_list[i].length = (uint64_t)length;
+        log_sge->sg_list[i].length = (uint32_t)length;
         i++;
     }
     log_sge->num_sge = i;
