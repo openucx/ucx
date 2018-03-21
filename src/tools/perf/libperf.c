@@ -367,11 +367,11 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         max_iov  = attr.cap.put.max_iov;
         break;
     case UCX_PERF_CMD_GET:
-        required_flags = __get_flag(params->uct.data_layout, 0,
+        required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_GET_SHORT,
                                     UCT_IFACE_FLAG_GET_BCOPY, UCT_IFACE_FLAG_GET_ZCOPY);
         min_size = __get_max_size(params->uct.data_layout, 0, 0,
                                   attr.cap.get.min_zcopy);
-        max_size = __get_max_size(params->uct.data_layout, 0,
+        max_size = __get_max_size(params->uct.data_layout, attr.cap.get.max_short,
                                   attr.cap.get.max_bcopy, attr.cap.get.max_zcopy);
         max_iov  = attr.cap.get.max_iov;
         break;

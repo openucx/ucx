@@ -494,6 +494,7 @@ struct uct_iface_attr {
         } put;                           /**< Attributes for PUT operations */
 
         struct {
+            size_t           max_short;  /**< Maximal size for get_short */
             size_t           max_bcopy;  /**< Maximal size for get_bcopy */
             size_t           min_zcopy;  /**< Minimal size for get_zcopy (total
                                               of @ref uct_iov_t::length of the
@@ -1743,6 +1744,17 @@ UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep,
                                              uct_completion_t *comp)
 {
     return ep->iface->ops.ep_put_zcopy(ep, iov, iovcnt, remote_addr, rkey, comp);
+}
+
+
+/**
+ * @ingroup UCT_RMA
+ * @brief
+ */
+UCT_INLINE_API ucs_status_t uct_ep_get_short(uct_ep_h ep, const void *buffer, unsigned length,
+                                             uint64_t remote_addr, uct_rkey_t rkey)
+{
+    return ep->iface->ops.ep_get_short(ep, buffer, length, remote_addr, rkey);
 }
 
 
