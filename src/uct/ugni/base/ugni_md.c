@@ -64,12 +64,12 @@ static ucs_status_t uct_ugni_mem_reg(uct_md_h md, void *address, size_t length,
         goto mem_err;
     }
 
-    uct_ugni_device_lock(&ugni_md->cdm);
+    uct_ugni_cdm_lock(&ugni_md->cdm);
     ugni_rc = GNI_MemRegister(ugni_md->cdm.nic_handle, (uint64_t)address,
                               length, NULL,
                               GNI_MEM_READWRITE | GNI_MEM_RELAXED_PI_ORDERING,
                               -1, mem_hndl);
-    uct_ugni_device_unlock(&ugni_md->cdm);
+    uct_ugni_cdm_unlock(&ugni_md->cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_MemRegister failed (addr %p, size %zu), Error status: %s %d",
                  address, length, gni_err_str[ugni_rc], ugni_rc);
@@ -94,9 +94,9 @@ static ucs_status_t uct_ugni_mem_dereg(uct_md_h md, uct_mem_h memh)
     gni_return_t ugni_rc;
     ucs_status_t status = UCS_OK;
 
-    uct_ugni_device_lock(&ugni_md->cdm);
+    uct_ugni_cdm_lock(&ugni_md->cdm);
     ugni_rc = GNI_MemDeregister(ugni_md->cdm.nic_handle, mem_hndl);
-    uct_ugni_device_unlock(&ugni_md->cdm);
+    uct_ugni_cdm_unlock(&ugni_md->cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_MemDeregister failed, Error status: %s %d",
                  gni_err_str[ugni_rc], ugni_rc);

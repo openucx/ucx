@@ -1,5 +1,6 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
+ * Copyright (c) Los Alamos National Security, LLC. 2018. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -21,9 +22,6 @@ typedef struct uct_ugni_device {
     uint32_t         cpu_id;                    /**< CPU attached directly
                                                   to the device */
     cpu_set_t        cpu_mask;                  /**< CPU mask */
-#if ENABLE_MT
-    ucs_spinlock_t   lock;                      /**< Device lock */
-#endif
     /* TBD - reference counter */
 } uct_ugni_device_t;
 
@@ -34,6 +32,10 @@ typedef struct uct_ugni_cdm {
     ucs_thread_mode_t  thread_mode;
     uint32_t           address; 
     uint16_t           domain_id;
+
+#if ENABLE_MT
+    ucs_spinlock_t   lock;                      /**< Device lock */
+#endif
 } uct_ugni_cdm_t;
 
 /**
