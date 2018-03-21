@@ -1327,20 +1327,27 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
 
     UCS_STATIC_ASSERT(sizeof(*cache) == sizeof(cache->out));
     UCS_STATIC_ASSERT(sizeof(cache->in) == sizeof(cache->out));
+    UCS_STATIC_ASSERT(sizeof(log_sge->sg_list) / sizeof(log_sge->sg_list[0]) >= 2);
 
     /* condition is static-evaluated */
     if (cache && hdr_len) {
         /* atomically by 8 bytes copy data to DM */
         *(dst++) = cache->out[0];
         *(dst++) = cache->out[1];
-        log_sge->sg_list[0].addr   = (uint64_t)cache;
-        log_sge->sg_list[0].length = (uint64_t)hdr_len;
+        if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
+            log_sge->sg_list[0].addr   = (uint64_t)cache;
+            log_sge->sg_list[0].length = (uint64_t)hdr_len;
+            i++;
+        }
+    }
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
+        log_sge->sg_list[i].addr   = (uint64_t)payload;
+        log_sge->sg_list[i].length = (uint64_t)length;
         i++;
     }
-    log_sge->sg_list[i].addr   = (uint64_t)payload;
-    log_sge->sg_list[i].length = (uint64_t)length;
-    log_sge->num_sge = i + 1;
+    log_sge->num_sge = i;
 
+    /* copy payload to DM */
     UCS_WORD_COPY(dst, payload + head, uint64_t, body);
     if (tail) {
         memcpy(&padding, payload + head + body, tail);
