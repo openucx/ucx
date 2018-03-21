@@ -242,6 +242,12 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
 
 
 /**
+ * Modify QP to a given state and check for error
+ */
+ucs_status_t uct_ib_modify_qp(struct ibv_qp *qp, enum ibv_qp_state state);
+
+
+/**
  * find device mtu. This function can be used before ib
  * interface is created.
  */

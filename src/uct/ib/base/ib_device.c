@@ -588,6 +588,20 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
     return buf;
 }
 
+ucs_status_t uct_ib_modify_qp(struct ibv_qp *qp, enum ibv_qp_state state)
+{
+    struct ibv_qp_attr qp_attr;
+
+    ucs_debug("modify QP 0x%x to state %d", qp->qp_num, state);
+    memset(&qp_attr, 0, sizeof(qp_attr));
+    qp_attr.qp_state = state;
+    if (ibv_modify_qp(qp, &qp_attr, IBV_QP_STATE)) {
+        ucs_warn("modify qp 0x%x to state %d failed: %m", qp->qp_num, state);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
 
 ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
                                               const char *tl_name, unsigned flags,
