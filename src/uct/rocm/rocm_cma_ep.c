@@ -46,42 +46,6 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_cma_ep_t, uct_ep_t);
                    (_rkey))
 
 
-/** Convert pointer to pointer which could be used for 
-  * GPU access.
-*/
-static ucs_status_t uct_rocm_cma_ptr_to_gpu_ptr(void *ptr, void **gpu_address,
-                                                size_t size, int any_memory,
-                                                int *locked)
-{
-    /* Assume that we do not need to lock memory */
-    *locked = 0;
-
-    /* Try to get GPU address if any */
-    if (!uct_rocm_is_ptr_gpu_accessible(ptr, gpu_address)) {
-        /* We do not have GPU address. Check what to do. */
-        if (!any_memory) {
-            /* We do not want to deal with memory about which
-             * ROCm stack is not aware */
-            ucs_warn("Address %p is not GPU registered", ptr);
-            return UCS_ERR_INVALID_ADDR;
-        } else {
-            /* Register / lock this memory for GPU access */
-            hsa_status_t status =  uct_rocm_memory_lock(ptr, size, gpu_address);
-
-            if (status != HSA_STATUS_SUCCESS) {
-                ucs_error("Could not lock  %p. Status %d", ptr, status);
-                return UCS_ERR_INVALID_ADDR;
-            } else {
-                ucs_trace("Lock address %p as GPU %p", ptr, *gpu_address);
-                /* We locked this memory. Set the flag to be aware that
-                 * we need to unlock it later */
-                *locked = 1;
-            }
-        }
-    }
-
-    return UCS_OK;
-}
 
 /** Release GPU address if it was previously locked */
 static void uct_rocm_cma_unlock_ptrs(void **local_ptr, int *locked,
@@ -131,8 +95,8 @@ ucs_status_t uct_rocm_cma_ep_common_zcopy(uct_ep_h tl_ep,
     size_t length = 0;
     HsaMemoryRange local_iov[UCT_SM_MAX_IOV];
     HsaMemoryRange remote_iov;
-    ucs_status_t ucs_status;
     HSAKMT_STATUS hsa_status;
+    hsa_status_t status;
     void   *local_ptr[UCT_SM_MAX_IOV];
     int     local_ptr_locked[UCT_SM_MAX_IOV];
     uint64_t remote_gpu_address;
@@ -212,15 +176,15 @@ ucs_status_t uct_rocm_cma_ep_common_zcopy(uct_ep_h tl_ep,
              * If this is memory was not yet registered with ROCm stack and
              * flag "any_memory" is set than lock this memory.
              */
-            ucs_status = uct_rocm_cma_ptr_to_gpu_ptr(local_ptr[local_iov_it],
-                                                     &local_iov[local_iov_it].MemoryAddress,
-                                                     local_iov[local_iov_it].SizeInBytes,
-                                                     rocm_md->any_memory,
-                                                     &local_ptr_locked[local_iov_it]);
+            status = uct_rocm_cma_ptr_to_gpu_ptr(local_ptr[local_iov_it],
+                                                 &local_iov[local_iov_it].MemoryAddress,
+                                                 local_iov[local_iov_it].SizeInBytes,
+                                                 rocm_md->any_memory,
+                                                 &local_ptr_locked[local_iov_it]);
 
-            if (ucs_status != UCS_OK) {
+            if (status != HSA_STATUS_SUCCESS) {
                 uct_rocm_cma_unlock_ptrs(local_ptr, local_ptr_locked, local_iov_it);
-                return ucs_status;
+                return UCS_ERR_INVALID_ADDR;
             }
 
             ucs_trace("[%d] Local address %p (GPU ptr %p), Local Size 0x%x",

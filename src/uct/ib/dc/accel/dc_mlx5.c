@@ -905,7 +905,7 @@ static ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_iface_t *dc_iface, int dc
      */
     uct_rc_mlx5_iface_common_update_cqs_ci(&iface->mlx5_common,
                                            &iface->super.super.super);
-    status = uct_rc_modify_qp(&iface->super.tx.dcis[dci].txqp, IBV_QPS_RESET);
+    status = uct_ib_modify_qp(iface->super.tx.dcis[dci].txqp.qp, IBV_QPS_RESET);
     uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->mlx5_common,
                                          &iface->super.super.super);
 

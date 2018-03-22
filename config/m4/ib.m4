@@ -313,6 +313,8 @@ AS_IF([test "x$with_ib" == xyes],
                [])
            ])
 
+       AC_CHECK_DECLS([ibv_cmd_modify_qp],
+                      [], [], [[#include <infiniband/driver.h>]])
 
        mlnx_valg_libdir=$with_verbs/lib${libsuff}/mlnx_ofed/valgrind
        AC_MSG_NOTICE([Checking OFED valgrind libs $mlnx_valg_libdir])

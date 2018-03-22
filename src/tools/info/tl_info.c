@@ -158,6 +158,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
                   size_limit_to_str(0, iface_attr.cap.am.align_mtu));
         }
 
+        PRINT_CAP(GET_SHORT, iface_attr.cap.flags, iface_attr.cap.put.max_short);
         PRINT_CAP(GET_BCOPY, iface_attr.cap.flags, iface_attr.cap.get.max_bcopy);
         PRINT_ZCAP(GET_ZCOPY, iface_attr.cap.flags, iface_attr.cap.get.min_zcopy,
                    iface_attr.cap.get.max_zcopy, iface_attr.cap.get.max_iov);

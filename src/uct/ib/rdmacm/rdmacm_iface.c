@@ -136,7 +136,6 @@ static void uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
 
     hdr = (uct_rdmacm_priv_data_hdr_t*) event->param.ud.private_data;
 
-
     /* TODO check the iface's cb_flags to determine when to invoke this callback.
      * currently only UCT_CB_FLAG_ASYNC is supported so the cb is invoked from here */
     status = iface->conn_request_cb(iface->conn_request_arg,
@@ -194,7 +193,6 @@ static int uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdma
     uct_rdmacm_ctx_t *cm_id_ctx;
     uct_rdmacm_ep_t *ep = NULL;
     int destroy_cm_id = 0;
-
 
     if (iface->is_server) {
         ucs_assert((iface->cm_id == event->id) ||

@@ -460,8 +460,8 @@ run_client_server() {
     UCX_NET_DEVICES=${dev} UCX_TLS=rc ./${test_name} -a ${server_ip} -p ${server_port} &
     hw_client_pid=$!
 
-    wait ${hw_client_pid} ${hw_server_pid}
-
+    wait ${hw_client_pid}
+    kill -9 ${hw_server_pid}
 }
 
 run_ucp_client_server() {
@@ -524,7 +524,8 @@ run_ucx_perftest_mpi() {
 	then
 		cat $ucx_inst_ptest/test_types | grep cuda | sort -R > $ucx_inst_ptest/test_types_short
 		echo "==== Running ucx_perf with cuda memory===="
-		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy $AFFINITY $UCX_PERFTEST
+		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=y $AFFINITY $UCX_PERFTEST
+		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=n $AFFINITY $UCX_PERFTEST
 	fi
 }
 
@@ -628,6 +629,11 @@ test_memtrack() {
 
 	echo "==== Running memtrack test ===="
 	UCX_MEMTRACK_DEST=stdout ./test/gtest/gtest --gtest_filter=test_memtrack.sanity
+}
+
+test_unused_env_var() {
+	echo "==== Running ucx_info env vars test ===="
+	UCX_TLS=dc ./src/tools/info/ucx_info -v | grep "unused" | grep -q "UCX_TLS"
 }
 
 #
@@ -812,6 +818,7 @@ run_tests() {
 	do_distributed_task 3 4 test_profiling
 	do_distributed_task 3 4 test_dlopen
 	do_distributed_task 3 4 test_memtrack
+	do_distributed_task 0 4 test_unused_env_var
 
 	# all are running gtest
 	run_gtest

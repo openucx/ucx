@@ -27,6 +27,8 @@ ucs_global_opts_t ucs_global_opts = {
     .error_mail_footer     = "",
     .gdb_command           = "gdb",
     .debug_signo           = SIGHUP,
+    .log_level_trigger     = UCS_LOG_LEVEL_FATAL,
+    .warn_unused_env_vars  = 1,
     .async_max_events      = 64,
     .async_signo           = SIGALRM,
     .stats_dest            = "",
@@ -119,6 +121,11 @@ static ucs_config_field_t ucs_global_opts_table[] = {
  {"LOG_LEVEL_TRIGGER", "fatal",
   "Log level to trigger error handling.",
   ucs_offsetof(ucs_global_opts_t, log_level_trigger), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+
+ {UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG, "yes",
+  "Issue warning about UCX_ environment variables which were not used by the\n"
+  "configuration parser.",
+  ucs_offsetof(ucs_global_opts_t, warn_unused_env_vars), UCS_CONFIG_TYPE_BOOL},
 
  {"ASYNC_MAX_EVENTS", "1024", /* TODO remove this; resize mpmc */
   "Maximal number of events which can be handled from one context",

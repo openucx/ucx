@@ -119,6 +119,7 @@ typedef struct ucp_ep_rma_config {
     size_t                 max_put_short;    /* Maximal payload of put short */
     size_t                 max_put_bcopy;    /* Maximal total size of put_bcopy */
     size_t                 max_put_zcopy;
+    size_t                 max_get_short;    /* Maximal payload of get short */
     size_t                 max_get_bcopy;    /* Maximal total size of get_bcopy */
     size_t                 max_get_zcopy;
     size_t                 put_zcopy_thresh;

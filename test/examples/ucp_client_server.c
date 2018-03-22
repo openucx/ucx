@@ -142,10 +142,6 @@ static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
     ucp_listener_params_t params;
     ucs_status_t status;
 
-    /* Initialize the server's endpoint to NULL. Once the server's endpoint is
-     * created, this field will have a valid value. */
-    context->ep = NULL;
-
     set_listen_addr(&listen_addr);
 
     params.field_mask         = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
@@ -157,15 +153,7 @@ static int start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
 
     /* Create a listener on the server side to listen on the given address.*/
     status = ucp_listener_create(ucp_worker, &params, listener);
-    if (status == UCS_OK) {
-        printf("Waiting for connection...\n");
-        /* Wait for the server's callback to set the context->ep field, thus
-         * indicating that the server's endpoint was created and is ready to
-         * be used */
-        while (context->ep == NULL) {
-            ucp_worker_progress(ucp_worker);
-        }
-    } else {
+    if (status != UCS_OK) {
         fprintf(stderr, "failed to listen (%s)\n", ucs_status_string(status));
     }
 
@@ -238,6 +226,9 @@ static void request_wait(ucp_worker_h ucp_worker, test_req_t *request)
     while (request->complete == 0) {
         ucp_worker_progress(ucp_worker);
     }
+
+    /* This request may be reused so initialize it for next time */
+    request->complete = 0;
     ucp_request_free(request);
 }
 
@@ -291,7 +282,8 @@ out:
 /**
  * Close the given endpoint.
  * Currently closing the endpoint with UCP_EP_CLOSE_MODE_FORCE since we currently
- * cannot rely on both client and server to be present during the closing process.
+ * cannot rely on the client side to be present during the server's endpoint
+ * closing process.
  */
 static void ep_close(ucp_worker_h ucp_worker, ucp_ep_h ep)
 {
@@ -451,13 +443,39 @@ int main(int argc, char **argv)
     if (server_addr == NULL) {
         /* Server side */
         is_server = 1;
+
+        /* Initialize the server's endpoint to NULL. Once the server's endpoint
+         * is created, this field will have a valid value. */
+        context.ep = NULL;
+
         status = start_server(ucp_worker, &context, &listener);
         if (status != UCS_OK) {
             fprintf(stderr, "failed to start server\n");
             goto err_worker;
         }
 
-        ep = context.ep;
+        /* Server is always up */
+        while (1) {
+            printf("Waiting for connection...\n");
+
+            /* Wait for the server's callback to set the context->ep field, thus
+             * indicating that the server's endpoint was created and is ready to
+             * be used. The client side should initiate the connection, leading
+             * to this ep's creation */
+            while (context.ep == NULL) {
+                ucp_worker_progress(ucp_worker);
+            }
+
+            /* Client-Server communication via Stream API */
+            send_recv_stream(ucp_worker, context.ep, is_server);
+
+            /* Close the endpoint to the client */
+            ep_close(ucp_worker, context.ep);
+
+            /* Initialize server's endpoint for the next connection with a new
+             * client */
+            context.ep = NULL;
+        }
     } else {
         /* Client side */
         is_server = 0;
@@ -466,18 +484,13 @@ int main(int argc, char **argv)
             fprintf(stderr, "failed to start client\n");
             goto err_worker;
         }
+
+        /* Client-Server communication via Stream API */
+        ret = send_recv_stream(ucp_worker, ep, is_server);
+
+        /* Close the endpoint to the server */
+        ep_close(ucp_worker, ep);
     }
-
-    /* Client-Server communication via Stream API */
-    ret = send_recv_stream(ucp_worker, ep, is_server);
-
-
-    /* Finalization or error flow */
-    if (is_server) {
-        ucp_listener_destroy(listener);
-    }
-
-    ep_close(ucp_worker, ep);
 
 err_worker:
     ucp_worker_destroy(ucp_worker);

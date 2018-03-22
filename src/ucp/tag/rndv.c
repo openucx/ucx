@@ -712,8 +712,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
 
     state = sreq->send.state.dt;
     ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iovcnt, &state,
-                        sreq->send.buffer, ucp_dt_make_contig(1), length, 0,
-                        sreq->send.mdesc);
+                        sreq->send.buffer, ucp_dt_make_contig(1), length,
+                        ucp_ep_md_index(ep, sreq->send.lane), sreq->send.mdesc);
     status = uct_ep_put_zcopy(ep->uct_eps[sreq->send.lane],
                               iov, iovcnt,
                               sreq->send.rndv_put.remote_address + offset,

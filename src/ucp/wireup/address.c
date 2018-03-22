@@ -168,6 +168,15 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int has_ep,
     return UCS_OK;
 }
 
+static const char *ucp_address_get_worker_name(ucp_worker_h worker)
+{
+    #if ENABLE_DEBUG_DATA
+        return ucp_worker_get_name(worker);
+    #else
+        return "";
+    #endif
+}
+
 static size_t ucp_address_packed_size(ucp_worker_h worker,
                                       const ucp_address_packed_device_t *devices,
                                       ucp_rsc_index_t num_devices)
@@ -176,7 +185,7 @@ static size_t ucp_address_packed_size(ucp_worker_h worker,
     size_t size;
 
     size = sizeof(uint64_t) +
-           ucp_address_string_packed_size(ucp_worker_get_name(worker));
+           ucp_address_string_packed_size(ucp_address_get_worker_name(worker));
 
     if (num_devices == 0) {
         size += 1;                      /* NULL md_index */
@@ -307,7 +316,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
     *(uint64_t*)ptr = worker->uuid;
     ptr += sizeof(uint64_t);
-    ptr = ucp_address_pack_string(ucp_worker_get_name(worker), ptr);
+    ptr = ucp_address_pack_string(ucp_address_get_worker_name(worker), ptr);
 
     if (num_devices == 0) {
         *((uint8_t*)ptr) = UCP_NULL_RESOURCE;

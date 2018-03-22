@@ -749,76 +749,63 @@ static size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
     }
 }
 
-static void
-ucp_ep_config_set_am_rndv_send_nbr_thresh(ucp_context_h context,
-                                          ucp_ep_config_t *config,
-                                          size_t adjust_min_val)
+static size_t ucp_ep_thresh(size_t thresh_value, size_t min_value,
+                            size_t max_value)
 {
-    size_t rndv_thresh;
- 
-    if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
-        rndv_thresh = SIZE_MAX;
-    } else {
-        rndv_thresh = ucs_min(context->config.ext.rndv_send_nbr_thresh,
-                              adjust_min_val);
-    }
+    size_t thresh;
 
-    config->tag.rndv_send_nbr.am_thresh = rndv_thresh;
+    ucs_assert(min_value <= max_value);
+
+    thresh = ucs_max(min_value, thresh_value);
+    thresh = ucs_min(max_value, thresh);
+
+    return thresh;
 }
 
 static void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_attr_t *iface_attr,
                                              uct_md_attr_t *md_attr, ucp_ep_config_t *config,
-                                             size_t adjust_min_val)
+                                             size_t max_rndv_thresh)
 {
-    size_t rndv_thresh;
+    size_t rndv_thresh, rndv_nbr_thresh;
 
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
     ucs_assert(config->key.lanes[config->key.am_lane].rsc_index != UCP_NULL_RESOURCE);
 
     if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
         /* Disable RNDV */
-        rndv_thresh = SIZE_MAX;
+        rndv_thresh = rndv_nbr_thresh = SIZE_MAX;
     } else if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the AM rndv threshold on its own.*/
-        rndv_thresh = ucp_ep_config_calc_rndv_thresh(context, iface_attr, md_attr,
-                                                     context->config.ext.bcopy_bw,
-                                                     0);
-        ucs_trace("Active Message rendezvous threshold is %zu", rndv_thresh);
+        rndv_thresh     = ucp_ep_config_calc_rndv_thresh(context, iface_attr, md_attr,
+                                                         context->config.ext.bcopy_bw,
+                                                         0);
+        rndv_nbr_thresh = context->config.ext.rndv_send_nbr_thresh;
     } else {
-        rndv_thresh = context->config.ext.rndv_thresh;
+        rndv_thresh     = context->config.ext.rndv_thresh;
+        rndv_nbr_thresh = context->config.ext.rndv_thresh;
     }
 
-    ucs_assert(iface_attr->cap.am.min_zcopy <= iface_attr->cap.am.max_zcopy);
-    /* use rendezvous only starting from minimal zero-copy am size */
-    rndv_thresh = ucs_max(rndv_thresh, iface_attr->cap.am.min_zcopy);
-    config->tag.rndv.am_thresh = ucs_min(rndv_thresh, adjust_min_val);
+    config->tag.rndv.am_thresh = ucp_ep_thresh(rndv_thresh,
+                                               iface_attr->cap.am.min_zcopy,
+                                               max_rndv_thresh);
 
-    ucp_ep_config_set_am_rndv_send_nbr_thresh(context, config, adjust_min_val);
-}
+    config->tag.rndv_send_nbr.am_thresh = ucp_ep_thresh(rndv_nbr_thresh,
+                                                        iface_attr->cap.am.min_zcopy,
+                                                        max_rndv_thresh);
 
-static void
-ucp_ep_config_set_rndv_send_nbr_thresh(ucp_context_h context,
-                                       ucp_ep_config_t *config,
-                                       size_t adjust_min_val,
-                                       size_t adjust_max_val)
-{
-    size_t rndv_thresh;
-
-    rndv_thresh = context->config.ext.rndv_send_nbr_thresh;
-    rndv_thresh = ucs_max(rndv_thresh, adjust_max_val);
-
-    config->tag.rndv_send_nbr.rma_thresh = ucs_min(rndv_thresh, adjust_min_val);
+    ucs_trace("Active Message rndv threshold is %zu (send_nbr: %zu)",
+              config->tag.rndv.am_thresh, config->tag.rndv_send_nbr.am_thresh);
 }
 
 static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
                                           ucp_ep_config_t *config,
                                           ucp_lane_index_t lane,
                                           uint64_t rndv_cap_flag,
-                                          size_t adjust_min_val)
+                                          size_t max_rndv_thresh)
 {
     ucp_context_t *context = worker->context;
     ucp_rsc_index_t rsc_index;
-    size_t rndv_thresh;
+    size_t rndv_thresh, rndv_nbr_thresh;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_t *md_attr;
 
@@ -838,22 +825,26 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
 
     if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
-        rndv_thresh = ucp_ep_config_calc_rndv_thresh(context, iface_attr,
-                                                     md_attr, SIZE_MAX, 1);
+        rndv_thresh     = ucp_ep_config_calc_rndv_thresh(context, iface_attr,
+                                                         md_attr, SIZE_MAX, 1);
+        rndv_nbr_thresh = context->config.ext.rndv_send_nbr_thresh;
     } else {
-        rndv_thresh = context->config.ext.rndv_thresh;
+        rndv_thresh     = context->config.ext.rndv_thresh;
+        rndv_nbr_thresh = context->config.ext.rndv_thresh;
     }
-
-    /* use rendezvous only starting from minimal zero-copy get size */
-    ucs_assert(iface_attr->cap.get.min_zcopy <= iface_attr->cap.get.max_zcopy);
-    rndv_thresh = ucs_max(rndv_thresh, iface_attr->cap.get.min_zcopy);
 
     config->tag.rndv.max_get_zcopy = iface_attr->cap.get.max_zcopy;
     config->tag.rndv.max_put_zcopy = iface_attr->cap.put.max_zcopy;
-    config->tag.rndv.rma_thresh    = ucs_min(rndv_thresh, adjust_min_val);
+    config->tag.rndv.rma_thresh    = ucp_ep_thresh(rndv_thresh,
+                                                   iface_attr->cap.get.min_zcopy,
+                                                   max_rndv_thresh);
 
-    ucp_ep_config_set_rndv_send_nbr_thresh(context, config, adjust_min_val,
-                                           iface_attr->cap.get.max_zcopy);
+    config->tag.rndv_send_nbr.rma_thresh = ucp_ep_thresh(rndv_nbr_thresh,
+                                                         iface_attr->cap.get.min_zcopy,
+                                                         max_rndv_thresh);
+
+    ucs_trace("rndv threshold is %zu (send_nbr: %zu)",
+              config->tag.rndv.rma_thresh, config->tag.rndv_send_nbr.rma_thresh);
 }
 
 static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
@@ -934,6 +925,8 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     config->tag.rndv.max_get_zcopy      = SIZE_MAX;
     config->tag.rndv.max_put_zcopy      = SIZE_MAX;
     config->tag.rndv.am_thresh          = SIZE_MAX;
+    config->tag.rndv_send_nbr.am_thresh = SIZE_MAX;
+    config->tag.rndv_send_nbr.rma_thresh = SIZE_MAX;
     config->tag.rndv.rkey_size          = ucp_rkey_packed_size(context,
                                                                config->key.rma_bw_md_map);
     config->stream.proto                = &ucp_stream_am_proto;
@@ -1062,6 +1055,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                 rma_config->put_zcopy_thresh = ucs_max(rma_config->put_zcopy_thresh,
                                                        iface_attr->cap.put.min_zcopy);
             }
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_SHORT) {
+                rma_config->max_get_short = iface_attr->cap.get.max_short;
+            }
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) {
                 rma_config->max_get_bcopy = iface_attr->cap.get.max_bcopy;
             }
@@ -1175,7 +1171,7 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
         } else {
             desc_str = "";
         }
-        snprintf(p, endp - p, "lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT " md[%d]%s %-*c-> ",
+        snprintf(p, endp - p, "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT " md[%d]%s %-*c-> ",
                  lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc),
                  context->tl_rscs[rsc_index].md_index, desc_str,
                  20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name) + strlen(desc_str)),
@@ -1310,6 +1306,7 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
 void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 {
     ucp_rsc_index_t aux_rsc_index;
+    ucp_lane_index_t wireup_lane;
     uct_ep_h wireup_ep;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
@@ -1326,11 +1323,14 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 #endif
             ep->dest_uuid);
 
-    wireup_ep = ep->uct_eps[ucp_ep_get_wireup_msg_lane(ep)];
-    if (ucp_wireup_ep_test(wireup_ep)) {
-        aux_rsc_index = ucp_wireup_ep_get_aux_rsc_index(wireup_ep);
-    } else {
-        aux_rsc_index = UCP_NULL_RESOURCE;
+    /* if there is a wireup lane, set aux_rsc_index to the stub ep resource */
+    aux_rsc_index = UCP_NULL_RESOURCE;
+    wireup_lane   = ucp_ep_config(ep)->key.wireup_lane;
+    if (wireup_lane != UCP_NULL_LANE) {
+        wireup_ep = ep->uct_eps[wireup_lane];
+        if (ucp_wireup_ep_test(wireup_ep)) {
+            aux_rsc_index = ucp_wireup_ep_get_aux_rsc_index(wireup_ep);
+        }
     }
 
     ucp_ep_config_print(stream, ep->worker, ucp_ep_config(ep), NULL,

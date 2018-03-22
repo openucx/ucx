@@ -90,12 +90,23 @@ unsigned uct_rc_mlx5_iface_progress(void *arg)
 
 static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    uct_rc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_t);
+    uct_rc_iface_t *rc_iface   = &iface->super;
+    size_t max_am_inline  = UCT_IB_MLX5_AM_MAX_SHORT(0);
+    size_t max_put_inline = UCT_IB_MLX5_PUT_MAX_SHORT(0);
     ucs_status_t status;
 
-    status = uct_rc_iface_query(iface, iface_attr,
-                                UCT_IB_MLX5_PUT_MAX_SHORT(0),
-                                UCT_IB_MLX5_AM_MAX_SHORT(0),
+#if HAVE_IBV_EXP_DM
+    if (iface->mlx5_common.dm.dm != NULL) {
+        max_am_inline  = ucs_max(iface->mlx5_common.dm.dm->seg_len, UCT_IB_MLX5_AM_MAX_SHORT(0));
+        max_put_inline = ucs_max(iface->mlx5_common.dm.dm->seg_len, UCT_IB_MLX5_PUT_MAX_SHORT(0));
+    }
+#endif
+
+
+    status = uct_rc_iface_query(rc_iface, iface_attr,
+                                max_put_inline,
+                                max_am_inline,
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(0),
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_IOV);
     if (status != UCS_OK) {
