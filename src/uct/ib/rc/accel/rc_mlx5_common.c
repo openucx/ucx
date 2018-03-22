@@ -47,6 +47,13 @@ typedef struct uct_mlx5_dm_va {
 #endif
 
 
+void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
+                                    void *data, size_t length, size_t valid_length,
+                                    char *buffer, size_t max)
+{
+    uct_rc_ep_packet_dump(iface, type, data, length, valid_length, buffer, max, 0);
+}
+
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq)
 {
     uct_ib_mlx5_srq_seg_t *seg;

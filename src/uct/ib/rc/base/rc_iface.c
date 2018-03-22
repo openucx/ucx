@@ -501,8 +501,10 @@ static void uct_rc_iface_release_desc(uct_recv_desc_t *self, void *desc)
     ucs_mpool_put_inline(ib_desc);
 }
 
+/* tag is passed as parameter, because some (but not all!) transports may need
+ * to translate TMH to LE */
 ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
-                                      struct ibv_exp_tmh *tmh,
+                                      struct ibv_exp_tmh *tmh, uct_tag_t tag,
                                       unsigned byte_len)
 {
     uct_rc_iface_tmh_priv_data_t *priv = (uct_rc_iface_tmh_priv_data_t*)tmh->reserved;
@@ -538,8 +540,7 @@ ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
     uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, rb);
 
     /* Do not pass flags to cb, because rkey is allocated on stack */
-    return iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, 0,
-                                   be64toh(tmh->tag),
+    return iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, 0, tag,
                                    (char *)rndv_usr_hdr - priv->length,
                                    rndv_usr_hdr_len + priv->length,
                                    be64toh(rvh->va), rndv_data_len,
