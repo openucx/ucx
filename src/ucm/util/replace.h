@@ -9,13 +9,12 @@
 #define UCM_UTIL_REPLACE_H_
 
 #include <ucs/datastruct/list.h>
+#include <ucs/type/spinlock.h>
 #include <ucs/type/status.h>
 #include <pthread.h>
 
 extern pthread_mutex_t ucm_reloc_get_orig_lock;
 extern pthread_t volatile ucm_reloc_get_orig_thread;
-
-#define PTHREAD_T_NULL (pthread_t)-1
 
 /**
  * Define a replacement function to a memory-mapping function call, which calls
