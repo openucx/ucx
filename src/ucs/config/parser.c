@@ -1339,10 +1339,9 @@ UCS_STATIC_INIT {
 }
 
 UCS_STATIC_CLEANUP {
-    int UCS_V_UNUSED dummy;
     const char *key;
 
-    kh_foreach(&ucs_config_parser_env_vars, key, dummy, {
+    kh_foreach_key(&ucs_config_parser_env_vars, key, {
         ucs_free((void*)key);
     })
     kh_destroy_inplace(ucs_config_env_vars, &ucs_config_parser_env_vars);
