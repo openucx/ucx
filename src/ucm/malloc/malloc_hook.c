@@ -688,10 +688,12 @@ ucs_status_t ucm_malloc_install(int events)
         goto out_succ;
     }
 
+#if HAVE_MALLOC_TRIM
     if (!ucm_malloc_hook_state.hook_called) {
         /* Try to leak less memory from original malloc */
         malloc_trim(0);
     }
+#endif
 
     if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_SBRK_EVH)) {
         ucm_debug("installing malloc-sbrk event handler");

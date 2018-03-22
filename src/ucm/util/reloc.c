@@ -20,7 +20,7 @@
 #include <ucs/type/component.h>
 #include <ucm/util/log.h>
 
-#include <sys/fcntl.h>
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <pthread.h>
 #include <stdlib.h>
