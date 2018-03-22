@@ -15,6 +15,8 @@
 extern pthread_mutex_t ucm_reloc_get_orig_lock;
 extern pthread_t volatile ucm_reloc_get_orig_thread;
 
+#define PTHREAD_T_NULL (pthread_t)-1
+
 /**
  * Define a replacement function to a memory-mapping function call, which calls
  * the event handler, and if event handler returns error code - calls the original
@@ -37,7 +39,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
             ucm_reloc_get_orig_thread = pthread_self(); \
             orig_func_ptr = ucm_reloc_get_orig(UCS_PP_QUOTE(_name), \
                                                ucm_override_##_name); \
-            ucm_reloc_get_orig_thread = (pthread_t)-1; \
+            ucm_reloc_get_orig_thread = PTHREAD_T_NULL; \
             pthread_mutex_unlock(&ucm_reloc_get_orig_lock); \
         } \
         return orig_func_ptr(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
