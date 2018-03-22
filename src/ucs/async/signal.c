@@ -102,19 +102,20 @@ ucs_async_signal_set_fd_owner(pid_t dest_tid, int fd)
 }
 
 static int
-ucs_async_signal_sys_timer_create_portable(clockid_t clk, struct ksigevent *restrict evp, timer_t *restrict res)
+ucs_async_signal_sys_timer_create_portable(clockid_t clk,
+                                           struct ksigevent *restrict evp,
+                                           timer_t *restrict res)
 {
     int timerid;
-    if (syscall(SYS_timer_create, clk, &evp, &timerid) < 0)
-    {
+
+    if (syscall(SYS_timer_create, clk, &evp, &timerid) < 0) {
         timerid = -1;
     }
-    if (timerid < 0)
-    {
+    if (timerid < 0) {
         return -1;
     }
     *res = (void *)(intptr_t)timerid;
-	return 0;
+    return 0;
 }
 
 static ucs_status_t
