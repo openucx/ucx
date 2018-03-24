@@ -144,7 +144,7 @@ uct_rc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer, unsigned len
                                  MLX5_OPCODE_RDMA_WRITE,
                                  buffer, length, 0, 0, 0,
                                  remote_addr, uct_ib_md_direct_rkey(rkey),
-                                 NULL, NULL, 0, 0, INT_MAX, NULL);
+                                 NULL, NULL, 0, 0, INT_MAX);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     return UCS_OK;
 }
@@ -169,7 +169,7 @@ uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                  0, 0,
                                  NULL, NULL, 0,
                                  MLX5_WQE_CTRL_SOLICITED,
-                                 INT_MAX, NULL);
+                                 INT_MAX);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     UCT_RC_UPDATE_FC(iface, &ep->super, id);
     return UCS_OK;
@@ -189,12 +189,13 @@ uct_rc_mlx5_ep_short_dm(uct_rc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
     ucs_status_t status;
     uct_ib_log_sge_t log_sge;
 
-    status = uct_rc_mlx5_common_make_data(&iface->mlx5_common, &iface->super,
-                                          cache, hdr_len, payload, length, &desc,
-                                          &buffer, &log_sge);
+    status = uct_rc_mlx5_common_dm_make_data(&iface->mlx5_common, &iface->super,
+                                             cache, hdr_len, payload, length, &desc,
+                                             &buffer, &log_sge);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         return status;
     }
+
     uct_rc_mlx5_txqp_bcopy_post(rc_iface, &ep->super.txqp, &ep->tx.wq,
                                 opcode, hdr_len + length,
                                 rdma_raddr, rdma_rkey, fm_ce_se,
@@ -509,7 +510,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                      0, 0, 0,
                                      0, 0,
                                      NULL, NULL, 0, 0,
-                                     INT_MAX, NULL);
+                                     INT_MAX);
     } else {
         sn = ep->tx.wq.sig_pi;
     }
@@ -537,7 +538,7 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                  UCT_RC_EP_FC_PURE_GRANT, 0, 0,
                                  0, 0,
                                  NULL, NULL, 0, 0,
-                                 INT_MAX, NULL);
+                                 INT_MAX);
     return UCS_OK;
 }
 

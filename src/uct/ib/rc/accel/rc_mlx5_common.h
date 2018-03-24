@@ -484,8 +484,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                   /* SEND */ uint8_t am_id, uint64_t am_hdr, uint32_t imm_val_be,
                   /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
                   /* AV   */ uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
-                             size_t av_size, unsigned fm_ce_se, int max_log_sge,
-                             uct_ib_log_sge_t *log_sge)
+                             size_t av_size, unsigned fm_ce_se, int max_log_sge)
 {
     struct mlx5_wqe_ctrl_seg     *ctrl;
     struct mlx5_wqe_raddr_seg    *raddr;
@@ -552,7 +551,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     }
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq, opcode, 0, fm_ce_se,
-                                 wqe_size, av, grh_av, imm_val_be, max_log_sge, log_sge);
+                                 wqe_size, av, grh_av, imm_val_be, max_log_sge, NULL);
 }
 
 /*
@@ -1311,12 +1310,12 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
                                     const void *payload, size_t length, void *dm,
                                     uct_ib_log_sge_t *log_sge)
 {
-    size_t head         = (cache && hdr_len) ? ucs_min(length, sizeof(*cache) - hdr_len) : 0;
-    size_t body         = ucs_align_down(length - head, sizeof(uint64_t));
-    size_t tail         = length - (head + body);
-    uint64_t *dst       = dm;
-    uint64_t padding    = 0; /* init by 0 to suppress valgrind error */
-    int i               = 0;
+    size_t head      = (cache && hdr_len) ? ucs_min(length, sizeof(*cache) - hdr_len) : 0;
+    size_t body      = ucs_align_down(length - head, sizeof(uint64_t));
+    size_t tail      = length - (head + body);
+    uint64_t *dst    = dm;
+    uint64_t padding = 0; /* init by 0 to suppress valgrind error */
+    int i            = 0;
 
     ucs_assert(sizeof(*cache) >= hdr_len);
     ucs_assert(head + body + tail == length);
@@ -1356,13 +1355,13 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
 }
 
 static ucs_status_t UCS_F_ALWAYS_INLINE
-uct_rc_mlx5_common_make_data(uct_rc_mlx5_iface_common_t *iface,
-                             uct_rc_iface_t *rc_iface,
-                             uct_rc_mlx5_dm_copy_data_t *cache,
-                             size_t hdr_len, const void *payload,
-                             unsigned length,
-                             uct_rc_iface_send_desc_t **desc_p,
-                             void **buffer_p, uct_ib_log_sge_t *log_sge)
+uct_rc_mlx5_common_dm_make_data(uct_rc_mlx5_iface_common_t *iface,
+                                uct_rc_iface_t *rc_iface,
+                                uct_rc_mlx5_dm_copy_data_t *cache,
+                                size_t hdr_len, const void *payload,
+                                unsigned length,
+                                uct_rc_iface_send_desc_t **desc_p,
+                                void **buffer_p, uct_ib_log_sge_t *log_sge)
 {
     uct_rc_iface_send_desc_t *desc;
     void *buffer;

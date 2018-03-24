@@ -372,7 +372,7 @@ uct_dc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                  0, 0,
                                  &ep->av, uct_dc_mlx5_ep_get_grh(ep),
                                  uct_ib_mlx5_wqe_av_size(&ep->av),
-                                 MLX5_WQE_CTRL_SOLICITED, INT_MAX, NULL);
+                                 MLX5_WQE_CTRL_SOLICITED, INT_MAX);
 
     UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->super.fc);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
@@ -392,12 +392,13 @@ uct_dc_mlx5_ep_short_dm(uct_dc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
     ucs_status_t status;
     uct_ib_log_sge_t log_sge;
 
-    status = uct_rc_mlx5_common_make_data(&iface->mlx5_common, &iface->super.super,
-                                          cache, hdr_len, payload, length, &desc,
-                                          &buffer, &log_sge);
+    status = uct_rc_mlx5_common_dm_make_data(&iface->mlx5_common, &iface->super.super,
+                                             cache, hdr_len, payload, length, &desc,
+                                             &buffer, &log_sge);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         return status;
     }
+
     uct_dc_mlx5_iface_bcopy_post(iface, ep, opcode,
                                  hdr_len + length,
                                  rdma_raddr, rdma_rkey,
@@ -513,7 +514,7 @@ uct_dc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer,
                                  buffer, length, 0, 0, 0,
                                  remote_addr, uct_ib_md_direct_rkey(rkey),
                                  &ep->av, uct_dc_mlx5_ep_get_grh(ep),
-                                 uct_ib_mlx5_wqe_av_size(&ep->av), 0, INT_MAX, NULL);
+                                 uct_ib_mlx5_wqe_av_size(&ep->av), 0, INT_MAX);
 
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
 
@@ -1005,7 +1006,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      &av /*dummy*/, 0, op, sender_ep, 0,
                                      0, 0,
                                      &av, ah_attr.is_global ? mlx5_av_grh(&mlx5_av) : NULL,
-                                     uct_ib_mlx5_wqe_av_size(&av), 0, INT_MAX, NULL);
+                                     uct_ib_mlx5_wqe_av_size(&av), 0, INT_MAX);
     } else {
         ucs_assert(op == UCT_RC_EP_FC_FLAG_HARD_REQ);
         dc_mlx5_ep              = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
@@ -1024,7 +1025,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      &dc_mlx5_ep->av,
                                      uct_dc_mlx5_ep_get_grh(dc_mlx5_ep),
                                      uct_ib_mlx5_wqe_av_size(&dc_mlx5_ep->av),
-                                     MLX5_WQE_CTRL_SOLICITED, INT_MAX, NULL);
+                                     MLX5_WQE_CTRL_SOLICITED, INT_MAX);
     }
 
     return UCS_OK;
