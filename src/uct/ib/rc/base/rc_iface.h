@@ -55,8 +55,8 @@
 
 #define UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(_iface, _mp, _desc, _pack_cb, _arg, _length) \
     UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
-    desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
-    _length = pack_cb(_desc + 1, _arg); \
+    (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
+    _length = _pack_cb(_desc + 1, _arg); \
     UCT_SKIP_ZERO_LENGTH(_length, _desc);
 
 #define UCT_RC_IFACE_GET_TX_GET_BCOPY_DESC(_iface, _mp, _desc, _unpack_cb, _comp, _arg, _length) \
