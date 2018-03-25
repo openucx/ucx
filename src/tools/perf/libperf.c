@@ -950,7 +950,7 @@ static ucs_status_t ucp_perf_test_exchange_status(ucx_perf_context_t *perf,
                                                   ucs_status_t status)
 {
     unsigned group_size  = rte_call(perf, group_size);
-    ucs_status_t collective_status = UCS_OK;
+    ucs_status_t collective_status = status;
     struct iovec vec;
     void *req = NULL;
     unsigned i;
@@ -1218,6 +1218,8 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
     }
 
     status = uct_perf_test_check_capabilities(params, perf->uct.iface);
+    /* sync status across all processes */
+    status = ucp_perf_test_exchange_status(perf, status);
     if (status != UCS_OK) {
         goto out_iface_close;
     }

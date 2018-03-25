@@ -284,6 +284,7 @@ uct_test::entity* uct_test::create_entity(size_t rx_headroom,
     iface_params.rx_headroom = rx_headroom;
     iface_params.open_mode   = UCT_IFACE_OPEN_MODE_DEVICE;
     iface_params.err_handler = err_handler;
+    iface_params.err_handler_arg = this;
     entity *new_ent = new entity(*GetParam(), m_iface_config, &iface_params,
                                  m_md_config);
     return new_ent;
