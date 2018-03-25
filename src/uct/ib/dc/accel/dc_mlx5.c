@@ -749,7 +749,7 @@ ucs_status_t uct_dc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
                      iface->mlx5_common.dm.seg_len, "tag_short");
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
 
-    uct_rc_iface_fill_tmh(ucs_unaligned_ptr(&cache.tm_hdr), tag, 0, IBV_EXP_TMH_EAGER);
+    uct_rc_mlx5_fill_tmh(ucs_unaligned_ptr(&cache.tm_hdr), tag, 0, IBV_EXP_TMH_EAGER);
 
     return uct_dc_mlx5_ep_short_dm(ep, &cache, sizeof(cache.tm_hdr), data, length,
                                    MLX5_OPCODE_SEND,
