@@ -129,7 +129,7 @@ uct_rc_mlx5_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,
            void *hdr; \
            UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
            (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
-           hdr = _desc + 1; \
+           hdr = (_desc) + 1; \
            uct_rc_mlx5_fill_tmh(hdr, _tag, _app_ctx, IBV_EXP_TMH_EAGER); \
            hdr += sizeof(struct ibv_exp_tmh); \
            _length = _pack_cb(hdr, _arg); \
