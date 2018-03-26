@@ -29,6 +29,7 @@
 #define UCT_IB_MLX5_CQE128_SIZE_LOG     7
 #define UCT_IB_MLX5_MAX_BB              4
 #define UCT_IB_MLX5_WORKER_BF_KEY       0x00c1b7e8u
+#define UCT_IB_MLX5_RES_DOMAIN_KEY      0x1b1bda7aU
 #define UCT_IB_MLX5_WORKER_DM_KEY       0xacdf1245u
 #define UCT_IB_MLX5_EXTENDED_UD_AV      0x80 /* htonl(0x80000000) */
 #define UCT_IB_MLX5_BF_REG_SIZE         256

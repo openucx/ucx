@@ -1142,6 +1142,15 @@ static ucs_status_t uct_dc_mlx5_iface_init_dcis(uct_dc_mlx5_iface_t *iface)
     return UCS_OK;
 }
 
+static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
+{
+    int i;
+
+    for (i = 0; i < iface->super.tx.ndci; i++) {
+        uct_ib_mlx5_txwq_cleanup(&iface->dci_wqs[i]);
+    }
+}
+
 static ucs_status_t uct_dc_mlx5_iface_tag_init(uct_dc_mlx5_iface_t *iface,
                                                uct_rc_iface_config_t *rc_config)
 {
@@ -1199,7 +1208,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_mlx5_iface_ops, md,
                               worker, params, 0, &config->super,
-                              IBV_EXP_TM_CAP_DC);
+                              IBV_EXP_TM_CAP_DC, UCT_IB_MLX5_RES_DOMAIN_KEY);
 
     status = uct_dc_mlx5_iface_tag_init(self, &config->super.super);
     if (status != UCS_OK) {
@@ -1251,6 +1260,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     ucs_trace_func("");
     uct_base_iface_progress_disable(&self->super.super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+    uct_dc_mlx5_iface_cleanup_dcis(self);
     uct_rc_mlx5_iface_common_cleanup(&self->mlx5_common);
     uct_dc_mlx5_iface_tag_cleanup(self);
 }

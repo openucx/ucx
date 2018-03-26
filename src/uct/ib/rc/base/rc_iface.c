@@ -683,7 +683,8 @@ unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface)
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_rc_iface_config_t *config, unsigned rx_priv_len,
-                    unsigned fc_req_size, int tm_cap_flag)
+                    unsigned fc_req_size, int tm_cap_flag,
+                    uint32_t res_domain_key)
 {
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     unsigned tx_cq_len   = config->tx.cq_len;
@@ -695,7 +696,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               rx_priv_len, sizeof(uct_rc_hdr_t), tx_cq_len,
-                              rx_cq_len, SIZE_MAX, &config->super);
+                              rx_cq_len, SIZE_MAX, res_domain_key, &config->super);
 
     self->tx.cq_available           = tx_cq_len - 1;
     self->rx.srq.available          = 0;
@@ -930,6 +931,13 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
     qp_init_attr.comp_mask           |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
     qp_init_attr.max_inl_recv         = iface->config.rx_inline;
 #  endif
+
+#if HAVE_IBV_EXP_RES_DOMAIN
+    if (iface->super.res_domain != NULL) {
+        qp_init_attr.comp_mask       |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
+        qp_init_attr.res_domain       = iface->super.res_domain->ibv_domain;
+    }
+#endif
 
     qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
 #else

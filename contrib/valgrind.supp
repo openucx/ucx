@@ -94,3 +94,9 @@
     ...
     fun:ibv_exp_free_dm
 }
+{
+   res_domain_leak
+   Memcheck:Leak
+   ...
+   fun:ibv_exp_create_res_domain
+}

@@ -299,9 +299,9 @@ struct uct_rc_iface {
     /* Progress function (either regular or TM aware) */
     ucs_callback_t           progress;
 };
-UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h,
-                  uct_worker_h, const uct_iface_params_t*,
-                  const uct_rc_iface_config_t*, unsigned, unsigned, int)
+UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h, uct_worker_h,
+                  const uct_iface_params_t*, const uct_rc_iface_config_t*,
+                  unsigned, unsigned, int, uint32_t)
 
 
 struct uct_rc_iface_send_op {
