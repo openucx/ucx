@@ -69,6 +69,10 @@ void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt);
 
 ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status);
 
+void uct_rc_verbs_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
+                                     void *data, size_t length, size_t valid_length,
+                                     char *buffer, size_t max);
+
 static inline void
 uct_rc_verbs_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt,
                          uct_rc_iface_t *iface, int signaled)
@@ -183,7 +187,7 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
 
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super, i, hdr, wc, num_wcs) {
         uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, &wc[i], hdr,
-                                   wc[i].byte_len, uct_rc_ep_am_packet_dump);
+                                   wc[i].byte_len, uct_rc_verbs_common_packet_dump);
         uct_rc_verbs_iface_handle_am(iface, hdr, wc[i].wr_id, wc[i].qp_num,
                                      wc[i].byte_len, wc[i].imm_data, wc[i].slid);
     }
@@ -499,20 +503,21 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_common_t *iface,
     case IBV_EXP_TMH_NO_TAG:
         rc_hdr = (uct_rc_hdr_t*)tmh;
         uct_ib_log_recv_completion(&rc_iface->super, IBV_QPT_RC, wc, rc_hdr,
-                                   wc->byte_len, uct_rc_ep_am_packet_dump);
+                                   wc->byte_len, uct_rc_verbs_common_packet_dump);
         uct_rc_verbs_iface_handle_am(rc_iface, rc_hdr, wc->wr_id, wc->qp_num,
                                      wc->byte_len, wc->imm_data, wc->slid);
         break;
 
     case IBV_EXP_TMH_RNDV:
-        status = uct_rc_iface_handle_rndv(rc_iface, tmh, wc->byte_len);
+        status = uct_rc_iface_handle_rndv(rc_iface, tmh, be64toh(tmh->tag),
+                                          wc->byte_len);
 
         uct_rc_verbs_iface_unexp_consumed(iface, rc_iface, ib_desc,
                                           &rc_iface->tm.rndv_desc, status);
         break;
 
     case IBV_EXP_TMH_FIN:
-        uct_rc_iface_handle_rndv_fin(rc_iface, tmh);
+        uct_rc_iface_handle_rndv_fin(rc_iface, ntohl(tmh->app_ctx));
         ucs_mpool_put_inline(ib_desc);
         break;
 

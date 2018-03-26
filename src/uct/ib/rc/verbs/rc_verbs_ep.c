@@ -27,7 +27,7 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
     wr->wr_id      = uct_rc_txqp_unsignaled(&ep->super.txqp);
 
     uct_ib_log_post_send(&iface->super.super, ep->super.txqp.qp, wr, max_log_sge,
-                         (wr->opcode == IBV_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
+                         (wr->opcode == IBV_WR_SEND) ? uct_rc_verbs_common_packet_dump : NULL);
 
     ret = ibv_post_send(ep->super.txqp.qp, wr, &bad_wr);
     if (ret != 0) {
@@ -56,7 +56,7 @@ uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
 
     uct_ib_log_exp_post_send(&iface->super.super, ep->super.txqp.qp, wr, max_log_sge,
                              (wr->exp_opcode == IBV_EXP_WR_SEND) ?
-                             uct_rc_ep_am_packet_dump : NULL);
+                             uct_rc_verbs_common_packet_dump : NULL);
 
     ret = ibv_exp_post_send(ep->super.txqp.qp, wr, &bad_wr);
     if (ret != 0) {

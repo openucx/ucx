@@ -392,7 +392,7 @@ typedef struct uct_rc_am_short_hdr {
        }
 
 ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
-                                      struct ibv_exp_tmh *tmh,
+                                      struct ibv_exp_tmh *tmh, uct_tag_t tag,
                                       unsigned byte_len);
 
 
@@ -462,18 +462,15 @@ uct_rc_iface_ctx_priv(uct_tag_context_t *ctx)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_iface_handle_rndv_fin(uct_rc_iface_t *iface, struct ibv_exp_tmh *tmh)
+uct_rc_iface_handle_rndv_fin(uct_rc_iface_t *iface, uint32_t app_ctx)
 {
     int found;
     void *rndv_comp;
 
-    ucs_assert(tmh->opcode == IBV_EXP_TMH_FIN);
-
-    found = ucs_ptr_array_lookup(&iface->tm.rndv_comps, ntohl(tmh->app_ctx),
-                                 rndv_comp);
+    found = ucs_ptr_array_lookup(&iface->tm.rndv_comps, app_ctx, rndv_comp);
     ucs_assert_always(found > 0);
     uct_invoke_completion((uct_completion_t*)rndv_comp, UCS_OK);
-    ucs_ptr_array_remove(&iface->tm.rndv_comps, ntohl(tmh->app_ctx), 0);
+    ucs_ptr_array_remove(&iface->tm.rndv_comps, app_ctx, 0);
 }
 
 #else

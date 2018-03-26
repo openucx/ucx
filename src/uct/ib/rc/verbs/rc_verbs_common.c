@@ -189,3 +189,11 @@ ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
         return UCS_ERR_IO_ERROR;
     }
 }
+
+void uct_rc_verbs_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
+                                     void *data, size_t length, size_t valid_length,
+                                     char *buffer, size_t max)
+{
+    uct_rc_ep_packet_dump(iface, type, data, length, valid_length, buffer, max, 1);
+}
+
