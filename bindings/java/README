@@ -1,0 +1,97 @@
+# JUCX
+JUCX is a Java API over UCP (UCX protocol).</br>
+See more about UCX at: https://github.com/openucx/ucx
+
+## Building JUCX
+Building the source requires [Apache Maven](http://maven.apache.org/) and [GNU/autotools](http://www.gnu.org/software/autoconf/autoconf.html) and Java version 8 or higher.</br>
+Java binding will be built by default, but it is recommended to execute the following steps:
+<ol>
+<li>Set JAVA_HOME environmental variable to Java home directory, i.e.,
+
+```sh
+$ export JAVA_HOME=<path-to-java>
+```
+</li>
+<li>When running UCX's "configure" add "--with-java" flag, i.e.,
+
+```sh
+$ ./configure --with-java
+```
+</li>
+</ol>
+
+## Example Code:
+### HelloWorld over UCP's stream API
+- Both server and client create a local Worker.
+- Each extracts the local Worker's address.
+- The sides exchange the addresses using TCP socket (through localhost by default).
+- If all steps are successful - both sides print the success message and exit.
+
+#### Run Examples:
+<ol>
+<li>
+Server: ./scripts/hello_world.sh server [-p &lt;port&gt;], e.g.,</br>
+
+```sh
+$ ./scripts/hello_world.sh server -p 29592
+```
+</li>
+<li>
+Client: ./scripts/hello_world.sh client [&lt;host_IP_address&gt;] [-p &lt;port&gt;], e.g., </br>
+
+```sh
+$ ./scripts/hello_world.sh client 40.40.40.12 -p 29592
+```
+</li>
+</ol>
+
+## Benchmarks:
+### Java UCX performance test:
+A 2 mode client-server application - latency and bandwidth. In each mode 10K warmup iterations and 1M time samples iterations are performed. Each iteration includes data exchange between the two sides.
+#### Latency test
+<ul>
+<li>Server and client exchanges worker addresses through a TCP connection.</li>
+<li>Each iteration:
+    <ul>
+    <li>Client posts a single send request to the server and server posts a receive request.</li>
+    <li>Client waits for a response from the server (i.e., client posts a receive request and server - a send request).</li>
+    <li>Client measures RTT, then calculates latency (&frac12;RTT).</li>
+    </ul>
+</li>
+<li>Both sides closes the connection, and client prints the results.</li>
+</ul>
+
+#### Bandwidth test
+<ul>
+<li>Server and client exchanges worker addresses through a TCP connection.</li>
+<li>Each iteration:
+    <ul>
+    <li>Client posts a single send request to the server and server posts a receive request.</li>
+    <li>Client measures time difference between two consecutive sends.</li>
+    </ul>
+</li>
+<li>Both sides closes the connection, and client prints the results.</li>
+</ul>
+
+#### Run benchmarks:
+##### Server:
+```sh
+$ ./scripts/perftest.sh
+```
+##### Client:
+<ul>
+<li>
+Latency (default): ./scripts/perftest.sh [&lt;Host_IP_address&gt;] [OPTIONS], e.g.,
+
+```sh
+$ ./scripts/perftest.sh client 40.40.40.12 -s 512 -w 100 -n 100000
+```
+</li>
+<li>
+Bandwidth: ./scripts/perftest.sh [&lt;Host_IP_address&gt;] -b [OPTIONS], e.g.,
+
+```sh
+$ ./scripts/perftest.sh client 40.40.40.12 -b -s 512 -w 100 -n 100000
+```
+</li>
+</ul>

@@ -9,6 +9,11 @@
 
 #include <mutex>
 
+#if ENABLE_MT
+#define JUCX_LOCK(_mutex) std::lock_guard<std::mutex> lk(_mutex)
+#else
+#define JUCX_LOCK(_mutex) {}
+#endif
 
 /**
  * Context wrapper - allocates and releases ucp context

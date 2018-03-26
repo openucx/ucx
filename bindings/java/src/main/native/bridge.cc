@@ -5,16 +5,18 @@
 
 #include "bridge.h"
 #include "worker.h"
+#include "request_util.h"
 
 #include <ucp/api/ucp.h>
+#include <ucp/dt/dt_contig.h>
 
 #include <cstring>
 #include <iostream>
 
 
-#define ERR_EXIT(_msg, _ret)  do {                   \
-                                print_error(_msg);   \
-                                return _ret;         \
+#define ERR_EXIT(_msg, _ret)  do {                      \
+                                  print_error(_msg);    \
+                                  return _ret;          \
                               } while(0)
 
 #define ERR_JUMP(_msg, _label)  do {                    \
@@ -73,12 +75,13 @@ static void print_error(const char* error_msg) {
 JNIEXPORT jlong JNICALL
 Java_org_ucx_jucx_Bridge_createWorkerNative(JNIEnv *env, jclass cls,
                                             jint max_comp, jobject comp_queue,
-                                            jobject jworker) {
+                                            jobject jworker,
+                                            jboolean thread_safety) {
     ucp_worker_params_t worker_params = { 0 };
     worker* worker_ptr = NULL;
     ucs_status_t status;
     jobject jbyte_buff;
-    uint32_t cap = (uint32_t) max_comp;
+    uint32_t cap = uint32_t(max_comp);
     ucp_address_t* local_addr;
     size_t local_addr_len;
     jbyteArray jaddr_arr;
@@ -86,7 +89,12 @@ Java_org_ucx_jucx_Bridge_createWorkerNative(JNIEnv *env, jclass cls,
     jbyte* local_addr_wrap;
 
     worker_params.field_mask    = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
-    worker_params.thread_mode   = UCS_THREAD_MODE_SINGLE;
+    if (thread_safety) {
+        worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
+    }
+    else {
+        worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
+    }
 
     try {
         worker_ptr = new worker(&cached_ctx, cap, worker_params);
@@ -95,7 +103,7 @@ Java_org_ucx_jucx_Bridge_createWorkerNative(JNIEnv *env, jclass cls,
     }
 
     status = worker_ptr->extract_worker_address(&local_addr, local_addr_len);
-    if (!local_addr) {
+    if (status != UCS_OK) {
         ERR_JUMP("Failed to get ucp worker native address", err_worker);
     }
 
@@ -117,7 +125,8 @@ Java_org_ucx_jucx_Bridge_createWorkerNative(JNIEnv *env, jclass cls,
     // Set the Java workerAddress field
     env->SetObjectField(jworker, field_worker_addr_arr, jaddr_arr);
 
-    jbyte_buff = env->NewDirectByteBuffer(worker_ptr->get_event_queue(), cap);
+    jbyte_buff = env->NewDirectByteBuffer(worker_ptr->get_event_queue(),
+                                          worker_ptr->get_queue_size());
     if (!jbyte_buff) {
         env->ExceptionClear();
         ERR_JUMP("Failed to create Java ByteBuffer object", err_worker);
@@ -139,8 +148,138 @@ err:
 }
 
 JNIEXPORT void JNICALL
-Java_org_ucx_jucx_Bridge_releaseWorkerNative(JNIEnv *env, jclass cls,
+Java_org_ucx_jucx_Bridge_destroyWorkerNative(JNIEnv *env, jclass cls,
                                              jlong worker_id) {
-    worker* worker_ptr = (worker*) worker_id;
+    worker* worker_ptr = reinterpret_cast<worker*>(worker_id);
     delete worker_ptr;
+}
+
+JNIEXPORT jlong JNICALL
+Java_org_ucx_jucx_Bridge_createEndPointNative(JNIEnv *env, jclass cls,
+                                              jlong worker_id,
+                                              jbyteArray jremote_address) {
+    worker* worker_ptr = reinterpret_cast<worker*>(worker_id);
+    ucs_status_t status;
+    ucp_worker_h ucp_worker = worker_ptr->get_ucp_worker();
+    ucp_ep_params_t ep_params = { 0 };
+    ucp_ep_h ep = NULL;
+
+    jsize len = env->GetArrayLength(jremote_address);
+    ucp_address_t* remote_address = reinterpret_cast<ucp_address_t*>(new char[len]);
+    if (!remote_address) {
+        ERR_JUMP("Allocation failure", err);
+    }
+
+    env->GetByteArrayRegion(jremote_address, 0, len, (jbyte*) remote_address);
+    if (env->ExceptionCheck()) { // JNI exception thrown
+        env->ExceptionClear();
+        ERR_JUMP("Failed to get remote address", err_addr);
+    }
+
+    ep_params.field_mask    = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS | UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+    ep_params.err_mode      = UCP_ERR_HANDLING_MODE_PEER;
+    ep_params.address       = remote_address;
+
+    status = ucp_ep_create(ucp_worker, &ep_params, &ep);
+    if (status != UCS_OK) {
+        ERR_JUMP("Failed to intialize ucp native endpoint", err_addr);
+    }
+
+err_addr:
+    free(remote_address);
+
+err:
+    return (native_ptr) ep;
+}
+
+JNIEXPORT void JNICALL
+Java_org_ucx_jucx_Bridge_destroyEndPointNative(JNIEnv *env, jclass cls,
+                                               jlong endpoint_id) {
+    ucp_ep_h endpoint = reinterpret_cast<ucp_ep_h>(endpoint_id);
+    ucs_status_ptr_t close_request = ucp_ep_close_nb(endpoint,
+                                                     UCP_EP_CLOSE_MODE_FORCE);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_ucx_jucx_Bridge_streamSendNative(JNIEnv *env, jclass cls,
+                                          jlong endpoint_id,
+                                          jlong worker_id,
+                                          jlong jbuffer,
+                                          jint jlength,
+                                          jlong request_id) {
+    ucp_ep_h endpoint = reinterpret_cast<ucp_ep_h>(endpoint_id);
+    worker* worker_ptr = reinterpret_cast<worker*>(worker_id);
+    char* buffer = reinterpret_cast<char*>(jbuffer);
+    if (!buffer) {
+        ERR_EXIT("Buffer is null", JNI_TRUE);
+    }
+    size_t count = size_t(jlength);
+
+    jucx_request* request =
+            reinterpret_cast<jucx_request*>(
+                    ucp_stream_send_nb(endpoint, buffer, count,
+                                       ucp_dt_make_contig(1),
+                                       jucx_handler::send_completion_handler,
+                                       0));
+
+    int ret = request_util::check_stream_request(request,
+                                                 worker_ptr,
+                                                 endpoint,
+                                                 uint64_t(request_id),
+                                                 CommandType::JUCX_STREAM_SEND);
+
+    return (jboolean) ret;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_ucx_jucx_Bridge_streamRecvNative(JNIEnv *env, jclass cls,
+                                          jlong endpoint_id,
+                                          jlong worker_id,
+                                          jlong jbuffer,
+                                          jint jlength,
+                                          jlong request_id) {
+    ucp_ep_h endpoint = reinterpret_cast<ucp_ep_h>(endpoint_id);
+    worker* worker_ptr = reinterpret_cast<worker*>(worker_id);
+    char* buffer = reinterpret_cast<char*>(jbuffer);
+    if (!buffer) {
+        ERR_EXIT("Buffer is null", JNI_TRUE);
+    }
+    size_t count = size_t(jlength);
+    size_t length;
+
+    jucx_request* request =
+            reinterpret_cast<jucx_request*>(
+                    ucp_stream_recv_nb(endpoint, buffer, count,
+                                       ucp_dt_make_contig(1),
+                                       jucx_handler::recv_completion_handler,
+                                       &length,
+                                       0));
+
+    int ret = request_util::check_stream_request(request,
+                                                 worker_ptr,
+                                                 endpoint,
+                                                 uint64_t(request_id),
+                                                 CommandType::JUCX_STREAM_RECV,
+                                                 length);
+
+    return (jboolean) ret;
+}
+
+JNIEXPORT jint JNICALL
+Java_org_ucx_jucx_Bridge_progressWorkerNative(JNIEnv *env, jclass cls,
+                                              jlong worker_id) {
+    worker* worker_ptr = reinterpret_cast<worker*>(worker_id);
+
+    int num_of_completions = worker_ptr->progress();
+    return num_of_completions;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_ucx_jucx_Bridge_isMultiThreadSupportEnabledNative(JNIEnv *env,
+                                                           jclass cls) {
+#if ENABLE_MT
+    return JNI_TRUE;
+#else
+    return JNI_FALSE;
+#endif
 }
