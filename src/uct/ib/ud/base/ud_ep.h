@@ -195,9 +195,16 @@ enum {
     UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(4), /* CREP message was received */
     UCT_UD_EP_FLAG_CREQ_SENT         = UCS_BIT(5), /* CREQ message was sent */
     UCT_UD_EP_FLAG_CREP_SENT         = UCS_BIT(6), /* CREP message was sent */
-    UCT_UD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(7)  /* CREQ message is NOT sent, because
+    UCT_UD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(7), /* CREQ message is NOT sent, because
                                                       connection establishment process
                                                       is driven by remote side. */
+
+    /* Endpoint is currently executing the pending queue */
+#if ENABLE_ASSERT
+    UCT_UD_EP_FLAG_IN_PENDING        = UCS_BIT(8)
+#else
+    UCT_UD_EP_FLAG_IN_PENDING        = 0
+#endif
 };
 
 typedef struct uct_ud_peer_name {
@@ -239,9 +246,9 @@ struct uct_ud_ep {
     } rx;
     ucs_list_link_t  cep_list;
     uint32_t         conn_id;      /* connection id. assigned in connect_to_iface() */
-    ucs_wtimer_t     slow_timer;
-    uint8_t          flags;
+    uint16_t         flags;
     uint8_t          path_bits;
+    ucs_wtimer_t     slow_timer;
     UCS_STATS_NODE_DECLARE(stats);
     UCT_UD_EP_HOOK_DECLARE(timer_hook);
 #if ENABLE_DEBUG_DATA

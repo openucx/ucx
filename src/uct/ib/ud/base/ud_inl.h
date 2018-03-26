@@ -161,6 +161,11 @@ uct_ud_am_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
         return UCS_ERR_NO_RESOURCE;
     }
 
+    ucs_assertv((ep->flags & UCT_UD_EP_FLAG_IN_PENDING) ||
+                ucs_arbiter_group_is_empty(&ep->tx.pending.group),
+                "out-of-order send detected for ep %p am %d ep_pending %d arb_empty %d",
+                ep, id, (ep->flags & UCT_UD_EP_FLAG_IN_PENDING),
+                ucs_arbiter_group_is_empty(&ep->tx.pending.group));
     uct_ud_am_set_neth(skb->neth, ep, id);
 
     *skb_p = skb;
