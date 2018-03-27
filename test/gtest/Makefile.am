@@ -238,7 +238,7 @@ list: gtest
 #
 test: ucx gtest
 	@rm -f core.*
-	$(LAUNCHER) $(abs_builddir)/gtest $(GTEST_ARGS)
+	$(LAUNCHER) stdbuf -e0 -o0 $(abs_builddir)/gtest $(GTEST_ARGS)
 
 #
 # Run unit tests with GDB
@@ -254,4 +254,4 @@ test_gdb: ucx gtest
 #
 test_valgrind: ucx gtest
 	$(LAUNCHER) env LD_LIBRARY_PATH="$(VALGRIND_LIBPATH):${LD_LIBRARY_PATH}" \
-	valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest $(GTEST_ARGS)
+	stdbuf -e0 -o0 valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest $(GTEST_ARGS)
