@@ -66,9 +66,11 @@ enum {
     UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG = 0xA
 };
 
+#  define UCT_RC_MLX5_TM_CQE_WITH_IMM(_cqe64) \
+       (((_cqe64)->op_own >> 4) == MLX5_CQE_RESP_SEND_IMM)
+
 #  define UCT_RC_MLX5_TM_IS_SW_RNDV(_cqe64, _imm_data) \
-       (ucs_unlikely((((_cqe64)->op_own >> 4) == MLX5_CQE_RESP_SEND_IMM) && \
-                     !(_imm_data)))
+       (ucs_unlikely(UCT_RC_MLX5_TM_CQE_WITH_IMM(_cqe64) && !(_imm_data)))
 
 #  define UCT_RC_MLX5_CHECK_TAG(_mlx5_common_iface) \
        if (ucs_unlikely((_mlx5_common_iface)->tm.head->next == NULL)) {  \
@@ -1167,14 +1169,22 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *mlx5_common_iface
     tmh = uct_rc_mlx5_iface_common_data(mlx5_common_iface, rc_iface, cqe,
                                         byte_len, &flags);
 
-    switch (tmh->opcode) {
-    case IBV_EXP_TMH_EAGER:
-        imm_data = uct_rc_iface_tag_imm_data_unpack(cqe->imm_inval_pkey,
-                                                    tmh->app_ctx,
-                                                    (cqe->op_own >> 4) ==
-                                                    MLX5_CQE_RESP_SEND_IMM);
+    if (ucs_likely((tmh->opcode == IBV_EXP_TMH_EAGER) &&
+                   !UCT_RC_MLX5_TM_CQE_WITH_IMM(cqe))) {
+        status = rc_iface->tm.eager_unexp.cb(rc_iface->tm.eager_unexp.arg,
+                                             tmh + 1, byte_len - sizeof(*tmh),
+                                             flags, tmh->tag, 0);
 
-        if (UCT_RC_MLX5_TM_IS_SW_RNDV(cqe, cqe->imm_inval_pkey)) {
+        uct_rc_mlx5_iface_unexp_consumed(mlx5_common_iface, rc_iface,
+                                         &rc_iface->tm.eager_desc, status,
+                                         ntohs(cqe->wqe_counter));
+
+    } else if (tmh->opcode == IBV_EXP_TMH_EAGER) {
+        imm_data = uct_rc_iface_tag_imm_data_unpack(cqe->imm_inval_pkey,
+                                                    tmh->app_ctx, 1);
+
+        if (ucs_unlikely(!imm_data)) {
+            /* Opcode is WITH_IMM, but imm_data is 0 - this must be SW RNDV */
             status = rc_iface->tm.rndv_unexp.cb(rc_iface->tm.rndv_unexp.arg,
                                                 flags, tmh->tag, tmh + 1,
                                                 byte_len - sizeof(*tmh),
@@ -1188,19 +1198,14 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *mlx5_common_iface
         uct_rc_mlx5_iface_unexp_consumed(mlx5_common_iface, rc_iface,
                                          &rc_iface->tm.eager_desc, status,
                                          ntohs(cqe->wqe_counter));
-        break;
-
-    case IBV_EXP_TMH_RNDV:
+    } else {
+        ucs_assertv_always(tmh->opcode == IBV_EXP_TMH_RNDV,
+                           "Unsupported packet arrived %d", tmh->opcode);
         status = uct_rc_iface_handle_rndv(rc_iface, tmh, tmh->tag, byte_len);
 
         uct_rc_mlx5_iface_unexp_consumed(mlx5_common_iface, rc_iface,
                                          &rc_iface->tm.rndv_desc, status,
                                          ntohs(cqe->wqe_counter));
-        break;
-
-    default:
-        ucs_fatal("Unsupported packet arrived %d", tmh->opcode);
-        break;
     }
 }
 
@@ -1251,6 +1256,14 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
 #if IBV_EXP_HW_TM
     ucs_assert(cqe->app == UCT_RC_MLX5_CQE_APP_TAG_MATCHING);
 
+    /* Should be a fast path, because small (latency-critical) messages
+     * are not supposed to be offloaded to the HW.  */
+    if (ucs_likely(cqe->app_op == UCT_RC_MLX5_CQE_APP_OP_TM_UNEXPECTED)) {
+        uct_rc_mlx5_iface_tag_handle_unexp(mlx5_common_iface, rc_iface, cqe,
+                                           byte_len);
+        goto done;
+    }
+
     switch (cqe->app_op) {
     case UCT_RC_MLX5_CQE_APP_OP_TM_APPEND:
         uct_rc_mlx5_iface_handle_tm_list_op(mlx5_common_iface,
@@ -1279,11 +1292,6 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                               ntohs(cqe->wqe_counter), UCS_OK, 0,
                                               NULL);
         }
-        break;
-
-    case UCT_RC_MLX5_CQE_APP_OP_TM_UNEXPECTED:
-        uct_rc_mlx5_iface_tag_handle_unexp(mlx5_common_iface, rc_iface, cqe,
-                                           byte_len);
         break;
 
     case UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED:
