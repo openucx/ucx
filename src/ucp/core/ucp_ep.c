@@ -930,6 +930,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     config->tag.rndv.rkey_size          = ucp_rkey_packed_size(context,
                                                                config->key.rma_bw_md_map);
     config->stream.proto                = &ucp_stream_am_proto;
+    config->tag.offload.max_eager_short = -1;
     max_rndv_thresh                     = SIZE_MAX;
     max_am_rndv_thresh                  = SIZE_MAX;
 
@@ -961,16 +962,18 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                                      UCT_IFACE_FLAG_TAG_EAGER_ZCOPY, 0,
                                      iface_attr->cap.tag.eager.max_bcopy);
 
-            config->tag.offload.max_rndv_iov   = iface_attr->cap.tag.rndv.max_iov;
-            config->tag.offload.max_rndv_zcopy = iface_attr->cap.tag.rndv.max_zcopy;
-            config->tag.sync_proto             = &ucp_tag_offload_sync_proto;
-            config->tag.proto                  = &ucp_tag_offload_proto;
-            config->tag.lane                   = lane;
-            max_rndv_thresh                    = iface_attr->cap.tag.eager.max_zcopy;
-            max_am_rndv_thresh                 = iface_attr->cap.tag.eager.max_bcopy;
+            config->tag.offload.max_rndv_iov    = iface_attr->cap.tag.rndv.max_iov;
+            config->tag.offload.max_rndv_zcopy  = iface_attr->cap.tag.rndv.max_zcopy;
+            config->tag.offload.max_eager_short = config->tag.eager.max_short;
+            config->tag.sync_proto              = &ucp_tag_offload_sync_proto;
+            config->tag.proto                   = &ucp_tag_offload_proto;
+            config->tag.lane                    = lane;
+            max_rndv_thresh                     = iface_attr->cap.tag.eager.max_zcopy;
+            max_am_rndv_thresh                  = iface_attr->cap.tag.eager.max_bcopy;
 
             ucs_assert_always(iface_attr->cap.tag.rndv.max_hdr >=
                               sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
+            ucs_assert_always(config->tag.offload.max_eager_short >= 0);
 
             if (config->key.am_lane != UCP_NULL_LANE) {
                 /* Must have active messages for using rendezvous */

@@ -78,18 +78,4 @@ void ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t stat
 
 void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self, ucs_status_t status);
 
-static inline ucs_status_t ucp_tag_send_eager_short(ucp_ep_t *ep, ucp_tag_t tag,
-                                                    const void *buffer, size_t length)
-{
-    if (ep->flags & UCP_EP_FLAG_TAG_OFFLOAD_ENABLED) {
-        UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uct_tag_t));
-        return uct_ep_tag_eager_short(ucp_ep_get_tag_uct_ep(ep), tag, buffer, length);
-    } else {
-        UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(ucp_eager_hdr_t));
-        UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
-        return uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_EAGER_ONLY, tag,
-                               buffer, length);
-    }
-}
-
 #endif

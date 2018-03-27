@@ -148,14 +148,24 @@ ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t count,
     }
 
     length = ucp_contig_dt_length(datatype, count);
-    if (ucs_unlikely((ssize_t)length > ucp_ep_config(ep)->tag.eager.max_short)) {
+
+    if ((ssize_t)length <= ucp_ep_config(ep)->tag.offload.max_eager_short) {
+        UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uct_tag_t));
+        status = uct_ep_tag_eager_short(ucp_ep_get_tag_uct_ep(ep), tag, buffer,
+                                        length);
+    } else if ((ssize_t)length <= ucp_ep_config(ep)->tag.eager.max_short) {
+        UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(ucp_eager_hdr_t));
+        UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
+        status = uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_EAGER_ONLY,
+                                 tag, buffer, length);
+    } else {
         return UCS_ERR_NO_RESOURCE;
     }
 
-    status = UCS_PROFILE_CALL(ucp_tag_send_eager_short, ep, tag, buffer, length);
     if (status != UCS_ERR_NO_RESOURCE) {
         UCP_EP_STAT_TAG_OP(ep, EAGER);
     }
+
     return status;
 }
 
@@ -174,7 +184,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
     ucs_trace_req("send_nb buffer %p count %zu tag %"PRIx64" to %s cb %p",
                   buffer, count, tag, ucp_ep_peer_name(ep), cb);
 
-    status = ucp_tag_send_inline(ep, buffer, count, datatype, tag);
+    status = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer, count,
+                              datatype, tag);
     if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
         ret = UCS_STATUS_PTR(status); /* UCS_OK also goes here */
         goto out;
@@ -211,7 +222,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_send_nbr,
     ucs_trace_req("send_nbr buffer %p count %zu tag %"PRIx64" to %s req %p",
                   buffer, count, tag, ucp_ep_peer_name(ep), request);
 
-    status = ucp_tag_send_inline(ep, buffer, count, datatype, tag);
+    status = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer, count,
+                              datatype, tag);
     if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
         UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
         return status;
