@@ -12,6 +12,7 @@ extern "C" {
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/tag/tag_match.h>
+#include <ucp/core/ucp_ep.inl>
 }
 
 class test_ucp_tag_offload : public test_ucp_tag {
@@ -22,7 +23,7 @@ public:
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
 
         test_ucp_tag::init();
-        if (!(sender().ep()->flags & UCP_EP_FLAG_TAG_OFFLOAD_ENABLED)) {
+        if (!ucp_ep_is_tag_offload_enabled(ucp_ep_config(sender().ep()))) {
             test_ucp_tag::cleanup();
             UCS_TEST_SKIP_R("no tag offload");
         }

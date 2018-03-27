@@ -113,7 +113,7 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
                   sreq->send.length);
     UCS_PROFILE_REQUEST_EVENT(sreq, "start_rndv", sreq->send.length);
 
-    if (ep->flags & UCP_EP_FLAG_TAG_OFFLOAD_ENABLED) {
+    if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
         status = ucp_tag_offload_start_rndv(sreq);
         if (status != UCS_OK) {
             return status;

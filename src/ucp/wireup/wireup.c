@@ -645,11 +645,6 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
         ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
     }
 
-    /* Cache tag offload state in the flags for fast-path */
-    if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
-        ep->flags |= UCP_EP_FLAG_TAG_OFFLOAD_ENABLED;
-    }
-
     return UCS_OK;
 
 err:
