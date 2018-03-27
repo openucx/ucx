@@ -257,7 +257,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
                                  UCP_RECV_DESC_FLAG_EAGER_ONLY |
                                  UCP_RECV_DESC_FLAG_EAGER_OFFLOAD;
     ucp_eager_sync_hdr_t *hdr;
-    unsigned hdr_len;
+    int hdr_len;
 
     UCP_WORKER_STAT_TAG_OFFLOAD(wiface->worker, RX_UNEXP_EGR);
 
@@ -272,11 +272,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
     hdr_len = sizeof(ucp_eager_sync_hdr_t);
 
     if (ucs_unlikely(tl_flags & UCT_CB_PARAM_FLAG_DESC)) {
-        hdr = (ucp_eager_sync_hdr_t*)((char*)data - hdr_len);
+        hdr = (ucp_eager_sync_hdr_t*)(UCS_PTR_BYTE_OFFSET(data, -hdr_len));
     } else {
         /* Can not shift back, no headroom */
         hdr = ucs_alloca(length + hdr_len);
-        memcpy((char*)hdr + hdr_len, data, length);
+        memcpy(UCS_PTR_BYTE_OFFSET(hdr, hdr_len), data, length);
     }
 
     hdr->super.super.tag = stag;
