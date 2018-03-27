@@ -372,7 +372,8 @@ UCS_TEST_P(test_ucp_tag_offload_multi, recv_from_multi)
     post_recv_and_check(e(2), 0u, tag + 1, UCP_TAG_MASK_FULL);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, all, "all")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, all_rcdc,
+                              "\\rc,\\dc,\\ud,rc_x,dc_x")
 
 
 #if ENABLE_STATS
