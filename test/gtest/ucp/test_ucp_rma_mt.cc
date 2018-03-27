@@ -27,6 +27,10 @@ public:
     {
         ucp_test::init();
         sender().connect(&receiver(), get_ep_params());
+        for (int i = 0; i < sender().get_num_workers(); i++) {
+            /* avoid deadlock for blocking rma */
+            flush_worker(sender(), i);
+        }
     }
 
     static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
