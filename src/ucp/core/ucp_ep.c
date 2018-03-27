@@ -965,6 +965,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             config->tag.offload.max_rndv_iov    = iface_attr->cap.tag.rndv.max_iov;
             config->tag.offload.max_rndv_zcopy  = iface_attr->cap.tag.rndv.max_zcopy;
             config->tag.offload.max_eager_short = config->tag.eager.max_short;
+            config->tag.eager.max_short         = -1;
             config->tag.sync_proto              = &ucp_tag_offload_sync_proto;
             config->tag.proto                   = &ucp_tag_offload_proto;
             config->tag.lane                    = lane;
