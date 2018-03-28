@@ -346,7 +346,7 @@ UCS_TEST_P(test_ucp_wireup, multi_wireup) {
 
     /* connect from sender() to all the rest */
     for (size_t i = 0; i < count; ++i) {
-        sender().connect(&entities().at(i), get_ep_params());
+        sender().connect(&entities().at(i), get_ep_params(), i);
     }
 }
 
