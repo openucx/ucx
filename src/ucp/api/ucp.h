@@ -242,9 +242,25 @@ enum ucp_ep_close_mode {
                                               for all endpoints created on
                                               both (local and remote) sides to
                                               avoid undefined behavior. */
-    UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
+    UCP_EP_CLOSE_MODE_FLUSH         = 1, /**< @ref ucp_ep_close_nb schedules
                                               flushes on all outstanding
                                               operations. */
+    UCP_EP_CLOSE_MODE_SYNC          = 2  /**< UCP will initiate synchronization
+                                              with the peer endpoint if it
+                                              exists and the request created by
+                                              @ref ucp_ep_close_nb will be
+                                              completed when peer is ready to be
+                                              closed too. If the peer have not
+                                              called @ref ucp_ep_close_nb yet
+                                              then callback defined in
+                                              ucp_ep_params_t::err_handler will
+                                              be invoked on remote side with
+                                              corresponding endpoint handler and
+                                              @ref UCS_ERR_REMOTE_DISCONNECT
+                                              status. If the endpoint does
+                                              not have its peer, the behavior
+                                              will be the same as
+                                              @ref UCP_EP_CLOSE_MODE_FLUSH */
 };
 
 
