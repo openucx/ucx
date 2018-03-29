@@ -25,12 +25,10 @@ ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
 
 ucs_config_field_t uct_mlx5_common_config_table[] = {
 #if HAVE_IBV_EXP_DM
-    /* TODO: set 1k limit */
-    {"DM_SIZE", "0",
+    {"DM_SIZE", "2k",
      "Device Memory segment size (0 - disabled)",
      ucs_offsetof(uct_common_mlx5_iface_config_t, dm.seg_len), UCS_CONFIG_TYPE_MEMUNITS},
-    /* TODO: set 1 buffer limit */
-    {"DM_COUNT", "0",
+    {"DM_COUNT", "1",
      "Device Memory segments count (0 - disabled)",
      ucs_offsetof(uct_common_mlx5_iface_config_t, dm.count), UCS_CONFIG_TYPE_UINT},
 #endif
@@ -46,6 +44,13 @@ typedef struct uct_mlx5_dm_va {
 } uct_mlx5_dm_va_t;
 #endif
 
+
+void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
+                                    void *data, size_t length, size_t valid_length,
+                                    char *buffer, size_t max)
+{
+    uct_rc_ep_packet_dump(iface, type, data, length, valid_length, buffer, max, 0);
+}
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq)
 {
@@ -235,7 +240,7 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface,
 
 #if HAVE_IBV_EXP_DM
 static ucs_status_t
-ucs_iface_dm_mpool_chunk_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+uct_rc_mlx5_iface_common_dm_mpool_chunk_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
     ucs_status_t status;
 
@@ -247,7 +252,7 @@ ucs_iface_dm_mpool_chunk_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
     return status;
 }
 
-static void uct_iface_dm_mp_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
+static void uct_rc_mlx5_iface_common_dm_mp_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
     uct_mlx5_dm_data_t *dm         = ucs_container_of(mp, uct_mlx5_dm_data_t, mp);
     uct_rc_iface_send_desc_t* desc = (uct_rc_iface_send_desc_t*)obj;
@@ -262,31 +267,34 @@ static void uct_iface_dm_mp_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
 }
 
 static ucs_mpool_ops_t uct_dm_iface_mpool_ops = {
-    .chunk_alloc   = ucs_iface_dm_mpool_chunk_malloc,
+    .chunk_alloc   = uct_rc_mlx5_iface_common_dm_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
-    .obj_init      = uct_iface_dm_mp_obj_init,
+    .obj_init      = uct_rc_mlx5_iface_common_dm_mp_obj_init,
     .obj_cleanup   = NULL
 };
 
 
-static int uct_mlx5_iface_dm_device_cmp(uct_mlx5_dm_data_t *dm_data,
-                                        uct_rc_iface_t *iface,
-                                        const uct_common_mlx5_iface_config_t *config)
+static int uct_rc_mlx5_iface_common_dm_device_cmp(uct_mlx5_dm_data_t *dm_data,
+                                                  uct_rc_iface_t *iface,
+                                                  const uct_common_mlx5_iface_config_t *config)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
 
     return dm_data->device->ibv_context == dev->ibv_context;
 }
 
-static ucs_status_t uct_mlx5_iface_init_dm_tl(uct_mlx5_dm_data_t *data,
-                                              uct_rc_iface_t *iface,
-                                              const uct_common_mlx5_iface_config_t *config)
+static ucs_status_t
+uct_rc_mlx5_iface_common_dm_tl_init(uct_mlx5_dm_data_t *data,
+                                    uct_rc_iface_t *iface,
+                                    const uct_common_mlx5_iface_config_t *config)
 {
     ucs_status_t status;
     struct ibv_exp_alloc_dm_attr dm_attr;
     struct ibv_exp_reg_mr_in mr_in;
 
-    data->seg_len      = ucs_align_up(config->dm.seg_len, 8);
+    data->seg_len      = ucs_min(ucs_align_up(config->dm.seg_len,
+                                              sizeof(uct_rc_mlx5_dm_copy_data_t)),
+                                 iface->super.config.seg_size);
     data->seg_count    = config->dm.count;
     data->seg_attached = 0;
     data->device       = uct_ib_iface_device(&iface->super);
@@ -299,7 +307,7 @@ static ucs_status_t uct_mlx5_iface_init_dm_tl(uct_mlx5_dm_data_t *data,
         /* TODO: prompt warning? */
         ucs_debug("ibv_exp_alloc_dm(dev=%s length=%zu) failed: %m",
                   uct_ib_device_name(data->device), dm_attr.length);
-        return UCS_OK;
+        return UCS_ERR_NO_RESOURCE;
     }
 
     memset(&mr_in, 0, sizeof(mr_in));
@@ -310,6 +318,7 @@ static ucs_status_t uct_mlx5_iface_init_dm_tl(uct_mlx5_dm_data_t *data,
     data->mr           = ibv_exp_reg_mr(&mr_in);
     if (data->mr == NULL) {
         ucs_warn("ibv_exp_reg_mr() error - On Device Memory registration failed, %d %m", errno);
+        status = UCS_ERR_NO_RESOURCE;
         goto failed_mr;
     }
 
@@ -332,10 +341,10 @@ failed_mpool:
 failed_mr:
     ibv_exp_free_dm(data->dm);
     data->dm = NULL;
-    return UCS_OK;
+    return status;
 }
 
-static void uct_mlx5_iface_cleanup_dm_tl(uct_mlx5_dm_data_t *data)
+static void uct_rc_mlx5_iface_common_dm_tl_cleanup(uct_mlx5_dm_data_t *data)
 {
     ucs_assert(data->dm != NULL);
     ucs_assert(data->mr != NULL);
@@ -346,41 +355,41 @@ static void uct_mlx5_iface_cleanup_dm_tl(uct_mlx5_dm_data_t *data)
 }
 #endif
 
-static ucs_status_t uct_mlx5_iface_init_dm(uct_rc_mlx5_iface_common_t *iface,
-                                           uct_rc_iface_t *rc_iface,
-                                           const uct_common_mlx5_iface_config_t *config)
+static ucs_status_t
+uct_rc_mlx5_iface_common_dm_init(uct_rc_mlx5_iface_common_t *iface,
+                                 uct_rc_iface_t *rc_iface,
+                                 const uct_common_mlx5_iface_config_t *config)
 {
 #if HAVE_IBV_EXP_DM
     if ((config->dm.seg_len * config->dm.count) == 0) {
-        iface->dm.dm = NULL;
-        return UCS_OK;
+        goto fallback;
     }
 
     iface->dm.dm = uct_worker_tl_data_get(rc_iface->super.super.worker,
                                           UCT_IB_MLX5_WORKER_DM_KEY,
                                           uct_mlx5_dm_data_t,
-                                          uct_mlx5_iface_dm_device_cmp,
-                                          uct_mlx5_iface_init_dm_tl, rc_iface, config);
-    if (iface->dm.dm == NULL) {
-        return UCS_OK;
+                                          uct_rc_mlx5_iface_common_dm_device_cmp,
+                                          uct_rc_mlx5_iface_common_dm_tl_init,
+                                          rc_iface, config);
+    if (UCS_PTR_IS_ERR(iface->dm.dm)) {
+        goto fallback;
     }
 
-    if (iface->dm.dm->dm == NULL) {
-        /* failed to initialize DM. put back object */
-        uct_worker_tl_data_put(iface->dm.dm, uct_mlx5_iface_cleanup_dm_tl);
-        iface->dm.dm = NULL;
-    } else {
-        iface->dm.seg_len = iface->dm.dm->seg_len;
-    }
+    ucs_assert(iface->dm.dm->dm != NULL);
+    iface->dm.seg_len = iface->dm.dm->seg_len;
+    return UCS_OK;
+
+fallback:
+    iface->dm.dm = NULL;
 #endif
     return UCS_OK;
 }
 
-static void uct_mlx_iface_dm_cleanup(uct_rc_mlx5_iface_common_t *iface)
+static void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
 #if HAVE_IBV_EXP_DM
     if (iface->dm.dm) {
-        uct_worker_tl_data_put(iface->dm.dm, uct_mlx5_iface_cleanup_dm_tl);
+        uct_worker_tl_data_put(iface->dm.dm, uct_rc_mlx5_iface_common_dm_tl_cleanup);
     }
 #endif
 }
@@ -408,7 +417,7 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
         return status;
     }
 
-    status = uct_mlx5_iface_init_dm(iface, rc_iface, common_config);
+    status = uct_rc_mlx5_iface_common_dm_init(iface, rc_iface, common_config);
     if (status != UCS_OK) {
         return status;
     }
@@ -454,7 +463,7 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
     return UCS_OK;
 
 cleanup_dm:
-    uct_mlx_iface_dm_cleanup(iface);
+    uct_rc_mlx5_iface_common_dm_cleanup(iface);
     return status;
 }
 
@@ -462,7 +471,7 @@ void uct_rc_mlx5_iface_common_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
     UCS_STATS_NODE_FREE(iface->stats);
     ucs_mpool_cleanup(&iface->tx.atomic_desc_mp, 1);
-    uct_mlx_iface_dm_cleanup(iface);
+    uct_rc_mlx5_iface_common_dm_cleanup(iface);
 }
 
 void uct_rc_mlx5_iface_common_query(uct_iface_attr_t *iface_attr)

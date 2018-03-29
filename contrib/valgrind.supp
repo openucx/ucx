@@ -80,3 +80,23 @@
    ...
    fun:gdr_copy_to_bar
 }
+{
+    ibv_exp_reg_mr
+    Memcheck:Param
+    write(buf)
+    ...
+    fun:ibv_exp_reg_mr
+}
+{
+    ibv_exp_free_dm
+    Memcheck:Param
+    write(buf)
+    ...
+    fun:ibv_exp_free_dm
+}
+{
+   res_domain_leak
+   Memcheck:Leak
+   ...
+   fun:ibv_exp_create_res_domain
+}

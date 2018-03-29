@@ -45,6 +45,13 @@ typedef struct ucs_component {
     static void UCS_F_CTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer)()
 
 
+/*
+ * Define code which runs at global destructor phase
+ */
+#define UCS_STATIC_CLEANUP \
+    static void UCS_F_DTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer)()
+
+
 /**
  * Define a list of components for specific base type.
  *

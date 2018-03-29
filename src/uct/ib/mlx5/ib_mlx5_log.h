@@ -12,6 +12,12 @@
 #include <uct/base/uct_log.h>
 
 
+typedef struct uct_ib_log_sge {
+    int            num_sge;
+    uint64_t       inline_bitmap;
+    struct ibv_sge sg_list[2];
+} uct_ib_log_sge_t;
+
 ucs_status_t uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe,
                                              ucs_log_level_t log_level);
 
@@ -19,6 +25,7 @@ ucs_status_t uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe,
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
                           uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
                           void *wqe, void *qstart, void *qend, int max_log_sge,
+                          uct_ib_log_sge_t *log_sge,
                           uct_log_data_dump_func_t packet_dump_cb);
 
 void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
@@ -29,10 +36,10 @@ void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
 void uct_ib_mlx5_cqe_dump(const char *file, int line, const char *function,
                           struct mlx5_cqe64 *cqe);
 
-#define uct_ib_mlx5_log_tx(_iface, _qpt, _wqe, _qstart, _qend, _max_sge, _dump_cb) \
+#define uct_ib_mlx5_log_tx(_iface, _qpt, _wqe, _qstart, _qend, _max_sge, _log_sge, _dump_cb) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
         __uct_ib_mlx5_log_tx(__FILE__, __LINE__, __FUNCTION__, \
-                             _iface, _qpt, _wqe, _qstart, _qend, _max_sge, _dump_cb); \
+                             _iface, _qpt, _wqe, _qstart, _qend, _max_sge, _log_sge, _dump_cb); \
     }
 
 #define uct_ib_mlx5_log_rx(_iface, _qpt, _cqe, _data, _dump_cb) \

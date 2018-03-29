@@ -329,6 +329,7 @@ ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
     ops->ep_put_short       = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_put_bcopy       = (void*)ucs_empty_function_return_bc_ep_timeout;
     ops->ep_put_zcopy       = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_get_short       = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_get_bcopy       = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_get_zcopy       = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_am_short        = (void*)ucs_empty_function_return_ep_timeout;

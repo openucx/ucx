@@ -29,8 +29,7 @@ enum {
     UCP_EP_FLAG_LOCAL_CONNECTED     = UCS_BIT(0), /* All local endpoints are connected */
     UCP_EP_FLAG_REMOTE_CONNECTED    = UCS_BIT(1), /* All remote endpoints are connected */
     UCP_EP_FLAG_CONNECT_REQ_QUEUED  = UCS_BIT(2), /* Connection request was queued */
-    UCP_EP_FLAG_TAG_OFFLOAD_ENABLED = UCS_BIT(3), /* Endpoint uses tl offload for tag matching */
-    UCP_EP_FLAG_FAILED              = UCS_BIT(4), /* EP is in failed state */
+    UCP_EP_FLAG_FAILED              = UCS_BIT(3), /* EP is in failed state */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT    = UCS_BIT(8), /* DEBUG: Connection request was sent */
@@ -119,6 +118,7 @@ typedef struct ucp_ep_rma_config {
     size_t                 max_put_short;    /* Maximal payload of put short */
     size_t                 max_put_bcopy;    /* Maximal total size of put_bcopy */
     size_t                 max_put_zcopy;
+    size_t                 max_get_short;    /* Maximal payload of get short */
     size_t                 max_get_bcopy;    /* Maximal total size of get_bcopy */
     size_t                 max_get_zcopy;
     size_t                 put_zcopy_thresh;
@@ -203,6 +203,8 @@ typedef struct ucp_ep_config {
         } rndv_send_nbr;
 
         struct {
+            /* Maximal size for eager short */
+            ssize_t         max_eager_short;
             /* Maximal iov count for RNDV offload */
             size_t          max_rndv_iov;
             /* Maximal total size for RNDV offload */

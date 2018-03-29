@@ -113,7 +113,7 @@ uct_dc_verbs_iface_post_send_to_dci(uct_dc_verbs_iface_t* iface,
     uct_ib_log_exp_post_send(&iface->super.super.super, txqp->qp, wr, max_log_sge,
                              ((wr->exp_opcode == IBV_EXP_WR_SEND) ||
                               (wr->exp_opcode == IBV_EXP_WR_SEND_WITH_IMM)) ?
-                             uct_rc_ep_am_packet_dump : NULL);
+                             uct_rc_verbs_common_packet_dump : NULL);
 
     ret = ibv_exp_post_send(txqp->qp, wr, &bad_wr);
     if (ret != 0) {
@@ -400,9 +400,9 @@ uct_dc_verbs_ep_atomic(uct_dc_verbs_ep_t *ep, int opcode, void *result,
     uct_rc_iface_send_desc_t *desc;
 
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super.super, &iface->verbs_common.short_desc_mp, desc,
-                                    iface->super.super.config.atomic64_handler,
-                                    result, comp);
+    UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super.super, &iface->verbs_common.short_desc_mp,
+                                          desc, iface->super.super.config.atomic64_handler,
+                                          result, comp);
     uct_dc_verbs_iface_atomic_post(iface, ep, opcode, compare_add, swap, remote_addr,
                                    rkey, desc, IBV_SEND_SIGNALED);
     return UCS_INPROGRESS;
@@ -438,8 +438,8 @@ uct_dc_verbs_ep_ext_atomic(uct_dc_verbs_ep_t *ep, int opcode, void *result,
     uct_rc_send_handler_t handler = uct_rc_iface_atomic_handler(&iface->super.super, 1, length);
 
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super.super, &iface->verbs_common.short_desc_mp, desc,
-                                    handler, result, comp);
+    UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super.super, &iface->verbs_common.short_desc_mp,
+                                          desc, handler, result, comp);
     uct_dc_verbs_iface_ext_atomic_post(iface, ep, opcode, length, compare_mask,
                                        compare_add, swap, remote_addr,
                                        rkey, desc, IBV_SEND_SIGNALED);
@@ -457,7 +457,7 @@ ucs_status_t uct_dc_verbs_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
 
     /* TODO don't allocate descriptor - have dummy buffer */
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_ADD_DESC(&iface->super.super, &iface->verbs_common.short_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super.super, &iface->verbs_common.short_desc_mp, desc);
 
     uct_dc_verbs_iface_atomic_post(iface, ep,
                                    IBV_WR_ATOMIC_FETCH_AND_ADD, add, 0,
@@ -510,7 +510,7 @@ ucs_status_t uct_dc_verbs_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
     uct_rc_iface_send_desc_t *desc;
 
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_ADD_DESC(&iface->super.super, &iface->verbs_common.short_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super.super, &iface->verbs_common.short_desc_mp, desc);
 
     /* TODO don't allocate descriptor - have dummy buffer */
     uct_dc_verbs_iface_ext_atomic_post(iface, ep, IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD,
@@ -631,7 +631,7 @@ static ucs_status_t uct_dc_verbs_reset_dci(uct_dc_iface_t *dc_iface, int dci)
               iface->dcis_txcnt[dci].ci, new_ci);
     iface->dcis_txcnt[dci].ci = new_ci;
 
-    return uct_rc_modify_qp(&dc_iface->tx.dcis[dci].txqp, IBV_QPS_RESET);
+    return uct_ib_modify_qp(dc_iface->tx.dcis[dci].txqp.qp, IBV_QPS_RESET);
 }
 
 /* Send either request for grants or grant message. Request includes ep
@@ -1114,7 +1114,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
 
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_verbs_iface_ops, md,
                               worker, params, 0, &config->super,
-                              IBV_EXP_TM_CAP_DC);
+                              IBV_EXP_TM_CAP_DC,
+                              UCT_IB_IFACE_NULL_RES_DOMAIN_KEY);
 
     uct_dc_verbs_iface_init_wrs(self);
 

@@ -1,6 +1,7 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+ * Copyright (c) Los Alamos National Security, LLC. 2018. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -370,22 +371,11 @@ ucs_status_t uct_ugni_device_create(int dev_id, int index, uct_ugni_device_t *de
     ucs_snprintf_zero(dev_p->fname, sizeof(dev_p->fname), "%s:%d",
                       dev_p->type_name, index);
 
-    status = uct_ugni_device_init_lock(dev_p);
-    if (UCS_OK != status) {
-        ucs_error("Couldn't initalize device lock.");
-        return status;
-    }
     return UCS_OK;
 }
 
 void uct_ugni_device_destroy(uct_ugni_device_t *dev)
 {
-    ucs_status_t status;
-
-    status = uct_ugni_device_destroy_lock(dev);
-    if (UCS_OK != status) {
-        ucs_error("Couldn't destroy device lock.");
-    }
 }
 
 ucs_status_t uct_ugni_iface_get_dev_address(uct_iface_t *tl_iface, uct_device_addr_t *addr)
@@ -413,7 +403,6 @@ ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device,
 
     cdm->thread_mode = thread_mode;
     cdm->dev = device;
-    uct_ugni_device_lock(cdm);
     cdm->domain_id = job_info->pmi_rank_id + job_info->pmi_num_of_ranks * ucs_atomic_fadd32(&ugni_domain_counter,1);
     ucs_debug("Creating new command domain with id %d (%d + %d * %d)",
               cdm->domain_id, job_info->pmi_rank_id,
@@ -425,8 +414,7 @@ ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device,
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_CdmCreate failed, Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);
-        status = UCS_ERR_NO_DEVICE;
-        goto out_unlock;
+        return UCS_ERR_NO_DEVICE;
     }
 
     ugni_rc = GNI_CdmAttach(cdm->cdm_handle, device->device_id,
@@ -440,8 +428,11 @@ ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device,
         status = UCS_ERR_NO_DEVICE;
     }
 
-out_unlock:
-    uct_ugni_device_unlock(cdm);
+    status = uct_ugni_cdm_init_lock(cdm);
+    if (UCS_OK != status) {
+        ucs_error("Couldn't initalize CDM lock.");
+    }
+
     if (UCS_OK == status) {
         ucs_debug("Made ugni cdm. nic_addr = %i domain_id = %i", device->address, cdm->domain_id);
     }
@@ -456,11 +447,15 @@ ucs_status_t uct_ugni_create_md_cdm(uct_ugni_cdm_t *cdm)
 ucs_status_t uct_ugni_destroy_cdm(uct_ugni_cdm_t *cdm)
 {
     gni_return_t ugni_rc;
+    ucs_status_t status;
+
+    status = uct_ugni_cdm_destroy_lock(cdm);
+    if (UCS_OK != status) {
+        ucs_error("Couldn't destroy cdm lock.");
+    }
 
     ucs_trace_func("cdm=%p", cdm);
-    uct_ugni_device_lock(cdm);
     ugni_rc = GNI_CdmDestroy(cdm->cdm_handle);
-    uct_ugni_device_unlock(cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_CdmDestroy error status: %s (%d)",
                  gni_err_str[ugni_rc], ugni_rc);
@@ -473,11 +468,9 @@ ucs_status_t uct_ugni_create_cq(gni_cq_handle_t *cq, unsigned cq_size, uct_ugni_
 {
     gni_return_t ugni_rc;
 
-    uct_ugni_device_lock(cdm);
     ugni_rc = GNI_CqCreate(cdm->nic_handle, UCT_UGNI_LOCAL_CQ, 0,
                            GNI_CQ_NOBLOCK,
                            NULL, NULL, cq);
-    uct_ugni_device_unlock(cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_CqCreate failed, Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);
@@ -491,9 +484,7 @@ ucs_status_t uct_ugni_destroy_cq(gni_cq_handle_t cq, uct_ugni_cdm_t *cdm)
 {
     gni_return_t ugni_rc;
 
-    uct_ugni_device_lock(cdm);
     ugni_rc = GNI_CqDestroy(cq);
-    uct_ugni_device_unlock(cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_warn("GNI_CqDestroy failed, Error status: %s %d",
                  gni_err_str[ugni_rc], ugni_rc);

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -13,6 +13,58 @@
 #include <ucs/datastruct/queue.h>
 #include <ucp/core/ucp_request.inl>
 
+static UCS_F_ALWAYS_INLINE void
+ucp_eager_expected_handler(ucp_worker_t *worker, ucp_request_t *req,
+                           void *data, size_t recv_len, ucp_tag_t recv_tag,
+                           uint16_t flags)
+{
+    ucs_trace_req("found req %p", req);
+    UCS_PROFILE_REQUEST_EVENT(req, "eager_recv", recv_len);
+
+    /* First fragment fills the receive information */
+    UCP_WORKER_STAT_EAGER_MSG(worker, flags);
+    UCP_WORKER_STAT_EAGER_CHUNK(worker, EXP);
+
+    req->recv.tag.info.sender_tag = recv_tag;
+
+    /* Cancel req in transport if it was offloaded,
+     * because it arrived either:
+     * 1) via SW TM (e. g. peer doesn't support offload)
+     * 2) as unexpected via HW TM */
+    ucp_tag_offload_try_cancel(worker, req,
+                               UCP_TAG_OFFLOAD_CANCEL_FORCE |
+                               UCP_TAG_OFFLOAD_CANCEL_DEREG);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_eager_offload_handler(void *arg, void *data, size_t length,
+                          unsigned tl_flags, uint16_t flags, ucp_tag_t recv_tag)
+{
+    ucp_worker_t *worker = arg;
+    ucp_request_t *req;
+    ucp_recv_desc_t *rdesc;
+    ucp_tag_t *rdesc_hdr;
+    ucs_status_t status;
+
+    req = ucp_tag_exp_search(&worker->tm, recv_tag);
+    if (req != NULL) {
+        ucp_eager_expected_handler(worker, req, data, length, recv_tag, flags);
+        req->recv.tag.info.length = length;
+        status = ucp_request_recv_data_unpack(req, data, length, 0, 1);
+        ucp_request_complete_tag_recv(req, status);
+        status = UCS_OK;
+    } else {
+        status = ucp_recv_desc_init(worker, data, length, sizeof(ucp_tag_t),
+                                    tl_flags, sizeof(ucp_tag_t), flags, &rdesc);
+        if (!UCS_STATUS_IS_ERR(status)) {
+            rdesc_hdr  = (ucp_tag_t*)(rdesc + 1);
+            *rdesc_hdr = recv_tag;
+            ucp_tag_unexp_recv(&worker->tm, rdesc, recv_tag);
+        }
+    }
+
+    return status;
+}
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags,
@@ -35,22 +87,7 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
 
     req = ucp_tag_exp_search(&worker->tm, recv_tag);
     if (req != NULL) {
-        ucs_trace_req("found req %p", req);
-        UCS_PROFILE_REQUEST_EVENT(req, "eager_recv", recv_len);
-
-        /* First fragment fills the receive information */
-        UCP_WORKER_STAT_EAGER_MSG(worker, flags);
-        UCP_WORKER_STAT_EAGER_CHUNK(worker, EXP);
-
-        req->recv.tag.info.sender_tag = recv_tag;
-
-        /* Cancel req in transport if it was offloaded,
-         * because it arrived either:
-         * 1) via SW TM (e. g. peer doesn't support offload)
-         * 2) as unexpected via HW TM */
-        ucp_tag_offload_try_cancel(worker, req,
-                                   UCP_TAG_OFFLOAD_CANCEL_FORCE |
-                                   UCP_TAG_OFFLOAD_CANCEL_DEREG);
+        ucp_eager_expected_handler(worker, req, data, recv_len, recv_tag, flags);
 
         if (flags & UCP_RECV_DESC_FLAG_EAGER_SYNC) {
             ucp_tag_eager_sync_send_ack(worker, data, flags);
@@ -76,7 +113,7 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
 
         status = UCS_OK;
     } else {
-        status = ucp_recv_desc_init(worker, data, length, am_flags, hdr_len,
+        status = ucp_recv_desc_init(worker, data, length, 0, am_flags, hdr_len,
                                     flags, &rdesc);
         if (!UCS_STATUS_IS_ERR(status)) {
             ucp_tag_unexp_recv(&worker->tm, rdesc, recv_tag);
@@ -128,7 +165,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
 
     if (ucp_tag_frag_match_is_unexp(matchq)) {
         /* add new received descriptor to the queue */
-        status = ucp_recv_desc_init(worker, data, length, am_flags, sizeof(*hdr),
+        status = ucp_recv_desc_init(worker, data, length, 0, am_flags, sizeof(*hdr),
                                     UCP_RECV_DESC_FLAG_EAGER, &rdesc);
         if (!UCS_STATUS_IS_ERR(status)) {
             ucp_tag_frag_match_add_unexp(matchq, rdesc, hdr->offset);
@@ -219,34 +256,33 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
     uint16_t flags             = UCP_RECV_DESC_FLAG_EAGER |
                                  UCP_RECV_DESC_FLAG_EAGER_ONLY |
                                  UCP_RECV_DESC_FLAG_EAGER_OFFLOAD;
-    ucp_eager_hdr_t *hdr;
-    ucp_eager_sync_hdr_t *sync_hdr;
-    unsigned hdr_len;
-
-    hdr_len = ucs_unlikely(imm) ? sizeof(ucp_eager_sync_hdr_t) :
-                                  sizeof(ucp_eager_hdr_t);
-
-    if (ucs_unlikely(tl_flags & UCT_CB_PARAM_FLAG_DESC)) {
-        hdr = (ucp_eager_hdr_t*)((char*)data - hdr_len);
-    } else {
-        /* Can not shift back, no headroom */
-        hdr = ucs_alloca(length + hdr_len);
-        memcpy((char*)hdr + hdr_len, data, length);
-    }
-
-    hdr->super.tag = stag;
-
-    if (ucs_unlikely(imm)) {
-        /* It is a sync send, imm data contains sender uuid */
-        sync_hdr = ucs_derived_of(hdr, ucp_eager_sync_hdr_t);
-        flags   |= UCP_RECV_DESC_FLAG_EAGER_SYNC;
-        sync_hdr->req.reqptr      = 0ul;
-        sync_hdr->req.sender_uuid = imm;
-    }
+    ucp_eager_sync_hdr_t *hdr;
+    int hdr_len;
 
     UCP_WORKER_STAT_TAG_OFFLOAD(wiface->worker, RX_UNEXP_EGR);
 
     ucp_tag_offload_unexp(wiface, stag);
+
+    if (ucs_likely(!imm)) {
+        return ucp_eager_offload_handler(wiface->worker, data, length, tl_flags,
+                                         flags, stag);
+    }
+
+    /* It is a sync send, imm data contains sender uuid */
+    hdr_len = sizeof(ucp_eager_sync_hdr_t);
+
+    if (ucs_unlikely(tl_flags & UCT_CB_PARAM_FLAG_DESC)) {
+        hdr = (ucp_eager_sync_hdr_t*)(UCS_PTR_BYTE_OFFSET(data, -hdr_len));
+    } else {
+        /* Can not shift back, no headroom */
+        hdr = ucs_alloca(length + hdr_len);
+        memcpy(UCS_PTR_BYTE_OFFSET(hdr, hdr_len), data, length);
+    }
+
+    hdr->super.super.tag = stag;
+    hdr->req.reqptr      = 0ul;
+    hdr->req.sender_uuid = imm;
+    flags               |= UCP_RECV_DESC_FLAG_EAGER_SYNC;
 
     return ucp_eager_tagged_handler(wiface->worker, hdr, length + hdr_len,
                                     tl_flags, flags, hdr_len);

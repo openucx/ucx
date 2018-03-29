@@ -27,7 +27,7 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
     wr->wr_id      = uct_rc_txqp_unsignaled(&ep->super.txqp);
 
     uct_ib_log_post_send(&iface->super.super, ep->super.txqp.qp, wr, max_log_sge,
-                         (wr->opcode == IBV_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
+                         (wr->opcode == IBV_WR_SEND) ? uct_rc_verbs_common_packet_dump : NULL);
 
     ret = ibv_post_send(ep->super.txqp.qp, wr, &bad_wr);
     if (ret != 0) {
@@ -56,7 +56,7 @@ uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
 
     uct_ib_log_exp_post_send(&iface->super.super, ep->super.txqp.qp, wr, max_log_sge,
                              (wr->exp_opcode == IBV_EXP_WR_SEND) ?
-                             uct_rc_ep_am_packet_dump : NULL);
+                             uct_rc_verbs_common_packet_dump : NULL);
 
     ret = ibv_exp_post_send(ep->super.txqp.qp, wr, &bad_wr);
     if (ret != 0) {
@@ -132,9 +132,9 @@ uct_rc_verbs_ep_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
     uct_rc_iface_send_desc_t *desc;
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->verbs_common.short_desc_mp, desc,
-                                    iface->super.config.atomic64_handler,
-                                    result, comp);
+    UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super, &iface->verbs_common.short_desc_mp,
+                                          desc, iface->super.config.atomic64_handler,
+                                          result, comp);
     uct_rc_verbs_ep_atomic_post(ep, opcode, compare_add, swap, remote_addr,
                                 rkey, desc, IBV_SEND_SIGNALED);
     return UCS_INPROGRESS;
@@ -171,8 +171,8 @@ uct_rc_verbs_ep_ext_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
     uct_rc_iface_send_desc_t *desc;
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->verbs_common.short_desc_mp, desc,
-                                    handler, result, comp);
+    UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super, &iface->verbs_common.short_desc_mp,
+                                          desc, handler, result, comp);
     uct_rc_verbs_ep_ext_atomic_post(ep, opcode, length, compare_mask, compare_add,
                                     swap, remote_addr, rkey, desc,
                                     IBV_EXP_SEND_SIGNALED);
@@ -370,7 +370,7 @@ ucs_status_t uct_rc_verbs_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
 
     /* TODO don't allocate descriptor - have dummy buffer */
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_ADD_DESC(&iface->super, &iface->verbs_common.short_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->verbs_common.short_desc_mp, desc);
 
     uct_rc_verbs_ep_atomic_post(ep,
                                 IBV_WR_ATOMIC_FETCH_AND_ADD, add, 0,
@@ -420,7 +420,7 @@ ucs_status_t uct_rc_verbs_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
     uct_rc_iface_send_desc_t *desc;
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_ADD_DESC(&iface->super, &iface->verbs_common.short_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->verbs_common.short_desc_mp, desc);
 
     /* TODO don't allocate descriptor - have dummy buffer */
     uct_rc_verbs_ep_ext_atomic_post(ep, IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD,

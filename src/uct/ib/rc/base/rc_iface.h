@@ -55,8 +55,8 @@
 
 #define UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(_iface, _mp, _desc, _pack_cb, _arg, _length) \
     UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
-    desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
-    _length = pack_cb(_desc + 1, _arg); \
+    (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
+    _length = _pack_cb(_desc + 1, _arg); \
     UCT_SKIP_ZERO_LENGTH(_length, _desc);
 
 #define UCT_RC_IFACE_GET_TX_GET_BCOPY_DESC(_iface, _mp, _desc, _unpack_cb, _comp, _arg, _length) \
@@ -71,11 +71,11 @@
     _desc->unpack_cb         = _unpack_cb;
 
 
-#define UCT_RC_IFACE_GET_TX_ATOMIC_ADD_DESC(_iface, _mp, _desc) \
+#define UCT_RC_IFACE_GET_TX_ATOMIC_DESC(_iface, _mp, _desc) \
     UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
     _desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
 
-#define UCT_RC_IFACE_GET_TX_ATOMIC_DESC(_iface, _mp, _desc, _handler, _result, _comp) \
+#define UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(_iface, _mp, _desc, _handler, _result, _comp) \
     UCT_CHECK_PARAM(_comp != NULL, "completion must be non-NULL"); \
     UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
     _desc->super.handler   = _handler; \
@@ -299,9 +299,9 @@ struct uct_rc_iface {
     /* Progress function (either regular or TM aware) */
     ucs_callback_t           progress;
 };
-UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h,
-                  uct_worker_h, const uct_iface_params_t*,
-                  const uct_rc_iface_config_t*, unsigned, unsigned, int)
+UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h, uct_worker_h,
+                  const uct_iface_params_t*, const uct_rc_iface_config_t*,
+                  unsigned, unsigned, int, uint32_t)
 
 
 struct uct_rc_iface_send_op {
@@ -392,7 +392,7 @@ typedef struct uct_rc_am_short_hdr {
        }
 
 ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
-                                      struct ibv_exp_tmh *tmh,
+                                      struct ibv_exp_tmh *tmh, uct_tag_t tag,
                                       unsigned byte_len);
 
 
@@ -462,18 +462,15 @@ uct_rc_iface_ctx_priv(uct_tag_context_t *ctx)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_iface_handle_rndv_fin(uct_rc_iface_t *iface, struct ibv_exp_tmh *tmh)
+uct_rc_iface_handle_rndv_fin(uct_rc_iface_t *iface, uint32_t app_ctx)
 {
     int found;
     void *rndv_comp;
 
-    ucs_assert(tmh->opcode == IBV_EXP_TMH_FIN);
-
-    found = ucs_ptr_array_lookup(&iface->tm.rndv_comps, ntohl(tmh->app_ctx),
-                                 rndv_comp);
+    found = ucs_ptr_array_lookup(&iface->tm.rndv_comps, app_ctx, rndv_comp);
     ucs_assert_always(found > 0);
     uct_invoke_completion((uct_completion_t*)rndv_comp, UCS_OK);
-    ucs_ptr_array_remove(&iface->tm.rndv_comps, ntohl(tmh->app_ctx), 0);
+    ucs_ptr_array_remove(&iface->tm.rndv_comps, app_ctx, 0);
 }
 
 #else

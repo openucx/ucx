@@ -26,7 +26,7 @@ public:
     };
 
     uct_p2p_err_test() :
-        uct_p2p_test(0, uct_error_handler_t(ucs_empty_function_return_success)) {
+        uct_p2p_test(0, error_handler) {
     }
 
     static size_t pack_cb(void *dest, void *arg)
@@ -130,6 +130,20 @@ public:
 
     static ucs_status_t last_error;
 
+private:
+    static ucs_status_t
+    error_handler(void *arg, uct_ep_h ep, ucs_status_t status) {
+        uct_p2p_err_test *self = static_cast<uct_p2p_err_test*>(arg);
+        const p2p_resource *r = dynamic_cast<const p2p_resource*>(self->GetParam());
+        ucs_assert_always(r != NULL);
+        if (r->loopback) {
+            /* In loop back IB TLs can generate QP flush error before remote
+             * access error. */
+            ucs_log(UCS_LOG_LEVEL_ERROR, "Error on ep %p with status %s is handled",
+                    ep, ucs_status_string(status));
+        }
+        return UCS_OK;
+    }
 };
 
 ucs_status_t uct_p2p_err_test::last_error = UCS_OK;

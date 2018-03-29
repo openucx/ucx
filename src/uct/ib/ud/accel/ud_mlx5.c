@@ -59,7 +59,7 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
 
     uct_ib_mlx5_log_tx(&iface->super.super, IBV_QPT_UD, ctrl,
                        iface->tx.wq.qstart, iface->tx.wq.qend,
-                       max_log_sge, uct_ud_dump_packet);
+                       max_log_sge, NULL, uct_ud_dump_packet);
     iface->super.tx.available -= uct_ib_mlx5_post_send(&iface->tx.wq, ctrl,
                                                        wqe_size);
     ucs_assert((int16_t)iface->tx.wq.bb_max >= iface->super.tx.available);
@@ -676,7 +676,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
-                              md, worker, params, 0, &config->super);
+                              md, worker, params, 0, UCT_IB_MLX5_RES_DOMAIN_KEY,
+                              &config->super);
 
     uct_ib_iface_set_max_iov(&self->super.super, UCT_IB_MLX5_AM_ZCOPY_MAX_IOV);
     self->super.config.max_inline = UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE);

@@ -925,9 +925,12 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     config->tag.rndv.max_get_zcopy      = SIZE_MAX;
     config->tag.rndv.max_put_zcopy      = SIZE_MAX;
     config->tag.rndv.am_thresh          = SIZE_MAX;
+    config->tag.rndv_send_nbr.am_thresh = SIZE_MAX;
+    config->tag.rndv_send_nbr.rma_thresh = SIZE_MAX;
     config->tag.rndv.rkey_size          = ucp_rkey_packed_size(context,
                                                                config->key.rma_bw_md_map);
     config->stream.proto                = &ucp_stream_am_proto;
+    config->tag.offload.max_eager_short = -1;
     max_rndv_thresh                     = SIZE_MAX;
     max_am_rndv_thresh                  = SIZE_MAX;
 
@@ -959,16 +962,19 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                                      UCT_IFACE_FLAG_TAG_EAGER_ZCOPY, 0,
                                      iface_attr->cap.tag.eager.max_bcopy);
 
-            config->tag.offload.max_rndv_iov   = iface_attr->cap.tag.rndv.max_iov;
-            config->tag.offload.max_rndv_zcopy = iface_attr->cap.tag.rndv.max_zcopy;
-            config->tag.sync_proto             = &ucp_tag_offload_sync_proto;
-            config->tag.proto                  = &ucp_tag_offload_proto;
-            config->tag.lane                   = lane;
-            max_rndv_thresh                    = iface_attr->cap.tag.eager.max_zcopy;
-            max_am_rndv_thresh                 = iface_attr->cap.tag.eager.max_bcopy;
+            config->tag.offload.max_rndv_iov    = iface_attr->cap.tag.rndv.max_iov;
+            config->tag.offload.max_rndv_zcopy  = iface_attr->cap.tag.rndv.max_zcopy;
+            config->tag.offload.max_eager_short = config->tag.eager.max_short;
+            config->tag.eager.max_short         = -1;
+            config->tag.sync_proto              = &ucp_tag_offload_sync_proto;
+            config->tag.proto                   = &ucp_tag_offload_proto;
+            config->tag.lane                    = lane;
+            max_rndv_thresh                     = iface_attr->cap.tag.eager.max_zcopy;
+            max_am_rndv_thresh                  = iface_attr->cap.tag.eager.max_bcopy;
 
             ucs_assert_always(iface_attr->cap.tag.rndv.max_hdr >=
                               sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
+            ucs_assert_always(config->tag.offload.max_eager_short >= 0);
 
             if (config->key.am_lane != UCP_NULL_LANE) {
                 /* Must have active messages for using rendezvous */
@@ -1052,6 +1058,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                 }
                 rma_config->put_zcopy_thresh = ucs_max(rma_config->put_zcopy_thresh,
                                                        iface_attr->cap.put.min_zcopy);
+            }
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_SHORT) {
+                rma_config->max_get_short = iface_attr->cap.get.max_short;
             }
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) {
                 rma_config->max_get_bcopy = iface_attr->cap.get.max_bcopy;
@@ -1166,7 +1175,7 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
         } else {
             desc_str = "";
         }
-        snprintf(p, endp - p, "lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT " md[%d]%s %-*c-> ",
+        snprintf(p, endp - p, "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT " md[%d]%s %-*c-> ",
                  lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc),
                  context->tl_rscs[rsc_index].md_index, desc_str,
                  20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name) + strlen(desc_str)),
@@ -1301,6 +1310,7 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
 void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 {
     ucp_rsc_index_t aux_rsc_index;
+    ucp_lane_index_t wireup_lane;
     uct_ep_h wireup_ep;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
@@ -1317,11 +1327,14 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 #endif
             ep->dest_uuid);
 
-    wireup_ep = ep->uct_eps[ucp_ep_get_wireup_msg_lane(ep)];
-    if (ucp_wireup_ep_test(wireup_ep)) {
-        aux_rsc_index = ucp_wireup_ep_get_aux_rsc_index(wireup_ep);
-    } else {
-        aux_rsc_index = UCP_NULL_RESOURCE;
+    /* if there is a wireup lane, set aux_rsc_index to the stub ep resource */
+    aux_rsc_index = UCP_NULL_RESOURCE;
+    wireup_lane   = ucp_ep_config(ep)->key.wireup_lane;
+    if (wireup_lane != UCP_NULL_LANE) {
+        wireup_ep = ep->uct_eps[wireup_lane];
+        if (ucp_wireup_ep_test(wireup_ep)) {
+            aux_rsc_index = ucp_wireup_ep_get_aux_rsc_index(wireup_ep);
+        }
     }
 
     ucp_ep_config_print(stream, ep->worker, ucp_ep_config(ep), NULL,

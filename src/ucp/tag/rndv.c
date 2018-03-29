@@ -113,7 +113,7 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
                   sreq->send.length);
     UCS_PROFILE_REQUEST_EVENT(sreq, "start_rndv", sreq->send.length);
 
-    if (ep->flags & UCP_EP_FLAG_TAG_OFFLOAD_ENABLED) {
+    if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
         status = ucp_tag_offload_start_rndv(sreq);
         if (status != UCS_OK) {
             return status;
@@ -564,7 +564,7 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
         UCP_WORKER_STAT_RNDV(worker, EXP);
         status = UCS_OK;
     } else {
-        status = ucp_recv_desc_init(worker, data, length, tl_flags,
+        status = ucp_recv_desc_init(worker, data, length, 0, tl_flags,
                                     sizeof(*rndv_rts_hdr),
                                     UCP_RECV_DESC_FLAG_RNDV, &rdesc);
         if (!UCS_STATUS_IS_ERR(status)) {
@@ -712,8 +712,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
 
     state = sreq->send.state.dt;
     ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iovcnt, &state,
-                        sreq->send.buffer, ucp_dt_make_contig(1), length, 0,
-                        sreq->send.mdesc);
+                        sreq->send.buffer, ucp_dt_make_contig(1), length,
+                        ucp_ep_md_index(ep, sreq->send.lane), sreq->send.mdesc);
     status = uct_ep_put_zcopy(ep->uct_eps[sreq->send.lane],
                               iov, iovcnt,
                               sreq->send.rndv_put.remote_address + offset,

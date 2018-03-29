@@ -125,8 +125,7 @@ static void uct_rc_ep_tag_qp_destroy(uct_rc_ep_t *ep)
 #endif
 }
 
-static ucs_status_t uct_rc_ep_tag_qp_create(uct_rc_iface_t *iface,
-                                            uct_rc_ep_t *ep)
+static ucs_status_t uct_rc_ep_tag_qp_create(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
 {
 #if IBV_EXP_HW_TM
     struct ibv_qp_cap cap;
@@ -283,24 +282,9 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_modify_qp(uct_rc_txqp_t *txqp, enum ibv_qp_state state)
-{
-    struct ibv_qp_attr qp_attr;
-
-    ucs_debug("modify QP 0x%x to state %d", txqp->qp->qp_num, state);
-    memset(&qp_attr, 0, sizeof(qp_attr));
-    qp_attr.qp_state = state;
-    if (ibv_modify_qp(txqp->qp, &qp_attr, IBV_QP_STATE)) {
-        ucs_warn("modify qp 0x%x to RESET failed: %m", txqp->qp->qp_num);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return UCS_OK;
-}
-
-void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
-                              void *data, size_t length, size_t valid_length,
-                              char *buffer, size_t max)
+void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
+                           void *data, size_t length, size_t valid_length,
+                           char *buffer, size_t max, int is_tmh_be)
 {
     uct_rc_hdr_t *rch = data;
     uint8_t fc_hdr    = uct_rc_fc_get_fc_hdr(rch->am_id);
@@ -310,20 +294,27 @@ void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
     if (rch->tmh_opcode != IBV_EXP_TMH_NO_TAG) {
         struct ibv_exp_tmh *tmh = (void*)rch;
         struct ibv_exp_tmh_rvh *rvh = (void*)(tmh + 1);
+        uct_tag_t tag;
+        uint32_t app_ctx;
+
+        if (is_tmh_be) {
+            tag     = be64toh(tmh->tag);
+            app_ctx = ntohl(tmh->app_ctx);
+        } else {
+            tag     = tmh->tag;
+            app_ctx = tmh->app_ctx;
+        }
 
         switch (rch->tmh_opcode) {
         case IBV_EXP_TMH_EAGER:
-            snprintf(buffer, max, " EAGER tag %lx app_ctx %d",
-                     be64toh(tmh->tag), ntohl(tmh->app_ctx));
+            snprintf(buffer, max, " EAGER tag %lx app_ctx %d", tag, app_ctx);
             return;
         case IBV_EXP_TMH_RNDV:
             snprintf(buffer, max, " RNDV tag %lx app_ctx %d va 0x%lx len %d rkey %x",
-                     be64toh(tmh->tag), ntohl(tmh->app_ctx),
-                     be64toh(rvh->va), ntohl(rvh->len), ntohl(rvh->rkey));
+                     tag, app_ctx, be64toh(rvh->va), ntohl(rvh->len), ntohl(rvh->rkey));
             return;
         case IBV_EXP_TMH_FIN:
-            snprintf(buffer, max, " FIN tag %lx app_ctx %d",
-                     be64toh(tmh->tag), ntohl(tmh->app_ctx));
+            snprintf(buffer, max, " FIN tag %lx app_ctx %d", tag, app_ctx);
             return;
         default:
             break;

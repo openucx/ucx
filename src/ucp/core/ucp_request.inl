@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -481,15 +481,17 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
-                   unsigned am_flags, uint16_t hdr_len, uint16_t rdesc_flags,
-                   ucp_recv_desc_t **rdesc_p)
+                   int data_offset, unsigned am_flags, uint16_t hdr_len,
+                   uint16_t rdesc_flags, ucp_recv_desc_t **rdesc_p)
 {
     ucp_recv_desc_t *rdesc;
+    void *data_hdr;
     ucs_status_t status;
 
     if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
         /* slowpath */
-        rdesc        = (ucp_recv_desc_t *)data - 1;
+        data_hdr     = UCS_PTR_BYTE_OFFSET(data, -data_offset);
+        rdesc        = (ucp_recv_desc_t *)data_hdr - 1;
         rdesc->flags = rdesc_flags | UCP_RECV_DESC_FLAG_UCT_DESC;
         status       = UCS_INPROGRESS;
     } else {
@@ -500,11 +502,11 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
         }
 
         rdesc->flags = rdesc_flags;
-        memcpy(rdesc + 1, data, length);
-        status = UCS_OK;
+        status       = UCS_OK;
+        memcpy(UCS_PTR_BYTE_OFFSET(rdesc + 1, data_offset), data, length);
     }
 
-    rdesc->length         = length;
+    rdesc->length         = length + data_offset;
     rdesc->payload_offset = hdr_len;
     *rdesc_p              = rdesc;
     return status;

@@ -348,6 +348,13 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
                                          const char *name, const char *value);
 
 /**
+ * Check all UCX_ environment variables have been used so far by the
+ * configuration parser, issue a warning if not. Called just before program exit.
+ */
+void ucs_config_parser_warn_unused_env_vars();
+
+
+/**
  * Translate configuration value of "MEMUNITS" type to actual value.
  *
  * @param config_size  Size specified by configuration.

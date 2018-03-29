@@ -494,6 +494,7 @@ struct uct_iface_attr {
         } put;                           /**< Attributes for PUT operations */
 
         struct {
+            size_t           max_short;  /**< Maximal size for get_short */
             size_t           max_bcopy;  /**< Maximal size for get_bcopy */
             size_t           min_zcopy;  /**< Minimal size for get_zcopy (total
                                               of @ref uct_iov_t::length of the
@@ -889,9 +890,7 @@ void uct_release_tl_resource_list(uct_tl_resource_desc_t *resources);
  *  Transports can allocate separate communication resources for every worker,
  * so that every worker can be progressed independently of others.
  *
- * @param [in]  async         Context for async event handlers.
-  *                            Can be NULL, which means that event handlers will
- *                             not have particular context.
+ * @param [in]  async         Context for async event handlers. Must not be NULL.
  * @param [in]  thread_mode   Thread access mode to the worker and all interfaces
  *                             and endpoints associated with it.
  * @param [out] worker_p      Filled with a pointer to the worker object.
@@ -1148,8 +1147,8 @@ ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
  * @ingroup UCT_RESOURCE
  * @brief Obtain a notification file descriptor for polling.
  *
- * Only interfaces supporting the @ref UCT_IFACE_FLAG_EVENT_FD implement this
- * function.
+ * Only interfaces that support at least one of the UCT_IFACE_FLAG_EVENT* flags
+ * will implement this function.
  *
  * @param [in]  iface      Interface to get the notification descriptor.
  * @param [out] fd_p       Location to write the notification file descriptor.
@@ -1745,6 +1744,17 @@ UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep,
                                              uct_completion_t *comp)
 {
     return ep->iface->ops.ep_put_zcopy(ep, iov, iovcnt, remote_addr, rkey, comp);
+}
+
+
+/**
+ * @ingroup UCT_RMA
+ * @brief
+ */
+UCT_INLINE_API ucs_status_t uct_ep_get_short(uct_ep_h ep, const void *buffer, unsigned length,
+                                             uint64_t remote_addr, uct_rkey_t rkey)
+{
+    return ep->iface->ops.ep_get_short(ep, buffer, length, remote_addr, rkey);
 }
 
 

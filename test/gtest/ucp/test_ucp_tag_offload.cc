@@ -12,6 +12,7 @@ extern "C" {
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/tag/tag_match.h>
+#include <ucp/core/ucp_ep.inl>
 }
 
 class test_ucp_tag_offload : public test_ucp_tag {
@@ -22,7 +23,7 @@ public:
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
 
         test_ucp_tag::init();
-        if (!(sender().ep()->flags & UCP_EP_FLAG_TAG_OFFLOAD_ENABLED)) {
+        if (!ucp_ep_is_tag_offload_enabled(ucp_ep_config(sender().ep()))) {
             test_ucp_tag::cleanup();
             UCS_TEST_SKIP_R("no tag offload");
         }
@@ -372,7 +373,10 @@ UCS_TEST_P(test_ucp_tag_offload_multi, recv_from_multi)
     post_recv_and_check(e(2), 0u, tag + 1, UCP_TAG_MASK_FULL);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, all, "all")
+// Do not include SM transports, because they would be selected for tag matching.
+// And since they do not support TM offload, this test would be skipped.
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, all_rcdc,
+                              "\\rc,\\dc,\\ud,rc_x,dc_x")
 
 
 #if ENABLE_STATS
