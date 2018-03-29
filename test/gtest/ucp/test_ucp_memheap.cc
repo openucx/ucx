@@ -159,6 +159,9 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
 
     sender().connect(&receiver(), get_ep_params());
 
+    /* avoid deadlock for blocking rma/amo */
+    flush_worker(sender());
+
     ucp_mem_h memh;
     void *memheap = NULL;
 

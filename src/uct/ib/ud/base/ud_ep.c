@@ -647,6 +647,13 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         skb->u.am.len = byte_len - sizeof(*neth);
         ucs_queue_push(&iface->rx.pending_q, &skb->u.am.queue);
     } else {
+        /* Avoid reordering with respect to pending operations, if user AM handler
+         * initiates sends. This flag would be cleared after all incoming messages
+         * are processed. */
+        if (ucs_unlikely(!ucs_arbiter_group_is_empty(&ep->tx.pending.group))) {
+            uct_ud_iface_raise_pending_async_ev(iface);
+        }
+
         uct_ib_iface_invoke_am_desc(&iface->super, am_id, neth + 1,
                                     byte_len - sizeof(*neth), &skb->super);
     }
@@ -1064,7 +1071,11 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
         ucs_status_t status;
 
         req = ucs_container_of(elem, uct_pending_req_t, priv);
+
+        ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_IN_PENDING));
+        ep->flags |= UCT_UD_EP_FLAG_IN_PENDING;
         status = req->func(req);
+        ep->flags &= ~UCT_UD_EP_FLAG_IN_PENDING;
 
         if (status == UCS_INPROGRESS) {
             return UCS_ARBITER_CB_RESULT_NEXT_GROUP;

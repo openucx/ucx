@@ -64,8 +64,8 @@ UCS_TEST_F(test_obj_size, size) {
     EXPECTED_SIZE(uct_dc_verbs_ep_t, 40);
 #  endif
 #  if HAVE_TL_UD
-    EXPECTED_SIZE(uct_ud_ep_t, 248);
-    EXPECTED_SIZE(uct_ud_verbs_ep_t, 264);
+    EXPECTED_SIZE(uct_ud_ep_t, 240);
+    EXPECTED_SIZE(uct_ud_verbs_ep_t, 256);
 #  endif
 #endif
 }
