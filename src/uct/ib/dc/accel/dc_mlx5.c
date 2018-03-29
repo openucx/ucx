@@ -254,7 +254,7 @@ ucs_status_t uct_dc_mlx5_ep_atomic_add(uct_ep_h tl_ep,
     uct_rc_iface_send_desc_t *desc;
 
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_ADD_DESC(&iface->super.super, &iface->mlx5_common.tx.atomic_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super.super, &iface->mlx5_common.tx.atomic_desc_mp, desc);
     uct_dc_mlx5_iface_atomic_post(iface, ep, opcode, desc, length,
                                   remote_addr, rkey, 0, 0, add);
     return UCS_OK;
@@ -270,9 +270,10 @@ uct_dc_mlx5_ep_atomic(uct_dc_mlx5_ep_t *ep, int opcode, void *result, int ext,
     uct_rc_iface_send_desc_t *desc;
 
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super.super, &iface->mlx5_common.tx.atomic_desc_mp, desc,
-                                    uct_rc_iface_atomic_handler(&iface->super.super, ext, length),
-                                    result, comp);
+    UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super.super, &iface->mlx5_common.tx.atomic_desc_mp,
+                                          desc, uct_rc_iface_atomic_handler(&iface->super.super,
+                                                                            ext, length),
+                                          result, comp);
     uct_dc_mlx5_iface_atomic_post(iface, ep, opcode, desc, length, remote_addr, rkey,
                                   compare_mask, compare, swap_add);
     return UCS_INPROGRESS;
