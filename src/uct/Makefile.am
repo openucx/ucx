@@ -230,6 +230,16 @@ libuct_la_SOURCES += \
     cuda/cuda_copy/cuda_copy_iface.c \
     cuda/cuda_copy/cuda_copy_ep.c
 
+noinst_HEADERS += \
+    cuda/cuda_ipc/cuda_ipc_md.h \
+    cuda/cuda_ipc/cuda_ipc_iface.h \
+    cuda/cuda_ipc/cuda_ipc_ep.h
+
+libuct_la_SOURCES += \
+    cuda/cuda_ipc/cuda_ipc_md.c \
+    cuda/cuda_ipc/cuda_ipc_iface.c \
+    cuda/cuda_ipc/cuda_ipc_ep.c
+
 endif
 
 if HAVE_ROCM
