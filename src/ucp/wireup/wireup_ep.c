@@ -321,6 +321,10 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     self->progress_id   = UCS_CALLBACKQ_ID_NULL;
     ucs_queue_head_init(&self->pending_q);
 
+    UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
+    ++ucp_ep->worker->wireup_pend_count;
+    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
+
     ucs_trace("ep %p: created wireup ep %p to %s ", ucp_ep, self,
               ucp_ep_peer_name(ucp_ep));
     return UCS_OK;
@@ -344,6 +348,10 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
     if (self->sockaddr_ep != NULL) {
         uct_ep_destroy(self->sockaddr_ep);
     }
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    --worker->wireup_pend_count;
+    UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
 UCS_CLASS_DEFINE(ucp_wireup_ep_t, ucp_proxy_ep_t);
