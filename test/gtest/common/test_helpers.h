@@ -446,7 +446,7 @@ public:
         EXPECT_TRUE(value != NULL);
     }
 
-    handle(const T& value, dtor2_t dtor, ArgT *arg) :
+    handle(const T& value, dtor2_t dtor, ArgT arg) :
         m_initialized(true), m_value(value), m_dtor(NULL),
         m_dtor_with_arg(dtor), m_dtor_arg(arg)
     {
