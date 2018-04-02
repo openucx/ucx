@@ -118,6 +118,7 @@ unsigned ucp_test::progress(int worker_index) const {
          iter != entities().end(); ++iter)
     {
         count += (*iter)->progress(worker_index);
+        sched_yield();
     }
     return count;
 }
