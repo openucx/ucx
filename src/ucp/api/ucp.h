@@ -245,22 +245,26 @@ enum ucp_ep_close_mode {
     UCP_EP_CLOSE_MODE_FLUSH         = 1, /**< @ref ucp_ep_close_nb schedules
                                               flushes on all outstanding
                                               operations. */
-    UCP_EP_CLOSE_MODE_SYNC          = 2  /**< UCP will initiate synchronization
-                                              with the peer endpoint if it
-                                              exists and the request created by
-                                              @ref ucp_ep_close_nb will be
-                                              completed when peer is ready to be
-                                              closed too. If the peer have not
-                                              called @ref ucp_ep_close_nb yet
-                                              then callback defined in
-                                              ucp_ep_params_t::err_handler will
-                                              be invoked on remote side with
-                                              corresponding endpoint handler and
+    UCP_EP_CLOSE_MODE_SYNC          = 2  /**< <ul>
+                                              <li>If there is a connected
+                                              remote endpoint, initiate a
+                                              synchronization with the peer, and
+                                              the request returned from @ref
+                                              ucp_ep_close_nb will be completed
+                                              after the local endpoint is
+                                              flushed and the remote endpoint is
+                                              disconnected. @note The remote
+                                              endpoint will get a notification
+                                              through the callback defined in
+                                              ucp_ep_params_t::err_handler with
                                               @ref UCS_ERR_REMOTE_DISCONNECT
-                                              status. If the endpoint does
-                                              not have its peer, the behavior
-                                              will be the same as
-                                              @ref UCP_EP_CLOSE_MODE_FLUSH */
+                                              status, unless it also has closed
+                                              its endpoint. </li>
+                                              <li> If the endpoint is not
+                                              connected to a remote endpoint,
+                                              the behavior will be the same as
+                                              @ref UCP_EP_CLOSE_MODE_FLUSH.</li>
+                                              </ul> */
 };
 
 
