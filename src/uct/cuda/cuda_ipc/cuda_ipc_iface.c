@@ -87,15 +87,6 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h iface,
     iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
     iface_attr->cap.get.max_iov         = 1;
 
-    iface_attr->cap.am.max_short        = 0;
-    iface_attr->cap.am.max_bcopy        = 0;
-    iface_attr->cap.am.min_zcopy        = 0;
-    iface_attr->cap.am.max_zcopy        = 0;
-    iface_attr->cap.am.opt_zcopy_align  = 1;
-    iface_attr->cap.am.align_mtu        = iface_attr->cap.am.opt_zcopy_align;
-    iface_attr->cap.am.max_hdr          = 0;
-    iface_attr->cap.am.max_iov          = 1;
-
     iface_attr->latency.overhead        = 1e-9;
     iface_attr->latency.growth          = 0;
     iface_attr->bandwidth               = 6911 * 1024.0 * 1024.0;

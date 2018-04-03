@@ -13,14 +13,14 @@
 extern uct_md_component_t uct_cuda_ipc_md_component;
 
 /**
- * @brief cuda_ipc MD descriptor
+ * @brief cuda ipc MD descriptor
  */
 typedef struct uct_cuda_ipc_md {
     struct uct_md super;   /**< Domain info */
 } uct_cuda_ipc_md_t;
 
 /**
- * cuda ipc domain configuration.
+ * @brief cuda ipc domain configuration.
  */
 typedef struct uct_cuda_ipc_md_config {
     uct_md_config_t super;

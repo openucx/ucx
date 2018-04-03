@@ -61,19 +61,16 @@ static ucs_status_t uct_cuda_ipc_rkey_release(uct_md_component_t *mdc, uct_rkey_
 static ucs_status_t uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
                                          unsigned flags, uct_mem_h *memh_p)
 {
-    ucs_status_t rc;
     uct_mem_h * mem_hndl = NULL;
 
     mem_hndl = ucs_malloc(sizeof(void *), "cuda_ipc handle for test passing");
     if (NULL == mem_hndl) {
         ucs_error("Failed to allocate memory for gni_mem_handle_t");
-        rc = UCS_ERR_NO_MEMORY;
-        goto mem_err;
+        return UCS_ERR_NO_MEMORY;
     }
     *memh_p = mem_hndl;
+
     return UCS_OK;
- mem_err:
-    return rc;
 }
 
 static ucs_status_t uct_cuda_ipc_mem_dereg(uct_md_h md, uct_mem_h memh)

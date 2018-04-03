@@ -15,13 +15,14 @@
 #define UCT_CUDA_IPC_TL_NAME    "cuda_ipc"
 #define UCT_CUDA_DEV_NAME   "cudaipc0"
 
-#define CUDA_FUNC(func)  ({                             \
+
+#define UCT_CUDA_FUNC(_func)  ({                        \
 ucs_status_t _status = UCS_OK;                          \
 do {                                                    \
-    CUresult _result = (func);                          \
-    if (CUDA_SUCCESS != _result) {                      \
-        ucs_error("[%s:%d] cuda failed with %d \n",     \
-                  __FILE__, __LINE__,_result);          \
+    cudaError_t _result = (_func);                      \
+    if (cudaSuccess != _result) {                       \
+        ucs_error("%s failed with %d \n",               \
+                  UCS_PP_MAKE_STRING(_func), _result);  \
         _status = UCS_ERR_IO_ERROR;                     \
     }                                                   \
 } while (0);                                            \
