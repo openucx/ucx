@@ -1997,8 +1997,8 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap32(uct_ep_h ep, uint32_t compare,
  * @brief
  */
 UCT_INLINE_API ucs_status_t uct_ep_atomic32_post(uct_ep_h ep, uct_atomic_op_t opcode,
-                                                  uint32_t value, uint64_t remote_addr,
-                                                  uct_rkey_t rkey)
+                                                 uint32_t value, uint64_t remote_addr,
+                                                 uct_rkey_t rkey)
 {
     return ep->iface->ops.ep_atomic32_post(ep, opcode, value, remote_addr, rkey);
 }
@@ -2009,8 +2009,8 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic32_post(uct_ep_h ep, uct_atomic_op_t op
  * @brief
  */
 UCT_INLINE_API ucs_status_t uct_ep_atomic64_post(uct_ep_h ep, uct_atomic_op_t opcode,
-                                                  uint64_t value, uint64_t remote_addr,
-                                                  uct_rkey_t rkey)
+                                                 uint64_t value, uint64_t remote_addr,
+                                                 uct_rkey_t rkey)
 {
     return ep->iface->ops.ep_atomic64_post(ep, opcode, value, remote_addr, rkey);
 }
@@ -2021,12 +2021,12 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic64_post(uct_ep_h ep, uct_atomic_op_t op
  * @brief
  */
 UCT_INLINE_API ucs_status_t uct_ep_atomic32_fetch_nb(uct_ep_h ep, uct_atomic_op_t opcode,
-                                                      uint32_t value, uint32_t *result,
-                                                      uint64_t remote_addr, uct_rkey_t rkey,
-                                                      uct_completion_t *comp)
+                                                     uint32_t value, uint32_t *result,
+                                                     uint64_t remote_addr, uct_rkey_t rkey,
+                                                     uct_completion_t *comp)
 {
     return ep->iface->ops.ep_atomic32_fetch_nb(ep, opcode, value, result,
-                                                remote_addr, rkey, comp);
+                                               remote_addr, rkey, comp);
 }
 
 
@@ -2035,12 +2035,12 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic32_fetch_nb(uct_ep_h ep, uct_atomic_op_
  * @brief
  */
 UCT_INLINE_API ucs_status_t uct_ep_atomic64_fetch_nb(uct_ep_h ep, uct_atomic_op_t opcode,
-                                                      uint64_t value, uint64_t *result,
-                                                      uint64_t remote_addr, uct_rkey_t rkey,
-                                                      uct_completion_t *comp)
+                                                     uint64_t value, uint64_t *result,
+                                                     uint64_t remote_addr, uct_rkey_t rkey,
+                                                     uct_completion_t *comp)
 {
     return ep->iface->ops.ep_atomic64_fetch_nb(ep, opcode, value, result,
-                                                remote_addr, rkey, comp);
+                                               remote_addr, rkey, comp);
 }
 
 
