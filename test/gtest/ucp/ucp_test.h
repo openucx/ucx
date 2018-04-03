@@ -52,7 +52,7 @@ public:
         ~entity();
 
         void connect(const entity* other, const ucp_ep_params_t& ep_params,
-                     int ep_idx = 0);
+                     int ep_idx = 0, int do_set_ep = 1);
 
         void* modify_ep(const ucp_ep_params_t& ep_params, int worker_idx = 0,
                        int ep_idx = 0);
@@ -187,7 +187,6 @@ protected:
 
 std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
 
-
 /**
  * Instantiate the parameterized test case a combination of transports.
  *
@@ -221,5 +220,8 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,   "self") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,    "tcp")
 
+#define UCP_INSTANTIATE_ALL_TEST_CASE(_test_case) \
+        UCP_INSTANTIATE_TEST_CASE (_test_case) \
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, mm_rdmacm, "mm,rdmacm")
 
 #endif

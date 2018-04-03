@@ -196,6 +196,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg
     ucs_status_t status;
     uint64_t tl_bitmap = 0;
     ucp_ep_h ep;
+    unsigned ep_init_flags = 0;
 
     ucs_trace("got wireup request from 0x%"PRIx64, uuid);
 
@@ -227,14 +228,16 @@ static void ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg
         ep->dest_uuid = uuid;
         ep->flags    |= UCP_EP_FLAG_DEST_UUID_PEER;
         ucp_ep_add_to_hash(ep);
+
+        ep_init_flags = UCP_EP_CREATE_AM_LANE;
     }
 
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     params.err_mode   = msg->err_mode;
 
     /* Initialize lanes (possible destroy existing lanes) */
-    status = ucp_wireup_init_lanes(ep, &params, 0, address_count, address_list,
-                                   addr_indices);
+    status = ucp_wireup_init_lanes(ep, &params, ep_init_flags, address_count,
+                                   address_list, addr_indices);
     if (status != UCS_OK) {
         return;
     }

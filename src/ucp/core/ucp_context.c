@@ -216,8 +216,8 @@ UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
 
 
 static ucp_tl_alias_t ucp_tl_aliases[] = {
-  { "sm",    { "mm", "knem", "cma", NULL } },
-  { "shm",   { "mm", "knem", "cma", NULL } },
+  { "sm",    { "mm", "knem", "cma", "rdmacm", NULL } },
+  { "shm",   { "mm", "knem", "cma", "rdmacm", NULL } },
   { "ib",    { "rc", "ud", "dc", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", NULL } },
   { "ud",    { "ud", "rdmacm", NULL } },
   { "ud_x",  { "ud_mlx5", "rdmacm", NULL } },
