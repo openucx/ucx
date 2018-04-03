@@ -32,7 +32,7 @@ static ucm_mmap_func_t ucm_mmap_funcs[] = {
     { {"mmap",   ucm_override_mmap},   UCM_EVENT_MMAP},
     { {"munmap", ucm_override_munmap}, UCM_EVENT_MUNMAP},
     { {"mremap", ucm_override_mremap}, UCM_EVENT_MREMAP},
-    { {"shmat",  ucm_override_shmat},  UCM_EVENT_SHMAT},
+    { {"shmat",  ucm_override_shmat},  UCM_EVENT_SHMAT | UCM_EVENT_SHMDT},
     { {"shmdt",  ucm_override_shmdt},  UCM_EVENT_SHMDT},
     { {"sbrk",   ucm_override_sbrk},   UCM_EVENT_SBRK},
     { {NULL, NULL}, 0}
