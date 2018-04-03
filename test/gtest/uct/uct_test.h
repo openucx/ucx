@@ -54,10 +54,19 @@ public:
     uct_test();
     virtual ~uct_test();
 
+    enum atomic_mode {
+        op32,
+        op64,
+        fop32,
+        fop64
+    };
+
 protected:
 
     class entity {
     public:
+        typedef uct_test::atomic_mode atomic_mode;
+
         entity(const resource& resource, uct_iface_config_t *iface_config,
                uct_iface_params_t *params, uct_md_config_t *md_config);
 
@@ -72,6 +81,7 @@ protected:
 
         bool is_caps_supported(uint64_t required_flags);
         void check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+        void check_atomics(uint64_t required_ops, atomic_mode mode);
 
         uct_md_h md() const;
 
@@ -217,6 +227,7 @@ protected:
     bool is_caps_supported(uint64_t required_flags);
     void check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     void check_caps(const entity& e, uint64_t required_flags, uint64_t invalid_flags = 0);
+    void check_atomics(uint64_t required_ops, atomic_mode mode);
     const entity& ent(unsigned index) const;
     unsigned progress() const;
     void flush(ucs_time_t deadline = ULONG_MAX) const;
