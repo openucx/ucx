@@ -11,6 +11,10 @@
 #include <ifaddrs.h>
 #include <sys/poll.h>
 
+#define UCP_INSTANTIATE_ALL_TEST_CASE(_test_case) \
+        UCP_INSTANTIATE_TEST_CASE (_test_case) \
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, mm_rdmacm, "mm,rdmacm")
+
 class test_ucp_sockaddr : public ucp_test {
 public:
     static ucp_params_t get_ctx_params() {
@@ -167,6 +171,15 @@ public:
         EXPECT_EQ(send_data, recv_data);
     }
 
+    void wait_for_server_ep(bool wakeup)
+    {
+        ucs_time_t time_limit = ucs_get_time() + ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
+
+        while ((receiver().get_num_eps() == 0) && (ucs_get_time() < time_limit)) {
+            check_events(sender().worker(), receiver().worker(), wakeup);
+        }
+    }
+
     void client_ep_connect(struct sockaddr *connect_addr)
     {
         ucp_ep_params_t ep_params = ucp_test::get_ep_params();
@@ -184,9 +197,7 @@ public:
 
         tag_send_recv(sender(), receiver(), wakeup);
 
-        while (receiver().get_num_eps() == 0) {
-            check_events(sender().worker(), receiver().worker(), wakeup);
-        }
+        wait_for_server_ep(wakeup);
 
         tag_send_recv(receiver(), sender(), wakeup);
     }
@@ -299,9 +310,7 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup_for_rma_atomic) {
 
     client_ep_connect((struct sockaddr*)&connect_addr);
 
-    while (receiver().get_num_eps() == 0) {
-        check_events(sender().worker(), receiver().worker(), false);
-    }
+    wait_for_server_ep(false);
 
     /* allow the connection establishment flow to complete */
     short_progress_loop();

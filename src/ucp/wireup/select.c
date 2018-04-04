@@ -724,11 +724,11 @@ static int ucp_wireup_is_lane_proxy(ucp_ep_h ep, ucp_rsc_index_t rsc_index,
             UCT_IFACE_FLAG_EVENT_RECV_SIG);
 }
 
-static inline int ucp_wireup_is_am_config_required(ucp_ep_h ep,
-                                                   const ucp_ep_params_t *params,
-                                                   unsigned ep_init_flags,
-                                                   ucp_wireup_lane_desc_t *lane_descs,
-                                                   int num_lanes_p)
+static inline int ucp_wireup_is_am_required(ucp_ep_h ep,
+                                            const ucp_ep_params_t *params,
+                                            unsigned ep_init_flags,
+                                            ucp_wireup_lane_desc_t *lane_descs,
+                                            int num_lanes_p)
 {
     ucp_lane_index_t lane;
     int need_am = 1;
@@ -763,7 +763,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
     unsigned addr_index;
     int is_proxy;
 
-    if (!ucp_wireup_is_am_config_required(ep, params, ep_init_flags, lane_descs,
+    if (!ucp_wireup_is_am_required(ep, params, ep_init_flags, lane_descs,
                                           *num_lanes_p)) {
         return UCS_OK;
     }
