@@ -530,15 +530,15 @@ typedef struct ucp_generic_dt_ops {
      * The pointer refers to application defined unpack routine.
      *
      * @param [in]  state          State as returned by
-     *                             @ref ucp_generic_dt_ops::start_pack
-     *                             "start_pack()" routine.
+     *                             @ref ucp_generic_dt_ops::start_unpack
+     *                             "start_unpack()" routine.
      * @param [in]  offset         Virtual offset in the input stream.
      * @param [in]  src            Source to unpack the data from.
      * @param [in]  length         Length to unpack.
      *
      * @return UCS_OK or an error if unpacking failed.
      */
-    ucs_status_t (*unpack)(void *state, size_t offset, const void *src, size_t count);
+    ucs_status_t (*unpack)(void *state, size_t offset, const void *src, size_t length);
 
     /**
      * @ingroup UCP_DATATYPE
