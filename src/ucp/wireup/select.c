@@ -731,22 +731,27 @@ static inline int ucp_wireup_is_am_required(ucp_ep_h ep,
                                             int num_lanes_p)
 {
     ucp_lane_index_t lane;
-    int need_am = 1;
 
     /* Check if we need active messages from the configurations, for wireup.
      * If not, check if am is required due to p2p transports */
-    if ((!(ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | UCP_FEATURE_STREAM)) ||
-         (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) &&
-        !(ep_init_flags & UCP_EP_CREATE_AM_LANE) &&
-        !(params->field_mask & UCP_EP_PARAM_FIELD_SOCK_ADDR)) {
-        need_am = 0;
-        for (lane = 0; lane < num_lanes_p; ++lane) {
-            need_am = need_am || ucp_worker_is_tl_p2p(ep->worker,
-                                                      lane_descs[lane].rsc_index);
+
+    if ((ep_init_flags & UCP_EP_CREATE_AM_LANE) ||
+        (params->field_mask & UCP_EP_PARAM_FIELD_SOCK_ADDR)) {
+        return 1;
+    }
+
+    if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
+        (ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | UCP_FEATURE_STREAM))) {
+        return 1;
+    }
+
+    for (lane = 0; lane < num_lanes_p; ++lane) {
+        if (ucp_worker_is_tl_p2p(ep->worker, lane_descs[lane].rsc_index)) {
+            return 1;
         }
     }
 
-    return need_am;
+    return 0;
 }
 
 static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *params,
@@ -764,7 +769,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
     int is_proxy;
 
     if (!ucp_wireup_is_am_required(ep, params, ep_init_flags, lane_descs,
-                                          *num_lanes_p)) {
+                                   *num_lanes_p)) {
         return UCS_OK;
     }
 

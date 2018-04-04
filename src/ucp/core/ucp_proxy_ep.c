@@ -183,12 +183,17 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_proxy_ep_t)
     }
 }
 
+static int ucp_proxy_ep_test(uct_ep_h uct_ep)
+{
+    return uct_ep->iface->ops.ep_destroy == ucp_proxy_ep_destroy;
+}
+
 static void ucp_proxy_ep_replace_if_owned(uct_ep_h uct_ep, uct_ep_h owned_ep,
                                           uct_ep_h replacement_ep)
 {
     ucp_proxy_ep_t *proxy_ep;
 
-    if (uct_ep->iface->ops.ep_destroy == ucp_proxy_ep_destroy) {
+    if (ucp_proxy_ep_test(uct_ep)) {
         proxy_ep = ucs_derived_of(uct_ep, ucp_proxy_ep_t);
         if (proxy_ep->uct_ep == owned_ep) {
             proxy_ep->uct_ep = replacement_ep;
@@ -213,9 +218,9 @@ void ucp_proxy_ep_replace(ucp_proxy_ep_t *proxy_ep)
         }
     }
 
-    /* go through the lanes and check if the wireup_ep which will be destroyed,
-     * is pointed to by another proxy ep. if so, set the wireup ep's real tl
-     * uct ep to the other proxy ep (owner proxy ep) */
+    /* go through the lanes and check if the proxy ep that is being destroyed,
+     * is pointed to by another proxy ep. if so, redirect that other proxy ep
+     * to point to the underlying uct ep. */
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
         ucp_proxy_ep_replace_if_owned(ucp_ep->uct_eps[lane], &proxy_ep->super,
                                       tl_ep);
