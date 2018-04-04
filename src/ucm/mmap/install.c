@@ -25,16 +25,17 @@
 
 typedef struct ucm_mmap_func {
     ucm_reloc_patch_t patch;
-    ucm_event_type_t   event_type;
+    ucm_event_type_t  event_type;
+    ucm_event_type_t  deps;
 } ucm_mmap_func_t;
 
 static ucm_mmap_func_t ucm_mmap_funcs[] = {
-    { {"mmap",   ucm_override_mmap},   UCM_EVENT_MMAP},
-    { {"munmap", ucm_override_munmap}, UCM_EVENT_MUNMAP},
-    { {"mremap", ucm_override_mremap}, UCM_EVENT_MREMAP},
-    { {"shmat",  ucm_override_shmat},  UCM_EVENT_SHMAT},
-    { {"shmdt",  ucm_override_shmdt},  UCM_EVENT_SHMDT},
-    { {"sbrk",   ucm_override_sbrk},   UCM_EVENT_SBRK},
+    { {"mmap",   ucm_override_mmap},   UCM_EVENT_MMAP, 0},
+    { {"munmap", ucm_override_munmap}, UCM_EVENT_MUNMAP, 0},
+    { {"mremap", ucm_override_mremap}, UCM_EVENT_MREMAP, 0},
+    { {"shmat",  ucm_override_shmat},  UCM_EVENT_SHMAT, 0},
+    { {"shmdt",  ucm_override_shmdt},  UCM_EVENT_SHMDT, UCM_EVENT_SHMAT},
+    { {"sbrk",   ucm_override_sbrk},   UCM_EVENT_SBRK, 0},
     { {NULL, NULL}, 0}
 };
 
@@ -112,7 +113,7 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
     }
 
     for (entry = ucm_mmap_funcs; entry->patch.symbol != NULL; ++entry) {
-        if (!(entry->event_type & events)) {
+        if (!((entry->event_type|entry->deps) & events)) {
             /* Not required */
             continue;
         }
