@@ -313,12 +313,9 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p)
 {
-    ucp_address_entry_t *address_list;
+    ucp_unpacked_address_t remote_address;
     uint8_t addr_indices[UCP_MAX_LANES];
-    char peer_name[UCP_WORKER_NAME_MAX];
-    unsigned address_count;
     ucs_status_t status;
-    uint64_t dest_uuid;
     ucp_ep_h ep;
 
     if (!(params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS)) {
@@ -329,14 +326,13 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
 
     UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
 
-    status = ucp_address_unpack(params->address, &dest_uuid, peer_name,
-                                sizeof(peer_name), &address_count, &address_list);
+    status = ucp_address_unpack(params->address, &remote_address);
     if (status != UCS_OK) {
         ucs_error("failed to unpack remote address: %s", ucs_status_string(status));
         goto out;
     }
 
-    ep = ucp_worker_ep_find(worker, dest_uuid);
+    ep = ucp_worker_ep_find(worker, remote_address.uuid);
     if (ep != NULL) {
         status = ucp_ep_adjust_params(ep, params);
         if ((status == UCS_OK) && (ep->ext.stream != NULL)) {
@@ -347,7 +343,8 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     }
 
     /* allocate endpoint */
-    status = ucp_ep_new(worker, dest_uuid, peer_name, message, &ep);
+    status = ucp_ep_new(worker, remote_address.uuid, remote_address.name,
+                        message, &ep);
     if (status != UCS_OK) {
         goto out_free_address;
     }
@@ -355,8 +352,9 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     ep->flags |= UCP_EP_FLAG_DEST_UUID_PEER;
 
     /* initialize transport endpoints */
-    status = ucp_wireup_init_lanes(ep, params, ep_init_flags, address_count,
-                                   address_list, addr_indices);
+    status = ucp_wireup_init_lanes(ep, params, ep_init_flags,
+                                   remote_address.address_count,
+                                   remote_address.address_list, addr_indices);
     if (status != UCS_OK) {
         goto err_delete;
     }
@@ -367,7 +365,7 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
 err_delete:
     ucp_ep_delete(ep);
 out_free_address:
-    ucs_free(address_list);
+    ucs_free(remote_address.address_list);
     if (status == UCS_OK) {
         *ep_p = ep;
     }

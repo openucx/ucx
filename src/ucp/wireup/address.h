@@ -64,6 +64,17 @@ struct ucp_address_entry {
 
 
 /**
+ * Unpacked remote address
+ */
+struct ucp_unpacked_address {
+    uint64_t                   uuid;            /* Remote worker UUID */
+    char                       name[UCP_WORKER_NAME_MAX]; /* Remote worker name */
+    unsigned                   address_count;   /* Length of address list */
+    ucp_address_entry_t        *address_list;   /* Pointer to address list */
+};
+
+
+/**
  * Pack multiple addresses into a buffer, of resources specified in rsc_bitmap.
  * For every resource in rcs_bitmap:
  *    - if iface is CONNECT_TO_IFACE, pack interface address
@@ -92,22 +103,16 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitm
  * Unpack a list of addresses.
  *
  * @param [in]  buffer           Buffer with data to unpack.
- * @param [out] remote_uuid_p    Filled with remote worker uuid.
- * @param [out] remote_name      Filled with remote worker name.
- * @param [in]  max              Maximal length on @a remote_name.
- * @param [out] address_count_p  Filled with amount of addresses in the list.
- * @param [out] address_list_p   Filled with pointer to unpacked address list.
- *                                It should be released by ucs_free().
+ * @param [out] unpacked_address Filled with remote address data.
  *
  * @note Entries in the address list could point into the data buffer, so it
- *       should not be released as long as the list is used.
+ *       should not be released as long as the remote address is used.
  *
- * @note The address list should be released by ucs_free().
+ * @note The address list inside @ref ucp_remote_address_t should be released
+ *       by ucs_free().
  */
-ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
-                                char *remote_name, size_t max,
-                                unsigned *address_count_p,
-                                ucp_address_entry_t **address_list_p);
+ucs_status_t ucp_address_unpack(const void *buffer,
+                                ucp_unpacked_address_t *unpacked_address);
 
 
 #endif
