@@ -17,7 +17,7 @@
 
 static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {"", "", NULL,
-        ucs_offsetof(uct_cuda_ipc_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+     ucs_offsetof(uct_cuda_ipc_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
     {NULL}
 };

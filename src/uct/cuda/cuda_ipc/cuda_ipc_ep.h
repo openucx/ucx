@@ -17,7 +17,6 @@ typedef struct uct_cuda_ipc_ep_addr {
 
 typedef struct uct_cuda_ipc_ep {
     uct_base_ep_t           super;
-    struct uct_cuda_ipc_ep *next;
 } uct_cuda_ipc_ep_t;
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_cuda_ipc_ep_t, uct_ep_t, uct_iface_t*,

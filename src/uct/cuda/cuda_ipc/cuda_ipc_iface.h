@@ -13,21 +13,7 @@
 
 
 #define UCT_CUDA_IPC_TL_NAME    "cuda_ipc"
-#define UCT_CUDA_DEV_NAME   "cudaipc0"
-
-
-#define UCT_CUDA_FUNC(_func)  ({                        \
-ucs_status_t _status = UCS_OK;                          \
-do {                                                    \
-    cudaError_t _result = (_func);                      \
-    if (cudaSuccess != _result) {                       \
-        ucs_error("%s failed with %d \n",               \
-                  UCS_PP_MAKE_STRING(_func), _result);  \
-        _status = UCS_ERR_IO_ERROR;                     \
-    }                                                   \
-} while (0);                                            \
-_status;                                                \
-})
+#define UCT_CUDA_DEV_NAME       "cudaipc0"
 
 
 typedef struct uct_cuda_ipc_iface {
