@@ -8,7 +8,7 @@
 #include "ucp_datatype.h"
 
 extern "C" {
-#include <malloc.h>
+#include <ucp/core/ucp_worker.h>
 }
 
 
@@ -214,7 +214,7 @@ void test_ucp_peer_failure::test_force_close()
     const size_t            msg_size = 16000;
     const size_t            iter     = 1000;
     uint8_t                 *buf     = (uint8_t *)calloc(msg_size, iter);
-    struct mallinfo         mem_before, mem_after;
+    size_t                  allocd_eps_before, allocd_eps_after;
     std::vector<request *>  reqs;
 
     reqs.reserve(iter);
@@ -231,7 +231,7 @@ void test_ucp_peer_failure::test_force_close()
 
     fail_receiver();
 
-    mem_before = mallinfo();
+    allocd_eps_before = ucs_strided_alloc_inuse_count(&sender().worker()->ep_alloc);
 
     request *close_req = (request *)ucp_ep_close_nb(sender().ep(),
                                                     UCP_EP_CLOSE_MODE_FORCE);
@@ -242,10 +242,10 @@ void test_ucp_peer_failure::test_force_close()
         EXPECT_FALSE(UCS_PTR_IS_ERR(close_req));
     }
 
-    mem_after = mallinfo();
-    /* Too low chance to predict memory consumption on wire up for all TLS */
+    allocd_eps_after = ucs_strided_alloc_inuse_count(&sender().worker()->ep_alloc);
+
     if (GetParam().variant != FAIL_IMMEDIATELY) {
-        EXPECT_GT(mem_before.uordblks, mem_after.uordblks);
+        EXPECT_LT(allocd_eps_after, allocd_eps_before);
     }
 
     /* The EP can't be used now */

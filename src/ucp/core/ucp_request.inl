@@ -110,13 +110,12 @@ ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_request_complete_stream_recv(ucp_request_t *req,
-                                 ucp_ep_ext_stream_t* ep_stream,
+ucp_request_complete_stream_recv(ucp_request_t *req, ucp_ep_ext_proto_t* ep_ext,
                                  ucs_status_t status)
 {
     /* dequeue request before complete */
     ucp_request_t *check_req UCS_V_UNUSED =
-            ucs_queue_pull_elem_non_empty(&ep_stream->match_q, ucp_request_t,
+            ucs_queue_pull_elem_non_empty(&ep_ext->stream.match_q, ucp_request_t,
                                           recv.queue);
     ucs_assert(check_req               == req);
     ucs_assert(req->recv.stream.offset >  0);
