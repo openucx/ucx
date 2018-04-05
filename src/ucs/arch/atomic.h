@@ -19,6 +19,42 @@
 #  error "Unsupported architecture"
 #endif
 
+#define UCS_DEFINE_ATOMIC_AND(wordsize, suffix) \
+    static inline void ucs_atomic_and##wordsize(volatile uint##wordsize##_t *ptr, \
+                                                uint##wordsize##_t value) { \
+        __sync_and_and_fetch(ptr, value); \
+    }
+
+#define UCS_DEFINE_ATOMIC_FAND(wordsize, suffix) \
+    static inline uint##wordsize##_t ucs_atomic_fand##wordsize(volatile uint##wordsize##_t *ptr, \
+                                                               uint##wordsize##_t value) { \
+        return __sync_fetch_and_and(ptr, value); \
+    }
+
+#define UCS_DEFINE_ATOMIC_XOR(wordsize, suffix) \
+    static inline void ucs_atomic_xor##wordsize(volatile uint##wordsize##_t *ptr, \
+                                                uint##wordsize##_t value) { \
+        __sync_xor_and_fetch(ptr, value); \
+    }
+
+#define UCS_DEFINE_ATOMIC_FXOR(wordsize, suffix) \
+    static inline uint##wordsize##_t ucs_atomic_fxor##wordsize(volatile uint##wordsize##_t *ptr, \
+                                                               uint##wordsize##_t value) { \
+        return __sync_fetch_and_xor(ptr, value); \
+    }
+
+#define UCS_DEFINE_ATOMIC_OR(wordsize, suffix) \
+    static inline void ucs_atomic_or##wordsize(volatile uint##wordsize##_t *ptr, \
+                                                uint##wordsize##_t value) { \
+        __sync_or_and_fetch(ptr, value); \
+    }
+
+#define UCS_DEFINE_ATOMIC_FOR(wordsize, suffix) \
+    static inline uint##wordsize##_t ucs_atomic_for##wordsize(volatile uint##wordsize##_t *ptr, \
+                                                               uint##wordsize##_t value) { \
+        return __sync_fetch_and_or(ptr, value); \
+    }
+
 /*
  * Define atomic functions
  */
@@ -31,6 +67,36 @@ UCS_DEFINE_ATOMIC_FADD(8,  b);
 UCS_DEFINE_ATOMIC_FADD(16, w);
 UCS_DEFINE_ATOMIC_FADD(32, l);
 UCS_DEFINE_ATOMIC_FADD(64, q);
+
+UCS_DEFINE_ATOMIC_AND(8,  b);
+UCS_DEFINE_ATOMIC_AND(16, w);
+UCS_DEFINE_ATOMIC_AND(32, l);
+UCS_DEFINE_ATOMIC_AND(64, q);
+
+UCS_DEFINE_ATOMIC_FAND(8,  b);
+UCS_DEFINE_ATOMIC_FAND(16, w);
+UCS_DEFINE_ATOMIC_FAND(32, l);
+UCS_DEFINE_ATOMIC_FAND(64, q);
+
+UCS_DEFINE_ATOMIC_OR(8,  b);
+UCS_DEFINE_ATOMIC_OR(16, w);
+UCS_DEFINE_ATOMIC_OR(32, l);
+UCS_DEFINE_ATOMIC_OR(64, q);
+
+UCS_DEFINE_ATOMIC_FOR(8,  b);
+UCS_DEFINE_ATOMIC_FOR(16, w);
+UCS_DEFINE_ATOMIC_FOR(32, l);
+UCS_DEFINE_ATOMIC_FOR(64, q);
+
+UCS_DEFINE_ATOMIC_XOR(8,  b);
+UCS_DEFINE_ATOMIC_XOR(16, w);
+UCS_DEFINE_ATOMIC_XOR(32, l);
+UCS_DEFINE_ATOMIC_XOR(64, q);
+
+UCS_DEFINE_ATOMIC_FXOR(8,  b);
+UCS_DEFINE_ATOMIC_FXOR(16, w);
+UCS_DEFINE_ATOMIC_FXOR(32, l);
+UCS_DEFINE_ATOMIC_FXOR(64, q);
 
 UCS_DEFINE_ATOMIC_SWAP(8,  b);
 UCS_DEFINE_ATOMIC_SWAP(16, w);
