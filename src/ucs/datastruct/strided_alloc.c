@@ -101,6 +101,8 @@ void ucs_strided_alloc_init(ucs_strided_alloc_t *sa, size_t elem_size,
                             unsigned stride_count)
 {
     ucs_assert(elem_size >= sizeof(ucs_strided_alloc_elem_t));
+    ucs_assert(elem_size <= (UCS_STRIDED_ALLOC_STRIDE -
+                             sizeof(ucs_strided_alloc_chunk_t)));
     ucs_assert(stride_count >= 1);
 
     ucs_queue_head_init(&sa->chunks);
