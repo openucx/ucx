@@ -75,7 +75,7 @@ private:
     static void send_completion(void *request, ucs_status_t status);
 
     static void tag_recv_completion(void *request, ucs_status_t status,
-                                ucp_tag_recv_info_t *info);
+                                    ucp_tag_recv_info_t *info);
 
     static void stream_recv_completion(void *request, ucs_status_t status,
                                        size_t length);
