@@ -25,28 +25,18 @@
 
 
 /**
- * Request flags
+ * Internal request flags
  */
-enum {
-    UCP_REQUEST_FLAG_COMPLETED            = UCS_BIT(0),
-    UCP_REQUEST_FLAG_RELEASED             = UCS_BIT(1),
-    UCP_REQUEST_FLAG_EXPECTED             = UCS_BIT(3),
-    UCP_REQUEST_FLAG_LOCAL_COMPLETED      = UCS_BIT(4),
-    UCP_REQUEST_FLAG_REMOTE_COMPLETED     = UCS_BIT(5),
-    UCP_REQUEST_FLAG_CALLBACK             = UCS_BIT(6),
-    UCP_REQUEST_FLAG_RECV                 = UCS_BIT(7),
-    UCP_REQUEST_FLAG_SYNC                 = UCS_BIT(8),
-    UCP_REQUEST_FLAG_OFFLOADED            = UCS_BIT(10),
-    UCP_REQUEST_FLAG_BLOCK_OFFLOAD        = UCS_BIT(11),
-    UCP_REQUEST_FLAG_STREAM_RECV_WAITALL  = UCS_BIT(12),
-
-#if ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(14),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(15)
-#else
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0
-#endif
-};
+#define UCP_REQUEST_FLAG_COMPLETED          ((uint64_t)UCP_REQUEST_FLAG_LAST <<  1)
+#define UCP_REQUEST_FLAG_RELEASED           ((uint64_t)UCP_REQUEST_FLAG_LAST <<  2)
+#define UCP_REQUEST_FLAG_EXPECTED           ((uint64_t)UCP_REQUEST_FLAG_LAST <<  3)
+#define UCP_REQUEST_FLAG_LOCAL_COMPLETED    ((uint64_t)UCP_REQUEST_FLAG_LAST <<  4)
+#define UCP_REQUEST_FLAG_REMOTE_COMPLETED   ((uint64_t)UCP_REQUEST_FLAG_LAST <<  5)
+#define UCP_REQUEST_FLAG_SYNC               ((uint64_t)UCP_REQUEST_FLAG_LAST <<  6)
+#define UCP_REQUEST_FLAG_RECV               ((uint64_t)UCP_REQUEST_FLAG_LAST <<  7)
+#define UCP_REQUEST_FLAG_OFFLOADED          ((uint64_t)UCP_REQUEST_FLAG_LAST <<  8)
+#define UCP_REQUEST_FLAG_BLOCK_OFFLOAD      ((uint64_t)UCP_REQUEST_FLAG_LAST <<  9)
+#define UCP_REQUEST_FLAG_STREAM_RECV        ((uint64_t)UCP_REQUEST_FLAG_LAST << 10)
 
 
 /**
@@ -88,7 +78,7 @@ enum {
  */
 struct ucp_request {
     ucs_status_t                  status;  /* Operation status */
-    uint16_t                      flags;   /* Request flags */
+    uint64_t                      flags;   /* Request flags */
 
     union {
         struct {

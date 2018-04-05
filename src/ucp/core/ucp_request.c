@@ -64,7 +64,7 @@ ucp_request_release_common(void *request, uint8_t cb_flag, const char *debug_nam
     ucp_request_t *req = (ucp_request_t*)request - 1;
     ucp_worker_h UCS_V_UNUSED worker = ucs_container_of(ucs_mpool_obj_owner(req),
                                                         ucp_worker_t, req_mp);
-    uint16_t flags;
+    uint64_t flags;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
@@ -72,7 +72,7 @@ ucp_request_release_common(void *request, uint8_t cb_flag, const char *debug_nam
     ucs_trace_req("%s request %p (%p) "UCP_REQUEST_FLAGS_FMT, debug_name,
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(flags));
 
-    ucs_assert(!(flags & UCP_REQUEST_DEBUG_FLAG_EXTERNAL));
+    ucs_assert(!(flags & UCP_REQUEST_FLAG_EXTERNAL));
     ucs_assert(!(flags & UCP_REQUEST_FLAG_RELEASED));
 
     if (ucs_likely(flags & UCP_REQUEST_FLAG_COMPLETED)) {

@@ -546,3 +546,14 @@ void ucp_test_base::entity::ep_destructor(ucp_ep_h ep, entity *e)
     EXPECT_EQ(UCS_OK, status);
     ucp_request_release(req);
 }
+
+class test_ucp_api_smoke : public ucs::test {
+};
+
+UCS_TEST_F(test_ucp_api_smoke, macro) {
+    ucp_request_attr_t *attr = UCP_REQUEST_ALLOCA(0);
+    ASSERT_FALSE(attr == NULL);
+    EXPECT_EQ(sizeof(ucp_request_attr_t), sizeof(*attr));
+    attr->context = (void *)(uintptr_t)ucp::MAGIC;
+    EXPECT_EQ(ucp::MAGIC, (uint32_t)(uintptr_t)UCP_REQUEST_CONTEXT(attr + 1));
+}
