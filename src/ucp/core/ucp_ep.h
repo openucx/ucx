@@ -54,7 +54,8 @@ enum {
  * Endpoint init flags
  */
 enum {
-    UCP_EP_INIT_FLAG_MEM_TYPE          = UCS_BIT(0)  /**< Endpoint for local mem type transfers */
+    UCP_EP_INIT_FLAG_MEM_TYPE          = UCS_BIT(0),  /**< Endpoint for local mem type transfers */
+    UCP_EP_CREATE_AM_LANE              = UCS_BIT(1)   /**< Endpoint requires an AM lane */
 };
 
 
