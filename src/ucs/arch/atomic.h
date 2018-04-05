@@ -19,39 +19,39 @@
 #  error "Unsupported architecture"
 #endif
 
-#define UCS_DEFINE_ATOMIC_AND(wordsize, suffix) \
-    static inline void ucs_atomic_and##wordsize(volatile uint##wordsize##_t *ptr, \
-                                                uint##wordsize##_t value) { \
+#define UCS_DEFINE_ATOMIC_AND(_wordsize, _suffix) \
+    static inline void ucs_atomic_and##_wordsize(volatile uint##_wordsize##_t *ptr, \
+                                                 uint##_wordsize##_t value) { \
         __sync_and_and_fetch(ptr, value); \
     }
 
-#define UCS_DEFINE_ATOMIC_FAND(wordsize, suffix) \
-    static inline uint##wordsize##_t ucs_atomic_fand##wordsize(volatile uint##wordsize##_t *ptr, \
-                                                               uint##wordsize##_t value) { \
+#define UCS_DEFINE_ATOMIC_FAND(_wordsize, _suffix) \
+    static inline uint##_wordsize##_t ucs_atomic_fand##_wordsize(volatile uint##_wordsize##_t *ptr, \
+                                                                 uint##_wordsize##_t value) { \
         return __sync_fetch_and_and(ptr, value); \
     }
 
-#define UCS_DEFINE_ATOMIC_XOR(wordsize, suffix) \
-    static inline void ucs_atomic_xor##wordsize(volatile uint##wordsize##_t *ptr, \
-                                                uint##wordsize##_t value) { \
+#define UCS_DEFINE_ATOMIC_XOR(_wordsize, _suffix) \
+    static inline void ucs_atomic_xor##_wordsize(volatile uint##_wordsize##_t *ptr, \
+                                                 uint##_wordsize##_t value) { \
         __sync_xor_and_fetch(ptr, value); \
     }
 
-#define UCS_DEFINE_ATOMIC_FXOR(wordsize, suffix) \
-    static inline uint##wordsize##_t ucs_atomic_fxor##wordsize(volatile uint##wordsize##_t *ptr, \
-                                                               uint##wordsize##_t value) { \
+#define UCS_DEFINE_ATOMIC_FXOR(_wordsize, _suffix) \
+    static inline uint##_wordsize##_t ucs_atomic_fxor##_wordsize(volatile uint##_wordsize##_t *ptr, \
+                                                                 uint##_wordsize##_t value) { \
         return __sync_fetch_and_xor(ptr, value); \
     }
 
-#define UCS_DEFINE_ATOMIC_OR(wordsize, suffix) \
-    static inline void ucs_atomic_or##wordsize(volatile uint##wordsize##_t *ptr, \
-                                                uint##wordsize##_t value) { \
+#define UCS_DEFINE_ATOMIC_OR(_wordsize, _suffix) \
+    static inline void ucs_atomic_or##_wordsize(volatile uint##_wordsize##_t *ptr, \
+                                                uint##_wordsize##_t value) { \
         __sync_or_and_fetch(ptr, value); \
     }
 
-#define UCS_DEFINE_ATOMIC_FOR(wordsize, suffix) \
-    static inline uint##wordsize##_t ucs_atomic_for##wordsize(volatile uint##wordsize##_t *ptr, \
-                                                               uint##wordsize##_t value) { \
+#define UCS_DEFINE_ATOMIC_FOR(_wordsize, _suffix) \
+    static inline uint##_wordsize##_t ucs_atomic_for##_wordsize(volatile uint##_wordsize##_t *ptr, \
+                                                                uint##_wordsize##_t value) { \
         return __sync_fetch_and_or(ptr, value); \
     }
 
