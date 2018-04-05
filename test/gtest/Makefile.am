@@ -139,6 +139,7 @@ gtest_SOURCES = \
 	ucs/test_rcache.cc \
 	ucs/test_memtype_cache.cc \
 	ucs/test_stats.cc \
+	ucs/test_strided_alloc.cc \
 	ucs/test_sys.cc \
 	ucs/test_time.cc \
 	ucs/test_twheel.cc \
