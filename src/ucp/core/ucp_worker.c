@@ -21,6 +21,11 @@
 #include <sys/poll.h>
 #include <sys/eventfd.h>
 
+
+#define UCP_WORKER_HEADROOM_SIZE \
+    (sizeof(ucp_recv_desc_t) + UCP_WORKER_HEADROOM_PRIV_SIZE)
+
+
 #if ENABLE_STATS
 static ucs_stats_class_t ucp_worker_stats_class = {
     .name           = "ucp_worker",
@@ -693,11 +698,6 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
-static size_t ucp_worker_rx_headroom(ucp_worker_h worker)
-{
-    return sizeof(ucp_recv_desc_t) + sizeof(ucp_eager_sync_hdr_t);
-}
-
 ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    uct_iface_params_t *iface_params,
                                    ucp_worker_iface_t *wiface)
@@ -729,9 +729,11 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         return status;
     }
 
+    UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >= sizeof(ucp_eager_sync_hdr_t));
+
     /* Fill rest of uct_iface params (caller should fill specific mode fields) */
     iface_params->stats_root      = UCS_STATS_RVAL(worker->stats);
-    iface_params->rx_headroom     = ucp_worker_rx_headroom(worker);
+    iface_params->rx_headroom     = UCP_WORKER_HEADROOM_SIZE;
     iface_params->err_handler_arg = worker;
     iface_params->err_handler     = ucp_worker_iface_error_handler;
     iface_params->eager_arg       = iface_params->rndv_arg = wiface;
@@ -966,7 +968,6 @@ static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
 
 static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
 {
-    size_t           rx_headroom       = ucp_worker_rx_headroom(worker);
     size_t           max_mp_entry_size = 0;
     ucp_context_t    *context          = worker->context;
     uct_iface_attr_t *if_attr;
@@ -984,7 +985,7 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
     }
 
     status = ucs_mpool_init(&worker->am_mp, 0,
-                            max_mp_entry_size + rx_headroom,
+                            max_mp_entry_size + UCP_WORKER_HEADROOM_SIZE,
                             0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
                             &ucp_am_mpool_ops, "ucp_am_bufs");
     if (status != UCS_OK) {

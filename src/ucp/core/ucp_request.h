@@ -251,6 +251,9 @@ struct ucp_recv_desc {
     uint32_t                payload_offset; /* Offset from end of the descriptor
                                              * to AM data */
     uint16_t                flags;          /* Flags */
+    int16_t                 priv_length;    /* Number of bytes consumed from
+                                               headroom private space, except the
+                                               space needed for ucp_recv_desc itself. */
 };
 
 

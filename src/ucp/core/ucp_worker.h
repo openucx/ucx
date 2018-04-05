@@ -17,6 +17,13 @@
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/async/async.h>
 
+
+/* The size of the private buffer in UCT descriptor headroom, which UCP may
+ * use for its own needs. This size does not include ucp_recv_desc_t length,
+ * because it is common for all cases and protocols (TAG, STREAM). */
+#define UCP_WORKER_HEADROOM_PRIV_SIZE 24
+
+
 KHASH_MAP_INIT_INT64(ucp_worker_ep_hash, ucp_ep_t *);
 KHASH_MAP_INIT_INT64(ucp_ep_errh_hash,   ucp_err_handler_cb_t);
 

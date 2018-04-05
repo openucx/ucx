@@ -14,8 +14,6 @@
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/profile/profile.h>
 
-#include <ucp/tag/eager.h> /* TODO: remove ucp_eager_sync_hdr_t usage */
-
 
 /* @verbatim
  * Data layout within Stream AM
@@ -114,17 +112,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_stream_rdesc_release(ucp_recv_desc_t *rdesc)
-{
-    if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
-        uct_iface_release_desc(UCS_PTR_BYTE_OFFSET(rdesc,
-                                                   -sizeof(ucp_eager_sync_hdr_t)));
-    } else {
-        ucs_mpool_put_inline(rdesc);
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void
 ucp_stream_rdesc_dequeue_and_release(ucp_recv_desc_t *rdesc,
                                      ucp_ep_ext_stream_t *ep)
 {
@@ -133,7 +120,7 @@ ucp_stream_rdesc_dequeue_and_release(ucp_recv_desc_t *rdesc,
                                                       ucp_recv_desc_t,
                                                       stream_queue));
     ucp_stream_rdesc_dequeue(ep);
-    ucp_stream_rdesc_release(rdesc);
+    ucp_recv_desc_release(rdesc);
 }
 
 UCS_PROFILE_FUNC_VOID(ucp_stream_data_release, (ep, data),
@@ -143,7 +130,7 @@ UCS_PROFILE_FUNC_VOID(ucp_stream_data_release, (ep, data),
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
-    ucp_stream_rdesc_release(rdesc);
+    ucp_recv_desc_release(rdesc);
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
 }
@@ -394,6 +381,7 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_stream_t *ep,
         rdesc                 = (ucp_recv_desc_t *)am_data - 1;
         rdesc->length         = rdesc_tmp.length;
         rdesc->payload_offset = rdesc_tmp.payload_offset + sizeof(*rdesc);
+        rdesc->priv_length    = 0;
         rdesc->flags          = UCP_RECV_DESC_FLAG_UCT_DESC;
     }
 
