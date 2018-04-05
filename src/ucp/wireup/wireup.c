@@ -710,9 +710,16 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     ucp_tl_resource_desc_t *rsc;
     ucp_lane_index_t lane;
     unsigned addr_index;
+    ucs_status_t status;
     char *p, *end;
 
-    ucp_address_unpack(msg + 1, &unpacked_address);
+    status = ucp_address_unpack(msg + 1, &unpacked_address);
+    if (status != UCS_OK) {
+        strncpy(unpacked_address.name, "<malformed address>", UCP_WORKER_NAME_MAX);
+        unpacked_address.uuid          = 0;
+        unpacked_address.address_count = 0;
+        unpacked_address.address_list  = NULL;
+    }
 
     p   = buffer;
     end = buffer + max;
