@@ -143,7 +143,7 @@ protected:
         uint32_t error = 0;
 
         sender().connect(&receiver(), get_ep_params());
-        flush_worker(sender()); /* avoiad deadlock for blocking amo */
+        flush_worker(sender()); /* avoid deadlock for blocking amo */
 
         params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH |
