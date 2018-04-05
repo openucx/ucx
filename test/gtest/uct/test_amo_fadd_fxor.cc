@@ -55,18 +55,6 @@ public:
     }
 };
 
-template <typename T>
-T add_op(T v1, T v2)
-{
-    return v1 + v2;
-}
-
-template <typename T>
-T xor_op(T v1, T v2)
-{
-    return v1 ^ v2;
-}
-
 UCS_TEST_P(uct_amo_fadd_fxor_test, fadd32) {
     check_caps(UCT_IFACE_FLAG_ATOMIC_FADD32);
     test_fop<uint32_t>(static_cast<send_func_t>(&uct_amo_fadd_fxor_test::fadd32), add_op<uint32_t>);
@@ -79,13 +67,13 @@ UCS_TEST_P(uct_amo_fadd_fxor_test, fadd64) {
 
 UCS_TEST_P(uct_amo_fadd_fxor_test, fxor32) {
     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP32);
-    test_fop<uint32_t>(static_cast<send_func_t>(&uct_amo_test::fop<uint32_t, UCT_ATOMIC_OP_XOR>),
+    test_fop<uint32_t>(static_cast<send_func_t>(&uct_amo_test::atomic_fop<uint32_t, UCT_ATOMIC_OP_XOR>),
                        xor_op<uint32_t>);
 }
 
 UCS_TEST_P(uct_amo_fadd_fxor_test, fxor64) {
     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64);
-    test_fop<uint64_t>(static_cast<send_func_t>(&uct_amo_test::fop<uint64_t, UCT_ATOMIC_OP_XOR>),
+    test_fop<uint64_t>(static_cast<send_func_t>(&uct_amo_test::atomic_fop<uint64_t, UCT_ATOMIC_OP_XOR>),
                        xor_op<uint64_t>);
 }
 
@@ -110,19 +98,19 @@ UCS_TEST_P(uct_amo_fadd_fxor_test_inlresp, fadd64_inlresp64, "IB_TX_INLINE_RESP=
 
 UCS_TEST_P(uct_amo_fadd_fxor_test_inlresp, fxor64_inlresp0, "IB_TX_INLINE_RESP=0") {
     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64);
-    test_fop<uint64_t>(static_cast<send_func_t>(&uct_amo_test::fop<uint64_t, UCT_ATOMIC_OP_XOR>),
+    test_fop<uint64_t>(static_cast<send_func_t>(&uct_amo_test::atomic_fop<uint64_t, UCT_ATOMIC_OP_XOR>),
                        xor_op<uint64_t>);
 }
 
 UCS_TEST_P(uct_amo_fadd_fxor_test_inlresp, fxor64_inlresp32, "IB_TX_INLINE_RESP=32") {
     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64);
-    test_fop<uint64_t>(static_cast<send_func_t>(&uct_amo_test::fop<uint64_t, UCT_ATOMIC_OP_XOR>),
+    test_fop<uint64_t>(static_cast<send_func_t>(&uct_amo_test::atomic_fop<uint64_t, UCT_ATOMIC_OP_XOR>),
                        xor_op<uint64_t>);
 }
 
 UCS_TEST_P(uct_amo_fadd_fxor_test_inlresp, fxor64_inlresp64, "IB_TX_INLINE_RESP=64") {
     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64);
-    test_fop<uint64_t>(static_cast<send_func_t>(&uct_amo_test::fop<uint64_t, UCT_ATOMIC_OP_XOR>),
+    test_fop<uint64_t>(static_cast<send_func_t>(&uct_amo_test::atomic_fop<uint64_t, UCT_ATOMIC_OP_XOR>),
                        xor_op<uint64_t>);
 }
 
