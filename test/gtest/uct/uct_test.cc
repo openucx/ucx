@@ -524,16 +524,16 @@ void uct_test::entity::check_atomics(uint64_t required_ops, atomic_mode mode)
     uint64_t amo;
 
     switch (mode) {
-    case op32:
+    case OP32:
         amo = iface_attr().cap.atomic32.op_flags;
         break;
-    case op64:
+    case OP64:
         amo = iface_attr().cap.atomic64.op_flags;
         break;
-    case fop32:
+    case FOP32:
         amo = iface_attr().cap.atomic32.fop_flags;
         break;
-    case fop64:
+    case FOP64:
         amo = iface_attr().cap.atomic64.fop_flags;
         break;
     default:

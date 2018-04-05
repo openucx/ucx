@@ -20,18 +20,6 @@ public:
         return uct_ep_atomic_add64(ep, worker.value, recvbuf.addr(), recvbuf.rkey());
     }
 
-    ucs_status_t xor32(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                       uint64_t *result, completion *comp) {
-        return uct_ep_atomic32_post(ep, UCT_ATOMIC_OP_XOR,
-                                    worker.value, recvbuf.addr(), recvbuf.rkey());
-    }
-
-    ucs_status_t xor64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                       uint64_t *result, completion *comp) {
-        return uct_ep_atomic64_post(ep, UCT_ATOMIC_OP_XOR,
-                                    worker.value, recvbuf.addr(), recvbuf.rkey());
-    }
-
     template <typename T>
     void test_add(send_func_t send, T (*op)(T, T)) {
         /*
@@ -86,13 +74,15 @@ UCS_TEST_P(uct_amo_add_xor_test, add64) {
 }
 
 UCS_TEST_P(uct_amo_add_xor_test, xor32) {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), op32);
-    test_add<uint32_t>(static_cast<send_func_t>(&uct_amo_add_xor_test::xor32), xor_op<uint32_t>);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP32);
+    test_add<uint32_t>(static_cast<send_func_t>(&uct_amo_test::op<uint32_t, UCT_ATOMIC_OP_XOR>),
+                       xor_op<uint32_t>);
 }
 
 UCS_TEST_P(uct_amo_add_xor_test, xor64) {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), op64);
-    test_add<uint64_t>(static_cast<send_func_t>(&uct_amo_add_xor_test::xor64), xor_op<uint64_t>);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP64);
+    test_add<uint64_t>(static_cast<send_func_t>(&uct_amo_test::op<uint64_t, UCT_ATOMIC_OP_XOR>),
+                       xor_op<uint64_t>);
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_amo_add_xor_test)

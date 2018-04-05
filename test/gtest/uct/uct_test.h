@@ -55,10 +55,10 @@ public:
     virtual ~uct_test();
 
     enum atomic_mode {
-        op32,
-        op64,
-        fop32,
-        fop64
+        OP32,
+        OP64,
+        FOP32,
+        FOP64
     };
 
 protected:

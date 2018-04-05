@@ -79,6 +79,47 @@ public:
         std::vector<completion> m_completions;
     };
 
+    ucs_status_t atomic_post(uct_ep_h ep, uct_atomic_op_t opcode,
+                             uint32_t value, uint64_t remote_addr,
+                             uct_rkey_t rkey) {
+        return uct_ep_atomic32_post(ep, opcode, value, remote_addr, rkey);
+    }
+
+    ucs_status_t atomic_post(uct_ep_h ep, uct_atomic_op_t opcode,
+                             uint64_t value, uint64_t remote_addr,
+                             uct_rkey_t rkey) {
+        return uct_ep_atomic64_post(ep, opcode, value, remote_addr, rkey);
+    }
+
+    ucs_status_t atomic_fetch_nb(uct_ep_h ep, uct_atomic_op_t opcode,
+                                 uint32_t value, uint32_t *result,
+                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                 uct_completion_t *comp) {
+        return uct_ep_atomic32_fetch_nb(ep, opcode, value, result, remote_addr, rkey, comp);
+    }
+
+    ucs_status_t atomic_fetch_nb(uct_ep_h ep, uct_atomic_op_t opcode,
+                                 uint64_t value, uint64_t *result,
+                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                 uct_completion_t *comp) {
+        return uct_ep_atomic64_fetch_nb(ep, opcode, value, result, remote_addr, rkey, comp);
+    }
+
+    template <typename T, uct_atomic_op_t opcode>
+    ucs_status_t op(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
+                    uint64_t *result, completion *comp) {
+        return atomic_post(ep, opcode, (T)worker.value, recvbuf.addr(), recvbuf.rkey());
+    }
+
+    template <typename T, uct_atomic_op_t opcode>
+    ucs_status_t fop(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
+                     uint64_t *result, completion *comp) {
+        comp->self     = this;
+        comp->uct.func = atomic_reply_cb;
+        return atomic_fetch_nb(ep, opcode, (T)worker.value,
+                               (T*)result, recvbuf.addr(), recvbuf.rkey(),
+                               &comp->uct);
+    }
 
 protected:
 

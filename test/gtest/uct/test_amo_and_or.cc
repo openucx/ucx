@@ -10,32 +10,8 @@
 class uct_amo_and_or_test : public uct_amo_test {
 public:
 
-    ucs_status_t and32(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                       uint64_t *result, completion *comp) {
-        return uct_ep_atomic32_post(ep, UCT_ATOMIC_OP_AND,
-                                    worker.value, recvbuf.addr(), recvbuf.rkey());
-    }
-
-    ucs_status_t and64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                       uint64_t *result, completion *comp) {
-        return uct_ep_atomic64_post(ep, UCT_ATOMIC_OP_AND,
-                                    worker.value, recvbuf.addr(), recvbuf.rkey());
-    }
-
-    ucs_status_t or32(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                      uint64_t *result, completion *comp) {
-        return uct_ep_atomic32_post(ep, UCT_ATOMIC_OP_OR,
-                                    worker.value, recvbuf.addr(), recvbuf.rkey());
-    }
-
-    ucs_status_t or64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                      uint64_t *result, completion *comp) {
-        return uct_ep_atomic64_post(ep, UCT_ATOMIC_OP_OR,
-                                    worker.value, recvbuf.addr(), recvbuf.rkey());
-    }
-
     template <typename T>
-    void test_and_or(send_func_t send, T (*op)(T, T), T (*val)(unsigned)) {
+    void test_op(send_func_t send, T (*op)(T, T), T (*val)(unsigned)) {
         /*
          * Method: Add may random values from multiple workers running at the same
          * time. We expect the final result to be the and/or of all these values.
@@ -91,27 +67,27 @@ T or_val(unsigned i)
 }
 
 UCS_TEST_P(uct_amo_and_or_test, and32) {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), op32);
-    test_and_or<uint32_t>(static_cast<send_func_t>(&uct_amo_and_or_test::and32),
-                          and_op<uint32_t>, and_val<uint32_t>);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), OP32);
+    test_op<uint32_t>(static_cast<send_func_t>(&uct_amo_test::op<uint32_t, UCT_ATOMIC_OP_AND>),
+                      and_op<uint32_t>, and_val<uint32_t>);
 }
 
 UCS_TEST_P(uct_amo_and_or_test, add64) {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), op64);
-    test_and_or<uint64_t>(static_cast<send_func_t>(&uct_amo_and_or_test::and64),
-                          and_op<uint64_t>, and_val<uint64_t>);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), OP64);
+    test_op<uint64_t>(static_cast<send_func_t>(&uct_amo_test::op<uint64_t, UCT_ATOMIC_OP_AND>),
+                      and_op<uint64_t>, and_val<uint64_t>);
 }
 
 UCS_TEST_P(uct_amo_and_or_test, or32) {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), op32);
-    test_and_or<uint32_t>(static_cast<send_func_t>(&uct_amo_and_or_test::or32),
-                          or_op<uint32_t>, or_val<uint32_t>);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), OP32);
+    test_op<uint32_t>(static_cast<send_func_t>(&uct_amo_test::op<uint32_t, UCT_ATOMIC_OP_OR>),
+                      or_op<uint32_t>, or_val<uint32_t>);
 }
 
 UCS_TEST_P(uct_amo_and_or_test, or64) {
-    check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), op64);
-    test_and_or<uint64_t>(static_cast<send_func_t>(&uct_amo_and_or_test::or64),
-                          or_op<uint64_t>, or_val<uint64_t>);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), OP64);
+    test_op<uint64_t>(static_cast<send_func_t>(&uct_amo_test::op<uint64_t, UCT_ATOMIC_OP_OR>),
+                      or_op<uint64_t>, or_val<uint64_t>);
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_amo_and_or_test)
