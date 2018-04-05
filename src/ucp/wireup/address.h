@@ -43,6 +43,7 @@ struct ucp_address_iface_attr {
     double                     bandwidth;     /* Interface performance - bandwidth */
     int                        priority;      /* Priority of device */
     double                     lat_ovh;       /* latency overhead */
+    ucp_atomic_requested_t     atomic;
 };
 
 

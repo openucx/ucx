@@ -859,8 +859,9 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     uct_md_attr_t *md_attr;
     uint64_t supp_tls;
     uint8_t priority, best_priority;
+    ucp_atomic_requested_t atomic;
 
-    iface_cap_flags = ucp_context_uct_atomic_iface_flags(context) |
+    iface_cap_flags = ucp_context_uct_atomic_iface_flags(context, &atomic) |
                       UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
     dummy_iface_attr.bandwidth  = 1e12;
@@ -882,7 +883,11 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
         iface_attr = &worker->ifaces[rsc_index].attr;
 
         if (!(md_attr->cap.flags & UCT_MD_FLAG_REG) ||
-            !ucs_test_all_flags(iface_attr->cap.flags, iface_cap_flags))
+            !ucs_test_all_flags(iface_attr->cap.flags, iface_cap_flags)                        ||
+            !ucs_test_all_flags(iface_attr->cap.atomic32.op_flags, atomic.atomic32.op_flags)   ||
+            !ucs_test_all_flags(iface_attr->cap.atomic32.fop_flags, atomic.atomic32.fop_flags) ||
+            !ucs_test_all_flags(iface_attr->cap.atomic64.op_flags, atomic.atomic64.op_flags)   ||
+            !ucs_test_all_flags(iface_attr->cap.atomic64.fop_flags, atomic.atomic64.fop_flags))
         {
             continue;
         }
