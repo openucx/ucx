@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2018.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -29,21 +29,23 @@ BEGIN_C_DECLS
  * chunk
  * start -+
  *        |
- *        \/
  *        |
+ *        | <--    128 kB    --> . <--    128 kB    --> .
+ *        |                      .                      .
+ *        \/                     .                      .
  *        +--------+--   ...   --+--------+--   ...   --+--------+
  *        | stride |             | stride |             | stride |
- * obj0:  | elem 0 | <- 128kB -> | elem 1 | <- 128kB -> | elem 2 |
+ * obj0:  | elem 0 |             | elem 1 |             | elem 2 |
  *        | (base) |             |        |             |        |
  *        +--------+--   ...   --+--------+--   ...   --+--------+
  *                 +--------+--  ...    --+--------+--  ...    --+--------+
  *                 | stride |             | stride |             | stride |
- * obj1:           | elem 0 | <- 128kB -> | elem 1 | <- 128kB -> | elem 2 |
+ * obj1:           | elem 0 |             | elem 1 |             | elem 2 |
  *                 | (base) |             |        |             |        |
  *                 +--------+--  ...     -+--------+--  ...    --+--------+
  *                          +--------+--  ...    --+--------+--   ...   --+--------+
  *                          | stride |             | stride |             | stride |
- * obj2:                    | elem 0 | <- 128kB -> | elem 1 | <- 128kB -> | elem 2 |
+ * obj2:                    | elem 0 |             | elem 1 |             | elem 2 |
  *                          | (base) |             |        |             |        |
  *                          +--------+--  ...     -+--------+--   ...   --+--------+
  *
@@ -55,7 +57,7 @@ BEGIN_C_DECLS
  *
  * @return Pointer to the desired element
  */
-#define ucs_strided_alloc_step(_elem, _stride_idx, _wanted_idx) \
+#define ucs_strided_elem_get(_elem, _stride_idx, _wanted_idx) \
     UCS_PTR_BYTE_OFFSET(_elem, UCS_STRIDED_ALLOC_STRIDE * \
                         ((ptrdiff_t)(_wanted_idx) - (ptrdiff_t)(_stride_idx)))
 
@@ -70,10 +72,10 @@ typedef struct ucs_strided_alloc_elem ucs_strided_alloc_elem_t;
  * This improves the cache locality when the first memory area is used mostly.
  */
 typedef struct ucs_strided_alloc {
-    ucs_strided_alloc_elem_t  *freelist;  /* LIFO of free elements */
-    ucs_queue_head_t          chunks;      /* Queue of allocated chunks */
-    size_t                    elem_size; /* Size of a single memory area */
-    unsigned                  stride_count;
+    ucs_strided_alloc_elem_t  *freelist;    /* LIFO of free elements */
+    ucs_queue_head_t          chunks;       /* Queue of allocated chunks */
+    size_t                    elem_size;    /* Size of a single memory area */
+    unsigned                  stride_count; /* Number of strides */
 } ucs_strided_alloc_t;
 
 

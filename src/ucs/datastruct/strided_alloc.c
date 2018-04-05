@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2018.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -9,7 +9,6 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/checker.h>
-#include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 
 
@@ -22,11 +21,11 @@
                                 + UCS_STRIDED_ALLOC_STRIDE)
 
 typedef struct ucs_splitalloc_chunk {
-    ucs_queue_elem_t            queue;
+    ucs_queue_elem_t         queue;
 } ucs_strided_alloc_chunk_t;
 
 struct ucs_strided_alloc_elem {
-    ucs_strided_alloc_elem_t       *next;
+    ucs_strided_alloc_elem_t *next;
 };
 
 static ucs_strided_alloc_chunk_t *
@@ -37,8 +36,8 @@ ucs_strided_alloc_chunk_alloc(ucs_strided_alloc_t *sa, size_t chunk_size
     size_t size;
     void *ptr;
 
-    size = chunk_size;
-    ptr  = NULL;
+    size   = chunk_size;
+    ptr    = NULL;
     status = ucs_mmap_alloc(&size, &ptr, 0 UCS_MEMTRACK_VAL);
     if (status != UCS_OK) {
         ucs_error("failed to allocate a chunk of %zu bytes", chunk_size);
@@ -147,7 +146,7 @@ void* ucs_strided_alloc_get(ucs_strided_alloc_t *sa, const char *alloc_name)
     VALGRIND_MAKE_MEM_NOACCESS(elem, sizeof(*elem));
 
     for (i = 0; i < sa->stride_count; ++i) {
-        VALGRIND_MEMPOOL_ALLOC(sa, ucs_strided_alloc_step(elem, 0, i),
+        VALGRIND_MEMPOOL_ALLOC(sa, ucs_strided_elem_get(elem, 0, i),
                                sa->elem_size);
     }
 
@@ -162,6 +161,6 @@ void ucs_strided_alloc_put(ucs_strided_alloc_t *sa, void *base)
     ucs_strided_alloc_push_to_freelist(sa, elem);
 
     for (i = 0; i < sa->stride_count; ++i) {
-        VALGRIND_MEMPOOL_FREE(sa, ucs_strided_alloc_step(elem, 0, i));
+        VALGRIND_MEMPOOL_FREE(sa, ucs_strided_elem_get(elem, 0, i));
     }
 }

@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2018.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -15,7 +15,7 @@ extern "C" {
 
 class test_strided_alloc : public ucs::test {
 protected:
-    static const size_t area_size = 64;
+    static const size_t area_size   = 64;
     static const unsigned num_areas = 3;
 };
 
@@ -32,7 +32,7 @@ UCS_TEST_F(test_strided_alloc, basic) {
         void *base = ucs_strided_alloc_get(&sa, "test");
 
         for (unsigned j = 0; j < num_areas; ++j) {
-            void *area = ucs_strided_alloc_step(base, 0, j);
+            void *area = ucs_strided_elem_get(base, 0, j);
             memset(area, i*j, area_size);
         }
 
@@ -46,7 +46,7 @@ UCS_TEST_F(test_strided_alloc, basic) {
         void *base = objs[i];
 
         for (unsigned j = 0; j < num_areas; ++j) {
-            void *area = ucs_strided_alloc_step(base, 0, j);
+            void *area = ucs_strided_elem_get(base, 0, j);
             memset(buf, i*j, area_size);
             EXPECT_EQ(0, memcmp(area, buf, area_size));
         }
