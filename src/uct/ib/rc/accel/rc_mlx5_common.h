@@ -39,17 +39,9 @@
 
 #define UCT_RC_MLX5_ATOMIC_FOPS (UCT_RC_MLX5_ATOMIC_OPS | UCS_BIT(UCT_ATOMIC_OP_SWAP))
 
-#define UCT_RC_MLX5_CHECK_ATOMIC_OPS(_op, _size)                                \
-    if (ucs_unlikely(!(UCS_BIT(_op) & UCT_RC_MLX5_ATOMIC_OPS))) {               \
-        ucs_assertv(0, "incorrect opcode for atomic_post: %d", _op);            \
-        return UCS_ERR_UNSUPPORTED;                                             \
-    } else {                                                                    \
-        ucs_assert((_size == sizeof(uint64_t)) || (_size == sizeof(uint32_t))); \
-    }
-
-#define UCT_RC_MLX5_CHECK_ATOMIC_FOPS(_op, _size)                               \
-    if (ucs_unlikely(!(UCS_BIT(_op) & UCT_RC_MLX5_ATOMIC_FOPS))) {              \
-        ucs_assertv(0, "incorrect opcode for atomic_fetch: %d", _op);           \
+#define UCT_RC_MLX5_CHECK_ATOMIC_OPS(_op, _size, _flags)                        \
+    if (ucs_unlikely(!(UCS_BIT(_op) & _flags))) {                               \
+        ucs_assertv(0, "incorrect opcode for atomic: %d", _op);                 \
         return UCS_ERR_UNSUPPORTED;                                             \
     } else {                                                                    \
         ucs_assert((_size == sizeof(uint64_t)) || (_size == sizeof(uint32_t))); \
