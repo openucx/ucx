@@ -49,7 +49,7 @@
 
 #define UCT_RC_MLX5_CHECK_ATOMIC_FOPS(_op, _size)                               \
     if (ucs_unlikely(!(UCS_BIT(_op) & UCT_RC_MLX5_ATOMIC_FOPS))) {              \
-        ucs_assertv(0, "incorrect opcode for atomic_post: %d", _op);            \
+        ucs_assertv(0, "incorrect opcode for atomic_fetch: %d", _op);           \
         return UCS_ERR_UNSUPPORTED;                                             \
     } else {                                                                    \
         ucs_assert((_size == sizeof(uint64_t)) || (_size == sizeof(uint32_t))); \
