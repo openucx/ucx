@@ -40,7 +40,7 @@
 #define UCT_RC_MLX5_ATOMIC_FOPS (UCT_RC_MLX5_ATOMIC_OPS | UCS_BIT(UCT_ATOMIC_OP_SWAP))
 
 #define UCT_RC_MLX5_CHECK_ATOMIC_OPS(_op, _size, _flags)                        \
-    if (ucs_unlikely(!(UCS_BIT(_op) & _flags))) {                               \
+    if (ucs_unlikely(!(UCS_BIT(_op) & (_flags)))) {                             \
         ucs_assertv(0, "incorrect opcode for atomic: %d", _op);                 \
         return UCS_ERR_UNSUPPORTED;                                             \
     } else {                                                                    \
