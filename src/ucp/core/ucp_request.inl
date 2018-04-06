@@ -504,6 +504,9 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
             return UCS_ERR_NO_MEMORY;
         }
 
+        /* No need to initialize rdesc->priv_length here, because it is only
+         * needed for releasing UCT descriptor. */
+
         rdesc->flags = rdesc_flags;
         status       = UCS_OK;
         memcpy(UCS_PTR_BYTE_OFFSET(rdesc + 1, data_offset), data, length);
