@@ -39,16 +39,20 @@
 
 #define UCT_RC_MLX5_ATOMIC_FOPS (UCT_RC_MLX5_ATOMIC_OPS | UCS_BIT(UCT_ATOMIC_OP_SWAP))
 
-#define UCT_RC_MLX5_CHECK_ATOMIC_OPS(_op)                               \
-    if (ucs_unlikely(!(UCS_BIT(_op) & UCT_RC_MLX5_ATOMIC_OPS))) {       \
-        ucs_assertv(0, "incorrect opcode for atomic_post: %d", opcode); \
-        return UCS_ERR_UNSUPPORTED;                                     \
+#define UCT_RC_MLX5_CHECK_ATOMIC_OPS(_op, _size)                                \
+    if (ucs_unlikely(!(UCS_BIT(_op) & UCT_RC_MLX5_ATOMIC_OPS))) {               \
+        ucs_assertv(0, "incorrect opcode for atomic_post: %d", _op);            \
+        return UCS_ERR_UNSUPPORTED;                                             \
+    } else {                                                                    \
+        ucs_assert((_size == sizeof(uint64_t)) || (_size == sizeof(uint32_t))); \
     }
 
-#define UCT_RC_MLX5_CHECK_ATOMIC_FOPS(_op)                              \
-    if (ucs_unlikely(!(UCS_BIT(_op) & UCT_RC_MLX5_ATOMIC_FOPS))) {      \
-        ucs_assertv(0, "incorrect opcode for atomic_post: %d", opcode); \
-        return UCS_ERR_UNSUPPORTED;                                     \
+#define UCT_RC_MLX5_CHECK_ATOMIC_FOPS(_op, _size)                               \
+    if (ucs_unlikely(!(UCS_BIT(_op) & UCT_RC_MLX5_ATOMIC_FOPS))) {              \
+        ucs_assertv(0, "incorrect opcode for atomic_post: %d", _op);            \
+        return UCS_ERR_UNSUPPORTED;                                             \
+    } else {                                                                    \
+        ucs_assert((_size == sizeof(uint64_t)) || (_size == sizeof(uint32_t))); \
     }
 
 #define UCT_RC_MLX5_TO_BE(_val, _size) \
@@ -760,9 +764,9 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
             masked_fadd64->add            = swap_add;
             masked_fadd64->filed_boundary = compare;
 
-            dptr                         = uct_ib_mlx5_txwq_wrap_exact(txwq, masked_fadd64 + 1);
-            wqe_size                     = ctrl_av_size + sizeof(*raddr) +
-                                           sizeof(*masked_fadd64) + sizeof(*dptr);
+            dptr                          = uct_ib_mlx5_txwq_wrap_exact(txwq, masked_fadd64 + 1);
+            wqe_size                      = ctrl_av_size + sizeof(*raddr) +
+                                            sizeof(*masked_fadd64) + sizeof(*dptr);
             break;
         default:
             ucs_fatal("invalid atomic type length %d", length);
@@ -1535,7 +1539,6 @@ uct_rc_mlx5_iface_common_atomic_data(unsigned opcode, unsigned size, uint64_t va
         ucs_assertv(0, "incorrect atomic opcode: %d", opcode);
         return UCS_ERR_UNSUPPORTED;
     }
-
     return UCS_OK;
 }
 

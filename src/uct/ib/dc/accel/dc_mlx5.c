@@ -260,8 +260,7 @@ uct_dc_mlx5_ep_atomic_op_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
     int      ext; /* not used here */
     ucs_status_t status;
 
-    UCT_RC_MLX5_CHECK_ATOMIC_OPS(opcode);
-    ucs_assert((size == sizeof(uint64_t)) || (size == sizeof(uint32_t)));
+    UCT_RC_MLX5_CHECK_ATOMIC_OPS(opcode, size);
 
     status = uct_rc_mlx5_iface_common_atomic_data(opcode, size, value, &op, &compare_mask,
                                                   &compare, &swap_mask, &swap, &ext);
@@ -310,8 +309,7 @@ uct_dc_mlx5_ep_atomic_fop_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
     int      ext;
     ucs_status_t status;
 
-    UCT_RC_MLX5_CHECK_ATOMIC_FOPS(opcode);
-    ucs_assert((size == sizeof(uint64_t)) || (size == sizeof(uint32_t)));
+    UCT_RC_MLX5_CHECK_ATOMIC_FOPS(opcode, size);
 
     status = uct_rc_mlx5_iface_common_atomic_data(opcode, size, value, &op, &compare_mask,
                                                   &compare, &swap_mask, &swap, &ext);
