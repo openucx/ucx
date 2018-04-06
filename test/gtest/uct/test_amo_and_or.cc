@@ -19,7 +19,7 @@ public:
          * for every worker to eliminate result to 0 or MAX_INT
          */
 
-        check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), sizeof(T) == sizeof(uint64_t) ? OP64 : OP32);
+        check_atomics(UCS_BIT(opcode), sizeof(T) == sizeof(uint64_t) ? OP64 : OP32);
 
         mapped_buffer recvbuf(sizeof(T), 0, receiver());
 

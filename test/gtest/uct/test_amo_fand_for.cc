@@ -18,7 +18,7 @@ public:
          * and the final value of atomic variable is the and/or of all.
          */
 
-        check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), sizeof(T) == sizeof(uint64_t) ? FOP64 : FOP32);
+        check_atomics(UCS_BIT(opcode), sizeof(T) == sizeof(uint64_t) ? FOP64 : FOP32);
 
         mapped_buffer recvbuf(sizeof(T), 0, receiver());
 
