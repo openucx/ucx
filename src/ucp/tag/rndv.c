@@ -566,7 +566,7 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
     } else {
         status = ucp_recv_desc_init(worker, data, length, 0, tl_flags,
                                     sizeof(*rndv_rts_hdr),
-                                    UCP_RECV_DESC_FLAG_RNDV, &rdesc);
+                                    UCP_RECV_DESC_FLAG_RNDV, 0, &rdesc);
         if (!UCS_STATUS_IS_ERR(status)) {
             ucp_tag_unexp_recv(&worker->tm, rdesc, rndv_rts_hdr->super.tag);
         }
