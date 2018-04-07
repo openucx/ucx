@@ -79,6 +79,83 @@ public:
         std::vector<completion> m_completions;
     };
 
+    ucs_status_t atomic_post(uct_ep_h ep, uct_atomic_op_t opcode,
+                             uint32_t value, uint64_t remote_addr,
+                             uct_rkey_t rkey) {
+        return uct_ep_atomic32_post(ep, opcode, value, remote_addr, rkey);
+    }
+
+    ucs_status_t atomic_post(uct_ep_h ep, uct_atomic_op_t opcode,
+                             uint64_t value, uint64_t remote_addr,
+                             uct_rkey_t rkey) {
+        return uct_ep_atomic64_post(ep, opcode, value, remote_addr, rkey);
+    }
+
+    ucs_status_t atomic_fetch_nb(uct_ep_h ep, uct_atomic_op_t opcode,
+                                 uint32_t value, uint32_t *result,
+                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                 uct_completion_t *comp) {
+        return uct_ep_atomic32_fetch_nb(ep, opcode, value, result, remote_addr, rkey, comp);
+    }
+
+    ucs_status_t atomic_fetch_nb(uct_ep_h ep, uct_atomic_op_t opcode,
+                                 uint64_t value, uint64_t *result,
+                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                 uct_completion_t *comp) {
+        return uct_ep_atomic64_fetch_nb(ep, opcode, value, result, remote_addr, rkey, comp);
+    }
+
+    template <typename T, uct_atomic_op_t opcode>
+    ucs_status_t atomic_op(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
+                           uint64_t *result, completion *comp) {
+        return atomic_post(ep, opcode, (T)worker.value, recvbuf.addr(), recvbuf.rkey());
+    }
+
+    template <typename T, uct_atomic_op_t opcode>
+    ucs_status_t atomic_fop(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
+                            uint64_t *result, completion *comp) {
+        comp->self     = this;
+        comp->uct.func = atomic_reply_cb;
+        return atomic_fetch_nb(ep, opcode, (T)worker.value,
+                               (T*)result, recvbuf.addr(), recvbuf.rkey(),
+                               &comp->uct);
+    }
+
+    template <typename T>
+    static T and_op(T v1, T v2)
+    {
+        return v1 & v2;
+    }
+
+    template <typename T>
+    static T or_op(T v1, T v2)
+    {
+        return v1 | v2;
+    }
+
+    template <typename T>
+    static T add_op(T v1, T v2)
+    {
+        return v1 + v2;
+    }
+
+    template <typename T>
+    static T xor_op(T v1, T v2)
+    {
+        return v1 ^ v2;
+    }
+
+    template <typename T>
+    static T and_val(unsigned i)
+    {
+        return ~(UCS_BIT(i * 2) | UCS_BIT(i + 16));
+    }
+
+    template <typename T>
+    static T or_val(unsigned i)
+    {
+        return UCS_BIT(i * 2) | UCS_BIT(i + 16);
+    }
 
 protected:
 
