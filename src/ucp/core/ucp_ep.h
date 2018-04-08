@@ -41,6 +41,8 @@ enum {
     UCP_EP_FLAG_FAILED              = UCS_BIT(3), /* EP is in failed state */
     UCP_EP_FLAG_USED                = UCS_BIT(4), /* EP is in use */
     UCP_EP_FLAG_STREAM_HAS_DATA     = UCS_BIT(5), /* EP has data in the ext.stream.match_q */
+    UCP_EP_FLAG_ON_HASH             = UCS_BIT(6), /* EP is on match queue */
+    UCP_EP_FLAG_DEST_EP             = UCS_BIT(7), /* dest_ep_ptr is valid */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT    = UCS_BIT(8), /* DEBUG: Connection request was sent */
@@ -239,6 +241,7 @@ typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
     ucp_ep_cfg_index_t            cfg_index;     /* Configuration index */
+    ucp_ep_conn_sn_t              conn_sn;       /* Sequence number for remote connection */
     ucp_lane_index_t              am_lane;       /* Cached value */
     ucp_ep_flags_t                flags;         /* Endpoint flags */
 
@@ -261,7 +264,13 @@ typedef struct {
     uint64_t                      dest_uuid;     /* Destination worker UUID */
     void                          *user_data;    /* User data associated with ep */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
+    ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
 
+    /* matching with remote endpoints */
+    struct {
+        ucs_list_link_t           list;          /* List entry into endpoint
+                                                    matching structure */
+    } ep_match;
 } ucp_ep_ext_gen_t;
 
 
@@ -312,6 +321,8 @@ void ucp_ep_config_key_set_params(ucp_ep_config_key_t *key,
                                   const ucp_ep_params_t *params);
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
+
+void ucp_ep_disconnected(ucp_ep_h ep, int force);
 
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
