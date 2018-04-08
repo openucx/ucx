@@ -132,16 +132,41 @@ static inline ucp_ep_h ucp_ep_from_ext_proto(ucp_ep_ext_proto_t *ep_ext)
     return (ucp_ep_h)ucs_strided_elem_get(ep_ext, 2, 0);
 }
 
-/*
- * Make sure the remote worker would be able to send replies to our endpoint.
- * Should be used before sending a message which requires a reply.
- */
-static inline void ucp_ep_connect_remote(ucp_ep_h ep)
+static inline uintptr_t ucp_ep_dest_ep_ptr(ucp_ep_h ep)
 {
-    if (ucs_unlikely(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED))) {
-        ucs_assert(ep->flags & UCP_EP_FLAG_DEST_UUID_PEER);
-        ucp_wireup_send_request(ep, ucp_ep_ext_gen(ep)->dest_uuid);
+#if ENABLE_ASSERT
+    if (!(ep->flags & UCP_EP_FLAG_DEST_EP)) {
+        return 0; /* Let remote side assert if it gets NULL pointer */
     }
+#endif
+    return ucp_ep_ext_gen(ep)->dest_ep_ptr;
+}
+
+/*
+ * Make sure we have a valid dest_ep_ptr value, so protocols which require a
+ * reply from remote side could be used.
+ */
+static inline ucs_status_t ucp_ep_resolve_dest_ep_ptr(ucp_ep_h ep)
+{
+    if (ep->flags & (UCP_EP_FLAG_DEST_EP|UCP_EP_FLAG_CONNECT_REQ_QUEUED)) {
+        return UCS_OK;
+    }
+
+    return ucp_wireup_connect_remote(ep);
+}
+
+static inline void ucp_ep_update_dest_ep_ptr(ucp_ep_h ep, uintptr_t ep_ptr)
+{
+    if (ep->flags & UCP_EP_FLAG_DEST_EP) {
+        ucs_assertv(ep_ptr == ucp_ep_ext_gen(ep)->dest_ep_ptr,
+                    "ep=%p ep_ptr=0x%lx ep->dest_ep_ptr=0x%lx",
+                    ep, ep_ptr, ucp_ep_ext_gen(ep)->dest_ep_ptr);
+    }
+
+    ucs_assert(ep_ptr != 0);
+    ucs_trace("ep %p: set dest_ep_ptr to 0x%lx", ep, ep_ptr);
+    ep->flags                   |= UCP_EP_FLAG_DEST_EP;
+    ucp_ep_ext_gen(ep)->dest_ep_ptr = ep_ptr;
 }
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)

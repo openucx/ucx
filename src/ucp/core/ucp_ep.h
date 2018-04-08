@@ -48,7 +48,7 @@ enum {
     UCP_EP_FLAG_CONNECT_REQ_SENT    = UCS_BIT(8), /* DEBUG: Connection request was sent */
     UCP_EP_FLAG_CONNECT_REP_SENT    = UCS_BIT(9), /* DEBUG: Connection reply was sent */
     UCP_EP_FLAG_CONNECT_ACK_SENT    = UCS_BIT(10),/* DEBUG: Connection ACK was sent */
-    UCP_EP_FLAG_DEST_UUID_PEER      = UCS_BIT(11) /* DEBUG: dest_uuid is of the remote worker */
+    UCP_EP_FLAG_CONNECT_REQ_IGNORED = UCS_BIT(11) /* DEBUG: Connection request was ignored */
 };
 
 
@@ -261,13 +261,14 @@ typedef struct ucp_ep {
  * Endpoint extension for generic non fast-path data
  */
 typedef struct {
-    uint64_t                      dest_uuid;     /* Destination worker UUID */
+    uintptr_t                     dest_ep_ptr;   /* Remote EP pointer */
     void                          *user_data;    /* User data associated with ep */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
 
     /* matching with remote endpoints */
     struct {
+        uint64_t                  dest_uuid;     /* Destination worker UUID */
         ucs_list_link_t           list;          /* List entry into endpoint
                                                     matching structure */
     } ep_match;
@@ -287,10 +288,6 @@ typedef struct {
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
 
-void ucp_ep_add_to_hash(ucp_ep_h ep);
-
-void ucp_ep_delete_from_hash(ucp_ep_h ep);
-
 void ucp_ep_config_lane_info_str(ucp_context_h context,
                                  const ucp_ep_config_key_t *key,
                                  const uint8_t *addr_indices,
@@ -298,14 +295,8 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
                                  ucp_rsc_index_t aux_rsc_index,
                                  char *buf, size_t max);
 
-ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
-                        const char *peer_name, const char *message,
-                        ucp_ep_h *ep_p);
-
-ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
-                                const ucp_ep_params_t *params,
-                                const char *peer_name, const char *message,
-                                ucp_ep_h *ep_p);
+ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
+                        const char *message, ucp_ep_h *ep_p);
 
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           const ucp_ep_params_t *params,
@@ -327,7 +318,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force);
 
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
-int ucp_ep_is_stub(ucp_ep_h ep);
+int ucp_ep_is_sockaddr_stub(ucp_ep_h ep);
 
 void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config);
 

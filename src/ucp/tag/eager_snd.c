@@ -36,7 +36,7 @@ static size_t ucp_tag_pack_eager_sync_only_dt(void *dest, void *arg)
     size_t length;
 
     hdr->super.super.tag = req->send.tag.tag;
-    hdr->req.sender_uuid = req->send.ep->worker->uuid;
+    hdr->req.ep_ptr      = ucp_request_get_dest_ep_ptr(req);
     hdr->req.reqptr      = (uintptr_t)req;
 
     ucs_assert(req->send.state.dt.offset == 0);
@@ -79,7 +79,7 @@ static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
                                     sizeof(*hdr);
     hdr->super.super.super.tag    = req->send.tag.tag;
     hdr->super.total_len          = req->send.length;
-    hdr->req.sender_uuid          = req->send.ep->worker->uuid;
+    hdr->req.ep_ptr               = ucp_request_get_dest_ep_ptr(req);
     hdr->super.msg_id             = req->send.tag.message_id;
     hdr->req.reqptr               = (uintptr_t)req;
 
@@ -286,7 +286,7 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_single(uct_pending_req_t *self)
     ucp_eager_sync_hdr_t hdr;
 
     hdr.super.super.tag = req->send.tag.tag;
-    hdr.req.sender_uuid = req->send.ep->worker->uuid;
+    hdr.req.ep_ptr      = ucp_request_get_dest_ep_ptr(req);
     hdr.req.reqptr      = (uintptr_t)req;
 
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_EAGER_SYNC_ONLY, &hdr, sizeof(hdr),
@@ -301,7 +301,7 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
 
     first_hdr.super.super.super.tag = req->send.tag.tag;
     first_hdr.super.total_len       = req->send.length;
-    first_hdr.req.sender_uuid       = req->send.ep->worker->uuid;
+    first_hdr.req.ep_ptr            = ucp_request_get_dest_ep_ptr(req);
     first_hdr.req.reqptr            = (uintptr_t)req;
     first_hdr.super.msg_id          = req->send.tag.message_id;
     middle_hdr.msg_id               = req->send.tag.message_id;
@@ -336,38 +336,41 @@ const ucp_proto_t ucp_tag_eager_sync_proto = {
     .mid_hdr_size            = sizeof(ucp_eager_hdr_t)
 };
 
-void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t flags)
+void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_flags)
 {
-    ucp_eager_sync_hdr_t *eagers_hdr;
     ucp_request_hdr_t *reqhdr;
     ucp_request_t *req;
 
-    ucs_assert(flags & UCP_RECV_DESC_FLAG_EAGER_SYNC);
+    ucs_assert(recv_flags & UCP_RECV_DESC_FLAG_EAGER_SYNC);
 
-    if (flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
-        eagers_hdr = hdr;
-        ucp_tag_offload_eager_sync_send_ack(worker,
-                                            eagers_hdr->req.sender_uuid,
-                                            eagers_hdr->super.super.tag);
-        return;
+    if (recv_flags & UCP_RECV_DESC_FLAG_EAGER_ONLY) {
+        reqhdr = &((ucp_eager_sync_hdr_t*)hdr)->req;       /* only */
+    } else {
+        reqhdr = &((ucp_eager_sync_first_hdr_t*)hdr)->req; /* first */
     }
 
-    if (flags & UCP_RECV_DESC_FLAG_EAGER_ONLY) {
-        reqhdr = &((ucp_eager_sync_hdr_t*)hdr)->req;
-    } else /* first */ {
-        reqhdr = &((ucp_eager_sync_first_hdr_t*)hdr)->req;
+    req = ucp_request_get(worker);
+    if (req == NULL) {
+        ucs_fatal("could not allocate request");
     }
 
-    ucs_assert(reqhdr->reqptr != 0);
-    ucs_trace_req("send_sync_ack sender_uuid %"PRIx64" remote_request 0x%lx",
-                  reqhdr->sender_uuid, reqhdr->reqptr);
+    req->flags              = 0;
+    req->send.ep            = ucp_worker_get_ep_by_ptr(worker, reqhdr->ep_ptr);
+    req->send.uct.func      = ucp_proto_progress_am_bcopy_single;
+    req->send.proto.comp_cb = ucp_request_put;
+    req->send.proto.status  = UCS_OK;
 
-    req = ucp_worker_allocate_reply(worker, reqhdr->sender_uuid);
-    req->send.uct.func             = ucp_proto_progress_am_bcopy_single;
-    req->send.proto.am_id          = UCP_AM_ID_EAGER_SYNC_ACK;
-    req->send.proto.remote_request = reqhdr->reqptr;
-    req->send.proto.status         = UCS_OK;
-    req->send.proto.comp_cb        = ucp_request_put;
+    ucs_trace_req("send_sync_ack req %p ep %p", req, req->send.ep);
+
+    if (recv_flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
+        ucs_assert(recv_flags & UCP_RECV_DESC_FLAG_EAGER_ONLY);
+        req->send.proto.am_id          = UCP_AM_ID_OFFLOAD_SYNC_ACK;
+        req->send.proto.sender_tag     = ((ucp_eager_sync_hdr_t*)hdr)->super.super.tag;
+    } else {
+        ucs_assert(reqhdr->reqptr != 0);
+        req->send.proto.am_id          = UCP_AM_ID_EAGER_SYNC_ACK;
+        req->send.proto.remote_request = reqhdr->reqptr;
+    }
 
     ucp_request_send(req);
 }

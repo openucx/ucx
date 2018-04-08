@@ -1116,8 +1116,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_snprintf_zero(worker->name, name_length, "%s:%d", ucs_get_host_name(),
                       getpid());
 
-    kh_init_inplace(ucp_worker_ep_hash, &worker->ep_hash);
-
     worker->ifaces = ucs_calloc(context->num_tls, sizeof(ucp_worker_iface_t),
                                 "ucp iface");
     if (worker->ifaces == NULL) {
@@ -1250,7 +1248,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
     ucs_free(worker->ifaces);
-    kh_destroy_inplace(ucp_worker_ep_hash, &worker->ep_hash);
     ucp_ep_match_cleanup(&worker->ep_match_ctx);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     UCP_THREAD_LOCK_FINALIZE(&worker->mt_lock);
@@ -1477,47 +1474,6 @@ void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address)
     ucs_free(address);
 }
 
-ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid)
-{
-    ucs_status_t status;
-    ucp_ep_h ep;
-
-    UCS_ASYNC_BLOCK(&worker->async);
-
-    ep = ucp_worker_ep_find(worker, dest_uuid);
-    if (ep == NULL) {
-        status = ucp_ep_create_stub(worker, dest_uuid, NULL, "??",
-                                    "for-sending-reply", &ep);
-        if (status != UCS_OK) {
-            goto err;
-        }
-        ep->flags |= UCP_EP_FLAG_DEST_UUID_PEER;
-    } else {
-        ucs_debug("found reply ep %p to uuid %"PRIx64, ep, dest_uuid);
-    }
-
-    UCS_ASYNC_UNBLOCK(&worker->async);
-    return ep;
-
-err:
-    UCS_ASYNC_UNBLOCK(&worker->async);
-    ucs_fatal("failed to create reply endpoint: %s", ucs_status_string(status));
-}
-
-ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid)
-{
-    ucp_request_t *req;
-
-    req = ucp_request_get(worker);
-    if (req == NULL) {
-        ucs_fatal("could not allocate request");
-    }
-
-    req->flags   = 0;
-    req->send.ep = ucp_worker_get_reply_ep(worker, dest_uuid);
-    req->send.mdesc = NULL;
-    return req;
-}
 
 void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
 {

@@ -251,6 +251,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
 {
     ucp_request_t *req;
     ucs_status_ptr_t ret;
+    ucs_status_t status;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
@@ -262,14 +263,17 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
         goto out;
     }
 
+    status = ucp_ep_resolve_dest_ep_ptr(ep);
+    if (status != UCS_OK) {
+        ret = UCS_STATUS_PTR(status);
+        goto out;
+    }
+
     req = ucp_request_get(ep->worker);
     if (req == NULL) {
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
         goto out;
     }
-
-    /* Remote side needs to send reply, so have it connect to us */
-    ucp_ep_connect_remote(ep);
 
     ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag,
                           UCP_REQUEST_FLAG_SYNC);

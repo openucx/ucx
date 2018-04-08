@@ -224,15 +224,15 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_offload_sync_ack_handler,
 
     ucs_queue_for_each_safe(sreq, iter, queue, send.tag_offload.queue) {
         if ((sreq->send.tag_offload.ssend_tag == rep_hdr->sender_tag) &&
-            (worker->uuid == rep_hdr->sender_uuid)) {
+            ((uintptr_t)sreq->send.ep == rep_hdr->ep_ptr)) {
             ucp_tag_eager_sync_completion(sreq, UCP_REQUEST_FLAG_REMOTE_COMPLETED,
                                           UCS_OK);
             ucs_queue_del_iter(queue, iter);
             return UCS_OK;
         }
     }
-    ucs_error("Unexpected sync ack received: tag %"PRIx64" uuid %"PRIx64"",
-              rep_hdr->sender_tag, rep_hdr->sender_uuid);
+    ucs_error("unexpected sync ack received: tag %"PRIx64" ep_ptr 0x%lx",
+              rep_hdr->sender_tag, rep_hdr->ep_ptr);
     return UCS_OK;
 }
 
@@ -283,7 +283,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
 
     hdr->super.super.tag = stag;
     hdr->req.reqptr      = 0ul;
-    hdr->req.sender_uuid = imm;
+    hdr->req.ep_ptr      = imm;
     flags               |= UCP_RECV_DESC_FLAG_EAGER_SYNC;
 
     return ucp_eager_tagged_handler(wiface->worker, hdr, length + hdr_len,
@@ -321,18 +321,18 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         header_len = sizeof(*eager_mid_hdr);
         break;
     case UCP_AM_ID_EAGER_SYNC_ONLY:
-        snprintf(buffer, max, "EGRS tag %"PRIx64" uuid %"PRIx64" request 0x%lx",
-                 eagers_hdr->super.super.tag, eagers_hdr->req.sender_uuid,
+        snprintf(buffer, max, "EGRS tag %"PRIx64" ep_ptr 0x%lx request 0x%lx",
+                 eagers_hdr->super.super.tag, eagers_hdr->req.ep_ptr,
                  eagers_hdr->req.reqptr);
         header_len = sizeof(*eagers_hdr);
         break;
     case UCP_AM_ID_EAGER_SYNC_FIRST:
         snprintf(buffer, max, "EGRS_F tag %"PRIx64" msgid %"PRIx64" len %zu "
-                 "uuid %"PRIx64" request 0x%lx",
+                 "ep_ptr 0x%lx request 0x%lx",
                  eagers_first_hdr->super.super.super.tag,
                  eagers_first_hdr->super.msg_id,
                  eagers_first_hdr->super.total_len,
-                 eagers_first_hdr->req.sender_uuid,
+                 eagers_first_hdr->req.ep_ptr,
                  eagers_first_hdr->req.reqptr);
         header_len = sizeof(*eagers_first_hdr);
         break;
@@ -342,8 +342,8 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         header_len = sizeof(*rep_hdr);
         break;
     case UCP_AM_ID_OFFLOAD_SYNC_ACK:
-        snprintf(buffer, max, "EGRS_A_O tag %"PRIx64" uuid %"PRIx64"",
-                 off_rep_hdr->sender_tag, off_rep_hdr->sender_uuid);
+        snprintf(buffer, max, "EGRS_A_O tag %"PRIx64" ep_ptr 0x%lx",
+                 off_rep_hdr->sender_tag, off_rep_hdr->ep_ptr);
         header_len = sizeof(*rep_hdr);
         break;
     default:

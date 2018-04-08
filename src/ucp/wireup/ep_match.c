@@ -102,8 +102,8 @@ static void ucp_ep_match_insert_common(ucp_ep_match_ctx_t *match_ctx,
 {
     ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_HASH));
     ucp_ep_match_list_add_tail(list, &ucp_ep_ext_gen(ep)->ep_match.list);
-    ep->flags                     |= UCP_EP_FLAG_ON_HASH;
-    ucp_ep_ext_gen(ep)->dest_uuid  = dest_uuid;
+    ep->flags                              |= UCP_EP_FLAG_ON_HASH;
+    ucp_ep_ext_gen(ep)->ep_match.dest_uuid  = dest_uuid;
     ucs_trace("match_ctx %p: ep %p added as %s uuid 0x%"PRIx64" conn_sn %d",
               match_ctx, ep, title, dest_uuid, ep->conn_sn);
 }
@@ -190,7 +190,7 @@ void ucp_ep_match_remove_ep(ucp_ep_match_ctx_t *match_ctx, ucp_ep_h ep)
         return;
     }
 
-    iter = kh_get(ucp_ep_match, &match_ctx->hash, ep_ext->dest_uuid);
+    iter = kh_get(ucp_ep_match, &match_ctx->hash, ep_ext->ep_match.dest_uuid);
     ucs_assertv(iter != kh_end(&match_ctx->hash), "ep %p not found in hash", ep);
     entry = &kh_value(&match_ctx->hash, iter);
 

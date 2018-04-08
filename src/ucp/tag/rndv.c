@@ -28,7 +28,7 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
 
     rndv_rts_hdr->super.tag        = sreq->send.tag.tag;
     rndv_rts_hdr->sreq.reqptr      = (uintptr_t)sreq;
-    rndv_rts_hdr->sreq.sender_uuid = worker->uuid;
+    rndv_rts_hdr->sreq.ep_ptr      = ucp_request_get_dest_ep_ptr(sreq);
     rndv_rts_hdr->size             = sreq->send.length;
 
     /* Pack remote keys (which can be empty list) */
@@ -113,6 +113,11 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
                   sreq->send.length);
     UCS_PROFILE_REQUEST_EVENT(sreq, "start_rndv", sreq->send.length);
 
+    status = ucp_ep_resolve_dest_ep_ptr(ep);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
         status = ucp_tag_offload_start_rndv(sreq);
         if (status != UCS_OK) {
@@ -133,7 +138,6 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
         sreq->send.uct.func = ucp_proto_progress_rndv_rts;
     }
 
-    ucp_ep_connect_remote(ep);
     return UCS_OK;
 }
 
@@ -308,11 +312,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     size_t min_zcopy;
     size_t max_zcopy;
     size_t tail;
-
-    if (ucp_ep_is_stub(ep)) {
-        rndv_req->send.lane = 0;
-        return UCS_ERR_NO_RESOURCE;
-    }
 
     ucp_rndv_get_lanes_count(rndv_req);
 
@@ -496,7 +495,17 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
 
     /* the internal send request allocated on receiver side (to perform a "get"
      * operation, send "ATS" and "RTR") */
-    rndv_req = ucp_worker_allocate_reply(worker, rndv_rts_hdr->sreq.sender_uuid);
+    rndv_req = ucp_request_get(worker);
+    if (rndv_req == NULL) {
+        ucs_error("failed to allocate rendezvous reply");
+        return;
+    }
+
+    rndv_req->send.ep           = ucp_worker_get_ep_by_ptr(worker,
+                                                           rndv_rts_hdr->sreq.ep_ptr);
+    rndv_req->flags             = 0;
+    rndv_req->send.mdesc        = NULL;
+    rndv_req->send.pending_lane = UCP_NULL_LANE;
 
     ucp_trace_req(rreq,
                   "rndv matched remote {address 0x%"PRIx64" size %zu sreq 0x%lx}"
@@ -513,14 +522,9 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
         goto out;
     }
 
-    rndv_req->send.pending_lane = UCP_NULL_LANE;
 
     /* if the receive side is not connected yet then the RTS was received on a stub ep */
     ep = rndv_req->send.ep;
-    if (ucp_ep_is_stub(ep)) {
-        ucs_debug("received rts on a stub ep, ep %p am_lane %d", ep,
-                  ucp_ep_get_am_lane(ep));
-    }
 
     rndv_mode = worker->context->config.ext.rndv_mode;
     if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
@@ -996,9 +1000,9 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 
     switch (id) {
     case UCP_AM_ID_RNDV_RTS:
-        snprintf(buffer, max, "RNDV_RTS tag %"PRIx64" uuid %"PRIx64" sreq 0x%lx "
+        snprintf(buffer, max, "RNDV_RTS tag %"PRIx64" ep_ptr %lx sreq 0x%lx "
                  "address 0x%"PRIx64" size %zu", rndv_rts_hdr->super.tag,
-                 rndv_rts_hdr->sreq.sender_uuid, rndv_rts_hdr->sreq.reqptr,
+                 rndv_rts_hdr->sreq.ep_ptr, rndv_rts_hdr->sreq.reqptr,
                  rndv_rts_hdr->address, rndv_rts_hdr->size);
         if (rndv_rts_hdr->address) {
             ucp_rndv_dump_rkey(rndv_rts_hdr + 1, buffer + strlen(buffer),
