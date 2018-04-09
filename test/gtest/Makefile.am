@@ -68,9 +68,11 @@ gtest_SOURCES = \
 	ucm/malloc_hook.cc \
 	\
 	uct/test_amo.cc \
-	uct/test_amo_add.cc \
+	uct/test_amo_add_xor.cc \
+	uct/test_amo_and_or.cc \
 	uct/test_amo_cswap.cc \
-	uct/test_amo_fadd.cc \
+	uct/test_amo_fadd_fxor.cc \
+	uct/test_amo_fand_for.cc \
 	uct/test_amo_swap.cc \
 	uct/test_event.cc \
 	uct/test_fence.cc \
@@ -139,6 +141,7 @@ gtest_SOURCES = \
 	ucs/test_rcache.cc \
 	ucs/test_memtype_cache.cc \
 	ucs/test_stats.cc \
+	ucs/test_strided_alloc.cc \
 	ucs/test_sys.cc \
 	ucs/test_time.cc \
 	ucs/test_twheel.cc \
@@ -238,7 +241,7 @@ list: gtest
 #
 test: ucx gtest
 	@rm -f core.*
-	$(LAUNCHER) $(abs_builddir)/gtest $(GTEST_ARGS)
+	$(LAUNCHER) stdbuf -e0 -o0 $(abs_builddir)/gtest $(GTEST_ARGS)
 
 #
 # Run unit tests with GDB
@@ -254,4 +257,4 @@ test_gdb: ucx gtest
 #
 test_valgrind: ucx gtest
 	$(LAUNCHER) env LD_LIBRARY_PATH="$(VALGRIND_LIBPATH):${LD_LIBRARY_PATH}" \
-	valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest $(GTEST_ARGS)
+	stdbuf -e0 -o0 valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest $(GTEST_ARGS)

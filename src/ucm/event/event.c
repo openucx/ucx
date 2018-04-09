@@ -19,6 +19,8 @@
 #include <ucm/util/log.h>
 #include <ucm/util/sys.h>
 #include <ucs/arch/cpu.h>
+#include <ucs/datastruct/khash.h>
+#include <ucs/type/component.h>
 
 #include <sys/mman.h>
 #include <pthread.h>
@@ -29,9 +31,13 @@
 #include <errno.h>
 
 
+#define ucm_ptr_hash(_ptr)  kh_int64_hash_func((uintptr_t)(_ptr))
+KHASH_INIT(ucm_ptr_size, const void*, size_t, 1, ucm_ptr_hash, kh_int64_hash_equal)
+
 static pthread_rwlock_t ucm_event_lock = PTHREAD_RWLOCK_INITIALIZER;
 static ucs_list_link_t ucm_event_handlers;
 static int ucm_external_events = 0;
+static khash_t(ucm_ptr_size) ucm_shmat_ptrs;
 
 static size_t ucm_shm_size(int shmid)
 {
@@ -269,7 +275,9 @@ void *ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags)
 void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
 {
     ucm_event_t event;
+    khiter_t iter;
     size_t size;
+    int result;
 
     ucm_event_enter();
 
@@ -284,6 +292,10 @@ void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
     ucm_event_dispatch(UCM_EVENT_SHMAT, &event);
 
     if (event.shmat.result != MAP_FAILED) {
+        iter = kh_put(ucm_ptr_size, &ucm_shmat_ptrs, event.mmap.result, &result);
+        if (result != -1) {
+            kh_value(&ucm_shmat_ptrs, iter) = size;
+        }
         ucm_dispatch_vm_mmap(event.shmat.result, size);
     }
 
@@ -295,12 +307,22 @@ void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
 int ucm_shmdt(const void *shmaddr)
 {
     ucm_event_t event;
+    khiter_t iter;
+    size_t size;
 
     ucm_event_enter();
 
     ucm_debug("ucm_shmdt(shmaddr=%p)", shmaddr);
 
-    ucm_dispatch_vm_munmap((void*)shmaddr, ucm_get_shm_seg_size(shmaddr));
+    iter = kh_get(ucm_ptr_size, &ucm_shmat_ptrs, shmaddr);
+    if (iter != kh_end(&ucm_shmat_ptrs)) {
+        size = kh_value(&ucm_shmat_ptrs, iter);
+        kh_del(ucm_ptr_size, &ucm_shmat_ptrs, iter);
+    } else {
+        size = ucm_get_shm_seg_size(shmaddr);
+    }
+
+    ucm_dispatch_vm_munmap((void*)shmaddr, size);
 
     event.shmdt.result  = -1;
     event.shmdt.shmaddr = shmaddr;
@@ -738,3 +760,10 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
     }
 }
 
+UCS_STATIC_INIT {
+    kh_init_inplace(ucm_ptr_size, &ucm_shmat_ptrs);
+}
+
+UCS_STATIC_CLEANUP {
+    kh_destroy_inplace(ucm_ptr_size, &ucm_shmat_ptrs);
+}

@@ -222,6 +222,12 @@ void uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
     }
 }
 
+void uct_test::check_atomics(uint64_t required_ops, atomic_mode mode) {
+    FOR_EACH_ENTITY(iter) {
+        (*iter)->check_atomics(required_ops, mode);
+    }
+}
+
 void uct_test::modify_config(const std::string& name, const std::string& value,
                              bool optional) {
     ucs_status_t status;
@@ -509,6 +515,33 @@ void uct_test::entity::check_caps(uint64_t required_flags,
         UCS_TEST_SKIP_R("unsupported");
     }
     if (iface_flags & invalid_flags) {
+        UCS_TEST_SKIP_R("unsupported");
+    }
+}
+
+void uct_test::entity::check_atomics(uint64_t required_ops, atomic_mode mode)
+{
+    uint64_t amo;
+
+    switch (mode) {
+    case OP32:
+        amo = iface_attr().cap.atomic32.op_flags;
+        break;
+    case OP64:
+        amo = iface_attr().cap.atomic64.op_flags;
+        break;
+    case FOP32:
+        amo = iface_attr().cap.atomic32.fop_flags;
+        break;
+    case FOP64:
+        amo = iface_attr().cap.atomic64.fop_flags;
+        break;
+    default:
+        UCS_TEST_ABORT("Incorrect atomic mode: " << mode);
+        break;
+    }
+
+    if (!ucs_test_all_flags(amo, required_ops)) {
         UCS_TEST_SKIP_R("unsupported");
     }
 }

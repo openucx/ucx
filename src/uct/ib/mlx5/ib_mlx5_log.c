@@ -27,11 +27,11 @@ static const char *uct_ib_mlx5_cqe_err_opcode(struct mlx5_err_cqe *ecqe)
         case MLX5_OPCODE_RDMA_READ:
             return "RDMA_READ";
         case MLX5_OPCODE_ATOMIC_CS:
-            return "COMPARE_SWAP";
+            return "CSWAP";
         case MLX5_OPCODE_ATOMIC_FA:
             return "FETCH_ADD";
         case MLX5_OPCODE_ATOMIC_MASKED_CS:
-            return "MASKED_COMPARE_SWAP";
+            return "MASKED_CSWAP";
         case MLX5_OPCODE_ATOMIC_MASKED_FA:
             return "MASKED_FETCH_ADD";
         default:
@@ -200,10 +200,12 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
         [MLX5_OPCODE_RDMA_READ]        = { "RDMA_READ",  UCT_IB_OPCODE_FLAG_HAS_RADDR },
         [MLX5_OPCODE_SEND]             = { "SEND",       0 },
         [MLX5_OPCODE_SEND_IMM]         = { "SEND_IMM",   0 },
-        [MLX5_OPCODE_ATOMIC_CS]        = { "CS",         UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
-        [MLX5_OPCODE_ATOMIC_FA]        = { "FA",         UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
-        [MLX5_OPCODE_ATOMIC_MASKED_CS] = { "MASKED_CS",  UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
-        [MLX5_OPCODE_ATOMIC_MASKED_FA] = { "MASKED_FA",  UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
+        [MLX5_OPCODE_ATOMIC_CS]        = { "CSWAP",      UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
+        [MLX5_OPCODE_ATOMIC_FA]        = { "FETCH_ADD",  UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
+        [MLX5_OPCODE_ATOMIC_MASKED_CS] = { "MASKED_CSWAP",
+                                           UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
+        [MLX5_OPCODE_ATOMIC_MASKED_FA] = { "MASKED_FETCH_ADD",
+                                           UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
    };
 
     struct mlx5_wqe_ctrl_seg *ctrl = wqe;

@@ -183,18 +183,47 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_proxy_ep_t)
     }
 }
 
+static int ucp_proxy_ep_test(uct_ep_h uct_ep)
+{
+    return uct_ep->iface->ops.ep_destroy == ucp_proxy_ep_destroy;
+}
+
+static void ucp_proxy_ep_replace_if_owned(uct_ep_h uct_ep, uct_ep_h owned_ep,
+                                          uct_ep_h replacement_ep)
+{
+    ucp_proxy_ep_t *proxy_ep;
+
+    if (ucp_proxy_ep_test(uct_ep)) {
+        proxy_ep = ucs_derived_of(uct_ep, ucp_proxy_ep_t);
+        if (proxy_ep->uct_ep == owned_ep) {
+            proxy_ep->uct_ep = replacement_ep;
+        }
+        ucs_assert(replacement_ep != NULL);
+    }
+}
+
 void ucp_proxy_ep_replace(ucp_proxy_ep_t *proxy_ep)
 {
     ucp_ep_h ucp_ep = proxy_ep->ucp_ep;
     ucp_lane_index_t lane;
+    uct_ep_h tl_ep = NULL;
 
     ucs_assert(proxy_ep->uct_ep != NULL);
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
         if (ucp_ep->uct_eps[lane] == &proxy_ep->super) {
+            ucs_assert(proxy_ep->uct_ep != NULL);    /* make sure there is only one match */
             ucp_ep->uct_eps[lane] = proxy_ep->uct_ep;
+            tl_ep = ucp_ep->uct_eps[lane];
             proxy_ep->uct_ep = NULL;
-            break;
         }
+    }
+
+    /* go through the lanes and check if the proxy ep that is being destroyed,
+     * is pointed to by another proxy ep. if so, redirect that other proxy ep
+     * to point to the underlying uct ep. */
+    for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+        ucp_proxy_ep_replace_if_owned(ucp_ep->uct_eps[lane], &proxy_ep->super,
+                                      tl_ep);
     }
 
     uct_ep_destroy(&proxy_ep->super);

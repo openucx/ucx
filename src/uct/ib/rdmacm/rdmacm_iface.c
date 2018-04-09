@@ -414,7 +414,8 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
         self->conn_request_arg = params->mode.sockaddr.conn_request_arg;
         self->is_server        = 1;
     } else {
-        self->is_server               = 0;
+        self->cm_id            = NULL;
+        self->is_server        = 0;
     }
 
     self->cm_id_quota = config->cm_id_quota;

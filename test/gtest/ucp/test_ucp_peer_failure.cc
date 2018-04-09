@@ -384,7 +384,8 @@ UCS_TEST_P(test_ucp_peer_failure_with_rma, status_after_error) {
     status = ucp_ep_rkey_unpack(sender().ep(), rkey_buffer, &rkey);
     ASSERT_UCS_OK(status);
     ucp_rkey_buffer_release(rkey_buffer);
-    ucp_mem_unmap(receiver().ucph(), memh);
+    status = ucp_mem_unmap(receiver().ucph(), memh);
+    ASSERT_UCS_OK(status);
 
     fail_receiver();
     if (GetParam().variant == FAIL_ON_RMA) {

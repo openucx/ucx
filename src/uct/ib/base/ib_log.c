@@ -166,8 +166,8 @@ static void uct_ib_dump_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
         [IBV_WR_RDMA_READ]            = { "RDMA_READ",  UCT_IB_OPCODE_FLAG_HAS_RADDR },
         [IBV_WR_SEND]                 = { "SEND",       0 },
         [IBV_WR_SEND_WITH_IMM]        = { "SEND_IMM",   0 },
-        [IBV_WR_ATOMIC_CMP_AND_SWP]   = { "CS",         UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
-        [IBV_WR_ATOMIC_FETCH_AND_ADD] = { "FA",         UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
+        [IBV_WR_ATOMIC_CMP_AND_SWP]   = { "CSWAP",      UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
+        [IBV_WR_ATOMIC_FETCH_AND_ADD] = { "FETCH_ADD",  UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
    };
 
     char *s             = buf;
@@ -232,13 +232,15 @@ static void uct_ib_dump_exp_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
         [IBV_EXP_WR_RDMA_READ]            = { "RDMA_READ",  UCT_IB_OPCODE_FLAG_HAS_RADDR },
         [IBV_EXP_WR_SEND]                 = { "SEND",       0 },
         [IBV_EXP_WR_SEND_WITH_IMM]        = { "SEND_IMM",   0 },
-        [IBV_EXP_WR_ATOMIC_CMP_AND_SWP]   = { "CS",         UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
-        [IBV_EXP_WR_ATOMIC_FETCH_AND_ADD] = { "FA",         UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
+        [IBV_EXP_WR_ATOMIC_CMP_AND_SWP]   = { "CSWAP",      UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
+        [IBV_EXP_WR_ATOMIC_FETCH_AND_ADD] = { "FETCH_ADD",  UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
 #if HAVE_DECL_IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP
-        [IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP]   = { "MASKED_CS", UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
+        [IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP]   = { "MASKED_CSWAP",
+                                                         UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
 #endif
 #if HAVE_DECL_IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD
-        [IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD] = { "MASKED_FA", UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
+        [IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD] = { "MASKED_FETCH_ADD",
+                                                         UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
 #endif
    };
 

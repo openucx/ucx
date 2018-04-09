@@ -118,6 +118,7 @@ unsigned ucp_test::progress(int worker_index) const {
          iter != entities().end(); ++iter)
     {
         count += (*iter)->progress(worker_index);
+        sched_yield();
     }
     return count;
 }
@@ -355,7 +356,7 @@ ucp_test_base::entity::~entity() {
 
 void ucp_test_base::entity::connect(const entity* other,
                                     const ucp_ep_params_t& ep_params,
-                                    int ep_idx) {
+                                    int ep_idx, int do_set_ep) {
     assert(num_workers == other->get_num_workers());
     for (unsigned i = 0; i < unsigned(num_workers); i++) {
         ucs_status_t status;
@@ -381,7 +382,9 @@ void ucp_test_base::entity::connect(const entity* other,
 
         ASSERT_UCS_OK(status);
 
-        set_ep(ep, i, ep_idx);
+        if (do_set_ep) {
+            set_ep(ep, i, ep_idx);
+        }
 
         ucp_worker_release_address(other->worker(i), address);
     }

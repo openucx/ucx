@@ -239,7 +239,19 @@ struct ucp_request {
 
 
 /**
- * Unexpected receive descriptor.
+ * Unexpected receive descriptor. If it is initialized in the headroom of UCT
+ * descriptor, the layout looks like the following:
+ *
+ *
+ * headroom                                    data
+ * |-------------------------------------------|-------------------------|
+ * | unused | ucp_recv_desc |      priv_length |                         |
+ * |        |               |                  |                         |
+ * |-------------------------------------------|-------------------------|
+ *
+ * Some protocols (i. e. tag offload) may need some space right before the
+ * incoming data to add specific headers needed for further message processing.
+ * Note: priv_length value should be in [0, UCP_WORKER_HEADROOM_PRIV_SIZE] range.
  */
 struct ucp_recv_desc {
     union {
@@ -251,6 +263,11 @@ struct ucp_recv_desc {
     uint32_t                payload_offset; /* Offset from end of the descriptor
                                              * to AM data */
     uint16_t                flags;          /* Flags */
+    int16_t                 priv_length;    /* Number of bytes consumed from
+                                               headroom private space, except the
+                                               space needed for ucp_recv_desc itself.
+                                               It is used for releasing descriptor
+                                               back to UCT only */
 };
 
 

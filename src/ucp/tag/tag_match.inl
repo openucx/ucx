@@ -212,27 +212,6 @@ ucp_tag_unexp_search(ucp_tag_match_t *tm, ucp_tag_t tag, uint64_t tag_mask,
     return NULL;
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_tag_unexp_desc_release(ucp_recv_desc_t *rdesc)
-{
-    ucs_trace_req("release receive descriptor %p", rdesc);
-    if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
-        /* uct desc is slowpath */
-        if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD)) {
-            if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER_SYNC) {
-                uct_iface_release_desc(rdesc);
-            } else {
-                uct_iface_release_desc( (char*)rdesc -
-                  (sizeof(ucp_eager_sync_hdr_t) - sizeof(ucp_eager_hdr_t)) );
-            }
-        } else {
-            uct_iface_release_desc((char*)rdesc - sizeof(ucp_eager_sync_hdr_t));
-        }
-    } else {
-        ucs_mpool_put_inline(rdesc);
-    }
-}
-
 /*
  * process data, complete receive if done
  * @return UCS_OK/ERR - completed, UCS_INPROGRESS - not completed
@@ -280,7 +259,7 @@ ucp_tag_recv_request_process_rdesc(ucp_request_t *req, ucp_recv_desc_t *rdesc,
      recv_len = rdesc->length - hdr_len;
      status = ucp_tag_request_process_recv_data(req, (void*)(rdesc + 1) + hdr_len,
                                                 recv_len, offset, 0);
-     ucp_tag_unexp_desc_release(rdesc);
+     ucp_recv_desc_release(rdesc);
      return status;
 }
 
