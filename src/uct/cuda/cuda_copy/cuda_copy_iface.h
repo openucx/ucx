@@ -7,27 +7,11 @@
 #define UCT_CUDA_COPY_IFACE_H
 
 #include <uct/base/uct_iface.h>
-#include <ucs/arch/cpu.h>
-#include <ucs/sys/preprocessor.h>
-#include <cuda_runtime.h>
-#include <cuda.h>
+#include <uct/cuda/base/cuda_iface.h>
 
 
 #define UCT_CUDA_COPY_TL_NAME    "cuda_copy"
-#define UCT_CUDA_DEV_NAME   "cudacopy0"
-
-#define UCT_CUDA_FUNC(_func)  ({                        \
-ucs_status_t _status = UCS_OK;                          \
-do {                                                    \
-    cudaError_t _result = (_func);                      \
-    if (cudaSuccess != _result) {                       \
-        ucs_error("%s failed with %d \n",               \
-                  UCS_PP_MAKE_STRING(_func), _result);  \
-        _status = UCS_ERR_IO_ERROR;                     \
-    }                                                   \
-} while (0);                                            \
-_status;                                                \
-})
+#define UCT_CUDA_DEV_NAME        "cudacopy0"
 
 
 typedef uint64_t uct_cuda_copy_iface_addr_t;
