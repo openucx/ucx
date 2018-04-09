@@ -191,7 +191,10 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
 
         /* Make sure we are indeed passing all flags required by the criteria in
          * ucp packed address */
-        ucs_assert(ucs_test_all_flags(UCP_ADDRESS_IFACE_FLAGS, criteria->remote_iface_flags));
+        ucs_assert(ucs_test_all_flags(UCP_ADDRESS_IFACE_FLAGS,
+                                      criteria->remote_iface_flags &
+                                      ~(UCP_UCT_IFACE_ATOMIC32_FLAGS |
+                                        UCP_UCT_IFACE_ATOMIC64_FLAGS)));
 
         if (!ucs_test_all_flags(ae->iface_attr.cap_flags, criteria->remote_iface_flags)) {
             ucs_trace("addr[%d] %s: no %s", addr_index,
