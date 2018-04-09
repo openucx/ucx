@@ -55,17 +55,4 @@ void ucp_proto_am_zcopy_completion(uct_completion_t *self, ucs_status_t status);
 
 void ucp_proto_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
 
-/*
- * Make sure the remote worker would be able to send replies to our endpoint.
- * Should be used before sending a message which requires a reply.
- */
-static inline void ucp_ep_connect_remote(ucp_ep_h ep)
-{
-    if (ucs_unlikely(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED))) {
-        ucs_assert(ep->flags & UCP_EP_FLAG_DEST_UUID_PEER);
-        ucp_wireup_send_request(ep, ep->dest_uuid);
-    }
-}
-
-
 #endif

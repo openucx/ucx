@@ -110,6 +110,7 @@ void ucs_strided_alloc_init(ucs_strided_alloc_t *sa, size_t elem_size,
     sa->freelist     = NULL;
     sa->elem_size    = elem_size;
     sa->stride_count = stride_count;
+    sa->inuse_count  = 0;
     VALGRIND_CREATE_MEMPOOL(sa, 0, 0);
 }
 
@@ -152,6 +153,8 @@ void* ucs_strided_alloc_get(ucs_strided_alloc_t *sa, const char *alloc_name)
                                sa->elem_size);
     }
 
+    ++sa->inuse_count;
+
     return elem;
 }
 
@@ -160,9 +163,18 @@ void ucs_strided_alloc_put(ucs_strided_alloc_t *sa, void *base)
     ucs_strided_alloc_elem_t *elem = base;
     unsigned i;
 
+    ucs_assert(sa->inuse_count > 0);
+
     ucs_strided_alloc_push_to_freelist(sa, elem);
 
     for (i = 0; i < sa->stride_count; ++i) {
         VALGRIND_MEMPOOL_FREE(sa, ucs_strided_elem_get(elem, 0, i));
     }
+
+    --sa->inuse_count;
+}
+
+unsigned ucs_strided_alloc_inuse_count(ucs_strided_alloc_t *sa)
+{
+    return sa->inuse_count;
 }

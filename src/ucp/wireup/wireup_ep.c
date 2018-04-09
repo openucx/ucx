@@ -460,7 +460,7 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
     /* pack private data */
     conn_priv->err_mode = UCP_PARAM_VALUE(EP, params, err_mode, ERR_HANDLING_MODE,
                                           UCP_ERR_HANDLING_MODE_NONE);
-    conn_priv->ep_uuid  = ucp_ep->dest_uuid;
+    conn_priv->ep_uuid  = ucp_ep_ext_gen(ucp_ep)->dest_uuid;
     memcpy(conn_priv + 1, worker_address, address_length);
 
     /* send connection request using the transport */
