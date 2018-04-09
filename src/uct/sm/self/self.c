@@ -55,8 +55,6 @@ static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t 
                                    UCT_IFACE_FLAG_ATOMIC_SWAP32    |
                                    UCT_IFACE_FLAG_ATOMIC_CSWAP64   |
                                    UCT_IFACE_FLAG_ATOMIC_CSWAP32   |
-                                   UCT_IFACE_FLAG_ATOMIC32         |
-                                   UCT_IFACE_FLAG_ATOMIC64         |
                                    UCT_IFACE_FLAG_ATOMIC_CPU       |
                                    UCT_IFACE_FLAG_PENDING          |
                                    UCT_IFACE_FLAG_CB_SYNC          |

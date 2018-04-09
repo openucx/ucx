@@ -410,27 +410,4 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
     uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, gid_p, path_bits, ah_attr);
 }
 
-static UCS_F_ALWAYS_INLINE
-void uct_ib_iface_set_atomic_flags(struct uct_iface_attr *attr)
-{
-    /* TODO: switch to new atomic flags */
-    if (ucs_test_all_flags(attr->cap.flags, UCT_IFACE_FLAG_ATOMIC_ADD32   |
-                                            UCT_IFACE_FLAG_ATOMIC_FADD32  |
-                                            UCT_IFACE_FLAG_ATOMIC_SWAP32  |
-                                            UCT_IFACE_FLAG_ATOMIC_CSWAP32)) {
-        attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC32;
-    } else {
-        attr->cap.flags &= ~UCT_IFACE_FLAG_ATOMIC32;
-    }
-
-    if (ucs_test_all_flags(attr->cap.flags, UCT_IFACE_FLAG_ATOMIC_ADD64   |
-                                            UCT_IFACE_FLAG_ATOMIC_FADD64  |
-                                            UCT_IFACE_FLAG_ATOMIC_SWAP64  |
-                                            UCT_IFACE_FLAG_ATOMIC_CSWAP64)) {
-        attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC64;
-    } else {
-        attr->cap.flags &= ~UCT_IFACE_FLAG_ATOMIC64;
-    }
-}
-
 #endif
