@@ -75,10 +75,22 @@
    fun:gdr_copy_to_bar
 }
 {
+   gdr_copy_cond_1
+   Memcheck:Cond
+   ...
+   fun:gdr_copy_from_bar
+}
+{
    gdr_copy_value8
    Memcheck:Value8
    ...
    fun:gdr_copy_to_bar
+}
+{
+   gdr_copy_value8_1
+   Memcheck:Value8
+   ...
+   fun:gdr_copy_from_bar
 }
 {
     ibv_exp_reg_mr
