@@ -351,8 +351,10 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_worker_h            worker           = (ucp_worker_h)arg;
     ucp_ep_h                ucp_ep           = NULL;
+    uct_tl_resource_desc_t* tl_rsc;
     uint64_t                dest_uuid UCS_V_UNUSED;
     ucp_lane_index_t        lane, failed_lane;
+    ucp_rsc_index_t         rsc_index;
 
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
     kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep, {
@@ -428,8 +430,17 @@ found_ucp_ep:
     ucp_ep->flags    |= UCP_EP_FLAG_FAILED;
     ucp_ep->am_lane   = 0;
 
+    if (ucp_ep_ext_gen(ucp_ep)->err_cb == NULL) {
+        rsc_index = ucp_ep_get_rsc_index(ucp_ep, lane);
+        tl_rsc    = &worker->context->tl_rscs[rsc_index].tl_rsc;
+        ucs_error("error '%s' was not handled for ep %p - "
+                 UCT_TL_RESOURCE_DESC_FMT, ucs_status_string(status), ucp_ep,
+                 UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
+       return status;
+    }
+
     ucp_ep_ext_gen(ucp_ep)->err_cb(ucp_ep_ext_gen(ucp_ep)->user_data, ucp_ep,
-                                    status);
+                                   status);
 
     return UCS_OK;
 }

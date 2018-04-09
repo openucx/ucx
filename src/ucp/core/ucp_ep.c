@@ -103,8 +103,9 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ep->cfg_index                   = ucp_worker_get_ep_config(worker, &key);
     ep->am_lane                     = UCP_NULL_LANE;
     ep->flags                       = UCP_EP_FLAG_USED;
-    ucp_ep_ext_gen(ep)->user_data   = NULL;
     ucp_ep_ext_gen(ep)->dest_uuid   = dest_uuid;
+    ucp_ep_ext_gen(ep)->user_data   = NULL;
+    ucp_ep_ext_gen(ep)->err_cb      = NULL;
 
     if (worker->context->config.features & UCP_FEATURE_STREAM) {
         ucp_ep_ext_proto(ep)->stream.ready_list.prev = NULL;
