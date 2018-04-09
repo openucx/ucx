@@ -480,7 +480,12 @@ void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
 {
     ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t  status    = UCS_PTR_STATUS(arg);
+    ucp_ep_h      ep;
 
+    ep = req->send.ep;
+    if (ucp_wireup_ep_test(ucp_ep_get_wireup_uct_ep(ep))) {
+        --ep->worker->wireup_pend_count;
+    }
     ucp_request_send_state_ff(req, status);
 }
 
