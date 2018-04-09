@@ -515,6 +515,8 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *iface, uct_iface_attr_t *ifa
         iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
     }
 
+    uct_ib_iface_set_atomic_flags(iface_attr);
+
     /* Software overhead */
     iface_attr->overhead          = 40e-9;
 

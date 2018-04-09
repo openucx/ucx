@@ -241,6 +241,9 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     /* Tag Offload */
     uct_rc_iface_tag_query(iface, iface_attr, max_inline);
 
+    /* Atomic flags */
+    uct_ib_iface_set_atomic_flags(iface_attr);
+
     return UCS_OK;
 }
 

@@ -204,6 +204,9 @@ typedef enum uct_atomic_op {
 #define UCT_IFACE_FLAG_ATOMIC_CSWAP32 UCS_BIT(22) /**< 32bit atomic compare-and-swap */
 #define UCT_IFACE_FLAG_ATOMIC_CSWAP64 UCS_BIT(23) /**< 64bit atomic compare-and-swap */
 
+#define UCT_IFACE_FLAG_ATOMIC32       UCS_BIT(24) /**< 32bit atomic operations */
+#define UCT_IFACE_FLAG_ATOMIC64       UCS_BIT(25) /**< 64bit atomic operations */
+
         /* Atomic operations domain */
 #define UCT_IFACE_FLAG_ATOMIC_CPU     UCS_BIT(30) /**< Atomic communications are consistent
                                                        with respect to CPU operations. */
