@@ -99,6 +99,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "cause stack smashing.\n",
      ucs_offsetof(uct_ib_md_config_t, ext.enable_contig_pages), UCS_CONFIG_TYPE_BOOL},
 
+    {"INDIRECT_ATOMIC", "y",
+     "Use indirect atomic\n",
+     ucs_offsetof(uct_ib_md_config_t, ext.enable_indirect_atomic), UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
 
@@ -158,7 +162,8 @@ static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
 
     ibdev = &md->dev;
 
-    if (!(ibdev->dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_UMR)) {
+    if (!(ibdev->dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_UMR) ||
+        !md->config.enable_indirect_atomic) {
         return UCS_ERR_UNSUPPORTED;
     }
 
