@@ -689,6 +689,28 @@ uct_rc_verbs_fill_ext_atomic_wr(struct ibv_exp_send_wr *wr, struct ibv_sge *sge,
         break;
     }
 }
+
+static UCS_F_ALWAYS_INLINE
+ucs_status_t uct_rc_verbs_ep_atomic32_data(uct_atomic_op_t opcode, uint32_t value,
+                                           int *op, uint32_t *add, uint32_t *swap)
+{
+    switch (opcode) {
+    case UCT_ATOMIC_OP_ADD:
+        *op   = IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD;
+        *add  = value;
+        *swap = 0;
+        break;
+    case UCT_ATOMIC_OP_SWAP:
+        *op   = IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP;
+        *add  = 0;
+        *swap = value;
+        break;
+    default:
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return UCS_OK;
+}
 #endif
 
 

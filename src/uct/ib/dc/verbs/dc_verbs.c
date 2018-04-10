@@ -454,7 +454,7 @@ ucs_status_t uct_dc_verbs_ep_atomic64_post(uct_ep_h tl_ep, unsigned opcode, uint
     uct_dc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
     uct_rc_iface_send_desc_t *desc;
 
-    if (opcode != UCT_ATOMIC_OP_ADD ) {
+    if (opcode != UCT_ATOMIC_OP_ADD) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -476,7 +476,7 @@ ucs_status_t uct_dc_verbs_ep_atomic32_post(uct_ep_h tl_ep, unsigned opcode, uint
     uct_dc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
     uct_rc_iface_send_desc_t *desc;
 
-    if (opcode != UCT_ATOMIC_OP_ADD ) {
+    if (opcode != UCT_ATOMIC_OP_ADD) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -513,7 +513,6 @@ ucs_status_t uct_dc_verbs_ep_atomic64_fetch_nb(uct_ep_h tl_ep, uct_atomic_op_t o
         break;
     }
 
-    ucs_assertv(0, "incorrect atomic_fetch opcode: %d", opcode);
     return UCS_ERR_UNSUPPORTED;
 }
 
@@ -526,21 +525,11 @@ ucs_status_t uct_dc_verbs_ep_atomic32_fetch_nb(uct_ep_h tl_ep, uct_atomic_op_t o
     int op;
     uint32_t add;
     uint32_t swap;
+    ucs_status_t status;
 
-    switch (opcode) {
-    case UCT_ATOMIC_OP_ADD:
-        op   = IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD;
-        add  = value;
-        swap = 0;
-        break;
-    case UCT_ATOMIC_OP_SWAP:
-        op   = IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP;
-        add  = 0;
-        swap = value;
-        break;
-    default:
-        ucs_assertv(0, "incorrect atomic_fetch opcode: %d", opcode);
-        return UCS_ERR_UNSUPPORTED;
+    status = uct_rc_verbs_ep_atomic32_data(opcode, value, &op, &add, &swap);
+    if (UCS_STATUS_IS_ERR(status)) {
+        return status;
     }
 
     return uct_dc_verbs_ep_ext_atomic(ucs_derived_of(tl_ep, uct_dc_verbs_ep_t), op,
