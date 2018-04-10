@@ -245,17 +245,19 @@ enum ucp_ep_close_mode {
     UCP_EP_CLOSE_MODE_FLUSH         = 1, /**< @ref ucp_ep_close_nb schedules
                                               flushes on all outstanding
                                               operations. */
-    UCP_EP_CLOSE_MODE_SYNC          = 2  /**< <ul>
-                                              <li>If there is a connected
+    UCP_EP_CLOSE_MODE_SYNC          = 2  /**< @ref ucp_ep_close_nb will flush
+                                              the local endpoint and handle any
+                                              existing remote endpoint by
+                                              generating a close event on the
+                                              remote peer and putting the remote
+                                              endpoint into an error state.
+                                              <ul>
+                                              <li> If there is a connected
                                               remote endpoint, initiate a
-                                              synchronization with the peer, and
-                                              the request returned from @ref
-                                              ucp_ep_close_nb will be completed
-                                              after the local endpoint is
-                                              flushed and the remote endpoint is
-                                              disconnected. @note The remote
-                                              endpoint will get a notification
-                                              through the callback defined in
+                                              synchronization with the peer. The
+                                              remote endpoint will get a
+                                              notification through the callback
+                                              defined in @ref
                                               ucp_ep_params_t::err_handler with
                                               @ref UCS_ERR_REMOTE_DISCONNECT
                                               status, unless it also has closed
