@@ -494,7 +494,7 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_common_t *iface,
             status = rc_iface->tm.eager_unexp.cb(rc_iface->tm.eager_unexp.arg,
                                                  tmh + 1, wc->byte_len - sizeof(*tmh),
                                                  UCT_CB_PARAM_FLAG_DESC,
-                                                 be64toh(tmh->tag), imm_data);
+                                                 be64toh(tmh->tag), imm_data, NULL);
         }
         uct_rc_verbs_iface_unexp_consumed(iface, rc_iface, ib_desc,
                                           &rc_iface->tm.eager_desc, status);

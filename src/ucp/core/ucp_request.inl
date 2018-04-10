@@ -393,6 +393,18 @@ ucp_request_wait_uct_comp(ucp_request_t *req)
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_request_unpack_contig(ucp_request_t *req, void *buf, const void *data,
+                          size_t length)
+{
+    if (ucs_likely(UCP_MEM_IS_HOST(req->recv.mem_type))) {
+        UCS_PROFILE_NAMED_CALL("memcpy_recv", memcpy, buf, data, length);
+    } else {
+        ucp_mem_type_unpack(req->recv.worker, buf, data, length,
+                            req->recv.mem_type);
+    }
+}
+
 /**
  * Unpack receive data to a request
  *
@@ -428,13 +440,7 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
 
     switch (req->recv.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        if (ucs_likely(UCP_MEM_IS_HOST(req->recv.mem_type))) {
-            UCS_PROFILE_NAMED_CALL("memcpy_recv", memcpy, req->recv.buffer + offset,
-                                   data, length);
-        } else {
-            ucp_mem_type_unpack(req->recv.worker, req->recv.buffer + offset,
-                                data, length, req->recv.mem_type);
-        }
+        ucp_request_unpack_contig(req, req->recv.buffer + offset, data, length);
         return UCS_OK;;
 
     case UCP_DATATYPE_IOV:
