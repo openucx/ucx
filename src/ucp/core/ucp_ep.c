@@ -102,7 +102,8 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ep->worker                      = worker;
     ep->cfg_index                   = ucp_worker_get_ep_config(worker, &key);
     ep->am_lane                     = UCP_NULL_LANE;
-    ep->flags                       = UCP_EP_FLAG_USED;
+    ep->flags                       = 0;
+    ep->conn_sn                     = -1;
     ucp_ep_ext_gen(ep)->dest_uuid   = dest_uuid;
     ucp_ep_ext_gen(ep)->user_data   = NULL;
     ucp_ep_ext_gen(ep)->err_cb      = NULL;
@@ -130,8 +131,9 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 
     ucp_ep_add_to_hash(ep);
 
+    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
     *ep_p = ep;
-    ucs_debug("created ep %p to %s %s", ucp_ep_peer_name(ep), peer_name, message);
+    ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
     return UCS_OK;
 
 err_free_ep:
@@ -144,6 +146,7 @@ static void ucp_ep_delete(ucp_ep_h ep)
 {
     ucp_ep_delete_from_hash(ep);
     UCS_STATS_NODE_FREE(ep->stats);
+    ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
 }
 
@@ -315,10 +318,6 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     ep = ucp_worker_ep_find(worker, remote_address.uuid);
     if (ep != NULL) {
         status = ucp_ep_adjust_params(ep, params);
-        if (status == UCS_OK) {
-            ep->flags |= UCP_EP_FLAG_USED;
-        }
-
         goto out_free_address;
     }
 
@@ -339,9 +338,16 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
         goto err_delete;
     }
 
+    status = ucp_ep_adjust_params(ep, params);
+    if (status != UCS_OK) {
+        goto err_cleanup_lanes;
+    }
+
     status = UCS_OK;
     goto out_free_address;
 
+err_cleanup_lanes:
+    ucp_ep_cleanup_lanes(ep);
 err_delete:
     ucp_ep_delete(ep);
 out_free_address:
@@ -375,6 +381,11 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
                                 "from api call", &ep);
     if (status != UCS_OK) {
         goto err;
+    }
+
+    status = ucp_ep_adjust_params(ep, params);
+    if (status != UCS_OK) {
+        goto err_cleanup_lanes;
     }
 
     status = ucp_wireup_ep_connect_to_sockaddr(ep->uct_eps[0], params);
@@ -424,8 +435,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
         }
     }
 
-    status = ucp_ep_adjust_params(ep, params);
-
+    ep->flags |= UCP_EP_FLAG_USED;
     *ep_p = ep;
 
 out:
@@ -510,7 +520,7 @@ static void ucp_ep_cleanup_lanes(ucp_ep_h ep)
     }
 }
 
-static void ucp_ep_disconnected(ucp_ep_h ep, int force)
+void ucp_ep_disconnected(ucp_ep_h ep, int force)
 {
     ucp_stream_recv_purge(ep);
 

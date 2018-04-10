@@ -26,6 +26,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     }
 
     if (accept->listener->cb != NULL) {
+        ep->flags |= UCP_EP_FLAG_USED;
         accept->listener->cb(ep, accept->listener->arg);
     }
 

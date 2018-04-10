@@ -45,6 +45,7 @@ noinst_HEADERS = \
 	tag/tag_match.inl \
 	tag/offload.h \
 	wireup/address.h \
+	wireup/ep_match.h \
 	wireup/wireup_ep.h \
 	wireup/wireup.h \
 	stream/stream.h
@@ -77,6 +78,7 @@ libucp_la_SOURCES = \
 	tag/tag_send.c \
 	tag/offload.c \
 	wireup/address.c \
+	wireup/ep_match.c \
 	wireup/select.c \
 	wireup/signaling_ep.c \
 	wireup/wireup_ep.c \

@@ -349,15 +349,16 @@ void ucp_worker_signal_internal(ucp_worker_h worker)
 static ucs_status_t
 ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
-    ucp_worker_h            worker           = (ucp_worker_h)arg;
-    ucp_ep_h                ucp_ep           = NULL;
+    ucp_worker_h worker = (ucp_worker_h)arg;
+    ucp_lane_index_t lane, failed_lane;
     uct_tl_resource_desc_t* tl_rsc;
-    uint64_t                dest_uuid UCS_V_UNUSED;
-    ucp_lane_index_t        lane, failed_lane;
-    ucp_rsc_index_t         rsc_index;
+    ucp_rsc_index_t rsc_index;
+    ucp_ep_ext_gen_t *ep_ext;
+    ucp_ep_h ucp_ep;
 
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
-    kh_foreach(&worker->ep_hash, dest_uuid, ucp_ep, {
+    ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
+        ucp_ep = ucp_ep_from_ext_gen(ep_ext);
         for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
             if ((uct_ep == ucp_ep->uct_eps[lane]) ||
                 ucp_wireup_ep_is_owner(ucp_ep->uct_eps[lane], uct_ep)) {
@@ -365,7 +366,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
                 goto found_ucp_ep;
             }
         }
-    });
+    }
 
     ucs_fatal("no uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
               uct_ep, worker);
@@ -1093,6 +1094,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->ep_config_count   = 0;
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
+    ucs_list_head_init(&worker->all_eps);
+    ucp_ep_match_init(&worker->ep_match_ctx);
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
     if (context->config.features & UCP_FEATURE_STREAM) {
@@ -1224,10 +1227,12 @@ err_free:
 
 static void ucp_worker_destroy_eps(ucp_worker_h worker)
 {
-    ucp_ep_h ep;
+    ucp_ep_ext_gen_t *ep_ext, *tmp;
 
     ucs_debug("worker %p: destroy all endpoints", worker);
-    kh_foreach_value(&worker->ep_hash, ep, ucp_ep_destroy_internal(ep));
+    ucs_list_for_each_safe(ep_ext, tmp, &worker->all_eps, ep_list) {
+        ucp_ep_disconnected(ucp_ep_from_ext_gen(ep_ext), 1);
+    }
 }
 
 void ucp_worker_destroy(ucp_worker_h worker)
@@ -1246,6 +1251,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_async_context_cleanup(&worker->async);
     ucs_free(worker->ifaces);
     kh_destroy_inplace(ucp_worker_ep_hash, &worker->ep_hash);
+    ucp_ep_match_cleanup(&worker->ep_match_ctx);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     UCP_THREAD_LOCK_FINALIZE(&worker->mt_lock);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
