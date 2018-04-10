@@ -189,19 +189,24 @@ static void
 ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
                             void *arg)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_t   *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_worker_h      worker;
     uct_pending_req_t *req;
-    ucp_request_t *ucp_req;
+    ucp_request_t     *ucp_req;
+
+    worker = wireup_ep->super.ucp_ep->worker;
 
     ucs_queue_for_each_extract(req, &wireup_ep->pending_q, priv, 1) {
         ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
-        --ucp_req->send.ep->worker->wireup_pend_count;
+        UCS_ASYNC_BLOCK(&worker->async);
+        --worker->wireup_pend_count;
+        UCS_ASYNC_UNBLOCK(&worker->async);
         cb(&ucp_req->send.uct, arg);
     }
 
     if (wireup_ep->aux_ep != NULL) {
-        uct_ep_pending_purge(wireup_ep->aux_ep, ucp_wireup_ep_pending_req_release,
-                             arg);
+        uct_ep_pending_purge(wireup_ep->aux_ep,
+                             ucp_wireup_ep_pending_req_release, arg);
     }
 }
 
