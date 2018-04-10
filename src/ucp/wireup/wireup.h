@@ -51,8 +51,8 @@ typedef struct {
                               const ucp_address_iface_attr_t *remote_iface_attr);
     uint8_t     tl_rsc_flags; /* Flags that describe TL specifics */
 
-    ucp_atomic_requested_t local_atomic_flags;
-    ucp_atomic_requested_t remote_atomic_flags;
+    ucp_tl_iface_atomic_flags_t local_atomic_flags;
+    ucp_tl_iface_atomic_flags_t remote_atomic_flags;
 } ucp_wireup_criteria_t;
 
 

@@ -16,16 +16,30 @@
 
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE       262144
 
-#define UCP_WIREUP_CHECK_AMO_FLAGS(_ae, _criteria, _context, _op, _size)                  \
-    if (!ucs_test_all_flags(_ae->iface_attr.atomic.atomic##_size._op##_flags,             \
-                            _criteria->remote_atomic_flags.atomic##_size._op##_flags)) {  \
-        ucs_trace("addr[%d] %s: no %s", addr_index,                                       \
-                  ucp_find_tl_name_by_csum(_context, _ae->tl_name_csum),                  \
-                  ucp_wireup_get_missing_flag_desc(_ae->iface_attr.atomic.atomic##_size._op##_flags, \
-                                                   _criteria->remote_atomic_flags.atomic##_size._op##_flags, \
-                                                   ucp_wireup_iface_amo##_size##_##_op)); \
-        continue;                                                                         \
+#define UCP_WIREUP_CHECK_AMO_FLAGS(_ae, _criteria, _context, _addr_index, _op, _size)      \
+    if (!ucs_test_all_flags((_ae)->iface_attr.atomic.atomic##_size._op##_flags,            \
+                            (_criteria)->remote_atomic_flags.atomic##_size._op##_flags)) { \
+        ucs_trace("addr[%d] %s: no %s", (_addr_index),                                     \
+                  ucp_find_tl_name_by_csum((_context), (_ae)->tl_name_csum),               \
+                  ucp_wireup_get_missing_flag_desc((_ae)->iface_attr.atomic.atomic##_size._op##_flags, \
+                                                   (_criteria)->remote_atomic_flags.atomic##_size._op##_flags, \
+                                                   ucp_wireup_iface_amo##_size##_##_op));  \
+        continue;                                                                          \
     }
+
+#define _UCP_WIREUP_STRINGS_AMO_POST(_size, _suffix)                                    \
+    [UCT_ATOMIC_OP_ADD]                         = #_size "-bit atomic " #_suffix "add", \
+    [UCT_ATOMIC_OP_AND]                         = #_size "-bit atomic " #_suffix "and", \
+    [UCT_ATOMIC_OP_OR]                          = #_size "-bit atomic " #_suffix "or",  \
+    [UCT_ATOMIC_OP_XOR]                         = #_size "-bit atomic " #_suffix "xor"
+
+#define UCP_WIREUP_STRINGS_AMO_POST(_size)                                              \
+    _UCP_WIREUP_STRINGS_AMO_POST(_size, "")
+
+#define UCP_WIREUP_STRINGS_AMO_FETCH(_size)                                             \
+    _UCP_WIREUP_STRINGS_AMO_POST(_size, "fetch-"),                                      \
+    [UCT_ATOMIC_OP_SWAP]                        = #_size "-bit atomic swap",            \
+    [UCT_ATOMIC_OP_CSWAP]                       = #_size "-bit atomic compare-swap"
 
 enum {
     UCP_WIREUP_LANE_USAGE_AM     = UCS_BIT(0), /* Active messages */
@@ -101,35 +115,19 @@ static const char *ucp_wireup_iface_flags[] = {
 };
 
 static const char *ucp_wireup_iface_amo32_op[] = {
-    [UCT_ATOMIC_OP_ADD]                         = "32-bit atomic add",
-    [UCT_ATOMIC_OP_AND]                         = "32-bit atomic and",
-    [UCT_ATOMIC_OP_OR]                          = "32-bit atomic or",
-    [UCT_ATOMIC_OP_XOR]                         = "32-bit atomic xor"
+    UCP_WIREUP_STRINGS_AMO_POST(32)
 };
 
 static const char *ucp_wireup_iface_amo64_op[] = {
-    [UCT_ATOMIC_OP_ADD]                        = "64-bit atomic add",
-    [UCT_ATOMIC_OP_AND]                        = "64-bit atomic and",
-    [UCT_ATOMIC_OP_OR]                         = "64-bit atomic or",
-    [UCT_ATOMIC_OP_XOR]                        = "64-bit atomic xor"
+    UCP_WIREUP_STRINGS_AMO_POST(64)
 };
 
 static const char *ucp_wireup_iface_amo32_fop[] = {
-    [UCT_ATOMIC_OP_ADD]                         = "32-bit atomic fetch-add",
-    [UCT_ATOMIC_OP_AND]                         = "32-bit atomic fetch-and",
-    [UCT_ATOMIC_OP_OR]                          = "32-bit atomic fetch-or",
-    [UCT_ATOMIC_OP_XOR]                         = "32-bit atomic fetch-xor",
-    [UCT_ATOMIC_OP_SWAP]                        = "32-bit atomic swap",
-    [UCT_ATOMIC_OP_CSWAP]                       = "32-bit atomic compare-swap"
+    UCP_WIREUP_STRINGS_AMO_FETCH(32)
 };
 
 static const char *ucp_wireup_iface_amo64_fop[] = {
-    [UCT_ATOMIC_OP_ADD]                         = "64-bit atomic fetch-add",
-    [UCT_ATOMIC_OP_AND]                         = "64-bit atomic fetch-and",
-    [UCT_ATOMIC_OP_OR]                          = "64-bit atomic fetch-or",
-    [UCT_ATOMIC_OP_XOR]                         = "64-bit atomic fetch-xor",
-    [UCT_ATOMIC_OP_SWAP]                        = "64-bit atomic swap",
-    [UCT_ATOMIC_OP_CSWAP]                       = "64-bit atomic compare-swap"
+    UCP_WIREUP_STRINGS_AMO_FETCH(64)
 };
 
 static double ucp_wireup_aux_score_func(ucp_context_h context,
@@ -249,10 +247,10 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
             continue;
         }
 
-        UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, op, 32);
-        UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, op, 64);
-        UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, fop, 32);
-        UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, fop, 64);
+        UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, addr_index, op, 32);
+        UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, addr_index, op, 64);
+        UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, addr_index, fop, 32);
+        UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, addr_index, fop, 64);
 
         addr_index_map |= UCS_BIT(addr_index);
     }
@@ -738,8 +736,8 @@ static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, const ucp_ep_params_t 
         return UCS_OK;
     }
 
-    criteria.remote_iface_flags = ucp_context_uct_atomic_iface_flags(context,
-                                                                     &criteria.remote_atomic_flags);
+    ucp_context_uct_atomic_iface_flags(context, &criteria.remote_atomic_flags);
+
     criteria.title              = "atomic operations on %s memory";
     criteria.local_iface_flags  = criteria.remote_iface_flags |
                                   UCT_IFACE_FLAG_PENDING;

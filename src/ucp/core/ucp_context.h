@@ -192,12 +192,12 @@ typedef struct ucp_am_handler {
     uct_am_callback_t             proxy_cb;
 } ucp_am_handler_t;
 
-typedef struct ucp_atomic_requested {
+typedef struct ucp_tl_iface_atomic_flags {
     struct {
         uint64_t                  op_flags;  /**< Attributes for atomic-post operations */
         uint64_t                  fop_flags; /**< Attributes for atomic-fetch operations */
     } atomic32, atomic64;
-} ucp_atomic_requested_t;
+} ucp_tl_iface_atomic_flags_t;
 
 
 #define UCP_ATOMIC_OP_MASK  (UCS_BIT(UCT_ATOMIC_OP_ADD)  | \
@@ -266,8 +266,8 @@ void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
 
 void ucp_context_tag_offload_enable(ucp_context_h context);
 
-uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context,
-                                            ucp_atomic_requested_t *atomic);
+void ucp_context_uct_atomic_iface_flags(ucp_context_h context,
+                                        ucp_tl_iface_atomic_flags_t *atomic);
 
 const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_csum);
 

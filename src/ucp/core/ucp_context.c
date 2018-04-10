@@ -1133,8 +1133,8 @@ void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
     }
 }
 
-uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context,
-                                            ucp_atomic_requested_t *atomic)
+void ucp_context_uct_atomic_iface_flags(ucp_context_h context,
+                                        ucp_tl_iface_atomic_flags_t *atomic)
 {
     if (context->config.features & UCP_FEATURE_AMO32) {
         atomic->atomic32.op_flags  = UCP_ATOMIC_OP_MASK;
@@ -1151,8 +1151,6 @@ uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context,
         atomic->atomic64.op_flags  = 0;
         atomic->atomic64.fop_flags = 0;
     }
-
-    return 0;
 }
 
 ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)

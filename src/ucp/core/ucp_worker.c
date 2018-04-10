@@ -859,10 +859,11 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     uct_md_attr_t *md_attr;
     uint64_t supp_tls;
     uint8_t priority, best_priority;
-    ucp_atomic_requested_t atomic;
+    ucp_tl_iface_atomic_flags_t atomic;
 
-    iface_cap_flags = ucp_context_uct_atomic_iface_flags(context, &atomic) |
-                      UCT_IFACE_FLAG_ATOMIC_DEVICE;
+    ucp_context_uct_atomic_iface_flags(context, &atomic);
+
+    iface_cap_flags             = UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
     dummy_iface_attr.bandwidth  = 1e12;
     dummy_iface_attr.cap_flags  = -1;
