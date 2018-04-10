@@ -19,13 +19,58 @@
 static inline
 ucs_status_t ucp_amo_check_send_status(ucp_request_t *req, ucs_status_t status);
 
-#define UCP_AMO_ONE_PARAM (value)
-#define UCP_AMO_TWO_PARAM (value, *result)
+#define UCP_UCT_AMO_OPCODE_POST(_opcode, _op)  \
+    switch(_opcode) {                          \
+    case UCP_ATOMIC_POST_OP_ADD:               \
+        _op = UCT_ATOMIC_OP_ADD;               \
+        break;                                 \
+    case UCP_ATOMIC_POST_OP_AND:               \
+        _op = UCT_ATOMIC_OP_AND;               \
+        break;                                 \
+    case UCP_ATOMIC_POST_OP_OR:                \
+        _op = UCT_ATOMIC_OP_OR;                \
+        break;                                 \
+    case UCP_ATOMIC_POST_OP_XOR:               \
+        _op = UCT_ATOMIC_OP_XOR;               \
+        break;                                 \
+    default:                                   \
+        return UCS_ERR_UNSUPPORTED;            \
+    }
+
+#define UCP_UCT_AMO_OPCODE_FETCH(_opcode, _op) \
+    switch(_opcode) {                          \
+    case UCP_ATOMIC_FETCH_OP_FADD:             \
+        _op = UCT_ATOMIC_OP_ADD;               \
+        break;                                 \
+    case UCP_ATOMIC_FETCH_OP_FAND:             \
+        _op = UCT_ATOMIC_OP_AND;               \
+        break;                                 \
+    case UCP_ATOMIC_FETCH_OP_FOR:              \
+        _op = UCT_ATOMIC_OP_OR;                \
+        break;                                 \
+    case UCP_ATOMIC_FETCH_OP_FXOR:             \
+        _op = UCT_ATOMIC_OP_XOR;               \
+        break;                                 \
+    case UCP_ATOMIC_FETCH_OP_SWAP:             \
+        _op = UCT_ATOMIC_OP_SWAP;              \
+        break;                                 \
+    case UCP_ATOMIC_FETCH_OP_CSWAP:            \
+        /* do not set op */                    \
+        break;                                 \
+    default:                                   \
+        return UCS_ERR_UNSUPPORTED;            \
+    }
 
 #define _UCP_PROGRESS_AMO_NAME(_function)           \
     UCS_PP_TOKENPASTE(ucp_amo_progress_, _function)
 
-#define UCP_PROGRESS_AMO_DECL(_type, _function, _params) \
+#define _UCP_PROGRESS_AMO_POST(_size)              \
+    _UCP_PROGRESS_AMO_NAME(uct_ep_atomic##_size##_post)
+
+#define _UCP_PROGRESS_AMO_FETCH(_size)              \
+    _UCP_PROGRESS_AMO_NAME(uct_ep_atomic##_size##_fetch)
+
+#define UCP_PROGRESS_AMO_CSWAP_DECL(_type, _function) \
     static ucs_status_t _UCP_PROGRESS_AMO_NAME(_function)(uct_pending_req_t *_self) \
     { \
         ucp_request_t *req = ucs_container_of(_self, ucp_request_t, send.uct); \
@@ -43,80 +88,73 @@ ucs_status_t ucp_amo_check_send_status(ucp_request_t *req, ucs_status_t status);
         \
         req->send.lane = rkey->cache.amo_lane; \
         status = _function(ep->uct_eps[req->send.lane], \
-                           UCS_PP_TUPLE_BREAK _params, \
+                           value, *result, \
                            remote_addr, rkey->cache.amo_rkey, result, \
                            &req->send.state.uct_comp); \
         return ucp_amo_check_send_status(req, status); \
     }
 
-UCP_PROGRESS_AMO_DECL(uint32_t, uct_ep_atomic_swap32, UCP_AMO_ONE_PARAM)
-
-UCP_PROGRESS_AMO_DECL(uint32_t, uct_ep_atomic_fadd32, UCP_AMO_ONE_PARAM)
-
-UCP_PROGRESS_AMO_DECL(uint32_t, uct_ep_atomic_cswap32, UCP_AMO_TWO_PARAM)
-
-UCP_PROGRESS_AMO_DECL(uint64_t, uct_ep_atomic_swap64, UCP_AMO_ONE_PARAM)
-
-UCP_PROGRESS_AMO_DECL(uint64_t, uct_ep_atomic_fadd64, UCP_AMO_ONE_PARAM)
-
-UCP_PROGRESS_AMO_DECL(uint64_t, uct_ep_atomic_cswap64, UCP_AMO_TWO_PARAM)
-
-#define UCP_POST_AMO_DECL(_type, _function) \
-    static ucs_status_t _UCP_PROGRESS_AMO_NAME(_function)(uct_pending_req_t *_self) \
-    { \
-        ucp_request_t *req = ucs_container_of(_self, ucp_request_t, send.uct); \
-        ucp_rkey_h rkey    = req->send.amo.rkey; \
-        ucp_ep_t *ep       = req->send.ep; \
-        _type value = (_type)req->send.amo.value;         \
-        uint64_t remote_addr = req->send.amo.remote_addr; \
-        ucs_status_t status; \
-        \
-        status = UCP_RKEY_RESOLVE(rkey, ep, amo); \
-        if (status != UCS_OK) { \
-            return UCS_ERR_UNREACHABLE; \
-        } \
-        \
-        req->send.lane = rkey->cache.amo_lane; \
-        status = UCS_PROFILE_CALL(_function, ep->uct_eps[req->send.lane], value, \
-                                  remote_addr, rkey->cache.amo_rkey); \
-        return ucp_amo_check_send_status(req, status); \
+#define UCP_PROGRESS_AMO_FETCH_DECL(_size)                                        \
+    static ucs_status_t _UCP_PROGRESS_AMO_FETCH(_size)(uct_pending_req_t *_self)  \
+    {                                                                             \
+        typedef uint##_size##_t type;                                             \
+                                                                                  \
+        ucp_request_t *req    = ucs_container_of(_self, ucp_request_t, send.uct); \
+        ucp_rkey_h rkey       = req->send.amo.rkey;                               \
+        ucp_ep_t *ep          = req->send.ep;                                     \
+        type value            = (type)req->send.amo.value;                        \
+        type *result          = (type *)req->send.amo.result;                     \
+        uint64_t remote_addr  = req->send.amo.remote_addr;                        \
+        uct_atomic_op_t op    = req->send.amo.uct_op;                             \
+        ucs_status_t status;                                                      \
+                                                                                  \
+        status = UCP_RKEY_RESOLVE(rkey, ep, amo);                                 \
+        if (status != UCS_OK) {                                                   \
+            return UCS_ERR_UNREACHABLE;                                           \
+        }                                                                         \
+                                                                                  \
+        req->send.lane = rkey->cache.amo_lane;                                    \
+        status = uct_ep_atomic##_size##_fetch(ep->uct_eps[req->send.lane],        \
+                                              op, value, result,                  \
+                                              remote_addr,                        \
+                                              rkey->cache.amo_rkey,               \
+                                              &req->send.state.uct_comp);         \
+        return ucp_amo_check_send_status(req, status);                            \
     }
 
-UCP_POST_AMO_DECL(uint64_t, uct_ep_atomic_add64)
-
-UCP_POST_AMO_DECL(uint32_t, uct_ep_atomic_add32)
-
-#define UCP_AMO_WITHOUT_RESULT(_ep, _param, _remote_addr, _rkey, _uct_func, _size) \
-    { \
-        ucs_status_t status; \
-        \
-        status = ucp_rma_check_atomic(_remote_addr, _size); \
-        if (status != UCS_OK) { \
-            goto out; \
-        } \
-        \
-        UCP_THREAD_CS_ENTER_CONDITIONAL(&(_ep)->worker->mt_lock); \
-        for (;;) { \
-            status = UCP_RKEY_RESOLVE(_rkey, _ep, amo); \
-            if (status != UCS_OK) { \
-                goto out_unlock; \
-            } \
-            \
-            status = UCS_PROFILE_CALL(_uct_func, (_ep)->uct_eps[(_rkey)->cache.amo_lane], \
-                                      _param, _remote_addr, (_rkey)->cache.amo_rkey); \
-            if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) { \
-                UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
-                return status; \
-            } \
-            ucp_worker_progress((_ep)->worker); \
-        } \
-        \
-        status = UCS_OK; \
-    out_unlock: \
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
-    out: \
-        return status; \
+#define UCP_PROGRESS_AMO_POST_DECL(_size) \
+    static ucs_status_t _UCP_PROGRESS_AMO_POST(_size)(uct_pending_req_t *_self)  \
+    {                                                                            \
+        typedef uint##_size##_t type;                                            \
+                                                                                 \
+        ucp_request_t *req   = ucs_container_of(_self, ucp_request_t, send.uct); \
+        ucp_rkey_h rkey      = req->send.amo.rkey;                               \
+        ucp_ep_t *ep         = req->send.ep;                                     \
+        type value           = (type)req->send.amo.value;                        \
+        uint64_t remote_addr = req->send.amo.remote_addr;                        \
+        uct_atomic_op_t op   = req->send.amo.uct_op;                             \
+        ucs_status_t status;                                                     \
+                                                                                 \
+        status = UCP_RKEY_RESOLVE(rkey, ep, amo);                                \
+        if (status != UCS_OK) {                                                  \
+            return UCS_ERR_UNREACHABLE;                                          \
+        }                                                                        \
+                                                                                 \
+        req->send.lane = rkey->cache.amo_lane;                                   \
+        status = UCS_PROFILE_CALL(uct_ep_atomic##_size##_post,                   \
+                                  ep->uct_eps[req->send.lane], op, value,        \
+                                  remote_addr, rkey->cache.amo_rkey);            \
+        return ucp_amo_check_send_status(req, status);                           \
     }
+
+UCP_PROGRESS_AMO_FETCH_DECL(32)
+UCP_PROGRESS_AMO_FETCH_DECL(64)
+
+UCP_PROGRESS_AMO_CSWAP_DECL(uint32_t, uct_ep_atomic_cswap32)
+UCP_PROGRESS_AMO_CSWAP_DECL(uint64_t, uct_ep_atomic_cswap64)
+
+UCP_PROGRESS_AMO_POST_DECL(64)
+UCP_PROGRESS_AMO_POST_DECL(32)
 
 #define UCP_RMA_CHECK_ATOMIC_PTR(_addr, _op_size) \
     do { \
@@ -178,62 +216,65 @@ ucp_amo_send_request(ucp_request_t *req, ucp_send_callback_t cb)
 }
 
 static inline
-uct_pending_callback_t ucp_amo_select_uct_func(ucp_atomic_fetch_op_t opcode, size_t op_size)
+uct_pending_callback_t ucp_amo_fetch_select_uct_func(ucp_atomic_fetch_op_t opcode, size_t op_size)
 {
-    uct_pending_callback_t progress_func;
-
     if (op_size == sizeof(uint64_t)) {
         switch (opcode) {
         case UCP_ATOMIC_FETCH_OP_CSWAP:
-            progress_func = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_cswap64);
-            break;
-        case UCP_ATOMIC_FETCH_OP_SWAP:
-            progress_func = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_swap64);
-            break;
+            return _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_cswap64);
         case UCP_ATOMIC_FETCH_OP_FADD:
-            progress_func = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_fadd64);
-            break;
+        case UCP_ATOMIC_FETCH_OP_FAND:
+        case UCP_ATOMIC_FETCH_OP_FOR:
+        case UCP_ATOMIC_FETCH_OP_FXOR:
+        case UCP_ATOMIC_FETCH_OP_SWAP:
+            return _UCP_PROGRESS_AMO_NAME(uct_ep_atomic64_fetch);
         default:
-            progress_func = NULL;
+            return NULL;
         }
     } else {
+        ucs_assert(op_size == sizeof(uint32_t));
+
         switch (opcode) {
         case UCP_ATOMIC_FETCH_OP_CSWAP:
-            progress_func = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_cswap32);
-            break;
-        case UCP_ATOMIC_FETCH_OP_SWAP:
-            progress_func = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_swap32);
-            break;
+            return _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_cswap32);
         case UCP_ATOMIC_FETCH_OP_FADD:
-            progress_func = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_fadd32);
-            break;
+        case UCP_ATOMIC_FETCH_OP_FAND:
+        case UCP_ATOMIC_FETCH_OP_FOR:
+        case UCP_ATOMIC_FETCH_OP_FXOR:
+        case UCP_ATOMIC_FETCH_OP_SWAP:
+            return _UCP_PROGRESS_AMO_NAME(uct_ep_atomic32_fetch);
         default:
-            progress_func = NULL;
+            return NULL;
         }
     }
-    return progress_func;
 }
 
 static inline
 uct_pending_callback_t ucp_amo_post_select_uct_func(ucp_atomic_post_op_t opcode, size_t op_size)
 {
-    uct_pending_callback_t progress_func;
+    if (op_size == sizeof(uint64_t)) {
+        switch (opcode) {
+        case UCP_ATOMIC_POST_OP_ADD:
+        case UCP_ATOMIC_POST_OP_AND:
+        case UCP_ATOMIC_POST_OP_OR:
+        case UCP_ATOMIC_POST_OP_XOR:
+            return _UCP_PROGRESS_AMO_NAME(uct_ep_atomic64_post);
+        default:
+            return NULL;
+        }
+    } else {
+        ucs_assert(op_size == sizeof(uint32_t));
 
-    if (opcode != UCP_ATOMIC_POST_OP_ADD) {
-        return NULL;
+        switch (opcode) {
+        case UCP_ATOMIC_POST_OP_ADD:
+        case UCP_ATOMIC_POST_OP_AND:
+        case UCP_ATOMIC_POST_OP_OR:
+        case UCP_ATOMIC_POST_OP_XOR:
+            return _UCP_PROGRESS_AMO_NAME(uct_ep_atomic32_post);
+        default:
+            return NULL;
+        }
     }
-    switch (op_size) {
-    case sizeof(uint32_t):
-        progress_func = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_add32);
-        break;
-    case sizeof(uint64_t):
-        progress_func = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_add64);
-        break;
-    default:
-        progress_func = NULL;
-    }
-
-    return progress_func;
 }
 
 static inline void init_amo_common(ucp_request_t *req, ucp_ep_h ep, uint64_t remote_addr,
@@ -249,22 +290,27 @@ static inline void init_amo_common(ucp_request_t *req, ucp_ep_h ep, uint64_t rem
 #endif
 }
 
-static inline void init_amo_req(ucp_request_t *req, ucp_ep_h ep, void *buffer,
-                                ucp_atomic_fetch_op_t op, size_t op_size, uint64_t remote_addr,
-                                ucp_rkey_h rkey, uint64_t value)
+static inline ucs_status_t init_amo_fetch(ucp_request_t *req, ucp_ep_h ep, void *buffer,
+                                          ucp_atomic_fetch_op_t op, size_t op_size,
+                                          uint64_t remote_addr, ucp_rkey_h rkey, uint64_t value)
 {
     init_amo_common(req, ep, remote_addr, rkey, value);
+    UCP_UCT_AMO_OPCODE_FETCH(op, req->send.amo.uct_op);
     req->send.state.uct_comp.count  = 1;
     req->send.state.uct_comp.func   = ucp_amo_completed_single;
     req->send.amo.result            = buffer;
-    req->send.uct.func              = ucp_amo_select_uct_func(op, op_size);
+    req->send.uct.func              = ucp_amo_fetch_select_uct_func(op, op_size);
+    return UCS_OK;
 }
 
-static inline void init_amo_post(ucp_request_t *req, ucp_ep_h ep, ucp_atomic_post_op_t op,
-                                 size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey,
-                                 uint64_t value)
+static inline ucs_status_t init_amo_post(ucp_request_t *req, ucp_ep_h ep,
+                                         ucp_atomic_post_op_t op,
+                                         size_t op_size, uint64_t remote_addr,
+                                         ucp_rkey_h rkey, uint64_t value)
 {
     init_amo_common(req, ep, remote_addr, rkey, value);
+    UCP_UCT_AMO_OPCODE_POST(op, req->send.amo.uct_op);
     req->send.uct.func = ucp_amo_post_select_uct_func(op, op_size);
+    return UCS_OK;
 }
 #endif

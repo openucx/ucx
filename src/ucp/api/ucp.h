@@ -380,6 +380,9 @@ enum {
  */
 typedef enum {
     UCP_ATOMIC_POST_OP_ADD, /**< Atomic add */
+    UCP_ATOMIC_POST_OP_AND, /**< Atomic and */
+    UCP_ATOMIC_POST_OP_OR,  /**< Atomic or  */
+    UCP_ATOMIC_POST_OP_XOR, /**< Atomic xor */
     UCP_ATOMIC_POST_OP_LAST
 } ucp_atomic_post_op_t;
 
@@ -393,9 +396,12 @@ typedef enum {
  * will fetch data from the remote node.
  */
 typedef enum {
-    UCP_ATOMIC_FETCH_OP_FADD, /**< Atomic Fetch and add */
-    UCP_ATOMIC_FETCH_OP_SWAP, /**< Atomic swap */
+    UCP_ATOMIC_FETCH_OP_FADD,  /**< Atomic Fetch and add    */
+    UCP_ATOMIC_FETCH_OP_SWAP,  /**< Atomic swap             */
     UCP_ATOMIC_FETCH_OP_CSWAP, /**< Atomic conditional swap */
+    UCP_ATOMIC_FETCH_OP_FAND,  /**< Atomic Fetch and and    */
+    UCP_ATOMIC_FETCH_OP_FOR,   /**< Atomic Fetch and or     */
+    UCP_ATOMIC_FETCH_OP_FXOR,  /**< Atomic Fetch and xor    */
     UCP_ATOMIC_FETCH_OP_LAST
 } ucp_atomic_fetch_op_t;
 

@@ -151,7 +151,7 @@ typedef struct uct_tl_resource_desc {
 
 /**
  * @brief Atomic operation requested for uct_ep_atomic32_post, uct_ep_atomic64_post,
- * uct_ep_atomic32_fetch_nb and uct_ep_atomic64_fetch_nb.
+ * uct_ep_atomic32_fetch and uct_ep_atomic64_fetch.
  *
  * This enumeration defines which atomic memory operation should be
  * performed by the uct_ep_atomic family of fuctions.

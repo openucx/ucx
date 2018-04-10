@@ -167,8 +167,8 @@ struct ucp_request {
 
                 struct {
                     uint64_t              remote_addr; /* Remote address */
-                    ucp_atomic_fetch_op_t op; /* Requested AMO */
-                    ucp_rkey_h            rkey;     /* Remote memory key */
+                    uct_atomic_op_t       uct_op;      /* Requested UCT AMO */
+                    ucp_rkey_h            rkey;        /* Remote memory key */
                     uint64_t              value;
                     void                  *result;
                 } amo;
