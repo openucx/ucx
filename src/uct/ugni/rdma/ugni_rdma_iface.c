@@ -71,13 +71,24 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                          UCT_IFACE_FLAG_PENDING;
 
+    iface_attr->cap.atomic64.op_flags  = UCS_BIT(UCT_ATOMIC_OP_ADD);
+    iface_attr->cap.atomic64.fop_flags = UCS_BIT(UCT_ATOMIC_OP_ADD)    |
+                                         UCS_BIT(UCT_ATOMIC_OP_CSWAP);
+
+
     if (uct_ugni_check_device_type(&iface->super, GNI_DEVICE_ARIES)) {
-        iface_attr->cap.flags         |= UCT_IFACE_FLAG_PUT_SHORT |
-                                         UCT_IFACE_FLAG_ATOMIC_SWAP64 |
-                                         UCT_IFACE_FLAG_ATOMIC_SWAP32 |
-                                         UCT_IFACE_FLAG_ATOMIC_FADD32 |
-                                         UCT_IFACE_FLAG_ATOMIC_ADD32 |
-                                         UCT_IFACE_FLAG_ATOMIC_CSWAP32;
+        iface_attr->cap.flags              |= UCT_IFACE_FLAG_PUT_SHORT     |
+                                              UCT_IFACE_FLAG_ATOMIC_SWAP64 |
+                                              UCT_IFACE_FLAG_ATOMIC_SWAP32 |
+                                              UCT_IFACE_FLAG_ATOMIC_FADD32 |
+                                              UCT_IFACE_FLAG_ATOMIC_ADD32  |
+                                              UCT_IFACE_FLAG_ATOMIC_CSWAP32;
+
+        iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_SWAP);
+        iface_attr->cap.atomic32.op_flags   = UCS_BIT(UCT_ATOMIC_OP_ADD);
+        iface_attr->cap.atomic32.fop_flags  = UCS_BIT(UCT_ATOMIC_OP_ADD)   |
+                                              UCS_BIT(UCT_ATOMIC_OP_SWAP)  |
+                                              UCS_BIT(UCT_ATOMIC_OP_CSWAP);
     }
     iface_attr->overhead               = 80e-9; /* 80 ns */
     iface_attr->latency.overhead       = 900e-9; /* 900 ns */
@@ -177,6 +188,10 @@ static uct_iface_ops_t uct_ugni_aries_rdma_iface_ops = {
     .ep_atomic_fadd32         = uct_ugni_ep_atomic_fadd32,
     .ep_atomic_cswap32        = uct_ugni_ep_atomic_cswap32,
     .ep_atomic_swap32         = uct_ugni_ep_atomic_swap32,
+    .ep_atomic64_post         = uct_ugni_ep_atomic64_post,
+    .ep_atomic32_post         = uct_ugni_ep_atomic32_post,
+    .ep_atomic64_fetch_nb     = uct_ugni_ep_atomic64_fetch,
+    .ep_atomic32_fetch_nb     = uct_ugni_ep_atomic32_fetch,
     .ep_pending_add           = uct_ugni_ep_pending_add,
     .ep_pending_purge         = uct_ugni_ep_pending_purge,
     .ep_flush                 = uct_ugni_ep_flush,
