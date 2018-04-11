@@ -52,6 +52,7 @@ public:
         server_params.open_mode                      = UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER;
         server_params.err_handler                    = err_handler;
         server_params.err_handler_arg                = reinterpret_cast<void*>(this);
+        server_params.err_handler_cb_flags           = UCT_CB_FLAG_SYNC;
         server_params.mode.sockaddr.listen_sockaddr  = listen_sock_addr;
         server_params.mode.sockaddr.cb_flags         = UCT_CB_FLAG_ASYNC;
         server_params.mode.sockaddr.conn_request_cb  = conn_request_cb;
@@ -65,9 +66,13 @@ public:
         client_params.open_mode                      = UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT;
         client_params.err_handler                    = err_handler;
         client_params.err_handler_arg                = reinterpret_cast<void*>(this);
+        client_params.err_handler_cb_flags           = UCT_CB_FLAG_SYNC;
 
         client = uct_test::create_entity(client_params);
         m_entities.push_back(client);
+
+        /* initiate the client's private data callback argument */
+        client->client_cb_arg = server->iface_attr().max_conn_priv;
     }
 
     static ucs_status_t conn_request_cb(void *arg, const void *conn_priv_data,
@@ -139,10 +144,12 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
         client_params.open_mode       = UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT;
         client_params.err_handler     = err_handler;
         client_params.err_handler_arg = reinterpret_cast<void*>(this);
+        client_params.err_handler_cb_flags = UCT_CB_FLAG_SYNC;
 
         client_test = uct_test::create_entity(client_params);
         m_entities.push_back(client_test);
 
+        client_test->client_cb_arg = server->iface_attr().max_conn_priv;
         client_test->connect(i, *server, 0, &connect_sock_addr);
     }
 

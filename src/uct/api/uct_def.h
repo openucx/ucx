@@ -300,6 +300,40 @@ typedef ucs_status_t (*uct_sockaddr_conn_request_callback_t)(void *arg,
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief Callback to fill the user's private data on the client side.
+ *
+ * This callback routine will be invoked on the client side before sending the
+ * transport's connection request to the server.
+ * It should be set by the client side while initializing an endpoint.
+ * The user's private data should be placed inside the priv_data buffer and it
+ * will be sent to the server side in the connection request.
+ * The private data's length is limited by the value of the max_conn_priv field
+ * inside @ref uct_iface_attr.
+ * The routine may fill the user's private data according to the given device
+ * name. This device name, which is passed to this routine, must comply to the
+ * dev_name structure inside @ref uct_tl_resource_desc_t which is filled by the
+ * transports during their resource query function.
+ * It is possible that this callback will not be invoked - in case the endpoint
+ * goes into an error state before getting the chance to invoke this callback.
+ * This callback has to be thread safe.
+ * Other than communication progress routines, it is allowed to call other UCT
+ * communication routines from this callback.
+ *
+ * @param [in]  dev_name   Device name.
+ * @param [out] priv_data  User's private data to be passed to the server side.
+ * @param [in]  arg        User defined argument for this callback.
+ *
+  @return  Negative value indicates an error according to @ref ucp_status_t.
+ *         On success, non-negative value indicates actual number of
+ *         bytes filled in the @a priv_data buffer.
+ */
+typedef ssize_t (*uct_sockaddr_fill_priv_data_callback_t)(const char *dev_name,
+                                                          void *priv_data,
+                                                          void *arg);
+
+
+/**
  * @ingroup UCT_TAG
  * @brief Callback to process unexpected eager tagged message.
  *

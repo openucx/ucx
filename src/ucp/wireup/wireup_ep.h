@@ -35,6 +35,7 @@ struct ucp_wireup_ep {
     uct_ep_h                  aux_ep;        /**< Used to wireup the "real" endpoint */
     uct_ep_h                  sockaddr_ep;   /**< Used for client-server wireup */
     ucp_rsc_index_t           aux_rsc_index; /**< Index of auxiliary transport */
+    ucp_rsc_index_t           sockaddr_rsc_index; /**< Index of sockaddr transport */
     volatile uint32_t         pending_count; /**< Number of pending wireup operations */
     volatile uint32_t         flags;         /**< Connection state flags */
     uct_worker_cb_id_t        progress_id;   /**< ID of progress function */

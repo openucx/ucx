@@ -41,6 +41,7 @@ public:
     static void hide_errors();
     static void hide_warnings();
     static void wrap_errors();
+    static void detect_error();
     static void restore_errors();
 
 protected:
@@ -96,6 +97,10 @@ private:
     static ucs_log_func_rc_t
     wrap_errors_logger(const char *file, unsigned line, const char *function,
                        ucs_log_level_t level, const char *message, va_list ap);
+
+    static ucs_log_func_rc_t
+    detect_error_logger(const char *file, unsigned line, const char *function,
+                        ucs_log_level_t level, const char *message, va_list ap);
 
     pthread_barrier_t    m_barrier;
 };

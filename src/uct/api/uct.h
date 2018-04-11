@@ -657,6 +657,9 @@ struct uct_iface_params {
     void                                         *err_handler_arg;
     /** The callback to handle transport level error.*/
     uct_error_handler_t                          err_handler;
+    /** Callback flags to indicate where the @err_handler callback can be
+     * invoked from. @ref uct_cb_flags */
+    uint32_t                                     err_handler_cb_flags;
 
     /** These callbacks are only relevant for HW Tag Matching */
     void                                         *eager_arg;
@@ -1336,32 +1339,38 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  *
  * This routine will create an endpoint for a connection to the remote peer,
  * specified by its socket address.
- * The user may provide private data to be sent on a connection request to the
- * remote peer.
+ * The user may provide a callback function which will be used to fill his
+ * private data that will be sent on a connection request to the remote peer.
+ * It is possible that the callback will no be invoked due to the endpoint going
+ * into an error state before getting the chance to invoke it.
  *
  * @note The interface in this routine requires the
  * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
  *
- * @param [in]  iface            Interface to create the endpoint on.
- * @param [in]  sockaddr         The sockaddr to connect to on the remote peer.
- * @param [in]  priv_data        User's private data for connecting to the
- *                               remote peer.
- * @param [in]  length           Length of the private data.
- * @param [out] ep_p             Handle to the created endpoint.
+ * @param [in]  iface              Interface to create the endpoint on.
+ * @param [in]  sockaddr           The sockaddr to connect to on the remote peer.
+ * @param [in]  fill_priv_data_cb  Callback for filling the user's private data.
+ * @param [in]  arg                User defined argument for the callback.
+ * @param [in]  cb_flags           Required @ref uct_cb_flags "callback flags" to
+ *                                 indicate where the
+ *                                 @ref uct_sockaddr_fill_priv_data_callback_t
+ *                                 callback can be invoked from.
+ * @param [out] ep_p               Handle to the created endpoint.
  *
- * @return UCS_OK              - Connection request was sent to the server.
- *                               This does not guarantee that the server has
- *                               received the message; in case of failure, the
- *                               error will be reported to the interface error
- *                               handler callback provided to @ref uct_iface_open
- *                               via @ref uct_iface_params_t.err_handler.
+ * @return UCS_OK                  Connection request was sent to the server.
+ *                                 This does not guarantee that the server has
+ *                                 received the message; in case of failure, the
+ *                                 error will be reported to the interface error
+ *                                 handler callback provided to @ref uct_iface_open
+ *                                 via @ref uct_iface_params_t.err_handler.
  *
- * @return error code          - In case of an error. (@ref ucs_status_t)
+ * @return error code              In case of an error. (@ref ucs_status_t)
  */
 ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
                                     const ucs_sock_addr_t *sockaddr,
-                                    const void *priv_data, size_t length,
-                                    uct_ep_h *ep_p);
+                                    uct_sockaddr_fill_priv_data_callback_t
+                                    fill_priv_data_cb, void *arg,
+                                    uint32_t cb_flags, uct_ep_h *ep_p);
 
 
 /**

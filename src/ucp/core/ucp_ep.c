@@ -580,6 +580,10 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
+    /* remove pending slow-path progress in case it wasn't removed yet */
+    ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
+                            ucp_worker_err_handle_remove_filter, ep->worker);
+
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -628,6 +632,10 @@ void ucp_ep_destroy(ucp_ep_h ep)
 
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+
+    /* remove pending slow-path progress in case it wasn't removed yet */
+    ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
+                            ucp_worker_err_handle_remove_filter, ep->worker);
     return;
 }
 

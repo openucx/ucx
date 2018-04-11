@@ -411,13 +411,14 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_iface_t, ops);
 
-    self->md              = md;
-    self->worker          = ucs_derived_of(worker, uct_priv_worker_t);
-    self->am_tracer       = NULL;
-    self->am_tracer_arg   = NULL;
-    self->err_handler     = params->err_handler;
-    self->err_handler_arg = params->err_handler_arg;
-    self->progress_flags  = 0;
+    self->md                   = md;
+    self->worker               = ucs_derived_of(worker, uct_priv_worker_t);
+    self->am_tracer            = NULL;
+    self->am_tracer_arg        = NULL;
+    self->err_handler          = params->err_handler;
+    self->err_handler_cb_flags = params->err_handler_cb_flags;
+    self->err_handler_arg      = params->err_handler_arg;
+    self->progress_flags       = 0;
     uct_worker_progress_init(&self->prog);
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {
@@ -467,9 +468,11 @@ uct_ep_create_connected(uct_iface_h iface, const uct_device_addr_t *dev_addr,
 
 ucs_status_t
 uct_ep_create_sockaddr(uct_iface_h iface, const ucs_sock_addr_t *sockaddr,
-                       const void *priv_data, size_t length, uct_ep_h *ep_p)
+                       uct_sockaddr_fill_priv_data_callback_t fill_priv_data_cb,
+                       void *arg, uint32_t cb_flags, uct_ep_h *ep_p)
 {
-    return iface->ops.ep_create_sockaddr(iface, sockaddr, priv_data, length, ep_p);
+    return iface->ops.ep_create_sockaddr(iface, sockaddr, fill_priv_data_cb, arg,
+                                         cb_flags, ep_p);
 }
 
 void uct_ep_destroy(uct_ep_h ep)
