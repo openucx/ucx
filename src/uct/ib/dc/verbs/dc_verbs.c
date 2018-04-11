@@ -510,10 +510,8 @@ ucs_status_t uct_dc_verbs_ep_atomic64_fetch_nb(uct_ep_h tl_ep, uct_atomic_op_t o
                                           rkey, comp);
 #endif
     default:
-        break;
+        return UCS_ERR_UNSUPPORTED;
     }
-
-    return UCS_ERR_UNSUPPORTED;
 }
 
 ucs_status_t uct_dc_verbs_ep_atomic32_fetch_nb(uct_ep_h tl_ep, uct_atomic_op_t opcode,

@@ -699,17 +699,15 @@ ucs_status_t uct_rc_verbs_ep_atomic32_data(uct_atomic_op_t opcode, uint32_t valu
         *op   = IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD;
         *add  = value;
         *swap = 0;
-        break;
+        return UCS_OK;
     case UCT_ATOMIC_OP_SWAP:
         *op   = IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP;
         *add  = 0;
         *swap = value;
-        break;
+        return UCS_OK;
     default:
         return UCS_ERR_UNSUPPORTED;
     }
-
-    return UCS_OK;
 }
 #endif
 
