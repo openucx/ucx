@@ -41,13 +41,41 @@
         if (ucs_test_all_flags(_cap_flags, \
                                UCT_IFACE_FLAG_##_name##32 | UCT_IFACE_FLAG_##_name##64)) \
         { \
-            printf("#         %12s: 32, 64 bit%s\n", s, domain); \
+            printf("#         %12s: 32, 64 bit%s (deprecated)\n", s, domain); \
         } else { \
-            printf("#         %12s: %d bit%s\n", s, \
+            printf("#         %12s: %d bit%s (deprecated)\n", s, \
                    ((_cap_flags) & UCT_IFACE_FLAG_##_name##32) ? 32 : 64, domain); \
         } \
         free(s); \
     }
+
+#define _PRINT_ATOMIC_POST(_name, _cap, _op, _suffix) \
+    if (((_cap).atomic32._op & UCS_BIT(UCT_ATOMIC_OP_##_name)) ||  \
+        ((_cap).atomic64._op & UCS_BIT(UCT_ATOMIC_OP_##_name))) {  \
+        char *s = strduplower(#_name); \
+        char amo[256] = "atomic_" _suffix; \
+        char *domain = ""; \
+        strcat(amo, s); \
+        free(s); \
+        if ((_cap).flags & UCT_IFACE_FLAG_ATOMIC_CPU) { \
+            domain = ", cpu"; \
+        } else if ((_cap).flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) { \
+            domain = ", device"; \
+        } \
+        if (((_cap).atomic32._op & UCS_BIT(UCT_ATOMIC_OP_##_name)) &&  \
+            ((_cap).atomic64._op & UCS_BIT(UCT_ATOMIC_OP_##_name))) {  \
+            printf("#         %12s: 32, 64 bit%s\n", amo, domain); \
+        } else { \
+            printf("#         %12s: %d bit%s\n", amo, \
+                   ((_cap).atomic32._op & UCS_BIT(UCT_ATOMIC_OP_##_name)) ? 32 : 64, domain); \
+        } \
+    }
+
+#define PRINT_ATOMIC_POST(_name, _cap) \
+    _PRINT_ATOMIC_POST(_name, _cap, op_flags, "");
+
+#define PRINT_ATOMIC_FETCH(_name, _cap, _suffix) \
+    _PRINT_ATOMIC_POST(_name, _cap, fop_flags, _suffix);
 
 static char *strduplower(const char *str)
 {
@@ -175,6 +203,18 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         PRINT_ATOMIC_CAP(ATOMIC_FADD,  iface_attr.cap.flags);
         PRINT_ATOMIC_CAP(ATOMIC_SWAP,  iface_attr.cap.flags);
         PRINT_ATOMIC_CAP(ATOMIC_CSWAP, iface_attr.cap.flags);
+
+        PRINT_ATOMIC_POST(ADD, iface_attr.cap);
+        PRINT_ATOMIC_POST(AND, iface_attr.cap);
+        PRINT_ATOMIC_POST(OR,  iface_attr.cap);
+        PRINT_ATOMIC_POST(XOR, iface_attr.cap);
+
+        PRINT_ATOMIC_FETCH(ADD,   iface_attr.cap, "f");
+        PRINT_ATOMIC_FETCH(AND,   iface_attr.cap, "f");
+        PRINT_ATOMIC_FETCH(OR,    iface_attr.cap, "f");
+        PRINT_ATOMIC_FETCH(XOR,   iface_attr.cap, "f");
+        PRINT_ATOMIC_FETCH(SWAP , iface_attr.cap, "");
+        PRINT_ATOMIC_FETCH(CSWAP, iface_attr.cap, "");
 
         buf[0] = '\0';
         if (iface_attr.cap.flags & (UCT_IFACE_FLAG_CONNECT_TO_EP |
