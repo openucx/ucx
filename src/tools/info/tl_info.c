@@ -76,8 +76,8 @@ static void print_atomic_info(uct_atomic_op_t opcode, const char *name,
 
     if ((op32 & UCS_BIT(opcode)) || (op64 & UCS_BIT(opcode))) {
         s = strduplower(name);
-        strncat(amo, suffix, sizeof(amo) - strlen(amo));
-        strncat(amo, s, sizeof(amo) - strlen(amo));
+        strncat(amo, suffix, sizeof(amo) - strlen(amo) - 1);
+        strncat(amo, s, sizeof(amo) - strlen(amo) - 1);
         free(s);
 
         if ((op32 & UCS_BIT(opcode)) && (op64 & UCS_BIT(opcode))) {
