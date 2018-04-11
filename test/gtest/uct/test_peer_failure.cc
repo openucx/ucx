@@ -40,8 +40,8 @@ public:
         static uct_iface_params_t params;
 
         memset(&params, 0, sizeof(params));
-        params.err_handler     = get_err_handler();
-        params.err_handler_arg = reinterpret_cast<void*>(this);
+        params.err_handler          = get_err_handler();
+        params.err_handler_arg      = reinterpret_cast<void*>(this);
         params.err_handler_cb_flags = UCT_CB_FLAG_SYNC;
         return params;
     }

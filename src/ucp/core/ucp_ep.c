@@ -582,7 +582,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 
     /* remove pending slow-path progress in case it wasn't removed yet */
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
-                            ucp_worker_err_handle_remove_filter, ep->worker);
+                            ucp_worker_err_handle_remove_filter, ep);
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
@@ -627,15 +627,17 @@ void ucp_ep_destroy(ucp_ep_h ep)
             ucp_worker_progress(worker);
             status = ucp_request_check_status(request);
         } while (status == UCS_INPROGRESS);
+
+        /* remove pending slow-path callback in case it was added in the above
+         * progress but won't be invoked */
+        ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
+                                ucp_worker_err_handle_remove_filter, ep);
+
         ucp_request_release(request);
     }
 
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
-
-    /* remove pending slow-path progress in case it wasn't removed yet */
-    ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
-                            ucp_worker_err_handle_remove_filter, ep->worker);
     return;
 }
 

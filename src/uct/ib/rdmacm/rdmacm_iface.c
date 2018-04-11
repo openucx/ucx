@@ -247,9 +247,9 @@ static int uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface, struct rdma
             /* TODO check the iface's cb_flags to determine when to invoke this callback.
              * currently only UCT_CB_FLAG_ASYNC is supported so the cb is invoked from here */
             priv_data_ret = ep->fill_priv_data_cb(dev_name,
-                                                     (void*)(conn_param.private_data +
-                                                     sizeof(uct_rdmacm_priv_data_hdr_t)),
-                                                     ep->fill_priv_data_arg);
+                                                  (void*)(conn_param.private_data +
+                                                  sizeof(uct_rdmacm_priv_data_hdr_t)),
+                                                  ep->fill_priv_data_arg);
             if (priv_data_ret < 0) {
                 ucs_debug("rdmacm client (iface=%p cm_id=%p fd=%d) failed to fill "
                           "private data", iface, event->id, iface->event_ch->fd);

@@ -357,7 +357,6 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     ucp_lane_index_t lane;
     ucp_ep_config_key_t key;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
     UCS_ASYNC_BLOCK(&worker->async);
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
@@ -425,8 +424,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
 out:
     ucs_free(err_handle_arg);
     UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
-    return 0;
+    return 1;
 }
 
 int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
@@ -435,7 +433,7 @@ int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
     ucp_worker_err_handle_arg_t *err_handle_arg = elem->arg;
 
     return (elem->cb == ucp_worker_iface_err_handle_progress) &&
-           (err_handle_arg->worker == arg);
+           (err_handle_arg->ucp_ep == arg);
 }
 
 static ucs_status_t
@@ -476,7 +474,7 @@ found_ucp_ep:
 
     err_handle_arg = ucs_malloc(sizeof(*err_handle_arg), "ucp_worker_err_handle_arg");
     if (err_handle_arg == NULL) {
-        ucs_error("failed to allocate listener ucp_worker_err_handle_arg");
+        ucs_error("failed to allocate ucp_worker_err_handle_arg");
         ret_status = UCS_ERR_NO_MEMORY;
         goto out;
     }
