@@ -469,19 +469,19 @@ ucs_status_t uct_rc_mlx5_ep_atomic64_post(uct_ep_h ep, unsigned opcode, uint64_t
     return uct_rc_mlx5_ep_atomic_op_post(ep, opcode, sizeof(value), value, remote_addr, rkey);
 }
 
-ucs_status_t uct_rc_mlx5_ep_atomic64_fetch_nb(uct_ep_h ep, uct_atomic_op_t opcode,
-                                              uint64_t value, uint64_t *result,
-                                              uint64_t remote_addr, uct_rkey_t rkey,
-                                              uct_completion_t *comp)
+ucs_status_t uct_rc_mlx5_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
+                                           uint64_t value, uint64_t *result,
+                                           uint64_t remote_addr, uct_rkey_t rkey,
+                                           uct_completion_t *comp)
 {
     return uct_rc_mlx5_ep_atomic_fop_post(ep, opcode, sizeof(value), value, result,
                                           remote_addr, rkey, comp);
 }
 
-ucs_status_t uct_rc_mlx5_ep_atomic32_fetch_nb(uct_ep_h ep, uct_atomic_op_t opcode,
-                                              uint32_t value, uint32_t *result,
-                                              uint64_t remote_addr, uct_rkey_t rkey,
-                                              uct_completion_t *comp)
+ucs_status_t uct_rc_mlx5_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
+                                           uint32_t value, uint32_t *result,
+                                           uint64_t remote_addr, uct_rkey_t rkey,
+                                           uct_completion_t *comp)
 {
     return uct_rc_mlx5_ep_atomic_fop_post(ep, opcode, sizeof(value), value, result,
                                           remote_addr, rkey, comp);
