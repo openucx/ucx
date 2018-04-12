@@ -170,7 +170,6 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_complete_rma_put_zcopy, (sreq),
     ucp_trace_req(sreq, "rndv_put completed");
     UCS_PROFILE_REQUEST_EVENT(sreq, "complete_rndv_put", 0);
 
-    ucp_rkey_destroy(sreq->send.rndv_put.rkey);
     ucp_request_send_buffer_dereg(sreq);
     ucp_request_complete_send(sreq, UCS_OK);
 }
@@ -183,6 +182,9 @@ static void ucp_rndv_send_atp(ucp_request_t *sreq, uintptr_t remote_request)
 
     ucp_trace_req(sreq, "send atp remote_request 0x%lx", remote_request);
     UCS_PROFILE_REQUEST_EVENT(sreq, "send_atp", 0);
+
+    /* destroy rkey before it gets overridden by ATP protocol data */
+    ucp_rkey_destroy(sreq->send.rndv_put.rkey);
 
     sreq->send.lane                 = ucp_ep_get_am_lane(sreq->send.ep);
     sreq->send.uct.func             = ucp_proto_progress_am_bcopy_single;
