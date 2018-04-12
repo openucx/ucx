@@ -85,6 +85,8 @@ public:
 
     static void scomplete_cb(void *req, ucs_status_t status)
     {
+        /* TODO: once large worker address is supported, only UCS_OK should be
+         * an acceptable status */
         if ((status != UCS_OK) && (status != UCS_ERR_BUFFER_TOO_SMALL)) {
             UCS_TEST_ABORT("Error: " << ucs_status_string(status));
         }
@@ -163,6 +165,7 @@ public:
             /* Check if the error was completed due to the error handling flow.
              * If so, skip the test since a valid error occurred - the one expected
              * from the error handling flow - case of a long worker address */
+            /* TODO: once large worker address is supported, no need for skip */
             if (ucp_request_check_status(send_req) == UCS_ERR_BUFFER_TOO_SMALL) {
                 ucp_request_free(send_req);
                 UCS_TEST_SKIP_R("Skipping due to too long worker address error");
@@ -243,6 +246,8 @@ public:
         self->err_handler_count++;
         /* The current expected errors are only from the err_handle test
          * and from transports where the worker address is too long  */
+        /* TODO: once large worker address is supported, only UCS_ERR_UNREACHABLE
+         * should be handled here */
         if ((status != UCS_ERR_UNREACHABLE) && (status != UCS_ERR_BUFFER_TOO_SMALL)) {
             UCS_TEST_ABORT("Error: " << ucs_status_string(status));
         }
@@ -336,6 +341,7 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup_for_rma_atomic) {
         UCS_TEST_SKIP_R("Skipping due to too long worker address error or no "
                         "matching transport");
     }
+    EXPECT_EQ(0, err_handler_count);
     restore_errors();
 
     wait_for_server_ep(false);
