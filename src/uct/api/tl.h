@@ -42,7 +42,7 @@ typedef struct uct_iface_ops {
 
     /* endpoint - get */
 
-    ucs_status_t (*ep_get_short)(uct_ep_h ep, const void *buffer, unsigned length,
+    ucs_status_t (*ep_get_short)(uct_ep_h ep, void *buffer, unsigned length,
                                  uint64_t remote_addr, uct_rkey_t rkey);
 
     ucs_status_t (*ep_get_bcopy)(uct_ep_h ep, uct_unpack_callback_t unpack_cb,

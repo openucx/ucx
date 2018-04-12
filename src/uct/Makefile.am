@@ -220,6 +220,7 @@ libuct_la_SOURCES += \
 endif
 noinst_HEADERS += \
     cuda/base/cuda_md.h \
+    cuda/base/cuda_iface.h \
     cuda/cuda_copy/cuda_copy_md.h \
     cuda/cuda_copy/cuda_copy_iface.h \
     cuda/cuda_copy/cuda_copy_ep.h
