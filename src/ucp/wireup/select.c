@@ -19,27 +19,21 @@
 #define UCP_WIREUP_CHECK_AMO_FLAGS(_ae, _criteria, _context, _addr_index, _op, _size)      \
     if (!ucs_test_all_flags((_ae)->iface_attr.atomic.atomic##_size._op##_flags,            \
                             (_criteria)->remote_atomic_flags.atomic##_size._op##_flags)) { \
+        char desc[256];                                                                    \
         ucs_trace("addr[%d] %s: no %s", (_addr_index),                                     \
                   ucp_find_tl_name_by_csum((_context), (_ae)->tl_name_csum),               \
-                  ucp_wireup_get_missing_flag_desc((_ae)->iface_attr.atomic.atomic##_size._op##_flags, \
-                                                   (_criteria)->remote_atomic_flags.atomic##_size._op##_flags, \
-                                                   ucp_wireup_iface_amo##_size##_##_op));  \
+                  ucp_wireup_get_missing_amo_flag_desc_##_op(                              \
+                      (_ae)->iface_attr.atomic.atomic##_size._op##_flags,                  \
+                      (_criteria)->remote_atomic_flags.atomic##_size._op##_flags,          \
+                      (_size), desc, sizeof(desc)));                                       \
         continue;                                                                          \
     }
 
-#define _UCP_WIREUP_STRINGS_AMO_POST(_size, _suffix)                                    \
-    [UCT_ATOMIC_OP_ADD]                         = #_size "-bit atomic " #_suffix "add", \
-    [UCT_ATOMIC_OP_AND]                         = #_size "-bit atomic " #_suffix "and", \
-    [UCT_ATOMIC_OP_OR]                          = #_size "-bit atomic " #_suffix "or",  \
-    [UCT_ATOMIC_OP_XOR]                         = #_size "-bit atomic " #_suffix "xor"
+typedef struct ucp_wireup_atomic_flag {
+    const char *name;
+    const char *fetch;
+} ucp_wireup_atomic_flag_t;
 
-#define UCP_WIREUP_STRINGS_AMO_POST(_size)                                              \
-    _UCP_WIREUP_STRINGS_AMO_POST(_size, "")
-
-#define UCP_WIREUP_STRINGS_AMO_FETCH(_size)                                             \
-    _UCP_WIREUP_STRINGS_AMO_POST(_size, "fetch-"),                                      \
-    [UCT_ATOMIC_OP_SWAP]                        = #_size "-bit atomic swap",            \
-    [UCT_ATOMIC_OP_CSWAP]                       = #_size "-bit atomic compare-swap"
 
 enum {
     UCP_WIREUP_LANE_USAGE_AM     = UCS_BIT(0), /* Active messages */
@@ -114,21 +108,15 @@ static const char *ucp_wireup_iface_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy"
 };
 
-static const char *ucp_wireup_iface_amo32_op[] = {
-    UCP_WIREUP_STRINGS_AMO_POST(32)
+static ucp_wireup_atomic_flag_t ucp_wireup_atomic_desc[] = {
+     [UCT_ATOMIC_OP_ADD]   = {.name = "add",   .fetch = "fetch-"},
+     [UCT_ATOMIC_OP_AND]   = {.name = "and",   .fetch = "fetch-"},
+     [UCT_ATOMIC_OP_OR]    = {.name = "or",    .fetch = "fetch-"},
+     [UCT_ATOMIC_OP_XOR]   = {.name = "xor",   .fetch = "fetch-"},
+     [UCT_ATOMIC_OP_SWAP]  = {.name = "swap",  .fetch = ""},
+     [UCT_ATOMIC_OP_CSWAP] = {.name = "cscap", .fetch = ""}
 };
 
-static const char *ucp_wireup_iface_amo64_op[] = {
-    UCP_WIREUP_STRINGS_AMO_POST(64)
-};
-
-static const char *ucp_wireup_iface_amo32_fop[] = {
-    UCP_WIREUP_STRINGS_AMO_FETCH(32)
-};
-
-static const char *ucp_wireup_iface_amo64_fop[] = {
-    UCP_WIREUP_STRINGS_AMO_FETCH(64)
-};
 
 static double ucp_wireup_aux_score_func(ucp_context_h context,
                                         const uct_md_attr_t *md_attr,
@@ -141,6 +129,37 @@ ucp_wireup_get_missing_flag_desc(uint64_t flags, uint64_t required_flags,
 {
     ucs_assert((required_flags & (~flags)) != 0);
     return flag_descs[ucs_ffs64(required_flags & (~flags))];
+}
+
+static const char *
+ucp_wireup_get_missing_amo_flag_desc(uint64_t flags, uint64_t required_flags,
+                                     int op_size, int fetch, char *buf, size_t len)
+{
+    int idx;
+
+    ucs_assert((required_flags & (~flags)) != 0);
+
+    idx = ucs_ffs64(required_flags & (~flags));
+
+    snprintf(buf, len, "%d-bit atomic %s%s", op_size,
+             fetch ? ucp_wireup_atomic_desc[idx].fetch : "",
+             ucp_wireup_atomic_desc[idx].name);
+
+    return buf;
+}
+
+static const char *
+ucp_wireup_get_missing_amo_flag_desc_op(uint64_t flags, uint64_t required_flags,
+                                        int op_size, char *buf, size_t len)
+{
+    return ucp_wireup_get_missing_amo_flag_desc(flags, required_flags, op_size, 0, buf, len);
+}
+
+static const char *
+ucp_wireup_get_missing_amo_flag_desc_fop(uint64_t flags, uint64_t required_flags,
+                                         int op_size, char *buf, size_t len)
+{
+    return ucp_wireup_get_missing_amo_flag_desc(flags, required_flags, op_size, 1, buf, len);
 }
 
 static int ucp_wireup_check_flags(const uct_tl_resource_desc_t *resource,
@@ -157,6 +176,30 @@ static int ucp_wireup_check_flags(const uct_tl_resource_desc_t *resource,
     if (required_flags) {
         missing_flag_desc = ucp_wireup_get_missing_flag_desc(flags, required_flags,
                                                              flag_descs);
+        ucs_trace(UCT_TL_RESOURCE_DESC_FMT " : not suitable for %s, no %s",
+                  UCT_TL_RESOURCE_DESC_ARG(resource), title,
+                  missing_flag_desc);
+        snprintf(reason, max, UCT_TL_RESOURCE_DESC_FMT" - no %s",
+                 UCT_TL_RESOURCE_DESC_ARG(resource), missing_flag_desc);
+    }
+    return 0;
+}
+
+static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
+                                      uint64_t flags, uint64_t required_flags,
+                                      int op_size, int fetch,
+                                      const char *title, char *reason, size_t max)
+{
+    char missing_flag_desc[256];
+
+    if (ucs_test_all_flags(flags, required_flags)) {
+        return 1;
+    }
+
+    if (required_flags) {
+        ucp_wireup_get_missing_amo_flag_desc(flags, required_flags,
+                                             op_size, fetch, missing_flag_desc,
+                                             sizeof(missing_flag_desc));
         ucs_trace(UCT_TL_RESOURCE_DESC_FMT " : not suitable for %s, no %s",
                   UCT_TL_RESOURCE_DESC_ARG(resource), title,
                   missing_flag_desc);
@@ -281,22 +324,18 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
             !ucp_wireup_check_flags(resource, iface_attr->cap.flags,
                                     criteria->local_iface_flags, criteria->title,
                                     ucp_wireup_iface_flags, p, endp - p) ||
-            !ucp_wireup_check_flags(resource, iface_attr->cap.atomic32.op_flags,
-                                    criteria->local_atomic_flags.atomic32.op_flags,
-                                    criteria->title,
-                                    ucp_wireup_iface_amo32_op, p, endp - p) ||
-            !ucp_wireup_check_flags(resource, iface_attr->cap.atomic64.op_flags,
-                                    criteria->local_atomic_flags.atomic64.op_flags,
-                                    criteria->title,
-                                    ucp_wireup_iface_amo64_op, p, endp - p) ||
-            !ucp_wireup_check_flags(resource, iface_attr->cap.atomic32.fop_flags,
-                                    criteria->local_atomic_flags.atomic32.fop_flags,
-                                    criteria->title,
-                                    ucp_wireup_iface_amo32_fop, p, endp - p) ||
-            !ucp_wireup_check_flags(resource, iface_attr->cap.atomic64.fop_flags,
-                                    criteria->local_atomic_flags.atomic64.fop_flags,
-                                    criteria->title,
-                                    ucp_wireup_iface_amo64_fop, p, endp - p))
+            !ucp_wireup_check_amo_flags(resource, iface_attr->cap.atomic32.op_flags,
+                                        criteria->local_atomic_flags.atomic32.op_flags,
+                                        32, 0, criteria->title, p, endp - p) ||
+            !ucp_wireup_check_amo_flags(resource, iface_attr->cap.atomic64.op_flags,
+                                        criteria->local_atomic_flags.atomic64.op_flags,
+                                        64, 0, criteria->title, p, endp - p) ||
+            !ucp_wireup_check_amo_flags(resource, iface_attr->cap.atomic32.fop_flags,
+                                        criteria->local_atomic_flags.atomic32.fop_flags,
+                                        32, 1, criteria->title, p, endp - p) ||
+            !ucp_wireup_check_amo_flags(resource, iface_attr->cap.atomic64.fop_flags,
+                                        criteria->local_atomic_flags.atomic64.fop_flags,
+                                        64, 1, criteria->title, p, endp - p))
         {
             p += strlen(p);
             snprintf(p, endp - p, ", ");
