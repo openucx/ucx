@@ -309,6 +309,7 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
 
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           const ucp_ep_params_t *params,
+                                          const ucp_unpacked_address_t *remote_address,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p);
 
