@@ -105,10 +105,10 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
 
     return UCS_OK;
 
-err_free_address:
-    ucs_free(remote_address.address_list);
 err_destroy_ep:
     ucp_ep_destroy_internal(ep);
+err_free_address:
+    ucs_free(remote_address.address_list);
 err:
     return status;
 }
