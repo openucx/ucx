@@ -187,23 +187,37 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                   UCT_IFACE_FLAG_EVENT_RECV;
 
     if (uct_ib_atomic_is_supported(dev, 0, sizeof(uint64_t))) {
-        iface_attr->cap.flags  |= UCT_IFACE_FLAG_ATOMIC_ADD64 |
-                                  UCT_IFACE_FLAG_ATOMIC_FADD64 |
-                                  UCT_IFACE_FLAG_ATOMIC_CSWAP64 |
-                                  UCT_IFACE_FLAG_ATOMIC_DEVICE;
+        /* TODO: remove deprecated flags */
+        iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_ADD64 |
+                                              UCT_IFACE_FLAG_ATOMIC_FADD64 |
+                                              UCT_IFACE_FLAG_ATOMIC_CSWAP64 |
+                                              UCT_IFACE_FLAG_ATOMIC_DEVICE;
+
+        iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+        iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
+                                              UCS_BIT(UCT_ATOMIC_OP_CSWAP);
     }
 
     if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint64_t))) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_SWAP64 |
-                                 UCT_IFACE_FLAG_ATOMIC_DEVICE;
+        /* TODO: remove deprecated flags */
+        iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_SWAP64 |
+                                              UCT_IFACE_FLAG_ATOMIC_DEVICE;
+
+        iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_SWAP);
     }
 
     if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint32_t))) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_ADD32 |
-                                 UCT_IFACE_FLAG_ATOMIC_FADD32 |
-                                 UCT_IFACE_FLAG_ATOMIC_SWAP32 |
-                                 UCT_IFACE_FLAG_ATOMIC_CSWAP32 |
-                                 UCT_IFACE_FLAG_ATOMIC_DEVICE;
+        /* TODO: remove deprecated flags */
+        iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_ADD32 |
+                                              UCT_IFACE_FLAG_ATOMIC_FADD32 |
+                                              UCT_IFACE_FLAG_ATOMIC_SWAP32 |
+                                              UCT_IFACE_FLAG_ATOMIC_CSWAP32 |
+                                              UCT_IFACE_FLAG_ATOMIC_DEVICE;
+
+        iface_attr->cap.atomic32.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+        iface_attr->cap.atomic32.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
+                                              UCS_BIT(UCT_ATOMIC_OP_SWAP) |
+                                              UCS_BIT(UCT_ATOMIC_OP_CSWAP);
     }
 
     iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
