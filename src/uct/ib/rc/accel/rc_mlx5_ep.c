@@ -630,7 +630,8 @@ ucs_status_t uct_rc_mlx5_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
     uint32_t app_ctx, ib_imm;
     int opcode;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_rc_mlx5_ep_tag_eager_zcopy");
+    UCT_CHECK_IOV_SIZE(iovcnt, UCT_IB_MLX5_AM_ZCOPY_MAX_IOV,
+                       "uct_rc_mlx5_ep_tag_eager_zcopy");
     UCT_RC_CHECK_ZCOPY_DATA(sizeof(struct ibv_exp_tmh),
                             uct_iov_total_length(iov, iovcnt),
                             iface->super.config.seg_size);
