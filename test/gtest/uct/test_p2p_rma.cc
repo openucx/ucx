@@ -42,6 +42,13 @@ ucs_status_t uct_p2p_rma_test::put_zcopy(uct_ep_h ep, const mapped_buffer &sendb
     return uct_ep_put_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
 }
 
+ucs_status_t uct_p2p_rma_test::get_short(uct_ep_h ep, const mapped_buffer &sendbuf,
+                                         const mapped_buffer &recvbuf)
+{
+     return uct_ep_get_short(ep, sendbuf.ptr(), sendbuf.length(),
+                             recvbuf.addr(), recvbuf.rkey());
+}
+
 ucs_status_t uct_p2p_rma_test::get_bcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                                          const mapped_buffer &recvbuf)
 {
@@ -96,6 +103,13 @@ UCS_TEST_P(uct_p2p_rma_test, put_zcopy) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy),
                     0ul, sender().iface_attr().cap.put.max_zcopy,
                     TEST_UCT_FLAG_SEND_ZCOPY);
+}
+
+UCS_TEST_P(uct_p2p_rma_test, get_short) {
+    check_caps(UCT_IFACE_FLAG_GET_SHORT);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_short),
+                    0ul, sender().iface_attr().cap.get.max_short,
+                    TEST_UCT_FLAG_RECV_ZCOPY);
 }
 
 UCS_TEST_P(uct_p2p_rma_test, get_bcopy) {
