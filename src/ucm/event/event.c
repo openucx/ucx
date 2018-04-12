@@ -579,7 +579,7 @@ cudaError_t ucm_cudaMallocManaged(void **devPtr, size_t size, unsigned int flags
 
     ret = ucm_orig_cudaMallocManaged(devPtr, size, flags);
     if (ret == cudaSuccess) {
-        ucm_trace("ucm_cudaMallocManaged(devPtr=%p size:%lu flags;%d)",
+        ucm_trace("ucm_cudaMallocManaged(devPtr=%p size:%lu flags:%d)",
                   *devPtr, size, flags);
         ucm_dispatch_mem_type_alloc(*devPtr, size, UCM_MEM_TYPE_CUDA_MANAGED);
     }
