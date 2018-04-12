@@ -64,7 +64,7 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h iface,
                                           UCT_IFACE_FLAG_PUT_ZCOPY |
                                           UCT_IFACE_FLAG_PENDING;
 
-    iface_attr->cap.put.max_short       = INT_MAX;
+    iface_attr->cap.put.max_short       = UINT_MAX;
     iface_attr->cap.put.max_bcopy       = 0;
     iface_attr->cap.put.min_zcopy       = 0;
     iface_attr->cap.put.max_zcopy       = SIZE_MAX;
@@ -72,7 +72,7 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h iface,
     iface_attr->cap.put.align_mtu       = iface_attr->cap.put.opt_zcopy_align;
     iface_attr->cap.put.max_iov         = 1;
 
-    iface_attr->cap.get.max_short       = INT_MAX;
+    iface_attr->cap.get.max_short       = UINT_MAX;
     iface_attr->cap.get.max_bcopy       = 0;
     iface_attr->cap.get.min_zcopy       = 0;
     iface_attr->cap.get.max_zcopy       = SIZE_MAX;
