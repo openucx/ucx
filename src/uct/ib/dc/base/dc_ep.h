@@ -212,11 +212,11 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
     }
     iface->tx.stack_top--;
     iface->tx.dcis_stack[iface->tx.stack_top] = dci;
+#if ENABLE_ASSERT
+    iface->tx.dcis[dci].flags = 0;
+#endif
 
     if (ucs_unlikely(ep == NULL)) {
-#if ENABLE_ASSERT
-        iface->tx.dcis[dci].flags = 0;
-#endif
         return;
     }
 
@@ -224,9 +224,7 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
     ep->dci    = UCT_DC_EP_NO_DCI;
     ep->flags &= ~UCT_DC_EP_FLAG_TX_WAIT;
     iface->tx.dcis[dci].ep = NULL;
-#if ENABLE_ASSERT
-    iface->tx.dcis[dci].flags = 0;
-#endif
+
     /* it is possible that dci is released while ep still has scheduled pending ops.
      * move the group to the 'wait for dci alloc' state
      */
