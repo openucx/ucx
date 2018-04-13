@@ -46,7 +46,8 @@ static const char * ucp_rndv_modes[] = {
 };
 
 uct_memory_type_t ucm_to_uct_mem_type_map[] = {
-    [UCM_MEM_TYPE_CUDA] = UCT_MD_MEM_TYPE_CUDA,
+    [UCM_MEM_TYPE_CUDA]         = UCT_MD_MEM_TYPE_CUDA,
+    [UCM_MEM_TYPE_CUDA_MANAGED] = UCT_MD_MEM_TYPE_HOST
 };
 
 static ucs_config_field_t ucp_config_table[] = {

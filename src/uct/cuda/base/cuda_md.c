@@ -10,15 +10,17 @@
 
 int uct_cuda_is_mem_type_owned(uct_md_h md, void *addr, size_t length)
 {
-    int memory_type;
+    CUmemorytype memType = 0;
+    uint32_t isManaged = 0;
+    void *attrdata[] = {(void *)&memType, (void *)&isManaged};
+    CUpointer_attribute attributes[2] = {CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+                                         CU_POINTER_ATTRIBUTE_IS_MANAGED};
     CUresult cu_err;
 
     if (addr == NULL) {
         return 0;
     }
 
-    cu_err = cuPointerGetAttribute(&memory_type,
-                                   CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
-                                   (CUdeviceptr)addr);
-    return ((cu_err == CUDA_SUCCESS) && (memory_type == CU_MEMORYTYPE_DEVICE));
+    cu_err = cuPointerGetAttributes(2, attributes, attrdata, (CUdeviceptr)addr);
+    return ((cu_err == CUDA_SUCCESS) && (!isManaged && (memType == CU_MEMORYTYPE_DEVICE)));
 }
