@@ -16,7 +16,9 @@ extern "C" {
 class test_ib_md : public test_md
 {
 protected:
-    void ib_md_umr_check(void *rkey_buffer, bool amo_access);
+    void ib_md_umr_check(void *rkey_buffer,
+                         bool amo_access,
+                         size_t size = 8192);
 };
 
 
@@ -25,10 +27,11 @@ protected:
  * UCT_MD_MEM_ACCESS_REMOTE_ATOMIC is not set
  */
 
-void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access) {
-
+void test_ib_md::ib_md_umr_check(void *rkey_buffer,
+                                 bool amo_access,
+                                 size_t size)
+{
     ucs_status_t status;
-    size_t size = 8192;
     void *buffer = malloc(size);
     ASSERT_TRUE(buffer != NULL);
 
@@ -109,6 +112,30 @@ UCS_TEST_P(test_ib_md, ib_md_umr_direct, "REG_METHODS=direct") {
     ib_md_umr_check(rkey_buffer, false);
     ib_md_umr_check(rkey_buffer, true);
     ib_md_umr_check(rkey_buffer, false);
+
+    free(rkey_buffer);
+}
+
+UCS_TEST_P(test_ib_md, ib_md_umr_ksm) {
+
+    ucs_status_t status;
+    uct_md_attr_t md_attr;
+    void *rkey_buffer;
+    bool has_ksm;
+
+    status = uct_md_query(pd(), &md_attr);
+    ASSERT_UCS_OK(status);
+    rkey_buffer = malloc(md_attr.rkey_packed_size);
+    ASSERT_TRUE(rkey_buffer != NULL);
+
+#ifdef HAVE_EXP_UMR_KSM
+    has_ksm = ucs_derived_of(pd(), uct_ib_md_t)->dev.dev_attr.exp_device_cap_flags &
+              IBV_EXP_DEVICE_UMR_FIXED_SIZE;
+#else
+    has_ksm = false;
+#endif
+
+    ib_md_umr_check(rkey_buffer, has_ksm, UCT_IB_MD_MAX_MR_SIZE + 0x1000);
 
     free(rkey_buffer);
 }
