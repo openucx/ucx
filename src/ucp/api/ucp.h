@@ -242,9 +242,31 @@ enum ucp_ep_close_mode {
                                               for all endpoints created on
                                               both (local and remote) sides to
                                               avoid undefined behavior. */
-    UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
+    UCP_EP_CLOSE_MODE_FLUSH         = 1, /**< @ref ucp_ep_close_nb schedules
                                               flushes on all outstanding
                                               operations. */
+    UCP_EP_CLOSE_MODE_SYNC          = 2  /**< @ref ucp_ep_close_nb will flush
+                                              the local endpoint and handle any
+                                              existing remote endpoint by
+                                              generating a close event on the
+                                              remote peer and putting the remote
+                                              endpoint into an error state.
+                                              <ul>
+                                              <li> If there is a connected
+                                              remote endpoint, initiate a
+                                              synchronization with the peer. The
+                                              remote endpoint will get a
+                                              notification through the callback
+                                              defined in @ref
+                                              ucp_ep_params_t::err_handler with
+                                              @ref UCS_ERR_REMOTE_DISCONNECT
+                                              status, unless it also has closed
+                                              its endpoint. </li>
+                                              <li> If the endpoint is not
+                                              connected to a remote endpoint,
+                                              the behavior will be the same as
+                                              @ref UCP_EP_CLOSE_MODE_FLUSH.</li>
+                                              </ul> */
 };
 
 

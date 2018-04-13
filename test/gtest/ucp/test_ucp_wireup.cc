@@ -14,6 +14,7 @@
 extern "C" {
 #include <ucp/wireup/address.h>
 #include <ucp/proto/proto.h>
+#include <ucp/core/ucp_ep.inl>
 }
 
 class test_ucp_wireup : public ucp_test {

@@ -12,10 +12,12 @@
 #include "ucp_thread.h"
 
 #include <ucp/tag/tag_match.h>
+#include <ucp/wireup/ep_match.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/async/async.h>
+#include <ucs/datastruct/strided_alloc.h>
 
 
 /* The size of the private buffer in UCT descriptor headroom, which UCP may
@@ -188,9 +190,11 @@ typedef struct ucp_worker {
     ucs_list_link_t               arm_ifaces;    /* List of interfaces to arm */
 
     void                          *user_data;    /* User-defined data */
-    ucs_list_link_t               stream_eps;    /* List of EPs with received stream data */
+    ucs_strided_alloc_t           ep_alloc;      /* Endpoint allocator */
+    ucs_list_link_t               stream_ready_eps; /* List of EPs with received stream data */
     khash_t(ucp_worker_ep_hash)   ep_hash;       /* Hash table of all endpoints */
-    khash_t(ucp_ep_errh_hash)     ep_errh_hash;  /* Hash table of error handlers associated with endpoints */
+    ucs_list_link_t               all_eps;       /* List of all endpoints */
+    ucp_ep_match_ctx_t            ep_match_ctx;  /* Endpoint-to-endpoint matching context */
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */

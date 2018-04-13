@@ -1774,7 +1774,7 @@ UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep,
  * @ingroup UCT_RMA
  * @brief
  */
-UCT_INLINE_API ucs_status_t uct_ep_get_short(uct_ep_h ep, const void *buffer, unsigned length,
+UCT_INLINE_API ucs_status_t uct_ep_get_short(uct_ep_h ep, void *buffer, unsigned length,
                                              uint64_t remote_addr, uct_rkey_t rkey)
 {
     return ep->iface->ops.ep_get_short(ep, buffer, length, remote_addr, rkey);

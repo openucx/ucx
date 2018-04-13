@@ -189,18 +189,24 @@ static void
 ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
                             void *arg)
 {
-    ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_wireup_ep_t   *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
+    ucp_worker_h      worker;
     uct_pending_req_t *req;
-    ucp_request_t *ucp_req;
+    ucp_request_t     *ucp_req;
+
+    worker = wireup_ep->super.ucp_ep->worker;
 
     ucs_queue_for_each_extract(req, &wireup_ep->pending_q, priv, 1) {
         ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
+        UCS_ASYNC_BLOCK(&worker->async);
+        --worker->wireup_pend_count;
+        UCS_ASYNC_UNBLOCK(&worker->async);
         cb(&ucp_req->send.uct, arg);
     }
 
     if (wireup_ep->aux_ep != NULL) {
-        uct_ep_pending_purge(wireup_ep->aux_ep, ucp_wireup_ep_pending_req_release,
-                             arg);
+        uct_ep_pending_purge(wireup_ep->aux_ep,
+                             ucp_wireup_ep_pending_req_release, arg);
     }
 }
 
@@ -460,7 +466,7 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
     /* pack private data */
     conn_priv->err_mode = UCP_PARAM_VALUE(EP, params, err_mode, ERR_HANDLING_MODE,
                                           UCP_ERR_HANDLING_MODE_NONE);
-    conn_priv->ep_uuid  = ucp_ep->dest_uuid;
+    conn_priv->ep_uuid  = ucp_ep_ext_gen(ucp_ep)->dest_uuid;
     memcpy(conn_priv + 1, worker_address, address_length);
 
     /* send connection request using the transport */

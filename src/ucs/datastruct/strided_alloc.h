@@ -76,6 +76,7 @@ typedef struct ucs_strided_alloc {
     ucs_queue_head_t          chunks;       /* Queue of allocated chunks */
     size_t                    elem_size;    /* Size of a single memory area */
     unsigned                  stride_count; /* Number of strides */
+    unsigned                  inuse_count;  /* Number of allocated elements */
 } ucs_strided_alloc_t;
 
 
@@ -116,6 +117,16 @@ void* ucs_strided_alloc_get(ucs_strided_alloc_t *sa, const char *alloc_name);
  * @param [in] base          Pointer to the first stride of the object to release
  */
 void ucs_strided_alloc_put(ucs_strided_alloc_t *sa, void *base);
+
+
+/**
+ * Get the number of currently allocated objects
+ *
+ * @param [in] sa            Strided allocator to get the information for
+*
+ * @return Number of currently allocated objects
+ */
+unsigned ucs_strided_alloc_inuse_count(ucs_strided_alloc_t *sa);
 
 
 END_C_DECLS

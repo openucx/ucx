@@ -276,6 +276,9 @@ void print_type_info(const char * tl_name)
     PRINT_SIZE(ucp_context_t);
     PRINT_SIZE(ucp_worker_t);
     PRINT_SIZE(ucp_ep_t);
+    PRINT_SIZE(ucp_ep_ext_gen_t);
+    PRINT_SIZE(ucp_ep_ext_proto_t);
+    PRINT_SIZE(ucp_ep_match_entry_t);
     PRINT_SIZE(ucp_ep_config_key_t);
     PRINT_SIZE(ucp_ep_config_t);
     PRINT_SIZE(ucp_request_t);

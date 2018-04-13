@@ -225,8 +225,8 @@ static void ucp_wireup_process_request(ucp_worker_h worker,
         /* Reinsert to hash table with destination worker uuid */
         ucs_assert(!(ep->flags & UCP_EP_FLAG_DEST_UUID_PEER));
         ucp_ep_delete_from_hash(ep);
-        ep->dest_uuid = remote_address->uuid;
-        ep->flags    |= UCP_EP_FLAG_DEST_UUID_PEER;
+        ucp_ep_ext_gen(ep)->dest_uuid = remote_address->uuid;
+        ep->flags                    |= UCP_EP_FLAG_DEST_UUID_PEER;
         ucp_ep_add_to_hash(ep);
 
         ep_init_flags = UCP_EP_CREATE_AM_LANE;
@@ -271,8 +271,9 @@ static void ucp_wireup_process_request(ucp_worker_h worker,
         }
 
         ucs_trace("ep %p: sending wireup reply", ep);
-        status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REPLY, ep->dest_uuid,
-                                     tl_bitmap, rsc_tli);
+        status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REPLY,
+                                     ucp_ep_ext_gen(ep)->dest_uuid, tl_bitmap,
+                                     rsc_tli);
         if (status != UCS_OK) {
             return;
         }
@@ -321,8 +322,8 @@ static void ucp_wireup_process_reply(ucp_worker_h worker,
         /* Send ACK without any address, we've already sent it as part of the request */
         ucs_trace("ep %p: sending wireup ack", ep);
         memset(rsc_tli, -1, sizeof(rsc_tli));
-        status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, ep->dest_uuid, 0,
-                                     rsc_tli);
+        status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK,
+                                     ucp_ep_ext_gen(ep)->dest_uuid, 0, rsc_tli);
         if (status != UCS_OK) {
             return;
         }
