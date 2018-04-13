@@ -103,6 +103,16 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Use indirect atomic\n",
      ucs_offsetof(uct_ib_md_config_t, ext.enable_indirect_atomic), UCS_CONFIG_TYPE_BOOL},
 
+    {"GID_INDEX", "0",
+     "Port GID index to use.",
+     ucs_offsetof(uct_ib_md_config_t, ext.gid_index), UCS_CONFIG_TYPE_UINT},
+
+    {"SUBNET_PREFIX", "",
+     "Infiniband subnet prefix to filter ports by, empty means no filter. "
+     "Relevant for IB link layer only\n"
+     "For example a filter for the default subnet prefix can be specified as: fe80:0:0:0",
+     ucs_offsetof(uct_ib_md_config_t, subnet_prefix), UCS_CONFIG_TYPE_STRING},
+
     {NULL}
 };
 
@@ -1240,6 +1250,29 @@ static void uct_ib_md_release_reg_method(uct_ib_md_t *md)
 }
 
 static ucs_status_t
+uct_ib_md_parse_subnet_prefix(const char *subnet_prefix_str,
+                              uint64_t *subnet_prefix)
+{
+    uint16_t pfx[4] = {0};
+    uint64_t pfx64 = 0;
+    int res, i;
+
+    res = sscanf(subnet_prefix_str, "%hx:%hx:%hx:%hx",
+                 &pfx[0], &pfx[1], &pfx[2], &pfx[3]);
+    if (res != 4) {
+        ucs_error("subnet filter '%s' is invalid", subnet_prefix_str);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    for (i = 0; i < 4; i++) {
+        pfx64 = pfx[i] + (pfx64 << 16);
+    }
+
+    *subnet_prefix = htobe64(pfx64);
+    return UCS_OK;
+}
+
+static ucs_status_t
 uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
     const uct_ib_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_ib_md_config_t);
@@ -1318,6 +1351,17 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     if (md->config.odp.max_size == UCS_CONFIG_MEMUNITS_AUTO) {
         /* Must be done after we open and query the device */
         md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
+    }
+
+    if (strlen(md_config->subnet_prefix) > 0) {
+        status = uct_ib_md_parse_subnet_prefix(md_config->subnet_prefix,
+                                               &md->subnet_filter);
+
+        if (status != UCS_OK) {
+            goto err_cleanup_device;
+        }
+
+        md->check_subnet_filter = 1;
     }
 
     /* Allocate memory domain */

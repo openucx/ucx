@@ -133,10 +133,6 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    ucs_offsetof(uct_ib_iface_config_t, addr_type),
    UCS_CONFIG_TYPE_ENUM(uct_ib_iface_addr_types)},
 
-  {"GID_INDEX", "0",
-   "Port GID index to use.",
-   ucs_offsetof(uct_ib_iface_config_t, gid_index), UCS_CONFIG_TYPE_UINT},
-
   {"SL", "0",
    "Which IB service level to use.\n",
    ucs_offsetof(uct_ib_iface_config_t, sl), UCS_CONFIG_TYPE_UINT},
@@ -607,7 +603,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     unsigned tx_cq_len, unsigned rx_cq_len, size_t mss,
                     uint32_t res_domain_key, const uct_ib_iface_config_t *config)
 {
-    uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
+    uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
+    uct_ib_device_t *dev = &ib_md->dev;
     int preferred_cpu = ucs_cpu_set_find_lcs(&params->cpu_mask);
     ucs_status_t status;
     uint8_t port_num;
@@ -649,7 +646,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.port_num          = port_num;
     self->config.sl                = config->sl;
     self->config.traffic_class     = config->traffic_class;
-    self->config.gid_index         = config->gid_index;
     self->release_desc.cb          = uct_ib_iface_release_desc;
 
     status = uct_ib_iface_init_pkey(self, config);
@@ -658,7 +654,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     }
 
     status = uct_ib_device_query_gid(dev, self->config.port_num,
-                                     self->config.gid_index, &self->gid);
+                                     ib_md->config.gid_index, &self->gid);
     if (status != UCS_OK) {
         goto err;
     }

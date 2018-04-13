@@ -350,8 +350,11 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
 ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
                                       unsigned flags)
 {
+    uct_ib_md_t *md = ucs_container_of(dev, uct_ib_md_t, dev);
     const uct_ib_device_spec_t *dev_info;
     uint8_t required_dev_flags;
+    ucs_status_t status;
+    union ibv_gid gid;
 
     if (port_num < dev->first_port || port_num >= dev->first_port + dev->num_ports) {
         return UCS_ERR_NO_DEVICE;
@@ -384,6 +387,19 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
         ucs_trace("%s:%d (%s) does not support flags 0x%x", uct_ib_device_name(dev),
                   port_num, dev_info->name, required_dev_flags);
         return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (md->check_subnet_filter && uct_ib_device_is_port_ib(dev, port_num)) {
+        status = uct_ib_device_query_gid(dev, port_num, md->config.gid_index, &gid);
+        if (status) {
+            return status;
+        }
+
+        if (md->subnet_filter != gid.global.subnet_prefix) {
+            ucs_trace("%s:%d subnet_prefix does not match",
+                      uct_ib_device_name(dev), port_num);
+            return UCS_ERR_UNSUPPORTED;
+        }
     }
 
     return UCS_OK;

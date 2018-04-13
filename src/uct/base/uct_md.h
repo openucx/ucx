@@ -54,9 +54,8 @@ extern ucs_config_field_t uct_md_config_rcache_table[];
  * Specific MDs extend this structure.
  */
 struct uct_md_config {
-#ifdef __cplusplus
-    char __dummy;
-#endif
+    /* C standard prohibits empty structures */
+    char                   __dummy;
 };
 
 
