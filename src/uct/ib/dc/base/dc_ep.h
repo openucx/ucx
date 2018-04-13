@@ -214,6 +214,9 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
     iface->tx.dcis_stack[iface->tx.stack_top] = dci;
 
     if (ucs_unlikely(ep == NULL)) {
+#if ENABLE_ASSERT
+        iface->tx.dcis[dci].flags = 0;
+#endif
         return;
     }
 
