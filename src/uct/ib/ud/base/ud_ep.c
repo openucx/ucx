@@ -12,6 +12,10 @@
 #include <uct/ib/base/ib_verbs.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
+#include <ucs/time/time.h>
+
+
+#define UCT_UD_SLOW_TIMER_MAX_TICK(_iface)  ((_iface)->config.peer_timeout / 3)
 
 static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface);
 
@@ -109,20 +113,34 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
 
 static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
 {
-    uct_ud_ep_t *ep = ucs_container_of(self, uct_ud_ep_t, slow_timer);
-    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                           uct_ud_iface_t);
-    ucs_time_t now;
-    ucs_time_t diff;
+    uct_ud_ep_t        *ep    = ucs_container_of(self, uct_ud_ep_t, slow_timer);
+    uct_ud_iface_t     *iface = ucs_derived_of(ep->super.super.iface,
+                                               uct_ud_iface_t);
+    uct_ud_iface_ops_t *ops;
+    ucs_time_t         now;
+    ucs_time_t         diff;
 
     UCT_UD_EP_HOOK_CALL_TIMER(ep);
     now = ucs_twheel_get_time(&iface->async.slow_timer);
-    diff = now - ep->tx.send_time;
 
     if (ucs_queue_is_empty(&ep->tx.window)) {
+        /* Do not free the EP until all scheduled communications are done. */
+        if (ep->flags & UCT_UD_EP_FLAG_DISCONNECTED) {
+            diff = now - ep->close_time;
+            if (diff > iface->config.peer_timeout) {
+                ucs_debug("ud_ep %p is destroyed after %fs with timout %fs\n",
+                        ep, ucs_time_to_sec(diff),
+                        ucs_time_to_sec(iface->config.peer_timeout));
+                ops = ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t);
+                ops->ep_free(&ep->super.super);
+                return;
+            }
+            goto again;
+        }
         return;
     }
 
+    diff = now - ep->tx.send_time;
     if (diff > iface->config.peer_timeout) {
         iface->super.ops->handle_failure(&iface->super, ep,
                                          UCS_ERR_ENDPOINT_TIMEOUT);
@@ -142,9 +160,11 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
     }
 
+again:
     /* Cool down the timer on rescheduling/resending */
     ep->tx.slow_tick *= iface->config.slow_timer_backoff;
-    ep->tx.slow_tick = ucs_min(ep->tx.slow_tick, iface->config.peer_timeout/3);
+    ep->tx.slow_tick = ucs_min(ep->tx.slow_tick,
+                               UCT_UD_SLOW_TIMER_MAX_TICK(iface));
     ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer, ep->tx.slow_tick);
 }
 
@@ -1178,16 +1198,8 @@ void uct_ud_ep_pending_purge(uct_ep_h ep_h, uct_pending_purge_callback_t cb,
 
 void  uct_ud_ep_disconnect(uct_ep_h tl_ep)
 {
-    uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
-    /*
-     * At the moment scedule flush and keep ep
-     * until interface is destroyed. User should not send any
-     * new data
-     * In the future consider doin full fledged disconnect
-     * protocol. Kind of TCP (FIN/ACK). Doing this will save memory
-     * on the other hand active ep will need more memory to keep its state
-     * and such protocol will add extra complexity
-     */
+    uct_ud_ep_t    *ep    = ucs_derived_of(tl_ep, uct_ud_ep_t);
+    uct_ud_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_iface_t);
 
     ucs_trace_func("");
     /* cancel user pending */
@@ -1196,6 +1208,11 @@ void  uct_ud_ep_disconnect(uct_ep_h tl_ep)
     /* schedule flush */
     uct_ud_ep_flush(tl_ep, 0, NULL);
 
+    /* the EP will be destroyed by interface destroy or timeout in
+     * uct_ud_ep_slow_timer
+     */
+    ep->close_time = ucs_twheel_get_time(&iface->async.slow_timer);
     ep->flags |= UCT_UD_EP_FLAG_DISCONNECTED;
-    /* TODO: at least in debug mode keep and check tl_ep state  */
+    ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer,
+                   UCT_UD_SLOW_TIMER_MAX_TICK(iface));
 }

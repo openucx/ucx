@@ -106,6 +106,7 @@ typedef struct uct_ud_iface_ops {
     unsigned                  (*async_progress)(uct_ud_iface_t *iface);
     void                      (*tx_skb)(uct_ud_ep_t *ep, uct_ud_send_skb_t *skb,
                                         int solicited);
+    void                      (*ep_free)(uct_ep_h ep);
 } uct_ud_iface_ops_t;
 
 struct uct_ud_iface {

@@ -229,26 +229,27 @@ struct uct_ud_ep {
          UCT_UD_EP_HOOK_DECLARE(tx_hook);
     } tx;
     struct {
-         uct_ud_psn_t           psn;       /* last psn that was retransmitted */
-         uct_ud_psn_t           max_psn;   /* max psn that should be retransmitted */
-         ucs_queue_iter_t       pos;       /* points to the part of tx window that needs to be resent */
-    } resend;
-    struct {
-        uct_ud_psn_t  wmax;
-        uct_ud_psn_t  cwnd;
-    } ca;
-    struct {
         uct_ud_psn_t        acked_psn;    /* Last psn we acked */
         ucs_frag_list_t     ooo_pkts;     /* Out of order packets that can not be processed yet,
                                             also keeps last psn we successfully received and processed */
         UCS_STATS_NODE_DECLARE(stats);
         UCT_UD_EP_HOOK_DECLARE(rx_hook);
     } rx;
+    struct {
+        uct_ud_psn_t  wmax;
+        uct_ud_psn_t  cwnd;
+    } ca;
+    struct UCS_S_PACKED {
+         uct_ud_psn_t           psn;       /* last psn that was retransmitted */
+         uct_ud_psn_t           max_psn;   /* max psn that should be retransmitted */
+         ucs_queue_iter_t       pos;       /* points to the part of tx window that needs to be resent */
+    } resend;
     ucs_list_link_t  cep_list;
     uint32_t         conn_id;      /* connection id. assigned in connect_to_iface() */
     uint16_t         flags;
     uint8_t          path_bits;
     ucs_wtimer_t     slow_timer;
+    ucs_time_t       close_time;   /* timestamp of closure */
     UCS_STATS_NODE_DECLARE(stats);
     UCT_UD_EP_HOOK_DECLARE(timer_hook);
 #if ENABLE_DEBUG_DATA
