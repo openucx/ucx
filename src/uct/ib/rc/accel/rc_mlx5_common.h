@@ -66,6 +66,10 @@ enum {
     UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG = 0xA
 };
 
+#  define UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(_av_size) \
+       (UCT_IB_MLX5_AM_MAX_SHORT(_av_size + sizeof(struct ibv_exp_tmh))/ \
+       sizeof(struct mlx5_wqe_data_seg))
+
 #  define UCT_RC_MLX5_TM_CQE_WITH_IMM(_cqe64) \
        (((_cqe64)->op_own >> 4) == MLX5_CQE_RESP_SEND_IMM)
 
@@ -136,6 +140,9 @@ uct_rc_mlx5_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,
            hdr += sizeof(struct ibv_exp_tmh); \
            _length = _pack_cb(hdr, _arg); \
        }
+# else
+
+#  define UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(_av_size)   0
 
 #endif /* IBV_EXP_HW_TM  */
 

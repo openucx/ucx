@@ -78,6 +78,7 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
                                 verbs_common->config.max_inline,
                                 verbs_common->config.max_inline,
                                 verbs_common->config.short_desc_size,
+                                uct_ib_iface_get_max_iov(&iface->super.super.super) - 1,
                                 uct_ib_iface_get_max_iov(&iface->super.super.super) - 1);
     if (status != UCS_OK) {
         return status;

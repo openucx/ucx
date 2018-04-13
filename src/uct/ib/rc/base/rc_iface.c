@@ -157,7 +157,8 @@ static void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
 ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 uct_iface_attr_t *iface_attr,
                                 size_t put_max_short, size_t max_inline,
-                                size_t am_max_hdr, size_t am_max_iov)
+                                size_t am_max_hdr, size_t am_max_iov,
+                                size_t tag_max_iov)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     ucs_status_t status;
@@ -239,7 +240,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
     /* Tag Offload */
-    uct_rc_iface_tag_query(iface, iface_attr, max_inline, am_max_iov);
+    uct_rc_iface_tag_query(iface, iface_attr, max_inline, tag_max_iov);
 
     return UCS_OK;
 }

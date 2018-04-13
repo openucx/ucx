@@ -108,7 +108,8 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                 max_put_inline,
                                 max_am_inline,
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(0),
-                                UCT_IB_MLX5_AM_ZCOPY_MAX_IOV);
+                                UCT_IB_MLX5_AM_ZCOPY_MAX_IOV,
+                                UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0));
     if (status != UCS_OK) {
         return status;
     }
