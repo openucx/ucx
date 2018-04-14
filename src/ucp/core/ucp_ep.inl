@@ -146,13 +146,14 @@ static inline uintptr_t ucp_ep_dest_ep_ptr(ucp_ep_h ep)
  * Make sure we have a valid dest_ep_ptr value, so protocols which require a
  * reply from remote side could be used.
  */
-static inline ucs_status_t ucp_ep_resolve_dest_ep_ptr(ucp_ep_h ep)
+static inline ucs_status_t ucp_ep_resolve_dest_ep_ptr(ucp_ep_h ep,
+                                                      ucp_lane_index_t lane)
 {
     if (ep->flags & UCP_EP_FLAG_DEST_EP) {
         return UCS_OK;
     }
 
-    return ucp_wireup_connect_remote(ep);
+    return ucp_wireup_connect_remote(ep, lane);
 }
 
 static inline void ucp_ep_update_dest_ep_ptr(ucp_ep_h ep, uintptr_t ep_ptr)

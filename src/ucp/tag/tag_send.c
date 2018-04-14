@@ -263,7 +263,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
         goto out;
     }
 
-    status = ucp_ep_resolve_dest_ep_ptr(ep);
+    status = ucp_ep_resolve_dest_ep_ptr(ep, ucp_ep_config(ep)->tag.lane);
     if (status != UCS_OK) {
         ret = UCS_STATUS_PTR(status);
         goto out;

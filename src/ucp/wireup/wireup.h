@@ -75,7 +75,7 @@ typedef struct ucp_wireup_msg {
 
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
 
-ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep);
+ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane);
 
 ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
                                              const ucp_ep_params_t *params,

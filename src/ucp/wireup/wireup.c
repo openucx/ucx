@@ -730,38 +730,35 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
     return status;
 }
 
-ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep)
+ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    ucp_lane_index_t am_lane;
     ucs_status_t status;
     uct_ep_h uct_ep;
 
-    ucs_trace("ep %p: connect to remote peer", ep);
+    ucs_trace("ep %p: connect lane %d to remote peer", ep, lane);
 
-    /* make am_lane a stub */
-    am_lane = ucp_ep_get_am_lane(ep);
-    if (ucp_wireup_ep_test(ep->uct_eps[am_lane])) {
-        /* already is a stub */
-        return UCS_OK;
+    if (ucp_wireup_ep_test(ep->uct_eps[lane])) {
+        return UCS_OK; /* already is a stub */
     }
 
-    if (ucp_proxy_ep_test(ep->uct_eps[am_lane])) {
+    if (ucp_proxy_ep_test(ep->uct_eps[lane])) {
         /* signaling ep is not needed now since we will send wireup request
          * with signaling flag
          */
-        uct_ep = ucp_proxy_ep_extract(ep->uct_eps[am_lane]);
-        uct_ep_destroy(ep->uct_eps[am_lane]);
+        uct_ep = ucp_proxy_ep_extract(ep->uct_eps[lane]);
+        uct_ep_destroy(ep->uct_eps[lane]);
     } else {
-        uct_ep = ep->uct_eps[am_lane];
+        uct_ep = ep->uct_eps[lane];
     }
 
-    status = ucp_wireup_ep_create(ep, &ep->uct_eps[am_lane]);
+    /* make ep->uct_eps[lane] a stub */
+    status = ucp_wireup_ep_create(ep, &ep->uct_eps[lane]);
     if (status != UCS_OK) {
         goto err;
     }
 
     /* the wireup ep should use the existing [am_lane] as next_ep */
-    ucp_wireup_ep_set_next_ep(ep->uct_eps[am_lane], uct_ep);
+    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
 
     status = ucp_wireup_send_request(ep);
     if (status != UCS_OK) {
@@ -771,9 +768,9 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep)
     return UCS_OK;
 
 err_destroy_wireup_ep:
-    uct_ep_destroy(ep->uct_eps[am_lane]);
+    uct_ep_destroy(ep->uct_eps[lane]);
 err:
-    ep->uct_eps[am_lane] = uct_ep; /* restore am lane */
+    ep->uct_eps[lane] = uct_ep; /* restore am lane */
     return status;
 }
 
