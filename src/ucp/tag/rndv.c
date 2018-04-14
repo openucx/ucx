@@ -500,7 +500,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     rndv_req = ucp_request_get(worker);
     if (rndv_req == NULL) {
         ucs_error("failed to allocate rendezvous reply");
-        return;
+        goto out;
     }
 
     rndv_req->send.ep           = ucp_worker_get_ep_by_ptr(worker,

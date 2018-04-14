@@ -404,7 +404,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
 {
     ucs_status_t status;
     unsigned flags;
-    ucp_ep_h ep;
+    ucp_ep_h ep = NULL;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
     UCS_ASYNC_BLOCK(&worker->async);
