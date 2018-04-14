@@ -645,7 +645,7 @@ static ucs_status_t ucp_tag_offload_eager_sync_bcopy(uct_pending_req_t *self)
     ucp_worker_t *worker = req->send.ep->worker;
     ucs_status_t status;
 
-    status = ucp_do_tag_offload_bcopy(self, worker->uuid,
+    status = ucp_do_tag_offload_bcopy(self, ucp_request_get_dest_ep_ptr(req),
                                       ucp_tag_offload_pack_eager);
     if (status == UCS_OK) {
         ucp_tag_offload_sync_posted(worker, req);
