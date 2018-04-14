@@ -1002,6 +1002,7 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 
     switch (id) {
     case UCP_AM_ID_RNDV_RTS:
+        ucs_assert(rndv_rts_hdr->sreq.ep_ptr != 0);
         snprintf(buffer, max, "RNDV_RTS tag %"PRIx64" ep_ptr %lx sreq 0x%lx "
                  "address 0x%"PRIx64" size %zu", rndv_rts_hdr->super.tag,
                  rndv_rts_hdr->sreq.ep_ptr, rndv_rts_hdr->sreq.reqptr,

@@ -321,6 +321,7 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         header_len = sizeof(*eager_mid_hdr);
         break;
     case UCP_AM_ID_EAGER_SYNC_ONLY:
+        ucs_assert(eagers_hdr->req.ep_ptr != 0);
         snprintf(buffer, max, "EGRS tag %"PRIx64" ep_ptr 0x%lx request 0x%lx",
                  eagers_hdr->super.super.tag, eagers_hdr->req.ep_ptr,
                  eagers_hdr->req.reqptr);

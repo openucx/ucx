@@ -148,7 +148,7 @@ static inline uintptr_t ucp_ep_dest_ep_ptr(ucp_ep_h ep)
  */
 static inline ucs_status_t ucp_ep_resolve_dest_ep_ptr(ucp_ep_h ep)
 {
-    if (ep->flags & (UCP_EP_FLAG_DEST_EP|UCP_EP_FLAG_CONNECT_REQ_QUEUED)) {
+    if (ep->flags & UCP_EP_FLAG_DEST_EP) {
         return UCS_OK;
     }
 

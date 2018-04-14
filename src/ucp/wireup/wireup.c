@@ -736,8 +736,14 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep)
     ucs_status_t status;
     uct_ep_h uct_ep;
 
+    ucs_trace("ep %p: connect to remote peer", ep);
+
     /* make am_lane a stub */
     am_lane = ucp_ep_get_am_lane(ep);
+    if (ucp_wireup_ep_test(ep->uct_eps[am_lane])) {
+        /* already is a stub */
+        return UCS_OK;
+    }
 
     if (ucp_proxy_ep_test(ep->uct_eps[am_lane])) {
         /* signaling ep is not needed now since we will send wireup request
