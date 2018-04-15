@@ -1238,7 +1238,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     uct_dc_iface_set_quota(&self->super, &config->super);
     /* Set max_iov for put_zcopy and get_zcopy */
     uct_ib_iface_set_max_iov(&self->super.super.super,
-                             ((UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB) -
+                             (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
                              sizeof(struct mlx5_wqe_raddr_seg) -
                              sizeof(struct mlx5_wqe_ctrl_seg) -
                              UCT_IB_MLX5_AV_FULL_SIZE) /

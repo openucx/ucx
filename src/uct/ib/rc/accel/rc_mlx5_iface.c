@@ -103,7 +103,6 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     }
 #endif
 
-
     status = uct_rc_iface_query(rc_iface, iface_attr,
                                 max_put_inline,
                                 max_am_inline,
@@ -279,7 +278,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     /* Set max_iov for put_zcopy and get_zcopy */
     uct_ib_iface_set_max_iov(&self->super.super,
-                             ((UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB) -
+                             (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
                              sizeof(struct mlx5_wqe_raddr_seg) -
                              sizeof(struct mlx5_wqe_ctrl_seg)) /
                              sizeof(struct mlx5_wqe_data_seg));

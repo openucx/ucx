@@ -35,6 +35,7 @@
 #define UCT_IB_MLX5_BF_REG_SIZE         256
 #define UCT_IB_MLX5_CQE_VENDOR_SYND_ODP 0x93
 #define UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK 0x80
+#define UCT_IB_MLX5_MAX_SEND_WQE_SIZE   (UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB)
 
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
@@ -74,7 +75,7 @@ struct mlx5_grh_av {
 #define UCT_IB_MLX5_AM_ZCOPY_MAX_IOV  3UL
 
 #define UCT_IB_MLX5_AM_MAX_SHORT(_av_size) \
-    (UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB - \
+    (UCT_IB_MLX5_MAX_SEND_WQE_SIZE - \
      (sizeof(struct mlx5_wqe_ctrl_seg) + \
       (_av_size) + \
       sizeof(struct mlx5_wqe_inl_data_seg)))
