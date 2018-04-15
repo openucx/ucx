@@ -315,16 +315,16 @@ typedef ucs_status_t (*uct_sockaddr_conn_request_callback_t)(void *arg,
  *
  * @param [in]  arg        User defined argument for this callback.
  * @param [in]  dev_name   Device name. This routine may fill the user's private
- *                         data according to the given device  name.
+ *                         data according to the given device name.
  *                         This device name, which is passed to this routine,
- *                         must comply to the dev_name structure inside
- *                         @ref uct_tl_resource_desc_t which is filled by the
- *                         transports during their resource query function.
+ *                         corresponds to the dev_name field inside
+ *                         @ref uct_tl_resource_desc_t as returned from
+ *                         @ref uct_md_query_tl_resources.
  * @param [out] priv_data  User's private data to be passed to the server side.
  *
  * @return Negative value indicates an error according to @ref ucp_status_t.
  *         On success, non-negative value indicates actual number of
- *         bytes filled in the @a priv_data buffer.
+ *         bytes written to the @a priv_data buffer.
  */
 typedef ssize_t (*uct_sockaddr_priv_pack_callback_t)(void *arg,
                                                      const char *dev_name,

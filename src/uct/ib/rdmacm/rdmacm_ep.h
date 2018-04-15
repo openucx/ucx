@@ -12,7 +12,7 @@ struct uct_rdmacm_ep {
     uct_base_ep_t                      super;
     uct_sockaddr_priv_pack_callback_t  pack_cb;
     void                               *pack_cb_arg;
-    uint32_t                           cb_flags;
+    uint32_t                           pack_cb_flags;
     int                                is_on_pending;
     ucs_status_t                       status;     /* client error handling status */
     ucs_list_link_t                    list_elem;  /* for the pending_eps_list */

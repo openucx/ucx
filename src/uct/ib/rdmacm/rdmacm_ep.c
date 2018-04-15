@@ -89,15 +89,15 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
     }
 
     if (cb_flags != UCT_CB_FLAG_ASYNC) {
-        ucs_fatal("UCT_CB_FLAG_SYNC is not supported");
+        return UCS_ERR_UNSUPPORTED;
     }
 
     /* Initialize these fields before calling rdma_resolve_addr to avoid a race
      * where they are used before being initialized (from the async thread
      * - after an RDMA_CM_EVENT_ROUTE_RESOLVED event) */
-    self->pack_cb     = pack_cb;
-    self->pack_cb_arg = arg;
-    self->cb_flags    = cb_flags;
+    self->pack_cb       = pack_cb;
+    self->pack_cb_arg   = arg;
+    self->pack_cb_flags = cb_flags;
 
     /* Save the remote address */
     if (sockaddr->addr->sa_family == AF_INET) {
