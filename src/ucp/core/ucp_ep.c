@@ -660,11 +660,6 @@ void ucp_ep_destroy(ucp_ep_h ep)
             status = ucp_request_check_status(request);
         } while (status == UCS_INPROGRESS);
 
-        /* remove pending slow-path callback in case it was added in the above
-         * progress but won't be invoked */
-        ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
-                                ucp_worker_err_handle_remove_filter, ep);
-
         ucp_request_release(request);
     }
 
