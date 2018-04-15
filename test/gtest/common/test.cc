@@ -137,11 +137,6 @@ void test_base::wrap_errors()
     ucs_log_push_handler(wrap_errors_logger);
 }
 
-void test_base::detect_error()
-{
-    ucs_log_push_handler(detect_error_logger);
-}
-
 void test_base::restore_errors()
 {
     ucs_log_pop_handler();
@@ -218,23 +213,6 @@ test_base::wrap_errors_logger(const char *file, unsigned line, const char *funct
         return UCS_LOG_FUNC_RC_STOP;
     }
 
-    return UCS_LOG_FUNC_RC_CONTINUE;
-}
-
-ucs_log_func_rc_t
-test_base::detect_error_logger(const char *file, unsigned line, const char *function,
-                               ucs_log_level_t level, const char *message, va_list ap)
-{
-    if (level == UCS_LOG_LEVEL_ERROR) {
-        pthread_mutex_lock(&m_logger_mutex);
-        std::string err_str = format_message(message, ap);
-        if (strstr(err_str.c_str(), "worker address information")) {
-            UCS_TEST_MESSAGE << err_str;
-            pthread_mutex_unlock(&m_logger_mutex);
-            return UCS_LOG_FUNC_RC_STOP;
-        }
-        pthread_mutex_unlock(&m_logger_mutex);
-    }
     return UCS_LOG_FUNC_RC_CONTINUE;
 }
 

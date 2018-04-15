@@ -175,7 +175,7 @@ typedef struct uct_base_iface {
     void                    *am_tracer_arg;   /* Tracer argument */
     uct_error_handler_t     err_handler;      /* Error handler */
     void                    *err_handler_arg; /* Error handler argument */
-    uint32_t                err_handler_cb_flags; /* Error handler callback flags */
+    uint32_t                err_handler_flags; /* Error handler callback flags */
     uct_worker_progress_t   prog;             /* Will be removed once all transports
                                                  support progress control */
     unsigned                progress_flags;   /* Which progress is currently enabled */

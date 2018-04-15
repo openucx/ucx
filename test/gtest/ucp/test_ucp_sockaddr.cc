@@ -47,6 +47,25 @@ public:
         ucp_test::init();
     }
 
+    static ucs_log_func_rc_t
+    detect_error_logger(const char *file, unsigned line, const char *function,
+                                   ucs_log_level_t level, const char *message, va_list ap)
+    {
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            std::string err_str = format_message(message, ap);
+            if (strstr(err_str.c_str(), "worker address information")) {
+                UCS_TEST_MESSAGE << err_str;
+                return UCS_LOG_FUNC_RC_STOP;
+            }
+        }
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    static void detect_error()
+    {
+        ucs_log_push_handler(detect_error_logger);
+    }
+
     void get_listen_addr(struct sockaddr_in *listen_addr) {
         struct ifaddrs* ifaddrs;
         int ret = getifaddrs(&ifaddrs);

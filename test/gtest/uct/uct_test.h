@@ -132,8 +132,8 @@ protected:
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
         void cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const;
         void cuda_mem_free(const uct_allocated_memory_t *mem) const;
-        static ssize_t client_priv_data_cb(const char *dev_name,
-                                           void *priv_data, void *arg);
+        static ssize_t client_priv_data_cb(void *arg, const char *dev_name,
+                                           void *priv_data);
 
         ucs::handle<uct_md_h>      m_md;
         uct_md_attr_t              m_md_attr;

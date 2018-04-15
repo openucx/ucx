@@ -287,11 +287,11 @@ uct_test::entity* uct_test::create_entity(size_t rx_headroom,
     uct_iface_params_t iface_params;
 
     memset(&iface_params, 0, sizeof(iface_params));
-    iface_params.rx_headroom          = rx_headroom;
-    iface_params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
-    iface_params.err_handler          = err_handler;
-    iface_params.err_handler_arg      = this;
-    iface_params.err_handler_cb_flags = UCT_CB_FLAG_SYNC;
+    iface_params.rx_headroom       = rx_headroom;
+    iface_params.open_mode         = UCT_IFACE_OPEN_MODE_DEVICE;
+    iface_params.err_handler       = err_handler;
+    iface_params.err_handler_arg   = this;
+    iface_params.err_handler_flags = UCT_CB_FLAG_SYNC;
     entity *new_ent = new entity(*GetParam(), m_iface_config, &iface_params,
                                  m_md_config);
     return new_ent;
@@ -640,8 +640,8 @@ void uct_test::entity::destroy_eps() {
     }
 }
 
-ssize_t uct_test::entity::client_priv_data_cb(const char *dev_name,
-                                              void *priv_data, void *arg)
+ssize_t uct_test::entity::client_priv_data_cb(void *arg, const char *dev_name,
+                                              void *priv_data)
 {
     size_t *max_conn_priv = (size_t*)arg;
     size_t priv_data_len;

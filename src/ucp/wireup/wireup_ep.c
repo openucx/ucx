@@ -417,8 +417,8 @@ err:
     return status;
 }
 
-ssize_t ucp_wireup_ep_sockaddr_fill_private_data(const char *dev_name,
-                                                 void *priv_data, void *arg)
+ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name,
+                                                 void *priv_data)
 {
     ucp_wireup_sockaddr_priv_t *conn_priv = priv_data;
     ucp_wireup_ep_t *wireup_ep            = arg;

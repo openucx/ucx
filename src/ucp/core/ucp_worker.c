@@ -792,15 +792,15 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >= sizeof(ucp_eager_sync_hdr_t));
 
     /* Fill rest of uct_iface params (caller should fill specific mode fields) */
-    iface_params->stats_root           = UCS_STATS_RVAL(worker->stats);
-    iface_params->rx_headroom          = UCP_WORKER_HEADROOM_SIZE;
-    iface_params->err_handler_arg      = worker;
-    iface_params->err_handler          = ucp_worker_iface_error_handler;
-    iface_params->err_handler_cb_flags = UCT_CB_FLAG_ASYNC;
-    iface_params->eager_arg            = iface_params->rndv_arg = wiface;
-    iface_params->eager_cb             = ucp_tag_offload_unexp_eager;
-    iface_params->rndv_cb              = ucp_tag_offload_unexp_rndv;
-    iface_params->cpu_mask             = worker->cpu_mask;
+    iface_params->stats_root        = UCS_STATS_RVAL(worker->stats);
+    iface_params->rx_headroom       = UCP_WORKER_HEADROOM_SIZE;
+    iface_params->err_handler_arg   = worker;
+    iface_params->err_handler       = ucp_worker_iface_error_handler;
+    iface_params->err_handler_flags = UCT_CB_FLAG_ASYNC;
+    iface_params->eager_arg         = iface_params->rndv_arg = wiface;
+    iface_params->eager_cb          = ucp_tag_offload_unexp_eager;
+    iface_params->rndv_cb           = ucp_tag_offload_unexp_rndv;
+    iface_params->cpu_mask          = worker->cpu_mask;
 
     /* Open UCT interface */
     status = uct_iface_open(md, worker->uct, iface_params, iface_config,

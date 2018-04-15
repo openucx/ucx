@@ -9,25 +9,21 @@
 #include "rdmacm_iface.h"
 
 struct uct_rdmacm_ep {
-    uct_base_ep_t                          super;
-    uct_sockaddr_fill_priv_data_callback_t fill_priv_data_cb;
-    void                                   *fill_priv_data_arg;
-    uint32_t                               cb_flags;
-    ucs_list_link_t                        list_elem;   /* for the pending_eps_list */
-    struct sockaddr_storage                remote_addr;
-    int                                    is_on_pending;
-    uct_worker_cb_id_t                     slow_prog_id;
-    uct_rdmacm_ctx_t                       *cm_id_ctx;
+    uct_base_ep_t                      super;
+    uct_sockaddr_priv_pack_callback_t  pack_cb;
+    void                               *pack_cb_arg;
+    uint32_t                           cb_flags;
+    int                                is_on_pending;
+    ucs_status_t                       status;     /* client error handling status */
+    ucs_list_link_t                    list_elem;  /* for the pending_eps_list */
+    struct sockaddr_storage            remote_addr;
+    uct_worker_cb_id_t                 slow_prog_id;
+    uct_rdmacm_ctx_t                   *cm_id_ctx;
 };
-
-typedef struct uct_rdmacm_ep_err_handle_cb_arg {
-    uct_rdmacm_ep_t *rdmacm_ep;
-    ucs_status_t    status;
-} uct_rdmacm_ep_err_handle_cb_arg_t;
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t, uct_iface_t*,
                            const ucs_sock_addr_t *,
-                           uct_sockaddr_fill_priv_data_callback_t, void *,
+                           uct_sockaddr_priv_pack_callback_t, void *,
                            uint32_t);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_ep_t, uct_ep_t);
 
