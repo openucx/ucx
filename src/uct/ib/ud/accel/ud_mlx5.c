@@ -438,9 +438,12 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
     if (cqe == NULL) {
         return 0;
     }
+
     ucs_memory_cpu_load_fence();
+
     uct_ib_mlx5_log_cqe(cqe);
-    iface->super.tx.available = uct_ib_mlx5_txwq_update_bb(&iface->tx.wq, ntohs(cqe->wqe_counter));
+    iface->super.tx.available = uct_ib_mlx5_txwq_update_bb(&iface->tx.wq,
+                                                           ntohs(cqe->wqe_counter));
     return 1;
 }
 

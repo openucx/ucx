@@ -397,7 +397,8 @@ uct_rc_iface_tx_moderation(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uint8_t f
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface, uint16_t res_count, int signaled)
+uct_rc_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface, uint16_t res_count,
+                   int signaled)
 {
     if (signaled) {
         ucs_assert(uct_rc_iface_have_tx_cqe_avail(iface));

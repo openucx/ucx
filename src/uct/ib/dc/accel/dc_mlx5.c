@@ -723,7 +723,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     uint8_t dci;
     struct mlx5_cqe64 *cqe;
     uint32_t qp_num;
-    uint16_t hw_ci, bb_num;
+    uint16_t hw_ci;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super.super, &iface->mlx5_common.tx.cq);
@@ -743,10 +743,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     ucs_trace_poll("dc_mlx5 iface %p tx_cqe: dci[%d] qpn 0x%x txqp %p hw_ci %d",
                    iface, dci, qp_num, txqp, hw_ci);
 
-    bb_num = uct_ib_mlx5_txwq_update_bb(txwq, hw_ci) - uct_rc_txqp_available(txqp);
-    uct_rc_txqp_available_add(txqp, bb_num);
-    iface->super.super.tx.cq_available += bb_num;
-
+    uct_rc_mlx5_common_update_tx_res(&iface->super.super, txwq, txqp, hw_ci);
     uct_dc_iface_dci_put(&iface->super, dci);
     uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
 

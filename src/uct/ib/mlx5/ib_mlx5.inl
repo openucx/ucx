@@ -368,7 +368,7 @@ static UCS_F_ALWAYS_INLINE uint16_t
 uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
                       struct mlx5_wqe_ctrl_seg *ctrl, unsigned wqe_size)
 {
-    uint16_t n, sw_pi, num_bb;
+    uint16_t n, sw_pi, num_bb, res_count;
     void *src, *dst;
 
     ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
@@ -411,15 +411,22 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     /* We don't want the compiler to reorder instructions and hurt latency */
     ucs_compiler_fence();
 
-    /* Advance queue pointer */
+    /*
+     * Advance queue pointer.
+     * We return the number of BBs the *previous* WQE has consumed, since CQEs
+     * are reporting the index of the first BB rather than the last. We have
+     * reserved QP space for at least UCT_IB_MLX5_MAX_BB to accommodate.
+     * */
     ucs_assert(ctrl == wq->curr);
-    wq->curr       = src;
-    wq->prev_sw_pi = wq->sw_pi;
-    wq->sw_pi      = sw_pi;
+    res_count    = wq->sw_pi - wq->prev_sw_pi;
+    wq->curr        = src;
+    wq->prev_sw_pi += res_count;
+    ucs_assert(wq->prev_sw_pi == wq->sw_pi);
+    wq->sw_pi       = sw_pi;
 
     /* Flip BF register */
     wq->bf->reg.addr ^= UCT_IB_MLX5_BF_REG_SIZE;
-    return num_bb;
+    return res_count;
 }
 
 
