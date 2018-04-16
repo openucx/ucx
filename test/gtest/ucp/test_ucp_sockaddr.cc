@@ -225,6 +225,9 @@ public:
                                      UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
                                      UCP_EP_PARAM_FIELD_ERR_HANDLER |
                                      UCP_EP_PARAM_FIELD_USER_DATA;
+        /* TODO The error handling requirement is needed since we need to take
+         * care of a case where the client gets an error.
+         * Error handling will be removed once a large worker address is handled. */
         ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
         ep_params.err_handler.cb   = err_handler_cb;
         ep_params.err_handler.arg  = NULL;
