@@ -209,9 +209,9 @@ static void ucp_wireup_remote_connected(ucp_ep_h ep)
     }
 }
 
-static void ucp_wireup_process_request(ucp_worker_h worker,
-                                       const ucp_wireup_msg_t *msg,
-                                       const ucp_unpacked_address_t *remote_address)
+static UCS_F_NOINLINE void
+ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
+                           const ucp_unpacked_address_t *remote_address)
 {
     uint64_t remote_uuid = remote_address->uuid;
     ucp_rsc_index_t rsc_tli[UCP_MAX_LANES];
@@ -225,6 +225,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker,
     ucp_ep_h ep;
     unsigned ep_init_flags = 0;
 
+    ucs_assert(msg->type == UCP_WIREUP_MSG_REQUEST);
     ucs_trace("got wireup request from 0x%"PRIx64" src_ep 0x%lx dst_ep 0x%lx conn_sn %d",
               remote_address->uuid, msg->src_ep_ptr, msg->dest_ep_ptr, msg->conn_sn);
 
@@ -319,9 +320,9 @@ static void ucp_wireup_process_request(ucp_worker_h worker,
     }
 }
 
-static void ucp_wireup_process_reply(ucp_worker_h worker,
-                                     const ucp_wireup_msg_t *msg,
-                                     const ucp_unpacked_address_t *remote_address)
+static UCS_F_NOINLINE void
+ucp_wireup_process_reply(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
+                         const ucp_unpacked_address_t *remote_address)
 {
     ucp_rsc_index_t rsc_tli[UCP_MAX_LANES];
     ucs_status_t status;
@@ -330,6 +331,7 @@ static void ucp_wireup_process_reply(ucp_worker_h worker,
 
     ep = ucp_worker_get_ep_by_ptr(worker, msg->dest_ep_ptr);
 
+    ucs_assert(msg->type == UCP_WIREUP_MSG_REPLY);
     ucs_trace("ep %p: got wireup reply src_ep 0x%lx dst_ep 0x%lx sn %d", ep,
               msg->src_ep_ptr, msg->dest_ep_ptr, msg->conn_sn);
 
@@ -364,13 +366,14 @@ static void ucp_wireup_process_reply(ucp_worker_h worker,
     }
 }
 
-static void ucp_wireup_process_ack(ucp_worker_h worker,
-                                   const ucp_wireup_msg_t *msg)
+static UCS_F_NOINLINE
+void ucp_wireup_process_ack(ucp_worker_h worker, const ucp_wireup_msg_t *msg)
 {
     ucp_ep_h ep;
 
     ep = ucp_worker_get_ep_by_ptr(worker, msg->dest_ep_ptr);
 
+    ucs_assert(msg->type == UCP_WIREUP_MSG_ACK);
     ucs_trace("ep %p: got wireup ack", ep);
 
     ucs_assert(ep->flags & UCP_EP_FLAG_DEST_EP);
