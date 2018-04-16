@@ -53,6 +53,7 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
 {
     const ucp_wireup_sockaddr_priv_t *client_data = conn_priv_data;
     ucp_listener_h listener                       = arg;
+    ucp_unpacked_address_t remote_address;
     ucp_listener_accept_t *accept;
     uct_worker_cb_id_t prog_id;
     ucp_ep_params_t params;
@@ -61,17 +62,20 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
 
     ucs_trace("listener %p: got connection request", listener);
 
-    params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
-                        UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     params.err_mode   = client_data->err_mode;
-    params.address    = (ucp_address_t*)(client_data + 1);
+
+    status = ucp_address_unpack(client_data + 1, &remote_address);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     /* create endpoint to the worker address we got in the private data */
     status = ucp_ep_create_to_worker_addr(listener->wiface.worker, &params,
-                                          UCP_EP_CREATE_AM_LANE,
+                                          &remote_address, UCP_EP_CREATE_AM_LANE,
                                           "listener", &ep);
     if (status != UCS_OK) {
-        goto err;
+        goto err_free_address;
     }
 
     /* Defer wireup init and user's callback to be invoked from the main thread */
@@ -97,10 +101,14 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
      * that he can wake-up on this event */
     ucp_worker_signal_internal(listener->wiface.worker);
 
+    ucs_free(remote_address.address_list);
+
     return UCS_OK;
 
 err_destroy_ep:
     ucp_ep_destroy_internal(ep);
+err_free_address:
+    ucs_free(remote_address.address_list);
 err:
     return status;
 }

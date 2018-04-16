@@ -240,9 +240,10 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
 ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
+    ucp_unpacked_address_t local_address;
     unsigned i, mem_type, md_index;
     ucs_status_t status;
-    void *address;
+    void *address_buffer;
     size_t address_length;
     ucp_ep_params_t params;
 
@@ -254,34 +255,43 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
         return UCS_OK;
     }
 
-    params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    params.field_mask = 0;
 
     for (i = 0; i < context->num_mem_type_mds; ++i) {
         md_index = context->mem_type_tl_mds[i];
         mem_type = context->tl_mds[md_index].attr.cap.mem_type;
 
         status = ucp_address_pack(worker, NULL, context->mem_type_tls[mem_type], NULL,
-                                  &address_length, &address);
+                                  &address_length, &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
+        }
+
+        status = ucp_address_unpack(address_buffer, &local_address);
+        if (status != UCS_OK) {
+            goto err_free_address_buffer;
         }
 
         /*reset uuid to mem_type id*/
-        *(uint64_t*)address = mem_type;
+        local_address.uuid = mem_type;
 
-        params.address    = (ucp_address_t*)address;
-
-        status = ucp_ep_create_to_worker_addr(worker, &params, UCP_EP_INIT_FLAG_MEM_TYPE,
-                                              "mem type", &worker->mem_type_ep[mem_type]);
+        status = ucp_ep_create_to_worker_addr(worker, &params, &local_address,
+                                              UCP_EP_INIT_FLAG_MEM_TYPE, "mem type",
+                                              &worker->mem_type_ep[mem_type]);
         if (status != UCS_OK) {
-            goto err_cleanup_eps;
+            goto err_free_address_list;
         }
 
-        ucs_free(address);
+        ucs_free(local_address.address_list);
+        ucs_free(address_buffer);
     }
 
     return UCS_OK;
 
+err_free_address_list:
+    ucs_free(local_address.address_list);
+err_free_address_buffer:
+    ucs_free(address_buffer);
 err_cleanup_eps:
     for (i = 0; i < UCT_MD_MEM_TYPE_LAST; i++) {
         if (worker->mem_type_ep[i]) {
@@ -293,47 +303,37 @@ err_cleanup_eps:
 
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           const ucp_ep_params_t *params,
+                                          const ucp_unpacked_address_t *remote_address,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p)
 {
-    ucp_unpacked_address_t remote_address;
     uint8_t addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
     ucp_ep_h ep;
 
-    if (!(params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS)) {
-        status = UCS_ERR_INVALID_PARAM;
-        ucs_error("remote worker address is missing");
-        goto out;
-    }
-
-    UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
-
-    status = ucp_address_unpack(params->address, &remote_address);
-    if (status != UCS_OK) {
-        ucs_error("failed to unpack remote address: %s", ucs_status_string(status));
-        goto out;
-    }
-
-    ep = ucp_worker_ep_find(worker, remote_address.uuid);
+    ep = ucp_worker_ep_find(worker, remote_address->uuid);
     if (ep != NULL) {
         status = ucp_ep_adjust_params(ep, params);
-        goto out_free_address;
+        if (status != UCS_OK) {
+            goto err;
+        }
+
+        goto out;
     }
 
     /* allocate endpoint */
-    status = ucp_ep_new(worker, remote_address.uuid, remote_address.name,
+    status = ucp_ep_new(worker, remote_address->uuid, remote_address->name,
                         message, &ep);
     if (status != UCS_OK) {
-        goto out_free_address;
+        goto err;
     }
 
     ep->flags |= UCP_EP_FLAG_DEST_UUID_PEER;
 
     /* initialize transport endpoints */
     status = ucp_wireup_init_lanes(ep, params, ep_init_flags,
-                                   remote_address.address_count,
-                                   remote_address.address_list, addr_indices);
+                                   remote_address->address_count,
+                                   remote_address->address_list, addr_indices);
     if (status != UCS_OK) {
         goto err_delete;
     }
@@ -343,19 +343,15 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
         goto err_cleanup_lanes;
     }
 
-    status = UCS_OK;
-    goto out_free_address;
+out:
+    *ep_p = ep;
+    return UCS_OK;
 
 err_cleanup_lanes:
     ucp_ep_cleanup_lanes(ep);
 err_delete:
     ucp_ep_delete(ep);
-out_free_address:
-    ucs_free(remote_address.address_list);
-    if (status == UCS_OK) {
-        *ep_p = ep;
-    }
-out:
+err:
     return status;
 }
 
@@ -402,12 +398,58 @@ err:
     return status;
 }
 
+static ucs_status_t
+ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
+                                 const ucp_ep_params_t *params, ucp_ep_h *ep_p)
+{
+    ucp_unpacked_address_t remote_address;
+    ucs_status_t status;
+    ucp_ep_h ep;
+
+    if (!(params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS)) {
+        status = UCS_ERR_INVALID_PARAM;
+        ucs_error("remote worker address is missing");
+        goto out;
+    }
+
+    UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
+
+    status = ucp_address_unpack(params->address, &remote_address);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = ucp_ep_create_to_worker_addr(worker, params, &remote_address, 0,
+                                          "from api call", &ep);
+    if (status != UCS_OK) {
+        goto out_free_address;
+    }
+
+    if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
+        status = ucp_wireup_send_request(ep, ucp_ep_ext_gen(ep)->dest_uuid);
+        if (status != UCS_OK) {
+            ucp_ep_destroy_internal(ep);
+            goto out_free_address;
+        }
+    }
+
+    status = UCS_OK;
+
+out_free_address:
+    ucs_free(remote_address.address_list);
+out:
+    if (status == UCS_OK) {
+        *ep_p = ep;
+    }
+    return status;
+}
+
 ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
                            ucp_ep_h *ep_p)
 {
     ucs_status_t status;
     unsigned flags;
-    ucp_ep_h ep = NULL;
+    ucp_ep_h ep;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
     UCS_ASYNC_BLOCK(&worker->async);
@@ -419,19 +461,9 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
             goto out;
         }
     } else {
-        status = ucp_ep_create_to_worker_addr(worker, params, 0, "from api call",
-                                              &ep);
+        status = ucp_ep_create_api_to_worker_addr(worker, params, &ep);
         if (status != UCS_OK) {
             goto out;
-        }
-
-        if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
-            /* send initial wireup message */
-            status = ucp_wireup_send_request(ep, ucp_ep_ext_gen(ep)->dest_uuid);
-            if (status != UCS_OK) {
-                ucp_ep_destroy_internal(ep);
-                goto out;
-            }
         }
     }
 

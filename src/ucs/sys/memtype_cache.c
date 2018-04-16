@@ -90,7 +90,6 @@ ucs_memtype_cache_delete(ucs_memtype_cache_t *memtype_cache, void *address,
     assert(pgt_region != NULL);
 
     region = ucs_derived_of(pgt_region, ucs_memtype_cache_region_t);
-    assert(region->mem_type == mem_type);
 
     status = ucs_pgtable_remove(&memtype_cache->pgtable, &region->super);
     if (status != UCS_OK) {

@@ -26,6 +26,9 @@ public:
     ucs_status_t put_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf);
 
+    ucs_status_t get_short(uct_ep_h ep, const mapped_buffer &sendbuf,
+                           const mapped_buffer &recvbuf);
+
     ucs_status_t get_bcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf);
 

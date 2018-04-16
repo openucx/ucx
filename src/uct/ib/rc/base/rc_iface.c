@@ -114,7 +114,7 @@ static ucs_mpool_ops_t uct_rc_fc_pending_mpool_ops = {
 
 static void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
                                    uct_iface_attr_t *iface_attr,
-                                   size_t max_inline)
+                                   size_t max_inline, size_t max_iov)
 {
 #if IBV_EXP_HW_TM
     unsigned eager_hdr_size = sizeof(struct ibv_exp_tmh);
@@ -137,7 +137,7 @@ static void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
                                           eager_hdr_size;
     iface_attr->cap.tag.eager.max_zcopy = iface->super.config.seg_size -
                                           eager_hdr_size;
-    iface_attr->cap.tag.eager.max_iov   = 1;
+    iface_attr->cap.tag.eager.max_iov   = max_iov;
 
     port_attr = uct_ib_iface_port_attr(&iface->super);
     iface_attr->cap.tag.rndv.max_zcopy  = port_attr->max_msg_sz;
@@ -157,7 +157,8 @@ static void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
 ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 uct_iface_attr_t *iface_attr,
                                 size_t put_max_short, size_t max_inline,
-                                size_t am_max_hdr, size_t am_max_iov)
+                                size_t am_max_hdr, size_t am_max_iov,
+                                size_t tag_max_iov)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     ucs_status_t status;
@@ -187,23 +188,37 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                   UCT_IFACE_FLAG_EVENT_RECV;
 
     if (uct_ib_atomic_is_supported(dev, 0, sizeof(uint64_t))) {
-        iface_attr->cap.flags  |= UCT_IFACE_FLAG_ATOMIC_ADD64 |
-                                  UCT_IFACE_FLAG_ATOMIC_FADD64 |
-                                  UCT_IFACE_FLAG_ATOMIC_CSWAP64 |
-                                  UCT_IFACE_FLAG_ATOMIC_DEVICE;
+        /* TODO: remove deprecated flags */
+        iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_ADD64 |
+                                              UCT_IFACE_FLAG_ATOMIC_FADD64 |
+                                              UCT_IFACE_FLAG_ATOMIC_CSWAP64 |
+                                              UCT_IFACE_FLAG_ATOMIC_DEVICE;
+
+        iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+        iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
+                                              UCS_BIT(UCT_ATOMIC_OP_CSWAP);
     }
 
     if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint64_t))) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_SWAP64 |
-                                 UCT_IFACE_FLAG_ATOMIC_DEVICE;
+        /* TODO: remove deprecated flags */
+        iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_SWAP64 |
+                                              UCT_IFACE_FLAG_ATOMIC_DEVICE;
+
+        iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_SWAP);
     }
 
     if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint32_t))) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_ADD32 |
-                                 UCT_IFACE_FLAG_ATOMIC_FADD32 |
-                                 UCT_IFACE_FLAG_ATOMIC_SWAP32 |
-                                 UCT_IFACE_FLAG_ATOMIC_CSWAP32 |
-                                 UCT_IFACE_FLAG_ATOMIC_DEVICE;
+        /* TODO: remove deprecated flags */
+        iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_ADD32 |
+                                              UCT_IFACE_FLAG_ATOMIC_FADD32 |
+                                              UCT_IFACE_FLAG_ATOMIC_SWAP32 |
+                                              UCT_IFACE_FLAG_ATOMIC_CSWAP32 |
+                                              UCT_IFACE_FLAG_ATOMIC_DEVICE;
+
+        iface_attr->cap.atomic32.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
+        iface_attr->cap.atomic32.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
+                                              UCS_BIT(UCT_ATOMIC_OP_SWAP) |
+                                              UCS_BIT(UCT_ATOMIC_OP_CSWAP);
     }
 
     iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
@@ -239,7 +254,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
     /* Tag Offload */
-    uct_rc_iface_tag_query(iface, iface_attr, max_inline);
+    uct_rc_iface_tag_query(iface, iface_attr, max_inline, tag_max_iov);
 
     return UCS_OK;
 }

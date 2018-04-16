@@ -42,7 +42,7 @@ typedef struct uct_iface_ops {
 
     /* endpoint - get */
 
-    ucs_status_t (*ep_get_short)(uct_ep_h ep, const void *buffer, unsigned length,
+    ucs_status_t (*ep_get_short)(uct_ep_h ep, void *buffer, unsigned length,
                                  uint64_t remote_addr, uct_rkey_t rkey);
 
     ucs_status_t (*ep_get_bcopy)(uct_ep_h ep, uct_unpack_callback_t unpack_cb,
@@ -106,13 +106,13 @@ typedef struct uct_iface_ops {
     ucs_status_t (*ep_atomic64_post)(uct_ep_h ep, unsigned opcode, uint64_t value,
                                      uint64_t remote_addr, uct_rkey_t rkey);
 
-    ucs_status_t (*ep_atomic32_fetch_nb)(uct_ep_h ep, unsigned opcode, uint32_t value,
-                                         uint32_t *result, uint64_t remote_addr,
-                                         uct_rkey_t rkey, uct_completion_t *comp);
+    ucs_status_t (*ep_atomic32_fetch)(uct_ep_h ep, unsigned opcode, uint32_t value,
+                                      uint32_t *result, uint64_t remote_addr,
+                                      uct_rkey_t rkey, uct_completion_t *comp);
 
-    ucs_status_t (*ep_atomic64_fetch_nb)(uct_ep_h ep, unsigned opcode, uint64_t value,
-                                         uint64_t *result, uint64_t remote_addr,
-                                         uct_rkey_t rkey, uct_completion_t *comp);
+    ucs_status_t (*ep_atomic64_fetch)(uct_ep_h ep, unsigned opcode, uint64_t value,
+                                      uint64_t *result, uint64_t remote_addr,
+                                      uct_rkey_t rkey, uct_completion_t *comp);
 
     /* endpoint - tagged operations */
 

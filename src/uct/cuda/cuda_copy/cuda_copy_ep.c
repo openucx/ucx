@@ -127,3 +127,35 @@ ucs_status_t uct_cuda_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     return status;
 
 }
+
+
+ucs_status_t uct_cuda_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
+                                        unsigned length, uint64_t remote_addr,
+                                        uct_rkey_t rkey)
+{
+    ucs_status_t status;
+
+    status = UCT_CUDA_FUNC(cudaMemcpy((void *)remote_addr, buffer,
+                                      length, cudaMemcpyHostToDevice));
+
+    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
+    ucs_trace_data("PUT_SHORT size %d from %p to %p",
+                   length, buffer, (void *)remote_addr);
+    return status;
+}
+
+ucs_status_t uct_cuda_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
+                                        unsigned length, uint64_t remote_addr,
+                                        uct_rkey_t rkey)
+{
+    ucs_status_t status;
+
+    status = UCT_CUDA_FUNC(cudaMemcpy(buffer, (void *)remote_addr,
+                                      length, cudaMemcpyDeviceToHost));
+
+    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, SHORT, length);
+    ucs_trace_data("GET_SHORT size %d from %p to %p",
+                   length, (void *)remote_addr, buffer);
+    return status;
+}
+
