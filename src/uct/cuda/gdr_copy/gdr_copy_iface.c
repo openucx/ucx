@@ -51,7 +51,8 @@ static ucs_status_t uct_gdr_copy_iface_query(uct_iface_h iface,
     iface_attr->device_addr_len         = 0;
     iface_attr->ep_addr_len             = 0;
     iface_attr->cap.flags               = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                          UCT_IFACE_FLAG_PUT_SHORT;
+                                          UCT_IFACE_FLAG_PUT_SHORT |
+                                          UCT_IFACE_FLAG_GET_SHORT;
 
     iface_attr->cap.put.max_short       = UINT_MAX;
     iface_attr->cap.put.max_bcopy       = 0;
@@ -61,6 +62,7 @@ static ucs_status_t uct_gdr_copy_iface_query(uct_iface_h iface,
     iface_attr->cap.put.align_mtu       = iface_attr->cap.put.opt_zcopy_align;
     iface_attr->cap.put.max_iov         = 1;
 
+    iface_attr->cap.get.max_short       = UINT_MAX;
     iface_attr->cap.get.max_bcopy       = 0;
     iface_attr->cap.get.min_zcopy       = 0;
     iface_attr->cap.get.max_zcopy       = 0;
@@ -88,6 +90,7 @@ static ucs_status_t uct_gdr_copy_iface_query(uct_iface_h iface,
 
 static uct_iface_ops_t uct_gdr_copy_iface_ops = {
     .ep_put_short             = uct_gdr_copy_ep_put_short,
+    .ep_get_short             = uct_gdr_copy_ep_get_short,
     .ep_pending_add           = ucs_empty_function_return_busy,
     .ep_pending_purge         = ucs_empty_function,
     .ep_flush                 = uct_base_ep_flush,

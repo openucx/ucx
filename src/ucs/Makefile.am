@@ -30,6 +30,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/mpool.h \
 	datastruct/pgtable.h \
 	datastruct/queue_types.h \
+	datastruct/strided_alloc.h \
 	profile/profile_defs.h \
 	profile/profile_off.h \
 	profile/profile_on.h \
@@ -111,6 +112,7 @@ libucs_la_SOURCES = \
 	datastruct/mpool.c \
 	datastruct/pgtable.c \
 	datastruct/ptr_array.c \
+	datastruct/strided_alloc.c \
 	debug/assert.c \
 	debug/debug.c \
 	debug/log.c \

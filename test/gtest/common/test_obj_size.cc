@@ -43,8 +43,9 @@ UCS_TEST_F(test_obj_size, size) {
 #elif ENABLE_STATS
    UCS_TEST_SKIP_R("Statistic enabled");
 #else
-    EXPECTED_SIZE(ucp_ep_t, 104);
+    EXPECTED_SIZE(ucp_ep_t, 64);
     EXPECTED_SIZE(ucp_request_t, 224);
+    EXPECTED_SIZE(ucp_recv_desc_t, 48);
     EXPECTED_SIZE(uct_ep_t, 8);
     EXPECTED_SIZE(uct_base_ep_t, 8);
     EXPECTED_SIZE(uct_rkey_bundle_t, 24);

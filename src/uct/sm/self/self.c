@@ -60,6 +60,19 @@ static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t 
                                    UCT_IFACE_FLAG_CB_SYNC          |
                                    UCT_IFACE_FLAG_EP_CHECK;
 
+    attr->cap.atomic32.op_flags   =
+    attr->cap.atomic64.op_flags   = UCS_BIT(UCT_ATOMIC_OP_ADD)     |
+                                    UCS_BIT(UCT_ATOMIC_OP_AND)     |
+                                    UCS_BIT(UCT_ATOMIC_OP_OR)      |
+                                    UCS_BIT(UCT_ATOMIC_OP_XOR);
+    attr->cap.atomic32.fop_flags  =
+    attr->cap.atomic64.fop_flags  = UCS_BIT(UCT_ATOMIC_OP_ADD)     |
+                                    UCS_BIT(UCT_ATOMIC_OP_AND)     |
+                                    UCS_BIT(UCT_ATOMIC_OP_OR)      |
+                                    UCS_BIT(UCT_ATOMIC_OP_XOR)     |
+                                    UCS_BIT(UCT_ATOMIC_OP_SWAP)    |
+                                    UCS_BIT(UCT_ATOMIC_OP_CSWAP);
+
     attr->cap.put.max_short       = UINT_MAX;
     attr->cap.put.max_bcopy       = SIZE_MAX;
     attr->cap.put.min_zcopy       = 0;
@@ -281,10 +294,14 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .ep_atomic_fadd64         = uct_sm_ep_atomic_fadd64,
     .ep_atomic_cswap64        = uct_sm_ep_atomic_cswap64,
     .ep_atomic_swap64         = uct_sm_ep_atomic_swap64,
+    .ep_atomic64_post         = uct_sm_ep_atomic64_post,
+    .ep_atomic64_fetch_nb     = uct_sm_ep_atomic64_fetch_nb,
     .ep_atomic_add32          = uct_sm_ep_atomic_add32,
     .ep_atomic_fadd32         = uct_sm_ep_atomic_fadd32,
     .ep_atomic_cswap32        = uct_sm_ep_atomic_cswap32,
     .ep_atomic_swap32         = uct_sm_ep_atomic_swap32,
+    .ep_atomic32_post         = uct_sm_ep_atomic32_post,
+    .ep_atomic32_fetch_nb     = uct_sm_ep_atomic32_fetch_nb,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_check                 = ucs_empty_function_return_success,

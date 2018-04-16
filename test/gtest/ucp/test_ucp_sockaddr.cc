@@ -11,6 +11,10 @@
 #include <ifaddrs.h>
 #include <sys/poll.h>
 
+#define UCP_INSTANTIATE_ALL_TEST_CASE(_test_case) \
+        UCP_INSTANTIATE_TEST_CASE (_test_case) \
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, mm_rdmacm, "mm,rdmacm")
+
 class test_ucp_sockaddr : public ucp_test {
 public:
     static ucp_params_t get_ctx_params() {
@@ -19,6 +23,27 @@ public:
         params.features     = UCP_FEATURE_TAG |
                               UCP_FEATURE_WAKEUP;
         return params;
+    }
+
+    void init()
+    {
+        test_base::init();
+        ucp_ep_params_t ep_params = ucp_test::get_ep_params();
+
+        /* create dummy sender and receiver entities */
+        create_entity();
+        create_entity();
+
+        /* try to connect the dummy entities to check if the tested transport
+         * can support the requested features from ucp_params */
+        wrap_errors();
+        sender().connect(&receiver(), ep_params, 0, 0);
+        restore_errors();
+
+        /* remove the dummy sender and receiver entities */
+        ucp_test::cleanup();
+        /* create valid sender and receiver entities to be used in the test */
+        ucp_test::init();
     }
 
     void get_listen_addr(struct sockaddr_in *listen_addr) {
@@ -146,23 +171,33 @@ public:
         EXPECT_EQ(send_data, recv_data);
     }
 
-    void connect_and_send_recv(struct sockaddr *connect_addr, bool wakeup)
+    void wait_for_server_ep(bool wakeup)
+    {
+        ucs_time_t time_limit = ucs_get_time() + ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
+
+        while ((receiver().get_num_eps() == 0) && (ucs_get_time() < time_limit)) {
+            check_events(sender().worker(), receiver().worker(), wakeup);
+        }
+    }
+
+    void client_ep_connect(struct sockaddr *connect_addr)
     {
         ucp_ep_params_t ep_params = ucp_test::get_ep_params();
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
-                                     UCP_EP_PARAM_FIELD_SOCK_ADDR |
-                                     UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-        ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
+                                     UCP_EP_PARAM_FIELD_SOCK_ADDR;
         ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
         ep_params.sockaddr.addr    = connect_addr;
         ep_params.sockaddr.addrlen = sizeof(*connect_addr);
         sender().connect(&receiver(), ep_params);
+    }
+
+    void connect_and_send_recv(struct sockaddr *connect_addr, bool wakeup)
+    {
+        client_ep_connect(connect_addr);
 
         tag_send_recv(sender(), receiver(), wakeup);
 
-        while (receiver().get_num_eps() == 0) {
-            check_events(sender().worker(), receiver().worker(), wakeup);
-        }
+        wait_for_server_ep(wakeup);
 
         tag_send_recv(receiver(), sender(), wakeup);
     }
@@ -246,4 +281,39 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
     EXPECT_EQ(1, err_handler_count);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_sockaddr)
+UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
+
+class test_ucp_sockaddr_with_rma_atomic : public test_ucp_sockaddr {
+public:
+
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = ucp_test::get_ctx_params();
+        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
+        params.features     = UCP_FEATURE_RMA   |
+                              UCP_FEATURE_AMO32 |
+                              UCP_FEATURE_AMO64;
+        return params;
+    }
+};
+
+UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup_for_rma_atomic) {
+
+    /* This test makes sure that the client-server flow works when the required
+     * features are RMA/ATOMIC. With these features, need to make sure that
+     * there is a lane for ucp-wireup (an am_lane should be created and used) */
+    struct sockaddr_in connect_addr;
+    get_listen_addr(&connect_addr);
+
+    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str((const struct sockaddr*)&connect_addr);
+
+    start_listener((const struct sockaddr*)&connect_addr);
+
+    client_ep_connect((struct sockaddr*)&connect_addr);
+
+    wait_for_server_ep(false);
+
+    /* allow the connection establishment flow to complete */
+    short_progress_loop();
+ }
+
+UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_with_rma_atomic)

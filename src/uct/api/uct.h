@@ -150,6 +150,24 @@ typedef struct uct_tl_resource_desc {
 
 
 /**
+ * @brief Atomic operation requested for uct_ep_atomic32_post, uct_ep_atomic64_post,
+ * uct_ep_atomic32_fetch_nb and uct_ep_atomic64_fetch_nb.
+ *
+ * This enumeration defines which atomic memory operation should be
+ * performed by the uct_ep_atomic family of fuctions.
+ */
+typedef enum uct_atomic_op {
+    UCT_ATOMIC_OP_ADD,   /**< Atomic add  */
+    UCT_ATOMIC_OP_AND,   /**< Atomic and  */
+    UCT_ATOMIC_OP_OR,    /**< Atomic or   */
+    UCT_ATOMIC_OP_XOR,   /**< Atomic xor  */
+    UCT_ATOMIC_OP_SWAP,  /**< Atomic swap */
+    UCT_ATOMIC_OP_CSWAP, /**< Atomic compare-and-swap */
+    UCT_ATOMIC_OP_LAST
+} uct_atomic_op_t;
+
+
+/**
  * @defgroup UCT_RESOURCE_IFACE_CAP   UCT interface operations and capabilities
  * @ingroup UCT_RESOURCE
  *
@@ -176,7 +194,7 @@ typedef struct uct_tl_resource_desc {
 #define UCT_IFACE_FLAG_GET_BCOPY      UCS_BIT(9)  /**< Buffered get */
 #define UCT_IFACE_FLAG_GET_ZCOPY      UCS_BIT(10) /**< Zero-copy get */
 
-        /* Atomic operations capabilities */
+        /* Atomic operations capabilities. TODO: replace it by uct_atomic_op_t */
 #define UCT_IFACE_FLAG_ATOMIC_ADD32   UCS_BIT(16) /**< 32bit atomic add */
 #define UCT_IFACE_FLAG_ATOMIC_ADD64   UCS_BIT(17) /**< 64bit atomic add */
 #define UCT_IFACE_FLAG_ATOMIC_FADD32  UCS_BIT(18) /**< 32bit atomic fetch-and-add */
@@ -561,6 +579,11 @@ struct uct_iface_attr {
                                               @ref uct_ep_tag_rndv_zcopy */
             } rndv;                      /**< Attributes related to rendezvous protocol */
         } tag;                           /**< Attributes for TAG operations */
+
+        struct {
+            uint64_t         op_flags;   /**< Attributes for atomic-post operations */
+            uint64_t         fop_flags;  /**< Attributes for atomic-fetch operations */
+        } atomic32, atomic64;            /**< Attributes for atomic operations */
 
         uint64_t             flags;      /**< Flags from @ref UCT_RESOURCE_IFACE_CAP */
     } cap;                               /**< Interface capabilities */
@@ -1751,7 +1774,7 @@ UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep,
  * @ingroup UCT_RMA
  * @brief
  */
-UCT_INLINE_API ucs_status_t uct_ep_get_short(uct_ep_h ep, const void *buffer, unsigned length,
+UCT_INLINE_API ucs_status_t uct_ep_get_short(uct_ep_h ep, void *buffer, unsigned length,
                                              uint64_t remote_addr, uct_rkey_t rkey)
 {
     return ep->iface->ops.ep_get_short(ep, buffer, length, remote_addr, rkey);
@@ -1966,6 +1989,58 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap32(uct_ep_h ep, uint32_t compare,
                                                   uint32_t *result, uct_completion_t *comp)
 {
     return ep->iface->ops.ep_atomic_cswap32(ep, compare, swap, remote_addr, rkey, result, comp);
+}
+
+
+/**
+ * @ingroup UCT_AMO
+ * @brief
+ */
+UCT_INLINE_API ucs_status_t uct_ep_atomic32_post(uct_ep_h ep, uct_atomic_op_t opcode,
+                                                 uint32_t value, uint64_t remote_addr,
+                                                 uct_rkey_t rkey)
+{
+    return ep->iface->ops.ep_atomic32_post(ep, opcode, value, remote_addr, rkey);
+}
+
+
+/**
+ * @ingroup UCT_AMO
+ * @brief
+ */
+UCT_INLINE_API ucs_status_t uct_ep_atomic64_post(uct_ep_h ep, uct_atomic_op_t opcode,
+                                                 uint64_t value, uint64_t remote_addr,
+                                                 uct_rkey_t rkey)
+{
+    return ep->iface->ops.ep_atomic64_post(ep, opcode, value, remote_addr, rkey);
+}
+
+
+/**
+ * @ingroup UCT_AMO
+ * @brief
+ */
+UCT_INLINE_API ucs_status_t uct_ep_atomic32_fetch_nb(uct_ep_h ep, uct_atomic_op_t opcode,
+                                                     uint32_t value, uint32_t *result,
+                                                     uint64_t remote_addr, uct_rkey_t rkey,
+                                                     uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_atomic32_fetch_nb(ep, opcode, value, result,
+                                               remote_addr, rkey, comp);
+}
+
+
+/**
+ * @ingroup UCT_AMO
+ * @brief
+ */
+UCT_INLINE_API ucs_status_t uct_ep_atomic64_fetch_nb(uct_ep_h ep, uct_atomic_op_t opcode,
+                                                     uint64_t value, uint64_t *result,
+                                                     uint64_t remote_addr, uct_rkey_t rkey,
+                                                     uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_atomic64_fetch_nb(ep, opcode, value, result,
+                                               remote_addr, rkey, comp);
 }
 
 

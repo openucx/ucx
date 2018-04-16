@@ -12,6 +12,7 @@
 #include "ucp_worker.h"
 #include "ucp_context.h"
 
+#include <ucp/wireup/wireup.h>
 #include <ucs/arch/bitops.h>
 
 
@@ -109,6 +110,38 @@ static inline const uct_md_attr_t* ucp_ep_md_attr(ucp_ep_h ep, ucp_lane_index_t 
 {
     ucp_context_h context = ep->worker->context;
     return &context->tl_mds[ucp_ep_md_index(ep, lane)].attr;
+}
+
+static inline ucp_ep_ext_gen_t* ucp_ep_ext_gen(ucp_ep_h ep)
+{
+    return (ucp_ep_ext_gen_t*)ucs_strided_elem_get(ep, 0, 1);
+}
+
+static inline ucp_ep_ext_proto_t* ucp_ep_ext_proto(ucp_ep_h ep)
+{
+    return (ucp_ep_ext_proto_t*)ucs_strided_elem_get(ep, 0, 2);
+}
+
+static inline ucp_ep_h ucp_ep_from_ext_gen(ucp_ep_ext_gen_t *ep_ext)
+{
+    return (ucp_ep_h)ucs_strided_elem_get(ep_ext, 1, 0);
+}
+
+static inline ucp_ep_h ucp_ep_from_ext_proto(ucp_ep_ext_proto_t *ep_ext)
+{
+    return (ucp_ep_h)ucs_strided_elem_get(ep_ext, 2, 0);
+}
+
+/*
+ * Make sure the remote worker would be able to send replies to our endpoint.
+ * Should be used before sending a message which requires a reply.
+ */
+static inline void ucp_ep_connect_remote(ucp_ep_h ep)
+{
+    if (ucs_unlikely(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED))) {
+        ucs_assert(ep->flags & UCP_EP_FLAG_DEST_UUID_PEER);
+        ucp_wireup_send_request(ep, ucp_ep_ext_gen(ep)->dest_uuid);
+    }
 }
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)

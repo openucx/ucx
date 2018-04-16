@@ -32,6 +32,23 @@
 #define UCT_RC_MLX5_CHECK_PUT_SHORT(_length, _av_size) \
     UCT_CHECK_LENGTH(_length, 0, UCT_IB_MLX5_PUT_MAX_SHORT(_av_size), "put_short")
 
+#define UCT_RC_MLX5_ATOMIC_OPS (UCS_BIT(UCT_ATOMIC_OP_ADD) | \
+                                UCS_BIT(UCT_ATOMIC_OP_AND) | \
+                                UCS_BIT(UCT_ATOMIC_OP_OR)  | \
+                                UCS_BIT(UCT_ATOMIC_OP_XOR))
+
+#define UCT_RC_MLX5_ATOMIC_FOPS (UCT_RC_MLX5_ATOMIC_OPS | UCS_BIT(UCT_ATOMIC_OP_SWAP))
+
+#define UCT_RC_MLX5_CHECK_ATOMIC_OPS(_op, _size, _flags)                        \
+    if (ucs_unlikely(!(UCS_BIT(_op) & (_flags)))) {                             \
+        ucs_assertv(0, "incorrect opcode for atomic: %d", _op);                 \
+        return UCS_ERR_UNSUPPORTED;                                             \
+    } else {                                                                    \
+        ucs_assert((_size == sizeof(uint64_t)) || (_size == sizeof(uint32_t))); \
+    }
+
+#define UCT_RC_MLX5_TO_BE(_val, _size) \
+    ((_size) == sizeof(uint64_t) ? htobe64(_val) : htobe32(_val))
 
 enum {
     UCT_RC_MLX5_IFACE_STAT_RX_INL_32,
@@ -225,7 +242,7 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
 
 void uct_rc_mlx5_iface_common_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
-void uct_rc_mlx5_iface_common_query(uct_iface_attr_t *iface_attr);
+void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface, uct_iface_attr_t *iface_attr);
 
 void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                             uct_ib_iface_t *ib_iface);
@@ -612,7 +629,8 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                            unsigned opcode_flags, const void *buffer,
                            unsigned length, uint32_t *lkey_p,
          /* RDMA/ATOMIC */ uint64_t remote_addr, uct_rkey_t rkey,
-         /* ATOMIC      */ uint64_t compare_mask, uint64_t compare, uint64_t swap_add,
+         /* ATOMIC      */ uint64_t compare_mask, uint64_t compare,
+         /* ATOMIC      */ uint64_t swap_mask, uint64_t swap_add,
          /* AV          */ uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
                            size_t av_size, uint8_t fm_ce_se, uint32_t imm_val_be,
                            int max_log_sge, uct_ib_log_sge_t *log_sge)
@@ -624,6 +642,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     struct uct_ib_mlx5_atomic_masked_cswap32_seg *masked_cswap32;
     struct uct_ib_mlx5_atomic_masked_fadd32_seg  *masked_fadd32;
     struct uct_ib_mlx5_atomic_masked_cswap64_seg *masked_cswap64;
+    struct uct_ib_mlx5_atomic_masked_fadd64_seg  *masked_fadd64;
     size_t  wqe_size, ctrl_av_size;
     uint8_t opmod;
     void *next_seg;
@@ -696,7 +715,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
             masked_cswap32               = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
             masked_cswap32->swap         = swap_add;
             masked_cswap32->compare      = compare;
-            masked_cswap32->swap_mask    = (uint32_t)-1;
+            masked_cswap32->swap_mask    = swap_mask;
             masked_cswap32->compare_mask = compare_mask;
             dptr                         = uct_ib_mlx5_txwq_wrap_exact(txwq, masked_cswap32 + 1);
             wqe_size                     = ctrl_av_size + sizeof(*raddr) +
@@ -710,7 +729,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
 
             /* 2nd half of masked_cswap64 can wrap */
             masked_cswap64               = uct_ib_mlx5_txwq_wrap_exact(txwq, masked_cswap64 + 1);
-            masked_cswap64->swap         = (uint64_t)-1;
+            masked_cswap64->swap         = swap_mask;
             masked_cswap64->compare      = compare_mask;
 
             dptr                         = uct_ib_mlx5_txwq_wrap_exact(txwq, masked_cswap64 + 1);
@@ -724,18 +743,33 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
         break;
 
      case MLX5_OPCODE_ATOMIC_MASKED_FA:
-        ucs_assert(length == sizeof(uint32_t));
-        raddr = uct_ib_mlx5_txwq_wrap_exact(txwq, (void*)ctrl + ctrl_av_size);
+        raddr = next_seg;
         uct_ib_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
 
-        opmod                         = UCT_IB_MLX5_OPMOD_EXT_ATOMIC(2);
-        masked_fadd32                 = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
-        masked_fadd32->add            = swap_add;
-        masked_fadd32->filed_boundary = 0;
+        switch (length) {
+        case sizeof(uint32_t):
+            opmod                         = UCT_IB_MLX5_OPMOD_EXT_ATOMIC(2);
+            masked_fadd32                 = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
+            masked_fadd32->add            = swap_add;
+            masked_fadd32->filed_boundary = compare;
 
-        dptr                          = uct_ib_mlx5_txwq_wrap_exact(txwq, masked_fadd32 + 1);
-        wqe_size                      = ctrl_av_size + sizeof(*raddr) +
-                                        sizeof(*masked_fadd32) + sizeof(*dptr);
+            dptr                          = uct_ib_mlx5_txwq_wrap_exact(txwq, masked_fadd32 + 1);
+            wqe_size                      = ctrl_av_size + sizeof(*raddr) +
+                                            sizeof(*masked_fadd32) + sizeof(*dptr);
+            break;
+        case sizeof(uint64_t):
+            opmod                         = UCT_IB_MLX5_OPMOD_EXT_ATOMIC(3); /* Ext. atomic, size 2**3 */
+            masked_fadd64                 = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
+            masked_fadd64->add            = swap_add;
+            masked_fadd64->filed_boundary = compare;
+
+            dptr                          = uct_ib_mlx5_txwq_wrap_exact(txwq, masked_fadd64 + 1);
+            wqe_size                      = ctrl_av_size + sizeof(*raddr) +
+                                            sizeof(*masked_fadd64) + sizeof(*dptr);
+            break;
+        default:
+            ucs_fatal("invalid atomic type length %d", length);
+        }
         uct_ib_mlx5_set_data_seg(dptr, buffer, length, *lkey_p);
         break;
 
@@ -1440,5 +1474,73 @@ uct_rc_mlx5_common_dm_make_data(uct_rc_mlx5_iface_common_t *iface,
     return UCS_OK;
 }
 #endif
+
+static ucs_status_t UCS_F_ALWAYS_INLINE
+uct_rc_mlx5_iface_common_atomic_data(unsigned opcode, unsigned size, uint64_t value,
+                                     int *op, uint64_t *compare_mask, uint64_t *compare,
+                                     uint64_t *swap_mask, uint64_t *swap, int *ext)
+{
+    ucs_assert((size == sizeof(uint64_t)) || (size == sizeof(uint32_t)));
+
+    switch (opcode) {
+    case UCT_ATOMIC_OP_ADD:
+        switch (size) {
+        case sizeof(uint64_t):
+            *op       = MLX5_OPCODE_ATOMIC_FA;
+            *ext      = 0;
+            break;
+        case sizeof(uint32_t):
+            *op       = MLX5_OPCODE_ATOMIC_MASKED_FA;
+            *ext      = 1;
+            break;
+        default:
+            ucs_assertv(0, "incorrect atomic size: %d", size);
+            return UCS_ERR_INVALID_PARAM;
+        }
+        *compare_mask = 0;
+        *compare      = 0;
+        *swap_mask    = 0;
+        *swap         = UCT_RC_MLX5_TO_BE(value, size);
+        break;
+    case UCT_ATOMIC_OP_AND:
+        *op           = MLX5_OPCODE_ATOMIC_MASKED_CS;
+        *compare_mask = 0;
+        *compare      = 0;
+        *swap_mask    = UCT_RC_MLX5_TO_BE(~value, size);
+        *swap         = UCT_RC_MLX5_TO_BE(value, size);
+        *ext          = 1;
+        break;
+    case UCT_ATOMIC_OP_OR:
+        *op           = MLX5_OPCODE_ATOMIC_MASKED_CS;
+        *compare_mask = 0;
+        *compare      = 0;
+        *swap_mask    = UCT_RC_MLX5_TO_BE(value, size);
+        *swap         = UCT_RC_MLX5_TO_BE(value, size);
+        *ext          = 1;
+        break;
+    case UCT_ATOMIC_OP_XOR:
+        *op           = MLX5_OPCODE_ATOMIC_MASKED_FA;
+        *compare_mask = 0;
+        *compare      = -1;
+        *swap_mask    = 0;
+        *swap         = UCT_RC_MLX5_TO_BE(value, size);
+        *ext          = 1;
+        break;
+    case UCT_ATOMIC_OP_SWAP:
+        *op           = MLX5_OPCODE_ATOMIC_MASKED_CS;
+        *compare_mask = 0;
+        *compare      = 0;
+        *swap_mask    = -1;
+        *swap         = UCT_RC_MLX5_TO_BE(value, size);
+        *ext          = 1;
+        break;
+    default:
+        ucs_assertv(0, "incorrect atomic opcode: %d", opcode);
+        return UCS_ERR_UNSUPPORTED;
+    }
+    return UCS_OK;
+}
+
+
 
 #endif

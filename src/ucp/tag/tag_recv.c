@@ -69,7 +69,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 
         status = ucp_dt_unpack_only(worker, buffer, count, datatype, mem_type,
                                     (void*)(rdesc + 1) + hdr_len, recv_len, 1);
-        ucp_tag_unexp_desc_release(rdesc);
+        ucp_recv_desc_release(rdesc);
 
         if (req_flags & UCP_REQUEST_FLAG_CALLBACK) {
             cb(req + 1, status, &req->recv.tag.info);
@@ -125,7 +125,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_RNDV)) {
         ucp_rndv_matched(worker, req, (void*)(rdesc + 1));
         UCP_WORKER_STAT_RNDV(worker, UNEXP);
-        ucp_tag_unexp_desc_release(rdesc);
+        ucp_recv_desc_release(rdesc);
         return;
     }
 

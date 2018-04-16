@@ -211,6 +211,12 @@ struct uct_ib_mlx5_atomic_masked_cswap64_seg {
 } UCS_S_PACKED;
 
 
+struct uct_ib_mlx5_atomic_masked_fadd64_seg {
+    uint64_t           add;
+    uint64_t           filed_boundary;
+} UCS_S_PACKED;
+
+
 /**
  * Get internal CQ information.
  */

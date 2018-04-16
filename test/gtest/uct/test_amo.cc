@@ -196,4 +196,3 @@ void uct_amo_test::worker::join() {
     pthread_join(m_thread, &retval);
     running = false;
 }
-

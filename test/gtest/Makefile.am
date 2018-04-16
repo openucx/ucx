@@ -68,9 +68,11 @@ gtest_SOURCES = \
 	ucm/malloc_hook.cc \
 	\
 	uct/test_amo.cc \
-	uct/test_amo_add.cc \
+	uct/test_amo_add_xor.cc \
+	uct/test_amo_and_or.cc \
 	uct/test_amo_cswap.cc \
-	uct/test_amo_fadd.cc \
+	uct/test_amo_fadd_fxor.cc \
+	uct/test_amo_fand_for.cc \
 	uct/test_amo_swap.cc \
 	uct/test_event.cc \
 	uct/test_fence.cc \
@@ -139,11 +141,11 @@ gtest_SOURCES = \
 	ucs/test_rcache.cc \
 	ucs/test_memtype_cache.cc \
 	ucs/test_stats.cc \
+	ucs/test_strided_alloc.cc \
 	ucs/test_sys.cc \
 	ucs/test_time.cc \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc \
-	ucs/test_hash_perf.cc \
 	ucs/test_type.cc \
 	ucs/test_log.cc
 

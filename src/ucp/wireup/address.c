@@ -48,9 +48,11 @@ typedef struct {
     float            overhead;
     float            bandwidth;
     float            lat_ovh;
-    uint32_t         prio_cap_flags; /* 8 lsb: prio, 24 msb - cap flags */
+    uint32_t         prio_cap_flags; /* 8 lsb: prio, 22 msb: cap flags, 2 hsb: amo */
 } ucp_address_packed_iface_attr_t;
 
+#define UCT_ADDRESS_FLAG_ATOMIC32     UCS_BIT(30) /* 32bit atomic operations */
+#define UCT_ADDRESS_FLAG_ATOMIC64     UCS_BIT(31) /* 64bit atomic operations */
 
 #define UCP_ADDRESS_FLAG_LAST         0x80   /* Last address in the list */
 #define UCP_ADDRESS_FLAG_EP_ADDR      0x40   /* Indicates that ep addr is packed
@@ -243,9 +245,6 @@ static void ucp_address_pack_iface_attr(ucp_address_packed_iface_attr_t *packed,
     uint64_t bit;
 
     cap_flags = iface_attr->cap.flags;
-    if (!enable_atomics) {
-        cap_flags &= ~(UCP_UCT_IFACE_ATOMIC32_FLAGS | UCP_UCT_IFACE_ATOMIC64_FLAGS);
-    }
 
     packed->prio_cap_flags = ((uint8_t)iface_attr->priority);
     packed->overhead       = iface_attr->overhead;
@@ -264,6 +263,16 @@ static void ucp_address_pack_iface_attr(ucp_address_packed_iface_attr_t *packed,
         }
         bit <<= 1;
     }
+
+    if (enable_atomics) {
+        if (ucs_test_all_flags(iface_attr->cap.flags, UCP_UCT_IFACE_ATOMIC32_FLAGS)) {
+            packed->prio_cap_flags |= UCT_ADDRESS_FLAG_ATOMIC32;
+        }
+        if (ucs_test_all_flags(iface_attr->cap.flags, UCP_UCT_IFACE_ATOMIC64_FLAGS)) {
+            packed->prio_cap_flags |= UCT_ADDRESS_FLAG_ATOMIC64;
+        }
+    }
+
 }
 
 static void
@@ -289,6 +298,13 @@ ucp_address_unpack_iface_attr(ucp_address_iface_attr_t *iface_attr,
             packed_flag <<= 1;
         }
         bit <<= 1;
+    }
+
+    if (packed->prio_cap_flags & UCT_ADDRESS_FLAG_ATOMIC32) {
+        iface_attr->cap_flags |= UCP_UCT_IFACE_ATOMIC32_FLAGS;
+    }
+    if (packed->prio_cap_flags & UCT_ADDRESS_FLAG_ATOMIC64) {
+        iface_attr->cap_flags |= UCP_UCT_IFACE_ATOMIC64_FLAGS;
     }
 }
 
@@ -485,10 +501,8 @@ out:
     return status;
 }
 
-ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
-                                char *remote_name, size_t max,
-                                unsigned *address_count_p,
-                                ucp_address_entry_t **address_list_p)
+ucs_status_t ucp_address_unpack(const void *buffer,
+                                ucp_unpacked_address_t *unpacked_address)
 {
     ucp_address_entry_t *address_list, *address;
     const uct_device_addr_t *dev_addr;
@@ -506,10 +520,11 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
     const void *aptr;
 
     ptr = buffer;
-    *remote_uuid_p = *(uint64_t*)ptr;
+    unpacked_address->uuid = *(uint64_t*)ptr;
     ptr += sizeof(uint64_t);
 
-    aptr = ucp_address_unpack_string(ptr, remote_name, max);
+    aptr = ucp_address_unpack_string(ptr, unpacked_address->name,
+                                     sizeof(unpacked_address->name));
 
     address_count = 0;
 
@@ -558,6 +573,7 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
     address_list = ucs_calloc(address_count, sizeof(*address_list),
                               "ucp_address_list");
     if (address_list == NULL) {
+        ucs_error("failed to allocate address list");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -631,8 +647,8 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
         ++dev_index;
     } while (!last_dev);
 
-    *address_count_p = address_count;
-    *address_list_p  = address_list;
+    unpacked_address->address_count = address_count;
+    unpacked_address->address_list  = address_list;
     return UCS_OK;
 }
 

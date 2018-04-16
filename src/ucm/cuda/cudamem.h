@@ -28,6 +28,12 @@ CUresult ucm_override_cuMemAlloc(CUdeviceptr *dptr, size_t size);
 CUresult ucm_orig_cuMemAlloc(CUdeviceptr *dptr, size_t size);
 CUresult ucm_cuMemAlloc(CUdeviceptr *dptr, size_t size);
 
+/*cuMemAllocManaged*/
+CUresult ucm_override_cuMemAllocManaged(CUdeviceptr *dptr, size_t size,
+                                        unsigned int flags);
+CUresult ucm_orig_cuMemAllocManaged(CUdeviceptr *dptr, size_t size, unsigned int flags);
+CUresult ucm_cuMemAllocManaged(CUdeviceptr *dptr, size_t size, unsigned int flags);
+
 /*cuMemAllocPitch*/
 CUresult ucm_override_cuMemAllocPitch(CUdeviceptr *dptr, size_t *pPitch,
                                       size_t WidthInBytes, size_t Height,
@@ -65,6 +71,12 @@ cudaError_t ucm_cudaFreeHost(void *ptr);
 cudaError_t ucm_override_cudaMalloc(void **devPtr, size_t size);
 cudaError_t ucm_orig_cudaMalloc(void **devPtr, size_t size);
 cudaError_t ucm_cudaMalloc(void **devPtr, size_t size);
+
+/*cudaMallocManaged*/
+cudaError_t ucm_override_cudaMallocManaged(void **devPtr, size_t size,
+                                           unsigned int flags);
+cudaError_t ucm_orig_cudaMallocManaged(void **devPtr, size_t size, unsigned int flags);
+cudaError_t ucm_cudaMallocManaged(void **devPtr, size_t size, unsigned int flags);
 
 /*cudaMallocPitch*/
 cudaError_t ucm_override_cudaMallocPitch(void **devPtr, size_t *pitch,

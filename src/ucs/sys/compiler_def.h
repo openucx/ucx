@@ -87,6 +87,10 @@
 /* Used for labels */
 #define UCS_EMPTY_STATEMENT {}
 
+/* Helper macro for address arithmetic in bytes */
+#define UCS_PTR_BYTE_OFFSET(_ptr, _offset) \
+    ((void *)((uintptr_t)(_ptr) + (_offset)))
+
 /**
  * Size of statically-declared array
  */

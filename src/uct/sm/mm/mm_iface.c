@@ -135,6 +135,19 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_EVENT_RECV_SIG      |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
+    iface_attr->cap.atomic32.op_flags   =
+    iface_attr->cap.atomic64.op_flags   = UCS_BIT(UCT_ATOMIC_OP_ADD)         |
+                                          UCS_BIT(UCT_ATOMIC_OP_AND)         |
+                                          UCS_BIT(UCT_ATOMIC_OP_OR)          |
+                                          UCS_BIT(UCT_ATOMIC_OP_XOR);
+    iface_attr->cap.atomic32.fop_flags  =
+    iface_attr->cap.atomic64.fop_flags  = UCS_BIT(UCT_ATOMIC_OP_ADD)         |
+                                          UCS_BIT(UCT_ATOMIC_OP_AND)         |
+                                          UCS_BIT(UCT_ATOMIC_OP_OR)          |
+                                          UCS_BIT(UCT_ATOMIC_OP_XOR)         |
+                                          UCS_BIT(UCT_ATOMIC_OP_SWAP)        |
+                                          UCS_BIT(UCT_ATOMIC_OP_CSWAP);
+
     iface_attr->latency.overhead        = 80e-9; /* 80 ns */
     iface_attr->latency.growth          = 0;
     iface_attr->bandwidth               = 6911 * 1024.0 * 1024.0;
@@ -306,10 +319,14 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .ep_atomic_fadd64         = uct_sm_ep_atomic_fadd64,
     .ep_atomic_cswap64        = uct_sm_ep_atomic_cswap64,
     .ep_atomic_swap64         = uct_sm_ep_atomic_swap64,
+    .ep_atomic64_post         = uct_sm_ep_atomic64_post,
+    .ep_atomic64_fetch_nb     = uct_sm_ep_atomic64_fetch_nb,
     .ep_atomic_add32          = uct_sm_ep_atomic_add32,
     .ep_atomic_fadd32         = uct_sm_ep_atomic_fadd32,
     .ep_atomic_cswap32        = uct_sm_ep_atomic_cswap32,
     .ep_atomic_swap32         = uct_sm_ep_atomic_swap32,
+    .ep_atomic32_post         = uct_sm_ep_atomic32_post,
+    .ep_atomic32_fetch_nb     = uct_sm_ep_atomic32_fetch_nb,
     .ep_pending_add           = uct_mm_ep_pending_add,
     .ep_pending_purge         = uct_mm_ep_pending_purge,
     .ep_flush                 = uct_mm_ep_flush,

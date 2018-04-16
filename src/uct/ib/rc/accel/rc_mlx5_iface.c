@@ -92,8 +92,8 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 {
     uct_rc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_t);
     uct_rc_iface_t *rc_iface   = &iface->super;
-    size_t max_am_inline  = UCT_IB_MLX5_AM_MAX_SHORT(0);
-    size_t max_put_inline = UCT_IB_MLX5_PUT_MAX_SHORT(0);
+    size_t max_am_inline       = UCT_IB_MLX5_AM_MAX_SHORT(0);
+    size_t max_put_inline      = UCT_IB_MLX5_PUT_MAX_SHORT(0);
     ucs_status_t status;
 
 #if HAVE_IBV_EXP_DM
@@ -113,7 +113,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
         return status;
     }
 
-    uct_rc_mlx5_iface_common_query(iface_attr);
+    uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr);
     iface_attr->latency.growth += 1e-9; /* 1 ns per each extra QP */
     return UCS_OK;
 }
@@ -321,6 +321,10 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_atomic_fadd32         = uct_rc_mlx5_ep_atomic_fadd32,
     .ep_atomic_swap32         = uct_rc_mlx5_ep_atomic_swap32,
     .ep_atomic_cswap32        = uct_rc_mlx5_ep_atomic_cswap32,
+    .ep_atomic64_post         = uct_rc_mlx5_ep_atomic64_post,
+    .ep_atomic32_post         = uct_rc_mlx5_ep_atomic32_post,
+    .ep_atomic64_fetch_nb     = uct_rc_mlx5_ep_atomic64_fetch_nb,
+    .ep_atomic32_fetch_nb     = uct_rc_mlx5_ep_atomic32_fetch_nb,
     .ep_pending_add           = uct_rc_ep_pending_add,
     .ep_pending_purge         = uct_rc_ep_pending_purge,
     .ep_flush                 = uct_rc_mlx5_ep_flush,

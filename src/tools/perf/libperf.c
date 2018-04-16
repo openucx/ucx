@@ -837,8 +837,13 @@ ucp_perf_test_alloc_contig(ucx_perf_context_t *perf, ucx_perf_params_t *params,
 
 static void ucp_perf_test_free_contig(ucx_perf_context_t *perf, void *addr, ucp_mem_h memh)
 {
+    ucs_status_t status;
+
     if (perf->params.mem_type == UCT_MD_MEM_TYPE_HOST) {
-        ucp_mem_unmap(perf->ucp.context, memh);
+        status = ucp_mem_unmap(perf->ucp.context, memh);
+        if (status != UCS_OK) {
+            ucs_warn("ucp_mem_unmap() failed: %s", ucs_status_string(status));
+        }
     } else if (perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA) {
 #if HAVE_CUDA
         cudaFree(addr);
