@@ -41,7 +41,7 @@ enum {
     UCP_EP_FLAG_FAILED              = UCS_BIT(3), /* EP is in failed state */
     UCP_EP_FLAG_USED                = UCS_BIT(4), /* EP is in use */
     UCP_EP_FLAG_STREAM_HAS_DATA     = UCS_BIT(5), /* EP has data in the ext.stream.match_q */
-    UCP_EP_FLAG_ON_HASH             = UCS_BIT(6), /* EP is on match queue */
+    UCP_EP_FLAG_ON_MATCH_CTX        = UCS_BIT(6), /* EP is on match queue */
     UCP_EP_FLAG_DEST_EP             = UCS_BIT(7), /* dest_ep_ptr is valid */
 
     /* DEBUG bits */
