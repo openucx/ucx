@@ -112,27 +112,27 @@ static inline const uct_md_attr_t* ucp_ep_md_attr(ucp_ep_h ep, ucp_lane_index_t 
     return &context->tl_mds[ucp_ep_md_index(ep, lane)].attr;
 }
 
-static inline ucp_ep_ext_gen_t* ucp_ep_ext_gen(ucp_ep_h ep)
+static UCS_F_ALWAYS_INLINE ucp_ep_ext_gen_t* ucp_ep_ext_gen(ucp_ep_h ep)
 {
     return (ucp_ep_ext_gen_t*)ucs_strided_elem_get(ep, 0, 1);
 }
 
-static inline ucp_ep_ext_proto_t* ucp_ep_ext_proto(ucp_ep_h ep)
+static UCS_F_ALWAYS_INLINE ucp_ep_ext_proto_t* ucp_ep_ext_proto(ucp_ep_h ep)
 {
     return (ucp_ep_ext_proto_t*)ucs_strided_elem_get(ep, 0, 2);
 }
 
-static inline ucp_ep_h ucp_ep_from_ext_gen(ucp_ep_ext_gen_t *ep_ext)
+static UCS_F_ALWAYS_INLINE ucp_ep_h ucp_ep_from_ext_gen(ucp_ep_ext_gen_t *ep_ext)
 {
     return (ucp_ep_h)ucs_strided_elem_get(ep_ext, 1, 0);
 }
 
-static inline ucp_ep_h ucp_ep_from_ext_proto(ucp_ep_ext_proto_t *ep_ext)
+static UCS_F_ALWAYS_INLINE ucp_ep_h ucp_ep_from_ext_proto(ucp_ep_ext_proto_t *ep_ext)
 {
     return (ucp_ep_h)ucs_strided_elem_get(ep_ext, 2, 0);
 }
 
-static inline uintptr_t ucp_ep_dest_ep_ptr(ucp_ep_h ep)
+static UCS_F_ALWAYS_INLINE uintptr_t ucp_ep_dest_ep_ptr(ucp_ep_h ep)
 {
 #if ENABLE_ASSERT
     if (!(ep->flags & UCP_EP_FLAG_DEST_EP)) {
@@ -146,8 +146,8 @@ static inline uintptr_t ucp_ep_dest_ep_ptr(ucp_ep_h ep)
  * Make sure we have a valid dest_ep_ptr value, so protocols which require a
  * reply from remote side could be used.
  */
-static inline ucs_status_t ucp_ep_resolve_dest_ep_ptr(ucp_ep_h ep,
-                                                      ucp_lane_index_t lane)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_ep_resolve_dest_ep_ptr(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     if (ep->flags & UCP_EP_FLAG_DEST_EP) {
         return UCS_OK;
@@ -166,7 +166,7 @@ static inline void ucp_ep_update_dest_ep_ptr(ucp_ep_h ep, uintptr_t ep_ptr)
 
     ucs_assert(ep_ptr != 0);
     ucs_trace("ep %p: set dest_ep_ptr to 0x%lx", ep, ep_ptr);
-    ep->flags                   |= UCP_EP_FLAG_DEST_EP;
+    ep->flags                      |= UCP_EP_FLAG_DEST_EP;
     ucp_ep_ext_gen(ep)->dest_ep_ptr = ep_ptr;
 }
 
