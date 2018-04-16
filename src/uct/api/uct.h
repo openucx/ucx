@@ -1342,8 +1342,9 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  * The user may provide a callback function which will be used to fill the
  * private data that will be sent on a connection request to the remote peer.
  *
- * @note In some cases the callback will not be called, for example, if the
- * endpoint goes into error state before issuing the connection request.
+ * @note It is never guaranteed that the callaback will be called.
+ * If, for example, the endpoint goes into error state before issuing the
+ * connection request, the callback will not be invoked.
  *
  * @note The interface in this routine requires the
  * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
