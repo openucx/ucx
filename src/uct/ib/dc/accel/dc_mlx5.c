@@ -137,7 +137,8 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                 max_put_inline,
                                 max_am_inline,
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE),
-                                UCT_IB_MLX5_AM_ZCOPY_MAX_IOV);
+                                UCT_IB_MLX5_AM_ZCOPY_MAX_IOV,
+                                UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE));
     if (status != UCS_OK) {
         return status;
     }
@@ -860,7 +861,8 @@ ucs_status_t uct_dc_mlx5_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
     uint32_t app_ctx, ib_imm;
     int opcode;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_dc_mlx5_ep_tag_eager_zcopy");
+    UCT_CHECK_IOV_SIZE(iovcnt, UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE),
+                       "uct_dc_mlx5_ep_tag_eager_zcopy");
     UCT_RC_CHECK_ZCOPY_DATA(sizeof(struct ibv_exp_tmh),
                             uct_iov_total_length(iov, iovcnt),
                             iface->super.super.super.config.seg_size);
@@ -1304,7 +1306,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     uct_dc_iface_set_quota(&self->super, &config->super);
     /* Set max_iov for put_zcopy and get_zcopy */
     uct_ib_iface_set_max_iov(&self->super.super.super,
-                             ((UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB) -
+                             (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
                              sizeof(struct mlx5_wqe_raddr_seg) -
                              sizeof(struct mlx5_wqe_ctrl_seg) -
                              UCT_IB_MLX5_AV_FULL_SIZE) /

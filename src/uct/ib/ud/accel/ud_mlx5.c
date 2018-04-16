@@ -209,8 +209,7 @@ uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_ib_mlx5_inline_copy(am + 1, buffer, length, &iface->tx.wq);
 
     wqe_size += ctrl_av_size + sizeof(*inl);
-    UCT_CHECK_LENGTH(wqe_size, 0, UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
-                     "am_short");
+    UCT_CHECK_LENGTH(wqe_size, 0, UCT_IB_MLX5_MAX_SEND_WQE_SIZE, "am_short");
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
     uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size, INT_MAX);
 
@@ -299,7 +298,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                                  UCT_IB_MLX5_WQE_SEG_SIZE);
     wqe_size += uct_ib_mlx5_set_data_seg_iov(&iface->tx.wq, (void *)ctrl + wqe_size,
                                              iov, iovcnt);
-    ucs_assert(wqe_size <= (UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB));
+    ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
 
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
     uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size,
@@ -359,8 +358,7 @@ uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
     uct_ib_mlx5_inline_copy(put_hdr + 1, buffer, length, &iface->tx.wq);
 
     wqe_size += ctrl_av_size + sizeof(*inl);
-    UCT_CHECK_LENGTH(wqe_size, 0, UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
-                     "put_short");
+    UCT_CHECK_LENGTH(wqe_size, 0, UCT_IB_MLX5_MAX_SEND_WQE_SIZE, "put_short");
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
     uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size, INT_MAX);
 

@@ -17,16 +17,21 @@
 #define PRINT_CAP(_name, _cap_flags, _max) \
     if ((_cap_flags) & (UCT_IFACE_FLAG_##_name)) { \
         char *s = strduplower(#_name); \
-        printf("#         %12s: %s\n", s, size_limit_to_str(0, _max)); \
+        printf("#      %15s: %s\n", s, size_limit_to_str(0, _max)); \
+        free(s); \
+    }
+
+#define PRINT_ZCAP_NO_CHECK(_name, _min, _max, _max_iov) \
+    { \
+        char *s = strduplower(#_name); \
+        printf("#      %15s: %s, up to %zu iov\n", s, \
+               size_limit_to_str((_min), (_max)), (_max_iov)); \
         free(s); \
     }
 
 #define PRINT_ZCAP(_name, _cap_flags, _min, _max, _max_iov) \
     if ((_cap_flags) & (UCT_IFACE_FLAG_##_name)) { \
-        char *s = strduplower(#_name); \
-        printf("#         %12s: %s, up to %zu iov\n", s, \
-               size_limit_to_str((_min), (_max)), (_max_iov)); \
-        free(s); \
+        PRINT_ZCAP_NO_CHECK(_name, _min, _max, _max_iov) \
     }
 
 #define PRINT_ATOMIC_CAP(_name, _cap_flags) \
@@ -168,36 +173,62 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         PRINT_ZCAP(PUT_ZCOPY, iface_attr.cap.flags, iface_attr.cap.put.min_zcopy,
                    iface_attr.cap.put.max_zcopy, iface_attr.cap.put.max_iov);
 
-        if((iface_attr.cap.flags) & (UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        if (iface_attr.cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
             printf("#  put_opt_zcopy_align: %s\n",
                    size_limit_to_str(0, iface_attr.cap.put.opt_zcopy_align));
             printf("#        put_align_mtu: %s\n",
                    size_limit_to_str(0, iface_attr.cap.put.align_mtu));
         }
-        if((iface_attr.cap.flags) & (UCT_IFACE_FLAG_GET_ZCOPY)) {
-           printf("#  get_opt_zcopy_align: %s\n",
-                  size_limit_to_str(0, iface_attr.cap.get.opt_zcopy_align));
-           printf("#        get_align_mtu: %s\n",
-                  size_limit_to_str(0, iface_attr.cap.get.align_mtu));
-        }
-        if((iface_attr.cap.flags) & (UCT_IFACE_FLAG_AM_ZCOPY)) {
-           printf("#   am_opt_zcopy_align: %s\n",
-                  size_limit_to_str(0, iface_attr.cap.am.opt_zcopy_align));
-           printf("#         am_align_mtu: %s\n",
-                  size_limit_to_str(0, iface_attr.cap.am.align_mtu));
-        }
 
-        PRINT_CAP(GET_SHORT, iface_attr.cap.flags, iface_attr.cap.put.max_short);
+        PRINT_CAP(GET_SHORT, iface_attr.cap.flags, iface_attr.cap.get.max_short);
         PRINT_CAP(GET_BCOPY, iface_attr.cap.flags, iface_attr.cap.get.max_bcopy);
         PRINT_ZCAP(GET_ZCOPY, iface_attr.cap.flags, iface_attr.cap.get.min_zcopy,
                    iface_attr.cap.get.max_zcopy, iface_attr.cap.get.max_iov);
+        if (iface_attr.cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
+            printf("#  get_opt_zcopy_align: %s\n",
+                   size_limit_to_str(0, iface_attr.cap.get.opt_zcopy_align));
+            printf("#        get_align_mtu: %s\n",
+                   size_limit_to_str(0, iface_attr.cap.get.align_mtu));
+        }
+
         PRINT_CAP(AM_SHORT,  iface_attr.cap.flags, iface_attr.cap.am.max_short);
         PRINT_CAP(AM_BCOPY,  iface_attr.cap.flags, iface_attr.cap.am.max_bcopy);
         PRINT_ZCAP(AM_ZCOPY,  iface_attr.cap.flags, iface_attr.cap.am.min_zcopy,
                    iface_attr.cap.am.max_zcopy, iface_attr.cap.am.max_iov);
         if (iface_attr.cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
+            printf("#   am_opt_zcopy_align: %s\n",
+                   size_limit_to_str(0, iface_attr.cap.am.opt_zcopy_align));
+            printf("#         am_align_mtu: %s\n",
+                   size_limit_to_str(0, iface_attr.cap.am.align_mtu));
             printf("#            am header: %s\n",
                    size_limit_to_str(0, iface_attr.cap.am.max_hdr));
+        }
+
+        PRINT_CAP(TAG_EAGER_SHORT, iface_attr.cap.flags,
+                  iface_attr.cap.tag.eager.max_short);
+        PRINT_CAP(TAG_EAGER_BCOPY, iface_attr.cap.flags,
+                  iface_attr.cap.tag.eager.max_bcopy);
+        PRINT_ZCAP(TAG_EAGER_ZCOPY, iface_attr.cap.flags, 0,
+                   iface_attr.cap.tag.eager.max_zcopy,
+                   iface_attr.cap.tag.eager.max_iov);
+
+        if (iface_attr.cap.flags & UCT_IFACE_FLAG_TAG_RNDV_ZCOPY) {
+            PRINT_ZCAP_NO_CHECK(TAG_RNDV_ZCOPY, 0,
+                                iface_attr.cap.tag.rndv.max_zcopy,
+                                iface_attr.cap.tag.rndv.max_iov);
+            printf("#  rndv private header: %s\n",
+                   size_limit_to_str(0, iface_attr.cap.tag.rndv.max_hdr));
+        }
+
+        if (iface_attr.cap.flags & (UCT_IFACE_FLAG_TAG_EAGER_SHORT |
+                                    UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                                    UCT_IFACE_FLAG_TAG_EAGER_ZCOPY |
+                                    UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)) {
+            PRINT_ZCAP_NO_CHECK(TAG_RECV, iface_attr.cap.tag.recv.min_recv,
+                                iface_attr.cap.tag.recv.max_zcopy,
+                                iface_attr.cap.tag.recv.max_iov);
+            printf("#  tag_max_outstanding: %s\n",
+                   size_limit_to_str(0, iface_attr.cap.tag.recv.max_outstanding));
         }
 
         /* TODO: deprecated, remove it */
@@ -231,8 +262,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
 
         buf[0] = '\0';
         if (iface_attr.cap.flags & (UCT_IFACE_FLAG_CONNECT_TO_EP |
-                                    UCT_IFACE_FLAG_CONNECT_TO_IFACE))
-        {
+                                    UCT_IFACE_FLAG_CONNECT_TO_IFACE)) {
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
                 strncat(buf, " to ep,", sizeof(buf) - 1);
             }
@@ -261,12 +291,11 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
                                     UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF   |
                                     UCT_IFACE_FLAG_ERRHANDLE_AM_ID       |
                                     UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM  |
-                                    UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE))
-        {
+                                    UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
+
             if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF |
                                         UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF |
-                                        UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF))
-            {
+                                        UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF)) {
                 strncat(buf, " buffer (", sizeof(buf) - 1);
                 if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF) {
                     strncat(buf, "short,", sizeof(buf) - 1);
