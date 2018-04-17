@@ -101,9 +101,10 @@ typedef enum {
     UCP_ERR_HANDLING_MODE_NONE,             /**< No guarantees about error
                                              *   reporting, imposes minimal
                                              *   overhead from a performance
-                                             *   perspective. @note In this mode,
-                                             *   @ref ucp_ep_params_t::err_handler
-                                             *   is not used for error reporting.
+                                             *   perspective. @note In this
+                                             *   mode, any error reporting will
+                                             *   not generate calls to @ref
+                                             *   ucp_ep_params_t::err_handler.
                                              */
     UCP_ERR_HANDLING_MODE_PEER              /**< Guarantees that send requests
                                              *   are always completed
@@ -314,7 +315,7 @@ typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status
  * This structure should be initialized in @ref ucp_ep_params_t to handle peer failure
  */
 typedef struct ucp_err_handler {
-    ucp_err_handler_cb_t cb;       /**< Error handler callback, if NULL, it will
+    ucp_err_handler_cb_t cb;       /**< Error handler callback, if NULL, will
                                         not be called. */
     void                 *arg;     /**< User defined argument associated with
                                         an endpoint, it will be overridden by
