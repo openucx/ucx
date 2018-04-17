@@ -66,13 +66,14 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
         status = UCS_PROFILE_CALL(uct_ep_atomic64_post, ep->uct_eps[rkey->cache.amo_lane], op,
                                   (uint64_t)value, remote_addr, rkey->cache.amo_rkey);
     } else {
-        return UCS_ERR_INVALID_PARAM;
+        status =  UCS_ERR_INVALID_PARAM;
+        goto out;
     }
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
         req = ucp_request_get(ep->worker);
         if (ucs_unlikely(NULL == req)) {
-            UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
-            return UCS_ERR_NO_MEMORY;
+            status = UCS_ERR_NO_MEMORY;
+            goto out;
         }
         status = init_amo_post(req, ep, opcode, op_size, remote_addr, rkey, value);
         if (UCS_STATUS_IS_ERR(status)) {
