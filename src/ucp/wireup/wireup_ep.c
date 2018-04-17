@@ -133,7 +133,7 @@ ucp_wireup_ep_pending_req_release(uct_pending_req_t *self, void *arg)
     ucp_request_t   *req;
 
     ucs_atomic_add32(&wireup_ep->pending_count, -1);
- 
+
     if (proxy_req->send.proxy.req->func == ucp_wireup_msg_progress) {
         req = ucs_container_of(proxy_req->send.proxy.req, ucp_request_t,
                                send.uct);

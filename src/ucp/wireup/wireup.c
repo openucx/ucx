@@ -145,7 +145,6 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     req->send.uct.func           = ucp_wireup_msg_progress;
     req->send.datatype           = ucp_dt_make_contig(1);
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
-
     /* pack all addresses */
     status = ucp_address_pack(ep->worker, ucp_wireup_is_ep_needed(ep) ? ep : NULL,
                               tl_bitmap, order, &req->send.length, &address);

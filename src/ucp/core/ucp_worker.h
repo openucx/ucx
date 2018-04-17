@@ -243,4 +243,7 @@ static inline ucp_ep_h ucp_worker_get_ep_by_ptr(ucp_worker_h worker,
     return ep;
 }
 
+/* get ep by uuid received from remote side */
+ucp_ep_h ucp_worker_get_ep_by_uuid(ucp_worker_h worker, uint64_t uuid);
+
 #endif

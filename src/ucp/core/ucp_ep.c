@@ -11,6 +11,7 @@
 
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/wireup/wireup.h>
+#include <ucp/wireup/fin.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/stream/stream.h>
@@ -73,7 +74,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     ep->worker                      = worker;
     ep->cfg_index                   = ucp_worker_get_ep_config(worker, &key);
     ep->am_lane                     = UCP_NULL_LANE;
-    ep->flags                       = 0;
+    ep->flags                       = UCP_EP_FLAG_HIDDEN;
     ep->conn_sn                     = -1;
     ucp_ep_ext_gen(ep)->dest_ep_ptr = 0;
     ucp_ep_ext_gen(ep)->user_data   = NULL;
@@ -491,7 +492,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
         }
     }
 
-    ep->flags |= UCP_EP_FLAG_USED;
+    ep->flags &= ~UCP_EP_FLAG_HIDDEN;
     *ep_p = ep;
 
 out:
@@ -586,10 +587,14 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_listener_accept_cb_remove_filter, ep);
 
+<<<<<<< HEAD
     ucp_stream_ep_cleanup(ep);
 
     ep->flags &= ~UCP_EP_FLAG_USED;
     ep->flags |= UCP_EP_FLAG_CLOSED;
+=======
+    ep->flags |= UCP_EP_FLAG_HIDDEN;
+>>>>>>> UCP/EP: UCP_EP_CLOSE_MODE_SYNC implementation
 
     if ((ep->flags & (UCP_EP_FLAG_CONNECT_REQ_QUEUED|UCP_EP_FLAG_REMOTE_CONNECTED))
         && !force) {
@@ -608,11 +613,19 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 static unsigned ucp_ep_do_disconnect(void *arg)
 {
     ucp_request_t *req = arg;
+    ucp_ep_h      ep   = req->send.ep;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
+    ep->flags |= UCP_EP_FLAG_HIDDEN;
 
-    ucp_ep_disconnected(req->send.ep, req->send.flush.uct_flags &
-                                      UCT_FLUSH_FLAG_CANCEL);
+    if (req->flags & UCP_REQUEST_FLAG_SYNC) {
+        if (ucs_test_all_flags(ep->flags, UCP_EP_MASK_FIN_DONE)) {
+            ucp_ep_disconnected(ep, 1);
+        }
+    } else {
+        ucp_ep_disconnected(req->send.ep, req->send.flush.uct_flags &
+                                          UCT_FLUSH_FLAG_CANCEL);
+    }
 
     /* Complete send request from here, to avoid releasing the request while
      * slow-path element is still pending */
@@ -649,14 +662,30 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     UCS_ASYNC_BLOCK(&worker->async);
+<<<<<<< HEAD
 
+=======
+    if (mode == UCP_EP_CLOSE_MODE_SYNC) {
+        ucp_fin_msg_send(ep);
+    }
+>>>>>>> UCP/EP: UCP_EP_CLOSE_MODE_SYNC implementation
     request = ucp_ep_flush_internal(ep,
-                                    (mode == UCP_EP_CLOSE_MODE_FLUSH) ?
-                                    UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL,
-                                    NULL, 0,
+                                    (mode == UCP_EP_CLOSE_MODE_FORCE) ?
+                                    UCT_FLUSH_FLAG_CANCEL : UCT_FLUSH_FLAG_LOCAL,
+                                    NULL,
+                                    (mode == UCP_EP_CLOSE_MODE_SYNC) ?
+                                    UCP_REQUEST_FLAG_SYNC : 0,
                                     ucp_ep_close_flushed_callback);
     if (!UCS_PTR_IS_PTR(request)) {
-        ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
+        ep->flags |= UCP_EP_FLAG_HIDDEN;
+
+        if (mode == UCP_EP_CLOSE_MODE_SYNC) {
+            if (ucs_test_all_flags(ep->flags, UCP_EP_MASK_FIN_DONE)) {
+                ucp_ep_disconnected(ep, 1);
+            }
+        } else {
+            ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
+        }
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -1108,9 +1137,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                 rma_config->max_put_zcopy    = iface_attr->cap.put.max_zcopy;
                 /* TODO: formula */
                 if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
-                    rma_config->put_zcopy_thresh = 16384; 
+                    rma_config->put_zcopy_thresh = 16384;
                 } else {
-                    rma_config->put_zcopy_thresh = context->config.ext.zcopy_thresh; 
+                    rma_config->put_zcopy_thresh = context->config.ext.zcopy_thresh;
                 }
                 rma_config->put_zcopy_thresh = ucs_max(rma_config->put_zcopy_thresh,
                                                        iface_attr->cap.put.min_zcopy);
@@ -1125,9 +1154,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                 /* TODO: formula */
                 rma_config->max_get_zcopy = iface_attr->cap.get.max_zcopy;
                 if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
-                    rma_config->get_zcopy_thresh = 16384; 
+                    rma_config->get_zcopy_thresh = 16384;
                 } else {
-                    rma_config->get_zcopy_thresh = context->config.ext.zcopy_thresh; 
+                    rma_config->get_zcopy_thresh = context->config.ext.zcopy_thresh;
                 }
                 rma_config->get_zcopy_thresh = ucs_max(rma_config->get_zcopy_thresh,
                                                        iface_attr->cap.get.min_zcopy);

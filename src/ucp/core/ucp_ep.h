@@ -24,14 +24,9 @@ typedef uint16_t                   ucp_ep_cfg_index_t;
 
 
 /* Endpoint flags type */
-#if ENABLE_DEBUG_DATA || ENABLE_ASSERT
 typedef uint32_t                   ucp_ep_flags_t;
-#else
-typedef uint16_t                   ucp_ep_flags_t;
-#endif
 
-
-/**
+        /**
  * Endpoint flags
  */
 enum {
@@ -39,7 +34,7 @@ enum {
     UCP_EP_FLAG_REMOTE_CONNECTED       = UCS_BIT(1), /* All remote endpoints are connected */
     UCP_EP_FLAG_CONNECT_REQ_QUEUED     = UCS_BIT(2), /* Connection request was queued */
     UCP_EP_FLAG_FAILED                 = UCS_BIT(3), /* EP is in failed state */
-    UCP_EP_FLAG_USED                   = UCS_BIT(4), /* EP is in use by the user */
+    UCP_EP_FLAG_HIDDEN                 = UCS_BIT(4), /* EP is not user visible */
     UCP_EP_FLAG_STREAM_HAS_DATA        = UCS_BIT(5), /* EP has data in the ext.stream.match_q */
     UCP_EP_FLAG_ON_MATCH_CTX           = UCS_BIT(6), /* EP is on match queue */
     UCP_EP_FLAG_DEST_EP                = UCS_BIT(7), /* dest_ep_ptr is valid */
@@ -47,17 +42,23 @@ enum {
                                                         (on server side due to receiving partial
                                                         worker address from the client) */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
-    UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
+    UCP_EP_FLAG_FIN_REQ_QUEUED         = UCS_BIT(8),  /* Fin request was queued */
+    UCP_EP_FLAG_FIN_REQ_COMPLETED      = UCS_BIT(9),  /* All local endpoints are disconnected */
+    UCP_EP_FLAG_FIN_MSG_RECVD          = UCS_BIT(10), /* Remote endpoints are disconnected */
+    /* Full event mask to destroy endpoint after FIN protocol */
+    UCP_EP_MASK_FIN_DONE               = UCP_EP_FLAG_FIN_REQ_COMPLETED |
+                                         UCP_EP_FLAG_FIN_MSG_RECVD     |
+                                         UCP_EP_FLAG_HIDDEN,
 
     /* DEBUG bits */
-    UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */
-    UCP_EP_FLAG_CONNECT_REP_SENT       = UCS_BIT(17),/* DEBUG: Connection reply was sent */
-    UCP_EP_FLAG_CONNECT_ACK_SENT       = UCS_BIT(18),/* DEBUG: Connection ACK was sent */
-    UCP_EP_FLAG_CONNECT_REQ_IGNORED    = UCS_BIT(19),/* DEBUG: Connection request was ignored */
-    UCP_EP_FLAG_CONNECT_PRE_REQ_SENT   = UCS_BIT(20),/* DEBUG: Connection pre-request was sent */
-    UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(21) /* DEBUG: Partial worker address was sent
-                                                               to the remote peer when starting
-                                                               connection establishment on this EP */
+    UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(11), /* DEBUG: Connection request was sent */
+    UCP_EP_FLAG_CONNECT_REP_SENT       = UCS_BIT(12), /* DEBUG: Connection reply was sent */
+    UCP_EP_FLAG_CONNECT_ACK_SENT       = UCS_BIT(13), /* DEBUG: Connection ACK was sent */
+    UCP_EP_FLAG_CONNECT_REQ_IGNORED    = UCS_BIT(14), /* DEBUG: Connection request was ignored */
+    UCP_EP_FLAG_CONNECT_PRE_REQ_SENT   = UCS_BIT(15), /* DEBUG: Connection pre-request was sent */
+    UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(16)  /* DEBUG: Partial worker address was sent
+                                                                to the remote peer when starting
+                                                                connection establishment on this EP */
 };
 
 
@@ -252,10 +253,10 @@ typedef struct ucp_ep_config {
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
+    ucp_ep_flags_t                flags;         /* Endpoint flags */
     ucp_ep_cfg_index_t            cfg_index;     /* Configuration index */
     ucp_ep_conn_sn_t              conn_sn;       /* Sequence number for remote connection */
     ucp_lane_index_t              am_lane;       /* Cached value */
-    ucp_ep_flags_t                flags;         /* Endpoint flags */
 
     /* TODO allocate ep dynamically according to number of lanes */
     uct_ep_h                      uct_eps[UCP_MAX_LANES]; /* Transports for every lane */

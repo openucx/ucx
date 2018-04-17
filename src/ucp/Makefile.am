@@ -48,6 +48,7 @@ noinst_HEADERS = \
 	wireup/ep_match.h \
 	wireup/wireup_ep.h \
 	wireup/wireup.h \
+	wireup/fin.h \
 	stream/stream.h
 
 libucp_la_SOURCES = \
@@ -83,6 +84,7 @@ libucp_la_SOURCES = \
 	wireup/signaling_ep.c \
 	wireup/wireup_ep.c \
 	wireup/wireup.c \
+	wireup/fin.c \
 	stream/stream_send.c \
 	stream/stream_recv.c
 

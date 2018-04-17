@@ -64,10 +64,10 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
 
     if (accept->listener->cb != NULL) {
         if (ep->flags & UCP_EP_FLAG_LISTENER) {
-            ep->flags &= ~UCP_EP_FLAG_USED;
+            ep->flags |= UCP_EP_FLAG_HIDDEN;
             ucp_ep_ext_gen(ep)->listener = accept->listener;
         } else {
-            ep->flags |= UCP_EP_FLAG_USED;
+            ep->flags &= ~UCP_EP_FLAG_HIDDEN;
             accept->listener->cb(ep, accept->listener->arg);
         }
     }

@@ -465,10 +465,16 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
               uct_ep, worker);
 
 found_ucp_ep:
+    /* NOTE: if user has not requested error handling on the endpoint,
+     *       the failure is considered unhandled */
     if (ucp_ep_config(ucp_ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) {
-        /* NOTE: if user has not requested error handling on the endpoint,
-         *       the failure is considered unhandled */
-        ret_status = status;
+        /* ignore timeout error if the endpoint is in closure phase */
+        if ((ucp_ep->flags & UCP_EP_MASK_FIN_DONE) &&
+            (status == UCS_ERR_ENDPOINT_TIMEOUT)) {
+            ret_status = UCS_OK;
+        } else {
+            ret_status = status;
+        }
         goto out;
     }
 
@@ -1300,6 +1306,7 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker)
     ucp_ep_ext_gen_t *ep_ext, *tmp;
 
     ucs_debug("worker %p: destroy all endpoints", worker);
+    ucp_worker_flush(worker);
     ucs_list_for_each_safe(ep_ext, tmp, &worker->all_eps, ep_list) {
         ucp_ep_disconnected(ucp_ep_from_ext_gen(ep_ext), 1);
     }
@@ -1590,4 +1597,18 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
     fprintf(stream, "#\n");
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+}
+
+/* get ep by uuid received from remote side */
+ucp_ep_h ucp_worker_get_ep_by_uuid(ucp_worker_h worker, uint64_t uuid)
+{
+    ucp_ep_ext_gen_t *ep_ext;
+
+    ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
+        if (ep_ext->ep_match.dest_uuid == uuid) {
+            return ucp_ep_from_ext_gen(ep_ext);
+        }
+    }
+
+    return NULL;
 }

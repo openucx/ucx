@@ -218,7 +218,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
         status = req->status;
         ucs_trace_req("ep %p: releasing flush request %p, returning status %s",
                       ep, req, ucs_status_string(status));
-        ucs_mpool_put(req);
+        ucp_request_put(req);
         return UCS_STATUS_PTR(status);
     }
 
