@@ -95,14 +95,14 @@ public:
                                  uint32_t value, uint32_t *result,
                                  uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp) {
-        return uct_ep_atomic32_fetch_nb(ep, opcode, value, result, remote_addr, rkey, comp);
+        return uct_ep_atomic32_fetch(ep, opcode, value, result, remote_addr, rkey, comp);
     }
 
     ucs_status_t atomic_fetch_nb(uct_ep_h ep, uct_atomic_op_t opcode,
                                  uint64_t value, uint64_t *result,
                                  uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp) {
-        return uct_ep_atomic64_fetch_nb(ep, opcode, value, result, remote_addr, rkey, comp);
+        return uct_ep_atomic64_fetch(ep, opcode, value, result, remote_addr, rkey, comp);
     }
 
     template <typename T, uct_atomic_op_t opcode>

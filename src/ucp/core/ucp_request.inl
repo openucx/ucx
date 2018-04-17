@@ -551,4 +551,13 @@ ucp_send_request_get_next_am_bw_lane(ucp_request_t *req)
     }
 }
 
+static UCS_F_ALWAYS_INLINE uintptr_t ucp_request_get_dest_ep_ptr(ucp_request_t *req)
+{
+    /* This function may return 0, but in such cases the message should not be
+     * sent at all because the am_lane would point to a wireup (proxy) endpoint.
+     * So only the receiver side has an assertion that ep_ptr != 0.
+     */
+    return ucp_ep_dest_ep_ptr(req->send.ep);
+}
+
 #endif

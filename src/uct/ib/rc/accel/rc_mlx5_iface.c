@@ -103,12 +103,12 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     }
 #endif
 
-
     status = uct_rc_iface_query(rc_iface, iface_attr,
                                 max_put_inline,
                                 max_am_inline,
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(0),
-                                UCT_IB_MLX5_AM_ZCOPY_MAX_IOV);
+                                UCT_IB_MLX5_AM_ZCOPY_MAX_IOV,
+                                UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0));
     if (status != UCS_OK) {
         return status;
     }
@@ -278,7 +278,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     /* Set max_iov for put_zcopy and get_zcopy */
     uct_ib_iface_set_max_iov(&self->super.super,
-                             ((UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB) -
+                             (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
                              sizeof(struct mlx5_wqe_raddr_seg) -
                              sizeof(struct mlx5_wqe_ctrl_seg)) /
                              sizeof(struct mlx5_wqe_data_seg));
@@ -323,8 +323,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_atomic_cswap32        = uct_rc_mlx5_ep_atomic_cswap32,
     .ep_atomic64_post         = uct_rc_mlx5_ep_atomic64_post,
     .ep_atomic32_post         = uct_rc_mlx5_ep_atomic32_post,
-    .ep_atomic64_fetch_nb     = uct_rc_mlx5_ep_atomic64_fetch_nb,
-    .ep_atomic32_fetch_nb     = uct_rc_mlx5_ep_atomic32_fetch_nb,
+    .ep_atomic64_fetch        = uct_rc_mlx5_ep_atomic64_fetch,
+    .ep_atomic32_fetch        = uct_rc_mlx5_ep_atomic32_fetch,
     .ep_pending_add           = uct_rc_ep_pending_add,
     .ep_pending_purge         = uct_rc_ep_pending_purge,
     .ep_flush                 = uct_rc_mlx5_ep_flush,

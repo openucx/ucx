@@ -11,10 +11,10 @@
 #include "ucp_ep.h"
 #include "ucp_thread.h"
 
+#include <ucp/proto/proto.h>
 #include <ucp/tag/tag_match.h>
 #include <ucp/wireup/ep_match.h>
 #include <ucs/datastruct/mpool.h>
-#include <ucs/datastruct/khash.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/async/async.h>
 #include <ucs/datastruct/strided_alloc.h>
@@ -24,10 +24,6 @@
  * use for its own needs. This size does not include ucp_recv_desc_t length,
  * because it is common for all cases and protocols (TAG, STREAM). */
 #define UCP_WORKER_HEADROOM_PRIV_SIZE 24
-
-
-KHASH_MAP_INIT_INT64(ucp_worker_ep_hash, ucp_ep_t *);
-KHASH_MAP_INIT_INT64(ucp_ep_errh_hash,   ucp_err_handler_cb_t);
 
 
 enum {
@@ -192,7 +188,6 @@ typedef struct ucp_worker {
     void                          *user_data;    /* User-defined data */
     ucs_strided_alloc_t           ep_alloc;      /* Endpoint allocator */
     ucs_list_link_t               stream_ready_eps; /* List of EPs with received stream data */
-    khash_t(ucp_worker_ep_hash)   ep_hash;       /* Hash table of all endpoints */
     ucs_list_link_t               all_eps;       /* List of all endpoints */
     ucp_ep_match_ctx_t            ep_match_ctx;  /* Endpoint-to-endpoint matching context */
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
@@ -225,10 +220,6 @@ typedef struct ucp_worker_err_handle_arg {
 } ucp_worker_err_handle_arg_t;
 
 
-ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid);
-
-ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid);
-
 unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
                                   const ucp_ep_config_key_t *key);
 
@@ -254,16 +245,16 @@ static inline const char* ucp_worker_get_name(ucp_worker_h worker)
     return worker->name;
 }
 
-static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uuid)
+/* get ep by pointer received from remote side, do some debug checks */
+static inline ucp_ep_h ucp_worker_get_ep_by_ptr(ucp_worker_h worker,
+                                                uintptr_t ep_ptr)
 {
-    khiter_t hash_it;
+    ucp_ep_h ep = (ucp_ep_h)ep_ptr;
 
-    hash_it = kh_get(ucp_worker_ep_hash, &worker->ep_hash, dest_uuid);
-    if (ucs_unlikely(hash_it == kh_end(&worker->ep_hash))) {
-        return NULL;
-    }
-
-    return kh_value(&worker->ep_hash, hash_it);
+    ucs_assert(ep != NULL);
+    ucs_assertv(ep->worker == worker, "worker=%p ep=%p ep->worker=%p", worker,
+                ep, ep->worker);
+    return ep;
 }
 
 #endif

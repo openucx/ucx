@@ -7,6 +7,7 @@
 #include "ucp_listener.h"
 
 #include <ucp/wireup/wireup_ep.h>
+#include <ucp/core/ucp_ep.inl>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
 
@@ -20,7 +21,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     ucs_trace_func("listener=%p ep=%p", accept->listener, ep);
 
     /* send wireup request message, to connect the client to the server's new endpoint */
-    status = ucp_wireup_send_request(accept->ep, accept->ep_uuid);
+    status = ucp_wireup_send_request(accept->ep);
     if (status != UCS_OK) {
         goto err_destroy_ep;
     }
@@ -78,6 +79,8 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
         goto err_free_address;
     }
 
+    ucp_ep_update_dest_ep_ptr(ep, client_data->ep_ptr);
+
     /* Defer wireup init and user's callback to be invoked from the main thread */
     accept = ucs_malloc(sizeof(*accept), "ucp_listener_accept");
     if (accept == NULL) {
@@ -88,7 +91,6 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
 
     accept->listener = listener;
     accept->ep       = ep;
-    accept->ep_uuid  = client_data->ep_uuid;
 
     prog_id = UCS_CALLBACKQ_ID_NULL;
     uct_worker_progress_register_safe(listener->wiface.worker->uct,
@@ -105,10 +107,10 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
 
     return UCS_OK;
 
-err_free_address:
-    ucs_free(remote_address.address_list);
 err_destroy_ep:
     ucp_ep_destroy_internal(ep);
+err_free_address:
+    ucs_free(remote_address.address_list);
 err:
     return status;
 }

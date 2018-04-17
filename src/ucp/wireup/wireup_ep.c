@@ -95,7 +95,7 @@ static uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
 {
     uct_ep_h wireup_msg_ep;
 
-    if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
+    if ((wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) || (wireup_ep->aux_ep == NULL)) {
         wireup_msg_ep = wireup_ep->super.uct_ep;
     } else {
         wireup_msg_ep = wireup_ep->aux_ep;
@@ -371,7 +371,10 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep)
         return UCP_NULL_RESOURCE;
     }
 
-    ucs_assert(wireup_ep->aux_ep != NULL);
+    if (wireup_ep->aux_ep == NULL) {
+        return UCP_NULL_RESOURCE;
+    }
+
     return wireup_ep->aux_rsc_index;
 }
 
@@ -451,7 +454,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
 
     /* pack private data */
     conn_priv->err_mode = ucp_ep_config(ucp_ep)->key.err_mode;
-    conn_priv->ep_uuid  = ucp_ep_ext_gen(ucp_ep)->dest_uuid;
+    conn_priv->ep_ptr   = (uintptr_t)ucp_ep;
     memcpy(conn_priv + 1, worker_address, address_length);
 
     ucp_worker_release_address(worker, worker_address);

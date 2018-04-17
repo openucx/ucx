@@ -22,7 +22,7 @@ enum {
  * Header for unexpected rendezvous
  */
 typedef struct {
-    uint64_t       sender_uuid;  /* Sender worker uuid */
+    uintptr_t      ep_ptr;
     uintptr_t      reqptr;       /* Request pointer */
     uint8_t        md_index;     /* md index */
 } UCS_S_PACKED ucp_tag_offload_unexp_rndv_hdr_t;
@@ -32,7 +32,7 @@ typedef struct {
  * Header for sync send acknowledgment
  */
 typedef struct {
-    uint64_t          sender_uuid;
+    uintptr_t         ep_ptr;
     ucp_tag_t         sender_tag;
 } UCS_S_PACKED ucp_offload_ssend_hdr_t;
 
@@ -48,10 +48,6 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self);
 void ucp_tag_offload_cancel_rndv(ucp_request_t *req);
 
 ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq);
-
-void ucp_tag_offload_eager_sync_send_ack(ucp_worker_h worker,
-                                         uint64_t sender_uuid,
-                                         ucp_tag_t sender_tag);
 
 ucs_status_t ucp_tag_offload_unexp_eager(void *arg, void *data, size_t length,
                                          unsigned flags, uct_tag_t stag, uint64_t imm);

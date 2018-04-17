@@ -92,16 +92,17 @@ protected:
     }
 
 
-    void check_mem_alloc_events(void *ptr, size_t size) {
+    void check_mem_alloc_events(void *ptr, size_t size,
+                                int expect_mem_type = UCM_MEM_TYPE_CUDA)  {
         ASSERT_EQ(ptr, alloc_event.mem_type.address);
         ASSERT_EQ(size, alloc_event.mem_type.size);
-        ASSERT_EQ(UCM_MEM_TYPE_CUDA, alloc_event.mem_type.mem_type);
+        ASSERT_EQ(expect_mem_type, alloc_event.mem_type.mem_type);
     }
 
-    void check_mem_free_events(void *ptr) {
+    void check_mem_free_events(void *ptr, int expect_mem_type = UCM_MEM_TYPE_CUDA) {
         ASSERT_EQ(ptr, free_ptr);
         ASSERT_EQ(ptr, free_event.mem_type.address);
-        ASSERT_EQ(UCM_MEM_TYPE_CUDA, free_event.mem_type.mem_type);
+        ASSERT_EQ(expect_mem_type, free_event.mem_type.mem_type);
     }
 
     CUdevice   device;
@@ -152,6 +153,20 @@ UCS_TEST_F(cuda_hooks, test_cuMem_Alloc_Free) {
     ret = cuMemFree(dptr);
     ASSERT_EQ(ret, CUDA_SUCCESS);
     ASSERT_EQ((void *)dptr, free_ptr);
+    check_mem_free_events((void *)dptr);
+}
+
+UCS_TEST_F(cuda_hooks, test_cuMemAllocManaged) {
+    CUresult ret;
+    CUdeviceptr dptr;
+
+    free_ptr = NULL;
+    ret = cuMemAllocManaged(&dptr, 64, CU_MEM_ATTACH_GLOBAL);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
+    check_mem_alloc_events((void *)dptr, 64, UCM_MEM_TYPE_CUDA_MANAGED);
+
+    ret = cuMemFree(dptr);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
     check_mem_free_events((void *)dptr);
 }
 
@@ -250,6 +265,20 @@ UCS_TEST_F(cuda_hooks, test_cuda_Malloc_Free) {
     ret = cudaFree(ptr);
     ASSERT_EQ(ret, cudaSuccess);
     ASSERT_EQ(ptr, free_ptr);
+    check_mem_free_events(ptr);
+}
+
+UCS_TEST_F(cuda_hooks, test_cudaMallocManaged) {
+    cudaError_t ret;
+    void *ptr;
+
+    free_ptr = NULL;
+    ret = cudaMallocManaged(&ptr, 64, cudaMemAttachGlobal);
+    ASSERT_EQ(ret, cudaSuccess);
+    check_mem_alloc_events(ptr, 64, UCM_MEM_TYPE_CUDA_MANAGED);
+
+    ret = cudaFree(ptr);
+    ASSERT_EQ(ret, cudaSuccess);
     check_mem_free_events(ptr);
 }
 
