@@ -405,6 +405,11 @@ run_hello() {
 # Compile and run UCP hello world example
 #
 run_ucp_hello() {
+	if ./src/tools/info/ucx_info -e -u twe|grep ERROR
+	then
+		return # skip if cannot create ucp ep
+	fi
+
 	for test_mode in -w -f -b -e
 	do
 		echo "==== Running UCP hello world with mode ${test_mode} ===="
