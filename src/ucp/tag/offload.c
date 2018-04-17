@@ -415,7 +415,8 @@ static size_t ucp_tag_offload_pack_eager(void *dest, void *arg)
     ucp_request_t *req = arg;
     size_t length;
 
-    length = ucp_dt_pack(req->send.datatype, dest, req->send.buffer,
+    length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
+                         req->send.mem_type, dest, req->send.buffer,
                          &req->send.state.dt, req->send.length);
     ucs_assert(length == req->send.length);
     return length;
