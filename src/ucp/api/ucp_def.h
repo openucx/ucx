@@ -101,10 +101,10 @@ typedef enum {
     UCP_ERR_HANDLING_MODE_NONE,             /**< No guarantees about error
                                              *   reporting, imposes minimal
                                              *   overhead from a performance
-                                             *   perspective. @note
+                                             *   perspective. @note In this mode,
                                              *   @ref ucp_ep_params_t::err_handler
-                                             *   is not used for errors
-                                             *   reporting in this mode. */
+                                             *   is not used for error reporting.
+                                             */
     UCP_ERR_HANDLING_MODE_PEER              /**< Guarantees that send requests
                                              *   are always completed
                                              *   (successfully or error) even in
