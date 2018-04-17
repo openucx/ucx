@@ -265,10 +265,12 @@ static void ucp_address_pack_iface_attr(ucp_address_packed_iface_attr_t *packed,
     }
 
     if (enable_atomics) {
-        if (ucs_test_all_flags(iface_attr->cap.flags, UCP_UCT_IFACE_ATOMIC32_FLAGS)) {
+        if (ucs_test_all_flags(iface_attr->cap.atomic32.op_flags, UCP_ATOMIC_OP_MASK) &&
+            ucs_test_all_flags(iface_attr->cap.atomic32.fop_flags, UCP_ATOMIC_FOP_MASK)) {
             packed->prio_cap_flags |= UCT_ADDRESS_FLAG_ATOMIC32;
         }
-        if (ucs_test_all_flags(iface_attr->cap.flags, UCP_UCT_IFACE_ATOMIC64_FLAGS)) {
+        if (ucs_test_all_flags(iface_attr->cap.atomic64.op_flags, UCP_ATOMIC_OP_MASK) &&
+            ucs_test_all_flags(iface_attr->cap.atomic64.fop_flags, UCP_ATOMIC_FOP_MASK)) {
             packed->prio_cap_flags |= UCT_ADDRESS_FLAG_ATOMIC64;
         }
     }
@@ -301,10 +303,12 @@ ucp_address_unpack_iface_attr(ucp_address_iface_attr_t *iface_attr,
     }
 
     if (packed->prio_cap_flags & UCT_ADDRESS_FLAG_ATOMIC32) {
-        iface_attr->cap_flags |= UCP_UCT_IFACE_ATOMIC32_FLAGS;
+        iface_attr->atomic.atomic32.op_flags  |= UCP_ATOMIC_OP_MASK;
+        iface_attr->atomic.atomic32.fop_flags |= UCP_ATOMIC_FOP_MASK;
     }
     if (packed->prio_cap_flags & UCT_ADDRESS_FLAG_ATOMIC64) {
-        iface_attr->cap_flags |= UCP_UCT_IFACE_ATOMIC64_FLAGS;
+        iface_attr->atomic.atomic64.op_flags  |= UCP_ATOMIC_OP_MASK;
+        iface_attr->atomic.atomic64.fop_flags |= UCP_ATOMIC_FOP_MASK;
     }
 }
 

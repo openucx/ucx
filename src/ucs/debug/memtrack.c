@@ -494,8 +494,10 @@ void ucs_memtrack_cleanup()
          entry != NULL;
          entry = sglib_hashed_ucs_memtrack_entry_t_it_next(&entry_it))
     {
-        sglib_hashed_ucs_memtrack_entry_t_delete(ucs_memtrack_context.entries, entry);
-        free(entry);
+        if (entry->count == 0) {
+            sglib_hashed_ucs_memtrack_entry_t_delete(ucs_memtrack_context.entries, entry);
+            free(entry);
+        }
     }
     pthread_mutex_unlock(&ucs_memtrack_context.lock);
 }

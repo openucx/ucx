@@ -433,46 +433,6 @@ UCS_TEST_P(test_ucp_wireup_1sided, multi_wireup) {
     }
 }
 
-UCS_TEST_P(test_ucp_wireup_1sided, reply_ep_send_before) {
-    skip_loopback();
-
-    sender().connect(&receiver(), get_ep_params());
-
-    if (GetParam().variant == TEST_TAG) {
-        /* Send a reply */
-        ucp_ep_connect_remote(sender().ep());
-        ucp_ep_h ep = ucp_worker_get_reply_ep(receiver().worker(),
-                                              sender().worker()->uuid);
-        send_recv(ep, sender().worker(), sender().ep(), 1, 1);
-        flush_worker(sender());
-
-        disconnect(ep);
-    }
-}
-
-UCS_TEST_P(test_ucp_wireup_1sided, reply_ep_send_after) {
-    skip_loopback();
-
-    sender().connect(&receiver(), get_ep_params());
-
-    if (GetParam().variant == TEST_TAG) {
-        ucp_ep_connect_remote(sender().ep());
-
-        /* Make sure the wireup message arrives before sending a reply */
-        send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
-        flush_worker(sender());
-
-        /* Send a reply */
-        ucp_ep_h ep = ucp_worker_get_reply_ep(receiver().worker(),
-                                              sender().worker()->uuid);
-        send_recv(ep, sender().worker(), sender().ep(), 1, 1);
-
-        flush_worker(sender());
-
-        disconnect(ep);
-    }
-}
-
 UCS_TEST_P(test_ucp_wireup_1sided, stress_connect) {
     for (int i = 0; i < 30; ++i) {
         sender().connect(&receiver(), get_ep_params());
@@ -598,6 +558,18 @@ UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nb_onesided) {
     waitall(sreqs);
 }
 
+UCS_TEST_P(test_ucp_wireup_1sided, multi_ep_1sided) {
+    const unsigned count = 10;
+
+    for (unsigned i = 0; i < count; ++i) {
+        sender().connect(&receiver(), get_ep_params(), i);
+    }
+
+    for (unsigned i = 0; i < count; ++i) {
+        send_recv(sender().ep(0, i), receiver().worker(), receiver().ep(), 8, 1);
+    }
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_1sided)
 
 class test_ucp_wireup_2sided : public test_ucp_wireup {
@@ -632,6 +604,35 @@ UCS_TEST_P(test_ucp_wireup_2sided, connect_disconnect) {
     disconnect(sender());
     if (!is_loopback()) {
         disconnect(receiver());
+    }
+}
+
+UCS_TEST_P(test_ucp_wireup_2sided, multi_ep_2sided) {
+    const unsigned count = 10;
+
+    for (unsigned j = 0; j < 4; ++j) {
+
+        unsigned offset = j * count;
+
+        for (unsigned i = 0; i < count; ++i) {
+            unsigned ep_idx = offset + i;
+            sender().connect(&receiver(), get_ep_params(), ep_idx);
+            if (!is_loopback()) {
+                receiver().connect(&sender(), get_ep_params(), ep_idx);
+            }
+            UCS_TEST_MESSAGE << "iteration " << j << " pair " << i << ": " <<
+                            sender().ep(0, ep_idx) << " <--> " << receiver().ep(0, ep_idx);
+        }
+
+        for (unsigned i = 0; i < count; ++i) {
+            unsigned ep_idx = offset + i;
+            send_recv(sender().ep(0, ep_idx), receiver().worker(),
+                      receiver().ep(0, ep_idx), 8, 1);
+            send_recv(receiver().ep(0, ep_idx), sender().worker(),
+                      sender().ep(0, ep_idx), 8, 1);
+        }
+
+        short_progress_loop(0);
     }
 }
 

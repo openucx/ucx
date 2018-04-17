@@ -10,8 +10,9 @@
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
 
+
 typedef struct {
-    uint64_t    sender_uuid;
+    uintptr_t                ep_ptr;
 } UCS_S_PACKED ucp_stream_am_hdr_t;
 
 

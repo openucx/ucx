@@ -41,8 +41,8 @@ struct ucp_wireup_ep {
 };
 
 typedef struct ucp_wireup_client_data {
-    ucp_err_handling_mode_t err_mode;
-    uint64_t                ep_uuid;
+    uintptr_t                 ep_ptr;        /**< Client-side endpoint pointer */
+    ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
     /* packed worker address follows */
 } UCS_S_PACKED ucp_wireup_sockaddr_priv_t;
 

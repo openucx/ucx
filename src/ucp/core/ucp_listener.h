@@ -30,7 +30,6 @@ typedef struct ucp_listener_accept {
                                                  was accepted */
     ucp_ep_h                        ep;       /* New endpoint which was created
                                                  for the connection */
-    uint64_t                        ep_uuid;  /* Remote endpoint's uuid */
 } ucp_listener_accept_t;
 
 

@@ -100,10 +100,10 @@ static void ucp_ep_match_insert_common(ucp_ep_match_ctx_t *match_ctx,
                                        ucs_list_link_t *list, ucp_ep_h ep,
                                        uint64_t dest_uuid, const char *title)
 {
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_HASH));
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
     ucp_ep_match_list_add_tail(list, &ucp_ep_ext_gen(ep)->ep_match.list);
-    ep->flags                     |= UCP_EP_FLAG_ON_HASH;
-    ucp_ep_ext_gen(ep)->dest_uuid  = dest_uuid;
+    ep->flags                              |= UCP_EP_FLAG_ON_MATCH_CTX;
+    ucp_ep_ext_gen(ep)->ep_match.dest_uuid  = dest_uuid;
     ucs_trace("match_ctx %p: ep %p added as %s uuid 0x%"PRIx64" conn_sn %d",
               match_ctx, ep, title, dest_uuid, ep->conn_sn);
 }
@@ -152,10 +152,10 @@ ucp_ep_match_retrieve_common(ucp_ep_match_ctx_t *match_ctx, uint64_t dest_uuid,
             ucs_trace("match_ctx %p: matched %s ep %p by uuid 0x%"PRIx64" conn_sn %d",
                       match_ctx, title, ep, dest_uuid, conn_sn);
             ucs_assertv(ucs_test_all_flags(ep->flags,
-                                           exp_ep_flags | UCP_EP_FLAG_ON_HASH),
+                                           exp_ep_flags | UCP_EP_FLAG_ON_MATCH_CTX),
                         "ep=%p flags=0x%x exp_flags=0x%x", ep, ep->flags,
                         exp_ep_flags);
-            ep->flags &= ~UCP_EP_FLAG_ON_HASH;
+            ep->flags &= ~UCP_EP_FLAG_ON_MATCH_CTX;
             return ep;
         }
     }
@@ -186,11 +186,11 @@ void ucp_ep_match_remove_ep(ucp_ep_match_ctx_t *match_ctx, ucp_ep_h ep)
     ucp_ep_match_entry_t *entry;
     khiter_t iter;
 
-    if (!(ep->flags & UCP_EP_FLAG_ON_HASH)) {
+    if (!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX)) {
         return;
     }
 
-    iter = kh_get(ucp_ep_match, &match_ctx->hash, ep_ext->dest_uuid);
+    iter = kh_get(ucp_ep_match, &match_ctx->hash, ep_ext->ep_match.dest_uuid);
     ucs_assertv(iter != kh_end(&match_ctx->hash), "ep %p not found in hash", ep);
     entry = &kh_value(&match_ctx->hash, iter);
 
@@ -201,5 +201,5 @@ void ucp_ep_match_remove_ep(ucp_ep_match_ctx_t *match_ctx, ucp_ep_h ep)
         ucs_trace("match_ctx %p: remove expected ep %p", match_ctx, ep);
         ucp_ep_match_list_del(&entry->exp_ep_q, &ep_ext->ep_match.list);
     }
-    ep->flags &= ~UCP_EP_FLAG_ON_HASH;
+    ep->flags &= ~UCP_EP_FLAG_ON_MATCH_CTX;
 }

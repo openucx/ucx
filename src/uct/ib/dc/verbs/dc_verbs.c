@@ -78,6 +78,7 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
                                 verbs_common->config.max_inline,
                                 verbs_common->config.max_inline,
                                 verbs_common->config.short_desc_size,
+                                uct_ib_iface_get_max_iov(&iface->super.super.super) - 1,
                                 uct_ib_iface_get_max_iov(&iface->super.super.super) - 1);
     if (status != UCS_OK) {
         return status;
@@ -492,10 +493,10 @@ ucs_status_t uct_dc_verbs_ep_atomic32_post(uct_ep_h tl_ep, unsigned opcode, uint
 #endif
 }
 
-ucs_status_t uct_dc_verbs_ep_atomic64_fetch_nb(uct_ep_h tl_ep, uct_atomic_op_t opcode,
-                                               uint64_t value, uint64_t *result,
-                                               uint64_t remote_addr, uct_rkey_t rkey,
-                                               uct_completion_t *comp)
+ucs_status_t uct_dc_verbs_ep_atomic64_fetch(uct_ep_h tl_ep, uct_atomic_op_t opcode,
+                                            uint64_t value, uint64_t *result,
+                                            uint64_t remote_addr, uct_rkey_t rkey,
+                                            uct_completion_t *comp)
 {
     switch (opcode) {
     case UCT_ATOMIC_OP_ADD:
@@ -514,10 +515,10 @@ ucs_status_t uct_dc_verbs_ep_atomic64_fetch_nb(uct_ep_h tl_ep, uct_atomic_op_t o
     }
 }
 
-ucs_status_t uct_dc_verbs_ep_atomic32_fetch_nb(uct_ep_h tl_ep, uct_atomic_op_t opcode,
-                                               uint32_t value, uint32_t *result,
-                                               uint64_t remote_addr, uct_rkey_t rkey,
-                                               uct_completion_t *comp)
+ucs_status_t uct_dc_verbs_ep_atomic32_fetch(uct_ep_h tl_ep, uct_atomic_op_t opcode,
+                                            uint32_t value, uint32_t *result,
+                                            uint64_t remote_addr, uct_rkey_t rkey,
+                                            uct_completion_t *comp)
 {
 #if HAVE_IB_EXT_ATOMICS
     int op;
@@ -548,8 +549,8 @@ ucs_status_t uct_dc_verbs_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
                                            uint64_t remote_addr, uct_rkey_t rkey,
                                            uint64_t *result, uct_completion_t *comp)
 {
-    return uct_dc_verbs_ep_atomic64_fetch_nb(tl_ep, UCT_ATOMIC_OP_ADD, add, result,
-                                             remote_addr, rkey, comp);
+    return uct_dc_verbs_ep_atomic64_fetch(tl_ep, UCT_ATOMIC_OP_ADD, add, result,
+                                          remote_addr, rkey, comp);
 }
 
 
@@ -557,8 +558,8 @@ ucs_status_t uct_dc_verbs_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
                                            uint64_t remote_addr, uct_rkey_t rkey,
                                            uint64_t *result, uct_completion_t *comp)
 {
-    return uct_dc_verbs_ep_atomic64_fetch_nb(tl_ep, UCT_ATOMIC_OP_SWAP, swap, result,
-                                             remote_addr, rkey, comp);
+    return uct_dc_verbs_ep_atomic64_fetch(tl_ep, UCT_ATOMIC_OP_SWAP, swap, result,
+                                          remote_addr, rkey, comp);
 }
 
 ucs_status_t uct_dc_verbs_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
@@ -581,16 +582,16 @@ ucs_status_t uct_dc_verbs_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
                                            uint64_t remote_addr, uct_rkey_t rkey,
                                            uint32_t *result, uct_completion_t *comp)
 {
-    return uct_dc_verbs_ep_atomic32_fetch_nb(tl_ep, UCT_ATOMIC_OP_ADD, add, result,
-                                             remote_addr, rkey, comp);
+    return uct_dc_verbs_ep_atomic32_fetch(tl_ep, UCT_ATOMIC_OP_ADD, add, result,
+                                          remote_addr, rkey, comp);
 }
 
 ucs_status_t uct_dc_verbs_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
                                            uint64_t remote_addr, uct_rkey_t rkey,
                                            uint32_t *result, uct_completion_t *comp)
 {
-    return uct_dc_verbs_ep_atomic32_fetch_nb(tl_ep, UCT_ATOMIC_OP_SWAP, swap, result,
-                                             remote_addr, rkey, comp);
+    return uct_dc_verbs_ep_atomic32_fetch(tl_ep, UCT_ATOMIC_OP_SWAP, swap, result,
+                                          remote_addr, rkey, comp);
 }
 
 ucs_status_t uct_dc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32_t swap,
@@ -863,7 +864,9 @@ ucs_status_t uct_dc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
     size_t sge_cnt;
     uint32_t app_ctx;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_dc_verbs_ep_tag_eager_zcopy");
+    UCT_CHECK_IOV_SIZE(iovcnt,
+                       uct_ib_iface_get_max_iov(&iface->super.super.super) - 1,
+                       "uct_dc_verbs_ep_tag_eager_zcopy");
     UCT_RC_CHECK_ZCOPY_DATA(sizeof(struct ibv_exp_tmh),
                             uct_iov_total_length(iov, iovcnt),
                             iface->super.super.super.config.seg_size);
@@ -1079,13 +1082,13 @@ static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
     .ep_atomic_swap64         = uct_dc_verbs_ep_atomic_swap64,
     .ep_atomic_cswap64        = uct_dc_verbs_ep_atomic_cswap64,
     .ep_atomic64_post         = uct_dc_verbs_ep_atomic64_post,
-    .ep_atomic64_fetch_nb     = uct_dc_verbs_ep_atomic64_fetch_nb,
+    .ep_atomic64_fetch        = uct_dc_verbs_ep_atomic64_fetch,
     .ep_atomic_add32          = uct_dc_verbs_ep_atomic_add32,
     .ep_atomic_fadd32         = uct_dc_verbs_ep_atomic_fadd32,
     .ep_atomic_swap32         = uct_dc_verbs_ep_atomic_swap32,
     .ep_atomic_cswap32        = uct_dc_verbs_ep_atomic_cswap32,
     .ep_atomic32_post         = uct_dc_verbs_ep_atomic32_post,
-    .ep_atomic32_fetch_nb     = uct_dc_verbs_ep_atomic32_fetch_nb,
+    .ep_atomic32_fetch        = uct_dc_verbs_ep_atomic32_fetch,
     .ep_pending_add           = uct_dc_ep_pending_add,
     .ep_pending_purge         = uct_dc_ep_pending_purge,
     .ep_flush                 = uct_dc_verbs_ep_flush,

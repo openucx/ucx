@@ -65,7 +65,7 @@ typedef struct {
 extern const ucp_proto_t ucp_tag_eager_proto;
 extern const ucp_proto_t ucp_tag_eager_sync_proto;
 
-void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t flags);
+void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_flags);
 
 void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag,
                                    ucs_status_t status);
