@@ -314,11 +314,12 @@ typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status
  * This structure should be initialized in @ref ucp_ep_params_t to handle peer failure
  */
 typedef struct ucp_err_handler {
-    ucp_err_handler_cb_t cb;       /**< Error handler callback */
+    ucp_err_handler_cb_t cb;       /**< Error handler callback, if NULL, it will
+                                        not be called. */
     void                 *arg;     /**< User defined argument associated with
                                         an endpoint, it will be overridden by
                                         @ref ucp_ep_params_t::user_data if both
-                                        are set */
+                                        are set. */
 } ucp_err_handler_t;
 
 
