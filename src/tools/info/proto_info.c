@@ -89,8 +89,8 @@ static void print_resource_usage(const resource_usage_t *usage_before,
 }
 
 void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
-                    uint64_t features, size_t estimated_num_eps,
-                    unsigned dev_type_bitmap)
+                    uint64_t ctx_features, const ucp_ep_params_t *base_ep_params,
+                    size_t estimated_num_eps, unsigned dev_type_bitmap)
 {
     ucp_config_t *config;
     ucs_status_t status;
@@ -113,7 +113,7 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     memset(&params, 0, sizeof(params));
     params.field_mask        = UCP_PARAM_FIELD_FEATURES |
                                UCP_PARAM_FIELD_ESTIMATED_NUM_EPS;
-    params.features          = features;
+    params.features          = ctx_features;
     params.estimated_num_eps = estimated_num_eps;
 
     get_resource_usage(&usage);
@@ -166,8 +166,10 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
             goto out_destroy_worker;
         }
 
-        ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-        ep_params.address    = address;
+        ep_params             = *base_ep_params;
+
+        ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+        ep_params.address     = address;
 
         status = ucp_ep_create(worker, &ep_params, &ep);
         ucp_worker_release_address(worker, address);
