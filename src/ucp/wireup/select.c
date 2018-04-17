@@ -16,6 +16,25 @@
 
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE       262144
 
+#define UCP_WIREUP_CHECK_AMO_FLAGS(_ae, _criteria, _context, _addr_index, _op, _size)      \
+    if (!ucs_test_all_flags((_ae)->iface_attr.atomic.atomic##_size._op##_flags,            \
+                            (_criteria)->remote_atomic_flags.atomic##_size._op##_flags)) { \
+        char desc[256];                                                                    \
+        ucs_trace("addr[%d] %s: no %s", (_addr_index),                                     \
+                  ucp_find_tl_name_by_csum((_context), (_ae)->tl_name_csum),               \
+                  ucp_wireup_get_missing_amo_flag_desc_##_op(                              \
+                      (_ae)->iface_attr.atomic.atomic##_size._op##_flags,                  \
+                      (_criteria)->remote_atomic_flags.atomic##_size._op##_flags,          \
+                      (_size), desc, sizeof(desc)));                                       \
+        continue;                                                                          \
+    }
+
+typedef struct ucp_wireup_atomic_flag {
+    const char *name;
+    const char *fetch;
+} ucp_wireup_atomic_flag_t;
+
+
 enum {
     UCP_WIREUP_LANE_USAGE_AM     = UCS_BIT(0), /* Active messages */
     UCP_WIREUP_LANE_USAGE_AM_BW  = UCS_BIT(1), /* High-BW active messages */
@@ -64,14 +83,15 @@ static const char *ucp_wireup_iface_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_GET_SHORT)]        = "get short",
     [ucs_ilog2(UCT_IFACE_FLAG_GET_BCOPY)]        = "get bcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_GET_ZCOPY)]        = "get zcopy",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_ADD32)]     = "32-bit atomic add",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_ADD64)]     = "64-bit atomic add",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_FADD32)]    = "32-bit atomic fetch-add",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_FADD64)]    = "64-bit atomic fetch-add",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_SWAP32)]    = "32-bit atomic swap",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_SWAP64)]    = "64-bit atomic swap",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_CSWAP32)]   = "32-bit atomic compare-swap",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_CSWAP64)]   = "64-bit atomic compare-swap",
+    /* TODO: remove deprecated flags */
+    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_ADD32)]     = "32-bit atomic add (deprecated)",
+    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_ADD64)]     = "64-bit atomic add (deprecated)",
+    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_FADD32)]    = "32-bit atomic fetch-add (deprecated)",
+    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_FADD64)]    = "64-bit atomic fetch-add (deprecated)",
+    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_SWAP32)]    = "32-bit atomic swap (deprecated)",
+    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_SWAP64)]    = "64-bit atomic swap (deprecated)",
+    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_CSWAP32)]   = "32-bit atomic compare-swap (deprecated)",
+    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_CSWAP64)]   = "64-bit atomic compare-swap (deprecated)",
     [ucs_ilog2(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)] = "peer failure handler",
     [ucs_ilog2(UCT_IFACE_FLAG_CONNECT_TO_IFACE)] = "connect to iface",
     [ucs_ilog2(UCT_IFACE_FLAG_CONNECT_TO_EP)]    = "connect to ep",
@@ -88,6 +108,16 @@ static const char *ucp_wireup_iface_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy"
 };
 
+static ucp_wireup_atomic_flag_t ucp_wireup_atomic_desc[] = {
+     [UCT_ATOMIC_OP_ADD]   = {.name = "add",   .fetch = "fetch-"},
+     [UCT_ATOMIC_OP_AND]   = {.name = "and",   .fetch = "fetch-"},
+     [UCT_ATOMIC_OP_OR]    = {.name = "or",    .fetch = "fetch-"},
+     [UCT_ATOMIC_OP_XOR]   = {.name = "xor",   .fetch = "fetch-"},
+     [UCT_ATOMIC_OP_SWAP]  = {.name = "swap",  .fetch = ""},
+     [UCT_ATOMIC_OP_CSWAP] = {.name = "cscap", .fetch = ""}
+};
+
+
 static double ucp_wireup_aux_score_func(ucp_context_h context,
                                         const uct_md_attr_t *md_attr,
                                         const uct_iface_attr_t *iface_attr,
@@ -99,6 +129,37 @@ ucp_wireup_get_missing_flag_desc(uint64_t flags, uint64_t required_flags,
 {
     ucs_assert((required_flags & (~flags)) != 0);
     return flag_descs[ucs_ffs64(required_flags & (~flags))];
+}
+
+static const char *
+ucp_wireup_get_missing_amo_flag_desc(uint64_t flags, uint64_t required_flags,
+                                     int op_size, int fetch, char *buf, size_t len)
+{
+    int idx;
+
+    ucs_assert((required_flags & (~flags)) != 0);
+
+    idx = ucs_ffs64(required_flags & (~flags));
+
+    snprintf(buf, len, "%d-bit atomic %s%s", op_size,
+             fetch ? ucp_wireup_atomic_desc[idx].fetch : "",
+             ucp_wireup_atomic_desc[idx].name);
+
+    return buf;
+}
+
+static const char *
+ucp_wireup_get_missing_amo_flag_desc_op(uint64_t flags, uint64_t required_flags,
+                                        int op_size, char *buf, size_t len)
+{
+    return ucp_wireup_get_missing_amo_flag_desc(flags, required_flags, op_size, 0, buf, len);
+}
+
+static const char *
+ucp_wireup_get_missing_amo_flag_desc_fop(uint64_t flags, uint64_t required_flags,
+                                         int op_size, char *buf, size_t len)
+{
+    return ucp_wireup_get_missing_amo_flag_desc(flags, required_flags, op_size, 1, buf, len);
 }
 
 static int ucp_wireup_check_flags(const uct_tl_resource_desc_t *resource,
@@ -115,6 +176,30 @@ static int ucp_wireup_check_flags(const uct_tl_resource_desc_t *resource,
     if (required_flags) {
         missing_flag_desc = ucp_wireup_get_missing_flag_desc(flags, required_flags,
                                                              flag_descs);
+        ucs_trace(UCT_TL_RESOURCE_DESC_FMT " : not suitable for %s, no %s",
+                  UCT_TL_RESOURCE_DESC_ARG(resource), title,
+                  missing_flag_desc);
+        snprintf(reason, max, UCT_TL_RESOURCE_DESC_FMT" - no %s",
+                 UCT_TL_RESOURCE_DESC_ARG(resource), missing_flag_desc);
+    }
+    return 0;
+}
+
+static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
+                                      uint64_t flags, uint64_t required_flags,
+                                      int op_size, int fetch,
+                                      const char *title, char *reason, size_t max)
+{
+    char missing_flag_desc[256];
+
+    if (ucs_test_all_flags(flags, required_flags)) {
+        return 1;
+    }
+
+    if (required_flags) {
+        ucp_wireup_get_missing_amo_flag_desc(flags, required_flags,
+                                             op_size, fetch, missing_flag_desc,
+                                             sizeof(missing_flag_desc));
         ucs_trace(UCT_TL_RESOURCE_DESC_FMT " : not suitable for %s, no %s",
                   UCT_TL_RESOURCE_DESC_ARG(resource), title,
                   missing_flag_desc);
@@ -205,6 +290,11 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
             continue;
         }
 
+        UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, addr_index, op, 32);
+        UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, addr_index, op, 64);
+        UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, addr_index, fop, 32);
+        UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, addr_index, fop, 64);
+
         addr_index_map |= UCS_BIT(addr_index);
     }
 
@@ -233,7 +323,19 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
                                     ucp_wireup_md_flags, p, endp - p) ||
             !ucp_wireup_check_flags(resource, iface_attr->cap.flags,
                                     criteria->local_iface_flags, criteria->title,
-                                    ucp_wireup_iface_flags, p, endp - p))
+                                    ucp_wireup_iface_flags, p, endp - p) ||
+            !ucp_wireup_check_amo_flags(resource, iface_attr->cap.atomic32.op_flags,
+                                        criteria->local_atomic_flags.atomic32.op_flags,
+                                        32, 0, criteria->title, p, endp - p) ||
+            !ucp_wireup_check_amo_flags(resource, iface_attr->cap.atomic64.op_flags,
+                                        criteria->local_atomic_flags.atomic64.op_flags,
+                                        64, 0, criteria->title, p, endp - p) ||
+            !ucp_wireup_check_amo_flags(resource, iface_attr->cap.atomic32.fop_flags,
+                                        criteria->local_atomic_flags.atomic32.fop_flags,
+                                        32, 1, criteria->title, p, endp - p) ||
+            !ucp_wireup_check_amo_flags(resource, iface_attr->cap.atomic64.fop_flags,
+                                        criteria->local_atomic_flags.atomic64.fop_flags,
+                                        64, 1, criteria->title, p, endp - p))
         {
             p += strlen(p);
             snprintf(p, endp - p, ", ");
@@ -603,21 +705,26 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
     ucp_wireup_fill_ep_params_criteria(criteria, params);
 }
 
+static void ucp_wireup_clean_amo_criteria(ucp_wireup_criteria_t *criteria)
+{
+    memset(&criteria->remote_atomic_flags, 0,
+           sizeof(criteria->remote_atomic_flags));
+    memset(&criteria->local_atomic_flags, 0,
+           sizeof(criteria->local_atomic_flags));
+}
+
 static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                              unsigned ep_init_flags, unsigned address_count,
                                              const ucp_address_entry_t *address_list,
                                              ucp_wireup_lane_desc_t *lane_descs,
                                              ucp_lane_index_t *num_lanes_p)
 {
-    ucp_wireup_criteria_t criteria;
+    ucp_wireup_criteria_t criteria = {0};
 
     if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_RMA) &&
         (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE))) {
         return UCS_OK;
     }
-
-    criteria.local_md_flags     = 0;
-    criteria.remote_md_flags    = 0;
 
     if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
         criteria.title              = "copy across memory types";
@@ -657,25 +764,24 @@ static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, const ucp_ep_params_t 
                                              ucp_wireup_lane_desc_t *lane_descs,
                                              ucp_lane_index_t *num_lanes_p)
 {
-    ucp_worker_h worker   = ep->worker;
-    ucp_context_h context = worker->context;
-    ucp_wireup_criteria_t criteria;
+    ucp_worker_h worker            = ep->worker;
+    ucp_context_h context          = worker->context;
+    ucp_wireup_criteria_t criteria = {0};
     ucp_rsc_index_t rsc_index;
     uint64_t tl_bitmap;
 
-    criteria.remote_iface_flags = ucp_context_uct_atomic_iface_flags(context);
-    if ((criteria.remote_iface_flags == 0) ||
+    if (!ucs_test_flags(context->config.features, UCP_FEATURE_AMO32, UCP_FEATURE_AMO64) ||
         (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) {
         return UCS_OK;
     }
 
+    ucp_context_uct_atomic_iface_flags(context, &criteria.remote_atomic_flags);
+
     criteria.title              = "atomic operations on %s memory";
-    criteria.local_md_flags     = 0;
-    criteria.remote_md_flags    = 0;
     criteria.local_iface_flags  = criteria.remote_iface_flags |
                                   UCT_IFACE_FLAG_PENDING;
+    criteria.local_atomic_flags = criteria.remote_atomic_flags;
     criteria.calc_score         = ucp_wireup_amo_score_func;
-    criteria.tl_rsc_flags       = 0;
     ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
     /* We can use only non-p2p resources or resources which are explicitly
@@ -765,7 +871,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
                                            double *am_score,
                                            ucp_err_handling_mode_t err_mode)
 {
-    ucp_wireup_criteria_t criteria;
+    ucp_wireup_criteria_t criteria = {0};
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
     unsigned addr_index;
@@ -778,13 +884,10 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, const ucp_ep_params_t *p
 
     /* Select one lane for active messages */
     criteria.title              = "active messages";
-    criteria.local_md_flags     = 0;
-    criteria.remote_md_flags    = 0;
     criteria.remote_iface_flags = UCT_IFACE_FLAG_AM_BCOPY |
                                   UCT_IFACE_FLAG_CB_SYNC;
     criteria.local_iface_flags  = UCT_IFACE_FLAG_AM_BCOPY;
     criteria.calc_score         = ucp_wireup_am_score_func;
-    criteria.tl_rsc_flags       = 0;
     ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_TAG |
@@ -916,6 +1019,7 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
     bw_info.criteria.local_iface_flags  = UCT_IFACE_FLAG_AM_BCOPY;
     bw_info.criteria.calc_score         = ucp_wireup_am_bw_score_func;
     bw_info.criteria.tl_rsc_flags       = 0;
+    ucp_wireup_clean_amo_criteria(&bw_info.criteria);
     ucp_wireup_fill_ep_params_criteria(&bw_info.criteria, params);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_TAG |
@@ -974,6 +1078,7 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
                                           UCT_IFACE_FLAG_PENDING;
     bw_info.criteria.calc_score         = ucp_wireup_rma_bw_score_func;
     bw_info.criteria.tl_rsc_flags       = 0;
+    ucp_wireup_clean_amo_criteria(&bw_info.criteria);
     ucp_wireup_fill_ep_params_criteria(&bw_info.criteria, params);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
@@ -999,7 +1104,7 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
                                             double am_score,
                                             ucp_err_handling_mode_t err_mode)
 {
-    ucp_wireup_criteria_t criteria;
+    ucp_wireup_criteria_t criteria = {0};
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
     unsigned addr_index;
@@ -1023,7 +1128,6 @@ static ucs_status_t ucp_wireup_add_tag_lane(ucp_ep_h ep, unsigned address_count,
                                   UCT_IFACE_FLAG_GET_ZCOPY       |
                                   UCT_IFACE_FLAG_PENDING;
     criteria.calc_score         = ucp_wireup_am_score_func;
-    criteria.tl_rsc_flags       = 0;
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
         criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
@@ -1061,10 +1165,10 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
                                   const ucp_wireup_lane_desc_t *lane_descs,
                                   ucp_lane_index_t num_lanes)
 {
-    ucp_context_h context     = worker->context;
-    ucp_lane_index_t p2p_lane = UCP_NULL_LANE;
+    ucp_context_h context          = worker->context;
+    ucp_lane_index_t p2p_lane      = UCP_NULL_LANE;
+    ucp_wireup_criteria_t criteria = {0};
     uct_tl_resource_desc_t *resource;
-    ucp_wireup_criteria_t criteria;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
     unsigned addr_index;
@@ -1277,7 +1381,7 @@ ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
                                              ucp_rsc_index_t *rsc_index_p,
                                              unsigned *addr_index_p)
 {
-    ucp_wireup_criteria_t criteria;
+    ucp_wireup_criteria_t criteria = {0};
     double score;
 
     ucp_wireup_fill_aux_criteria(&criteria, params);
