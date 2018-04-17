@@ -418,7 +418,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
      * reserved QP space for at least UCT_IB_MLX5_MAX_BB to accommodate.
      * */
     ucs_assert(ctrl == wq->curr);
-    res_count    = wq->sw_pi - wq->prev_sw_pi;
+    res_count       = wq->sw_pi - wq->prev_sw_pi;
     wq->curr        = src;
     wq->prev_sw_pi += res_count;
     ucs_assert(wq->prev_sw_pi == wq->sw_pi);
