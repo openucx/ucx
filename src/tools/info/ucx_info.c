@@ -29,6 +29,7 @@ static void usage() {
     printf("                'r' : remote memory access\n");
     printf("                't' : tag matching \n");
     printf("                'w' : wakeup\n");
+    printf("                'e' : error handling\n");
     printf("  -D <type>  Set which device types to use\n");
     printf("                'all'  : all possible devices (default)\n");
     printf("                'shm'  : shared memory devices only\n");
@@ -46,6 +47,7 @@ static void usage() {
 int main(int argc, char **argv)
 {
     ucs_config_print_flags_t print_flags;
+    ucp_ep_params_t ucp_ep_params;
     unsigned dev_type_bitmap;
     uint64_t ucp_features;
     size_t ucp_num_eps;
@@ -54,12 +56,13 @@ int main(int argc, char **argv)
     const char *f;
     int c;
 
-    print_opts       = 0;
-    print_flags      = 0;
-    tl_name          = NULL;
-    ucp_features     = 0;
-    ucp_num_eps      = 1;
-    dev_type_bitmap  = -1;
+    print_opts               = 0;
+    print_flags              = 0;
+    tl_name                  = NULL;
+    ucp_features             = 0;
+    ucp_num_eps              = 1;
+    dev_type_bitmap          = -1;
+    ucp_ep_params.field_mask = 0;
     while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:D:")) != -1) {
         switch (c) {
         case 'f':
@@ -115,6 +118,10 @@ int main(int argc, char **argv)
                     break;
                 case 'w':
                     ucp_features |= UCP_FEATURE_WAKEUP;
+                    break;
+                case 'e':
+                    ucp_ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+                    ucp_ep_params.err_mode    = UCP_ERR_HANDLING_MODE_PEER;
                     break;
                 default:
                     usage();
@@ -177,8 +184,8 @@ int main(int argc, char **argv)
             printf("Please select UCP features using -u switch\n");
             return -1;
         }
-        print_ucp_info(print_opts, print_flags, ucp_features, ucp_num_eps,
-                       dev_type_bitmap);
+        print_ucp_info(print_opts, print_flags, ucp_features, &ucp_ep_params,
+                       ucp_num_eps, dev_type_bitmap);
     }
 
     return 0;
