@@ -175,8 +175,7 @@ void test_ucp_peer_failure::test_status_after(bool request_must_fail)
     fail_receiver();
 
     std::vector<uint8_t> buf(m_msg_size, 0);
-    request *req = send_nb(buf.data(), buf.size(), DATATYPE,
-                                         0x111337);
+    request *req = send_nb(buf.data(), buf.size(), DATATYPE, 0x111337);
     wait_err();
     EXPECT_NE(UCS_OK, m_err_status);
     EXPECT_TRUE(m_err_cb_mod);

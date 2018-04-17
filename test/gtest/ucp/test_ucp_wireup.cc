@@ -30,7 +30,9 @@ protected:
     enum {
         TEST_RMA,
         TEST_TAG,
-        TEST_STREAM
+        TEST_STREAM,
+        TEST_TAG_CLOSE_SYNC,
+        TEST_STREAM_CLOSE_SYNC
     };
 
     typedef uint64_t               elem_type;
@@ -56,11 +58,26 @@ protected:
     void send_recv(ucp_ep_h send_ep, ucp_worker_h recv_worker, ucp_ep_h recv_ep,
                    size_t vecsize, int repeat);
 
-    void waitall(std::vector<void*> reqs);
+    void waitall(std::vector<void*> &reqs);
 
-    void disconnect(ucp_ep_h ep);
+    void* disconnect(ucp_ep_h ep);
 
-    void disconnect(ucp_test::entity &e);
+    virtual void* disconnect(ucp_test::entity &e);
+
+    bool is_close_sync_test() const {
+        return (GetParam().variant == TEST_TAG_CLOSE_SYNC) ||
+               (GetParam().variant == TEST_STREAM_CLOSE_SYNC);
+    }
+
+    bool is_tag_test() const {
+        return (GetParam().variant == TEST_TAG) ||
+               (GetParam().variant == TEST_TAG_CLOSE_SYNC);
+    }
+
+    bool is_stream_test() const {
+        return (GetParam().variant == TEST_STREAM) ||
+               (GetParam().variant == TEST_STREAM_CLOSE_SYNC);
+    }
 
 private:
     vec_type                               m_send_data;
@@ -104,12 +121,19 @@ test_ucp_wireup::enum_test_params_features(const ucp_params_t& ctx_params,
         tmp_ctx_params.features = UCP_FEATURE_TAG;
         generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/tag",
                                      tls, TEST_TAG, result);
+
+        generate_test_params_variant(tmp_ctx_params, name,
+                                     test_case_name + "/tag_close_sync", tls,
+                                     TEST_TAG_CLOSE_SYNC, result);
     }
 
     if (features & UCP_FEATURE_STREAM) {
         tmp_ctx_params.features = UCP_FEATURE_STREAM;
         generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/stream",
                                      tls, TEST_STREAM, result);
+        generate_test_params_variant(tmp_ctx_params, name,
+                                     test_case_name + "/stream_close_sync", tls,
+                                     TEST_STREAM_CLOSE_SYNC, result);
     }
 
     return result;
@@ -176,10 +200,34 @@ ucp_rkey_h test_ucp_wireup::get_rkey(ucp_ep_h ep, ucp_mem_h memh)
 }
 
 void test_ucp_wireup::cleanup() {
-    m_rkeys.clear();
-    m_memh_sender.reset();
-    m_memh_receiver.reset();
-    ucp_test::cleanup();
+    if (is_close_sync_test()) {
+        std::vector<void*> reqs;
+
+        /* disconnect before destroying the entities */
+        for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
+             iter != entities().end(); ++iter)
+        {
+            reqs.push_back(disconnect(**iter));
+        }
+
+        waitall(reqs);
+
+        for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
+             iter != entities().end(); ++iter)
+        {
+            (*iter)->cleanup();
+        }
+
+        m_rkeys.clear();
+        m_memh_sender.reset();
+        m_memh_receiver.reset();
+        m_entities.clear();
+    } else {
+        m_rkeys.clear();
+        m_memh_sender.reset();
+        m_memh_receiver.reset();
+        ucp_test::cleanup();
+    }
 }
 
 void test_ucp_wireup::clear_recv_data() {
@@ -189,7 +237,7 @@ void test_ucp_wireup::clear_recv_data() {
 void test_ucp_wireup::send_nb(ucp_ep_h ep, size_t length, int repeat,
                               std::vector<void*>& reqs, uint64_t send_data)
 {
-    if (GetParam().variant == TEST_TAG) {
+    if (is_tag_test()) {
         std::fill(m_send_data.begin(), m_send_data.end(), send_data);
         for (int i = 0; i < repeat; ++i) {
             void *req = ucp_tag_send_nb(ep, &m_send_data[0], length,
@@ -200,7 +248,7 @@ void test_ucp_wireup::send_nb(ucp_ep_h ep, size_t length, int repeat,
                 ASSERT_UCS_OK(UCS_PTR_STATUS(req));
             }
         }
-    } else if (GetParam().variant == TEST_STREAM) {
+    } else if (is_stream_test()) {
         std::fill(m_send_data.begin(), m_send_data.end(), send_data);
         for (int i = 0; i < repeat; ++i) {
             void *req = ucp_stream_send_nb(ep, &m_send_data[0], length, DT_U64,
@@ -246,17 +294,16 @@ void test_ucp_wireup::send_b(ucp_ep_h ep, size_t length, int repeat,
 void test_ucp_wireup::recv_b(ucp_worker_h worker, ucp_ep_h ep, size_t length,
                              int repeat, uint64_t recv_data)
 {
-    if ((GetParam().variant == TEST_TAG) || (GetParam().variant == TEST_STREAM))
-    {
+    if (is_tag_test() || is_stream_test()) {
         for (int i = 0; i < repeat; ++i) {
             size_t recv_length;
             void *req;
 
             clear_recv_data();
-            if (GetParam().variant == TEST_TAG) {
+            if (is_tag_test()) {
                 req = ucp_tag_recv_nb(worker, &m_recv_data[0], length, DT_U64,
                                       TAG, (ucp_tag_t)-1, tag_recv_completion);
-            } else if (GetParam().variant == TEST_STREAM) {
+            } else if (is_stream_test()) {
                 req = ucp_stream_recv_nb(ep, &m_recv_data[0], length, DT_U64,
                                          stream_recv_completion, &recv_length,
                                          UCP_STREAM_RECV_FLAG_WAITALL);
@@ -277,7 +324,7 @@ void test_ucp_wireup::recv_b(ucp_worker_h worker, ucp_ep_h ep, size_t length,
         }
     } else if (GetParam().variant == TEST_RMA) {
         for (size_t i = 0; i < length; ++i) {
-            while (m_recv_data[i] != recv_data + repeat - 1) {
+            while (m_recv_data[i] != (recv_data + repeat - 1)) {
                 progress();
             }
         }
@@ -311,19 +358,31 @@ void test_ucp_wireup::send_recv(ucp_ep_h send_ep, ucp_worker_h recv_worker,
     m_rkeys.clear();
 }
 
-void test_ucp_wireup::disconnect(ucp_ep_h ep) {
-    void *req = ucp_disconnect_nb(ep);
+void* test_ucp_wireup::disconnect(ucp_ep_h ep) {
+    if (ep == NULL) {
+        return NULL;
+    }
+
+    unsigned mode = is_close_sync_test() ? UCP_EP_CLOSE_MODE_SYNC :
+                    UCP_EP_CLOSE_MODE_FLUSH;
+    void *req = ucp_ep_close_nb(ep, mode);
     if (!UCS_PTR_IS_PTR(req)) {
         ASSERT_UCS_OK(UCS_PTR_STATUS(req));
     }
+
+    if (mode == UCP_EP_CLOSE_MODE_SYNC) {
+        return req;
+    }
+
     wait(req);
+    return NULL;
 }
 
-void test_ucp_wireup::disconnect(ucp_test::entity &e) {
-    disconnect(e.revoke_ep());
+void* test_ucp_wireup::disconnect(ucp_test::entity &e) {
+    return disconnect(e.revoke_ep());
 }
 
-void test_ucp_wireup::waitall(std::vector<void*> reqs)
+void test_ucp_wireup::waitall(std::vector<void*> &reqs)
 {
     while (!reqs.empty()) {
         wait(reqs.back());
@@ -416,7 +475,9 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
 UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup) {
     sender().connect(&receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
-    flush_worker(sender());
+    if (!is_close_sync_test()) {
+        flush_worker(sender());
+    }
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup_rndv, "RNDV_THRESH=1") {
@@ -445,6 +506,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, multi_wireup) {
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, stress_connect) {
+    std::vector<void *> reqs;
     for (int i = 0; i < 30; ++i) {
         sender().connect(&receiver(), get_ep_params());
         send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1,
@@ -453,14 +515,16 @@ UCS_TEST_P(test_ucp_wireup_1sided, stress_connect) {
             receiver().connect(&sender(), get_ep_params());
         }
 
-        disconnect(sender());
+        reqs.push_back(disconnect(sender()));
         if (!is_loopback()) {
-            disconnect(receiver());
+            reqs.push_back(disconnect(receiver()));
         }
+        waitall(reqs);
     }
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, stress_connect2) {
+    std::vector<void *> reqs;
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
         sender().connect(&receiver(), get_ep_params());
         send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
@@ -468,17 +532,18 @@ UCS_TEST_P(test_ucp_wireup_1sided, stress_connect2) {
             receiver().connect(&sender(), get_ep_params());
         }
 
-        disconnect(sender());
+        reqs.push_back(disconnect(sender()));
         if (!is_loopback()) {
-            disconnect(receiver());
+            reqs.push_back(disconnect(receiver()));
         }
+        waitall(reqs);
     }
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nonexistent) {
     skip_loopback();
     sender().connect(&receiver(), get_ep_params());
-    disconnect(sender());
+    wait(disconnect(sender()));
     receiver().destroy_worker();
     sender().destroy_worker();
 }
@@ -486,26 +551,26 @@ UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nonexistent) {
 UCS_TEST_P(test_ucp_wireup_1sided, disconnect_reconnect) {
     sender().connect(&receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 1);
-    disconnect(sender());
+    wait(disconnect(sender()));
     recv_b(receiver().worker(), receiver().ep(), 1000, 1);
 
     sender().connect(&receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 1);
-    disconnect(sender());
+    wait(disconnect(sender()));
     recv_b(receiver().worker(), receiver().ep(), 1000, 1);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided) {
     sender().connect(&receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 100);
-    disconnect(sender());
+    wait(disconnect(sender()));
     recv_b(receiver().worker(), receiver().ep(), 1000, 100);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided_nozcopy, "ZCOPY_THRESH=-1") {
     sender().connect(&receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 100);
-    disconnect(sender());
+    wait(disconnect(sender()));
     recv_b(receiver().worker(), receiver().ep(), 1000, 100);
 }
 
@@ -513,11 +578,14 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided_wait) {
     sender().connect(&receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), 8, 1);
     send_b(sender().ep(), 1000, 200);
-    disconnect(sender());
+    wait(disconnect(sender()));
     recv_b(receiver().worker(), receiver().ep(), 1000, 200);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply1) {
+    if (GetParam().variant == TEST_TAG_CLOSE_SYNC) {
+        UCS_TEST_SKIP_R("Invalid for TEST_TAG_CLOSE_SYNC");
+    }
     sender().connect(&receiver(), get_ep_params());
     if (!is_loopback()) {
         receiver().connect(&sender(), get_ep_params());
@@ -525,21 +593,22 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply1) {
 
     send_b(sender().ep(), 8, 1);
     if (!is_loopback()) {
-        disconnect(sender());
+        wait(disconnect(sender()));
     }
 
     recv_b(receiver().worker(), receiver().ep(), 8, 1);
     send_b(receiver().ep(), 8, 1);
-    disconnect(receiver());
+    wait(disconnect(receiver()));
     recv_b(sender().worker(), sender().ep(), 8, 1);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
+    std::vector<void*> reqs;
     sender().connect(&receiver(), get_ep_params());
 
     send_b(sender().ep(), 8, 1);
     if (!is_loopback()) {
-        disconnect(sender());
+        reqs.push_back(disconnect(sender()));
     }
     recv_b(receiver().worker(), receiver().ep(),  8, 1);
 
@@ -548,8 +617,10 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
     }
 
     send_b(receiver().ep(), 8, 1);
-    disconnect(receiver());
-    recv_b(sender().worker(), receiver().ep(), 8, 1);
+    reqs.push_back(disconnect(receiver()));
+    recv_b(sender().worker(), sender().ep(), 8, 1);
+
+    waitall(reqs);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nb_onesided) {
@@ -671,14 +742,17 @@ UCS_TEST_P(test_ucp_wireup_2sided, no_loopback_with_delay) {
 }
 
 UCS_TEST_P(test_ucp_wireup_2sided, connect_disconnect) {
+    std::vector<void*> reqs;
+
     sender().connect(&receiver(), get_ep_params());
     if (!is_loopback()) {
         receiver().connect(&sender(), get_ep_params());
     }
-    disconnect(sender());
+    reqs.push_back(disconnect(sender()));
     if (!is_loopback()) {
-        disconnect(receiver());
+        reqs.push_back(disconnect(receiver()));
     }
+    waitall(reqs);
 }
 
 UCS_TEST_P(test_ucp_wireup_2sided, multi_ep_2sided) {
@@ -715,13 +789,15 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_2sided)
 class test_ucp_wireup_errh_peer : public test_ucp_wireup_1sided
 {
 public:
+    test_ucp_wireup_errh_peer() : m_err_status(UCS_OK), m_err_count(0) {}
+
     virtual ucp_ep_params_t get_ep_params() {
         ucp_ep_params_t params = test_ucp_wireup::get_ep_params();
         params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
                                  UCP_EP_PARAM_FIELD_ERR_HANDLER;
         params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
         params.err_handler.cb  = err_cb;
-        params.err_handler.arg = NULL;
+        params.err_handler.arg = this;
         return params;
     }
 
@@ -730,7 +806,16 @@ public:
         skip_loopback();
     }
 
-    static void err_cb(void *, ucp_ep_h, ucs_status_t) {}
+    static void err_cb(void *arg, ucp_ep_h, ucs_status_t status) {
+        test_ucp_wireup_errh_peer *self;
+        self = reinterpret_cast<test_ucp_wireup_errh_peer *>(arg);
+        ASSERT_TRUE(self != NULL);
+        self->m_err_status = status;
+    }
+
+protected:
+    ucs_status_t m_err_status;
+    size_t       m_err_count;
 };
 
 UCS_TEST_P(test_ucp_wireup_errh_peer, msg_after_ep_create) {
@@ -738,19 +823,40 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, msg_after_ep_create) {
 
     sender().connect(&receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
-    flush_worker(sender());
+    if (!is_close_sync_test()) {
+        flush_worker(sender());
+    }
 }
 
 UCS_TEST_P(test_ucp_wireup_errh_peer, msg_before_ep_create) {
 
     sender().connect(&receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
-    flush_worker(sender());
+    if (!is_close_sync_test()) {
+        flush_worker(sender());
+    }
 
     receiver().connect(&sender(), get_ep_params());
 
     send_recv(receiver().ep(), sender().worker(), receiver().ep(), 1, 1);
-    flush_worker(receiver());
+    if (!is_close_sync_test()) {
+        flush_worker(receiver());
+    }
+}
+
+UCS_TEST_P(test_ucp_wireup_errh_peer, remote_disconnect) {
+    if (!is_close_sync_test()) {
+        UCS_TEST_SKIP_R("Valid only for *CLOSE_SYNC");
+    }
+
+    sender().connect(&receiver(), get_ep_params());
+    receiver().connect(&sender(), get_ep_params());
+    send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
+
+    wait(disconnect(sender()));
+
+    wait_for_flag(&m_err_count);
+    EXPECT_EQ(UCS_ERR_REMOTE_DISCONNECT, m_err_status);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)
