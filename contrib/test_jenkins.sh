@@ -271,7 +271,7 @@ build_cuda() {
     then
         if module_load dev/gdrcopy
         then
-            echo "==== Build with enable cuda ===="
+            echo "==== Build with enable cuda, gdr_copy ===="
             ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
             $MAKE clean
             $MAKE
@@ -282,12 +282,14 @@ build_cuda() {
             $MAKE
             $MAKE distclean
             module unload dev/gdrcopy
-        else
-            ../contrib/configure-devel --prefix=$ucx_inst --with-cuda
-            $MAKE clean
-            $MAKE
-            $MAKE distclean
         fi
+
+        echo "==== Build with enable cuda, w/o gdr_copy ===="
+        ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
+        $MAKE clean
+        $MAKE
+        $MAKE distclean
+
         module unload dev/cuda
         echo "ok 1 - build successful " >> build_cuda.tap
     else
