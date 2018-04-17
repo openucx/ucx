@@ -892,6 +892,7 @@ static const char *ucs_signal_cause_segv(int si_code)
 static const char *ucs_signal_cause_bus(int si_code)
 {
     switch (si_code) {
+    case BUS_ADRALN   : return "invalid address alignment";
     case BUS_ADRERR   : return "nonexistent physical address";
     case BUS_OBJERR   : return "object-specific hardware error";
     default           : return ucs_signal_cause_common(si_code);
