@@ -8,9 +8,6 @@
 #define UCP_PROTO_H_
 
 #include <ucp/core/ucp_ep.h>
-#include <ucp/wireup/wireup.h>
-#include <ucp/core/ucp_context.h>
-#include <ucp/core/ucp_worker.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
 
@@ -19,7 +16,7 @@
  * Header segment for a transaction
  */
 typedef struct {
-    uint64_t                  sender_uuid;
+    uintptr_t                 ep_ptr;
     uintptr_t                 reqptr;
 } UCS_S_PACKED ucp_request_hdr_t;
 

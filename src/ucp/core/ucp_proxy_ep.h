@@ -42,6 +42,10 @@ UCS_CLASS_DECLARE(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
  */
 void ucp_proxy_ep_replace(ucp_proxy_ep_t *proxy_ep);
 
+int ucp_proxy_ep_test(uct_ep_h ep);
+
+uct_ep_h ucp_proxy_ep_extract(uct_ep_h ep);
+
 void ucp_proxy_ep_set_uct_ep(ucp_proxy_ep_t *proxy_ep, uct_ep_h uct_ep,
                              int is_owner);
 

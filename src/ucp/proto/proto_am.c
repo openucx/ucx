@@ -26,8 +26,8 @@ static size_t ucp_proto_pack(void *dest, void *arg)
         return sizeof(*rep_hdr);
     case UCP_AM_ID_OFFLOAD_SYNC_ACK:
         off_rep_hdr = dest;
-        off_rep_hdr->sender_tag  = req->send.proto.sender_tag;
-        off_rep_hdr->sender_uuid = req->send.proto.sender_uuid;
+        off_rep_hdr->sender_tag = req->send.proto.sender_tag;
+        off_rep_hdr->ep_ptr     = ucp_request_get_dest_ep_ptr(req);
         return sizeof(*off_rep_hdr);
     }
 
