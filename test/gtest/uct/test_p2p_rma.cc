@@ -69,7 +69,7 @@ ucs_status_t uct_p2p_rma_test::get_zcopy(uct_ep_h ep, const mapped_buffer &sendb
 void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
                                  unsigned flags, uct_memory_type_t mem_type)
 {
-    mapped_buffer sendbuf(length, SEED1, sender(), 1);
+    mapped_buffer sendbuf(length, SEED1, sender(), 1, mem_type);
     mapped_buffer recvbuf(length, SEED2, receiver(), 3, mem_type);
 
     blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
