@@ -59,10 +59,54 @@ public:
 
     template <typename T>
     void nb_cswap(entity *e,  size_t max_size, void *memheap_addr,
-                        ucp_rkey_h rkey, std::string& expected_data);
+                  ucp_rkey_h rkey, std::string& expected_data);
     
     template <typename T, typename F>
     void test(F f, bool malloc_allocate);
+
+    template <typename T, ucp_atomic_post_op_t OP>
+    void nb_post(entity *e,  size_t max_size, void *memheap_addr,
+                 ucp_rkey_h rkey, std::string& expected_data);
+
+    template <typename T, ucp_atomic_fetch_op_t FOP>
+    void nb_fetch(entity *e,  size_t max_size, void *memheap_addr,
+                  ucp_rkey_h rkey, std::string& expected_data);
+
+    template <typename T, ucp_atomic_post_op_t OP>
+    T atomic_op_val(T v1, T v2)
+    {
+        switch (OP) {
+        case UCP_ATOMIC_POST_OP_ADD:
+            return v1 + v2;
+        case UCP_ATOMIC_POST_OP_AND:
+            return v1 & v2;
+        case UCP_ATOMIC_POST_OP_OR:
+            return v1 | v2;
+        case UCP_ATOMIC_POST_OP_XOR:
+            return v1 ^ v2;
+        default:
+            return 0;
+        }
+    }
+
+    template <typename T, ucp_atomic_fetch_op_t OP>
+    T atomic_fop_val(T v1, T v2)
+    {
+        switch (OP) {
+        case UCP_ATOMIC_FETCH_OP_FADD:
+            return v1 + v2;
+        case UCP_ATOMIC_FETCH_OP_FAND:
+            return v1 & v2;
+        case UCP_ATOMIC_FETCH_OP_FOR:
+            return v1 | v2;
+        case UCP_ATOMIC_FETCH_OP_FXOR:
+            return v1 ^ v2;
+        case UCP_ATOMIC_FETCH_OP_SWAP:
+            return v1;
+        default:
+            return 0;
+        }
+    }
 
 private:
     static void send_completion(void *request, ucs_status_t status){}
