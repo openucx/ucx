@@ -87,6 +87,16 @@ module_load() {
 }
 
 #
+# try load cuda modules if nvidia driver is installed
+#
+try_load_cuda_env() {
+	if [ -f "/proc/driver/nvidia/version" ]; then
+		module_load dev/cuda || true
+		module_load dev/gdrcopy || true
+	fi
+}
+
+#
 # Check whether this test should do a task with given index,
 # according to the parallel test execution parameters.
 #
@@ -493,11 +503,6 @@ test_malloc_hooks_mpi() {
 #
 run_mpi_tests() {
 	echo "1..2" > mpi_tests.tap
-
-	#load cuda modules if available
-	module_load dev/cuda || true
-	module_load dev/gdrcopy || true
-
 	if module_load hpcx-gcc
 	then
 		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
@@ -592,11 +597,6 @@ run_coverity() {
 # Run the test suite (gtest)
 #
 run_gtest() {
-
-	#load cuda modules if available
-	module_load dev/cuda || true
-	module_load dev/gdrcopy || true
-
 	../contrib/configure-devel --prefix=$ucx_inst
 	$MAKE clean
 	$MAKE
@@ -738,6 +738,7 @@ run_tests() {
 }
 
 prepare
+try_load_cuda_env
 do_distributed_task 0 4 build_docs
 do_distributed_task 0 4 build_disable_numa
 do_distributed_task 1 4 build_no_verbs
