@@ -417,6 +417,72 @@ out:
     return status;
 }
 
+ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
+                                      size_t length, uct_memory_type_t mem_type,
+                                      unsigned md_index, uct_mem_h *memh,
+                                      ucp_md_map_t *md_map,
+                                      uct_rkey_bundle_t *rkey_bundle)
+{
+    ucp_context_h context = worker->context;
+    uct_md_h md;
+    ucs_status_t status;
+    char *rkey_buffer;
+
+    md = context->tl_mds[md_index].md;
+
+    *memh = UCT_MEM_HANDLE_NULL;
+    status = ucp_mem_rereg_mds(context, UCS_BIT(md_index), remote_addr, length,
+                               UCT_MD_MEM_ACCESS_ALL, NULL, mem_type,
+                               NULL, memh, md_map);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    if (context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) {
+        rkey_buffer = ucs_alloca(context->tl_mds[md_index].attr.rkey_packed_size);
+
+        status = uct_md_mkey_pack(md, memh[0], rkey_buffer);
+        if (status != UCS_OK) {
+            ucs_error("failed to pack key from md[%d]: %s",
+                      md_index, ucs_status_string(status));
+            goto err_dreg_mem;
+        }
+
+        status = uct_rkey_unpack(rkey_buffer, rkey_bundle);
+        if (status != UCS_OK) {
+            ucs_error("failed to unpack key from md[%d]: %s",
+                      md_index, ucs_status_string(status));
+            goto err_dreg_mem;
+        }
+    } else {
+        rkey_bundle->handle = NULL;
+        rkey_bundle->rkey   = UCT_INVALID_RKEY;
+        rkey_bundle->type   = NULL;
+    }
+
+    return UCS_OK;
+
+err_dreg_mem:
+    ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, mem_type, NULL,
+                      memh, md_map);
+err:
+    return status;
+}
+
+void ucp_mem_type_unreg_buffers(ucp_worker_h worker, uct_memory_type_t mem_type,
+                                uct_mem_h *memh, ucp_md_map_t *md_map,
+                                uct_rkey_bundle_t *rkey_bundle)
+{
+    ucp_context_h context = worker->context;
+
+    if (rkey_bundle->rkey != UCT_INVALID_RKEY) {
+        uct_rkey_release(rkey_bundle);
+    }
+
+    ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, mem_type, NULL,
+                      memh, md_map);
+}
+
 ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr)
 {
     if (attr->field_mask & UCP_MEM_ATTR_FIELD_ADDRESS) {
