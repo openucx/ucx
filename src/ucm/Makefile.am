@@ -38,6 +38,11 @@ noinst_HEADERS = \
 	util/reloc.h \
 	util/sys.h
 
+if HAVE_CUDA
+noinst_HEADERS += \
+	cuda/cudamem.h
+endif
+
 libucm_la_SOURCES = \
 	event/event.c \
 	malloc/malloc_hook.c \
