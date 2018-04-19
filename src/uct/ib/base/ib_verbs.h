@@ -211,6 +211,13 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define ibv_exp_create_srq_attr           ibv_srq_init_attr
 #endif
 
+#if IBV_EXP_MP_RQ
+#  define IBV_DEVICE_MP_CAPS(_dev, _field)  ((_dev)->dev_attr.mp_rq_caps._field)
+#else
+#  define IBV_DEVICE_MP_CAPS(_dev, _field)  0
+#  define IBV_EXP_MP_RQ_SUP_TYPE_SRQ_TM     0
+#endif
+
 
 /*
  * Resource domain

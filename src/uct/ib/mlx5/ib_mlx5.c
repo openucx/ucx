@@ -388,12 +388,13 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
 }
 
 ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
-                                  size_t sg_byte_count)
+                                  size_t sg_byte_count, uint16_t sge_num)
 {
     uct_ib_mlx5_srq_info_t srq_info;
     uct_ib_mlx5_srq_seg_t *seg;
     ucs_status_t status;
-    unsigned i;
+    unsigned i, j;
+    uint16_t stride;
 
     status = uct_ib_mlx5_get_srq_info(verbs_srq, &srq_info);
     if (status != UCS_OK) {
@@ -405,9 +406,11 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
         return UCS_ERR_NO_DEVICE;
     }
 
-    if (srq_info.stride != UCT_IB_MLX5_SRQ_STRIDE) {
-        ucs_error("SRQ stride is not %lu (%d)", UCT_IB_MLX5_SRQ_STRIDE,
-                  srq_info.stride);
+    stride = sizeof(struct mlx5_wqe_srq_next_seg) +
+             sge_num * sizeof(struct mlx5_wqe_data_seg);
+    stride = pow(2, ceil(ucs_log2(stride)));
+    if (srq_info.stride != stride) {
+        ucs_error("SRQ stride is not %u (%d)", stride, srq_info.stride);
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -423,12 +426,17 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
     srq->sw_pi           = -1;
     srq->mask            = srq_info.tail;
     srq->tail            = srq_info.tail;
+    srq->stride          = srq_info.stride;
+    srq->sge_num         = sge_num;
 
     for (i = srq_info.head; i <= srq_info.tail; ++i) {
-        seg = uct_ib_mlx5_srq_get_wqe(srq, i);
-        seg->srq.free        = 0;
-        seg->srq.desc        = NULL;
-        seg->dptr.byte_count = htonl(sg_byte_count);
+        for (j = 0; j < sge_num; ++j) {
+            seg = uct_ib_mlx5_srq_get_wqe(srq, i);
+            seg->srq.free           = 0;
+            seg->srq.desc           = NULL;
+            seg->srq.strides        = sge_num;
+            seg->dptr[j].byte_count = htonl(sg_byte_count);
+        }
     }
 
     return UCS_OK;

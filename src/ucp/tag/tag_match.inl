@@ -313,6 +313,8 @@ ucp_tag_recv_request_process_rdesc(ucp_request_t *req, ucp_recv_desc_t *rdesc,
 
      hdr_len  = rdesc->payload_offset;
      recv_len = rdesc->length - hdr_len;
+     ucs_warn("UCP: process rdesc %p hdr_len %ld, recv_len %ld",
+              rdesc, hdr_len, recv_len);
      status = ucp_tag_request_process_recv_data(req, (void*)(rdesc + 1) + hdr_len,
                                                 recv_len, offset, 0, rdesc->flags);
      ucp_recv_desc_release(rdesc);

@@ -298,6 +298,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
 
     ucp_tag_offload_unexp(wiface, stag);
 
+    ucs_warn("UCP/HW: eager unexp %p, imm %ld, flags %d, length %ld",
+             data, imm, flags, length);
+
     /* Fast path: non-sync eager-only messages */
     if (ucs_likely(!imm && (tl_flags & UCT_CB_PARAM_FLAG_FIRST) &&
                    !(tl_flags & UCT_CB_PARAM_FLAG_MORE))) {

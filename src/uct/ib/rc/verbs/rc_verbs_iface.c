@@ -227,7 +227,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
                               worker, params, &config->super, 0,
-                              sizeof(uct_rc_fc_request_t), IBV_EXP_TM_CAP_RC,
+                              sizeof(uct_rc_fc_request_t), IBV_EXP_TM_CAP_RC, 0,
                               UCT_IB_IFACE_NULL_RES_DOMAIN_KEY);
 
     self->config.tx_max_wr           = ucs_min(config->verbs_common.tx_max_wr,

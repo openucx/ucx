@@ -11,6 +11,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
+#include <ucs/arch/bitops.h>
 
 
 ucs_config_field_t uct_rc_iface_config_table[] = {
@@ -558,14 +559,20 @@ ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
 static void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
                                  const uct_rc_iface_config_t *config,
                                  const uct_iface_params_t *params,
-                                 int tm_cap_flag, unsigned *rx_cq_len)
+                                 int tm_cap_flag, int mp_cap_flag,
+                                 unsigned *rx_cq_len, size_t *max_seg_size)
 {
 #if IBV_EXP_HW_TM
     struct ibv_exp_tmh tmh;
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
-    uint32_t cap_flags   = IBV_DEVICE_TM_CAPS(dev, capability_flags);
+    uint32_t tm_flags    = IBV_DEVICE_TM_CAPS(dev, capability_flags);
+    uint32_t mp_flags    = IBV_DEVICE_MP_CAPS(dev, supported_qps);
+    ucs_status_t status;
+    int mtu;
 
-    iface->tm.enabled = (config->tm.enable && (cap_flags & tm_cap_flag));
+    iface->tm.enabled    = (config->tm.enable && (tm_flags & tm_cap_flag));
+    iface->tm.mp_enabled = mp_flags & mp_cap_flag;
+    *max_seg_size        = SIZE_MAX;
 
     if (!iface->tm.enabled) {
         goto out_tm_disabled;
@@ -596,11 +603,25 @@ static void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
     UCS_STATIC_ASSERT(IBV_DEVICE_MAX_UNEXP_COUNT);
     *rx_cq_len = config->super.rx.queue_len + iface->tm.num_tags * 3  +
                  config->super.rx.queue_len / IBV_DEVICE_MAX_UNEXP_COUNT;
+
+    if (iface->tm.mp_enabled) {
+        status = uct_ib_device_mtu(params->mode.device.dev_name, md, &mtu);
+        if (status != UCS_OK) {
+            ucs_error("Failed to get port MTU: %s", ucs_status_string(status));
+        } else {
+            *max_seg_size = mtu;
+        }
+    }
+
+    ucs_warn("mp flag %d cap flag %d   res %d mtu %d max %ld",
+            mp_flags, mp_cap_flag, mp_flags & mp_cap_flag, mtu, *max_seg_size);
+
     return;
 
 out_tm_disabled:
 #endif
-    *rx_cq_len  = config->super.rx.queue_len;
+    *rx_cq_len    = config->super.rx.queue_len;
+    *max_seg_size = SIZE_MAX;
 }
 
 ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
@@ -613,6 +634,8 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
 #if IBV_EXP_HW_TM
     uct_ib_md_t *md       = uct_ib_iface_md(&iface->super);
     unsigned tmh_hdrs_len = sizeof(struct ibv_exp_tmh) + rndv_hdr_len;
+    int max_wr, log_strides_num;
+    size_t mtu;
 
     if (!UCT_RC_IFACE_TM_ENABLED(iface)) {
         goto out_tm_disabled;
@@ -635,10 +658,36 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
      * of TM header. */
     ucs_ptr_array_init(&iface->tm.rndv_comps, 0, "rm_rndv_completions");
 
-    /* Create TM-capable XRQ */
-    srq_init_attr->base.attr.max_sge   = 1;
-    srq_init_attr->base.attr.max_wr    = ucs_max(IBV_DEVICE_MIN_UWQ_POST,
-                                                 config->super.rx.queue_len);
+    /* Create TM-capable XRQ.
+     * If Multi-Packet XRQ is supported, configure it in the following way:
+     * - Use minimal possible number of strides per single WQE.
+     * - Use the same number of sg elements per WQE (thus, one sge per stride).
+     * - Consider stride to be a single RX queue element. Therefore we need
+     *   rx_queue_len/stride_per_wqe WQEs posted in SRQ.
+     **/
+     if (UCT_RC_IFACE_MP_ENABLED(iface)) {
+        mtu = uct_ib_mtu_value(uct_ib_iface_port_attr(&(iface)->super)->active_mtu);
+        log_strides_num = IBV_DEVICE_MP_CAPS(&md->dev, min_single_wqe_log_num_of_strides);
+
+        srq_init_attr->comp_mask               |= IBV_EXP_CREATE_SRQ_MP_WR;
+        srq_init_attr->mp_wr.log_num_of_strides = log_strides_num;
+        srq_init_attr->mp_wr.log_stride_size    = ucs_ilog2(iface->super.config.seg_size);
+        iface->rx.srq.sge_num                   = 1 << log_strides_num;
+        max_wr = ucs_max(IBV_DEVICE_MIN_UWQ_POST,
+                         config->super.rx.queue_len/iface->rx.srq.sge_num);
+
+        ucs_assertv(iface->super.config.seg_size <= mtu,
+                    "Segment size %d exceeds MTU %ld",
+                    iface->super.config.seg_size, mtu);
+        ucs_error("Multi-Packet WQ config: stride size %d, WQEs %d, strides per WQE %d",
+                  iface->super.config.seg_size, max_wr, iface->rx.srq.sge_num);
+    } else {
+        iface->rx.srq.sge_num = 1;
+        max_wr                = ucs_max(IBV_DEVICE_MIN_UWQ_POST,
+                                        config->super.rx.queue_len);
+    }
+    srq_init_attr->base.attr.max_sge   = iface->rx.srq.sge_num;
+    srq_init_attr->base.attr.max_wr    = max_wr;
     srq_init_attr->base.attr.srq_limit = 0;
     srq_init_attr->base.srq_context    = iface;
     srq_init_attr->srq_type            = IBV_EXP_SRQT_TAG_MATCHING;
@@ -690,7 +739,7 @@ unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface)
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_rc_iface_config_t *config, unsigned rx_priv_len,
-                    unsigned fc_req_size, int tm_cap_flag,
+                    unsigned fc_req_size, int tm_cap_flag, int mp_cap_flag,
                     uint32_t res_domain_key)
 {
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
@@ -698,12 +747,16 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     struct ibv_srq_init_attr srq_init_attr;
     ucs_status_t status;
     unsigned rx_cq_len;
+    size_t max_seg_size;
 
-    uct_rc_iface_preinit(self, md, config, params, tm_cap_flag, &rx_cq_len);
+    uct_rc_iface_preinit(self, md, config, params, tm_cap_flag, mp_cap_flag,
+                         &rx_cq_len, &max_seg_size);
 
+    ucs_warn("max seg %ld", max_seg_size);
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               rx_priv_len, sizeof(uct_rc_hdr_t), tx_cq_len,
-                              rx_cq_len, SIZE_MAX, res_domain_key, &config->super);
+                              rx_cq_len, max_seg_size, res_domain_key,
+                              &config->super);
 
     self->tx.cq_available           = tx_cq_len - 1;
     self->rx.srq.available          = 0;
@@ -938,8 +991,12 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 #  endif
 
 #  if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
-    qp_init_attr.comp_mask           |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
-    qp_init_attr.max_inl_recv         = iface->config.rx_inline;
+
+    /* MP WR is not supported with inline receive. */
+    if (!UCT_RC_IFACE_MP_ENABLED(iface)) {
+        qp_init_attr.comp_mask           |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
+        qp_init_attr.max_inl_recv         = iface->config.rx_inline;
+    }
 #  endif
 
 #if HAVE_IBV_EXP_RES_DOMAIN

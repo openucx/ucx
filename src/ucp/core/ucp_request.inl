@@ -506,6 +506,8 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
         status       = UCS_OK;
         memcpy(UCS_PTR_BYTE_OFFSET(rdesc + 1, data_offset), data, length);
     }
+    ucs_warn("UCP: rdesc init: (%p)  len %ld, data_off %d",
+             rdesc, length, data_offset);
 
     rdesc->length         = length + data_offset;
     rdesc->payload_offset = hdr_len;
