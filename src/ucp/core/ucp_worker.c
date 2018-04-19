@@ -346,36 +346,21 @@ void ucp_worker_signal_internal(ucp_worker_h worker)
     }
 }
 
-static ucs_status_t
-ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
+static unsigned ucp_worker_iface_err_handle_progress(void *arg)
 {
-    ucp_worker_h worker = (ucp_worker_h)arg;
-    ucp_lane_index_t lane, failed_lane;
-    uct_tl_resource_desc_t* tl_rsc;
-    ucp_rsc_index_t rsc_index;
-    ucp_ep_ext_gen_t *ep_ext;
-    ucp_ep_h ucp_ep;
+    ucp_worker_err_handle_arg_t *err_handle_arg = arg;
+    ucp_worker_h worker                         = err_handle_arg->worker;
+    ucp_ep_h ucp_ep                             = err_handle_arg->ucp_ep;
+    uct_ep_h uct_ep                             = err_handle_arg->uct_ep;
+    ucs_status_t status                         = err_handle_arg->status;
+    ucp_lane_index_t failed_lane                = err_handle_arg->failed_lane;
+    ucp_lane_index_t lane;
+    ucp_ep_config_key_t key;
 
-    /* TODO: need to optimize uct_ep -> ucp_ep lookup */
-    ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
-        ucp_ep = ucp_ep_from_ext_gen(ep_ext);
-        for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
-            if ((uct_ep == ucp_ep->uct_eps[lane]) ||
-                ucp_wireup_ep_is_owner(ucp_ep->uct_eps[lane], uct_ep)) {
-                failed_lane = lane;
-                goto found_ucp_ep;
-            }
-        }
-    }
+    UCS_ASYNC_BLOCK(&worker->async);
 
-    ucs_fatal("no uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
-              uct_ep, worker);
-
-found_ucp_ep:
-    if (ucp_ep_config(ucp_ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) {
-        /* NOTE: if user has not requested error handling on the endpoint,
-         *       the failure is considered unhandled */
-        return status;
+    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
+        goto out;
     }
 
     /* Destroy all lanes except failed one since ucp_ep becomes unusable as well */
@@ -416,7 +401,7 @@ found_ucp_ep:
     }
 
     /* Redirect all lanes to failed one */
-    ucp_ep_config_key_t key = ucp_ep_config(ucp_ep)->key;
+    key                    = ucp_ep_config(ucp_ep)->key;
     key.am_lane            = 0;
     key.wireup_lane        = 0;
     key.tag_lane           = 0;
@@ -431,19 +416,99 @@ found_ucp_ep:
     ucp_ep->flags    |= UCP_EP_FLAG_FAILED;
     ucp_ep->am_lane   = 0;
 
+    if (ucp_ep_ext_gen(ucp_ep)->err_cb != NULL) {
+        ucp_ep_ext_gen(ucp_ep)->err_cb(ucp_ep_ext_gen(ucp_ep)->user_data, ucp_ep,
+                                       status);
+    }
+
+out:
+    ucs_free(err_handle_arg);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return 1;
+}
+
+int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
+                                        void *arg)
+{
+    ucp_worker_err_handle_arg_t *err_handle_arg = elem->arg;
+
+    return (elem->cb == ucp_worker_iface_err_handle_progress) &&
+           (err_handle_arg->ucp_ep == arg);
+}
+
+static ucs_status_t
+ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
+{
+    ucp_worker_h worker         = (ucp_worker_h)arg;
+    uct_worker_cb_id_t prog_id  = UCS_CALLBACKQ_ID_NULL;
+    uct_tl_resource_desc_t* tl_rsc;
+    ucp_lane_index_t lane, failed_lane;
+    ucp_worker_err_handle_arg_t *err_handle_arg;
+    ucs_status_t ret_status;
+    ucp_rsc_index_t rsc_index;
+    ucp_ep_ext_gen_t *ep_ext;
+    ucp_ep_h ucp_ep;
+
+    /* TODO: need to optimize uct_ep -> ucp_ep lookup */
+    ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
+        ucp_ep = ucp_ep_from_ext_gen(ep_ext);
+        for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+            if ((uct_ep == ucp_ep->uct_eps[lane]) ||
+                ucp_wireup_ep_is_owner(ucp_ep->uct_eps[lane], uct_ep)) {
+                failed_lane = lane;
+                goto found_ucp_ep;
+            }
+        }
+    }
+
+    ucs_fatal("no uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
+              uct_ep, worker);
+
+found_ucp_ep:
+    if (ucp_ep_config(ucp_ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) {
+        /* NOTE: if user has not requested error handling on the endpoint,
+         *       the failure is considered unhandled */
+        ret_status = status;
+        goto out;
+    }
+
+    err_handle_arg = ucs_malloc(sizeof(*err_handle_arg), "ucp_worker_err_handle_arg");
+    if (err_handle_arg == NULL) {
+        ucs_error("failed to allocate ucp_worker_err_handle_arg");
+        ret_status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
+    err_handle_arg->worker      = worker;
+    err_handle_arg->ucp_ep      = ucp_ep;
+    err_handle_arg->uct_ep      = uct_ep;
+    err_handle_arg->status      = status;
+    err_handle_arg->failed_lane = failed_lane;
+
+    /* invoke the rest of the error handling flow from the main thread */
+    uct_worker_progress_register_safe(worker->uct,
+                                      ucp_worker_iface_err_handle_progress,
+                                      err_handle_arg, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
+
     if (ucp_ep_ext_gen(ucp_ep)->err_cb == NULL) {
         rsc_index = ucp_ep_get_rsc_index(ucp_ep, lane);
         tl_rsc    = &worker->context->tl_rscs[rsc_index].tl_rsc;
-        ucs_error("error '%s' was not handled for ep %p - "
-                 UCT_TL_RESOURCE_DESC_FMT, ucs_status_string(status), ucp_ep,
-                 UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
-       return status;
+        ucs_error("error '%s' will not be handled for ep %p - "
+                  UCT_TL_RESOURCE_DESC_FMT, ucs_status_string(status), ucp_ep,
+                  UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
+        ret_status = status;
+        goto out;
     }
 
-    ucp_ep_ext_gen(ucp_ep)->err_cb(ucp_ep_ext_gen(ucp_ep)->user_data, ucp_ep,
-                                   status);
+    ret_status = UCS_OK;
 
-    return UCS_OK;
+out:
+    /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
+     * that he can wake-up on this event */
+    ucp_worker_signal_internal(worker);
+
+    return ret_status;
 }
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
@@ -727,14 +792,15 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >= sizeof(ucp_eager_sync_hdr_t));
 
     /* Fill rest of uct_iface params (caller should fill specific mode fields) */
-    iface_params->stats_root      = UCS_STATS_RVAL(worker->stats);
-    iface_params->rx_headroom     = UCP_WORKER_HEADROOM_SIZE;
-    iface_params->err_handler_arg = worker;
-    iface_params->err_handler     = ucp_worker_iface_error_handler;
-    iface_params->eager_arg       = iface_params->rndv_arg = wiface;
-    iface_params->eager_cb        = ucp_tag_offload_unexp_eager;
-    iface_params->rndv_cb         = ucp_tag_offload_unexp_rndv;
-    iface_params->cpu_mask        = worker->cpu_mask;
+    iface_params->stats_root        = UCS_STATS_RVAL(worker->stats);
+    iface_params->rx_headroom       = UCP_WORKER_HEADROOM_SIZE;
+    iface_params->err_handler_arg   = worker;
+    iface_params->err_handler       = ucp_worker_iface_error_handler;
+    iface_params->err_handler_flags = UCT_CB_FLAG_ASYNC;
+    iface_params->eager_arg         = iface_params->rndv_arg = wiface;
+    iface_params->eager_cb          = ucp_tag_offload_unexp_eager;
+    iface_params->rndv_cb           = ucp_tag_offload_unexp_rndv;
+    iface_params->cpu_mask          = worker->cpu_mask;
 
     /* Open UCT interface */
     status = uct_iface_open(md, worker->uct, iface_params, iface_config,
@@ -1285,6 +1351,7 @@ unsigned ucp_worker_progress(ucp_worker_h worker)
      */
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
+    /* check that ucp_worker_progress is not called from within ucp_worker_progress */
     ucs_assert(worker->inprogress++ == 0);
     count = uct_worker_progress(worker->uct);
     ucs_async_check_miss(&worker->async);

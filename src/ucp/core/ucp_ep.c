@@ -509,6 +509,10 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 {
     ucp_stream_recv_purge(ep);
 
+    /* remove pending slow-path progress in case it wasn't removed yet */
+    ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
+                            ucp_worker_err_handle_remove_filter, ep);
+
     ep->flags &= ~UCP_EP_FLAG_USED;
 
     if ((ep->flags & (UCP_EP_FLAG_CONNECT_REQ_QUEUED|UCP_EP_FLAG_REMOTE_CONNECTED))
@@ -609,6 +613,7 @@ void ucp_ep_destroy(ucp_ep_h ep)
             ucp_worker_progress(worker);
             status = ucp_request_check_status(request);
         } while (status == UCS_INPROGRESS);
+
         ucp_request_release(request);
     }
 

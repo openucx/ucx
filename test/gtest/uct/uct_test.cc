@@ -287,10 +287,11 @@ uct_test::entity* uct_test::create_entity(size_t rx_headroom,
     uct_iface_params_t iface_params;
 
     memset(&iface_params, 0, sizeof(iface_params));
-    iface_params.rx_headroom = rx_headroom;
-    iface_params.open_mode   = UCT_IFACE_OPEN_MODE_DEVICE;
-    iface_params.err_handler = err_handler;
-    iface_params.err_handler_arg = this;
+    iface_params.rx_headroom       = rx_headroom;
+    iface_params.open_mode         = UCT_IFACE_OPEN_MODE_DEVICE;
+    iface_params.err_handler       = err_handler;
+    iface_params.err_handler_arg   = this;
+    iface_params.err_handler_flags = UCT_CB_FLAG_SYNC;
     entity *new_ent = new entity(*GetParam(), m_iface_config, &iface_params,
                                  m_md_config);
     return new_ent;
@@ -354,7 +355,8 @@ void uct_test::twait(int delta_ms) const {
     } while (now + ucs_time_from_msec(delta_ms) > ucs_get_time());
 }
 
-const std::string uct_test::entity::client_priv_data = "Client private data";
+std::string uct_test::entity::client_priv_data = "";
+size_t uct_test::entity::client_cb_arg = 0;
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
                          uct_iface_params_t *params, uct_md_config_t *md_config) {
@@ -638,6 +640,21 @@ void uct_test::entity::destroy_eps() {
     }
 }
 
+ssize_t uct_test::entity::client_priv_data_cb(void *arg, const char *dev_name,
+                                              void *priv_data)
+{
+    size_t *max_conn_priv = (size_t*)arg;
+    size_t priv_data_len;
+
+    client_priv_data = "Client private data";
+    priv_data_len = 1 + client_priv_data.length();
+
+    memcpy(priv_data, client_priv_data.c_str(), priv_data_len);
+    EXPECT_LE(priv_data_len, (*max_conn_priv));
+
+    return priv_data_len;
+}
+
 void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
                                            ucs_sock_addr_t *remote_addr)
 {
@@ -649,12 +666,10 @@ void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
         return; /* Already connected */
     }
 
-    ASSERT_TRUE(1 + client_priv_data.length() <= other.iface_attr().max_conn_priv);
-
     /* Connect to the server */
     status = uct_ep_create_sockaddr(iface(), remote_addr,
-                                    client_priv_data.c_str(),
-                                    1 + client_priv_data.length(), &ep);
+                                    client_priv_data_cb, (void*)&client_cb_arg,
+                                    UCT_CB_FLAG_ASYNC, &ep);
     ASSERT_UCS_OK(status);
 
     m_eps[index].reset(ep, uct_ep_destroy);

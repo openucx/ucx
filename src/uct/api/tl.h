@@ -179,8 +179,8 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*ep_create_sockaddr)(uct_iface_h iface,
                                        const ucs_sock_addr_t *sockaddr,
-                                       const void *priv_data, size_t length,
-                                       uct_ep_h *ep_p);
+                                       uct_sockaddr_priv_pack_callback_t pack_cb,
+                                       void *arg, uint32_t cb_flags, uct_ep_h *ep_p);
 
     void         (*ep_destroy)(uct_ep_h ep);
 

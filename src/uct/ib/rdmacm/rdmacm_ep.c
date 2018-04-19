@@ -74,11 +74,11 @@ static inline void uct_rdmacm_ep_add_to_pending(uct_rdmacm_iface_t *iface, uct_r
 
 static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
                            const ucs_sock_addr_t *sockaddr,
-                           const void *priv_data, size_t length)
+                           uct_sockaddr_priv_pack_callback_t pack_cb,
+                           void *arg, uint32_t cb_flags)
 {
     uct_rdmacm_iface_t *iface = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
-    uct_rdmacm_priv_data_hdr_t hdr;
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
@@ -88,18 +88,16 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
         return UCS_ERR_UNSUPPORTED;
     }
 
+    if (cb_flags != UCT_CB_FLAG_ASYNC) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     /* Initialize these fields before calling rdma_resolve_addr to avoid a race
      * where they are used before being initialized (from the async thread
      * - after an RDMA_CM_EVENT_ROUTE_RESOLVED event) */
-    hdr.length           = length;
-    self->priv_data      = ucs_malloc(sizeof(hdr) + length, "client private data");
-    if (self->priv_data == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    memcpy(self->priv_data, &hdr, sizeof(hdr));
-    memcpy(self->priv_data + sizeof(hdr), priv_data, length);
+    self->pack_cb       = pack_cb;
+    self->pack_cb_arg   = arg;
+    self->pack_cb_flags = cb_flags;
 
     /* Save the remote address */
     if (sockaddr->addr->sa_family == AF_INET) {
@@ -109,7 +107,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
     } else {
         ucs_error("rdmacm ep: unknown remote sa_family=%d", sockaddr->addr->sa_family);
         status = UCS_ERR_IO_ERROR;
-        goto err_free_priv_data;
+        goto err;
     }
 
     self->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
@@ -118,7 +116,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
     if (status == UCS_ERR_NO_RESOURCE) {
         goto add_to_pending;
     } else if (status != UCS_OK) {
-        goto err_free_priv_data;
+        goto err;
     }
 
     self->is_on_pending = 0;
@@ -130,7 +128,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
      * All endpoints share the interface's event_channel. */
     status = uct_rdmacm_ep_resolve_addr(self);
     if (status != UCS_OK) {
-        goto err_free_priv_data;
+        goto err;
     }
 
     goto out;
@@ -147,8 +145,6 @@ out:
                                 ip_port_str, UCS_SOCKADDR_STRING_LEN));
     return UCS_OK;
 
-err_free_priv_data:
-    ucs_free(self->priv_data);
 err:
     return status;
 }
@@ -179,35 +175,42 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
         ucs_debug("ep destroy: cm_id %p", cm_id_ctx->cm_id);
     }
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
-
-    ucs_free(self->priv_data);
 }
 
 UCS_CLASS_DEFINE(uct_rdmacm_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t, uct_iface_t*,
                           const ucs_sock_addr_t *,
-                          const void *, size_t);
+                          uct_sockaddr_priv_pack_callback_t, void *,
+                          uint32_t);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rdmacm_ep_t, uct_ep_t);
 
 static unsigned uct_rdmacm_client_err_handle_progress(void *arg)
 {
-    uct_rdmacm_ep_t *ep = arg;
-    ucs_trace_func("err_handle ep=%p",ep);
+    uct_rdmacm_ep_t *rdmacm_ep = arg;
+    ucs_trace_func("err_handle ep=%p", rdmacm_ep);
 
-    ep->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
-    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), &ep->super.super,
-                      ep->super.super.iface, UCS_ERR_IO_ERROR);
+    rdmacm_ep->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
+    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), &rdmacm_ep->super.super,
+                      rdmacm_ep->super.super.iface, rdmacm_ep->status);
+
     return 0;
 }
 
-void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep)
+void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t status)
 {
     uct_rdmacm_iface_t *rdmacm_iface = ucs_derived_of(iface, uct_rdmacm_iface_t);
-    uct_rdmacm_ep_t *rdmacm_ep = ucs_derived_of(ep, uct_rdmacm_ep_t);
+    uct_rdmacm_ep_t *rdmacm_ep       = ucs_derived_of(ep, uct_rdmacm_ep_t);
 
-    /* invoke the error handling flow from the main thread */
-    uct_worker_progress_register_safe(&rdmacm_iface->super.worker->super,
-                                      uct_rdmacm_client_err_handle_progress,
-                                      rdmacm_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &rdmacm_ep->slow_prog_id);
+    if (rdmacm_iface->super.err_handler_flags == UCT_CB_FLAG_SYNC) {
+        rdmacm_ep->status = status;
+
+        /* invoke the error handling flow from the main thread */
+        uct_worker_progress_register_safe(&rdmacm_iface->super.worker->super,
+                                          uct_rdmacm_client_err_handle_progress,
+                                          rdmacm_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                          &rdmacm_ep->slow_prog_id);
+    } else {
+        uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), &rdmacm_ep->super.super,
+                          &rdmacm_iface->super.super, status);
+    }
 }
