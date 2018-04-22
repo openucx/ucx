@@ -147,7 +147,7 @@ static void uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
                                     hdr->length);
     if (status != UCS_OK) {
         rdma_reject(event->id, NULL, 0);
-        return;
+        goto out;
     }
 
     /* The server will not send any reply data back to the client */
@@ -158,9 +158,10 @@ static void uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
         ucs_error("rdma_accept(to addr=%s) failed: %m.",
                   ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
         rdma_reject(event->id, NULL, 0);
-        return;
+        goto out;
     }
 
+out:
     /* Destroy the new rdma_cm_id which was created when receiving the
      * RDMA_CM_EVENT_CONNECT_REQUEST event. (this is not the listening rdma_cm_id)*/
     rdma_destroy_id(event->id);
