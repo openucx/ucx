@@ -81,17 +81,17 @@ public:
 
 #if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
     void test_eth_port(struct ibv_port_attr port_attr, struct ibv_context *ibctx,
-                       unsigned port_num, uct_ib_iface_config_t *ib_config,
-                       ib_port_desc_t *port_desc) {
+                       unsigned port_num, ib_port_desc_t *port_desc) {
 
         union ibv_gid gid;
+        uct_ib_md_config_t *md_config = ucs_derived_of(m_md_config, uct_ib_md_config_t);
 
         /* no pkeys for Ethernet */
         port_desc->have_pkey = 0;
 
         /* check the gid index */
-        if (ibv_query_gid(ibctx, port_num, ib_config->gid_index, &gid) != 0) {
-            UCS_TEST_ABORT("Failed to query gid (index=" << ib_config->gid_index << ")");
+        if (ibv_query_gid(ibctx, port_num, md_config->ext.gid_index, &gid) != 0) {
+            UCS_TEST_ABORT("Failed to query gid (index=" << md_config->ext.gid_index << ")");
         }
         if (uct_ib_device_is_gid_raw_empty(gid.raw)) {
             port_desc->have_valid_gid_idx = 0;
@@ -113,7 +113,6 @@ public:
         struct ibv_device **device_list;
         struct ibv_context *ibctx = NULL;
         struct ibv_port_attr port_attr;
-        uct_ib_iface_config_t *ib_config = ucs_derived_of(m_iface_config, uct_ib_iface_config_t);
         int num_devices, i, found = 0;
 
         /* get device list */
@@ -147,7 +146,7 @@ public:
         lmc_find(port_attr, port_desc);
 
         if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
-            test_eth_port(port_attr, ibctx, port_num, ib_config, port_desc);
+            test_eth_port(port_attr, ibctx, port_num, port_desc);
             goto out;
         }
 
@@ -281,7 +280,7 @@ UCS_TEST_P(test_uct_ib, non_default_lmc, "IB_LID_PATH_BITS=1")
 }
 
 #if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
-UCS_TEST_P(test_uct_ib, non_default_gid_idx, "IB_GID_INDEX=1")
+UCS_TEST_P(test_uct_ib, non_default_gid_idx, "GID_INDEX=1")
 {
     ib_port_desc_t *port_desc;
 
