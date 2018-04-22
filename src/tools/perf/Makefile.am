@@ -14,6 +14,9 @@ else
 ucx_perftest_CC = $(CC)
 endif
 
+# override CXXFLAGS to link C++ code with C linker
+CXXFLAGS += -nostdlib -fno-exceptions -fno-rtti
+
 perftestdir = $(pkgdatadir)/perftest
 dist_perftest_DATA = \
 	$(top_srcdir)/contrib/ucx_perftest_config/msg_pow2 \
@@ -41,7 +44,6 @@ libucxperf_la_LDFLAGS = \
 	$(RTE_LDFLAGS) \
 	$(OPENMP_CFLAGS)
 libucxperf_la_CXXFLAGS = \
-	-nostdlib -fno-exceptions -fno-rtti \
 	$(BASE_CXXFLAGS) \
 	$(OPENMP_CFLAGS)
 libucxperf_la_CFLAGS = \
