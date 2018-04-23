@@ -170,6 +170,7 @@ struct ucp_request {
                     uct_atomic_op_t       uct_op;      /* Requested UCT AMO */
                     ucp_rkey_h            rkey;        /* Remote memory key */
                     uint64_t              value;
+                    size_t                size;
                     void                  *result;
                 } amo;
 
