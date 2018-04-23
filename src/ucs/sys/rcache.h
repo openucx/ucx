@@ -18,6 +18,7 @@
 #include <ucs/datastruct/mpool.h>
 #include <ucs/stats/stats_fwd.h>
 #include <sys/mman.h>
+#include <pthread.h>
 
 
 #define UCS_RCACHE_PROT_FMT "%c%c"

@@ -18,7 +18,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/sys/string.h>
-#include <sys/poll.h>
+#include <poll.h>
 #include <sys/eventfd.h>
 
 

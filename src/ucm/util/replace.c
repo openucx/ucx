@@ -23,8 +23,9 @@
 
 #define MAP_FAILED ((void*)-1)
 
-pthread_mutex_t ucm_reloc_get_orig_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
-pthread_t volatile ucm_reloc_get_orig_thread = -1;
+pthread_mutex_t ucm_reloc_get_orig_lock = PTHREAD_MUTEX_INITIALIZER;
+
+pthread_t volatile ucm_reloc_get_orig_thread = PTHREAD_T_NULL;
 
 UCM_DEFINE_REPLACE_FUNC(mmap,   void*, MAP_FAILED, void*, size_t, int, int, int, off_t)
 UCM_DEFINE_REPLACE_FUNC(munmap, int,   -1,         void*, size_t)
@@ -82,3 +83,12 @@ UCM_OVERRIDE_FUNC(cudaHostUnregister,        cudaError_t)
 #endif
 
 #endif
+
+void UCS_F_CTOR ucm_reloc_get_orig_lock_initializer()
+{
+    pthread_mutexattr_t mutattr;
+    pthread_mutexattr_init(&mutattr);
+    pthread_mutexattr_settype(&mutattr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&ucm_reloc_get_orig_lock, &mutattr);
+    pthread_mutexattr_destroy(&mutattr);
+}

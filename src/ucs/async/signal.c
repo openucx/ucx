@@ -101,10 +101,27 @@ ucs_async_signal_set_fd_owner(pid_t dest_tid, int fd)
 #endif
 }
 
+static int
+ucs_async_signal_sys_timer_create_portable(clockid_t clk,
+                                           struct ksigevent *restrict evp,
+                                           timer_t *restrict res)
+{
+    int timerid;
+
+    if (syscall(SYS_timer_create, clk, &evp, &timerid) < 0) {
+        timerid = -1;
+    }
+    if (timerid < 0) {
+        return -1;
+    }
+    *res = (void *)(intptr_t)timerid;
+    return 0;
+}
+
 static ucs_status_t
 ucs_async_signal_sys_timer_create(int uid, pid_t tid, timer_t *sys_timer_id)
 {
-    struct sigevent ev;
+    struct ksigevent ev;
     timer_t timer;
     int ret;
 
@@ -116,7 +133,7 @@ ucs_async_signal_sys_timer_create(int uid, pid_t tid, timer_t *sys_timer_id)
     ev.sigev_signo           = ucs_global_opts.async_signo;
     ev.sigev_value.sival_int = uid; /* user parameter to timer */
     ev._sigev_un._tid        = tid; /* target thread */
-    ret = timer_create(CLOCK_REALTIME, &ev, &timer);
+    ret = ucs_async_signal_sys_timer_create_portable(CLOCK_REALTIME, &ev, &timer);
     if (ret < 0) {
         ucs_error("failed to create an interval timer: %m");
         return UCS_ERR_INVALID_PARAM;

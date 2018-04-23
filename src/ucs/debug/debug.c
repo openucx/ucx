@@ -18,7 +18,9 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <sys/wait.h>
-#include <execinfo.h>
+#ifdef HAVE_EXECINFO_H
+#  include <execinfo.h>
+#endif
 #include <dlfcn.h>
 #include <link.h>
 #include <dirent.h>
@@ -120,8 +122,9 @@ static stack_t  ucs_debug_signal_stack    = {NULL, 0, 0};
 khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
 
 
+#ifdef HAVE_EXECINFO_H
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
-
+#endif
 
 static char *ucs_debug_strdup(const char *str)
 {
@@ -544,12 +547,15 @@ ucs_status_t ucs_debug_lookup_address(void *address, ucs_debug_address_info_t *i
 
 void ucs_debug_print_backtrace(FILE *stream, int strip)
 {
+#ifdef HAVE_EXECINFO_H
     char **symbols;
     void *addresses[BACKTRACE_MAX];
     int count, i, n;
+#endif
 
     fprintf(stream, "==== backtrace ====\n");
 
+#ifdef HAVE_EXECINFO_H
     count = backtrace(addresses, BACKTRACE_MAX);
     symbols = backtrace_symbols(addresses, count);
     n = 0;
@@ -560,6 +566,7 @@ void ucs_debug_print_backtrace(FILE *stream, int strip)
         }
     }
     free(symbols);
+#endif
 
     fprintf(stream, "===================\n");
 }
@@ -1128,6 +1135,7 @@ static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
     }
 }
 
+#ifdef HAVE_EXECINFO_H
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
 {
     return !strcmp(symbol, "ucs_handle_error") ||
@@ -1145,6 +1153,7 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
            (strstr(symbol, "_L_unlock_") == symbol) ||
            (address == ucs_debug_signal_restorer);
 }
+#endif
 
 static struct dl_address_search *ucs_debug_get_lib_info()
 {

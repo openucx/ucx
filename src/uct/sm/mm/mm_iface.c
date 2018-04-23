@@ -14,7 +14,7 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
-#include <sys/poll.h>
+#include <poll.h>
 
 
 /* Maximal number of events to clear from the signaling pipe in single call */
