@@ -189,12 +189,14 @@ public:
              * from the error handling flow - case of a long worker address or
              * transport doesn't support the error handling requirement */
             /* TODO: once large worker address is supported, no need for skip */
-            if ((ucp_request_check_status(send_req) == UCS_ERR_BUFFER_TOO_SMALL) ||
-                (ucp_request_check_status(send_req) == UCS_ERR_UNREACHABLE)) {
+            if (ucp_request_check_status(send_req) == UCS_ERR_BUFFER_TOO_SMALL) {
                 ucp_request_free(send_req);
-                UCS_TEST_SKIP_R("Skipping due to too long worker address error "
-                                "or an unreachable destination");
+                UCS_TEST_SKIP_R("Skipping due to too long worker address error");
+            } else if (ucp_request_check_status(send_req) == UCS_ERR_UNREACHABLE) {
+                ucp_request_free(send_req);
+                UCS_TEST_SKIP_R("Skipping due an unreachable destination");
             }
+
             ucp_request_free(send_req);
         }
 
@@ -337,10 +339,8 @@ class test_ucp_sockaddr_with_wakeup : public test_ucp_sockaddr {
 public:
 
     static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features     = UCP_FEATURE_TAG |
-                              UCP_FEATURE_WAKEUP;
+        ucp_params_t params = test_ucp_sockaddr::get_ctx_params();
+        params.features    |= UCP_FEATURE_WAKEUP;
         return params;
     }
 };
