@@ -56,6 +56,7 @@ typedef struct uct_ib_md_ext_config {
         size_t               max_size;     /**< Maximal memory region size for ODP */
     } odp;
 
+    unsigned                 gid_index;    /**< IB GID index to use  */
 } uct_ib_md_ext_config_t;
 
 
@@ -85,6 +86,8 @@ typedef struct uct_ib_md {
         uct_ib_device_spec_t *specs;    /* Custom device specifications */
         unsigned             count;     /* Number of custom devices */
     } custom_devices;
+    int                      check_subnet_filter;
+    uint64_t                 subnet_filter;
 } uct_ib_md_t;
 
 
@@ -107,6 +110,7 @@ typedef struct uct_ib_md_config {
 
     UCS_CONFIG_STRING_ARRAY_FIELD(spec) custom_devices; /**< Custom device specifications */
 
+    char                     *subnet_prefix; /**< Filter of subnet_prefix for IB ports */
 } uct_ib_md_config_t;
 
 

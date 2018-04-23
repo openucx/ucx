@@ -35,7 +35,8 @@ public:
         create_entity();
 
         /* try to connect the dummy entities to check if the tested transport
-         * can support the requested features from ucp_params */
+         * can support the requested features from ucp_params.
+         * regular flow is used here (not client-server) */
         wrap_errors();
         sender().connect(&receiver(), ep_params, 0, 0);
         restore_errors();
@@ -44,6 +45,25 @@ public:
         ucp_test::cleanup();
         /* create valid sender and receiver entities to be used in the test */
         ucp_test::init();
+    }
+
+    static ucs_log_func_rc_t
+    detect_error_logger(const char *file, unsigned line, const char *function,
+                                   ucs_log_level_t level, const char *message, va_list ap)
+    {
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            std::string err_str = format_message(message, ap);
+            if (strstr(err_str.c_str(), "worker address information")) {
+                UCS_TEST_MESSAGE << err_str;
+                return UCS_LOG_FUNC_RC_STOP;
+            }
+        }
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    static void detect_error()
+    {
+        ucs_log_push_handler(detect_error_logger);
     }
 
     void get_listen_addr(struct sockaddr_in *listen_addr) {
@@ -84,7 +104,11 @@ public:
 
     static void scomplete_cb(void *req, ucs_status_t status)
     {
-        ASSERT_UCS_OK(status);
+        /* TODO: once large worker address is supported, only UCS_OK should be
+         * an acceptable status */
+        if ((status != UCS_OK) && (status != UCS_ERR_BUFFER_TOO_SMALL)) {
+            UCS_TEST_ABORT("Error: " << ucs_status_string(status));
+        }
     }
 
     static void rcomplete_cb(void *req, ucs_status_t status,
@@ -128,9 +152,14 @@ public:
         EXPECT_GE(ret, 1);
     }
 
-    void check_events(ucp_worker_h send_worker, ucp_worker_h recv_worker, bool wakeup)
+    void check_events(ucp_worker_h send_worker, ucp_worker_h recv_worker,
+                      bool wakeup, void *req)
     {
         if (progress()) {
+            return;
+        }
+
+        if ((req != NULL) && (ucp_request_check_status(req) == UCS_ERR_BUFFER_TOO_SMALL)) {
             return;
         }
 
@@ -150,7 +179,15 @@ public:
             ASSERT_UCS_OK(UCS_PTR_STATUS(send_req));
         } else {
             while (!ucp_request_is_completed(send_req)) {
-                check_events(from.worker(), to.worker(), wakeup);
+                check_events(from.worker(), to.worker(), wakeup, send_req);
+            }
+            /* Check if the error was completed due to the error handling flow.
+             * If so, skip the test since a valid error occurred - the one expected
+             * from the error handling flow - case of a long worker address */
+            /* TODO: once large worker address is supported, no need for skip */
+            if (ucp_request_check_status(send_req) == UCS_ERR_BUFFER_TOO_SMALL) {
+                ucp_request_free(send_req);
+                UCS_TEST_SKIP_R("Skipping due to too long worker address error");
             }
             ucp_request_free(send_req);
         }
@@ -163,7 +200,7 @@ public:
             ASSERT_UCS_OK(UCS_PTR_STATUS(recv_req));
         } else {
             while (!ucp_request_is_completed(recv_req)) {
-                check_events(from.worker(), to.worker(), wakeup);
+                check_events(from.worker(), to.worker(), wakeup, recv_req);
             }
             ucp_request_free(recv_req);
         }
@@ -176,7 +213,7 @@ public:
         ucs_time_t time_limit = ucs_get_time() + ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
 
         while ((receiver().get_num_eps() == 0) && (ucs_get_time() < time_limit)) {
-            check_events(sender().worker(), receiver().worker(), wakeup);
+            check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
     }
 
@@ -184,7 +221,17 @@ public:
     {
         ucp_ep_params_t ep_params = ucp_test::get_ep_params();
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
-                                     UCP_EP_PARAM_FIELD_SOCK_ADDR;
+                                     UCP_EP_PARAM_FIELD_SOCK_ADDR |
+                                     UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                     UCP_EP_PARAM_FIELD_ERR_HANDLER |
+                                     UCP_EP_PARAM_FIELD_USER_DATA;
+        /* TODO The error handling requirement is needed since we need to take
+         * care of a case where the client gets an error.
+         * Error handling will be removed once a large worker address is handled. */
+        ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
+        ep_params.err_handler.cb   = err_handler_cb;
+        ep_params.err_handler.arg  = NULL;
+        ep_params.user_data        = reinterpret_cast<void*>(this);
         ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
         ep_params.sockaddr.addr    = connect_addr;
         ep_params.sockaddr.addrlen = sizeof(*connect_addr);
@@ -193,9 +240,11 @@ public:
 
     void connect_and_send_recv(struct sockaddr *connect_addr, bool wakeup)
     {
+        detect_error();
         client_ep_connect(connect_addr);
 
         tag_send_recv(sender(), receiver(), wakeup);
+        restore_errors();
 
         wait_for_server_ep(wakeup);
 
@@ -206,6 +255,7 @@ public:
     {
         struct sockaddr_in connect_addr;
         get_listen_addr(&connect_addr);
+        err_handler_count = 0;
 
         UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str((const struct sockaddr*)&connect_addr);
 
@@ -216,6 +266,13 @@ public:
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
         test_ucp_sockaddr *self = reinterpret_cast<test_ucp_sockaddr*>(arg);
         self->err_handler_count++;
+        /* The current expected errors are only from the err_handle test
+         * and from transports where the worker address is too long  */
+        /* TODO: once large worker address is supported, only UCS_ERR_UNREACHABLE
+         * should be handled here */
+        if ((status != UCS_ERR_UNREACHABLE) && (status != UCS_ERR_BUFFER_TOO_SMALL)) {
+            UCS_TEST_ABORT("Error: " << ucs_status_string(status));
+        }
     }
 
 protected:
@@ -235,6 +292,7 @@ UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
     struct sockaddr_in connect_addr, inaddr_any_listen_addr;
     get_listen_addr(&connect_addr);
     inaddr_any_addr(&inaddr_any_listen_addr, connect_addr.sin_port);
+    err_handler_count = 0;
 
     UCS_TEST_MESSAGE << "Testing " <<
                      ucs::sockaddr_to_str((const struct sockaddr*)&inaddr_any_listen_addr);
@@ -259,21 +317,8 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
     /* make the client try to connect to a non-existing port on the server side */
     listen_addr.sin_port = 1;
 
-    ucp_ep_params_t ep_params = ucp_test::get_ep_params();
-    ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
-                                 UCP_EP_PARAM_FIELD_SOCK_ADDR |
-                                 UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
-                                 UCP_EP_PARAM_FIELD_ERR_HANDLER |
-                                 UCP_EP_PARAM_FIELD_USER_DATA;
-    ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
-    ep_params.err_handler.cb   = err_handler_cb;
-    ep_params.err_handler.arg  = NULL;
-    ep_params.user_data        = reinterpret_cast<void*>(this);
-    ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
-    ep_params.sockaddr.addr    = (struct sockaddr*)&listen_addr;
-    ep_params.sockaddr.addrlen = sizeof(listen_addr);
     wrap_errors();
-    sender().connect(&receiver(), ep_params);
+    client_ep_connect((struct sockaddr*)&listen_addr);
     /* allow for the unreachable event to arrive before restoring errors */
     wait_for_flag(&err_handler_count);
     restore_errors();
@@ -303,17 +348,28 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup_for_rma_atomic) {
      * there is a lane for ucp-wireup (an am_lane should be created and used) */
     struct sockaddr_in connect_addr;
     get_listen_addr(&connect_addr);
+    err_handler_count = 0;
 
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str((const struct sockaddr*)&connect_addr);
 
     start_listener((const struct sockaddr*)&connect_addr);
 
+    wrap_errors();
     client_ep_connect((struct sockaddr*)&connect_addr);
+
+    /* allow the err_handler callback to be invoked if needed */
+    short_progress_loop();
+    if (err_handler_count == 1) {
+        UCS_TEST_SKIP_R("Skipping due to too long worker address error or no "
+                        "matching transport");
+    }
+    EXPECT_EQ(0, err_handler_count);
+    restore_errors();
 
     wait_for_server_ep(false);
 
     /* allow the connection establishment flow to complete */
     short_progress_loop();
- }
+}
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_with_rma_atomic)

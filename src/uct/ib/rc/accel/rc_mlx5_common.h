@@ -268,6 +268,28 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
                                     char *buffer, size_t max);
 
 static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_common_update_tx_res(uct_rc_iface_t *rc_iface, uct_ib_mlx5_txwq_t *txwq,
+                                 uct_rc_txqp_t *txqp, uint16_t hw_ci)
+{
+    int bb_num;
+
+    bb_num = uct_ib_mlx5_txwq_update_bb(txwq, hw_ci) - uct_rc_txqp_available(txqp);
+
+    /* Must always have positive number of released resources. The first completion
+     * will report bb_num=1 (because prev_sw_pi is initialized to -1) and all the rest
+     * report the amount of BBs the previous WQE has consumed.
+     */
+    ucs_assertv(bb_num > 0, "hw_ci=%d prev_sw_pi=%d available=%d bb_num=%d",
+                hw_ci, txwq->prev_sw_pi, txqp->available, bb_num);
+
+    uct_rc_txqp_available_add(txqp, bb_num);
+    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
+
+    rc_iface->tx.cq_available += bb_num;
+    ucs_assert(rc_iface->tx.cq_available <= rc_iface->config.tx_cq_len);
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txqp_process_tx_cqe(uct_rc_txqp_t *txqp, struct mlx5_cqe64 *cqe,
                                 uint16_t hw_ci)
 {
@@ -481,7 +503,7 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                              uct_ib_log_sge_t *log_sge)
 {
     struct mlx5_wqe_ctrl_seg *ctrl;
-    uint16_t posted;
+    uint16_t res_count;
 
     ctrl = txwq->curr;
 
@@ -503,12 +525,11 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                        ((opcode == MLX5_OPCODE_SEND) || (opcode == MLX5_OPCODE_SEND_IMM)) ?
                        uct_rc_mlx5_common_packet_dump : NULL);
 
-    posted = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size);
+    res_count = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size);
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
-        txwq->sig_pi = txwq->sw_pi - posted;
+        txwq->sig_pi = txwq->prev_sw_pi;
     }
-
-    uct_rc_txqp_posted(txqp, iface, posted, fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE);
+    uct_rc_txqp_posted(txqp, iface, res_count, fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE);
 }
 
 

@@ -557,7 +557,7 @@ UCS_TEST_P(test_tag, tag_cancel_noforce)
     short_progress_loop(200);
     ASSERT_UCS_OK(tag_cancel(receiver(), r_ctx, 0));
 
-    short_progress_loop();
+    wait_for_flag(&r_ctx.comp);
 
     // Check that completed callback has been called with CANCELED status
     // (because 0 was passed as force parameter to cancel).
