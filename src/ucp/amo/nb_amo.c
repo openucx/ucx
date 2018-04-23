@@ -13,20 +13,6 @@
 #include <ucs/debug/log.h>
 #include <inttypes.h>
 
-#define UCP_UCT_AMO_OPCODE_POST(_opcode, _op)                 \
-    if (ucs_unlikely((_opcode) >= UCP_ATOMIC_POST_OP_LAST)) { \
-        return UCS_ERR_INVALID_PARAM;                         \
-    } else {                                                  \
-        _op = ucp_uct_op_table[_opcode];                      \
-    }
-
-#define UCP_UCT_AMO_OPCODE_FETCH(_opcode, _op)                 \
-    if (ucs_unlikely((_opcode) >= UCP_ATOMIC_FETCH_OP_LAST)) { \
-        return UCS_ERR_INVALID_PARAM;                          \
-    } else {                                                   \
-        _op = ucp_uct_fop_table[_opcode];                      \
-    }
-
 static uct_atomic_op_t ucp_uct_op_table[] = {
     [UCP_ATOMIC_POST_OP_ADD]    = UCT_ATOMIC_OP_ADD,
     [UCP_ATOMIC_POST_OP_AND]    = UCT_ATOMIC_OP_AND,
@@ -49,7 +35,7 @@ static void ucp_amo_completed_single(uct_completion_t *self,
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
-    ucs_trace("Invoking completion on AMO request %p", req);
+    ucs_trace("invoking completion on AMO request %p", req);
     ucp_request_complete_send(req, status);
 }
 
@@ -134,11 +120,13 @@ _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_fetch)(uct_pending_req_t *_self)
     return ucp_amo_check_send_status(req, status);
 }
 
-static inline void init_amo_common(ucp_request_t *req, ucp_ep_h ep, uint64_t remote_addr,
-                                   ucp_rkey_h rkey, uint64_t value, size_t size)
+static inline void init_amo_common(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
+                                   uint64_t remote_addr, ucp_rkey_h rkey,
+                                   uint64_t value, size_t size)
 {
     req->flags                = 0;
     req->send.ep              = ep;
+    req->send.amo.uct_op      = op;
     req->send.amo.remote_addr = remote_addr;
     req->send.amo.rkey        = rkey;
     req->send.amo.value       = value;
@@ -148,28 +136,24 @@ static inline void init_amo_common(ucp_request_t *req, ucp_ep_h ep, uint64_t rem
 #endif
 }
 
-static inline ucs_status_t init_amo_fetch(ucp_request_t *req, ucp_ep_h ep, void *buffer,
-                                          ucp_atomic_fetch_op_t op, size_t op_size,
-                                          uint64_t remote_addr, ucp_rkey_h rkey, uint64_t value)
+static inline void init_amo_fetch(ucp_request_t *req, ucp_ep_h ep, void *buffer,
+                                  uct_atomic_op_t op, size_t op_size,
+                                  uint64_t remote_addr, ucp_rkey_h rkey, uint64_t value)
 {
-    init_amo_common(req, ep, remote_addr, rkey, value, op_size);
-    UCP_UCT_AMO_OPCODE_FETCH(op, req->send.amo.uct_op);
+    init_amo_common(req, ep, op, remote_addr, rkey, value, op_size);
     req->send.state.uct_comp.count  = 1;
     req->send.state.uct_comp.func   = ucp_amo_completed_single;
     req->send.amo.result            = buffer;
     req->send.uct.func              = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_fetch);
-    return UCS_OK;
 }
 
-static inline ucs_status_t init_amo_post(ucp_request_t *req, ucp_ep_h ep,
-                                         ucp_atomic_post_op_t op,
-                                         size_t op_size, uint64_t remote_addr,
-                                         ucp_rkey_h rkey, uint64_t value)
+static inline void init_amo_post(ucp_request_t *req, ucp_ep_h ep,
+                                 uct_atomic_op_t op,
+                                 size_t op_size, uint64_t remote_addr,
+                                 ucp_rkey_h rkey, uint64_t value)
 {
-    init_amo_common(req, ep, remote_addr, rkey, value, op_size);
-    UCP_UCT_AMO_OPCODE_POST(op, req->send.amo.uct_op);
+    init_amo_common(req, ep, op, remote_addr, rkey, value, op_size);
     req->send.uct.func = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_post);
-    return UCS_OK;
 }
 
 ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
@@ -178,10 +162,13 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
                                      ucp_send_callback_t cb)
 {
     ucp_request_t *req;
-    ucs_status_t status;
     ucs_status_ptr_t status_p;
 
     UCP_RMA_CHECK_ATOMIC_PTR(remote_addr, op_size);
+    if (ENABLE_PARAMS_CHECK && ucs_unlikely((opcode) >= UCP_ATOMIC_FETCH_OP_LAST)) {
+        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+    }
+
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
     req = ucp_request_get(ep->worker);
     if (ucs_unlikely(NULL == req)) {
@@ -189,13 +176,10 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
-    status = init_amo_fetch(req, ep, result, opcode, op_size, remote_addr, rkey, value);
-    if (UCS_STATUS_IS_ERR(status)) {
-        status_p = UCS_STATUS_PTR(status);
-        goto out;
-    }
+    init_amo_fetch(req, ep, result, ucp_uct_fop_table[opcode], op_size,
+                   remote_addr, rkey, value);
+
     status_p = ucp_amo_send_request(req, cb);
-out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return status_p;
 }
@@ -208,8 +192,11 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
     ucp_request_t *req;
     uct_atomic_op_t op;
 
-    UCP_UCT_AMO_OPCODE_POST(opcode, op);
+    if (ENABLE_PARAMS_CHECK && ucs_unlikely(opcode >= UCP_ATOMIC_POST_OP_LAST)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
 
+    op     = ucp_uct_op_table[opcode];
     status = ucp_rma_check_atomic(remote_addr, op_size);
     if (status != UCS_OK) {
         return status;
@@ -220,6 +207,7 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
     if (status != UCS_OK) {
         goto out;
     }
+
     if (op_size == sizeof(uint32_t)) {
         status = UCS_PROFILE_CALL(uct_ep_atomic32_post, ep->uct_eps[rkey->cache.amo_lane], op,
                                   (uint32_t)value, remote_addr, rkey->cache.amo_rkey);
@@ -230,6 +218,7 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
         status =  UCS_ERR_INVALID_PARAM;
         goto out;
     }
+
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
         req = ucp_request_get(ep->worker);
         if (ucs_unlikely(NULL == req)) {
@@ -237,11 +226,7 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
             goto out;
         }
 
-        status = init_amo_post(req, ep, opcode, op_size, remote_addr, rkey, value);
-        if (UCS_STATUS_IS_ERR(status)) {
-            ucp_request_put(req);
-            goto out;
-        }
+        init_amo_post(req, ep, op, op_size, remote_addr, rkey, value);
 
         status_p = ucp_amo_send_request(req, (ucp_send_callback_t)ucs_empty_function);
         if (UCS_PTR_IS_PTR(status_p)) {
