@@ -12,11 +12,6 @@
 #include <ucs/type/class.h>
 #include "cuda_ipc_md.h"
 
-
-#define UCT_CUDA_IPC_HASH_SIZE 256
-#define UCT_CUDA_IPC_PUT 0
-#define UCT_CUDA_IPC_GET 1
-
 typedef struct uct_cuda_ipc_rem_seg  uct_cuda_ipc_rem_seg_t;
 
 
@@ -36,7 +31,6 @@ typedef struct uct_cuda_ipc_ep_addr {
 
 typedef struct uct_cuda_ipc_ep {
     uct_base_ep_t          super;
-    uct_cuda_ipc_rem_seg_t *rem_segments_hash[UCT_CUDA_IPC_HASH_SIZE];
 } uct_cuda_ipc_ep_t;
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_cuda_ipc_ep_t, uct_ep_t, uct_iface_t*,

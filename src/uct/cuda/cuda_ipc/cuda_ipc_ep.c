@@ -12,6 +12,9 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
 
+#define UCT_CUDA_IPC_PUT 0
+#define UCT_CUDA_IPC_GET 1
+
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, uct_iface_t *tl_iface,
                            const uct_device_addr_t *dev_addr,
@@ -36,14 +39,6 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_ipc_ep_t, uct_ep_t);
 #define uct_cuda_ipc_trace_data(_remote_addr, _rkey, _fmt, ...)     \
     ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
                    (_rkey))
-
-#define UCT_CUDA_IPC_ZERO_LENGTH_POST(len)                      \
-    do {                                                        \
-        if (0 == len) {                                         \
-            ucs_trace_data("Zero length request: skip it");     \
-            return UCS_OK;                                      \
-        }                                                       \
-    } while(0);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_key_t *key,
@@ -101,18 +96,21 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr, const uc
                                   int direction)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_ipc_iface_t);
-    uct_cuda_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_cuda_ipc_ep_t);
-    uct_cuda_ipc_key_t *key = (uct_cuda_ipc_key_t *) rkey;
+    uct_cuda_ipc_ep_t *ep       = ucs_derived_of(tl_ep, uct_cuda_ipc_ep_t);
+    uct_cuda_ipc_key_t *key     = (uct_cuda_ipc_key_t *) rkey;
+    void *mapped_rem_addr       = NULL;
     ucs_status_t status;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
     CUstream stream;
     ucs_queue_head_t *outstanding_queue;
-    void *mapped_rem_addr  = NULL;
     CUdevice cu_device;
     CUdeviceptr dst;
     CUdeviceptr src;
 
-    UCT_CUDA_IPC_ZERO_LENGTH_POST(iov[0].length);
+    if (0 == iov[0].length) {
+        ucs_trace_data("Zero length request: skip it");
+        return UCS_OK;
+    }
 
     status = UCT_CUDADRV_FUNC(cuCtxGetDevice(&cu_device));
     if (UCS_OK != status) {
@@ -132,9 +130,9 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr, const uc
         }
     }
 
-    stream = iface->stream_d2d[key->dev_num];
+    stream            = iface->stream_d2d[key->dev_num];
     outstanding_queue = &iface->outstanding_d2d_event_q;
-    cuda_ipc_event = ucs_mpool_get(&iface->event_desc);
+    cuda_ipc_event    = ucs_mpool_get(&iface->event_desc);
 
     if (ucs_unlikely(cuda_ipc_event == NULL)) {
         ucs_error("Failed to allocate cuda_ipc event object");

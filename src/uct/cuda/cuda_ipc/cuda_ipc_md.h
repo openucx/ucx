@@ -14,8 +14,7 @@
 
 
 #define UCT_CUDA_IPC_MD_NAME      "cuda_ipc"
-#define CUDA_ERR_STRLEN           512
-#define UCT_CUDA_IPC_MAX_ALLOC_SZ (1 << 24)
+#define UCT_CUDA_IPC_MAX_ALLOC_SZ (1 << 30)
 
 
 extern uct_md_component_t uct_cuda_ipc_md_component;
