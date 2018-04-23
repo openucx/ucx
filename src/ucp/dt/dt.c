@@ -11,9 +11,11 @@
 #include <ucp/core/ucp_mm.h>
 #include <ucs/profile/profile.h>
 
-UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_mem_type_unpack(ucp_worker_h worker, void *buffer, const void *recv_data,
-                    size_t recv_length, uct_memory_type_t mem_type)
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_unpack,
+                 (worker, buffer, recv_data, recv_length, mem_type),
+                 ucp_worker_h worker, void *buffer, const void *recv_data,
+                 size_t recv_length, uct_memory_type_t mem_type)
 {
     ucp_ep_h ep         = worker->mem_type_ep[mem_type];
     ucp_md_map_t md_map = 0;
@@ -37,6 +39,7 @@ ucp_mem_type_unpack(ucp_worker_h worker, void *buffer, const void *recv_data,
         ucs_error("failed to register buffer with mem type domian");
         return status;
     }
+
     status = uct_ep_put_short(ep->uct_eps[lane], recv_data, recv_length,
                               (uint64_t)buffer, rkey_bundle.rkey);
     if (status != UCS_OK) {
@@ -48,9 +51,10 @@ ucp_mem_type_unpack(ucp_worker_h worker, void *buffer, const void *recv_data,
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE  ucs_status_t
-ucp_mem_type_pack(ucp_worker_h worker, void *dest, const void *src, size_t length,
-                  uct_memory_type_t mem_type)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_pack,
+                 (worker, dest, src, length, mem_type),
+                 ucp_worker_h worker, void *dest, const void *src, size_t length,
+                 uct_memory_type_t mem_type)
 {
     ucp_ep_h ep         = worker->mem_type_ep[mem_type];
     ucp_md_map_t md_map = 0;
@@ -73,6 +77,7 @@ ucp_mem_type_pack(ucp_worker_h worker, void *dest, const void *src, size_t lengt
         ucs_error("failed to register buffer with mem type domian");
         return status;
     }
+
     status = uct_ep_get_short(ep->uct_eps[lane], dest, length,
                               (uint64_t)src, rkey_bundle.rkey);
     if (status != UCS_OK) {
