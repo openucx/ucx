@@ -1045,6 +1045,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
                               ucp_context_h *context_p)
 {
     unsigned major_version, minor_version, release_number;
+    ucp_config_t *dfl_config = NULL;
     ucp_context_t *context;
     ucs_status_t status;
 
@@ -1057,11 +1058,19 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
                   major_version, minor_version, release_number);
     }
 
+    if (config == NULL) {
+        status = ucp_config_read(NULL, NULL, &dfl_config);
+        if (status != UCS_OK) {
+            goto err;
+        }
+        config = dfl_config;
+    }
+
     /* allocate a ucp context */
     context = ucs_calloc(1, sizeof(*context), "ucp context");
     if (context == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto err_release_config;
     }
 
     status = ucp_fill_config(context, params, config);
@@ -1084,6 +1093,10 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_free_resources;
     }
 
+    if (dfl_config != NULL) {
+        ucp_config_release(dfl_config);
+    }
+
     ucs_debug("created ucp context %p [%d mds %d tls] features 0x%lx", context,
               context->num_mds, context->num_tls, context->config.features);
 
@@ -1096,6 +1109,10 @@ err_free_config:
     ucp_free_config(context);
 err_free_ctx:
     ucs_free(context);
+err_release_config:
+    if (dfl_config != NULL) {
+        ucp_config_release(dfl_config);
+    }
 err:
     return status;
 }
