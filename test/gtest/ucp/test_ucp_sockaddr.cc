@@ -20,8 +20,7 @@ public:
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
         params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features     = UCP_FEATURE_TAG |
-                              UCP_FEATURE_WAKEUP;
+        params.features     = UCP_FEATURE_TAG;
         return params;
     }
 
@@ -53,7 +52,10 @@ public:
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
-            if (strstr(err_str.c_str(), "worker address information")) {
+            if ((strstr(err_str.c_str(), "worker address information")) ||
+                (strstr(err_str.c_str(), "no peer failure handler")) ||
+                /* when the "peer failure" error happens, it is followed by: */
+                (strstr(err_str.c_str(), "received event RDMA_CM_EVENT_UNREACHABLE"))) {
                 UCS_TEST_MESSAGE << err_str;
                 return UCS_LOG_FUNC_RC_STOP;
             }
@@ -104,9 +106,10 @@ public:
 
     static void scomplete_cb(void *req, ucs_status_t status)
     {
-        /* TODO: once large worker address is supported, only UCS_OK should be
-         * an acceptable status */
-        if ((status != UCS_OK) && (status != UCS_ERR_BUFFER_TOO_SMALL)) {
+        /* TODO: once large worker address is supported, and the error handling
+         * requirement is removed, only UCS_OK should be an acceptable status */
+        if ((status != UCS_OK) && (status != UCS_ERR_BUFFER_TOO_SMALL) &&
+            (status != UCS_ERR_UNREACHABLE)) {
             UCS_TEST_ABORT("Error: " << ucs_status_string(status));
         }
     }
@@ -183,12 +186,17 @@ public:
             }
             /* Check if the error was completed due to the error handling flow.
              * If so, skip the test since a valid error occurred - the one expected
-             * from the error handling flow - case of a long worker address */
+             * from the error handling flow - case of a long worker address or
+             * transport doesn't support the error handling requirement */
             /* TODO: once large worker address is supported, no need for skip */
             if (ucp_request_check_status(send_req) == UCS_ERR_BUFFER_TOO_SMALL) {
                 ucp_request_free(send_req);
                 UCS_TEST_SKIP_R("Skipping due to too long worker address error");
+            } else if (ucp_request_check_status(send_req) == UCS_ERR_UNREACHABLE) {
+                ucp_request_free(send_req);
+                UCS_TEST_SKIP_R("Skipping due an unreachable destination");
             }
+
             ucp_request_free(send_req);
         }
 
@@ -227,7 +235,9 @@ public:
                                      UCP_EP_PARAM_FIELD_USER_DATA;
         /* TODO The error handling requirement is needed since we need to take
          * care of a case where the client gets an error.
-         * Error handling will be removed once a large worker address is handled. */
+         * Error handling will be removed once a large worker address is handled.
+         * after that, transports that fail on lack of error handling support,
+         * shouldn't fail anymore */
         ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
         ep_params.err_handler.cb   = err_handler_cb;
         ep_params.err_handler.arg  = NULL;
@@ -268,8 +278,8 @@ public:
         self->err_handler_count++;
         /* The current expected errors are only from the err_handle test
          * and from transports where the worker address is too long  */
-        /* TODO: once large worker address is supported, only UCS_ERR_UNREACHABLE
-         * should be handled here */
+        /* TODO: once large worker address is supported, and the error handling
+         * requirement is removed, only UCS_ERR_UNREACHABLE should be handled here */
         if ((status != UCS_ERR_UNREACHABLE) && (status != UCS_ERR_BUFFER_TOO_SMALL)) {
             UCS_TEST_ABORT("Error: " << ucs_status_string(status));
         }
@@ -281,10 +291,6 @@ protected:
 
 UCS_TEST_P(test_ucp_sockaddr, listen) {
     listen_and_communicate(false);
-}
-
-UCS_TEST_P(test_ucp_sockaddr, wakeup) {
-    listen_and_communicate(true);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
@@ -327,6 +333,24 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
+
+
+class test_ucp_sockaddr_with_wakeup : public test_ucp_sockaddr {
+public:
+
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = test_ucp_sockaddr::get_ctx_params();
+        params.features    |= UCP_FEATURE_WAKEUP;
+        return params;
+    }
+};
+
+UCS_TEST_P(test_ucp_sockaddr_with_wakeup, wakeup) {
+    listen_and_communicate(true);
+}
+
+UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_with_wakeup)
+
 
 class test_ucp_sockaddr_with_rma_atomic : public test_ucp_sockaddr {
 public:
