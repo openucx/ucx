@@ -62,6 +62,5 @@ UCS_TEST_P(uct_amo_add_xor_test, xor64) {
     test_op<uint64_t, UCT_ATOMIC_OP_XOR>(xor_op<uint64_t>);
 }
 
-
 UCT_INSTANTIATE_TEST_CASE(uct_amo_add_xor_test)
 
