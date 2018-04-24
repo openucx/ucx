@@ -10,20 +10,10 @@
 class uct_amo_add_xor_test : public uct_amo_test {
 public:
 
-    ucs_status_t add32(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                       uint64_t *result, completion *comp) {
-        return uct_ep_atomic_add32(ep, worker.value, recvbuf.addr(), recvbuf.rkey());
-    }
-
-    ucs_status_t add64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                       uint64_t *result, completion *comp) {
-        return uct_ep_atomic_add64(ep, worker.value, recvbuf.addr(), recvbuf.rkey());
-    }
-
-    template <typename T>
-    void test_add(send_func_t send, T (*op)(T, T)) {
+    template <typename T, uct_atomic_op_t opcode>
+    void test_op(T (*op)(T, T)) {
         /*
-         * Method: Add may random values from multiple workers running at the same
+         * Method: Add/xor may random values from multiple workers running at the same
          * time. We expect the final result to be the sum/xor of all these values.
          */
 
@@ -44,7 +34,8 @@ public:
              }
         }
 
-        run_workers(send, recvbuf, add_vec, true);
+        run_workers(static_cast<send_func_t>(&uct_amo_test::atomic_op<T, opcode>),
+                    recvbuf, add_vec, true);
 
         wait_for_remote();
         EXPECT_EQ(exp_result, *(T*)recvbuf.ptr());
@@ -52,25 +43,23 @@ public:
 };
 
 UCS_TEST_P(uct_amo_add_xor_test, add32) {
-    check_caps(UCT_IFACE_FLAG_ATOMIC_ADD32);
-    test_add<uint32_t>(static_cast<send_func_t>(&uct_amo_add_xor_test::add32), add_op<uint32_t>);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP32);
+    test_op<uint32_t, UCT_ATOMIC_OP_ADD>(add_op<uint32_t>);
 }
 
 UCS_TEST_P(uct_amo_add_xor_test, add64) {
-    check_caps(UCT_IFACE_FLAG_ATOMIC_ADD64);
-    test_add<uint64_t>(static_cast<send_func_t>(&uct_amo_add_xor_test::add64), add_op<uint64_t>);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64);
+    test_op<uint64_t, UCT_ATOMIC_OP_ADD>(add_op<uint64_t>);
 }
 
 UCS_TEST_P(uct_amo_add_xor_test, xor32) {
     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP32);
-    test_add<uint32_t>(static_cast<send_func_t>(&uct_amo_test::atomic_op<uint32_t, UCT_ATOMIC_OP_XOR>),
-                       xor_op<uint32_t>);
+    test_op<uint32_t, UCT_ATOMIC_OP_XOR>(xor_op<uint32_t>);
 }
 
 UCS_TEST_P(uct_amo_add_xor_test, xor64) {
     check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP64);
-    test_add<uint64_t>(static_cast<send_func_t>(&uct_amo_test::atomic_op<uint64_t, UCT_ATOMIC_OP_XOR>),
-                       xor_op<uint64_t>);
+    test_op<uint64_t, UCT_ATOMIC_OP_XOR>(xor_op<uint64_t>);
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_amo_add_xor_test)
