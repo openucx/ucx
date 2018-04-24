@@ -132,6 +132,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      AM_CONDITIONAL([HAVE_PROFILING], [false])
      AM_CONDITIONAL([HAVE_UCM_PTMALLOC286], [false])
      AM_CONDITIONAL([HAVE_JAVA], [false])
+     AM_CONDITIONAL([HAVE_CXX11], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
