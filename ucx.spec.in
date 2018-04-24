@@ -51,7 +51,6 @@ Provides static libraries required for development with UCX.
            --disable-debug \
            --disable-assertions \
            --disable-params-check \
-           CXXFLAGS="%{optflags} -fno-exceptions" \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
