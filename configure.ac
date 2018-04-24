@@ -132,6 +132,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      AM_CONDITIONAL([HAVE_PROFILING], [false])
      AM_CONDITIONAL([HAVE_UCM_PTMALLOC286], [false])
      AM_CONDITIONAL([HAVE_JAVA], [false])
+     AM_CONDITIONAL([HAVE_CXX11], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
@@ -251,6 +252,7 @@ AC_CONFIG_LINKS([
                  debian/compat:debian/compat
                  debian/copyright:debian/copyright
                  debian/ucx.prerm:debian/ucx.prerm
+                 test/apps/sockaddr/run.sh:test/apps/sockaddr/run.sh
                  ])
 AC_CONFIG_FILES([
                  ucx.spec
@@ -268,6 +270,7 @@ AC_CONFIG_FILES([
                  src/tools/perf/Makefile
                  src/tools/profile/Makefile
                  test/apps/Makefile
+                 test/apps/sockaddr/Makefile
                  test/examples/Makefile
                  test/gtest/Makefile
                  test/mpi/Makefile
