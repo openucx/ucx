@@ -152,7 +152,8 @@ static size_t ucp_stream_pack_am_single_dt(void *dest, void *arg)
 
     ucs_assert(req->send.state.dt.offset == 0);
 
-    length = ucp_dt_pack(req->send.datatype, hdr + 1, req->send.buffer,
+    length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
+                         UCT_MD_MEM_TYPE_HOST, hdr + 1, req->send.buffer,
                          &req->send.state.dt, req->send.length);
     ucs_assert(length == req->send.length);
     return sizeof(*hdr) + length;
@@ -184,9 +185,9 @@ static size_t ucp_stream_pack_am_first_dt(void *dest, void *arg)
     ucs_debug("pack stream_am_first paylen %zu", length);
     ucs_assert(req->send.state.dt.offset == 0);
     ucs_assert(req->send.length > length);
-    return sizeof(*hdr) + ucp_dt_pack(req->send.datatype, hdr + 1,
-                                      req->send.buffer, &req->send.state.dt,
-                                      length);
+    return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, req->send.datatype,
+                                      UCT_MD_MEM_TYPE_HOST, hdr + 1, req->send.buffer,
+                                      &req->send.state.dt, length);
 }
 
 static size_t ucp_stream_pack_am_middle_dt(void *dest, void *arg)
@@ -199,9 +200,9 @@ static size_t ucp_stream_pack_am_middle_dt(void *dest, void *arg)
     length      = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
     ucs_debug("pack stream_am_middle paylen %zu offset %zu", length,
               req->send.state.dt.offset);
-    return sizeof(*hdr) + ucp_dt_pack(req->send.datatype, hdr + 1,
-                                      req->send.buffer, &req->send.state.dt,
-                                      length);
+    return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, req->send.datatype,
+                                      UCT_MD_MEM_TYPE_HOST, hdr + 1, req->send.buffer,
+                                      &req->send.state.dt, length);
 }
 
 static size_t ucp_stream_pack_am_last_dt(void *dest, void *arg)
@@ -212,7 +213,8 @@ static size_t ucp_stream_pack_am_last_dt(void *dest, void *arg)
     size_t              length = req->send.length - req->send.state.dt.offset;
 
     hdr->ep_ptr = ucp_request_get_dest_ep_ptr(req);
-    ret_length  = ucp_dt_pack(req->send.datatype, hdr + 1, req->send.buffer,
+    ret_length  = ucp_dt_pack(req->send.ep->worker,  req->send.datatype,
+                              UCT_MD_MEM_TYPE_HOST, hdr + 1, req->send.buffer,
                               &req->send.state.dt, length);
 
     ucs_debug("pack stream_am_last paylen %zu offset %zu", length,

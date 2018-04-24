@@ -281,7 +281,7 @@ build_cuda() {
     then
         if module_load dev/gdrcopy
         then
-            echo "==== Build with enable cuda ===="
+            echo "==== Build with enable cuda, gdr_copy ===="
             ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
             $MAKE clean
             $MAKE
@@ -292,12 +292,14 @@ build_cuda() {
             $MAKE
             $MAKE distclean
             module unload dev/gdrcopy
-        else
-            ../contrib/configure-devel --prefix=$ucx_inst --with-cuda
-            $MAKE clean
-            $MAKE
-            $MAKE distclean
         fi
+
+        echo "==== Build with enable cuda, w/o gdr_copy ===="
+        ../contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
+        $MAKE clean
+        $MAKE
+        $MAKE distclean
+
         module unload dev/cuda
         echo "ok 1 - build successful " >> build_cuda.tap
     else
@@ -541,6 +543,7 @@ run_ucx_perftest_mpi() {
 		echo "==== Running ucx_perf with cuda memory===="
 		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=y $AFFINITY $UCX_PERFTEST
 		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=n $AFFINITY $UCX_PERFTEST
+		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy $AFFINITY $UCX_PERFTEST
 	fi
 }
 

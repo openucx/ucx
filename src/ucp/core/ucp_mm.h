@@ -126,6 +126,15 @@ ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
 
 void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max);
 
+ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
+                                      size_t length, uct_memory_type_t mem_type,
+                                      unsigned md_index, uct_mem_h *memh,
+                                      ucp_md_map_t *md_map,
+                                      uct_rkey_bundle_t *rkey_bundle);
+
+void ucp_mem_type_unreg_buffers(ucp_worker_h worker, uct_memory_type_t mem_type,
+                                uct_mem_h *memh, ucp_md_map_t *md_map,
+                                uct_rkey_bundle_t *rkey_bundle);
 
 static UCS_F_ALWAYS_INLINE ucp_md_index_t
 ucp_memh_map2idx(ucp_md_map_t md_map, ucp_md_index_t md_idx)

@@ -627,9 +627,9 @@ static size_t ucp_rndv_pack_data(void *dest, void *arg)
     hdr->offset   = sreq->send.state.dt.offset;
     length        = ucp_ep_get_max_bcopy(sreq->send.ep, sreq->send.lane) - sizeof(*hdr);
 
-    return sizeof(*hdr) + ucp_dt_pack(sreq->send.datatype, hdr + 1,
-                                      sreq->send.buffer, &sreq->send.state.dt,
-                                      length);
+    return sizeof(*hdr) + ucp_dt_pack(sreq->send.ep->worker, sreq->send.datatype,
+                                      sreq->send.mem_type, hdr + 1, sreq->send.buffer,
+                                      &sreq->send.state.dt, length);
 }
 
 static size_t ucp_rndv_pack_data_last(void *dest, void *arg)
@@ -643,9 +643,9 @@ static size_t ucp_rndv_pack_data_last(void *dest, void *arg)
     length        = sreq->send.length - offset;
     hdr->offset   = offset;
 
-    return sizeof(*hdr) + ucp_dt_pack(sreq->send.datatype, hdr + 1,
-                                      sreq->send.buffer, &sreq->send.state.dt,
-                                      length);
+    return sizeof(*hdr) + ucp_dt_pack(sreq->send.ep->worker, sreq->send.datatype,
+                                      sreq->send.mem_type, hdr + 1, sreq->send.buffer,
+                                      &sreq->send.state.dt, length);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
