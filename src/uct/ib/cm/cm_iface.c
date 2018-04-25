@@ -12,6 +12,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/async/async.h>
 #include <ucs/debug/log.h>
+#include <infiniband/driver.h>
 #include <poll.h>
 
 
@@ -458,6 +459,18 @@ static ucs_status_t uct_cm_query_resources(uct_md_h md,
                                            uct_tl_resource_desc_t **resources_p,
                                            unsigned *num_resources_p)
 {
+    static const char *cm_sysfs_name = "class/infiniband_cm/abi_version";
+    char value[8];
+
+    if (ibv_read_sysfs_file(ibv_get_sysfs_path(), cm_sysfs_name,
+                            value, sizeof value) < 0) {
+        ucs_debug("failed to open %s/%s, disabling cm transport",
+                  ibv_get_sysfs_path(), cm_sysfs_name);
+        *num_resources_p = 0;
+        *resources_p     = NULL;
+        return UCS_OK;
+    }
+
     return uct_ib_device_query_tl_resources(&ucs_derived_of(md, uct_ib_md_t)->dev,
                                             "cm", UCT_IB_DEVICE_FLAG_LINK_IB,
                                             resources_p, num_resources_p);
