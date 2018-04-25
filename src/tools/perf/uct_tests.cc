@@ -213,29 +213,29 @@ public:
             }
         case UCX_PERF_CMD_ADD:
             if (length == sizeof(uint32_t)) {
-                return uct_ep_atomic_add32(ep, sn - prev_sn, remote_addr, rkey);
+                return uct_ep_atomic32_post(ep, UCT_ATOMIC_OP_ADD, sn - prev_sn, remote_addr, rkey);
             } else if (length == sizeof(uint64_t)) {
-                return uct_ep_atomic_add64(ep, sn - prev_sn, remote_addr, rkey);
+                return uct_ep_atomic64_post(ep, UCT_ATOMIC_OP_ADD, sn - prev_sn, remote_addr, rkey);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_FADD:
             if (length == sizeof(uint32_t)) {
-                return uct_ep_atomic_fadd32(ep, sn - prev_sn, remote_addr, rkey,
-                                            (uint32_t*)buffer, comp);
+                return uct_ep_atomic32_fetch(ep, UCT_ATOMIC_OP_ADD, sn - prev_sn,
+                                             (uint32_t*)buffer, remote_addr, rkey, comp);
             } else if (length == sizeof(uint64_t)) {
-                return uct_ep_atomic_fadd64(ep, sn - prev_sn, remote_addr, rkey,
-                                            (uint64_t*)buffer, comp);
+                return uct_ep_atomic64_fetch(ep, UCT_ATOMIC_OP_ADD, sn - prev_sn,
+                                             (uint64_t*)buffer, remote_addr, rkey, comp);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_SWAP:
             if (length == sizeof(uint32_t)) {
-                return uct_ep_atomic_swap32(ep, sn, remote_addr, rkey,
-                                            (uint32_t*)buffer, comp);
+                return uct_ep_atomic32_fetch(ep, UCT_ATOMIC_OP_SWAP, sn,
+                                             (uint32_t*)buffer, remote_addr, rkey, comp);
             } else if (length == sizeof(uint64_t)) {
-                return uct_ep_atomic_swap64(ep, sn, remote_addr, rkey,
-                                            (uint64_t*)buffer, comp);
+                return uct_ep_atomic64_fetch(ep, UCT_ATOMIC_OP_SWAP, sn,
+                                             (uint64_t*)buffer, remote_addr, rkey, comp);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
