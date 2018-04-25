@@ -58,9 +58,9 @@ public:
     public:
         worker(uct_fence_test* test, send_func_t send, recv_func_t recv,
                const mapped_buffer& recvbuf,
-               const entity& entity, uint64_t initial_value, uint32_t* error) :
-            test(test), value(initial_value), result32(0), result64(0),
-            error(error), running(true), m_send(send), m_recv(recv),
+               const entity& entity, uct_atomic_op_t op, uint32_t* error) :
+            test(test), value(0), result32(0), result64(0),
+            error(error), running(true), op(op), m_send(send), m_recv(recv),
             m_recvbuf(recvbuf), m_entity(entity) {
             pthread_create(&m_thread, NULL, run, reinterpret_cast<void*>(this));
         }
@@ -81,19 +81,46 @@ public:
             running = false;
         }
 
+        uint64_t atomic_op_val(uct_atomic_op_t op, uint64_t v1, uint64_t v2)
+        {
+            switch (op) {
+            case UCT_ATOMIC_OP_ADD:
+                return v1 + v2;
+            case UCT_ATOMIC_OP_AND:
+                return v1 & v2;
+            case UCT_ATOMIC_OP_OR:
+                return v1 | v2;
+            case UCT_ATOMIC_OP_XOR:
+                return v1 ^ v2;
+            default:
+                return 0;
+            }
+        }
+
         uct_fence_test* const test;
         uint64_t value;
         uint32_t result32;
         uint64_t result64;
         uint32_t* error;
         bool running;
+        uct_atomic_op_t op;
 
     private:
         void run() {
             uct_completion_t uct_comp;
             uct_comp.func = completion_cb;
             for (unsigned i = 0; i < uct_fence_test::count(); i++) {
-                uct_comp.count = 1;
+                uint64_t local_val  = ucs::rand();
+                uint64_t remote_val = ucs::rand();
+                uct_comp.count      = 1;
+
+                if (m_recvbuf.length() == sizeof(uint32_t)) {
+                    *(uint32_t*)m_recvbuf.ptr() = remote_val;
+                } else {
+                    *(uint64_t*)m_recvbuf.ptr() = remote_val;
+                }
+                value = local_val;
+
                 (test->*m_send)(m_entity.ep(0), *this, m_recvbuf);
                 uct_ep_fence(m_entity.ep(0), 0);
                 (test->*m_recv)(m_entity.ep(0), *this,
@@ -103,7 +130,7 @@ public:
                 uint64_t result = (m_recvbuf.length() == sizeof(uint32_t)) ?
                                     result32 : result64;
 
-                if (result != (uint64_t)(i+1))
+                if (result != atomic_op_val(op, local_val, remote_val))
                     (*error)++;
 
                 // reset for next loop
@@ -119,39 +146,40 @@ public:
         pthread_t m_thread;
     };
 
+    template <uct_atomic_op_t OP>
     void run_workers(send_func_t send, recv_func_t recv,
-                     const mapped_buffer& recvbuf,
-                     uint64_t initial_value, uint32_t* error) {
+                     const mapped_buffer& recvbuf, uint32_t* error) {
         ucs::ptr_vector<worker> m_workers;
         m_workers.clear();
         m_workers.push_back(new worker(this, send, recv, recvbuf,
-                                       sender(), initial_value, error));
+                                       sender(), OP, error));
         m_workers.at(0).join();
         m_workers.clear();
     }
 
-    ucs_status_t add32(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf) {
-        return uct_ep_atomic_add32(ep, worker.value, recvbuf.addr(), recvbuf.rkey());
+    template <typename T, uct_atomic_op_t OP>
+    ucs_status_t atomic_op(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf) {
+        if (sizeof(T) == sizeof(uint32_t)) {
+            return uct_ep_atomic32_post(ep, OP, worker.value, recvbuf.addr(), recvbuf.rkey());
+        } else {
+            return uct_ep_atomic64_post(ep, OP, worker.value, recvbuf.addr(), recvbuf.rkey());
+        }
     }
 
-    ucs_status_t add64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf) {
-        return uct_ep_atomic_add64(ep, worker.value, recvbuf.addr(), recvbuf.rkey());
+    template <typename T, uct_atomic_op_t OP>
+    ucs_status_t atomic_fop(uct_ep_h ep, worker& worker,
+                            const mapped_buffer& recvbuf, uct_completion_t *comp) {
+        if (sizeof(T) == sizeof(uint32_t)) {
+            return uct_ep_atomic32_fetch(ep, OP, 0, &worker.result32,
+                                         recvbuf.addr(), recvbuf.rkey(), comp);
+        } else {
+            return uct_ep_atomic64_fetch(ep, OP, 0, &worker.result64,
+                                         recvbuf.addr(), recvbuf.rkey(), comp);
+        }
     }
 
-    ucs_status_t fadd32(uct_ep_h ep, worker& worker,
-                        const mapped_buffer& recvbuf, uct_completion_t *comp) {
-        return uct_ep_atomic_fadd32(ep, 0, recvbuf.addr(), recvbuf.rkey(),
-                                    &worker.result32, comp);
-    }
-
-    ucs_status_t fadd64(uct_ep_h ep, worker& worker,
-                        const mapped_buffer& recvbuf, uct_completion_t *comp) {
-        return uct_ep_atomic_fadd64(ep, 0, recvbuf.addr(), recvbuf.rkey(),
-                                    &worker.result64, comp);
-    }
-
-    template <typename T>
-    void test_fence(send_func_t send, recv_func_t recv) {
+    template <typename T, uct_atomic_op_t OP>
+    void test_fence() {
 
         mapped_buffer recvbuf(sizeof(T), 0, receiver());
 
@@ -159,24 +187,60 @@ public:
 
         *(T*)recvbuf.ptr() = 0;
 
-        run_workers(send, recv, recvbuf, 1, &error);
+        run_workers<OP>(static_cast<send_func_t>(&uct_fence_test::atomic_op<T, OP>),
+                        static_cast<recv_func_t>(&uct_fence_test::atomic_fop<T, OP>),
+                        recvbuf, &error);
 
         EXPECT_EQ(error, (uint32_t)0);
     }
 };
 
 UCS_TEST_P(uct_fence_test, add32) {
-    check_caps(UCT_IFACE_FLAG_ATOMIC_ADD32);
-    check_caps(UCT_IFACE_FLAG_ATOMIC_FADD32);
-    test_fence<uint32_t>(static_cast<send_func_t>(&uct_fence_test::add32),
-                         static_cast<recv_func_t>(&uct_fence_test::fadd32));
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP32);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP32);
+    test_fence<uint32_t, UCT_ATOMIC_OP_ADD>();
 }
 
 UCS_TEST_P(uct_fence_test, add64) {
-    check_caps(UCT_IFACE_FLAG_ATOMIC_ADD64);
-    check_caps(UCT_IFACE_FLAG_ATOMIC_FADD64);
-    test_fence<uint64_t>(static_cast<send_func_t>(&uct_fence_test::add64),
-                         static_cast<recv_func_t>(&uct_fence_test::fadd64));
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64);
+    test_fence<uint64_t, UCT_ATOMIC_OP_ADD>();
+}
+
+UCS_TEST_P(uct_fence_test, and32) {
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), OP32);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), FOP32);
+    test_fence<uint32_t, UCT_ATOMIC_OP_AND>();
+}
+
+UCS_TEST_P(uct_fence_test, and64) {
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), OP64);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), FOP64);
+    test_fence<uint64_t, UCT_ATOMIC_OP_AND>();
+}
+
+UCS_TEST_P(uct_fence_test, or32) {
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), OP32);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), FOP32);
+    test_fence<uint32_t, UCT_ATOMIC_OP_OR>();
+}
+
+UCS_TEST_P(uct_fence_test, or64) {
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), OP64);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_OR), FOP64);
+    test_fence<uint64_t, UCT_ATOMIC_OP_OR>();
+}
+
+UCS_TEST_P(uct_fence_test, xor32) {
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP32);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP32);
+    test_fence<uint32_t, UCT_ATOMIC_OP_XOR>();
+}
+
+UCS_TEST_P(uct_fence_test, xor64) {
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP64);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP64);
+    test_fence<uint64_t, UCT_ATOMIC_OP_XOR>();
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_fence_test)
