@@ -284,43 +284,55 @@ UCS_TEST_P(test_uct_stats, get_zcopy)
                       lbuf->length());
 }
 
-#define TEST_STATS_ATOMIC_ADD(val) \
-UCS_TEST_P(test_uct_stats, atomic_add ## val) \
-{ \
-    ucs_status_t status; \
-\
-    check_caps(UCT_IFACE_FLAG_ATOMIC_ADD ## val); \
-    init_bufs(sizeof(uint##val##_t), sizeof(uint##val##_t)); \
-    status = uct_ep_atomic_add ## val (sender_ep(), 1, rbuf->addr(), rbuf->rkey()); \
-    EXPECT_UCS_OK(status); \
-    check_atomic_counters(); \
+#define TEST_STATS_ATOMIC_POST(_op, _val)                                      \
+UCS_TEST_P(test_uct_stats, atomic_post_ ## _op ## _val)                        \
+{                                                                              \
+    ucs_status_t status;                                                       \
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_ ## _op), OP ## _val);                 \
+    init_bufs(sizeof(uint##_val##_t), sizeof(uint##_val##_t));                 \
+    status = uct_ep_atomic ##_val##_post(sender_ep(), (UCT_ATOMIC_OP_ ## _op), \
+                                         1, rbuf->addr(), rbuf->rkey());       \
+    EXPECT_UCS_OK(status);                                                     \
+    check_atomic_counters();                                                   \
 }
 
-TEST_STATS_ATOMIC_ADD(32)
+TEST_STATS_ATOMIC_POST(ADD, 32)
+TEST_STATS_ATOMIC_POST(ADD, 64)
+TEST_STATS_ATOMIC_POST(AND, 32)
+TEST_STATS_ATOMIC_POST(AND, 64)
+TEST_STATS_ATOMIC_POST(OR,  32)
+TEST_STATS_ATOMIC_POST(OR,  64)
+TEST_STATS_ATOMIC_POST(XOR, 32)
+TEST_STATS_ATOMIC_POST(XOR, 64)
 
-TEST_STATS_ATOMIC_ADD(64)
 
-#define TEST_STATS_ATOMIC_FUNC(func, flag, val) \
-UCS_TEST_P(test_uct_stats, atomic_##func##val) \
-{ \
-    ucs_status_t status; \
-    uint##val##_t result; \
-\
-    check_caps(UCT_IFACE_FLAG_ATOMIC_ ## flag ## val); \
-    init_bufs(sizeof(result), sizeof(result)); \
-\
-    init_completion(); \
-    status = uct_ep_atomic_##func##val (sender_ep(), 1, rbuf->addr(), rbuf->rkey(), &result, &m_comp); \
-    wait_for_completion(status); \
-\
-    check_atomic_counters(); \
+#define TEST_STATS_ATOMIC_FETCH(_op, _val)                                              \
+UCS_TEST_P(test_uct_stats, atomic_fetch_## _op ## _val)                                 \
+{                                                                                       \
+    ucs_status_t status;                                                                \
+    uint##_val##_t result;                                                              \
+                                                                                        \
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_ ## _op), FOP ## _val);                         \
+    init_bufs(sizeof(result), sizeof(result));                                          \
+                                                                                        \
+    init_completion();                                                                  \
+    status = uct_ep_atomic##_val##_fetch(sender_ep(), (UCT_ATOMIC_OP_ ## _op), 1,       \
+                                         &result, rbuf->addr(), rbuf->rkey(), &m_comp); \
+    wait_for_completion(status);                                                        \
+                                                                                        \
+    check_atomic_counters();                                                            \
 }
 
-TEST_STATS_ATOMIC_FUNC(fadd, FADD, 32)
-TEST_STATS_ATOMIC_FUNC(fadd, FADD, 64)
-
-TEST_STATS_ATOMIC_FUNC(swap, SWAP, 32)
-TEST_STATS_ATOMIC_FUNC(swap, SWAP, 64)
+TEST_STATS_ATOMIC_FETCH(ADD,  32)
+TEST_STATS_ATOMIC_FETCH(ADD,  64)
+TEST_STATS_ATOMIC_FETCH(AND,  32)
+TEST_STATS_ATOMIC_FETCH(AND,  64)
+TEST_STATS_ATOMIC_FETCH(OR,   32)
+TEST_STATS_ATOMIC_FETCH(OR,   64)
+TEST_STATS_ATOMIC_FETCH(XOR,  32)
+TEST_STATS_ATOMIC_FETCH(XOR,  64)
+TEST_STATS_ATOMIC_FETCH(SWAP, 32)
+TEST_STATS_ATOMIC_FETCH(SWAP, 64)
 
 #define TEST_STATS_ATOMIC_CSWAP(val) \
 UCS_TEST_P(test_uct_stats, atomic_cswap##val) \
@@ -328,7 +340,7 @@ UCS_TEST_P(test_uct_stats, atomic_cswap##val) \
     ucs_status_t status; \
     uint##val##_t result; \
 \
-    check_caps(UCT_IFACE_FLAG_ATOMIC_CSWAP ## val); \
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP ## val); \
     init_bufs(sizeof(result), sizeof(result)); \
 \
     init_completion(); \
