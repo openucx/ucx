@@ -231,7 +231,7 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
         status_p = ucp_amo_send_request(req, (ucp_send_callback_t)ucs_empty_function);
         if (UCS_PTR_IS_PTR(status_p)) {
             ucp_request_release(status_p);
-            status = UCS_INPROGRESS;
+            status = UCS_OK;
         } else {
             status = UCS_PTR_STATUS(status_p);
         }
