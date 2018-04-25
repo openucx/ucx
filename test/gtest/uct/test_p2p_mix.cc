@@ -27,13 +27,18 @@ void uct_p2p_mix_test::completion_callback(uct_completion_t *comp, ucs_status_t 
     ASSERT_UCS_OK(status);
 }
 
-ucs_status_t uct_p2p_mix_test::swap64(const mapped_buffer &sendbuf,
-                                      const mapped_buffer &recvbuf,
-                                      uct_completion_t *comp)
+template <typename T, uct_atomic_op_t OP>
+ucs_status_t uct_p2p_mix_test::uct_p2p_mix_test::atomic_fop(const mapped_buffer &sendbuf,
+                                                            const mapped_buffer &recvbuf,
+                                                            uct_completion_t *comp)
 {
-    return uct_ep_atomic_swap64(sender().ep(0), 1, recvbuf.addr(),
-                                recvbuf.rkey(), (uint64_t*)sendbuf.ptr(),
-                                comp);
+    if (sizeof(T) == sizeof(uint32_t)) {
+        return uct_ep_atomic32_fetch(sender().ep(0), OP, 1, (uint32_t*)sendbuf.ptr(),
+                                     recvbuf.addr(), recvbuf.rkey(), comp);
+    } else {
+        return uct_ep_atomic64_fetch(sender().ep(0), OP, 1, (uint64_t*)sendbuf.ptr(),
+                                     recvbuf.addr(), recvbuf.rkey(), comp);
+    }
 }
 
 ucs_status_t uct_p2p_mix_test::cswap64(const mapped_buffer &sendbuf,
@@ -43,22 +48,6 @@ ucs_status_t uct_p2p_mix_test::cswap64(const mapped_buffer &sendbuf,
     return uct_ep_atomic_cswap64(sender().ep(0), 0, 1, recvbuf.addr(),
                                  recvbuf.rkey(), (uint64_t*)sendbuf.ptr(),
                                  comp);
-}
-
-ucs_status_t uct_p2p_mix_test::uct_p2p_mix_test::fadd32(const mapped_buffer &sendbuf,
-                                                        const mapped_buffer &recvbuf,
-                                                        uct_completion_t *comp)
-{
-    return uct_ep_atomic_fadd32(sender().ep(0), 1, recvbuf.addr(),
-                                recvbuf.rkey(), (uint32_t*)sendbuf.ptr(), comp);
-}
-
-ucs_status_t uct_p2p_mix_test::swap32(const mapped_buffer &sendbuf,
-                                      const mapped_buffer &recvbuf,
-                                      uct_completion_t *comp)
-{
-    return uct_ep_atomic_swap32(sender().ep(0), 1, recvbuf.addr(),
-                                recvbuf.rkey(), (uint32_t*)sendbuf.ptr(), comp);
 }
 
 ucs_status_t uct_p2p_mix_test::put_short(const mapped_buffer &sendbuf,
@@ -192,17 +181,38 @@ void uct_p2p_mix_test::init() {
         m_avail_send_funcs.push_back(&uct_p2p_mix_test::put_bcopy);
         m_send_size = ucs_min(m_send_size, sender().iface_attr().cap.put.max_bcopy);
     }
-    if (sender().iface_attr().cap.flags & UCT_IFACE_FLAG_ATOMIC_SWAP64) {
-        m_avail_send_funcs.push_back(&uct_p2p_mix_test::swap64);
-    }
-    if (sender().iface_attr().cap.flags & UCT_IFACE_FLAG_ATOMIC_CSWAP64) {
+    if (sender().iface_attr().cap.atomic64.fop_flags & UCS_BIT(UCT_ATOMIC_OP_CSWAP)) {
         m_avail_send_funcs.push_back(&uct_p2p_mix_test::cswap64);
     }
-    if (sender().iface_attr().cap.flags & UCT_IFACE_FLAG_ATOMIC_SWAP32) {
-        m_avail_send_funcs.push_back(&uct_p2p_mix_test::swap32);
+    if (sender().iface_attr().cap.atomic64.fop_flags & UCS_BIT(UCT_ATOMIC_OP_ADD)) {
+        m_avail_send_funcs.push_back(&uct_p2p_mix_test::atomic_fop<uint64_t, UCT_ATOMIC_OP_ADD>);
     }
-    if (sender().iface_attr().cap.flags & UCT_IFACE_FLAG_ATOMIC_FADD32) {
-        m_avail_send_funcs.push_back(&uct_p2p_mix_test::fadd32);
+    if (sender().iface_attr().cap.atomic32.fop_flags & UCS_BIT(UCT_ATOMIC_OP_ADD)) {
+        m_avail_send_funcs.push_back(&uct_p2p_mix_test::atomic_fop<uint32_t, UCT_ATOMIC_OP_ADD>);
+    }
+    if (sender().iface_attr().cap.atomic64.fop_flags & UCS_BIT(UCT_ATOMIC_OP_AND)) {
+        m_avail_send_funcs.push_back(&uct_p2p_mix_test::atomic_fop<uint64_t, UCT_ATOMIC_OP_AND>);
+    }
+    if (sender().iface_attr().cap.atomic32.fop_flags & UCS_BIT(UCT_ATOMIC_OP_AND)) {
+        m_avail_send_funcs.push_back(&uct_p2p_mix_test::atomic_fop<uint32_t, UCT_ATOMIC_OP_AND>);
+    }
+    if (sender().iface_attr().cap.atomic64.fop_flags & UCS_BIT(UCT_ATOMIC_OP_OR)) {
+        m_avail_send_funcs.push_back(&uct_p2p_mix_test::atomic_fop<uint64_t, UCT_ATOMIC_OP_OR>);
+    }
+    if (sender().iface_attr().cap.atomic32.fop_flags & UCS_BIT(UCT_ATOMIC_OP_OR)) {
+        m_avail_send_funcs.push_back(&uct_p2p_mix_test::atomic_fop<uint32_t, UCT_ATOMIC_OP_OR>);
+    }
+    if (sender().iface_attr().cap.atomic64.fop_flags & UCS_BIT(UCT_ATOMIC_OP_XOR)) {
+        m_avail_send_funcs.push_back(&uct_p2p_mix_test::atomic_fop<uint64_t, UCT_ATOMIC_OP_XOR>);
+    }
+    if (sender().iface_attr().cap.atomic32.fop_flags & UCS_BIT(UCT_ATOMIC_OP_XOR)) {
+        m_avail_send_funcs.push_back(&uct_p2p_mix_test::atomic_fop<uint32_t, UCT_ATOMIC_OP_XOR>);
+    }
+    if (sender().iface_attr().cap.atomic64.fop_flags & UCS_BIT(UCT_ATOMIC_OP_SWAP)) {
+        m_avail_send_funcs.push_back(&uct_p2p_mix_test::atomic_fop<uint64_t, UCT_ATOMIC_OP_SWAP>);
+    }
+    if (sender().iface_attr().cap.atomic32.fop_flags & UCS_BIT(UCT_ATOMIC_OP_SWAP)) {
+        m_avail_send_funcs.push_back(&uct_p2p_mix_test::atomic_fop<uint32_t, UCT_ATOMIC_OP_SWAP>);
     }
 }
 

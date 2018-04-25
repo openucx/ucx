@@ -28,21 +28,14 @@ protected:
 
     static void completion_callback(uct_completion_t *comp, ucs_status_t status);
 
-    ucs_status_t swap64(const mapped_buffer &sendbuf,
-                        const mapped_buffer &recvbuf,
-                        uct_completion_t *comp);
+    template <typename T, uct_atomic_op_t OP>
+    ucs_status_t atomic_fop(const mapped_buffer &sendbuf,
+                            const mapped_buffer &recvbuf,
+                            uct_completion_t *comp);
 
     ucs_status_t cswap64(const mapped_buffer &sendbuf,
                          const mapped_buffer &recvbuf,
                          uct_completion_t *comp);
-
-    ucs_status_t fadd32(const mapped_buffer &sendbuf,
-                        const mapped_buffer &recvbuf,
-                        uct_completion_t *comp);
-
-    ucs_status_t swap32(const mapped_buffer &sendbuf,
-                        const mapped_buffer &recvbuf,
-                        uct_completion_t *comp);
 
     ucs_status_t put_short(const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf,
