@@ -68,20 +68,8 @@ UCP_PROXY_EP_DEFINE_OP(ssize_t, am_bcopy, uint8_t, uct_pack_callback_t, void*,
                        unsigned)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, am_zcopy, uint8_t, const void*, unsigned,
                        const uct_iov_t*, size_t, unsigned, uct_completion_t*)
-UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic_add64, uint64_t, uint64_t,
-                       uct_rkey_t)
-UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic_fadd64, uint64_t, uint64_t,
-                       uct_rkey_t, uint64_t*, uct_completion_t*)
-UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic_swap64, uint64_t, uint64_t,
-                       uct_rkey_t, uint64_t*, uct_completion_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic_cswap64, uint64_t, uint64_t,
                        uint64_t, uct_rkey_t, uint64_t*, uct_completion_t*)
-UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic_add32, uint32_t, uint64_t,
-                       uct_rkey_t)
-UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic_fadd32, uint32_t, uint64_t,
-                       uct_rkey_t, uint32_t*, uct_completion_t*)
-UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic_swap32, uint32_t, uint64_t,
-                       uct_rkey_t, uint32_t*, uct_completion_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic_cswap32, uint32_t, uint32_t,
                        uint64_t, uct_rkey_t, uint32_t*, uct_completion_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic64_post, uct_atomic_op_t,
@@ -141,13 +129,7 @@ UCS_CLASS_INIT_FUNC(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
     UCP_PROXY_EP_SET_OP(ep_am_short);
     UCP_PROXY_EP_SET_OP(ep_am_bcopy);
     UCP_PROXY_EP_SET_OP(ep_am_zcopy);
-    UCP_PROXY_EP_SET_OP(ep_atomic_add64);
-    UCP_PROXY_EP_SET_OP(ep_atomic_fadd64);
-    UCP_PROXY_EP_SET_OP(ep_atomic_swap64);
     UCP_PROXY_EP_SET_OP(ep_atomic_cswap64);
-    UCP_PROXY_EP_SET_OP(ep_atomic_add32);
-    UCP_PROXY_EP_SET_OP(ep_atomic_fadd32);
-    UCP_PROXY_EP_SET_OP(ep_atomic_swap32);
     UCP_PROXY_EP_SET_OP(ep_atomic_cswap32);
     UCP_PROXY_EP_SET_OP(ep_atomic64_post);
     UCP_PROXY_EP_SET_OP(ep_atomic32_post);

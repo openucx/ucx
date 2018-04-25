@@ -231,12 +231,6 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
                    size_limit_to_str(0, iface_attr.cap.tag.recv.max_outstanding));
         }
 
-        /* TODO: deprecated, remove it */
-        PRINT_ATOMIC_CAP(ATOMIC_ADD,   iface_attr.cap.flags);
-        PRINT_ATOMIC_CAP(ATOMIC_FADD,  iface_attr.cap.flags);
-        PRINT_ATOMIC_CAP(ATOMIC_SWAP,  iface_attr.cap.flags);
-        PRINT_ATOMIC_CAP(ATOMIC_CSWAP, iface_attr.cap.flags);
-
         if (iface_attr.cap.atomic32.op_flags  ||
             iface_attr.cap.atomic64.op_flags  ||
             iface_attr.cap.atomic32.fop_flags ||

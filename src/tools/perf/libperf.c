@@ -314,11 +314,9 @@ static inline uint64_t __get_flag(uct_perf_data_layout_t layout, uint64_t short_
            0;
 }
 
-static inline uint64_t __get_atomic_flag(size_t size, uint64_t flag32, uint64_t flag64)
+static inline void __get_atomic_flag(size_t size, uint64_t *op32, uint64_t *op64, uint64_t op)
 {
-    return (size == 4) ? flag32 :
-           (size == 8) ? flag64 :
-           0;
+    *((size == sizeof(uint32_t)) ? op32 : op64) = UCS_BIT(op);
 }
 
 static inline size_t __get_max_size(uct_perf_data_layout_t layout, size_t short_m,
@@ -333,9 +331,13 @@ static inline size_t __get_max_size(uct_perf_data_layout_t layout, size_t short_
 static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
                                                      uct_iface_h iface)
 {
+    uint64_t required_flags = 0;
+    uint64_t atomic_op32    = 0;
+    uint64_t atomic_op64    = 0;
+    uint64_t atomic_fop32   = 0;
+    uint64_t atomic_fop64   = 0;
     uct_iface_attr_t attr;
     ucs_status_t status;
-    uint64_t required_flags;
     size_t min_size, max_size, max_iov, message_size;
 
     status = uct_iface_query(iface, &attr);
@@ -376,23 +378,19 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         max_iov  = attr.cap.get.max_iov;
         break;
     case UCX_PERF_CMD_ADD:
-        required_flags = __get_atomic_flag(message_size, UCT_IFACE_FLAG_ATOMIC_ADD32,
-                                           UCT_IFACE_FLAG_ATOMIC_ADD64);
+        __get_atomic_flag(message_size, &atomic_op32, &atomic_op64, UCT_ATOMIC_OP_ADD);
         max_size = 8;
         break;
     case UCX_PERF_CMD_FADD:
-        required_flags = __get_atomic_flag(message_size, UCT_IFACE_FLAG_ATOMIC_FADD32,
-                                           UCT_IFACE_FLAG_ATOMIC_FADD64);
+        __get_atomic_flag(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_ADD);
         max_size = 8;
         break;
     case UCX_PERF_CMD_SWAP:
-        required_flags = __get_atomic_flag(message_size, UCT_IFACE_FLAG_ATOMIC_SWAP32,
-                                           UCT_IFACE_FLAG_ATOMIC_SWAP64);
+        __get_atomic_flag(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_SWAP);
         max_size = 8;
         break;
     case UCX_PERF_CMD_CSWAP:
-        required_flags = __get_atomic_flag(message_size, UCT_IFACE_FLAG_ATOMIC_CSWAP32,
-                                           UCT_IFACE_FLAG_ATOMIC_CSWAP64);
+        __get_atomic_flag(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_CSWAP);
         max_size = 8;
         break;
     default:
@@ -407,7 +405,12 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         return status;
     }
 
-    if (!ucs_test_all_flags(attr.cap.flags, required_flags) || !required_flags) {
+    if (!ucs_test_all_flags(attr.cap.flags, required_flags)            ||
+        !ucs_test_all_flags(attr.cap.atomic32.op_flags, atomic_op32)   ||
+        !ucs_test_all_flags(attr.cap.atomic64.op_flags, atomic_op64)   ||
+        !ucs_test_all_flags(attr.cap.atomic32.fop_flags, atomic_fop32) ||
+        !ucs_test_all_flags(attr.cap.atomic64.fop_flags, atomic_fop64) ||
+        !(required_flags | atomic_op32 | atomic_op64 | atomic_fop32 | atomic_fop64)) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("%s/%s does not support required required flags 0x%lx",
                       params->uct.tl_name, params->uct.dev_name,

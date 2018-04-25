@@ -335,13 +335,7 @@ ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
     ops->ep_am_short        = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_am_bcopy        = (void*)ucs_empty_function_return_bc_ep_timeout;
     ops->ep_am_zcopy        = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic_add64    = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic_fadd64   = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic_swap64   = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_atomic_cswap64  = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic_add32    = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic_fadd32   = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic_swap32   = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_atomic_cswap32  = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_atomic64_post   = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_atomic32_post   = (void*)ucs_empty_function_return_ep_timeout;

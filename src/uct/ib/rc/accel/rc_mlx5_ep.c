@@ -487,28 +487,6 @@ ucs_status_t uct_rc_mlx5_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                           remote_addr, rkey, comp);
 }
 
-ucs_status_t uct_rc_mlx5_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
-                                         uint64_t remote_addr, uct_rkey_t rkey)
-{
-    return uct_rc_mlx5_ep_atomic_op_post(tl_ep, UCT_ATOMIC_OP_ADD, sizeof(add), add, remote_addr, rkey);
-}
-
-ucs_status_t uct_rc_mlx5_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
-                                          uint64_t remote_addr, uct_rkey_t rkey,
-                                          uint64_t *result, uct_completion_t *comp)
-{
-    return uct_rc_mlx5_ep_atomic_fop_post(tl_ep, UCT_ATOMIC_OP_ADD, sizeof(add), add,
-                                          result,remote_addr, rkey, comp);
-}
-
-ucs_status_t uct_rc_mlx5_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
-                                          uint64_t remote_addr, uct_rkey_t rkey,
-                                          uint64_t *result, uct_completion_t *comp)
-{
-    return uct_rc_mlx5_ep_atomic_fop_post(tl_ep, UCT_ATOMIC_OP_SWAP, sizeof(swap), swap,
-                                          result,remote_addr, rkey, comp);
-}
-
 ucs_status_t uct_rc_mlx5_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
                                            uint64_t remote_addr, uct_rkey_t rkey,
                                            uint64_t *result, uct_completion_t *comp)
@@ -517,29 +495,6 @@ ucs_status_t uct_rc_mlx5_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uin
                                      MLX5_OPCODE_ATOMIC_CS, result, 0, sizeof(uint64_t),
                                      remote_addr, rkey, 0, htobe64(compare), -1, htobe64(swap),
                                      comp);
-}
-
-ucs_status_t uct_rc_mlx5_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
-                                         uint64_t remote_addr, uct_rkey_t rkey)
-{
-    return uct_rc_mlx5_ep_atomic_op_post(tl_ep, UCT_ATOMIC_OP_ADD, sizeof(add),
-                                         add, remote_addr, rkey);
-}
-
-ucs_status_t uct_rc_mlx5_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
-                                          uint64_t remote_addr, uct_rkey_t rkey,
-                                          uint32_t *result, uct_completion_t *comp)
-{
-    return uct_rc_mlx5_ep_atomic_fop_post(tl_ep, UCT_ATOMIC_OP_ADD, sizeof(add), add,
-                                          result, remote_addr, rkey, comp);
-}
-
-ucs_status_t uct_rc_mlx5_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
-                                          uint64_t remote_addr, uct_rkey_t rkey,
-                                          uint32_t *result, uct_completion_t *comp)
-{
-    return uct_rc_mlx5_ep_atomic_fop_post(tl_ep, UCT_ATOMIC_OP_SWAP, sizeof(swap), swap,
-                                          result, remote_addr, rkey, comp);
 }
 
 ucs_status_t uct_rc_mlx5_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32_t swap,

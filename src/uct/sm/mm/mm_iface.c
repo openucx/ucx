@@ -117,14 +117,6 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->max_conn_priv           = 0;
     iface_attr->cap.flags               = UCT_IFACE_FLAG_PUT_SHORT           |
                                           UCT_IFACE_FLAG_PUT_BCOPY           |
-                                          UCT_IFACE_FLAG_ATOMIC_ADD32        |
-                                          UCT_IFACE_FLAG_ATOMIC_ADD64        |
-                                          UCT_IFACE_FLAG_ATOMIC_FADD64       |
-                                          UCT_IFACE_FLAG_ATOMIC_FADD32       |
-                                          UCT_IFACE_FLAG_ATOMIC_SWAP64       |
-                                          UCT_IFACE_FLAG_ATOMIC_SWAP32       |
-                                          UCT_IFACE_FLAG_ATOMIC_CSWAP64      |
-                                          UCT_IFACE_FLAG_ATOMIC_CSWAP32      |
                                           UCT_IFACE_FLAG_ATOMIC_CPU          |
                                           UCT_IFACE_FLAG_GET_BCOPY           |
                                           UCT_IFACE_FLAG_AM_SHORT            |
@@ -315,16 +307,10 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .ep_get_bcopy             = uct_sm_ep_get_bcopy,
     .ep_am_short              = uct_mm_ep_am_short,
     .ep_am_bcopy              = uct_mm_ep_am_bcopy,
-    .ep_atomic_add64          = uct_sm_ep_atomic_add64,
-    .ep_atomic_fadd64         = uct_sm_ep_atomic_fadd64,
     .ep_atomic_cswap64        = uct_sm_ep_atomic_cswap64,
-    .ep_atomic_swap64         = uct_sm_ep_atomic_swap64,
     .ep_atomic64_post         = uct_sm_ep_atomic64_post,
     .ep_atomic64_fetch        = uct_sm_ep_atomic64_fetch,
-    .ep_atomic_add32          = uct_sm_ep_atomic_add32,
-    .ep_atomic_fadd32         = uct_sm_ep_atomic_fadd32,
     .ep_atomic_cswap32        = uct_sm_ep_atomic_cswap32,
-    .ep_atomic_swap32         = uct_sm_ep_atomic_swap32,
     .ep_atomic32_post         = uct_sm_ep_atomic32_post,
     .ep_atomic32_fetch        = uct_sm_ep_atomic32_fetch,
     .ep_pending_add           = uct_mm_ep_pending_add,

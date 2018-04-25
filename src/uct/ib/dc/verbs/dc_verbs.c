@@ -539,29 +539,6 @@ ucs_status_t uct_dc_verbs_ep_atomic32_fetch(uct_ep_h tl_ep, uct_atomic_op_t opco
 #endif
 }
 
-ucs_status_t uct_dc_verbs_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
-                                          uint64_t remote_addr, uct_rkey_t rkey)
-{
-    return uct_dc_verbs_ep_atomic64_post(tl_ep, UCT_ATOMIC_OP_ADD, add, remote_addr, rkey);
-}
-
-ucs_status_t uct_dc_verbs_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
-                                           uint64_t remote_addr, uct_rkey_t rkey,
-                                           uint64_t *result, uct_completion_t *comp)
-{
-    return uct_dc_verbs_ep_atomic64_fetch(tl_ep, UCT_ATOMIC_OP_ADD, add, result,
-                                          remote_addr, rkey, comp);
-}
-
-
-ucs_status_t uct_dc_verbs_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
-                                           uint64_t remote_addr, uct_rkey_t rkey,
-                                           uint64_t *result, uct_completion_t *comp)
-{
-    return uct_dc_verbs_ep_atomic64_fetch(tl_ep, UCT_ATOMIC_OP_SWAP, swap, result,
-                                          remote_addr, rkey, comp);
-}
-
 ucs_status_t uct_dc_verbs_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
                                             uint64_t remote_addr, uct_rkey_t rkey,
                                             uint64_t *result, uct_completion_t *comp)
@@ -569,29 +546,6 @@ ucs_status_t uct_dc_verbs_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, ui
     return uct_dc_verbs_ep_atomic(ucs_derived_of(tl_ep, uct_dc_verbs_ep_t),
                                   IBV_WR_ATOMIC_CMP_AND_SWP, result, compare, swap,
                                   remote_addr, rkey, comp);
-}
-
-
-ucs_status_t uct_dc_verbs_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
-                                          uint64_t remote_addr, uct_rkey_t rkey)
-{
-    return uct_dc_verbs_ep_atomic32_post(tl_ep, UCT_ATOMIC_OP_ADD, add, remote_addr, rkey);
-}
-
-ucs_status_t uct_dc_verbs_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
-                                           uint64_t remote_addr, uct_rkey_t rkey,
-                                           uint32_t *result, uct_completion_t *comp)
-{
-    return uct_dc_verbs_ep_atomic32_fetch(tl_ep, UCT_ATOMIC_OP_ADD, add, result,
-                                          remote_addr, rkey, comp);
-}
-
-ucs_status_t uct_dc_verbs_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
-                                           uint64_t remote_addr, uct_rkey_t rkey,
-                                           uint32_t *result, uct_completion_t *comp)
-{
-    return uct_dc_verbs_ep_atomic32_fetch(tl_ep, UCT_ATOMIC_OP_SWAP, swap, result,
-                                          remote_addr, rkey, comp);
 }
 
 ucs_status_t uct_dc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32_t swap,
@@ -607,7 +561,6 @@ ucs_status_t uct_dc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, ui
     return UCS_ERR_UNSUPPORTED;
 #endif
 }
-
 
 ucs_status_t uct_dc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
@@ -1077,15 +1030,9 @@ static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
     .ep_am_short              = uct_dc_verbs_ep_am_short,
     .ep_am_bcopy              = uct_dc_verbs_ep_am_bcopy,
     .ep_am_zcopy              = uct_dc_verbs_ep_am_zcopy,
-    .ep_atomic_add64          = uct_dc_verbs_ep_atomic_add64,
-    .ep_atomic_fadd64         = uct_dc_verbs_ep_atomic_fadd64,
-    .ep_atomic_swap64         = uct_dc_verbs_ep_atomic_swap64,
     .ep_atomic_cswap64        = uct_dc_verbs_ep_atomic_cswap64,
     .ep_atomic64_post         = uct_dc_verbs_ep_atomic64_post,
     .ep_atomic64_fetch        = uct_dc_verbs_ep_atomic64_fetch,
-    .ep_atomic_add32          = uct_dc_verbs_ep_atomic_add32,
-    .ep_atomic_fadd32         = uct_dc_verbs_ep_atomic_fadd32,
-    .ep_atomic_swap32         = uct_dc_verbs_ep_atomic_swap32,
     .ep_atomic_cswap32        = uct_dc_verbs_ep_atomic_cswap32,
     .ep_atomic32_post         = uct_dc_verbs_ep_atomic32_post,
     .ep_atomic32_fetch        = uct_dc_verbs_ep_atomic32_fetch,
