@@ -435,6 +435,62 @@ ucs_status_t uct_ugni_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
+ucs_status_t uct_ugni_ep_atomic32_post(uct_ep_h ep, unsigned opcode, uint32_t value,
+                                       uint64_t remote_addr, uct_rkey_t rkey)
+{
+    switch (opcode) {
+    case UCT_ATOMIC_OP_ADD:
+        return uct_ugni_ep_atomic_add32(ep, value, remote_addr, rkey);
+    default:
+        ucs_assertv(0, "incorrect opcode for atomic: %d", opcode);
+        return UCS_ERR_UNSUPPORTED;
+    }
+}
+
+ucs_status_t uct_ugni_ep_atomic64_post(uct_ep_h ep, unsigned opcode, uint64_t value,
+                                       uint64_t remote_addr, uct_rkey_t rkey)
+{
+    switch (opcode) {
+    case UCT_ATOMIC_OP_ADD:
+        return uct_ugni_ep_atomic_add64(ep, value, remote_addr, rkey);
+    default:
+        ucs_assertv(0, "incorrect opcode for atomic: %d", opcode);
+        return UCS_ERR_UNSUPPORTED;
+    }
+}
+
+ucs_status_t uct_ugni_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
+                                        uint64_t value, uint64_t *result,
+                                        uint64_t remote_addr, uct_rkey_t rkey,
+                                        uct_completion_t *comp)
+{
+    switch (opcode) {
+    case UCT_ATOMIC_OP_ADD:
+        return uct_ugni_ep_atomic_fadd64(ep, value, remote_addr, rkey, result, comp);
+    case UCT_ATOMIC_OP_SWAP:
+        return uct_ugni_ep_atomic_swap64(ep, value, remote_addr, rkey, result, comp);
+    default:
+        ucs_assertv(0, "incorrect opcode for atomic: %d", opcode);
+        return UCS_ERR_UNSUPPORTED;
+    }
+}
+
+ucs_status_t uct_ugni_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
+                                        uint32_t value, uint32_t *result,
+                                        uint64_t remote_addr, uct_rkey_t rkey,
+                                        uct_completion_t *comp)
+{
+    switch (opcode) {
+    case UCT_ATOMIC_OP_ADD:
+        return uct_ugni_ep_atomic_fadd32(ep, value, remote_addr, rkey, result, comp);
+    case UCT_ATOMIC_OP_SWAP:
+        return uct_ugni_ep_atomic_swap32(ep, value, remote_addr, rkey, result, comp);
+    default:
+        ucs_assertv(0, "incorrect opcode for atomic: %d", opcode);
+        return UCS_ERR_UNSUPPORTED;
+    }
+}
+
 static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self, ucs_status_t status)
 {
     uct_ugni_rdma_fetch_desc_t *fma = (uct_ugni_rdma_fetch_desc_t *)
