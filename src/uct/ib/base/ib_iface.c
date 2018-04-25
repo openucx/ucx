@@ -400,7 +400,7 @@ static int uct_ib_max_cqe_size()
         ucs_aarch64_cpuid(&cpuid);
 
         arm_board_vendor[0] = '\0';
-        ucs_read_file(arm_board_vendor, sizeof(arm_board_vendor), 0,
+        ucs_read_file(arm_board_vendor, sizeof(arm_board_vendor), 1,
                       "/sys/devices/virtual/dmi/id/board_vendor");
         ucs_debug("arm_board_vendor is '%s'", arm_board_vendor);
 
