@@ -737,9 +737,21 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
     return status;
 }
 
+static void ucp_wireup_connect_remote_purge_cb(uct_pending_req_t *self, void *arg)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_queue_head_t *queue = arg;
+
+    ucs_trace_req("ep %p: extracted request %p from pending queue", req->send.ep,
+                  req);
+    ucs_queue_push(queue, (ucs_queue_elem_t*)&req->send.uct.priv);
+}
+
 ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
 {
+    ucs_queue_head_t tmp_q;
     ucs_status_t status;
+    ucp_request_t *req;
     uct_ep_h uct_ep;
 
     ucs_trace("ep %p: connect lane %d to remote peer", ep, lane);
@@ -764,12 +776,26 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
         goto err;
     }
 
+    /* Extract all pending requests from the transport endpoint, otherwise they
+     * will prevent the wireup message from being sent (because those requests
+     * could not be progressed any more after switching to wireup proxy).
+     */
+    ucs_queue_head_init(&tmp_q);
+    uct_ep_pending_purge(uct_ep, ucp_wireup_connect_remote_purge_cb, &tmp_q);
+
     /* the wireup ep should use the existing [am_lane] as next_ep */
     ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
 
     status = ucp_wireup_send_request(ep);
     if (status != UCS_OK) {
         goto err_destroy_wireup_ep;
+    }
+
+    ucs_queue_for_each_extract(req, &tmp_q, send.uct.priv, 1) {
+        ucs_trace_req("ep %p: requeue request %p after wireup request",
+                      req->send.ep, req);
+        status = uct_ep_pending_add(ep->uct_eps[lane], &req->send.uct);
+        ucs_assert(status == UCS_OK); /* because it's a wireup proxy */
     }
 
     return UCS_OK;
