@@ -75,6 +75,7 @@ public:
     template <typename T, ucp_atomic_post_op_t OP>
     T atomic_op_val(T v1, T v2)
     {
+        /* coverity[switch_selector_expr_is_constant] */
         switch (OP) {
         case UCP_ATOMIC_POST_OP_ADD:
             return v1 + v2;
@@ -92,6 +93,7 @@ public:
     template <typename T, ucp_atomic_fetch_op_t OP>
     T atomic_fop_val(T v1, T v2)
     {
+        /* coverity[switch_selector_expr_is_constant] */
         switch (OP) {
         case UCP_ATOMIC_FETCH_OP_FADD:
             return v1 + v2;
