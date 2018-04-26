@@ -237,31 +237,9 @@ UCS_TEST_P(test_uct_peer_failure, peer_failure)
               UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_atomic64_post(ep0(), UCT_ATOMIC_OP_ADD, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_atomic32_post(ep0(), UCT_ATOMIC_OP_ADD, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic64_post(ep0(), UCT_ATOMIC_OP_AND, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic32_post(ep0(), UCT_ATOMIC_OP_AND, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic64_post(ep0(), UCT_ATOMIC_OP_OR, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic32_post(ep0(), UCT_ATOMIC_OP_OR, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic64_post(ep0(), UCT_ATOMIC_OP_XOR, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic32_post(ep0(), UCT_ATOMIC_OP_XOR, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_atomic64_fetch(ep0(), UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_atomic32_fetch(ep0(), UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic64_fetch(ep0(), UCT_ATOMIC_OP_AND, 0, NULL, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic32_fetch(ep0(), UCT_ATOMIC_OP_AND, 0, NULL, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic64_fetch(ep0(), UCT_ATOMIC_OP_OR, 0, NULL, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic32_fetch(ep0(), UCT_ATOMIC_OP_OR, 0, NULL, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic64_fetch(ep0(), UCT_ATOMIC_OP_XOR, 0, NULL, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic32_fetch(ep0(), UCT_ATOMIC_OP_XOR, 0, NULL, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic64_fetch(ep0(), UCT_ATOMIC_OP_SWAP, 0, NULL, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic32_fetch(ep0(), UCT_ATOMIC_OP_SWAP, 0, NULL, 0, 0, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_atomic_cswap64(ep0(), 0, 0, 0, 0, NULL, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
