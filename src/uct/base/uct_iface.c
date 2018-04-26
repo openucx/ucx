@@ -343,6 +343,10 @@ ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
     ops->ep_atomic_fadd32   = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_atomic_swap32   = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_atomic_cswap32  = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic64_post   = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic32_post   = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic64_fetch  = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic32_fetch  = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_tag_eager_short = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_tag_eager_bcopy = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_tag_eager_zcopy = (void*)ucs_empty_function_return_ep_timeout;

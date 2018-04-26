@@ -84,6 +84,14 @@ UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic_swap32, uint32_t, uint64_t,
                        uct_rkey_t, uint32_t*, uct_completion_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic_cswap32, uint32_t, uint32_t,
                        uint64_t, uct_rkey_t, uint32_t*, uct_completion_t*)
+UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic64_post, uct_atomic_op_t,
+                       uint64_t, uint64_t, uct_rkey_t)
+UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic32_post, uct_atomic_op_t,
+                       uint32_t, uint64_t, uct_rkey_t)
+UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic64_fetch, uct_atomic_op_t, uint64_t,
+                       uint64_t*, uint64_t, uct_rkey_t, uct_completion_t*)
+UCP_PROXY_EP_DEFINE_OP(ucs_status_t, atomic32_fetch, uct_atomic_op_t, uint32_t,
+                       uint32_t*, uint64_t, uct_rkey_t, uct_completion_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, tag_eager_short, uct_tag_t, const void*,
                        size_t)
 UCP_PROXY_EP_DEFINE_OP(ssize_t, tag_eager_bcopy, uct_tag_t, uint64_t,
@@ -141,6 +149,10 @@ UCS_CLASS_INIT_FUNC(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
     UCP_PROXY_EP_SET_OP(ep_atomic_fadd32);
     UCP_PROXY_EP_SET_OP(ep_atomic_swap32);
     UCP_PROXY_EP_SET_OP(ep_atomic_cswap32);
+    UCP_PROXY_EP_SET_OP(ep_atomic64_post);
+    UCP_PROXY_EP_SET_OP(ep_atomic32_post);
+    UCP_PROXY_EP_SET_OP(ep_atomic64_fetch);
+    UCP_PROXY_EP_SET_OP(ep_atomic32_fetch);
     UCP_PROXY_EP_SET_OP(ep_tag_eager_short);
     UCP_PROXY_EP_SET_OP(ep_tag_eager_bcopy);
     UCP_PROXY_EP_SET_OP(ep_tag_eager_zcopy);
