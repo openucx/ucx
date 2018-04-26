@@ -28,8 +28,12 @@ public:
     static void usage(const std::string& error);
 
 private:
-    typedef std::pair<std::string, int> dest_t;
-    typedef std::vector<dest_t>         dest_vec_t;
+    typedef struct {
+        std::string        hostname;
+        int                port;
+    } dest_t;
+
+    typedef std::vector<dest_t> dest_vec_t;
 
     void parse_hostfile(const std::string& filename);
 
@@ -118,6 +122,10 @@ void application::parse_hostfile(const std::string& filename) {
         throw error("failed to open '" + filename + "'");
     }
 
+    /*
+     * Each line in the file contains 2 whitespace-separated tokens: host-name
+     * and port number.
+     */
     std::string line;
     int lineno = 1;
     while (std::getline(f, line)) {
@@ -127,7 +135,7 @@ void application::parse_hostfile(const std::string& filename) {
         }
 
         dest_t dest;
-        if ((ss >> dest.first) && (ss >> dest.second)) {
+        if ((ss >> dest.hostname) && (ss >> dest.port)) {
             m_dests.push_back(dest);
         } else {
             std::stringstream errss;
