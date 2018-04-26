@@ -409,7 +409,8 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
 
     if (!ucs_test_all_flags(attr.cap.flags, required_flags) || !required_flags) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-            ucs_error("Device does not support required required flags 0x%lx",
+            ucs_error("%s/%s does not support required required flags 0x%lx",
+                      params->uct.tl_name, params->uct.dev_name,
                       required_flags & ~attr.cap.flags);
         }
         return UCS_ERR_UNSUPPORTED;
