@@ -42,20 +42,9 @@ public:
     void blocking_cswap(entity *e,  size_t max_size, void *memheap_addr,
                         ucp_rkey_h rkey, std::string& expected_data);
 
-    template <typename T>
-    void nb_add(entity *e,  size_t max_size, void *memheap_addr,
-                      ucp_rkey_h rkey, std::string& expected_data);
-
-    void unaligned_nb_add64(entity *e,  size_t max_size, void *memheap_addr,
-                            ucp_rkey_h rkey, std::string& expected_data);
-
-    template <typename T>
-    void nb_fadd(entity *e,  size_t max_size, void *memheap_addr,
-                 ucp_rkey_h rkey, std::string& expected_data);
-
-    template <typename T>
-    void nb_swap(entity *e,  size_t max_size, void *memheap_addr,
-                 ucp_rkey_h rkey, std::string& expected_data);
+    template <ucp_atomic_post_op_t OP>
+    void unaligned_nb_post(entity *e,  size_t max_size, void *memheap_addr,
+                           ucp_rkey_h rkey, std::string& expected_data);
 
     template <typename T>
     void nb_cswap(entity *e,  size_t max_size, void *memheap_addr,
