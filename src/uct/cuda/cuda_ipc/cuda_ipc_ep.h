@@ -12,18 +12,6 @@
 #include <ucs/type/class.h>
 #include "cuda_ipc_md.h"
 
-typedef struct uct_cuda_ipc_rem_seg  uct_cuda_ipc_rem_seg_t;
-
-
-typedef struct uct_cuda_ipc_rem_seg {
-    uct_cuda_ipc_rem_seg_t *next;
-    CUipcMemHandle         ph;         /* Memory handle of GPU memory */
-    CUdeviceptr            d_bptr;     /* Allocation base address */
-    size_t                 b_len;      /* Allocation size */
-    int                    dev_num;    /* GPU Device number */
-} uct_cuda_ipc_rem_seg_t;
-
-
 typedef struct uct_cuda_ipc_ep_addr {
     int                ep_id;
 } uct_cuda_ipc_ep_addr_t;
