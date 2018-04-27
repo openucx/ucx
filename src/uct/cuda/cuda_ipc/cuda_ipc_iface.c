@@ -28,7 +28,8 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_iface_t)(uct_iface_t*);
 
 static uint64_t uct_cuda_ipc_iface_node_guid(uct_base_iface_t *iface)
 {
-    return ucs_machine_guid() * ucs_string_to_id(iface->md->component->name);
+    return ucs_machine_guid() *
+           ucs_string_to_id(iface->md->component->name);
 }
 
 ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
@@ -221,8 +222,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
 {
     uct_cuda_ipc_iface_config_t *config = NULL;
     ucs_status_t status;
-    int dev_count;
-    int i, j;
+    int dev_count, i, j;
 
     config = ucs_derived_of(tl_config, uct_cuda_ipc_iface_config_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_ipc_iface_ops, md, worker,

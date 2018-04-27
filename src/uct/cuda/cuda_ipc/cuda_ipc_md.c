@@ -6,8 +6,6 @@
 
 #include "cuda_ipc_md.h"
 
-#include <string.h>
-#include <limits.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack.h>
@@ -56,10 +54,9 @@ uct_cuda_ipc_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer,
 {
     uct_cuda_ipc_key_t *packed = (uct_cuda_ipc_key_t *) rkey_buffer;
     uct_cuda_ipc_key_t *key;
-    ucs_status_t status;
     CUdevice cu_device;
 
-    GET_CUDA_DEVICE(status, cu_device);
+    GET_CUDA_DEVICE(cu_device);
 
     key = ucs_malloc(sizeof(uct_cuda_ipc_key_t), "uct_cuda_ipc_key_t");
     if (NULL == key) {
@@ -97,7 +94,7 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
         return status;
     }
 
-    GET_CUDA_DEVICE(status, cu_device);
+    GET_CUDA_DEVICE(cu_device);
 
     UCT_CUDADRV_FUNC(cuMemGetAddressRange(&(mem_hndl->d_bptr),
                                           &(mem_hndl->b_len),
@@ -114,17 +111,15 @@ static ucs_status_t uct_cuda_ipc_mem_reg(uct_md_h md, void *addr, size_t length,
                                          unsigned flags, uct_mem_h *memh_p)
 {
     uct_cuda_ipc_mem_t *mem_hndl = NULL;
-    ucs_status_t status;
 
     mem_hndl = ucs_malloc(sizeof(uct_cuda_ipc_mem_t), "cuda_ipc handle");
     if (NULL == mem_hndl) {
         ucs_error("failed to allocate memory for cuda_ipc_mem_t");
         return UCS_ERR_NO_MEMORY;
     }
-    status = uct_cuda_ipc_mem_reg_internal(md, addr, length, 0, mem_hndl);
-    if (status != UCS_OK) {
+    if (UCS_OK != uct_cuda_ipc_mem_reg_internal(md, addr, length, 0, mem_hndl)) {
         ucs_free(mem_hndl);
-        return status;
+        return UCS_ERR_IO_ERROR;
     }
     *memh_p = mem_hndl;
     return UCS_OK;

@@ -43,9 +43,8 @@ uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_key_t *key,
                              int cu_device, uint64_t remote_addr,
                              void **mapped_rem_addr, void *buffer)
 {
-    int same_ctx = 0;
+    int offset, same_ctx = 0;
     void *mapped_addr;
-    int offset;
     ucs_status_t status;
     CUcontext local_ptr_ctx;
     CUcontext remote_ptr_ctx;
@@ -101,20 +100,19 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     uct_cuda_ipc_ep_t *ep       = ucs_derived_of(tl_ep, uct_cuda_ipc_ep_t);
     uct_cuda_ipc_key_t *key     = (uct_cuda_ipc_key_t *) rkey;
     void *mapped_rem_addr       = NULL;
-    ucs_status_t status;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
-    CUstream stream;
     ucs_queue_head_t *outstanding_queue;
+    ucs_status_t status;
+    CUdeviceptr dst, src;
     CUdevice cu_device;
-    CUdeviceptr dst;
-    CUdeviceptr src;
+    CUstream stream;
 
     if (0 == iov[0].length) {
         ucs_trace_data("Zero length request: skip it");
         return UCS_OK;
     }
 
-    GET_CUDA_DEVICE(status, cu_device);
+    GET_CUDA_DEVICE(cu_device);
 
     status = uct_cuda_ipc_get_mapped_addr(ep, key, cu_device, remote_addr,
                                           &mapped_rem_addr, iov[0].buffer);
