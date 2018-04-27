@@ -10,7 +10,6 @@
 #include <uct/base/uct_md.h>
 #include <uct/cuda/base/cuda_md.h>
 #include <uct/cuda/base/cuda_iface.h>
-#include <cuda.h>
 
 
 #define UCT_CUDA_IPC_MD_NAME      "cuda_ipc"
@@ -34,8 +33,6 @@ typedef struct uct_cuda_ipc_md {
  */
 typedef struct uct_cuda_ipc_md_config {
     uct_md_config_t     super;
-    uct_linear_growth_t uc_reg_cost;  /* Memory registration cost estimation
-                                         without using the cache */
 } uct_cuda_ipc_md_config_t;
 
 
@@ -63,5 +60,13 @@ typedef struct uct_cuda_ipc_key {
     CUdeviceptr    d_mapped_ptr; /* Mapped GPU address */
     int            dev_num;      /* GPU Device number */
 } uct_cuda_ipc_key_t;
+
+#define GET_CUDA_DEVICE(status, cu_device)                      \
+    do {                                                        \
+        status = UCT_CUDADRV_FUNC(cuCtxGetDevice(&cu_device));  \
+        if (UCS_OK != status) {                                 \
+            return status;                                      \
+        }                                                       \
+    } while(0);
 
 #endif

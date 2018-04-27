@@ -24,7 +24,8 @@ typedef struct uct_cuda_ipc_iface {
     ucs_queue_head_t outstanding_d2d_event_q; /* stream for outstanding d2d */
     int              device_count;
     int              streams_initialized;     /* indicates if stream created */
-    CUstream         stream_d2d[UCT_CUDA_IPC_MAX_PEERS]; /* per-peer stream */
+    CUstream         stream_d2d[UCT_CUDA_IPC_MAX_PEERS];
+                                              /* per-peer stream */
     int              p2p_map[UCT_CUDA_IPC_MAX_PEERS][UCT_CUDA_IPC_MAX_PEERS];
                                               /* map indicating connectivity */
     struct {

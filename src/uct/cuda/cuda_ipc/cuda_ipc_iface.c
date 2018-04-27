@@ -90,8 +90,9 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h iface,
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
-                                             uct_completion_t *comp)
+static ucs_status_t
+uct_cuda_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                         uct_completion_t *comp)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
 
@@ -107,22 +108,22 @@ static ucs_status_t uct_cuda_ipc_iface_flush(uct_iface_h tl_iface, unsigned flag
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_cuda_ipc_progress_event_queue(ucs_queue_head_t *event_queue, unsigned max_events)
+uct_cuda_ipc_progress_event_q(ucs_queue_head_t *event_q, unsigned max_events)
 {
     unsigned count = 0;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
     ucs_queue_iter_t iter;
     ucs_status_t status;
 
-    ucs_queue_for_each_safe(cuda_ipc_event, iter, event_queue, queue) {
+    ucs_queue_for_each_safe(cuda_ipc_event, iter, event_q, queue) {
         status = UCT_CUDADRV_FUNC(cuEventQuery(cuda_ipc_event->event));
         if (UCS_INPROGRESS == status) {
-            break;
+            continue;
         }
         else if (UCS_OK != status) {
             return status;
         }
-        ucs_queue_del_iter(event_queue, iter);
+        ucs_queue_del_iter(event_q, iter);
         if (cuda_ipc_event->comp != NULL) {
             uct_invoke_completion(cuda_ipc_event->comp, UCS_OK);
         }
@@ -139,11 +140,10 @@ uct_cuda_ipc_progress_event_queue(ucs_queue_head_t *event_queue, unsigned max_ev
 static unsigned uct_cuda_ipc_iface_progress(uct_iface_h tl_iface)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
-    unsigned max_events = iface->config.max_poll;
-    unsigned count;
+    unsigned max_events         = iface->config.max_poll;
 
-    count =  uct_cuda_ipc_progress_event_queue(&iface->outstanding_d2d_event_q, max_events);
-    return count;
+    return uct_cuda_ipc_progress_event_q(&iface->outstanding_d2d_event_q,
+                                         max_events);
 }
 
 static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
@@ -173,7 +173,8 @@ static void uct_cuda_ipc_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk
     ucs_status_t status;
 
     memset(base, 0 , sizeof(*base));
-    status = UCT_CUDADRV_FUNC(cuEventCreate(&(base->event), CU_EVENT_DISABLE_TIMING));
+    status = UCT_CUDADRV_FUNC(cuEventCreate(&(base->event),
+                                            CU_EVENT_DISABLE_TIMING));
     if (UCS_OK != status) {
         return;
     }
@@ -196,7 +197,8 @@ ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
     int i;
 
     for (i = 0; i < iface->device_count; i++) {
-        status = UCT_CUDADRV_FUNC(cuStreamCreate(&iface->stream_d2d[i], CU_STREAM_NON_BLOCKING));
+        status = UCT_CUDADRV_FUNC(cuStreamCreate(&iface->stream_d2d[i],
+                                                 CU_STREAM_NON_BLOCKING));
         if (UCS_OK != status) {
             return status;
         }
@@ -297,9 +299,9 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_cuda_ipc_iface_t, uct_iface_t, uct_md_h, uct_worke
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_ipc_iface_t, uct_iface_t);
 
 
-static ucs_status_t uct_cuda_ipc_query_tl_resources(uct_md_h md,
-                                                    uct_tl_resource_desc_t **resource_p,
-                                                    unsigned *num_resources_p)
+static ucs_status_t
+uct_cuda_ipc_query_tl_resources(uct_md_h md,uct_tl_resource_desc_t **resource_p,
+                                unsigned *num_resources_p)
 {
     uct_tl_resource_desc_t *resource;
 
@@ -318,8 +320,11 @@ static ucs_status_t uct_cuda_ipc_query_tl_resources(uct_md_h md,
     return UCS_OK;
 }
 
-UCT_TL_COMPONENT_DEFINE(uct_cuda_ipc_tl, uct_cuda_ipc_query_tl_resources,
-                        uct_cuda_ipc_iface_t, UCT_CUDA_IPC_TL_NAME,
-                        "CUDA_IPC_", uct_cuda_ipc_iface_config_table,
+UCT_TL_COMPONENT_DEFINE(uct_cuda_ipc_tl,
+                        uct_cuda_ipc_query_tl_resources,
+                        uct_cuda_ipc_iface_t,
+                        UCT_CUDA_IPC_TL_NAME,
+                        "CUDA_IPC_",
+                        uct_cuda_ipc_iface_config_table,
                         uct_cuda_ipc_iface_config_t);
 UCT_MD_REGISTER_TL(&uct_cuda_ipc_md_component, &uct_cuda_ipc_tl);
