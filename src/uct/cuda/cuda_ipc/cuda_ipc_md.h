@@ -23,8 +23,7 @@ extern uct_md_component_t uct_cuda_ipc_md_component;
  * @brief cuda ipc MD descriptor
  */
 typedef struct uct_cuda_ipc_md {
-    struct uct_md       super;    /**< Domain info */
-    uct_linear_growth_t reg_cost; /* Memory registration cost */
+    struct uct_md super;   /**< Domain info */
 } uct_cuda_ipc_md_t;
 
 
@@ -32,7 +31,7 @@ typedef struct uct_cuda_ipc_md {
  * @brief cuda ipc domain configuration.
  */
 typedef struct uct_cuda_ipc_md_config {
-    uct_md_config_t     super;
+    uct_md_config_t super;
 } uct_cuda_ipc_md_config_t;
 
 
