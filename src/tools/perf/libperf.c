@@ -316,7 +316,11 @@ static inline uint64_t __get_flag(uct_perf_data_layout_t layout, uint64_t short_
 
 static inline void __get_atomic_flag(size_t size, uint64_t *op32, uint64_t *op64, uint64_t op)
 {
-    *((size == sizeof(uint32_t)) ? op32 : op64) = UCS_BIT(op);
+    if (size == sizeof(uint32_t)) {
+        *op32 = UCS_BIT(op);
+    } else if (size == sizeof(uint32_t)) {
+        *op64 = UCS_BIT(op);
+    }
 }
 
 static inline size_t __get_max_size(uct_perf_data_layout_t layout, size_t short_m,
