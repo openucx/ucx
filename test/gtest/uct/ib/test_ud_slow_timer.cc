@@ -11,6 +11,7 @@
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/ptr_array.h>
 #include <uct/ib/ud/base/ud_ep.h>
 #include <uct/ib/ud/base/ud_iface.h>
 }
@@ -35,7 +36,7 @@ public:
     static ucs_status_t tick_counter(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
     {
         uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                uct_ud_iface_t);
+                                               uct_ud_iface_t);
 
         /* hack to disable retransmit */
         ep->tx.send_time = ucs_twheel_get_time(&iface->async.slow_timer);
@@ -83,6 +84,21 @@ UCS_TEST_P(test_ud_slow_timer, txn) {
     wait_for_rx_sn(N);
     EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
     EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+}
+
+UCS_TEST_P(test_ud_slow_timer, ep_destroy, "UD_TIMEOUT=1s") {
+    void *ud_ep_tmp;
+    connect();
+
+    uct_ud_ep_t    *ud_ep = ep(m_e1);
+    uct_ud_iface_t *iface = ucs_derived_of(ud_ep->super.super.iface,
+                                           uct_ud_iface_t);
+    uint32_t       ep_idx = ud_ep->ep_id;
+    EXPECT_TRUE(ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp));
+
+    m_e1->destroy_eps();
+    twait(ucs_time_to_msec(iface->config.peer_timeout * 1.5));
+    EXPECT_FALSE(ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp));
 }
 
 #ifdef UCT_UD_EP_DEBUG_HOOKS
