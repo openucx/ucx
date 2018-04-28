@@ -409,21 +409,25 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
 
     if (!ucs_test_all_flags(attr.cap.flags, required_flags) || !required_flags) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-            ucs_error("Device does not support required operation");
+            ucs_error("%s/%s does not support required required flags 0x%lx",
+                      params->uct.tl_name, params->uct.dev_name,
+                      required_flags & ~attr.cap.flags);
         }
         return UCS_ERR_UNSUPPORTED;
     }
 
     if (message_size < min_size) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-            ucs_error("Message size too small");
+            ucs_error("Message size (%zu) is smaller than min supported (%zu)",
+                      message_size, min_size);
         }
         return UCS_ERR_UNSUPPORTED;
     }
 
     if (message_size > max_size) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-            ucs_error("Message size too big");
+            ucs_error("Message size (%zu) is larger than max supported (%zu)",
+                      message_size, max_size);
         }
         return UCS_ERR_UNSUPPORTED;
     }
@@ -439,25 +443,27 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         }
 
         if ((params->uct.data_layout == UCT_PERF_DATA_LAYOUT_ZCOPY) &&
-                        (params->am_hdr_size > attr.cap.am.max_hdr))
+            (params->am_hdr_size > attr.cap.am.max_hdr))
         {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-                ucs_error("AM header size too big");
+                ucs_error("AM header size (%zu) is larger than max supported (%zu)",
+                          params->am_hdr_size, attr.cap.am.max_hdr);
             }
             return UCS_ERR_UNSUPPORTED;
         }
 
         if (params->am_hdr_size > message_size) {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-                ucs_error("AM header size larger than message size");
+                ucs_error("AM header size (%zu) is larger than message size (%zu)",
+                          params->am_hdr_size, message_size);
             }
             return UCS_ERR_INVALID_PARAM;
         }
 
         if (params->uct.fc_window > UCT_PERF_TEST_MAX_FC_WINDOW) {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-                ucs_error("AM flow-control window too large (should be <= %d)",
-                          UCT_PERF_TEST_MAX_FC_WINDOW);
+                ucs_error("AM flow-control window (%d) too large (should be <= %d)",
+                          params->uct.fc_window, UCT_PERF_TEST_MAX_FC_WINDOW);
             }
             return UCS_ERR_INVALID_PARAM;
         }
