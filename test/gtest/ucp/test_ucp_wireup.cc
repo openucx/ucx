@@ -60,9 +60,9 @@ protected:
 
     void waitall(std::vector<void*> &reqs);
 
-    void* disconnect(ucp_ep_h ep);
+    void* ep_disconnect(ucp_ep_h ep);
 
-    virtual void* disconnect(ucp_test::entity &e);
+    virtual void* disconnect(const ucp_test::entity &e);
 
     bool is_close_sync_test() const {
         return (GetParam().variant == TEST_TAG_CLOSE_SYNC) ||
@@ -358,7 +358,7 @@ void test_ucp_wireup::send_recv(ucp_ep_h send_ep, ucp_worker_h recv_worker,
     m_rkeys.clear();
 }
 
-void* test_ucp_wireup::disconnect(ucp_ep_h ep) {
+void* test_ucp_wireup::ep_disconnect(ucp_ep_h ep) {
     if (ep == NULL) {
         return NULL;
     }
@@ -378,8 +378,8 @@ void* test_ucp_wireup::disconnect(ucp_ep_h ep) {
     return NULL;
 }
 
-void* test_ucp_wireup::disconnect(ucp_test::entity &e) {
-    return disconnect(e.revoke_ep());
+void* test_ucp_wireup::disconnect(const ucp_test::entity &e) {
+    return ep_disconnect(e.revoke_ep());
 }
 
 void test_ucp_wireup::waitall(std::vector<void*> &reqs)

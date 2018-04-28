@@ -498,7 +498,7 @@ ucs_status_t ucp_test_base::entity::listen(const struct sockaddr* saddr,
 }
 
 ucp_worker_h ucp_test_base::entity::worker(int worker_index) const {
-    ucs_assert(size_t(worker_index) < m_workers.size());
+    assert(size_t(worker_index) < m_workers.size());
     return m_workers[worker_index].first;
 }
 
