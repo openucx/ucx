@@ -173,6 +173,25 @@ CHECK_SPECIFIC_ATTRIBUTE([optimize], [NOOPTIMIZE],
 
 
 #
+# Check for C++11 support
+#
+AC_MSG_CHECKING([c++11 support])
+AC_LANG_PUSH([C++])
+SAVE_CXXFLAGS="$CXXFLAGS"
+CXX11FLAGS="-std=c++11"
+CXXFLAGS="$CXXFLAGS $CXX11FLAGS"
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[int main() { return 0; } ]])],
+                  [AC_MSG_RESULT([yes])
+                   AC_SUBST([CXX11FLAGS])
+                   cxx11_happy=yes],
+                  [AC_MSG_RESULT([no])
+                   cxx11_happy=no])
+CXXFLAGS="$SAVE_CXXFLAGS"
+AC_LANG_POP
+AM_CONDITIONAL([HAVE_CXX11], [test "x$cxx11_happy" != xno])
+
+
+#
 # Set C++ optimization/debug flags to be the same as for C
 #
 BASE_CPPFLAGS="-DCPU_FLAGS=\"$OPT_CFLAGS\""

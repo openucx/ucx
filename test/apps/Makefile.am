@@ -6,6 +6,10 @@
 # See file LICENSE for terms.
 #
 
+if HAVE_CXX11
+SUBDIRS = sockaddr
+endif
+
 noinst_PROGRAMS = \
 	test_dlopen
 
