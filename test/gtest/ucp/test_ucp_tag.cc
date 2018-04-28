@@ -11,6 +11,8 @@
 
 extern "C" {
 #include <ucp/core/ucp_worker.h>
+#include <ucp/core/ucp_ep.h>
+#include <ucp/core/ucp_ep.inl>
 }
 
 
@@ -144,6 +146,16 @@ void test_ucp_tag::wait_for_unexpected_msg(ucp_worker_h worker, double sec)
     do {
         short_progress_loop();
     } while (ucp_tag_unexp_is_empty(&worker->tm) && (ucs_get_time() < timeout));
+}
+
+void test_ucp_tag::check_offload_support(bool offload_required)
+{
+    bool offload_supported = ucp_ep_is_tag_offload_enabled(ucp_ep_config(sender().ep()));
+    if (offload_supported != offload_required) {
+        cleanup();
+        std::string reason = offload_supported ? "tag offload" : "no tag offload";
+        UCS_TEST_SKIP_R(reason);
+    }
 }
 
 int test_ucp_tag::get_worker_index(int buf_index)

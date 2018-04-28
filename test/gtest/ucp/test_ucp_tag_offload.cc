@@ -9,10 +9,8 @@
 #include "ucp_datatype.h"
 
 extern "C" {
-#include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/tag/tag_match.h>
-#include <ucp/core/ucp_ep.inl>
 }
 
 class test_ucp_tag_offload : public test_ucp_tag {
@@ -21,12 +19,8 @@ public:
     void init()
     {
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
-
         test_ucp_tag::init();
-        if (!ucp_ep_is_tag_offload_enabled(ucp_ep_config(sender().ep()))) {
-            test_ucp_tag::cleanup();
-            UCS_TEST_SKIP_R("no tag offload");
-        }
+        check_offload_support(true);
     }
 
     request* recv_nb_and_check(void *buffer, size_t count, ucp_datatype_t dt,

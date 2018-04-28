@@ -84,6 +84,8 @@ protected:
 
     void wait_for_unexpected_msg(ucp_worker_h worker, double sec);
 
+    void check_offload_support(bool offload_required);
+
     virtual bool is_external_request();
 
     static ucp_context_attr_t ctx_attr;

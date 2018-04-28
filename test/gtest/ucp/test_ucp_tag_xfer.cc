@@ -35,6 +35,7 @@ public:
         }
         modify_config("MAX_EAGER_LANES", "2");
         modify_config("MAX_RNDV_LANES", "2");
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
         test_ucp_tag::init();
     }
 
@@ -112,6 +113,7 @@ private:
     static const uint64_t SENDER_TAG = 0x111337;
     static const uint64_t RECV_MASK  = 0xffff;
     static const uint64_t RECV_TAG   = 0x1337;
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 
 };
 
@@ -545,7 +547,8 @@ UCS_TEST_P(test_ucp_tag_xfer, contig_exp) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_contig, true, false, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, contig_exp_truncated, "RC_TM_ENABLE?=n") {
+UCS_TEST_P(test_ucp_tag_xfer, contig_exp_truncated) {
+    check_offload_support(false);
     test_xfer(&test_ucp_tag_xfer::test_xfer_contig, true, false, true);
 }
 
@@ -599,6 +602,11 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp_sync) {
 UCS_TEST_P(test_ucp_tag_xfer, contig_exp_sync) {
     /* because ucp_tag_send_req return status (instead request) if send operation
      * completed immediately */
+    skip_loopback();
+    test_xfer(&test_ucp_tag_xfer::test_xfer_contig, true, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, contig_exp_sync_zcopy, "ZCOPY_THRESH=1000") {
     skip_loopback();
     test_xfer(&test_ucp_tag_xfer::test_xfer_contig, true, true, false);
 }
@@ -693,8 +701,8 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp_rndv, "RNDV_THRESH=100
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp_rndv_truncated, "RNDV_THRESH=1000",
-                                                                          "ZCOPY_THRESH=1248576",
-                                                                          "RC_TM_ENABLE?=n") {
+                                                                          "ZCOPY_THRESH=1248576") {
+    check_offload_support(false);
     test_run_xfer(true, true, true, false, true);
 }
 
@@ -987,8 +995,8 @@ public:
 };
 
 
-UCS_TEST_P(test_ucp_tag_stats, eager_expected, "RNDV_THRESH=1248576",
-                                               "RC_TM_ENABLE?=n") {
+UCS_TEST_P(test_ucp_tag_stats, eager_expected, "RNDV_THRESH=1248576") {
+    check_offload_support(false);
     test_run_xfer(true, true, true, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_EAGER,
                       UCP_WORKER_STAT_TAG_RX_EAGER_MSG);
@@ -999,8 +1007,8 @@ UCS_TEST_P(test_ucp_tag_stats, eager_expected, "RNDV_THRESH=1248576",
     EXPECT_EQ(cnt, 0ul);
 }
 
-UCS_TEST_P(test_ucp_tag_stats, eager_unexpected, "RNDV_THRESH=1248576",
-                                                 "RC_TM_ENABLE?=n") {
+UCS_TEST_P(test_ucp_tag_stats, eager_unexpected, "RNDV_THRESH=1248576") {
+    check_offload_support(false);
     test_run_xfer(true, true, false, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_EAGER,
                       UCP_WORKER_STAT_TAG_RX_EAGER_MSG);
@@ -1010,8 +1018,8 @@ UCS_TEST_P(test_ucp_tag_stats, eager_unexpected, "RNDV_THRESH=1248576",
     EXPECT_GT(cnt, 0ul);
 }
 
-UCS_TEST_P(test_ucp_tag_stats, sync_expected, "RNDV_THRESH=1248576",
-                                              "RC_TM_ENABLE?=n") {
+UCS_TEST_P(test_ucp_tag_stats, sync_expected, "RNDV_THRESH=1248576") {
+    check_offload_support(false);
     skip_loopback();
     test_run_xfer(true, true, true, true, false);
     validate_counters(UCP_EP_STAT_TAG_TX_EAGER_SYNC,
@@ -1023,8 +1031,8 @@ UCS_TEST_P(test_ucp_tag_stats, sync_expected, "RNDV_THRESH=1248576",
     EXPECT_EQ(cnt, 0ul);
 }
 
-UCS_TEST_P(test_ucp_tag_stats, sync_unexpected, "RNDV_THRESH=1248576",
-                                                "RC_TM_ENABLE?=n") {
+UCS_TEST_P(test_ucp_tag_stats, sync_unexpected, "RNDV_THRESH=1248576") {
+    check_offload_support(false);
     skip_loopback();
     test_run_xfer(true, true, false, true, false);
     validate_counters(UCP_EP_STAT_TAG_TX_EAGER_SYNC,
@@ -1035,15 +1043,15 @@ UCS_TEST_P(test_ucp_tag_stats, sync_unexpected, "RNDV_THRESH=1248576",
     EXPECT_GT(cnt, 0ul);
 }
 
-UCS_TEST_P(test_ucp_tag_stats, rndv_expected, "RNDV_THRESH=1000",
-                                              "RC_TM_ENABLE?=n") {
+UCS_TEST_P(test_ucp_tag_stats, rndv_expected, "RNDV_THRESH=1000") {
+    check_offload_support(false);
     test_run_xfer(true, true, true, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
                       UCP_WORKER_STAT_TAG_RX_RNDV_EXP);
 }
 
-UCS_TEST_P(test_ucp_tag_stats, rndv_unexpected, "RNDV_THRESH=1000",
-                                                "RC_TM_ENABLE?=n") {
+UCS_TEST_P(test_ucp_tag_stats, rndv_unexpected, "RNDV_THRESH=1000") {
+    check_offload_support(false);
     test_run_xfer(true, true, false, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
                       UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP);
