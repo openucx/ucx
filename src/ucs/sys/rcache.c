@@ -639,13 +639,14 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
         goto err_cleanup_pgtable;
     }
 
+    ucs_queue_head_init(&self->inv_q);
+
     status = ucm_set_event_handler(UCM_EVENT_VM_UNMAPPED, params->ucm_event_priority,
                                    ucs_rcache_unmapped_callback, self);
     if (status != UCS_OK) {
         goto err_destroy_mp;
     }
 
-    ucs_queue_head_init(&self->inv_q);
     return UCS_OK;
 
 err_destroy_mp:
