@@ -674,7 +674,7 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
         goto err;
     }
 
-    length     = ucs_memtrack_adjust_alloc_size(*length_p);
+    length     = *length_p;
     exp_access = uct_ib_md_access_flags(md, flags, length) |
                  IBV_EXP_ACCESS_ALLOCATE_MR;
     status = uct_ib_md_reg_mr(md, NULL, length, exp_access, 0, &memh->mr);
@@ -694,10 +694,11 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
     }
 
     UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_ALLOC, +1);
+    ucs_memtrack_allocated(memh->mr->addr, memh->mr->length UCS_MEMTRACK_VAL);
+
     *address_p = memh->mr->addr;
     *length_p  = memh->mr->length;
     *memh_p    = memh;
-    ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
     return UCS_OK;
 
 err_free_memh:
@@ -714,7 +715,7 @@ static ucs_status_t uct_ib_mem_free(uct_md_h md, uct_mem_h memh)
     uct_ib_mem_t *ib_memh = memh;
     ucs_status_t status;
 
-    ucs_memtrack_releasing_adjusted(ib_memh->mr->addr);
+    ucs_memtrack_releasing(ib_memh->mr->addr);
 
     status = UCS_PROFILE_CALL(uct_ib_memh_dereg, memh);
     if (status != UCS_OK) {
