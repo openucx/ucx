@@ -35,8 +35,8 @@ typedef struct uct_cuda_ipc_iface {
 
 
 typedef struct uct_cuda_ipc_iface_config {
-    uct_iface_config_t super;
-    unsigned           max_poll;
+    uct_iface_config_t      super;
+    unsigned                max_poll;
 } uct_cuda_ipc_iface_config_t;
 
 

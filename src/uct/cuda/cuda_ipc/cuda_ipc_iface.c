@@ -7,14 +7,17 @@
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"
 #include "cuda_ipc_ep.h"
+
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 
 
 static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
+
     {"", "", NULL,
      ucs_offsetof(uct_cuda_ipc_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
     {"MAX_POLL", "16",
      "Max number of event completions to pick during cuda events polling",
       ucs_offsetof(uct_cuda_ipc_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
@@ -70,6 +73,7 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h iface,
                                           UCT_IFACE_FLAG_PENDING   |
                                           UCT_IFACE_FLAG_GET_ZCOPY |
                                           UCT_IFACE_FLAG_PUT_ZCOPY;
+
     iface_attr->cap.put.max_short       = 0;
     iface_attr->cap.put.max_bcopy       = 0;
     iface_attr->cap.put.min_zcopy       = 0;
@@ -77,17 +81,20 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h iface,
     iface_attr->cap.put.opt_zcopy_align = 1;
     iface_attr->cap.put.align_mtu       = iface_attr->cap.put.opt_zcopy_align;
     iface_attr->cap.put.max_iov         = 1;
+
     iface_attr->cap.get.max_bcopy       = 0;
     iface_attr->cap.get.min_zcopy       = 0;
     iface_attr->cap.get.max_zcopy       = UCT_CUDA_IPC_MAX_ALLOC_SZ;
     iface_attr->cap.get.opt_zcopy_align = 1;
     iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
     iface_attr->cap.get.max_iov         = 1;
+
     iface_attr->latency.overhead        = 1e-9;
     iface_attr->latency.growth          = 0;
     iface_attr->bandwidth               = 6911 * 1024.0 * 1024.0;
     iface_attr->overhead                = 0;
     iface_attr->priority                = 0;
+
     return UCS_OK;
 }
 
@@ -157,7 +164,7 @@ static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_cuda_ipc_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_ep_t),
     .iface_flush              = uct_cuda_ipc_iface_flush,
-    .iface_fence              = uct_base_iface_fence, /*TODO*/
+    .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_cuda_ipc_iface_progress,
@@ -228,11 +235,13 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_ipc_iface_ops, md, worker,
                               params, tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_CUDA_IPC_TL_NAME));
+
     if (strncmp(params->mode.device.dev_name,
                 UCT_CUDA_IPC_DEV_NAME, strlen(UCT_CUDA_IPC_DEV_NAME)) != 0) {
         ucs_error("No device was found: %s", params->mode.device.dev_name);
         return UCS_ERR_NO_DEVICE;
     }
+
     for (i = 0; i < UCT_CUDA_IPC_MAX_PEERS; i++) {
         for (j = 0; j < UCT_CUDA_IPC_MAX_PEERS; j++) {
             self->p2p_map[i][j] = -1;
@@ -299,8 +308,8 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_cuda_ipc_iface_t, uct_iface_t, uct_md_h, uct_worke
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_ipc_iface_t, uct_iface_t);
 
 static ucs_status_t uct_cuda_ipc_query_tl_resources(uct_md_h md,
-						    uct_tl_resource_desc_t **resource_p,
-						    unsigned *num_resources_p)
+                                                    uct_tl_resource_desc_t **resource_p,
+                                                    unsigned *num_resources_p)
 {
     uct_tl_resource_desc_t *resource;
 
@@ -309,11 +318,13 @@ static ucs_status_t uct_cuda_ipc_query_tl_resources(uct_md_h md,
         ucs_error("Failed to allocate memory");
         return UCS_ERR_NO_MEMORY;
     }
+
     ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name), "%s",
                       UCT_CUDA_IPC_TL_NAME);
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s",
                       UCT_CUDA_IPC_DEV_NAME);
     resource->dev_type = UCT_DEVICE_TYPE_ACC;
+
     *num_resources_p = 1;
     *resource_p      = resource;
     return UCS_OK;
