@@ -31,7 +31,7 @@ public:
     void init_bufs(size_t min, size_t max)
     {
         size_t size = ucs_max(min, ucs_min(64ul, max));
-        lbuf = new mapped_buffer(size, 0, sender());
+        lbuf = new mapped_buffer(size, 0, sender(), 0, sender().md_attr().cap.mem_type);
         rbuf = new mapped_buffer(size, 0, receiver(), 0, sender().md_attr().cap.mem_type);
     }
 
