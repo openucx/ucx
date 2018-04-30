@@ -15,11 +15,12 @@
 #include <malloc.h>
 #include <unistd.h>
 
-#define ATOMIC_OP_CONFIG(_size, _op32, _op64, _op, _status)                              \
-    _status = __get_atomic_flag((_size), (_op32), (_op64), (_op));                       \
-    if (_status != UCS_OK) {                                                             \
-        ucs_error("Device does not support atomic for message size %zu bytes", (_size)); \
-        return _status;                                                                  \
+#define ATOMIC_OP_CONFIG(_size, _op32, _op64, _op, _msg, _status)                 \
+    _status = __get_atomic_flag((_size), (_op32), (_op64), (_op));                \
+    if (_status != UCS_OK) {                                                      \
+        ucs_error("Device does not support atomic %s for message size %zu bytes", \
+                  (_msg)[_op], (_size));                                          \
+        return _status;                                                           \
     }
 
 #define ATOMIC_OP_CHECK(_size, _attr, _required, _params, _msg)                   \
@@ -377,7 +378,7 @@ static inline ucs_status_t __get_atomic_flag(size_t size, uint64_t *op32,
     if (size == sizeof(uint32_t)) {
         *op32 = UCS_BIT(op);
         return UCS_OK;
-    } else if (size == sizeof(uint32_t)) {
+    } else if (size == sizeof(uint64_t)) {
         *op64 = UCS_BIT(op);
         return UCS_OK;
     }
@@ -443,19 +444,23 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         max_iov  = attr.cap.get.max_iov;
         break;
     case UCX_PERF_CMD_ADD:
-        ATOMIC_OP_CONFIG(message_size, &atomic_op32, &atomic_op64, UCT_ATOMIC_OP_ADD, status);
+        ATOMIC_OP_CONFIG(message_size, &atomic_op32, &atomic_op64, UCT_ATOMIC_OP_ADD,
+                         perf_atomic_op, status);
         max_size = 8;
         break;
     case UCX_PERF_CMD_FADD:
-        ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_ADD, status);
+        ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_ADD,
+                         perf_atomic_fop, status);
         max_size = 8;
         break;
     case UCX_PERF_CMD_SWAP:
-        ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_SWAP, status);
+        ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_SWAP,
+                         perf_atomic_fop, status);
         max_size = 8;
         break;
     case UCX_PERF_CMD_CSWAP:
-        ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_CSWAP, status);
+        ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_CSWAP,
+                         perf_atomic_fop, status);
         max_size = 8;
         break;
     default:
