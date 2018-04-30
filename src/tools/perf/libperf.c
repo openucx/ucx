@@ -10,10 +10,26 @@
 #include "libperf_int.h"
 
 #include <ucs/debug/log.h>
+#include <ucs/arch/bitops.h>
 #include <string.h>
 #include <malloc.h>
 #include <unistd.h>
 
+#define ATOMIC_OP_CONFIG(_size, _op32, _op64, _op, _status)                              \
+    _status = __get_atomic_flag((_size), (_op32), (_op64), (_op));                       \
+    if (_status != UCS_OK) {                                                             \
+        ucs_error("Device does not support atomic for message size %zu bytes", (_size)); \
+        return _status;                                                                  \
+    }
+
+#define ATOMIC_OP_CHECK(_size, _attr, _required, _params, _msg)                   \
+    if (!ucs_test_all_flags(_attr, _required)) {                                  \
+        if ((_params)->flags & UCX_PERF_TEST_FLAG_VERBOSE) {                      \
+            ucs_error("Device does not support required "#_size"-bit atomic: %s", \
+                      (_msg)[ucs_ffs64(~(_attr) & (_required))]);                 \
+        }                                                                         \
+        return UCS_ERR_UNSUPPORTED;                                               \
+    }
 
 typedef struct {
     union {
@@ -30,6 +46,47 @@ typedef struct {
     unsigned long      recv_buffer;
 } ucx_perf_ep_info_t;
 
+static const char *perf_iface_ops[] = {
+    [ucs_ilog2(UCT_IFACE_FLAG_AM_SHORT)]         = "am short",
+    [ucs_ilog2(UCT_IFACE_FLAG_AM_BCOPY)]         = "am bcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_AM_ZCOPY)]         = "am zcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_PUT_SHORT)]        = "put short",
+    [ucs_ilog2(UCT_IFACE_FLAG_PUT_BCOPY)]        = "put bcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_PUT_ZCOPY)]        = "put zcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_GET_SHORT)]        = "get short",
+    [ucs_ilog2(UCT_IFACE_FLAG_GET_BCOPY)]        = "get bcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_GET_ZCOPY)]        = "get zcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)] = "peer failure handler",
+    [ucs_ilog2(UCT_IFACE_FLAG_CONNECT_TO_IFACE)] = "connect to iface",
+    [ucs_ilog2(UCT_IFACE_FLAG_CONNECT_TO_EP)]    = "connect to ep",
+    [ucs_ilog2(UCT_IFACE_FLAG_AM_DUP)]           = "full reliability",
+    [ucs_ilog2(UCT_IFACE_FLAG_CB_SYNC)]          = "sync callback",
+    [ucs_ilog2(UCT_IFACE_FLAG_CB_ASYNC)]         = "async callback",
+    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_SEND_COMP)]  = "send completion event",
+    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV)]       = "tag or active message event",
+    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV_SIG)]   = "signaled message event",
+    [ucs_ilog2(UCT_IFACE_FLAG_PENDING)]          = "pending",
+    [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_SHORT)]  = "tag eager short",
+    [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_BCOPY)]  = "tag eager bcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_ZCOPY)]  = "tag eager zcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy"
+};
+
+static const char *perf_atomic_op[] = {
+     [UCT_ATOMIC_OP_ADD]   = "add",
+     [UCT_ATOMIC_OP_AND]   = "and",
+     [UCT_ATOMIC_OP_OR]    = "or" ,
+     [UCT_ATOMIC_OP_XOR]   = "xor"
+};
+
+static const char *perf_atomic_fop[] = {
+     [UCT_ATOMIC_OP_ADD]   = "fetch-add",
+     [UCT_ATOMIC_OP_AND]   = "fetch-and",
+     [UCT_ATOMIC_OP_OR]    = "fetch-or",
+     [UCT_ATOMIC_OP_XOR]   = "fetch-xor",
+     [UCT_ATOMIC_OP_SWAP]  = "swap",
+     [UCT_ATOMIC_OP_CSWAP] = "cscap"
+};
 
 /*
  *  This Quickselect routine is based on the algorithm described in
@@ -314,13 +371,17 @@ static inline uint64_t __get_flag(uct_perf_data_layout_t layout, uint64_t short_
            0;
 }
 
-static inline void __get_atomic_flag(size_t size, uint64_t *op32, uint64_t *op64, uint64_t op)
+static inline ucs_status_t __get_atomic_flag(size_t size, uint64_t *op32,
+                                             uint64_t *op64, uint64_t op)
 {
     if (size == sizeof(uint32_t)) {
         *op32 = UCS_BIT(op);
+        return UCS_OK;
     } else if (size == sizeof(uint32_t)) {
         *op64 = UCS_BIT(op);
+        return UCS_OK;
     }
+    return UCS_ERR_UNSUPPORTED;
 }
 
 static inline size_t __get_max_size(uct_perf_data_layout_t layout, size_t short_m,
@@ -382,19 +443,19 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         max_iov  = attr.cap.get.max_iov;
         break;
     case UCX_PERF_CMD_ADD:
-        __get_atomic_flag(message_size, &atomic_op32, &atomic_op64, UCT_ATOMIC_OP_ADD);
+        ATOMIC_OP_CONFIG(message_size, &atomic_op32, &atomic_op64, UCT_ATOMIC_OP_ADD, status);
         max_size = 8;
         break;
     case UCX_PERF_CMD_FADD:
-        __get_atomic_flag(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_ADD);
+        ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_ADD, status);
         max_size = 8;
         break;
     case UCX_PERF_CMD_SWAP:
-        __get_atomic_flag(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_SWAP);
+        ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_SWAP, status);
         max_size = 8;
         break;
     case UCX_PERF_CMD_CSWAP:
-        __get_atomic_flag(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_CSWAP);
+        ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_CSWAP, status);
         max_size = 8;
         break;
     default:
@@ -409,16 +470,16 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         return status;
     }
 
-    if (!ucs_test_all_flags(attr.cap.flags, required_flags)            ||
-        !ucs_test_all_flags(attr.cap.atomic32.op_flags, atomic_op32)   ||
-        !ucs_test_all_flags(attr.cap.atomic64.op_flags, atomic_op64)   ||
-        !ucs_test_all_flags(attr.cap.atomic32.fop_flags, atomic_fop32) ||
-        !ucs_test_all_flags(attr.cap.atomic64.fop_flags, atomic_fop64) ||
-        !(required_flags | atomic_op32 | atomic_op64 | atomic_fop32 | atomic_fop64)) {
+    ATOMIC_OP_CHECK(32, attr.cap.atomic32.op_flags, atomic_op32, params, perf_atomic_op);
+    ATOMIC_OP_CHECK(64, attr.cap.atomic64.op_flags, atomic_op64, params, perf_atomic_op);
+    ATOMIC_OP_CHECK(32, attr.cap.atomic32.fop_flags, atomic_fop32, params, perf_atomic_fop);
+    ATOMIC_OP_CHECK(64, attr.cap.atomic64.fop_flags, atomic_fop64, params, perf_atomic_fop);
+
+    if (!ucs_test_all_flags(attr.cap.flags, required_flags) || !required_flags) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-            ucs_error("%s/%s does not support required required flags 0x%lx",
+            ucs_error("%s/%s does not support operation %s",
                       params->uct.tl_name, params->uct.dev_name,
-                      required_flags & ~attr.cap.flags);
+                      perf_iface_ops[ucs_ffs64(~attr.cap.flags & required_flags)]);
         }
         return UCS_ERR_UNSUPPORTED;
     }
