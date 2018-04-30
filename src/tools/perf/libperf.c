@@ -85,7 +85,7 @@ static const char *perf_atomic_fop[] = {
      [UCT_ATOMIC_OP_OR]    = "fetch-or",
      [UCT_ATOMIC_OP_XOR]   = "fetch-xor",
      [UCT_ATOMIC_OP_SWAP]  = "swap",
-     [UCT_ATOMIC_OP_CSWAP] = "cscap"
+     [UCT_ATOMIC_OP_CSWAP] = "cswap"
 };
 
 /*
