@@ -30,11 +30,11 @@ enum {
  * Allocation site entry
  */
 typedef struct ucs_memtrack_entry {
-    size_t                  size;
-    size_t                  peak_size;
-    unsigned                count;
-    unsigned                peak_count;
-    char                    name[0];
+    size_t                  size;       /* currently allocated total size */
+    size_t                  peak_size;  /* peak allocated total size */
+    unsigned                count;      /* number of currently allocated blocks */
+    unsigned                peak_count; /* peak number of allocated blocks */
+    char                    name[0];    /* allocation name */
 } ucs_memtrack_entry_t;
 
 
