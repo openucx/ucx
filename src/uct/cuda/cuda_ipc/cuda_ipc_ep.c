@@ -166,7 +166,7 @@ ucs_status_t uct_cuda_ipc_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
 
     status = uct_cuda_ipc_post_cuda_async_copy(tl_ep, remote_addr, iov,
                                                rkey, comp, UCT_CUDA_IPC_GET);
-    if ((UCS_INPROGRESS != status) || (UCS_OK != status)) {
+    if ((UCS_INPROGRESS != status) && (UCS_OK != status)) {
         return status;
     }
 
@@ -185,7 +185,7 @@ ucs_status_t uct_cuda_ipc_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
 
     status = uct_cuda_ipc_post_cuda_async_copy(tl_ep, remote_addr, iov,
                                                rkey, comp, UCT_CUDA_IPC_PUT);
-    if ((UCS_INPROGRESS != status) || (UCS_OK != status)) {
+    if ((UCS_INPROGRESS != status) && (UCS_OK != status)) {
         return status;
     }
 
