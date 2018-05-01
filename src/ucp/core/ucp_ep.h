@@ -24,31 +24,34 @@ typedef uint16_t                   ucp_ep_cfg_index_t;
 
 
 /* Endpoint flags type */
-#if ENABLE_ASSERT || ENABLE_DEBUG_DATA
 typedef uint16_t                   ucp_ep_flags_t;
-#else
-typedef uint8_t                    ucp_ep_flags_t;
-#endif
-
 
 /**
  * Endpoint flags
  */
 enum {
-    UCP_EP_FLAG_LOCAL_CONNECTED     = UCS_BIT(0), /* All local endpoints are connected */
-    UCP_EP_FLAG_REMOTE_CONNECTED    = UCS_BIT(1), /* All remote endpoints are connected */
-    UCP_EP_FLAG_CONNECT_REQ_QUEUED  = UCS_BIT(2), /* Connection request was queued */
-    UCP_EP_FLAG_FAILED              = UCS_BIT(3), /* EP is in failed state */
-    UCP_EP_FLAG_USED                = UCS_BIT(4), /* EP is in use */
-    UCP_EP_FLAG_STREAM_HAS_DATA     = UCS_BIT(5), /* EP has data in the ext.stream.match_q */
-    UCP_EP_FLAG_ON_MATCH_CTX        = UCS_BIT(6), /* EP is on match queue */
-    UCP_EP_FLAG_DEST_EP             = UCS_BIT(7), /* dest_ep_ptr is valid */
+    UCP_EP_FLAG_LOCAL_CONNECTED        = UCS_BIT(0), /* All local endpoints are connected */
+    UCP_EP_FLAG_REMOTE_CONNECTED       = UCS_BIT(1), /* All remote endpoints are connected */
+    UCP_EP_FLAG_CONNECT_REQ_QUEUED     = UCS_BIT(2), /* Connection request was queued */
+    UCP_EP_FLAG_FAILED                 = UCS_BIT(3), /* EP is in failed state */
+    UCP_EP_FLAG_USED                   = UCS_BIT(4), /* EP is in use */
+    UCP_EP_FLAG_STREAM_HAS_DATA        = UCS_BIT(5), /* EP has data in the ext.stream.match_q */
+    UCP_EP_FLAG_ON_MATCH_CTX           = UCS_BIT(6), /* EP is on match queue */
+    UCP_EP_FLAG_DEST_EP                = UCS_BIT(7), /* dest_ep_ptr is valid */
+    UCP_EP_FLAG_LISTENER               = UCS_BIT(8), /* EP holds pointer to a listener
+                                                        (on server side due to receiving partial
+                                                        worker address from the client) */
+    UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
 
     /* DEBUG bits */
-    UCP_EP_FLAG_CONNECT_REQ_SENT    = UCS_BIT(8), /* DEBUG: Connection request was sent */
-    UCP_EP_FLAG_CONNECT_REP_SENT    = UCS_BIT(9), /* DEBUG: Connection reply was sent */
-    UCP_EP_FLAG_CONNECT_ACK_SENT    = UCS_BIT(10),/* DEBUG: Connection ACK was sent */
-    UCP_EP_FLAG_CONNECT_REQ_IGNORED = UCS_BIT(11) /* DEBUG: Connection request was ignored */
+    UCP_EP_FLAG_CONNECT_REQ_SENT     = UCS_BIT(10), /* DEBUG: Connection request was sent */
+    UCP_EP_FLAG_CONNECT_REP_SENT     = UCS_BIT(11), /* DEBUG: Connection reply was sent */
+    UCP_EP_FLAG_CONNECT_ACK_SENT     = UCS_BIT(12), /* DEBUG: Connection ACK was sent */
+    UCP_EP_FLAG_CONNECT_REQ_IGNORED  = UCS_BIT(13), /* DEBUG: Connection request was ignored */
+    UCP_EP_FLAG_CONNECT_PRE_REQ_SENT = UCS_BIT(14), /* DEBUG: Connection pre-request was sent */
+    UCP_EP_FLAG_PARTIAL_ADDR         = UCS_BIT(15)  /* DEBUG: Partial worker address was sent
+                                                              to the remote peer when starting
+                                                              connection establishment on this EP */
 };
 
 
@@ -262,7 +265,10 @@ typedef struct ucp_ep {
  */
 typedef struct {
     uintptr_t                     dest_ep_ptr;   /* Remote EP pointer */
-    void                          *user_data;    /* User data associated with ep */
+    union {
+        void                      *user_data;    /* User data associated with ep */
+        ucp_listener_h            listener;      /* Listener that may be associated with ep */
+    };
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
 
@@ -298,6 +304,12 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
 ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
                         const char *message, ucp_ep_h *ep_p);
 
+void ucp_ep_delete(ucp_ep_h ep);
+
+ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
+                                       const ucp_ep_params_t *params,
+                                       ucp_wireup_ep_t **wireup_ep);
+
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           const ucp_ep_params_t *params,
                                           const ucp_unpacked_address_t *remote_address,
@@ -317,6 +329,8 @@ void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
 void ucp_ep_disconnected(ucp_ep_h ep, int force);
 
 void ucp_ep_destroy_internal(ucp_ep_h ep);
+
+void ucp_ep_cleanup_lanes(ucp_ep_h ep);
 
 int ucp_ep_is_sockaddr_stub(ucp_ep_h ep);
 

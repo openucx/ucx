@@ -23,8 +23,6 @@
 
 extern const ucp_proto_t ucp_stream_am_proto;
 
-static void ucp_ep_cleanup_lanes(ucp_ep_h ep);
-
 #if ENABLE_STATS
 static ucs_stats_class_t ucp_ep_stats_class = {
     .name           = "ucp_ep",
@@ -112,7 +110,7 @@ err:
     return status;
 }
 
-static void ucp_ep_delete(ucp_ep_h ep)
+void ucp_ep_delete(ucp_ep_h ep)
 {
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
@@ -219,6 +217,41 @@ err_cleanup_eps:
     return status;
 }
 
+ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
+                                       const ucp_ep_params_t *params,
+                                       ucp_wireup_ep_t **wireup_ep)
+{
+    ucp_ep_config_key_t key;
+    ucs_status_t status;
+
+    ucp_ep_config_key_reset(&key);
+    ucp_ep_config_key_set_params(&key, params);
+
+    /* all operations will use the first lane, which is a stub endpoint */
+    key.num_lanes             = 1;
+    key.lanes[0].rsc_index    = UCP_NULL_RESOURCE;
+    key.lanes[0].dst_md_index = UCP_NULL_RESOURCE;
+    key.am_lane               = 0;
+    key.wireup_lane           = 0;
+    key.tag_lane              = 0;
+    key.am_bw_lanes[0]        = 0;
+    key.rma_lanes[0]          = 0;
+    key.rma_bw_lanes[0]       = 0;
+    key.amo_lanes[0]          = 0;
+
+    ep->cfg_index             = ucp_worker_get_ep_config(ep->worker, &key);
+    ep->am_lane               = 0;
+    ep->flags                |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
+
+    status = ucp_wireup_ep_create(ep, &ep->uct_eps[0]);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *wireup_ep = ucs_derived_of(ep->uct_eps[0], ucp_wireup_ep_t);
+    return UCS_OK;
+}
+
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           const ucp_ep_params_t *params,
                                           const ucp_unpacked_address_t *remote_address,
@@ -264,7 +297,7 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
                                                ucp_ep_h *ep_p)
 {
     char peer_name[UCS_SOCKADDR_STRING_LEN];
-    ucp_ep_config_key_t key;
+    ucp_wireup_ep_t *wireup_ep;
     ucs_status_t status;
     ucp_ep_h ep;
 
@@ -284,26 +317,7 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
         goto err;
     }
 
-    ucp_ep_config_key_reset(&key);
-    ucp_ep_config_key_set_params(&key, params);
-
-    /* all operations will use the first lane, which is a stub endpoint */
-    key.num_lanes             = 1;
-    key.lanes[0].rsc_index    = UCP_NULL_RESOURCE;
-    key.lanes[0].dst_md_index = UCP_NULL_RESOURCE;
-    key.am_lane               = 0;
-    key.wireup_lane           = 0;
-    key.tag_lane              = 0;
-    key.am_bw_lanes[0]        = 0;
-    key.rma_lanes[0]          = 0;
-    key.rma_bw_lanes[0]       = 0;
-    key.amo_lanes[0]          = 0;
-
-    ep->cfg_index             = ucp_worker_get_ep_config(worker, &key);
-    ep->am_lane               = 0;
-    ep->flags                |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
-
-    status = ucp_wireup_ep_create(ep, &ep->uct_eps[0]);
+    status = ucp_ep_init_create_wireup(ep, params, &wireup_ep);
     if (status != UCS_OK) {
         goto err_delete;
     }
@@ -379,6 +393,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 
     /* if needed, send initial wireup message */
     if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
+        ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
         status = ucp_wireup_send_request(ep);
         if (status != UCS_OK) {
             ucp_ep_destroy_internal(ep);
@@ -471,7 +486,7 @@ void ucp_ep_destroy_internal(ucp_ep_h ep)
     ucp_ep_delete(ep);
 }
 
-static void ucp_ep_cleanup_lanes(ucp_ep_h ep)
+void ucp_ep_cleanup_lanes(ucp_ep_h ep)
 {
     ucp_lane_index_t lane, proxy_lane;
     uct_ep_h uct_ep;

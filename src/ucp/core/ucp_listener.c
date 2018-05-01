@@ -20,16 +20,29 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
 
     ucs_trace_func("listener=%p ep=%p", accept->listener, ep);
 
-    /* send wireup request message, to connect the client to the server's new endpoint */
-    status = ucp_wireup_send_request(accept->ep);
-    if (status != UCS_OK) {
-        goto err_destroy_ep;
+    if (!(ep->flags & UCP_EP_FLAG_LISTENER)) {
+        /* send wireup request message, to connect the client to the server's new endpoint */
+        ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
+        status = ucp_wireup_send_request(ep);
+        if (status != UCS_OK) {
+            goto err_destroy_ep;
+        }
+    } else {
+        status = ucp_wireup_send_pre_request(ep);
+        if (status != UCS_OK) {
+            goto err_destroy_ep;
+        }
     }
 
     if (accept->listener->cb != NULL) {
-        ep->flags |= UCP_EP_FLAG_USED;
-        accept->listener->cb(ep, accept->listener->arg);
+        if (ep->flags & UCP_EP_FLAG_LISTENER) {
+            ucp_ep_ext_gen(ep)->listener = accept->listener;
+        } else {
+            accept->listener->cb(ep, accept->listener->arg);
+        }
     }
+
+    ep->flags |= UCP_EP_FLAG_USED;
 
     goto out;
 
@@ -71,12 +84,26 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
         goto err;
     }
 
-    /* create endpoint to the worker address we got in the private data */
-    status = ucp_ep_create_to_worker_addr(listener->wiface.worker, &params,
-                                          &remote_address, UCP_EP_CREATE_AM_LANE,
-                                          "listener", &ep);
-    if (status != UCS_OK) {
-        goto err_free_address;
+    if (client_data->is_full_addr) {
+        /* create endpoint to the worker address we got in the private data */
+        status = ucp_ep_create_to_worker_addr(listener->wiface.worker, &params,
+                                              &remote_address, UCP_EP_CREATE_AM_LANE,
+                                              "listener", &ep);
+        if (status != UCS_OK) {
+            goto err_free_address;
+        }
+
+        ep->flags &= ~UCP_EP_FLAG_LISTENER;
+    } else {
+        status = ucp_wireup_ep_create_sockaddr_aux(listener->wiface.worker,
+                                                   &params, &remote_address,
+                                                   &ep);
+        if (status != UCS_OK) {
+            goto err_free_address;
+        }
+
+        /* the listener's ep should be aware of the sent address from the client */
+        ep->flags |= UCP_EP_FLAG_LISTENER;
     }
 
     ucp_ep_update_dest_ep_ptr(ep, client_data->ep_ptr);

@@ -44,6 +44,7 @@ struct ucp_wireup_ep {
 typedef struct ucp_wireup_client_data {
     uintptr_t                 ep_ptr;        /**< Client-side endpoint pointer */
     ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
+    uint8_t                   is_full_addr;  /**< Is full worker address packed */
     /* packed worker address follows */
 } UCS_S_PACKED ucp_wireup_sockaddr_priv_t;
 
@@ -77,6 +78,11 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *param
 
 ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
                                                const ucp_ep_params_t *params);
+
+ucs_status_t ucp_wireup_ep_create_sockaddr_aux(ucp_worker_h worker,
+                                               const ucp_ep_params_t *params,
+                                               const ucp_unpacked_address_t *remote_address,
+                                               ucp_ep_h *ep_p);
 
 void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
 

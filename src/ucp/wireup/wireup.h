@@ -18,6 +18,7 @@
  * Wireup message types
  */
 enum {
+    UCP_WIREUP_MSG_PRE_REQUEST,
     UCP_WIREUP_MSG_REQUEST,
     UCP_WIREUP_MSG_REPLY,
     UCP_WIREUP_MSG_ACK,
@@ -76,6 +77,8 @@ typedef struct ucp_wireup_msg {
 
 
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
+
+ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep);
 
 ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane);
 

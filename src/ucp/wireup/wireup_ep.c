@@ -270,6 +270,44 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
     return UCS_OK;
 }
 
+ucs_status_t ucp_wireup_ep_create_sockaddr_aux(ucp_worker_h worker,
+                                               const ucp_ep_params_t *params,
+                                               const ucp_unpacked_address_t *remote_address,
+                                               ucp_ep_h *ep_p)
+{
+    ucp_wireup_ep_t *wireup_ep;
+    ucs_status_t status;
+    ucp_ep_h ep;
+
+    /* allocate endpoint */
+    status = ucp_ep_new(worker, remote_address->name, "listener", &ep);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = ucp_ep_init_create_wireup(ep, params, &wireup_ep);
+    if (status != UCS_OK) {
+        goto err_delete;
+    }
+
+    status = ucp_wireup_ep_connect_aux(wireup_ep, params,
+                                       remote_address->address_count,
+                                       remote_address->address_list);
+    if (status != UCS_OK) {
+        goto err_destroy_wireup_ep;
+    }
+
+    *ep_p = ep;
+    return status;
+
+err_destroy_wireup_ep:
+    uct_ep_destroy(ep->uct_eps[0]);
+err_delete:
+    ucp_ep_delete(ep);
+err:
+    return status;
+}
+
 static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
                                         uct_completion_t *comp)
 {
@@ -420,6 +458,41 @@ err:
     return status;
 }
 
+static ucs_status_t ucp_wireup_ep_pack_always_supported_rscs(ucp_worker_h worker,
+                                                             const char *dev_name,
+                                                             int *tl_id_p,
+                                                             ucp_address_t **address_p,
+                                                             size_t *address_length_p)
+{
+    ucp_context_h context = worker->context;
+    int tl_id, found_supported_tl = 0;
+    ucs_status_t status;
+    uint64_t tl_bitmap = 0;
+
+    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+        if ((worker->ifaces[tl_id].attr.cap.flags & UCT_IFACE_FLAG_SUPPORT_PRESENT) &&
+            (!strncmp(context->tl_rscs[tl_id].tl_rsc.dev_name, dev_name, UCT_DEVICE_NAME_MAX))) {
+            found_supported_tl = 1;
+            tl_bitmap |= UCS_BIT(tl_id);
+        }
+    }
+
+    if (found_supported_tl) {
+        UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+
+        status = ucp_address_pack(worker, NULL, tl_bitmap, NULL,
+                                  address_length_p, (void**)address_p);
+
+        UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    } else {
+        ucs_error("no supported transport found for %s", dev_name);
+        status = UCS_ERR_NO_RESOURCE;
+    }
+
+    *tl_id_p = tl_id;
+    return status;
+}
+
 ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name,
                                                  void *priv_data)
 {
@@ -430,9 +503,10 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     ucp_worker_h worker                   = ucp_ep->worker;
     ucp_context_h context                 = worker->context;
     size_t address_length, conn_priv_len;
-    ucp_address_t *worker_address;
+    ucp_address_t *worker_address, *rsc_address;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
+    int tl_id;
 
     status = ucp_worker_get_address(worker, &worker_address, &address_length);
     if (status != UCS_OK) {
@@ -441,21 +515,51 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
 
     conn_priv_len = sizeof(*conn_priv) + address_length;
 
-    /* check private data length limitation */
-    wiface = &worker->ifaces[sockaddr_rsc];
-    if (conn_priv_len > wiface->attr.max_conn_priv) {
-        ucs_error("worker address information (%zu) exceeds max_priv on "
-                   UCT_TL_RESOURCE_DESC_FMT" (%zu)", conn_priv_len,
-                   UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
-                   wiface->attr.max_conn_priv);
-        status = UCS_ERR_BUFFER_TOO_SMALL;
-        goto err_free_address;
-    }
-
     /* pack private data */
     conn_priv->err_mode = ucp_ep_config(ucp_ep)->key.err_mode;
     conn_priv->ep_ptr   = (uintptr_t)ucp_ep;
-    memcpy(conn_priv + 1, worker_address, address_length);
+
+    wiface = &worker->ifaces[sockaddr_rsc];
+
+    /* check private data length limitation */
+    if (conn_priv_len > wiface->attr.max_conn_priv) {
+
+        /* since the full worker address is too large to fit into the trasnport's
+         * private data, try to pack resources to pass partial address */
+        status = ucp_wireup_ep_pack_always_supported_rscs(worker, dev_name, &tl_id,
+                                                          &rsc_address, &address_length);
+        if (status != UCS_OK) {
+            goto err_free_address;
+        }
+
+        conn_priv_len = sizeof(*conn_priv) + address_length;
+
+        /* check the private data length limitation again, now with partial
+         * resources packed (and not the entire worker address) */
+        if (conn_priv_len > wiface->attr.max_conn_priv) {
+            ucs_error("always supported resources addresses ("UCT_TL_RESOURCE_DESC_FMT")"
+                      " information (%zu) exceed max_priv on "
+                      UCT_TL_RESOURCE_DESC_FMT" (%zu)",
+                      UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[tl_id].tl_rsc),
+                      conn_priv_len,
+                      UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
+                      wiface->attr.max_conn_priv);
+            status = UCS_ERR_BUFFER_TOO_SMALL;
+            ucs_free(rsc_address);
+            goto err_free_address;
+        }
+
+        conn_priv->is_full_addr = 0;
+        memcpy(conn_priv + 1, rsc_address, address_length);
+        ucp_ep->flags |= UCP_EP_FLAG_PARTIAL_ADDR;
+
+        ucs_free(rsc_address);
+
+    } else {
+        conn_priv->is_full_addr = 1;
+        memcpy(conn_priv + 1, worker_address, address_length);
+        ucp_ep->flags &= ~UCP_EP_FLAG_PARTIAL_ADDR;
+    }
 
     ucp_worker_release_address(worker, worker_address);
     return conn_priv_len;

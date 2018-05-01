@@ -251,6 +251,10 @@ typedef enum uct_atomic_op {
 #define UCT_IFACE_FLAG_EVENT_RECV_SIG  UCS_BIT(48) /**< Event notification of signaled tag and active
                                                         message is supported */
 
+#define UCT_IFACE_FLAG_SUPPORT_PRESENT UCS_BIT(49) /**< Supported by every device version.
+                                                        Can be set only on ifaces where
+                                                        UCT_IFACE_FLAG_CONNECT_TO_IFACE is set as well */
+
         /* Tag matching operations */
 #define UCT_IFACE_FLAG_TAG_EAGER_SHORT UCS_BIT(50) /**< Hardware tag matching short eager support */
 #define UCT_IFACE_FLAG_TAG_EAGER_BCOPY UCS_BIT(51) /**< Hardware tag matching bcopy eager support */

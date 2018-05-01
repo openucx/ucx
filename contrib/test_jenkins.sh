@@ -446,7 +446,6 @@ run_uct_hello() {
 }
 
 run_client_server() {
-    dev=$1
 
     test_name=ucp_client_server
 
@@ -468,13 +467,13 @@ run_client_server() {
     server_port=$((10000 + EXECUTOR_NUMBER))
 
     # run server side
-    UCX_NET_DEVICES=${dev} UCX_TLS=rc ./${test_name} -p ${server_port} &
+    ./${test_name} -p ${server_port} &
     hw_server_pid=$!
 
     sleep 5
 
     # need to be ran in background to reflect application PID in $!
-    UCX_NET_DEVICES=${dev} UCX_TLS=rc ./${test_name} -a ${server_ip} -p ${server_port} &
+    ./${test_name} -a ${server_ip} -p ${server_port} &
     hw_client_pid=$!
 
     wait ${hw_client_pid}
@@ -494,11 +493,9 @@ run_ucp_client_server() {
         return
     fi
 
-    for ucx_dev in $(get_active_ib_devices)
-    do
-        echo "==== Running UCP client-server  ===="
-        run_client_server ${ucx_dev}
-    done
+    echo "==== Running UCP client-server  ===="
+    run_client_server
+
     rm -f ./ucp_client_server
 }
 
