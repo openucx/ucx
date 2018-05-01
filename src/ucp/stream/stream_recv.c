@@ -391,14 +391,37 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_proto_t *ep_ext,
     return UCS_INPROGRESS;
 }
 
-void ucp_stream_recv_purge(ucp_ep_h ep)
+void ucp_stream_ep_init(ucp_ep_h ep)
+{
+    ucp_ep_ext_proto_t *ep_ext = ucp_ep_ext_proto(ep);
+
+    if (ep->worker->context->config.features & UCP_FEATURE_STREAM) {
+        ep_ext->stream.ready_list.prev = NULL;
+        ep_ext->stream.ready_list.next = NULL;
+        ucs_queue_head_init(&ep_ext->stream.match_q);
+    }
+}
+
+void ucp_stream_ep_cleanup(ucp_ep_h ep)
 {
     size_t length;
     void *data;
 
-    while ((data = ucp_stream_recv_data_nb(ep, &length)) != NULL) {
-        ucs_assert_always(!UCS_PTR_IS_ERR(data));
-        ucp_stream_data_release(ep, data);
+    if (ep->worker->context->config.features & UCP_FEATURE_STREAM) {
+        while ((data = ucp_stream_recv_data_nb(ep, &length)) != NULL) {
+            ucs_assert_always(!UCS_PTR_IS_ERR(data));
+            ucp_stream_data_release(ep, data);
+        }
+    }
+}
+
+void ucp_stream_ep_activate(ucp_ep_h ep)
+{
+    ucp_ep_ext_proto_t *ep_ext = ucp_ep_ext_proto(ep);
+
+    if ((ep->worker->context->config.features & UCP_FEATURE_STREAM) &&
+        ucp_stream_ep_has_data(ep_ext) && !ucp_stream_ep_is_queued(ep_ext)) {
+        ucp_stream_ep_enqueue(ep_ext, ep->worker);
     }
 }
 
@@ -417,7 +440,7 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
     ep     = ucp_worker_get_ep_by_ptr(worker, data->hdr.ep_ptr);
     ep_ext = ucp_ep_ext_proto(ep);
 
-    if (ucs_unlikely(!(ep->flags & UCP_EP_FLAG_USED))) {
+    if (ucs_unlikely(ep->flags & UCP_EP_FLAG_CLOSED)) {
         ucs_trace_data("ep %p: stream is invalid", ep);
         /* drop the data */
         return UCS_OK;
@@ -433,7 +456,7 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
 
     ucs_assert(status == UCS_INPROGRESS);
 
-    if (!ucp_stream_ep_is_queued(ep_ext)) {
+    if (!ucp_stream_ep_is_queued(ep_ext) && (ep->flags & UCP_EP_FLAG_USED)) {
         ucp_stream_ep_enqueue(ep_ext, worker);
     }
 

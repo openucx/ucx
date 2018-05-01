@@ -24,7 +24,11 @@ typedef struct {
 } UCS_S_PACKED ucp_stream_am_data_t;
 
 
-void ucp_stream_recv_purge(ucp_ep_h ep);
+void ucp_stream_ep_init(ucp_ep_h ep);
+
+void ucp_stream_ep_cleanup(ucp_ep_h ep);
+
+void ucp_stream_ep_activate(ucp_ep_h ep);
 
 
 static UCS_F_ALWAYS_INLINE int ucp_stream_ep_is_queued(ucp_ep_ext_proto_t *ep_ext)
