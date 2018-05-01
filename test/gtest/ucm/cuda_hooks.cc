@@ -170,23 +170,6 @@ UCS_TEST_F(cuda_hooks, test_cuMemAllocManaged) {
     check_mem_free_events((void *)dptr);
 }
 
-UCS_TEST_F(cuda_hooks, test_cuMemFreeHost) {
-    CUresult ret;
-    CUdeviceptr dptr;
-    void *p;
-
-    ret = cuMemAllocHost(&p, 4096);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
-
-    ret = cuMemHostGetDevicePointer(&dptr, p, 0);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
-    check_mem_alloc_events((void *)dptr, 4096);
-
-    ret = cuMemFreeHost(p);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
-    check_mem_free_events((void *)dptr);
-}
-
 UCS_TEST_F(cuda_hooks, test_cuMemAllocPitch) {
     CUresult ret;
     CUdeviceptr dptr;
@@ -200,25 +183,6 @@ UCS_TEST_F(cuda_hooks, test_cuMemAllocPitch) {
     ASSERT_EQ(ret, CUDA_SUCCESS);
     ASSERT_EQ((void *)dptr, free_ptr);
     check_mem_free_events((void *)dptr);
-}
-
-UCS_TEST_F(cuda_hooks, test_cuMemHostUnregister) {
-    CUresult ret;
-    CUdeviceptr dptr;
-    void *p;
-
-    p = malloc(65536);
-    EXPECT_TRUE(p != NULL);
-
-    ret = cuMemHostRegister(p, 65536, CU_MEMHOSTREGISTER_DEVICEMAP);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
-    ret = cuMemHostGetDevicePointer(&dptr, p, 0);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
-    ret = cuMemHostUnregister(p);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
-    check_mem_free_events((void *)dptr);
-
-    free(p);
 }
 
 UCS_TEST_F(cuda_hooks, test_cuda_Malloc_Free) {
@@ -282,23 +246,6 @@ UCS_TEST_F(cuda_hooks, test_cudaMallocManaged) {
     check_mem_free_events(ptr);
 }
 
-UCS_TEST_F(cuda_hooks, test_cudaFreeHost) {
-    cudaError_t ret;
-    void **pDevice;
-    void *ptr;
-
-    ret = cudaMallocHost(&ptr, 4096);
-    ASSERT_EQ(ret, cudaSuccess);
-
-    ret = cudaHostGetDevicePointer(&pDevice, ptr, 0);
-    ASSERT_EQ(ret, cudaSuccess);
-    check_mem_alloc_events(pDevice, 4096);
-
-    ret = cudaFreeHost(ptr);
-    ASSERT_EQ(ret, cudaSuccess);
-    check_mem_free_events(pDevice);
-}
-
 UCS_TEST_F(cuda_hooks, test_cudaMallocPitch) {
     cudaError_t ret;
     void *devPtr;
@@ -312,23 +259,4 @@ UCS_TEST_F(cuda_hooks, test_cudaMallocPitch) {
     ASSERT_EQ(ret, cudaSuccess);
     ASSERT_EQ(devPtr, free_ptr);
     check_mem_free_events(devPtr);
-}
-
-UCS_TEST_F(cuda_hooks, test_cudaHostUnregister) {
-    cudaError_t ret;
-    void *dptr;
-    void *p;
-
-    p = malloc(65536);
-    EXPECT_TRUE(p != NULL);
-
-    ret = cudaHostRegister(p, 65536, cudaHostRegisterMapped);
-    ASSERT_EQ(ret, cudaSuccess);
-    ret = cudaHostGetDevicePointer(&dptr, p, 0);
-    ASSERT_EQ(ret, cudaSuccess);
-    ret = cudaHostUnregister(p);
-    ASSERT_EQ(ret, cudaSuccess);
-    check_mem_free_events((void *)dptr);
-
-    free(p);
 }
