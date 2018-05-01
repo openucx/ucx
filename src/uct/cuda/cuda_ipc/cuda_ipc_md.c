@@ -61,7 +61,7 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_md_component_t *mdc,
     uct_cuda_ipc_key_t *key;
     CUdevice cu_device;
 
-    GET_CUDA_DEVICE(cu_device);
+    UCT_CUDA_IPC_GET_DEVICE(cu_device);
 
     key = ucs_malloc(sizeof(uct_cuda_ipc_key_t), "uct_cuda_ipc_key_t");
     if (NULL == key) {
@@ -99,7 +99,7 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
         return status;
     }
 
-    GET_CUDA_DEVICE(cu_device);
+    UCT_CUDA_IPC_GET_DEVICE(cu_device);
 
     UCT_CUDADRV_FUNC(cuMemGetAddressRange(&(mem_hndl->d_bptr),
                                           &(mem_hndl->b_len),

@@ -112,7 +112,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_OK;
     }
 
-    GET_CUDA_DEVICE(cu_device);
+    UCT_CUDA_IPC_GET_DEVICE(cu_device);
 
     status = uct_cuda_ipc_get_mapped_addr(ep, key, cu_device, remote_addr,
                                           &mapped_rem_addr, iov[0].buffer);
