@@ -15,10 +15,11 @@
 #include <malloc.h>
 #include <unistd.h>
 
-#define ATOMIC_OP_CONFIG(_size, _op32, _op64, _op, _msg, _status)                 \
+#define ATOMIC_OP_CONFIG(_size, _op32, _op64, _op, _msg, _params, _status)        \
     _status = __get_atomic_flag((_size), (_op32), (_op64), (_op));                \
     if (_status != UCS_OK) {                                                      \
-        ucs_error("Device does not support atomic %s for message size %zu bytes", \
+        ucs_error("%s/%s does not support atomic %s for message size %zu bytes",  \
+                  (_params)->uct.tl_name, (_params)->uct.dev_name,                \
                   (_msg)[_op], (_size));                                          \
         return _status;                                                           \
     }
@@ -26,7 +27,8 @@
 #define ATOMIC_OP_CHECK(_size, _attr, _required, _params, _msg)                   \
     if (!ucs_test_all_flags(_attr, _required)) {                                  \
         if ((_params)->flags & UCX_PERF_TEST_FLAG_VERBOSE) {                      \
-            ucs_error("Device does not support required "#_size"-bit atomic: %s", \
+            ucs_error("%s/%s does not support required "#_size"-bit atomic: %s",  \
+                      (_params)->uct.tl_name, (_params)->uct.dev_name,            \
                       (_msg)[ucs_ffs64(~(_attr) & (_required))]);                 \
         }                                                                         \
         return UCS_ERR_UNSUPPORTED;                                               \
@@ -445,22 +447,22 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         break;
     case UCX_PERF_CMD_ADD:
         ATOMIC_OP_CONFIG(message_size, &atomic_op32, &atomic_op64, UCT_ATOMIC_OP_ADD,
-                         perf_atomic_op, status);
+                         perf_atomic_op, params, status);
         max_size = 8;
         break;
     case UCX_PERF_CMD_FADD:
         ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_ADD,
-                         perf_atomic_fop, status);
+                         perf_atomic_fop, params, status);
         max_size = 8;
         break;
     case UCX_PERF_CMD_SWAP:
         ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_SWAP,
-                         perf_atomic_fop, status);
+                         perf_atomic_fop, params, status);
         max_size = 8;
         break;
     case UCX_PERF_CMD_CSWAP:
         ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_CSWAP,
-                         perf_atomic_fop, status);
+                         perf_atomic_fop, params, status);
         max_size = 8;
         break;
     default:
@@ -475,12 +477,15 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         return status;
     }
 
+    /* check atomics first */
     ATOMIC_OP_CHECK(32, attr.cap.atomic32.op_flags, atomic_op32, params, perf_atomic_op);
     ATOMIC_OP_CHECK(64, attr.cap.atomic64.op_flags, atomic_op64, params, perf_atomic_op);
     ATOMIC_OP_CHECK(32, attr.cap.atomic32.fop_flags, atomic_fop32, params, perf_atomic_fop);
     ATOMIC_OP_CHECK(64, attr.cap.atomic64.fop_flags, atomic_fop64, params, perf_atomic_fop);
 
-    if (!ucs_test_all_flags(attr.cap.flags, required_flags) || !required_flags) {
+    /* check iface flags */
+    if (!(atomic_op32 | atomic_op64 | atomic_fop32 | atomic_fop64) &&
+        (!ucs_test_all_flags(attr.cap.flags, required_flags) || !required_flags)) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("%s/%s does not support operation %s",
                       params->uct.tl_name, params->uct.dev_name,
