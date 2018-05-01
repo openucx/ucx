@@ -9,6 +9,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>
+#include <stdlib.h>
 
 
 ucs_status_t ucs_timerq_init(ucs_timer_queue_t *timerq)

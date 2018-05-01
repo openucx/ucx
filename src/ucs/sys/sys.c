@@ -517,12 +517,10 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
     void *ptr;
     int ret, err;
 
-    alloc_size = ucs_memtrack_adjust_alloc_size(*size);
-
     if (flags & SHM_HUGETLB){
-        alloc_size = ucs_align_up(alloc_size, ucs_get_huge_page_size());
+        alloc_size = ucs_align_up(*size, ucs_get_huge_page_size());
     } else {
-        alloc_size = ucs_align_up(alloc_size, ucs_get_page_size());
+        alloc_size = ucs_align_up(*size, ucs_get_page_size());
     }
 
     if (alloc_size >= max_size) {
@@ -589,10 +587,9 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
         }
     }
 
+    ucs_memtrack_allocated(ptr, alloc_size UCS_MEMTRACK_VAL);
     *address_p = ptr;
     *size      = alloc_size;
-
-    ucs_memtrack_allocated(address_p, size UCS_MEMTRACK_VAL);
     return UCS_OK;
 }
 
@@ -600,7 +597,7 @@ ucs_status_t ucs_sysv_free(void *address)
 {
     int ret;
 
-    ucs_memtrack_releasing(&address);
+    ucs_memtrack_releasing(address);
     ret = shmdt(address);
     if (ret) {
         ucs_warn("Unable to detach shared memory segment at %p: %m", address);

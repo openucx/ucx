@@ -188,16 +188,13 @@ UCS_TEST_F(test_memtrack, mmap) {
 
 UCS_TEST_F(test_memtrack, custom) {
     void *ptr, *initial_ptr;
-    size_t size;
 
-    size = ucs_memtrack_adjust_alloc_size(ALLOC_SIZE);
-    initial_ptr = ptr = malloc(size);
-    ucs_memtrack_allocated(&ptr, &size, ALLOC_NAME);
+    initial_ptr = ptr = malloc(ALLOC_SIZE);
+    ucs_memtrack_allocated(ptr, ALLOC_SIZE, ALLOC_NAME);
 
-    EXPECT_EQ(size_t(ALLOC_SIZE), size);
-    memset(ptr, 0, size);
+    memset(ptr, 0, ALLOC_SIZE);
 
-    ucs_memtrack_releasing(&ptr);
+    ucs_memtrack_releasing(ptr);
     ASSERT_EQ(initial_ptr, ptr);
     free(ptr);
 
