@@ -21,6 +21,7 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
     {"MAX_POLL", "16",
      "Max number of event completions to pick during cuda events polling",
       ucs_offsetof(uct_cuda_ipc_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
@@ -127,8 +128,7 @@ uct_cuda_ipc_progress_event_q(ucs_queue_head_t *event_q, unsigned max_events)
         status = UCT_CUDADRV_FUNC(cuEventQuery(cuda_ipc_event->event));
         if (UCS_INPROGRESS == status) {
             continue;
-        }
-        else if (UCS_OK != status) {
+        } else if (UCS_OK != status) {
             return status;
         }
         ucs_queue_del_iter(event_q, iter);
@@ -180,7 +180,7 @@ static void uct_cuda_ipc_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk
     uct_cuda_ipc_event_desc_t *base = (uct_cuda_ipc_event_desc_t *) obj;
     ucs_status_t status;
 
-    memset(base, 0 , sizeof(*base));
+    memset(base, 0, sizeof(*base));
     status = UCT_CUDADRV_FUNC(cuEventCreate(&(base->event),
                                             CU_EVENT_DISABLE_TIMING));
     if (UCS_OK != status) {
@@ -256,8 +256,10 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     self->device_count = dev_count;
     for (i = 0; i < dev_count; i++) {
         for (j = 0; j < dev_count; j++) {
-            UCT_CUDADRV_FUNC(cuDeviceCanAccessPeer(&(self->p2p_map[i][j]),
-                                                   (CUdevice) i, (CUdevice) j));
+            status =
+                UCT_CUDADRV_FUNC(cuDeviceCanAccessPeer(&(self->p2p_map[i][j]),
+                                                            (CUdevice) i,
+                                                            (CUdevice) j));
             if (UCS_OK != status) {
                 return status;
             }
@@ -292,7 +294,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
         for (i = 0; i < self->device_count; i++) {
             status = UCT_CUDADRV_FUNC(cuStreamDestroy(self->stream_d2d[i]));
             if (UCS_OK != status) {
-                return;
+                continue;
             }
         }
         self->streams_initialized = 0;

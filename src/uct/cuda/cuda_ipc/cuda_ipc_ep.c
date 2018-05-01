@@ -166,6 +166,10 @@ ucs_status_t uct_cuda_ipc_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
 
     status = uct_cuda_ipc_post_cuda_async_copy(tl_ep, remote_addr, iov,
                                                rkey, comp, UCT_CUDA_IPC_GET);
+    if ((UCS_INPROGRESS != status) || (UCS_OK != status)) {
+        return status;
+    }
+
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));
     uct_cuda_ipc_trace_data(remote_addr, rkey, "GET_ZCOPY [length %zu]",
@@ -181,6 +185,10 @@ ucs_status_t uct_cuda_ipc_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
 
     status = uct_cuda_ipc_post_cuda_async_copy(tl_ep, remote_addr, iov,
                                                rkey, comp, UCT_CUDA_IPC_PUT);
+    if ((UCS_INPROGRESS != status) || (UCS_OK != status)) {
+        return status;
+    }
+
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));
     uct_cuda_ipc_trace_data(remote_addr, rkey, "PUT_ZCOPY [length %zu]",
