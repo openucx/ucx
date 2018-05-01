@@ -67,7 +67,7 @@ int test_ud_slow_timer::tick_count = 0;
 UCS_TEST_P(test_ud_slow_timer, tx1) {
     connect();
     EXPECT_UCS_OK(tx(m_e1));
-    twait(200);
+    wait_for_rx_sn(1);
     EXPECT_EQ(2, ep(m_e1)->tx.psn);
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 }
