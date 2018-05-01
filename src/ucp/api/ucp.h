@@ -211,7 +211,7 @@ enum ucp_ep_params_field {
  * @ref ucp_ep_create() function.
  */
 enum ucp_ep_params_flags_field {
-    UCP_EP_PARAMS_FLAGS_CLIENT_SERVER  = UCS_BIT(0)   /**< Using a client-server
+    UCP_EP_PARAMS_FLAGS_CLIENT_SERVER  = UCS_BIT(0),  /**< Using a client-server
                                                            connection establishment
                                                            mechanism.
                                                            @ref ucs_sock_addr_t
@@ -219,6 +219,12 @@ enum ucp_ep_params_flags_field {
                                                            must be provided and
                                                            contain the address
                                                            of the remote peer */
+    UCP_EP_PARAMS_FLAGS_NO_LOOPBACK    = UCS_BIT(1)   /**< Avoid connecting the
+                                                           endpoint to itself,
+                                                           even if the destination
+                                                           worker address belongs
+                                                           to the same worker the
+                                                           endpoint is created on */
 };
 
 

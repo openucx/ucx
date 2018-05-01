@@ -419,6 +419,17 @@ UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup) {
     flush_worker(sender());
 }
 
+UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup_rndv, "RNDV_THRESH=1") {
+    sender().connect(&receiver(), get_ep_params());
+    send_recv(sender().ep(), receiver().worker(), receiver().ep(), BUFFER_LENGTH, 1);
+    if (is_loopback() && (GetParam().variant == TEST_TAG)) {
+        /* expect the endpoint to be connected to itself */
+        ucp_ep_h ep = sender().ep();
+        EXPECT_EQ((uintptr_t)ep, ucp_ep_dest_ep_ptr(ep));
+    }
+    flush_worker(sender());
+}
+
 UCS_TEST_P(test_ucp_wireup_1sided, multi_wireup) {
     skip_loopback();
 
@@ -582,11 +593,14 @@ public:
                                          UCP_FEATURE_RMA | UCP_FEATURE_TAG |
                                          UCP_FEATURE_STREAM);
     }
+
+protected:
+    void test_connect_loopback(bool delay_before_connect, bool enable_loopback);
 };
 
 UCS_TEST_P(test_ucp_wireup_2sided, two_sided_wireup) {
     sender().connect(&receiver(), get_ep_params());
-    if (&sender() != &receiver()) {
+    if (!is_loopback()) {
         receiver().connect(&sender(), get_ep_params());
     }
 
@@ -594,6 +608,68 @@ UCS_TEST_P(test_ucp_wireup_2sided, two_sided_wireup) {
     flush_worker(sender());
     send_recv(receiver().ep(), sender().worker(), sender().ep(), 1, 1);
     flush_worker(receiver());
+}
+
+void test_ucp_wireup_2sided::test_connect_loopback(bool delay_before_connect,
+                                                   bool enable_loopback) {
+
+    ucp_ep_params_t params = test_ucp_wireup::get_ep_params();
+    if (!enable_loopback) {
+        params.field_mask |= UCP_EP_PARAM_FIELD_FLAGS;
+        params.flags      |= UCP_EP_PARAMS_FLAGS_NO_LOOPBACK;
+    }
+
+    for (int i = 0; i < 5; ++i) {
+        int base_index = i * 2;
+        sender().connect(&sender(), params, base_index);
+        ucp_ep_h ep1 = sender().ep(0, base_index);
+
+        if (delay_before_connect) {
+            /* let one side create ep */
+            short_progress_loop(0);
+        }
+
+        sender().connect(&sender(), params, base_index + 1);
+        ucp_ep_h ep2 = sender().ep(0, base_index + 1);
+
+        EXPECT_NE(ep1, ep2);
+
+        if (GetParam().variant == TEST_STREAM) {
+
+            uint64_t data1 = (base_index * 10) + 1;
+            uint64_t data2 = (base_index * 10) + 2;
+
+            send_b(ep1, 1, 1, data1);
+            send_b(ep2, 1, 1, data2);
+
+            if (enable_loopback) {
+                /* self-send - each ep receives what was sent on it */
+                recv_b(sender().worker(), ep1, 1, 1, data1);
+                recv_b(sender().worker(), ep2, 1, 1, data2);
+            } else {
+                /* cross-send - each ep receives what was sent on the other ep */
+                recv_b(sender().worker(), ep1, 1, 1, data2);
+                recv_b(sender().worker(), ep2, 1, 1, data1);
+            }
+        }
+    }
+    flush_worker(sender());
+}
+
+UCS_TEST_P(test_ucp_wireup_2sided, loopback) {
+    test_connect_loopback(false, true);
+}
+
+UCS_TEST_P(test_ucp_wireup_2sided, loopback_with_delay) {
+    test_connect_loopback(true, true);
+}
+
+UCS_TEST_P(test_ucp_wireup_2sided, no_loopback) {
+    test_connect_loopback(false, false);
+}
+
+UCS_TEST_P(test_ucp_wireup_2sided, no_loopback_with_delay) {
+    test_connect_loopback(true, false);
 }
 
 UCS_TEST_P(test_ucp_wireup_2sided, connect_disconnect) {
