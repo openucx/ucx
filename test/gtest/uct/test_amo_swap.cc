@@ -14,16 +14,16 @@ public:
                         uint64_t *result, completion *comp) {
         comp->self     = this;
         comp->uct.func = atomic_reply_cb;
-        return uct_ep_atomic_swap32(ep, worker.value, recvbuf.addr(), recvbuf.rkey(),
-                                    (uint32_t*)result, &comp->uct);
+        return uct_ep_atomic32_fetch(ep, UCT_ATOMIC_OP_SWAP, worker.value, (uint32_t*)result,
+                                     recvbuf.addr(), recvbuf.rkey(), &comp->uct);
     }
 
     ucs_status_t swap64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
                         uint64_t *result, completion *comp) {
         comp->self     = this;
         comp->uct.func = atomic_reply_cb;
-        return uct_ep_atomic_swap64(ep, worker.value, recvbuf.addr(), recvbuf.rkey(),
-                                    result, &comp->uct);
+        return uct_ep_atomic64_fetch(ep, UCT_ATOMIC_OP_SWAP, worker.value, (uint64_t*)result,
+                                     recvbuf.addr(), recvbuf.rkey(), &comp->uct);
     }
 
     template <typename T>
@@ -65,12 +65,12 @@ public:
 
 
 UCS_TEST_P(uct_amo_swap_test, swap32) {
-    check_caps(UCT_IFACE_FLAG_ATOMIC_SWAP32);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP32);
     test_swap<uint32_t>(static_cast<send_func_t>(&uct_amo_swap_test::swap32));
 }
 
 UCS_TEST_P(uct_amo_swap_test, swap64) {
-    check_caps(UCT_IFACE_FLAG_ATOMIC_SWAP64);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP64);
     test_swap<uint64_t>(static_cast<send_func_t>(&uct_amo_swap_test::swap64));
 }
 
@@ -79,17 +79,17 @@ UCT_INSTANTIATE_TEST_CASE(uct_amo_swap_test)
 class uct_amo_swap_test_inlresp : public uct_amo_swap_test {};
 
 UCS_TEST_P(uct_amo_swap_test_inlresp, swap32_inlresp0, "IB_TX_INLINE_RESP=0") {
-    check_caps(UCT_IFACE_FLAG_ATOMIC_SWAP32);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP32);
     test_swap<uint32_t>(static_cast<send_func_t>(&uct_amo_swap_test::swap32));
 }
 
 UCS_TEST_P(uct_amo_swap_test_inlresp, swap32_inlresp32, "IB_TX_INLINE_RESP=32") {
-    check_caps(UCT_IFACE_FLAG_ATOMIC_SWAP32);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP32);
     test_swap<uint32_t>(static_cast<send_func_t>(&uct_amo_swap_test::swap32));
 }
 
 UCS_TEST_P(uct_amo_swap_test_inlresp, swap32_inlresp64, "IB_TX_INLINE_RESP=64") {
-    check_caps(UCT_IFACE_FLAG_ATOMIC_SWAP32);
+    check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP32);
     test_swap<uint32_t>(static_cast<send_func_t>(&uct_amo_swap_test::swap32));
 }
 

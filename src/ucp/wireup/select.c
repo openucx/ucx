@@ -83,15 +83,6 @@ static const char *ucp_wireup_iface_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_GET_SHORT)]        = "get short",
     [ucs_ilog2(UCT_IFACE_FLAG_GET_BCOPY)]        = "get bcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_GET_ZCOPY)]        = "get zcopy",
-    /* TODO: remove deprecated flags */
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_ADD32)]     = "32-bit atomic add (deprecated)",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_ADD64)]     = "64-bit atomic add (deprecated)",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_FADD32)]    = "32-bit atomic fetch-add (deprecated)",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_FADD64)]    = "64-bit atomic fetch-add (deprecated)",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_SWAP32)]    = "32-bit atomic swap (deprecated)",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_SWAP64)]    = "64-bit atomic swap (deprecated)",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_CSWAP32)]   = "32-bit atomic compare-swap (deprecated)",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_CSWAP64)]   = "64-bit atomic compare-swap (deprecated)",
     [ucs_ilog2(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)] = "peer failure handler",
     [ucs_ilog2(UCT_IFACE_FLAG_CONNECT_TO_IFACE)] = "connect to iface",
     [ucs_ilog2(UCT_IFACE_FLAG_CONNECT_TO_EP)]    = "connect to ep",
@@ -277,9 +268,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
         /* Make sure we are indeed passing all flags required by the criteria in
          * ucp packed address */
         ucs_assert(ucs_test_all_flags(UCP_ADDRESS_IFACE_FLAGS,
-                                      criteria->remote_iface_flags &
-                                      ~(UCP_UCT_IFACE_ATOMIC32_FLAGS |
-                                        UCP_UCT_IFACE_ATOMIC64_FLAGS)));
+                                      criteria->remote_iface_flags));
 
         if (!ucs_test_all_flags(ae->iface_attr.cap_flags, criteria->remote_iface_flags)) {
             ucs_trace("addr[%d] %s: no %s", addr_index,

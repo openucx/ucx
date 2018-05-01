@@ -194,16 +194,6 @@ typedef enum uct_atomic_op {
 #define UCT_IFACE_FLAG_GET_BCOPY      UCS_BIT(9)  /**< Buffered get */
 #define UCT_IFACE_FLAG_GET_ZCOPY      UCS_BIT(10) /**< Zero-copy get */
 
-        /* Atomic operations capabilities. TODO: replace it by uct_atomic_op_t */
-#define UCT_IFACE_FLAG_ATOMIC_ADD32   UCS_BIT(16) /**< 32bit atomic add */
-#define UCT_IFACE_FLAG_ATOMIC_ADD64   UCS_BIT(17) /**< 64bit atomic add */
-#define UCT_IFACE_FLAG_ATOMIC_FADD32  UCS_BIT(18) /**< 32bit atomic fetch-and-add */
-#define UCT_IFACE_FLAG_ATOMIC_FADD64  UCS_BIT(19) /**< 64bit atomic fetch-and-add */
-#define UCT_IFACE_FLAG_ATOMIC_SWAP32  UCS_BIT(20) /**< 32bit atomic swap */
-#define UCT_IFACE_FLAG_ATOMIC_SWAP64  UCS_BIT(21) /**< 64bit atomic swap */
-#define UCT_IFACE_FLAG_ATOMIC_CSWAP32 UCS_BIT(22) /**< 32bit atomic compare-and-swap */
-#define UCT_IFACE_FLAG_ATOMIC_CSWAP64 UCS_BIT(23) /**< 64bit atomic compare-and-swap */
-
         /* Atomic operations domain */
 #define UCT_IFACE_FLAG_ATOMIC_CPU     UCS_BIT(30) /**< Atomic communications are consistent
                                                        with respect to CPU operations. */
@@ -1912,81 +1902,11 @@ UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id,
  * @ingroup UCT_AMO
  * @brief
  */
-UCT_INLINE_API ucs_status_t uct_ep_atomic_add64(uct_ep_h ep, uint64_t add,
-                                                uint64_t remote_addr, uct_rkey_t rkey)
-{
-    return ep->iface->ops.ep_atomic_add64(ep, add, remote_addr, rkey);
-}
-
-
-/**
- * @ingroup UCT_AMO
- * @brief
- */
-UCT_INLINE_API ucs_status_t uct_ep_atomic_fadd64(uct_ep_h ep, uint64_t add,
-                                                 uint64_t remote_addr, uct_rkey_t rkey,
-                                                 uint64_t *result, uct_completion_t *comp)
-{
-    return ep->iface->ops.ep_atomic_fadd64(ep, add, remote_addr, rkey, result, comp);
-}
-
-
-/**
- * @ingroup UCT_AMO
- * @brief
- */
-UCT_INLINE_API ucs_status_t uct_ep_atomic_swap64(uct_ep_h ep, uint64_t swap,
-                                                 uint64_t remote_addr, uct_rkey_t rkey,
-                                                 uint64_t *result, uct_completion_t *comp)
-{
-    return ep->iface->ops.ep_atomic_swap64(ep, swap, remote_addr, rkey, result, comp);
-}
-
-
-/**
- * @ingroup UCT_AMO
- * @brief
- */
 UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap64(uct_ep_h ep, uint64_t compare, uint64_t swap,
                                                   uint64_t remote_addr, uct_rkey_t rkey,
                                                   uint64_t *result, uct_completion_t *comp)
 {
     return ep->iface->ops.ep_atomic_cswap64(ep, compare, swap, remote_addr, rkey, result, comp);
-}
-
-
-/**
- * @ingroup UCT_AMO
- * @brief
- */
-UCT_INLINE_API ucs_status_t uct_ep_atomic_add32(uct_ep_h ep, uint32_t add,
-                                                uint64_t remote_addr, uct_rkey_t rkey)
-{
-    return ep->iface->ops.ep_atomic_add32(ep, add, remote_addr, rkey);
-}
-
-
-/**
- * @ingroup UCT_AMO
- * @brief
- */
-UCT_INLINE_API ucs_status_t uct_ep_atomic_fadd32(uct_ep_h ep, uint32_t add,
-                                                 uint64_t remote_addr, uct_rkey_t rkey,
-                                                 uint32_t *result, uct_completion_t *comp)
-{
-    return ep->iface->ops.ep_atomic_fadd32(ep, add, remote_addr, rkey, result, comp);
-}
-
-
-/**
- * @ingroup UCT_AMO
- * @brief
- */
-UCT_INLINE_API ucs_status_t uct_ep_atomic_swap32(uct_ep_h ep, uint32_t swap,
-                                                 uint64_t remote_addr, uct_rkey_t rkey,
-                                                 uint32_t *result, uct_completion_t *comp)
-{
-    return ep->iface->ops.ep_atomic_swap32(ep, swap, remote_addr, rkey, result, comp);
 }
 
 

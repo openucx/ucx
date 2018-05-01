@@ -117,31 +117,9 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
                                       size_t iovcnt, unsigned flags,
                                       uct_completion_t *comp);
 
-ucs_status_t uct_rc_verbs_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
-                                          uint64_t remote_addr, uct_rkey_t rkey);
-
-ucs_status_t uct_rc_verbs_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
-                                           uint64_t remote_addr, uct_rkey_t rkey,
-                                           uint64_t *result, uct_completion_t *comp);
-
-ucs_status_t uct_rc_verbs_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
-                                           uint64_t remote_addr, uct_rkey_t rkey,
-                                           uint64_t *result, uct_completion_t *comp);
-
 ucs_status_t uct_rc_verbs_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
                                             uint64_t remote_addr, uct_rkey_t rkey,
                                             uint64_t *result, uct_completion_t *comp);
-
-ucs_status_t uct_rc_verbs_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
-                                          uint64_t remote_addr, uct_rkey_t rkey);
-
-ucs_status_t uct_rc_verbs_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
-                                           uint64_t remote_addr, uct_rkey_t rkey,
-                                           uint32_t *result, uct_completion_t *comp);
-
-ucs_status_t uct_rc_verbs_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
-                                           uint64_t remote_addr, uct_rkey_t rkey,
-                                           uint32_t *result, uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32_t swap,
                                             uint64_t remote_addr, uct_rkey_t rkey,

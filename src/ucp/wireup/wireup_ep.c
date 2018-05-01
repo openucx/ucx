@@ -307,13 +307,11 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
         .ep_tag_eager_zcopy   = (void*)ucs_empty_function_return_no_resource,
         .ep_tag_rndv_zcopy    = (void*)ucs_empty_function_return_ptr_no_resource,
         .ep_tag_rndv_request  = (void*)ucs_empty_function_return_no_resource,
-        .ep_atomic_add64      = (void*)ucs_empty_function_return_no_resource,
-        .ep_atomic_fadd64     = (void*)ucs_empty_function_return_no_resource,
-        .ep_atomic_swap64     = (void*)ucs_empty_function_return_no_resource,
+        .ep_atomic64_post     = (void*)ucs_empty_function_return_no_resource,
+        .ep_atomic64_fetch    = (void*)ucs_empty_function_return_no_resource,
         .ep_atomic_cswap64    = (void*)ucs_empty_function_return_no_resource,
-        .ep_atomic_add32      = (void*)ucs_empty_function_return_no_resource,
-        .ep_atomic_fadd32     = (void*)ucs_empty_function_return_no_resource,
-        .ep_atomic_swap32     = (void*)ucs_empty_function_return_no_resource,
+        .ep_atomic32_post     = (void*)ucs_empty_function_return_no_resource,
+        .ep_atomic32_fetch    = (void*)ucs_empty_function_return_no_resource,
         .ep_atomic_cswap32    = (void*)ucs_empty_function_return_no_resource
     };
 
