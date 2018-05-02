@@ -822,6 +822,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     uct_md_attr_t *md_attr       = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
     size_t it;
     size_t zcopy_thresh;
+    int mem_type;
 
     if (iface_attr->cap.flags & short_flag && !context->num_mem_type_mds) {
         config->max_short = max_short - hdr_len;
@@ -855,6 +856,18 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
         config->zcopy_auto_thresh    = 0;
         config->sync_zcopy_thresh[0] = config->zcopy_thresh[0] =
                 ucs_min(context->config.ext.zcopy_thresh, adjust_min_val);
+    }
+
+    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+        if (UCP_MEM_IS_HOST(mem_type)) {
+            continue;
+        }
+
+        if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
+            config->mem_type_zcopy_thresh[mem_type] = 1;
+        } else {
+            config->mem_type_zcopy_thresh[mem_type] = -1;
+        }
     }
 }
 
