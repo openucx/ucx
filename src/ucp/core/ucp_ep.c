@@ -357,10 +357,11 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
      * In case of loopback connection, search the hash table for an endpoint with
      * even/odd matching, so that every 2 endpoints connected to the local worker
      * with be paired to each other.
-     * Note that if a loopback endpoint had UCP_EP_PARAMS_FLAGS_NO_LOOPBACK flag,
-     * it will not be added to ep_match as unexpected. This is because dest_ep_ptr
-     * will be initialized, so a WIREUP_REQUEST (if sent) will have dst_ep != 0,
-     * so ucp_wireup_process_request() will not create unexpected ep in ep_match.
+     * Note that if a loopback endpoint had the UCP_EP_PARAMS_FLAGS_NO_LOOPBACK
+     * flag set, it will not be added to ep_match as an unexpected ep. Because
+     * dest_ep_ptr will be initialized, a WIREUP_REQUEST (if sent) will have
+     * dst_ep != 0. So, ucp_wireup_request() will not create an unexpected ep
+     * in ep_match.
      */
     conn_sn = ucp_ep_match_get_next_sn(&worker->ep_match_ctx, remote_address.uuid);
     ep = ucp_ep_match_retrieve_unexp(&worker->ep_match_ctx, remote_address.uuid,
