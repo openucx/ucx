@@ -221,10 +221,13 @@ enum ucp_ep_params_flags_field {
                                                            of the remote peer */
     UCP_EP_PARAMS_FLAGS_NO_LOOPBACK    = UCS_BIT(1)   /**< Avoid connecting the
                                                            endpoint to itself,
-                                                           even if the destination
-                                                           worker address belongs
-                                                           to the same worker the
-                                                           endpoint is created on */
+                                                           when connecting the
+                                                           endpoint to the same
+                                                           worker it's created on.
+                                                           Affects protocols which
+                                                           send to a particular
+                                                           remote endpoint, for
+                                                           example stream */
 };
 
 
