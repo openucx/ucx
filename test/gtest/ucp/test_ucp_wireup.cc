@@ -612,7 +612,6 @@ UCS_TEST_P(test_ucp_wireup_2sided, two_sided_wireup) {
 
 void test_ucp_wireup_2sided::test_connect_loopback(bool delay_before_connect,
                                                    bool enable_loopback) {
-
     ucp_ep_params_t params = test_ucp_wireup::get_ep_params();
     if (!enable_loopback) {
         params.field_mask |= UCP_EP_PARAM_FIELD_FLAGS;
@@ -635,7 +634,6 @@ void test_ucp_wireup_2sided::test_connect_loopback(bool delay_before_connect,
         EXPECT_NE(ep1, ep2);
 
         if (GetParam().variant == TEST_STREAM) {
-
             uint64_t data1 = (base_index * 10) + 1;
             uint64_t data2 = (base_index * 10) + 2;
 
