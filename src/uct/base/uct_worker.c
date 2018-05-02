@@ -105,8 +105,8 @@ void uct_worker_progress_register_safe(uct_worker_h tl_worker, ucs_callback_t fu
     if (*id_p == UCS_CALLBACKQ_ID_NULL) {
         UCS_ASYNC_BLOCK(worker->async);
         *id_p = ucs_callbackq_add_safe(&worker->super.progress_q, func, arg, flags);
-        UCS_ASYNC_UNBLOCK(worker->async);
         ucs_assert(*id_p != UCS_CALLBACKQ_ID_NULL);
+        UCS_ASYNC_UNBLOCK(worker->async);
     }
 }
 
