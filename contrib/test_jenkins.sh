@@ -465,6 +465,13 @@ run_client_server() {
         return
     fi
 
+    ibdev=`ibdev2netdev | grep $iface | awk '{print $1}'`
+    node_guid=`cat /sys/class/infiniband/$ibdev/node_guid`
+    if [ $node_guid == "0000:0000:0000:0000" ]
+    then
+        return
+    fi
+
     server_port=$((10000 + EXECUTOR_NUMBER))
 
     # run server side

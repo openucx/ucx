@@ -76,17 +76,39 @@ bool is_inet_addr(const struct sockaddr* ifa_addr) {
 
 bool is_ib_netdev(const char *ifa_name) {
     char path[PATH_MAX];
+    char dev_name[16];
+    char guid_buf[32];
     DIR *dir;
 
     snprintf(path, PATH_MAX, "/sys/class/net/%s/device/infiniband", ifa_name);
-
     dir = opendir(path);
     if (dir == NULL) {
         return false;
-    } else {
-        closedir(dir);
-        return true;
     }
+
+    /* read IB device name */
+    for (;;) {
+        struct dirent *entry = readdir(dir);
+        if (entry == NULL) {
+            closedir(dir);
+            return false;
+        } else if (entry->d_name[0] != '.') {
+            ucs_strncpy_zero(dev_name, entry->d_name, sizeof(dev_name));
+            break;
+        }
+    }
+    closedir(dir);
+
+    /* read node guid */
+    memset(guid_buf, 0, sizeof(guid_buf));
+    ssize_t nread = ucs_read_file(guid_buf, sizeof(guid_buf), 1,
+                                  "/sys/class/infiniband/%s/node_guid", dev_name);
+    if (nread < 0) {
+        return false;
+    }
+
+    /* use the device if node_guid != 0 */
+    return strstr(guid_buf, "0000:0000:0000:0000") == NULL;
 }
 
 uint16_t get_port() {
