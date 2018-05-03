@@ -15,6 +15,9 @@
 #include <ucs/time/time.h>
 
 
+/* Must be less then peer_timeout to avoid false positive errors taking into
+ * account timer resolution and not too small to avoid performance degradation
+ */
 #define UCT_UD_SLOW_TIMER_MAX_TICK(_iface)  ((_iface)->config.peer_timeout / 3)
 
 static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface);
@@ -111,35 +114,49 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
                        UCS_STATS_ARG(ep->super.stats));
 }
 
+static ucs_status_t uct_ud_ep_check_and_free(uct_ud_ep_t *ep,
+                                             uct_ud_iface_t *iface)
+{
+    uct_ud_iface_ops_t *ops;
+    ucs_time_t         diff;
+
+    if (ep->flags & UCT_UD_EP_FLAG_DISCONNECTED) {
+        diff = ucs_twheel_get_time(&iface->async.slow_timer) - ep->close_time;
+        if (diff > iface->config.peer_timeout) {
+            ucs_debug("ud_ep %p is destroyed after %fs with timout %fs\n",
+                      ep, ucs_time_to_sec(diff),
+                      ucs_time_to_sec(iface->config.peer_timeout));
+            ops = ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t);
+            ops->ep_free(&ep->super.super);
+            return UCS_OK;
+        }
+        return UCS_INPROGRESS;
+    }
+    return UCS_ERR_NO_PROGRESS;
+}
+
 static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
 {
     uct_ud_ep_t        *ep    = ucs_container_of(self, uct_ud_ep_t, slow_timer);
     uct_ud_iface_t     *iface = ucs_derived_of(ep->super.super.iface,
                                                uct_ud_iface_t);
-    uct_ud_iface_ops_t *ops;
     ucs_time_t         now;
     ucs_time_t         diff;
+    ucs_status_t       status;
 
     UCT_UD_EP_HOOK_CALL_TIMER(ep);
-    now = ucs_twheel_get_time(&iface->async.slow_timer);
 
     if (ucs_queue_is_empty(&ep->tx.window)) {
         /* Do not free the EP until all scheduled communications are done. */
-        if (ep->flags & UCT_UD_EP_FLAG_DISCONNECTED) {
-            diff = now - ep->close_time;
-            if (diff > iface->config.peer_timeout) {
-                ucs_debug("ud_ep %p is destroyed after %fs with timout %fs\n",
-                        ep, ucs_time_to_sec(diff),
-                        ucs_time_to_sec(iface->config.peer_timeout));
-                ops = ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t);
-                ops->ep_free(&ep->super.super);
-                return;
-            }
+        status = uct_ud_ep_check_and_free(ep, iface);
+        if (status == UCS_INPROGRESS) {
             goto again;
         }
+        ucs_assert((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS));
         return;
     }
 
+    now = ucs_twheel_get_time(&iface->async.slow_timer);
     diff = now - ep->tx.send_time;
     if (diff > iface->config.peer_timeout) {
         iface->super.ops->handle_failure(&iface->super, ep,
