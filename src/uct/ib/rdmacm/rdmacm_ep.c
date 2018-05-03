@@ -187,12 +187,17 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_rdmacm_ep_t, uct_ep_t);
 static unsigned uct_rdmacm_client_err_handle_progress(void *arg)
 {
     uct_rdmacm_ep_t *rdmacm_ep = arg;
+    uct_rdmacm_iface_t *iface = ucs_derived_of(rdmacm_ep->super.super.iface,
+                                               uct_rdmacm_iface_t);
+
     ucs_trace_func("err_handle ep=%p", rdmacm_ep);
+    UCS_ASYNC_BLOCK(iface->super.worker->async);
 
     rdmacm_ep->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
     uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), &rdmacm_ep->super.super,
                       rdmacm_ep->super.super.iface, rdmacm_ep->status);
 
+    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
     return 0;
 }
 
