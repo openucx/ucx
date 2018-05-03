@@ -58,11 +58,11 @@ protected:
     void send_recv(ucp_ep_h send_ep, ucp_worker_h recv_worker, ucp_ep_h recv_ep,
                    size_t vecsize, int repeat);
 
-    void waitall(std::vector<void*> &reqs);
+    void waitall(std::vector<void*> reqs);
 
     void* ep_disconnect(ucp_ep_h ep);
 
-    virtual void* disconnect(const ucp_test::entity &e);
+    virtual std::vector<void*> disconnect(const ucp_test::entity &e);
 
     bool is_close_sync_test() const {
         return (GetParam().variant == TEST_TAG_CLOSE_SYNC) ||
@@ -207,7 +207,8 @@ void test_ucp_wireup::cleanup() {
         for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
              iter != entities().end(); ++iter)
         {
-            reqs.push_back(disconnect(**iter));
+            std::vector<void*> i_reqs = disconnect(**iter);
+            reqs.insert(reqs.end(), i_reqs.begin(), i_reqs.end());
         }
 
         waitall(reqs);
@@ -378,11 +379,21 @@ void* test_ucp_wireup::ep_disconnect(ucp_ep_h ep) {
     return NULL;
 }
 
-void* test_ucp_wireup::disconnect(const ucp_test::entity &e) {
-    return ep_disconnect(e.revoke_ep());
+std::vector<void*> test_ucp_wireup::disconnect(const ucp_test::entity &e) {
+    std::vector<void*> reqs;
+    for (int i = 0; i < e.get_num_workers(); i++) {
+        for (int j = 0; j < e.get_num_eps(i); j++) {
+            void *dreq = ep_disconnect(e.revoke_ep(i, j));
+            if (!UCS_PTR_IS_PTR(dreq)) {
+                ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
+            }
+            reqs.push_back(dreq);
+        }
+    }
+    return reqs;
 }
 
-void test_ucp_wireup::waitall(std::vector<void*> &reqs)
+void test_ucp_wireup::waitall(std::vector<void*> reqs)
 {
     while (!reqs.empty()) {
         wait(reqs.back());
@@ -475,9 +486,6 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
 UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup) {
     sender().connect(&receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
-    if (!is_close_sync_test()) {
-        flush_worker(sender());
-    }
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup_rndv, "RNDV_THRESH=1") {
@@ -506,8 +514,9 @@ UCS_TEST_P(test_ucp_wireup_1sided, multi_wireup) {
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, stress_connect) {
-    std::vector<void *> reqs;
     for (int i = 0; i < 30; ++i) {
+        std::vector<void *> reqs;
+        std::vector<void *> i_reqs;
         sender().connect(&receiver(), get_ep_params());
         send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1,
                   10000 / ucs::test_time_multiplier());
@@ -515,26 +524,30 @@ UCS_TEST_P(test_ucp_wireup_1sided, stress_connect) {
             receiver().connect(&sender(), get_ep_params());
         }
 
-        reqs.push_back(disconnect(sender()));
+        i_reqs = disconnect(sender());
+        reqs.insert(reqs.end(), i_reqs.begin(), i_reqs.end());
         if (!is_loopback()) {
-            reqs.push_back(disconnect(receiver()));
+            i_reqs = disconnect(receiver());
+            reqs.insert(reqs.end(), i_reqs.begin(), i_reqs.end());
         }
         waitall(reqs);
     }
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, stress_connect2) {
-    std::vector<void *> reqs;
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
+        std::vector<void *> reqs;
         sender().connect(&receiver(), get_ep_params());
         send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
         if (&sender() != &receiver()) {
             receiver().connect(&sender(), get_ep_params());
         }
 
-        reqs.push_back(disconnect(sender()));
+        std::vector<void *> i_reqs = disconnect(sender());
+        reqs.insert(reqs.end(), i_reqs.begin(), i_reqs.end());
         if (!is_loopback()) {
-            reqs.push_back(disconnect(receiver()));
+            i_reqs = disconnect(receiver());
+            reqs.insert(reqs.end(), i_reqs.begin(), i_reqs.end());
         }
         waitall(reqs);
     }
@@ -543,7 +556,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, stress_connect2) {
 UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nonexistent) {
     skip_loopback();
     sender().connect(&receiver(), get_ep_params());
-    wait(disconnect(sender()));
+    waitall(disconnect(sender()));
     receiver().destroy_worker();
     sender().destroy_worker();
 }
@@ -551,26 +564,26 @@ UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nonexistent) {
 UCS_TEST_P(test_ucp_wireup_1sided, disconnect_reconnect) {
     sender().connect(&receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 1);
-    wait(disconnect(sender()));
+    waitall(disconnect(sender()));
     recv_b(receiver().worker(), receiver().ep(), 1000, 1);
 
     sender().connect(&receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 1);
-    wait(disconnect(sender()));
+    waitall(disconnect(sender()));
     recv_b(receiver().worker(), receiver().ep(), 1000, 1);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided) {
     sender().connect(&receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 100);
-    wait(disconnect(sender()));
+    waitall(disconnect(sender()));
     recv_b(receiver().worker(), receiver().ep(), 1000, 100);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided_nozcopy, "ZCOPY_THRESH=-1") {
     sender().connect(&receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 100);
-    wait(disconnect(sender()));
+    waitall(disconnect(sender()));
     recv_b(receiver().worker(), receiver().ep(), 1000, 100);
 }
 
@@ -578,7 +591,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided_wait) {
     sender().connect(&receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), 8, 1);
     send_b(sender().ep(), 1000, 200);
-    wait(disconnect(sender()));
+    waitall(disconnect(sender()));
     recv_b(receiver().worker(), receiver().ep(), 1000, 200);
 }
 
@@ -593,22 +606,24 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply1) {
 
     send_b(sender().ep(), 8, 1);
     if (!is_loopback()) {
-        wait(disconnect(sender()));
+        waitall(disconnect(sender()));
     }
 
     recv_b(receiver().worker(), receiver().ep(), 8, 1);
     send_b(receiver().ep(), 8, 1);
-    wait(disconnect(receiver()));
+    waitall(disconnect(receiver()));
     recv_b(sender().worker(), sender().ep(), 8, 1);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
     std::vector<void*> reqs;
+    std::vector<void*> reqs_tmp;
     sender().connect(&receiver(), get_ep_params());
 
     send_b(sender().ep(), 8, 1);
     if (!is_loopback()) {
-        reqs.push_back(disconnect(sender()));
+        reqs_tmp = disconnect(sender());
+        reqs.insert(reqs.end(), reqs_tmp.begin(), reqs_tmp.end());
     }
     recv_b(receiver().worker(), receiver().ep(),  8, 1);
 
@@ -617,7 +632,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
     }
 
     send_b(receiver().ep(), 8, 1);
-    reqs.push_back(disconnect(receiver()));
+    reqs_tmp = disconnect(receiver());
+    reqs.insert(reqs.end(), reqs_tmp.begin(), reqs_tmp.end());
     recv_b(sender().worker(), sender().ep(), 8, 1);
 
     waitall(reqs);
@@ -743,14 +759,17 @@ UCS_TEST_P(test_ucp_wireup_2sided, no_loopback_with_delay) {
 
 UCS_TEST_P(test_ucp_wireup_2sided, connect_disconnect) {
     std::vector<void*> reqs;
+    std::vector<void*> reqs_tmp;
 
     sender().connect(&receiver(), get_ep_params());
     if (!is_loopback()) {
         receiver().connect(&sender(), get_ep_params());
     }
-    reqs.push_back(disconnect(sender()));
+    reqs_tmp = disconnect(sender());
+    reqs.insert(reqs.end(), reqs_tmp.begin(), reqs_tmp.end());
     if (!is_loopback()) {
-        reqs.push_back(disconnect(receiver()));
+        reqs_tmp = disconnect(receiver());
+        reqs.insert(reqs.end(), reqs_tmp.begin(), reqs_tmp.end());
     }
     waitall(reqs);
 }
@@ -853,7 +872,7 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, remote_disconnect) {
     receiver().connect(&sender(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
 
-    wait(disconnect(sender()));
+    waitall(disconnect(sender()));
 
     wait_for_flag(&m_err_count);
     EXPECT_EQ(UCS_ERR_REMOTE_DISCONNECT, m_err_status);
