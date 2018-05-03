@@ -671,6 +671,7 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
     uct_ud_enter(iface);
 
     if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
+        UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super);
         uct_ud_leave(iface);
         return UCS_INPROGRESS;
     }
@@ -689,6 +690,7 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
         UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super);
         return UCS_INPROGRESS;
     }
+
     UCT_TL_IFACE_STAT_FLUSH(&iface->super.super);
     return UCS_OK;
 }
