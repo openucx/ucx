@@ -486,7 +486,7 @@ static ucs_status_t ucp_wireup_ep_pack_always_supported_rscs(ucp_worker_h worker
         UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     } else {
         ucs_error("no supported transport found for %s", dev_name);
-        status = UCS_ERR_NO_RESOURCE;
+        status = UCS_ERR_UNREACHABLE;
     }
 
     *tl_id_p = tl_id;
@@ -544,7 +544,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
                       conn_priv_len,
                       UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
                       wiface->attr.max_conn_priv);
-            status = UCS_ERR_BUFFER_TOO_SMALL;
+            status = UCS_ERR_UNREACHABLE;
             ucs_free(rsc_address);
             goto err_free_address;
         }

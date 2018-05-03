@@ -14,9 +14,13 @@
 #define UCP_INSTANTIATE_ALL_TEST_CASE(_test_case) \
         UCP_INSTANTIATE_TEST_CASE (_test_case) \
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, mm_rdmacm, "mm,rdmacm") \
-        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc_ud, "dc_x,dc,ud,ud_x,mm")
-        /* last case is for testing handling of a large worker address on
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc_ud, "dc_x,dc,ud,ud_x,mm") \
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, no_ud_ud_x, "\\dc_mlx5,dc,mm") \
+        /* dc_ud case is for testing handling of a large worker address on
          * UCT_IFACE_FLAG_CONNECT_TO_IFACE transports (dc, dc_x) */
+        /* no_ud_ud_x case is for testing handling a large worker address
+         * but with the lack of ud/ud_x transports, which would return an error
+         * and skipped */
 
 class test_ucp_sockaddr : public ucp_test {
 public:
@@ -110,8 +114,7 @@ public:
 
     static void scomplete_cb(void *req, ucs_status_t status)
     {
-        if ((status != UCS_OK) && (status != UCS_ERR_BUFFER_TOO_SMALL) &&
-            (status != UCS_ERR_NO_RESOURCE) && (status != UCS_ERR_UNREACHABLE)) {
+        if ((status != UCS_OK) && (status != UCS_ERR_UNREACHABLE)) {
             UCS_TEST_ABORT("Error: " << ucs_status_string(status));
         }
     }
@@ -164,8 +167,7 @@ public:
             return;
         }
 
-        if ((req != NULL) && ((ucp_request_check_status(req) == UCS_ERR_BUFFER_TOO_SMALL) ||
-            (ucp_request_check_status(req) == UCS_ERR_NO_RESOURCE))) {
+        if ((req != NULL) && (ucp_request_check_status(req) == UCS_ERR_UNREACHABLE)) {
             return;
         }
 
@@ -191,13 +193,12 @@ public:
              * If so, skip the test since a valid error occurred - the one expected
              * from the error handling flow - cases of failure to handle long worker
              * address or transport doesn't support the error handling requirement */
-            if ((ucp_request_check_status(send_req) == UCS_ERR_BUFFER_TOO_SMALL) ||
-                (ucp_request_check_status(send_req) == UCS_ERR_NO_RESOURCE)){
+            if (ucp_request_check_status(send_req) == UCS_ERR_UNREACHABLE) {
                 ucp_request_free(send_req);
-                UCS_TEST_SKIP_R("Skipping due to too long worker address error");
-            } else if (ucp_request_check_status(send_req) == UCS_ERR_UNREACHABLE) {
-                ucp_request_free(send_req);
-                UCS_TEST_SKIP_R("Skipping due an unreachable destination");
+                UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
+                                "feature or too long worker address or no "
+                                "supported transport to send partial worker "
+                                "address)");
             }
 
             ucp_request_free(send_req);
@@ -279,9 +280,9 @@ public:
         self->err_handler_count++;
         /* The current expected errors are only from the err_handle test
          * and from transports where the worker address is too long but ud/ud_x
-         * are not present. too long ud/ud_x errors may also create a valie error  */
-        if ((status != UCS_ERR_UNREACHABLE) && (status != UCS_ERR_NO_RESOURCE) &&
-            (status != UCS_ERR_BUFFER_TOO_SMALL)) {
+         * are not present, or ud/ud_x are present but their addresses are too
+         * long as well */
+        if ((status != UCS_ERR_UNREACHABLE)) {
             UCS_TEST_ABORT("Error: " << ucs_status_string(status));
         }
     }

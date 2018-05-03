@@ -110,10 +110,10 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
 {
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
-    unsigned *order = ucs_alloca(ep->worker->context->num_tls * sizeof(*order));
     ucp_request_t* req;
     ucs_status_t status;
     void *address;
+    unsigned *order = ucs_alloca(ep->worker->context->num_tls * sizeof(*order));
 
     ucs_assert(ep->cfg_index != (uint8_t)-1);
 
@@ -214,6 +214,34 @@ static void ucp_wireup_remote_connected(ucp_ep_h ep)
             ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
         }
     }
+}
+
+static unsigned ucp_wireup_listener_accept_cb_progress(void *arg)
+{
+    ucp_ep_h ep = arg;
+
+    ep->flags |= UCP_EP_FLAG_USED;
+    ucp_ep_ext_gen(ep)->listener->cb(ep, ucp_ep_ext_gen(ep)->listener->arg);
+
+    return 0;
+}
+
+int ucp_wireup_listener_accept_cb_remove_filter(const ucs_callbackq_elem_t *elem,
+                                                void *arg)
+{
+    ucp_ep_h ep = elem->arg;
+
+    return (elem->cb == ucp_wireup_listener_accept_cb_progress) && (ep == arg);
+}
+
+static void ucp_wireup_schedule_listener_cb(ucp_ep_h ep)
+{
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+
+    uct_worker_progress_register_safe(ep->worker->uct,
+                                      ucp_wireup_listener_accept_cb_progress,
+                                      ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
 }
 
 static UCS_F_NOINLINE void
@@ -398,10 +426,11 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
             ep->flags |= UCP_EP_FLAG_LISTENER;
         }
     } else {
-        /* if in client-server flow, invoke user's callback if server is connected */
-        if ((ep->flags & UCP_EP_FLAG_LISTENER) &&
-            (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
-            ucp_ep_ext_gen(ep)->listener->cb(ep, ucp_ep_ext_gen(ep)->listener->arg);
+        /* if in client-server flow, schedule invoking the user's callback
+         * (if server is connected) from the main thread */
+        if (ucs_test_all_flags(ep->flags,
+                               (UCP_EP_FLAG_LISTENER | UCP_EP_FLAG_LOCAL_CONNECTED))) {
+            ucp_wireup_schedule_listener_cb(ep);
         }
     }
 }
@@ -470,9 +499,10 @@ void ucp_wireup_process_ack(ucp_worker_h worker, const ucp_wireup_msg_t *msg)
     ucp_wireup_remote_connected(ep);
 
     /* if this ack is received as part of the client-server flow, when handling
-     * a large worker address from the client, invoke the cached user callback now */
+     * a large worker address from the client, invoke the cached user callback
+     * from the main thread */
     if (ep->flags & UCP_EP_FLAG_LISTENER) {
-        ucp_ep_ext_gen(ep)->listener->cb(ep, ucp_ep_ext_gen(ep)->listener->arg);
+        ucp_wireup_schedule_listener_cb(ep);
     }
 }
 

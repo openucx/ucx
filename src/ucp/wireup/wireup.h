@@ -114,6 +114,9 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 ucs_status_t ucp_signaling_ep_create(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                      int is_owner, uct_ep_h *signaling_ep);
 
+int ucp_wireup_listener_accept_cb_remove_filter(const ucs_callbackq_elem_t *elem,
+                                                void *arg);
+
 static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
     uint64_t flags = worker->ifaces[rsc_index].attr.cap.flags;

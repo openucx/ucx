@@ -528,6 +528,10 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_worker_err_handle_remove_filter, ep);
 
+    /* remove pending slow-path function it wasn't removed yet */
+    ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
+                            ucp_wireup_listener_accept_cb_remove_filter, ep);
+
     ep->flags &= ~UCP_EP_FLAG_USED;
 
     if ((ep->flags & (UCP_EP_FLAG_CONNECT_REQ_QUEUED|UCP_EP_FLAG_REMOTE_CONNECTED))
