@@ -482,7 +482,7 @@ UCS_TEST_P(test_md, reg_multi_thread) {
 UCS_TEST_P(test_md, sockaddr_accessibility) {
     ucs_sock_addr_t sock_addr;
     struct ifaddrs *ifaddr, *ifa;
-    int rc_local, rc_remote, found_ipoib = 0;
+    int found_ipoib = 0;
 
     check_caps(UCT_MD_FLAG_SOCKADDR, "sockaddr");
 
@@ -493,22 +493,23 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
         if (ucs::is_inet_addr(ifa->ifa_addr) && ucs_netif_is_active(ifa->ifa_name)) {
             sock_addr.addr = ifa->ifa_addr;
 
-            rc_local  = uct_md_is_sockaddr_accessible(pd(), &sock_addr, UCT_SOCKADDR_ACC_LOCAL);
-            rc_remote = uct_md_is_sockaddr_accessible(pd(), &sock_addr, UCT_SOCKADDR_ACC_REMOTE);
-
             if (!strcmp(GetParam().c_str(), "rdmacm")) {
                 if (ucs::is_ib_netdev(ifa->ifa_name)) {
                     UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
                                         ucs::sockaddr_to_str(ifa->ifa_addr);
-                    ASSERT_TRUE(rc_local);
-                    ASSERT_TRUE(rc_remote);
+                    ASSERT_TRUE(uct_md_is_sockaddr_accessible(pd(), &sock_addr,
+                                                              UCT_SOCKADDR_ACC_LOCAL));
+                    ASSERT_TRUE(uct_md_is_sockaddr_accessible(pd(), &sock_addr,
+                                                              UCT_SOCKADDR_ACC_REMOTE));
                     found_ipoib = 1;
                 }
             } else {
                 UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
                                     ucs::sockaddr_to_str(ifa->ifa_addr);
-                ASSERT_TRUE(rc_local);
-                ASSERT_TRUE(rc_remote);
+                ASSERT_TRUE(uct_md_is_sockaddr_accessible(pd(), &sock_addr,
+                                                          UCT_SOCKADDR_ACC_LOCAL));
+                ASSERT_TRUE(uct_md_is_sockaddr_accessible(pd(), &sock_addr,
+                                                          UCT_SOCKADDR_ACC_REMOTE));
             }
         }
     }

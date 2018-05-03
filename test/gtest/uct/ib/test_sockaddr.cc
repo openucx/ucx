@@ -27,12 +27,6 @@ public:
             UCS_TEST_SKIP_R("There is no IP on the interface");
         }
 
-        /* If rdmacm is tested, make sure that this is an IPoIB or RoCE interface */
-        if (!strcmp(GetParam()->md_name.c_str(), "rdmacm") &&
-            (!ucs::is_ib_netdev(GetParam()->dev_name.c_str()))) {
-            UCS_TEST_SKIP_R("rdmacm - not an IPoIB or RoCE interface");
-        }
-
         /* This address is accessible, as it was tested at the resource creation */
         sock_addr.addr = (struct sockaddr *)&(GetParam()->if_addr);
         ASSERT_TRUE(sock_addr.addr != NULL);
