@@ -57,7 +57,7 @@ static void ucp_ep_fin_cb(ucp_request_t *req)
     ucs_debug("ep %p, flags %d: completed FIN msg", ep, ep->flags);
     ucs_trace_req("putting request %p FIN flush of ep %p with flags %d",
                   req, ep, ep->flags);
-    ucp_request_put(req);
+    ucp_request_complete_send(req, req->status);
 }
 
 ucs_status_t ucp_fin_msg_send(ucp_ep_h ep)
@@ -95,6 +95,8 @@ ucs_status_t ucp_fin_msg_send(ucp_ep_h ep)
         ep->flags |= UCP_EP_FLAG_FIN_REQ_COMPLETED;
     } else if (UCS_PTR_IS_ERR(flush_req)) {
         return UCS_PTR_STATUS(flush_req);
+    } else {
+        ucp_request_free(flush_req);
     }
     return UCS_OK;
 }

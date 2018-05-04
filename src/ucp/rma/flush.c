@@ -141,7 +141,6 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     }
 
     if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
-        req->send.lane = UCP_NULL_LANE;
         return UCS_OK;
     } else if (status == UCS_ERR_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
