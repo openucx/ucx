@@ -340,7 +340,7 @@ ucp_proto_get_zcopy_threshold(const ucp_request_t *req,
     }
 
     if (ucs_unlikely(!UCP_MEM_IS_HOST(req->send.mem_type))) {
-        return 1;
+        return msg_config->mem_type_zcopy_thresh[req->send.mem_type];
     }
 
     if (ucs_likely(UCP_DT_IS_CONTIG(req->send.datatype))) {
