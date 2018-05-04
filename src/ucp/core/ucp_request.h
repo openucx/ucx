@@ -279,10 +279,12 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status);
 
 ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
                                     void *buffer, size_t length, ucp_datatype_t datatype,
-                                    ucp_dt_state_t *state, ucp_request_t *req_dbg);
+                                    ucp_dt_state_t *state, uct_memory_type_t mem_type,
+                                    ucp_request_t *req_dbg);
 
 void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
-                              ucp_dt_state_t *state, ucp_request_t *req_dbg);
+                              ucp_dt_state_t *state, uct_memory_type_t mem_type,
+                              ucp_request_t *req_dbg);
 
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t multi_thresh,

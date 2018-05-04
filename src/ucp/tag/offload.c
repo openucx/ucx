@@ -260,7 +260,7 @@ ucp_tag_offload_do_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
         /* register the whole buffer to support SW RNDV fallback */
         status = ucp_request_memory_reg(context, UCS_BIT(mdi), req->recv.buffer,
                                         req->recv.length, req->recv.datatype,
-                                        &req->recv.state, req);
+                                        &req->recv.state, req->recv.mem_type, req);
         if (status != UCS_OK) {
             return status;
         }

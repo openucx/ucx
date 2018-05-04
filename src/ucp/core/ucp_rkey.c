@@ -339,6 +339,7 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
 
 static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
                                                  const ucp_ep_config_t *config,
+                                                 uct_memory_type_t mem_type,
                                                  const ucp_lane_index_t *lanes,
                                                  ucp_rkey_h rkey,
                                                  ucp_lane_map_t ignore,
@@ -368,6 +369,11 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
             return lane;
         }
 
+        if ((md_index != UCP_NULL_RESOURCE) &&
+            (!(context->tl_mds[md_index].attr.cap.reg_mem_types & UCS_BIT(mem_type)))) {
+            return UCP_NULL_LANE;
+        }
+
         dst_md_index = config->key.lanes[lane].dst_md_index;
         dst_md_mask  = UCS_BIT(dst_md_index);
         if (rkey->md_map & dst_md_mask) {
@@ -388,6 +394,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     uct_rkey_t uct_rkey;
 
     rkey->cache.rma_lane = ucp_config_find_rma_lane(context, config,
+                                                    UCT_MD_MEM_TYPE_HOST,
                                                     config->key.rma_lanes, rkey,
                                                     0, &uct_rkey);
     if (rkey->cache.rma_lane != UCP_NULL_LANE) {
@@ -396,6 +403,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     }
 
     rkey->cache.amo_lane = ucp_config_find_rma_lane(context, config,
+                                                    UCT_MD_MEM_TYPE_HOST,
                                                     config->key.amo_lanes, rkey,
                                                     0, &uct_rkey);
     if (rkey->cache.amo_lane != UCP_NULL_LANE) {
@@ -408,11 +416,12 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
 }
 
 ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,
+                                          uct_memory_type_t mem_type,
                                           uct_rkey_t *uct_rkey_p,
                                           ucp_lane_map_t ignore)
 {
     ucp_ep_config_t *config = ucp_ep_config(ep);
-    return ucp_config_find_rma_lane(ep->worker->context, config,
+    return ucp_config_find_rma_lane(ep->worker->context, config, mem_type,
                                     config->key.rma_bw_lanes, rkey,
                                     ignore, uct_rkey_p);
 }
