@@ -44,13 +44,22 @@ private:
         CONNECTION_SERVER
     };
 
-    struct defaults {
-        static const int    CONN_COUNT;;
-        static const double CONN_RATIO;
-        static const size_t REQUEST_SIZE;
-        static const size_t RESPONSE_SIZE;
-        static const int    WAIT_TIME;
-    };
+    struct params {
+        params() : port(0),
+                   total_conns(1000),
+                   conn_ratio(1.5),
+                   request_size(32),
+                   response_size(1024) {
+        }
+
+        std::string         mode;
+        int                 port;
+        int                 total_conns;
+        double              conn_ratio;
+        size_t              request_size;
+        size_t              response_size;
+        dest_vec_t          dests;
+   };
 
     struct connection_state {
         conn_ptr_t          conn_ptr;
@@ -86,59 +95,45 @@ private:
     template <typename O>
     friend typename O::__basic_ostream& operator<<(O& os, connection_type conn_type);
 
-    std::string             m_mode;
-    int                     m_port;
-    dest_vec_t              m_dests;
-    int                     m_conn_backlog;
-    double                  m_conn_ratio;
-    size_t                  m_request_size;
-    size_t                  m_response_size;
+    params                  m_params;
     std::shared_ptr<worker> m_worker;
     evpoll_set              m_evpoll;
     conn_map_t              m_connections;
     int                     m_num_conns_inflight;
+    int                     m_num_conns_started;
 };
 
-const int    application::defaults::CONN_COUNT    = 1000;
-const double application::defaults::CONN_RATIO    = 1.5;
-const size_t application::defaults::REQUEST_SIZE  = 32;
-const size_t application::defaults::RESPONSE_SIZE = 1024;
 
 application::usage_exception::usage_exception(const std::string& message) :
                 error(message) {
 };
 
-application::application(int argc, char **argv) :
-                m_port(0),
-                m_conn_backlog(defaults::CONN_COUNT),
-                m_conn_ratio(defaults::CONN_RATIO),
-                m_request_size(defaults::REQUEST_SIZE),
-                m_response_size(defaults::RESPONSE_SIZE),
-                m_num_conns_inflight(0) {
+application::application(int argc, char **argv) : m_num_conns_inflight(0),
+                m_num_conns_started(0) {
     int c;
 
     while ( (c = getopt(argc, argv, "p:f:m:r:n:S:s:vh")) != -1 ) {
         switch (c) {
         case 'p':
-            m_port = atoi(optarg);
+            m_params.port = atoi(optarg);
             break;
         case 'f':
             parse_hostfile(optarg);
             break;
         case 'm':
-            m_mode = optarg;
+            m_params.mode = optarg;
             break;
         case 'r':
-            m_conn_ratio = atof(optarg);
+            m_params.conn_ratio = atof(optarg);
             break;
         case 'n':
-            m_conn_backlog = atoi(optarg);
+            m_params.total_conns = atoi(optarg);
             break;
         case 'S':
-            m_request_size = atoi(optarg);
+            m_params.request_size = atoi(optarg);
             break;
         case 's':
-            m_response_size = atoi(optarg);
+            m_params.response_size = atoi(optarg);
             break;
         case 'v':
             log::more_verbose();
@@ -148,15 +143,15 @@ application::application(int argc, char **argv) :
         }
     }
 
-    if (m_mode.empty()) {
+    if (m_params.mode.empty()) {
         throw usage_exception("missing mode argument");
     }
 
-    if (m_dests.empty()) {
+    if (m_params.dests.empty()) {
         throw usage_exception("no remote destinations specified");
     }
 
-    if (!m_port) {
+    if (m_params.port == 0) {
         throw usage_exception("local port not specified");
     }
 }
@@ -164,11 +159,11 @@ application::application(int argc, char **argv) :
 int application::run() {
     LOG_INFO << "starting application with "
              << max_conns_inflight() << " simultaneous connections, "
-             << m_conn_backlog << " total";
+             << m_params.total_conns << " total";
 
     create_worker();
 
-    while ((m_conn_backlog > 0) || !m_connections.empty()) {
+    while ((m_num_conns_started > m_params.total_conns) || !m_connections.empty()) {
         initiate_connections();
         m_worker->wait(m_evpoll,
                        [this](conn_ptr_t conn) {
@@ -197,10 +192,10 @@ void application::create_worker() {
     struct sockaddr_in inaddr_any;
     memset(&inaddr_any, 0, sizeof(inaddr_any));
     inaddr_any.sin_family      = AF_INET;
-    inaddr_any.sin_port        = htons(m_port);
+    inaddr_any.sin_port        = htons(m_params.port);
     inaddr_any.sin_addr.s_addr = INADDR_ANY;
 
-    m_worker = worker::make(m_mode, reinterpret_cast<struct sockaddr *>(&inaddr_any),
+    m_worker = worker::make(m_params.mode, reinterpret_cast<struct sockaddr *>(&inaddr_any),
                             sizeof(inaddr_any));
     m_worker->add_to_evpoll(m_evpoll);
 }
@@ -234,12 +229,12 @@ void application::add_connection(conn_ptr_t conn_ptr, connection_type conn_type)
 
     switch (s->conn_type) {
     case CONNECTION_CLIENT:
-        s->send_data.assign(m_request_size, 'r');
-        s->recv_data.resize(m_response_size);
+        s->send_data.assign(m_params.request_size, 'r');
+        s->recv_data.resize(m_params.response_size);
         break;
     case CONNECTION_SERVER:
-        s->send_data.resize(m_response_size);
-        s->recv_data.resize(m_request_size);
+        s->send_data.resize(m_params.response_size);
+        s->recv_data.resize(m_params.request_size);
         break;
     }
 
@@ -251,10 +246,10 @@ void application::add_connection(conn_ptr_t conn_ptr, connection_type conn_type)
 
 void application::initiate_connections() {
     int max = max_conns_inflight();
-    while ((m_conn_backlog > 0) && (m_num_conns_inflight < max)) {
+    while ((m_num_conns_started < m_params.total_conns) && (m_num_conns_inflight < max)) {
         /* coverity[dont_call] */
-        const dest_t& dest = m_dests[::rand() % m_dests.size()];
-        --m_conn_backlog;
+        const dest_t& dest = m_params.dests[::rand() % m_params.dests.size()];
+        ++m_num_conns_started;
         ++m_num_conns_inflight;
         LOG_DEBUG << "connecting to " << dest.hostname << ":" << dest.port;
         add_connection(connect(dest), CONNECTION_CLIENT);
@@ -262,7 +257,7 @@ void application::initiate_connections() {
 }
 
 int application::max_conns_inflight() const {
-    return m_conn_ratio * m_dests.size() + 0.5;
+    return m_params.conn_ratio * m_params.dests.size() + 0.5;
 }
 
 void application::advance_connection(conn_state_ptr_t s, uint32_t events) {
@@ -270,37 +265,38 @@ void application::advance_connection(conn_state_ptr_t s, uint32_t events) {
               << " total sent " << s->bytes_sent << ", received " << s->bytes_recvd;
     switch (s->conn_type) {
     case CONNECTION_CLIENT:
-        if (s->bytes_sent < m_request_size) {
+        if (s->bytes_sent < m_params.request_size) {
             /* more data should be sent */
             size_t nsent = s->conn_ptr->send(&s->send_data[s->bytes_sent],
-                                             m_request_size - s->bytes_sent);
+                                             m_params.request_size - s->bytes_sent);
             LOG_DEBUG << "sent " << nsent << " bytes on connection id "
                       << s->conn_ptr->id();
             s->bytes_sent += nsent;
         }
         if (events & EPOLLIN) {
             size_t nrecv = s->conn_ptr->recv(&s->recv_data[s->bytes_recvd],
-                                             m_response_size - s->bytes_recvd);
+                                             m_params.response_size - s->bytes_recvd);
             LOG_DEBUG << "received " << nrecv << " bytes on connection id "
                        << s->conn_ptr->id();
             s->bytes_recvd += nrecv;
         }
-        if (s->bytes_recvd == m_response_size) {
+        if (s->bytes_recvd == m_params.response_size) {
             connection_completed(s);
         }
         break;
     case CONNECTION_SERVER:
         if (events & EPOLLIN) {
             size_t nrecv = s->conn_ptr->recv(&s->recv_data[s->bytes_recvd],
-                                             m_request_size - s->bytes_recvd);
+                                             m_params.request_size - s->bytes_recvd);
             LOG_DEBUG << "received " << nrecv << " bytes on connection id "
                       << s->conn_ptr->id();
             s->bytes_recvd += nrecv;
         }
-        if ((s->bytes_recvd == m_request_size) && (s->bytes_sent < m_response_size)) {
+        if ((s->bytes_recvd == m_params.request_size) &&
+            (s->bytes_sent < m_params.response_size)) {
             /* more data should be sent */
             size_t nsent = s->conn_ptr->send(&s->send_data[s->bytes_sent],
-                                             m_response_size - s->bytes_sent);
+                                             m_params.response_size - s->bytes_sent);
             LOG_DEBUG << "sent " << nsent << " bytes on connection id "
                       << s->conn_ptr->id();
             s->bytes_sent += nsent;
@@ -362,6 +358,8 @@ void application::usage(const std::string& error) {
         std::cout << "Error: " << error << std::endl;
         std::cout << std::endl;
     }
+
+    params defaults;
     std::cout << "Usage: ./sa [ options ]" << std::endl;
     std::cout << "Options:"                                                           << std::endl;
     std::cout << "    -m <mode>    Application mode (tcp)"                            << std::endl;
@@ -370,10 +368,10 @@ void application::usage(const std::string& error) {
     std::cout << "                 Each line in the file is formatter as follows:"    << std::endl;
     std::cout << "                    <address> <port>"                               << std::endl;
     std::cout << "    -r <ratio>   How many in-flight connection to hold as multiple" << std::endl;
-    std::cout << "                 of number of possible destinations (" << defaults::CONN_RATIO << ")" << std::endl;
-    std::cout << "    -n <count>   How many total exchanges to perform (" << defaults::CONN_COUNT << ")" << std::endl;
-    std::cout << "    -S <size>    Request message size, in bytes (" << defaults::REQUEST_SIZE << ")" << std::endl;
-    std::cout << "    -s <size>    Response message size, in bytes (" << defaults::RESPONSE_SIZE << ")" << std::endl;
+    std::cout << "                 of number of possible destinations (" << defaults.conn_ratio << ")" << std::endl;
+    std::cout << "    -n <count>   How many total exchanges to perform (" << defaults.total_conns << ")" << std::endl;
+    std::cout << "    -S <size>    Request message size, in bytes (" << defaults.request_size << ")" << std::endl;
+    std::cout << "    -s <size>    Response message size, in bytes (" << defaults.response_size << ")" << std::endl;
     std::cout << "    -v           Increase verbosity level (may be specified several times)" << std::endl;
 }
 
@@ -397,7 +395,7 @@ void application::parse_hostfile(const std::string& filename) {
 
         dest_t dest;
         if ((ss >> dest.hostname) && (ss >> dest.port)) {
-            m_dests.push_back(dest);
+            m_params.dests.push_back(dest);
         } else {
             std::stringstream errss;
             errss << "syntax error in file '" << filename << "' line " << lineno <<
