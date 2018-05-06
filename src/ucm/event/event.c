@@ -401,18 +401,12 @@ CUresult ucm_cuMemFree(CUdeviceptr dptr)
 CUresult ucm_cuMemFreeHost(void *p)
 {
     CUresult ret;
-    CUdeviceptr dptr;
 
     ucm_event_enter();
 
     ucm_trace("ucm_cuMemFreeHost(ptr=%p)", p);
-    ret = ucm_cuMemHostGetDevicePointer(&dptr, p, 0);
-    if (ret == CUDA_SUCCESS) {
-        ucm_dispatch_vm_munmap((void *)dptr, 0);
-        ucm_dispatch_mem_type_free((void *)dptr, 0, UCM_MEM_TYPE_CUDA);
-    } else {
-        ucm_warn("ucm_cuMemHostGetDevicePointer failed. ret:%d", ret);
-    }
+
+    ucm_dispatch_vm_munmap(p, 0);
 
     ret = ucm_orig_cuMemFreeHost(p);
 
@@ -476,16 +470,12 @@ CUresult ucm_cuMemAllocPitch(CUdeviceptr *dptr, size_t *pPitch,
 CUresult ucm_cuMemHostGetDevicePointer(CUdeviceptr *pdptr, void *p, unsigned int Flags)
 {
     CUresult ret;
-    size_t psize;
 
     ucm_event_enter();
 
     ret = ucm_orig_cuMemHostGetDevicePointer(pdptr, p, Flags);
     if (ret == CUDA_SUCCESS) {
         ucm_trace("ucm_cuMemHostGetDevicePointer(pdptr=%p p=%p)",(void *)*pdptr, p);
-        if (cuMemGetAddressRange(NULL, &psize, *pdptr) == CUDA_SUCCESS) {
-            ucm_dispatch_mem_type_alloc((void *)*pdptr, psize, UCM_MEM_TYPE_CUDA);
-        }
     }
 
     ucm_event_leave();
@@ -495,18 +485,10 @@ CUresult ucm_cuMemHostGetDevicePointer(CUdeviceptr *pdptr, void *p, unsigned int
 CUresult ucm_cuMemHostUnregister(void *p)
 {
     CUresult ret;
-    CUdeviceptr dptr;
 
     ucm_event_enter();
 
     ucm_trace("ucm_cuMemHostUnregister(ptr=%p)", p);
-    ret = ucm_cuMemHostGetDevicePointer(&dptr, p, 0);
-    if (ret == CUDA_SUCCESS) {
-        ucm_dispatch_vm_munmap((void *)dptr, 0);
-        ucm_dispatch_mem_type_free((void *)dptr, 0, UCM_MEM_TYPE_CUDA);
-    } else {
-        ucm_warn("ucm_cuMemHostGetDevicePointer failed. ret:%d", ret);
-    }
 
     ret = ucm_orig_cuMemHostUnregister(p);
 
@@ -535,18 +517,12 @@ cudaError_t ucm_cudaFree(void *devPtr)
 cudaError_t ucm_cudaFreeHost(void *ptr)
 {
     cudaError_t ret;
-    void *pDevice;
 
     ucm_event_enter();
 
     ucm_trace("ucm_cudaFreeHost(ptr=%p)", ptr);
-    ret = ucm_cudaHostGetDevicePointer(&pDevice, ptr, 0);
-    if (ret == cudaSuccess) {
-        ucm_dispatch_vm_munmap(pDevice, 0);
-        ucm_dispatch_mem_type_free(pDevice, 0, UCM_MEM_TYPE_CUDA);
-    } else {
-        ucm_warn("ucm_cudaHostGetDevicePointer failed. ret:%d", ret);
-    }
+
+    ucm_dispatch_vm_munmap(ptr, 0);
 
     ret = ucm_orig_cudaFreeHost(ptr);
 
@@ -609,16 +585,12 @@ cudaError_t ucm_cudaMallocPitch(void **devPtr, size_t *pitch,
 cudaError_t ucm_cudaHostGetDevicePointer(void **pDevice, void *pHost, unsigned int flags)
 {
     cudaError_t ret;
-    size_t psize;
 
     ucm_event_enter();
 
     ret = ucm_orig_cudaHostGetDevicePointer(pDevice, pHost, flags);
     if (ret == cudaSuccess) {
         ucm_trace("ucm_cuMemHostGetDevicePointer(pDevice=%p pHost=%p)", pDevice, pHost);
-        if (cuMemGetAddressRange(NULL, &psize, (CUdeviceptr)*pDevice) == CUDA_SUCCESS) {
-            ucm_dispatch_mem_type_alloc(*pDevice, psize, UCM_MEM_TYPE_CUDA);
-        }
     }
 
     ucm_event_leave();
@@ -628,18 +600,10 @@ cudaError_t ucm_cudaHostGetDevicePointer(void **pDevice, void *pHost, unsigned i
 cudaError_t ucm_cudaHostUnregister(void *ptr)
 {
     cudaError_t ret;
-    void *pDevice;
 
     ucm_event_enter();
 
     ucm_trace("ucm_cudaHostUnregister(ptr=%p)", ptr);
-    ret = ucm_cudaHostGetDevicePointer(&pDevice, ptr, 0);
-    if (ret == cudaSuccess) {
-        ucm_dispatch_vm_munmap(pDevice, 0);
-        ucm_dispatch_mem_type_free(pDevice, 0, UCM_MEM_TYPE_CUDA);
-    } else {
-        ucm_warn("ucm_cudaHostGetDevicePointer failed. ret:%d", ret);
-    }
 
     ret = ucm_orig_cudaHostUnregister(ptr);
 
