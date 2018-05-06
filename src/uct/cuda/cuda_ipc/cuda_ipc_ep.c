@@ -66,7 +66,7 @@ uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_key_t *key,
             return status;
         }
 
-        same_ctx = (local_ptr_ctx == remote_ptr_ctx) ? 1 : 0;
+        same_ctx = (local_ptr_ctx == remote_ptr_ctx);
     }
 
     if (same_ctx) {
@@ -80,7 +80,7 @@ uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_key_t *key,
             return status;
         }
 
-        offset = (uintptr_t) remote_addr - (uintptr_t) key->d_rem_bptr;
+        offset = (uintptr_t)remote_addr - (uintptr_t)key->d_rem_bptr;
         if (offset > key->b_rem_len) {
             ucs_fatal("Access memory outside memory range attempt\n");
             return UCS_ERR_IO_ERROR;
@@ -88,6 +88,7 @@ uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_key_t *key,
 
         *mapped_rem_addr = (void *) ((uintptr_t) mapped_addr + offset);
     }
+
     return UCS_OK;
 }
 
@@ -120,7 +121,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return status;
     }
 
-    if (0 == iface->streams_initialized) {
+    if (!iface->streams_initialized) {
         status = uct_cuda_ipc_iface_init_streams(iface);
         if (UCS_OK != status) {
             return status;
@@ -143,6 +144,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
 
     status = UCT_CUDADRV_FUNC(cuMemcpyDtoDAsync(dst, src, iov[0].length, stream));
     if (UCS_OK != status) {
+        ucs_mpool_put(cuda_ipc_event);
         return status;
     }
 

@@ -68,6 +68,7 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_md_component_t *mdc,
         ucs_error("failed to allocate memory for uct_cuda_ipc_key_t");
         return UCS_ERR_NO_MEMORY;
     }
+
     *key      = *packed;
     *handle_p = NULL;
     *rkey_p   = (uintptr_t) key;
@@ -93,6 +94,7 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
     if (!length) {
         return UCS_OK;
     }
+
     status = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&(mem_hndl->ph),
                                                 (CUdeviceptr) addr));
     if (UCS_OK != status) {
@@ -122,6 +124,7 @@ static ucs_status_t uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t leng
         ucs_error("failed to allocate memory for cuda_ipc_mem_t");
         return UCS_ERR_NO_MEMORY;
     }
+
     if (UCS_OK != uct_cuda_ipc_mem_reg_internal(md, address, length, 0, mem_hndl)) {
         ucs_free(mem_hndl);
         return UCS_ERR_IO_ERROR;

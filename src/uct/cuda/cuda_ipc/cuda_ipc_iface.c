@@ -108,10 +108,12 @@ uct_cuda_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
     if (comp != NULL) {
         return UCS_ERR_UNSUPPORTED;
     }
+
     if (ucs_queue_is_empty(&iface->outstanding_d2d_event_q)) {
         UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
         return UCS_OK;
     }
+
     UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
     return UCS_INPROGRESS;
 }
@@ -131,17 +133,21 @@ uct_cuda_ipc_progress_event_q(ucs_queue_head_t *event_q, unsigned max_events)
         } else if (UCS_OK != status) {
             return status;
         }
+
         ucs_queue_del_iter(event_q, iter);
         if (cuda_ipc_event->comp != NULL) {
             uct_invoke_completion(cuda_ipc_event->comp, UCS_OK);
         }
+
         ucs_trace_poll("CUDA_IPC Event Done :%p", cuda_ipc_event);
         ucs_mpool_put(cuda_ipc_event);
         count++;
+
         if (count >= max_events) {
             break;
         }
     }
+
     return count;
 }
 
@@ -178,25 +184,19 @@ static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
 static void uct_cuda_ipc_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
     uct_cuda_ipc_event_desc_t *base = (uct_cuda_ipc_event_desc_t *) obj;
-    ucs_status_t status;
 
     memset(base, 0, sizeof(*base));
-    status = UCT_CUDADRV_FUNC(cuEventCreate(&(base->event),
-                                            CU_EVENT_DISABLE_TIMING));
-    if (UCS_OK != status) {
-        return;
-    }
+    UCT_CUDADRV_FUNC(cuEventCreate(&base->event, CU_EVENT_DISABLE_TIMING));
+
+    return;
 }
 
 static void uct_cuda_ipc_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
     uct_cuda_ipc_event_desc_t *base = (uct_cuda_ipc_event_desc_t *) obj;
-    ucs_status_t status;
 
-    status = UCT_CUDADRV_FUNC(cuEventDestroy(base->event));
-    if (UCS_OK != status) {
-        return;
-    }
+    UCT_CUDADRV_FUNC(cuEventDestroy(base->event));
+    return;
 }
 
 ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
@@ -211,6 +211,7 @@ ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
             return status;
         }
     }
+
     iface->streams_initialized = 1;
 
     return UCS_OK;
@@ -247,6 +248,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
             self->p2p_map[i][j] = -1;
         }
     }
+
     status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&dev_count));
     if (UCS_OK != status) {
         return status;
@@ -258,13 +260,14 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
         for (j = 0; j < dev_count; j++) {
             status =
                 UCT_CUDADRV_FUNC(cuDeviceCanAccessPeer(&(self->p2p_map[i][j]),
-                                                            (CUdevice) i,
-                                                            (CUdevice) j));
+                                                       (CUdevice) i,
+                                                       (CUdevice) j));
             if (UCS_OK != status) {
                 return status;
             }
         }
     }
+
     ucs_trace("cuda_ipc p2p map generated for %d devices", dev_count);
     self->config.max_poll = config->max_poll;
     status = ucs_mpool_init(&self->event_desc,
@@ -280,6 +283,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
         ucs_error("mpool creation failed");
         return UCS_ERR_IO_ERROR;
     }
+
     self->streams_initialized = 0;
     ucs_queue_head_init(&self->outstanding_d2d_event_q);
     return UCS_OK;
@@ -290,7 +294,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
     ucs_status_t status;
     int i;
 
-    if (1 == self->streams_initialized) {
+    if (self->streams_initialized) {
         for (i = 0; i < self->device_count; i++) {
             status = UCT_CUDADRV_FUNC(cuStreamDestroy(self->stream_d2d[i]));
             if (UCS_OK != status) {
@@ -299,6 +303,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
         }
         self->streams_initialized = 0;
     }
+
     uct_base_iface_progress_disable(&self->super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     ucs_mpool_cleanup(&self->event_desc, 1);

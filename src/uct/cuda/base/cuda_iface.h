@@ -34,8 +34,7 @@
             const char *cu_err_str;                             \
             if (CUDA_ERROR_NOT_READY == _result) {              \
                 _status = UCS_INPROGRESS;                       \
-            }                                                   \
-            else if (CUDA_SUCCESS != _result) {                 \
+            } else if (CUDA_SUCCESS != _result) {               \
                 cuGetErrorString(_result, &cu_err_str);         \
                 ucs_error("%s is failed. ret:%s",               \
                           UCS_PP_MAKE_STRING(_func),cu_err_str);\
