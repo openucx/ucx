@@ -76,7 +76,7 @@ public:
         for (struct ifaddrs *ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
             if (ucs_netif_is_active(ifa->ifa_name) &&
                 ucs::is_inet_addr(ifa->ifa_addr)   &&
-                ucs::is_ib_netdev(ifa->ifa_name))
+                ucs::is_rdmacm_netdev(ifa->ifa_name))
             {
                 *listen_addr = *(struct sockaddr_in*)(void*)ifa->ifa_addr;
                 listen_addr->sin_port = ucs::get_port();

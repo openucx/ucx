@@ -74,7 +74,8 @@ bool is_inet_addr(const struct sockaddr* ifa_addr) {
     return ifa_addr->sa_family == AF_INET;
 }
 
-bool is_ib_netdev(const char *ifa_name) {
+bool is_rdmacm_netdev(const char *ifa_name) {
+    struct dirent *entry;
     char path[PATH_MAX];
     char dev_name[16];
     char guid_buf[32];
@@ -88,7 +89,7 @@ bool is_ib_netdev(const char *ifa_name) {
 
     /* read IB device name */
     for (;;) {
-        struct dirent *entry = readdir(dir);
+        entry = readdir(dir);
         if (entry == NULL) {
             closedir(dir);
             return false;
