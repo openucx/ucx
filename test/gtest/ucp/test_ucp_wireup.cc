@@ -616,6 +616,10 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply1) {
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
+    if (GetParam().variant == TEST_TAG_CLOSE_SYNC) {
+        UCS_TEST_SKIP_R("Invalid for TEST_TAG_CLOSE_SYNC");
+    }
+
     std::vector<void*> reqs;
     std::vector<void*> reqs_tmp;
     sender().connect(&receiver(), get_ep_params());
