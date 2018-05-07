@@ -621,6 +621,8 @@ static unsigned ucp_ep_do_disconnect(void *arg)
     if (req->flags & UCP_REQUEST_FLAG_SYNC) {
         if (ucs_test_all_flags(ep->flags, UCP_EP_MASK_FIN_DONE)) {
             ucp_ep_disconnected(ep, 1);
+        } else {
+            ucp_stream_recv_purge(ep);
         }
     } else {
         ucp_ep_disconnected(req->send.ep, req->send.flush.uct_flags &
@@ -678,10 +680,11 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
                                     ucp_ep_close_flushed_callback);
     if (!UCS_PTR_IS_PTR(request)) {
         ep->flags |= UCP_EP_FLAG_HIDDEN;
-
         if (mode == UCP_EP_CLOSE_MODE_SYNC) {
             if (ucs_test_all_flags(ep->flags, UCP_EP_MASK_FIN_DONE)) {
                 ucp_ep_disconnected(ep, 1);
+            } else {
+                ucp_stream_recv_purge(ep);
             }
         } else {
             ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
