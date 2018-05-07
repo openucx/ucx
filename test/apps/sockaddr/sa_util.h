@@ -54,4 +54,54 @@ private:
 };
 
 
+/* event poll set */
+class evpoll_set : public file_desc {
+public:
+    struct event {
+        int      fd;
+        uint32_t ev_flags;
+    };
+
+    evpoll_set();
+
+    void add(int fd, uint32_t ev_flags);
+
+    void wait(std::vector<event>& events, int timeout_ms = -1) const;
+
+private:
+    static int create_epfd();
+};
+
+#define LOG_INFO \
+    log(log::INFO, __FILE__, __LINE__)
+#define LOG_DEBUG \
+    log(log::DEBUG, __FILE__, __LINE__)
+
+/* logger */
+class log {
+public:
+    typedef enum {
+        INFO,
+        DEBUG
+    } level_t;
+
+    log(level_t level, const std::string& file, int line);
+    ~log();
+
+    template <typename T>
+    log& operator<<(const T& value) {
+        m_msg << value;
+        return *this;
+    }
+
+    static void more_verbose();
+
+private:
+    static std::string level_str(level_t level);
+
+    static level_t     m_log_level;
+    const bool         m_enabled;
+    std::ostringstream m_msg;
+};
+
 #endif
