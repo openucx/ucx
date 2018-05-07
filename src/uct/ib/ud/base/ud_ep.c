@@ -114,25 +114,22 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
                        UCS_STATS_ARG(ep->super.stats));
 }
 
-static ucs_status_t uct_ud_ep_check_and_free(uct_ud_ep_t *ep,
-                                             uct_ud_iface_t *iface)
+static ucs_status_t uct_ud_ep_free_by_timeout(uct_ud_ep_t *ep,
+                                              uct_ud_iface_t *iface)
 {
     uct_ud_iface_ops_t *ops;
     ucs_time_t         diff;
 
-    if (ep->flags & UCT_UD_EP_FLAG_DISCONNECTED) {
-        diff = ucs_twheel_get_time(&iface->async.slow_timer) - ep->close_time;
-        if (diff > iface->config.peer_timeout) {
-            ucs_debug("ud_ep %p is destroyed after %fs with timout %fs\n",
-                      ep, ucs_time_to_sec(diff),
-                      ucs_time_to_sec(iface->config.peer_timeout));
-            ops = ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t);
-            ops->ep_free(&ep->super.super);
-            return UCS_OK;
-        }
-        return UCS_INPROGRESS;
+    diff = ucs_twheel_get_time(&iface->async.slow_timer) - ep->close_time;
+    if (diff > iface->config.peer_timeout) {
+        ucs_debug("ud_ep %p is destroyed after %fs with timeout %fs\n",
+                  ep, ucs_time_to_sec(diff),
+                  ucs_time_to_sec(iface->config.peer_timeout));
+        ops = ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t);
+        ops->ep_free(&ep->super.super);
+        return UCS_OK;
     }
-    return UCS_ERR_NO_PROGRESS;
+    return UCS_INPROGRESS;
 }
 
 static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
@@ -148,11 +145,12 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
 
     if (ucs_queue_is_empty(&ep->tx.window)) {
         /* Do not free the EP until all scheduled communications are done. */
-        status = uct_ud_ep_check_and_free(ep, iface);
-        if (status == UCS_INPROGRESS) {
-            goto again;
+        if (ep->flags & UCT_UD_EP_FLAG_DISCONNECTED) {
+            status = uct_ud_ep_free_by_timeout(ep, iface);
+            if (status == UCS_INPROGRESS) {
+                goto again;
+            }
         }
-        ucs_assert((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS));
         return;
     }
 
