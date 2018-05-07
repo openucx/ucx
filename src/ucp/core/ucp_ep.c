@@ -890,10 +890,12 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         config->tag.eager.zcopy_thresh[it]       = SIZE_MAX;
         config->tag.eager.sync_zcopy_thresh[it]  = SIZE_MAX;
     }
+
     for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
         config->am.mem_type_zcopy_thresh[mem_type]        = SIZE_MAX;
         config->tag.eager.mem_type_zcopy_thresh[mem_type] = SIZE_MAX;
     }
+
     config->tag.eager.zcopy_auto_thresh = 0;
     config->am.zcopy_auto_thresh        = 0;
     config->p2p_lanes                   = 0;
