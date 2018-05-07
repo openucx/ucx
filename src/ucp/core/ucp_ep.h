@@ -44,14 +44,14 @@ enum {
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
 
     /* DEBUG bits */
-    UCP_EP_FLAG_CONNECT_REQ_SENT     = UCS_BIT(10), /* DEBUG: Connection request was sent */
-    UCP_EP_FLAG_CONNECT_REP_SENT     = UCS_BIT(11), /* DEBUG: Connection reply was sent */
-    UCP_EP_FLAG_CONNECT_ACK_SENT     = UCS_BIT(12), /* DEBUG: Connection ACK was sent */
-    UCP_EP_FLAG_CONNECT_REQ_IGNORED  = UCS_BIT(13), /* DEBUG: Connection request was ignored */
-    UCP_EP_FLAG_CONNECT_PRE_REQ_SENT = UCS_BIT(14), /* DEBUG: Connection pre-request was sent */
-    UCP_EP_FLAG_PARTIAL_ADDR         = UCS_BIT(15)  /* DEBUG: Partial worker address was sent
-                                                              to the remote peer when starting
-                                                              connection establishment on this EP */
+    UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(10), /* DEBUG: Connection request was sent */
+    UCP_EP_FLAG_CONNECT_REP_SENT       = UCS_BIT(11), /* DEBUG: Connection reply was sent */
+    UCP_EP_FLAG_CONNECT_ACK_SENT       = UCS_BIT(12), /* DEBUG: Connection ACK was sent */
+    UCP_EP_FLAG_CONNECT_REQ_IGNORED    = UCS_BIT(13), /* DEBUG: Connection request was ignored */
+    UCP_EP_FLAG_CONNECT_PRE_REQ_SENT   = UCS_BIT(14), /* DEBUG: Connection pre-request was sent */
+    UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(15)  /* DEBUG: Partial worker address was sent
+                                                                to the remote peer when starting
+                                                                connection establishment on this EP */
 };
 
 
@@ -320,6 +320,11 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_send_callback_t req_cb,
                                        unsigned req_flags,
                                        ucp_request_callback_t flushed_cb);
+
+ucs_status_t ucp_ep_create_sockaddr_aux(ucp_worker_h worker,
+                                        const ucp_ep_params_t *params,
+                                        const ucp_unpacked_address_t *remote_address,
+                                        ucp_ep_h *ep_p);
 
 void ucp_ep_config_key_set_params(ucp_ep_config_key_t *key,
                                   const ucp_ep_params_t *params);

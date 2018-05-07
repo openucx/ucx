@@ -14,6 +14,7 @@
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/stream/stream.h>
+#include <ucp/core/ucp_listener.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
@@ -115,6 +116,44 @@ void ucp_ep_delete(ucp_ep_h ep)
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
+}
+
+ucs_status_t ucp_ep_create_sockaddr_aux(ucp_worker_h worker,
+                                        const ucp_ep_params_t *params,
+                                        const ucp_unpacked_address_t *remote_address,
+                                        ucp_ep_h *ep_p)
+{
+    ucp_wireup_ep_t *wireup_ep;
+    ucs_status_t status;
+    ucp_ep_h ep;
+
+    /* allocate endpoint */
+    status = ucp_ep_new(worker, remote_address->name, "listener", &ep);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = ucp_ep_init_create_wireup(ep, params, &wireup_ep);
+    if (status != UCS_OK) {
+        goto err_delete;
+    }
+
+    status = ucp_wireup_ep_connect_aux(wireup_ep, params,
+                                       remote_address->address_count,
+                                       remote_address->address_list);
+    if (status != UCS_OK) {
+        goto err_destroy_wireup_ep;
+    }
+
+    *ep_p = ep;
+    return status;
+
+err_destroy_wireup_ep:
+    uct_ep_destroy(ep->uct_eps[0]);
+err_delete:
+    ucp_ep_delete(ep);
+err:
+    return status;
 }
 
 void ucp_ep_config_key_set_params(ucp_ep_config_key_t *key,
@@ -530,7 +569,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 
     /* remove pending slow-path function it wasn't removed yet */
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
-                            ucp_wireup_listener_accept_cb_remove_filter, ep);
+                            ucp_listener_accept_cb_remove_filter, ep);
 
     ep->flags &= ~UCP_EP_FLAG_USED;
 

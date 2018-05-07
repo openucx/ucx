@@ -101,6 +101,15 @@ static unsigned ucp_wireup_address_index(const unsigned *order,
     return order[ucs_count_one_bits(tl_bitmap & UCS_MASK(tl_index))];
 }
 
+static inline ucp_ep_h ucp_wireup_is_ep_needed(ucp_ep_h ep)
+{
+    if ((ep != NULL) && !(ep->flags & UCP_EP_FLAG_LISTENER)) {
+        return ep;
+    }
+
+    return NULL;
+}
+
 /*
  * @param [in] rsc_tli  Resource index for every lane.
  */
@@ -142,8 +151,8 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
 
     /* pack all addresses */
-    status = ucp_address_pack(ep->worker, ep, tl_bitmap, order,
-                              &req->send.length, &address);
+    status = ucp_address_pack(ep->worker, ucp_wireup_is_ep_needed(ep),
+                              tl_bitmap, order, &req->send.length, &address);
     if (status != UCS_OK) {
         ucs_free(req);
         ucs_error("failed to pack address: %s", ucs_status_string(status));
@@ -216,34 +225,6 @@ static void ucp_wireup_remote_connected(ucp_ep_h ep)
     }
 }
 
-static unsigned ucp_wireup_listener_accept_cb_progress(void *arg)
-{
-    ucp_ep_h ep = arg;
-
-    ep->flags |= UCP_EP_FLAG_USED;
-    ucp_ep_ext_gen(ep)->listener->cb(ep, ucp_ep_ext_gen(ep)->listener->arg);
-
-    return 0;
-}
-
-int ucp_wireup_listener_accept_cb_remove_filter(const ucs_callbackq_elem_t *elem,
-                                                void *arg)
-{
-    ucp_ep_h ep = elem->arg;
-
-    return (elem->cb == ucp_wireup_listener_accept_cb_progress) && (ep == arg);
-}
-
-static void ucp_wireup_schedule_listener_cb(ucp_ep_h ep)
-{
-    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
-
-    uct_worker_progress_register_safe(ep->worker->uct,
-                                      ucp_wireup_listener_accept_cb_progress,
-                                      ep, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &prog_id);
-}
-
 static UCS_F_NOINLINE void
 ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                                const ucp_unpacked_address_t *remote_address)
@@ -260,7 +241,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     /* wireup pre_request for a specific ep */
     ep = ucp_worker_get_ep_by_ptr(worker, msg->dest_ep_ptr);
-    ucs_assert(ep->flags & UCP_EP_FLAG_PARTIAL_ADDR);
+    ucs_assert(ep->flags & UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR);
 
     ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
 
@@ -430,7 +411,7 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
          * (if server is connected) from the main thread */
         if (ucs_test_all_flags(ep->flags,
                                (UCP_EP_FLAG_LISTENER | UCP_EP_FLAG_LOCAL_CONNECTED))) {
-            ucp_wireup_schedule_listener_cb(ep);
+            ucp_listener_schedule_accept_cb(ep);
         }
     }
 }
@@ -502,7 +483,7 @@ void ucp_wireup_process_ack(ucp_worker_h worker, const ucp_wireup_msg_t *msg)
      * a large worker address from the client, invoke the cached user callback
      * from the main thread */
     if (ep->flags & UCP_EP_FLAG_LISTENER) {
-        ucp_wireup_schedule_listener_cb(ep);
+        ucp_listener_schedule_accept_cb(ep);
     }
 }
 

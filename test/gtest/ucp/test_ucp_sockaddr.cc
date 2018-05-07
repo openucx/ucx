@@ -59,7 +59,7 @@ public:
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
-            if ((strstr(err_str.c_str(), "no supported transport found for")) ||
+            if ((strstr(err_str.c_str(), "no supported transports found for")) ||
                 (strstr(err_str.c_str(), "always supported resources addresses")) ||
                 (strstr(err_str.c_str(), "no peer failure handler")) ||
                 /* when the "peer failure" error happens, it is followed by: */

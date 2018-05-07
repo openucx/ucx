@@ -12,6 +12,34 @@
 #include <ucs/sys/string.h>
 
 
+static unsigned ucp_listener_accept_cb_progress(void *arg)
+{
+    ucp_ep_h ep = arg;
+
+    ep->flags |= UCP_EP_FLAG_USED;
+    ucp_ep_ext_gen(ep)->listener->cb(ep, ucp_ep_ext_gen(ep)->listener->arg);
+
+    return 0;
+}
+
+int ucp_listener_accept_cb_remove_filter(const ucs_callbackq_elem_t *elem,
+                                                void *arg)
+{
+    ucp_ep_h ep = elem->arg;
+
+    return (elem->cb == ucp_listener_accept_cb_progress) && (ep == arg);
+}
+
+void ucp_listener_schedule_accept_cb(ucp_ep_h ep)
+{
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+
+    uct_worker_progress_register_safe(ep->worker->uct,
+                                      ucp_listener_accept_cb_progress,
+                                      ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
+}
+
 static unsigned ucp_listener_conn_request_progress(void *arg)
 {
     ucp_listener_accept_t *accept = arg;
@@ -94,11 +122,10 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
             goto err_free_address;
         }
 
-        ep->flags &= ~UCP_EP_FLAG_LISTENER;
     } else {
-        status = ucp_wireup_ep_create_sockaddr_aux(listener->wiface.worker,
-                                                   &params, &remote_address,
-                                                   &ep);
+        status = ucp_ep_create_sockaddr_aux(listener->wiface.worker,
+                                            &params, &remote_address,
+                                            &ep);
         if (status != UCS_OK) {
             goto err_free_address;
         }

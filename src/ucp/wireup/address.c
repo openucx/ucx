@@ -116,7 +116,7 @@ out:
 }
 
 static ucs_status_t
-ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int need_ep_addrs,
+ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int has_ep,
                            ucp_address_packed_device_t **devices_p,
                            ucp_rsc_index_t *num_devices_p)
 {
@@ -152,7 +152,7 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int need_ep_
 
         dev->tl_addrs_size += iface_attr->iface_addr_len;
 
-        if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) && need_ep_addrs) {
+        if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) && has_ep) {
             /* ep address and its length */
             dev->tl_addrs_size += 1 + iface_attr->ep_addr_len;
         }
@@ -312,11 +312,6 @@ ucp_address_unpack_iface_attr(ucp_address_iface_attr_t *iface_attr,
     }
 }
 
-static inline int ucp_address_need_ep_addrs(ucp_ep_h ep)
-{
-    return (ep != NULL) && !(ep->flags & UCP_EP_FLAG_LISTENER);
-}
-
 static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                                         void *buffer, size_t size,
                                         uint64_t tl_bitmap, unsigned *order,
@@ -421,7 +416,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
             /* Pack ep address if present */
             if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) &&
-                ucp_address_need_ep_addrs(ep)) {
+                (ep != NULL)) {
                 *iface_addr_len_ptr |= UCP_ADDRESS_FLAG_EP_ADDR;
 
                 ep_addr_len = iface_attr->ep_addr_len;
@@ -472,8 +467,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitm
     size_t size;
 
     /* Collect all devices we want to pack */
-    status = ucp_address_gather_devices(worker, tl_bitmap,
-                                        ucp_address_need_ep_addrs(ep),
+    status = ucp_address_gather_devices(worker, tl_bitmap, ep != NULL,
                                         &devices, &num_devices);
     if (status != UCS_OK) {
         goto out;

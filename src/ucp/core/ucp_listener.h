@@ -32,5 +32,9 @@ typedef struct ucp_listener_accept {
                                                  for the connection */
 } ucp_listener_accept_t;
 
+void ucp_listener_schedule_accept_cb(ucp_ep_h ep);
+
+int ucp_listener_accept_cb_remove_filter(const ucs_callbackq_elem_t *elem,
+                                         void *arg);
 
 #endif
