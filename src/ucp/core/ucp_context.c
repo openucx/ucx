@@ -608,7 +608,7 @@ const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap, char *s
             continue;
         }
 
-        snprintf(p, UCT_TL_NAME_MAX, "%s ",context->tl_rscs[i].tl_rsc.tl_name);
+        ucs_snprintf_zero(p, UCT_TL_NAME_MAX, "%s ",context->tl_rscs[i].tl_rsc.tl_name);
         p += strlen(p);
     }
 

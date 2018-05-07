@@ -482,7 +482,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
     uint64_t tl_bitmap;
-    char *supported_tls = ucs_alloca(context->config.num_partial_tls * UCT_TL_NAME_MAX);
+    char *supported_tls = ucs_alloca(context->config.num_partial_tls * 2 * UCT_TL_NAME_MAX);
 
     status = ucp_worker_get_address(worker, &worker_address, &address_length);
     if (status != UCS_OK) {
