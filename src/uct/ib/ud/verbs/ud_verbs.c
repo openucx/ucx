@@ -526,7 +526,8 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .set_ep_failed            = uct_ud_verbs_ep_set_failed
     },
     .async_progress           = uct_ud_verbs_iface_async_progress,
-    .tx_skb                   = uct_ud_verbs_ep_tx_ctl_skb
+    .tx_skb                   = uct_ud_verbs_ep_tx_ctl_skb,
+    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t)
 };
 
 static UCS_F_NOINLINE void

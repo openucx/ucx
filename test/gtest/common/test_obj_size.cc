@@ -34,7 +34,7 @@
 class test_obj_size : public ucs::test {
 };
 
-#define EXPECTED_SIZE(_obj, _size) EXPECT_EQ(sizeof(_obj), (size_t)_size)
+#define EXPECTED_SIZE(_obj, _size) EXPECT_EQ((size_t)_size, sizeof(_obj))
 
 UCS_TEST_F(test_obj_size, size) {
 
