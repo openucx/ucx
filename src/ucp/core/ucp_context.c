@@ -94,11 +94,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "name, or a wildcard - '*' - which expands to all MD components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-   {"TLS_FOR_PARTIAL_ADDRESS", "ud,ud_mlx5",
-    "For the client-server case, use these transports when sending a partial worker\n"
-    "address from the client to the server in case the former's worker address is\n"
-    "too long to pass in the sockaddr transport.",
-    ucs_offsetof(ucp_config_t, partial_addr_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
+  {"SOCKADDR_AUX_TLS", "ud,ud_mlx5",
+   "Transports to use for exchanging additional address information while\n"
+   "establishing client/server connection. ",
+   ucs_offsetof(ucp_config_t, sockaddr_aux_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"BCOPY_THRESH", "0",
    "Threshold for switching from short to bcopy protocol",
@@ -595,20 +594,18 @@ static ucs_status_t ucp_check_tl_names(ucp_context_t *context)
     return UCS_OK;
 }
 
-const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap, char *str)
+const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
+                              char *str, size_t max_str_len)
 {
     ucp_rsc_index_t i;
-    uint64_t mask;
-    char *p = str;
+    char *p, *endp;
 
-    for (i = 0; i < context->num_tls; ++i) {
-        mask = UCS_BIT(i);
+    p    = str;
+    endp = str + max_str_len;
 
-        if (!(mask & tl_bitmap)) {
-            continue;
-        }
-
-        ucs_snprintf_zero(p, UCT_TL_NAME_MAX, "%s ",context->tl_rscs[i].tl_rsc.tl_name);
+    ucs_for_each_bit(i, tl_bitmap) {
+        ucs_snprintf_zero(p, endp - p, "%s ",
+                          context->tl_rscs[i].tl_rsc.tl_name);
         p += strlen(p);
     }
 
@@ -742,6 +739,30 @@ static void ucp_resource_config_str(const ucp_config_t *config, char *buf,
 
     if (devs_p == p) {
         snprintf(p, endp - p, "all devices");
+    }
+}
+
+static void ucp_fill_sockaddr_aux_tls_config(ucp_context_h context,
+                                             const ucp_config_t *config)
+{
+    unsigned num_sockaddr_aux_tls, idx;
+    ucp_rsc_index_t tl_id;
+
+    context->config.sockaddr_aux_rscs.bitmap   = 0;
+    context->config.sockaddr_aux_rscs.num_rscs = config->sockaddr_aux_tls.count;
+
+    if (config->sockaddr_aux_tls.count != 0) {
+        /* Get the number of sockaddr auxiliary transports for the client-server flow */
+        num_sockaddr_aux_tls = config->sockaddr_aux_tls.count;
+
+        for (idx = 0; idx < num_sockaddr_aux_tls; ++idx) {
+            for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+                if (!strncmp(config->sockaddr_aux_tls.aux_tls[idx],
+                             context->tl_rscs[tl_id].tl_rsc.tl_name,
+                             UCT_TL_NAME_MAX))
+                    context->config.sockaddr_aux_rscs.bitmap |= UCS_BIT(tl_id);
+            }
+        }
     }
 }
 
@@ -888,6 +909,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
     ucp_report_unavailable(&config->tls, tl_cfg_mask, "transport");
 
+    ucp_fill_sockaddr_aux_tls_config(context, config);
+
     return UCS_OK;
 
 err_free_context_resources:
@@ -952,7 +975,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
 {
-    unsigned i, num_alloc_methods, method, num_partial_tls;
+    unsigned i, num_alloc_methods, method;
     const char *method_name;
     ucs_status_t status;
 
@@ -1045,28 +1068,6 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
-    if (config->partial_addr_tls.count != 0) {
-        /* Get the number of transports for partial packing for the client-server flow */
-        num_partial_tls = config->partial_addr_tls.count;
-        context->config.num_partial_tls = num_partial_tls;
-
-        /* Allocate an array to hold the transports */
-        context->config.partial_tls = ucs_calloc(context->config.num_partial_tls,
-                                                 sizeof(*context->config.partial_tls),
-                                                 "ucp_partial_tls");
-        if (context->config.partial_tls == NULL) {
-            status = UCS_ERR_NO_MEMORY;
-            goto err;
-        }
-
-        /* Parse the transports specified in the configuration */
-        for (i = 0; i < num_partial_tls; ++i) {
-            ucs_strncpy_zero(context->config.partial_tls[i].tl_name,
-                             config->partial_addr_tls.p_tls[i],
-                             UCT_TL_NAME_MAX);
-        }
-    }
-
     return UCS_OK;
 
 err_free:
@@ -1079,7 +1080,6 @@ err:
 static void ucp_free_config(ucp_context_h context)
 {
     ucs_free(context->config.alloc_methods);
-    ucs_free(context->config.partial_tls);
 }
 
 static ucs_mpool_ops_t ucp_rkey_mpool_ops = {

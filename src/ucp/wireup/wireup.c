@@ -101,13 +101,13 @@ static unsigned ucp_wireup_address_index(const unsigned *order,
     return order[ucs_count_one_bits(tl_bitmap & UCS_MASK(tl_index))];
 }
 
-static inline ucp_ep_h ucp_wireup_is_ep_needed(ucp_ep_h ep)
+static inline int ucp_wireup_is_ep_needed(ucp_ep_h ep)
 {
     if ((ep != NULL) && !(ep->flags & UCP_EP_FLAG_LISTENER)) {
-        return ep;
+        return 1;
     }
 
-    return NULL;
+    return 0;
 }
 
 /*
@@ -151,7 +151,7 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
 
     /* pack all addresses */
-    status = ucp_address_pack(ep->worker, ucp_wireup_is_ep_needed(ep),
+    status = ucp_address_pack(ep->worker, ucp_wireup_is_ep_needed(ep) ? ep : NULL,
                               tl_bitmap, order, &req->send.length, &address);
     if (status != UCS_OK) {
         ucs_free(req);

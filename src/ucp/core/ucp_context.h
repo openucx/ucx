@@ -92,7 +92,7 @@ struct ucp_config {
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Array of transports for partial worker address to pack */
-    UCS_CONFIG_STRING_ARRAY_FIELD(p_tls)   partial_addr_tls;
+    UCS_CONFIG_STRING_ARRAY_FIELD(aux_tls) sockaddr_aux_tls;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
 };
@@ -175,12 +175,11 @@ typedef struct ucp_context {
         } *alloc_methods;
         unsigned                  num_alloc_methods;
 
-        /* Array of transports to pack for partial address */
+        /* Array of sockaddr auxiliary transports to pack for client/server flow */
         struct {
-            /* TL name to use */
-            char                  tl_name[UCT_TL_NAME_MAX];
-        } *partial_tls;
-        unsigned                  num_partial_tls;
+            uint64_t              bitmap;
+            unsigned              num_rscs;
+        } sockaddr_aux_rscs;
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;
@@ -280,7 +279,8 @@ void ucp_context_uct_atomic_iface_flags(ucp_context_h context,
 
 const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_csum);
 
-const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap, char *str);
+const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
+                              char *str, size_t max_str_len);
 
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)

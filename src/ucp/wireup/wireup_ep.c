@@ -420,34 +420,29 @@ err:
     return status;
 }
 
-static ucs_status_t ucp_wireup_ep_pack_always_supported_rscs(ucp_worker_h worker,
-                                                             const char *dev_name,
-                                                             uint64_t *tl_bitmap_p,
-                                                             ucp_address_t **address_p,
-                                                             size_t *address_length_p)
+static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
+                                                        const char *dev_name,
+                                                        uint64_t *tl_bitmap_p,
+                                                        ucp_address_t **address_p,
+                                                        size_t *address_length_p)
 {
     ucp_context_h context = worker->context;
-    int tl_id, tl, found_supported_tl = 0;
+    int tl_id, found_supported_tl = 0;
     ucs_status_t status;
     uint64_t tl_bitmap = 0;
 
-    if (context->config.num_partial_tls == 0) {
+    if (context->config.sockaddr_aux_rscs.num_rscs == 0) {
         ucs_error("no supported transports found in configuration");
         status = UCS_ERR_UNREACHABLE;
         goto out;
     }
 
     /* Find a transport which matches the given dev_name and the user's configuration */
-    for (tl = 0; tl < context->config.num_partial_tls; ++tl) {
-        for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
-            if ((!strncmp(context->config.partial_tls[tl].tl_name,
-                          context->tl_rscs[tl_id].tl_rsc.tl_name,
-                          UCT_TL_NAME_MAX)) &&
-                (!strncmp(context->tl_rscs[tl_id].tl_rsc.dev_name, dev_name,
-                          UCT_DEVICE_NAME_MAX))) {
-                found_supported_tl = 1;
-                tl_bitmap |= UCS_BIT(tl_id);
-            }
+    ucs_for_each_bit(tl_id, context->config.sockaddr_aux_rscs.bitmap) {
+        if (!strncmp(context->tl_rscs[tl_id].tl_rsc.dev_name, dev_name,
+                     UCT_DEVICE_NAME_MAX)) {
+            found_supported_tl = 1;
+            tl_bitmap |= UCS_BIT(tl_id);
         }
     }
 
@@ -482,7 +477,9 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
     uint64_t tl_bitmap;
-    char *supported_tls = ucs_alloca(context->config.num_partial_tls * 2 * UCT_TL_NAME_MAX);
+    unsigned sockaddr_aux_tls_str_len = context->config.sockaddr_aux_rscs.num_rscs *
+                                        2 * UCT_TL_NAME_MAX;
+    char *sockaddr_aux_tls = ucs_alloca(sockaddr_aux_tls_str_len);
 
     status = ucp_worker_get_address(worker, &worker_address, &address_length);
     if (status != UCS_OK) {
@@ -501,9 +498,9 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     if (conn_priv_len > wiface->attr.max_conn_priv) {
 
         /* since the full worker address is too large to fit into the trasnport's
-         * private data, try to pack resources to pass partial address */
-        status = ucp_wireup_ep_pack_always_supported_rscs(worker, dev_name, &tl_bitmap,
-                                                          &rsc_address, &address_length);
+         * private data, try to pack sockaddr aux tls to pass in the address */
+        status = ucp_wireup_ep_pack_sockaddr_aux_tls(worker, dev_name, &tl_bitmap,
+                                                     &rsc_address, &address_length);
         if (status != UCS_OK) {
             goto err_free_address;
         }
@@ -513,10 +510,11 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
         /* check the private data length limitation again, now with partial
          * resources packed (and not the entire worker address) */
         if (conn_priv_len > wiface->attr.max_conn_priv) {
-            ucs_error("always supported resources addresses (%s transports)"
-                      " information (%zu) exceed max_priv on "
+            ucs_error("sockaddr aux resources addresses (%s transports)"
+                      " information (%zu) exceeds max_priv on "
                       UCT_TL_RESOURCE_DESC_FMT" (%zu)",
-                      ucp_tl_bitmap_str(context, tl_bitmap, supported_tls),
+                      ucp_tl_bitmap_str(context, tl_bitmap, sockaddr_aux_tls,
+                                        sockaddr_aux_tls_str_len),
                       conn_priv_len,
                       UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
                       wiface->attr.max_conn_priv);
@@ -535,7 +533,8 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
                   "(%s transports) (len=%zu) to server. "
                   "total client priv data len: %zu",
                   context->tl_rscs[sockaddr_rsc].tl_rsc.tl_name, dev_name,
-                  ucp_tl_bitmap_str(context, tl_bitmap, supported_tls),
+                  ucp_tl_bitmap_str(context, tl_bitmap, sockaddr_aux_tls,
+                                    sockaddr_aux_tls_str_len),
                   address_length, conn_priv_len);
 
     } else {
