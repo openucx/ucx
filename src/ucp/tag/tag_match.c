@@ -146,6 +146,7 @@ void ucp_tag_frag_list_process_queue(ucp_tag_match_t *tm, ucp_request_t *req,
 
     iter   = kh_put(ucp_tag_frag_hash, &tm->frag_hash, msg_id, &ret);
     matchq = &kh_value(&tm->frag_hash, iter);
+
     if (ret == 0) {
         status = UCS_INPROGRESS;
         ucs_assert(ucp_tag_frag_match_is_unexp(matchq));

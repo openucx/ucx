@@ -613,9 +613,6 @@ static void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
         }
     }
 
-    ucs_warn("mp flag %d cap flag %d   res %d mtu %d max %ld",
-            mp_flags, mp_cap_flag, mp_flags & mp_cap_flag, mtu, *max_seg_size);
-
     return;
 
 out_tm_disabled:
@@ -676,10 +673,10 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
         max_wr = ucs_max(IBV_DEVICE_MIN_UWQ_POST,
                          config->super.rx.queue_len/iface->rx.srq.sge_num);
 
-        ucs_assertv(iface->super.config.seg_size <= mtu,
-                    "Segment size %d exceeds MTU %ld",
-                    iface->super.config.seg_size, mtu);
-        ucs_error("Multi-Packet WQ config: stride size %d, WQEs %d, strides per WQE %d",
+        ucs_assertv_always(iface->super.config.seg_size <= mtu,
+                           "Segment size %d exceeds MTU %ld",
+                           iface->super.config.seg_size, mtu);
+        ucs_debug("Multi-Packet WQ config: stride size %d, WQEs %d, strides per WQE %d",
                   iface->super.config.seg_size, max_wr, iface->rx.srq.sge_num);
     } else {
         iface->rx.srq.sge_num = 1;
@@ -752,7 +749,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     uct_rc_iface_preinit(self, md, config, params, tm_cap_flag, mp_cap_flag,
                          &rx_cq_len, &max_seg_size);
 
-    ucs_warn("max seg %ld", max_seg_size);
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               rx_priv_len, sizeof(uct_rc_hdr_t), tx_cq_len,
                               rx_cq_len, max_seg_size, res_domain_key,
@@ -992,7 +988,8 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 
 #  if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
 
-    /* MP WR is not supported with inline receive. */
+    /* MP WR is not supported with inline receive.
+     * TODO: Remove when driver supports it. */
     if (!UCT_RC_IFACE_MP_ENABLED(iface)) {
         qp_init_attr.comp_mask           |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
         qp_init_attr.max_inl_recv         = iface->config.rx_inline;

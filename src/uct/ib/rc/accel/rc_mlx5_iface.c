@@ -112,6 +112,20 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr);
     iface_attr->latency.growth += 1e-9; /* 1 ns per each extra QP */
+
+    /* Redefine eager thresholds if MP is supported
+     * TODO: move to rc_iface_tag_query */
+    if (UCT_RC_IFACE_MP_ENABLED(rc_iface)) {
+#if IBV_EXP_HW_TM
+        iface_attr->cap.tag.eager.max_bcopy = UCT_RC_MLX5_TAG_BCOPY_MAX -
+                                              sizeof(struct ibv_exp_tmh);
+        /* TODO: define better formula */
+        iface_attr->cap.tag.eager.max_zcopy = (rc_iface->super.config.seg_size*
+                                              (rc_iface->rx.srq.available + rc_iface->rx.srq.quota)/
+                                              128) - sizeof(struct ibv_exp_tmh);
+#endif
+    }
+
     return UCS_OK;
 }
 

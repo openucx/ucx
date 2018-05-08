@@ -156,7 +156,7 @@ ucp_eager_common_middle_handler(ucp_worker_t *worker, ucp_tag_frag_match_t *matc
 
     if (ucp_tag_frag_match_is_unexp(matchq)) {
         /* add new received descriptor to the queue */
-        status = ucp_recv_desc_init(worker, data, length, 0, am_flags,
+        status = ucp_recv_desc_init(worker, data, length, 0, tl_flags,
                                     sizeof(*hdr), UCP_RECV_DESC_FLAG_EAGER, 0,
                                     &rdesc);
         if (!UCS_STATUS_IS_ERR(status)) {
@@ -298,20 +298,18 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
 
     ucp_tag_offload_unexp(wiface, stag);
 
-    ucs_warn("UCP/HW: eager unexp %p, imm %ld, flags %d, length %ld",
-             data, imm, flags, length);
-
     /* Fast path: non-sync eager-only messages */
     if (ucs_likely(!imm && (tl_flags & UCT_CB_PARAM_FLAG_FIRST) &&
                    !(tl_flags & UCT_CB_PARAM_FLAG_MORE))) {
         return ucp_eager_offload_handler(worker, data, length, tl_flags,
-                                         flags, stag);
+                                         flags | UCP_RECV_DESC_FLAG_EAGER_LAST |
+                                         UCP_RECV_DESC_FLAG_EAGER_ONLY, stag);
     }
 
     if (!(tl_flags & UCT_CB_PARAM_FLAG_FIRST)) {
         /* Either middle or last fragment.
          * The corresponding entry must be present in hash. */
-        iter = kh_get(ucp_tag_frag_hash, &worker->tm.frag_hash, imm);
+        iter = kh_get(ucp_tag_frag_hash, &worker->tm.frag_hash, *context);
         ucs_assert(iter != kh_end(&worker->tm.frag_hash));
         frag = &kh_val(&worker->tm.frag_hash, iter);
         m_hdr = (ucp_eager_middle_hdr_t*)ucp_tag_eager_offload_hdr(tl_flags, data,
@@ -330,14 +328,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
         /* First part of the fragmented message. Pass message ID back to UCT,
          * so it will be provided with the rest of message fragments. */
         *context     = worker->tm.am.message_id++;
-        iter         = kh_put(ucp_tag_frag_hash, &worker->tm.frag_hash, imm, &ret);
+        iter         = kh_put(ucp_tag_frag_hash, &worker->tm.frag_hash, *context, &ret);
         ucs_assert(ret != 0);
         frag         = &kh_value(&worker->tm.frag_hash, iter);
         frag->offset = length;
         ucp_tag_frag_match_init_unexp(frag);
     } else {
         /* Eager only packet */
-        flags |= UCP_RECV_DESC_FLAG_EAGER_ONLY;
+        flags |= UCP_RECV_DESC_FLAG_EAGER_ONLY | UCP_RECV_DESC_FLAG_EAGER_LAST;
     }
 
     /* Can be eager first, sync eager first or sync eager only message */
@@ -349,17 +347,17 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
             hdr = ucp_tag_eager_offload_hdr(tl_flags, data,length, hdr_len);
             s_hdr = (ucp_eager_sync_hdr_t*)hdr;
             s_hdr->req.reqptr      = 0ul;
-            s_hdr->req.sender_uuid = imm;
+            /*TODO: sync eager support! (s_hdr->req.sender_uuid = imm) */
             s_hdr->super.super.tag = stag;
             return ucp_eager_tagged_handler(worker, hdr, length + hdr_len,
-                                    tl_flags, flags, hdr_len);
+                                    tl_flags, flags, hdr_len, hdr_len);
 
         } else {
             hdr_len = sizeof(ucp_eager_sync_first_hdr_t);
             hdr = ucp_tag_eager_offload_hdr(tl_flags, data,length, hdr_len);
             sf_hdr =(ucp_eager_sync_first_hdr_t*)hdr;
             sf_hdr->req.reqptr      = 0ul;
-            sf_hdr->req.sender_uuid = imm;
+            /*TODO: sync eager support! (s_hdr->req.sender_uuid = imm) */
         }
     } else {
         hdr_len = sizeof(ucp_eager_first_hdr_t);
@@ -372,7 +370,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
     f_hdr->msg_id          = *context;
 
     return ucp_eager_tagged_handler(worker, hdr, length + hdr_len,
-                                    tl_flags, flags, hdr_len);
+                                    tl_flags, flags, hdr_len, hdr_len);
 }
 
 static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,

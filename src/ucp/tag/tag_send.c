@@ -22,7 +22,7 @@ ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t count,
                            size_t rndv_am_thresh, size_t seg_size)
 {
     switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
-    case UCP_DATATYPE_IOV: 
+    case UCP_DATATYPE_IOV:
         if ((count > max_iov) &&
             ucp_ep_is_tag_offload_enabled(ucp_ep_config(req->send.ep))) {
             /* Make sure SW RNDV will be used, because tag offload does
@@ -30,14 +30,14 @@ ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t count,
             return seg_size;
         }
         /* Fall through */
-    case UCP_DATATYPE_CONTIG: 
+    case UCP_DATATYPE_CONTIG:
         return ucs_min(rndv_rma_thresh, rndv_am_thresh);
     case UCP_DATATYPE_GENERIC:
         return rndv_am_thresh;
     default:
         ucs_error("Invalid data type %lx", req->send.datatype);
     }
- 
+
     return SIZE_MAX;
 }
 

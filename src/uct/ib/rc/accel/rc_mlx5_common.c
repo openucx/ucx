@@ -89,13 +89,11 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
 
                 /* Set receive data segment pointer. Length is pre-initialized. */
                 hdr               = uct_ib_iface_recv_desc_hdr(&iface->super, desc);
-                seg->srq.desc     = desc;
+                /* TODO: analyze whether desc is really needed
+                 * (seg->srq.desc     = desc;) */
                 seg->dptr[i].lkey = htonl(desc->lkey);
                 seg->dptr[i].addr = htobe64((uintptr_t)hdr);
                 VALGRIND_MAKE_MEM_NOACCESS(hdr, iface->super.config.seg_size);
-                ucs_warn("Post desc %p (%ld / %p) (sge %d : %d), lkey %d, sge_num %d",
-                         desc, htobe64((uintptr_t)hdr), hdr,  next_index, i  ,
-                         htonl(desc->lkey), iface->rx.srq.sge_num );
             }
         }
 
@@ -169,7 +167,20 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
 
 #if IBV_EXP_MP_RQ
     if (UCT_RC_IFACE_MP_ENABLED(rc_iface)) {
-        kh_init_inplace(uct_mlx5_mp_data_hash, &iface->tm.data_hash);
+        kh_init_inplace(uct_mlx5_mp_data_set, &iface->tm.data_set);
+        status = uct_iface_mpool_init(&rc_iface->super.super,
+                                      &iface->tm.tx_mp,
+                                      sizeof(uct_rc_iface_send_desc_t) +
+                                      UCT_RC_MLX5_TAG_BCOPY_MAX,
+                                      sizeof(uct_rc_iface_send_desc_t),
+                                      UCS_SYS_CACHE_LINE_SIZE,
+                                      &rc_config->super.tx.mp,
+                                      rc_iface->config.tx_qp_len,
+                                      uct_rc_iface_send_desc_init,
+                                      "tag_eager_send_desc");
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 #endif
 
@@ -248,7 +259,7 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface,
         uct_rc_iface_tag_cleanup(rc_iface);
 
         if (UCT_RC_IFACE_MP_ENABLED(rc_iface)) {
-            kh_destroy_inplace(uct_mlx5_mp_data_hash, &iface->tm.data_hash);
+            kh_destroy_inplace(uct_mlx5_mp_data_set, &iface->tm.data_set);
         }
     }
 #endif

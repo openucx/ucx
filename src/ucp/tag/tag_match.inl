@@ -219,6 +219,7 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data, size_t lengt
     ucs_status_t status;
 
     *last = recv_flags & UCP_RECV_DESC_FLAG_EAGER_LAST;
+
     if (ucs_unlikely(req->status != UCS_OK)) {
        return req->status;
     }
@@ -259,7 +260,6 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data, size_t lengt
     return status;
 }
 
->>>>>>> UCP: MP support draft
 /*
  * process data, complete receive if done
  * @return UCS_OK/ERR - completed, UCS_INPROGRESS - not completed
@@ -284,11 +284,11 @@ ucp_tag_request_process_recv_data(ucp_request_t *req, const void *data,
         } else {
             status = req->status;
         }
-        ucs_assert(req->recv.tag.remaining >= length);
-        req->recv.tag.remaining -= length;
-    }
     if (status != UCS_OK) {
         req->status = status;
+    }
+        ucs_assert(req->recv.tag.remaining >= length);
+        req->recv.tag.remaining -= length;
     }
 
     if (last) {
@@ -313,8 +313,7 @@ ucp_tag_recv_request_process_rdesc(ucp_request_t *req, ucp_recv_desc_t *rdesc,
 
      hdr_len  = rdesc->payload_offset;
      recv_len = rdesc->length - hdr_len;
-     ucs_warn("UCP: process rdesc %p hdr_len %ld, recv_len %ld",
-              rdesc, hdr_len, recv_len);
+
      status = ucp_tag_request_process_recv_data(req, (void*)(rdesc + 1) + hdr_len,
                                                 recv_len, offset, 0, rdesc->flags);
      ucp_recv_desc_release(rdesc);

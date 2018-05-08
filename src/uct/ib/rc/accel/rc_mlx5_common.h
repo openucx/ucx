@@ -92,12 +92,15 @@ enum {
     UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG = 0xA
 };
 
+
+#define UCT_RC_MLX5_TAG_BCOPY_MAX 65536
+
 #  define UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(_av_size) \
        (UCT_IB_MLX5_AM_MAX_SHORT(_av_size + sizeof(struct ibv_exp_tmh))/ \
         sizeof(struct mlx5_wqe_data_seg))
+
 #if IBV_EXP_MP_RQ
-    KHASH_INIT(uct_mlx5_mp_data_hash, uint64_t, int, 1, kh_int64_hash_func,
-               kh_int64_hash_equal);
+    KHASH_SET_INIT_INT64(uct_mlx5_mp_data_set);
 #endif
 
 #  define UCT_RC_MLX5_TM_CQE_WITH_IMM(_cqe64) \
@@ -220,7 +223,8 @@ typedef struct uct_rc_mlx5_iface_common {
     } rx;
 #if IBV_EXP_HW_TM
     struct {
-        khash_t(uct_mlx5_mp_data_hash) data_hash; /* Hash table of MP data */
+        khash_t(uct_mlx5_mp_data_set)  data_set; /* Hash table of MP data */
+        ucs_mpool_t                    tx_mp;
         uct_rc_mlx5_cmd_wq_t           cmd_wq;
         uct_rc_mlx5_tag_entry_t        *head;
         uct_rc_mlx5_tag_entry_t        *tail;
@@ -346,19 +350,16 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                   ucs_status_t status, unsigned offset,
                                   uct_recv_desc_t *release_desc)
 {
-    void *udesc, *udesc2= NULL;
+    void *udesc, *udesc2;
     int headroom;
 
     if (UCT_RC_IFACE_MP_ENABLED(rc_iface)) {
         if (status != UCS_OK) {
+            /* TODO: Optimize */
             headroom =  rc_iface->super.config.rx_payload_offset -
                         rc_iface->super.config.rx_headroom_offset;
              udesc = (void*)be64toh(seg->dptr[ntohs(cqe->ib_stride_index)].addr);
-             udesc2 = udesc - (headroom - offset);
-             //udesc2 += offset;
-             ucs_warn("UCT/HW: release seg, dptr %p, udesc %p, offset %d, headr %d",
-                      (void*)be64toh(seg->dptr[ntohs(cqe->ib_stride_index)].addr),
-                      udesc2, offset, headroom);
+             udesc2 = udesc + sizeof(struct ibv_exp_tmh) - headroom;
              uct_recv_desc(udesc2) = release_desc;
         }
         if (--seg->srq.strides) {
@@ -463,30 +464,46 @@ uct_rc_mlx5_iface_common_mp_data(uct_rc_mlx5_iface_common_t *mlx5_iface,
     int ret;
     khiter_t iter;
 
-    seg  = uct_ib_mlx5_srq_get_wqe(&mlx5_iface->rx.srq, ntohs(cqe->wqe_counter));
-    hdr  = (void*)be64toh(seg->dptr[ntohs(cqe->ib_stride_index)].addr);
-    VALGRIND_MAKE_MEM_DEFINED(hdr, byte_count & UCT_RC_MLX5_MP_RQ_BYTE_CNT_FIELD_MASK);
+    *flags = 0;
 
-    iter = kh_put(uct_mlx5_mp_data_hash, &mlx5_iface->tm.data_hash,
+    seg  = uct_ib_mlx5_srq_get_wqe(&mlx5_iface->rx.srq, ntohs(cqe->wqe_counter));
+
+    iter = kh_put(uct_mlx5_mp_data_set, &mlx5_iface->tm.data_set,
                   (ntohl(cqe->sop_drop_qpn) & 0xffffff), &ret);
 
-    *flags = UCT_CB_PARAM_FLAG_DESC;
     if (ucs_unlikely(!(byte_count & UCT_RC_MLX5_MP_RQ_LAST_MSG_FIELD))) {
         *flags |= UCT_CB_PARAM_FLAG_MORE;
     } else {
-        kh_del(uct_mlx5_mp_data_hash, &mlx5_iface->tm.data_hash, iter);
+        kh_del(uct_mlx5_mp_data_set, &mlx5_iface->tm.data_set, iter);
     }
 
     if (ucs_likely(ret !=0)) {
         *flags |= UCT_CB_PARAM_FLAG_FIRST;
     }
 
-    //uct_rc_mlx5_srq_prefetch_setup(mlx5_iface, rc_iface);
+    /* TODO: Pass real rc iface and buffer to uct_rc_mlx5_iface_common_rx_inline */
+    if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
+        hdr = (uct_rc_hdr_t*)(cqe);
+        uct_rc_mlx5_iface_common_rx_inline(mlx5_iface, NULL, NULL,
+                                           UCT_RC_MLX5_IFACE_STAT_RX_INL_32,
+                                           byte_count);
+    } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
+        hdr = (uct_rc_hdr_t*)(cqe - 1);
+        uct_rc_mlx5_iface_common_rx_inline(mlx5_iface, NULL, NULL,
+                                           UCT_RC_MLX5_IFACE_STAT_RX_INL_64,
+                                           byte_count);
+    } else {
+        *flags |= UCT_CB_PARAM_FLAG_DESC;
+        hdr  = (void*)be64toh(seg->dptr[ntohs(cqe->ib_stride_index)].addr);
+        VALGRIND_MAKE_MEM_DEFINED(hdr, byte_count & UCT_RC_MLX5_MP_RQ_BYTE_CNT_FIELD_MASK);
+    }
+
+
+    /* TODO: enable prefetch
+     * uct_rc_mlx5_srq_prefetch_setup(mlx5_iface, rc_iface);
+     */
 
     *byte_len = byte_count & UCT_RC_MLX5_MP_RQ_BYTE_CNT_FIELD_MASK;
-
-    ucs_warn("Got MP CQE:  dptr %ld, flags %d, len %d",
-              seg->dptr[ntohs(cqe->ib_stride_index)].addr, *flags, *byte_len);
 
     return hdr;
 }
@@ -535,9 +552,6 @@ uct_rc_mlx5_iface_common_data(uct_rc_mlx5_iface_common_t *mlx5_iface,
          */
          uct_rc_mlx5_srq_prefetch_setup(mlx5_iface, rc_iface);
     }
-
-    ucs_warn("Got CQE: desc %p, dptr %ld, flags %d",
-             desc, seg->dptr[ntohs(cqe->ib_stride_index)].addr, *flags);
 
     hdr = (void*)be64toh(seg->dptr[0].addr);
 
@@ -767,7 +781,8 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     case MLX5_OPCODE_SEND:
         /* Data segment only */
         ucs_assert(length < (2ul << 30));
-        ucs_assert(length <= iface->super.config.seg_size);
+        ucs_assert(length <= ucs_max(UCT_RC_MLX5_TAG_BCOPY_MAX,
+                                     iface->super.config.seg_size));
 
         wqe_size = ctrl_av_size + sizeof(struct mlx5_wqe_data_seg);
         uct_ib_mlx5_set_data_seg(next_seg, buffer, length, *lkey_p);
@@ -1314,15 +1329,27 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *mlx5_common_iface
     ucs_status_t       status;
     unsigned           flags;
     unsigned           byte_len;
+    static uint64_t context; /* TODO: use real context from hash! */
 
+    /* TODO: Refactor/optimize */
     tmh = uct_rc_mlx5_iface_common_data(mlx5_common_iface, rc_iface, cqe,
                                         byte_count, &byte_len, &flags);
+
+    if (!(flags & UCT_CB_PARAM_FLAG_FIRST)) {
+        status = rc_iface->tm.eager_unexp.cb(rc_iface->tm.eager_unexp.arg,
+                                             tmh, byte_len, flags, tmh->tag, 0, &context);
+
+        uct_rc_mlx5_iface_unexp_consumed(mlx5_common_iface, rc_iface, cqe,
+                                         &rc_iface->tm.eager_desc, status,
+                                         ntohs(cqe->wqe_counter));
+        return;
+    }
 
     if (ucs_likely((tmh->opcode == IBV_EXP_TMH_EAGER) &&
                    !UCT_RC_MLX5_TM_CQE_WITH_IMM(cqe))) {
         status = rc_iface->tm.eager_unexp.cb(rc_iface->tm.eager_unexp.arg,
                                              tmh + 1, byte_len - sizeof(*tmh),
-                                             flags, tmh->tag, 0, NULL);
+                                             flags, tmh->tag, 0, &context);
 
         uct_rc_mlx5_iface_unexp_consumed(mlx5_common_iface, rc_iface, cqe,
                                          &rc_iface->tm.eager_desc, status,
@@ -1341,7 +1368,7 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *mlx5_common_iface
         } else {
             status = rc_iface->tm.eager_unexp.cb(rc_iface->tm.eager_unexp.arg,
                                                  tmh + 1, byte_len - sizeof(*tmh),
-                                                 flags, tmh->tag, imm_data, NULL);
+                                                 flags, tmh->tag, imm_data, &context);
         }
 
         uct_rc_mlx5_iface_unexp_consumed(mlx5_common_iface, rc_iface, cqe,
@@ -1406,11 +1433,6 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
 #if IBV_EXP_HW_TM
     ucs_assert(cqe->app == UCT_RC_MLX5_CQE_APP_TAG_MATCHING);
 
-    byte_len = cqe->byte_cnt;
-    ucs_warn("CQE: op %d, byte_cnt %d, stride_idx %d(%d), is_last %d",
-             cqe->app_op, ntohl(byte_len) & UCT_RC_MLX5_MP_RQ_BYTE_CNT_FIELD_MASK,
-             ntohs(cqe->ib_stride_index), (ntohl(byte_len) &  UCT_RC_MLX5_MP_RQ_NUM_STRIDES_FIELD_MASK) >> 16,
-             ntohl(byte_len) & UCT_RC_MLX5_MP_RQ_LAST_MSG_FIELD);
     byte_len = ntohl(cqe->byte_cnt);
 
     /* Should be a fast path, because small (latency-critical) messages
