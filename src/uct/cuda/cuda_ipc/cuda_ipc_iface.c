@@ -187,8 +187,6 @@ static void uct_cuda_ipc_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk
 
     memset(base, 0, sizeof(*base));
     UCT_CUDADRV_FUNC(cuEventCreate(&base->event, CU_EVENT_DISABLE_TIMING));
-
-    return;
 }
 
 static void uct_cuda_ipc_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
@@ -196,7 +194,6 @@ static void uct_cuda_ipc_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
     uct_cuda_ipc_event_desc_t *base = (uct_cuda_ipc_event_desc_t *) obj;
 
     UCT_CUDADRV_FUNC(cuEventDestroy(base->event));
-    return;
 }
 
 ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
