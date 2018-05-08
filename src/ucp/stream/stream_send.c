@@ -87,7 +87,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
-    ucs_trace_req("send_nb buffer %p count %zu to %s cb %p flags %u",
+    ucs_trace_req("stream_send_nb buffer %p count %zu to %s cb %p flags %u",
                   buffer, count, ucp_ep_peer_name(ep), cb, flags);
 
     if (ucs_unlikely(flags != 0)) {
@@ -182,7 +182,6 @@ static size_t ucp_stream_pack_am_first_dt(void *dest, void *arg)
     hdr->ep_ptr = ucp_request_get_dest_ep_ptr(req);
     length      = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
 
-    ucs_debug("pack stream_am_first paylen %zu", length);
     ucs_assert(req->send.state.dt.offset == 0);
     ucs_assert(req->send.length > length);
     return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, req->send.datatype,
@@ -198,8 +197,6 @@ static size_t ucp_stream_pack_am_middle_dt(void *dest, void *arg)
 
     hdr->ep_ptr = ucp_request_get_dest_ep_ptr(req);
     length      = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
-    ucs_debug("pack stream_am_middle paylen %zu offset %zu", length,
-              req->send.state.dt.offset);
     return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, req->send.datatype,
                                       UCT_MD_MEM_TYPE_HOST, hdr + 1, req->send.buffer,
                                       &req->send.state.dt, length);
@@ -216,9 +213,6 @@ static size_t ucp_stream_pack_am_last_dt(void *dest, void *arg)
     ret_length  = ucp_dt_pack(req->send.ep->worker,  req->send.datatype,
                               UCT_MD_MEM_TYPE_HOST, hdr + 1, req->send.buffer,
                               &req->send.state.dt, length);
-
-    ucs_debug("pack stream_am_last paylen %zu offset %zu", length,
-              req->send.state.dt.offset);
     ucs_assertv(ret_length == length, "length=%zu, max_length=%zu",
                 ret_length, length);
     return sizeof(*hdr) + ret_length;
