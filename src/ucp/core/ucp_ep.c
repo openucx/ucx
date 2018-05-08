@@ -666,6 +666,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     if (mode == UCP_EP_CLOSE_MODE_SYNC) {
         ucp_fin_msg_send(ep);
     }
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_HIDDEN));
     ep->flags |= UCP_EP_FLAG_HIDDEN;
     request = ucp_ep_flush_internal(ep,
                                     (mode == UCP_EP_CLOSE_MODE_FORCE) ?
