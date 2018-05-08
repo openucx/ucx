@@ -1093,6 +1093,16 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_free_resources;
     }
 
+    /* create memory pool for requests */
+    status = ucs_mpool_init(&context->req_mp, 0,
+                            context->config.ext.seg_size + sizeof(ucp_mem_desc_t),
+                            sizeof(ucp_mem_desc_t), UCS_SYS_CACHE_LINE_SIZE,
+                            128, UINT_MAX, &ucp_request_ctx_mpool_ops,
+                            "ucp_ctx_reg_bufs");
+    if (status != UCS_OK) {
+        goto err_free_rkey_mp;
+    }
+
     if (dfl_config != NULL) {
         ucp_config_release(dfl_config);
     }
@@ -1103,6 +1113,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     *context_p = context;
     return UCS_OK;
 
+err_free_rkey_mp:
+    ucs_mpool_cleanup(&context->rkey_mp, 1);
 err_free_resources:
     ucp_free_resources(context);
 err_free_config:
@@ -1119,6 +1131,7 @@ err:
 
 void ucp_cleanup(ucp_context_h context)
 {
+    ucs_mpool_cleanup(&context->req_mp, 1);
     ucs_mpool_cleanup(&context->rkey_mp, 1);
     ucp_free_resources(context);
     ucp_free_config(context);

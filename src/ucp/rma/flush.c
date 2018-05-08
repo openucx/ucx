@@ -299,12 +299,14 @@ static ucs_status_ptr_t ucp_worker_flush_nb_internal(ucp_worker_h worker,
         return UCS_STATUS_PTR(status);
     }
 
-    req = ucs_mpool_get(&worker->req_mp);
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
+    req = ucs_mpool_get(&worker->context->req_mp);
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);
     if (req == NULL) {
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
-    req->flags                = req_flags;
+    req->flags                = req_flags | UCP_REQUEST_FLAG_WORKER_FLUSH;
     req->status               = UCS_OK;
     req->flush_worker.worker  = worker;
     req->flush_worker.cb      = cb;
@@ -362,6 +364,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
 
     return status;
+}
+
+void ucp_worker_destroy(ucp_worker_h worker)
+{
+    ucs_trace_func("worker=%p", worker);
+    ucp_flush_wait(worker, ucp_worker_destroy_nb(worker));
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)

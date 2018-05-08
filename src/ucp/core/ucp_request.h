@@ -39,6 +39,7 @@ enum {
     UCP_REQUEST_FLAG_OFFLOADED            = UCS_BIT(10),
     UCP_REQUEST_FLAG_BLOCK_OFFLOAD        = UCS_BIT(11),
     UCP_REQUEST_FLAG_STREAM_RECV_WAITALL  = UCS_BIT(12),
+    UCP_REQUEST_FLAG_WORKER_FLUSH         = UCS_BIT(13),
 
 #if ENABLE_ASSERT
     UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(14),
@@ -217,7 +218,7 @@ struct ucp_request {
                     ucp_mem_desc_t          *rdesc;   /* Offload bounce buffer */
                     ssize_t                 remaining; /* How much more data to be received */
                     ucp_worker_iface_t      *wiface;  /* Cached iface this request
-                                                         is received on. Used in 
+                                                         is received on. Used in
                                                          tag offload expected callbacks*/
                 } tag;
 
@@ -271,7 +272,8 @@ struct ucp_recv_desc {
 };
 
 
-extern ucs_mpool_ops_t ucp_request_mpool_ops;
+extern ucs_mpool_ops_t ucp_request_worker_mpool_ops;
+extern ucs_mpool_ops_t ucp_request_ctx_mpool_ops;
 extern ucs_mpool_ops_t ucp_rndv_get_mpool_ops;
 
 

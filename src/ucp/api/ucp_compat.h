@@ -85,6 +85,13 @@ ucs_status_t ucp_ep_flush(ucp_ep_h ep);
  */
 ucs_status_t ucp_worker_flush(ucp_worker_h worker);
 
+
+/**
+ * @ingroup UCP_WORKER
+ * @deprecated Replaced by @ref ucp_worker_destroy_nb.
+ */
+void ucp_worker_destroy(ucp_worker_h worker);
+
 END_C_DECLS
 
 #endif
