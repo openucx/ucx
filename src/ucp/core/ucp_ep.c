@@ -587,14 +587,9 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_listener_accept_cb_remove_filter, ep);
 
-<<<<<<< HEAD
     ucp_stream_ep_cleanup(ep);
 
-    ep->flags &= ~UCP_EP_FLAG_USED;
-    ep->flags |= UCP_EP_FLAG_CLOSED;
-=======
     ep->flags |= UCP_EP_FLAG_HIDDEN;
->>>>>>> UCP/EP: UCP_EP_CLOSE_MODE_SYNC implementation
 
     if ((ep->flags & (UCP_EP_FLAG_CONNECT_REQ_QUEUED|UCP_EP_FLAG_REMOTE_CONNECTED))
         && !force) {
@@ -616,7 +611,10 @@ static unsigned ucp_ep_do_disconnect(void *arg)
     ucp_ep_h      ep   = req->send.ep;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
-    ep->flags |= UCP_EP_FLAG_HIDDEN;
+
+    if (ep->flags & UCP_EP_FLAG_FIN_REQ_QUEUED) {
+        ep->flags |= UCP_EP_FLAG_FIN_REQ_COMPLETED;
+    }
 
     if (req->flags & UCP_REQUEST_FLAG_SYNC) {
         if (ucs_test_all_flags(ep->flags, UCP_EP_MASK_FIN_DONE)) {
@@ -664,13 +662,11 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     UCS_ASYNC_BLOCK(&worker->async);
-<<<<<<< HEAD
 
-=======
     if (mode == UCP_EP_CLOSE_MODE_SYNC) {
         ucp_fin_msg_send(ep);
     }
->>>>>>> UCP/EP: UCP_EP_CLOSE_MODE_SYNC implementation
+    ep->flags |= UCP_EP_FLAG_HIDDEN;
     request = ucp_ep_flush_internal(ep,
                                     (mode == UCP_EP_CLOSE_MODE_FORCE) ?
                                     UCT_FLUSH_FLAG_CANCEL : UCT_FLUSH_FLAG_LOCAL,
@@ -679,7 +675,6 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
                                     UCP_REQUEST_FLAG_SYNC : 0,
                                     ucp_ep_close_flushed_callback);
     if (!UCS_PTR_IS_PTR(request)) {
-        ep->flags |= UCP_EP_FLAG_HIDDEN;
         if (mode == UCP_EP_CLOSE_MODE_SYNC) {
             if (ucs_test_all_flags(ep->flags, UCP_EP_MASK_FIN_DONE)) {
                 ucp_ep_disconnected(ep, 1);

@@ -52,8 +52,6 @@ static void ucp_ep_fin_cb(ucp_request_t *req)
                 "ep %p FIN msg is failed with status %s", ep,
                 ucs_status_string(req->status));
 
-    ep->flags |= UCP_EP_FLAG_FIN_REQ_COMPLETED;
-
     ucs_debug("ep %p, flags %d: completed FIN msg", ep, ep->flags);
     ucs_trace_req("putting request %p FIN flush of ep %p with flags %d",
                   req, ep, ep->flags);
@@ -91,13 +89,11 @@ ucs_status_t ucp_fin_msg_send(ucp_ep_h ep)
 
     flush_req = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0,
                                       ucp_ep_fin_cb);
-    if (flush_req == NULL) {
-        ep->flags |= UCP_EP_FLAG_FIN_REQ_COMPLETED;
-    } else if (UCS_PTR_IS_ERR(flush_req)) {
+    if (UCS_PTR_IS_ERR(flush_req)) {
         return UCS_PTR_STATUS(flush_req);
-    } else {
-        ucp_request_free(flush_req);
     }
+
+    ucp_request_free(flush_req);
     return UCS_OK;
 }
 
