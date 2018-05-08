@@ -544,7 +544,7 @@ UCS_TEST_P(test_ud, ca_md, "IB_TX_QUEUE_LEN=" UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_W
     for (i = 1; i < UCT_UD_CA_MAX_WINDOW; i++) {
         status = tx(m_e1);
         if (status == UCS_ERR_NO_RESOURCE) {
-            // the congestion window can shrink by by async timer if ACKs are
+            // the congestion window can shrink by async timer if ACKs are
             // not received fast enough
             EXPECT_GT(i, 1); /* at least one packet should be sent */
             break;
