@@ -556,19 +556,25 @@ ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
 #endif
 
 static void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
-                                 const uct_rc_iface_config_t *config,
+                                 uct_rc_iface_config_t *config,
                                  const uct_iface_params_t *params,
                                  int tm_cap_flag, unsigned *rx_cq_len)
 {
 #if IBV_EXP_HW_TM
-    struct ibv_exp_tmh tmh;
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     uint32_t cap_flags   = IBV_DEVICE_TM_CAPS(dev, capability_flags);
+    struct ibv_exp_tmh tmh;
+    ucs_status_t status;
 
     iface->tm.enabled = (config->tm.enable && (cap_flags & tm_cap_flag));
 
     if (!iface->tm.enabled) {
         goto out_tm_disabled;
+    }
+
+    status = uct_config_modify(config, "RC_MAX_BCOPY", "48k");
+    if (status != UCS_OK) {
+        ucs_warn("failed to set MAX_BCOPY to 48K for tag offload");
     }
 
     /* Compile-time check that THM and uct_rc_hdr_t are wire-compatible for the
@@ -699,7 +705,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     ucs_status_t status;
     unsigned rx_cq_len;
 
-    uct_rc_iface_preinit(self, md, config, params, tm_cap_flag, &rx_cq_len);
+    uct_rc_iface_preinit(self, md, (uct_rc_iface_config_t*)config, params,
+                         tm_cap_flag, &rx_cq_len);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               rx_priv_len, sizeof(uct_rc_hdr_t), tx_cq_len,
