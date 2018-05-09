@@ -285,7 +285,8 @@ void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
                               ucp_dt_state_t *state, ucp_request_t *req_dbg);
 
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
-                                    size_t zcopy_thresh, size_t multi_thresh,
-                                    size_t rndv_thresh, const ucp_proto_t *proto);
+                                    size_t zcopy_thresh, size_t seg_size,
+                                    size_t zcopy_max, size_t max_iov,
+                                    size_t count, const ucp_proto_t *proto);
 
 #endif
