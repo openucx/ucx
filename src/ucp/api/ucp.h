@@ -1614,6 +1614,12 @@ void ucp_listener_destroy(ucp_listener_h listener);
  * @param [out] ep_p        A handle to the created endpoint.
  *
  * @return Error code as defined by @ref ucs_status_t
+ *
+ * @note An endpoint destined to the same @a worker it's created on
+ * (@a params.address belongs to @a worker) will be connected to itself by default.
+ * This can be changed by passing the @ref UCP_EP_PARAMS_FLAGS_NO_LOOPBACK flag
+ * in @params.flags. It means the endpoint will become connected to *next*
+ * endpoint on the same @a worker which is created the same way.
  */
 ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
                            ucp_ep_h *ep_p);
