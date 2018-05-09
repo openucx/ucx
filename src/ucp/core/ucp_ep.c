@@ -861,10 +861,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
         if (UCP_MEM_IS_HOST(mem_type)) {
             config->mem_type_zcopy_thresh[mem_type] = config->zcopy_thresh[0];
-            continue;
-        }
-
-        if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
+        } else if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
             config->mem_type_zcopy_thresh[mem_type] = 1;
         }
     }

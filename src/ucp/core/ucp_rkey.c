@@ -371,7 +371,7 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
 
         if ((md_index != UCP_NULL_RESOURCE) &&
             (!(context->tl_mds[md_index].attr.cap.reg_mem_types & UCS_BIT(mem_type)))) {
-            return UCP_NULL_LANE;
+            continue;
         }
 
         dst_md_index = config->key.lanes[lane].dst_md_index;
