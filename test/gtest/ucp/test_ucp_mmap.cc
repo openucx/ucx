@@ -30,6 +30,7 @@ protected:
     bool resolve_rma(entity *e, ucp_rkey_h rkey);
     bool resolve_amo(entity *e, ucp_rkey_h rkey);
     bool resolve_rma_bw(entity *e, ucp_rkey_h rkey);
+    void test_length0(unsigned flags);
     void test_rkey_management(entity *e, ucp_mem_h memh, bool is_dummy);
 };
 
@@ -203,8 +204,8 @@ UCS_TEST_P(test_ucp_mmap, reg) {
     }
 }
 
-UCS_TEST_P(test_ucp_mmap, dummy_mem) {
-
+void test_ucp_mmap::test_length0(unsigned flags)
+{
     ucs_status_t status;
     int buf_num = 2;
     ucp_mem_h memh[buf_num];
@@ -222,7 +223,7 @@ UCS_TEST_P(test_ucp_mmap, dummy_mem) {
                         UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     params.address    = NULL;
     params.length     = 0;
-    params.flags      = rand_flags() | UCP_MEM_MAP_ALLOCATE;
+    params.flags      = rand_flags() | flags;
 
     status = ucp_mem_map(sender().ucph(), &params, &memh[0]);
     ASSERT_UCS_OK(status);
@@ -236,6 +237,14 @@ UCS_TEST_P(test_ucp_mmap, dummy_mem) {
         status = ucp_mem_unmap(sender().ucph(), memh[i]);
         ASSERT_UCS_OK(status);
     }
+}
+
+UCS_TEST_P(test_ucp_mmap, reg0) {
+    test_length0(0);
+}
+
+UCS_TEST_P(test_ucp_mmap, alloc0) {
+    test_length0(UCP_MEM_MAP_ALLOCATE);
 }
 
 UCS_TEST_P(test_ucp_mmap, alloc_advise) {

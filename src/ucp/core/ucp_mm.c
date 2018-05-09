@@ -221,16 +221,16 @@ ucp_mem_map_params2uct_flags(ucp_mem_map_params_t *params)
 }
 
 /* Matrix of behavior
- * |-----------------------------------------------------------------------------|
- * | parameter |                          value                                  |
- * |-----------|-----------------------------------------------------------------|
- * | ALLOCATE  |  0  |     1     |  0  |  0  |  1  |     1     |  0  |     1     |
- * | FIXED     |  0  |     0     |  1  |  0  |  1  |     0     |  1  |     1     |
- * | addr      |  0  |     0     |  0  |  1  |  0  |     1     |  1  |     1     |
- * |-----------|-----|-----------|-----|-----|-----|-----------|-----|-----------|
- * | result    | err | alloc/reg | err | reg | err | alloc/reg | err | alloc/reg |
- * |           |     |           |     |     |     |  (hint)   |     | (fixed)   |
- * |-----------------------------------------------------------------------------|
+ * |--------------------------------------------------------------------------------|
+ * | parameter |                             value                                  |
+ * |-----------|--------------------------------------------------------------------|
+ * | ALLOCATE  |  0     |     1     |  0  |  0  |  1  |     1     |  0  |     1     |
+ * | FIXED     |  0     |     0     |  1  |  0  |  1  |     0     |  1  |     1     |
+ * | addr      |  0     |     0     |  0  |  1  |  0  |     1     |  1  |     1     |
+ * |-----------|--------|-----------|-----|-----|-----|-----------|-----|-----------|
+ * | result    | err if | alloc/reg | err | reg | err | alloc/reg | err | alloc/reg |
+ * |           | len >0 |           |     |     |     |  (hint)   |     | (fixed)   |
+ * |--------------------------------------------------------------------------------|
  */
 static inline ucs_status_t ucp_mem_map_check_and_adjust_params(ucp_mem_map_params_t *params)
 {
@@ -260,8 +260,9 @@ static inline ucs_status_t ucp_mem_map_check_and_adjust_params(ucp_mem_map_param
 
     /* Now, lets check the rest of erroneous cases from the matrix */
     if (params->address == NULL) {
-        if (!(params->flags & UCP_MEM_MAP_ALLOCATE)) {
-            ucs_error("Undefined address requires UCP_MEM_MAP_ALLOCATE flag");
+        if (!(params->flags & UCP_MEM_MAP_ALLOCATE) && (params->length > 0)) {
+            ucs_error("Undefined address with nonzero length requires "
+                      "UCP_MEM_MAP_ALLOCATE flag");
             return UCS_ERR_INVALID_PARAM;
         }
     } else if (!(params->flags & UCP_MEM_MAP_ALLOCATE) &&

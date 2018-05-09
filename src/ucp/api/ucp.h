@@ -966,7 +966,7 @@ typedef struct ucp_mem_map_params {
       * Length (in bytes) to allocate or map (register).
       * This field is mandatory for filling (along with its corresponding bit
       * in the field_mask - @ref UCP_MEM_MAP_PARAM_FIELD_LENGTH).
-      * The @ref ucp_mem_map routine will return with an error if the length isn't
+      * The @ref ucp_aa routine will return with an error if the length isn't
       * specified.
       */
      size_t                 length;
@@ -1780,7 +1780,7 @@ ucs_status_ptr_t ucp_ep_flush_nb(ucp_ep_h ep, unsigned flags,
  *                        <td align="center">@ref ucp_mem_map_params.address "address"</td>
  *                        <td align="center">@b result
  * <tr><td rowspan="8" align="center">@b value <td rowspan="8" align="center">0/1 - the value\n only affects the\n register/map\n phase</td>
- *                                               <td align="center">0 <td align="center">0 <td align="center">0 <td align="center">@ref anch_err "error"
+ *                                               <td align="center">0 <td align="center">0 <td align="center">0 <td align="center">@ref anch_err "error" if length > 0
  * <tr>                                          <td align="center">1 <td align="center">0 <td align="center">0 <td align="center">@ref anch_alloc_reg "alloc+register"
  * <tr>                                          <td align="center">0 <td align="center">1 <td align="center">0 <td align="center">@ref anch_err "error"</td>
  * <tr>                                          <td align="center">0 <td align="center">0 <td align="center">defined <td align="center">@ref anch_reg "register"
