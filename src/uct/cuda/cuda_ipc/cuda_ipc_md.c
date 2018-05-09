@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2018.  ALL RIGHTS RESERVED.
+ * Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
  * See file LICENSE for terms.
  */
 
@@ -29,8 +30,8 @@ static ucs_status_t uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_CUDA);
     md_attr->cap.mem_type      = UCT_MD_MEM_TYPE_CUDA;
     md_attr->cap.max_alloc     = 0;
-    md_attr->cap.max_reg       = ULONG_MAX;
-    md_attr->rkey_packed_size  = 0;
+    md_attr->cap.max_reg       = UCT_CUDA_IPC_MAX_ALLOC_SZ;
+    md_attr->rkey_packed_size  = sizeof(uct_cuda_ipc_key_t);
     md_attr->reg_cost.overhead = 0;
     md_attr->reg_cost.growth   = 0;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
@@ -40,6 +41,15 @@ static ucs_status_t uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 static ucs_status_t uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
                                            void *rkey_buffer)
 {
+    uct_cuda_ipc_key_t *packed   = (uct_cuda_ipc_key_t *) rkey_buffer;
+    uct_cuda_ipc_mem_t *mem_hndl = (uct_cuda_ipc_mem_t *) memh;
+
+    packed->ph         = mem_hndl->ph;
+    packed->d_rem_ptr  = mem_hndl->d_ptr;
+    packed->d_rem_bptr = mem_hndl->d_bptr;
+    packed->b_rem_len  = mem_hndl->b_len;
+    packed->dev_num    = mem_hndl->dev_num;
+
     return UCS_OK;
 }
 
@@ -47,26 +57,77 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_md_component_t *mdc,
                                              const void *rkey_buffer, uct_rkey_t *rkey_p,
                                              void **handle_p)
 {
-    *rkey_p   = 0xdeadbeef;
+    uct_cuda_ipc_key_t *packed = (uct_cuda_ipc_key_t *) rkey_buffer;
+    uct_cuda_ipc_key_t *key;
+    CUdevice cu_device;
+
+    UCT_CUDA_IPC_GET_DEVICE(cu_device);
+
+    key = ucs_malloc(sizeof(uct_cuda_ipc_key_t), "uct_cuda_ipc_key_t");
+    if (NULL == key) {
+        ucs_error("failed to allocate memory for uct_cuda_ipc_key_t");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    *key      = *packed;
     *handle_p = NULL;
+    *rkey_p   = (uintptr_t) key;
+
     return UCS_OK;
 }
 
 static ucs_status_t uct_cuda_ipc_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey,
                                               void *handle)
 {
+    ucs_assert(NULL == handle);
+    ucs_free((void *)rkey);
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
+                              unsigned flags, uct_cuda_ipc_mem_t *mem_hndl)
+{
+    CUdevice cu_device;
+    ucs_status_t status;
+
+    if (!length) {
+        return UCS_OK;
+    }
+
+    status = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&(mem_hndl->ph),
+                                                (CUdeviceptr) addr));
+    if (UCS_OK != status) {
+        return status;
+    }
+
+    UCT_CUDA_IPC_GET_DEVICE(cu_device);
+
+    UCT_CUDADRV_FUNC(cuMemGetAddressRange(&(mem_hndl->d_bptr),
+                                          &(mem_hndl->b_len),
+                                          (CUdeviceptr) addr));
+    mem_hndl->d_ptr    = (CUdeviceptr) addr;
+    mem_hndl->reg_size = length;
+    mem_hndl->dev_num  = (int) cu_device;
+    ucs_trace("registered memory:%p..%p length:%lu d_ptr:%p dev_num:%d",
+              addr, addr + length, length, addr, (int) cu_device);
     return UCS_OK;
 }
 
 static ucs_status_t uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
                                          unsigned flags, uct_mem_h *memh_p)
 {
-    uct_mem_h * mem_hndl = NULL;
+    uct_cuda_ipc_mem_t *mem_hndl = NULL;
 
-    mem_hndl = ucs_malloc(sizeof(void *), "cuda_ipc handle for test passing");
+    mem_hndl = ucs_malloc(sizeof(uct_cuda_ipc_mem_t), "cuda_ipc handle");
     if (NULL == mem_hndl) {
-        ucs_error("Failed to allocate memory for gni_mem_handle_t");
+        ucs_error("failed to allocate memory for cuda_ipc_mem_t");
         return UCS_ERR_NO_MEMORY;
+    }
+
+    if (UCS_OK != uct_cuda_ipc_mem_reg_internal(md, address, length, 0, mem_hndl)) {
+        ucs_free(mem_hndl);
+        return UCS_ERR_IO_ERROR;
     }
     *memh_p = mem_hndl;
 
@@ -105,7 +166,7 @@ static ucs_status_t uct_cuda_ipc_md_open(const char *md_name, const uct_md_confi
         .mkey_pack    = uct_cuda_ipc_mkey_pack,
         .mem_reg      = uct_cuda_ipc_mem_reg,
         .mem_dereg    = uct_cuda_ipc_mem_dereg,
-        .is_mem_type_owned = (void *)ucs_empty_function_return_zero,
+        .is_mem_type_owned = uct_cuda_is_mem_type_owned,
     };
     static uct_md_t md = {
         .ops          = &md_ops,

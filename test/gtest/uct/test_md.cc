@@ -529,6 +529,7 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
                    sysv, \
                    xpmem, \
                    cuda_cpy, \
+                   cuda_ipc, \
                    rocm, \
                    ib, \
                    ugni, \
