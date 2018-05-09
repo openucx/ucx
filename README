@@ -1,8 +1,17 @@
-UCX is a communication library implementing high-performance messaging for MPI/PGAS frameworks
+UCX is a communication library implementing a high-performance messaging
+layer for MPI, PGAS, and RPC frameworks.
 
-### Quick start
+### Running internal unit tests
 ```sh
-$ export PATH=$PATH:$MPI_HOME/bin  
+$ ./autogen.sh
+$ ./contrib/configure-devel
+$ make
+$ make -C test/gtest test
+```
+
+### Running UCX performance test
+```sh
+$ export PATH=$PATH:$MPI_HOME/bin
 $ ./autogen.sh  
 $ ./contrib/configure-release --prefix=$PWD/install --with-mpi  
 $ make -j8 install  
@@ -10,7 +19,7 @@ $ salloc -N2 --ntasks-per-node=1 mpirun --display-map \
       $PWD/install/bin/ucx_perftest -d mlx5_1:1 -x rc_mlx5 -c 12 -t put_lat  
 ```
 
-### UCX layout
+### UCX high-level layout
 - UCX - Unified Communication X
 - UCP - UCX Protocol
 - UCT - UCX Transport
