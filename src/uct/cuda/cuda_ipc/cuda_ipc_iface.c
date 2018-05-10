@@ -227,7 +227,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
 {
     uct_cuda_ipc_iface_config_t *config = NULL;
     ucs_status_t status;
-    int dev_count, i, j;
+    int dev_count;
 
     config = ucs_derived_of(tl_config, uct_cuda_ipc_iface_config_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_ipc_iface_ops, md, worker,
@@ -240,32 +240,13 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
         return UCS_ERR_NO_DEVICE;
     }
 
-    for (i = 0; i < UCT_CUDA_IPC_MAX_PEERS; i++) {
-        for (j = 0; j < UCT_CUDA_IPC_MAX_PEERS; j++) {
-            self->p2p_map[i][j] = -1;
-        }
-    }
-
     status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&dev_count));
     if (UCS_OK != status) {
         return status;
     }
     ucs_assert(dev_count <= UCT_CUDA_IPC_MAX_PEERS);
 
-    self->device_count = dev_count;
-    for (i = 0; i < dev_count; i++) {
-        for (j = 0; j < dev_count; j++) {
-            status =
-                UCT_CUDADRV_FUNC(cuDeviceCanAccessPeer(&(self->p2p_map[i][j]),
-                                                       (CUdevice) i,
-                                                       (CUdevice) j));
-            if (UCS_OK != status) {
-                return status;
-            }
-        }
-    }
-
-    ucs_trace("cuda_ipc p2p map generated for %d devices", dev_count);
+    self->device_count    = dev_count;
     self->config.max_poll = config->max_poll;
     status = ucs_mpool_init(&self->event_desc,
                             0,
