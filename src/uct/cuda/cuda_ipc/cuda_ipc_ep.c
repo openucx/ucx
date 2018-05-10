@@ -15,6 +15,12 @@
 #define UCT_CUDA_IPC_PUT 0
 #define UCT_CUDA_IPC_GET 1
 
+SGLIB_DEFINE_LIST_FUNCTIONS(uct_cuda_ipc_rem_seg_t,
+                            uct_cuda_ipc_rem_seg_compare, next)
+SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_cuda_ipc_rem_seg_t,
+                                        UCT_CUDA_IPC_HASH_SIZE,
+                                        uct_cuda_ipc_rem_seg_hash)
+
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, uct_iface_t *tl_iface,
                            const uct_device_addr_t *dev_addr,
                            const uct_iface_addr_t *iface_addr)
@@ -38,10 +44,55 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_ipc_ep_t, uct_ep_t);
 #define uct_cuda_ipc_trace_data(_addr, _rkey, _fmt, ...)     \
     ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_addr), (_rkey))
 
+void *uct_cuda_ipc_ep_attach_rem_seg(uct_cuda_ipc_ep_t *ep,
+                                     uct_cuda_ipc_iface_t *iface,
+                                     uct_cuda_ipc_key_t *rkey)
+{
+    unsigned int cuda_ipc_mh_flags = CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS;
+    uct_cuda_ipc_rem_seg_t *rem_seg, search;
+    ucs_status_t status;
+
+    search.ph = rkey->ph;
+    /* TODO: Address the case when va matches but not memhandle
+
+       Cause:
+       cudaMalloc(&ptrX ...); mhX = getmemhandle(ptrX, ...); cudafree(ptrX);
+       cudaMalloc(&ptrY ...); mhY = getmemhandle(ptrX, ...);
+       Now: ptrX can be ptrY but mhX is never mhY
+    */
+    rem_seg =
+        sglib_hashed_uct_cuda_ipc_rem_seg_t_find_member(ep->rem_segments_hash,
+                                                        &search);
+    if (rem_seg == NULL) {
+        rem_seg = ucs_malloc(sizeof(*rem_seg), "rem_seg");
+        if (rem_seg == NULL) {
+            ucs_fatal("Failed to allocate memory for a remote segment. %m");
+        }
+
+        rem_seg->ph      = rkey->ph;
+        rem_seg->dev_num = rkey->dev_num;
+
+        status =
+            UCT_CUDADRV_FUNC(cuIpcOpenMemHandle((CUdeviceptr *)&rem_seg->d_bptr,
+                                                rkey->ph, cuda_ipc_mh_flags));
+        if (UCS_OK != status) {
+            ucs_error("cuIpcOpenMemHandle failed\n");
+            return NULL;
+        }
+        rem_seg->b_len = rkey->b_rem_len;
+
+        sglib_hashed_uct_cuda_ipc_rem_seg_t_add(ep->rem_segments_hash,
+                                                rem_seg);
+    }
+
+    return (void *)rem_seg->d_bptr;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_key_t *key,
-                             int cu_device, uint64_t remote_addr,
-                             void **mapped_rem_addr, void *buffer)
+uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_iface_t *iface,
+                             uct_cuda_ipc_key_t *key, int cu_device,
+                             uint64_t remote_addr, void **mapped_rem_addr,
+                             void *buffer)
 {
     int offset, same_ctx = 0;
     void *mapped_addr;
@@ -72,12 +123,9 @@ uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_key_t *key,
     if (same_ctx) {
         *mapped_rem_addr = (void *) remote_addr;
     } else {
-        status =
-            UCT_CUDADRV_FUNC(cuIpcOpenMemHandle((CUdeviceptr *) &mapped_addr,
-                                                key->ph,
-                                                CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS));
-        if (UCS_OK != status) {
-            return status;
+        mapped_addr = uct_cuda_ipc_ep_attach_rem_seg(ep, iface, key);
+        if (NULL == mapped_addr) {
+            return UCS_ERR_IO_ERROR;
         }
 
         offset = (uintptr_t)remote_addr - (uintptr_t)key->d_rem_bptr;
@@ -115,7 +163,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
 
     UCT_CUDA_IPC_GET_DEVICE(cu_device);
 
-    status = uct_cuda_ipc_get_mapped_addr(ep, key, cu_device, remote_addr,
+    status = uct_cuda_ipc_get_mapped_addr(ep, iface, key, cu_device, remote_addr,
                                           &mapped_rem_addr, iov[0].buffer);
     if (UCS_OK != status) {
         return status;
