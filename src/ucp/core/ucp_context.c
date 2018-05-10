@@ -745,23 +745,21 @@ static void ucp_resource_config_str(const ucp_config_t *config, char *buf,
 static void ucp_fill_sockaddr_aux_tls_config(ucp_context_h context,
                                              const ucp_config_t *config)
 {
-    unsigned num_sockaddr_aux_tls, idx;
+    const char **tl_names = (const char**)config->sockaddr_aux_tls.aux_tls;
+    unsigned count = config->sockaddr_aux_tls.count;
     ucp_rsc_index_t tl_id;
+    uint64_t bitmap;
 
-    context->config.sockaddr_aux_rscs.bitmap   = 0;
-    context->config.sockaddr_aux_rscs.num_rscs = config->sockaddr_aux_tls.count;
+    context->config.sockaddr_aux_rscs_bitmap = 0;
 
-    if (config->sockaddr_aux_tls.count != 0) {
-        /* Get the number of sockaddr auxiliary transports for the client-server flow */
-        num_sockaddr_aux_tls = config->sockaddr_aux_tls.count;
-
-        for (idx = 0; idx < num_sockaddr_aux_tls; ++idx) {
-            for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
-                if (!strncmp(config->sockaddr_aux_tls.aux_tls[idx],
-                             context->tl_rscs[tl_id].tl_rsc.tl_name,
-                             UCT_TL_NAME_MAX))
-                    context->config.sockaddr_aux_rscs.bitmap |= UCS_BIT(tl_id);
-            }
+    /* Check if any of the context's resources are present in the sockaddr
+     * auxiliary transports for the client-server flow */
+    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+        bitmap = ucp_str_array_search(tl_names, count,
+                                      context->tl_rscs[tl_id].tl_rsc.tl_name,
+                                      NULL);
+        if (bitmap) {
+            context->config.sockaddr_aux_rscs_bitmap |= UCS_BIT(tl_id) ;
         }
     }
 }

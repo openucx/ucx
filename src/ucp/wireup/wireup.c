@@ -103,11 +103,7 @@ static unsigned ucp_wireup_address_index(const unsigned *order,
 
 static inline int ucp_wireup_is_ep_needed(ucp_ep_h ep)
 {
-    if ((ep != NULL) && !(ep->flags & UCP_EP_FLAG_LISTENER)) {
-        return 1;
-    }
-
-    return 0;
+    return (ep != NULL) && !(ep->flags & UCP_EP_FLAG_LISTENER);
 }
 
 /*

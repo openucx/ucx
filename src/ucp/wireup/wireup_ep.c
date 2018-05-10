@@ -431,14 +431,8 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
     ucs_status_t status;
     uint64_t tl_bitmap = 0;
 
-    if (context->config.sockaddr_aux_rscs.num_rscs == 0) {
-        ucs_error("no supported transports found in configuration");
-        status = UCS_ERR_UNREACHABLE;
-        goto out;
-    }
-
     /* Find a transport which matches the given dev_name and the user's configuration */
-    ucs_for_each_bit(tl_id, context->config.sockaddr_aux_rscs.bitmap) {
+    ucs_for_each_bit(tl_id, context->config.sockaddr_aux_rscs_bitmap) {
         if (!strncmp(context->tl_rscs[tl_id].tl_rsc.dev_name, dev_name,
                      UCT_DEVICE_NAME_MAX)) {
             found_supported_tl = 1;
@@ -458,7 +452,6 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
         status = UCS_ERR_UNREACHABLE;
     }
 
-out:
     *tl_bitmap_p = tl_bitmap;
     return status;
 }
@@ -477,8 +470,9 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
     uint64_t tl_bitmap;
-    unsigned sockaddr_aux_tls_str_len = context->config.sockaddr_aux_rscs.num_rscs *
-                                        2 * UCT_TL_NAME_MAX;
+    unsigned sockaddr_aux_tls_str_len =
+                    ucs_count_one_bits(context->config.sockaddr_aux_rscs_bitmap) *
+                                       2 * UCT_TL_NAME_MAX;
     char *sockaddr_aux_tls = ucs_alloca(sockaddr_aux_tls_str_len);
 
     status = ucp_worker_get_address(worker, &worker_address, &address_length);

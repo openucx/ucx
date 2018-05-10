@@ -175,11 +175,8 @@ typedef struct ucp_context {
         } *alloc_methods;
         unsigned                  num_alloc_methods;
 
-        /* Array of sockaddr auxiliary transports to pack for client/server flow */
-        struct {
-            uint64_t              bitmap;
-            unsigned              num_rscs;
-        } sockaddr_aux_rscs;
+        /* Bitmap of sockaddr auxiliary transports to pack for client/server flow */
+        uint64_t                  sockaddr_aux_rscs_bitmap;
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;
