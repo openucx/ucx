@@ -748,17 +748,15 @@ static void ucp_fill_sockaddr_aux_tls_config(ucp_context_h context,
     const char **tl_names = (const char**)config->sockaddr_aux_tls.aux_tls;
     unsigned count = config->sockaddr_aux_tls.count;
     ucp_rsc_index_t tl_id;
-    uint64_t bitmap;
 
     context->config.sockaddr_aux_rscs_bitmap = 0;
 
     /* Check if any of the context's resources are present in the sockaddr
      * auxiliary transports for the client-server flow */
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
-        bitmap = ucp_str_array_search(tl_names, count,
-                                      context->tl_rscs[tl_id].tl_rsc.tl_name,
-                                      NULL);
-        if (bitmap) {
+        if (ucp_str_array_search(tl_names, count,
+                                 context->tl_rscs[tl_id].tl_rsc.tl_name,
+                                 NULL)) {
             context->config.sockaddr_aux_rscs_bitmap |= UCS_BIT(tl_id) ;
         }
     }

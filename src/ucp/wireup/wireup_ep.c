@@ -470,10 +470,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
     uint64_t tl_bitmap;
-    unsigned sockaddr_aux_tls_str_len =
-                    ucs_count_one_bits(context->config.sockaddr_aux_rscs_bitmap) *
-                                       2 * UCT_TL_NAME_MAX;
-    char *sockaddr_aux_tls = ucs_alloca(sockaddr_aux_tls_str_len);
+    char aux_tls_str[UCS_SOCKADDR_AUX_TLS_STRING_LEN];
 
     status = ucp_worker_get_address(worker, &worker_address, &address_length);
     if (status != UCS_OK) {
@@ -507,8 +504,8 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
             ucs_error("sockaddr aux resources addresses (%s transports)"
                       " information (%zu) exceeds max_priv on "
                       UCT_TL_RESOURCE_DESC_FMT" (%zu)",
-                      ucp_tl_bitmap_str(context, tl_bitmap, sockaddr_aux_tls,
-                                        sockaddr_aux_tls_str_len),
+                      ucp_tl_bitmap_str(context, tl_bitmap, aux_tls_str,
+                                        UCS_SOCKADDR_AUX_TLS_STRING_LEN),
                       conn_priv_len,
                       UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
                       wiface->attr.max_conn_priv);
@@ -527,8 +524,8 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
                   "(%s transports) (len=%zu) to server. "
                   "total client priv data len: %zu",
                   context->tl_rscs[sockaddr_rsc].tl_rsc.tl_name, dev_name,
-                  ucp_tl_bitmap_str(context, tl_bitmap, sockaddr_aux_tls,
-                                    sockaddr_aux_tls_str_len),
+                  ucp_tl_bitmap_str(context, tl_bitmap, aux_tls_str,
+                                    UCS_SOCKADDR_AUX_TLS_STRING_LEN),
                   address_length, conn_priv_len);
 
     } else {
