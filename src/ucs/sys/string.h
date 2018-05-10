@@ -18,9 +18,6 @@ BEGIN_C_DECLS
 /* A string to hold the IP address and port from a sockaddr */
 #define UCS_SOCKADDR_STRING_LEN  60
 
-/* A string to hold the names of sockaddr auxiliary transports */
-#define UCS_SOCKADDR_AUX_TLS_STRING_LEN  64
-
 /**
  * Expand a partial path to full path.
  *
