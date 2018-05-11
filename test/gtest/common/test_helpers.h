@@ -83,6 +83,7 @@
         } \
     } while (0)
 
+
 #define ASSERT_UCS_PTR_OK(_expr) \
     do { \
         ucs_status_ptr_t _status = (_expr); \

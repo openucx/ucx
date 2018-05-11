@@ -389,6 +389,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     ucp_unpacked_address_t remote_address;
     ucp_ep_conn_sn_t conn_sn;
     ucs_status_t status;
+    unsigned flags;
     ucp_ep_h ep;
 
     if (!(params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS)) {
@@ -404,14 +405,21 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         goto out;
     }
 
-    /* check if there is already an unconnected internal endpoint to the same
-     * destination address
+    /* Check if there is already an unconnected internal endpoint to the same
+     * destination address.
+     * In case of loopback connection, search the hash table for an endpoint with
+     * even/odd matching, so that every 2 endpoints connected to the local worker
+     * with be paired to each other.
+     * Note that if a loopback endpoint had the UCP_EP_PARAMS_FLAGS_NO_LOOPBACK
+     * flag set, it will not be added to ep_match as an unexpected ep. Because
+     * dest_ep_ptr will be initialized, a WIREUP_REQUEST (if sent) will have
+     * dst_ep != 0. So, ucp_wireup_request() will not create an unexpected ep
+     * in ep_match.
      */
     conn_sn = ucp_ep_match_get_next_sn(&worker->ep_match_ctx, remote_address.uuid);
     ep = ucp_ep_match_retrieve_unexp(&worker->ep_match_ctx, remote_address.uuid,
-                                     conn_sn);
+                                     conn_sn ^ (remote_address.uuid == worker->uuid));
     if (ep != NULL) {
-        ucs_assert(ep->conn_sn == conn_sn);
         status = ucp_ep_adjust_params(ep, params);
         if (status != UCS_OK) {
             ucp_ep_destroy_internal(ep);
@@ -425,10 +433,21 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         goto out_free_address;
     }
 
-    /* add the new ep to the matching context as an expected endpoint, waiting
-     * for connection request from remote peer  */
     ep->conn_sn = conn_sn;
-    ucp_ep_match_insert_exp(&worker->ep_match_ctx, remote_address.uuid, ep);
+
+    /*
+     * If we are connecting to our own worker, and loopback is allowed, connect
+     * the endpoint to itself by updating dest_ep_ptr.
+     * Otherwise, add the new ep to the matching context as an expected endpoint,
+     * waiting for connection request from the peer endpoint
+     */
+    flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
+    if ((remote_address.uuid == worker->uuid) &&
+        !(flags & UCP_EP_PARAMS_FLAGS_NO_LOOPBACK)) {
+        ucp_ep_update_dest_ep_ptr(ep, (uintptr_t)ep);
+    } else {
+        ucp_ep_match_insert_exp(&worker->ep_match_ctx, remote_address.uuid, ep);
+    }
 
     /* if needed, send initial wireup message */
     if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {

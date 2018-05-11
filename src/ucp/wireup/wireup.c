@@ -291,7 +291,7 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         ep_init_flags |= UCP_EP_CREATE_AM_LANE;
     } else {
         ep = ucp_ep_match_retrieve_exp(&worker->ep_match_ctx, remote_uuid,
-                                       msg->conn_sn);
+                                       msg->conn_sn ^ (remote_uuid == worker->uuid));
         if (ep == NULL) {
             /* Create a new endpoint if does not exist */
             status = ucp_ep_new(worker, remote_address->name, "remote-request",

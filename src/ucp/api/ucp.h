@@ -211,7 +211,7 @@ enum ucp_ep_params_field {
  * @ref ucp_ep_create() function.
  */
 enum ucp_ep_params_flags_field {
-    UCP_EP_PARAMS_FLAGS_CLIENT_SERVER  = UCS_BIT(0)   /**< Using a client-server
+    UCP_EP_PARAMS_FLAGS_CLIENT_SERVER  = UCS_BIT(0),  /**< Using a client-server
                                                            connection establishment
                                                            mechanism.
                                                            @ref ucs_sock_addr_t
@@ -219,6 +219,15 @@ enum ucp_ep_params_flags_field {
                                                            must be provided and
                                                            contain the address
                                                            of the remote peer */
+    UCP_EP_PARAMS_FLAGS_NO_LOOPBACK    = UCS_BIT(1)   /**< Avoid connecting the
+                                                           endpoint to itself when
+                                                           connecting the endpoint
+                                                           to the same worker it
+                                                           was created on.
+                                                           Affects protocols which
+                                                           send to a particular
+                                                           remote endpoint, for
+                                                           example stream */
 };
 
 
@@ -1605,6 +1614,13 @@ void ucp_listener_destroy(ucp_listener_h listener);
  * @param [out] ep_p        A handle to the created endpoint.
  *
  * @return Error code as defined by @ref ucs_status_t
+ *
+ * @note By default, ucp_ep_create() will connect an endpoint to itself if
+ * the endpoint is destined to the same @a worker on which it was created,
+ * i.e. @a params.address belongs to @a worker. This behavior can be changed by
+ * passing the @ref UCP_EP_PARAMS_FLAGS_NO_LOOPBACK flag in @params.flags.
+ * In that case, the endpoint will be connected to the *next* endpoint created
+ * in the same way on the same @a worker.
  */
 ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
                            ucp_ep_h *ep_p);
