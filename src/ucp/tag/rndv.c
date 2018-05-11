@@ -669,7 +669,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
                                        sizeof(ucp_rndv_data_hdr_t),
                                        ucp_rndv_pack_data,
                                        ucp_rndv_pack_data,
-                                       ucp_rndv_pack_data_last, 1);
+                                       ucp_rndv_pack_data_last, 0);
     }
     if (status == UCS_OK) {
         ucp_rndv_complete_send(sreq);
@@ -783,7 +783,7 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_multi(uct_pending_req_t *self)
                                  UCP_AM_ID_RNDV_DATA,
                                  &hdr, sizeof(hdr),
                                  &hdr, sizeof(hdr),
-                                 ucp_rndv_am_zcopy_send_req_complete, 1);
+                                 ucp_rndv_am_zcopy_send_req_complete, 0);
 }
 
 UCS_PROFILE_FUNC_VOID(ucp_rndv_frag_put_completion, (self, status),
