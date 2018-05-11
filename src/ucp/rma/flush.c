@@ -283,7 +283,10 @@ static unsigned ucp_worker_flush_progress(void *arg)
     }
 
     uct_worker_progress_unregister_safe(worker->uct, &req->flush_worker.prog_id);
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
     ucp_request_complete(req, flush_worker.cb, status);
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);
+
     return 0;
 }
 

@@ -1342,9 +1342,9 @@ ucs_status_ptr_t ucp_worker_destroy_nb(ucp_worker_h worker)
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
     ucp_worker_remove_am_handlers(worker);
+    request = ucp_worker_flush_nb(worker, 0, ucp_worker_destroy_cb);
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
 
-    request = ucp_worker_flush_nb(worker, 0, ucp_worker_destroy_cb);
     if (!UCS_PTR_IS_PTR(request)) {
         ucp_worker_cleanup(worker);
     }

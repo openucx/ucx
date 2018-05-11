@@ -1095,10 +1095,11 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
 
     /* create memory pool for requests */
     status = ucs_mpool_init(&context->req_mp, 0,
-                            context->config.ext.seg_size + sizeof(ucp_mem_desc_t),
-                            sizeof(ucp_mem_desc_t), UCS_SYS_CACHE_LINE_SIZE,
-                            128, UINT_MAX, &ucp_request_ctx_mpool_ops,
-                            "ucp_ctx_reg_bufs");
+                            sizeof(ucp_request_t) + context->config.request.size,
+                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                            &ucp_request_ctx_mpool_ops,
+                            "ucp_ctx_request_bufs");
+
     if (status != UCS_OK) {
         goto err_free_rkey_mp;
     }
