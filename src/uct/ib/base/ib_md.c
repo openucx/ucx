@@ -201,11 +201,7 @@ static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
     qp_init_attr.pd                  = md->pd;
     qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD|IBV_EXP_QP_INIT_ATTR_MAX_INL_KLMS;
     qp_init_attr.max_inl_recv        = 0;
-#if (HAVE_IBV_EXP_QP_CREATE_UMR_CAPS || HAVE_EXP_UMR_NEW_API)
     qp_init_attr.max_inl_send_klms   = ibdev->dev_attr.umr_caps.max_send_wqe_inline_klms;
-#else
-    qp_init_attr.max_inl_send_klms   = ibdev->dev_attr.max_send_wqe_inline_klms;
-#endif
 
 #if HAVE_IBV_EXP_QP_CREATE_UMR
     qp_init_attr.comp_mask          |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
@@ -357,12 +353,14 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
                                        off_t offset, struct ibv_mr **umr_p)
 {
 #if HAVE_EXP_UMR
-    struct ibv_exp_mem_region mem_reg;
+    struct ibv_exp_mem_region *mem_reg = NULL;
     struct ibv_exp_send_wr wr, *bad_wr;
     struct ibv_exp_create_mr_in mrin;
     ucs_status_t status;
     struct ibv_mr *umr;
     struct ibv_wc wc;
+    int i, list_size;
+    size_t reg_length;
     int ret;
 
     if (md->umr_qp == NULL) {
@@ -370,19 +368,56 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
         goto err;
     }
 
-    /* Create memory key */
+    /* Create and fill memory key */
     memset(&mrin, 0, sizeof(mrin));
-    mrin.pd                       = md->pd;
+    memset(&wr, 0, sizeof(wr));
 
-#ifdef HAVE_EXP_UMR_NEW_API
-    mrin.attr.create_flags        = IBV_EXP_MR_INDIRECT_KLMS;
-    mrin.attr.exp_access_flags    = UCT_IB_MEM_ACCESS_FLAGS;
-    mrin.attr.max_klm_list_size   = 1;
+    mrin.pd                             = md->pd;
+    wr.exp_opcode                       = IBV_EXP_WR_UMR_FILL;
+    wr.exp_send_flags                   = IBV_EXP_SEND_INLINE |
+                                          IBV_EXP_SEND_SIGNALED;
+    wr.ext_op.umr.exp_access            = UCT_IB_MEM_ACCESS_FLAGS;
+
+    reg_length = UCT_IB_MD_MAX_MR_SIZE;
+#ifdef HAVE_EXP_UMR_KSM
+    if ((md->dev.dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_COMP_MASK_2) &&
+        (md->dev.dev_attr.comp_mask_2 & IBV_EXP_DEVICE_ATTR_UMR_FIXED_SIZE_CAPS) &&
+        (md->dev.dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_UMR_FIXED_SIZE))
+    {
+        reg_length                      = md->dev.dev_attr.umr_fixed_size_caps.max_entity_size;
+        list_size                       = ucs_div_round_up(mr->length, reg_length);
+    } else if (mr->length < reg_length) {
+        list_size                       = 1;
+    } else {
+        status                          = UCS_ERR_UNSUPPORTED;
+        goto err;
+    }
+
+    if (list_size > 1) {
+        mrin.attr.create_flags          = IBV_EXP_MR_FIXED_BUFFER_SIZE;
+        wr.ext_op.umr.umr_type          = IBV_EXP_UMR_MR_LIST_FIXED_SIZE;
+    } else {
+        mrin.attr.create_flags          = IBV_EXP_MR_INDIRECT_KLMS;
+        wr.ext_op.umr.umr_type          = IBV_EXP_UMR_MR_LIST;
+    }
 #else
-    mrin.attr.create_flags        = IBV_MR_NONCONTIG_MEM;
-    mrin.attr.access_flags        = UCT_IB_MEM_ACCESS_FLAGS;
-    mrin.attr.max_reg_descriptors = 1;
+    if (mr->length >= reg_length) {
+        status = UCS_ERR_UNSUPPORTED;
+        goto err;
+    }
+
+    list_size                           = 1;
+    mrin.attr.create_flags              = IBV_EXP_MR_INDIRECT_KLMS;
+    wr.ext_op.umr.umr_type              = IBV_EXP_UMR_MR_LIST;
 #endif
+
+    mrin.attr.exp_access_flags          = UCT_IB_MEM_ACCESS_FLAGS;
+    mrin.attr.max_klm_list_size         = list_size;
+    mem_reg                             = ucs_calloc(list_size, sizeof(mem_reg[0]), "mem_reg");
+    if (!mem_reg) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
 
     umr = ibv_exp_create_mr(&mrin);
     if (!umr) {
@@ -391,37 +426,22 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
         goto err;
     }
 
-    /* Fill memory list and UMR */
-    memset(&wr, 0, sizeof(wr));
-    memset(&mem_reg, 0, sizeof(mem_reg));
+    for (i = 0; i < list_size; i++) {
+        mem_reg[i].base_addr            = (uintptr_t) mr->addr + i * reg_length;
+        mem_reg[i].length               = reg_length;
+        mem_reg[i].mr                   = mr;
+    }
 
-    mem_reg.base_addr                              = (uintptr_t) mr->addr;
-    mem_reg.length                                 = mr->length;
-
-#ifdef HAVE_EXP_UMR_NEW_API
-    mem_reg.mr                                     = mr;
-    wr.ext_op.umr.umr_type                         = IBV_EXP_UMR_MR_LIST;
-    wr.ext_op.umr.mem_list.mem_reg_list            = &mem_reg;
-    wr.ext_op.umr.exp_access                       = UCT_IB_MEM_ACCESS_FLAGS;
-    wr.ext_op.umr.modified_mr                      = umr;
-    wr.ext_op.umr.base_addr                        = (uint64_t) (uintptr_t) mr->addr + offset;
-    wr.ext_op.umr.num_mrs                          = 1;
-    ucs_trace_data("UMR_FILL qp 0x%x lkey 0x%x base 0x%lx [addr %lx len %zu lkey 0x%x]",
+    ucs_assert(list_size >= 1);
+    mem_reg[list_size - 1].length       = mr->length % reg_length;
+    wr.ext_op.umr.mem_list.mem_reg_list = mem_reg;
+    wr.ext_op.umr.base_addr             = (uint64_t) (uintptr_t) mr->addr + offset;
+    wr.ext_op.umr.num_mrs               = list_size;
+    wr.ext_op.umr.modified_mr           = umr;
+    ucs_trace_data("UMR_FILL qp 0x%x lkey 0x%x base 0x%lx [addr %lx len %zu lkey 0x%x] list_size %d",
                    md->umr_qp->qp_num, wr.ext_op.umr.modified_mr->lkey,
-                   wr.ext_op.umr.base_addr, mem_reg.base_addr, mem_reg.length,
-                   mem_reg.mr->lkey);
-#else
-    mem_reg.m_key                                  = mr;
-    wr.ext_op.umr.memory_key.mkey_type             = IBV_EXP_UMR_MEM_LAYOUT_NONCONTIG;
-    wr.ext_op.umr.memory_key.mem_list.mem_reg_list = &mem_reg;
-    wr.ext_op.umr.memory_key.access                = UCT_IB_MEM_ACCESS_FLAGS;
-    wr.ext_op.umr.memory_key.modified_mr           = umr;
-    wr.ext_op.umr.memory_key.region_base_addr      = mr->addr + offset;
-    wr.num_sge                                     = 1;
-#endif
-
-    wr.exp_opcode                                  = IBV_EXP_WR_UMR_FILL;
-    wr.exp_send_flags                              = IBV_EXP_SEND_INLINE | IBV_EXP_SEND_SIGNALED;
+                   wr.ext_op.umr.base_addr, mem_reg[0].base_addr,
+                   mem_reg[0].length, mem_reg[0].mr->lkey, list_size);
 
     /* Post UMR */
     ret = ibv_exp_post_send(md->umr_qp, &wr, &bad_wr);
@@ -455,11 +475,13 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
               umr->lkey, umr->rkey);
     *umr_p = umr;
 
+    ucs_free(mem_reg);
     return UCS_OK;
 
 err_free_umr:
     UCS_PROFILE_CALL(ibv_dereg_mr, umr);
 err:
+    ucs_free(mem_reg);
     return status;
 #else
     return UCS_ERR_UNSUPPORTED;

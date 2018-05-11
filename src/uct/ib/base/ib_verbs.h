@@ -60,7 +60,14 @@
 
 #else
 #  define IBV_SHARED_MR_ACCESS_FLAGS(_shared_mr)    ((_shared_mr)->access)
+#if HAVE_DECL_IBV_EXP_DEVICE_ATTR_RESERVED_2
+#  define IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(_attr)  do { \
+            (_attr)->comp_mask = 0xffffffff; \
+            (_attr)->comp_mask_2 = (IBV_EXP_DEVICE_ATTR_RESERVED_2 - 1); \
+        } while (0)
+#else
 #  define IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(_attr)  (_attr)->comp_mask = (IBV_EXP_DEVICE_ATTR_RESERVED - 1)
+#endif /* HAVE_DECL_IBV_EXP_DEVICE_ATTR_RESERVED_2 */
 #  define IBV_EXP_PORT_ATTR_SET_COMP_MASK(_attr)    (_attr)->comp_mask = 0
 #endif /* HAVE_VERBS_EXP_H */
 

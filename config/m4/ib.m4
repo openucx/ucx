@@ -211,8 +211,11 @@ AS_IF([test "x$with_ib" == xyes],
                       [have_ext_atomics=no],
                       [[#include <infiniband/verbs_exp.h>]])
 
+       AC_CHECK_DECLS(IBV_EXP_DEVICE_ATTR_RESERVED_2, [], [],
+                      [[#include <infiniband/verbs_exp.h>]])
+
        # UMR support
-       AC_CHECK_DECLS(IBV_EXP_WR_UMR_FILL,
+       AC_CHECK_DECLS(IBV_EXP_MR_INDIRECT_KLMS,
                      [AC_DEFINE([HAVE_EXP_UMR], 1, [IB UMR support])],
                      [],
                      [[#include <infiniband/verbs.h>]])
@@ -227,8 +230,8 @@ AS_IF([test "x$with_ib" == xyes],
                         [],
                         [[#include <infiniband/verbs.h>]])
 
-       AC_CHECK_DECLS(IBV_EXP_MR_INDIRECT_KLMS,
-                     [AC_DEFINE([HAVE_EXP_UMR_NEW_API], 1, [IB UMR new API])],
+       AC_CHECK_DECLS(IBV_EXP_MR_FIXED_BUFFER_SIZE,
+                     [AC_DEFINE([HAVE_EXP_UMR_KSM], 1, [IB UMR KSM support])],
                      [],
                      [[#include <infiniband/verbs.h>]])
 
