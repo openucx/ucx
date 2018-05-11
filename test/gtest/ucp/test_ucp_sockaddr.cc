@@ -13,7 +13,14 @@
 
 #define UCP_INSTANTIATE_ALL_TEST_CASE(_test_case) \
         UCP_INSTANTIATE_TEST_CASE (_test_case) \
-        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, mm_rdmacm, "mm,rdmacm")
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm, "shm") \
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc_ud, "dc_x,dc,ud,ud_x,mm") \
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, no_ud_ud_x, "dc_x,dc,mm") \
+        /* dc_ud case is for testing handling of a large worker address on
+         * UCT_IFACE_FLAG_CONNECT_TO_IFACE transports (dc, dc_x) */
+        /* no_ud_ud_x case is for testing handling a large worker address
+         * but with the lack of ud/ud_x transports, which would return an error
+         * and skipped */
 
 class test_ucp_sockaddr : public ucp_test {
 public:
@@ -52,7 +59,8 @@ public:
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
-            if ((strstr(err_str.c_str(), "worker address information")) ||
+            if ((strstr(err_str.c_str(), "no supported transports found for")) ||
+                (strstr(err_str.c_str(), "sockaddr aux resources addresses")) ||
                 (strstr(err_str.c_str(), "no peer failure handler")) ||
                 /* when the "peer failure" error happens, it is followed by: */
                 (strstr(err_str.c_str(), "received event RDMA_CM_EVENT_UNREACHABLE"))) {
@@ -106,10 +114,7 @@ public:
 
     static void scomplete_cb(void *req, ucs_status_t status)
     {
-        /* TODO: once large worker address is supported, and the error handling
-         * requirement is removed, only UCS_OK should be an acceptable status */
-        if ((status != UCS_OK) && (status != UCS_ERR_BUFFER_TOO_SMALL) &&
-            (status != UCS_ERR_UNREACHABLE)) {
+        if ((status != UCS_OK) && (status != UCS_ERR_UNREACHABLE)) {
             UCS_TEST_ABORT("Error: " << ucs_status_string(status));
         }
     }
@@ -162,7 +167,7 @@ public:
             return;
         }
 
-        if ((req != NULL) && (ucp_request_check_status(req) == UCS_ERR_BUFFER_TOO_SMALL)) {
+        if ((req != NULL) && (ucp_request_check_status(req) == UCS_ERR_UNREACHABLE)) {
             return;
         }
 
@@ -186,15 +191,14 @@ public:
             }
             /* Check if the error was completed due to the error handling flow.
              * If so, skip the test since a valid error occurred - the one expected
-             * from the error handling flow - case of a long worker address or
-             * transport doesn't support the error handling requirement */
-            /* TODO: once large worker address is supported, no need for skip */
-            if (ucp_request_check_status(send_req) == UCS_ERR_BUFFER_TOO_SMALL) {
+             * from the error handling flow - cases of failure to handle long worker
+             * address or transport doesn't support the error handling requirement */
+            if (ucp_request_check_status(send_req) == UCS_ERR_UNREACHABLE) {
                 ucp_request_free(send_req);
-                UCS_TEST_SKIP_R("Skipping due to too long worker address error");
-            } else if (ucp_request_check_status(send_req) == UCS_ERR_UNREACHABLE) {
-                ucp_request_free(send_req);
-                UCS_TEST_SKIP_R("Skipping due an unreachable destination");
+                UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
+                                "feature or too long worker address or no "
+                                "supported transport to send partial worker "
+                                "address)");
             }
 
             ucp_request_free(send_req);
@@ -233,11 +237,9 @@ public:
                                      UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
                                      UCP_EP_PARAM_FIELD_ERR_HANDLER |
                                      UCP_EP_PARAM_FIELD_USER_DATA;
-        /* TODO The error handling requirement is needed since we need to take
-         * care of a case where the client gets an error.
-         * Error handling will be removed once a large worker address is handled.
-         * after that, transports that fail on lack of error handling support,
-         * shouldn't fail anymore */
+        /* The error handling requirement is needed since we need to take
+         * care of a case where the client gets an error. In case ucp needs to
+         * handle a large worker address but neither ud nor ud_x are present */
         ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
         ep_params.err_handler.cb   = err_handler_cb;
         ep_params.err_handler.arg  = NULL;
@@ -277,10 +279,10 @@ public:
         test_ucp_sockaddr *self = reinterpret_cast<test_ucp_sockaddr*>(arg);
         self->err_handler_count++;
         /* The current expected errors are only from the err_handle test
-         * and from transports where the worker address is too long  */
-        /* TODO: once large worker address is supported, and the error handling
-         * requirement is removed, only UCS_ERR_UNREACHABLE should be handled here */
-        if ((status != UCS_ERR_UNREACHABLE) && (status != UCS_ERR_BUFFER_TOO_SMALL)) {
+         * and from transports where the worker address is too long but ud/ud_x
+         * are not present, or ud/ud_x are present but their addresses are too
+         * long as well */
+        if ((status != UCS_ERR_UNREACHABLE)) {
             UCS_TEST_ABORT("Error: " << ucs_status_string(status));
         }
     }

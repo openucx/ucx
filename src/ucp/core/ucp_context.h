@@ -91,6 +91,8 @@ struct ucp_config {
     ucs_config_names_array_t               tls;
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
+    /** Array of transports for partial worker address to pack */
+    UCS_CONFIG_STRING_ARRAY_FIELD(aux_tls) sockaddr_aux_tls;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
 };
@@ -172,6 +174,9 @@ typedef struct ucp_context {
             char                  mdc_name[UCT_MD_COMPONENT_NAME_MAX];
         } *alloc_methods;
         unsigned                  num_alloc_methods;
+
+        /* Bitmap of sockaddr auxiliary transports to pack for client/server flow */
+        uint64_t                  sockaddr_aux_rscs_bitmap;
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;
@@ -270,6 +275,9 @@ void ucp_context_uct_atomic_iface_flags(ucp_context_h context,
                                         ucp_tl_iface_atomic_flags_t *atomic);
 
 const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_csum);
+
+const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
+                              char *str, size_t max_str_len);
 
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)

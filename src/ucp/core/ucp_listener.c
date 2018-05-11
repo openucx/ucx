@@ -12,6 +12,34 @@
 #include <ucs/sys/string.h>
 
 
+static unsigned ucp_listener_accept_cb_progress(void *arg)
+{
+    ucp_ep_h ep = arg;
+
+    ep->flags |= UCP_EP_FLAG_USED;
+    ucp_ep_ext_gen(ep)->listener->cb(ep, ucp_ep_ext_gen(ep)->listener->arg);
+
+    return 0;
+}
+
+int ucp_listener_accept_cb_remove_filter(const ucs_callbackq_elem_t *elem,
+                                                void *arg)
+{
+    ucp_ep_h ep = elem->arg;
+
+    return (elem->cb == ucp_listener_accept_cb_progress) && (ep == arg);
+}
+
+void ucp_listener_schedule_accept_cb(ucp_ep_h ep)
+{
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+
+    uct_worker_progress_register_safe(ep->worker->uct,
+                                      ucp_listener_accept_cb_progress,
+                                      ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
+}
+
 static unsigned ucp_listener_conn_request_progress(void *arg)
 {
     ucp_listener_accept_t *accept = arg;
@@ -20,16 +48,30 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
 
     ucs_trace_func("listener=%p ep=%p", accept->listener, ep);
 
-    /* send wireup request message, to connect the client to the server's new endpoint */
-    status = ucp_wireup_send_request(accept->ep);
-    if (status != UCS_OK) {
-        goto err_destroy_ep;
+    if (!(ep->flags & UCP_EP_FLAG_LISTENER)) {
+        /* send wireup request message, to connect the client to the server's new endpoint */
+        ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
+        status = ucp_wireup_send_request(ep);
+        if (status != UCS_OK) {
+            goto err_destroy_ep;
+        }
+    } else {
+        status = ucp_wireup_send_pre_request(ep);
+        if (status != UCS_OK) {
+            goto err_destroy_ep;
+        }
     }
 
     if (accept->listener->cb != NULL) {
-        ep->flags |= UCP_EP_FLAG_USED;
-        accept->listener->cb(ep, accept->listener->arg);
+        if (ep->flags & UCP_EP_FLAG_LISTENER) {
+            ep->flags &= ~UCP_EP_FLAG_USED;
+            ucp_ep_ext_gen(ep)->listener = accept->listener;
+        } else {
+            ep->flags |= UCP_EP_FLAG_USED;
+            accept->listener->cb(ep, accept->listener->arg);
+        }
     }
+
 
     goto out;
 
@@ -71,12 +113,25 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
         goto err;
     }
 
-    /* create endpoint to the worker address we got in the private data */
-    status = ucp_ep_create_to_worker_addr(listener->wiface.worker, &params,
-                                          &remote_address, UCP_EP_CREATE_AM_LANE,
-                                          "listener", &ep);
-    if (status != UCS_OK) {
-        goto err_free_address;
+    if (client_data->is_full_addr) {
+        /* create endpoint to the worker address we got in the private data */
+        status = ucp_ep_create_to_worker_addr(listener->wiface.worker, &params,
+                                              &remote_address, UCP_EP_CREATE_AM_LANE,
+                                              "listener", &ep);
+        if (status != UCS_OK) {
+            goto err_free_address;
+        }
+
+    } else {
+        status = ucp_ep_create_sockaddr_aux(listener->wiface.worker,
+                                            &params, &remote_address,
+                                            &ep);
+        if (status != UCS_OK) {
+            goto err_free_address;
+        }
+
+        /* the listener's ep should be aware of the sent address from the client */
+        ep->flags |= UCP_EP_FLAG_LISTENER;
     }
 
     ucp_ep_update_dest_ep_ptr(ep, client_data->ep_ptr);

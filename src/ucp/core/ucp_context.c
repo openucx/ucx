@@ -94,6 +94,11 @@ static ucs_config_field_t ucp_config_table[] = {
    "name, or a wildcard - '*' - which expands to all MD components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
+  {"SOCKADDR_AUX_TLS", "ud,ud_mlx5",
+   "Transports to use for exchanging additional address information while\n"
+   "establishing client/server connection. ",
+   ucs_offsetof(ucp_config_t, sockaddr_aux_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
+
   {"BCOPY_THRESH", "0",
    "Threshold for switching from short to bcopy protocol",
    ucs_offsetof(ucp_config_t, ctx.bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
@@ -589,6 +594,24 @@ static ucs_status_t ucp_check_tl_names(ucp_context_t *context)
     return UCS_OK;
 }
 
+const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
+                              char *str, size_t max_str_len)
+{
+    ucp_rsc_index_t i;
+    char *p, *endp;
+
+    p    = str;
+    endp = str + max_str_len;
+
+    ucs_for_each_bit(i, tl_bitmap) {
+        ucs_snprintf_zero(p, endp - p, "%s ",
+                          context->tl_rscs[i].tl_rsc.tl_name);
+        p += strlen(p);
+    }
+
+    return str;
+}
+
 static void ucp_free_resources(ucp_context_t *context)
 {
     ucp_rsc_index_t i;
@@ -716,6 +739,26 @@ static void ucp_resource_config_str(const ucp_config_t *config, char *buf,
 
     if (devs_p == p) {
         snprintf(p, endp - p, "all devices");
+    }
+}
+
+static void ucp_fill_sockaddr_aux_tls_config(ucp_context_h context,
+                                             const ucp_config_t *config)
+{
+    const char **tl_names = (const char**)config->sockaddr_aux_tls.aux_tls;
+    unsigned count = config->sockaddr_aux_tls.count;
+    ucp_rsc_index_t tl_id;
+
+    context->config.sockaddr_aux_rscs_bitmap = 0;
+
+    /* Check if any of the context's resources are present in the sockaddr
+     * auxiliary transports for the client-server flow */
+    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+        if (ucp_str_array_search(tl_names, count,
+                                 context->tl_rscs[tl_id].tl_rsc.tl_name,
+                                 NULL)) {
+            context->config.sockaddr_aux_rscs_bitmap |= UCS_BIT(tl_id) ;
+        }
     }
 }
 
@@ -861,6 +904,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         ucp_report_unavailable(&config->devices[i], dev_cfg_masks[i], "device");
     }
     ucp_report_unavailable(&config->tls, tl_cfg_mask, "transport");
+
+    ucp_fill_sockaddr_aux_tls_config(context, config);
 
     return UCS_OK;
 

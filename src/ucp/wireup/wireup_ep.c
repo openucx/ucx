@@ -228,7 +228,7 @@ static ssize_t ucp_wireup_ep_am_bcopy(uct_ep_h uct_ep, uint8_t id,
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
                                 ucp_ep_h);
 
-static ucs_status_t
+ucs_status_t
 ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
                           const ucp_ep_params_t *params, unsigned address_count,
                           const ucp_address_entry_t *address_list)
@@ -418,6 +418,42 @@ err:
     return status;
 }
 
+static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
+                                                        const char *dev_name,
+                                                        uint64_t *tl_bitmap_p,
+                                                        ucp_address_t **address_p,
+                                                        size_t *address_length_p)
+{
+    ucp_context_h context = worker->context;
+    int tl_id, found_supported_tl = 0;
+    ucs_status_t status;
+    uint64_t tl_bitmap = 0;
+
+    /* Find a transport which matches the given dev_name and the user's configuration */
+    ucs_for_each_bit(tl_id, context->config.sockaddr_aux_rscs_bitmap) {
+        if (!strncmp(context->tl_rscs[tl_id].tl_rsc.dev_name, dev_name,
+                     UCT_DEVICE_NAME_MAX)) {
+            found_supported_tl = 1;
+            tl_bitmap |= UCS_BIT(tl_id);
+        }
+    }
+
+    if (found_supported_tl) {
+        UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+
+        status = ucp_address_pack(worker, NULL, tl_bitmap, NULL,
+                                  address_length_p, (void**)address_p);
+
+        UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    } else {
+        ucs_error("no supported transports found for %s", dev_name);
+        status = UCS_ERR_UNREACHABLE;
+    }
+
+    *tl_bitmap_p = tl_bitmap;
+    return status;
+}
+
 ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name,
                                                  void *priv_data)
 {
@@ -428,9 +464,11 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     ucp_worker_h worker                   = ucp_ep->worker;
     ucp_context_h context                 = worker->context;
     size_t address_length, conn_priv_len;
-    ucp_address_t *worker_address;
+    ucp_address_t *worker_address, *rsc_address;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
+    uint64_t tl_bitmap;
+    char aux_tls_str[64];
 
     status = ucp_worker_get_address(worker, &worker_address, &address_length);
     if (status != UCS_OK) {
@@ -439,21 +477,59 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
 
     conn_priv_len = sizeof(*conn_priv) + address_length;
 
-    /* check private data length limitation */
-    wiface = &worker->ifaces[sockaddr_rsc];
-    if (conn_priv_len > wiface->attr.max_conn_priv) {
-        ucs_error("worker address information (%zu) exceeds max_priv on "
-                   UCT_TL_RESOURCE_DESC_FMT" (%zu)", conn_priv_len,
-                   UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
-                   wiface->attr.max_conn_priv);
-        status = UCS_ERR_BUFFER_TOO_SMALL;
-        goto err_free_address;
-    }
-
     /* pack private data */
     conn_priv->err_mode = ucp_ep_config(ucp_ep)->key.err_mode;
     conn_priv->ep_ptr   = (uintptr_t)ucp_ep;
-    memcpy(conn_priv + 1, worker_address, address_length);
+
+    wiface = &worker->ifaces[sockaddr_rsc];
+
+    /* check private data length limitation */
+    if (conn_priv_len > wiface->attr.max_conn_priv) {
+
+        /* since the full worker address is too large to fit into the trasnport's
+         * private data, try to pack sockaddr aux tls to pass in the address */
+        status = ucp_wireup_ep_pack_sockaddr_aux_tls(worker, dev_name, &tl_bitmap,
+                                                     &rsc_address, &address_length);
+        if (status != UCS_OK) {
+            goto err_free_address;
+        }
+
+        conn_priv_len = sizeof(*conn_priv) + address_length;
+
+        /* check the private data length limitation again, now with partial
+         * resources packed (and not the entire worker address) */
+        if (conn_priv_len > wiface->attr.max_conn_priv) {
+            ucs_error("sockaddr aux resources addresses (%s transports)"
+                      " information (%zu) exceeds max_priv on "
+                      UCT_TL_RESOURCE_DESC_FMT" (%zu)",
+                      ucp_tl_bitmap_str(context, tl_bitmap, aux_tls_str,
+                                        sizeof(aux_tls_str)),
+                      conn_priv_len,
+                      UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
+                      wiface->attr.max_conn_priv);
+            status = UCS_ERR_UNREACHABLE;
+            ucs_free(rsc_address);
+            goto err_free_address;
+        }
+
+        conn_priv->is_full_addr = 0;
+        memcpy(conn_priv + 1, rsc_address, address_length);
+        ucp_ep->flags |= UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR;
+
+        ucs_free(rsc_address);
+
+        ucs_trace("sockaddr tl ("UCT_TL_RESOURCE_DESC_FMT") sending partial address: "
+                  "(%s transports) (len=%zu) to server. "
+                  "total client priv data len: %zu",
+                  context->tl_rscs[sockaddr_rsc].tl_rsc.tl_name, dev_name,
+                  ucp_tl_bitmap_str(context, tl_bitmap, aux_tls_str,
+                                    sizeof(aux_tls_str)),
+                  address_length, conn_priv_len);
+
+    } else {
+        conn_priv->is_full_addr = 1;
+        memcpy(conn_priv + 1, worker_address, address_length);
+    }
 
     ucp_worker_release_address(worker, worker_address);
     return conn_priv_len;
