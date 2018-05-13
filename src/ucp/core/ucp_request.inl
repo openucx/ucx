@@ -337,19 +337,6 @@ ucp_request_send_state_advance(ucp_request_t *req,
                (req->send.state.dt.offset <= req->send.length));
 }
 
-/* Fast-forward to data end */
-static UCS_F_ALWAYS_INLINE void
-ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
-{
-    if (req->send.state.uct_comp.func) {
-        req->send.state.dt.offset = req->send.length;
-        req->send.state.uct_comp.count = 0;
-        req->send.state.uct_comp.func(&req->send.state.uct_comp, status);
-    } else {
-        ucp_request_complete_send(req, status);
-    }
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_request_send_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map)
 {

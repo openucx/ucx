@@ -289,4 +289,7 @@ ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t multi_thresh,
                                     size_t rndv_thresh, const ucp_proto_t *proto);
 
+/* Fast-forward to data end */
+void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status);
+
 #endif
