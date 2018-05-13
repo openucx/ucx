@@ -11,8 +11,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
-#include <cuda_runtime.h>
-#include <cuda.h>
+#include <uct/cuda/base/cuda_iface.h>
 
 #define UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN 65536
 
@@ -283,8 +282,17 @@ uct_gdr_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
     ucs_rcache_region_t *rregion;
     ucs_status_t status;
     uct_gdr_copy_mem_t *memh;
+    CUdeviceptr d_ptr;
+    size_t d_length;
 
-    status = ucs_rcache_get(md->rcache, address, length, PROT_READ|PROT_WRITE,
+
+    status = UCT_CUDADRV_FUNC(cuMemGetAddressRange(&d_ptr, &d_length,
+                                                   (CUdeviceptr)address));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_rcache_get(md->rcache, (void *)d_ptr, d_length, PROT_READ|PROT_WRITE,
                             &flags, &rregion);
     if (status != UCS_OK) {
         return status;

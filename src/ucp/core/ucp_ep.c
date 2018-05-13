@@ -899,6 +899,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     uct_md_attr_t *md_attr       = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
     size_t it;
     size_t zcopy_thresh;
+    int mem_type;
 
     if (iface_attr->cap.flags & short_flag && !context->num_mem_type_mds) {
         config->max_short = max_short - hdr_len;
@@ -933,6 +934,14 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
         config->sync_zcopy_thresh[0] = config->zcopy_thresh[0] =
                 ucs_min(context->config.ext.zcopy_thresh, adjust_min_val);
     }
+
+    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+        if (UCP_MEM_IS_HOST(mem_type)) {
+            config->mem_type_zcopy_thresh[mem_type] = config->zcopy_thresh[0];
+        } else if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
+            config->mem_type_zcopy_thresh[mem_type] = 1;
+        }
+    }
 }
 
 void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
@@ -941,6 +950,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     ucp_ep_rma_config_t *rma_config;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_t *md_attr;
+    uct_memory_type_t mem_type;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
     size_t it;
@@ -954,6 +964,12 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         config->tag.eager.zcopy_thresh[it]       = SIZE_MAX;
         config->tag.eager.sync_zcopy_thresh[it]  = SIZE_MAX;
     }
+
+    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+        config->am.mem_type_zcopy_thresh[mem_type]        = SIZE_MAX;
+        config->tag.eager.mem_type_zcopy_thresh[mem_type] = SIZE_MAX;
+    }
+
     config->tag.eager.zcopy_auto_thresh = 0;
     config->am.zcopy_auto_thresh        = 0;
     config->p2p_lanes                   = 0;
