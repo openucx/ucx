@@ -161,6 +161,12 @@ void ucp_test::wait(void *req, int worker_index)
         return;
     }
 
+    if (UCS_PTR_IS_ERR(req)) {
+        ucs_error("operation returned error: %s",
+                  ucs_status_string(UCS_PTR_STATUS(req)));
+        return;
+    }
+
     ucs_status_t status;
     do {
         progress(worker_index);
@@ -321,6 +327,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
 {
     ucp_test_param entity_param = test_param;
     ucp_worker_params_t local_worker_params = worker_params;
+    int num_workers;
 
     if (test_param.thread_type == MULTI_THREAD_CONTEXT) {
         num_workers = MT_TEST_NUM_THREADS;
@@ -359,8 +366,8 @@ ucp_test_base::entity::~entity() {
 void ucp_test_base::entity::connect(const entity* other,
                                     const ucp_ep_params_t& ep_params,
                                     int ep_idx, int do_set_ep) {
-    assert(num_workers == other->get_num_workers());
-    for (unsigned i = 0; i < unsigned(num_workers); i++) {
+    assert(get_num_workers() == other->get_num_workers());
+    for (unsigned i = 0; i < unsigned(get_num_workers()); i++) {
         ucs_status_t status;
         ucp_address_t *address;
         size_t address_length;
@@ -494,7 +501,11 @@ ucs_status_t ucp_test_base::entity::listen(const struct sockaddr* saddr,
 }
 
 ucp_worker_h ucp_test_base::entity::worker(int worker_index) const {
-    return m_workers[worker_index].first;
+    if (worker_index < get_num_workers()) {
+        return m_workers[worker_index].first;
+    } else {
+        return NULL;
+    }
 }
 
 ucp_context_h ucp_test_base::entity::ucph() const {
@@ -508,8 +519,7 @@ unsigned ucp_test_base::entity::progress(int worker_index)
 }
 
 int ucp_test_base::entity::get_num_workers() const {
-    assert(m_workers.size() == size_t(num_workers));
-    return num_workers;
+    return m_workers.size();
 }
 
 int ucp_test_base::entity::get_num_eps(int worker_index) const {

@@ -62,13 +62,14 @@ protected:
 
     virtual void test_body() = 0;
 
-    state_t              m_state;
-    bool                 m_initialized;
-    unsigned             m_num_threads;
-    config_stack_t       m_config_stack;
-    int                  m_num_valgrind_errors_before;
-    unsigned             m_num_errors_before;
-    unsigned             m_num_warnings_before;
+    state_t                         m_state;
+    bool                            m_initialized;
+    unsigned                        m_num_threads;
+    config_stack_t                  m_config_stack;
+    ptr_vector<scoped_setenv>       m_env_stack;
+    int                             m_num_valgrind_errors_before;
+    unsigned                        m_num_errors_before;
+    unsigned                        m_num_warnings_before;
 
     static pthread_mutex_t          m_logger_mutex;
     static unsigned                 m_total_errors;
