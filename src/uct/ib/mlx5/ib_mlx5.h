@@ -80,8 +80,10 @@
 /* do not use direct cast from address of reserved0 to avoid compilation warnings */
 #  define mlx5_av_grh(_av)          ((struct mlx5_grh_av *)(((char*)(_av)) + \
                                      ucs_offsetof(struct mlx5_wqe_av, reserved0[0])))
-#  define UCT_IB_MLX5_AV_BASE_SIZE  sizeof(struct mlx5_wqe_av)
+#  define UCT_IB_MLX5_AV_BASE_SIZE  ucs_offsetof(struct mlx5_wqe_av, reserved0[0])
 #  define UCT_IB_MLX5_AV_FULL_SIZE  sizeof(struct mlx5_wqe_av)
+
+#  define mlx5_base_av              mlx5_wqe_av
 
 struct mlx5_grh_av {
         uint8_t         reserved0[4];
