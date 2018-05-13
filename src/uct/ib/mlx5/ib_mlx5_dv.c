@@ -44,3 +44,4 @@ int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
 
     return 0;
 }
+
