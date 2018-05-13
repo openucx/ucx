@@ -185,7 +185,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
         return NULL;
     }
 
-    req = ucs_mpool_get(&ep->worker->req_mp);
+    req = ucp_request_get(ep->worker);
     if (req == NULL) {
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
@@ -299,7 +299,7 @@ static ucs_status_ptr_t ucp_worker_flush_nb_internal(ucp_worker_h worker,
         return UCS_STATUS_PTR(status);
     }
 
-    req = ucs_mpool_get(&worker->req_mp);
+    req = ucp_request_get(worker);
     if (req == NULL) {
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }

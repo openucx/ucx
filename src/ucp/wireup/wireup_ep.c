@@ -156,7 +156,7 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
 
     UCS_ASYNC_BLOCK(&worker->async);
     if (req->func == ucp_wireup_msg_progress) {
-        proxy_req = ucs_mpool_get(&worker->req_mp);
+        proxy_req = ucp_request_get(worker);
         if (proxy_req == NULL) {
             status = UCS_ERR_NO_MEMORY;
             goto out;
