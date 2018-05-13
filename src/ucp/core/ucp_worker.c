@@ -359,9 +359,10 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        goto out;
-    }
+    ucs_debug("ep %p: handle error on lane[%d]=%p: %s",
+              ucp_ep, failed_lane, uct_ep, ucs_status_string(status));
+
+    ucs_assert(ucp_ep->flags & UCP_EP_FLAG_FAILED);
 
     /* Destroy all lanes except failed one since ucp_ep becomes unusable as well */
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
@@ -413,7 +414,6 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     key.status             = status;
 
     ucp_ep->cfg_index = ucp_worker_get_ep_config(worker, &key);
-    ucp_ep->flags    |= UCP_EP_FLAG_FAILED;
     ucp_ep->am_lane   = 0;
 
     if (ucp_ep_ext_gen(ucp_ep)->err_cb != NULL) {
@@ -421,7 +421,6 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
                                        status);
     }
 
-out:
     ucs_free(err_handle_arg);
     UCS_ASYNC_UNBLOCK(&worker->async);
     return 1;
@@ -449,6 +448,11 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     ucp_ep_ext_gen_t *ep_ext;
     ucp_ep_h ucp_ep;
 
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    ucs_debug("worker %p: error handler called for uct_ep %p: %s",
+              worker, uct_ep, ucs_status_string(status));
+
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
     ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
         ucp_ep = ucp_ep_from_ext_gen(ep_ext);
@@ -465,6 +469,13 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
               uct_ep, worker);
 
 found_ucp_ep:
+    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
+        goto out_ok;
+    }
+
+    /* set endpoint to failed to prevent wireup_ep switch */
+    ucp_ep->flags |= UCP_EP_FLAG_FAILED;
+
     if (ucp_ep_config(ucp_ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) {
         /* NOTE: if user has not requested error handling on the endpoint,
          *       the failure is considered unhandled */
@@ -501,12 +512,15 @@ found_ucp_ep:
         goto out;
     }
 
+out_ok:
     ret_status = UCS_OK;
 
 out:
     /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
      * that he can wake-up on this event */
     ucp_worker_signal_internal(worker);
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
 
     return ret_status;
 }
