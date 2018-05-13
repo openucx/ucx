@@ -119,7 +119,7 @@ static ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
     status = req->func(req);
     if (status == UCS_OK) {
         ucs_atomic_add32(&wireup_ep->pending_count, -1);
-        ucp_request_put(proxy_req);
+        ucs_free(proxy_req);
     }
     return status;
 }
@@ -141,7 +141,7 @@ ucp_wireup_ep_pending_req_release(uct_pending_req_t *self, void *arg)
         ucs_free(req);
     }
 
-    ucp_request_put(proxy_req);
+    ucs_free(proxy_req);
 }
 
 static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
@@ -156,7 +156,7 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
 
     UCS_ASYNC_BLOCK(&worker->async);
     if (req->func == ucp_wireup_msg_progress) {
-        proxy_req = ucp_request_get(worker);
+        proxy_req = ucs_malloc(sizeof(*proxy_req), "ucp_wireup_proxy_req");
         if (proxy_req == NULL) {
             status = UCS_ERR_NO_MEMORY;
             goto out;
@@ -173,7 +173,7 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
         if (status == UCS_OK) {
             ucs_atomic_add32(&wireup_ep->pending_count, +1);
         } else {
-            ucp_request_put(proxy_req);
+            ucs_free(proxy_req);
         }
     } else {
         ucs_queue_push(&wireup_ep->pending_q, ucp_wireup_ep_req_priv(req));
@@ -637,8 +637,9 @@ int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep)
     }
 
     wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
-    return (wireup_ep->aux_ep == owned_ep) || (wireup_ep->sockaddr_ep == owned_ep);
-
+    return (wireup_ep->aux_ep == owned_ep) ||
+           (wireup_ep->sockaddr_ep == owned_ep) ||
+           (wireup_ep->super.uct_ep == owned_ep);
 }
 
 void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep)
@@ -650,5 +651,7 @@ void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep)
         wireup_ep->aux_ep = NULL;
     } else if (wireup_ep->sockaddr_ep == owned_ep) {
         wireup_ep->sockaddr_ep = NULL;
+    } else if (wireup_ep->super.uct_ep == owned_ep) {
+        ucp_proxy_ep_extract(uct_ep);
     }
 }

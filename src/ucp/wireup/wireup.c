@@ -219,6 +219,8 @@ static void ucp_wireup_remote_connected(ucp_ep_h ep)
             ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
         }
     }
+
+    ucs_assert(ep->flags & UCP_EP_FLAG_DEST_EP);
 }
 
 static UCS_F_NOINLINE void
@@ -867,8 +869,14 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
 
     ucs_trace("ep %p: connect lane %d to remote peer", ep, lane);
 
-    if (ucp_wireup_ep_test(ep->uct_eps[lane])) {
-        return UCS_OK; /* already is a stub */
+    UCS_ASYNC_BLOCK(&ep->worker->async);
+
+    /* checking again, with lock held, if already connected or connection is
+     * in progress */
+    if ((ep->flags & UCP_EP_FLAG_DEST_EP) ||
+        ucp_wireup_ep_test(ep->uct_eps[lane])) {
+        status = UCS_OK;
+        goto out_unlock;
     }
 
     if (ucp_proxy_ep_test(ep->uct_eps[lane])) {
@@ -880,6 +888,10 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
     } else {
         uct_ep = ep->uct_eps[lane];
     }
+
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED));
+
+    ucs_trace("ep %p: connect lane %d to remote peer with wireup ep", ep, lane);
 
     /* make ep->uct_eps[lane] a stub */
     status = ucp_wireup_ep_create(ep, &ep->uct_eps[lane]);
@@ -911,12 +923,15 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
         ucs_assert(status == UCS_OK); /* because it's a wireup proxy */
     }
 
-    return UCS_OK;
+    status = UCS_OK;
+    goto out_unlock;
 
 err_destroy_wireup_ep:
     uct_ep_destroy(ep->uct_eps[lane]);
 err:
     ep->uct_eps[lane] = uct_ep; /* restore am lane */
+out_unlock:
+    UCS_ASYNC_UNBLOCK(&ep->worker->async);
     return status;
 }
 
