@@ -188,9 +188,9 @@ enum {
     UCT_UD_EP_FLAG_ASYNC_COMPS       = UCS_BIT(0), /* set if there are completions that
                                                     * were picked by async thread and queued */
     UCT_UD_EP_FLAG_DISCONNECTED      = UCS_BIT(1), /* set if the endpoint was disconnected */
+    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(2), /* EP is was created as internal */
 
     /* debug flags */
-    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(2), /* EP is was created as internal */
     UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(3), /* CREQ message was received */
     UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(4), /* CREP message was received */
     UCT_UD_EP_FLAG_CREQ_SENT         = UCS_BIT(5), /* CREQ message was sent */
