@@ -175,6 +175,8 @@ UCS_TEST_P(test_ucp_perf, envelope) {
 
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv tls("UCX_TLS", ss.str().c_str());
+    ucs::scoped_setenv warn_invalid("UCX_WARN_INVALID_CONFIG", "no");
+
     for (test_spec *test = tests; test->title != NULL; ++test) {
         unsigned flags = (test->command == UCX_PERF_CMD_TAG) ? 0 :
                                  UCX_PERF_TEST_FLAG_ONE_SIDED;
