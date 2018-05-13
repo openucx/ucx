@@ -966,7 +966,7 @@ typedef struct ucp_mem_map_params {
       * Length (in bytes) to allocate or map (register).
       * This field is mandatory for filling (along with its corresponding bit
       * in the field_mask - @ref UCP_MEM_MAP_PARAM_FIELD_LENGTH).
-      * The @ref ucp_aa routine will return with an error if the length isn't
+      * The @ref ucp_mem_map routine will return with an error if the length isn't
       * specified.
       */
      size_t                 length;
