@@ -326,7 +326,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
         local_worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
     } else if (test_param.thread_type == MULTI_THREAD_WORKER) {
         num_workers = 1;
-        entity_param.ctx_params.mt_workers_shared = 0;
+        entity_param.ctx_params.mt_workers_shared = 1;
         local_worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
     } else {
         num_workers = 1;

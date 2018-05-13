@@ -1224,7 +1224,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     status = ucs_mpool_init(&worker->req_mp, 0,
                             sizeof(ucp_request_t) + context->config.request.size,
                             0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                            &ucp_request_mpool_ops, "ucp_requests");
+                            &ucp_request_worker_mpool_ops,
+                            "ucp_worker_requests");
     if (status != UCS_OK) {
         goto err_destroy_uct_worker;
     }
@@ -1305,10 +1306,8 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker)
     }
 }
 
-void ucp_worker_destroy(ucp_worker_h worker)
+static void ucp_worker_cleanup(ucp_worker_h worker)
 {
-    ucs_trace_func("worker=%p", worker);
-    ucp_worker_remove_am_handlers(worker);
     ucp_worker_destroy_eps(worker);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
@@ -1326,6 +1325,31 @@ void ucp_worker_destroy(ucp_worker_h worker)
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);
     ucs_free(worker);
+}
+
+static void ucp_worker_destroy_cb(void *request, ucs_status_t status)
+{
+    ucp_request_t *req = (ucp_request_t *)request - 1;
+
+    ucp_worker_cleanup(req->flush_worker.worker);
+}
+
+ucs_status_ptr_t ucp_worker_destroy_nb(ucp_worker_h worker)
+{
+    void *request;
+
+    ucs_trace_func("worker=%p", worker);
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    ucp_worker_remove_am_handlers(worker);
+    request = ucp_worker_flush_nb(worker, 0, ucp_worker_destroy_cb);
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+
+    if (!UCS_PTR_IS_PTR(request)) {
+        ucp_worker_cleanup(worker);
+    }
+
+    return request;
 }
 
 ucs_status_t ucp_worker_query(ucp_worker_h worker,

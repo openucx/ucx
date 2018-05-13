@@ -149,6 +149,7 @@ typedef struct ucp_context {
     uint64_t                      mem_type_tls[UCT_MD_MEM_TYPE_LAST];
 
     ucs_mpool_t                   rkey_mp;    /* Pool for memory keys */
+    ucs_mpool_t                   req_mp;     /* Memory pool for requests */
 
     struct {
 

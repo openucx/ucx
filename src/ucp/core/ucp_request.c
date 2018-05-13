@@ -62,13 +62,19 @@ static UCS_F_ALWAYS_INLINE void
 ucp_request_release_common(void *request, uint8_t cb_flag, const char *debug_name)
 {
     ucp_request_t *req = (ucp_request_t*)request - 1;
-    ucp_worker_h UCS_V_UNUSED worker = ucs_container_of(ucs_mpool_obj_owner(req),
-                                                        ucp_worker_t, req_mp);
+    ucp_mt_lock_t UCS_V_UNUSED *mt_lock;
     uint16_t flags;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
     flags = req->flags;
+    if (ucs_unlikely(flags & UCP_REQUEST_FLAG_WORKER_FLUSH)) {
+        mt_lock = &req->flush_worker.worker->context->mt_lock;
+    } else {
+        mt_lock = &ucs_container_of(ucs_mpool_obj_owner(req), ucp_worker_t,
+                                    req_mp)->mt_lock;
+    }
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(mt_lock);
+
     ucs_trace_req("%s request %p (%p) "UCP_REQUEST_FLAGS_FMT, debug_name,
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(flags));
 
@@ -81,7 +87,7 @@ ucp_request_release_common(void *request, uint8_t cb_flag, const char *debug_nam
         req->flags = (flags | UCP_REQUEST_FLAG_RELEASED) & ~cb_flag;
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_THREAD_CS_EXIT_CONDITIONAL(mt_lock);
 }
 
 UCS_PROFILE_FUNC_VOID(ucp_request_release, (request), void *request)
@@ -140,12 +146,41 @@ static void ucp_worker_request_fini_proxy(ucs_mpool_t *mp, void *obj)
     }
 }
 
-ucs_mpool_ops_t ucp_request_mpool_ops = {
+ucs_mpool_ops_t ucp_request_worker_mpool_ops = {
     .chunk_alloc   = ucs_mpool_hugetlb_malloc,
     .chunk_release = ucs_mpool_hugetlb_free,
     .obj_init      = ucp_worker_request_init_proxy,
     .obj_cleanup   = ucp_worker_request_fini_proxy
 };
+
+
+static void ucp_ctx_request_init_proxy(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    ucp_context_h context = ucs_container_of(mp, ucp_context_t, req_mp);
+    ucp_request_t *req    = obj;
+
+    if (context->config.request.init != NULL) {
+        context->config.request.init(req + 1);
+    }
+}
+
+static void ucp_ctx_request_fini_proxy(ucs_mpool_t *mp, void *obj)
+{
+    ucp_context_h context = ucs_container_of(mp, ucp_context_t, req_mp);
+    ucp_request_t *req    = obj;
+
+    if (context->config.request.cleanup != NULL) {
+        context->config.request.cleanup(req + 1);
+    }
+}
+
+ucs_mpool_ops_t ucp_request_ctx_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_hugetlb_malloc,
+    .chunk_release = ucs_mpool_hugetlb_free,
+    .obj_init      = ucp_ctx_request_init_proxy,
+    .obj_cleanup   = ucp_ctx_request_fini_proxy
+};
+
 
 ucs_mpool_ops_t ucp_rndv_get_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
