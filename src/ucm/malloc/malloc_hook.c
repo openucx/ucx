@@ -23,7 +23,6 @@
 #include <ucm/util/sys.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/component.h>
-#include <ucs/type/spinlock.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/checker.h>
@@ -89,7 +88,7 @@ typedef struct ucm_malloc_hook_state {
     /*
      * Track record of which pointers are ours
      */
-    ucs_spinlock_t        lock;       /* Protect heap counters.
+    pthread_spinlock_t    lock;       /* Protect heap counters.
                                          Note: Cannot modify events when this lock
                                          is held - may deadlock */
     /* Our heap address range. Used to identify whether a released pointer is ours,
@@ -136,14 +135,14 @@ static void ucm_malloc_mmaped_ptr_add(void *ptr)
     int hash_extra_status;
     khiter_t hash_it;
 
-    ucs_spin_lock(&ucm_malloc_hook_state.lock);
+    pthread_spin_lock(&ucm_malloc_hook_state.lock);
 
     hash_it = kh_put(mmap_ptrs, &ucm_malloc_hook_state.ptrs, ptr,
                      &hash_extra_status);
     ucs_assert_always(hash_extra_status >= 0);
     ucs_assert_always(hash_it != kh_end(&ucm_malloc_hook_state.ptrs));
 
-    ucs_spin_unlock(&ucm_malloc_hook_state.lock);
+    pthread_spin_unlock(&ucm_malloc_hook_state.lock);
 }
 
 static int ucm_malloc_mmaped_ptr_remove_if_exists(void *ptr)
@@ -151,7 +150,7 @@ static int ucm_malloc_mmaped_ptr_remove_if_exists(void *ptr)
     khiter_t hash_it;
     int found;
 
-    ucs_spin_lock(&ucm_malloc_hook_state.lock);
+    pthread_spin_lock(&ucm_malloc_hook_state.lock);
 
     hash_it = kh_get(mmap_ptrs, &ucm_malloc_hook_state.ptrs, ptr);
     if (hash_it == kh_end(&ucm_malloc_hook_state.ptrs)) {
@@ -161,7 +160,7 @@ static int ucm_malloc_mmaped_ptr_remove_if_exists(void *ptr)
         kh_del(mmap_ptrs, &ucm_malloc_hook_state.ptrs, hash_it);
     }
 
-    ucs_spin_unlock(&ucm_malloc_hook_state.lock);
+    pthread_spin_unlock(&ucm_malloc_hook_state.lock);
     return found;
 }
 
@@ -169,10 +168,10 @@ static int ucm_malloc_is_address_in_heap(void *ptr)
 {
     int in_heap;
 
-    ucs_spin_lock(&ucm_malloc_hook_state.lock);
+    pthread_spin_lock(&ucm_malloc_hook_state.lock);
     in_heap = (ptr >= ucm_malloc_hook_state.heap_start) &&
               (ptr < ucm_malloc_hook_state.heap_end);
-    ucs_spin_unlock(&ucm_malloc_hook_state.lock);
+    pthread_spin_unlock(&ucm_malloc_hook_state.lock);
     return in_heap;
 }
 
@@ -496,7 +495,7 @@ out:
 static void ucm_malloc_sbrk(ucm_event_type_t event_type,
                             ucm_event_t *event, void *arg)
 {
-    ucs_spin_lock(&ucm_malloc_hook_state.lock);
+    pthread_spin_lock(&ucm_malloc_hook_state.lock);
 
     /* Copy return value from call. We assume the event handler uses a lock. */
     if (ucm_malloc_hook_state.heap_start == (void*)-1) {
@@ -508,7 +507,7 @@ static void ucm_malloc_sbrk(ucm_event_type_t event_type,
               event->sbrk.increment, event->sbrk.result,
               ucm_malloc_hook_state.heap_start, ucm_malloc_hook_state.heap_end);
 
-    ucs_spin_unlock(&ucm_malloc_hook_state.lock);
+    pthread_spin_unlock(&ucm_malloc_hook_state.lock);
 }
 
 static int ucs_malloc_is_ready(int events)
@@ -771,7 +770,7 @@ void ucm_malloc_state_reset(int default_mmap_thresh, int default_trim_thresh)
 }
 
 UCS_STATIC_INIT {
-    ucs_spinlock_init(&ucm_malloc_hook_state.lock);
+    pthread_spin_init(&ucm_malloc_hook_state.lock, 0);
     kh_init_inplace(mmap_ptrs, &ucm_malloc_hook_state.ptrs);
 }
 
