@@ -257,7 +257,7 @@ static ucs_status_t ucs_async_thread_init(ucs_async_context_t *async)
         pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
         ret = pthread_mutex_init(&async->thread.mutex, &attr);
         if (ret != 0) {
-            ucs_error("Failed to initialize lock: %s", strerror(ret));
+            ucs_error("failed to initialize async lock: %s", strerror(ret));
             return UCS_ERR_INVALID_PARAM;
         }
 
@@ -265,6 +265,21 @@ static ucs_status_t ucs_async_thread_init(ucs_async_context_t *async)
     } else
 #endif
         return ucs_spinlock_init(&async->thread.spinlock);
+}
+
+static void ucs_async_thread_cleanup(ucs_async_context_t *async)
+{
+#if !(NVALGRIND)
+    int ret;
+
+    if (RUNNING_ON_VALGRIND) {
+        ret = pthread_mutex_destroy(&async->thread.mutex);
+        if (ret != 0) {
+            ucs_warn("failed to destroy async lock: %s", strerror(ret));
+        }
+    } else
+#endif
+        ucs_spinlock_destroy(&async->thread.spinlock);
 }
 
 static ucs_status_t ucs_async_thread_add_event_fd(ucs_async_context_t *async,
@@ -407,6 +422,7 @@ ucs_async_ops_t ucs_async_thread_ops = {
     .block              = ucs_empty_function,
     .unblock            = ucs_empty_function,
     .context_init       = ucs_async_thread_init,
+    .context_cleanup    = ucs_async_thread_cleanup,
     .context_try_block  = ucs_async_thread_try_block,
     .context_unblock    = ucs_async_thread_unblock,
     .add_event_fd       = ucs_async_thread_add_event_fd,

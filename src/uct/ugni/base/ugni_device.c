@@ -447,12 +447,8 @@ ucs_status_t uct_ugni_create_md_cdm(uct_ugni_cdm_t *cdm)
 ucs_status_t uct_ugni_destroy_cdm(uct_ugni_cdm_t *cdm)
 {
     gni_return_t ugni_rc;
-    ucs_status_t status;
 
-    status = uct_ugni_cdm_destroy_lock(cdm);
-    if (UCS_OK != status) {
-        ucs_error("Couldn't destroy cdm lock.");
-    }
+    uct_ugni_cdm_destroy_lock(cdm);
 
     ucs_trace_func("cdm=%p", cdm);
     ugni_rc = GNI_CdmDestroy(cdm->cdm_handle);
