@@ -1796,7 +1796,7 @@ ucs_status_ptr_t ucp_ep_flush_nb(ucp_ep_h ep, unsigned flags,
  *                        <td align="center">@ref ucp_mem_map_params.address "address"</td>
  *                        <td align="center">@b result
  * <tr><td rowspan="8" align="center">@b value <td rowspan="8" align="center">0/1 - the value\n only affects the\n register/map\n phase</td>
- *                                               <td align="center">0 <td align="center">0 <td align="center">0 <td align="center">@ref anch_err "error"
+ *                                               <td align="center">0 <td align="center">0 <td align="center">0 <td align="center">@ref anch_err "error" if length > 0
  * <tr>                                          <td align="center">1 <td align="center">0 <td align="center">0 <td align="center">@ref anch_alloc_reg "alloc+register"
  * <tr>                                          <td align="center">0 <td align="center">1 <td align="center">0 <td align="center">@ref anch_err "error"</td>
  * <tr>                                          <td align="center">0 <td align="center">0 <td align="center">defined <td align="center">@ref anch_reg "register"
