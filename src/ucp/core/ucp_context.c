@@ -100,7 +100,7 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, sockaddr_aux_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"WARN_INVALID_CONFIG", "y",
-   "Issue a warning in case of non-available device and/or transport.",
+   "Issue a warning in case of invalid device and/or transport configuration.",
    ucs_offsetof(ucp_config_t, warn_invalid_config), UCS_CONFIG_TYPE_BOOL},
 
   {"BCOPY_THRESH", "0",
