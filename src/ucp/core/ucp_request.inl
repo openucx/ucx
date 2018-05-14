@@ -377,10 +377,11 @@ ucp_send_request_add_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map)
+ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map,
+                            size_t length)
 {
     return ucp_request_memory_reg(req->recv.worker->context, md_map,
-                                  req->recv.buffer, req->recv.length,
+                                  req->recv.buffer, length,
                                   req->recv.datatype, &req->recv.state,
                                   req->recv.mem_type, req);
 }
