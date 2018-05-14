@@ -15,15 +15,15 @@
 
 #define UCT_CUDA_IPC_HASH_SIZE 256
 
-typedef struct uct_cuda_ipc_rem_seg  uct_cuda_ipc_rem_seg_t;
+typedef struct uct_cuda_ipc_rem_seg uct_cuda_ipc_rem_seg_t;
 
-typedef struct uct_cuda_ipc_rem_seg {
+struct uct_cuda_ipc_rem_seg {
     uct_cuda_ipc_rem_seg_t *next;
     CUipcMemHandle         ph;         /* Memory handle of GPU memory */
     CUdeviceptr            d_bptr;     /* Allocation base address */
     size_t                 b_len;      /* Allocation size */
     int                    dev_num;    /* GPU Device number */
-} uct_cuda_ipc_rem_seg_t;
+};
 
 typedef struct uct_cuda_ipc_ep_addr {
     int                ep_id;
