@@ -484,7 +484,7 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
 
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue, 1) {
         if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
-            if (is_log != 0) {
+            if ((is_log != 0) && (status != UCS_ERR_CANCELED)) {
                 ucs_warn("destroying rc ep %p with uncompleted operation %p",
                          txqp, op);
             }
