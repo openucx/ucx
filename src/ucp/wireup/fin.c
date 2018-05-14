@@ -89,7 +89,7 @@ ucs_status_t ucp_fin_msg_send(ucp_ep_h ep)
 
     flush_req = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0,
                                       ucp_ep_fin_cb);
-    if (UCS_PTR_IS_ERR(flush_req)) {
+    if (!UCS_PTR_IS_PTR(flush_req)) {
         return UCS_PTR_STATUS(flush_req);
     }
 

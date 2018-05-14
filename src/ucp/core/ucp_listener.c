@@ -16,7 +16,7 @@ static unsigned ucp_listener_accept_cb_progress(void *arg)
 {
     ucp_ep_h ep = arg;
 
-    ep->flags |= UCP_EP_FLAG_USED;
+    ep->flags &= ~UCP_EP_FLAG_HIDDEN;
     ucp_ep_ext_gen(ep)->listener->cb(ep, ucp_ep_ext_gen(ep)->listener->arg);
 
     return 0;

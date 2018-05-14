@@ -42,21 +42,21 @@ enum {
                                                         (on server side due to receiving partial
                                                         worker address from the client) */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
-    UCP_EP_FLAG_FIN_REQ_QUEUED         = UCS_BIT(8),  /* Fin request was queued */
-    UCP_EP_FLAG_FIN_REQ_COMPLETED      = UCS_BIT(9),  /* All local endpoints are disconnected */
-    UCP_EP_FLAG_FIN_MSG_RECVD          = UCS_BIT(10), /* Remote endpoints are disconnected */
+    UCP_EP_FLAG_FIN_REQ_QUEUED         = UCS_BIT(10),  /* Fin request was queued */
+    UCP_EP_FLAG_FIN_REQ_COMPLETED      = UCS_BIT(11),  /* All local endpoints are disconnected */
+    UCP_EP_FLAG_FIN_MSG_RECVD          = UCS_BIT(12), /* Remote endpoints are disconnected */
     /* Full event mask to destroy endpoint after FIN protocol */
     UCP_EP_MASK_FIN_DONE               = UCP_EP_FLAG_FIN_REQ_COMPLETED |
                                          UCP_EP_FLAG_FIN_MSG_RECVD     |
                                          UCP_EP_FLAG_HIDDEN,
 
     /* DEBUG bits */
-    UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(11), /* DEBUG: Connection request was sent */
-    UCP_EP_FLAG_CONNECT_REP_SENT       = UCS_BIT(12), /* DEBUG: Connection reply was sent */
-    UCP_EP_FLAG_CONNECT_ACK_SENT       = UCS_BIT(13), /* DEBUG: Connection ACK was sent */
-    UCP_EP_FLAG_CONNECT_REQ_IGNORED    = UCS_BIT(14), /* DEBUG: Connection request was ignored */
-    UCP_EP_FLAG_CONNECT_PRE_REQ_SENT   = UCS_BIT(15), /* DEBUG: Connection pre-request was sent */
-    UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(16)  /* DEBUG: Partial worker address was sent
+    UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16), /* DEBUG: Connection request was sent */
+    UCP_EP_FLAG_CONNECT_REP_SENT       = UCS_BIT(17), /* DEBUG: Connection reply was sent */
+    UCP_EP_FLAG_CONNECT_ACK_SENT       = UCS_BIT(18), /* DEBUG: Connection ACK was sent */
+    UCP_EP_FLAG_CONNECT_REQ_IGNORED    = UCS_BIT(19), /* DEBUG: Connection request was ignored */
+    UCP_EP_FLAG_CONNECT_PRE_REQ_SENT   = UCS_BIT(20), /* DEBUG: Connection pre-request was sent */
+    UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(21)  /* DEBUG: Partial worker address was sent
                                                                 to the remote peer when starting
                                                                 connection establishment on this EP */
 };
