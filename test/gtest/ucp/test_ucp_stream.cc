@@ -52,6 +52,66 @@ test_ucp_stream_base::stream_send_nb(const ucp::data_type_desc_t& dt_desc)
                               dt_desc.dt(), ucp_send_cb, 0);
 }
 
+class test_ucp_stream_onesided : public test_ucp_stream_base {
+public:
+    ucp_ep_params_t get_ep_params() {
+        ucp_ep_params_t params = test_ucp_stream_base::get_ep_params();
+        params.field_mask |= UCP_EP_PARAM_FIELD_FLAGS;
+        params.flags      |= UCP_EP_PARAMS_FLAGS_NO_LOOPBACK;
+        return params;
+    }
+};
+
+UCS_TEST_P(test_ucp_stream_onesided, send_recv_no_ep) {
+
+    /* connect from sender side only and send */
+    sender().connect(&receiver(), get_ep_params());
+    uint64_t send_data = ucs::rand();
+    void *sreq = stream_send_nb(ucp::data_type_desc_t(
+                    ucp_dt_make_contig(sizeof(uint64_t)), &send_data, sizeof(send_data)));
+    wait(sreq);
+
+    /* must not receive data before ep is created on receiver side */
+    static const size_t max_eps = 10;
+    ucp_stream_poll_ep_t poll_eps[max_eps];
+    ssize_t count = ucp_stream_worker_poll(receiver().worker(), poll_eps,
+                                           max_eps, 0);
+    EXPECT_EQ(0l, count) << "ucp_stream_worker_poll returned ep too early";
+
+    /* create receiver side ep */
+    ucp_ep_params_t recv_ep_param = get_ep_params();
+    recv_ep_param.field_mask |= UCP_EP_PARAM_FIELD_USER_DATA;
+    recv_ep_param.user_data   = reinterpret_cast<void*>(static_cast<uintptr_t>(ucs::rand()));
+    receiver().connect(&sender(), recv_ep_param);
+
+    /* expect ep to be ready */
+    ucs_time_t deadline = ucs_get_time() +
+                          (ucs_time_from_sec(10.0) * ucs::test_time_multiplier());
+    do {
+        progress();
+        count = ucp_stream_worker_poll(receiver().worker(), poll_eps, max_eps, 0);
+    } while ((count == 0) && (ucs_get_time() < deadline));
+    EXPECT_EQ(1l, count);
+    EXPECT_EQ(recv_ep_param.user_data, poll_eps[0].user_data);
+    EXPECT_EQ(receiver().ep(0), poll_eps[0].ep);
+
+    /* expect data to be received */
+    uint64_t recv_data = 0;
+    size_t recv_length = 0;
+    void *rreq = ucp_stream_recv_nb(receiver().ep(), &recv_data, 1,
+                                    ucp_dt_make_contig(sizeof(uint64_t)),
+                                    ucp_recv_cb, &recv_length, 0);
+    ASSERT_UCS_PTR_OK(rreq);
+    if (rreq != NULL) {
+        recv_length = wait_stream_recv(rreq);
+    }
+
+    EXPECT_EQ(sizeof(uint64_t), recv_length);
+    EXPECT_EQ(send_data, recv_data);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_stream_onesided)
+
 class test_ucp_stream : public test_ucp_stream_base
 {
 public:

@@ -79,11 +79,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     ucp_ep_ext_gen(ep)->user_data   = NULL;
     ucp_ep_ext_gen(ep)->err_cb      = NULL;
 
-    if (worker->context->config.features & UCP_FEATURE_STREAM) {
-        ucp_ep_ext_proto(ep)->stream.ready_list.prev = NULL;
-        ucp_ep_ext_proto(ep)->stream.ready_list.next = NULL;
-        ucs_queue_head_init(&ucp_ep_ext_proto(ep)->stream.match_q);
-    }
+    ucp_stream_ep_init(ep);
 
     for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
         ep->uct_eps[lane] = NULL;
@@ -424,6 +420,8 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         if (status != UCS_OK) {
             ucp_ep_destroy_internal(ep);
         }
+
+        ucp_stream_ep_activate(ep);
         goto out_free_address;
     }
 
@@ -580,8 +578,6 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
 
 void ucp_ep_disconnected(ucp_ep_h ep, int force)
 {
-    ucp_stream_recv_purge(ep);
-
     /* remove pending slow-path progress in case it wasn't removed yet */
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_worker_err_handle_remove_filter, ep);
@@ -590,7 +586,10 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_listener_accept_cb_remove_filter, ep);
 
+    ucp_stream_ep_cleanup(ep);
+
     ep->flags &= ~UCP_EP_FLAG_USED;
+    ep->flags |= UCP_EP_FLAG_CLOSED;
 
     if ((ep->flags & (UCP_EP_FLAG_CONNECT_REQ_QUEUED|UCP_EP_FLAG_REMOTE_CONNECTED))
         && !force) {
@@ -650,6 +649,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     UCS_ASYNC_BLOCK(&worker->async);
+
     request = ucp_ep_flush_internal(ep,
                                     (mode == UCP_EP_CLOSE_MODE_FLUSH) ?
                                     UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL,

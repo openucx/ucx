@@ -24,7 +24,12 @@ typedef uint16_t                   ucp_ep_cfg_index_t;
 
 
 /* Endpoint flags type */
+#if ENABLE_DEBUG_DATA || ENABLE_ASSERT
+typedef uint32_t                   ucp_ep_flags_t;
+#else
 typedef uint16_t                   ucp_ep_flags_t;
+#endif
+
 
 /**
  * Endpoint flags
@@ -42,16 +47,17 @@ enum {
                                                         (on server side due to receiving partial
                                                         worker address from the client) */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
+    UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
 
     /* DEBUG bits */
-    UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(10), /* DEBUG: Connection request was sent */
-    UCP_EP_FLAG_CONNECT_REP_SENT       = UCS_BIT(11), /* DEBUG: Connection reply was sent */
-    UCP_EP_FLAG_CONNECT_ACK_SENT       = UCS_BIT(12), /* DEBUG: Connection ACK was sent */
-    UCP_EP_FLAG_CONNECT_REQ_IGNORED    = UCS_BIT(13), /* DEBUG: Connection request was ignored */
-    UCP_EP_FLAG_CONNECT_PRE_REQ_SENT   = UCS_BIT(14), /* DEBUG: Connection pre-request was sent */
-    UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(15)  /* DEBUG: Partial worker address was sent
-                                                                to the remote peer when starting
-                                                                connection establishment on this EP */
+    UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */
+    UCP_EP_FLAG_CONNECT_REP_SENT       = UCS_BIT(17),/* DEBUG: Connection reply was sent */
+    UCP_EP_FLAG_CONNECT_ACK_SENT       = UCS_BIT(18),/* DEBUG: Connection ACK was sent */
+    UCP_EP_FLAG_CONNECT_REQ_IGNORED    = UCS_BIT(19),/* DEBUG: Connection request was ignored */
+    UCP_EP_FLAG_CONNECT_PRE_REQ_SENT   = UCS_BIT(20),/* DEBUG: Connection pre-request was sent */
+    UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(21) /* DEBUG: Partial worker address was sent
+                                                               to the remote peer when starting
+                                                               connection establishment on this EP */
 };
 
 
