@@ -65,6 +65,7 @@ static ucs_async_ops_t ucs_async_poll_ops = {
     .block              = ucs_empty_function,
     .unblock            = ucs_empty_function,
     .context_init       = ucs_async_poll_init,
+    .context_cleanup    = ucs_empty_function,
     .context_try_block  = ucs_async_poll_tryblock,
     .context_unblock    = ucs_empty_function,
     .add_event_fd       = ucs_empty_function_return_success,
@@ -330,6 +331,8 @@ void ucs_async_context_cleanup(ucs_async_context_t *async)
         ucs_warn("releasing async context with %d handlers", async->num_handlers);
         pthread_rwlock_unlock(&ucs_async_global_context.handlers_lock);
     }
+
+    ucs_async_method_call(async->mode, context_cleanup, async);
     ucs_mpmc_queue_cleanup(&async->missed);
 }
 

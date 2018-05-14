@@ -131,6 +131,7 @@ libucs_la_SOURCES = \
 	time/timerq.c \
 	type/class.c \
 	type/component.c \
+	type/spinlock.c \
 	type/status.c
 
 if HAVE_STATS

@@ -523,6 +523,24 @@ UCS_TEST_P(test_async, modify_event) {
     EXPECT_EQ(le.count(), count);
 }
 
+UCS_TEST_P(test_async, warn_block) {
+    hide_warnings();
+    {
+        local_event le(GetParam());
+        le.block();
+    }
+    restore_errors();
+
+    int warn_count = m_warnings.size();
+    for (int i = 0; i < warn_count; ++i) {
+        UCS_TEST_MESSAGE << "< " << m_warnings[i] << " >";
+    }
+
+    if (GetParam() != UCS_ASYNC_MODE_POLL) {
+        EXPECT_GE(warn_count, 1);
+    }
+}
+
 class local_timer_remove_handler : public local_timer {
 public:
     local_timer_remove_handler(ucs_async_mode_t mode) : local_timer(mode) {
