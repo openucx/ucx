@@ -181,7 +181,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
     ucs_status_t status;
     ucp_request_t *req;
 
-    ucs_debug("disconnect ep %p", ep);
+    ucs_debug("flush ep %p", ep);
 
     if (ep->flags & UCP_EP_FLAG_FAILED) {
         return NULL;

@@ -90,14 +90,21 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
     ucs_trace_req("stream_send_nb buffer %p count %zu to %s cb %p flags %u",
                   buffer, count, ucp_ep_peer_name(ep), cb, flags);
 
-    ucs_assert(!(ep->flags & (UCP_EP_FLAG_HIDDEN|UCP_EP_FLAG_FIN_REQ_QUEUED)));
-
     if (ucs_unlikely(flags != 0)) {
         ret = UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
         goto out;
     }
 
-    ucs_assert(!(ep->flags & (UCP_EP_FLAG_FIN_REQ_QUEUED|UCP_EP_FLAG_HIDDEN)));
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_HIDDEN));
+    if (ucs_unlikely(ep->flags & (UCP_EP_FLAG_FIN_MSG_RECVD))) {
+        /* Notify user about disconnect */
+        if (ucp_ep_ext_gen(ep)->err_cb) {
+            ucp_ep_ext_gen(ep)->err_cb(ucp_ep_ext_gen(ep)->user_data, ep,
+                                       UCS_ERR_REMOTE_DISCONNECT);
+        }
+        ret = NULL;
+        goto out;
+    }
 
     status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
     if (status != UCS_OK) {
