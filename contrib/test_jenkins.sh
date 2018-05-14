@@ -386,7 +386,7 @@ run_hello() {
 	./${test_name} ${test_args} -p ${tcp_port} &
 	hw_server_pid=$!
 
-	sleep 5
+	sleep 15
 
 	# temporary disable 
 	if [[ ${test_args} == *"-e"* ]]
@@ -481,7 +481,7 @@ run_client_server() {
     ./${test_name} -p ${server_port} &
     hw_server_pid=$!
 
-    sleep 5
+    sleep 15
 
     # need to be ran in background to reflect application PID in $!
     ./${test_name} -a ${server_ip} -p ${server_port} &
