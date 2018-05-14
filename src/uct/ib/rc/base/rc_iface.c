@@ -78,7 +78,7 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
    ucs_offsetof(uct_rc_iface_config_t, tm.list_size), UCS_CONFIG_TYPE_UINT},
 
   {"TM_MAX_BCOPY", "48k",
-   "Maximal size of copy-out sends with eager tag offload protocols.\n",
+   "Maximal size of copy-out sends when tag-matching offload is enabled",
    ucs_offsetof(uct_rc_iface_config_t, tm.max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
 #endif
 
