@@ -417,6 +417,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     ucp_ep->am_lane   = 0;
 
     if (ucp_ep_ext_gen(ucp_ep)->err_cb != NULL) {
+        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_USED);
         ucs_debug("ep %p: calling user error callback %p with arg %p", ucp_ep,
                   ucp_ep_ext_gen(ucp_ep)->err_cb,  ucp_ep_ext_gen(ucp_ep)->user_data);
         ucp_ep_ext_gen(ucp_ep)->err_cb(ucp_ep_ext_gen(ucp_ep)->user_data, ucp_ep,
