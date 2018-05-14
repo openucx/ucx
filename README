@@ -1,17 +1,42 @@
-UCX is a communication library implementing high-performance messaging for MPI/PGAS frameworks
+UCX is a communication library implementing a high-performance messaging
+layer for MPI, PGAS, and RPC frameworks.
 
-### Quick start
+### Running internal unit tests
 ```sh
-$ export PATH=$PATH:$MPI_HOME/bin  
-$ ./autogen.sh  
-$ ./contrib/configure-release --prefix=$PWD/install --with-mpi  
-$ make -j8 install  
-$ salloc -N2 --ntasks-per-node=1 mpirun --display-map \
-      $PWD/install/bin/ucx_perftest -d mlx5_1:1 -x rc_mlx5 -c 12 -t put_lat  
+$ ./autogen.sh
+$ ./contrib/configure-devel
+$ make
+$ make -C test/gtest test
 ```
 
-### UCX layout
+### Running UCX hello-world
+Compile:
+
+```sh
+$ ./autogen.sh  
+$ ./contrib/configure-release --prefix=$PWD/install
+$ make
+```
+Start server:
+
+```sh
+$ ./src/tools/perf/ucx_perftest -c 0
+```
+
+Connect client:
+
+```sh
+$ ./src/tools/perf/ucx_perftest <server-hostname> -t tag_lat -c 0
+```
+
+### UCX high-level layout
 - UCX - Unified Communication X
-- UCP - UCX Protocol
-- UCT - UCX Transport
-- UCS - UCX Services
+- UCP - UCX Protocol. Implements high-level abstractions such as tag-matching,
+  streams, connection negotiation and establishment, multi-rail, and handling 
+  different memory types.
+- UCT - UCX Transport. Implements low-level communication primitives such as
+  active messages, remote memory access, and atomic operations.
+- UCS - UCX Services. A collection of data structures, algorithms, and system
+  utilities for common use.
+- UCM - UCX Memory. Intercepts memory allocation and release events, used by
+  memory registration cache.
