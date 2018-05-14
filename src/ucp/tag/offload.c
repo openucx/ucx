@@ -27,7 +27,7 @@ int ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
         ucs_assert(worker->tm.offload.iface        == NULL);
 
         worker->tm.offload.thresh       = context->config.ext.tm_thresh;
-        worker->tm.offload.zcopy_thresh = context->config.ext.tm_max_bcopy;
+        worker->tm.offload.zcopy_thresh = context->config.ext.tm_max_bb_size;
 
         /* Cache active offload iface, in most cases only one iface should be
          * used for offload. If more ifaces will be activated, they will be

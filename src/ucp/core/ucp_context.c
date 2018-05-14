@@ -180,12 +180,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "Smaller buffers will not be posted to the transport.",
    ucs_offsetof(ucp_config_t, ctx.tm_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TM_MAX_BCOPY", "1024", /* TODO: calculate automaticlly */
+  {"TM_MAX_BB_SIZE", "1024", /* TODO: calculate automaticlly */
    "Maximal size for posting \"bounce buffer\" (UCX interal preregistered memory) for\n"
    "tag offload receives. When message arrives, it is copied into the user buffer (similar\n"
    "to eager protocol). The size values has to be equal or less than segment size.\n"
    "Also the value has to be bigger than UCX_TM_THRESH to take an effect." ,
-   ucs_offsetof(ucp_config_t, ctx.tm_max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(ucp_config_t, ctx.tm_max_bb_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TM_FORCE_THRESH", "8192", /* TODO: calculate automaticlly */
    "Threshold for forcing tag matching offload mode. Every tag receive operation\n"
@@ -1001,20 +1001,20 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
 
     /* Need to check MAX_BCOPY value if it is enabled only */
-    if (context->config.ext.tm_max_bcopy > context->config.ext.tm_thresh) {
-        if (context->config.ext.tm_max_bcopy < sizeof(ucp_request_hdr_t)) {
+    if (context->config.ext.tm_max_bb_size > context->config.ext.tm_thresh) {
+        if (context->config.ext.tm_max_bb_size < sizeof(ucp_request_hdr_t)) {
             /* In case of expected SW RNDV message, the header (ucp_request_hdr_t) is
              * scattered to UCP user buffer. Make sure that bounce buffer is used for
              * messages which can not fit SW RNDV hdr. */
-            context->config.ext.tm_max_bcopy = sizeof(ucp_request_hdr_t);
-            ucs_info("UCX_TM_MAX_BCOPY value: %zu, adjusted to: %zu",
-                     context->config.ext.tm_max_bcopy, sizeof(ucp_request_hdr_t));
+            context->config.ext.tm_max_bb_size = sizeof(ucp_request_hdr_t);
+            ucs_info("UCX_TM_MAX_BB_SIZE value: %zu, adjusted to: %zu",
+                     context->config.ext.tm_max_bb_size, sizeof(ucp_request_hdr_t));
         }
 
-        if (context->config.ext.tm_max_bcopy > context->config.ext.seg_size) {
-            context->config.ext.tm_max_bcopy = context->config.ext.seg_size;
-            ucs_info("Wrong UCX_TM_MAX_BCOPY value: %zu, adjusted to: %zu",
-                     context->config.ext.tm_max_bcopy,
+        if (context->config.ext.tm_max_bb_size > context->config.ext.seg_size) {
+            context->config.ext.tm_max_bb_size = context->config.ext.seg_size;
+            ucs_info("Wrong UCX_TM_MAX_BB_SIZE value: %zu, adjusted to: %zu",
+                     context->config.ext.tm_max_bb_size,
                      context->config.ext.seg_size);
         }
     }

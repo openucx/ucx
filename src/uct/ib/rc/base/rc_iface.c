@@ -76,6 +76,10 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
    "is a minimum between this value and the maximum value supported by the HW. \n"
    "-1 means no limit.",
    ucs_offsetof(uct_rc_iface_config_t, tm.list_size), UCS_CONFIG_TYPE_UINT},
+
+  {"TM_MAX_BCOPY", "48k",
+   "Maximal size of copy-out sends with eager tag offload protocols.\n",
+   ucs_offsetof(uct_rc_iface_config_t, tm.max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
 #endif
 
   {NULL}
@@ -556,25 +560,20 @@ ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
 #endif
 
 static void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
-                                 uct_rc_iface_config_t *config,
+                                 const uct_rc_iface_config_t *config,
                                  const uct_iface_params_t *params,
-                                 int tm_cap_flag, unsigned *rx_cq_len)
+                                 int tm_cap_flag, unsigned *rx_cq_len,
+                                 size_t *max_bcopy)
 {
 #if IBV_EXP_HW_TM
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     uint32_t cap_flags   = IBV_DEVICE_TM_CAPS(dev, capability_flags);
     struct ibv_exp_tmh tmh;
-    ucs_status_t status;
 
     iface->tm.enabled = (config->tm.enable && (cap_flags & tm_cap_flag));
 
     if (!iface->tm.enabled) {
         goto out_tm_disabled;
-    }
-
-    status = uct_config_modify(config, "RC_MAX_BCOPY", "48k");
-    if (status != UCS_OK) {
-        ucs_warn("failed to set MAX_BCOPY to 48K for tag offload");
     }
 
     /* Compile-time check that THM and uct_rc_hdr_t are wire-compatible for the
@@ -602,11 +601,13 @@ static void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
     UCS_STATIC_ASSERT(IBV_DEVICE_MAX_UNEXP_COUNT);
     *rx_cq_len = config->super.rx.queue_len + iface->tm.num_tags * 3  +
                  config->super.rx.queue_len / IBV_DEVICE_MAX_UNEXP_COUNT;
+    *max_bcopy = ucs_max(config->tm.max_bcopy, config->super.super.max_bcopy);
     return;
 
 out_tm_disabled:
 #endif
-    *rx_cq_len  = config->super.rx.queue_len;
+    *rx_cq_len = config->super.rx.queue_len;
+    *max_bcopy = config->super.super.max_bcopy;
 }
 
 ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
@@ -704,13 +705,14 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     struct ibv_srq_init_attr srq_init_attr;
     ucs_status_t status;
     unsigned rx_cq_len;
+    size_t max_bcopy;
 
-    uct_rc_iface_preinit(self, md, (uct_rc_iface_config_t*)config, params,
-                         tm_cap_flag, &rx_cq_len);
+    uct_rc_iface_preinit(self, md, config, params, tm_cap_flag, &rx_cq_len,
+                         &max_bcopy);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               rx_priv_len, sizeof(uct_rc_hdr_t), tx_cq_len,
-                              rx_cq_len, SIZE_MAX, res_domain_key, &config->super);
+                              rx_cq_len, max_bcopy, res_domain_key, &config->super);
 
     self->tx.cq_available           = tx_cq_len - 1;
     self->rx.srq.available          = 0;

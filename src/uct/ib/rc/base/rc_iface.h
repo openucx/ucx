@@ -162,6 +162,7 @@ struct uct_rc_iface_config {
     struct {
         int                  enable;
         unsigned             list_size;
+        size_t               max_bcopy;
     } tm;
 #endif
 
