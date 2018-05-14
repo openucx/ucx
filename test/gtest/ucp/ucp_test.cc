@@ -233,6 +233,8 @@ void ucp_test::set_ucp_config(ucp_config_t *config,
     std::stringstream ss;
     ss << test_param;
     ucp_config_modify(config, "TLS", ss.str().c_str());
+    /* prevent configuration warnings in the UCP testing */
+    ucp_config_modify(config, "WARN_INVALID_CONFIG", "no");
 }
 
 void ucp_test::modify_config(const std::string& name, const std::string& value,

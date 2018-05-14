@@ -99,6 +99,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "establishing client/server connection. ",
    ucs_offsetof(ucp_config_t, sockaddr_aux_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
+  {"WARN_INVALID_CONFIG", "y",
+   "Issue a warning in case of invalid device and/or transport configuration.",
+   ucs_offsetof(ucp_config_t, warn_invalid_config), UCS_CONFIG_TYPE_BOOL},
+
   {"BCOPY_THRESH", "0",
    "Threshold for switching from short to bcopy protocol",
    ucs_offsetof(ucp_config_t, ctx.bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
@@ -397,8 +401,8 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
 {
     int device_enabled, tl_enabled;
     ucp_tl_alias_t *alias;
-    uint64_t dummy_mask;
-    uint8_t tmp_flags;
+    uint64_t dummy_mask, tmp_tl_cfg_mask;
+    uint8_t tmp_rsc_flags;
     char info[32];
     unsigned count;
 
@@ -424,12 +428,14 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
              */
             count = ucp_tl_alias_count(alias);
             snprintf(info, sizeof(info), "for alias '%s'", alias->alias);
-            tmp_flags = 0;
-            if (ucp_config_is_tl_enabled(config, alias->alias, 1, &tmp_flags,
-                                         tl_cfg_mask) &&
+            tmp_rsc_flags = 0;
+            tmp_tl_cfg_mask = 0;
+            if (ucp_config_is_tl_enabled(config, alias->alias, 1, &tmp_rsc_flags,
+                                         &tmp_tl_cfg_mask) &&
                 ucp_tls_array_is_present(alias->tls, count, resource->tl_name,
-                                         info, &tmp_flags, &dummy_mask)) {
-                *rsc_flags |= tmp_flags;
+                                         info, &tmp_rsc_flags, &dummy_mask)) {
+                *rsc_flags   |= tmp_rsc_flags;
+                *tl_cfg_mask |= tmp_tl_cfg_mask;
                 tl_enabled  = 1;
                 break;
             }
@@ -897,13 +903,15 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
 
     uct_release_md_resource_list(md_rscs);
 
-    /* Notify the user if there are devices or transports from the command line
-     * that are not available
-     */
-    for (i = 0; i < UCT_DEVICE_TYPE_LAST; ++i) {
-        ucp_report_unavailable(&config->devices[i], dev_cfg_masks[i], "device");
+    if (config->warn_invalid_config) {
+        /* Notify the user if there are devices or transports from the command line
+         * that are not available
+         */
+        for (i = 0; i < UCT_DEVICE_TYPE_LAST; ++i) {
+            ucp_report_unavailable(&config->devices[i], dev_cfg_masks[i], "device");
+        }
+        ucp_report_unavailable(&config->tls, tl_cfg_mask, "transport");
     }
-    ucp_report_unavailable(&config->tls, tl_cfg_mask, "transport");
 
     ucp_fill_sockaddr_aux_tls_config(context, config);
 

@@ -93,6 +93,8 @@ struct ucp_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Array of transports for partial worker address to pack */
     UCS_CONFIG_STRING_ARRAY_FIELD(aux_tls) sockaddr_aux_tls;
+    /** Warn on invalid configuration */
+    int                                    warn_invalid_config;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
 };
