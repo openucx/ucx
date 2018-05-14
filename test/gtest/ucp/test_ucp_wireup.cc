@@ -216,6 +216,12 @@ void test_ucp_wireup::cleanup() {
         for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
              iter != entities().end(); ++iter)
         {
+            flush_worker(**iter);
+        }
+
+        for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
+             iter != entities().end(); ++iter)
+        {
             (*iter)->cleanup();
         }
 

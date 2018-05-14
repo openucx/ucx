@@ -1306,7 +1306,6 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker)
     ucp_ep_ext_gen_t *ep_ext, *tmp;
 
     ucs_debug("worker %p: destroy all endpoints", worker);
-    ucp_worker_flush(worker);
     ucs_list_for_each_safe(ep_ext, tmp, &worker->all_eps, ep_list) {
         ucp_ep_disconnected(ucp_ep_from_ext_gen(ep_ext), 1);
     }
