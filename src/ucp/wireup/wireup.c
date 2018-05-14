@@ -134,7 +134,7 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     req->send.ep                 = ep;
     req->send.wireup.type        = type;
     req->send.wireup.err_mode    = ucp_ep_config(ep)->key.err_mode;
-    req->send.wireup.conn_sn     = ep->conn_sn;
+    req->send.wireup.conn_sn     = ucp_ep_ext_proto(ep)->conn.conn_sn;
     req->send.wireup.src_ep_ptr  = (uintptr_t)ep;
     if (ep->flags & UCP_EP_FLAG_DEST_EP) {
         req->send.wireup.dest_ep_ptr = ucp_ep_dest_ep_ptr(ep);
@@ -300,7 +300,7 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
             }
 
             /* add internal endpoint to hash */
-            ep->conn_sn = msg->conn_sn;
+            ucp_ep_ext_proto(ep)->conn.conn_sn = msg->conn_sn;
             ucp_ep_match_insert_unexp(&worker->ep_match_ctx, remote_uuid, ep);
         }
 
@@ -978,5 +978,5 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     ucs_free(unpacked_address.address_list);
 }
 
-UCP_DEFINE_AM(-1, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler, 
+UCP_DEFINE_AM(-1, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler,
               ucp_wireup_msg_dump, UCT_CB_FLAG_ASYNC);

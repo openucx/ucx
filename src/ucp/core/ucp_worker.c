@@ -1175,13 +1175,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->all_eps);
     ucp_ep_match_init(&worker->ep_match_ctx);
 
-    UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
-    if (context->config.features & UCP_FEATURE_STREAM) {
-        UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_proto_t) <= sizeof(ucp_ep_t));
-        ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 3);
-    } else {
-        ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 2);
-    }
+    UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t)   <= sizeof(ucp_ep_t));
+    UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_proto_t) <= sizeof(ucp_ep_t));
+    ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 3);
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_USER_DATA) {
         worker->user_data = params->user_data;

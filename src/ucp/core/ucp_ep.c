@@ -71,14 +71,14 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     }
 
     ucp_ep_config_key_reset(&key);
-    ep->worker                      = worker;
-    ep->cfg_index                   = ucp_worker_get_ep_config(worker, &key);
-    ep->am_lane                     = UCP_NULL_LANE;
-    ep->flags                       = UCP_EP_FLAG_HIDDEN;
-    ep->conn_sn                     = -1;
-    ucp_ep_ext_gen(ep)->dest_ep_ptr = 0;
-    ucp_ep_ext_gen(ep)->user_data   = NULL;
-    ucp_ep_ext_gen(ep)->err_cb      = NULL;
+    ep->worker                             = worker;
+    ep->cfg_index                          = ucp_worker_get_ep_config(worker, &key);
+    ep->am_lane                            = UCP_NULL_LANE;
+    ep->flags                              = UCP_EP_FLAG_HIDDEN;
+    ucp_ep_ext_gen(ep)->user_data          = NULL;
+    ucp_ep_ext_gen(ep)->err_cb             = NULL;
+    ucp_ep_ext_proto(ep)->conn.dest_ep_ptr = 0;
+    ucp_ep_ext_proto(ep)->conn.conn_sn     = -1;
 
     ucp_stream_ep_init(ep);
 
@@ -432,7 +432,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         goto out_free_address;
     }
 
-    ep->conn_sn = conn_sn;
+    ucp_ep_ext_proto(ep)->conn.conn_sn = conn_sn;
 
     /*
      * If we are connecting to our own worker, and loopback is allowed, connect

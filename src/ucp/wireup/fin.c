@@ -23,11 +23,11 @@ static ucs_status_t ucp_fin_msg_progress(uct_pending_req_t *self)
     ssize_t       len;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
-    if (ucp_ep_ext_gen(ep)->dest_ep_ptr == 0) {
+    if (ucp_ep_ext_proto(ep)->conn.dest_ep_ptr == 0) {
         req->send.fin.ep_id  = ep->worker->uuid;
         req->send.fin.is_ptr = 0;
     } else {
-        req->send.fin.ep_id  = ucp_ep_ext_gen(ep)->dest_ep_ptr;
+        req->send.fin.ep_id  = ucp_ep_ext_proto(ep)->conn.dest_ep_ptr;
         req->send.fin.is_ptr = 1;
     }
 

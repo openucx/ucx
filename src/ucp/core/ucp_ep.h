@@ -255,7 +255,6 @@ typedef struct ucp_ep {
 
     ucp_ep_flags_t                flags;         /* Endpoint flags */
     ucp_ep_cfg_index_t            cfg_index;     /* Configuration index */
-    ucp_ep_conn_sn_t              conn_sn;       /* Sequence number for remote connection */
     ucp_lane_index_t              am_lane;       /* Cached value */
 
     /* TODO allocate ep dynamically according to number of lanes */
@@ -274,7 +273,6 @@ typedef struct ucp_ep {
  * Endpoint extension for generic non fast-path data
  */
 typedef struct {
-    uintptr_t                     dest_ep_ptr;   /* Remote EP pointer */
     union {
         void                      *user_data;    /* User data associated with ep */
         ucp_listener_h            listener;      /* Listener that may be associated with ep */
@@ -296,9 +294,14 @@ typedef struct {
  */
 typedef struct {
     struct {
-        ucs_list_link_t           ready_list;    /* List entry in worker's EP list */
-        ucs_queue_head_t          match_q;       /* Queue of receive data or requests,
-                                                    depends on UCP_EP_FLAG_STREAM_HAS_DATA */
+        ucp_ep_conn_sn_t              conn_sn;       /* Sequence number for remote connection */
+        uintptr_t                     dest_ep_ptr;   /* Remote EP pointer */
+    } conn;
+
+    struct {
+        ucs_list_link_t           ready_list;        /* List entry in worker's EP list */
+        ucs_queue_head_t          match_q;           /* Queue of receive data or requests,
+                                                        depends on UCP_EP_FLAG_STREAM_HAS_DATA */
     } stream;
 } ucp_ep_ext_proto_t;
 
