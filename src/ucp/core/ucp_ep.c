@@ -620,7 +620,7 @@ static unsigned ucp_ep_do_disconnect(void *arg)
         if (ucs_test_all_flags(ep->flags, UCP_EP_MASK_FIN_DONE)) {
             ucp_ep_disconnected(ep, 1);
         } else {
-            ucp_stream_recv_purge(ep);
+            ucp_stream_ep_cleanup(ep);
         }
     } else {
         ucp_ep_disconnected(req->send.ep, req->send.flush.uct_flags &
@@ -682,7 +682,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
             if (ucs_test_all_flags(ep->flags, UCP_EP_MASK_FIN_DONE)) {
                 ucp_ep_disconnected(ep, 1);
             } else {
-                ucp_stream_recv_purge(ep);
+                ucp_stream_ep_cleanup(ep);
             }
         } else {
             ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
