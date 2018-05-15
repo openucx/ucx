@@ -94,7 +94,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "name, or a wildcard - '*' - which expands to all MD components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"SOCKADDR_AUX_TLS", "ud,ud_mlx5",
+  {"SOCKADDR_AUX_TLS", "ud,ud_x",
    "Transports to use for exchanging additional address information while\n"
    "establishing client/server connection. ",
    ucs_offsetof(ucp_config_t, sockaddr_aux_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
@@ -344,12 +344,10 @@ static int ucp_tls_array_is_present(const char **tls, unsigned count,
     }
 }
 
-static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_name,
-                                    int is_alias, uint8_t *rsc_flags,
-                                    uint64_t *tl_cfg_mask)
+static int ucp_config_is_tl_enabled(const char **names, unsigned count,
+                                    const char *tl_name, int is_alias,
+                                    uint8_t *rsc_flags, uint64_t *tl_cfg_mask)
 {
-    const char **names = (const char**)config->tls.names;
-    unsigned count     = config->tls.count;
     char strict_name[UCT_TL_NAME_MAX + 1];
 
     snprintf(strict_name, sizeof(strict_name), "\\%s", tl_name);
@@ -395,28 +393,20 @@ static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource
     return !!mask;
 }
 
-static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
-                                   const ucp_config_t *config, uint8_t *rsc_flags,
-                                   uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
+static int ucp_is_resource_in_transports_list(const char *tl_name,
+                                              const char **names, unsigned count,
+                                              uint8_t *rsc_flags, uint64_t *tl_cfg_mask)
 {
-    int device_enabled, tl_enabled;
-    ucp_tl_alias_t *alias;
     uint64_t dummy_mask, tmp_tl_cfg_mask;
     uint8_t tmp_rsc_flags;
+    ucp_tl_alias_t *alias;
+    int tl_enabled;
     char info[32];
-    unsigned count;
+    unsigned alias_arr_count;
 
-    /* Find the enabled devices */
-    device_enabled = (*rsc_flags & UCP_TL_RSC_FLAG_SOCKADDR) ||
-                     ucp_is_resource_in_device_list(resource, config->devices,
-                                                    &dev_cfg_masks[resource->dev_type],
-                                                    resource->dev_type);
-
-
-    /* Find the enabled UCTs */
-    ucs_assert(config->tls.count > 0);
-    if (ucp_config_is_tl_enabled(config, resource->tl_name, 0, rsc_flags,
-                                 tl_cfg_mask)) {
+    ucs_assert(count > 0);
+    if (ucp_config_is_tl_enabled(names, count, tl_name, 0,
+                                 rsc_flags, tl_cfg_mask)) {
         tl_enabled = 1;
     } else {
         tl_enabled = 0;
@@ -426,13 +416,13 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
             /* If an alias is enabled, and the transport is part of this alias,
              * enable the transport.
              */
-            count = ucp_tl_alias_count(alias);
+            alias_arr_count = ucp_tl_alias_count(alias);
             snprintf(info, sizeof(info), "for alias '%s'", alias->alias);
             tmp_rsc_flags = 0;
             tmp_tl_cfg_mask = 0;
-            if (ucp_config_is_tl_enabled(config, alias->alias, 1, &tmp_rsc_flags,
-                                         &tmp_tl_cfg_mask) &&
-                ucp_tls_array_is_present(alias->tls, count, resource->tl_name,
+            if (ucp_config_is_tl_enabled(names, count, alias->alias, 1,
+                                         &tmp_rsc_flags, &tmp_tl_cfg_mask) &&
+                ucp_tls_array_is_present(alias->tls, alias_arr_count, tl_name,
                                          info, &tmp_rsc_flags, &dummy_mask)) {
                 *rsc_flags   |= tmp_rsc_flags;
                 *tl_cfg_mask |= tmp_tl_cfg_mask;
@@ -441,6 +431,28 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
             }
         }
     }
+
+    return tl_enabled;
+}
+
+static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
+                                   const ucp_config_t *config, uint8_t *rsc_flags,
+                                   uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
+{
+    int device_enabled, tl_enabled;
+
+    /* Find the enabled devices */
+    device_enabled = (*rsc_flags & UCP_TL_RSC_FLAG_SOCKADDR) ||
+                     ucp_is_resource_in_device_list(resource, config->devices,
+                                                    &dev_cfg_masks[resource->dev_type],
+                                                    resource->dev_type);
+
+
+    /* Find the enabled UCTs */
+    tl_enabled = ucp_is_resource_in_transports_list(resource->tl_name,
+                                                    (const char**)config->tls.names,
+                                                    config->tls.count, rsc_flags,
+                                                    tl_cfg_mask);
 
     ucs_trace(UCT_TL_RESOURCE_DESC_FMT " is %sabled",
               UCT_TL_RESOURCE_DESC_ARG(resource),
@@ -754,16 +766,18 @@ static void ucp_fill_sockaddr_aux_tls_config(ucp_context_h context,
     const char **tl_names = (const char**)config->sockaddr_aux_tls.aux_tls;
     unsigned count = config->sockaddr_aux_tls.count;
     ucp_rsc_index_t tl_id;
+    uint8_t dummy_flags;
+    uint64_t dummy_mask;
 
     context->config.sockaddr_aux_rscs_bitmap = 0;
 
     /* Check if any of the context's resources are present in the sockaddr
      * auxiliary transports for the client-server flow */
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
-        if (ucp_str_array_search(tl_names, count,
-                                 context->tl_rscs[tl_id].tl_rsc.tl_name,
-                                 NULL)) {
-            context->config.sockaddr_aux_rscs_bitmap |= UCS_BIT(tl_id) ;
+        if (ucp_is_resource_in_transports_list(context->tl_rscs[tl_id].tl_rsc.tl_name,
+                                               tl_names, count, &dummy_flags,
+                                               &dummy_mask)) {
+            context->config.sockaddr_aux_rscs_bitmap |= UCS_BIT(tl_id);
         }
     }
 }
