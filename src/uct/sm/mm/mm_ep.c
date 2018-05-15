@@ -96,6 +96,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     sglib_hashed_uct_mm_remote_seg_t_init(self->remote_segments_hash);
 
     ucs_arbiter_group_init(&self->arb_group);
+    self->flags = 0;
 
     ucs_debug("mm: ep connected: %p, to remote_shmid: %zu", self, addr->id);
 
@@ -223,19 +224,19 @@ uct_mm_ep_am_common_send(unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_t *ifa
     head = ep->fifo_ctl->head;
     /* check if there is room in the remote process's receive FIFO to write */
     if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
-        if (!ucs_arbiter_group_is_empty(&ep->arb_group)) {
-            /* pending isn't empty. don't send now to prevent out-of-order sending */
+        /* update the local copy of the tail to its actual value on the remote peer */
+        uct_mm_ep_update_cached_tail(ep);
+        if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
             UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
             return UCS_ERR_NO_RESOURCE;
-        } else {
-            /* pending is empty */
-            /* update the local copy of the tail to its actual value on the remote peer */
-            uct_mm_ep_update_cached_tail(ep);
-            if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
-                UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
-                return UCS_ERR_NO_RESOURCE;
-            }
         }
+    }
+
+    if (ucs_unlikely(!ucs_arbiter_group_is_empty(&ep->arb_group) &&
+                     !(ep->flags & UCT_MM_EP_FLAG_IN_PENDING))) {
+        /* don't send out-of-order */
+        UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
+        return UCS_ERR_NO_RESOURCE;
     }
 
     status = uct_mm_ep_get_remote_elem(ep, head, &elem);
@@ -335,7 +336,8 @@ ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
     /* check if resources became available */
-    if (uct_mm_ep_has_tx_resources(ep)) {
+    if (ucs_arbiter_group_is_empty(&ep->arb_group) &&
+        uct_mm_ep_has_tx_resources(ep)) {
         return UCS_ERR_BUSY;
     }
 
@@ -367,7 +369,9 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
         return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
     }
 
+    ep->flags |= UCT_MM_EP_FLAG_IN_PENDING;
     status = req->func(req);
+    ep->flags &= ~UCT_MM_EP_FLAG_IN_PENDING;
     ucs_trace_data("progress pending request %p returned %s", req,
                    ucs_status_string(status));
 
