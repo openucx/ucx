@@ -156,6 +156,7 @@ static inline void uct_mm_progress_fifo_tail(uct_mm_iface_t *iface)
     }
 
     iface->recv_fifo_ctl->tail = iface->read_index;
+    ucs_memory_cpu_store_fence();
 }
 
 ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
@@ -234,6 +235,7 @@ static inline unsigned uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
 
         /* read from read_index_elem */
         ucs_memory_cpu_load_fence();
+        ucs_cpu_instruction_fence();
         ucs_assert(iface->read_index <= iface->recv_fifo_ctl->head);
 
         status = uct_mm_iface_process_recv(iface, read_index_elem);

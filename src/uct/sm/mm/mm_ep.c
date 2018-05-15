@@ -192,6 +192,7 @@ static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t h
     if (returned_val != head) {
         return UCS_ERR_NO_RESOURCE;
     }
+    ucs_memory_cpu_store_fence();
 
     return UCS_OK;
 }
