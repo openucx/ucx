@@ -220,6 +220,7 @@ uct_mm_ep_am_common_send(unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_t *ifa
 
     UCT_CHECK_AM_ID(am_id);
 
+retry:
     head = ep->fifo_ctl->head;
     /* check if there is room in the remote process's receive FIFO to write */
     if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
@@ -240,9 +241,9 @@ uct_mm_ep_am_common_send(unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_t *ifa
 
     status = uct_mm_ep_get_remote_elem(ep, head, &elem);
     if (status != UCS_OK) {
-        ucs_trace_poll("couldn't get an available FIFO element");
-        UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
-        return status;
+        ucs_assert(status == UCS_ERR_NO_RESOURCE);
+        ucs_trace_poll("couldn't get an available FIFO element. retrying");
+        goto retry;
     }
 
     if (is_short) {
