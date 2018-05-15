@@ -60,10 +60,10 @@ static inline uint64_t uct_cuda_ipc_rem_seg_hash(uct_cuda_ipc_rem_seg_t *seg)
     return (uint64_t) (hash_val % UCT_CUDA_IPC_HASH_SIZE);
 }
 
-static inline uint64_t uct_cuda_ipc_rem_seg_compare(uct_cuda_ipc_rem_seg_t *sg1,
+static inline int64_t uct_cuda_ipc_rem_seg_compare(uct_cuda_ipc_rem_seg_t *sg1,
                                                     uct_cuda_ipc_rem_seg_t *sg2)
 {
-    return (uint64_t) (memcmp((const void *) &sg1->ph, (const void *) &sg2->ph,
+    return (int64_t) (memcmp((const void *) &sg1->ph, (const void *) &sg2->ph,
                               sizeof(CUipcMemHandle)));
 }
 
