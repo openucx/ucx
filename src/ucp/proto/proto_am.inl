@@ -45,7 +45,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
     ucs_status_t status;
-    size_t max_middle;
+    size_t UCS_V_UNUSED max_middle;
     ssize_t packed_len;
     uct_ep_h uct_ep;
     size_t offset;
