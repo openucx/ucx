@@ -13,9 +13,14 @@
 #include <ucs/datastruct/sglib.h>
 #include <ucs/datastruct/sglib_wrapper.h>
 
+enum {
+    UCT_MM_EP_FLAG_IN_PENDING   =   UCS_BIT(1)
+};
 
 struct uct_mm_ep {
-    uct_base_ep_t       super;
+    uct_base_ep_t        super;
+
+    uint16_t             flags;
 
     /* Remote peer */
     uct_mm_fifo_ctl_t    *fifo_ctl;   /* pointer to the destination's ctl struct in the receive fifo */
