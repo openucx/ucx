@@ -337,6 +337,7 @@ ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
 
     /* check if resources became available */
     if (uct_mm_ep_has_tx_resources(ep)) {
+        ucs_assert(ucs_arbiter_group_is_empty(&ep->arb_group));
         return UCS_ERR_BUSY;
     }
 
@@ -361,8 +362,7 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
 
     /* update the local tail with its actual value from the remote peer
      * making sure that the pending sends would use the real tail value */
-    ucs_memory_cpu_load_fence();
-    ep->cached_tail = ep->fifo_ctl->tail;
+    uct_mm_ep_update_cached_tail(ep);
 
     if (!uct_mm_ep_has_tx_resources(ep)) {
         return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
