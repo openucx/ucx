@@ -90,9 +90,9 @@ bool is_inet_addr(const struct sockaddr* ifa_addr);
 
 
 /**
- * Check if the given interface is associated with a device.
+ * Check if the given network device is supported by rdmacm.
  */
-bool is_ib_netdev(const char *ifa_name);
+bool is_rdmacm_netdev(const char *ifa_name);
 
 
 /**
