@@ -36,17 +36,16 @@ ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
 
 static UCS_F_ALWAYS_INLINE
 ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
-                                   uint8_t am_id_middle, uint8_t am_id_last,
+                                   uint8_t am_id_middle,
                                    size_t hdr_size_middle,
                                    uct_pack_callback_t pack_first,
                                    uct_pack_callback_t pack_middle,
-                                   uct_pack_callback_t pack_last,
                                    int enable_am_bw)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
     ucs_status_t status;
-    size_t max_middle;
+    size_t UCS_V_UNUSED max_middle;
     ssize_t packed_len;
     uct_ep_h uct_ep;
     size_t offset;
@@ -65,20 +64,19 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             packed_len = uct_ep_am_bcopy(uct_ep, am_id_first, pack_first, req, 0);
             UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_bcopy_first", packed_len,
                                                    packed_len);
-        } else if (offset + max_middle < req->send.length) {
-            /* Middle */
+        } else {
+            ucs_assert(offset < req->send.length);
+            /* Middle or last */
             packed_len = uct_ep_am_bcopy(uct_ep, am_id_middle, pack_middle, req, 0);
             ucs_assertv((packed_len < 0) || (packed_len <= max_middle + hdr_size_middle),
                         "packed_len=%zd max_middle=%zu hdr_size_middle=%zu",
                         packed_len, max_middle, hdr_size_middle);
             UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_bcopy_middle",
                                                    packed_len, packed_len);
-        } else {
-            /* Last */
-            packed_len = uct_ep_am_bcopy(uct_ep, am_id_last, pack_last, req, 0);
-            UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_bcopy_last", packed_len,
-                                                   packed_len);
-            if (packed_len >= 0) {
+            ucs_assert((packed_len < 0) ||
+                       (offset + packed_len - hdr_size_middle <= req->send.length));
+            if ((packed_len > 0) && (offset + packed_len - hdr_size_middle == req->send.length)) {
+                /* Last */
                 return UCS_OK;
             }
         }
