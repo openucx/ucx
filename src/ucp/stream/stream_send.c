@@ -196,26 +196,11 @@ static size_t ucp_stream_pack_am_middle_dt(void *dest, void *arg)
     size_t              length;
 
     hdr->ep_ptr = ucp_request_get_dest_ep_ptr(req);
-    length      = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
+    length      = ucs_min(ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr),
+                          req->send.length - req->send.state.dt.offset);
     return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, req->send.datatype,
                                       UCT_MD_MEM_TYPE_HOST, hdr + 1, req->send.buffer,
                                       &req->send.state.dt, length);
-}
-
-static size_t ucp_stream_pack_am_last_dt(void *dest, void *arg)
-{
-    size_t              ret_length;
-    ucp_stream_am_hdr_t *hdr   = dest;
-    ucp_request_t       *req   = arg;
-    size_t              length = req->send.length - req->send.state.dt.offset;
-
-    hdr->ep_ptr = ucp_request_get_dest_ep_ptr(req);
-    ret_length  = ucp_dt_pack(req->send.ep->worker,  req->send.datatype,
-                              UCT_MD_MEM_TYPE_HOST, hdr + 1, req->send.buffer,
-                              &req->send.state.dt, length);
-    ucs_assertv(ret_length == length, "length=%zu, max_length=%zu",
-                ret_length, length);
-    return sizeof(*hdr) + ret_length;
 }
 
 static ucs_status_t ucp_stream_bcopy_multi(uct_pending_req_t *self)
@@ -223,11 +208,9 @@ static ucs_status_t ucp_stream_bcopy_multi(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_bcopy_multi(self,
                                                 UCP_AM_ID_STREAM_DATA,
                                                 UCP_AM_ID_STREAM_DATA,
-                                                UCP_AM_ID_STREAM_DATA,
                                                 sizeof(ucp_stream_am_hdr_t),
                                                 ucp_stream_pack_am_first_dt,
-                                                ucp_stream_pack_am_middle_dt,
-                                                ucp_stream_pack_am_last_dt, 0);
+                                                ucp_stream_pack_am_middle_dt, 0);
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
         ucp_request_send_generic_dt_finish(req);

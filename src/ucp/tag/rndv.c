@@ -623,27 +623,13 @@ static size_t ucp_rndv_pack_data(void *dest, void *arg)
 {
     ucp_rndv_data_hdr_t *hdr = dest;
     ucp_request_t *sreq = arg;
-    size_t length;
-
-    hdr->rreq_ptr = sreq->send.tag.rreq_ptr;
-    hdr->offset   = sreq->send.state.dt.offset;
-    length        = ucp_ep_get_max_bcopy(sreq->send.ep, sreq->send.lane) - sizeof(*hdr);
-
-    return sizeof(*hdr) + ucp_dt_pack(sreq->send.ep->worker, sreq->send.datatype,
-                                      sreq->send.mem_type, hdr + 1, sreq->send.buffer,
-                                      &sreq->send.state.dt, length);
-}
-
-static size_t ucp_rndv_pack_data_last(void *dest, void *arg)
-{
-    ucp_rndv_data_hdr_t *hdr = dest;
-    ucp_request_t *sreq = arg;
     size_t length, offset;
 
     offset        = sreq->send.state.dt.offset;
     hdr->rreq_ptr = sreq->send.tag.rreq_ptr;
-    length        = sreq->send.length - offset;
     hdr->offset   = offset;
+    length        = ucs_min(sreq->send.length - offset,
+                            ucp_ep_get_max_bcopy(sreq->send.ep, sreq->send.lane) - sizeof(*hdr));
 
     return sizeof(*hdr) + ucp_dt_pack(sreq->send.ep->worker, sreq->send.datatype,
                                       sreq->send.mem_type, hdr + 1, sreq->send.buffer,
@@ -662,16 +648,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
     if (sreq->send.length <= ucp_ep_config(ep)->am.max_bcopy - sizeof(ucp_rndv_data_hdr_t)) {
         /* send a single bcopy message */
         status = ucp_do_am_bcopy_single(self, UCP_AM_ID_RNDV_DATA,
-                                        ucp_rndv_pack_data_last);
+                                        ucp_rndv_pack_data);
     } else {
-        /* send multiple bcopy messages (fragments of the original send message) */
         status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_RNDV_DATA,
-                                       UCP_AM_ID_RNDV_DATA,
                                        UCP_AM_ID_RNDV_DATA,
                                        sizeof(ucp_rndv_data_hdr_t),
                                        ucp_rndv_pack_data,
-                                       ucp_rndv_pack_data,
-                                       ucp_rndv_pack_data_last, 1);
+                                       ucp_rndv_pack_data, 1);
     }
     if (status == UCS_OK) {
         ucp_rndv_complete_send(sreq);
