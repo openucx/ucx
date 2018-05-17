@@ -167,7 +167,7 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
 
 #if IBV_EXP_MP_RQ
     if (UCT_RC_IFACE_MP_ENABLED(rc_iface)) {
-        kh_init_inplace(uct_mlx5_mp_data_set, &iface->tm.data_set);
+        kh_init_inplace(uct_mlx5_mp_data_hash, &iface->tm.data_hash);
         status = uct_iface_mpool_init(&rc_iface->super.super,
                                       &iface->tm.tx_mp,
                                       sizeof(uct_rc_iface_send_desc_t) +
@@ -181,8 +181,17 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
         if (status != UCS_OK) {
             return status;
         }
-    }
+
+        /* TODO: define better formula */
+        iface->tm.max_eager_zcopy = (rc_iface->super.config.seg_size*
+                                     (rc_iface->rx.srq.available + rc_iface->rx.srq.quota)/
+                                      128) - sizeof(struct ibv_exp_tmh);
+    } else
 #endif
+    {
+        iface->tm.max_eager_zcopy = rc_iface->super.config.seg_size -
+                                    sizeof(struct ibv_exp_tmh);
+    }
 
     status = uct_rc_iface_tag_init(rc_iface, rc_config, srq_init_attr,
                                    rndv_hdr_len, 0);
@@ -259,7 +268,8 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface,
         uct_rc_iface_tag_cleanup(rc_iface);
 
         if (UCT_RC_IFACE_MP_ENABLED(rc_iface)) {
-            kh_destroy_inplace(uct_mlx5_mp_data_set, &iface->tm.data_set);
+            kh_destroy_inplace(uct_mlx5_mp_data_hash, &iface->tm.data_hash);
+            ucs_mpool_cleanup(&iface->tm.tx_mp, 1);
         }
     }
 #endif
@@ -502,13 +512,15 @@ void uct_rc_mlx5_iface_common_cleanup(uct_rc_mlx5_iface_common_t *iface)
     uct_rc_mlx5_iface_common_dm_cleanup(iface);
 }
 
-void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *iface, uct_iface_attr_t *iface_attr)
+void uct_rc_mlx5_iface_common_query(uct_rc_mlx5_iface_common_t *iface,
+                                    uct_rc_iface_t *rc_iface,
+                                    uct_iface_attr_t *iface_attr)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uct_ib_device_t *dev = uct_ib_iface_device(&rc_iface->super);
 
     /* Atomics */
-    iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
-                                    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM;
+    iface_attr->cap.flags |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
+                             UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM;
 
     if (uct_ib_atomic_is_supported(dev, 0, sizeof(uint64_t))) {
         iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
@@ -546,6 +558,16 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *iface, uct_iface_attr_t *ifa
     /* Software overhead */
     iface_attr->overhead          = 40e-9;
 
+    /* Redefine eager thresholds if MP is supported */
+    if (UCT_RC_IFACE_MP_ENABLED(rc_iface)) {
+#if IBV_EXP_HW_TM
+        ucs_assert(UCT_RC_IFACE_TM_ENABLED(rc_iface));
+        iface_attr->cap.tag.eager.max_bcopy = UCT_RC_MLX5_TAG_BCOPY_MAX -
+                                              sizeof(struct ibv_exp_tmh);
+
+        iface_attr->cap.tag.eager.max_zcopy = iface->tm.max_eager_zcopy;
+#endif
+    }
 }
 
 void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,

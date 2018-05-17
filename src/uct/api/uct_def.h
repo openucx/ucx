@@ -351,7 +351,12 @@ typedef ssize_t (*uct_sockaddr_priv_pack_callback_t)(void *arg,
  * @param [in]     desc    Points to the received descriptor, at the beginning of
  *                         the user-defined rx_headroom.
  * @param [in]     stag    Tag from sender.
- * @param [inout]  imm     Immediate data from sender.
+ * @param [in]     imm     Immediate data from sender.
+ * @param [inout]  context User context, which is relevant for multi-packet
+ *                         messages only. User should initizliaze context value
+ *                         when the first part of message is received. UCT, in
+ *                         turn, will provide this value for all subsequent parts
+ *                         of the message.
  *
  * @warning If the user became the owner of the @a desc (by returning
  *          @ref UCS_INPROGRESS) the descriptor must be released later by

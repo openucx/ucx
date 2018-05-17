@@ -1706,7 +1706,6 @@ UCT_INLINE_API ucs_status_t uct_iface_fence(uct_iface_h iface, unsigned flags)
 UCT_INLINE_API void uct_iface_release_desc(void *desc)
 {
     uct_recv_desc_t *release_desc = uct_recv_desc(desc);
-    //ucs_warn("Release desc %p  rele_desc %p ", desc, release_desc);
     release_desc->cb(release_desc, desc);
 }
 

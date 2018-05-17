@@ -347,7 +347,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
             hdr = ucp_tag_eager_offload_hdr(tl_flags, data,length, hdr_len);
             s_hdr = (ucp_eager_sync_hdr_t*)hdr;
             s_hdr->req.reqptr      = 0ul;
-            /*TODO: sync eager support! (s_hdr->req.sender_uuid = imm) */
+            s_hdr->req.ep_ptr      = imm;
             s_hdr->super.super.tag = stag;
             return ucp_eager_tagged_handler(worker, hdr, length + hdr_len,
                                     tl_flags, flags, hdr_len, hdr_len);
@@ -357,7 +357,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
             hdr = ucp_tag_eager_offload_hdr(tl_flags, data,length, hdr_len);
             sf_hdr =(ucp_eager_sync_first_hdr_t*)hdr;
             sf_hdr->req.reqptr      = 0ul;
-            /*TODO: sync eager support! (s_hdr->req.sender_uuid = imm) */
+            sf_hdr->req.ep_ptr      = imm;
         }
     } else {
         hdr_len = sizeof(ucp_eager_first_hdr_t);
@@ -366,7 +366,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
     }
     f_hdr                  = (ucp_eager_first_hdr_t*)hdr;
     f_hdr->super.super.tag = stag;
-    f_hdr->total_len       = SIZE_MAX;
+    f_hdr->total_len       = SIZE_MAX; /* Total len is not known yet */
     f_hdr->msg_id          = *context;
 
     return ucp_eager_tagged_handler(worker, hdr, length + hdr_len,

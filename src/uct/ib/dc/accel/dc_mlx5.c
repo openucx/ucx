@@ -143,7 +143,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
         return status;
     }
 
-    uct_rc_mlx5_iface_common_query(&iface->super.super.super, iface_attr);
+    uct_rc_mlx5_iface_common_query(&iface->mlx5_common, &iface->super.super, iface_attr);
     return UCS_OK;
 }
 

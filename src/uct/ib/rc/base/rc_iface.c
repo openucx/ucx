@@ -617,8 +617,8 @@ static void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
 
 out_tm_disabled:
 #endif
-    *rx_cq_len    = config->super.rx.queue_len;
-    *max_seg_size = SIZE_MAX;
+    *rx_cq_len          = config->super.rx.queue_len;
+    *max_seg_size       = SIZE_MAX;
 }
 
 ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
