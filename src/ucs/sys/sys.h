@@ -164,9 +164,9 @@ size_t ucs_get_page_size();
 
 
 /**
- * @return Huge page size on the system.
+ * @return Huge page size on the system, or -1 if unsupported.
  */
-size_t ucs_get_huge_page_size();
+ssize_t ucs_get_huge_page_size();
 
 
 /**
