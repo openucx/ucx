@@ -66,7 +66,8 @@ void *uct_cuda_ipc_ep_attach_rem_seg(uct_cuda_ipc_ep_t *ep,
     if (rem_seg == NULL) {
         rem_seg = ucs_malloc(sizeof(*rem_seg), "rem_seg");
         if (rem_seg == NULL) {
-            ucs_fatal("Failed to allocate memory for a remote segment. %m");
+            ucs_error("failed to allocate memory for a remote segment. %m");
+            return NULL;
         }
 
         rem_seg->ph      = rkey->ph;
@@ -76,7 +77,6 @@ void *uct_cuda_ipc_ep_attach_rem_seg(uct_cuda_ipc_ep_t *ep,
             UCT_CUDADRV_FUNC(cuIpcOpenMemHandle((CUdeviceptr *)&rem_seg->d_bptr,
                                                 rkey->ph, cuda_ipc_mh_flags));
         if (UCS_OK != status) {
-            ucs_error("cuIpcOpenMemHandle failed\n");
             return NULL;
         }
         rem_seg->b_len = rkey->b_rem_len;

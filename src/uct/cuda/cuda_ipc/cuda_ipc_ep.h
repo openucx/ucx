@@ -48,23 +48,23 @@ ucs_status_t uct_cuda_ipc_ep_put_zcopy(uct_ep_h tl_ep,
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp);
 
-static inline uint64_t uct_cuda_ipc_rem_seg_hash(uct_cuda_ipc_rem_seg_t *seg)
+static inline int uct_cuda_ipc_rem_seg_hash(uct_cuda_ipc_rem_seg_t *seg)
 {
-    uint64_t hash_val = 7;
+    int hash_val = 7;
     int i;
 
     for (i = 0; i < sizeof(seg->ph); i++) {
         hash_val = hash_val*31 + seg->ph.reserved[i];
     }
 
-    return (uint64_t) (hash_val % UCT_CUDA_IPC_HASH_SIZE);
+    return (hash_val % UCT_CUDA_IPC_HASH_SIZE);
 }
 
-static inline int64_t uct_cuda_ipc_rem_seg_compare(uct_cuda_ipc_rem_seg_t *sg1,
-                                                    uct_cuda_ipc_rem_seg_t *sg2)
+static inline int uct_cuda_ipc_rem_seg_compare(uct_cuda_ipc_rem_seg_t *sg1,
+                                               uct_cuda_ipc_rem_seg_t *sg2)
 {
-    return (int64_t) (memcmp((const void *) &sg1->ph, (const void *) &sg2->ph,
-                              sizeof(CUipcMemHandle)));
+    return (int) (memcmp((const void *) &sg1->ph, (const void *) &sg2->ph,
+                         sizeof(CUipcMemHandle)));
 }
 
 SGLIB_DEFINE_LIST_PROTOTYPES(uct_cuda_ipc_rem_seg_t,
