@@ -328,7 +328,8 @@ public:
     }
 
     static ucs_status_t unexp_eager(void *arg, void *data, size_t length,
-                                    unsigned flags, uct_tag_t stag, uint64_t imm)
+                                    unsigned flags, uct_tag_t stag, uint64_t imm,
+                                    uint64_t *context)
     {
         recv_ctx *user_ctx = reinterpret_cast<recv_ctx*>(imm);
         user_ctx->unexp    = true;

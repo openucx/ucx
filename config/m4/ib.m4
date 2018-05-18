@@ -74,6 +74,15 @@ AC_ARG_WITH([ib-hw-tm],
 
 
 #
+# MP (IB Multi-Packet messages) support
+#
+AC_ARG_WITH([ib-mp],
+            [AC_HELP_STRING([--with-ib-mp], [Compile with IB Multi-Packet support])],
+            [],
+            [with_ib_hw_mp=yes])
+
+
+#
 # DM Support
 #
 AC_ARG_WITH([dm],
@@ -300,6 +309,16 @@ AS_IF([test "x$with_ib" == xyes],
                              [AC_DEFINE([IBV_EXP_HW_TM_DC], 1, [DC Tag Matching support])],
                              [], [#include <infiniband/verbs_exp.h>])
            ])
+
+       # Multi-Packet support
+       AS_IF([test "x$with_ib_mp" != xno],
+           [AC_CHECK_MEMBER([struct ibv_exp_device_attr.mp_rq_caps], [], [with_ib_mp=no],
+                            [[#include <infiniband/verbs_exp.h>]])
+           ])
+       AS_IF([test "x$with_ib_mp" != xno],
+           [AC_DEFINE([IBV_EXP_MP_RQ], 1, [IB Multi-Packet support])
+           ])
+
 
        # Device Memory support
        AS_IF([test "x$with_dm" != xno],

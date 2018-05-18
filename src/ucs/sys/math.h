@@ -83,10 +83,7 @@ BEGIN_C_DECLS
 #define ucs_div_round_up(_n, _d) \
     (((_n) + (_d) - 1) / (_d))
 
-static inline double ucs_log2(double x)
-{
-    return log(x) / log(2.0);
-}
+#define ucs_log2(_x) (log(_x) / log((typeof(_x))2))
 
 /**
  * Convert flags without a branch

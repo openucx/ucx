@@ -143,7 +143,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
         return status;
     }
 
-    uct_rc_mlx5_iface_common_query(&iface->super.super.super, iface_attr);
+    uct_rc_mlx5_iface_common_query(&iface->mlx5_common, &iface->super.super, iface_attr);
     return UCS_OK;
 }
 
@@ -712,7 +712,9 @@ static unsigned uct_dc_mlx5_iface_progress(void *arg)
     unsigned count;
 
     count = uct_rc_mlx5_iface_common_poll_rx(&iface->mlx5_common,
-                                             &iface->super.super, 0);
+                                             &iface->super.super,
+                                             UCT_RC_MLX5_IFACE_NO_TM,
+                                             IBV_EXP_QPT_DC_INI);
     if (count > 0) {
         return count;
     }
@@ -923,7 +925,9 @@ static unsigned uct_dc_mlx5_iface_progress_tm(void *arg)
     unsigned count;
 
     count = uct_rc_mlx5_iface_common_poll_rx(&iface->mlx5_common,
-                                             &iface->super.super, 1);
+                                             &iface->super.super,
+                                             UCT_RC_MLX5_IFACE_TM,
+                                             IBV_EXP_QPT_DC_INI);
     if (count > 0) {
         return count;
     }

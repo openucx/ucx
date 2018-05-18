@@ -434,5 +434,5 @@ static inline uct_ib_mlx5_srq_seg_t *
 uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
 {
     ucs_assert(index <= srq->mask);
-    return srq->buf + index * UCT_IB_MLX5_SRQ_STRIDE;
+    return srq->buf + index * srq->stride;
 }

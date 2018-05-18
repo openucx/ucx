@@ -29,8 +29,8 @@
      UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + _length, 0, _max_inline, "am_short");
 
 #define UCT_RC_CHECK_ZCOPY_DATA(_header_length, _length, _seg_size) \
-    UCT_CHECK_LENGTH(_header_length + _length, 0, _seg_size, "am_zcopy payload"); \
-    UCT_CHECK_LENGTH(_header_length + _length, 0, UCT_IB_MAX_MESSAGE_SIZE, "am_zcopy ib max message");
+    UCT_CHECK_LENGTH(_header_length + _length, 0, _seg_size, "zcopy payload"); \
+    UCT_CHECK_LENGTH(_header_length + _length, 0, UCT_IB_MAX_MESSAGE_SIZE, "zcopy ib max message");
 
 #define UCT_RC_CHECK_AM_ZCOPY(_id, _header_length, _length, _desc_size, _seg_size) \
     UCT_CHECK_AM_ID(_id); \
@@ -183,6 +183,9 @@ typedef struct uct_rc_srq {
     struct ibv_srq           *srq;
     unsigned                 available;
     unsigned                 quota;
+    unsigned                 sge_num; /* Number of sg elements in a single WQE.
+                                         Can be more than one when
+                                         Multi-Packet SRQ is configured. */
 } uct_rc_srq_t;
 
 
@@ -242,6 +245,7 @@ struct uct_rc_iface {
         uint16_t                     unexpected_cnt;
         uint16_t                     cmd_qp_len;
         uint8_t                      enabled;
+        uint8_t                      mp_enabled;
         struct {
             void                     *arg; /* User defined arg */
             uct_tag_unexp_eager_cb_t cb;   /* Callback for unexpected eager messages */
@@ -304,7 +308,7 @@ struct uct_rc_iface {
 };
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, const uct_rc_iface_config_t*,
-                  unsigned, unsigned, int, uint32_t)
+                  unsigned, unsigned, int, int, uint32_t)
 
 
 struct uct_rc_iface_send_op {
@@ -344,6 +348,8 @@ typedef struct uct_rc_am_short_hdr {
 #if IBV_EXP_HW_TM
 
 #  define UCT_RC_IFACE_TM_ENABLED(_iface) (_iface)->tm.enabled
+
+#  define UCT_RC_IFACE_MP_ENABLED(_iface) (_iface)->tm.mp_enabled
 
 /* TMH can carry 2 bytes of data in its reserved filed */
 #  define UCT_RC_IFACE_TMH_PRIV_LEN       ucs_field_sizeof(uct_rc_iface_tmh_priv_data_t, \
@@ -479,6 +485,8 @@ uct_rc_iface_handle_rndv_fin(uct_rc_iface_t *iface, uint32_t app_ctx)
 #else
 
 #  define UCT_RC_IFACE_TM_ENABLED(_iface) 0
+
+#  define UCT_RC_IFACE_MP_ENABLED(_iface) 0
 
 #endif
 

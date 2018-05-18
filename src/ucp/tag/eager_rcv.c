@@ -105,7 +105,7 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
             req->recv.tag.remaining   = eagerf_hdr->total_len;
 
             status = ucp_tag_request_process_recv_data(req, data + hdr_len,
-                                                       recv_len, 0, 0);
+                                                       recv_len, 0, 0, flags);
             ucs_assert(status == UCS_INPROGRESS);
 
             ucp_tag_frag_list_process_queue(&worker->tm, req, eagerf_hdr->msg_id
@@ -143,30 +143,20 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_first_handler,
                                     sizeof(ucp_eager_first_hdr_t), 0);
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
-                 (arg, data, length, am_flags),
-                 void *arg, void *data, size_t length, unsigned am_flags)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_eager_common_middle_handler(ucp_worker_t *worker, ucp_tag_frag_match_t *matchq,
+                                khiter_t iter, void *data, size_t length,
+                                unsigned tl_flags, uint16_t flags)
 {
-    ucp_worker_h worker         = arg;
     ucp_eager_middle_hdr_t *hdr = data;
-    ucp_tag_frag_match_t *matchq;
     ucp_recv_desc_t *rdesc;
     ucp_request_t *req;
     ucs_status_t status;
     size_t recv_len;
-    khiter_t iter;
-    int ret;
-
-    iter   = kh_put(ucp_tag_frag_hash, &worker->tm.frag_hash, hdr->msg_id, &ret);
-    matchq = &kh_value(&worker->tm.frag_hash, iter);
-    if (ret != 0) {
-        /* initialize a previously empty hash entry */
-        ucp_tag_frag_match_init_unexp(matchq);
-    }
 
     if (ucp_tag_frag_match_is_unexp(matchq)) {
         /* add new received descriptor to the queue */
-        status = ucp_recv_desc_init(worker, data, length, 0, am_flags,
+        status = ucp_recv_desc_init(worker, data, length, 0, tl_flags,
                                     sizeof(*hdr), UCP_RECV_DESC_FLAG_EAGER, 0,
                                     &rdesc);
         if (!UCS_STATUS_IS_ERR(status)) {
@@ -179,7 +169,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
 
         UCP_WORKER_STAT_EAGER_CHUNK(worker, EXP);
         status = ucp_tag_request_process_recv_data(req, data + sizeof(*hdr),
-                                                   recv_len, hdr->offset, 0);
+                                                   recv_len, hdr->offset, 0,
+                                                   flags);
         if (status != UCS_INPROGRESS) {
             /* request completed, delete hash entry */
             kh_del(ucp_tag_frag_hash, &worker->tm.frag_hash, iter);
@@ -189,6 +180,27 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
     }
 
     return status;
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
+                 (arg, data, length, am_flags),
+                 void *arg, void *data, size_t length, unsigned am_flags)
+{
+    ucp_worker_h worker         = arg;
+    ucp_eager_middle_hdr_t *hdr = data;
+    ucp_tag_frag_match_t *matchq;
+    khiter_t iter;
+    int ret;
+
+    iter   = kh_put(ucp_tag_frag_hash, &worker->tm.frag_hash, hdr->msg_id, &ret);
+    matchq = &kh_value(&worker->tm.frag_hash, iter);
+    if (ret != 0) {
+        /* initialize a previously empty hash entry */
+        ucp_tag_frag_match_init_unexp(matchq);
+    }
+
+    return ucp_eager_common_middle_handler(worker, matchq, iter, data, length,
+                                           am_flags, UCP_RECV_DESC_FLAG_EAGER);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_only_handler,
@@ -248,45 +260,116 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_ack_handler,
     return UCS_OK;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
-                 (arg, data, length, tl_flags, stag, imm),
-                 void *arg, void *data, size_t length, unsigned tl_flags,
-                 uct_tag_t stag, uint64_t imm)
-{
-    /* Align data with AM protocol. We should add tag before the data. */
-    ucp_worker_iface_t *wiface = arg;
-    uint16_t flags             = UCP_RECV_DESC_FLAG_EAGER |
-                                 UCP_RECV_DESC_FLAG_EAGER_ONLY |
-                                 UCP_RECV_DESC_FLAG_EAGER_OFFLOAD;
-    ucp_eager_sync_hdr_t *hdr;
-    int hdr_len;
+#define ucp_tag_eager_offload_hdr(_flags, _data, _length, _hdr_len) \
+    ({ \
+         void *hdr; \
+         do { \
+             if (ucs_unlikely((_flags) & UCT_CB_PARAM_FLAG_DESC)) { \
+                 hdr = UCS_PTR_BYTE_OFFSET(_data, -(_hdr_len)); \
+             } else { /* Can not shift back, no headroom */ \
+                 hdr = ucs_alloca(_length + _hdr_len); \
+                 memcpy(UCS_PTR_BYTE_OFFSET(hdr, _hdr_len), _data, _length); \
+             } \
+         } while(0); \
+         hdr; \
+    })
 
-    UCP_WORKER_STAT_TAG_OFFLOAD(wiface->worker, RX_UNEXP_EGR);
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
+                 (arg, data, length, tl_flags, stag, imm, context),
+                 void *arg, void *data, size_t length, unsigned tl_flags,
+                 uct_tag_t stag, uint64_t imm, uint64_t *context)
+{
+    ucp_worker_iface_t *wiface = arg;
+    ucp_worker_t       *worker = wiface->worker;
+    uint16_t flags             = UCP_RECV_DESC_FLAG_EAGER |
+                                 UCP_RECV_DESC_FLAG_EAGER_OFFLOAD;
+    ucp_eager_first_hdr_t      *f_hdr;
+    ucp_eager_sync_hdr_t       *s_hdr;
+    ucp_eager_sync_first_hdr_t *sf_hdr;
+    ucp_eager_middle_hdr_t     *m_hdr;
+    khiter_t iter;
+    ucp_tag_frag_match_t *frag;
+    void *hdr;
+    int hdr_len;
+    int ret;
+
+    UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_EGR);
 
     ucp_tag_offload_unexp(wiface, stag);
 
-    if (ucs_likely(!imm)) {
-        return ucp_eager_offload_handler(wiface->worker, data, length, tl_flags,
-                                         flags, stag);
+    /* Fast path: non-sync eager-only messages */
+    if (ucs_likely(!imm && (tl_flags & UCT_CB_PARAM_FLAG_FIRST) &&
+                   !(tl_flags & UCT_CB_PARAM_FLAG_MORE))) {
+        return ucp_eager_offload_handler(worker, data, length, tl_flags,
+                                         flags | UCP_RECV_DESC_FLAG_EAGER_LAST |
+                                         UCP_RECV_DESC_FLAG_EAGER_ONLY, stag);
     }
 
-    /* It is a sync send, imm data contains sender uuid */
-    hdr_len = sizeof(ucp_eager_sync_hdr_t);
-
-    if (ucs_unlikely(tl_flags & UCT_CB_PARAM_FLAG_DESC)) {
-        hdr = (ucp_eager_sync_hdr_t*)(UCS_PTR_BYTE_OFFSET(data, -hdr_len));
+    if (!(tl_flags & UCT_CB_PARAM_FLAG_FIRST)) {
+        /* Either middle or last fragment.
+         * The corresponding entry must be present in hash. */
+        iter = kh_get(ucp_tag_frag_hash, &worker->tm.frag_hash, *context);
+        ucs_assert(iter != kh_end(&worker->tm.frag_hash));
+        frag = &kh_val(&worker->tm.frag_hash, iter);
+        m_hdr = (ucp_eager_middle_hdr_t*)ucp_tag_eager_offload_hdr(tl_flags, data,
+                                                                   length,
+                                                                   sizeof(*m_hdr));
+        m_hdr->msg_id   = *context;
+        m_hdr->offset   = frag->offset;
+        frag->offset += length;
+        if (!(tl_flags & UCT_CB_PARAM_FLAG_MORE)) {
+            flags |= UCP_RECV_DESC_FLAG_EAGER_LAST;
+        }
+        return ucp_eager_common_middle_handler(worker, frag, iter, m_hdr,
+                                               length + sizeof(ucp_eager_middle_hdr_t),
+                                               tl_flags, flags);
+    } else if (tl_flags & UCT_CB_PARAM_FLAG_MORE) {
+        /* First part of the fragmented message. Pass message ID back to UCT,
+         * so it will be provided with the rest of message fragments. */
+        *context     = worker->tm.am.message_id++;
+        iter         = kh_put(ucp_tag_frag_hash, &worker->tm.frag_hash, *context, &ret);
+        ucs_assert(ret != 0);
+        frag         = &kh_value(&worker->tm.frag_hash, iter);
+        frag->offset = length;
+        ucp_tag_frag_match_init_unexp(frag);
     } else {
-        /* Can not shift back, no headroom */
-        hdr = ucs_alloca(length + hdr_len);
-        memcpy(UCS_PTR_BYTE_OFFSET(hdr, hdr_len), data, length);
+        /* Eager only packet */
+        flags |= UCP_RECV_DESC_FLAG_EAGER_ONLY | UCP_RECV_DESC_FLAG_EAGER_LAST;
     }
 
-    hdr->super.super.tag = stag;
-    hdr->req.reqptr      = 0ul;
-    hdr->req.ep_ptr      = imm;
-    flags               |= UCP_RECV_DESC_FLAG_EAGER_SYNC;
+    /* Can be eager first, sync eager first or sync eager only message */
+    if (ucs_unlikely(imm)) {
+        flags |= UCP_RECV_DESC_FLAG_EAGER_SYNC;
+        if (!(tl_flags & UCT_CB_PARAM_FLAG_MORE)) {
+            /* Sync eager only message */
+            hdr_len = sizeof(ucp_eager_sync_hdr_t);
+            hdr = ucp_tag_eager_offload_hdr(tl_flags, data,length, hdr_len);
+            s_hdr = (ucp_eager_sync_hdr_t*)hdr;
+            s_hdr->req.reqptr      = 0ul;
+            s_hdr->req.ep_ptr      = imm;
+            s_hdr->super.super.tag = stag;
+            return ucp_eager_tagged_handler(worker, hdr, length + hdr_len,
+                                    tl_flags, flags, hdr_len, hdr_len);
 
-    return ucp_eager_tagged_handler(wiface->worker, hdr, length + hdr_len,
+        } else {
+            hdr_len = sizeof(ucp_eager_sync_first_hdr_t);
+            hdr = ucp_tag_eager_offload_hdr(tl_flags, data,length, hdr_len);
+            sf_hdr =(ucp_eager_sync_first_hdr_t*)hdr;
+            sf_hdr->req.reqptr      = 0ul;
+            sf_hdr->req.ep_ptr      = imm;
+        }
+    } else {
+        hdr_len = sizeof(ucp_eager_first_hdr_t);
+        hdr = ucp_tag_eager_offload_hdr(tl_flags, data, length, hdr_len);
+        f_hdr =(ucp_eager_first_hdr_t*)hdr;
+    }
+    f_hdr                  = (ucp_eager_first_hdr_t*)hdr;
+    f_hdr->super.super.tag = stag;
+    f_hdr->total_len       = SIZE_MAX; /* Total len is not known yet */
+    f_hdr->msg_id          = *context;
+
+    return ucp_eager_tagged_handler(worker, hdr, length + hdr_len,
                                     tl_flags, flags, hdr_len, hdr_len);
 }
 

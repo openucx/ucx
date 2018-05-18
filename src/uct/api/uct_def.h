@@ -61,7 +61,9 @@ enum uct_cb_param_flags {
        @endverbatim
      *
      */
-    UCT_CB_PARAM_FLAG_DESC = UCS_BIT(0)
+    UCT_CB_PARAM_FLAG_DESC  = UCS_BIT(0),
+    UCT_CB_PARAM_FLAG_FIRST = UCS_BIT(1),
+    UCT_CB_PARAM_FLAG_MORE  = UCS_BIT(2)
 };
 
 /**
@@ -343,13 +345,18 @@ typedef ssize_t (*uct_sockaddr_priv_pack_callback_t)(void *arg,
  *
  * @note It is allowed to call other communication routines from the callback.
  *
- * @param [in]  arg     User-defined argument
- * @param [in]  data    Points to the received unexpected data.
- * @param [in]  length  Length of data.
- * @param [in]  desc    Points to the received descriptor, at the beginning of
- *                      the user-defined rx_headroom.
- * @param [in]  stag    Tag from sender.
- * @param [in]  imm     Immediate data from sender.
+ * @param [in]     arg     User-defined argument
+ * @param [in]     data    Points to the received unexpected data.
+ * @param [in]     length  Length of data.
+ * @param [in]     desc    Points to the received descriptor, at the beginning of
+ *                         the user-defined rx_headroom.
+ * @param [in]     stag    Tag from sender.
+ * @param [in]     imm     Immediate data from sender.
+ * @param [inout]  context User context, which is relevant for multi-packet
+ *                         messages only. User should initizliaze context value
+ *                         when the first part of message is received. UCT, in
+ *                         turn, will provide this value for all subsequent parts
+ *                         of the message.
  *
  * @warning If the user became the owner of the @a desc (by returning
  *          @ref UCS_INPROGRESS) the descriptor must be released later by
@@ -362,7 +369,8 @@ typedef ssize_t (*uct_sockaddr_priv_pack_callback_t)(void *arg,
  */
 typedef ucs_status_t (*uct_tag_unexp_eager_cb_t)(void *arg, void *data,
                                                  size_t length, unsigned flags,
-                                                 uct_tag_t stag, uint64_t imm);
+                                                 uct_tag_t stag, uint64_t imm,
+                                                 uint64_t *context);
 
 
 /**

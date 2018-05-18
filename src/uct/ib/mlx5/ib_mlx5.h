@@ -87,9 +87,6 @@ struct mlx5_grh_av {
 #define UCT_IB_MLX5_PUT_MAX_SHORT(_av_size) \
     (UCT_IB_MLX5_AM_MAX_SHORT(_av_size) - sizeof(struct mlx5_wqe_raddr_seg))
 
-#define UCT_IB_MLX5_SRQ_STRIDE   (sizeof(struct mlx5_wqe_srq_next_seg) + \
-                                  sizeof(struct mlx5_wqe_data_seg))
-
 
 /* Shared receive queue */
 typedef struct uct_ib_mlx5_srq {
@@ -100,6 +97,8 @@ typedef struct uct_ib_mlx5_srq {
     uint16_t           sw_pi;      /* what is posted to hw */
     uint16_t           mask;
     uint16_t           tail;       /* tail in the driver */
+    uint16_t           stride;     /* space occupied by one WQE */
+    uint16_t           sge_num;    /* Number of sges in one WQE */
 } uct_ib_mlx5_srq_t;
 
 
@@ -170,8 +169,11 @@ typedef struct uct_ib_mlx5_base_av {
  * SRQ segment
  *
  * We add some SW book-keeping information in the unused HW fields:
- *  - next_hole - points to the next out-of-order completed segment
- *  - desc      - the receive descriptor.
+ *  - strides      - Number of available strides in this WQE. When it is 0,
+ *                   this segment can be reposted to the HW. Relevant for
+ *                   Multi-Packet SRQ only.
+ *  - free         - points to the next out-of-order completed segment.
+ *  - desc         - the receive descriptor.
  *
  */
 typedef struct uct_rc_mlx5_srq_seg {
@@ -181,12 +183,13 @@ typedef struct uct_rc_mlx5_srq_seg {
             uint8_t                    rsvd0[2];
             uint16_t                   next_wqe_index; /* Network byte order */
             uint8_t                    signature;
-            uint8_t                    rsvd1[2];
+            uint8_t                    rsvd1[1];
+            uint8_t                    strides;
             uint8_t                    free;           /* Released but not posted */
             uct_ib_iface_recv_desc_t   *desc;          /* Host byte order */
         } srq;
     };
-    struct mlx5_wqe_data_seg           dptr;
+    struct mlx5_wqe_data_seg           dptr[0];
 } uct_ib_mlx5_srq_seg_t;
 
 
@@ -269,7 +272,7 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
  * Initialize srq structure.
  */
 ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
-                                  size_t sg_byte_count);
+                                  size_t sg_byte_count, uint16_t sge_num);
 void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
 
 

@@ -249,7 +249,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &ops->super, md, worker, params,
                               &config->super, rx_priv_len,
-                              sizeof(uct_dc_fc_request_t), tm_cap_bit,
+                              sizeof(uct_dc_fc_request_t), tm_cap_bit, 0,
                               res_domain_key);
     if (config->ndci < 1) {
         ucs_error("dc interface must have at least 1 dci (requested: %d)",

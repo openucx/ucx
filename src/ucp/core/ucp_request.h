@@ -70,7 +70,9 @@ enum {
     UCP_RECV_DESC_FLAG_EAGER_ONLY     = UCS_BIT(2), /* Eager tag message with single fragment */
     UCP_RECV_DESC_FLAG_EAGER_SYNC     = UCS_BIT(3), /* Eager tag message which requires reply */
     UCP_RECV_DESC_FLAG_EAGER_OFFLOAD  = UCS_BIT(4), /* Eager tag from offload */
-    UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(5)  /* Rendezvous request */
+    UCP_RECV_DESC_FLAG_EAGER_LAST     = UCS_BIT(5), /* Last fragment of eager tag message.
+                                                       Used by offload protocol  */
+    UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(6)  /* Rendezvous request */
 };
 
 
@@ -216,6 +218,8 @@ struct ucp_request {
                     ucp_tag_recv_info_t     info;     /* Completion info to fill */
                     ucp_mem_desc_t          *rdesc;   /* Offload bounce buffer */
                     ssize_t                 remaining; /* How much more data to be received */
+                    void                    *gen_buf;
+
                     ucp_worker_iface_t      *wiface;  /* Cached iface this request
                                                          is received on. Used in 
                                                          tag offload expected callbacks*/
