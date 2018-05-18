@@ -35,7 +35,9 @@ public:
         }
         modify_config("MAX_EAGER_LANES", "2");
         modify_config("MAX_RNDV_LANES", "2");
-        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
+        if (!RUNNING_ON_VALGRIND) {
+            m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
+        }
         test_ucp_tag::init();
     }
 

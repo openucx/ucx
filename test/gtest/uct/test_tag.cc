@@ -197,7 +197,11 @@ public:
     }
 
     void test_tag_expected(send_func sfunc, size_t length = 75) {
-        uct_tag_t    tag    = 11;
+        uct_tag_t tag = 11;
+
+        if (RUNNING_ON_VALGRIND) {
+            length = ucs_min(length, 128U);
+        }
 
         mapped_buffer recvbuf(length, RECV_SEED, receiver());
         recv_ctx r_ctx;
@@ -220,6 +224,10 @@ public:
     void test_tag_unexpected(send_func sfunc, size_t length = 75,
                              bool take_uct_desc = false) {
         uct_tag_t tag = 11;
+
+        if (RUNNING_ON_VALGRIND) {
+            length = ucs_min(length, 128U);
+        }
 
         mapped_buffer recvbuf(length, RECV_SEED, receiver());
         mapped_buffer sendbuf(length, SEND_SEED, sender());
