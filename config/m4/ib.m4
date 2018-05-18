@@ -56,12 +56,15 @@ AC_ARG_WITH([cm],
 
 
 #
-# mlx5 bare-metal support
+# mlx5 DV support
 #
-AC_ARG_WITH([mlx5-hw],
-            [AC_HELP_STRING([--with-mlx5-hw], [Compile with mlx5 bare-metal support])],
+AC_ARG_WITH([mlx5-dv],
+            [AC_HELP_STRING([--with-mlx5-dv], [Compile with mlx5 Direct Verbs
+                support. Direct Verbs (DV) support provides additional
+                acceleration capabilities that are not available in a
+                regular mode.])],
             [],
-            [with_mlx5_hw=yes])
+            [with_mlx5_dv=yes])
 
 
 #
@@ -142,17 +145,28 @@ AS_IF([test "x$with_ib" == xyes],
            verbs_exp=yes],
            [verbs_exp=no])
 
-       AS_IF([test "x$with_mlx5_hw" != xno],
-             [AC_CHECK_HEADERS([infiniband/mlx5_hw.h],
-                               [with_mlx5_hw=yes],
-                               [with_mlx5_hw=no])])
-
-       AC_CHECK_DECLS([ibv_mlx5_exp_get_qp_info,
-                       ibv_mlx5_exp_get_cq_info,
-                       ibv_mlx5_exp_get_srq_info,
-                       ibv_mlx5_exp_update_cq_ci,
-                       MLX5_WQE_CTRL_SOLICITED],
-                      [], [], [[#include <infiniband/mlx5_hw.h>]])
+       AS_IF([test "x$with_mlx5_dv" != xno],
+               AC_MSG_NOTICE([Checking for legacy bare-metal support])
+               AC_CHECK_HEADERS([infiniband/mlx5_hw.h],
+                               [with_mlx5_hw=yes
+                       AC_CHECK_DECLS([
+                           ibv_mlx5_exp_get_qp_info,
+                           ibv_mlx5_exp_get_cq_info,
+                           ibv_mlx5_exp_get_srq_info,
+                           ibv_mlx5_exp_update_cq_ci,
+                           MLX5_WQE_CTRL_SOLICITED],
+                                  [], [], [[#include <infiniband/mlx5_hw.h>]])
+                               ], [with_mlx5_hw=no])
+              AC_MSG_NOTICE([Checking for DV bare-metal support])
+              AC_CHECK_HEADERS([infiniband/mlx5dv.h],
+                               [with_mlx5_hw=yes
+                                with_mlx5_dv=yes
+                       AC_CHECK_LIB([mlx5-rdmav2], [mlx5dv_query_device],
+                                    [AC_SUBST(LIB_MLX5, [-lmlx5-rdmav2])],[
+                       AC_CHECK_LIB([mlx5], [mlx5dv_query_device],
+                                    [AC_SUBST(LIB_MLX5, [-lmlx5])],
+                                    [with_mlx5_dv=no])])
+                               ], [with_mlx5_dv=no]))
 
        # Disable mlx5_hw if the driver does not provide BF locking information
        AS_IF([test "x$ac_cv_have_decl_ibv_mlx5_exp_get_qp_info" == "xyes"],
@@ -334,6 +348,7 @@ AS_IF([test "x$with_ib" == xyes],
         with_rc=no
         with_ud=no
         with_mlx5_hw=no
+        with_mlx5_dv=no
         with_ib_hw_tm=no
     ])
 
@@ -347,4 +362,5 @@ AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_TL_CM],   [test "x$with_cm" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
+AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" != xno])
 AM_CONDITIONAL([HAVE_IBV_EX_HW_TM], [test "x$with_ib_hw_tm"  != xno])

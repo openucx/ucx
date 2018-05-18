@@ -151,7 +151,9 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
                                   unsigned rndv_hdr_len)
 {
     ucs_status_t status = UCS_OK;
-#if IBV_EXP_HW_TM
+#if !defined(MLX_HW_H_)
+    status = UCS_ERR_UNSUPPORTED;
+#elif IBV_EXP_HW_TM
     struct ibv_srq *srq;
     struct mlx5_srq *msrq;
     int i;
