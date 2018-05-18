@@ -153,6 +153,9 @@ AS_IF([test "x$with_ib" == xyes],
                          struct ibv_async_event.element.dct],
                         [], [], [[#include <infiniband/verbs_exp.h>]])
 
+       AC_CHECK_DECLS([IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN],
+                      [have_cq_io=yes], [], [[#include <infiniband/verbs.h>]])
+
        AS_IF([test "x$with_mlx5_dv" != xno], [
                AC_MSG_NOTICE([Checking for legacy bare-metal support])
                AC_CHECK_HEADERS([infiniband/mlx5_hw.h],

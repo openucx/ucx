@@ -687,6 +687,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     ucs_trace_func("");
 
     init_attr.res_domain_key = UCT_IB_IFACE_NULL_RES_DOMAIN_KEY;
+    init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
                               md, worker, params, &config->super, &init_attr);

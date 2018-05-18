@@ -154,6 +154,8 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
     cq_attr.cq_cap_flags = IBV_EXP_CQ_IGNORE_OVERRUN;
     return ibv_exp_modify_cq(cq, &cq_attr, IBV_EXP_CQ_CAP_FLAGS);
 }
+#elif HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
+static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq) { return 0; }
 #else
 static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 {

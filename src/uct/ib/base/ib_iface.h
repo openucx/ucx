@@ -162,6 +162,10 @@ struct uct_ib_iface {
 
 };
 
+enum {
+    UCT_IB_CQ_IGNORE_OVERRUN         = UCS_BIT(0),
+};
+
 typedef struct uct_ib_iface_init_attr {
 
     unsigned    rx_priv_len;  /* Length of transport private data to reserve */
@@ -172,6 +176,7 @@ typedef struct uct_ib_iface_init_attr {
     uint32_t    res_domain_key;
     int         tm_cap_bit;
     unsigned    fc_req_size;
+    int         flags;
 } uct_ib_iface_init_attr_t;
 
 UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h,
