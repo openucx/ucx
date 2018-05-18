@@ -4,6 +4,7 @@
 * See file LICENSE for terms.
 */
 
+#include "ib_mlx5.h"
 #include "ib_mlx5_log.h"
 
 #include <uct/ib/base/ib_device.h>
