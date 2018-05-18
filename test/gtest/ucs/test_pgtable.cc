@@ -258,6 +258,17 @@ UCS_TEST_F(test_pgtable, nonexist_remove) {
     remove(&region2);
 }
 
+UCS_TEST_F(test_pgtable, search_large_region) {
+    ucs_pgt_region_t region = {0x3c03cb00, 0x3c03f600};
+    insert(&region, UCS_OK);
+
+    search_result_t result = search(0x36990000, 0x3c810000);
+    EXPECT_EQ(1u, result.size());
+    EXPECT_EQ(&region, result.front());
+
+    remove(&region);
+}
+
 class test_pgtable_perf : public test_pgtable {
 protected:
 
