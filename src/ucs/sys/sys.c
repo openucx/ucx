@@ -29,7 +29,6 @@
 
 
 /* Default huge page size is 2 MBytes */
-#define UCS_DEFAULT_HUGEPAGE_SIZE  (2 * UCS_MBYTE)
 #define UCS_DEFAULT_MEM_FREE       640000
 #define UCS_PROCESS_MAPS_FILE      "/proc/self/maps"
 
@@ -403,12 +402,12 @@ size_t ucs_get_page_size()
     return page_size;
 }
 
-size_t ucs_get_meminfo_entry(const char* pattern)
+static ssize_t ucs_get_meminfo_entry(const char* pattern)
 {
     char buf[256];
     char final_pattern[80];
     int val = 0;
-    size_t val_b = 0;
+    ssize_t val_b = -1;
     FILE *f;
 
     f = fopen("/proc/meminfo", "r");
@@ -432,7 +431,7 @@ size_t ucs_get_memfree_size()
     size_t mem_free;
 
     mem_free = ucs_get_meminfo_entry("MemFree");
-    if (mem_free == 0) {
+    if (mem_free == -1) {
         mem_free = UCS_DEFAULT_MEM_FREE;
         ucs_info("cannot determine free mem size, using default: %zu",
                   mem_free);
@@ -441,17 +440,15 @@ size_t ucs_get_memfree_size()
     return mem_free;
 }
 
-size_t ucs_get_huge_page_size()
+ssize_t ucs_get_huge_page_size()
 {
-    static size_t huge_page_size = 0;
+    static ssize_t huge_page_size = 0;
 
     /* Cache the huge page size value */
     if (huge_page_size == 0) {
         huge_page_size = ucs_get_meminfo_entry("Hugepagesize");
-        if (huge_page_size == 0) {
-            huge_page_size = UCS_DEFAULT_HUGEPAGE_SIZE;
-            ucs_warn("cannot determine huge page size, using default: %zu",
-                      huge_page_size);
+        if (huge_page_size == -1) {
+            ucs_debug("huge pages are not supported on the system");
         } else {
             ucs_trace("detected huge page size: %zu", huge_page_size);
         }
@@ -513,12 +510,20 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
                             int flags, int *shmid UCS_MEMTRACK_ARG)
 {
     struct shminfo shminfo, *shminfo_ptr;
+    ssize_t huge_page_size;
     size_t alloc_size;
     void *ptr;
     int ret, err;
 
-    if (flags & SHM_HUGETLB){
-        alloc_size = ucs_align_up(*size, ucs_get_huge_page_size());
+    if (flags & SHM_HUGETLB) {
+        huge_page_size = ucs_get_huge_page_size();
+        if (huge_page_size <= 0) {
+            flags &= ~SHM_HUGETLB;
+        }
+    }
+
+    if (flags & SHM_HUGETLB) {
+        alloc_size = ucs_align_up(*size, huge_page_size);
     } else {
         alloc_size = ucs_align_up(*size, ucs_get_page_size());
     }
