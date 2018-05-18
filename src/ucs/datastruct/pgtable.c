@@ -549,6 +549,10 @@ void ucs_pgtable_search_range(const ucs_pgtable_t *pgtable,
     ucs_pgt_region_t *last;
     unsigned order = 0;
 
+    /* intersect the range with page table span */
+    address = ucs_max(address, pgtable->base);
+    end     = ucs_min(end,     pgtable->base + UCS_BIT(pgtable->shift));
+
     last = NULL;
     while ((address <= to) && (order != UCS_PGT_ADDR_ORDER)) {
         order = ucs_pgtable_get_next_page_order(address, end);
