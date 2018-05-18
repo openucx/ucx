@@ -59,6 +59,16 @@ static unsigned ucp_wireup_ep_progress(void *arg)
         goto out;
     }
 
+    /* If an error happened on the endpoint (but perhaps the deferred error handler,
+     * ucp_worker_iface_err_handle_progress(), was not called yet, avoid changing
+     * ep state, and let the error handler take care of cleanup.
+     */
+    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
+        ucs_trace("ep %p: not switching wireup_ep %p to ready state because of error",
+                  ucp_ep, wireup_ep);
+        goto out;
+    }
+
     ucs_trace("ep %p: switching wireup_ep %p to ready state", ucp_ep, wireup_ep);
 
     /* Move wireup pending queue to temporary queue and remove references to
