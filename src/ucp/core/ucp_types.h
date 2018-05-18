@@ -54,10 +54,11 @@ typedef struct ucp_worker_iface         ucp_worker_iface_t;
  */
 enum {
     UCP_AM_ID_WIREUP            =  1, /* Connection establishment */
+    UCP_AM_ID_FIN               =  2, /* Connection closure */
 
-    UCP_AM_ID_EAGER_ONLY        =  2, /* Single packet eager TAG */
-    UCP_AM_ID_EAGER_FIRST       =  3, /* First eager fragment */
-    UCP_AM_ID_EAGER_MIDDLE      =  4, /* Middle eager fragment */
+    UCP_AM_ID_EAGER_ONLY        =  3, /* Single packet eager TAG */
+    UCP_AM_ID_EAGER_FIRST       =  4, /* First eager fragment */
+    UCP_AM_ID_EAGER_MIDDLE      =  5, /* Middle eager fragment */
 
     UCP_AM_ID_EAGER_SYNC_ONLY   =  6, /* Single packet eager-sync */
     UCP_AM_ID_EAGER_SYNC_FIRST  =  7, /* First eager-sync fragment */

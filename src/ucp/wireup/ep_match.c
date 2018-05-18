@@ -105,7 +105,8 @@ static void ucp_ep_match_insert_common(ucp_ep_match_ctx_t *match_ctx,
     ep->flags                              |= UCP_EP_FLAG_ON_MATCH_CTX;
     ucp_ep_ext_gen(ep)->ep_match.dest_uuid  = dest_uuid;
     ucs_trace("match_ctx %p: ep %p added as %s uuid 0x%"PRIx64" conn_sn %d",
-              match_ctx, ep, title, dest_uuid, ep->conn_sn);
+              match_ctx, ep, title, dest_uuid,
+              ucp_ep_ext_proto(ep)->conn.conn_sn);
 }
 
 void ucp_ep_match_insert_exp(ucp_ep_match_ctx_t *match_ctx, uint64_t dest_uuid,
@@ -147,7 +148,7 @@ ucp_ep_match_retrieve_common(ucp_ep_match_ctx_t *match_ctx, uint64_t dest_uuid,
     list  = is_exp ? &entry->exp_ep_q : &entry->unexp_ep_q;
     ucp_ep_match_list_for_each(ep_ext, list, ep_match.list) {
         ep = ucp_ep_from_ext_gen(ep_ext);
-        if (ep->conn_sn == conn_sn) {
+        if (ucp_ep_ext_proto(ep)->conn.conn_sn == conn_sn) {
             ucp_ep_match_list_del(list, &ep_ext->ep_match.list);
             ucs_trace("match_ctx %p: matched %s ep %p by uuid 0x%"PRIx64" conn_sn %d",
                       match_ctx, title, ep, dest_uuid, conn_sn);

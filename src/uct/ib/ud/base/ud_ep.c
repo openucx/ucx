@@ -316,7 +316,7 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
     uct_ep_h new_ep_h;
 
     ep = uct_ud_iface_cep_lookup(iface, ib_addr, if_addr, UCT_UD_EP_CONN_ID_MAX);
-    if (ep) {
+    if (ep && !(ep->flags & UCT_UD_EP_FLAG_DISCONNECTED)) {
         uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_NOTSENT);
         *new_ep_p = ep;
         *skb_p    = NULL;
@@ -628,7 +628,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         uct_ud_ep_rx_creq(iface, neth);
         goto out;
     } else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep) ||
-               ep->ep_id != dest_id))
+                            (ep->ep_id != dest_id)))
     {
         /* Drop the packet because it is
          * allowed to do disconnect without flush/barrier. So it

@@ -18,6 +18,7 @@
 #include <ucs/datastruct/queue_types.h>
 #include <ucp/dt/dt.h>
 #include <ucp/wireup/wireup.h>
+#include <ucp/wireup/fin.h>
 
 
 #define ucp_trace_req(_sreq, _message, ...) \
@@ -101,7 +102,8 @@ struct ucp_request {
 
             union {
 
-                ucp_wireup_msg_t  wireup;
+                ucp_wireup_msg_t     wireup;
+                ucp_fin_msg_t        fin;
 
                 /* Tagged send */
                 struct {

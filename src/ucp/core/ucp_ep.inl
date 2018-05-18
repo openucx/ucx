@@ -139,7 +139,7 @@ static UCS_F_ALWAYS_INLINE uintptr_t ucp_ep_dest_ep_ptr(ucp_ep_h ep)
         return 0; /* Let remote side assert if it gets NULL pointer */
     }
 #endif
-    return ucp_ep_ext_gen(ep)->dest_ep_ptr;
+    return ucp_ep_ext_proto(ep)->conn.dest_ep_ptr;
 }
 
 /*
@@ -159,15 +159,15 @@ ucp_ep_resolve_dest_ep_ptr(ucp_ep_h ep, ucp_lane_index_t lane)
 static inline void ucp_ep_update_dest_ep_ptr(ucp_ep_h ep, uintptr_t ep_ptr)
 {
     if (ep->flags & UCP_EP_FLAG_DEST_EP) {
-        ucs_assertv(ep_ptr == ucp_ep_ext_gen(ep)->dest_ep_ptr,
+        ucs_assertv(ep_ptr == ucp_ep_ext_proto(ep)->conn.dest_ep_ptr,
                     "ep=%p ep_ptr=0x%lx ep->dest_ep_ptr=0x%lx",
-                    ep, ep_ptr, ucp_ep_ext_gen(ep)->dest_ep_ptr);
+                    ep, ep_ptr, ucp_ep_ext_proto(ep)->conn.dest_ep_ptr);
     }
 
     ucs_assert(ep_ptr != 0);
     ucs_trace("ep %p: set dest_ep_ptr to 0x%lx", ep, ep_ptr);
-    ep->flags                      |= UCP_EP_FLAG_DEST_EP;
-    ucp_ep_ext_gen(ep)->dest_ep_ptr = ep_ptr;
+    ep->flags |= UCP_EP_FLAG_DEST_EP;
+    ucp_ep_ext_proto(ep)->conn.dest_ep_ptr = ep_ptr;
 }
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)

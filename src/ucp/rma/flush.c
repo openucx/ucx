@@ -141,7 +141,9 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     }
 
     if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
-        req->send.lane = UCP_NULL_LANE;
+        if (!completed) {
+            req->send.lane = UCP_NULL_LANE;
+        }
         return UCS_OK;
     } else if (status == UCS_ERR_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
@@ -179,7 +181,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
     ucs_status_t status;
     ucp_request_t *req;
 
-    ucs_debug("disconnect ep %p", ep);
+    ucs_debug("flush ep %p", ep);
 
     if (ep->flags & UCP_EP_FLAG_FAILED) {
         return NULL;
@@ -218,7 +220,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
         status = req->status;
         ucs_trace_req("ep %p: releasing flush request %p, returning status %s",
                       ep, req, ucs_status_string(status));
-        ucs_mpool_put(req);
+        ucp_request_put(req);
         return UCS_STATUS_PTR(status);
     }
 

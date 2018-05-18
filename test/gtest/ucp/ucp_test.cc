@@ -57,6 +57,16 @@ void ucp_test::cleanup() {
     for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
          iter != entities().end(); ++iter)
     {
+        /* FIN protocol requires presenting of flush during worker destroy
+         * (currently it's a blocking API), it may cause deadlock in single
+         * process/thread destruction, expecially in 1 sided tests. So, flush
+         * everything before cleanup */
+        flush_worker(**iter);
+    }
+
+    for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
+         iter != entities().end(); ++iter)
+    {
         (*iter)->cleanup();
     }
 
@@ -142,9 +152,8 @@ void ucp_test::flush_worker(const entity &e, int worker_index)
     wait(request, worker_index);
 }
 
-void ucp_test::disconnect(const entity& entity) {
+std::vector<void*> ucp_test::disconnect(const entity& entity) {
     for (int i = 0; i < entity.get_num_workers(); i++) {
-        flush_worker(entity, i);
         for (int j = 0; j < entity.get_num_eps(i); j++) {
             void *dreq = entity.disconnect_nb(i, j);
             if (!UCS_PTR_IS_PTR(dreq)) {
@@ -153,6 +162,7 @@ void ucp_test::disconnect(const entity& entity) {
             wait(dreq, i);
         }
     }
+    return std::vector<void*>();
 }
 
 void ucp_test::wait(void *req, int worker_index)
@@ -160,6 +170,9 @@ void ucp_test::wait(void *req, int worker_index)
     if (req == NULL) {
         return;
     }
+
+    EXPECT_TRUE(UCS_PTR_IS_PTR(req)) << "error: "
+                                     << ucs_status_string(UCS_PTR_STATUS(req));
 
     ucs_status_t status;
     do {
@@ -494,6 +507,7 @@ ucs_status_t ucp_test_base::entity::listen(const struct sockaddr* saddr,
 }
 
 ucp_worker_h ucp_test_base::entity::worker(int worker_index) const {
+    assert(size_t(worker_index) < m_workers.size());
     return m_workers[worker_index].first;
 }
 
