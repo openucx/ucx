@@ -280,7 +280,8 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
                               params, 0 /* rx_priv_len */, 0 /* rx_hdr_len */,
                               1 /* tx_cq_len */,
                               config->super.rx.queue_len /* rx_cq_len */,
-                              IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE, /* mss */
+                              ucs_min(IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE,
+                                      config->super.super.max_bcopy) /* seg_size */,
                               UCT_IB_IFACE_NULL_RES_DOMAIN_KEY,
                               &config->super);
 

@@ -62,7 +62,7 @@ typedef struct ucp_context_config {
     size_t                                 tm_force_thresh;
     /** Upper bound for posting tm offload receives with internal UCP
      *  preregistered bounce buffers. */
-    size_t                                 tm_max_bcopy;
+    size_t                                 tm_max_bb_size;
     /** Maximal size of worker name for debugging */
     unsigned                               max_worker_name;
     /** Atomic mode */

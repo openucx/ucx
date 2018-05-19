@@ -17,7 +17,11 @@ public:
     virtual void init()
     {
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
+        if (RUNNING_ON_VALGRIND) {
+            m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_MAX_BCOPY", "8k"));
+        }
         modify_config("TM_THRESH",  "1");
+
         test_ucp_tag::init();
         ucp_test_param param = GetParam();
     }

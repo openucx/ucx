@@ -22,22 +22,22 @@ ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t count,
                            size_t rndv_am_thresh, size_t seg_size)
 {
     switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
-    case UCP_DATATYPE_IOV: 
+    case UCP_DATATYPE_IOV:
         if ((count > max_iov) &&
             ucp_ep_is_tag_offload_enabled(ucp_ep_config(req->send.ep))) {
             /* Make sure SW RNDV will be used, because tag offload does
              * not support multi-packet eager protocols. */
-            return seg_size;
+            return 1;
         }
         /* Fall through */
-    case UCP_DATATYPE_CONTIG: 
+    case UCP_DATATYPE_CONTIG:
         return ucs_min(rndv_rma_thresh, rndv_am_thresh);
     case UCP_DATATYPE_GENERIC:
         return rndv_am_thresh;
     default:
         ucs_error("Invalid data type %lx", req->send.datatype);
     }
- 
+
     return SIZE_MAX;
 }
 
@@ -71,7 +71,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t count,
                   max_short, rndv_thresh, zcopy_thresh, enable_zcopy);
 
     status = ucp_request_send_start(req, max_short, zcopy_thresh, seg_size,
-                                    rndv_thresh, proto);
+                                    rndv_thresh, msg_config->max_iov, count, proto);
     if (ucs_unlikely(status != UCS_OK)) {
         if (status == UCS_ERR_NO_PROGRESS) {
             /* RMA/AM rendezvous */

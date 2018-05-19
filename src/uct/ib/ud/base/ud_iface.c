@@ -456,7 +456,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
                               params, rx_priv_len, rx_hdr_len,
                               config->super.tx.queue_len,
                               config->super.rx.queue_len,
-                              mtu, res_domain_key, &config->super);
+                              ucs_min(mtu, config->super.super.max_bcopy),
+                              res_domain_key, &config->super);
 
     if (self->super.super.worker->async == NULL) {
         ucs_error("%s ud iface must have valid async context", params->mode.device.dev_name);

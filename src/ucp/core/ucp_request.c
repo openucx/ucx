@@ -302,8 +302,8 @@ ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info)
 
 ucs_status_t
 ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
-                       size_t zcopy_thresh, size_t seg_size,
-                       size_t zcopy_max, const ucp_proto_t *proto)
+                       size_t zcopy_thresh, size_t seg_size, size_t zcopy_max,
+                       size_t max_iov, size_t count, const ucp_proto_t *proto)
 {
     size_t       length = req->send.length;
     ucs_status_t status;
@@ -336,15 +336,16 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
             return status;
         }
 
-        if (length < seg_size) {
-            req->send.uct.func   = proto->zcopy_single;
-            UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_single", req->send.length);
-        } else {
+        if ((length >= seg_size) ||
+            (UCP_DT_IS_IOV(req->send.datatype) && (count > max_iov))) {
             req->send.uct.func        = proto->zcopy_multi;
             req->send.tag.message_id  = req->send.ep->worker->tm.am.message_id++;
             req->send.tag.am_bw_index = 0;
             req->send.pending_lane    = UCP_NULL_LANE;
             UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_multi", req->send.length);
+        } else {
+            req->send.uct.func   = proto->zcopy_single;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_single", req->send.length);
         }
         return UCS_OK;
     }

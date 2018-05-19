@@ -595,12 +595,12 @@ static void uct_ib_iface_res_domain_cleanup(uct_ib_iface_res_domain_t *res_domai
  * @param rx_headroom   Headroom requested by the user.
  * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
  * @param rx_hdr_len    Length of transport network header.
- * @param mss           Maximal segment size (transport limit).
+ * @param seg_size      Transport segment size.
  */
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     unsigned rx_priv_len, unsigned rx_hdr_len,
-                    unsigned tx_cq_len, unsigned rx_cq_len, size_t mss,
+                    unsigned tx_cq_len, unsigned rx_cq_len, size_t seg_size,
                     uint32_t res_domain_key, const uct_ib_iface_config_t *config)
 {
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
@@ -638,7 +638,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;
     self->config.rx_headroom_offset= self->config.rx_payload_offset -
                                      params->rx_headroom;
-    self->config.seg_size          = ucs_min(mss, config->super.max_bcopy);
+    self->config.seg_size          = seg_size;
     self->config.tx_max_poll       = config->tx.max_poll;
     self->config.rx_max_poll       = config->rx.max_poll;
     self->config.rx_max_batch      = ucs_min(config->rx.max_batch,

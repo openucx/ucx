@@ -52,7 +52,8 @@ ucp_stream_send_req(ucp_request_t *req, size_t count,
     ssize_t max_short   = ucp_proto_get_short_max(req, msg_config);
 
     ucs_status_t status = ucp_request_send_start(req, max_short, zcopy_thresh,
-                                                 seg_size, SIZE_MAX, proto);
+                                                 seg_size, SIZE_MAX,
+                                                 msg_config->max_iov, count, proto);
     if (status != UCS_OK) {
         return UCS_STATUS_PTR(status);
     }
