@@ -14,56 +14,27 @@
 #include <ucs/type/status.h>
 #include <infiniband/verbs.h>
 
-typedef struct uct_ib_mlx5_qp_info {
-    uint32_t           qpn;           /* QP number */
-    volatile uint32_t  *dbrec;        /* QP doorbell record in RAM */
+typedef struct {
+    struct mlx5dv_obj  dv;
+} uct_ib_mlx5dv_t;
 
-    struct {
-            void       *buf;          /* Work queue buffer */
-            unsigned   wqe_cnt;       /* Number of WQEs in the work queue */
-            unsigned   stride;        /* Size of each WQE */
-    } sq, rq;
+typedef struct {
+    struct mlx5dv_qp   dv;
+} uct_ib_mlx5dv_qp_t;
 
-    struct {
-            void       *reg;          /* BlueFlame register */
-            unsigned   size;          /* BlueFlame register size (0 - unsupported) */
-    } bf;
-} uct_ib_mlx5_qp_info_t;
-
-
-typedef struct uct_ib_mlx5_srq_info {
-    void               *buf;          /* SRQ queue buffer */
-    volatile uint32_t  *dbrec;        /* SRQ doorbell record in RAM */
-    unsigned           stride;        /* Size of each WQE */
-    unsigned           head;
-    unsigned           tail;
-} uct_ib_mlx5_srq_info_t;
+typedef struct {
+    struct mlx5dv_srq  dv;
+} uct_ib_mlx5dv_srq_t;
 
 /* Completion queue */
-typedef struct uct_ib_mlx5_cq {
-    void               *cq_buf;
-    unsigned           cq_ci;
-    unsigned           cq_length;
-    unsigned           cqe_size_log;
-    unsigned           cq_num;
-} uct_ib_mlx5_cq_t;
+typedef struct {
+    struct mlx5dv_cq   dv;
+} uct_ib_mlx5dv_cq_t;
 
 /**
- * Get internal QP information.
+ * Get internal verbs information.
  */
-ucs_status_t uct_ib_mlx5_get_qp_info(struct ibv_qp *qp,
-                                     uct_ib_mlx5_qp_info_t *qp_info);
-
-/**
- * Get internal SRQ information.
- */
-ucs_status_t uct_ib_mlx5_get_srq_info(struct ibv_srq *srq,
-                                      uct_ib_mlx5_srq_info_t *srq_info);
-
-/**
- * Get internal CQ information.
- */
-ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq);
+ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type);
 
 /**
  * Update CI to support req_notify_cq

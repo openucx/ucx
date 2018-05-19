@@ -71,7 +71,8 @@ noinst_HEADERS += \
 	ib/mlx5/ib_mlx5_log.h \
 	ib/mlx5/ib_mlx5.h \
 	ib/mlx5/ib_mlx5.inl \
-	ib/mlx5/ib_mlx5_dv.h
+	ib/mlx5/ib_mlx5_dv.h \
+	ib/mlx5/ib_mlx5_hw.h
 
 if HAVE_MLX5_DV
 libuct_la_LDFLAGS += $(LIB_MLX5)
