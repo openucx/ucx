@@ -36,6 +36,7 @@
 #  include <infiniband/mlx5dv.h>
 #else
 #  include <infiniband/mlx5_hw.h>
+#  include "ib_mlx5_hw.h"
 #endif
 #include "ib_mlx5_dv.h"
 
@@ -113,6 +114,7 @@ struct mlx5_grh_av {
 #define UCT_IB_MLX5_SRQ_STRIDE   (sizeof(struct mlx5_wqe_srq_next_seg) + \
                                   sizeof(struct mlx5_wqe_data_seg))
 
+
 /* Shared receive queue */
 typedef struct uct_ib_mlx5_srq {
     void               *buf;
@@ -123,6 +125,17 @@ typedef struct uct_ib_mlx5_srq {
     uint16_t           mask;
     uint16_t           tail;       /* tail in the driver */
 } uct_ib_mlx5_srq_t;
+
+
+/* Completion queue */
+typedef struct uct_ib_mlx5_cq {
+    void               *cq_buf;
+    unsigned           cq_ci;
+    unsigned           cq_length;
+    unsigned           cqe_size_log;
+    unsigned           cq_num;
+} uct_ib_mlx5_cq_t;
+
 
 /* Blue flame register */
 typedef struct uct_ib_mlx5_bf {
@@ -224,6 +237,12 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
     uint64_t           add;
     uint64_t           filed_boundary;
 } UCS_S_PACKED;
+
+
+/**
+ * Get internal CQ information.
+ */
+ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq);
 
 /**
  * Get flag indicating compact AV support.
