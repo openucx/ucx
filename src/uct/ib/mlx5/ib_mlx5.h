@@ -20,6 +20,7 @@
 #  include <infiniband/mlx5dv.h>
 #else
 #  include <infiniband/mlx5_hw.h>
+#  include "ib_mlx5_hw.h"
 #endif
 #include "ib_mlx5_dv.h"
 #include <netinet/in.h>
@@ -216,7 +217,7 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av);
 /**
  * Check for completion with error.
  */
-void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
+void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5dv_cq_t *cq,
                                   struct mlx5_cqe64 *cqe);
 
 /**

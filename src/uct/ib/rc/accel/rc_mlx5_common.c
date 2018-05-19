@@ -401,14 +401,19 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                            uct_rc_iface_config_t *config,
                                            uct_common_mlx5_iface_config_t *common_config)
 {
+    uct_ib_mlx5dv_t obj;
     ucs_status_t status;
 
-    status = uct_ib_mlx5_get_cq(rc_iface->super.send_cq, &iface->tx.cq);
+    obj.dv.cq.in = rc_iface->super.send_cq;
+    obj.dv.cq.out = &iface->tx.cq.dv;
+    status = uct_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_CQ);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = uct_ib_mlx5_get_cq(rc_iface->super.recv_cq, &iface->rx.cq);
+    obj.dv.cq.in = rc_iface->super.recv_cq;
+    obj.dv.cq.out = &iface->rx.cq.dv;
+    status = uct_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_CQ);
     if (status != UCS_OK) {
         return status;
     }
@@ -539,8 +544,8 @@ void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                         uct_rc_iface_t *rc_iface, uint32_t qpn)
 {
-    uct_ib_mlx5_cq_t *mlx5_cq = &mlx5_common_iface->rx.cq;
-    const size_t cqe_sz       = 1ul << mlx5_cq->cqe_size_log;
+    uct_ib_mlx5dv_cq_t *mlx5_cq = &mlx5_common_iface->rx.cq;
+    const size_t cqe_sz         = 1ul << mlx5_cq->cqe_size_log;
     struct mlx5_cqe64 *cqe, *dest;
     uct_ib_mlx5_srq_seg_t *seg;
     unsigned pi, idx;
@@ -550,13 +555,13 @@ void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_
     pi = mlx5_cq->cq_ci;
     for (;;) {
         cqe = uct_ib_mlx5_get_cqe(mlx5_cq, pi);
-        if (((cqe->op_own & MLX5_CQE_OWNER_MASK) == !(pi & mlx5_cq->cq_length)) ||
+        if (((cqe->op_own & MLX5_CQE_OWNER_MASK) == !(pi & mlx5_cq->dv.cqe_cnt)) ||
             ((cqe->op_own >> 4) == MLX5_CQE_INVALID)) {
             break;
         }
 
         ++pi;
-        if (pi == (mlx5_cq->cq_ci + mlx5_cq->cq_length - 1)) {
+        if (pi == (mlx5_cq->cq_ci + mlx5_cq->dv.cqe_cnt - 1)) {
             break;
         }
     }
