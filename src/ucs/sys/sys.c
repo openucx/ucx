@@ -764,6 +764,43 @@ const char* ucs_get_process_cmdline()
     return cmdline;
 }
 
+unsigned long ucs_sys_get_pfn(uintptr_t address)
+{
+    static const char *pagemap_file = "/proc/self/pagemap";
+    static int initialized = 0;
+    static int pagemap_fd;
+    uint64_t data;
+    off_t offset;
+    ssize_t ret;
+
+    if (!initialized) {
+        pagemap_fd = open(pagemap_file, O_RDONLY);
+        if (pagemap_fd < 0) {
+            ucs_warn("failed to open %s: %m", pagemap_file);
+        }
+        initialized = 1;
+    }
+
+    if (pagemap_fd < 0) {
+        return 0; /* could not open file */
+    }
+
+    offset = (address / ucs_get_page_size()) * sizeof(data);
+    data   = 0;
+    ret    = pread(pagemap_fd, &data, sizeof(data), offset);
+    if (ret < 0) {
+        ucs_warn("pread(file=%s offset=%zu) failed: %m", pagemap_file, offset);
+        return 0;
+    }
+
+    if (!(data & UCS_BIT(63))) {
+        ucs_trace("address 0x%lx not present", address);
+        return 0;
+    }
+
+    return data & UCS_MASK(55);
+}
+
 ucs_status_t ucs_sys_fcntl_modfl(int fd, int add, int remove)
 {
     int oldfl, ret;

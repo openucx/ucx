@@ -39,6 +39,7 @@ ucs_global_opts_t ucs_global_opts = {
     .profile_file          = "",
     .stats_filter          = { NULL, 0 },
     .stats_format          = UCS_STATS_FULL,
+    .rcache_check_pfn      = 0,
 };
 
 static const char *ucs_handle_error_modes[] = {
@@ -198,6 +199,11 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   {"PROFILE_LOG_SIZE", "4m",
    "Maximal size of profiling log. New records will replace old records.",
    ucs_offsetof(ucs_global_opts_t, profile_log_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RCACHE_CHECK_PFN", "n",
+   "Registration cache to check that the physical page frame number of a found\n"
+   "memory region was not changed since the time the region was registered.\n",
+   ucs_offsetof(ucs_global_opts_t, rcache_check_pfn), UCS_CONFIG_TYPE_BOOL},
 
  {NULL}
 };
