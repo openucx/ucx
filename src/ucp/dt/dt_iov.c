@@ -92,3 +92,14 @@ void ucp_dt_iov_seek(ucp_dt_iov_t *iov, size_t iovcnt, ptrdiff_t distance,
 
     *iov_offset = new_iov_offset;
 }
+
+size_t ucp_dt_iov_count_nonempty(const ucp_dt_iov_t *iov, size_t iovcnt)
+{
+    size_t iov_it, count;
+
+    count = 0;
+    for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+        count += iov[iov_it].length != 0;
+    }
+    return count;
+}

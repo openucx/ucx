@@ -21,6 +21,10 @@ namespace ucp {
 
 class data_type_desc_t {
 public: 
+    enum {
+        MAX_IOV = 40
+    };
+
     data_type_desc_t()
         : m_origin(uintptr_t(NULL)), m_length(0), m_dt(0), m_buf(NULL),
           m_count(0), m_iov_cnt_limit(sizeof(m_iov) / sizeof(m_iov[0])) {
@@ -106,7 +110,7 @@ private:
     size_t          m_count;
 
     const size_t    m_iov_cnt_limit;
-    ucp_dt_iov_t    m_iov[40];
+    ucp_dt_iov_t    m_iov[MAX_IOV];
 };
 
 struct dt_gen_state {

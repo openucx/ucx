@@ -94,6 +94,10 @@ protected:
     typedef void (test_ucp_tag_xfer::* xfer_func_t)(size_t size, bool expected,
                                                     bool sync, bool truncated);
 
+    size_t do_xfer(const void *sendbuf, void *recvbuf, size_t count,
+                   ucp_datatype_t send_dt, ucp_datatype_t recv_dt,
+                   bool expected, bool sync, bool truncated);
+
     void test_xfer(xfer_func_t func, bool expected, bool sync, bool truncated);
     void test_run_xfer(bool send_contig, bool recv_contig,
                        bool expected, bool sync, bool truncated);
@@ -107,10 +111,6 @@ protected:
     void test_xfer_len_offset();
 
 private:
-    size_t do_xfer(const void *sendbuf, void *recvbuf, size_t count,
-                   ucp_datatype_t send_dt, ucp_datatype_t recv_dt,
-                   bool expected, bool sync, bool truncated);
-
     request* do_send(const void *sendbuf, size_t count, ucp_datatype_t dt, bool sync);
 
     static const uint64_t SENDER_TAG = 0x111337;
@@ -482,7 +482,7 @@ size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf,
 
     recvd = rreq->info.length;
     if (!truncated) {
-        ASSERT_UCS_OK(rreq->status);
+        EXPECT_UCS_OK(rreq->status);
         EXPECT_EQ((ucp_tag_t)SENDER_TAG, rreq->info.sender_tag);
     } else {
         EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED, rreq->status);
@@ -950,6 +950,42 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_probe_zcopy, "RN
 
 UCS_TEST_P(test_ucp_tag_xfer, test_xfer_len_offset, "RNDV_THRESH=1000") {
     test_xfer_len_offset();
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, iov_with_empty_buffers, "ZCOPY_THRESH=512") {
+    const size_t iovcnt    = ucp::data_type_desc_t::MAX_IOV;
+    const size_t size      = 1024;
+    const int    expected  = 1;
+    const int    sync      = 0;
+    const int    truncated = 0;
+
+    std::vector<char> sendbuf(size, 0);
+    std::vector<char> recvbuf(size, 0);
+    ucp_dt_iov_t iovec[iovcnt];
+
+    ucs::fill_random(sendbuf);
+
+    /* initialize iovec with 99 empty buffers and one non-empty */
+    for (size_t i = 0; i < iovcnt - 1; ++i) {
+        iovec[i].buffer = NULL;
+        iovec[i].length = 0;
+    }
+
+    /* coverity[escape] */
+    iovec[iovcnt - 1].buffer = &sendbuf[0];
+    iovec[iovcnt - 1].length = size;
+
+    ucp::data_type_desc_t recv_dt_desc(DATATYPE_IOV, recvbuf.data(),
+                                       recvbuf.size(), iovcnt);
+
+    size_t recvd = do_xfer(iovec, recv_dt_desc.buf(), iovcnt,
+                           DATATYPE_IOV, DATATYPE_IOV, expected, 0,
+                           truncated);
+
+    ASSERT_EQ(sendbuf.size(), recvd);
+    EXPECT_TRUE(!check_buffers(sendbuf, recvbuf, recvd, iovcnt,
+                               recv_dt_desc.count(), size, expected, sync,
+                               "IOV"));
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_xfer)

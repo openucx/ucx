@@ -64,6 +64,8 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             packed_len = uct_ep_am_bcopy(uct_ep, am_id_first, pack_first, req, 0);
             UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_bcopy_first", packed_len,
                                                    packed_len);
+            ucs_assertv(req->send.state.dt.offset < req->send.length,
+                        "offset=%zd", req->send.state.dt.offset);
         } else {
             ucs_assert(offset < req->send.length);
             /* Middle or last */
@@ -260,6 +262,8 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                 req->send.buffer,  req->send.datatype,
                                 max_middle - hdr_size_first + hdr_size_middle,
                                 ucp_ep_md_index(ep, req->send.lane), NULL);
+            ucs_assertv(state.offset < req->send.length, "state.offset=%zu",
+                        state.offset);
 
             status = uct_ep_am_zcopy(uct_ep, am_id_first, (void*)hdr_first,
                                      hdr_size_first, iov, iovcnt, 0,
