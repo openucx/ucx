@@ -765,7 +765,6 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_multi(uct_pending_req_t *self)
     return ucp_do_am_zcopy_multi(self,
                                  UCP_AM_ID_RNDV_DATA,
                                  UCP_AM_ID_RNDV_DATA,
-                                 UCP_AM_ID_RNDV_DATA,
                                  &hdr, sizeof(hdr),
                                  &hdr, sizeof(hdr),
                                  ucp_rndv_am_zcopy_send_req_complete, 1);

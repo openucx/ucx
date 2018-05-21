@@ -241,7 +241,6 @@ static ucs_status_t ucp_stream_eager_zcopy_multi(uct_pending_req_t *self)
     return ucp_do_am_zcopy_multi(self,
                                  UCP_AM_ID_STREAM_DATA,
                                  UCP_AM_ID_STREAM_DATA,
-                                 UCP_AM_ID_STREAM_DATA,
                                  &hdr, sizeof(hdr), &hdr, sizeof(hdr),
                                  ucp_proto_am_zcopy_req_complete, 0);
 }
