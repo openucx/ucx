@@ -113,6 +113,7 @@ struct ucs_rcache_region {
     ucs_status_t           status;   /**< Current status code */
     uint8_t                prot;     /**< Protection bits */
     uint16_t               flags;    /**< Status flags. Protected by page table lock. */
+    uint64_t               priv;     /**< Used internally */
 };
 
 

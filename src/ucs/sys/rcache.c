@@ -36,6 +36,9 @@
 #define ucs_rcache_region_trace(_message, ...) \
     ucs_rcache_region_log(UCS_LOG_LEVEL_TRACE, _message, ## __VA_ARGS__)
 
+#define ucs_rcache_region_pfn(_region) \
+    ((_region)->priv)
+
 
 typedef struct ucs_rcache_inv_entry {
     ucs_queue_elem_t         queue;
@@ -149,6 +152,26 @@ static ucs_mpool_ops_t ucs_rcache_mp_ops = {
     .obj_cleanup   = NULL
 };
 
+/* Lock must be held for read */
+static void ucs_rcache_region_validate_pfn(ucs_rcache_t *rcache,
+                                           ucs_rcache_region_t *region)
+{
+    unsigned long region_pfn, actual_pfn;
+
+    if (!ucs_unlikely(ucs_global_opts.rcache_check_pfn)) {
+        return;
+    }
+
+    region_pfn = ucs_rcache_region_pfn(region);
+    actual_pfn = ucs_sys_get_pfn(region->super.start);
+    if (region_pfn != actual_pfn) {
+        ucs_rcache_region_error(rcache, region, "pfn check failed");
+        ucs_fatal("%s: page at virtual address 0x%lx moved from pfn 0x%lx to pfn 0x%lx",
+                  rcache->name, region->super.start, region_pfn, actual_pfn);
+    } else {
+        ucs_rcache_region_trace(rcache, region, "pfn ok");
+    }
+}
 
 /* Lock must be held */
 static void ucs_rcache_region_collect_callback(const ucs_pgtable_t *pgtable,
@@ -452,6 +475,7 @@ retry:
         /* Found a matching region (it could have been added after we released
          * the lock)
          */
+        ucs_rcache_region_validate_pfn(rcache, region);
         status = region->status;
         UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_HITS_SLOW, 1);
         goto out_set_region;
@@ -515,6 +539,12 @@ retry:
     region->flags   |= UCS_RCACHE_REGION_FLAG_REGISTERED;
     region->refcount = 2; /* Page-table + user */
 
+    if (ucs_global_opts.rcache_check_pfn) {
+        ucs_rcache_region_pfn(region) = ucs_sys_get_pfn(region->super.start);
+    } else {
+        ucs_rcache_region_pfn(region) = 0;
+    }
+
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_MISSES, 1);
 
     ucs_rcache_region_trace(rcache, region, "created");
@@ -553,6 +583,7 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
                 ucs_rcache_region_test(region, prot))
             {
                 ucs_rcache_region_hold(rcache, region);
+                ucs_rcache_region_validate_pfn(rcache, region);
                 *region_p = region;
                 UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_HITS_FAST, 1);
                 pthread_rwlock_unlock(&rcache->lock);

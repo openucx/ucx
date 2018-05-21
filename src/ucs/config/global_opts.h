@@ -98,13 +98,16 @@ typedef struct {
     char                     *profile_file;
 
     /* Limit for profiling log size */
-     size_t                   profile_log_size;
+    size_t                   profile_log_size;
 
     /* Counters to be included in statistics summary */
     ucs_config_names_array_t stats_filter;
 
     /* statistics format options */
     ucs_stats_formats_t      stats_format;
+
+    /* registration cache checks if physical page is not moved */
+    int                      rcache_check_pfn;
 
 } ucs_global_opts_t;
 

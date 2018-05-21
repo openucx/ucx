@@ -238,6 +238,17 @@ int ucs_get_mem_prot(unsigned long start, unsigned long end);
 
 
 /**
+ * Returns the physical page frame number of a given virtual page address.
+ * If the page map file is non-readable (for example, due to permissions), or
+ * the page is not present, this function returns 0.
+ *
+ * @param address  Virtual address to get the PFN for
+ * @return PFN number, or 0 if failed.
+ */
+unsigned long ucs_sys_get_pfn(uintptr_t address);
+
+
+/**
  * Modify file descriptor flags via fcntl().
  *
  * @param fd     File descriptor to modify.
