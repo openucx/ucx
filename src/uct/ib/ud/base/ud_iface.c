@@ -337,11 +337,14 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
         goto err_destroy_qp;
     }
 
-    ucs_debug("iface=%p: created qp 0x%x max_send_wr %u max_recv_wr %u max_inline %u",
-            self, self->qp->qp_num,
-            qp_init_attr.cap.max_send_wr,
-            qp_init_attr.cap.max_recv_wr,
-            qp_init_attr.cap.max_inline_data);
+    ucs_debug("iface=%p: created qp 0x%x on %s:%d max_send_wr %u max_recv_wr %u "
+              "max_inline %u",
+              self, self->qp->qp_num,
+              uct_ib_device_name(uct_ib_iface_device(&self->super)),
+              self->super.config.port_num,
+              qp_init_attr.cap.max_send_wr,
+              qp_init_attr.cap.max_recv_wr,
+              qp_init_attr.cap.max_inline_data);
 
     return UCS_OK;
 err_destroy_qp:

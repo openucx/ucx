@@ -174,17 +174,45 @@ static uint64_t network_to_host(void *ptr, int size)
         return *(uint64_t*)ptr;
     }
 }
-static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg)
+static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg, int is_eth)
 {
     struct mlx5_wqe_datagram_seg *dgseg = seg;
+    struct mlx5_base_av *base_av;
+    struct mlx5_grh_av *grh_av;
+    char gid_buf[32];
+    char *p, *endp;
 
-    snprintf(buf, max-1, " [dlid %d rqpn 0x%x]",
-             ntohs(mlx5_av_base(&dgseg->av)->rlid),
-             ntohl(mlx5_av_base(&dgseg->av)->dqp_dct & ~UCT_IB_MLX5_EXTENDED_UD_AV));
+    p       = buf;
+    endp    = buf + max - 1;
+    base_av = mlx5_av_base(&dgseg->av);
+
+    snprintf(p, endp - p, " [rqpn 0x%x",
+             ntohl(base_av->dqp_dct & ~UCT_IB_MLX5_EXTENDED_UD_AV));
+    p += strlen(p);
+
+    if (!is_eth) {
+        snprintf(p, endp - p, " rlid %d", ntohs(base_av->rlid));
+        p += strlen(p);
+    }
 
     if (mlx5_av_base(&dgseg->av)->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) {
+        grh_av = mlx5_av_grh(&dgseg->av);
+        if (is_eth || (ntohl(grh_av->grh_gid_fl) & UCS_BIT(30))) {
+            if (is_eth) {
+                snprintf(p, endp - p, " rmac %02x:%02x:%02x:%02x:%02x:%02x",
+                         grh_av->rmac[0], grh_av->rmac[1], grh_av->rmac[2],
+                         grh_av->rmac[3], grh_av->rmac[4], grh_av->rmac[5]);
+                p += strlen(p);
+            }
+
+            snprintf(p, endp - p,  " sgid %ld dgid %s fl %ld]",
+                     (htonl(grh_av->grh_gid_fl) >> 20) & UCS_MASK(8),
+                     inet_ntop(AF_INET6, grh_av->rgid, gid_buf, sizeof(gid_buf)),
+                     htonl(grh_av->grh_gid_fl) & UCS_MASK(20));
+        }
         return UCT_IB_MLX5_AV_FULL_SIZE;
     } else {
+        snprintf(p, endp - p, "]");
         return UCT_IB_MLX5_AV_BASE_SIZE;
     }
 }
@@ -218,7 +246,8 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
     char *ends          = buffer + max;
     struct ibv_sge sg_list[16];
     uint64_t inline_bitmap;
-    int i, is_inline;
+    int i, is_inline, is_eth;
+    size_t dg_size;
     void *seg;
 
     /* QP number and opcode name */
@@ -237,7 +266,8 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
     }
 
     if ((qp_type == IBV_QPT_UD) || (qp_type == IBV_EXP_QPT_DC_INI)) {
-        size_t dg_size = uct_ib_mlx5_dump_dgram(s, ends - s, seg);
+        is_eth = IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface));
+        dg_size = uct_ib_mlx5_dump_dgram(s, ends - s, seg, is_eth);
         s += strlen(s);
 
         seg = (char *)seg + dg_size;
