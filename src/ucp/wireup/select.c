@@ -913,8 +913,9 @@ static double ucp_wireup_am_bw_score_func(ucp_context_h context,
 {
     /* best single MTU bandwidth */
     double size = iface_attr->cap.am.max_bcopy;
-    double time = (size / iface_attr->bandwidth) + iface_attr->overhead +
-                  remote_iface_attr->overhead;
+    double time = (size / ucs_min(iface_attr->bandwidth,
+                                  remote_iface_attr->bandwidth)) +
+                  iface_attr->overhead + remote_iface_attr->overhead;
     return size / time * 1e-5;
 }
 
