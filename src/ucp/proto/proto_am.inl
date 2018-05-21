@@ -217,6 +217,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     size_t max_iov;
     uct_iov_t *iov;
     size_t offset;
+    size_t mid_len;
     ucs_status_t status;
     uct_ep_h uct_ep;
     int pending_adde_res;
@@ -269,9 +270,10 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                                    iov[0].length, status);
         } else {
             /* Middle or last stage */
+            mid_len = ucs_min(max_middle, req->send.length - offset);
+            ucs_assert(offset + mid_len <= req->send.length);
             ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &state,
-                                req->send.buffer, req->send.datatype,
-                                ucs_min(max_middle, req->send.length - offset),
+                                req->send.buffer, req->send.datatype, mid_len,
                                 ucp_ep_md_index(ep, req->send.lane), NULL);
 
             status = uct_ep_am_zcopy(uct_ep, am_id_middle, (void*)hdr_middle,
@@ -281,7 +283,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_zcopy_middle",
                                                    iov[0].length, status);
 
-            if (!flag_iov_mid && (offset + max_middle >= req->send.length)) {
+            if (!flag_iov_mid && (offset + mid_len == req->send.length)) {
                 /* Last stage */
                 if (status == UCS_OK) {
                     complete(req, UCS_OK);
