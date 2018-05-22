@@ -245,19 +245,19 @@ build_release_pkg() {
 #
 build_icc() {
 	echo 1..1 > build_icc.tap
-	if module_load intel/ics
+	if module_load intel/ics && icc -v
 	then
 		echo "==== Build with Intel compiler ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
 		$MAKE clean
 		$MAKE
 		$MAKE distclean
-		module unload intel/ics
 		echo "ok 1 - build successful " >> build_icc.tap
 	else
 		echo "==== Not building with Intel compiler ===="
 		echo "ok 1 - # SKIP because Coverity not installed" >> build_icc.tap
 	fi
+	module unload intel/ics
 }
 
 #
