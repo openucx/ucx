@@ -965,7 +965,7 @@ UCS_TEST_P(test_ucp_tag_xfer, iov_with_empty_buffers, "ZCOPY_THRESH=512") {
 
     ucs::fill_random(sendbuf);
 
-    /* initialize iovec with 99 empty buffers and one non-empty */
+    /* initialize iovec with MAX_IOV-1 empty buffers and one non-empty */
     for (size_t i = 0; i < iovcnt - 1; ++i) {
         iovec[i].buffer = NULL;
         iovec[i].length = 0;
