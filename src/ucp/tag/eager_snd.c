@@ -182,7 +182,6 @@ static ucs_status_t ucp_tag_eager_zcopy_multi(uct_pending_req_t *self)
     return ucp_do_am_zcopy_multi(self,
                                  UCP_AM_ID_EAGER_FIRST,
                                  UCP_AM_ID_EAGER_MIDDLE,
-                                 UCP_AM_ID_EAGER_MIDDLE,
                                  &first_hdr, sizeof(first_hdr),
                                  &middle_hdr, sizeof(middle_hdr),
                                  ucp_proto_am_zcopy_req_complete, 1);
@@ -292,7 +291,6 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
 
     return ucp_do_am_zcopy_multi(self,
                                  UCP_AM_ID_EAGER_SYNC_FIRST,
-                                 UCP_AM_ID_EAGER_MIDDLE,
                                  UCP_AM_ID_EAGER_MIDDLE,
                                  &first_hdr, sizeof(first_hdr),
                                  &middle_hdr, sizeof(middle_hdr),
