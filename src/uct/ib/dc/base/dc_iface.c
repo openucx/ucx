@@ -68,7 +68,9 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
                                  IBV_EXP_ACCESS_REMOTE_READ |
                                  IBV_EXP_ACCESS_REMOTE_ATOMIC;
     init_attr.min_rnr_timer    = iface->super.config.min_rnr_timer;
-    init_attr.hop_limit        = 1;
+    init_attr.tclass           = iface->super.super.config.traffic_class;
+    init_attr.hop_limit        = 0;
+    init_attr.gid_index        = uct_ib_iface_md(&iface->super.super)->config.gid_index;
     init_attr.inline_size      = iface->super.config.rx_inline;
 
 #if HAVE_DECL_IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT
