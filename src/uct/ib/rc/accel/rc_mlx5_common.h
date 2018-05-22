@@ -271,7 +271,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_common_update_tx_res(uct_rc_iface_t *rc_iface, uct_ib_mlx5_txwq_t *txwq,
                                  uct_rc_txqp_t *txqp, uint16_t hw_ci)
 {
-    int bb_num;
+    uint16_t bb_num;
 
     bb_num = uct_ib_mlx5_txwq_update_bb(txwq, hw_ci) - uct_rc_txqp_available(txqp);
 
@@ -286,7 +286,10 @@ uct_rc_mlx5_common_update_tx_res(uct_rc_iface_t *rc_iface, uct_ib_mlx5_txwq_t *t
     ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
 
     rc_iface->tx.cq_available += bb_num;
-    ucs_assert(rc_iface->tx.cq_available <= rc_iface->config.tx_cq_len);
+    ucs_assertv(rc_iface->tx.cq_available <= rc_iface->config.tx_cq_len,
+                "cq_available=%d tx_cq_len=%d bb_num=%d txwq=%p txqp=%p",
+                rc_iface->tx.cq_available, rc_iface->config.tx_cq_len, bb_num,
+                txwq, txqp);
 }
 
 static UCS_F_ALWAYS_INLINE void
