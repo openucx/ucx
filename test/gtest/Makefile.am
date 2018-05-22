@@ -203,7 +203,7 @@ noinst_HEADERS = \
 	ucp/test_ucp_memheap.h \
 	ucp/test_ucp_tag.h \
 	ucp/ucp_test.h \
-	ucp/ucp_datatype.cc
+	ucp/ucp_datatype.h
 
 .PHONY: test test gdb valgrind fix_rpath ucx
 
