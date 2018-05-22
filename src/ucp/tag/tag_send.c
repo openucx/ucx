@@ -19,7 +19,7 @@
 static UCS_F_ALWAYS_INLINE size_t
 ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t count,
                            size_t max_iov, size_t rndv_rma_thresh,
-                           size_t rndv_am_thresh, size_t seg_size)
+                           size_t rndv_am_thresh)
 {
     switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_IOV:
@@ -42,23 +42,22 @@ ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t count,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
-ucp_tag_send_req(ucp_request_t *req, size_t count,
+ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                  const ucp_ep_msg_config_t* msg_config,
                  size_t rndv_rma_thresh, size_t rndv_am_thresh,
                  ucp_send_callback_t cb, const ucp_proto_t *proto,
                  int enable_zcopy)
 {
-    size_t seg_size     = (msg_config->max_bcopy - proto->only_hdr_size);
-    size_t rndv_thresh  = ucp_tag_get_rndv_threshold(req, count,
+    size_t rndv_thresh  = ucp_tag_get_rndv_threshold(req, dt_count,
                                                      msg_config->max_iov,
                                                      rndv_rma_thresh,
-                                                     rndv_am_thresh, seg_size);
+                                                     rndv_am_thresh);
     ssize_t max_short   = ucp_proto_get_short_max(req, msg_config);
     ucs_status_t status;
     size_t zcopy_thresh;
 
     if (enable_zcopy || ucs_unlikely(!UCP_MEM_IS_HOST(req->send.mem_type))) {
-        zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, count,
+        zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, dt_count,
                                                      rndv_thresh);
     } else {
         zcopy_thresh = rndv_thresh;
@@ -70,8 +69,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t count,
                   req, req->send.datatype, req->send.buffer, req->send.length,
                   max_short, rndv_thresh, zcopy_thresh, enable_zcopy);
 
-    status = ucp_request_send_start(req, max_short, zcopy_thresh, seg_size,
-                                    rndv_thresh, msg_config->max_iov, count, proto);
+    status = ucp_request_send_start(req, max_short, zcopy_thresh, rndv_thresh,
+                                    dt_count, msg_config, proto);
     if (ucs_unlikely(status != UCS_OK)) {
         if (status == UCS_ERR_NO_PROGRESS) {
             /* RMA/AM rendezvous */

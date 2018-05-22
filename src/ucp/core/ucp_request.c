@@ -302,11 +302,13 @@ ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info)
 
 ucs_status_t
 ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
-                       size_t zcopy_thresh, size_t seg_size, size_t zcopy_max,
-                       size_t max_iov, size_t count, const ucp_proto_t *proto)
+                       size_t zcopy_thresh, size_t zcopy_max, size_t dt_count,
+                       const ucp_ep_msg_config_t* msg_config,
+                       const ucp_proto_t *proto)
 {
     size_t       length = req->send.length;
     ucs_status_t status;
+    int          multi;
 
     if ((ssize_t)length <= max_short) {
         /* short */
@@ -316,7 +318,7 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
     } else if (length < zcopy_thresh) {
         /* bcopy */
         ucp_request_send_state_reset(req, NULL, UCP_REQUEST_SEND_PROTO_BCOPY_AM);
-        if (length < seg_size) {
+        if (length <= msg_config->max_bcopy - proto->only_hdr_size) {
             req->send.uct.func   = proto->bcopy_single;
             UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_single", req->send.length);
         } else {
@@ -336,8 +338,20 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
             return status;
         }
 
-        if ((length >= seg_size) ||
-            (UCP_DT_IS_IOV(req->send.datatype) && (count > max_iov))) {
+        if (ucs_unlikely(length > msg_config->max_zcopy - proto->only_hdr_size)) {
+            multi = 1;
+        } else if (ucs_unlikely(UCP_DT_IS_IOV(req->send.datatype))) {
+            if (dt_count <= msg_config->max_iov) {
+                multi = 0;
+            } else {
+                multi = ucp_dt_iov_count_nonempty(req->send.buffer, dt_count) >
+                        msg_config->max_iov;
+            }
+        } else {
+            multi = 0;
+        }
+
+        if (multi) {
             req->send.uct.func        = proto->zcopy_multi;
             req->send.tag.message_id  = req->send.ep->worker->tm.am.message_id++;
             req->send.tag.am_bw_index = 0;

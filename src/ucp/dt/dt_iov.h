@@ -88,4 +88,14 @@ void ucp_dt_iov_seek(ucp_dt_iov_t *iov, size_t iovcnt, ptrdiff_t distance,
                      size_t *iov_offset, size_t *iovcnt_offset);
 
 
+/**
+ * Count non-empty buffers in the iov
+ *
+ * @param [in]     iov            @ref ucp_dt_iov_t buffer to count
+ * @param [in]     iovcnt         Number of entries the @a iov buffer
+ *
+ * @return Number of non-empty buffers in the iovec
+ */
+size_t ucp_dt_iov_count_nonempty(const ucp_dt_iov_t *iov, size_t iovcnt);
+
 #endif
