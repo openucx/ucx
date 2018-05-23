@@ -95,8 +95,6 @@ public:
         worker_vec_t                m_workers;
         ucs::handle<ucp_listener_h> m_listener;
 
-        int num_workers;
-
     private:
         static void empty_send_completion(void *r, ucs_status_t status);
         static void accept_cb(ucp_ep_h ep, void *arg);

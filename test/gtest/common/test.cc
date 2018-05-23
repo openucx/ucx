@@ -94,13 +94,14 @@ void test_base::modify_config(const std::string& name, const std::string& value,
                               bool optional)
 {
     ucs_status_t status = ucs_global_opts_set_value(name.c_str(), value.c_str());
-    if ((status == UCS_OK) || (optional && (status == UCS_ERR_NO_ELEM))) {
-        return;
+    if ((status == UCS_ERR_NO_ELEM) && optional) {
+        m_env_stack.push_back(new scoped_setenv(("UCX_" + name).c_str(),
+                                                value.c_str()));
+    } else if (status != UCS_OK) {
+        GTEST_FAIL() << "Invalid UCS configuration for " << name << " : "
+                     << value << ", error message: "
+                     << ucs_status_string(status) << "(" << status << ")";
     }
-
-    GTEST_FAIL() << "Invalid UCS configuration for " << name << " : "
-                    << value << ", error message: "
-                    << ucs_status_string(status) << "(" << status << ")";
 }
 
 void test_base::push_config()
