@@ -28,7 +28,7 @@ enum {
 #define UCS_STATS_DEFAULT_UDP_PORT 37873
 
 
-#define UCS_STAT_NAME_MAX          31
+#define UCS_STAT_NAME_MAX          39
 
 #define UCS_STATS_NODE_FMT \
     "%s%s"
