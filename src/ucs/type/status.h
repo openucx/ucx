@@ -70,7 +70,6 @@ typedef enum {
     UCS_ERR_TIMED_OUT              = -20,
     UCS_ERR_EXCEEDS_LIMIT          = -21,
     UCS_ERR_UNSUPPORTED            = -22,
-    UCS_ERR_REMOTE_DISCONNECT      = -23,
 
     UCS_ERR_FIRST_LINK_FAILURE     = -40,
     UCS_ERR_LAST_LINK_FAILURE      = -59,
