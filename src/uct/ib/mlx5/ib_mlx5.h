@@ -32,6 +32,7 @@
 #define UCT_IB_MLX5_RES_DOMAIN_KEY      0x1b1bda7aU
 #define UCT_IB_MLX5_WORKER_DM_KEY       0xacdf1245u
 #define UCT_IB_MLX5_EXTENDED_UD_AV      0x80 /* htonl(0x80000000) */
+#define UCT_IB_MLX5_AV_GRH_PRESENT      0x40 /* htonl(UCS_BIT(30)) */
 #define UCT_IB_MLX5_BF_REG_SIZE         256
 #define UCT_IB_MLX5_CQE_VENDOR_SYND_ODP 0x93
 #define UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK 0x80

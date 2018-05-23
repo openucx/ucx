@@ -180,6 +180,7 @@ static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg, int is_et
     struct mlx5_base_av *base_av;
     struct mlx5_grh_av *grh_av;
     char gid_buf[32];
+    int sgid_index;
     char *p, *endp;
 
     p       = buf;
@@ -197,7 +198,7 @@ static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg, int is_et
 
     if (mlx5_av_base(&dgseg->av)->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) {
         grh_av = mlx5_av_grh(&dgseg->av);
-        if (is_eth || (ntohl(grh_av->grh_gid_fl) & UCS_BIT(30))) {
+        if (is_eth || (grh_av->grh_gid_fl & UCT_IB_MLX5_AV_GRH_PRESENT)) {
             if (is_eth) {
                 snprintf(p, endp - p, " rmac %02x:%02x:%02x:%02x:%02x:%02x",
                          grh_av->rmac[0], grh_av->rmac[1], grh_av->rmac[2],
@@ -205,10 +206,10 @@ static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg, int is_et
                 p += strlen(p);
             }
 
-            snprintf(p, endp - p,  " sgid %ld dgid %s fl %ld]",
-                     (htonl(grh_av->grh_gid_fl) >> 20) & UCS_MASK(8),
+            sgid_index = (htonl(grh_av->grh_gid_fl) >> 20) & UCS_MASK(8);
+            snprintf(p, endp - p,  " sgix %d dgid %s tc %d]", sgid_index,
                      inet_ntop(AF_INET6, grh_av->rgid, gid_buf, sizeof(gid_buf)),
-                     htonl(grh_av->grh_gid_fl) & UCS_MASK(20));
+                     grh_av->tclass);
         }
         return UCT_IB_MLX5_AV_FULL_SIZE;
     } else {
