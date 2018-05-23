@@ -219,7 +219,13 @@ ucp_mem_map_params2uct_flags(ucp_mem_map_params_t *params)
         }
 
         if (params->flags & UCP_MEM_MAP_FIXED) {
-            flags |= UCT_MD_MEM_FLAG_FIXED;
+            if ((params->field_mask & UCP_MEM_MAP_PARAM_FIELD_ADDRESS) &&
+                (params->address == NULL)) {
+                /* special hint: allocate memory on device */
+                flags |= UCT_MD_MEM_FLAG_ON_DEVICE;
+            } else {
+                flags |= UCT_MD_MEM_FLAG_FIXED;
+            }
         }
     }
 
@@ -261,8 +267,7 @@ static inline ucs_status_t ucp_mem_map_check_and_adjust_params(ucp_mem_map_param
     }
 
     if ((params->flags & UCP_MEM_MAP_FIXED) &&
-        (!params->address ||
-         ((uintptr_t)params->address % ucs_get_page_size()))) {
+        ((uintptr_t)params->address % ucs_get_page_size())) {
         ucs_error("UCP_MEM_MAP_FIXED flag requires page aligned address");
         return UCS_ERR_INVALID_PARAM;
     }

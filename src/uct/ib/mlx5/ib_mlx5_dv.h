@@ -14,6 +14,8 @@
 #include <ucs/type/status.h>
 #include <infiniband/verbs.h>
 
+#include <uct/ib/base/ib_md.h>
+
 typedef struct {
     struct mlx5dv_obj  dv;
 #if HAVE_IBV_EXP_DM
@@ -94,12 +96,6 @@ ibv_reg_dm_mr(struct ibv_pd *pd, struct ibv_dm *dm,
     mr_in.length    = length;
     return ibv_exp_reg_mr(&mr_in);
 }
-
-typedef struct uct_mlx5_dm_va {
-    struct ibv_dm      ibv_dm;
-    size_t             length;
-    uint64_t           *start_va;
-} uct_mlx5_dm_va_t;
 
 static ucs_status_t UCS_F_MAYBE_UNUSED
 uct_ib_mlx5_get_dm_info(struct ibv_exp_dm *dm, struct mlx5dv_dm *dm_info)

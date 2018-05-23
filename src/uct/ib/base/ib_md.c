@@ -223,6 +223,9 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
                              UCT_MD_FLAG_NEED_MEMH |
                              UCT_MD_FLAG_NEED_RKEY |
                              UCT_MD_FLAG_ADVISE;
+#if HAVE_IBV_EXP_DM
+    md_attr->cap.flags    |= UCT_MD_FLAG_DEVICE_ALLOC;
+#endif
     md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
 
     if (md->config.enable_gpudirect_rdma != UCS_NO) {
@@ -484,7 +487,9 @@ ucs_status_t uct_ib_verbs_reg_atomic_key(uct_ib_md_t *md,
 {
 #if HAVE_EXP_UMR
     struct ibv_exp_mem_region *mem_reg = NULL;
-    struct ibv_mr *mr = memh->mr;
+    struct ibv_mr *mr                  = memh->mr;
+    int    on_dm                       = memh->flags & UCT_IB_MEM_FLAG_DM;
+    uintptr_t base_addr                = on_dm ? 0 : (uintptr_t)mr->addr;
     struct ibv_exp_send_wr wr, *bad_wr;
     struct ibv_exp_create_mr_in mrin;
     ucs_status_t status;
@@ -557,7 +562,7 @@ ucs_status_t uct_ib_verbs_reg_atomic_key(uct_ib_md_t *md,
     }
 
     for (i = 0; i < list_size; i++) {
-        mem_reg[i].base_addr            = (uintptr_t) mr->addr + i * reg_length;
+        mem_reg[i].base_addr            = base_addr + i * reg_length;
         mem_reg[i].length               = reg_length;
         mem_reg[i].mr                   = mr;
     }
@@ -565,7 +570,7 @@ ucs_status_t uct_ib_verbs_reg_atomic_key(uct_ib_md_t *md,
     ucs_assert(list_size >= 1);
     mem_reg[list_size - 1].length       = mr->length % reg_length;
     wr.ext_op.umr.mem_list.mem_reg_list = mem_reg;
-    wr.ext_op.umr.base_addr             = (uint64_t) (uintptr_t) mr->addr + offset;
+    wr.ext_op.umr.base_addr             = (uint64_t)base_addr + offset;
     wr.ext_op.umr.num_mrs               = list_size;
     wr.ext_op.umr.modified_mr           = umr;
 
@@ -833,7 +838,45 @@ static void uct_ib_mem_init(uct_ib_mem_t *memh, unsigned uct_flags,
     if (uct_flags & UCT_MD_MEM_ACCESS_REMOTE_ATOMIC) {
         memh->flags |= UCT_IB_MEM_ACCESS_REMOTE_ATOMIC;
     }
+
+    if (uct_flags & UCT_MD_MEM_FLAG_ON_DEVICE) {
+        memh->flags |= UCT_IB_MEM_FLAG_DM;
+    }
 }
+
+#if HAVE_IBV_EXP_DM
+/* TODO: here is code duplication with uct_rc_mlx5_iface_common_dm_tl_init to
+ * simplify backport it into v1.6 branch. deduplicate it after backport
+ * into v1.6 branch is complete */
+static ucs_status_t uct_ib_mem_alloc_dm(uct_ib_mem_t *memh, uct_ib_md_t *md,
+                                        size_t length, uint64_t exp_access)
+{
+    struct ibv_exp_alloc_dm_attr dm_attr = {.length = length};
+    struct ibv_exp_reg_mr_in mr_in       = {0};
+
+    memh->dm = UCS_PROFILE_CALL(ibv_exp_alloc_dm, md->dev.ibv_context, &dm_attr);
+    if (memh->dm == NULL) {
+        ucs_debug("failed to allocate memory on device: %s", uct_ib_device_name(&md->dev));
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    mr_in.pd         = md->pd;
+    mr_in.length     = length;
+    mr_in.exp_access = UCT_IB_MEM_ACCESS_FLAGS | exp_access;
+    mr_in.comp_mask  = IBV_EXP_REG_MR_DM;
+    mr_in.dm         = memh->dm;
+
+    memh->mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &mr_in);
+    if (memh->mr == NULL) {
+        uct_ib_md_print_mem_reg_err_msg(UCS_LOG_LEVEL_DEBUG, mr_in.addr, mr_in.length,
+                                        mr_in.exp_access, "exp_");
+        UCS_PROFILE_CALL(ibv_exp_free_dm, memh->dm);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+#endif
 
 static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
                                      void **address_p, unsigned flags,
@@ -846,7 +889,17 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
     uct_ib_mem_t *memh;
     size_t length;
 
-    if (!md->config.enable_contig_pages) {
+#if !HAVE_IBV_EXP_DM
+    if (flags & UCT_MD_MEM_FLAG_ON_DEVICE) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+#endif
+
+    if (!(flags & UCT_MD_MEM_FLAG_ON_DEVICE) &&
+        !md->config.enable_contig_pages) {
+        /* in case if ON_DEVICE flag is not active - then memory
+         * is allocated using contig_pages and contig pages
+         * should be enabled */
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -858,10 +911,24 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
 
     length     = *length_p;
     exp_access = uct_ib_md_access_flags(md, flags, length) |
-                 IBV_EXP_ACCESS_ALLOCATE_MR;
-    status = uct_ib_md_reg_mr(md, NULL, length, exp_access, 0, &memh->mr);
-    if (status != UCS_OK) {
-        goto err_free_memh;
+                 !(flags & UCT_MD_MEM_FLAG_ON_DEVICE) ?
+                 IBV_EXP_ACCESS_ALLOCATE_MR : 0;
+
+#if HAVE_IBV_EXP_DM
+    if (flags & UCT_MD_MEM_FLAG_ON_DEVICE) {
+        status = uct_ib_mem_alloc_dm(memh, md, length, exp_access);
+        if (status != UCS_OK) {
+            goto err_free_memh;
+        }
+        *address_p = ((uct_mlx5_dm_va_t*)memh->dm)->start_va;
+    } else
+#endif
+    {
+        status = uct_ib_md_reg_mr(md, NULL, length, exp_access, 0, &memh->mr);
+        if (status != UCS_OK) {
+            goto err_free_memh;
+        }
+        *address_p = memh->mr->addr;
     }
 
     ucs_trace("allocated memory %p..%p on %s lkey 0x%x rkey 0x%x",
@@ -878,7 +945,6 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
     UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_ALLOC, +1);
     ucs_memtrack_allocated(memh->mr->addr, memh->mr->length UCS_MEMTRACK_VAL);
 
-    *address_p = memh->mr->addr;
     *length_p  = memh->mr->length;
     *memh_p    = memh;
     return UCS_OK;
@@ -913,6 +979,14 @@ static ucs_status_t uct_ib_mem_free(uct_md_h uct_md, uct_mem_h memh)
     status = UCS_PROFILE_CALL(uct_ib_memh_dereg, md, memh);
     if (status != UCS_OK) {
         return status;
+    }
+
+    if (ib_memh->flags & UCT_IB_MEM_FLAG_DM) {
+#if HAVE_IBV_EXP_DM
+        UCS_PROFILE_CALL(ibv_exp_free_dm, ib_memh->dm);
+#else
+        ucs_assert_always(0);
+#endif
     }
 
     uct_ib_memh_free(ib_memh);

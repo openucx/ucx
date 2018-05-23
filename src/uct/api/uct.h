@@ -509,22 +509,23 @@ typedef enum {
  * @brief  Memory domain capability flags.
  */
 enum {
-    UCT_MD_FLAG_ALLOC      = UCS_BIT(0),  /**< MD supports memory allocation */
-    UCT_MD_FLAG_REG        = UCS_BIT(1),  /**< MD supports memory registration */
-    UCT_MD_FLAG_NEED_MEMH  = UCS_BIT(2),  /**< The transport needs a valid local
-                                               memory handle for zero-copy operations */
-    UCT_MD_FLAG_NEED_RKEY  = UCS_BIT(3),  /**< The transport needs a valid
-                                               remote memory key for remote memory
-                                               operations */
-    UCT_MD_FLAG_ADVISE     = UCS_BIT(4),  /**< MD supports memory advice */
-    UCT_MD_FLAG_FIXED      = UCS_BIT(5),  /**< MD supports memory allocation with
-                                               fixed address */
-    UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6),  /**< MD supports direct access to
-                                               remote memory via a pointer that
-                                               is returned by @ref uct_rkey_ptr */
-    UCT_MD_FLAG_SOCKADDR   = UCS_BIT(7)   /**< MD support for client-server
-                                               connection establishment via
-                                               sockaddr */
+    UCT_MD_FLAG_ALLOC        = UCS_BIT(0),  /**< MD supports memory allocation */
+    UCT_MD_FLAG_REG          = UCS_BIT(1),  /**< MD supports memory registration */
+    UCT_MD_FLAG_NEED_MEMH    = UCS_BIT(2),  /**< The transport needs a valid local
+                                                 memory handle for zero-copy operations */
+    UCT_MD_FLAG_NEED_RKEY    = UCS_BIT(3),  /**< The transport needs a valid
+                                                 remote memory key for remote memory
+                                                 operations */
+    UCT_MD_FLAG_ADVISE       = UCS_BIT(4),  /**< MD supports memory advice */
+    UCT_MD_FLAG_FIXED        = UCS_BIT(5),  /**< MD supports memory allocation with
+                                                 fixed address */
+    UCT_MD_FLAG_RKEY_PTR     = UCS_BIT(6),  /**< MD supports direct access to
+                                                 remote memory via a pointer that
+                                                 is returned by @ref uct_rkey_ptr */
+    UCT_MD_FLAG_SOCKADDR     = UCS_BIT(7),  /**< MD support for client-server
+                                                 connection establishment via
+                                                 sockaddr */
+    UCT_MD_FLAG_DEVICE_ALLOC = UCS_BIT(8)   /**< MD supports Device Memory allocation */
 };
 
 /*
@@ -566,6 +567,9 @@ enum uct_md_mem_flags {
     UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), /**< enable remote put access */
     UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(6), /**< enable remote get access */
     UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(7), /**< enable remote atomic access */
+
+    /* device specific flags */
+    UCT_MD_MEM_FLAG_ON_DEVICE       = UCS_BIT(8), /**< allocate memory on device */
 
     /** enable local and remote access for all operations */
     UCT_MD_MEM_ACCESS_ALL =  (UCT_MD_MEM_ACCESS_REMOTE_PUT|

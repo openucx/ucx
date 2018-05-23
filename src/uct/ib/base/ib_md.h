@@ -36,9 +36,11 @@ enum {
                                                        demand paging enabled */
     UCT_IB_MEM_FLAG_ATOMIC_MR       = UCS_BIT(1), /**< The memory region has UMR
                                                        for the atomic access */
-    UCT_IB_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(2)  /**< An atomic access was 
+    UCT_IB_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(2), /**< An atomic access was
                                                        requested for the memory
                                                        region */
+    UCT_IB_MEM_FLAG_DM              = UCS_BIT(3)  /**< The memory region is located
+                                                       on device memory */
 };
 
 
@@ -65,6 +67,16 @@ typedef struct uct_ib_md_ext_config {
 } uct_ib_md_ext_config_t;
 
 
+#if HAVE_IBV_EXP_DM
+/* uct_mlx5_dm_va is used to get pointer to DM mapped into process address space */
+typedef struct uct_mlx5_dm_va {
+    struct ibv_exp_dm  ibv_dm;
+    size_t             length;
+    uint64_t           *start_va;
+} uct_mlx5_dm_va_t;
+#endif
+
+
 typedef struct uct_ib_mem {
     uint32_t                lkey;
     uint32_t                atomic_rkey;
@@ -73,6 +85,7 @@ typedef struct uct_ib_mem {
 #if HAVE_EXP_UMR
     struct ibv_mr           *atomic_mr;
 #endif
+    struct ibv_exp_dm       *dm;
 } uct_ib_mem_t;
 
 struct uct_ib_md;
