@@ -77,7 +77,7 @@ class uct_p2p_mix_test_alloc_methods : public uct_p2p_mix_test {};
 UCS_TEST_P(uct_p2p_mix_test_alloc_methods, mix1000_odp,
            "REG_METHODS=odp,direct")
 {
-#if defined(__powerpc64__)
+#if defined(__powerpc64__) || defined(__aarch64__)
     UCS_TEST_SKIP_R("odp on ppc64");
 #endif
     run(1000);
