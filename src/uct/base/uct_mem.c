@@ -85,6 +85,19 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if ((flags & UCT_MD_MEM_FLAG_FIXED) &&
+        (flags & UCT_MD_MEM_FLAG_ON_DEVICE)) {
+        ucs_debug("UCT_MD_MEM_FLAG_FIXED can't be used with UCT_MD_MEM_FLAG_ON_DEVICE");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((flags & UCT_MD_MEM_FLAG_NONBLOCK) &&
+        (flags & UCT_MD_MEM_FLAG_ON_DEVICE)) {
+        ucs_debug("UCT_MD_MEM_FLAG_NONBLOCK can't be used with UCT_MD_MEM_FLAG_ON_DEVICE");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+fallback_no_dm:
     for (method = methods; method < methods + num_methods; ++method) {
         ucs_trace("trying allocation method %s", uct_alloc_method_names[*method]);
 
@@ -99,15 +112,21 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                     return status;
                 }
 
-                /* Check if MD supports allocation */
-                if (!(md_attr.cap.flags & UCT_MD_FLAG_ALLOC)) {
+                if ((flags & UCT_MD_MEM_FLAG_ON_DEVICE) &&
+                    !(md_attr.cap.flags & UCT_MD_FLAG_DEVICE_ALLOC)) {
+                    /* DM requested, but not supported by MD */
                     continue;
                 }
 
-                /* Check if MD supports allocation with fixed address
-                 * if it's requested */
+                if (!(flags & UCT_MD_MEM_FLAG_ON_DEVICE) &&
+                    !(md_attr.cap.flags & UCT_MD_FLAG_ALLOC)) {
+                    /* DM is not requested, then ALLOC caps is required to allocate */
+                    continue;
+                }
+
                 if ((flags & UCT_MD_MEM_FLAG_FIXED) &&
                     !(md_attr.cap.flags & UCT_MD_FLAG_FIXED)) {
+                    /* FIXED requested, but not supported by MD */
                     continue;
                 }
 
@@ -120,7 +139,12 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 address = addr;
                 status = uct_md_mem_alloc(md, &alloc_length, &address, flags,
                                           alloc_name, &memh);
-                if (status != UCS_OK) {
+                if ((status == UCS_ERR_NO_RESOURCE) &&
+                    (flags & UCT_MD_MEM_FLAG_ON_DEVICE)) {
+                    ucs_trace("failed to allocate memory on device using md %s for %s: %s",
+                              md->component->name, alloc_name, ucs_status_string(status));
+                    continue;
+                } else if (status != UCS_OK) {
                     ucs_error("failed to allocate %zu bytes using md %s for %s: %s",
                               alloc_length, md->component->name,
                               alloc_name, ucs_status_string(status));
@@ -128,12 +152,19 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 }
 
                 ucs_assert(memh != UCT_MEM_HANDLE_NULL);
-                mem->md   = md;
+                mem->md       = md;
                 mem->mem_type = md_attr.cap.mem_type;
-                mem->memh = memh;
+                mem->memh     = memh;
                 goto allocated;
 
             }
+
+            if ((status == UCS_ERR_NO_RESOURCE) &&
+                (flags & UCT_MD_MEM_FLAG_ON_DEVICE)) {
+                flags &= ~UCT_MD_MEM_FLAG_ON_DEVICE;
+                goto fallback_no_dm;
+            }
+
             break;
 
         case UCT_ALLOC_METHOD_THP:

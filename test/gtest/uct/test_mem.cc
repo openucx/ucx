@@ -69,7 +69,6 @@ UCS_TEST_P(test_mem, pd_alloc) {
     methods[2] = UCT_ALLOC_METHOD_HEAP;
 
     for (i = 0; i < num_md_resources; ++i) {
-
         status = uct_md_config_read(md_resources[i].md_name, NULL, NULL, &md_config);
         ASSERT_UCS_OK(status);
 
@@ -204,6 +203,61 @@ UCS_TEST_P(test_mem, mmap_fixed) {
             EXPECT_EQ(status, UCS_ERR_NO_MEMORY);
         }
         p_addr = (char*)p_addr + (2 * page_size);
+    }
+}
+
+UCS_TEST_P(test_mem, dm_alloc) {
+    uct_alloc_method_t methods[] = {UCT_ALLOC_METHOD_MD, GetParam(), UCT_ALLOC_METHOD_HEAP};
+    int skipped = 1;
+    uct_allocated_memory mem;
+    uct_md_resource_desc_t *md_resources;
+    uct_md_attr_t md_attr;
+    unsigned i, num_md_resources;
+    ucs_status_t status;
+    uct_md_h pd;
+    uct_md_config_t *md_config;
+    size_t j;
+    size_t length;
+
+    status = uct_query_md_resources(&md_resources, &num_md_resources);
+    ASSERT_UCS_OK(status);
+
+    for (i = 0; i < num_md_resources; ++i) {
+
+        status = uct_md_config_read(md_resources[i].md_name, NULL, NULL, &md_config);
+        ASSERT_UCS_OK(status);
+
+        status = uct_md_open(md_resources[i].md_name, md_config, &pd);
+        uct_config_release(md_config);
+        ASSERT_UCS_OK(status);
+
+        status = uct_md_query(pd, &md_attr);
+        ASSERT_UCS_OK(status);
+
+        if (md_attr.cap.flags & UCT_MD_FLAG_DEVICE_ALLOC) {
+            skipped = 0;
+
+            for (j = 1; j < 300; j++) {
+                length = j * 100;
+                status = uct_mem_alloc(NULL, length,
+                                       UCT_MD_MEM_ACCESS_ALL | UCT_MD_MEM_FLAG_ON_DEVICE,
+                                       methods, 3, &pd, 1, "test", &mem);
+                ASSERT_UCS_OK(status);
+
+                check_mem(mem, length);
+
+                uct_mem_free(&mem);
+            }
+        }
+
+        uct_md_close(pd);
+    }
+
+    uct_release_md_resource_list(md_resources);
+
+    if (skipped) {
+        /* mark test as skipped due to no device memory MD are processed */
+        UCS_TEST_SKIP_R("not supported");
     }
 }
 

@@ -220,6 +220,10 @@ ucp_mem_map_params2uct_flags(ucp_mem_map_params_t *params)
         if (params->flags & UCP_MEM_MAP_FIXED) {
             flags |= UCT_MD_MEM_FLAG_FIXED;
         }
+
+        if (params->flags & UCP_MEM_MAP_DEVICE_MEM) {
+            flags |= UCT_MD_MEM_FLAG_ON_DEVICE;
+        }
     }
 
     flags |= UCT_MD_MEM_ACCESS_ALL;
@@ -276,6 +280,10 @@ static inline ucs_status_t ucp_mem_map_check_and_adjust_params(ucp_mem_map_param
     } else if (!(params->flags & UCP_MEM_MAP_ALLOCATE) &&
                (params->flags & UCP_MEM_MAP_FIXED)) {
         ucs_error("Wrong combination of flags when address is defined");
+        return UCS_ERR_INVALID_PARAM;
+    } else if ((params->flags & UCP_MEM_MAP_DEVICE_MEM) &&
+               !(params->flags & UCP_MEM_MAP_ALLOCATE)) {
+        ucs_error("Wrong combination of flags when DM requested and allocate flag not specified");
         return UCS_ERR_INVALID_PARAM;
     }
 
