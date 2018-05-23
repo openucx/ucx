@@ -455,6 +455,19 @@ static int show_profile_data(profile_data_t *data, options_t *opts)
     return 0;
 }
 
+static void usage()
+{
+    printf("Usage: ucx_read_profile [options] [profile-file]\n");
+    printf("Options are:\n");
+    printf("  -r              Show raw output\n");
+    printf("  -t <units>      Select time units to use:\n");
+    printf("                     sec  - seconds\n");
+    printf("                     msec - milliseconds\n");
+    printf("                     usec - microseconds (default)\n");
+    printf("                     nsec - nanoseconds\n");
+    printf("  -h              Show this help message\n");
+}
+
 int parse_args(int argc, char **argv, options_t *opts)
 {
     int c;
@@ -481,12 +494,17 @@ int parse_args(int argc, char **argv, options_t *opts)
             }
             break;
         case 'h':
+            usage();
+            return -127;
         default:
+            usage();
             return -1;
         }
     }
 
     if (optind >= argc) {
+        printf("Error: missing profile file argument\n");
+        usage();
         return -1;
     }
 
@@ -500,13 +518,9 @@ int main(int argc, char **argv)
     options_t opts;
     int ret;
 
-    if (parse_args(argc, argv, &opts) < 0) {
-        printf("Usage: %s [options] <file>\n", basename(argv[0]));
-        printf("Options:\n");
-        printf("      -r             raw output\n");
-        printf("      -t UNITS       select time units (sec/msec/usec/nsec)\n");
-        printf("\n");
-        return -1;
+    ret = parse_args(argc, argv, &opts);
+    if (ret < 0) {
+        return (ret == -127) ? 0 : ret;
     }
 
     if (read_profile_data(opts.filename, &data) < 0) {
