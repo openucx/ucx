@@ -198,4 +198,21 @@ void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
     memcpy(av, &ucs_container_of(ah, struct mlx5_ah, ibv_ah)->av, sizeof(*av));
 }
 
+struct ibv_qp *uct_dv_get_cmd_qp(struct ibv_srq *srq)
+{
+    struct mlx5_srq *msrq;
+
+    if (srq->handle == LEGACY_XRC_SRQ_HANDLE) {
+        srq = (struct ibv_srq *)(((struct ibv_srq_legacy *)srq)->ibv_srq);
+    }
+
+    msrq = ucs_container_of(srq, struct mlx5_srq, vsrq.srq);
+    if (msrq->counter != 0) {
+        ucs_error("SRQ counter is not 0 (%d)", msrq->counter);
+        return NULL;
+    }
+
+    return &msrq->cmd_qp->verbs_qp.qp;
+}
+
 #endif
