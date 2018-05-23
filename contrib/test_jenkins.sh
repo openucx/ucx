@@ -579,19 +579,21 @@ run_mpi_tests() {
 	echo "1..2" > mpi_tests.tap
 	if module_load hpcx-gcc
 	then
+		# Prevent our tests from using UCX libraries from hpcx module by prepending
+		# our local library path first
+		export LD_LIBRARY_PATH=${ucx_inst}/lib:$LD_LIBRARY_PATH
+
 		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
 		$MAKE clean
 		$MAKE install
 		$MAKE installcheck # check whether installation is valid (it compiles examples at least)
 
-		# Prevent our tests from using installed UCX libraries
-		export LD_LIBRARY_PATH=${ucx_inst}/lib:$LD_LIBRARY_PATH
-
 		MPIRUN="mpirun \
 				-x UCX_ERROR_SIGNALS \
 				-x UCX_HANDLE_ERRORS \
 				-mca pml ob1 \
-				-mca btl vader,self \
+				-mca btl tcp,self \
+				-mca btl_tcp_if_include lo \
 				-mca coll ^hcoll,ml"
 
 		run_ucx_perftest_mpi
