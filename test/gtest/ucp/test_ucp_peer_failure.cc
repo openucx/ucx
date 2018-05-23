@@ -153,7 +153,7 @@ void *test_ucp_peer_failure::send_nb(ucp_ep_h ep, ucp_rkey_h rkey) {
         return ucp_put_nb(ep, &m_sbuf[0], m_sbuf.size(), (uintptr_t)&m_rbuf[0],
                           rkey, send_cb);
     } else {
-        return NULL;
+        ucs_fatal("invalid test case");
     }
 }
 
@@ -162,8 +162,10 @@ void *test_ucp_peer_failure::recv_nb(entity& e) {
     if (GetParam().variant & TEST_TAG) {
         return ucp_tag_recv_nb(e.worker(), &m_rbuf[0], m_rbuf.size(), DATATYPE, 0,
                                0, recv_cb);
-    } else {
+    } else if (GetParam().variant & TEST_RMA) {
         return NULL;
+    } else {
+        ucs_fatal("invalid test case");
     }
 }
 
