@@ -51,6 +51,11 @@ unsigned uct_ib_mlx5_get_cq_ci(struct ibv_cq *cq);
  */
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av);
 
+/**
+ * Backports for legacy bare-metal support
+ */
+struct ibv_qp *uct_dv_get_cmd_qp(struct ibv_srq *srq);
+
 void uct_ib_mlx5_cq_set_flags(struct ibv_cq *cq, int v);
 
 #endif

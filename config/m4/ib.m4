@@ -156,6 +156,9 @@ AS_IF([test "x$with_ib" == xyes],
                            ibv_mlx5_exp_update_cq_ci,
                            MLX5_WQE_CTRL_SOLICITED],
                                   [], [], [[#include <infiniband/mlx5_hw.h>]])
+                       AC_CHECK_MEMBERS([struct mlx5_srq.cmd_qp],
+                                  [], [with_ib_hw_tm=no],
+                                      [[#include <infiniband/mlx5_hw.h>]])
                        AC_CHECK_MEMBERS([struct mlx5_cq.model_flags],
                                   [], [], [[#include <infiniband/mlx5_hw.h>]])
                                ], [with_mlx5_hw=no])
