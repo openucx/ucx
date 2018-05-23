@@ -350,10 +350,11 @@ enum {
                                             if passed address is not a null-pointer
                                             then it will be used as a hint or direct
                                             address for allocation. */
-    UCP_MEM_MAP_FIXED    = UCS_BIT(2)  /**< Don't interpret address as a hint:
+    UCP_MEM_MAP_FIXED    = UCS_BIT(2), /**< Don't interpret address as a hint:
                                             place the mapping at exactly that
                                             address. The address must be a multiple
                                             of the page size. */
+    UCP_MEM_MAP_DM       = UCS_BIT(3)  /**< Allocate memory on DM */
 };
 
 

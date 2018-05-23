@@ -402,9 +402,10 @@ enum {
     UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6),  /**< MD supports direct access to
                                                remote memory via a pointer that
                                                is returned by @ref uct_rkey_ptr */
-    UCT_MD_FLAG_SOCKADDR   = UCS_BIT(7)   /**< MD support for client-server
+    UCT_MD_FLAG_SOCKADDR   = UCS_BIT(7),  /**< MD support for client-server
                                                connection establishment via
                                                sockaddr */
+    UCT_MD_FLAG_DM         = UCS_BIT(8),  /**< MD supports memory allocation on DM */
 };
 
 /*
@@ -439,6 +440,7 @@ enum uct_md_mem_flags {
     UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), /**< enable remote put access */
     UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(6), /**< enable remote get access */
     UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(7), /**< enable remote atomic access */
+    UCT_MD_MEM_FLAG_DM              = UCS_BIT(8), /**< Allocate memory on DM */
 
     /** enable local and remote access for all operations */
     UCT_MD_MEM_ACCESS_ALL =  (UCT_MD_MEM_ACCESS_REMOTE_PUT|
