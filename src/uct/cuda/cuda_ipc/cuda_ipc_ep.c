@@ -29,11 +29,29 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, uct_iface_t *tl_iface,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
+    sglib_hashed_uct_cuda_ipc_rem_seg_t_init(self->rem_segments_hash);
+
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
 {
+    struct sglib_hashed_uct_cuda_ipc_rem_seg_t_iterator iter;
+    uct_cuda_ipc_rem_seg_t *rem_seg;
+    ucs_status_t status;
+
+    for (rem_seg = sglib_hashed_uct_cuda_ipc_rem_seg_t_it_init(&iter, self->rem_segments_hash);
+         rem_seg != NULL;
+         rem_seg = sglib_hashed_uct_cuda_ipc_rem_seg_t_it_next(&iter)) {
+            sglib_hashed_uct_cuda_ipc_rem_seg_t_delete(self->rem_segments_hash,
+                                                           rem_seg);
+            status =
+                UCT_CUDADRV_FUNC(cuIpcCloseMemHandle(rem_seg->d_bptr));
+            if (UCS_OK != status) {
+                ucs_error("failed to close ipc memHandle\n");
+            }
+            ucs_free(rem_seg);
+    }
 }
 
 UCS_CLASS_DEFINE(uct_cuda_ipc_ep_t, uct_base_ep_t)
@@ -77,6 +95,7 @@ void *uct_cuda_ipc_ep_attach_rem_seg(uct_cuda_ipc_ep_t *ep,
             UCT_CUDADRV_FUNC(cuIpcOpenMemHandle((CUdeviceptr *)&rem_seg->d_bptr,
                                                 rkey->ph, cuda_ipc_mh_flags));
         if (UCS_OK != status) {
+            ucs_free(rem_seg);
             return NULL;
         }
         rem_seg->b_len = rkey->b_rem_len;
