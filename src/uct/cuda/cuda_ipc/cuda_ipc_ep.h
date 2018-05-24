@@ -15,7 +15,6 @@
 typedef struct uct_cuda_ipc_rem_seg uct_cuda_ipc_rem_seg_t;
 
 struct uct_cuda_ipc_rem_seg {
-    uct_cuda_ipc_rem_seg_t *next;
     CUipcMemHandle         ph;         /* Memory handle of GPU memory */
     CUdeviceptr            d_bptr;     /* Allocation base address */
     size_t                 b_len;      /* Allocation size */
@@ -28,14 +27,14 @@ static inline khint_t uct_cuda_ipc_memh_hash_func(CUipcMemHandle seg)
     int i;
 
     for (i = 0; i < sizeof(seg); i++) {
-        hash_val = hash_val*31 + seg.reserved[i];
+        hash_val = (hash_val * 31) + seg.reserved[i];
     }
 
-    return (khint_t) (hash_val);
+    return hash_val;
 }
 
-#define uct_cuda_ipc_memh_hash_equal(sg1, sg2)  \
-    strncmp((const char *) &sg1, (const char *) &sg2, sizeof(CUipcMemHandle))
+#define uct_cuda_ipc_memh_hash_equal(_sg1, _sg2)  \
+    strncmp((const char *) &(_sg1), (const char *) &(_sg2), sizeof(CUipcMemHandle))
 
 KHASH_INIT(uct_cuda_ipc_memh_hash, CUipcMemHandle, CUdeviceptr, 1,
            uct_cuda_ipc_memh_hash_func, uct_cuda_ipc_memh_hash_equal);
