@@ -157,6 +157,7 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
     now = ucs_twheel_get_time(&iface->async.slow_timer);
     diff = now - ep->tx.send_time;
     if (diff > iface->config.peer_timeout) {
+        ucs_debug("ep %p: timeout of %.2f sec", ep, ucs_time_to_sec(diff));
         iface->super.ops->handle_failure(&iface->super, ep,
                                          UCS_ERR_ENDPOINT_TIMEOUT);
         return;
@@ -318,6 +319,7 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
     ep = uct_ud_iface_cep_lookup(iface, ib_addr, if_addr, UCT_UD_EP_CONN_ID_MAX);
     if (ep) {
         uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_NOTSENT);
+        ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
         *new_ep_p = ep;
         *skb_p    = NULL;
         return UCS_ERR_ALREADY_EXISTS;
@@ -1216,7 +1218,8 @@ void  uct_ud_ep_disconnect(uct_ep_h tl_ep)
     uct_ud_ep_t    *ep    = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_iface_t);
 
-    ucs_trace_func("");
+    ucs_debug("ep %p: disconnect", ep);
+
     /* cancel user pending */
     uct_ud_ep_pending_purge(tl_ep, NULL, NULL);
 
