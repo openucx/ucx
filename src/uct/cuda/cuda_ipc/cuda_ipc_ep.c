@@ -30,7 +30,10 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, uct_iface_t *tl_iface,
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
 {
+    CUdeviceptr dptr;
 
+    kh_foreach_value(&self->memh_hash, dptr,
+                     UCT_CUDADRV_FUNC(cuIpcCloseMemHandle(dptr)));
     kh_destroy_inplace(uct_cuda_ipc_memh_hash, &self->memh_hash);
 }
 
