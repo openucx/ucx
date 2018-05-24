@@ -353,7 +353,8 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
 }
 
 static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
-                                       off_t offset, struct ibv_mr **umr_p)
+                                       off_t offset, struct ibv_mr **umr_p,
+                                       int on_dm)
 {
 #if HAVE_EXP_UMR
     struct ibv_exp_mem_region *mem_reg = NULL;
@@ -430,7 +431,7 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
     }
 
     for (i = 0; i < list_size; i++) {
-        mem_reg[i].base_addr            = (uintptr_t) mr->addr + i * reg_length;
+        mem_reg[i].base_addr            = (uintptr_t) (on_dm ? 0 : mr->addr) + i * reg_length;
         mem_reg[i].length               = reg_length;
         mem_reg[i].mr                   = mr;
     }
@@ -438,7 +439,7 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
     ucs_assert(list_size >= 1);
     mem_reg[list_size - 1].length       = mr->length % reg_length;
     wr.ext_op.umr.mem_list.mem_reg_list = mem_reg;
-    wr.ext_op.umr.base_addr             = (uint64_t) (uintptr_t) mr->addr + offset;
+    wr.ext_op.umr.base_addr             = (uint64_t) (uintptr_t) (on_dm ? 0 : mr->addr) + offset;
     wr.ext_op.umr.num_mrs               = list_size;
     wr.ext_op.umr.modified_mr           = umr;
     ucs_trace_data("UMR_FILL qp 0x%x lkey 0x%x base 0x%lx [addr %lx len %zu lkey 0x%x] list_size %d",
@@ -889,13 +890,14 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
      */
     if ((memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) &&
         !(memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) &&
-        (memh != &md->global_odp) && 0)
+        (memh != &md->global_odp))
     {
         /* create UMR on-demand */
         ucs_assert(memh->atomic_mr == NULL);
         umr_offset = uct_ib_md_atomic_offset(uct_ib_md_get_atomic_mr_id(md));
         status = UCS_PROFILE_CALL(uct_ib_md_post_umr, md, memh->mr,
-                                  umr_offset, &memh->atomic_mr);
+                                  umr_offset, &memh->atomic_mr,
+                                  !!(memh->flags & UCT_IB_MEM_FLAG_DM));
         if (status == UCS_OK) {
             memh->flags |= UCT_IB_MEM_FLAG_ATOMIC_MR;
             ucs_trace("created atomic key 0x%x for 0x%x", memh->atomic_mr->rkey,
