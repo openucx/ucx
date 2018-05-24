@@ -968,6 +968,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 
     if (IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface))) {
         extra_pkt_len += UCT_IB_GRH_LEN + UCT_IB_ROCE_LEN;
+        iface_attr->latency.overhead += 200e-9;
     } else {
         /* TODO check if UCT_IB_DELIM_LEN is present in RoCE as well */
         extra_pkt_len += UCT_IB_LRH_LEN;
