@@ -15,12 +15,6 @@
 #define UCT_CUDA_IPC_PUT 0
 #define UCT_CUDA_IPC_GET 1
 
-SGLIB_DEFINE_LIST_FUNCTIONS(uct_cuda_ipc_rem_seg_t,
-                            uct_cuda_ipc_rem_seg_compare, next)
-SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_cuda_ipc_rem_seg_t,
-                                        UCT_CUDA_IPC_HASH_SIZE,
-                                        uct_cuda_ipc_rem_seg_hash)
-
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, uct_iface_t *tl_iface,
                            const uct_device_addr_t *dev_addr,
                            const uct_iface_addr_t *iface_addr)
@@ -29,29 +23,15 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, uct_iface_t *tl_iface,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
-    sglib_hashed_uct_cuda_ipc_rem_seg_t_init(self->rem_segments_hash);
+    kh_init_inplace(uct_cuda_ipc_memh_hash, &self->memh_hash);
 
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
 {
-    struct sglib_hashed_uct_cuda_ipc_rem_seg_t_iterator iter;
-    uct_cuda_ipc_rem_seg_t *rem_seg;
-    ucs_status_t status;
 
-    for (rem_seg = sglib_hashed_uct_cuda_ipc_rem_seg_t_it_init(&iter, self->rem_segments_hash);
-         rem_seg != NULL;
-         rem_seg = sglib_hashed_uct_cuda_ipc_rem_seg_t_it_next(&iter)) {
-            sglib_hashed_uct_cuda_ipc_rem_seg_t_delete(self->rem_segments_hash,
-                                                           rem_seg);
-            status =
-                UCT_CUDADRV_FUNC(cuIpcCloseMemHandle(rem_seg->d_bptr));
-            if (UCS_OK != status) {
-                ucs_error("failed to close ipc memHandle\n");
-            }
-            ucs_free(rem_seg);
-    }
+    kh_destroy_inplace(uct_cuda_ipc_memh_hash, &self->memh_hash);
 }
 
 UCS_CLASS_DEFINE(uct_cuda_ipc_ep_t, uct_base_ep_t)
@@ -67,44 +47,28 @@ void *uct_cuda_ipc_ep_attach_rem_seg(uct_cuda_ipc_ep_t *ep,
                                      uct_cuda_ipc_key_t *rkey)
 {
     unsigned int cuda_ipc_mh_flags = CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS;
-    uct_cuda_ipc_rem_seg_t *rem_seg, search;
     ucs_status_t status;
+    CUdeviceptr dptr;
+    khiter_t hash_it;
+    int ret;
 
-    search.ph = rkey->ph;
-    /* TODO: Address the case when va matches but not memhandle
-
-       Cause:
-       cudaMalloc(&ptrX ...); mhX = getmemhandle(ptrX, ...); cudafree(ptrX);
-       cudaMalloc(&ptrY ...); mhY = getmemhandle(ptrX, ...);
-       Now: ptrX can be ptrY but mhX is never mhY
-    */
-    rem_seg =
-        sglib_hashed_uct_cuda_ipc_rem_seg_t_find_member(ep->rem_segments_hash,
-                                                        &search);
-    if (rem_seg == NULL) {
-        rem_seg = ucs_malloc(sizeof(*rem_seg), "rem_seg");
-        if (rem_seg == NULL) {
-            ucs_error("failed to allocate memory for a remote segment. %m");
-            return NULL;
-        }
-
-        rem_seg->ph      = rkey->ph;
-        rem_seg->dev_num = rkey->dev_num;
-
-        status =
-            UCT_CUDADRV_FUNC(cuIpcOpenMemHandle((CUdeviceptr *)&rem_seg->d_bptr,
-                                                rkey->ph, cuda_ipc_mh_flags));
+    hash_it = kh_put(uct_cuda_ipc_memh_hash, &ep->memh_hash,
+                     rkey->ph, &ret);
+    if (ret > 0) {
+        /* memhandle not found */
+        status = UCT_CUDADRV_FUNC(cuIpcOpenMemHandle(&dptr, rkey->ph,
+                                                     cuda_ipc_mh_flags));
         if (UCS_OK != status) {
-            ucs_free(rem_seg);
+            kh_del(uct_cuda_ipc_memh_hash, &ep->memh_hash, hash_it);
             return NULL;
         }
-        rem_seg->b_len = rkey->b_rem_len;
-
-        sglib_hashed_uct_cuda_ipc_rem_seg_t_add(ep->rem_segments_hash,
-                                                rem_seg);
+        kh_value(&ep->memh_hash, hash_it) = (CUdeviceptr)dptr;
+    }
+    else {
+        dptr = (CUdeviceptr)kh_value(&ep->memh_hash, hash_it);
     }
 
-    return (void *)rem_seg->d_bptr;
+    return (void *)dptr;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
