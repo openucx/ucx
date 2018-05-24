@@ -1185,7 +1185,8 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                                               env_prefix, table_prefix,
                                               field->name, aliased_field,
                                               flags, "(alias of %s%s%s)",
-                                              env_prefix, table_prefix,
+                                              env_prefix,
+                                              table_prefix ? table_prefix : "",
                                               aliased_field->name);
             }
         } else {
