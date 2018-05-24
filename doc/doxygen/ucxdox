@@ -1648,7 +1648,7 @@ EXTRA_PACKAGES         = times
 # to HTML_HEADER.
 # This tag requires that the tag GENERATE_LATEX is set to YES.
 
-LATEX_HEADER           = $(SRCDIR)/doc/doxygen/header.tex
+LATEX_HEADER           = doc/doxygen/header.tex
 
 # The LATEX_FOOTER tag can be used to specify a personal LaTeX footer for the
 # generated LaTeX document. The footer should contain everything after the last
