@@ -12,8 +12,6 @@
 #include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
-#include <cuda_runtime.h>
-#include <cuda.h>
 
 
 static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {

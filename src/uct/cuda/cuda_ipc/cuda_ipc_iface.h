@@ -26,8 +26,6 @@ typedef struct uct_cuda_ipc_iface {
     int              streams_initialized;     /* indicates if stream created */
     CUstream         stream_d2d[UCT_CUDA_IPC_MAX_PEERS];
                                               /* per-peer stream */
-    int              p2p_map[UCT_CUDA_IPC_MAX_PEERS][UCT_CUDA_IPC_MAX_PEERS];
-                                              /* map indicating connectivity */
     struct {
         unsigned     max_poll;                /* query attempts w.o success */
     } config;
