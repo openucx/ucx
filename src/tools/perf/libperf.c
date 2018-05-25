@@ -446,18 +446,17 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         max_iov  = attr.cap.get.max_iov;
         break;
     case UCX_PERF_CMD_ADD:
-        ATOMIC_OP_CONFIG(message_size, &atomic_op32, &atomic_op64, UCT_ATOMIC_OP_ADD,
-                         perf_atomic_op, params, status);
-        max_size = 8;
-        break;
+    case UCX_PERF_CMD_AND:
+    case UCX_PERF_CMD_OR:
+    case UCX_PERF_CMD_XOR:
     case UCX_PERF_CMD_FADD:
-        ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_ADD,
-                         perf_atomic_fop, params, status);
-        max_size = 8;
-        break;
+    case UCX_PERF_CMD_FAND:
+    case UCX_PERF_CMD_FOR:
+    case UCX_PERF_CMD_FXOR:
     case UCX_PERF_CMD_SWAP:
-        ATOMIC_OP_CONFIG(message_size, &atomic_fop32, &atomic_fop64, UCT_ATOMIC_OP_SWAP,
-                         perf_atomic_fop, params, status);
+        ATOMIC_OP_CONFIG(message_size, &atomic_op32, &atomic_op64,
+                         uct_perf_amo_cmd_op(params->command),
+                         perf_atomic_op, params, status);
         max_size = 8;
         break;
     case UCX_PERF_CMD_CSWAP:
@@ -792,7 +791,13 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
         ucp_params->features |= UCP_FEATURE_RMA;
         break;
     case UCX_PERF_CMD_ADD:
+    case UCX_PERF_CMD_AND:
+    case UCX_PERF_CMD_OR:
+    case UCX_PERF_CMD_XOR:
     case UCX_PERF_CMD_FADD:
+    case UCX_PERF_CMD_FAND:
+    case UCX_PERF_CMD_FOR:
+    case UCX_PERF_CMD_FXOR:
     case UCX_PERF_CMD_SWAP:
     case UCX_PERF_CMD_CSWAP:
         if (message_size == sizeof(uint32_t)) {

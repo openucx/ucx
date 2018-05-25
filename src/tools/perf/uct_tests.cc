@@ -15,7 +15,6 @@ extern "C" {
 #include <ucs/sys/sys.h>
 }
 
-
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, uct_perf_data_layout_t DATA, bool ONESIDED>
 class uct_perf_test_runner {
 public:
@@ -212,23 +211,29 @@ public:
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_ADD:
+        case UCX_PERF_CMD_AND:
+        case UCX_PERF_CMD_OR:
+        case UCX_PERF_CMD_XOR:
             if (length == sizeof(uint32_t)) {
-                return uct_ep_atomic32_post(ep, UCT_ATOMIC_OP_ADD, sn - prev_sn, remote_addr, rkey);
+                return uct_ep_atomic32_post(ep, uct_perf_amo_cmd_op(CMD), sn - prev_sn, remote_addr, rkey);
             } else if (length == sizeof(uint64_t)) {
-                return uct_ep_atomic64_post(ep, UCT_ATOMIC_OP_ADD, sn - prev_sn, remote_addr, rkey);
+                return uct_ep_atomic64_post(ep, uct_perf_amo_cmd_op(CMD), sn - prev_sn, remote_addr, rkey);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_FADD:
             if (length == sizeof(uint32_t)) {
-                return uct_ep_atomic32_fetch(ep, UCT_ATOMIC_OP_ADD, sn - prev_sn,
+                return uct_ep_atomic32_fetch(ep, uct_perf_amo_cmd_op(CMD), sn - prev_sn,
                                              (uint32_t*)buffer, remote_addr, rkey, comp);
             } else if (length == sizeof(uint64_t)) {
-                return uct_ep_atomic64_fetch(ep, UCT_ATOMIC_OP_ADD, sn - prev_sn,
+                return uct_ep_atomic64_fetch(ep, uct_perf_amo_cmd_op(CMD), sn - prev_sn,
                                              (uint64_t*)buffer, remote_addr, rkey, comp);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
+        case UCX_PERF_CMD_FAND:
+        case UCX_PERF_CMD_FOR:
+        case UCX_PERF_CMD_FXOR:
         case UCX_PERF_CMD_SWAP:
             if (length == sizeof(uint32_t)) {
                 return uct_ep_atomic32_fetch(ep, UCT_ATOMIC_OP_SWAP, sn,
@@ -283,6 +288,10 @@ public:
 
     ucs_status_t run_pingpong()
     {
+        const psn_t orig_val   = 0xcc;
+        const psn_t update_val = 0xf3;
+        /* any operation over orig and update will produce
+         * result which is not equal orig value */
         psn_t send_sn, *recv_sn;
         unsigned my_index;
         uct_ep_h ep;
@@ -298,6 +307,9 @@ public:
         switch (CMD) {
         case UCX_PERF_CMD_AM:
         case UCX_PERF_CMD_ADD:
+        case UCX_PERF_CMD_AND:
+        case UCX_PERF_CMD_OR:
+        case UCX_PERF_CMD_XOR:
             recv_sn = (psn_t*)m_perf.recv_buffer;
             break;
         case UCX_PERF_CMD_PUT:
@@ -311,7 +323,7 @@ public:
 
         uct_perf_test_prepare_iov_buffer();
 
-        *recv_sn  = -1;
+        *recv_sn = orig_val;
         rte_call(&m_perf, barrier);
 
         my_index = rte_call(&m_perf, group_index);
@@ -323,26 +335,28 @@ public:
         rkey        = m_perf.uct.peers[1 - my_index].rkey.rkey;
         ep          = m_perf.uct.peers[1 - my_index].ep;
 
-        send_sn = 0;
+        send_sn = update_val;
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
+                *recv_sn = orig_val;
+                send_b(ep, send_sn, 0, buffer, length, remote_addr,
                        rkey, NULL);
                 ucx_perf_update(&m_perf, 1, length);
-                while (*recv_sn != send_sn) {
+                /* wait for recv buffer is updated */
+                while (*recv_sn == orig_val) {
                     progress_responder();
                 }
-                ++send_sn;
             }
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                while (*recv_sn != send_sn) {
+                /* wait for recv buffer is updated */
+                while (*recv_sn == orig_val) {
                     progress_responder();
                 }
-                send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
+                *recv_sn = orig_val;
+                send_b(ep, send_sn, 0, buffer, length, remote_addr,
                        rkey, NULL);
                 ucx_perf_update(&m_perf, 1, length);
-                ++send_sn;
             }
         }
 
@@ -522,6 +536,9 @@ public:
                                           true, /* Waiting for replies */
                                           false /* For GET, data is delivered to requester */ );
             case UCX_PERF_CMD_FADD:
+            case UCX_PERF_CMD_FAND:
+            case UCX_PERF_CMD_FOR:
+            case UCX_PERF_CMD_FXOR:
             case UCX_PERF_CMD_SWAP:
             case UCX_PERF_CMD_CSWAP:
                 return run_stream_req_uni(false, /* No flow control for RMA/AMO */
@@ -573,11 +590,20 @@ ucs_status_t uct_perf_test_dispatch(ucx_perf_context_t *perf)
         (UCX_PERF_CMD_AM,  UCX_PERF_TEST_TYPE_PINGPONG),
         (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG),
         (UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_PINGPONG),
+        (UCX_PERF_CMD_AND, UCX_PERF_TEST_TYPE_PINGPONG),
+        (UCX_PERF_CMD_OR,  UCX_PERF_TEST_TYPE_PINGPONG),
+        (UCX_PERF_CMD_XOR, UCX_PERF_TEST_TYPE_PINGPONG),
         (UCX_PERF_CMD_AM,  UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_AND, UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_OR, UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_XOR, UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_FAND, UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_FOR, UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_FXOR, UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI)
         );

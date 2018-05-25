@@ -161,6 +161,64 @@ size_t ucx_perf_get_message_size(const ucx_perf_params_t *params)
     return length;
 }
 
+static inline
+uct_atomic_op_t uct_perf_amo_cmd_op(ucx_perf_cmd_t cmd) {
+    switch (cmd) {
+    case UCX_PERF_CMD_ADD:
+    case UCX_PERF_CMD_FADD:
+        return UCT_ATOMIC_OP_ADD;
+    case UCX_PERF_CMD_AND:
+    case UCX_PERF_CMD_FAND:
+        return UCT_ATOMIC_OP_AND;
+    case UCX_PERF_CMD_OR:
+    case UCX_PERF_CMD_FOR:
+        return  UCT_ATOMIC_OP_OR;
+    case UCX_PERF_CMD_XOR:
+    case UCX_PERF_CMD_FXOR:
+        return UCT_ATOMIC_OP_XOR;
+    case UCX_PERF_CMD_SWAP:
+        return UCT_ATOMIC_OP_SWAP;
+    default:
+        ucs_error("Incorrect atomic command: %d", cmd);
+        return UCT_ATOMIC_OP_LAST;
+    }
+}
+
+static inline
+ucp_atomic_post_op_t ucp_perf_amo_cmd_op(ucx_perf_cmd_t cmd) {
+    switch (cmd) {
+    case UCX_PERF_CMD_ADD:
+        return UCP_ATOMIC_POST_OP_ADD;
+    case UCX_PERF_CMD_AND:
+        return UCP_ATOMIC_POST_OP_AND;
+    case UCX_PERF_CMD_OR:
+        return UCP_ATOMIC_POST_OP_OR;
+    case UCX_PERF_CMD_XOR:
+        return UCP_ATOMIC_POST_OP_XOR;
+    default:
+        ucs_error("Incorrect atomic command: %d", cmd);
+        return UCP_ATOMIC_POST_OP_LAST;
+    }
+}
+
+static inline
+ucp_atomic_fetch_op_t ucp_perf_amo_cmd_fop(ucx_perf_cmd_t cmd) {
+    switch (cmd) {
+    case UCX_PERF_CMD_FADD:
+        return UCP_ATOMIC_FETCH_OP_FADD;
+    case UCX_PERF_CMD_FAND:
+        return UCP_ATOMIC_FETCH_OP_FAND;
+    case UCX_PERF_CMD_FOR:
+        return UCP_ATOMIC_FETCH_OP_FOR;
+    case UCX_PERF_CMD_FXOR:
+        return UCP_ATOMIC_FETCH_OP_FXOR;
+    case UCX_PERF_CMD_SWAP:
+        return UCP_ATOMIC_FETCH_OP_SWAP;
+    default:
+        ucs_error("Incorrect atomic command: %d", cmd);
+        return UCP_ATOMIC_FETCH_OP_LAST;
+    }
+}
 
 END_C_DECLS
 
