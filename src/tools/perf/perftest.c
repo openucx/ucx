@@ -89,11 +89,29 @@ test_type_t tests[] = {
     {"add_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_PINGPONG,
      "atomic add latency"},
 
+    {"and_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_AND, UCX_PERF_TEST_TYPE_PINGPONG,
+     "atomic and latency"},
+
+    {"or_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_OR, UCX_PERF_TEST_TYPE_PINGPONG,
+     "atomic or latency"},
+
+    {"xor_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_XOR, UCX_PERF_TEST_TYPE_PINGPONG,
+     "atomic xor latency"},
+
     {"get", UCX_PERF_API_UCT, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "get latency / bandwidth / message rate"},
 
     {"fadd", UCX_PERF_API_UCT, UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "atomic fetch-and-add latency / message rate"},
+
+    {"fand", UCX_PERF_API_UCT, UCX_PERF_CMD_FAND, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "atomic fetch-and-and latency / message rate"},
+
+    {"for", UCX_PERF_API_UCT, UCX_PERF_CMD_FOR, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "atomic fetch-and-or latency / message rate"},
+
+    {"fxor", UCX_PERF_API_UCT, UCX_PERF_CMD_FXOR, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "atomic fetch-and-xor latency / message rate"},
 
     {"swap", UCX_PERF_API_UCT, UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "atomic swap latency / message rate"},
@@ -134,8 +152,26 @@ test_type_t tests[] = {
     {"ucp_add", UCX_PERF_API_UCP, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "UCP atomic add bandwidth / message rate"},
 
+    {"ucp_and", UCX_PERF_API_UCP, UCX_PERF_CMD_AND, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "UCP atomic and bandwidth / message rate"},
+
+    {"ucp_or", UCX_PERF_API_UCP, UCX_PERF_CMD_OR, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "UCP atomic or bandwidth / message rate"},
+
+    {"ucp_xor", UCX_PERF_API_UCP, UCX_PERF_CMD_XOR, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "UCP atomic xor bandwidth / message rate"},
+
     {"ucp_fadd", UCX_PERF_API_UCP, UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "UCP atomic fetch-and-add latency / bandwidth / message rate"},
+
+    {"ucp_fand", UCX_PERF_API_UCP, UCX_PERF_CMD_FAND, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "UCP atomic fetch-and-and latency / bandwidth / message rate"},
+
+    {"ucp_for", UCX_PERF_API_UCP, UCX_PERF_CMD_FOR, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "UCP atomic fetch-and-or latency / bandwidth / message rate"},
+
+    {"ucp_fxor", UCX_PERF_API_UCP, UCX_PERF_CMD_FXOR, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "UCP atomic fetch-and-xor latency / bandwidth / message rate"},
 
     {"ucp_swap", UCX_PERF_API_UCP, UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "UCP atomic swap latency / bandwidth / message rate"},

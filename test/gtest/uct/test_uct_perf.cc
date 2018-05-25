@@ -95,6 +95,24 @@ test_perf::test_spec test_uct_perf::tests[] =
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 3.5,
     0 },
 
+  { "atomic and latency", "usec",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_AND, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCT_PERF_DATA_LAYOUT_SHORT, 0, 1, { 8 }, 1, 100000l,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 3.5,
+    0 },
+
+  { "atomic or latency", "usec",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_OR, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCT_PERF_DATA_LAYOUT_SHORT, 0, 1, { 8 }, 1, 100000l,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 3.5,
+    0 },
+
+  { "atomic xor latency", "usec",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_XOR, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCT_PERF_DATA_LAYOUT_SHORT, 0, 1, { 8 }, 1, 100000l,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 3.5,
+    0 },
+
   { "atomic add rate", "Mpps",
     UCX_PERF_API_UCT, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_SHORT, 0, 1, { 8 }, 1, 2000000l,
