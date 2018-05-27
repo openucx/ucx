@@ -23,11 +23,18 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, uct_iface_t *tl_iface,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
+    kh_init_inplace(uct_cuda_ipc_memh_hash, &self->memh_hash);
+
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
 {
+    CUdeviceptr dptr;
+
+    kh_foreach_value(&self->memh_hash, dptr,
+                     UCT_CUDADRV_FUNC(cuIpcCloseMemHandle(dptr)));
+    kh_destroy_inplace(uct_cuda_ipc_memh_hash, &self->memh_hash);
 }
 
 UCS_CLASS_DEFINE(uct_cuda_ipc_ep_t, uct_base_ep_t)
@@ -38,10 +45,40 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_ipc_ep_t, uct_ep_t);
 #define uct_cuda_ipc_trace_data(_addr, _rkey, _fmt, ...)     \
     ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_addr), (_rkey))
 
+void *uct_cuda_ipc_ep_attach_rem_seg(uct_cuda_ipc_ep_t *ep,
+                                     uct_cuda_ipc_iface_t *iface,
+                                     uct_cuda_ipc_key_t *rkey)
+{
+    unsigned int cuda_ipc_mh_flags = CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS;
+    ucs_status_t status;
+    CUdeviceptr dptr;
+    khiter_t hash_it;
+    int ret;
+
+    hash_it = kh_put(uct_cuda_ipc_memh_hash, &ep->memh_hash,
+                     rkey->ph, &ret);
+    if (ret > 0) {
+        /* memhandle not found */
+        status = UCT_CUDADRV_FUNC(cuIpcOpenMemHandle(&dptr, rkey->ph,
+                                                     cuda_ipc_mh_flags));
+        if (UCS_OK != status) {
+            kh_del(uct_cuda_ipc_memh_hash, &ep->memh_hash, hash_it);
+            return NULL;
+        }
+        kh_value(&ep->memh_hash, hash_it) = (CUdeviceptr)dptr;
+    }
+    else {
+        dptr = (CUdeviceptr)kh_value(&ep->memh_hash, hash_it);
+    }
+
+    return (void *)dptr;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_key_t *key,
-                             int cu_device, uint64_t remote_addr,
-                             void **mapped_rem_addr, void *buffer)
+uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_iface_t *iface,
+                             uct_cuda_ipc_key_t *key, int cu_device,
+                             uint64_t remote_addr, void **mapped_rem_addr,
+                             void *buffer)
 {
     int offset, same_ctx = 0;
     void *mapped_addr;
@@ -72,12 +109,9 @@ uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_key_t *key,
     if (same_ctx) {
         *mapped_rem_addr = (void *) remote_addr;
     } else {
-        status =
-            UCT_CUDADRV_FUNC(cuIpcOpenMemHandle((CUdeviceptr *) &mapped_addr,
-                                                key->ph,
-                                                CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS));
-        if (UCS_OK != status) {
-            return status;
+        mapped_addr = uct_cuda_ipc_ep_attach_rem_seg(ep, iface, key);
+        if (NULL == mapped_addr) {
+            return UCS_ERR_IO_ERROR;
         }
 
         offset = (uintptr_t)remote_addr - (uintptr_t)key->d_rem_bptr;
@@ -115,7 +149,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
 
     UCT_CUDA_IPC_GET_DEVICE(cu_device);
 
-    status = uct_cuda_ipc_get_mapped_addr(ep, key, cu_device, remote_addr,
+    status = uct_cuda_ipc_get_mapped_addr(ep, iface, key, cu_device, remote_addr,
                                           &mapped_rem_addr, iov[0].buffer);
     if (UCS_OK != status) {
         return status;
