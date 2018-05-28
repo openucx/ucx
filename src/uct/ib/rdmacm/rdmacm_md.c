@@ -106,6 +106,31 @@ static int uct_rdmacm_is_addr_route_resolved(struct rdma_cm_id *cm_id,
     return 1;
 }
 
+static int uct_rdmacm_is_sockaddr_inaddr_any(struct sockaddr *addr)
+{
+    struct sockaddr_in6 *addr_in6;
+    struct sockaddr_in *addr_in;
+
+    switch (addr->sa_family) {
+    case AF_INET:
+        addr_in = (struct sockaddr_in *)addr;
+        if (addr_in->sin_addr.s_addr == INADDR_ANY) {
+            return 1;
+        }
+        break;
+    case AF_INET6:
+        addr_in6 = (struct sockaddr_in6 *)addr;
+        if (!memcmp(&addr_in6->sin6_addr, &in6addr_any, sizeof(addr_in6->sin6_addr))) {
+            return 1;
+        }
+        break;
+    default:
+        ucs_error("Invalid address family");
+    }
+
+    return 0;
+}
+
 int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                       uct_sockaddr_accessibility_t mode)
 {
@@ -139,6 +164,11 @@ int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
                                        ip_port_str, UCS_SOCKADDR_STRING_LEN));
             goto out_destroy_id;
         }
+
+        if (uct_rdmacm_is_sockaddr_inaddr_any((struct sockaddr *)sockaddr->addr)) {
+            is_accessible = 1;
+            goto out_print;
+        }
     }
 
     /* Client and server sides check if can access the given sockaddr.
@@ -150,6 +180,7 @@ int uct_rdmacm_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockad
         goto out_destroy_id;
     }
 
+out_print:
     ucs_debug("address %s (port %d) is accessible from rdmacm_md %p with mode: %d",
               ucs_sockaddr_str((struct sockaddr *)sockaddr->addr, ip_port_str,
                                UCS_SOCKADDR_STRING_LEN),
