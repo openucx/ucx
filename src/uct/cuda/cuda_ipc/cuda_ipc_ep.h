@@ -33,8 +33,8 @@ static inline khint_t uct_cuda_ipc_memh_hash_func(CUipcMemHandle seg)
     return hash_val;
 }
 
-#define uct_cuda_ipc_memh_hash_equal(_sg1, _sg2)  \
-    strncmp((const char *) &(_sg1), (const char *) &(_sg2), sizeof(CUipcMemHandle))
+#define uct_cuda_ipc_memh_hash_equal(_sg1, _sg2)                        \
+    !strncmp((const char *) &(_sg1), (const char *) &(_sg2), sizeof(CUipcMemHandle))
 
 KHASH_INIT(uct_cuda_ipc_memh_hash, CUipcMemHandle, CUdeviceptr, 1,
            uct_cuda_ipc_memh_hash_func, uct_cuda_ipc_memh_hash_equal);
