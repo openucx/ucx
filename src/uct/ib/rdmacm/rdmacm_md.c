@@ -114,18 +114,12 @@ static int uct_rdmacm_is_sockaddr_inaddr_any(struct sockaddr *addr)
     switch (addr->sa_family) {
     case AF_INET:
         addr_in = (struct sockaddr_in *)addr;
-        if (addr_in->sin_addr.s_addr == INADDR_ANY) {
-            return 1;
-        }
-        break;
+        return addr_in->sin_addr.s_addr == INADDR_ANY;
     case AF_INET6:
         addr_in6 = (struct sockaddr_in6 *)addr;
-        if (!memcmp(&addr_in6->sin6_addr, &in6addr_any, sizeof(addr_in6->sin6_addr))) {
-            return 1;
-        }
-        break;
+        return !memcmp(&addr_in6->sin6_addr, &in6addr_any, sizeof(addr_in6->sin6_addr));
     default:
-        ucs_error("Invalid address family");
+        ucs_debug("Invalid address family: %d", addr->sa_family);
     }
 
     return 0;
