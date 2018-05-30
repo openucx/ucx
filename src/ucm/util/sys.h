@@ -36,6 +36,12 @@ typedef int (*ucm_proc_maps_cb_t)(void *arg, void *addr, size_t length, int prot
 
 
 /**
+ * @return Page size on the system.
+ */
+size_t ucm_get_page_size();
+
+
+/**
  * Read and process entries from /proc/self/maps.
  *
  * @param [in]  cb      Callback function that would be called for each entry

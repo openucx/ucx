@@ -26,12 +26,13 @@
 pthread_mutex_t ucm_reloc_get_orig_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 pthread_t volatile ucm_reloc_get_orig_thread = -1;
 
-UCM_DEFINE_REPLACE_FUNC(mmap,   void*, MAP_FAILED, void*, size_t, int, int, int, off_t)
-UCM_DEFINE_REPLACE_FUNC(munmap, int,   -1,         void*, size_t)
-UCM_DEFINE_REPLACE_FUNC(mremap, void*, MAP_FAILED, void*, size_t, size_t, int)
-UCM_DEFINE_REPLACE_FUNC(shmat,  void*, MAP_FAILED, int, const void*, int)
-UCM_DEFINE_REPLACE_FUNC(shmdt,  int,   -1,         const void*)
-UCM_DEFINE_REPLACE_FUNC(sbrk,   void*, MAP_FAILED, intptr_t)
+UCM_DEFINE_REPLACE_FUNC(mmap,    void*, MAP_FAILED, void*, size_t, int, int, int, off_t)
+UCM_DEFINE_REPLACE_FUNC(munmap,  int,   -1,         void*, size_t)
+UCM_DEFINE_REPLACE_FUNC(mremap,  void*, MAP_FAILED, void*, size_t, size_t, int)
+UCM_DEFINE_REPLACE_FUNC(shmat,   void*, MAP_FAILED, int, const void*, int)
+UCM_DEFINE_REPLACE_FUNC(shmdt,   int,   -1,         const void*)
+UCM_DEFINE_REPLACE_FUNC(sbrk,    void*, MAP_FAILED, intptr_t)
+UCM_DEFINE_REPLACE_FUNC(madvise, int,   -1,         void*, size_t, int)
 
 #if ENABLE_SYMBOL_OVERRIDE
 UCM_OVERRIDE_FUNC(mmap, void)
@@ -40,6 +41,7 @@ UCM_OVERRIDE_FUNC(mremap, void)
 UCM_OVERRIDE_FUNC(shmat, void)
 UCM_OVERRIDE_FUNC(shmdt, void)
 UCM_OVERRIDE_FUNC(sbrk, void)
+UCM_OVERRIDE_FUNC(madvise, void)
 #endif
 
 #if HAVE_CUDA

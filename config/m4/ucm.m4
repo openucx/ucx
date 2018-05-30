@@ -47,3 +47,24 @@ AC_CHECK_FUNCS([malloc_get_state malloc_set_state],
                [],
                [#include <stdlib.h>])
 
+
+#
+# Madvise flags
+#
+AC_CHECK_DECLS([MADV_FREE,
+                MADV_REMOVE,
+                POSIX_MADV_DONTNEED],
+               [],
+               [],
+               [#include <sys/mman.h>])
+
+
+#
+# tcmalloc library - for testing only
+#
+SAVE_LDFLAGS="$LDFLAGS"
+AC_CHECK_LIB([tcmalloc], [tc_malloc],
+             [have_tcmalloc=yes
+              TCMALLOC_LIB="-ltcmalloc"],
+             [have_tcmalloc=no])
+AM_CONDITIONAL([HAVE_TCMALLOC],[test "x$have_tcmalloc" = "xyes"])

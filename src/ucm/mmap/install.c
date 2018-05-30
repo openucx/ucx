@@ -15,6 +15,7 @@
 #include <ucm/event/event.h>
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
+#include <ucm/util/sys.h>
 #include <ucs/sys/math.h>
 
 #include <sys/mman.h>
@@ -30,19 +31,21 @@ typedef struct ucm_mmap_func {
 } ucm_mmap_func_t;
 
 static ucm_mmap_func_t ucm_mmap_funcs[] = {
-    { {"mmap",   ucm_override_mmap},   UCM_EVENT_MMAP, 0},
-    { {"munmap", ucm_override_munmap}, UCM_EVENT_MUNMAP, 0},
-    { {"mremap", ucm_override_mremap}, UCM_EVENT_MREMAP, 0},
-    { {"shmat",  ucm_override_shmat},  UCM_EVENT_SHMAT, 0},
-    { {"shmdt",  ucm_override_shmdt},  UCM_EVENT_SHMDT, UCM_EVENT_SHMAT},
-    { {"sbrk",   ucm_override_sbrk},   UCM_EVENT_SBRK, 0},
+    { {"mmap",    ucm_override_mmap},    UCM_EVENT_MMAP,    0},
+    { {"munmap",  ucm_override_munmap},  UCM_EVENT_MUNMAP,  0},
+    { {"mremap",  ucm_override_mremap},  UCM_EVENT_MREMAP,  0},
+    { {"shmat",   ucm_override_shmat},   UCM_EVENT_SHMAT,   0},
+    { {"shmdt",   ucm_override_shmdt},   UCM_EVENT_SHMDT,   UCM_EVENT_SHMAT},
+    { {"sbrk",    ucm_override_sbrk},    UCM_EVENT_SBRK,    0},
+    { {"madvise", ucm_override_madvise}, UCM_EVENT_MADVISE, 0},
     { {NULL, NULL}, 0}
 };
 
-void ucm_mmap_event_test_callback(ucm_event_type_t event_type,
-                                  ucm_event_t *event, void *arg)
+static void ucm_mmap_event_test_callback(ucm_event_type_t event_type,
+                                         ucm_event_t *event, void *arg)
 {
     int *out_events = arg;
+
     *out_events |= event_type;
 }
 
@@ -83,6 +86,17 @@ static ucs_status_t ucm_mmap_test(int events)
 
     if (events & UCM_EVENT_SBRK) {
         (void)sbrk(0);
+    }
+
+    if (events & UCM_EVENT_MADVISE) {
+        p = mmap(NULL, ucm_get_page_size(), PROT_READ|PROT_WRITE,
+                 MAP_PRIVATE|MAP_ANON, -1, 0);
+        if (p != MAP_FAILED) {
+            madvise(p, ucm_get_page_size(), MADV_NORMAL);
+            munmap(p, ucm_get_page_size());
+        } else {
+            ucm_debug("mmap failed: %m");
+        }
     }
 
     ucm_event_handler_remove(&handler);

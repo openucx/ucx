@@ -523,11 +523,13 @@ static int ucs_malloc_is_ready(int events)
            ucs_test_all_flags(ucm_malloc_hook_state.installed_events, events);
 }
 
-static ucm_event_handler_t ucm_malloc_sbrk_handler = {
-    .events   = UCM_EVENT_SBRK,
-    .priority = 1000,
-    .cb       = ucm_malloc_sbrk
-};
+static void ucm_malloc_event_test_callback(ucm_event_type_t event_type,
+                                           ucm_event_t *event, void *arg)
+{
+    int *out_events = arg;
+
+    *out_events |= event_type;
+}
 
 /* Has to be called with install_mutex held */
 static void ucm_malloc_test(int events)
@@ -547,7 +549,7 @@ static void ucm_malloc_test(int events)
      */
     handler.events   = events;
     handler.priority = -1;
-    handler.cb       = ucm_mmap_event_test_callback;
+    handler.cb       = ucm_malloc_event_test_callback;
     handler.arg      = &out_events;
     out_events       = 0;
 
@@ -573,7 +575,7 @@ static void ucm_malloc_test(int events)
 
     ucm_malloc_hook_state.installed_events |= out_events;
 
-    ucm_debug("malloc test: have 0x%x out of 0x%x, hooks were%s called",
+    ucm_debug("malloc test: have 0x%x out of 0x%x, malloc/free hooks were%s called",
               ucm_malloc_hook_state.installed_events, events,
               ucm_malloc_hook_state.hook_called ? "" : " not");
 }
@@ -672,11 +674,14 @@ static void ucm_malloc_set_env_mallopt()
 
 ucs_status_t ucm_malloc_install(int events)
 {
+    static ucm_event_handler_t sbrk_handler = {
+        .events   = UCM_EVENT_SBRK,
+        .priority = 1000,
+        .cb       = ucm_malloc_sbrk
+    };
     ucs_status_t status;
 
     pthread_mutex_lock(&ucm_malloc_hook_state.install_mutex);
-
-    events &= UCM_EVENT_MMAP | UCM_EVENT_MUNMAP | UCM_EVENT_MREMAP | UCM_EVENT_SBRK;
 
     if (ucs_malloc_is_ready(events)) {
         goto out_succ;
@@ -694,7 +699,7 @@ ucs_status_t ucm_malloc_install(int events)
 
     if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_SBRK_EVH)) {
         ucm_debug("installing malloc-sbrk event handler");
-        ucm_event_handler_add(&ucm_malloc_sbrk_handler);
+        ucm_event_handler_add(&sbrk_handler);
         ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_SBRK_EVH;
     }
 
