@@ -19,6 +19,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/type/component.h>
 #include <ucm/util/log.h>
+#include <ucm/util/sys.h>
 
 #include <sys/fcntl.h>
 #include <sys/mman.h>
@@ -156,11 +157,7 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     int ret;
     int i;
 
-    page_size = sysconf(_SC_PAGESIZE);
-    if (page_size < 0) {
-        ucm_error("failed to get page size: %m");
-        return UCS_ERR_IO_ERROR;
-    }
+    page_size = ucm_get_page_size();
 
     /* find PT_DYNAMIC */
     dphdr = NULL;
@@ -265,8 +262,8 @@ static void *ucm_dlopen(const char *filename, int flag)
          */
         pthread_mutex_lock(&ucm_reloc_patch_list_lock);
         ucs_list_for_each(patch, &ucm_reloc_patch_list, list) {
-            ucm_debug("in dlopen(), re-applying '%s' to %p", patch->symbol,
-                      patch->value);
+            ucm_debug("in dlopen(%s), re-applying '%s' to %p", filename,
+                      patch->symbol, patch->value);
             ucm_reloc_apply_patch(patch);
         }
         pthread_mutex_unlock(&ucm_reloc_patch_list_lock);

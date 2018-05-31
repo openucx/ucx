@@ -98,6 +98,13 @@ static void ucm_event_call_orig(ucm_event_type_t event_type, ucm_event_t *event,
             event->sbrk.result = ucm_orig_sbrk(event->sbrk.increment);
         }
         break;
+    case UCM_EVENT_MADVISE:
+        if (event->madvise.result == -1) {
+            event->madvise.result = ucm_orig_madvise(event->madvise.addr,
+                                                     event->madvise.length,
+                                                     event->madvise.advice);
+        }
+        break;
     default:
         ucm_warn("Got unknown event %d", event_type);
         break;
@@ -111,7 +118,8 @@ static void ucm_event_call_orig(ucm_event_type_t event_type, ucm_event_t *event,
 static ucm_event_handler_t ucm_event_orig_handler = {
     .list     = UCS_LIST_INITIALIZER(&ucm_event_handlers, &ucm_event_handlers),
     .events   = UCM_EVENT_MMAP | UCM_EVENT_MUNMAP | UCM_EVENT_MREMAP |
-                UCM_EVENT_SHMAT | UCM_EVENT_SHMDT | UCM_EVENT_SBRK, /* All events */
+                UCM_EVENT_SHMAT | UCM_EVENT_SHMDT | UCM_EVENT_SBRK |
+                UCM_EVENT_MADVISE,      /* All events */
     .priority = 0,                      /* Between negative and positive handlers */
     .cb       = ucm_event_call_orig
 };
@@ -162,6 +170,8 @@ ucm_dispatch_vm_mmap(void *addr, size_t length)
 {
     ucm_event_t event;
 
+    ucm_trace("vm_map addr=%p length=%zu", addr, length);
+
     event.vm_mapped.address = addr;
     event.vm_mapped.size    = length;
     ucm_event_dispatch(UCM_EVENT_VM_MAPPED, &event);
@@ -171,6 +181,8 @@ static UCS_F_ALWAYS_INLINE void
 ucm_dispatch_vm_munmap(void *addr, size_t length)
 {
     ucm_event_t event;
+
+    ucm_trace("vm_unmap addr=%p length=%zu", addr, length);
 
     event.vm_unmapped.address = addr;
     event.vm_unmapped.size    = length;
@@ -364,6 +376,41 @@ void *ucm_sbrk(intptr_t increment)
 
     return event.sbrk.result;
 }
+
+int ucm_madvise(void *addr, size_t length, int advice)
+{
+    ucm_event_t event;
+
+    ucm_event_enter();
+
+    ucm_trace("ucm_madvise(addr=%p length=%zu advice=%d)", addr, length, advice);
+
+    /* madvise(MADV_DONTNEED) and madvise(MADV_FREE) are releasing pages */
+    if ((advice == MADV_DONTNEED)
+#if HAVE_DECL_MADV_REMOVE
+        || (advice == MADV_REMOVE)
+#endif
+#if HAVE_DECL_POSIX_MADV_DONTNEED
+        || (advice == POSIX_MADV_DONTNEED)
+#endif
+#if HAVE_DECL_MADV_FREE
+        || (advice == MADV_FREE)
+#endif
+       ) {
+        ucm_dispatch_vm_munmap(addr, length);
+    }
+
+    event.madvise.result = -1;
+    event.madvise.addr   = addr;
+    event.madvise.length = length;
+    event.madvise.advice = advice;
+    ucm_event_dispatch(UCM_EVENT_MADVISE, &event);
+
+    ucm_event_leave();
+
+    return event.madvise.result;
+}
+
 
 #if HAVE_CUDA
 static UCS_F_ALWAYS_INLINE void
@@ -646,8 +693,8 @@ void ucm_event_handler_remove(ucm_event_handler_t *handler)
 
 static ucs_status_t ucm_event_install(int events)
 {
+    int native_events, malloc_events;
     ucs_status_t status;
-    int native_events;
 
     /* Replace aggregate events with the native events which make them */
     native_events = events & ~(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED |
@@ -658,7 +705,8 @@ static ucs_status_t ucm_event_install(int events)
     }
     if (events & UCM_EVENT_VM_UNMAPPED) {
         native_events |= UCM_EVENT_MUNMAP | UCM_EVENT_MREMAP |
-                         UCM_EVENT_SHMDT | UCM_EVENT_SBRK;
+                         UCM_EVENT_SHMDT | UCM_EVENT_SBRK |
+                         UCM_EVENT_MADVISE;
     }
 
     /* TODO lock */
@@ -670,7 +718,9 @@ static ucs_status_t ucm_event_install(int events)
 
     ucm_debug("mmap hooks are ready");
 
-    status = ucm_malloc_install(native_events);
+    malloc_events = events & ~(UCM_EVENT_MEM_TYPE_ALLOC |
+                               UCM_EVENT_MEM_TYPE_FREE);
+    status = ucm_malloc_install(malloc_events);
     if (status != UCS_OK) {
         ucm_debug("failed to install malloc events");
         goto out_unlock;

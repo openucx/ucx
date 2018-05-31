@@ -30,7 +30,7 @@ extern char **environ;
 
 
 UCS_LIST_HEAD(ucs_config_global_list);
-static khash_t(ucs_config_env_vars) ucs_config_parser_env_vars;
+static khash_t(ucs_config_env_vars) ucs_config_parser_env_vars = {0};
 
 
 const char *ucs_async_mode_names[] = {
@@ -1333,10 +1333,6 @@ int ucs_config_names_search(ucs_config_names_array_t config_names,
     }
 
     return -1;
-}
-
-UCS_STATIC_INIT {
-    kh_init_inplace(ucs_config_env_vars, &ucs_config_parser_env_vars);
 }
 
 UCS_STATIC_CLEANUP {

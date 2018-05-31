@@ -32,6 +32,7 @@ typedef enum ucm_event_type {
     UCM_EVENT_SHMAT           = UCS_BIT(3),
     UCM_EVENT_SHMDT           = UCS_BIT(4),
     UCM_EVENT_SBRK            = UCS_BIT(5),
+    UCM_EVENT_MADVISE         = UCS_BIT(6),
 
     /* Aggregate events */
     UCM_EVENT_VM_MAPPED       = UCS_BIT(16),
@@ -125,6 +126,17 @@ typedef union ucm_event {
         void           *result;
         intptr_t       increment;
     } sbrk;
+
+    /*
+     * UCM_EVENT_MADVISE
+     * madvise() is called.
+     */
+    struct {
+        int            result;
+        void           *addr;
+        size_t         length;
+        int            advice;
+    } madvise;
 
     /*
      * UCM_EVENT_VM_MAPPED, UCM_EVENT_VM_UNMAPPED
@@ -320,6 +332,12 @@ void *ucm_orig_sbrk(intptr_t increment);
 
 
 /**
+ * @brief Call the original implementation of @ref madvise without triggering events.
+ */
+int ucm_orig_madvise(void *addr, size_t length, int advice);
+
+
+/**
  * @brief Call the original implementation of @ref mmap and all handlers
  * associated with it.
  */
@@ -372,6 +390,13 @@ int ucm_shmdt(const void *shmaddr);
  * associated with it.
  */
 void *ucm_sbrk(intptr_t increment);
+
+
+/**
+ * @brief Call the original implementation of @ref ucm_madvise and all handlers
+ * associated with it.
+ */
+int ucm_madvise(void *addr, size_t length, int advice);
 
 
 END_C_DECLS

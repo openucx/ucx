@@ -658,6 +658,14 @@ test_unused_env_var() {
 	UCX_TLS=dc ./src/tools/info/ucx_info -v | grep "unused" | grep -q "UCX_TLS"
 }
 
+test_malloc_hook() {
+	echo "==== Running malloc hooks test ===="
+	if [ -x ./test/apps/test_tcmalloc ]
+	then
+		./test/apps/test_tcmalloc
+	fi
+}
+
 #
 # Run Coverity and report errors
 #
@@ -837,6 +845,7 @@ run_tests() {
 	do_distributed_task 3 4 test_dlopen
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
+	do_distributed_task 1 3 test_malloc_hook
 
 	# all are running gtest
 	run_gtest

@@ -276,7 +276,7 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
     int                     j;
 
     status = uct_query_md_resources(&md_resources, &num_md_resources);
-    CHKERR_JUMP(UCS_OK != status, "query for protected domain resources", error_ret);
+    CHKERR_JUMP(UCS_OK != status, "query for memory domain resources", error_ret);
 
     /* Iterate through protected domain resources */
     for (i = 0; i < num_md_resources; ++i) {
@@ -285,7 +285,7 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
 
         status = uct_md_open(md_resources[i].md_name, md_config, &iface_p->pd);
         uct_config_release(md_config);
-        CHKERR_JUMP(UCS_OK != status, "open protected domains", release_pd);
+        CHKERR_JUMP(UCS_OK != status, "open memory domains", release_pd);
 
         status = uct_md_query_tl_resources(iface_p->pd, &tl_resources, &num_tl_resources);
         CHKERR_JUMP(UCS_OK != status, "query transport resources", close_pd);
