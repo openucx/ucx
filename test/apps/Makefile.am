@@ -24,7 +24,9 @@ test_dlopen_LDADD    = -ldl
 if HAVE_TCMALLOC
 noinst_PROGRAMS       += test_tcmalloc
 test_tcmalloc_SOURCES  = test_tcmalloc.c
-test_tcmalloc_CPPFLAGS = $(BASE_CPPFLAGS) -g -I$(abs_top_builddir)/src
+test_tcmalloc_CPPFLAGS = $(BASE_CPPFLAGS) -g \
+				-I$(abs_top_builddir)/src \
+				-I$(abs_top_srcdir)/src
 test_tcmalloc_CFLAGS   = $(BASE_CFLAGS)
 test_tcmalloc_LDADD    = -ldl $(TCMALLOC_LIB) \
                           $(top_builddir)/src/ucp/libucp.la
