@@ -39,21 +39,25 @@ public:
         send_ctx(mapped_buffer *b, uct_tag_t t, uint64_t i) :
                  mbuf(b), rndv_op(NULL), tag(t), imm_data(i) {
 
-            uct_comp.count = 2;
-            uct_comp.func  = NULL;
-            sw_rndv        = false;
+            uct_comp.count = 1;
+            uct_comp.func  = send_completion;
+            sw_rndv        = comp = false;
+            status         = UCS_ERR_NO_PROGRESS;
         }
         mapped_buffer    *mbuf;
         void             *rndv_op;
         uct_tag_t        tag;
         uint64_t         imm_data;
         uct_completion_t uct_comp;
-        bool sw_rndv;
+        ucs_status_t     status;
+        bool             sw_rndv;
+        bool             comp;
     };
 
     typedef ucs_status_t (test_tag::*send_func)(entity&, send_ctx&);
 
-    void init() {
+    void init()
+    {
         ucs_status_t status = uct_config_modify(m_iface_config, "RC_TM_ENABLE", "y");
         ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_ELEM));
 
@@ -87,7 +91,8 @@ public:
     }
 
     void init_recv_ctx(recv_ctx &r,  mapped_buffer *b, uct_tag_t t,
-                       uct_tag_t m = MASK, bool uct_d = false) {
+                       uct_tag_t m = MASK, bool uct_d = false)
+    {
         r.mbuf                    = b;
         r.tag                     = t;
         r.tmask                   = m;
@@ -95,13 +100,17 @@ public:
         r.uct_ctx.tag_consumed_cb = tag_consumed;
         r.uct_ctx.rndv_cb         = sw_rndv_completed;
         r.take_uct_desc           = uct_d;
+        r.status                  = UCS_ERR_NO_PROGRESS;
         r.comp = r.unexp = r.consumed = r.sw_rndv = false;
     }
 
     ucs_status_t tag_eager_short(entity &e, send_ctx &ctx)
     {
-        return uct_ep_tag_eager_short(e.ep(0), ctx.tag, ctx.mbuf->ptr(),
-                                      ctx.mbuf->length());
+        ctx.status = uct_ep_tag_eager_short(e.ep(0), ctx.tag, ctx.mbuf->ptr(),
+                                            ctx.mbuf->length());
+        ctx.comp   = true;
+
+        return ctx.status;
     }
 
     ucs_status_t tag_eager_bcopy(entity &e, send_ctx &ctx)
@@ -110,8 +119,10 @@ public:
                                                 ctx.imm_data, mapped_buffer::pack,
                                                 reinterpret_cast<void*>(ctx.mbuf),
                                                 0);
+        ctx.status = (status >= 0) ? UCS_OK : static_cast<ucs_status_t>(status);
+        ctx.comp   = true;
 
-        return (status >= 0) ? UCS_OK : static_cast<ucs_status_t>(status);
+        return ctx.status;
     }
 
     ucs_status_t tag_eager_zcopy(entity &e, send_ctx &ctx)
@@ -184,16 +195,24 @@ public:
     // called). And it is vice versa if message arrives unexpectedly.
     // If expected SW RNDV request arrives tag_consumed and sw_rndv_cb
     // should be called.
-    void check_completion(recv_ctx &ctx, bool is_expected, uint64_t seed,
-                          ucs_status_t status = UCS_OK, bool is_sw_rndv = false) {
-      EXPECT_EQ(ctx.consumed, is_expected);
-      EXPECT_EQ(ctx.comp,     (is_expected && !is_sw_rndv));
-      EXPECT_EQ(ctx.unexp,    (!is_expected && !is_sw_rndv));
-      EXPECT_EQ(ctx.sw_rndv,  is_sw_rndv);
-      EXPECT_EQ(ctx.status,   status);
-      if (is_expected) {
-          ctx.mbuf->pattern_check(seed);
-      }
+    void check_rx_completion(recv_ctx &ctx, bool is_expected, uint64_t seed,
+                             ucs_status_t status = UCS_OK, bool is_sw_rndv = false)
+    {
+        EXPECT_EQ(ctx.consumed, is_expected);
+        EXPECT_EQ(ctx.comp,     (is_expected && !is_sw_rndv));
+        EXPECT_EQ(ctx.unexp,    (!is_expected && !is_sw_rndv));
+        EXPECT_EQ(ctx.sw_rndv,  is_sw_rndv);
+        EXPECT_EQ(ctx.status,   status);
+        if (is_expected) {
+            ctx.mbuf->pattern_check(seed);
+        }
+    }
+
+    void check_tx_completion(send_ctx &ctx)
+    {
+        wait_for_flag(&ctx.comp);
+        EXPECT_TRUE(ctx.comp);
+        EXPECT_EQ(ctx.status, UCS_OK);
     }
 
     void test_tag_expected(send_func sfunc, size_t length = 75) {
@@ -216,13 +235,17 @@ public:
 
         wait_for_flag(&r_ctx.comp);
 
-        check_completion(r_ctx, true, SEND_SEED);
+        check_rx_completion(r_ctx, true, SEND_SEED);
+
+        // If it was RNDV send, need to wait send completion as well
+        check_tx_completion(s_ctx);
 
         flush();
     }
 
     void test_tag_unexpected(send_func sfunc, size_t length = 75,
-                             bool take_uct_desc = false) {
+                             bool take_uct_desc = false)
+    {
         uct_tag_t tag = 11;
 
         if (RUNNING_ON_VALGRIND) {
@@ -244,11 +267,12 @@ public:
             ASSERT_UCS_OK(tag_rndv_cancel(sender(), s_ctx.rndv_op));
         }
 
-        check_completion(r_ctx, false, SEND_SEED);
+        check_rx_completion(r_ctx, false, SEND_SEED);
         flush();
     }
 
-    void test_tag_wrong_tag(send_func sfunc) {
+    void test_tag_wrong_tag(send_func sfunc)
+    {
         const size_t length = 65;
         uct_tag_t    tag    = 11;
 
@@ -271,11 +295,12 @@ public:
 
         // Message should be reported as unexpected and filled with
         // recv seed (unchanged), as the incoming tag does not match the expected
-        check_completion(r_ctx, false, RECV_SEED);
+        check_rx_completion(r_ctx, false, RECV_SEED);
         flush();
     }
 
-    void test_tag_mask(send_func sfunc) {
+    void test_tag_mask(send_func sfunc)
+    {
         const size_t length = 65;
 
         mapped_buffer recvbuf(length, RECV_SEED, receiver());
@@ -294,7 +319,10 @@ public:
         wait_for_flag(&r_ctx.comp);
 
         // Should be matched because tags are equal with tag mask applied.
-        check_completion(r_ctx, true, SEND_SEED);
+        check_rx_completion(r_ctx, true, SEND_SEED);
+
+        // If it was RNDV send, need to wait send completion as well
+        check_tx_completion(s_ctx);
         flush();
     }
 
@@ -374,7 +402,8 @@ public:
     }
 
     static ucs_status_t am_handler(void *arg, void *data, size_t length,
-                                   unsigned flags) {
+                                   unsigned flags)
+    {
         is_am_received = true;
         return UCS_OK;
     }
@@ -389,6 +418,14 @@ public:
         }
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
+
+    static void send_completion(uct_completion_t *self, ucs_status_t status)
+    {
+        send_ctx *user_ctx = ucs_container_of(self, send_ctx, uct_comp);
+        user_ctx->comp     = true;
+        user_ctx->status   = status;
+    }
+
 
 protected:
     uct_test::entity& sender() {
@@ -549,7 +586,7 @@ UCS_TEST_P(test_tag, tag_cancel_force)
     // Message should arrive unexpected, since tag was cancelled
     // on the receiver.
     wait_for_flag(&r_ctx.unexp);
-    check_completion(r_ctx, false, SEND_SEED);
+    check_rx_completion(r_ctx, false, SEND_SEED);
 }
 
 UCS_TEST_P(test_tag, tag_cancel_noforce)
@@ -631,7 +668,7 @@ UCS_TEST_P(test_tag, sw_rndv_expected)
 
     wait_for_flag(&r_ctx.sw_rndv);
 
-    check_completion(r_ctx, true, SEND_SEED, UCS_OK, true);
+    check_rx_completion(r_ctx, true, SEND_SEED, UCS_OK, true);
 
     flush();
 }
