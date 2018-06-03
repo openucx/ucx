@@ -246,6 +246,7 @@ AC_MSG_NOTICE([Supported transports: $transports])
 # Final output
 #
 AC_CONFIG_FILES([Makefile
+                 doc/doxygen/header.tex
                  src/uct/api/version.h
                  ])
 AS_IF([test "x$with_docs_only" == xyes], [], [
