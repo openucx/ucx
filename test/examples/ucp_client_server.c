@@ -19,20 +19,12 @@
  * Notes:
  *
  *    - The server will listen to incoming connection requests on INADDR_ANY.
- *    - The client needs to pass the IP address of the server side to connect to,
- *      as the first and only argument to the test.
+ *    - The client needs to pass the IP address of the server side to connect to
+ *      as an argument to the test.
  *    - Currently, the passed IP needs to be an IPoIB or a RoCE address.
- *    - The amount of used resources (HCA's and transports) needs to be limited
- *      for this test (for example: UCX_NET_DEVICES=mlx5_0:1 UCX_TLS=rc_x).
- *      This is currently required since the UCP layer has a limitation on
- *      the size of the transfered transports addresses that are being passed
- *      to the remote peer.
- *      Therefore, the current usage should be, for example:
- *      Server side:
- *              UCX_NET_DEVICES=mlx5_0:1 UCX_TLS=rc ./ucp_client_server
- *      Client side:
- *              UCX_NET_DEVICES=mlx5_0:1 UCX_TLS=rc ./ucp_client_server -a <server-address>
- *
+ *    - The port which the server side would listen on can be modified with the
+ *      '-p' option and should be used on both sides. The default port to use is
+ *      13337.
  */
 
 #include <ucp/api/ucp.h>
