@@ -57,6 +57,9 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {0x02c9, 41682, "ConnectX-5",
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 37},
+  {0x02c9, 4122, "ConnectX-5",
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 36},
   {0, 0, "Generic HCA", 0, 0}
 };
 
