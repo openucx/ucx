@@ -227,6 +227,19 @@ typedef struct uct_rc_mlx5_iface_common {
     UCS_STATS_NODE_DECLARE(stats);
 } uct_rc_mlx5_iface_common_t;
 
+
+/**
+ * RC communication interface
+ */
+typedef struct {
+    uct_rc_iface_t              super;
+    uct_rc_mlx5_iface_common_t  mlx5_common;
+    struct {
+        uint16_t           bb_max;     /* limit number of outstanding WQE BBs */
+    } tx;
+} uct_rc_mlx5_iface_t;
+
+
 extern ucs_config_field_t uct_mlx5_common_config_table[];
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq);
@@ -249,8 +262,8 @@ void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                           uct_ib_iface_t *ib_iface);
 
-void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
-                                        uct_rc_iface_t *rc_iface, uint32_t qpn);
+void uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
+                                    uct_rc_mlx5_iface_t *iface, uint32_t qpn);
 
 ucs_status_t
 uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,

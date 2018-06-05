@@ -41,18 +41,6 @@ typedef struct uct_rc_mlx5_ep {
 } uct_rc_mlx5_ep_t;
 
 
-/**
- * RC communication interface
- */
-typedef struct {
-    uct_rc_iface_t              super;
-    uct_rc_mlx5_iface_common_t  mlx5_common;
-    struct {
-        uint16_t           bb_max;     /* limit number of outstanding WQE BBs */
-    } tx;
-} uct_rc_mlx5_iface_t;
-
-
 UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);

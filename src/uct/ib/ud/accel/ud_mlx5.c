@@ -19,6 +19,7 @@
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/ib_mlx5.inl>
+#include <uct/ib/mlx5/ib_mlx5_dv.h>
 
 #include <uct/ib/ud/base/ud_iface.h>
 #include <uct/ib/ud/base/ud_ep.h>
@@ -607,9 +608,13 @@ static ucs_status_t uct_ud_mlx5_iface_arm_cq(uct_ib_iface_t *ib_iface,
                                              int solicited)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+#if HAVE_DECL_MLX5DV_INIT_OBJ
+    return uct_ib_mlx5dv_arm_cq(&iface->cq[rxtx], solicited);
+#else
     uct_ib_mlx5_update_cq_ci(iface->super.super.cq[rxtx],
                              iface->cq[rxtx].cq_ci);
     return uct_ib_iface_arm_cq(ib_iface, rxtx, solicited);
+#endif
 }
 
 static ucs_status_t uct_ud_mlx5_ep_set_failed(uct_ib_iface_t *iface,

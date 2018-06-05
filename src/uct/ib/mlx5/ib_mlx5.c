@@ -36,6 +36,7 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     mlx5_cq->cq_length = dcq.dv.cqe_cnt;
     mlx5_cq->cq_num    = dcq.dv.cqn;
     mlx5_cq->uar       = uct_dv_get_info_uar0(dcq.dv.uar);
+    mlx5_cq->dbrec     = dcq.dv.dbrec;
     cqe_size           = dcq.dv.cqe_size;
 
     /* Move buffer forward for 128b CQE, so we would get pointer to the 2nd
