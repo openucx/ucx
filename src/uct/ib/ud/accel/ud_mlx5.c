@@ -19,6 +19,7 @@
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/ib_mlx5.inl>
+#include <uct/ib/mlx5/ib_mlx5_dv.h>
 
 #include <uct/ib/ud/base/ud_iface.h>
 #include <uct/ib/ud/base/ud_ep.h>
@@ -605,16 +606,24 @@ uct_ud_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
 static ucs_status_t uct_ud_mlx5_iface_arm_tx_cq(uct_ib_iface_t *ib_iface)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+#if HAVE_DECL_MLX5DV_INIT_OBJ
+    return uct_dv_mlx5_arm_cq(&iface->tx.cq, 0);
+#else
     uct_ib_mlx5_update_cq_ci(iface->super.super.send_cq, iface->tx.cq.cq_ci);
     return uct_ib_iface_arm_tx_cq(ib_iface);
+#endif
 }
 
 static ucs_status_t uct_ud_mlx5_iface_arm_rx_cq(uct_ib_iface_t *ib_iface,
                                                 int solicited)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+#if HAVE_DECL_MLX5DV_INIT_OBJ
+    return uct_dv_mlx5_arm_cq(&iface->rx.cq, solicited);
+#else
     uct_ib_mlx5_update_cq_ci(iface->super.super.recv_cq, iface->rx.cq.cq_ci);
     return uct_ib_iface_arm_rx_cq(ib_iface, solicited);
+#endif
 }
 
 static ucs_status_t uct_ud_mlx5_ep_set_failed(uct_ib_iface_t *iface,

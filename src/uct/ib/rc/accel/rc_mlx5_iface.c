@@ -7,6 +7,7 @@
 
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <uct/ib/mlx5/ib_mlx5_dv.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/cpu.h>
@@ -118,16 +119,24 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 static ucs_status_t uct_rc_mlx5_iface_arm_tx_cq(uct_ib_iface_t *ib_iface)
 {
     uct_rc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_t);
+#if HAVE_DECL_MLX5DV_INIT_OBJ
+    return uct_dv_mlx5_arm_cq(&iface->mlx5_common.tx.cq, 0);
+#else
     uct_ib_mlx5_update_cq_ci(iface->super.super.send_cq, iface->mlx5_common.tx.cq.cq_ci);
     return uct_ib_iface_arm_tx_cq(ib_iface);
+#endif
 }
 
 static ucs_status_t uct_rc_mlx5_iface_arm_rx_cq(uct_ib_iface_t *ib_iface,
                                                 int solicited_only)
 {
     uct_rc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_t);
+#if HAVE_DECL_MLX5DV_INIT_OBJ
+    return uct_dv_mlx5_arm_cq(&iface->mlx5_common.rx.cq, solicited_only);
+#else
     uct_ib_mlx5_update_cq_ci(iface->super.super.recv_cq, iface->mlx5_common.rx.cq.cq_ci);
     return uct_ib_iface_arm_rx_cq(ib_iface, solicited_only);
+#endif
 }
 
 static void
