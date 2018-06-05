@@ -919,6 +919,12 @@ static double ucp_wireup_am_bw_score_func(ucp_context_h context,
     return size / time * 1e-5;
 }
 
+static int ucp_wireup_is_ep_single_lane(ucp_ep_h ep, ucp_rsc_index_t rsc_index)
+{
+    return (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SHM) ||
+           (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SELF);
+}
+
 static ucs_status_t ucp_wireup_add_bw_lanes(ucp_ep_h ep,
                                             unsigned address_count,
                                             const ucp_address_entry_t *address_list,
@@ -970,7 +976,7 @@ static ucs_status_t ucp_wireup_add_bw_lanes(ucp_ep_h ep,
         local_dev_bitmap  &= ~UCS_BIT(context->tl_rscs[rsc_index].dev_index);
         remote_dev_bitmap &= ~UCS_BIT(address_list[addr_index].dev_index);
 
-        if (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SHM) {
+        if (ucp_wireup_is_ep_single_lane(ep, rsc_index)) {
             /* special case for SHM: do not try to lookup additional lanes when
              * SHM transport detected (another transport will be significantly
              * slower) */
@@ -1031,8 +1037,13 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
             bw_info.md_map            |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
             bw_info.local_dev_bitmap  &= ~UCS_BIT(context->tl_rscs[rsc_index].dev_index);
             bw_info.remote_dev_bitmap &= ~UCS_BIT(address_list[addr_index].dev_index);
-            break; /* do not continue searching due to we found
-                      AM lane (and there is only one lane) */
+            if (ucp_wireup_is_ep_single_lane(ep, rsc_index)) {
+                /* if AM lane is SELF or SHMEM - then do not use more lanes */
+                return UCS_OK;
+            } else {
+                break; /* do not continue searching due to we found
+                          AM lane (and there is only one lane) */
+            }
         }
     }
 
