@@ -7,6 +7,7 @@
 
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <uct/ib/mlx5/ib_mlx5_dv.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/cpu.h>
@@ -120,9 +121,13 @@ static ucs_status_t uct_rc_mlx5_iface_arm_cq(uct_ib_iface_t *ib_iface,
                                              int solicited_only)
 {
     uct_rc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_t);
+#if HAVE_DECL_MLX5DV_INIT_OBJ
+    return uct_ib_mlx5dv_arm_cq(&iface->mlx5_common.cq[rxtx], solicited_only);
+#else
     uct_ib_mlx5_update_cq_ci(iface->super.super.cq[rxtx],
                              iface->mlx5_common.cq[rxtx].cq_ci);
     return uct_ib_iface_arm_cq(ib_iface, rxtx, solicited_only);
+#endif
 }
 
 static void
