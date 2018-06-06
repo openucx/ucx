@@ -412,6 +412,10 @@ void ucp_stream_ep_cleanup(ucp_ep_h ep)
             ucs_assert_always(!UCS_PTR_IS_ERR(data));
             ucp_stream_data_release(ep, data);
         }
+
+        if (ucp_stream_ep_is_queued(ucp_ep_ext_proto(ep))) {
+            ucp_stream_ep_dequeue(ucp_ep_ext_proto(ep));
+        }
     }
 }
 

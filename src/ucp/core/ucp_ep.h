@@ -325,6 +325,10 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p);
 
+ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
+                                  const ucp_ep_address_h ep_addr,
+                                  ucp_ep_h *ep_p);
+
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_send_callback_t req_cb,
                                        unsigned req_flags,
