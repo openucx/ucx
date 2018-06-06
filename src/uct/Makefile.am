@@ -109,13 +109,19 @@ endif
 if HAVE_TL_DC
 noinst_HEADERS += \
 	ib/dc/base/dc_iface.h \
-	ib/dc/base/dc_ep.h \
-	ib/dc/verbs/dc_verbs.h 
+	ib/dc/base/dc_ep.h
 
 libuct_la_SOURCES += \
 	ib/dc/base/dc_iface.c \
-	ib/dc/base/dc_ep.c \
+	ib/dc/base/dc_ep.c
+
+if HAVE_DC_EXP
+noinst_HEADERS += \
+	ib/dc/verbs/dc_verbs.h
+
+libuct_la_SOURCES += \
 	ib/dc/verbs/dc_verbs.c
+endif
 
 if HAVE_MLX5_HW
 noinst_HEADERS += \

@@ -224,14 +224,14 @@ static int uct_ib_mlx5_is_qp_require_av_seg(int qp_type)
         return 1;
     }
 #if HAVE_TL_DC
-    if (qp_type == IBV_EXP_QPT_DC_INI) {
+    if (qp_type == UCT_IB_QPT_DCI) {
         return 1;
     }
 #endif
     return 0;
 }
 
-static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
+static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, int qp_type,
                                  void *wqe, void *qstart, void *qend, int max_sge,
                                  uct_log_data_dump_func_t packet_dump_cb,
                                  char *buffer, size_t max, uct_ib_log_sge_t *log_sge)
@@ -381,7 +381,7 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
 }
 
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
-                          uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
+                          uct_ib_iface_t *iface, int qp_type,
                           void *wqe, void *qstart, void *qend, int max_sge,
                           uct_ib_log_sge_t *log_sge,
                           uct_log_data_dump_func_t packet_dump_cb)
@@ -409,7 +409,7 @@ void uct_ib_mlx5_cqe_dump(const char *file, int line, const char *function, stru
 }
 
 void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
-                          uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
+                          uct_ib_iface_t *iface, int qp_type,
                           struct mlx5_cqe64 *cqe, void *data,
                           uct_log_data_dump_func_t packet_dump_cb)
 {

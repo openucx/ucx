@@ -10,7 +10,6 @@
 #include <uct/ib/base/ib_device.h>
 #include <ucs/async/async.h>
 
-
 const static char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS]           = "dcs",
     [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
@@ -54,6 +53,7 @@ ucs_config_field_t uct_dc_iface_config_table[] = {
 
 ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
 {
+#if HAVE_DC_EXP
     struct ibv_exp_dct_init_attr init_attr;
 
     memset(&init_attr, 0, sizeof(init_attr));
@@ -89,6 +89,7 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
         ucs_error("Failed to created DC target %m");
         return UCS_ERR_INVALID_PARAM;
     }
+#endif
 
     return UCS_OK;
 }
@@ -97,6 +98,7 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
 static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
                                              uct_rc_txqp_t *dci)
 {
+#if HAVE_DC_EXP
     struct ibv_exp_qp_attr attr;
     long attr_mask;
 
@@ -165,6 +167,7 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
         ucs_error("error modifying QP to RTS: %m");
         return UCS_ERR_IO_ERROR;
     }
+#endif
 
     return UCS_OK;
 }
@@ -189,7 +192,7 @@ static ucs_status_t uct_dc_iface_create_dcis(uct_dc_iface_t *iface,
     iface->tx.stack_top = 0;
     for (i = 0; i < iface->tx.ndci; i++) {
         status = uct_rc_txqp_init(&iface->tx.dcis[i].txqp, &iface->super,
-                                  IBV_EXP_QPT_DC_INI, &cap
+                                  UCT_IB_QPT_DCI, &cap
                                   UCS_STATS_ARG(iface->super.stats));
         if (status != UCS_OK) {
             goto err;
@@ -290,7 +293,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
     ucs_debug("dc iface %p: using '%s' policy with %d dcis, dct 0x%x", self,
               uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci,
               UCT_RC_IFACE_TM_ENABLED(&self->super) ?
-              0 : self->rx.dct->dct_num);
+              0 : uct_dc_get_dct_num(self));
 
     /* Create fake endpoint which will be used for sending FC grants */
     uct_dc_iface_init_fc_ep(self);
@@ -300,7 +303,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_dc_iface_ops_t *ops, uct_md_h md,
 
 err_destroy_dct:
     if (!UCT_RC_IFACE_TM_ENABLED(&self->super)) {
-        ibv_exp_destroy_dct(self->rx.dct);
+        uct_dc_destroy_dct(self);
     }
 err:
     return status;
@@ -312,7 +315,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
 
     ucs_trace_func("");
     if (self->rx.dct != NULL) {
-        ibv_exp_destroy_dct(self->rx.dct);
+        uct_dc_destroy_dct(self);
     }
     ucs_list_for_each_safe(ep, tmp, &self->tx.gc_list, list) {
         uct_dc_ep_release(ep);
@@ -371,7 +374,7 @@ uct_dc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
     uct_dc_iface_t      *iface = ucs_derived_of(tl_iface, uct_dc_iface_t);
     uct_dc_iface_addr_t *addr  = (uct_dc_iface_addr_t *)iface_addr;
 
-    uct_ib_pack_uint24(addr->qp_num, iface->rx.dct->dct_num);
+    uct_ib_pack_uint24(addr->qp_num, uct_dc_get_dct_num(iface));
     addr->atomic_mr_id = uct_ib_iface_get_atomic_mr_id(&iface->super.super);
     addr->flags        = iface->version_flag;
     if (UCT_RC_IFACE_TM_ENABLED(&iface->super)) {

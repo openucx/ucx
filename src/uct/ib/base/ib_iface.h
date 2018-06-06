@@ -49,6 +49,12 @@ typedef enum {
     UCT_IB_DIR_NUM
 } uct_ib_dir_t;
 
+enum {
+    UCT_IB_QPT_UNKNOWN,
+#if HAVE_DC_EXP
+    UCT_IB_QPT_DCI = IBV_EXP_QPT_DC_INI,
+#endif
+};
 
 struct uct_ib_iface_config {
     uct_iface_config_t      super;

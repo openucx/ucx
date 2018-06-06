@@ -301,13 +301,15 @@ AS_IF([test "x$with_ib" == xyes],
 
        AC_DEFINE([HAVE_IB], 1, [IB support])
 
-       AS_IF([test "x$with_dc" != xno],
-           [AC_CHECK_DECLS(IBV_EXP_QPT_DC_INI, [], [with_dc=no], [[#include <infiniband/verbs.h>]])
-           AC_CHECK_MEMBERS([struct ibv_exp_dct_init_attr.inline_size], [] , [with_dc=no], [[#include <infiniband/verbs.h>]])
-           ])
-       AS_IF([test "x$with_dc" != xno],
-           [AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
-           transports="${transports},dc"])
+       AC_CHECK_DECLS([IBV_EXP_QPT_DC_INI],
+                [have_dc_exp=yes], [], [[#include <infiniband/verbs.h>]])
+
+       AS_IF([test "x$with_dc" != xno -a "$have_dc_exp" ], [
+           AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
+           transports="${transports},dc"
+           AS_IF([test -n "$have_dc_exp"],
+                 [AC_DEFINE([HAVE_DC_EXP], 1, [DC EXP support])])],
+           [with_dc=no])
 
        AS_IF([test "x$with_rc" != xno],
            [AC_DEFINE([HAVE_TL_RC], 1, [RC transport support])
@@ -384,6 +386,7 @@ AS_IF([test "x$with_ib" == xyes],
 AM_CONDITIONAL([HAVE_IB],      [test "x$with_ib" != xno])
 AM_CONDITIONAL([HAVE_TL_RC],   [test "x$with_rc" != xno])
 AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
+AM_CONDITIONAL([HAVE_DC_EXP],  [test -n "$have_dc_exp"])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_TL_CM],   [test "x$with_cm" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])

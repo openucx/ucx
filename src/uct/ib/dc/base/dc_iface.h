@@ -119,7 +119,9 @@ struct uct_dc_iface {
     } tx;
 
     struct {
+#if HAVE_DC_EXP
         struct ibv_exp_dct        *dct;
+#endif
     } rx;
 
     uint8_t                       version_flag;
@@ -238,6 +240,23 @@ static inline ucs_status_t uct_dc_iface_flush_dci(uct_dc_iface_t *iface, int dci
     ucs_assertv(uct_rc_txqp_unsignaled(&iface->tx.dcis[dci].txqp) == 0,
                 "unsignalled send is not supported!!!");
     return UCS_INPROGRESS;
+}
+
+static inline int uct_dc_get_dct_num(uct_dc_iface_t *iface)
+{
+#if HAVE_DC_EXP
+    return iface->rx.dct->dct_num;
+#else
+    return 0;
+#endif
+}
+
+static inline void uct_dc_destroy_dct(uct_dc_iface_t *iface)
+{
+#if HAVE_DC_EXP
+    ibv_exp_destroy_dct(iface->rx.dct);
+#endif
+    iface->rx.dct = NULL;
 }
 
 #endif
