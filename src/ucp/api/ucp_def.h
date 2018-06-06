@@ -82,6 +82,17 @@ typedef struct ucp_ep                    *ucp_ep_h;
 
 
 /**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP endpoint address
+ *
+ * The address handle is an opaque object that is used as an identifier for an
+ * @ref ucp_ep_h "endpoint" instance directly connect to with
+ * @ref ucp_ep_create routine.
+ */
+typedef struct ucp_ep_address            *ucp_ep_address_h;
+
+
+/**
  * @ingroup UCP_WORKER
  * @brief UCP worker address
  *
@@ -94,7 +105,7 @@ typedef struct ucp_address               ucp_address_t;
 /**
  * @ingroup UCP_ENDPOINT
  * @brief Error handling mode for the UCP endpoint.
- * 
+ *
  * Specifies error handling mode for the UCP endpoint.
  */
 typedef enum {
@@ -311,7 +322,7 @@ typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status
  /**
  * @ingroup UCP_COMM
  * @brief UCP endpoint error handling context.
- * 
+ *
  * This structure should be initialized in @ref ucp_ep_params_t to handle peer failure
  */
 typedef struct ucp_err_handler {
@@ -343,6 +354,23 @@ typedef void (*ucp_listener_accept_callback_t)(ucp_ep_h ep, void *arg);
 
 /**
  * @ingroup UCP_WORKER
+ * @brief A callback for handling of incoming connection request with a client
+ * endpoint address which is connecting to a listener @ref ucp_listener_h.
+ *
+ *  This callback routine is invoked on the server side upon a remote client
+ *  creates an endpoint. The user can pass an argument to this callback.
+ *  The user is responsible for releasing the @a ep_addr handle using the
+ *  @ref ucp_ep_create or @ref ucp_ep_reject routine.
+ *
+ *  @param [in]  ep_addr Address handle to a client endpoint.
+ *  @param [in]  arg     User's argument for the callback.
+ */
+typedef void (*ucp_listener_accept_addr_callback_t)(ucp_ep_address_h ep_addr,
+                                                    void *arg);
+
+
+/**
+ * @ingroup UCP_WORKER
  * @brief UCP callback to handle the creation of an endpoint in a client-server
  * connection establishment flow.
  *
@@ -359,6 +387,29 @@ typedef struct ucp_listener_accept_handler {
    void                            *arg;     /**< User defined argument for the
                                                   callback */
 } ucp_listener_accept_handler_t;
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief UCP callback to handle the connection request in a client-server
+ * connection establishment flow.
+ *
+ * This structure is used for handling an incoming connection request on
+ * the listener. Setting this type of handler allows to create an endpoint on
+ * other worker and not limited to the worker associated with the listener.
+ * Other than communication progress routines, it is allowed to call other
+ * communication routines from the callback in the struct. The callback should
+ * be thread safe with respect to the worker it is invoked on. Also it is an
+ * user's responsibility to avoid possible dead lock accessing different worker.
+ * If the callback is called from different threads, this callback needs thread
+ * safety support.
+ */
+typedef struct ucp_listener_accept_addr_handler {
+   ucp_listener_accept_addr_callback_t  cb;      /**< Endpoint address accepting
+                                                      callback */
+   void                                 *arg;    /**< User defined argument for
+                                                      the callback */
+} ucp_listener_accept_addr_handler_t;
 
 
 /**
