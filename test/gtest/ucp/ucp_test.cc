@@ -8,6 +8,7 @@
 #include <common/test_helpers.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/stats/stats.h>
+#include <queue>
 
 
 namespace ucp {
@@ -399,6 +400,22 @@ void ucp_test_base::entity::connect(const entity* other,
     }
 }
 
+ucp_ep_h ucp_test_base::entity::accept(ucp_worker_h worker,
+                                       ucp_ep_address_h ep_addr)
+{
+    ucp_ep_h        ep;
+    ucp_ep_params_t ep_params;
+    ep_params.field_mask  = UCP_EP_PARAM_FIELD_USER_DATA |
+                            UCP_EP_PARAM_FIELD_EP_ADDR;
+    ep_params.user_data   = (void *)0xdeadbeef;
+    ep_params.ep_addr     = ep_addr;
+
+    ucs_status_t status   = ucp_ep_create(worker, &ep_params, &ep);
+    ASSERT_UCS_OK(status);
+    return ep;
+}
+
+
 void* ucp_test_base::entity::modify_ep(const ucp_ep_params_t& ep_params,
                                       int worker_idx, int ep_idx) {
     return ucp_ep_modify_nb(ep(worker_idx, ep_idx), &ep_params);
@@ -418,10 +435,17 @@ void ucp_test_base::entity::set_ep(ucp_ep_h ep, int worker_index, int ep_index)
 void ucp_test_base::entity::empty_send_completion(void *r, ucs_status_t status) {
 }
 
-void ucp_test_base::entity::accept_cb(ucp_ep_h ep, void *arg) {
+void ucp_test_base::entity::accept_ep_cb(ucp_ep_h ep, void *arg) {
     entity *self = reinterpret_cast<entity*>(arg);
     int worker_index = 0; /* TODO pass worker index in arg */
     self->set_ep(ep, worker_index, self->get_num_eps(worker_index));
+}
+
+void ucp_test_base::entity::accept_ep_addr_cb(ucp_ep_address_h ep_addr,
+                                              void *arg)
+{
+    entity *self = reinterpret_cast<entity*>(arg);
+    self->m_ep_addrs.push(ep_addr);
 }
 
 void* ucp_test_base::entity::flush_ep_nb(int worker_index, int ep_index) const {
@@ -474,18 +498,27 @@ ucp_ep_h ucp_test_base::entity::revoke_ep(int worker_index, int ep_index) const 
     return ucp_ep;
 }
 
-ucs_status_t ucp_test_base::entity::listen(const struct sockaddr* saddr,
+ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
+                                           const struct sockaddr* saddr,
                                            socklen_t addrlen, int worker_index)
 {
     ucp_listener_params_t params;
-    ucp_listener_h listener;
+    ucp_listener_h        listener;
 
-    params.field_mask         = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
-                                UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
-    params.sockaddr.addr      = saddr;
-    params.sockaddr.addrlen   = addrlen;
-    params.accept_handler.cb  = accept_cb;
-    params.accept_handler.arg = reinterpret_cast<void*>(this);
+    params.field_mask             = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR;
+    params.sockaddr.addr          = saddr;
+    params.sockaddr.addrlen       = addrlen;
+    if (cb_type == LISTEN_CB_EP) {
+        params.field_mask        |= UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
+        params.accept_handler.cb  = accept_ep_cb;
+        params.accept_handler.arg = reinterpret_cast<void*>(this);
+    } else if (cb_type == LISTEN_CB_EP_ADDR) {
+        params.field_mask |= UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER;
+        params.accept_addr_handler.cb  = accept_ep_addr_cb;
+        params.accept_addr_handler.arg = reinterpret_cast<void*>(this);
+    } else {
+        ucs_bug("invalid test parameter");
+    }
 
     wrap_errors();
     ucs_status_t status = ucp_listener_create(worker(worker_index), &params, &listener);
@@ -515,7 +548,21 @@ ucp_context_h ucp_test_base::entity::ucph() const {
 unsigned ucp_test_base::entity::progress(int worker_index)
 {
     ucp_worker_h ucp_worker = worker(worker_index);
-    return ucp_worker ? ucp_worker_progress(ucp_worker) : 0;
+
+    if (ucp_worker == NULL) {
+        return 0;
+    }
+
+    unsigned ret = 0;
+    if (!m_ep_addrs.empty()) {
+        ucp_ep_address_h ep_addr = m_ep_addrs.back();
+        m_ep_addrs.pop();
+        ucp_ep_h ep = accept(ucp_worker, ep_addr);
+        set_ep(ep, worker_index, std::numeric_limits<int>::max());
+        ++ret;
+    }
+
+    return ret + ucp_worker_progress(ucp_worker);
 }
 
 int ucp_test_base::entity::get_num_workers() const {

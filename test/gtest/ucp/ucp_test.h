@@ -16,6 +16,8 @@
 
 #include <common/test.h>
 
+#include <queue>
+
 #define MT_TEST_NUM_THREADS       4
 #define UCP_TEST_TIMEOUT_IN_SEC   10.0
 
@@ -46,6 +48,11 @@ public:
                                       ep_vec_t> > worker_vec_t;
 
     public:
+        typedef enum {
+            LISTEN_CB_EP,
+            LISTEN_CB_EP_ADDR,
+        } listen_cb_type_t;
+
         entity(const ucp_test_param& test_param, ucp_config_t* ucp_config,
                const ucp_worker_params_t& worker_params);
 
@@ -53,6 +60,8 @@ public:
 
         void connect(const entity* other, const ucp_ep_params_t& ep_params,
                      int ep_idx = 0, int do_set_ep = 1);
+
+        ucp_ep_h accept(ucp_worker_h worker, ucp_ep_address_h ep_addr);
 
         void* modify_ep(const ucp_ep_params_t& ep_params, int worker_idx = 0,
                        int ep_idx = 0);
@@ -67,7 +76,8 @@ public:
 
         void destroy_worker(int worker_index = 0);
 
-        ucs_status_t listen(const struct sockaddr *saddr, socklen_t addrlen,
+        ucs_status_t listen(listen_cb_type_t cb_type,
+                            const struct sockaddr *saddr, socklen_t addrlen,
                             int worker_index = 0);
 
         ucp_ep_h ep(int worker_index = 0, int ep_index = 0) const;
@@ -91,13 +101,15 @@ public:
         static void ep_destructor(ucp_ep_h ep, entity *e);
 
     protected:
-        ucs::handle<ucp_context_h>  m_ucph;
-        worker_vec_t                m_workers;
-        ucs::handle<ucp_listener_h> m_listener;
+        ucs::handle<ucp_context_h>      m_ucph;
+        worker_vec_t                    m_workers;
+        ucs::handle<ucp_listener_h>     m_listener;
+        std::queue<ucp_ep_address_h>    m_ep_addrs;
 
     private:
         static void empty_send_completion(void *r, ucs_status_t status);
-        static void accept_cb(ucp_ep_h ep, void *arg);
+        static void accept_ep_cb(ucp_ep_h ep, void *arg);
+        static void accept_ep_addr_cb(ucp_ep_address_h ep_addr, void *arg);
 
         void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
     };

@@ -31,6 +31,24 @@ public:
         return params;
     }
 
+    enum {
+        EP_ADDR = DEFAULT_PARAM_VARIANT + 1
+    };
+
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params,
+                     const std::string& name,
+                     const std::string& test_case_name,
+                     const std::string& tls)
+    {
+        std::vector<ucp_test_param> result =
+            ucp_test::enum_test_params(ctx_params, name, test_case_name, tls);
+
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     EP_ADDR, result);
+        return result;
+    }
+
     void init()
     {
         test_base::init();
@@ -104,9 +122,10 @@ public:
         addr->sin_port        = port;
     }
 
-    void start_listener(const struct sockaddr* addr)
+    void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type,
+                        const struct sockaddr* addr)
     {
-        ucs_status_t status = receiver().listen(addr, sizeof(*addr));
+        ucs_status_t status = receiver().listen(cb_type, addr, sizeof(*addr));
         if (status == UCS_ERR_UNREACHABLE) {
             UCS_TEST_SKIP_R("cannot listen to " + ucs::sockaddr_to_str(addr));
         }
@@ -263,15 +282,18 @@ public:
         tag_send_recv(receiver(), sender(), wakeup);
     }
 
-    void listen_and_communicate(bool wakeup)
+    void listen_and_communicate(ucp_test_base::entity::listen_cb_type_t cb_type,
+                                bool wakeup)
     {
         struct sockaddr_in connect_addr;
         get_listen_addr(&connect_addr);
         err_handler_count = 0;
 
-        UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str((const struct sockaddr*)&connect_addr);
+        UCS_TEST_MESSAGE << "Testing "
+                         << ucs::sockaddr_to_str(
+                                (const struct sockaddr*)&connect_addr);
 
-        start_listener((const struct sockaddr*)&connect_addr);
+        start_listener(cb_type, (const struct sockaddr*)&connect_addr);
         connect_and_send_recv((struct sockaddr*)&connect_addr, wakeup);
     }
 
@@ -288,11 +310,17 @@ public:
     }
 
 protected:
+    ucp_test_base::entity::listen_cb_type_t cb_type() const {
+        return GetParam().variant == EP_ADDR ?
+               ucp_test_base::entity::LISTEN_CB_EP_ADDR :
+               ucp_test_base::entity::LISTEN_CB_EP;
+    }
+
     volatile int err_handler_count;
 };
 
 UCS_TEST_P(test_ucp_sockaddr, listen) {
-    listen_and_communicate(false);
+    listen_and_communicate(cb_type(), false);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
@@ -302,10 +330,11 @@ UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
     inaddr_any_addr(&inaddr_any_listen_addr, connect_addr.sin_port);
     err_handler_count = 0;
 
-    UCS_TEST_MESSAGE << "Testing " <<
-                     ucs::sockaddr_to_str((const struct sockaddr*)&inaddr_any_listen_addr);
+    UCS_TEST_MESSAGE << "Testing "
+                     << ucs::sockaddr_to_str(
+                        (const struct sockaddr*)&inaddr_any_listen_addr);
 
-    start_listener((const struct sockaddr*)&inaddr_any_listen_addr);
+    start_listener(cb_type(), (const struct sockaddr*)&inaddr_any_listen_addr);
     connect_and_send_recv((struct sockaddr*)&connect_addr, false);
 }
 
@@ -316,7 +345,8 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
 
     get_listen_addr(&listen_addr);
 
-    ucs_status_t status = receiver().listen((const struct sockaddr*)&listen_addr,
+    ucs_status_t status = receiver().listen(cb_type(),
+                                            (const struct sockaddr*)&listen_addr,
                                             sizeof(listen_addr));
     if (status == UCS_ERR_UNREACHABLE) {
         UCS_TEST_SKIP_R("cannot listen to " + ucs::sockaddr_to_str(&listen_addr));
@@ -348,7 +378,7 @@ public:
 };
 
 UCS_TEST_P(test_ucp_sockaddr_with_wakeup, wakeup) {
-    listen_and_communicate(true);
+    listen_and_communicate(cb_type(), true);
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_with_wakeup)
@@ -378,7 +408,7 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup_for_rma_atomic) {
 
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str((const struct sockaddr*)&connect_addr);
 
-    start_listener((const struct sockaddr*)&connect_addr);
+    start_listener(cb_type(), (const struct sockaddr*)&connect_addr);
 
     wrap_errors();
     client_ep_connect((struct sockaddr*)&connect_addr);
