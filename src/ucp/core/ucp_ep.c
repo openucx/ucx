@@ -378,23 +378,23 @@ err:
     return status;
 }
 
-ucs_status_t ucp_ep_create_accept(ucp_worker_h           worker,
-                                  const ucp_ep_address_h ep_addr,
-                                  ucp_ep_h               *ep_p)
+ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
+                                  const ucp_wireup_sockaddr_priv_t* priv_addr,
+                                  ucp_ep_h *ep_p)
 {
     ucp_ep_params_t        params;
     ucp_unpacked_address_t remote_address;
     ucs_status_t           status;
 
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-    params.err_mode   = ep_addr->priv_addr.err_mode;
+    params.err_mode   = priv_addr->err_mode;
 
-    status = ucp_address_unpack((&ep_addr->priv_addr) + 1, &remote_address);
+    status = ucp_address_unpack(priv_addr + 1, &remote_address);
     if (status != UCS_OK) {
         return status;
     }
 
-    if (ep_addr->priv_addr.is_full_addr) {
+    if (priv_addr->is_full_addr) {
         /* create endpoint to the worker address we got in the private data */
         status = ucp_ep_create_to_worker_addr(worker, &params, &remote_address,
                                               UCP_EP_CREATE_AM_LANE, "listener",
@@ -413,7 +413,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h           worker,
         (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
     }
 
-    ucp_ep_update_dest_ep_ptr(*ep_p, ep_addr->priv_addr.ep_ptr);
+    ucp_ep_update_dest_ep_ptr(*ep_p, priv_addr->ep_ptr);
 free_address:
     ucs_free(remote_address.address_list);
     return status;
@@ -423,11 +423,16 @@ static ucs_status_t
 ucp_ep_create_api_to_ep_addr(ucp_worker_h worker, const ucp_ep_params_t *params,
                              ucp_ep_h *ep_p)
 {
+    ucp_ep_address_h ep_addr = params->ep_addr;
+    ucs_status_t     status  = ucp_ep_create_accept(worker, &ep_addr->priv_addr,
+                                                    ep_p);
 
-    ucs_status_t status = ucp_ep_create_accept(worker, params->ep_addr, ep_p);
     if (status != UCS_OK) {
+        uct_iface_reject(ep_addr->listener->wiface.iface, ep_addr->conn_req_id);
         return status;
     }
+
+    uct_iface_accept(ep_addr->listener->wiface.iface, ep_addr->conn_req_id);
 
     if (!((*ep_p)->flags & UCP_EP_FLAG_LISTENER)) {
         /* send wireup request message, to connect the client to the server's new endpoint */

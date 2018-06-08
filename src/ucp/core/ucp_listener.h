@@ -33,7 +33,8 @@ typedef struct ucp_listener_accept {
     union {
         ucp_ep_h                    ep;       /* New endpoint which was created
                                                  for the connection */
-        ucp_ep_address_h            addr;
+        ucp_ep_address_t            *addr;    /* EP address which was created
+                                                 for the connection */
     };
 } ucp_listener_accept_t;
 

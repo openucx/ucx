@@ -301,6 +301,24 @@ typedef struct {
     } stream;
 } ucp_ep_ext_proto_t;
 
+
+typedef struct ucp_wireup_client_data {
+    uintptr_t                 ep_ptr;        /**< Client-side endpoint pointer */
+    ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
+    uint8_t                   is_full_addr;  /**< Whether the attached address is
+                                                  full or partial */
+    /* packed worker address follows */
+} UCS_S_PACKED ucp_wireup_sockaddr_priv_t;
+
+
+typedef struct ucp_ep_address {
+    struct ucp_listener         *listener;
+    void                        *conn_req_id;
+    ucp_wireup_sockaddr_priv_t  priv_addr;
+    /* packed worker address follows */
+} UCS_S_PACKED ucp_ep_address_t;
+
+
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
 
 void ucp_ep_config_lane_info_str(ucp_context_h context,
@@ -326,7 +344,7 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           const char *message, ucp_ep_h *ep_p);
 
 ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
-                                  const ucp_ep_address_h ep_addr,
+                                  const ucp_wireup_sockaddr_priv_t *ep_addr,
                                   ucp_ep_h *ep_p);
 
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,

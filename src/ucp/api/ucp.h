@@ -1686,6 +1686,21 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode);
 
 
 /**
+ * @ingroup UCP_WORKER
+ *
+ * @brief Reject @ref ucp_ep_h "endpoint" creation.
+ *
+ * This routine releases the @ref ucp_ep_address_h and notifies client if there
+ * was set @ref ucp_ep_params_t::err_handler with status @ref UCS_ERR_CANCELED.
+ *
+ * @param [in]  listener    Handle to the listener which created the address.
+ * @param [in]  ep_addr     Handle to the endpoint address to reject.
+ *
+ */
+void ucp_listener_reject(ucp_listener_h listener, ucp_ep_address_h ep_addr);
+
+
+/**
  * @ingroup UCP_ENDPOINT
  * @brief Print endpoint information.
  *

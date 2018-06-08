@@ -8,6 +8,7 @@
 
 #include <ucp/stream/stream.h>
 #include <ucp/wireup/wireup_ep.h>
+#include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
@@ -109,9 +110,8 @@ ucp_listener_ep_create(ucp_listener_h                    listener,
                        ucp_listener_accept_t            *accept)
 {
     ucp_ep_h     ep;
-    const ucp_ep_address_h addr = (void *)client_data;
     ucs_status_t status = ucp_ep_create_accept(listener->wiface.worker,
-                                               addr, &ep);
+                                               client_data, &ep);
     if (status != UCS_OK) {
         return status;
     }
@@ -123,23 +123,28 @@ ucp_listener_ep_create(ucp_listener_h                    listener,
 }
 
 static ucs_status_t
-ucp_listener_ep_addr_create(ucp_listener_h listener,
+ucp_listener_ep_addr_create(ucp_listener_h listener, void *id,
                             const ucp_wireup_sockaddr_priv_t *client_data,
                             size_t length, ucp_listener_accept_t *accept)
 {
     accept->listener    = listener;
     accept->is_ep       = 0;
-    accept->addr        = ucs_malloc(length, "accept ep addr");
+    accept->addr        = ucs_malloc(ucs_offsetof(ucp_ep_address_t, priv_addr) +
+                                     length, "accept ep addr");
     if (accept->addr == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
-    memcpy(accept->addr, client_data, length);
+
+    accept->addr->listener    = listener;
+    accept->addr->conn_req_id = id;
+    memcpy(&accept->addr->priv_addr, client_data, length);
+
     return UCS_OK;
 }
 
 static ucs_status_t
-ucp_listener_conn_request_callback(void *arg, const void *conn_priv_data,
-                                   size_t length)
+ucp_listener_conn_request_callback(void *arg, void *id,
+                                   const void *conn_priv_data, size_t length)
 {
     const ucp_wireup_sockaddr_priv_t *client_data = conn_priv_data;
     ucp_listener_h listener                       = arg;
@@ -159,13 +164,17 @@ ucp_listener_conn_request_callback(void *arg, const void *conn_priv_data,
     if (listener->cb) {
         status = ucp_listener_ep_create(listener, client_data, accept);
     } else if (listener->accept_addr_cb) {
-        status = ucp_listener_ep_addr_create(listener, client_data, length,
+        status = ucp_listener_ep_addr_create(listener, id, client_data, length,
                                              accept);
+        if (status == UCS_OK) {
+            /* hold id */
+            status = UCS_INPROGRESS;
+        }
     } else {
         status = UCS_OK;
     }
 
-    if (status != UCS_OK) {
+    if (UCS_STATUS_IS_ERR(status)) {
         ucs_free(accept);
         return status;
     }
@@ -181,7 +190,7 @@ ucp_listener_conn_request_callback(void *arg, const void *conn_priv_data,
      * that he can wake-up on this event */
     ucp_worker_signal_internal(listener->wiface.worker);
 
-    return UCS_OK;
+    return status;
 }
 
 ucs_status_t ucp_listener_create(ucp_worker_h worker,
@@ -298,3 +307,19 @@ void ucp_listener_destroy(ucp_listener_h listener)
     ucp_worker_iface_cleanup(&listener->wiface);
     ucs_free(listener);
 }
+
+void ucp_listener_reject(ucp_listener_h listener, ucp_ep_address_h ep_addr)
+{
+    ucp_worker_h worker = listener->wiface.worker;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    uct_iface_reject(listener->wiface.iface, ep_addr->conn_req_id);
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+
+    ucs_free(ep_addr);
+}
+
