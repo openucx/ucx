@@ -92,6 +92,21 @@ ucp_test_base::entity* ucp_test::create_entity(bool add_in_front,
     return e;
 }
 
+ucp_test::entity* ucp_test::get_entity_by_ep(ucp_ep_h ep) {
+    ucs::ptr_vector<entity>::const_iterator e_it;
+    for (e_it = entities().begin(); e_it != entities().end(); ++e_it) {
+        for (int w_idx = 0; w_idx < (*e_it)->get_num_workers(); ++w_idx) {
+            for (int ep_idx = 0; ep_idx < (*e_it)->get_num_eps(w_idx); ++ep_idx)
+            {
+                if (ep == (*e_it)->ep(w_idx, ep_idx)) {
+                    return *e_it;
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
 ucp_params_t ucp_test::get_ctx_params() {
     ucp_params_t params;
     memset(&params, 0, sizeof(params));
@@ -325,6 +340,7 @@ bool ucp_test::check_test_param(const std::string& name,
 ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               ucp_config_t* ucp_config,
                               const ucp_worker_params_t& worker_params)
+    : m_rejected_cntr(0)
 {
     ucp_test_param entity_param = test_param;
     ucp_worker_params_t local_worker_params = worker_params;
@@ -448,6 +464,14 @@ void ucp_test_base::entity::accept_ep_addr_cb(ucp_ep_address_h ep_addr,
     self->m_ep_addrs.push(ep_addr);
 }
 
+void ucp_test_base::entity::reject_ep_addr_cb(ucp_ep_address_h ep_addr,
+                                              void *arg)
+{
+    entity *self = reinterpret_cast<entity*>(arg);
+    ucp_listener_reject(self->m_listener, ep_addr);
+    self->m_rejected_cntr++;
+}
+
 void* ucp_test_base::entity::flush_ep_nb(int worker_index, int ep_index) const {
     return ucp_ep_flush_nb(ep(worker_index, ep_index), 0, empty_send_completion);
 }
@@ -516,6 +540,10 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
         params.field_mask |= UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER;
         params.accept_addr_handler.cb  = accept_ep_addr_cb;
         params.accept_addr_handler.arg = reinterpret_cast<void*>(this);
+    } else if (cb_type == LISTEN_CB_REJECT) {
+        params.field_mask |= UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER;
+        params.accept_addr_handler.cb  = reject_ep_addr_cb;
+        params.accept_addr_handler.arg = reinterpret_cast<void*>(this);
     } else {
         ucs_bug("invalid test parameter");
     }
@@ -572,6 +600,15 @@ int ucp_test_base::entity::get_num_workers() const {
 int ucp_test_base::entity::get_num_eps(int worker_index) const {
     return m_workers[worker_index].second.size();
 }
+
+size_t ucp_test_base::entity::get_rejected_cntr() const {
+    return m_rejected_cntr;
+}
+
+void ucp_test_base::entity::inc_rejected_cntr() {
+    ++m_rejected_cntr;
+}
+
 
 void ucp_test_base::entity::warn_existing_eps() const {
     for (size_t worker_index = 0; worker_index < m_workers.size(); ++worker_index) {

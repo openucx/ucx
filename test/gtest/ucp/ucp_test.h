@@ -51,6 +51,7 @@ public:
         typedef enum {
             LISTEN_CB_EP,
             LISTEN_CB_EP_ADDR,
+            LISTEN_CB_REJECT
         } listen_cb_type_t;
 
         entity(const ucp_test_param& test_param, ucp_config_t* ucp_config,
@@ -94,6 +95,10 @@ public:
 
         int get_num_eps(int worker_index = 0) const;
 
+        void inc_rejected_cntr();
+
+        size_t get_rejected_cntr() const;
+
         void warn_existing_eps() const;
 
         void cleanup();
@@ -105,11 +110,13 @@ public:
         worker_vec_t                    m_workers;
         ucs::handle<ucp_listener_h>     m_listener;
         std::queue<ucp_ep_address_h>    m_ep_addrs;
+        size_t                          m_rejected_cntr;
 
     private:
         static void empty_send_completion(void *r, ucs_status_t status);
         static void accept_ep_cb(ucp_ep_h ep, void *arg);
         static void accept_ep_addr_cb(ucp_ep_address_h ep_addr, void *arg);
+        static void reject_ep_addr_cb(ucp_ep_address_h ep_addr, void *arg);
 
         void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
     };
@@ -166,6 +173,7 @@ protected:
     virtual void cleanup();
     entity* create_entity(bool add_in_front = false);
     entity* create_entity(bool add_in_front, const ucp_test_param& test_param);
+    entity* get_entity_by_ep(ucp_ep_h ep);
     unsigned progress(int worker_index = 0) const;
     void short_progress_loop(int worker_index = 0) const;
     void flush_ep(const entity &e, int worker_index = 0, int ep_index = 0);

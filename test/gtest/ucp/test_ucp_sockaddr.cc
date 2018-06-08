@@ -133,9 +133,12 @@ public:
 
     static void scomplete_cb(void *req, ucs_status_t status)
     {
-        if ((status != UCS_OK) && (status != UCS_ERR_UNREACHABLE)) {
-            UCS_TEST_ABORT("Error: " << ucs_status_string(status));
+        if ((status == UCS_OK)              ||
+            (status == UCS_ERR_UNREACHABLE) ||
+            (status == UCS_ERR_CANCELED)) {
+            return;
         }
+        UCS_TEST_ABORT("Error: " << ucs_status_string(status));
     }
 
     static void rcomplete_cb(void *req, ucs_status_t status,
@@ -201,9 +204,12 @@ public:
         void *send_req = ucp_tag_send_nb(from.ep(), &send_data, 1,
                                          ucp_dt_make_contig(sizeof(send_data)),
                                          1, scomplete_cb);
+        ucs_status_t send_status;
         if (send_req == NULL) {
+            send_status = UCS_OK;
         } else if (UCS_PTR_IS_ERR(send_req)) {
-            ASSERT_UCS_OK(UCS_PTR_STATUS(send_req));
+            send_status = UCS_PTR_STATUS(send_req);
+            ASSERT_UCS_OK(send_status);
         } else {
             while (!ucp_request_is_completed(send_req)) {
                 check_events(from.worker(), to.worker(), wakeup, send_req);
@@ -212,7 +218,8 @@ public:
              * If so, skip the test since a valid error occurred - the one expected
              * from the error handling flow - cases of failure to handle long worker
              * address or transport doesn't support the error handling requirement */
-            if (ucp_request_check_status(send_req) == UCS_ERR_UNREACHABLE) {
+            send_status = ucp_request_check_status(send_req);
+            if (send_status == UCS_ERR_UNREACHABLE) {
                 ucp_request_free(send_req);
                 UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
                                 "feature or too long worker address or no "
@@ -221,6 +228,11 @@ public:
             }
 
             ucp_request_free(send_req);
+        }
+
+        /* reject test cases */
+        if (send_status == UCS_ERR_CANCELED) {
+            return;
         }
 
         uint64_t recv_data = 0;
@@ -246,6 +258,32 @@ public:
         while ((receiver().get_num_eps() == 0) && (ucs_get_time() < time_limit)) {
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
+    }
+
+    void wait_for_server_reject(bool wakeup)
+    {
+        ucs_time_t time_limit = ucs_get_time() +
+                                ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
+
+        while ((receiver().get_rejected_cntr() == 0) &&
+               (ucs_get_time() < time_limit)) {
+            check_events(sender().worker(), receiver().worker(), wakeup, NULL);
+        }
+        EXPECT_GT(time_limit, ucs_get_time());
+        EXPECT_EQ(1, receiver().get_rejected_cntr());
+    }
+
+    void wait_for_client_reject(bool wakeup)
+    {
+        ucs_time_t time_limit = ucs_get_time() +
+                                ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
+
+        while ((sender().get_rejected_cntr() == 0) &&
+               (ucs_get_time() < time_limit)) {
+            check_events(sender().worker(), receiver().worker(), wakeup, NULL);
+        }
+        EXPECT_GT(time_limit, ucs_get_time());
+        EXPECT_EQ(1, sender().get_rejected_cntr());
     }
 
     void client_ep_connect(struct sockaddr *connect_addr)
@@ -282,6 +320,17 @@ public:
         tag_send_recv(receiver(), sender(), wakeup);
     }
 
+    void connect_and_reject(struct sockaddr *connect_addr, bool wakeup)
+    {
+        detect_error();
+        client_ep_connect(connect_addr);
+        tag_send_recv(sender(), receiver(), wakeup);
+        restore_errors();
+
+        wait_for_server_reject(wakeup);
+        wait_for_client_reject(wakeup);
+    }
+
     void listen_and_communicate(ucp_test_base::entity::listen_cb_type_t cb_type,
                                 bool wakeup)
     {
@@ -297,9 +346,32 @@ public:
         connect_and_send_recv((struct sockaddr*)&connect_addr, wakeup);
     }
 
+    void listen_and_reject(ucp_test_base::entity::listen_cb_type_t cb_type,
+                           bool wakeup)
+    {
+        struct sockaddr_in connect_addr;
+        get_listen_addr(&connect_addr);
+        err_handler_count = 0;
+
+        UCS_TEST_MESSAGE << "Testing "
+                         << ucs::sockaddr_to_str(
+                                (const struct sockaddr*)&connect_addr);
+        start_listener(cb_type, (const struct sockaddr*)&connect_addr);
+        connect_and_reject((struct sockaddr*)&connect_addr, wakeup);
+    }
+
+
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
         test_ucp_sockaddr *self = reinterpret_cast<test_ucp_sockaddr*>(arg);
         self->err_handler_count++;
+
+        if (status == UCS_ERR_CANCELED) {
+            entity *e = self->get_entity_by_ep(ep);
+            if (e != NULL) {
+                e->inc_rejected_cntr();
+                return;
+            }
+        }
         /* The current expected errors are only from the err_handle test
          * and from transports where the worker address is too long but ud/ud_x
          * are not present, or ud/ud_x are present but their addresses are too
@@ -336,6 +408,14 @@ UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
 
     start_listener(cb_type(), (const struct sockaddr*)&inaddr_any_listen_addr);
     connect_and_send_recv((struct sockaddr*)&connect_addr, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr, reject) {
+    if (GetParam().variant > 0) {
+        UCS_TEST_SKIP_R("Not parameterized test");
+    }
+
+    listen_and_reject(ucp_test_base::entity::LISTEN_CB_REJECT, false);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, err_handle) {
@@ -379,6 +459,14 @@ public:
 
 UCS_TEST_P(test_ucp_sockaddr_with_wakeup, wakeup) {
     listen_and_communicate(cb_type(), true);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_with_wakeup, reject) {
+    if (GetParam().variant > 0) {
+        UCS_TEST_SKIP_R("Not parameterized test");
+    }
+
+    listen_and_reject(ucp_test_base::entity::LISTEN_CB_REJECT, true);
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_with_wakeup)
