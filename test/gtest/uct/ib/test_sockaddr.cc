@@ -13,8 +13,13 @@ extern "C" {
 #include <ucs/sys/string.h>
 }
 
+#include <queue>
+
 class test_uct_sockaddr : public uct_test {
 public:
+    test_uct_sockaddr() : err_count(0), server_recv_req(0),
+                          delay_conn_reply(false) {}
+
     void init() {
         uct_test::init();
 
@@ -69,7 +74,8 @@ public:
         client->client_cb_arg = server->iface_attr().max_conn_priv;
     }
 
-    static ucs_status_t conn_request_cb(void *arg, const void *conn_priv_data,
+    static ucs_status_t conn_request_cb(void *arg, void *id,
+                                        const void *conn_priv_data,
                                         size_t length)
     {
         test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr*>(arg);
@@ -80,6 +86,11 @@ public:
 
         EXPECT_EQ(1 + uct_test::entity::client_priv_data.length(), length);
         self->server_recv_req++;
+        if (self->delay_conn_reply) {
+            self->delayed_conn_reqs.push(id);
+            return UCS_INPROGRESS;
+        }
+
         return UCS_OK;
     }
 
@@ -94,6 +105,8 @@ protected:
     entity *server, *client;
     ucs_sock_addr_t listen_sock_addr, connect_sock_addr;
     volatile int err_count, server_recv_req;
+    std::queue<void *> delayed_conn_reqs;
+    bool delay_conn_reply;
 };
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
@@ -101,8 +114,6 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
                      << " Interface: " << GetParam()->dev_name.c_str();
 
-    server_recv_req = 0;
-    err_count = 0;
     client->connect(0, *server, 0, &connect_sock_addr);
 
     /* wait for the server to connect */
@@ -120,12 +131,57 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
      * test ends and the client's ep was destroyed */
 }
 
+UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
+{
+    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
+                     << " Interface: " << GetParam()->dev_name.c_str();
+    delay_conn_reply = true;
+    client->connect(0, *server, 0, &connect_sock_addr);
+
+    /* wait for the server to connect */
+    while (server_recv_req == 0) {
+        progress();
+    }
+    ASSERT_EQ(1, server_recv_req);
+    ASSERT_EQ(1ul, delayed_conn_reqs.size());
+    EXPECT_EQ(0, err_count);
+    while (!delayed_conn_reqs.empty()) {
+        uct_iface_accept(server->iface(), delayed_conn_reqs.front());
+        delayed_conn_reqs.pop();
+    }
+    sleep(3);
+    while (progress());
+    EXPECT_EQ(0, err_count);
+}
+
+UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
+{
+    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
+                     << " Interface: " << GetParam()->dev_name.c_str();
+    delay_conn_reply = true;
+    client->connect(0, *server, 0, &connect_sock_addr);
+
+    /* wait for the server to connect */
+    while (server_recv_req == 0) {
+        progress();
+    }
+    ASSERT_EQ(1, server_recv_req);
+    ASSERT_EQ(1ul, delayed_conn_reqs.size());
+    EXPECT_EQ(0, err_count);
+    while (!delayed_conn_reqs.empty()) {
+        uct_iface_reject(server->iface(), delayed_conn_reqs.front());
+        delayed_conn_reqs.pop();
+    }
+    while (err_count == 0) {
+        progress();
+    }
+    EXPECT_EQ(1, err_count);
+}
+
 UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
 {
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
                      << " Interface: " << GetParam()->dev_name.c_str();
-    server_recv_req = 0;
-    err_count = 0;
 
     uct_iface_params client_params;
     entity *client_test;
@@ -158,8 +214,6 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 {
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
                      << " Interface: " << GetParam()->dev_name.c_str();
-    server_recv_req = 0;
-    err_count = 0;
 
     int i, num_conns_on_client = 100;
 
@@ -180,9 +234,6 @@ UCS_TEST_P(test_uct_sockaddr, err_handle)
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
                      << " Interface: " << GetParam()->dev_name.c_str();
-
-    server_recv_req = 0;
-    err_count = 0;
 
     client->connect(0, *server, 0, &connect_sock_addr);
 

@@ -281,6 +281,8 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  * communication routines from this callback.
  *
  * @param [in]  arg              User defined argument for this callback.
+ * @param [in]  id               Transport level identifier of the connection
+ *                               request.
  * @param [in]  conn_priv_data   Points to the received data.
  *                               This is the private data that was passed to the
  *                               @ref uct_ep_create_sockaddr function on the
@@ -289,12 +291,16 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  *
  * @retval UCS_OK         - the server will accept the connection request from
  *                          the client.
+ * @retval UCS_INPROGRESS - the user should accept or reject the request with
+ *                          @a id calling @ref uct_iface_accept or @ref
+ *                          uct_iface_reject routines correspondingly.
  * @retval Otherwise      - the server will reject the connection request from
  *                          the client which will invoke the error handling flow
  *                          on the client side.
  *
  */
 typedef ucs_status_t (*uct_sockaddr_conn_request_callback_t)(void *arg,
+                                                             void *id,
                                                              const void *conn_priv_data,
                                                              size_t length);
 
