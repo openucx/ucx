@@ -227,4 +227,19 @@ void uct_ib_mlx5_cq_set_flags(struct ibv_cq *cq, int v)
 #endif
 }
 
+struct mlx5_uar_data {
+    enum { __DUMMY }            map_type;
+    void                        *regs;
+};
+
+void *uct_dv_get_info_uar0(void *uar)
+{
+#if HAVE_DECL_MLX5DV_INIT_OBJ
+    struct mlx5_uar_data *muar = uar;
+    return muar[0].regs;
+#else
+    return NULL;
+#endif
+}
+
 #endif

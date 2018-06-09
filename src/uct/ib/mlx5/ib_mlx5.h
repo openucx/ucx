@@ -134,6 +134,7 @@ typedef struct uct_ib_mlx5_cq {
     unsigned           cq_length;
     unsigned           cqe_size_log;
     unsigned           cq_num;
+    void               *uar;
 } uct_ib_mlx5_cq_t;
 
 
