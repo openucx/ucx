@@ -58,4 +58,6 @@ struct ibv_qp *uct_dv_get_cmd_qp(struct ibv_srq *srq);
 
 void uct_ib_mlx5_cq_set_flags(struct ibv_cq *cq, int v);
 
+void *uct_dv_get_info_uar0(void *uar);
+
 #endif
