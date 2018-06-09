@@ -1329,8 +1329,12 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker)
 void ucp_worker_destroy(ucp_worker_h worker)
 {
     ucs_trace_func("worker=%p", worker);
-    ucp_worker_remove_am_handlers(worker);
+
+    UCS_ASYNC_BLOCK(&worker->async);
     ucp_worker_destroy_eps(worker);
+    ucp_worker_remove_am_handlers(worker);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
