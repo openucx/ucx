@@ -43,6 +43,8 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 
         cq->cqe_size_log = ucs_ilog2(cqe_size);
         ucs_assert_always((1 << cq->cqe_size_log) == cqe_size);
+
+        cq->dv.uar = uct_dv_get_info_uar0(cq->dv.uar);
     }
 
     return UCS_OK;

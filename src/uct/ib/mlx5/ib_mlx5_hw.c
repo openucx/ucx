@@ -215,4 +215,15 @@ struct ibv_qp *uct_dv_get_cmd_qp(struct ibv_srq *srq)
     return &msrq->cmd_qp->verbs_qp.qp;
 }
 
+struct mlx5_uar_data {
+    enum { __DUMMY }            map_type;
+    void                        *regs;
+};
+
+void *uct_dv_get_info_uar0(void *uar)
+{
+    struct mlx5_uar_data *muar = uar;
+    return muar[0].regs;
+}
+
 #endif
