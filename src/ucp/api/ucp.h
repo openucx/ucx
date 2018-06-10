@@ -1528,7 +1528,9 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker);
  * This routine signals that the event has happened, as part of the wake-up
  * mechanism. This function causes a blocking call to @ref ucp_worker_wait or
  * waiting on a file descriptor from @ref ucp_worker_get_efd to return, even
- * if no event from the underlying interfaces has taken place.
+ * if no event from the underlying interfaces has taken place. It’s safe to use
+ * this routine from any thread, even if UCX is compiled/initialized without
+ * multi-threading support
  *
  * @param [in]  worker    Worker to wait for events on.
  *
