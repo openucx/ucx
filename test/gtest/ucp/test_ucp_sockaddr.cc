@@ -27,13 +27,19 @@ public:
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
         params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features     = UCP_FEATURE_TAG;
+        params.features     = UCP_FEATURE_TAG | UCP_FEATURE_STREAM;
         return params;
     }
 
     enum {
-        EP_ADDR = DEFAULT_PARAM_VARIANT + 1
+        EP_ADDR = DEFAULT_PARAM_VARIANT + 1,
+        EP_ADDR_STREAM
     };
+
+    typedef enum {
+        SEND_RECV_TAG,
+        SEND_RECV_STREAM
+    } send_recv_type_t;
 
     static std::vector<ucp_test_param>
     enum_test_params(const ucp_params_t& ctx_params,
@@ -46,6 +52,8 @@ public:
 
         generate_test_params_variant(ctx_params, name, test_case_name, tls,
                                      EP_ADDR, result);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     EP_ADDR_STREAM, result);
         return result;
     }
 
@@ -141,8 +149,14 @@ public:
         UCS_TEST_ABORT("Error: " << ucs_status_string(status));
     }
 
-    static void rcomplete_cb(void *req, ucs_status_t status,
-                             ucp_tag_recv_info_t *info)
+    static void rtag_complete_cb(void *req, ucs_status_t status,
+                                 ucp_tag_recv_info_t *info)
+    {
+        ASSERT_UCS_OK(status);
+    }
+
+    static void rstream_complete_cb(void *req, ucs_status_t status,
+                                    size_t length)
     {
         ASSERT_UCS_OK(status);
     }
@@ -198,12 +212,23 @@ public:
         }
     }
 
-    void tag_send_recv(entity& from, entity& to, bool wakeup)
+    void send_recv(entity& from, entity& to, send_recv_type_t send_recv_type,
+                   bool wakeup)
     {
-        uint64_t send_data = ucs_generate_uuid(0);
-        void *send_req = ucp_tag_send_nb(from.ep(), &send_data, 1,
-                                         ucp_dt_make_contig(sizeof(send_data)),
-                                         1, scomplete_cb);
+        const uint64_t send_data = ucs_generate_uuid(0);
+        void *send_req = NULL;
+        if (send_recv_type == SEND_RECV_TAG) {
+            send_req = ucp_tag_send_nb(from.ep(), &send_data, 1,
+                                       ucp_dt_make_contig(sizeof(send_data)), 1,
+                                       scomplete_cb);
+        } else if (send_recv_type == SEND_RECV_STREAM) {
+            send_req = ucp_stream_send_nb(from.ep(), &send_data, 1,
+                                          ucp_dt_make_contig(sizeof(send_data)),
+                                          scomplete_cb, 0);
+        } else {
+            ASSERT_TRUE(false) << "unsupported communication type";
+        }
+
         ucs_status_t send_status;
         if (send_req == NULL) {
             send_status = UCS_OK;
@@ -236,12 +261,32 @@ public:
         }
 
         uint64_t recv_data = 0;
-        void *recv_req = ucp_tag_recv_nb(to.worker(), &recv_data, 1,
-                                         ucp_dt_make_contig(sizeof(recv_data)),
-                                         1, 0, rcomplete_cb);
-        if (UCS_PTR_IS_ERR(recv_req)) {
-            ASSERT_UCS_OK(UCS_PTR_STATUS(recv_req));
+        void *recv_req;
+        if (send_recv_type == SEND_RECV_TAG) {
+            recv_req = ucp_tag_recv_nb(to.worker(), &recv_data, 1,
+                                       ucp_dt_make_contig(sizeof(recv_data)),
+                                       1, 0, rtag_complete_cb);
         } else {
+            ASSERT_TRUE(send_recv_type == SEND_RECV_STREAM);
+            ucp_stream_poll_ep_t poll_eps[1];
+            ssize_t              ep_count;
+            size_t               recv_length;
+            do {
+                progress();
+                ep_count = ucp_stream_worker_poll(to.worker(), poll_eps, 1, 0);
+            } while (ep_count == 0);
+            ASSERT_EQ(1,                  ep_count);
+            EXPECT_EQ(to.ep(),            poll_eps->ep);
+            EXPECT_EQ((void *)0xdeadbeef, poll_eps->user_data);
+
+            recv_req = ucp_stream_recv_nb(to.ep(), &recv_data, 1,
+                                          ucp_dt_make_contig(sizeof(recv_data)),
+                                          rstream_complete_cb, &recv_length,
+                                          UCP_STREAM_RECV_FLAG_WAITALL);
+        }
+
+        if (recv_req != NULL) {
+            ASSERT_TRUE(UCS_PTR_IS_PTR(recv_req));
             while (!ucp_request_is_completed(recv_req)) {
                 check_events(from.worker(), to.worker(), wakeup, recv_req);
             }
@@ -311,20 +356,23 @@ public:
     {
         detect_error();
         client_ep_connect(connect_addr);
-
-        tag_send_recv(sender(), receiver(), wakeup);
+        /* Check reachability with tagged send */
+        send_recv(sender(), receiver(), SEND_RECV_TAG, wakeup);
         restore_errors();
 
         wait_for_server_ep(wakeup);
 
-        tag_send_recv(receiver(), sender(), wakeup);
+        send_recv(sender(), receiver(), (GetParam().variant == EP_ADDR_STREAM) ?
+                                        SEND_RECV_STREAM : SEND_RECV_TAG,
+                  wakeup);
     }
 
     void connect_and_reject(struct sockaddr *connect_addr, bool wakeup)
     {
         detect_error();
         client_ep_connect(connect_addr);
-        tag_send_recv(sender(), receiver(), wakeup);
+        /* Check reachability with tagged send */
+        send_recv(sender(), receiver(), SEND_RECV_TAG, wakeup);
         restore_errors();
 
         wait_for_server_reject(wakeup);
@@ -383,9 +431,11 @@ public:
 
 protected:
     ucp_test_base::entity::listen_cb_type_t cb_type() const {
-        return GetParam().variant == EP_ADDR ?
-               ucp_test_base::entity::LISTEN_CB_EP_ADDR :
-               ucp_test_base::entity::LISTEN_CB_EP;
+        if ((GetParam().variant == EP_ADDR) ||
+            (GetParam().variant == EP_ADDR_STREAM)) {
+            return ucp_test_base::entity::LISTEN_CB_EP_ADDR;
+        }
+        return ucp_test_base::entity::LISTEN_CB_EP;
     }
 
     volatile int err_handler_count;
