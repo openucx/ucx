@@ -17,8 +17,11 @@ extern "C" {
 
 class test_uct_sockaddr : public uct_test {
 public:
-    test_uct_sockaddr() : err_count(0), server_recv_req(0),
-                          delay_conn_reply(false) {}
+    test_uct_sockaddr() : server(NULL), client(NULL), err_count(0),
+                          server_recv_req(0), delay_conn_reply(false) {
+        memset(&listen_sock_addr,  0, sizeof(listen_sock_addr));
+        memset(&connect_sock_addr, 0, sizeof(connect_sock_addr));
+    }
 
     void init() {
         uct_test::init();

@@ -270,7 +270,7 @@ public:
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
         EXPECT_GT(time_limit, ucs_get_time());
-        EXPECT_EQ(1, receiver().get_rejected_cntr());
+        EXPECT_EQ(1ul, receiver().get_rejected_cntr());
     }
 
     void wait_for_client_reject(bool wakeup)
@@ -283,7 +283,7 @@ public:
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
         EXPECT_GT(time_limit, ucs_get_time());
-        EXPECT_EQ(1, sender().get_rejected_cntr());
+        EXPECT_EQ(1ul, sender().get_rejected_cntr());
     }
 
     void client_ep_connect(struct sockaddr *connect_addr)

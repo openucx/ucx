@@ -545,7 +545,7 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
         params.accept_addr_handler.cb  = reject_ep_addr_cb;
         params.accept_addr_handler.arg = reinterpret_cast<void*>(this);
     } else {
-        ucs_bug("invalid test parameter");
+        UCS_TEST_ABORT("invalid test parameter");
     }
 
     wrap_errors();
