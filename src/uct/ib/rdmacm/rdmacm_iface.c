@@ -351,6 +351,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
             ucs_assert(!iface->is_server);
             status = UCS_ERR_CANCELED;
         }
+        /* Fall through */
     case RDMA_CM_EVENT_ADDR_ERROR:
     case RDMA_CM_EVENT_ROUTE_ERROR:
     case RDMA_CM_EVENT_CONNECT_RESPONSE:
