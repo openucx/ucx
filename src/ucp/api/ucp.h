@@ -1694,7 +1694,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode);
  * was set @ref ucp_ep_params_t::err_handler with status @ref UCS_ERR_CANCELED.
  *
  * @param [in]  listener    Handle to the listener which created the address.
- * @param [in]  ep_addr     Handle to the endpoint address to reject.
+ * @param [in]  ep_addr     Handle to the remote endpoint address to reject.
  *
  */
 void ucp_listener_reject(ucp_listener_h listener, ucp_ep_address_h ep_addr);
