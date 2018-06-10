@@ -274,11 +274,9 @@ typedef struct ucp_ep {
  */
 typedef struct {
     uintptr_t                     dest_ep_ptr;   /* Remote EP pointer */
-    union {
-        void                      *user_data;    /* User data associated with ep */
-        ucp_listener_h            listener;      /* Listener that may be associated with ep */
-    };
+    ucp_listener_h                listener;      /* Listener that may be associated with ep */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
+    void                          *user_data;    /* User data associated with ep */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
 
     /* matching with remote endpoints */
