@@ -424,6 +424,7 @@ ucp_ep_create_api_to_ep_addr(ucp_worker_h worker, const ucp_ep_params_t *params,
                              ucp_ep_h *ep_p)
 {
     ucp_ep_address_h ep_addr = params->ep_addr;
+    /* coverity[overrun-buffer-val] */
     ucs_status_t     status  = ucp_ep_create_accept(worker, &ep_addr->priv_addr,
                                                     ep_p);
 
