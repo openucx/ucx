@@ -87,8 +87,8 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
                 accept->listener->cb(ep, accept->listener->arg);
             }
         }
-    } else if (accept->listener->accept_addr_cb != NULL) {
-        accept->listener->accept_addr_cb(accept->addr, accept->listener->arg);
+    } else if (accept->listener->addr_cb != NULL) {
+        accept->listener->addr_cb(accept->addr, accept->listener->arg);
     }
 
 out:
@@ -163,15 +163,14 @@ ucp_listener_conn_request_callback(void *arg, void *id,
 
     if (listener->cb) {
         status = ucp_listener_ep_create(listener, client_data, accept);
-    } else if (listener->accept_addr_cb) {
+    } else {
+        ucs_assert(listener->addr_cb != NULL);
         status = ucp_listener_ep_addr_create(listener, id, client_data, length,
                                              accept);
         if (status == UCS_OK) {
             /* hold id */
             status = UCS_INPROGRESS;
         }
-    } else {
-        status = UCS_OK;
     }
 
     if (UCS_STATUS_IS_ERR(status)) {
@@ -206,16 +205,25 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
     ucp_tl_md_t *tl_md;
     char saddr_str[UCS_SOCKADDR_STRING_LEN];
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-    UCS_ASYNC_BLOCK(&worker->async);
-
     if (!(params->field_mask & UCP_LISTENER_PARAM_FIELD_SOCK_ADDR)) {
         ucs_error("Missing sockaddr for listener");
-        status = UCS_ERR_INVALID_PARAM;
-        goto out;
+        return UCS_ERR_INVALID_PARAM;
     }
 
-    UCP_CHECK_PARAM_NON_NULL(params->sockaddr.addr, status, goto out);
+    UCP_CHECK_PARAM_NON_NULL(params->sockaddr.addr, status, return status);
+
+    if (ucs_test_all_flags(params->field_mask,
+                           UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER |
+                           UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER) ||
+        !(params->field_mask & (UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER |
+                                UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER)))
+    {
+        ucs_error("Only one accept handler is valid");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCS_ASYNC_BLOCK(&worker->async);
 
     /* Go through all the available resources and for each one, check if the given
      * sockaddr is accessible from its md. Start listening on the first md that
@@ -240,20 +248,17 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
         if (params->field_mask & UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER) {
             UCP_CHECK_PARAM_NON_NULL(params->accept_handler.cb, status,
                                      goto err_free);
-            listener->cb             = params->accept_handler.cb;
-            listener->accept_addr_cb = NULL;
-            listener->arg            = params->accept_handler.arg;
-        } else if (params->field_mask &
-                   UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER) {
+            listener->cb      = params->accept_handler.cb;
+            listener->addr_cb = NULL;
+            listener->arg     = params->accept_handler.arg;
+        } else {
+            ucs_assert_always(params->field_mask &
+                              UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER);
             UCP_CHECK_PARAM_NON_NULL(params->accept_addr_handler.cb, status,
                                      goto err_free);
-            listener->cb             = NULL;
-            listener->accept_addr_cb = params->accept_addr_handler.cb;
-            listener->arg            = params->accept_addr_handler.arg;
-        } else {
-            listener->cb             = NULL;
-            listener->accept_addr_cb = NULL;
-            listener->arg            = NULL;
+            listener->cb      = NULL;
+            listener->addr_cb = params->accept_addr_handler.cb;
+            listener->arg     = params->accept_addr_handler.arg;
         }
 
         memset(&iface_params, 0, sizeof(iface_params));
