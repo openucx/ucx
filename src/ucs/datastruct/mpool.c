@@ -172,8 +172,8 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
                  (num_elems * ucs_mpool_elem_total_size(data));
     status = data->ops->chunk_alloc(mp, &chunk_size, &ptr);
     if (status != UCS_OK) {
-        ucs_error("Failed to allocate memory pool chunk: %s",
-                  ucs_status_string(status));
+        ucs_error("Failed to allocate memory pool (name=%s) chunk: %s",
+                  ucs_mpool_name(mp), ucs_status_string(status));
         return;
     }
 
