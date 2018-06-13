@@ -336,7 +336,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
                                    UCS_SOCKADDR_STRING_LEN), event->id);
 
         ret.destroy_cm_id = 1;
-        uct_rdmacm_client_handle_failure(iface, ep, UCS_ERR_CANCELED);
+        uct_rdmacm_client_handle_failure(iface, ep, UCS_ERR_REJECTED);
         break;
 
     case RDMA_CM_EVENT_ESTABLISHED:
@@ -349,7 +349,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
         if (!strncmp("reject", (char *)event->param.conn.private_data,
                      strlen("reject"))) {
             ucs_assert(!iface->is_server);
-            status = UCS_ERR_CANCELED;
+            status = UCS_ERR_REJECTED;
         }
         /* Fall through */
     case RDMA_CM_EVENT_ADDR_ERROR:
@@ -359,7 +359,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
     case RDMA_CM_EVENT_CONNECT_ERROR:
     case RDMA_CM_EVENT_DISCONNECTED:
         /* Server/Client - connection was disconnected */
-        if (status != UCS_ERR_CANCELED) {
+        if (status != UCS_ERR_REJECTED) {
             ucs_error("received event %s. status = %d. Peer: %s.",
                       rdma_event_str(event->event), event->status,
                       ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));

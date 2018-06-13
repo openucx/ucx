@@ -143,7 +143,7 @@ public:
     {
         if ((status == UCS_OK)              ||
             (status == UCS_ERR_UNREACHABLE) ||
-            (status == UCS_ERR_CANCELED)) {
+            (status == UCS_ERR_REJECTED)) {
             return;
         }
         UCS_TEST_ABORT("Error: " << ucs_status_string(status));
@@ -255,8 +255,7 @@ public:
             ucp_request_free(send_req);
         }
 
-        /* reject test cases */
-        if (send_status == UCS_ERR_CANCELED) {
+        if (send_status == UCS_ERR_REJECTED) {
             return;
         }
 
@@ -413,7 +412,7 @@ public:
         test_ucp_sockaddr *self = reinterpret_cast<test_ucp_sockaddr*>(arg);
         self->err_handler_count++;
 
-        if (status == UCS_ERR_CANCELED) {
+        if (status == UCS_ERR_REJECTED) {
             entity *e = self->get_entity_by_ep(ep);
             if (e != NULL) {
                 e->inc_rejected_cntr();
