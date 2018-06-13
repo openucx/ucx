@@ -70,14 +70,16 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     }
 
     ucp_ep_config_key_reset(&key);
-    ep->worker                      = worker;
-    ep->cfg_index                   = ucp_worker_get_ep_config(worker, &key);
-    ep->am_lane                     = UCP_NULL_LANE;
-    ep->flags                       = 0;
-    ep->conn_sn                     = -1;
-    ucp_ep_ext_gen(ep)->dest_ep_ptr = 0;
-    ucp_ep_ext_gen(ep)->user_data   = ucp_ep_ext_gen(ep)->listener = NULL;
-    ucp_ep_ext_gen(ep)->err_cb      = NULL;
+    ep->worker                             = worker;
+    ep->cfg_index                          = ucp_worker_get_ep_config(worker,
+                                                                      &key);
+    ep->am_lane                            = UCP_NULL_LANE;
+    ep->flags                              = 0;
+    ep->conn_sn                            = -1;
+    ucp_ep_ext_gen(ep)->listener           = NULL;
+    ucp_ep_ext_gen(ep)->user_data          = 
+    ucp_ep_ext_gen(ep)->err_cb             = NULL;
+    ucp_ep_ext_proto(ep)->conn.dest_ep_ptr = 0;
 
     ucp_stream_ep_init(ep);
 
