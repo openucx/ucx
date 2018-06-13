@@ -18,6 +18,27 @@ static int ucp_rndv_is_get_zcopy(ucp_request_t *sreq, ucp_rndv_mode_t rndv_mode)
             ((rndv_mode == UCP_RNDV_MODE_AUTO) &&
              UCP_MEM_IS_HOST(sreq->send.mem_type)));
 }
+static int ucp_rndv_is_pipeline_needed(ucp_request_t *sreq) {
+    ucp_rsc_index_t rsc_index;
+    ucp_rndv_mode_t rndv_mode;
+
+    rndv_mode = sreq->send.ep->worker->context->config.ext.rndv_mode;
+    rsc_index = ucp_ep_config(sreq->send.ep)->key.lanes[sreq->send.lane].rsc_index;
+
+    if ((rndv_mode == UCP_RNDV_MODE_PUT_ZCOPY) ||
+        ((rndv_mode == UCP_RNDV_MODE_AUTO) &&
+         UCP_MEM_IS_HOST(sreq->send.mem_type))) {
+        return 0;
+    }
+
+    if (strstr(sreq->send.ep->worker->context->tl_rscs[rsc_index].
+               tl_rsc.tl_name, "cuda_ipc")) {
+        /* pipelining rma is not needed over cuda_ipc */
+        return 0;
+    }
+
+    return 1;
+}
 
 size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
 {
@@ -875,7 +896,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = data;
     ucp_request_t *sreq              = (ucp_request_t*)rndv_rtr_hdr->sreq_ptr;
     ucp_ep_h ep                      = sreq->send.ep;
-    ucp_rndv_mode_t rndv_mode        = ep->worker->context->config.ext.rndv_mode;
     ucs_status_t status;
 
     ucp_trace_req(sreq, "received rtr address 0x%lx remote rreq 0x%lx",
@@ -900,9 +920,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
                                                    sreq->send.mem_type,
                                                    &sreq->send.rndv_put.uct_rkey, 0);
         if (sreq->send.lane != UCP_NULL_LANE) {
-            if ((rndv_mode == UCP_RNDV_MODE_PUT_ZCOPY) ||
-                ((rndv_mode == UCP_RNDV_MODE_AUTO) &&
-                 UCP_MEM_IS_HOST(sreq->send.mem_type))) {
+            if (!ucp_rndv_is_pipeline_needed(sreq)) {
                 ucp_request_send_state_reset(sreq, ucp_rndv_put_completion,
                                              UCP_REQUEST_SEND_PROTO_RNDV_PUT);
                 sreq->send.uct.func                = ucp_rndv_progress_rma_put_zcopy;
