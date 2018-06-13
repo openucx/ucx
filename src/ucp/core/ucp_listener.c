@@ -163,14 +163,17 @@ ucp_listener_conn_request_callback(void *arg, void *id,
 
     if (listener->cb) {
         status = ucp_listener_ep_create(listener, client_data, accept);
-    } else {
-        ucs_assert(listener->addr_cb != NULL);
+    } else if (listener->addr_cb) {
         status = ucp_listener_ep_addr_create(listener, id, client_data, length,
                                              accept);
         if (status == UCS_OK) {
             /* hold id */
             status = UCS_INPROGRESS;
         }
+    } else {
+        ucs_assert((listener->cb == NULL) && (listener->addr_cb == NULL));
+        /* No callback, but create internal EP for backward compatibility */
+        status = ucp_listener_ep_create(listener, client_data, accept);
     }
 
     if (UCS_STATUS_IS_ERR(status)) {
@@ -214,10 +217,7 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
 
     if (ucs_test_all_flags(params->field_mask,
                            UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER |
-                           UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER) ||
-        !(params->field_mask & (UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER |
-                                UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER)))
-    {
+                           UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER)) {
         ucs_error("Only one accept handler is valid");
         return UCS_ERR_INVALID_PARAM;
     }
@@ -251,14 +251,17 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
             listener->cb      = params->accept_handler.cb;
             listener->addr_cb = NULL;
             listener->arg     = params->accept_handler.arg;
-        } else {
-            ucs_assert_always(params->field_mask &
-                              UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER);
+        } else if (params->field_mask &
+                   UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER) {
             UCP_CHECK_PARAM_NON_NULL(params->accept_addr_handler.cb, status,
                                      goto err_free);
             listener->cb      = NULL;
             listener->addr_cb = params->accept_addr_handler.cb;
             listener->arg     = params->accept_addr_handler.arg;
+        } else {
+            listener->cb      = NULL;
+            listener->addr_cb = NULL;
+            listener->arg     = NULL;
         }
 
         memset(&iface_params, 0, sizeof(iface_params));
