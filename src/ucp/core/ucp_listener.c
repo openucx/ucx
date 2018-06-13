@@ -149,6 +149,7 @@ ucp_listener_conn_request_callback(void *arg, void *id,
     const ucp_wireup_sockaddr_priv_t *client_data = conn_priv_data;
     ucp_listener_h listener                       = arg;
     ucp_listener_accept_t *accept;
+    ucp_worker_h worker;
     uct_worker_cb_id_t prog_id;
     ucs_status_t status;
 
@@ -160,6 +161,9 @@ ucp_listener_conn_request_callback(void *arg, void *id,
         ucs_error("failed to allocate listener accept context");
         return UCS_ERR_NO_MEMORY;
     }
+
+    worker = listener->wiface.worker;
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     if (listener->cb) {
         status = ucp_listener_ep_create(listener, client_data, accept);
@@ -176,21 +180,22 @@ ucp_listener_conn_request_callback(void *arg, void *id,
         status = ucp_listener_ep_create(listener, client_data, accept);
     }
 
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+
     if (UCS_STATUS_IS_ERR(status)) {
         ucs_free(accept);
         return status;
     }
 
     prog_id = UCS_CALLBACKQ_ID_NULL;
-    uct_worker_progress_register_safe(listener->wiface.worker->uct,
+    uct_worker_progress_register_safe(worker->uct,
                                       ucp_listener_conn_request_progress,
                                       accept, UCS_CALLBACKQ_FLAG_ONESHOT,
                                       &prog_id);
 
-
     /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
      * that he can wake-up on this event */
-    ucp_worker_signal_internal(listener->wiface.worker);
+    ucp_worker_signal_internal(worker);
 
     return status;
 }
