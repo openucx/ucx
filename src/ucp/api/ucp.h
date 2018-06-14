@@ -144,7 +144,8 @@ enum ucp_feature {
                                            operations support */
     UCP_FEATURE_WAKEUP = UCS_BIT(4),  /**< Request interrupt notification
                                            support */
-    UCP_FEATURE_STREAM = UCS_BIT(5)   /**< Request stream support */
+    UCP_FEATURE_STREAM = UCS_BIT(5),  /**< Request stream support */
+    UCP_FEATURE_AM     = UCS_BIT(6)   /**< Request am support */
 };
 
 
@@ -182,6 +183,18 @@ enum ucp_listener_params_field {
                                                                 endpoint */
 };
 
+/**
+ * @ingroup UCP_WORKER
+ * @brief Flags for a UCP AM callback
+ *
+ * Flags that indicate how to handle UCP Active Messages
+ * Currently only UCP_AM_FLAG_WHOLE_MSG is supported,
+ * which indicates the entire message is handled in one
+ * callback
+ */
+enum ucp_am_cb_flags {
+    UCP_AM_FLAG_WHOLE_MSG = UCS_BIT(0)
+};
 
 /**
  * @ingroup UCP_ENDPOINT
@@ -256,6 +269,18 @@ enum ucp_ep_close_mode {
                                               operations. */
 };
 
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Descriptor flags for Active Message Callback
+ *
+ * In a callback, if flags is set to UCP_CB_PARAM_FLAG_DATA, data
+ * was allocated, so if UCS_INPROGRESS is returned from the
+ * callback, the data parameter will persist and the user has to call
+ * @ref ucp_am_data_release
+ */
+enum ucp_cb_param_flags {
+    UCP_CB_PARAM_FLAG_DATA = UCS_BIT(0)
+};
 
 /**
  * @ingroup UCP_MEM
@@ -1359,6 +1384,30 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
                                ucp_stream_poll_ep_t *poll_eps, size_t max_eps,
                                unsigned flags);
 
+/**
+ * @ingroup UCP_WORKER
+ * @brief Add user defined callback for active message.
+ *
+ * This routine installs a user defined callback to handle incoming active
+ * messages with a specific id. This callback is called whenever an active message,
+ * which was sent from the remote peer by @ref for ucp_am_send_nb, is received on 
+ * this worker.
+ *
+ * @param [in]  worker      UCP worker on which to set the am handler
+ * @param [in]  id          Active message id.
+ * @param [in]  cb          Active message callback. NULL to clear.
+ * @param [in]  arg         Active message argument, which will be passed in to
+ *                          every invocation of the callback as the arg argument.
+ * @param [in]  flags       Dictates how an Active Message is handled on the remote endpoint.
+ *                          Currently only UCP_AM_FLAG_WHOLE_MSG is supported, which indicates
+ *                          the callback will not be invoked until all data has arrived.
+ *
+ * @return error code if the worker does not support active messages or 
+ *         requested callback flags
+ */
+ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id, 
+                                       ucp_am_callback_t cb, void *arg,
+                                       uint32_t flags);
 
 /**
  * @ingroup UCP_WAKEUP
@@ -2049,6 +2098,49 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p);
  * @param [in]  rkey         Remote key to destroy.
  */
 void ucp_rkey_destroy(ucp_rkey_h rkey);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Send Active Message
+ *
+ * This routine sends an Active Message to an ep.
+ *
+ * @param [in]  ep          UCP endpoint where the active message will be run
+ * @param [in]  id          Active Message id. Specifies which registered 
+ *                          callback to run.
+ * @param [in]  payload     Pointer to the data to be sent to the target node 
+ *                          for the AM
+ * @param [in]  count       Number of elements to send.
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer. 
+ * @param [in]  cb          Callback that is invoked upon completion of the data
+ *                          transfer if it is not completed immediately
+ * @param [in]  flags       For Future use
+ *
+ * @return UCS_OK           Active message was sent immediately
+ * @return UCS_PTR_IS_ERR(_ptr) Error sending Active Message
+ * @return otherwise        Pointer to request, and Active Message is known
+ *                          to be completed after cb is run
+ */
+ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
+                                const void *payload, size_t count,
+                                ucp_datatype_t datatype,
+                                ucp_send_callback_t cb, unsigned flags);
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Releases am data
+ *
+ * This routine releases back data that persisted through an AM
+ * callback because that callback returned UCS_INPROGRESS
+ *
+ * @param [in] worker       Worker which received the active message
+ * @param [in] data         Pointer to data that was passed into
+ *                          the Active Message callback as the data
+ *                          parameter and the callback flags were set to 
+ *                          UCP_CB_PARAM_FLAG_DATA
+ */
+void ucp_am_data_release(ucp_worker_h worker, void *data);
 
 
 /**
