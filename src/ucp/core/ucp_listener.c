@@ -164,6 +164,7 @@ ucp_listener_conn_request_callback(void *arg, void *id,
 
     worker = listener->wiface.worker;
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCS_ASYNC_BLOCK(&worker->async);
 
     if (listener->cb) {
         status = ucp_listener_ep_create(listener, client_data, accept);
@@ -180,6 +181,7 @@ ucp_listener_conn_request_callback(void *arg, void *id,
         status = ucp_listener_ep_create(listener, client_data, accept);
     }
 
+    UCS_ASYNC_UNBLOCK(&worker->async);
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
 
     if (UCS_STATUS_IS_ERR(status)) {

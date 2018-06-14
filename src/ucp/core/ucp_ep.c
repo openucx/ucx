@@ -77,7 +77,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     ep->flags                              = 0;
     ep->conn_sn                            = -1;
     ucp_ep_ext_gen(ep)->listener           = NULL;
-    ucp_ep_ext_gen(ep)->user_data          = 
+    ucp_ep_ext_gen(ep)->user_data          = NULL;
     ucp_ep_ext_gen(ep)->err_cb             = NULL;
     ucp_ep_ext_proto(ep)->conn.dest_ep_ptr = 0;
 
@@ -411,7 +411,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
             goto free_address;
         }
 
-        /* the listener's ep should be aware of the sent address from the client */
+        /* the server's ep should be aware of the sent address from the client */
         (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
     }
 
