@@ -36,29 +36,16 @@ typedef struct uct_cuda_ipc_md_config {
 
 
 /**
- * @brief cuda_ipc memory handle
- */
-typedef struct uct_cuda_ipc_mem {
-    CUipcMemHandle ph;         /* Memory handle of GPU memory */
-    CUdeviceptr    d_ptr;      /* GPU address */
-    CUdeviceptr    d_bptr;     /* Allocation base address */
-    size_t         b_len;      /* Allocation size */
-    int            dev_num;    /* GPU Device number */
-    size_t         reg_size;   /* Size of mapping */
-} uct_cuda_ipc_mem_t;
-
-
-/**
  * @brief cuda_ipc packed and remote key for put/get
  */
 typedef struct uct_cuda_ipc_key {
     CUipcMemHandle ph;           /* Memory handle of GPU memory */
-    CUdeviceptr    d_rem_ptr;    /* GPU address */
-    CUdeviceptr    d_rem_bptr;   /* Allocation base address */
-    size_t         b_rem_len;    /* Allocation size */
-    CUdeviceptr    d_mapped_ptr; /* Mapped GPU address */
+    CUdeviceptr    d_bptr;       /* Allocation base address */
+    size_t         b_len;        /* Allocation size */
     int            dev_num;      /* GPU Device number */
 } uct_cuda_ipc_key_t;
+
+typedef uct_cuda_ipc_key_t uct_cuda_ipc_mem_t;
 
 #define UCT_CUDA_IPC_GET_DEVICE(_cu_device)                             \
     do {                                                                \
