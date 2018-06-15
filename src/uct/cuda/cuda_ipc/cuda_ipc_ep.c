@@ -80,48 +80,21 @@ uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_iface_t *iface,
                              uint64_t remote_addr, void **mapped_rem_addr,
                              void *buffer)
 {
-    int offset, same_ctx = 0;
+    int offset;
     void *mapped_addr;
-    ucs_status_t status;
-    CUcontext local_ptr_ctx;
-    CUcontext remote_ptr_ctx;
-    CUpointer_attribute attrib;
 
-    if (key->dev_num == (int) cu_device) {
-        attrib = CU_POINTER_ATTRIBUTE_CONTEXT;
-        status = UCT_CUDADRV_FUNC(cuPointerGetAttribute((void *) &remote_ptr_ctx,
-                                                        attrib,
-                                                        (CUdeviceptr) remote_addr));
-        if (UCS_OK != status) {
-            return status;
-        }
-
-        status = UCT_CUDADRV_FUNC(cuPointerGetAttribute((void *) &local_ptr_ctx,
-                                                        attrib,
-                                                        (CUdeviceptr) buffer));
-        if (UCS_OK != status) {
-            return status;
-        }
-
-        same_ctx = (local_ptr_ctx == remote_ptr_ctx);
+    mapped_addr = uct_cuda_ipc_ep_attach_rem_seg(ep, iface, key);
+    if (NULL == mapped_addr) {
+        return UCS_ERR_IO_ERROR;
     }
 
-    if (same_ctx) {
-        *mapped_rem_addr = (void *) remote_addr;
-    } else {
-        mapped_addr = uct_cuda_ipc_ep_attach_rem_seg(ep, iface, key);
-        if (NULL == mapped_addr) {
-            return UCS_ERR_IO_ERROR;
-        }
-
-        offset = (uintptr_t)remote_addr - (uintptr_t)key->d_rem_bptr;
-        if (offset > key->b_rem_len) {
-            ucs_fatal("Access memory outside memory range attempt\n");
-            return UCS_ERR_IO_ERROR;
-        }
-
-        *mapped_rem_addr = (void *) ((uintptr_t) mapped_addr + offset);
+    offset = (uintptr_t)remote_addr - (uintptr_t)key->d_bptr;
+    if (offset > key->b_len) {
+        ucs_fatal("Access memory outside memory range attempt\n");
+        return UCS_ERR_IO_ERROR;
     }
+
+    *mapped_rem_addr = (void *) ((uintptr_t) mapped_addr + offset);
 
     return UCS_OK;
 }

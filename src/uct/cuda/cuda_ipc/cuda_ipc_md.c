@@ -12,6 +12,8 @@
 #include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 
 static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
@@ -42,11 +44,7 @@ static ucs_status_t uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
     uct_cuda_ipc_key_t *packed   = (uct_cuda_ipc_key_t *) rkey_buffer;
     uct_cuda_ipc_mem_t *mem_hndl = (uct_cuda_ipc_mem_t *) memh;
 
-    packed->ph         = mem_hndl->ph;
-    packed->d_rem_ptr  = mem_hndl->d_ptr;
-    packed->d_rem_bptr = mem_hndl->d_bptr;
-    packed->b_rem_len  = mem_hndl->b_len;
-    packed->dev_num    = mem_hndl->dev_num;
+    *packed = *mem_hndl;
 
     return UCS_OK;
 }
@@ -104,11 +102,9 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
     UCT_CUDADRV_FUNC(cuMemGetAddressRange(&(mem_hndl->d_bptr),
                                           &(mem_hndl->b_len),
                                           (CUdeviceptr) addr));
-    mem_hndl->d_ptr    = (CUdeviceptr) addr;
-    mem_hndl->reg_size = length;
     mem_hndl->dev_num  = (int) cu_device;
-    ucs_trace("registered memory:%p..%p length:%lu d_ptr:%p dev_num:%d",
-              addr, addr + length, length, addr, (int) cu_device);
+    ucs_trace("registered memory:%p..%p length:%lu dev_num:%d",
+              addr, addr + length, length, (int) cu_device);
     return UCS_OK;
 }
 
