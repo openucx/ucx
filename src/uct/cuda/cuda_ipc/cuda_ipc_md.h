@@ -40,10 +40,7 @@ typedef struct uct_cuda_ipc_md_config {
  */
 typedef struct uct_cuda_ipc_key {
     CUipcMemHandle ph;           /* Memory handle of GPU memory */
-    CUdeviceptr    d_ptr;        /* GPU address */
     CUdeviceptr    d_bptr;       /* Allocation base address */
-    CUcontext      pctx;         /* GPU context */
-    pid_t          pid;          /* pid that owns the GPU */
     size_t         b_len;        /* Allocation size */
     int            dev_num;      /* GPU Device number */
 } uct_cuda_ipc_key_t;
