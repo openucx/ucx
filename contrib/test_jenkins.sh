@@ -220,13 +220,20 @@ build_release_pkg() {
 	# Show UCX info
 	./src/tools/info/ucx_info -f -c -v -y -d -b -p -w -e -uart
 
-	set +e
-	out=$(rpm -q rpm 2>/dev/null)
-	rc=$?
-	set -e
-	rpm_based=yes
-	if [[ $rc != 0 || "$out" == *"not installed"* ]]; then
+	if [ -f /etc/redhat-release -o -f /etc/fedora-release ]; then
+		rpm_based=yes
+	elif [ `cat /etc/os-release | grep -i "ubuntu\|mint"|wc -l` -gt 0 ]; then
 		rpm_based=no
+	else
+		# try rpm tool to detect distro
+		set +e
+		out=$(rpm -q rpm 2>/dev/null)
+		rc=$?
+		set -e
+		rpm_based=yes
+		if [[ $rc != 0 || "$out" == *"not installed"* ]]; then
+			rpm_based=no
+		fi
 	fi
 
 	if [[ "$rpm_based" == "no" && -x /usr/bin/dpkg-buildpackage ]]; then
