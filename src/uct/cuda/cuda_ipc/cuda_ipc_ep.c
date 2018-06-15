@@ -84,18 +84,10 @@ uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_iface_t *iface,
     void *mapped_addr;
     ucs_status_t status;
     CUcontext local_ptr_ctx;
-    CUcontext remote_ptr_ctx;
     CUpointer_attribute attrib;
 
     if (key->dev_num == (int) cu_device) {
         attrib = CU_POINTER_ATTRIBUTE_CONTEXT;
-        status = UCT_CUDADRV_FUNC(cuPointerGetAttribute((void *) &remote_ptr_ctx,
-                                                        attrib,
-                                                        (CUdeviceptr) remote_addr));
-        if (UCS_OK != status) {
-            return status;
-        }
-
         status = UCT_CUDADRV_FUNC(cuPointerGetAttribute((void *) &local_ptr_ctx,
                                                         attrib,
                                                         (CUdeviceptr) buffer));
@@ -103,7 +95,7 @@ uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_iface_t *iface,
             return status;
         }
 
-        same_ctx = (local_ptr_ctx == remote_ptr_ctx);
+        same_ctx = (local_ptr_ctx == key->pctx);
     }
 
     if (same_ctx) {

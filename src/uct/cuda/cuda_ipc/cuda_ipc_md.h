@@ -42,6 +42,7 @@ typedef struct uct_cuda_ipc_mem {
     CUipcMemHandle ph;         /* Memory handle of GPU memory */
     CUdeviceptr    d_ptr;      /* GPU address */
     CUdeviceptr    d_bptr;     /* Allocation base address */
+    CUcontext      pctx;       /* GPU context */
     size_t         b_len;      /* Allocation size */
     int            dev_num;    /* GPU Device number */
     size_t         reg_size;   /* Size of mapping */
@@ -55,6 +56,7 @@ typedef struct uct_cuda_ipc_key {
     CUipcMemHandle ph;           /* Memory handle of GPU memory */
     CUdeviceptr    d_rem_ptr;    /* GPU address */
     CUdeviceptr    d_rem_bptr;   /* Allocation base address */
+    CUcontext      pctx;         /* GPU context */
     size_t         b_rem_len;    /* Allocation size */
     CUdeviceptr    d_mapped_ptr; /* Mapped GPU address */
     int            dev_num;      /* GPU Device number */
