@@ -86,7 +86,7 @@ uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_iface_t *iface,
     CUcontext local_ptr_ctx;
     CUpointer_attribute attrib;
 
-    if (key->dev_num == (int) cu_device) {
+    if ((key->dev_num == (int) cu_device) && (key->dev_num == getpid())) {
         attrib = CU_POINTER_ATTRIBUTE_CONTEXT;
         status = UCT_CUDADRV_FUNC(cuPointerGetAttribute((void *) &local_ptr_ctx,
                                                         attrib,
@@ -106,8 +106,8 @@ uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_iface_t *iface,
             return UCS_ERR_IO_ERROR;
         }
 
-        offset = (uintptr_t)remote_addr - (uintptr_t)key->d_rem_bptr;
-        if (offset > key->b_rem_len) {
+        offset = (uintptr_t)remote_addr - (uintptr_t)key->d_bptr;
+        if (offset > key->b_len) {
             ucs_fatal("Access memory outside memory range attempt\n");
             return UCS_ERR_IO_ERROR;
         }
