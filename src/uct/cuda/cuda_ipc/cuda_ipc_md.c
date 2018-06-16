@@ -55,9 +55,17 @@ static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_md_component_t *mdc,
 {
     uct_cuda_ipc_key_t *packed = (uct_cuda_ipc_key_t *) rkey_buffer;
     uct_cuda_ipc_key_t *key;
+    ucs_status_t status;
     CUdevice cu_device;
+    int peer_accessble;
 
     UCT_CUDA_IPC_GET_DEVICE(cu_device);
+
+    status = UCT_CUDADRV_FUNC(cuDeviceCanAccessPeer(&peer_accessble,
+                                                    cu_device, packed->dev_num));
+    if ((status != UCS_OK) || (peer_accessble == 0)) {
+        return UCS_ERR_UNREACHABLE;
+    }
 
     key = ucs_malloc(sizeof(uct_cuda_ipc_key_t), "uct_cuda_ipc_key_t");
     if (NULL == key) {
