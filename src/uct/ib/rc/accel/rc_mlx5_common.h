@@ -250,8 +250,9 @@ void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                           uct_ib_iface_t *ib_iface);
 
-void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
-                                        uct_rc_iface_t *rc_iface, uint32_t qpn);
+void uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5dv_cq_t *mlx5_cq,
+                                    uct_ib_mlx5_srq_t *mlx5_srq,
+                                    uct_rc_iface_t *rc_iface, uint32_t qpn);
 
 ucs_status_t
 uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,

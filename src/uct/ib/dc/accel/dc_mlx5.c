@@ -1069,6 +1069,9 @@ static ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_iface_t *dc_iface, int dc
     uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->mlx5_common,
                                          &iface->super.super.super);
 
+    uct_rc_mlx5_iface_commom_clean(&iface->mlx5_common.tx.cq, NULL, NULL,
+                                   iface->super.tx.dcis[dci].txqp.qp->qp_num);
+
     /* Resume posting from to the beginning of the QP */
     uct_ib_mlx5_txwq_reset(&iface->dci_wqs[dci]);
 
