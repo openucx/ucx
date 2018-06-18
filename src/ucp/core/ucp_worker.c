@@ -1541,15 +1541,8 @@ out:
 
 ucs_status_t ucp_worker_signal(ucp_worker_h worker)
 {
-    ucs_status_t status;
-
     ucs_trace_func("worker %p", worker);
-
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-    status = ucp_worker_wakeup_signal_fd(worker);
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
-
-    return status;
+    return ucp_worker_wakeup_signal_fd(worker);
 }
 
 ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address_p,
