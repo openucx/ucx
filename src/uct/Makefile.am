@@ -63,14 +63,19 @@ libuct_la_CPPFLAGS += \
 
 libuct_la_SOURCES += \
 	ib/mlx5/ib_mlx5_log.c \
-	ib/mlx5/ib_mlx5.c
+	ib/mlx5/ib_mlx5.c \
+	ib/mlx5/ib_mlx5_dv.c \
+	ib/mlx5/ib_mlx5_hw.c
 
 noinst_HEADERS += \
 	ib/mlx5/ib_mlx5_log.h \
 	ib/mlx5/ib_mlx5.h \
 	ib/mlx5/ib_mlx5.inl
-endif
 
+if HAVE_MLX5_DV
+libuct_la_LDFLAGS += -lmlx5
+endif
+endif
 
 if HAVE_TL_RC
 noinst_HEADERS += \

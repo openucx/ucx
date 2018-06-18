@@ -19,6 +19,7 @@
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/ib_mlx5.inl>
+#include <uct/ib/mlx5/ib_mlx5_dv.h>
 
 #include <uct/ib/ud/base/ud_iface.h>
 #include <uct/ib/ud/base/ud_ep.h>
@@ -605,16 +606,24 @@ uct_ud_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
 static ucs_status_t uct_ud_mlx5_iface_arm_tx_cq(uct_ib_iface_t *ib_iface)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+#if HAVE_DECL_MLX5DV_INIT_OBJ
+    return uct_dv_mlx5_arm_cq(&iface->tx.cq, 0);
+#else
     uct_ib_mlx5_update_cq_ci(iface->super.super.send_cq, iface->tx.cq.cq_ci);
     return uct_ib_iface_arm_tx_cq(ib_iface);
+#endif
 }
 
 static ucs_status_t uct_ud_mlx5_iface_arm_rx_cq(uct_ib_iface_t *ib_iface,
                                                 int solicited)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+#if HAVE_DECL_MLX5DV_INIT_OBJ
+    return uct_dv_mlx5_arm_cq(&iface->rx.cq, solicited);
+#else
     uct_ib_mlx5_update_cq_ci(iface->super.super.recv_cq, iface->rx.cq.cq_ci);
     return uct_ib_iface_arm_rx_cq(ib_iface, solicited);
+#endif
 }
 
 static ucs_status_t uct_ud_mlx5_ep_set_failed(uct_ib_iface_t *iface,
@@ -672,6 +681,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 {
     uct_ud_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
                                                         uct_ud_mlx5_iface_config_t);
+    uct_ib_mlx5dv_t obj;
     ucs_status_t status;
     int i;
 
@@ -684,12 +694,16 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     uct_ib_iface_set_max_iov(&self->super.super, UCT_IB_MLX5_AM_ZCOPY_MAX_IOV);
     self->super.config.max_inline = UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE);
 
-    status = uct_ib_mlx5_get_cq(self->super.super.send_cq, &self->tx.cq);
+    obj.dv.cq.in = self->super.super.send_cq;
+    obj.dv.cq.out = &self->tx.cq.dv;
+    status = uct_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_CQ);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = uct_ib_mlx5_get_cq(self->super.super.recv_cq, &self->rx.cq);
+    obj.dv.cq.in = self->super.super.recv_cq;
+    obj.dv.cq.out = &self->rx.cq.dv;
+    status = uct_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_CQ);
     if (status != UCS_OK) {
         return status;
     }

@@ -197,11 +197,11 @@ typedef struct uct_common_mlx5_iface_config {
 
 typedef struct uct_rc_mlx5_iface_common {
     struct {
-        uct_ib_mlx5_cq_t          cq;
+        uct_ib_mlx5dv_cq_t        cq;
         ucs_mpool_t               atomic_desc_mp;
     } tx;
     struct {
-        uct_ib_mlx5_cq_t          cq;
+        uct_ib_mlx5dv_cq_t        cq;
         uct_ib_mlx5_srq_t         srq;
         void                      *pref_ptr;
     } rx;
@@ -250,8 +250,9 @@ void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                           uct_ib_iface_t *ib_iface);
 
-void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
-                                        uct_rc_iface_t *rc_iface, uint32_t qpn);
+void uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5dv_cq_t *mlx5_cq,
+                                    uct_ib_mlx5_srq_t *mlx5_srq,
+                                    uct_rc_iface_t *rc_iface, uint32_t qpn);
 
 ucs_status_t
 uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
@@ -371,7 +372,7 @@ uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *mlx5_common_if
                                       uct_rc_iface_t *rc_iface,
                                       struct mlx5_cqe64 *cqe)
 {
-    uct_ib_mlx5_cq_t *cq      = &mlx5_common_iface->rx.cq;
+    uct_ib_mlx5dv_cq_t *cq    = &mlx5_common_iface->rx.cq;
     struct mlx5_err_cqe *ecqe = (void*)cqe;
     uct_ib_mlx5_srq_seg_t *seg;
     uint16_t wqe_ctr;
@@ -399,7 +400,7 @@ static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                              uct_rc_iface_t *rc_iface)
 {
-    uct_ib_mlx5_cq_t *cq = &mlx5_common_iface->rx.cq;
+    uct_ib_mlx5dv_cq_t *cq = &mlx5_common_iface->rx.cq;
     struct mlx5_cqe64 *cqe;
     unsigned index;
     uint8_t op_own;
@@ -411,7 +412,7 @@ uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     cqe    = uct_ib_mlx5_get_cqe(cq, index);
     op_own = cqe->op_own;
 
-    if (ucs_unlikely((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length))) {
+    if (ucs_unlikely((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->dv.cqe_cnt))) {
         return NULL;
     } else if (ucs_unlikely(op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK)) {
         uct_rc_mlx5_iface_check_rx_completion(mlx5_common_iface, rc_iface, cqe);

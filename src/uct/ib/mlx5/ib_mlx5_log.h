@@ -7,8 +7,8 @@
 #ifndef UCT_IB_MLX5_LOG_H_
 #define UCT_IB_MLX5_LOG_H_
 
-#include "ib_mlx5.h"
-
+#include <infiniband/verbs.h>
+#include <uct/ib/base/ib_iface.h>
 #include <uct/base/uct_log.h>
 
 
