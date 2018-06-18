@@ -336,6 +336,7 @@ build_armclang() {
     then
         echo "==== Build with armclang compiler ===="
         ../contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
+        UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
         $MAKE clean
         $MAKE
         $MAKE distclean
