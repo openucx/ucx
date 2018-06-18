@@ -16,6 +16,14 @@
 #include <ucs/debug/log.h>
 #include <ucs/type/status.h>
 
+#ifdef __clang__
+#  define CLANG_VERSION ( __clang_major__ * 100 + __clang_minor__)
+#  if CLANG_VERSION >= 500
+#    undef __GNUC_MINOR__
+#    define __GNUC_MINOR__ 3
+#  endif
+#endif
+
 #include <infiniband/mlx5_hw.h>
 #include <netinet/in.h>
 #include <endian.h>
