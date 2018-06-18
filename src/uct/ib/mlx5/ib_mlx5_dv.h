@@ -51,4 +51,6 @@ unsigned uct_ib_mlx5_get_cq_ci(struct ibv_cq *cq);
  */
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av);
 
+void uct_ib_mlx5_cq_set_flags(struct ibv_cq *cq, int v);
+
 #endif

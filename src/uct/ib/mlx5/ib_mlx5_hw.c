@@ -198,4 +198,12 @@ void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
     memcpy(av, &ucs_container_of(ah, struct mlx5_ah, ibv_ah)->av, sizeof(*av));
 }
 
+void uct_ib_mlx5_cq_set_flags(struct ibv_cq *cq, int v)
+{
+#if HAVE_STRUCT_MLX5_CQ_MODEL_FLAGS
+    struct mlx5_cq *mcq = ucs_container_of(cq, struct mlx5_cq, ibv_cq);
+    mcq->model_flags = v;
+#endif
+}
+
 #endif
