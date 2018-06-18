@@ -156,6 +156,8 @@ AS_IF([test "x$with_ib" == xyes],
                            ibv_mlx5_exp_update_cq_ci,
                            MLX5_WQE_CTRL_SOLICITED],
                                   [], [], [[#include <infiniband/mlx5_hw.h>]])
+                       AC_CHECK_MEMBERS([struct mlx5_cq.model_flags],
+                                  [], [], [[#include <infiniband/mlx5_hw.h>]])
                                ], [with_mlx5_hw=no])
               AC_MSG_NOTICE([Checking for DV bare-metal support])
               AC_CHECK_HEADERS([infiniband/mlx5dv.h],
