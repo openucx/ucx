@@ -16,9 +16,17 @@
 #include <ucs/debug/log.h>
 #include <ucs/type/status.h>
 
+/**
+ * When using an clang version that is higher than 3.0, the GNUC_MINOR is set
+ * to 2, which affects the offset of several fields that are used by UCX from
+ * the liblmlx5 library (from the mlx5_qp struct).
+ * According to libmlx5, resetting the GNUC_MINOR version to 3, will make the
+ * offset of these fields inside libmlx5 (when compiled with GCC) the same as
+ * the one used by UCX (when compiled with armclang).
+ */
 #ifdef __clang__
 #  define CLANG_VERSION ( __clang_major__ * 100 + __clang_minor__)
-#  if CLANG_VERSION >= 500
+#  if CLANG_VERSION >= 300
 #    undef __GNUC_MINOR__
 #    define __GNUC_MINOR__ 3
 #  endif
