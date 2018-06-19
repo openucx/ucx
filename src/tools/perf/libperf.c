@@ -1437,7 +1437,7 @@ static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
                                  ucx_perf_result_t* result);
 
 #if HAVE_CUDA
-static ucs_status_t init_cuda_device(ucx_perf_context_t *perf)
+static ucs_status_t ucx_perf_init_cuda_device(ucx_perf_context_t *perf)
 {
     cudaError_t cerr;
     unsigned group_index;
@@ -1489,7 +1489,7 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
 
 #if HAVE_CUDA
     if (params->mem_type == UCT_MD_MEM_TYPE_CUDA) {
-        status = init_cuda_device(perf);
+        status = ucx_perf_init_cuda_device(perf);
         if (status != UCS_OK) {
             goto out_free;
         }

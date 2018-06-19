@@ -42,7 +42,7 @@ static ucs_status_t uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
                                            void *rkey_buffer)
 {
     uct_cuda_ipc_key_t *packed   = (uct_cuda_ipc_key_t *) rkey_buffer;
-    uct_cuda_ipc_mem_t *mem_hndl = (uct_cuda_ipc_mem_t *) memh;
+    uct_cuda_ipc_key_t *mem_hndl = (uct_cuda_ipc_key_t *) memh;
 
     *packed = *mem_hndl;
 
@@ -90,7 +90,7 @@ static ucs_status_t uct_cuda_ipc_rkey_release(uct_md_component_t *mdc, uct_rkey_
 
 static ucs_status_t
 uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
-                              unsigned flags, uct_cuda_ipc_mem_t *mem_hndl)
+                              unsigned flags, uct_cuda_ipc_key_t *key)
 {
     CUdevice cu_device;
     ucs_status_t status;
@@ -99,18 +99,17 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
         return UCS_OK;
     }
 
-    status = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&(mem_hndl->ph),
-                                                (CUdeviceptr) addr));
+    status = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&(key->ph), (CUdeviceptr) addr));
     if (UCS_OK != status) {
         return status;
     }
 
     UCT_CUDA_IPC_GET_DEVICE(cu_device);
 
-    UCT_CUDADRV_FUNC(cuMemGetAddressRange(&(mem_hndl->d_bptr),
-                                          &(mem_hndl->b_len),
+    UCT_CUDADRV_FUNC(cuMemGetAddressRange(&(key->d_bptr),
+                                          &(key->b_len),
                                           (CUdeviceptr) addr));
-    mem_hndl->dev_num  = (int) cu_device;
+    key->dev_num  = (int) cu_device;
     ucs_trace("registered memory:%p..%p length:%lu dev_num:%d",
               addr, addr + length, length, (int) cu_device);
     return UCS_OK;
@@ -119,19 +118,19 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
 static ucs_status_t uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
                                          unsigned flags, uct_mem_h *memh_p)
 {
-    uct_cuda_ipc_mem_t *mem_hndl = NULL;
+    uct_cuda_ipc_key_t *key;
 
-    mem_hndl = ucs_malloc(sizeof(uct_cuda_ipc_mem_t), "cuda_ipc handle");
-    if (NULL == mem_hndl) {
-        ucs_error("failed to allocate memory for cuda_ipc_mem_t");
+    key = ucs_malloc(sizeof(uct_cuda_ipc_key_t), "uct_cuda_ipc_key_t");
+    if (NULL == key) {
+        ucs_error("failed to allocate memory for uct_cuda_ipc_key_t");
         return UCS_ERR_NO_MEMORY;
     }
 
-    if (UCS_OK != uct_cuda_ipc_mem_reg_internal(md, address, length, 0, mem_hndl)) {
-        ucs_free(mem_hndl);
+    if (UCS_OK != uct_cuda_ipc_mem_reg_internal(md, address, length, 0, key)) {
+        ucs_free(key);
         return UCS_ERR_IO_ERROR;
     }
-    *memh_p = mem_hndl;
+    *memh_p = key;
 
     return UCS_OK;
 }
