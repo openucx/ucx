@@ -144,7 +144,8 @@ enum ucp_feature {
                                            operations support */
     UCP_FEATURE_WAKEUP = UCS_BIT(4),  /**< Request interrupt notification
                                            support */
-    UCP_FEATURE_STREAM = UCS_BIT(5)   /**< Request stream support */
+    UCP_FEATURE_STREAM = UCS_BIT(5),  /**< Request stream support */
+    UCP_FEATURE_AM     = UCS_BIT(6)   /**< Request am support */
 };
 
 
@@ -280,6 +281,17 @@ enum ucp_ep_close_mode {
                                               operations. */
 };
 
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Callback flags.
+ *
+ * List of flags for a callback
+ * A callback must have exactly one of the SYNC or ASYNC flags set.
+ */
+enum ucp_cb_flags {
+    UCP_CB_FLAG_SYNC = UCS_BIT(1),
+    UCP_CB_FLAG_ASYNC = UCS_BIT(2)
+};
 
 /**
  * @ingroup UCP_MEM
@@ -1614,6 +1626,89 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
 
 /**
  * @ingroup UCP_ENDPOINT
+<<<<<<< HEAD
+=======
+ * @brief Add user defined callback for active message.
+ *
+ * This routine adds a user defined callback to be used for ucp_am_put_nb.
+ *
+ * @param [in]  worker      UCP worker on which to set the am handler
+ * @param [in]  id          Active message id. Must be 0..(UCT_AM_ID_MAX-1)-UCP_AM_ID_LAST
+ * @param [in]  cb          Active message callback. NULL to clear.
+ * @param [in]  arg         Active message argument, which will be passed in to
+ *                          every invocation of the callback as the arg argument.
+ * @param [in]  flags       Requested active message callback capabilities
+ *
+ * @return error code if the ep does not support active messages or 
+ *         requested callback flags
+ */
+
+ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint8_t id, 
+                                       ucp_am_callback_t cb, void *arg,
+                                       uint32_t flags);
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Send Active Message
+ *
+ * This routine sends an Active Message to an ep.
+ *
+ * @param [in]  ep          UCP endpoint where the active message will be run
+ * @param [in]  id          Active Message id. Specifies which registered 
+ *                          callback to run.
+ * @param [in]  payload     Pointer to the data to be sent to the target node 
+ *                          for the AM
+ * @param [in]  count       Number of elements to send.
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer. 
+ * @param [in]  cb          Callback that is invoked upon completion of the data
+ *                          transfer if it is not completed immediately
+ * @param [in]  flags       For Future use
+ *
+ * @return UCS_OK           Active message was sent immediately
+ * @return UCS_PTR_IS_ERR(_ptr) Error sending Active Message
+ * @return otherwise        Pointer to request, and Active Message is known
+ *                          to be completed after cb is run
+ */
+
+ucs_status_ptr_t ucp_am_put_nb(ucp_ep_h ep, uint8_t id,
+                               void *payload, size_t count,
+                               uintptr_t datatype, ucp_send_callback_t cb,
+                               unsigned flags);
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Modify endpoint parameters.
+ *
+ * This routine modifies @ref ucp_ep_h "endpoint" created by @ref ucp_ep_create
+ * or @ref ucp_listener_accept_callback_t. For example, this API can be used
+ * to setup custom parameters like @ref ucp_ep_params_t::user_data or
+ * @ref ucp_ep_params_t::err_handler_cb to endpoint created by 
+ * @ref ucp_listener_accept_callback_t.
+ *
+ * @param [in]  ep          A handle to the endpoint.
+ * @param [in]  params      User defined @ref ucp_ep_params_t configurations
+ *                          for the @ref ucp_ep_h "UCP endpoint".
+ *
+ * @return NULL             - The endpoint is modified successfully.
+ * @return UCS_PTR_IS_ERR(_ptr) - The reconfiguration failed and an error code
+ *                                indicates the status. However, the @a endpoint
+ *                                is not modified and can be used further.
+ * @return otherwise        - The reconfiguration process is started, and can be
+ *                            completed at any point in time. A request handle
+ *                            is returned to the application in order to track
+ *                            progress of the endpoint modification.
+ *                            The application is responsible for releasing the
+ *                            handle using the @ref ucp_request_free routine.
+ *
+ * @note See the documentation of @ref ucp_ep_params_t for details, only some of
+ *       the parameters can be modified.
+ */
+ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+>>>>>>> UCP/API Proposed API for Active Messages at the UCP level
  *
  * @brief Non-blocking @ref ucp_ep_h "endpoint" closure.
  *

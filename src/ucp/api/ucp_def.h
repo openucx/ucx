@@ -2,6 +2,7 @@
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 * Copyright (C) IBM 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Los Alamos National Security, LLC. 2018. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -90,6 +91,31 @@ typedef struct ucp_ep                    *ucp_ep_h;
  * endpoint which connects back to the client.
  */
 typedef struct ucp_conn_request          *ucp_conn_request_h;
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Callback to process incoming active message
+ *
+ * When the callback is called, @a flags indicates how @a should be handled.
+ *  
+ * @param [in]  arg     User-defined argument.
+ * @param [in]  data    Points to the received data. This may be part of
+ *                      a descriptor which may be released later.
+ * @param [in]  length  Length of data.
+ * @param [in]  flags   Ignore, these are only relevant at the UCT level
+ *
+ * @note This callback could be set and released
+ *       by @ref ucp_worker_set_am_handler function.
+ *       The minimum value of length is 8. If a user only
+ *       specifies to send 1 byte, that will be the only
+ *       valid byte in data, however length will still be set to 8.
+ *
+ * @retval UCS_OK         - The user must always specify the function to
+ *                          return UCS_OK. Failure to do this can result
+ *                          memory leaks or errors
+ */
+typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
+                                          unsigned flags);
 
 
 /**
