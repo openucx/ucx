@@ -45,7 +45,6 @@ typedef struct uct_cuda_ipc_key {
     int            dev_num;      /* GPU Device number */
 } uct_cuda_ipc_key_t;
 
-typedef uct_cuda_ipc_key_t uct_cuda_ipc_mem_t;
 
 #define UCT_CUDA_IPC_GET_DEVICE(_cu_device)                             \
     do {                                                                \

@@ -18,6 +18,7 @@ static int ucp_rndv_is_get_zcopy(ucp_request_t *sreq, ucp_rndv_mode_t rndv_mode)
             ((rndv_mode == UCP_RNDV_MODE_AUTO) &&
              UCP_MEM_IS_HOST(sreq->send.mem_type)));
 }
+
 static int ucp_rndv_is_pipeline_needed(ucp_request_t *sreq) {
     ucp_rsc_index_t rsc_index;
     ucp_rndv_mode_t rndv_mode;
