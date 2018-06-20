@@ -77,9 +77,9 @@ public:
         client->client_cb_arg = server->iface_attr().max_conn_priv;
     }
 
-    static ucs_status_t conn_request_cb(void *arg, void *id,
-                                        const void *conn_priv_data,
-                                        size_t length)
+    static void conn_request_cb(uct_iface_h iface, void *arg,
+                                uct_conn_request_h conn_request,
+                                const void *conn_priv_data, size_t length)
     {
         test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr*>(arg);
 
@@ -90,11 +90,10 @@ public:
         EXPECT_EQ(1 + uct_test::entity::client_priv_data.length(), length);
         self->server_recv_req++;
         if (self->delay_conn_reply) {
-            self->delayed_conn_reqs.push(id);
-            return UCS_INPROGRESS;
+            self->delayed_conn_reqs.push(conn_request);
+        } else {
+            uct_iface_accept(iface, conn_request);
         }
-
-        return UCS_OK;
     }
 
     static ucs_status_t err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
@@ -108,7 +107,7 @@ protected:
     entity *server, *client;
     ucs_sock_addr_t listen_sock_addr, connect_sock_addr;
     volatile int err_count, server_recv_req;
-    std::queue<void *> delayed_conn_reqs;
+    std::queue<uct_conn_request_h> delayed_conn_reqs;
     bool delay_conn_reply;
 };
 
