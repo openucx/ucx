@@ -168,9 +168,9 @@ typedef struct uct_iface_ops {
                                      const uct_device_addr_t *dev_addr,
                                      const uct_ep_addr_t *ep_addr);
 
-    void (*iface_accept)(uct_iface_h iface, void *id);
+    void (*iface_accept)(uct_iface_h iface, uct_conn_request_h conn_request);
 
-    void (*iface_reject)(uct_iface_h iface, void *id);
+    void (*iface_reject)(uct_iface_h iface, uct_conn_request_h conn_request);
 
     /* interface - synchronization */
 

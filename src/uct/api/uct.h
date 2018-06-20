@@ -1266,13 +1266,12 @@ ucs_status_t uct_iface_set_am_tracer(uct_iface_h iface, uct_am_tracer_t tracer,
  * @ingroup UCT_RESOURCE
  * @brief Accept connection request.
  *
- * @param [in] iface       Interface which generated connection establishment
- *                         request @a id.
- * @param [in] id          Identifier of connection establishment request
- *                         passed as parameter of
- *                         @ref uct_sockaddr_conn_request_callback_t.
+ * @param [in] iface        Interface which generated connection establishment
+ *                          request @a id.
+ * @param [in] conn_request Connection establishment request passed as parameter
+ *                          of @ref uct_sockaddr_conn_request_callback_t.
  */
-void uct_iface_accept(uct_iface_h iface, void *id);
+void uct_iface_accept(uct_iface_h iface, uct_conn_request_h conn_request);
 
 
 /**
@@ -1280,13 +1279,12 @@ void uct_iface_accept(uct_iface_h iface, void *id);
  * @brief Reject connection request, will invoke the error handling flow on the
  *        client side.
  *
- * @param [in] iface       Interface which generated connection establishment
- *                         request @a id.
- * @param [in] id          Identifier of connection establishment request
- *                         passed as parameter of
- *                         @ref uct_sockaddr_conn_request_callback_t.
+ * @param [in] iface        Interface which generated connection establishment
+ *                          request @a id.
+ * @param [in] conn_request Connection establishment request passed as parameter
+ *                          of @ref uct_sockaddr_conn_request_callback_t.
  */
-void uct_iface_reject(uct_iface_h iface, void *id);
+void uct_iface_reject(uct_iface_h iface, uct_conn_request_h conn_request);
 
 
 /**
