@@ -97,8 +97,7 @@ typedef struct ucp_conn_request          *ucp_conn_request_h;
  * @brief Callback to process incoming active message
  *
  * @param [in]  arg     User-defined argument.
- * @param [in]  data    Points to the received data. This may be part of
- *                      a descriptor which may be released later.
+ * @param [in]  data    Points to the received data. 
  * @param [in]  length  Length of data.
  * @param [in]  flags   Ignore, these are only relevant at the UCT level
  *
