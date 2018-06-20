@@ -312,12 +312,12 @@ typedef struct ucp_wireup_client_data {
 } UCS_S_PACKED ucp_wireup_sockaddr_priv_t;
 
 
-typedef struct ucp_ep_address {
+typedef struct ucp_conn_request {
     struct ucp_listener         *listener;
-    void                        *conn_req_id;
+    void                        *id;
     ucp_wireup_sockaddr_priv_t  priv_addr;
     /* packed worker address follows */
-} UCS_S_PACKED ucp_ep_address_t;
+} UCS_S_PACKED ucp_conn_request_t;
 
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
