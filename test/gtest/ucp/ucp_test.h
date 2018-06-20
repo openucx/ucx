@@ -50,7 +50,7 @@ public:
     public:
         typedef enum {
             LISTEN_CB_EP,
-            LISTEN_CB_EP_ADDR,
+            LISTEN_CB_CONN,
             LISTEN_CB_REJECT
         } listen_cb_type_t;
 
@@ -62,7 +62,7 @@ public:
         void connect(const entity* other, const ucp_ep_params_t& ep_params,
                      int ep_idx = 0, int do_set_ep = 1);
 
-        ucp_ep_h accept(ucp_worker_h worker, ucp_ep_address_h ep_addr);
+        ucp_ep_h accept(ucp_worker_h worker, ucp_conn_request_h conn_request);
 
         void* modify_ep(const ucp_ep_params_t& ep_params, int worker_idx = 0,
                        int ep_idx = 0);
@@ -109,14 +109,14 @@ public:
         ucs::handle<ucp_context_h>      m_ucph;
         worker_vec_t                    m_workers;
         ucs::handle<ucp_listener_h>     m_listener;
-        std::queue<ucp_ep_address_h>    m_ep_addrs;
+        std::queue<ucp_conn_request_h>  m_conn_reqs;
         size_t                          m_rejected_cntr;
 
     private:
         static void empty_send_completion(void *r, ucs_status_t status);
         static void accept_ep_cb(ucp_ep_h ep, void *arg);
-        static void accept_ep_addr_cb(ucp_ep_address_h ep_addr, void *arg);
-        static void reject_ep_addr_cb(ucp_ep_address_h ep_addr, void *arg);
+        static void accept_conn_cb(ucp_conn_request_h conn_req, void *arg);
+        static void reject_conn_cb(ucp_conn_request_h conn_req, void *arg);
 
         void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
     };

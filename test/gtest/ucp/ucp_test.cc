@@ -417,16 +417,16 @@ void ucp_test_base::entity::connect(const entity* other,
 }
 
 ucp_ep_h ucp_test_base::entity::accept(ucp_worker_h worker,
-                                       ucp_ep_address_h ep_addr)
+                                       ucp_conn_request_h conn_request)
 {
     ucp_ep_h        ep;
     ucp_ep_params_t ep_params;
-    ep_params.field_mask  = UCP_EP_PARAM_FIELD_USER_DATA |
-                            UCP_EP_PARAM_FIELD_EP_ADDR;
-    ep_params.user_data   = (void *)0xdeadbeef;
-    ep_params.ep_addr     = ep_addr;
+    ep_params.field_mask   = UCP_EP_PARAM_FIELD_USER_DATA |
+                             UCP_EP_PARAM_FIELD_CONN_REQUEST;
+    ep_params.user_data    = (void *)0xdeadbeef;
+    ep_params.conn_request = conn_request;
 
-    ucs_status_t status   = ucp_ep_create(worker, &ep_params, &ep);
+    ucs_status_t status    = ucp_ep_create(worker, &ep_params, &ep);
     ASSERT_UCS_OK(status);
     return ep;
 }
@@ -457,18 +457,16 @@ void ucp_test_base::entity::accept_ep_cb(ucp_ep_h ep, void *arg) {
     self->set_ep(ep, worker_index, self->get_num_eps(worker_index));
 }
 
-void ucp_test_base::entity::accept_ep_addr_cb(ucp_ep_address_h ep_addr,
-                                              void *arg)
+void ucp_test_base::entity::accept_conn_cb(ucp_conn_request_h conn_req, void* arg)
 {
     entity *self = reinterpret_cast<entity*>(arg);
-    self->m_ep_addrs.push(ep_addr);
+    self->m_conn_reqs.push(conn_req);
 }
 
-void ucp_test_base::entity::reject_ep_addr_cb(ucp_ep_address_h ep_addr,
-                                              void *arg)
+void ucp_test_base::entity::reject_conn_cb(ucp_conn_request_h conn_req, void* arg)
 {
     entity *self = reinterpret_cast<entity*>(arg);
-    ucp_listener_reject(self->m_listener, ep_addr);
+    ucp_listener_reject(self->m_listener, conn_req);
     self->m_rejected_cntr++;
 }
 
@@ -536,14 +534,14 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
         params.field_mask        |= UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
         params.accept_handler.cb  = accept_ep_cb;
         params.accept_handler.arg = reinterpret_cast<void*>(this);
-    } else if (cb_type == LISTEN_CB_EP_ADDR) {
-        params.field_mask |= UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER;
-        params.accept_addr_handler.cb  = accept_ep_addr_cb;
-        params.accept_addr_handler.arg = reinterpret_cast<void*>(this);
+    } else if (cb_type == LISTEN_CB_CONN) {
+        params.field_mask |= UCP_LISTENER_PARAM_FIELD_ACCEPT_CONN_HANDLER;
+        params.accept_conn_handler.cb  = accept_conn_cb;
+        params.accept_conn_handler.arg = reinterpret_cast<void*>(this);
     } else if (cb_type == LISTEN_CB_REJECT) {
-        params.field_mask |= UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER;
-        params.accept_addr_handler.cb  = reject_ep_addr_cb;
-        params.accept_addr_handler.arg = reinterpret_cast<void*>(this);
+        params.field_mask |= UCP_LISTENER_PARAM_FIELD_ACCEPT_CONN_HANDLER;
+        params.accept_conn_handler.cb  = reject_conn_cb;
+        params.accept_conn_handler.arg = reinterpret_cast<void*>(this);
     } else {
         UCS_TEST_ABORT("invalid test parameter");
     }
@@ -582,10 +580,10 @@ unsigned ucp_test_base::entity::progress(int worker_index)
     }
 
     unsigned ret = 0;
-    if (!m_ep_addrs.empty()) {
-        ucp_ep_address_h ep_addr = m_ep_addrs.back();
-        m_ep_addrs.pop();
-        ucp_ep_h ep = accept(ucp_worker, ep_addr);
+    if (!m_conn_reqs.empty()) {
+        ucp_conn_request_h conn_req = m_conn_reqs.back();
+        m_conn_reqs.pop();
+        ucp_ep_h ep = accept(ucp_worker, conn_req);
         set_ep(ep, worker_index, std::numeric_limits<int>::max());
         ++ret;
     }

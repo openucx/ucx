@@ -32,8 +32,8 @@ public:
     }
 
     enum {
-        EP_ADDR = DEFAULT_PARAM_VARIANT + 1,
-        EP_ADDR_STREAM
+        CONN_REQ = DEFAULT_PARAM_VARIANT + 1,
+        CONN_REQ_STREAM
     };
 
     typedef enum {
@@ -51,9 +51,9 @@ public:
             ucp_test::enum_test_params(ctx_params, name, test_case_name, tls);
 
         generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     EP_ADDR, result);
+                                     CONN_REQ, result);
         generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     EP_ADDR_STREAM, result);
+                                     CONN_REQ_STREAM, result);
         return result;
     }
 
@@ -361,7 +361,7 @@ public:
 
         wait_for_server_ep(wakeup);
 
-        send_recv(sender(), receiver(), (GetParam().variant == EP_ADDR_STREAM) ?
+        send_recv(sender(), receiver(), (GetParam().variant == CONN_REQ_STREAM) ?
                                         SEND_RECV_STREAM : SEND_RECV_TAG,
                   wakeup);
     }
@@ -430,9 +430,9 @@ public:
 
 protected:
     ucp_test_base::entity::listen_cb_type_t cb_type() const {
-        if ((GetParam().variant == EP_ADDR) ||
-            (GetParam().variant == EP_ADDR_STREAM)) {
-            return ucp_test_base::entity::LISTEN_CB_EP_ADDR;
+        if ((GetParam().variant == CONN_REQ) ||
+            (GetParam().variant == CONN_REQ_STREAM)) {
+            return ucp_test_base::entity::LISTEN_CB_CONN;
         }
         return ucp_test_base::entity::LISTEN_CB_EP;
     }
