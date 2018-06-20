@@ -96,8 +96,6 @@ typedef struct ucp_conn_request          *ucp_conn_request_h;
  * @ingroup UCP_ENDPOINT
  * @brief Callback to process incoming active message
  *
- * When the callback is called, @a flags indicates how @a should be handled.
- *  
  * @param [in]  arg     User-defined argument.
  * @param [in]  data    Points to the received data. This may be part of
  *                      a descriptor which may be released later.
