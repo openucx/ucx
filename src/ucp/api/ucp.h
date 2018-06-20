@@ -184,8 +184,8 @@ enum ucp_listener_params_field {
     UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER      = UCS_BIT(1),
 
     /**< User's callback and argument for handling the incoming connection
-     *   request with an endpoint address. */
-    UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER = UCS_BIT(2)
+     *   request. */
+    UCP_LISTENER_PARAM_FIELD_ACCEPT_CONN_HANDLER = UCS_BIT(2)
 };
 
 
@@ -206,7 +206,7 @@ enum ucp_ep_params_field {
     UCP_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(3), /**< User data pointer */
     UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(4), /**< Socket address field */
     UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(5), /**< Endpoint flags */
-    UCP_EP_PARAM_FIELD_EP_ADDR           = UCS_BIT(6)  /**< Endpoint address field */
+    UCP_EP_PARAM_FIELD_CONN_REQUEST      = UCS_BIT(6)  /**< Connection request field */
 };
 
 
@@ -835,10 +835,10 @@ typedef struct ucp_listener_params {
     /**
      * Handler to processing of incoming connection request in a client-server
      * connection flow. In order for the callback inside this handler to be
-     * invoked, the UCP_LISTENER_PARAM_FIELD_ACCEPT_ADDR_HANDLER needs to be set
+     * invoked, the UCP_LISTENER_PARAM_FIELD_ACCEPT_CONN_HANDLER needs to be set
      * in the field_mask.
      */
-    ucp_listener_accept_addr_handler_t  accept_addr_handler;
+    ucp_listener_accept_conn_handler_t  accept_conn_handler;
 } ucp_listener_params_t;
 
 
@@ -859,11 +859,11 @@ typedef struct ucp_ep_params {
     uint64_t                field_mask;
 
     /**
-     * Destination address; one from the following fields is mandatory for
+     * Destination address; one of the following fields is mandatory for
      * filling:
      *  - ucp_ep_params_t::address
      *  - ucp_ep_params_t::sockaddr
-     *  - ucp_ep_params_t::ep_addr
+     *  - ucp_ep_params_t::conn_request
      * This field should be set along with its corresponding bit in the
      * field_mask - @ref UCP_EP_PARAM_FIELD_REMOTE_ADDRESS and must be obtained
      * using @ref ucp_worker_get_address. This field cannot be changed by
@@ -899,11 +899,11 @@ typedef struct ucp_ep_params {
      unsigned               flags;
 
     /**
-     * Destination address in the form of a sockaddr; one from the following
+     * Destination address in the form of a sockaddr; one of the following
      * fields is mandatory for filling:
      *  - ucp_ep_params_t::address
      *  - ucp_ep_params_t::sockaddr
-     *  - ucp_ep_params_t::ep_addr
+     *  - ucp_ep_params_t::conn_request
      * This field should be set along with its corresponding bit in the
      * field_mask - @ref UCP_EP_PARAM_FIELD_SOCK_ADDR and must be obtained
      * from the user, it means that this type of the endpoint creation is
@@ -913,19 +913,19 @@ typedef struct ucp_ep_params {
     ucs_sock_addr_t         sockaddr;
 
     /**
-     * Destination address of a remote endpoint to directly connect; one from
-     * the following fields is mandatory for filling:
+     * Connection request from client; one of the following fields is mandatory
+     * for filling:
      *  - ucp_ep_params_t::address
      *  - ucp_ep_params_t::sockaddr
-     *  - ucp_ep_params_t::ep_addr
+     *  - ucp_ep_params_t::conn_request
      * This field should be set along with its corresponding bit in the
-     * field_mask - @ref UCP_EP_PARAM_FIELD_EP_ADDR and must be obtained using
-     * @ref ucp_listener_accept_addr_callback_t, it means that this type of the
-     * endpoint creation is possible only on server side in client-server
+     * field_mask - @ref UCP_EP_PARAM_FIELD_CONN_REQUEST and must be obtained
+     * using @ref ucp_listener_accept_addr_callback_t, it means that this type
+     * of the endpoint creation is possible only on server side in client-server
      * connection establishment flow. This field cannot be changed by
      * @ref ucp_ep_modify_nb.
      */
-    ucp_ep_address_h        ep_addr;
+    ucp_conn_request_h      conn_request;
 
 } ucp_ep_params_t;
 
@@ -1710,11 +1710,13 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode);
  * This routine releases the @ref ucp_ep_address_h and notifies client if there
  * was set @ref ucp_ep_params_t::err_handler with status @ref UCS_ERR_REJECTED.
  *
- * @param [in]  listener    Handle to the listener which created the address.
- * @param [in]  ep_addr     Handle to the remote endpoint address to reject.
+ * @param [in]  listener        Handle to the listener which created
+ *                              @a conn_request.
+ * @param [in]  conn_request    Handle to the connection request to reject.
  *
  */
-void ucp_listener_reject(ucp_listener_h listener, ucp_ep_address_h ep_addr);
+void ucp_listener_reject(ucp_listener_h listener,
+                         ucp_conn_request_h conn_request);
 
 
 /**
