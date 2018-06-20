@@ -452,15 +452,15 @@ static UCS_CLASS_CLEANUP_FUNC(uct_base_iface_t)
 UCS_CLASS_DEFINE(uct_base_iface_t, uct_iface_t);
 
 
-void uct_iface_accept(uct_iface_h iface, void *id)
+void uct_iface_accept(uct_iface_h iface, uct_conn_request_h conn_request)
 {
-    iface->ops.iface_accept(iface, id);
+    iface->ops.iface_accept(iface, conn_request);
 }
 
 
-void uct_iface_reject(uct_iface_h iface, void *id)
+void uct_iface_reject(uct_iface_h iface, uct_conn_request_h conn_request)
 {
-    iface->ops.iface_reject(iface, id);
+    iface->ops.iface_reject(iface, conn_request);
 }
 
 

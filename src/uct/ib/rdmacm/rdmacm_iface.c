@@ -71,22 +71,24 @@ void uct_rdmacm_accept(void *id)
     }
 }
 
-static void uct_rdmacm_iface_accept(uct_iface_h tl_iface, void *id)
+static void uct_rdmacm_iface_accept(uct_iface_h tl_iface,
+                                    uct_conn_request_h conn_request)
 {
-    struct rdma_cm_event *event = id;
+    struct rdma_cm_event *event = conn_request;
 
-    ucs_debug("accepting event %p with id %p", event, event->id);
+    ucs_trace("accepting event %p with id %p", event, event->id);
     uct_rdmacm_accept(event->id);
     rdma_destroy_id(event->id);
     rdma_ack_cm_event(event);
 }
 
-static void uct_rdmacm_iface_reject(uct_iface_h tl_iface, void *id)
+static void uct_rdmacm_iface_reject(uct_iface_h tl_iface,
+                                    uct_conn_request_h conn_request)
 {
-    struct rdma_cm_event *event = id;
+    struct rdma_cm_event *event = conn_request;
 
-    ucs_debug("rejecting event %p with id %p", event, event->id);
-    if (rdma_reject(event->id, "reject"/*NULL*/, strlen("reject"))) {
+    ucs_trace("rejecting event %p with id %p", event, event->id);
+    if (rdma_reject(event->id, "reject", strlen("reject"))) {
         ucs_warn("rdma_reject(id=%p) failed: %m", event->id);
     }
 
@@ -166,38 +168,24 @@ static void uct_rdmacm_client_handle_failure(uct_rdmacm_iface_t *iface,
     }
 }
 
-static int uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
-                                             struct rdma_cm_event *event,
-                                             struct sockaddr *remote_addr)
+static void uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
+                                              struct rdma_cm_event *event,
+                                              struct sockaddr *remote_addr)
 {
     uct_rdmacm_priv_data_hdr_t *hdr;
-    ucs_status_t status;
 
     hdr = (uct_rdmacm_priv_data_hdr_t*) event->param.ud.private_data;
 
     /* TODO check the iface's cb_flags to determine when to invoke this callback.
      * currently only UCT_CB_FLAG_ASYNC is supported so the cb is invoked from here */
-    status = iface->conn_request_cb(iface->conn_request_arg, event,
-                                    event->param.ud.private_data +
-                                    /* private data */
-                                    sizeof(uct_rdmacm_priv_data_hdr_t),
-                                    /* length */
-                                    hdr->length);
-    if (status == UCS_OK) {
-        uct_rdmacm_accept(event->id);
-    } else if (status == UCS_INPROGRESS) {
-        ucs_debug("rdmacm event %p with id %p was held by user", event,
-                  event->id);
-        /* Accept or reject is delayed by user's callback */
-        return 0;
-    } else {
-        rdma_reject(event->id, NULL, 0);
-    }
-
-    /* Destroy the new rdma_cm_id which was created when receiving the
-     * RDMA_CM_EVENT_CONNECT_REQUEST event. (this is not the listening rdma_cm_id)*/
-    rdma_destroy_id(event->id);
-    return 1;
+    iface->conn_request_cb(&iface->super.super, iface->conn_request_arg,
+                           /* connection request*/
+                           event,
+                           /* private data */
+                           UCS_PTR_BYTE_OFFSET(event->param.ud.private_data,
+                                               sizeof(uct_rdmacm_priv_data_hdr_t)),
+                           /* length */
+                           hdr->length);
 }
 
 /**
@@ -207,7 +195,7 @@ static int uct_rdmacm_iface_process_conn_req(uct_rdmacm_iface_t *iface,
 static void uct_rdmacm_iface_release_cm_id(uct_rdmacm_iface_t *iface,
                                           uct_rdmacm_ctx_t *cm_id_ctx)
 {
-    ucs_debug("destroying cm_id %p", cm_id_ctx->cm_id);
+    ucs_trace("destroying cm_id %p", cm_id_ctx->cm_id);
 
     ucs_list_del(&cm_id_ctx->list);
     if (cm_id_ctx->ep != NULL) {
@@ -258,7 +246,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
         ep = cm_id_ctx->ep;
     }
 
-    ucs_debug("rdmacm event (fd=%d cm_id %p) on %s (ep=%p): %s. Peer: %s.",
+    ucs_trace("rdmacm event (fd=%d cm_id %p) on %s (ep=%p): %s. Peer: %s.",
               iface->event_ch->fd, event->id, (iface->is_server ? "server" : "client"),
               ep, rdma_event_str(event->event),
               ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
@@ -296,7 +284,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
                                         (void*)(conn_param.private_data +
                                         sizeof(uct_rdmacm_priv_data_hdr_t)));
             if (priv_data_ret < 0) {
-                ucs_debug("rdmacm client (iface=%p cm_id=%p fd=%d) failed to fill "
+                ucs_trace("rdmacm client (iface=%p cm_id=%p fd=%d) failed to fill "
                           "private data. status: %s",
                           iface, event->id, iface->event_ch->fd,
                           ucs_status_string(priv_data_ret));
@@ -325,8 +313,8 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
     case RDMA_CM_EVENT_CONNECT_REQUEST:
         /* Server - handle a connection request from the client */
         ucs_assert(iface->is_server);
-        ret.ack_event = uct_rdmacm_iface_process_conn_req(iface, event,
-                                                          remote_addr);
+        uct_rdmacm_iface_process_conn_req(iface, event, remote_addr);
+        ret.ack_event = 0;
         break;
 
     case RDMA_CM_EVENT_REJECTED:
@@ -346,7 +334,8 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
 
     /* client error events */
     case RDMA_CM_EVENT_UNREACHABLE:
-        if (!strncmp("reject", (char *)event->param.conn.private_data,
+        if ((event->param.conn.private_data_len > 0) &&
+            !strncmp("reject", (char *)event->param.conn.private_data,
                      strlen("reject"))) {
             ucs_assert(!iface->is_server);
             status = UCS_ERR_REJECTED;
@@ -381,7 +370,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
 
 static void uct_rdmacm_iface_event_handler(int fd, void *arg)
 {
-    uct_rdmacm_iface_t             *iface    = arg;
+    uct_rdmacm_iface_t             *iface     = arg;
     uct_rdmacm_ctx_t               *cm_id_ctx = NULL;
     struct rdma_cm_event           *event;
     uct_rdmacm_process_event_ret_t ret_proc_event;
