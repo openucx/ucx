@@ -15,6 +15,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define UCP_AM_ID_BITS 15
+#define UCP_AM_ID_MAX  UCS_BIT(UCP_AM_ID_BITS)
 
 /**
  * @ingroup UCP_CONTEXT
@@ -97,22 +99,16 @@ typedef struct ucp_conn_request          *ucp_conn_request_h;
  * @brief Callback to process incoming active message
  *
  * @param [in]  arg     User-defined argument.
- * @param [in]  data    Points to the received data. 
+ * @param [in]  data    Points to the received data.  
  * @param [in]  length  Length of data.
- * @param [in]  flags   Ignore, these are only relevant at the UCT level
+ * @param [in]  flags   For future use 
  *
  * @note This callback could be set and released
  *       by @ref ucp_worker_set_am_handler function.
- *       The minimum value of length is 8. If a user only
- *       specifies to send 1 byte, that will be the only
- *       valid byte in data, however length will still be set to 8.
  *
- * @retval UCS_OK         - The user must always specify the function to
- *                          return UCS_OK. Failure to do this can result
- *                          memory leaks or errors
  */
-typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
-                                          unsigned flags);
+typedef void (*ucp_am_callback_t)(void *arg, void *data, size_t length,
+                                  unsigned flags);
 
 
 /**
