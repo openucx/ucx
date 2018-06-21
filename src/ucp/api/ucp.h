@@ -282,18 +282,6 @@ enum ucp_ep_close_mode {
 };
 
 /**
- * @ingroup UCP_ENDPOINT
- * @brief Callback flags.
- *
- * List of flags for a callback
- * A callback must have exactly one of the SYNC or ASYNC flags set.
- */
-enum ucp_cb_flags {
-    UCP_CB_FLAG_SYNC = UCS_BIT(1),
-    UCP_CB_FLAG_ASYNC = UCS_BIT(2)
-};
-
-/**
  * @ingroup UCP_MEM
  * @brief UCP memory mapping parameters field mask.
  *
@@ -1637,7 +1625,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  * @param [in]  cb          Active message callback. NULL to clear.
  * @param [in]  arg         Active message argument, which will be passed in to
  *                          every invocation of the callback as the arg argument.
- * @param [in]  flags       Requested active message callback capabilities
+ * @param [in]  flags       For future use
  *
  * @return error code if the ep does not support active messages or 
  *         requested callback flags
