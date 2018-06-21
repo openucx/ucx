@@ -1633,7 +1633,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  * This routine adds a user defined callback to be used for ucp_am_put_nb.
  *
  * @param [in]  worker      UCP worker on which to set the am handler
- * @param [in]  id          Active message id. Must be 0..(UCT_AM_ID_MAX-1)-UCP_AM_ID_LAST
+ * @param [in]  id          Active message id. Must be 0..(UCP_AM_ID_MAX - 1)
  * @param [in]  cb          Active message callback. NULL to clear.
  * @param [in]  arg         Active message argument, which will be passed in to
  *                          every invocation of the callback as the arg argument.
