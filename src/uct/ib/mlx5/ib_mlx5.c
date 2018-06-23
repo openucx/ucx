@@ -33,6 +33,7 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 
     mlx5_cq->cq_buf    = dcq.dv.buf;
     mlx5_cq->cq_ci     = 0;
+    mlx5_cq->cq_sn     = 0;
     mlx5_cq->cq_length = dcq.dv.cqe_cnt;
     mlx5_cq->cq_num    = dcq.dv.cqn;
     mlx5_cq->uar       = uct_dv_get_info_uar0(dcq.dv.uar);

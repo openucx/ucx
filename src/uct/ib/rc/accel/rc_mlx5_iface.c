@@ -237,6 +237,14 @@ uct_rc_mlx5_iface_tag_init(uct_rc_mlx5_iface_t *iface,
     return UCS_OK;
 }
 
+static void uct_rc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
+                                       uct_ib_direction_t rxtx)
+{
+    uct_rc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_rc_mlx5_iface_t);
+
+    iface->mlx5_common.cq[rxtx].cq_sn++;
+}
+
 
 static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
@@ -348,6 +356,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_is_reachable       = uct_rc_iface_is_reachable
     },
     .arm_cq                   = uct_rc_mlx5_iface_arm_cq,
+    .event_cq                 = uct_rc_mlx5_iface_event_cq,
     .handle_failure           = uct_rc_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_rc_mlx5_ep_set_failed
     },

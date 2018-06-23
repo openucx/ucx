@@ -1079,6 +1079,14 @@ static ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_iface_t *dc_iface, int dc
     return status;
 }
 
+static void uct_dc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
+                                       uct_ib_direction_t rxtx)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
+
+    iface->mlx5_common.cq[rxtx].cq_sn++;
+}
+
 static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     {
     {
@@ -1127,6 +1135,7 @@ static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_get_address        = uct_dc_iface_get_address,
     },
     .arm_cq                   = uct_ib_iface_arm_cq,
+    .event_cq                 = uct_dc_mlx5_iface_event_cq,
     .handle_failure           = uct_dc_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_dc_mlx5_ep_set_failed
     },

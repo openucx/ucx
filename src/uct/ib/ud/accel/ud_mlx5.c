@@ -624,6 +624,14 @@ static ucs_status_t uct_ud_mlx5_ep_set_failed(uct_ib_iface_t *iface,
                              &iface->super.super, status);
 }
 
+static void uct_ud_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
+                                       uct_ib_direction_t rxtx)
+{
+    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+
+    iface->cq[rxtx].cq_sn++;
+}
+
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t)(uct_iface_t*);
 
 static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
@@ -656,6 +664,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .iface_is_reachable       = uct_ib_iface_is_reachable
     },
     .arm_cq                   = uct_ud_mlx5_iface_arm_cq,
+    .event_cq                 = uct_ud_mlx5_iface_event_cq,
     .handle_failure           = uct_ud_iface_handle_failure,
     .set_ep_failed            = uct_ud_mlx5_ep_set_failed
     },
