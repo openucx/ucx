@@ -101,6 +101,8 @@ struct uct_ib_iface_ops {
     ucs_status_t            (*arm_cq)(uct_ib_iface_t *iface,
                                       uct_ib_direction_t rxtx,
                                       int solicited_only);
+    void                    (*event_cq)(uct_ib_iface_t *iface,
+                                        uct_ib_direction_t rxtx);
     void                    (*handle_failure)(uct_ib_iface_t *iface, void *arg,
                                               ucs_status_t status);
     ucs_status_t            (*set_ep_failed)(uct_ib_iface_t *iface, uct_ep_h ep,

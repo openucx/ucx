@@ -131,6 +131,7 @@ typedef struct uct_ib_mlx5_srq {
 typedef struct uct_ib_mlx5_cq {
     void               *cq_buf;
     unsigned           cq_ci;
+    unsigned           cq_sn;
     unsigned           cq_length;
     unsigned           cqe_size_log;
     unsigned           cq_num;

@@ -521,6 +521,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .iface_is_reachable       = uct_ib_iface_is_reachable
     },
     .arm_cq                   = uct_ib_iface_arm_cq,
+    .event_cq                 = (void*)ucs_empty_function,
     .handle_failure           = uct_ud_iface_handle_failure,
     .set_ep_failed            = uct_ud_verbs_ep_set_failed
     },

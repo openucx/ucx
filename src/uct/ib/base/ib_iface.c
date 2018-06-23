@@ -999,9 +999,11 @@ ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface)
         res = ibv_get_cq_event(iface->comp_channel, &cq, &cq_context);
         if (0 == res) {
             if (iface->cq[UCT_IB_TX] == cq) {
+                iface->ops->event_cq(iface, UCT_IB_TX);
                 ++send_cq_count;
             }
             if (iface->cq[UCT_IB_RX] == cq) {
+                iface->ops->event_cq(iface, UCT_IB_RX);
                 ++recv_cq_count;
             }
         }

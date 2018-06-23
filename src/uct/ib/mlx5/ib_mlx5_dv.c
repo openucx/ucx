@@ -39,7 +39,7 @@ int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
     uint32_t ci;
     uint32_t cmd;
 
-    sn  = cq->cq_ci & 3;
+    sn  = cq->cq_sn & 3;
     ci  = cq->cq_ci & 0xffffff;
     cmd = solicited ? MLX5_CQ_DB_REQ_NOT_SOL : MLX5_CQ_DB_REQ_NOT;
 
