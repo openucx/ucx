@@ -197,14 +197,13 @@ typedef struct uct_common_mlx5_iface_config {
 
 typedef struct uct_rc_mlx5_iface_common {
     struct {
-        uct_ib_mlx5_cq_t          cq;
         ucs_mpool_t               atomic_desc_mp;
     } tx;
     struct {
-        uct_ib_mlx5_cq_t          cq;
         uct_ib_mlx5_srq_t         srq;
         void                      *pref_ptr;
     } rx;
+    uct_ib_mlx5_cq_t              cq[UCT_IB_DIRECTION_NUM];
 #if IBV_EXP_HW_TM
     struct {
         uct_rc_mlx5_cmd_wq_t      cmd_wq;
@@ -371,7 +370,7 @@ uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *mlx5_common_if
                                       uct_rc_iface_t *rc_iface,
                                       struct mlx5_cqe64 *cqe)
 {
-    uct_ib_mlx5_cq_t *cq      = &mlx5_common_iface->rx.cq;
+    uct_ib_mlx5_cq_t *cq      = &mlx5_common_iface->cq[UCT_IB_RX];
     struct mlx5_err_cqe *ecqe = (void*)cqe;
     uct_ib_mlx5_srq_seg_t *seg;
     uint16_t wqe_ctr;
@@ -399,7 +398,7 @@ static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                              uct_rc_iface_t *rc_iface)
 {
-    uct_ib_mlx5_cq_t *cq = &mlx5_common_iface->rx.cq;
+    uct_ib_mlx5_cq_t *cq = &mlx5_common_iface->cq[UCT_IB_RX];
     struct mlx5_cqe64 *cqe;
     unsigned index;
     uint8_t op_own;

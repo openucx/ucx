@@ -39,6 +39,16 @@ typedef enum uct_ib_mtu {
 } uct_ib_mtu_t;
 
 
+/**
+ * Traffic direction.
+ */
+typedef enum {
+    UCT_IB_RX,
+    UCT_IB_TX,
+    UCT_IB_DIRECTION_NUM
+} uct_ib_direction_t;
+
+
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
 
@@ -88,8 +98,9 @@ struct uct_ib_iface_config {
 
 struct uct_ib_iface_ops {
     uct_iface_ops_t         super;
-    ucs_status_t            (*arm_tx_cq)(uct_ib_iface_t *iface);
-    ucs_status_t            (*arm_rx_cq)(uct_ib_iface_t *iface, int solicited_only);
+    ucs_status_t            (*arm_cq)(uct_ib_iface_t *iface,
+                                      uct_ib_direction_t rxtx,
+                                      int solicited_only);
     void                    (*handle_failure)(uct_ib_iface_t *iface, void *arg,
                                               ucs_status_t status);
     ucs_status_t            (*set_ep_failed)(uct_ib_iface_t *iface, uct_ep_h ep,
@@ -106,8 +117,7 @@ typedef struct uct_ib_iface_res_domain {
 struct uct_ib_iface {
     uct_base_iface_t        super;
 
-    struct ibv_cq           *send_cq;
-    struct ibv_cq           *recv_cq;
+    struct ibv_cq           *cq[UCT_IB_DIRECTION_NUM];
     struct ibv_comp_channel *comp_channel;
     uct_recv_desc_t         release_desc;
 
@@ -273,10 +283,9 @@ ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 
 ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h iface, int *fd_p);
 
-ucs_status_t uct_ib_iface_arm_tx_cq(uct_ib_iface_t *iface);
-
-ucs_status_t uct_ib_iface_arm_rx_cq(uct_ib_iface_t *iface, int solicited_only);
-
+ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
+                                 uct_ib_direction_t rxtx,
+                                 int solicited_only);
 
 static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
 {

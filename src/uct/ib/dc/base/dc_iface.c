@@ -59,7 +59,7 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
     memset(&init_attr, 0, sizeof(init_attr));
 
     init_attr.pd               = uct_ib_iface_md(&iface->super.super)->pd;
-    init_attr.cq               = iface->super.super.recv_cq;
+    init_attr.cq               = iface->super.super.cq[UCT_IB_RX];
     init_attr.srq              = iface->super.rx.srq.srq;
     init_attr.dc_key           = UCT_IB_KEY;
     init_attr.port             = iface->super.super.config.port_num;
