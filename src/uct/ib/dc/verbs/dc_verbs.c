@@ -1065,8 +1065,7 @@ static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
     .iface_is_reachable       = uct_dc_iface_is_reachable,
     .iface_get_address        = uct_dc_iface_get_address
     },
-    .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
-    .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
+    .arm_cq                   = uct_ib_iface_arm_cq,
     .handle_failure           = uct_dc_verbs_handle_failure,
     .set_ep_failed            = uct_dc_verbs_ep_set_failed
     },

@@ -376,12 +376,12 @@ public:
 
     void check_send_cq(uct_iface_t *iface, size_t val) {
         uct_ib_iface_t *ib_iface = ucs_derived_of(iface, uct_ib_iface_t);
-        struct ibv_cq  *send_cq = ib_iface->send_cq;
+        struct ibv_cq  *send_cq = ib_iface->cq[UCT_IB_TX];
 
         if (val != send_cq->comp_events_completed) {
             uint32_t completed_evt = send_cq->comp_events_completed;
             /* need this call to acknowledge the completion to prevent iface dtor hung*/
-            ibv_ack_cq_events(ib_iface->send_cq, 1);
+            ibv_ack_cq_events(ib_iface->cq[UCT_IB_TX], 1);
             UCS_TEST_ABORT("send_cq->comp_events_completed have to be 1 but the value "
                            << completed_evt);
         }
@@ -389,12 +389,12 @@ public:
 
     void check_recv_cq(uct_iface_t *iface, size_t val) {
         uct_ib_iface_t *ib_iface = ucs_derived_of(iface, uct_ib_iface_t);
-        struct ibv_cq  *recv_cq = ib_iface->recv_cq;
+        struct ibv_cq  *recv_cq = ib_iface->cq[UCT_IB_RX];
 
         if (val != recv_cq->comp_events_completed) {
             uint32_t completed_evt = recv_cq->comp_events_completed;
             /* need this call to acknowledge the completion to prevent iface dtor hung*/
-            ibv_ack_cq_events(ib_iface->recv_cq, 1);
+            ibv_ack_cq_events(ib_iface->cq[UCT_IB_RX], 1);
             UCS_TEST_ABORT("recv_cq->comp_events_completed have to be 1 but the value "
                            << completed_evt);
         }

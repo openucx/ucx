@@ -681,7 +681,8 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     uint16_t hw_ci;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
-    cqe = uct_ib_mlx5_poll_cq(&iface->super.super.super, &iface->mlx5_common.tx.cq);
+    cqe = uct_ib_mlx5_poll_cq(&iface->super.super.super,
+                              &iface->mlx5_common.cq[UCT_IB_TX]);
     if (cqe == NULL) {
         return 0;
     }
@@ -1122,8 +1123,7 @@ static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_is_reachable       = uct_dc_iface_is_reachable,
     .iface_get_address        = uct_dc_iface_get_address,
     },
-    .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
-    .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
+    .arm_cq                   = uct_ib_iface_arm_cq,
     .handle_failure           = uct_dc_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_dc_mlx5_ep_set_failed
     },

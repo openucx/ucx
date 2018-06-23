@@ -258,8 +258,8 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     /* Create QP */
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
     qp_init_attr.qp_context          = NULL;
-    qp_init_attr.send_cq             = self->super.send_cq;
-    qp_init_attr.recv_cq             = self->super.recv_cq;
+    qp_init_attr.send_cq             = self->super.cq[UCT_IB_TX];
+    qp_init_attr.recv_cq             = self->super.cq[UCT_IB_RX];
     qp_init_attr.srq                 = NULL; /* TODO */
     qp_init_attr.qp_type             = IBV_QPT_UD;
     qp_init_attr.sq_sig_all          = 0;
@@ -927,7 +927,7 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     }
 
     if (events & UCT_EVENT_SEND_COMP) {
-        status = iface->super.ops->arm_tx_cq(&iface->super);
+        status = iface->super.ops->arm_cq(&iface->super, UCT_IB_TX, 0);
         if (status != UCS_OK) {
             goto out;
         }
@@ -935,7 +935,7 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 
     if (events & (UCT_EVENT_SEND_COMP | UCT_EVENT_RECV)) {
         /* we may get send completion through ACKs as well */
-        status = iface->super.ops->arm_rx_cq(&iface->super, 0);
+        status = iface->super.ops->arm_cq(&iface->super, UCT_IB_RX, 0);
         if (status != UCS_OK) {
             goto out;
         }
