@@ -180,6 +180,10 @@ void *ucm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
     ucm_event_enter();
 
+    if ((flags & MAP_FIXED) && (addr != NULL)) {
+        ucm_dispatch_vm_munmap(addr, length);
+    }
+
     event.mmap.result  = MAP_FAILED;
     event.mmap.address = addr;
     event.mmap.size    = length;
@@ -269,6 +273,7 @@ void *ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags)
 
 void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
 {
+    uintptr_t attach_addr;
     ucm_event_t event;
     size_t size;
 
@@ -278,6 +283,15 @@ void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
               shmid, shmaddr, shmflg);
 
     size = ucm_shm_size(shmid);
+
+    if ((shmflg & SHM_REMAP) && (shmaddr != NULL)) {
+        attach_addr = (uintptr_t)shmaddr;
+        if (shmflg & SHM_RND) {
+            attach_addr -= attach_addr % SHMLBA;
+        }
+        ucm_dispatch_vm_munmap((void*)shmaddr, size);
+    }
+
     event.shmat.result  = MAP_FAILED;
     event.shmat.shmid   = shmid;
     event.shmat.shmaddr = shmaddr;

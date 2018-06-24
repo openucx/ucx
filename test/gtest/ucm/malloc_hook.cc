@@ -647,3 +647,90 @@ UCS_TEST_F(malloc_hook_cplusplus, mmap_ptrs) {
     unset();
 
 }
+
+UCS_TEST_F(malloc_hook_cplusplus, remap_override) {
+
+    /*
+     * Test memory mapping functions which override an existing mapping
+     */
+
+    size_t size = ucs_get_page_size() * 800;
+    void *buffer;
+    int shmid;
+
+    set();
+
+    EXPECT_EQ(0u, m_mapped_size);
+    EXPECT_EQ(0u, m_unmapped_size);
+
+    /* 1. Map a large buffer */
+    {
+        buffer = mmap(NULL, size, PROT_READ|PROT_WRITE,
+                            MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+        ASSERT_NE(MAP_FAILED, buffer) << strerror(errno);
+
+        EXPECT_EQ(size, m_mapped_size);
+        EXPECT_EQ(0u,   m_unmapped_size);
+    }
+
+    /*
+     * 2. Map another buffer in the same place.
+     *    Expected behavior: unmap event on the old buffer
+     */
+    {
+        m_mapped_size = m_unmapped_size = 0;
+
+        void *remap = mmap(buffer, size, PROT_READ|PROT_WRITE,
+                           MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED, -1, 0);
+        ASSERT_EQ(buffer, remap);
+
+        EXPECT_EQ(size, m_mapped_size);
+        EXPECT_EQ(size, m_unmapped_size);
+    }
+
+    /* 3. Create a shared memory segment */
+    {
+        shmid = shmget(IPC_PRIVATE, size, IPC_CREAT | SHM_R | SHM_W);
+        ASSERT_NE(-1, shmid) << strerror(errno);
+    }
+
+    /*
+     * 4. Attach the segment at the same buffer address.
+     *    Expected behavior: unmap event on the old buffer
+     */
+    {
+        m_mapped_size = m_unmapped_size = 0;
+
+        void *shmaddr = shmat(shmid, buffer, SHM_REMAP);
+        ASSERT_EQ(buffer, shmaddr);
+
+        EXPECT_EQ(size, m_mapped_size);
+        EXPECT_EQ(size, m_unmapped_size);
+    }
+
+    /* 5. Detach the sysv segment */
+    {
+        m_mapped_size = m_unmapped_size = 0;
+
+        shmdt(buffer);
+
+        EXPECT_EQ(size, m_unmapped_size);
+    }
+
+    /* 6. Remove the shared memory segment */
+    {
+        int ret = shmctl(shmid, IPC_RMID, NULL);
+        ASSERT_NE(-1, ret) << strerror(errno);
+    }
+
+    /* 7. Unmap the buffer */
+    {
+        m_mapped_size = m_unmapped_size = 0;
+
+        munmap(buffer, size);
+
+        EXPECT_EQ(size, m_unmapped_size);
+    }
+
+    unset();
+}
