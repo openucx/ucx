@@ -19,6 +19,9 @@ static unsigned ucp_listener_accept_cb_progress(void *arg)
     ucp_ep_h       ep       = arg;
     ucp_listener_h listener = ucp_ep_ext_gen(ep)->listener;
 
+    /* NOTE: protect union */
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
+
     ep->flags |= UCP_EP_FLAG_USED;
     if (ep->flags & UCP_EP_FLAG_STREAM_HAS_DATA) {
         /* return the EP from ucp_stream_worker_poll */
@@ -81,6 +84,8 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
         if (accept->listener->accept_cb != NULL) {
             if (ep->flags & UCP_EP_FLAG_LISTENER) {
                 ep->flags &= ~UCP_EP_FLAG_USED;
+                /* NOTE: protect union */
+                ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
                 ucp_ep_ext_gen(ep)->listener = accept->listener;
             } else {
                 ep->flags |= UCP_EP_FLAG_USED;
