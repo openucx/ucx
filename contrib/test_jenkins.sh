@@ -328,6 +328,7 @@ build_armclang() {
         $MAKE
         $MAKE distclean
         echo "ok 1 - build successful " >> build_armclang.tap
+        module unload arm-compiler/latest
     else
         echo "==== Not building with armclang compiler ===="
         echo "ok 1 - # SKIP because armclang not installed" >> build_armclang.tap
