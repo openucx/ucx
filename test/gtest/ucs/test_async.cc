@@ -416,12 +416,12 @@ UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
 
 UCS_TEST_P(test_async, many_timers) {
 
-    for (int count = 0; count < 1000; ++count) {
+    for (int count = 0; count < 4010; ++count) {
         std::vector<int> timers;
         ucs_status_t status;
         int timer_id;
 
-        for (int count2 = 0; count2 < 1010; ++count2) {
+        for (int count2 = 0; count2 < 250; ++count2) {
             status = ucs_async_add_timer(GetParam(), ucs_time_from_sec(1.0),
                                          (ucs_async_event_cb_t)ucs_empty_function,
                                          NULL, NULL, &timer_id);
