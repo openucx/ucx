@@ -264,8 +264,11 @@ UCS_TEST_F(stats_filter_summary, summary) {
             break;
         }
     }
-    std::string compared_string = std::string(ucs_get_host_name()) + ":" +
-                                  ucs::to_string(getpid()) +
+
+    std::string node_name = std::string(ucs_get_host_name()) + ":" +
+                            ucs::to_string(getpid());
+    node_name.resize(std::min<size_t>(node_name.length(), UCS_STAT_NAME_MAX - 1));
+    std::string compared_string = node_name +
                                   ":data*:{counter0:30 counter1:60 " +
                                   "counter2:90 counter3:120} \n";
     EXPECT_EQ(compared_string, output);
