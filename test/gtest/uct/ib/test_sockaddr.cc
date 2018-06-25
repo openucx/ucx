@@ -88,12 +88,12 @@ public:
                   std::string(reinterpret_cast<const char *>(conn_priv_data)));
 
         EXPECT_EQ(1 + uct_test::entity::client_priv_data.length(), length);
-        self->server_recv_req++;
         if (self->delay_conn_reply) {
             self->delayed_conn_reqs.push(conn_request);
         } else {
             uct_iface_accept(iface, conn_request);
         }
+        self->server_recv_req++;
     }
 
     static ucs_status_t err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
