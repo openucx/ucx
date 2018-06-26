@@ -282,6 +282,19 @@ enum ucp_ep_close_mode {
 };
 
 /**
+ * @ingroup UCP_ENDPOINT
+ * @brief Descriptor flags for Active Message Callback
+ *
+ * In a callback, if flags is set to UCP_CB_PARAM_FLAG_DATA, data
+ * was allocated, so if UCS_INPROGRESS is returned from the
+ * callback, the data parameter will persist and the user has to call
+ * @ref ucp_am_data_free
+ */
+enum ucp_cb_param_flags {
+    UCP_CB_PARAM_FLAG_DATA = UCS_BIT(0)
+};
+
+/**
  * @ingroup UCP_MEM
  * @brief UCP memory mapping parameters field mask.
  *
@@ -1618,7 +1631,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
 =======
  * @brief Add user defined callback for active message.
  *
- * This routine adds a user defined callback to be used for ucp_am_put_nb.
+ * This routine adds a user defined callback to be used for ucp_am_send_nb.
  *
  * @param [in]  worker      UCP worker on which to set the am handler
  * @param [in]  id          Active message id. Must be 0..(UCP_AM_ID_MAX - 1)
@@ -1630,7 +1643,6 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  * @return error code if the ep does not support active messages or 
  *         requested callback flags
  */
-
 ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id, 
                                        ucp_am_callback_t cb, void *arg,
                                        uint32_t flags);
@@ -1657,11 +1669,24 @@ ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id,
  * @return otherwise        Pointer to request, and Active Message is known
  *                          to be completed after cb is run
  */
-
 ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
                                 const void *payload, size_t count,
-                                uintptr_t datatype, ucp_send_callback_t cb,
-                                unsigned flags);
+                                ucp_datatype_t datatype, 
+                                ucp_send_callback_t cb, unsigned flags);
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Releases am data
+ *
+ * This routine releases back data that persisted through an AM
+ * callback because that callback returned UCS_INPROGRESS
+ *
+ * @param [in] data         Pointer to data that was passed into
+ *                          Active Message callback as the data
+ *                          parameter and the callback flags were set to 
+ *                          UCP_CB_PARAM_FLAG_DATA
+ */
+void ucp_am_data_free(void *data);
 
 /**
  * @ingroup UCP_ENDPOINT
