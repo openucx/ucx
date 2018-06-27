@@ -64,6 +64,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
     void *address;
     int shmid;
 #ifdef MADV_HUGEPAGE
+    ssize_t huge_page_size;
     int ret;
 #endif
 
@@ -136,22 +137,26 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 
         case UCT_ALLOC_METHOD_THP:
 #ifdef MADV_HUGEPAGE
-            if (!ucs_is_thp_enabled()) {
-                break;
-            }
-
             /* Fixed option is not supported for thp allocation*/
             if (flags & UCT_MD_MEM_FLAG_FIXED) {
                 break;
             }
 
-            alloc_length = ucs_align_up(min_length, ucs_get_huge_page_size());
+            if (!ucs_is_thp_enabled()) {
+                break;
+            }
+
+            huge_page_size = ucs_get_huge_page_size();
+            if (huge_page_size <= 0) {
+                break;
+            }
+
+            alloc_length = ucs_align_up(min_length, huge_page_size);
             if (alloc_length >= 2 * min_length) {
                 break;
             }
 
-            address = ucs_memalign(ucs_get_huge_page_size(), alloc_length
-                                   UCS_MEMTRACK_VAL);
+            address = ucs_memalign(huge_page_size, alloc_length UCS_MEMTRACK_VAL);
             if (address == NULL) {
                 ucs_trace("failed to allocate %zu bytes using THP: %m", alloc_length);
             } else {

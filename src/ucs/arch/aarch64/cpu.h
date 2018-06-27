@@ -33,6 +33,25 @@ BEGIN_C_DECLS
 #define ucs_memory_cpu_store_fence()  asm volatile ("dmb ishst" ::: "memory");
 #define ucs_memory_cpu_load_fence()   asm volatile ("dmb ishld" ::: "memory");
 
+
+/*
+ * ARM processor ID (ARM ISA - Main ID Register, EL1)
+ */
+typedef struct ucs_aarch64_cpuid {
+    int       implementer;
+    int       architecture;
+    int       variant;
+    int       part;
+    int       revision;
+} ucs_aarch64_cpuid_t;
+
+
+/**
+ * Get ARM CPU identifier and version
+ */
+void ucs_aarch64_cpuid(ucs_aarch64_cpuid_t *cpuid);
+
+
 #if HAVE_HW_TIMER
 static inline uint64_t ucs_arch_read_hres_clock(void)
 {
