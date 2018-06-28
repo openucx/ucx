@@ -189,6 +189,18 @@ enum ucp_listener_params_field {
     UCP_LISTENER_PARAM_FIELD_CONN_HANDLER        = UCS_BIT(2)
 };
 
+/**
+ * @ingroup UCP_WORKER
+ * @brief Flags for a UCP AM callback
+ *
+ * Flags that indicate how to handle UCP Active Messages
+ * Currently only UCP_AM_FLAG_WHOLE_MSG is supported,
+ * which indicates the entire message is handled in one
+ * callback
+ */
+enum ucp_am_cb_flags {
+    UCP_AM_FLAG_WHOLE_MSG = UCS_BIT(0)
+};
 
 /**
  * @ingroup UCP_WORKER
@@ -1383,10 +1395,12 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
  * @param [in]  cb          Active message callback. NULL to clear.
  * @param [in]  arg         Active message argument, which will be passed in to
  *                          every invocation of the callback as the arg argument.
- * @param [in]  flags       For future use
+ * @param [in]  flags       Dictates how an Active Message is handled on the remote endpoint.
+ *                          Currently only UCP_AM_FLAG_WHOLE_MSG is supported, which indicates
+ *                          the callback will not be invoked until all data has arrived.
  *
- * @return error code if the ep does not support active messages or 
- *         requested flags
+ * @return error code if the worker does not support active messages or 
+ *         requested callback flags
  */
 ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id, 
                                        ucp_am_callback_t cb, void *arg,
