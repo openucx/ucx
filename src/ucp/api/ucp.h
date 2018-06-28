@@ -1373,7 +1373,10 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
  * @ingroup UCP_WORKER
  * @brief Add user defined callback for active message.
  *
- * This routine adds a user defined callback to be used for ucp_am_send_nb.
+ * This routine installs a user defined callback to handle incoming active
+ * messages with a specific id. This callback is called whenever an active message,
+ * which was sent from the remote peer by @ref for ucp_am_send_nb, is received on 
+ * this worker.
  *
  * @param [in]  worker      UCP worker on which to set the am handler
  * @param [in]  id          Active message id.
