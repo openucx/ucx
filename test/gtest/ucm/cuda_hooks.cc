@@ -11,10 +11,19 @@ class cuda_hook : public ucs::test {
 };
 
 static void  *free_ptr;
+static size_t free_size;
+
 static void cuda_mem_event_callback(ucm_event_type_t event_type,
                                     ucm_event_t *event, void *arg)
 {
-    free_ptr = event->vm_unmapped.address;
+    free_ptr  = event->vm_unmapped.address;
+    free_size = event->vm_unmapped.size;
+}
+
+static void check_mem_free_events(void *ptr, size_t size)
+{
+    ASSERT_EQ(ptr, free_ptr);
+    ASSERT_TRUE(!size || (size == free_size));
 }
 
 UCS_TEST_F(cuda_hook, cudafree) {
@@ -39,7 +48,7 @@ UCS_TEST_F(cuda_hook, cudafree) {
 
     ret = cudaFree(ptr);
     EXPECT_EQ(ret, cudaSuccess);
-    EXPECT_EQ(ptr, free_ptr);
+    check_mem_free_events(ptr, 64);
 
     /* large allocation */
     free_ptr = NULL;
@@ -48,7 +57,7 @@ UCS_TEST_F(cuda_hook, cudafree) {
 
     ret = cudaFree(ptr);
     EXPECT_EQ(ret, cudaSuccess);
-    EXPECT_EQ(ptr, free_ptr);
+    check_mem_free_events(ptr, (256 * 1024 *1024));
 
     /* multiple allocations, cudafree in reverse order */
     free_ptr = NULL;
@@ -60,12 +69,12 @@ UCS_TEST_F(cuda_hook, cudafree) {
 
     ret = cudaFree(ptr1);
     EXPECT_EQ(ret, cudaSuccess);
-    EXPECT_EQ(ptr1, free_ptr);
+    check_mem_free_events(ptr1, (1 * 1024 *1024));
 
     free_ptr = NULL;
     ret = cudaFree(ptr);
     EXPECT_EQ(ret, cudaSuccess);
-    EXPECT_EQ(ptr, free_ptr);
+    check_mem_free_events(ptr, (1 * 1024 *1024));
 
     ucm_unset_event_handler(UCM_EVENT_VM_UNMAPPED, cuda_mem_event_callback,
                             reinterpret_cast<void*>(this));
