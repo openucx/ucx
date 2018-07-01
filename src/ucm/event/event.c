@@ -411,7 +411,7 @@ static void ucm_cudafree_dispatch_events(void *dptr)
     ret = cuMemGetAddressRange(&pbase, &psize, (CUdeviceptr) dptr);
     if (ret != CUDA_SUCCESS) {
         ucm_warn("cuMemGetAddressRange(devPtr=%p) failed", (void *)dptr);
-        psize = 4; /* set minimum length */
+        psize = 1; /* set minimum length */
     }
     ucs_assert(dptr == (void *)pbase);
 
