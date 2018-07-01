@@ -39,6 +39,12 @@ enum {
     UCS_RCACHE_REGION_FLAG_PGTABLE    = UCS_BIT(1)  /**< In the page table */
 };
 
+/*
+ * Memory registration flags.
+ */
+enum {
+    UCS_RCACHE_MEM_REG_HIDE_ERRORS = UCS_BIT(0) /**< Hide errors on memory registration */
+};
 
 /*
  * Registration cache operations.
@@ -55,6 +61,7 @@ struct ucs_rcache_ops {
      *                          `region_struct_size' in @ref ucs_rcache_params.
      *                         This function may store relevant information (such
      *                          as memory keys) inside the larger structure.
+     * @param [in]  flags      Memory registration flags.
      *
      * @return UCS_OK if registration is successful, error otherwise.
      *
@@ -63,7 +70,8 @@ struct ucs_rcache_ops {
      *       such as error messages or fatal failure.
      */
     ucs_status_t           (*mem_reg)(void *context, ucs_rcache_t *rcache,
-                                      void *arg, ucs_rcache_region_t *region);
+                                      void *arg, ucs_rcache_region_t *region,
+                                      uint16_t flags);
    /**
     * Deregister a memory region.
     *

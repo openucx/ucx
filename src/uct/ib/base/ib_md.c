@@ -949,7 +949,8 @@ static uct_md_ops_t uct_ib_md_rcache_ops = {
 };
 
 static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
-                                             void *arg, ucs_rcache_region_t *rregion)
+                                             void *arg, ucs_rcache_region_t *rregion,
+                                             uint16_t rcache_mem_reg_flags)
 {
     uct_ib_rcache_region_t *region = ucs_derived_of(rregion, uct_ib_rcache_region_t);
     uct_ib_md_t *md = context;
@@ -958,7 +959,7 @@ static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache
 
     status = uct_ib_mem_reg_internal(&md->super, (void*)region->super.super.start,
                                      region->super.super.end - region->super.super.start,
-                                     *flags, 1, &region->memh);
+                                     *flags, rcache_mem_reg_flags, &region->memh);
     if (status != UCS_OK) {
         return status;
     }
