@@ -8,12 +8,14 @@
 #include <cuda_runtime.h>
 
 static void  *free_ptr;
+static size_t free_size;
 static ucm_event_t alloc_event, free_event;
 
 static void cuda_mem_event_callback(ucm_event_type_t event_type,
                                     ucm_event_t *event, void *arg)
 {
-    free_ptr = event->vm_unmapped.address;
+    free_ptr  = event->vm_unmapped.address;
+    free_size = event->vm_unmapped.size;
 }
 
 static void cuda_mem_alloc_callback(ucm_event_type_t event_type,
@@ -99,8 +101,10 @@ protected:
         ASSERT_EQ(expect_mem_type, alloc_event.mem_type.mem_type);
     }
 
-    void check_mem_free_events(void *ptr, int expect_mem_type = UCM_MEM_TYPE_CUDA) {
+    void check_mem_free_events(void *ptr, size_t size,
+                               int expect_mem_type = UCM_MEM_TYPE_CUDA) {
         ASSERT_EQ(ptr, free_ptr);
+        ASSERT_TRUE(!size || (size == free_size));
         ASSERT_EQ(ptr, free_event.mem_type.address);
         ASSERT_EQ(expect_mem_type, free_event.mem_type.mem_type);
     }
@@ -121,7 +125,7 @@ UCS_TEST_F(cuda_hooks, test_cuMem_Alloc_Free) {
 
     ret = cuMemFree(dptr);
     ASSERT_EQ(ret, CUDA_SUCCESS);
-    check_mem_free_events((void *)dptr);
+    check_mem_free_events((void *)dptr, 64);
 
     /* large allocation */
     free_ptr = NULL;
@@ -132,7 +136,7 @@ UCS_TEST_F(cuda_hooks, test_cuMem_Alloc_Free) {
     ret = cuMemFree(dptr);
     ASSERT_EQ(ret, CUDA_SUCCESS);
     ASSERT_EQ((void *)dptr, free_ptr);
-    check_mem_free_events((void *)dptr);
+    check_mem_free_events((void *)dptr, (256 * 1024 *1024));
 
     /* multiple allocations, cudafree in reverse order */
     free_ptr = NULL;
@@ -147,13 +151,13 @@ UCS_TEST_F(cuda_hooks, test_cuMem_Alloc_Free) {
     ret = cuMemFree(dptr1);
     ASSERT_EQ(ret, CUDA_SUCCESS);
     ASSERT_EQ((void *)dptr1, free_ptr);
-    check_mem_free_events((void *)dptr1);
+    check_mem_free_events((void *)dptr1, (1 * 1024 *1024));
 
     free_ptr = NULL;
     ret = cuMemFree(dptr);
     ASSERT_EQ(ret, CUDA_SUCCESS);
     ASSERT_EQ((void *)dptr, free_ptr);
-    check_mem_free_events((void *)dptr);
+    check_mem_free_events((void *)dptr, (1 * 1024 *1024));
 }
 
 UCS_TEST_F(cuda_hooks, test_cuMemAllocManaged) {
@@ -167,7 +171,7 @@ UCS_TEST_F(cuda_hooks, test_cuMemAllocManaged) {
 
     ret = cuMemFree(dptr);
     ASSERT_EQ(ret, CUDA_SUCCESS);
-    check_mem_free_events((void *)dptr);
+    check_mem_free_events((void *)dptr, 0);
 }
 
 UCS_TEST_F(cuda_hooks, test_cuMemAllocPitch) {
@@ -182,7 +186,7 @@ UCS_TEST_F(cuda_hooks, test_cuMemAllocPitch) {
     ret = cuMemFree(dptr);
     ASSERT_EQ(ret, CUDA_SUCCESS);
     ASSERT_EQ((void *)dptr, free_ptr);
-    check_mem_free_events((void *)dptr);
+    check_mem_free_events((void *)dptr, 0);
 }
 
 UCS_TEST_F(cuda_hooks, test_cuda_Malloc_Free) {
@@ -197,7 +201,7 @@ UCS_TEST_F(cuda_hooks, test_cuda_Malloc_Free) {
 
     ret = cudaFree(ptr);
     ASSERT_EQ(ret, cudaSuccess);
-    check_mem_free_events(ptr);
+    check_mem_free_events(ptr, 64);
 
     /* large allocation */
     free_ptr = NULL;
@@ -208,7 +212,7 @@ UCS_TEST_F(cuda_hooks, test_cuda_Malloc_Free) {
     ret = cudaFree(ptr);
     ASSERT_EQ(ret, cudaSuccess);
     ASSERT_EQ(ptr, free_ptr);
-    check_mem_free_events(ptr);
+    check_mem_free_events(ptr, (256 * 1024 *1024));
 
     /* multiple allocations, cudafree in reverse order */
     free_ptr = NULL;
@@ -223,13 +227,13 @@ UCS_TEST_F(cuda_hooks, test_cuda_Malloc_Free) {
     ret = cudaFree(ptr1);
     ASSERT_EQ(ret, cudaSuccess);
     ASSERT_EQ(ptr1, free_ptr);
-    check_mem_free_events(ptr1);
+    check_mem_free_events(ptr1, (1 * 1024 *1024));
 
     free_ptr = NULL;
     ret = cudaFree(ptr);
     ASSERT_EQ(ret, cudaSuccess);
     ASSERT_EQ(ptr, free_ptr);
-    check_mem_free_events(ptr);
+    check_mem_free_events(ptr, (1 * 1024 *1024));
 }
 
 UCS_TEST_F(cuda_hooks, test_cudaMallocManaged) {
@@ -243,7 +247,7 @@ UCS_TEST_F(cuda_hooks, test_cudaMallocManaged) {
 
     ret = cudaFree(ptr);
     ASSERT_EQ(ret, cudaSuccess);
-    check_mem_free_events(ptr);
+    check_mem_free_events(ptr, 0);
 }
 
 UCS_TEST_F(cuda_hooks, test_cudaMallocPitch) {
@@ -258,5 +262,5 @@ UCS_TEST_F(cuda_hooks, test_cudaMallocPitch) {
     ret = cudaFree(devPtr);
     ASSERT_EQ(ret, cudaSuccess);
     ASSERT_EQ(devPtr, free_ptr);
-    check_mem_free_events(devPtr);
+    check_mem_free_events(devPtr, 0);
 }
