@@ -364,7 +364,7 @@ cudaError_t ucm_cudaFree(void *devPtr)
     cuerr = cuMemGetAddressRange(&pbase, &psize, (CUdeviceptr) devPtr);
     if (cuerr != CUDA_SUCCESS) {
         ucm_warn("cuMemGetAddressRange(devPtr=%p) failed", devPtr);
-        psize = 4; /* set mininum length */
+        psize = 1; /* set mininum length */
     }
     ucs_assert((void *)pbase == devPtr);
 
