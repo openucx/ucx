@@ -517,7 +517,7 @@ retry:
     region->status = status =
         UCS_PROFILE_NAMED_CALL("mem_reg", rcache->params.ops->mem_reg,
                                rcache->params.context, rcache, arg, region,
-                               merged ? 0 : UCS_RCACHE_MEM_REG_HIDE_ERRORS);
+                               merged ? UCS_RCACHE_MEM_REG_HIDE_ERRORS : 0);
     if (status != UCS_OK) {
         if (merged) {
             /* failure may be due to merge, because memory of the merged

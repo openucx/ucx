@@ -315,6 +315,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
 {
     ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
     struct ibv_mr *mr;
+    char str[32];
 
     if (exp_access) {
 #if HAVE_DECL_IBV_EXP_REG_MR
@@ -328,8 +329,12 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
 
         mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &in);
         if (mr == NULL) {
-            ucs_log(level, "ibv_exp_reg_mr(address=%p, length=%zu, exp_access=0x%lx) failed: %m",
-                    in.addr, in.length, in.exp_access);
+            ucs_log(level, "ibv_exp_reg_mr(address=%p, length=%zu, exp_access=0x%lx) failed. "
+                    "The max locked memory limit (ulimit -l) on the system is set to %s. "
+                    "It is recommended to set this limit to 'unlimited'. "
+                    "errno: %m",
+                    in.addr, in.length, in.exp_access,
+                    ucs_sys_get_mem_lock_limit(str, sizeof(str)));
             return UCS_ERR_IO_ERROR;
         }
 #else
@@ -339,8 +344,12 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
         mr = UCS_PROFILE_CALL(ibv_reg_mr, md->pd, address, length,
                               UCT_IB_MEM_ACCESS_FLAGS);
         if (mr == NULL) {
-            ucs_log(level, "ibv_reg_mr(address=%p, length=%zu, access=0x%x) failed: %m",
-                      address, length, UCT_IB_MEM_ACCESS_FLAGS);
+            ucs_log(level, "ibv_reg_mr(address=%p, length=%zu, access=0x%x) failed. "
+                    "The max locked memory limit (ulimit -l) on the system is set to %s. "
+                    "It is recommended to set this limit to 'unlimited'. "
+                    "errno: %m",
+                    address, length, UCT_IB_MEM_ACCESS_FLAGS,
+                    ucs_sys_get_mem_lock_limit(str, sizeof(str)));
             return UCS_ERR_IO_ERROR;
         }
     }
@@ -959,7 +968,9 @@ static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache
 
     status = uct_ib_mem_reg_internal(&md->super, (void*)region->super.super.start,
                                      region->super.super.end - region->super.super.start,
-                                     *flags, rcache_mem_reg_flags, &region->memh);
+                                     *flags,
+                                     rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS,
+                                     &region->memh);
     if (status != UCS_OK) {
         return status;
     }

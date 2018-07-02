@@ -917,6 +917,25 @@ void ucs_sys_free(void *ptr, size_t length)
     }
 }
 
+const char* ucs_sys_get_mem_lock_limit(char *str, size_t max_size)
+{
+    struct rlimit limit_info;
+
+    /* Return the value of the max locked memory which is set on the system
+     * (ulimit -l) */
+    if (getrlimit(RLIMIT_MEMLOCK, &limit_info) != 0) {
+        ucs_error("getrlimit() failed: %m. Unable to read system limits");
+        return "Invalid String";
+    } else {
+        if (limit_info.rlim_cur == RLIM_INFINITY) {
+            ucs_snprintf_zero(str, max_size, "%s", "'unlimited'");
+        } else {
+            ucs_snprintf_zero(str, max_size, "%lu", limit_info.rlim_cur);
+        }
+        return str;
+    }
+}
+
 void ucs_empty_function()
 {
 }
