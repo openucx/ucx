@@ -402,6 +402,23 @@ ucm_dispatch_mem_type_free(void *addr, size_t length, ucm_mem_type_t mem_type)
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
 }
 
+static void ucm_cudafree_dispatch_events(void *dptr)
+{
+    CUresult ret;
+    CUdeviceptr pbase;
+    size_t psize;
+
+    ret = cuMemGetAddressRange(&pbase, &psize, (CUdeviceptr) dptr);
+    if (ret != CUDA_SUCCESS) {
+        ucm_warn("cuMemGetAddressRange(devPtr=%p) failed", (void *)dptr);
+        psize = 1; /* set minimum length */
+    }
+    ucs_assert(dptr == (void *)pbase);
+
+    ucm_dispatch_vm_munmap((void *)dptr, psize);
+    ucm_dispatch_mem_type_free((void *)dptr, psize, UCM_MEM_TYPE_CUDA);
+}
+
 CUresult ucm_cuMemFree(CUdeviceptr dptr)
 {
     CUresult ret;
@@ -410,8 +427,7 @@ CUresult ucm_cuMemFree(CUdeviceptr dptr)
 
     ucm_trace("ucm_cuMemFree(dptr=%p)",(void *)dptr);
 
-    ucm_dispatch_vm_munmap((void *)dptr, 0);
-    ucm_dispatch_mem_type_free((void *)dptr, 0, UCM_MEM_TYPE_CUDA);
+    ucm_cudafree_dispatch_events((void *)dptr);
 
     ret = ucm_orig_cuMemFree(dptr);
 
@@ -525,8 +541,7 @@ cudaError_t ucm_cudaFree(void *devPtr)
 
     ucm_trace("ucm_cudaFree(devPtr=%p)", devPtr);
 
-    ucm_dispatch_vm_munmap(devPtr, 0);
-    ucm_dispatch_mem_type_free(devPtr, 0, UCM_MEM_TYPE_CUDA);
+    ucm_cudafree_dispatch_events((void *)devPtr);
 
     ret = ucm_orig_cudaFree(devPtr);
 
