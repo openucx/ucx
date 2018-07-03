@@ -334,7 +334,7 @@ void ucs_sys_free(void *ptr, size_t length);
  * @param [in/out]          A string filled with the max locked memory limit.
  * @param [in]              Maximal length of the string.
  */
-const char* ucs_sys_get_mem_lock_limit(char *str, size_t max_size);
+char* ucs_sys_get_mem_lock_limit(char *str, size_t max_size);
 
 
 /**

@@ -12,6 +12,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/string.h>
 #include <pthread.h>
 
 
@@ -309,13 +310,40 @@ uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
 #endif
 }
 
+static void uct_ib_md_print_mem_reg_err_msg(ucs_log_level_t level, void *address,
+                                            size_t length, uint64_t exp_access,
+                                            int exp)
+{
+    char *str = ucs_alloca(32);
+    char msg[400] = {0};
+
+    if (exp) {
+        ucs_snprintf_zero(msg, sizeof(msg),
+                          "ibv_exp_reg_mr(address=%p, length=%zu, exp_access=0x%lx) failed: %m. ",
+                          address, length, exp_access);
+    } else {
+        ucs_snprintf_zero(msg, sizeof(msg),
+                          "ibv_reg_mr(address=%p, length=%zu, access=0x%lx) failed: %m. ",
+                          address, length, exp_access);
+    }
+
+    str = ucs_sys_get_mem_lock_limit(str, 32);
+    if ((strcmp(str, "'unlimited'")) && (strcmp(str, "<unknown>"))) {
+        ucs_snprintf_zero(msg + strlen(msg), sizeof(msg) - strlen(msg),
+                          "The max locked memory limit (ulimit -l) on the system is "
+                          "set to %s. It is recommended to set this limit to 'unlimited'.",
+                          str);
+    }
+
+    ucs_log(level, msg);
+}
+
 static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
                                      size_t length, uint64_t exp_access,
                                      int silent, struct ibv_mr **mr_p)
 {
     ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
     struct ibv_mr *mr;
-    char str[32];
 
     if (exp_access) {
 #if HAVE_DECL_IBV_EXP_REG_MR
@@ -329,12 +357,8 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
 
         mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &in);
         if (mr == NULL) {
-            ucs_log(level, "ibv_exp_reg_mr(address=%p, length=%zu, exp_access=0x%lx) failed. "
-                    "The max locked memory limit (ulimit -l) on the system is set to %s. "
-                    "It is recommended to set this limit to 'unlimited'. "
-                    "errno: %m",
-                    in.addr, in.length, in.exp_access,
-                    ucs_sys_get_mem_lock_limit(str, sizeof(str)));
+            uct_ib_md_print_mem_reg_err_msg(level, in.addr, in.length,
+                                            in.exp_access, 1);
             return UCS_ERR_IO_ERROR;
         }
 #else
@@ -344,12 +368,8 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
         mr = UCS_PROFILE_CALL(ibv_reg_mr, md->pd, address, length,
                               UCT_IB_MEM_ACCESS_FLAGS);
         if (mr == NULL) {
-            ucs_log(level, "ibv_reg_mr(address=%p, length=%zu, access=0x%x) failed. "
-                    "The max locked memory limit (ulimit -l) on the system is set to %s. "
-                    "It is recommended to set this limit to 'unlimited'. "
-                    "errno: %m",
-                    address, length, UCT_IB_MEM_ACCESS_FLAGS,
-                    ucs_sys_get_mem_lock_limit(str, sizeof(str)));
+            uct_ib_md_print_mem_reg_err_msg(level, address, length,
+                                            UCT_IB_MEM_ACCESS_FLAGS, 0);
             return UCS_ERR_IO_ERROR;
         }
     }
