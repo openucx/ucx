@@ -319,15 +319,15 @@ static void uct_ib_md_print_mem_reg_err_msg(ucs_log_level_t level, void *address
     struct rlimit limit_info;
 
     ucs_snprintf_zero(msg, sizeof(msg),
-                      "ibv_%sreg_mr(address=%p, length=%zu, %saccess=0x%lx) failed: %m. ",
+                      "ibv_%sreg_mr(address=%p, length=%zu, %saccess=0x%lx) failed: %m",
                       exp_prefix, address, length, exp_prefix, exp_access);
 
     /* Check the value of the max locked memory which is set on the system
      * (ulimit -l) */
-    if ((!getrlimit(RLIMIT_MEMLOCK, &limit_info)) &&
+    if (!getrlimit(RLIMIT_MEMLOCK, &limit_info) &&
         (limit_info.rlim_cur != RLIM_INFINITY)) {
         ucs_snprintf_zero(msg + strlen(msg), sizeof(msg) - strlen(msg),
-                          "Please set max locked memory (ulimit -l) to 'unlimited' "
+                          ". Please set max locked memory (ulimit -l) to 'unlimited' "
                           "(current: %llu kbytes)", limit_info.rlim_cur / UCS_KBYTE);
     }
 
