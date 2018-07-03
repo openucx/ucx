@@ -45,10 +45,12 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
     ucs_status_t status;
     struct ifreq ifr;
     size_t mtu, ll_headers;
+    int speed_known;
     short ether_type;
 
     memset(&ifr, 0, sizeof(ifr));
 
+    speed_known  = 0;
     edata.cmd    = ETHTOOL_GSET;
     ifr.ifr_data = (void*)&edata;
     status = ucs_netif_ioctl(if_name, SIOCETHTOOL, &ifr);
@@ -59,15 +61,15 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
         speed_mbps = edata.speed;
 #endif
 #if HAVE_DECL_SPEED_UNKNOWN
-        if (speed_mbps == SPEED_UNKNOWN) {
+        speed_known = speed_mbps != SPEED_UNKNOWN;
 #else
-        if ((speed_mbps == 0) || ((uint16_t)speed_mbps == (uint16_t)-1)) {
+        speed_known = (speed_mbps != 0) && ((uint16_t)speed_mbps != (uint16_t)-1);
 #endif
-            ucs_error("speed of %s is UNKNOWN", if_name);
-            return UCS_ERR_NO_DEVICE;
-        }
-    } else {
-        speed_mbps = 100; /* Default value if SIOCETHTOOL is not supported */
+    }
+
+    if (!speed_known) {
+        speed_mbps = 100;
+        ucs_debug("speed of %s is UNKNOWN, assuming %d Mbps", if_name, speed_mbps);
     }
 
     status = ucs_netif_ioctl(if_name, SIOCGIFHWADDR, &ifr);
