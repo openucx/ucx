@@ -12,7 +12,9 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/string.h>
 #include <pthread.h>
+#include <sys/resource.h>
 
 
 #define UCT_IB_MD_PREFIX         "ib"
@@ -309,6 +311,29 @@ uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
 #endif
 }
 
+static void uct_ib_md_print_mem_reg_err_msg(ucs_log_level_t level, void *address,
+                                            size_t length, uint64_t exp_access,
+                                            const char *exp_prefix)
+{
+    char msg[200] = {0};
+    struct rlimit limit_info;
+
+    ucs_snprintf_zero(msg, sizeof(msg),
+                      "ibv_%sreg_mr(address=%p, length=%zu, %saccess=0x%lx) failed: %m",
+                      exp_prefix, address, length, exp_prefix, exp_access);
+
+    /* Check the value of the max locked memory which is set on the system
+     * (ulimit -l) */
+    if (!getrlimit(RLIMIT_MEMLOCK, &limit_info) &&
+        (limit_info.rlim_cur != RLIM_INFINITY)) {
+        ucs_snprintf_zero(msg + strlen(msg), sizeof(msg) - strlen(msg),
+                          ". Please set max locked memory (ulimit -l) to 'unlimited' "
+                          "(current: %llu kbytes)", limit_info.rlim_cur / UCS_KBYTE);
+    }
+
+    ucs_log(level, "%s", msg);
+}
+
 static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
                                      size_t length, uint64_t exp_access,
                                      int silent, struct ibv_mr **mr_p)
@@ -328,8 +353,8 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
 
         mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &in);
         if (mr == NULL) {
-            ucs_log(level, "ibv_exp_reg_mr(address=%p, length=%zu, exp_access=0x%lx) failed: %m",
-                    in.addr, in.length, in.exp_access);
+            uct_ib_md_print_mem_reg_err_msg(level, in.addr, in.length,
+                                            in.exp_access, "exp_");
             return UCS_ERR_IO_ERROR;
         }
 #else
@@ -339,8 +364,8 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
         mr = UCS_PROFILE_CALL(ibv_reg_mr, md->pd, address, length,
                               UCT_IB_MEM_ACCESS_FLAGS);
         if (mr == NULL) {
-            ucs_log(level, "ibv_reg_mr(address=%p, length=%zu, access=0x%x) failed: %m",
-                      address, length, UCT_IB_MEM_ACCESS_FLAGS);
+            uct_ib_md_print_mem_reg_err_msg(level, address, length,
+                                            UCT_IB_MEM_ACCESS_FLAGS, "");
             return UCS_ERR_IO_ERROR;
         }
     }
@@ -949,7 +974,8 @@ static uct_md_ops_t uct_ib_md_rcache_ops = {
 };
 
 static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
-                                             void *arg, ucs_rcache_region_t *rregion)
+                                             void *arg, ucs_rcache_region_t *rregion,
+                                             uint16_t rcache_mem_reg_flags)
 {
     uct_ib_rcache_region_t *region = ucs_derived_of(rregion, uct_ib_rcache_region_t);
     uct_ib_md_t *md = context;
@@ -958,7 +984,9 @@ static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache
 
     status = uct_ib_mem_reg_internal(&md->super, (void*)region->super.super.start,
                                      region->super.super.end - region->super.super.start,
-                                     *flags, 1, &region->memh);
+                                     *flags,
+                                     rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS,
+                                     &region->memh);
     if (status != UCS_OK) {
         return status;
     }

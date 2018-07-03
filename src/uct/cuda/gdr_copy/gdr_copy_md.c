@@ -324,7 +324,8 @@ static uct_md_ops_t md_rcache_ops = {
 
 static ucs_status_t
 uct_gdr_copy_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
-                               void *arg, ucs_rcache_region_t *rregion)
+                               void *arg, ucs_rcache_region_t *rregion,
+                               uint16_t rcache_mem_reg_flags)
 {
     uct_gdr_copy_md_t *md = context;
     int *flags = arg;

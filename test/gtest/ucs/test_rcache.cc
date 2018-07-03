@@ -135,7 +135,8 @@ protected:
 private:
 
     static ucs_status_t mem_reg_cb(void *context, ucs_rcache_t *rcache,
-                                   void *arg, ucs_rcache_region_t *r)
+                                   void *arg, ucs_rcache_region_t *r,
+                                   uint16_t rcache_mem_reg_flags)
     {
         return reinterpret_cast<test_rcache*>(context)->mem_reg(
                         ucs_derived_of(r, struct region));
