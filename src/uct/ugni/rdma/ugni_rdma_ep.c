@@ -243,6 +243,72 @@ static void uct_ugni_amo_unpack64(uct_completion_t *self, ucs_status_t status)
     uct_ugni_invoke_orig_comp(fma, status);
 }
 
+ucs_status_t uct_ugni_ep_atomic_xor64(uct_ep_h tl_ep, uint64_t xor,
+                                      uint64_t remote_addr, uct_rkey_t rkey)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_ugni_rdma_fetch_desc_t *fma;
+
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
+                             return UCS_ERR_NO_RESOURCE);
+    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC_XOR,
+                            xor, 0, NULL, remote_addr,
+                            rkey, LEN_64, ep, NULL, NULL, NULL);
+    ucs_trace_data("Posting AMO XOR, GNI_PostFma of size %"PRIx64" value"
+                   "%"PRIx64" to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->super.desc.length, xor,
+                   (void *)fma->super.desc.remote_addr,
+                   fma->super.desc.remote_mem_hndl.qword1,
+                   fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return uct_ugni_post_fma(iface, ep, &fma->super, UCS_OK);
+}
+
+ucs_status_t uct_ugni_ep_atomic_and64(uct_ep_h tl_ep, uint64_t and,
+                                      uint64_t remote_addr, uct_rkey_t rkey)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_ugni_rdma_fetch_desc_t *fma;
+
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
+                             return UCS_ERR_NO_RESOURCE);
+    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC_AND,
+                            and, 0, NULL, remote_addr,
+                            rkey, LEN_64, ep, NULL, NULL, NULL);
+    ucs_trace_data("Posting AMO AND, GNI_PostFma of size %"PRIx64" value"
+                   "%"PRIx64" to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->super.desc.length, and,
+                   (void *)fma->super.desc.remote_addr,
+                   fma->super.desc.remote_mem_hndl.qword1,
+                   fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return uct_ugni_post_fma(iface, ep, &fma->super, UCS_OK);
+}
+
+ucs_status_t uct_ugni_ep_atomic_or64(uct_ep_h tl_ep, uint64_t or,
+                                      uint64_t remote_addr, uct_rkey_t rkey)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_ugni_rdma_fetch_desc_t *fma;
+
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
+                             return UCS_ERR_NO_RESOURCE);
+    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC_OR,
+                            or, 0, NULL, remote_addr,
+                            rkey, LEN_64, ep, NULL, NULL, NULL);
+    ucs_trace_data("Posting AMO OR, GNI_PostFma of size %"PRIx64" value"
+                   "%"PRIx64" to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->super.desc.length, or,
+                   (void *)fma->super.desc.remote_addr,
+                   fma->super.desc.remote_mem_hndl.qword1,
+                   fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return uct_ugni_post_fma(iface, ep, &fma->super, UCS_OK);
+}
+
 ucs_status_t uct_ugni_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
                                       uint64_t remote_addr, uct_rkey_t rkey)
 {
@@ -263,6 +329,75 @@ ucs_status_t uct_ugni_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
                    fma->super.desc.remote_mem_hndl.qword2);
     UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_OK);
+}
+
+ucs_status_t uct_ugni_ep_atomic_for64(uct_ep_h tl_ep, uint64_t or,
+                                      uint64_t remote_addr, uct_rkey_t rkey,
+                                      uint64_t *result, uct_completion_t *comp)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_ugni_rdma_fetch_desc_t *fma;
+
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
+                             return UCS_ERR_NO_RESOURCE);
+    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC_FOR,
+                            or, 0, fma + 1, remote_addr,
+                            rkey, LEN_64, ep, comp, uct_ugni_amo_unpack64, (void *)result);
+    ucs_trace_data("Posting AMO FOR, GNI_PostFma of size %"PRIx64" value"
+                   "%"PRIx64" to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->super.desc.length, or,
+                   (void *)fma->super.desc.remote_addr,
+                   fma->super.desc.remote_mem_hndl.qword1,
+                   fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
+}
+
+ucs_status_t uct_ugni_ep_atomic_fand64(uct_ep_h tl_ep, uint64_t and,
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uint64_t *result, uct_completion_t *comp)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_ugni_rdma_fetch_desc_t *fma;
+
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
+                             return UCS_ERR_NO_RESOURCE);
+    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC_FAND,
+                            and, 0, fma + 1, remote_addr,
+                            rkey, LEN_64, ep, comp, uct_ugni_amo_unpack64, (void *)result);
+    ucs_trace_data("Posting AMO FAND, GNI_PostFma of size %"PRIx64" value"
+                   "%"PRIx64" to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->super.desc.length, and,
+                   (void *)fma->super.desc.remote_addr,
+                   fma->super.desc.remote_mem_hndl.qword1,
+                   fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
+}
+
+ucs_status_t uct_ugni_ep_atomic_fxor64(uct_ep_h tl_ep, uint64_t xor,
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uint64_t *result, uct_completion_t *comp)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_ugni_rdma_fetch_desc_t *fma;
+
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
+                             return UCS_ERR_NO_RESOURCE);
+    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC_FXOR,
+                            xor, 0, fma + 1, remote_addr,
+                            rkey, LEN_64, ep, comp, uct_ugni_amo_unpack64, (void *)result);
+    ucs_trace_data("Posting AMO FXOR, GNI_PostFma of size %"PRIx64" value"
+                   "%"PRIx64" to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->super.desc.length, xor,
+                   (void *)fma->super.desc.remote_addr,
+                   fma->super.desc.remote_mem_hndl.qword1,
+                   fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
 ucs_status_t uct_ugni_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
@@ -344,6 +479,73 @@ ucs_status_t uct_ugni_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
+
+ucs_status_t uct_ugni_ep_atomic_xor32(uct_ep_h tl_ep, uint32_t xor,
+                                      uint64_t remote_addr, uct_rkey_t rkey)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_ugni_rdma_fetch_desc_t *fma;
+
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
+                             return UCS_ERR_NO_RESOURCE);
+    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC2_XOR_S,
+                            (uint64_t)xor, 0, NULL, remote_addr,
+                            rkey, LEN_32, ep, NULL, NULL, NULL);
+    ucs_trace_data("Posting AMO XOR, GNI_PostFma of size %"PRIx64" value"
+                   "%"PRIx32" to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->super.desc.length, xor,
+                   (void *)fma->super.desc.remote_addr,
+                   fma->super.desc.remote_mem_hndl.qword1,
+                   fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return uct_ugni_post_fma(iface, ep, &fma->super, UCS_OK);
+}
+
+ucs_status_t uct_ugni_ep_atomic_or32(uct_ep_h tl_ep, uint32_t or,
+                                      uint64_t remote_addr, uct_rkey_t rkey)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_ugni_rdma_fetch_desc_t *fma;
+
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
+                             return UCS_ERR_NO_RESOURCE);
+    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC2_OR_S,
+                            (uint64_t)or, 0, NULL, remote_addr,
+                            rkey, LEN_32, ep, NULL, NULL, NULL);
+    ucs_trace_data("Posting AMO OR, GNI_PostFma of size %"PRIx64" value"
+                   "%"PRIx32" to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->super.desc.length, or,
+                   (void *)fma->super.desc.remote_addr,
+                   fma->super.desc.remote_mem_hndl.qword1,
+                   fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return uct_ugni_post_fma(iface, ep, &fma->super, UCS_OK);
+}
+
+ucs_status_t uct_ugni_ep_atomic_and32(uct_ep_h tl_ep, uint32_t and,
+                                      uint64_t remote_addr, uct_rkey_t rkey)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_ugni_rdma_fetch_desc_t *fma;
+
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
+                             return UCS_ERR_NO_RESOURCE);
+    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC2_AND_S,
+                            (uint64_t)and, 0, NULL, remote_addr,
+                            rkey, LEN_32, ep, NULL, NULL, NULL);
+    ucs_trace_data("Posting AMO AND, GNI_PostFma of size %"PRIx64" value"
+                   "%"PRIx32" to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->super.desc.length, and,
+                   (void *)fma->super.desc.remote_addr,
+                   fma->super.desc.remote_mem_hndl.qword1,
+                   fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return uct_ugni_post_fma(iface, ep, &fma->super, UCS_OK);
+}
+
 ucs_status_t uct_ugni_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
                                       uint64_t remote_addr, uct_rkey_t rkey)
 {
@@ -364,6 +566,75 @@ ucs_status_t uct_ugni_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
                    fma->super.desc.remote_mem_hndl.qword2);
     UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_OK);
+}
+
+ucs_status_t uct_ugni_ep_atomic_for32(uct_ep_h tl_ep, uint32_t or,
+                                      uint64_t remote_addr, uct_rkey_t rkey,
+                                      uint32_t *result, uct_completion_t *comp)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_ugni_rdma_fetch_desc_t *fma;
+
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
+                             return UCS_ERR_NO_RESOURCE);
+    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC2_FOR_S,
+                            (uint64_t)or, 0, fma + 1, remote_addr,
+                            rkey, LEN_32, ep, comp, uct_ugni_amo_unpack32, (void *)result);
+    ucs_trace_data("Posting AMO FOR, GNI_PostFma of size %"PRIx64" value"
+                   "%"PRIx32" to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->super.desc.length, or,
+                   (void *)fma->super.desc.remote_addr,
+                   fma->super.desc.remote_mem_hndl.qword1,
+                   fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
+}
+
+ucs_status_t uct_ugni_ep_atomic_fand32(uct_ep_h tl_ep, uint32_t and,
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uint32_t *result, uct_completion_t *comp)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_ugni_rdma_fetch_desc_t *fma;
+
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
+                             return UCS_ERR_NO_RESOURCE);
+    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC2_FAND_S,
+                            (uint64_t)and, 0, fma + 1, remote_addr,
+                            rkey, LEN_32, ep, comp, uct_ugni_amo_unpack32, (void *)result);
+    ucs_trace_data("Posting AMO FAND, GNI_PostFma of size %"PRIx64" value"
+                   "%"PRIx32" to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->super.desc.length, and,
+                   (void *)fma->super.desc.remote_addr,
+                   fma->super.desc.remote_mem_hndl.qword1,
+                   fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
+}
+
+ucs_status_t uct_ugni_ep_atomic_fxor32(uct_ep_h tl_ep, uint32_t xor,
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uint32_t *result, uct_completion_t *comp)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_ugni_rdma_fetch_desc_t *fma;
+
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
+                             return UCS_ERR_NO_RESOURCE);
+    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC2_FXOR_S,
+                            (uint64_t)xor, 0, fma + 1, remote_addr,
+                            rkey, LEN_32, ep, comp, uct_ugni_amo_unpack32, (void *)result);
+    ucs_trace_data("Posting AMO FXOR, GNI_PostFma of size %"PRIx64" value"
+                   "%"PRIx32" to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->super.desc.length, xor,
+                   (void *)fma->super.desc.remote_addr,
+                   fma->super.desc.remote_mem_hndl.qword1,
+                   fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
 ucs_status_t uct_ugni_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
@@ -441,6 +712,12 @@ ucs_status_t uct_ugni_ep_atomic32_post(uct_ep_h ep, unsigned opcode, uint32_t va
     switch (opcode) {
     case UCT_ATOMIC_OP_ADD:
         return uct_ugni_ep_atomic_add32(ep, value, remote_addr, rkey);
+    case UCT_ATOMIC_OP_XOR:
+        return uct_ugni_ep_atomic_xor32(ep, value, remote_addr, rkey);
+    case UCT_ATOMIC_OP_AND:
+        return uct_ugni_ep_atomic_and32(ep, value, remote_addr, rkey);
+    case UCT_ATOMIC_OP_OR:
+        return uct_ugni_ep_atomic_or32(ep, value, remote_addr, rkey);
     default:
         ucs_assertv(0, "incorrect opcode for atomic: %d", opcode);
         return UCS_ERR_UNSUPPORTED;
@@ -453,6 +730,12 @@ ucs_status_t uct_ugni_ep_atomic64_post(uct_ep_h ep, unsigned opcode, uint64_t va
     switch (opcode) {
     case UCT_ATOMIC_OP_ADD:
         return uct_ugni_ep_atomic_add64(ep, value, remote_addr, rkey);
+    case UCT_ATOMIC_OP_XOR:
+        return uct_ugni_ep_atomic_xor64(ep, value, remote_addr, rkey);
+   case UCT_ATOMIC_OP_AND:
+        return uct_ugni_ep_atomic_and64(ep, value, remote_addr, rkey); 
+   case UCT_ATOMIC_OP_OR:
+        return uct_ugni_ep_atomic_or64(ep, value, remote_addr, rkey);
     default:
         ucs_assertv(0, "incorrect opcode for atomic: %d", opcode);
         return UCS_ERR_UNSUPPORTED;
@@ -469,6 +752,12 @@ ucs_status_t uct_ugni_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
         return uct_ugni_ep_atomic_fadd64(ep, value, remote_addr, rkey, result, comp);
     case UCT_ATOMIC_OP_SWAP:
         return uct_ugni_ep_atomic_swap64(ep, value, remote_addr, rkey, result, comp);
+    case UCT_ATOMIC_OP_XOR:
+        return uct_ugni_ep_atomic_fxor64(ep, value, remote_addr, rkey, result, comp);
+    case UCT_ATOMIC_OP_AND:
+        return uct_ugni_ep_atomic_fand64(ep, value, remote_addr, rkey, result, comp);
+    case UCT_ATOMIC_OP_OR:
+        return uct_ugni_ep_atomic_for64(ep, value, remote_addr, rkey, result, comp);
     default:
         ucs_assertv(0, "incorrect opcode for atomic: %d", opcode);
         return UCS_ERR_UNSUPPORTED;
@@ -485,6 +774,12 @@ ucs_status_t uct_ugni_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
         return uct_ugni_ep_atomic_fadd32(ep, value, remote_addr, rkey, result, comp);
     case UCT_ATOMIC_OP_SWAP:
         return uct_ugni_ep_atomic_swap32(ep, value, remote_addr, rkey, result, comp);
+    case UCT_ATOMIC_OP_XOR:
+        return uct_ugni_ep_atomic_fxor32(ep, value, remote_addr, rkey, result, comp);
+    case UCT_ATOMIC_OP_AND:
+        return uct_ugni_ep_atomic_fand32(ep, value, remote_addr, rkey, result, comp); 
+    case UCT_ATOMIC_OP_OR:
+        return uct_ugni_ep_atomic_for32(ep, value, remote_addr, rkey, result, comp);
     default:
         ucs_assertv(0, "incorrect opcode for atomic: %d", opcode);
         return UCS_ERR_UNSUPPORTED;
