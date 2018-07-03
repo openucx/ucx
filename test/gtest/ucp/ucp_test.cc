@@ -348,8 +348,10 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
 
     ucp_test::set_ucp_config(ucp_config, entity_param);
 
+    hide_warnings();
     UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init,
                            &entity_param.ctx_params, ucp_config);
+    restore_errors();
 
     m_workers.resize(num_workers);
     for (int i = 0; i < num_workers; i++) {
