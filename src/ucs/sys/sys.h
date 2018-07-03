@@ -30,7 +30,6 @@
 #include <sys/param.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
-#include <sys/resource.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -325,16 +324,6 @@ void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length);
  * @param [in]  length      Length of the memory block.
  */
 void ucs_sys_free(void *ptr, size_t length);
-
-
-/**
- * Return the value of the max locked memory limit which is set on the system
- * (ulimit -l)
- *
- * @param [in/out]          A string filled with the max locked memory limit.
- * @param [in]              Maximal length of the string.
- */
-char* ucs_sys_get_mem_lock_limit(char *str, size_t max_size);
 
 
 /**

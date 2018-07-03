@@ -14,6 +14,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
 #include <pthread.h>
+#include <sys/resource.h>
 
 
 #define UCT_IB_MD_PREFIX         "ib"
@@ -312,30 +313,25 @@ uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
 
 static void uct_ib_md_print_mem_reg_err_msg(ucs_log_level_t level, void *address,
                                             size_t length, uint64_t exp_access,
-                                            int exp)
+                                            const char *exp_prefix)
 {
-    char *str = ucs_alloca(32);
-    char msg[400] = {0};
+    char msg[200] = {0};
+    struct rlimit limit_info;
 
-    if (exp) {
-        ucs_snprintf_zero(msg, sizeof(msg),
-                          "ibv_exp_reg_mr(address=%p, length=%zu, exp_access=0x%lx) failed: %m. ",
-                          address, length, exp_access);
-    } else {
-        ucs_snprintf_zero(msg, sizeof(msg),
-                          "ibv_reg_mr(address=%p, length=%zu, access=0x%lx) failed: %m. ",
-                          address, length, exp_access);
-    }
+    ucs_snprintf_zero(msg, sizeof(msg),
+                      "ibv_%sreg_mr(address=%p, length=%zu, %saccess=0x%lx) failed: %m. ",
+                      exp_prefix, address, length, exp_prefix, exp_access);
 
-    str = ucs_sys_get_mem_lock_limit(str, 32);
-    if ((strcmp(str, "'unlimited'")) && (strcmp(str, "<unknown>"))) {
+    /* Check the value of the max locked memory which is set on the system
+     * (ulimit -l) */
+    if ((!getrlimit(RLIMIT_MEMLOCK, &limit_info)) &&
+        (limit_info.rlim_cur != RLIM_INFINITY)) {
         ucs_snprintf_zero(msg + strlen(msg), sizeof(msg) - strlen(msg),
-                          "The max locked memory limit (ulimit -l) on the system is "
-                          "set to %s. It is recommended to set this limit to 'unlimited'.",
-                          str);
+                          "Please set max locked memory (ulimit -l) to 'unlimited' "
+                          "(current: %llu kbytes)", limit_info.rlim_cur / UCS_KBYTE);
     }
 
-    ucs_log(level, msg);
+    ucs_log(level, "%s", msg);
 }
 
 static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
@@ -358,7 +354,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
         mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &in);
         if (mr == NULL) {
             uct_ib_md_print_mem_reg_err_msg(level, in.addr, in.length,
-                                            in.exp_access, 1);
+                                            in.exp_access, "exp_");
             return UCS_ERR_IO_ERROR;
         }
 #else
@@ -369,7 +365,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
                               UCT_IB_MEM_ACCESS_FLAGS);
         if (mr == NULL) {
             uct_ib_md_print_mem_reg_err_msg(level, address, length,
-                                            UCT_IB_MEM_ACCESS_FLAGS, 0);
+                                            UCT_IB_MEM_ACCESS_FLAGS, "");
             return UCS_ERR_IO_ERROR;
         }
     }
