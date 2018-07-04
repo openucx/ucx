@@ -224,7 +224,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     /* Open verbs context */
     dev->ibv_context = ibv_open_device(ibv_device);
     if (dev->ibv_context == NULL) {
-        ucs_warn("ibv_open_device(%s) failed: %m", ibv_get_device_name(ibv_device));
+        ucs_error("ibv_open_device(%s) failed: %m", ibv_get_device_name(ibv_device));
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
