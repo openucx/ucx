@@ -877,7 +877,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     for (i = 0; i < num_md_resources; ++i) {
         status = ucp_fill_tl_md(&md_rscs[i], &context->tl_mds[md_index]);
         if (status != UCS_OK) {
-            goto err_free_context_resources;
+            continue;
         }
 
         /* Add communication resources of each MD */
