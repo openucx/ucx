@@ -987,6 +987,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                                                                config->key.rma_bw_md_map);
     config->stream.proto                = &ucp_stream_am_proto;
     config->tag.offload.max_eager_short = -1;
+    config->tag.max_eager_short         = -1;
     max_rndv_thresh                     = SIZE_MAX;
     max_am_rndv_thresh                  = SIZE_MAX;
 
@@ -1021,7 +1022,6 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             config->tag.offload.max_rndv_iov    = iface_attr->cap.tag.rndv.max_iov;
             config->tag.offload.max_rndv_zcopy  = iface_attr->cap.tag.rndv.max_zcopy;
             config->tag.offload.max_eager_short = config->tag.eager.max_short;
-            config->tag.eager.max_short         = -1;
             config->tag.sync_proto              = &ucp_tag_offload_sync_proto;
             config->tag.proto                   = &ucp_tag_offload_proto;
             config->tag.lane                    = lane;
@@ -1075,8 +1075,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                                               config->key.rma_bw_lanes[0],
                                               UCT_IFACE_FLAG_GET_ZCOPY,
                                               max_rndv_thresh);
-                config->tag.eager      = config->am;
-                config->tag.lane       = lane;
+                config->tag.eager           = config->am;
+                config->tag.lane            = lane;
+                config->tag.max_eager_short = config->tag.eager.max_short;
             }
         } else {
             /* Stub endpoint */

@@ -148,7 +148,7 @@ ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t count,
 
     length = ucp_contig_dt_length(datatype, count);
 
-    if ((ssize_t)length <= ucp_ep_config(ep)->tag.eager.max_short) {
+    if ((ssize_t)length <= ucp_ep_config(ep)->tag.max_eager_short) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(ucp_eager_hdr_t));
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
         status = uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_EAGER_ONLY,
