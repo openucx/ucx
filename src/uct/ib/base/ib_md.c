@@ -979,14 +979,14 @@ static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache
 {
     uct_ib_rcache_region_t *region = ucs_derived_of(rregion, uct_ib_rcache_region_t);
     uct_ib_md_t *md = context;
-    int *flags = arg;
+    int *flags      = arg;
+    int silent      = (rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS) ||
+                      (*flags & UCT_MD_MEM_FLAG_HIDE_ERRORS);
     ucs_status_t status;
 
     status = uct_ib_mem_reg_internal(&md->super, (void*)region->super.super.start,
                                      region->super.super.end - region->super.super.start,
-                                     *flags,
-                                     rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS,
-                                     &region->memh);
+                                     *flags, silent, &region->memh);
     if (status != UCS_OK) {
         return status;
     }
