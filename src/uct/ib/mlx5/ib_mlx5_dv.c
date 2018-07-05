@@ -18,11 +18,6 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
         return UCS_ERR_NO_DEVICE;
     }
 
-    if (type & MLX5DV_OBJ_CQ) {
-        /* enable cq_clean in libmlx5 */
-        uct_ib_mlx5_cq_set_flags(obj->dv.cq.in, 0);
-    }
-
     return UCS_OK;
 }
 #endif

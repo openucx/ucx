@@ -219,14 +219,6 @@ struct ibv_qp *uct_dv_get_cmd_qp(struct ibv_srq *srq)
 #endif
 }
 
-void uct_ib_mlx5_cq_set_flags(struct ibv_cq *cq, int v)
-{
-#if HAVE_STRUCT_MLX5_CQ_MODEL_FLAGS
-    struct mlx5_cq *mcq = ucs_container_of(cq, struct mlx5_cq, ibv_cq);
-    mcq->model_flags = v;
-#endif
-}
-
 struct mlx5_uar_data {
     enum { __DUMMY }            map_type;
     void                        *regs;
