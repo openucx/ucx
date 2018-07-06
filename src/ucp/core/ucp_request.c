@@ -205,6 +205,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     ucp_dt_reg_t *dt_reg;
     ucs_status_t status;
     int uct_flags;
+    int level;
 
     ucs_trace_func("context=%p md_map=0x%lx buffer=%p length=%zu datatype=0x%lu "
                    "state=%p", context, md_map, buffer, length, datatype, state);
@@ -255,7 +256,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
 
 err:
     if (status != UCS_OK) {
-        ucs_log(silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR,
+        level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+        ucs_log(level,
                 "failed to register user buffer datatype 0x%lx address %p len %zu:"
                 " %s", datatype, buffer, length, ucs_status_string(status));
     }

@@ -37,6 +37,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     unsigned prev_num_memh;
     unsigned md_index;
     ucs_status_t status;
+    int level;
 
     if (reg_md_map == *md_map_p) {
         return UCS_OK; /* shortcut - no changes required */
@@ -99,8 +100,9 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
             status = uct_md_mem_reg(context->tl_mds[md_index].md, address,
                                     length, uct_flags, &uct_memh[memh_index]);
             if (status != UCS_OK) {
-                ucs_log(uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS ?
-                        UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR,
+                level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
+                        UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+                ucs_log(level,
                         "failed to register address %p length %zu on md[%d]=%s: %s",
                         address, length, md_index, context->tl_mds[md_index].rsc.md_name,
                         ucs_status_string(status));
