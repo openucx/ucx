@@ -234,12 +234,14 @@ libuct_la_SOURCES += \
 noinst_HEADERS += \
     cuda/cuda_ipc/cuda_ipc_md.h \
     cuda/cuda_ipc/cuda_ipc_iface.h \
-    cuda/cuda_ipc/cuda_ipc_ep.h
+    cuda/cuda_ipc/cuda_ipc_ep.h \
+    cuda/cuda_ipc/cuda_ipc_cache.h
 
 libuct_la_SOURCES += \
     cuda/cuda_ipc/cuda_ipc_md.c \
     cuda/cuda_ipc/cuda_ipc_iface.c \
-    cuda/cuda_ipc/cuda_ipc_ep.c
+    cuda/cuda_ipc/cuda_ipc_ep.c \
+    cuda/cuda_ipc/cuda_ipc_cache.c
 
 endif
 
