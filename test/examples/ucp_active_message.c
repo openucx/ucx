@@ -271,7 +271,6 @@ err:
 static int run_ucx_server(ucp_worker_h ucp_worker)
 {
     char string[1];
-    generate_random_string(string, 1);
     ucp_tag_recv_info_t info_tag;
     ucp_tag_message_h msg_tag;
     ucs_status_t status;
@@ -281,9 +280,10 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     struct ucx_context *request = 0;
     int ret = -1;
     int i;
-    am_put_args_t put_args;// = malloc(10000);
+    am_put_args_t put_args;
     ucs_status_ptr_t status_ptr;
-  
+    
+    generate_random_string(string, 1);
     /* Receive client UCX address */
     do {
         /* Progressing before probe to update the state */
