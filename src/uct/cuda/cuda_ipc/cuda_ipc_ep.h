@@ -10,6 +10,7 @@
 #include <uct/base/uct_iface.h>
 #include <ucs/type/class.h>
 #include "cuda_ipc_md.h"
+#include "cuda_ipc_cache.h"
 
 typedef struct uct_cuda_ipc_ep_addr {
     int                ep_id;
@@ -17,6 +18,7 @@ typedef struct uct_cuda_ipc_ep_addr {
 
 typedef struct uct_cuda_ipc_ep {
     uct_base_ep_t                   super;
+    uct_cuda_ipc_cache_t            *remote_memh_cache;
 } uct_cuda_ipc_ep_t;
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_cuda_ipc_ep_t, uct_ep_t, uct_iface_t*,
