@@ -273,7 +273,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
                                                UCT_UD_MIN_INLINE);
 
 #if HAVE_VERBS_EXP_H
-    qp_init_attr.pd                  = uct_ib_iface_md(&self->super)->pd;
+    qp_init_attr.pd                  = uct_ib_iface_qp_pd(&self->super);
     qp_init_attr.comp_mask           = IBV_QP_INIT_ATTR_PD;
 #if HAVE_IBV_EXP_RES_DOMAIN
     if (self->super.res_domain != NULL) {
@@ -292,7 +292,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     self->qp = ibv_exp_create_qp(uct_ib_iface_device(&self->super)->ibv_context,
                                  &qp_init_attr);
 #else
-    self->qp = ibv_exp_create_qp(uct_ib_iface_md(&self->super)->pd, &qp_init_attr);
+    self->qp = ibv_exp_create_qp(uct_ib_iface_qp_pd(&self->super), &qp_init_attr);
 #endif
     if (self->qp == NULL) {
         ucs_error("Failed to create qp: %s [inline: %u rsge: %u ssge: %u rwr: %u swr: %u]",

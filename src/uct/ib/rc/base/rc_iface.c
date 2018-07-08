@@ -934,7 +934,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD;
-    qp_init_attr.pd                  = uct_ib_iface_md(&iface->super)->pd;
+    qp_init_attr.pd                  = uct_ib_iface_qp_pd(&iface->super);
 
 #  if HAVE_IB_EXT_ATOMICS
     qp_init_attr.comp_mask          |= IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
@@ -962,7 +962,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 
     qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
 #else
-    qp = ibv_create_qp(uct_ib_iface_md(&iface->super)->pd, &qp_init_attr);
+    qp = ibv_create_qp(uct_ib_iface_qp_pd(&iface->super), &qp_init_attr);
 #endif
     if (qp == NULL) {
         ucs_error("failed to create qp: %m");

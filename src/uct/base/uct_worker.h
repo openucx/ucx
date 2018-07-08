@@ -19,7 +19,6 @@ typedef struct uct_worker_tl_data {
     ucs_list_link_t        list;
     uint32_t               refcount;
     uint32_t               key;
-    void                   *ptr;
 } uct_worker_tl_data_t;
 
 
