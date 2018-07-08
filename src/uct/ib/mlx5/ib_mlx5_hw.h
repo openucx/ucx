@@ -33,7 +33,10 @@ struct mlx5dv_cq {
     volatile uint32_t   *dbrec;
     uint32_t            cqe_cnt;
     uint32_t            cqe_size;
-    void                *uar;
+    void                *cq_uar;
+/* DV backport will behave as DV with fixed CQ UAR */
+#undef HAVE_STRUCT_MLX5DV_CQ_CQ_UAR
+#define HAVE_STRUCT_MLX5DV_CQ_CQ_UAR 1
     uint32_t            cqn;
     uint64_t            comp_mask;
 };
