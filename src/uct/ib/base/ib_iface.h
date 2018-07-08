@@ -115,7 +115,13 @@ struct uct_ib_iface_ops {
 
 typedef struct uct_ib_iface_res_domain {
     uct_worker_tl_data_t        super;
+#if HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_res_domain   *ibv_domain;
+#elif HAVE_DECL_IBV_ALLOC_TD
+    struct ibv_td               *td;
+    struct ibv_pd               *pd;
+    struct ibv_pd               *ibv_domain;
+#endif
 } uct_ib_iface_res_domain_t;
 
 
@@ -420,6 +426,20 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
     }
 
     uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, gid_p, path_bits, ah_attr);
+}
+
+static UCS_F_ALWAYS_INLINE
+struct ibv_pd *uct_ib_iface_qp_pd(uct_ib_iface_t *iface)
+{
+    struct ibv_pd *pd;
+
+    pd = uct_ib_iface_md(iface)->pd;
+#if HAVE_DECL_IBV_ALLOC_TD
+    if (iface->res_domain && iface->res_domain->ibv_domain) {
+        pd = iface->res_domain->ibv_domain;
+    }
+#endif
+    return pd;
 }
 
 #endif

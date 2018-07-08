@@ -559,6 +559,10 @@ static int uct_ib_iface_res_domain_cmp(uct_ib_iface_res_domain_t *res_domain,
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
 
     return res_domain->ibv_domain->context == dev->ibv_context;
+#elif HAVE_DECL_IBV_ALLOC_TD
+    uct_ib_md_t     *md  = uct_ib_iface_md(iface);
+
+    return res_domain->pd == md->pd;
 #else
     return 1;
 #endif
@@ -594,6 +598,38 @@ uct_ib_iface_res_domain_init(uct_ib_iface_res_domain_t *res_domain,
                   uct_ib_device_name(dev));
         return UCS_ERR_IO_ERROR;
     }
+#elif HAVE_DECL_IBV_ALLOC_TD
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uct_ib_md_t     *md  = uct_ib_iface_md(iface);
+    struct ibv_parent_domain_init_attr attr;
+    struct ibv_td_init_attr td_attr;
+
+    if (iface->super.worker->thread_mode == UCS_THREAD_MODE_MULTI) {
+        td_attr.comp_mask = 0;
+        res_domain->td = ibv_alloc_td(dev->ibv_context, &td_attr);
+        if (res_domain->td == NULL) {
+            ucs_error("ibv_alloc_td() on %s failed: %m",
+                      uct_ib_device_name(dev));
+            return UCS_ERR_IO_ERROR;
+        }
+    } else {
+        res_domain->td = NULL;
+        res_domain->ibv_domain = NULL;
+        res_domain->pd = md->pd;
+        return UCS_OK;
+    }
+
+    attr.td = res_domain->td;
+    attr.pd = md->pd;
+    attr.comp_mask = 0;
+    res_domain->ibv_domain = ibv_alloc_parent_domain(dev->ibv_context, &attr);
+    if (res_domain->ibv_domain == NULL) {
+        ucs_error("ibv_alloc_parent_domain() on %s failed: %m",
+                  uct_ib_device_name(dev));
+        ibv_dealloc_td(res_domain->td);
+        return UCS_ERR_IO_ERROR;
+    }
+    res_domain->pd = md->pd;
 #endif
     return UCS_OK;
 }
@@ -609,6 +645,21 @@ static void uct_ib_iface_res_domain_cleanup(uct_ib_iface_res_domain_t *res_domai
                                      res_domain->ibv_domain, &attr);
     if (ret != 0) {
         ucs_warn("ibv_exp_destroy_res_domain() failed: %m");
+    }
+#elif HAVE_DECL_IBV_ALLOC_TD
+    int ret;
+
+    if (res_domain->ibv_domain != NULL) {
+        ret = ibv_dealloc_pd(res_domain->ibv_domain);
+        if (ret != 0) {
+            ucs_warn("ibv_dealloc_pd() failed: %m");
+            return;
+        }
+
+        ret = ibv_dealloc_td(res_domain->td);
+        if (ret != 0) {
+            ucs_warn("ibv_dealloc_td() failed: %m");
+        }
     }
 #endif
 }
