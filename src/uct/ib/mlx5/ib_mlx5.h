@@ -32,7 +32,14 @@
 #  endif
 #endif
 
-#include <infiniband/mlx5_hw.h>
+#if HAVE_INFINIBAND_MLX5DV_H
+#  include <infiniband/mlx5dv.h>
+#else
+#  include <infiniband/mlx5_hw.h>
+#  include "ib_mlx5_hw.h"
+#endif
+#include "ib_mlx5_dv.h"
+
 #include <netinet/in.h>
 #include <endian.h>
 #include <string.h>
@@ -126,9 +133,7 @@ typedef struct uct_ib_mlx5_cq {
     unsigned           cq_ci;
     unsigned           cq_length;
     unsigned           cqe_size_log;
-#if ENABLE_DEBUG_DATA
     unsigned           cq_num;
-#endif
 } uct_ib_mlx5_cq_t;
 
 
@@ -238,21 +243,6 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
  * Get internal CQ information.
  */
 ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq);
-
-/**
- * Update CI to support req_notify_cq
- */
-void uct_ib_mlx5_update_cq_ci(struct ibv_cq *cq, unsigned cq_ci);
-
-/**
- * Retrieve CI from the driver
- */
-unsigned uct_ib_mlx5_get_cq_ci(struct ibv_cq *cq);
-
-/**
- * Get internal AV information.
- */
-void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av);
 
 /**
  * Get flag indicating compact AV support.
