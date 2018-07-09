@@ -261,7 +261,7 @@ ucp_tag_offload_do_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
         status = ucp_request_memory_reg(context, UCS_BIT(mdi), req->recv.buffer,
                                         req->recv.length, req->recv.datatype,
                                         &req->recv.state, req->recv.mem_type,
-                                        req, 1);
+                                        req, UCT_MD_MEM_FLAG_HIDE_ERRORS);
         if (status != UCS_OK) {
             return status;
         }
