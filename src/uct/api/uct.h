@@ -434,7 +434,10 @@ enum uct_md_mem_flags {
                                                    locked. May incur extra cost for
                                                    registration, but memory access
                                                    is usually faster. */
-    UCT_MD_MEM_FLAG_HIDE_ERRORS = UCS_BIT(3), /**< Hide errors on memory registration  */
+    UCT_MD_MEM_FLAG_HIDE_ERRORS = UCS_BIT(3), /**< Hide errors on memory registration.
+                                                   In some cases registration failure
+                                                   is not an error (e. g. for merged
+                                                   memory regions). */
 
     /* memory access flags */
     UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), /**< enable remote put access */
