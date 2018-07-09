@@ -1,11 +1,13 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
 
 #include "ucp_ep.h"
 #include "ucp_worker.h"
+#include "ucp_am.h"
 #include "ucp_ep.inl"
 #include "ucp_request.inl"
 
@@ -23,6 +25,7 @@
 
 
 extern const ucp_proto_t ucp_stream_am_proto;
+extern const ucp_proto_t ucp_am_proto;
 
 #if ENABLE_STATS
 static ucs_stats_class_t ucp_ep_stats_class = {
@@ -80,6 +83,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     ucp_ep_ext_gen(ep)->err_cb      = NULL;
 
     ucp_stream_ep_init(ep);
+    ucp_am_ep_init(ep);
 
     for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
         ep->uct_eps[lane] = NULL;
@@ -587,6 +591,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
                             ucp_listener_accept_cb_remove_filter, ep);
 
     ucp_stream_ep_cleanup(ep);
+    ucp_am_ep_cleanup(ep);
 
     ep->flags &= ~UCP_EP_FLAG_USED;
     ep->flags |= UCP_EP_FLAG_CLOSED;
@@ -986,6 +991,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     config->tag.rndv.rkey_size          = ucp_rkey_packed_size(context,
                                                                config->key.rma_bw_md_map);
     config->stream.proto                = &ucp_stream_am_proto;
+    config->am_u.proto                  = &ucp_am_proto;
     config->tag.offload.max_eager_short = -1;
     config->tag.max_eager_short         = -1;
     max_rndv_thresh                     = SIZE_MAX;

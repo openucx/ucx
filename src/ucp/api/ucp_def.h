@@ -2,6 +2,7 @@
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 * Copyright (C) IBM 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Los Alamos National Security, LLC. 2018. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -12,7 +13,6 @@
 #include <ucs/type/status.h>
 #include <stddef.h>
 #include <stdint.h>
-
 
 /**
  * @ingroup UCP_CONTEXT
@@ -79,6 +79,38 @@ typedef struct ucp_config                ucp_config_t;
  * ucp_ep_destroy "destroy" routine to destroy the endpoint handle.
  */
 typedef struct ucp_ep                    *ucp_ep_h;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Callback to process incoming active message
+ *
+ * When the callback is called, @a flags indicates how @a should be handled.
+ *  
+ * @param [in]  arg     User-defined argument.
+ * @param [in]  data    Points to the received data. This data may
+ *                      persist after the callback returns and need
+ *                      to be freed with @ref ucp_am_data_release
+ * @param [in]  length  Length of data.
+ * @param [in]  flags   If this flag is set to UCP_CB_PARAM_FLAG_DATA,
+ *                      the callback can return UCS_INPROGRESS and
+ *                      data will persist after the callback returns
+ *
+ * @return UCS_OK       A descriptor will not be allocated and data will
+ *                      not be available when the callback returns
+ * @return UCS_INPROGRESS Can only be returned if flags is set to
+ *                        UCP_CB_PARAM_FLAG_DATA. If UCP_INPROGRESS
+ *                        is returned, data will persist after the
+ *                        callback has returned. To free the memory,
+ *                        a pointer to the data must be passed into
+ *                        @ref ucp_am_data_release
+ *
+ * @note This callback could be set and released
+ *       by @ref ucp_worker_set_am_handler function.
+ *
+ */
+typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
+                                          unsigned flags);
 
 
 /**

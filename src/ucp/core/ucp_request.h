@@ -1,6 +1,7 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
  * Copyright (c) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
+ * Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -70,7 +71,11 @@ enum {
     UCP_RECV_DESC_FLAG_EAGER_ONLY     = UCS_BIT(2), /* Eager tag message with single fragment */
     UCP_RECV_DESC_FLAG_EAGER_SYNC     = UCS_BIT(3), /* Eager tag message which requires reply */
     UCP_RECV_DESC_FLAG_EAGER_OFFLOAD  = UCS_BIT(4), /* Eager tag from offload */
-    UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(5)  /* Rendezvous request */
+    UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(5), /* Rendezvous request */
+    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(6),  /* Descriptor was allocated with malloc 
+                                                       and must be freed, not returned to the
+                                                       memory pool */
+    UCP_RECV_DESC_FLAG_HDR            = UCS_BIT(7)    
 };
 
 
@@ -178,7 +183,11 @@ struct ucp_request {
                     ucp_tag_t         ssend_tag; /* Tag in offload sync send */
                     void              *rndv_op;  /* Handler of issued rndv send. Need to cancel
                                                     the operation if it is completed by SW. */
-                 } tag_offload;
+                } tag_offload;
+
+                struct {
+                    uint16_t am_id;
+                } am;
             };
 
             /* This structure holds all mutable fields, and everything else

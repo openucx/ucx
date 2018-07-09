@@ -2,6 +2,7 @@
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and the University of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+# Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -97,6 +98,7 @@ gtest_SOURCES = \
 	uct/test_peer_failure.cc \
 	uct/test_tag.cc \
 	\
+	ucp/test_ucp_am.cc \
 	ucp/test_ucp_stream.cc \
 	ucp/test_ucp_peer_failure.cc \
 	ucp/test_ucp_atomic.cc \

@@ -75,6 +75,10 @@ enum {
 
     UCP_AM_ID_RNDV_ATP          =  16, /* Ack-to-put complete after finishing a put_zcopy */
 
+    UCP_AM_ID_SINGLE            =  17, /* For user defined Active Messages */
+    UCP_AM_ID_MULTI             =  18, /* For user defined AM if message 
+                                          does not fit in one AM */
+
     UCP_AM_ID_LAST
 };
 

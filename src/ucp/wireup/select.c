@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -839,7 +840,9 @@ static inline int ucp_wireup_is_am_required(ucp_ep_h ep,
     }
 
     if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
-        (ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | UCP_FEATURE_STREAM))) {
+        (ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | 
+                                            UCP_FEATURE_STREAM | 
+                                            UCP_FEATURE_AM))) {
         return 1;
     }
 
