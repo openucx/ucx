@@ -20,11 +20,13 @@ static int ucp_rndv_is_get_zcopy(ucp_request_t *sreq, ucp_rndv_mode_t rndv_mode)
 }
 
 static int ucp_rndv_is_pipeline_needed(ucp_request_t *sreq) {
-    ucp_rsc_index_t rsc_index;
     ucp_rndv_mode_t rndv_mode;
+    uct_md_attr_t *md_attr;
+    unsigned md_index;
 
     rndv_mode = sreq->send.ep->worker->context->config.ext.rndv_mode;
-    rsc_index = ucp_ep_config(sreq->send.ep)->key.lanes[sreq->send.lane].rsc_index;
+    md_index  = ucp_ep_md_index(sreq->send.ep, sreq->send.lane);
+    md_attr   = &sreq->send.ep->worker->context->tl_mds[md_index].attr;
 
     if ((rndv_mode == UCP_RNDV_MODE_PUT_ZCOPY) ||
         ((rndv_mode == UCP_RNDV_MODE_AUTO) &&
@@ -32,9 +34,8 @@ static int ucp_rndv_is_pipeline_needed(ucp_request_t *sreq) {
         return 0;
     }
 
-    if (strstr(sreq->send.ep->worker->context->tl_rscs[rsc_index].
-               tl_rsc.tl_name, "cuda_ipc")) {
-        /* pipelining rma is not needed over cuda_ipc */
+    if (!(md_attr->cap.reg_mem_types & UCS_BIT(UCT_MD_MEM_TYPE_HOST))) {
+        /* lane support only mem type. cann't pipeline staging over it */
         return 0;
     }
 
