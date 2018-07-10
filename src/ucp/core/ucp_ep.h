@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -14,6 +15,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/stats/stats.h>
 #include <ucs/datastruct/strided_alloc.h>
+#include <ucp/api/ucpx.h>
 
 #define UCP_MAX_IOV                16UL
 
@@ -250,6 +252,13 @@ typedef struct ucp_ep_config {
          * (currently it's only AM based). */
         const ucp_proto_t   *proto;
     } stream;
+    
+    struct {
+        /* Protocols used for am operations */
+        const ucp_proto_t *proto;
+        const ucp_proto_t *reply_proto;
+    } am_u;
+
 } ucp_ep_config_t;
 
 
@@ -317,6 +326,10 @@ typedef struct {
         ucs_queue_head_t          match_q;       /* Queue of receive data or requests,
                                                     depends on UCP_EP_FLAG_STREAM_HAS_DATA */
     } stream;
+
+    struct {
+        ucs_list_link_t           started_ams;
+    } am;
 } ucp_ep_ext_proto_t;
 
 

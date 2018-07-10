@@ -5,6 +5,7 @@
 * See file LICENSE for terms.
 */
 
+#include "ucp_am.h"
 #include "ucp_worker.h"
 #include "ucp_mm.h"
 #include "ucp_request.inl"
@@ -1420,13 +1421,14 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->ep_config_max     = config_count;
     worker->ep_config_count   = 0;
     worker->num_active_ifaces = 0;
+    worker->am_message_id     = ucs_generate_uuid(0);
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
     ucs_list_head_init(&worker->all_eps);
     ucp_ep_match_init(&worker->ep_match_ctx);
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
-    if (context->config.features & UCP_FEATURE_STREAM) {
+    if (context->config.features & (UCP_FEATURE_STREAM | UCP_FEATURE_EXPERIMENTAL)) {
         UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_proto_t) <= sizeof(ucp_ep_t));
         ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 3);
     } else {
@@ -1439,6 +1441,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         worker->user_data = NULL;
     }
 
+    if (context->config.features & UCP_FEATURE_EXPERIMENTAL){
+        worker->am_cbs            = NULL;
+        worker->am_cb_array_len   = 0;
+    }
     name_length = ucs_min(UCP_WORKER_NAME_MAX,
                           context->config.ext.max_worker_name + 1);
     ucs_snprintf_zero(worker->name, name_length, "%s:%d", ucs_get_host_name(),
@@ -1564,6 +1570,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_trace_func("worker=%p", worker);
 
     UCS_ASYNC_BLOCK(&worker->async);
+    ucs_free(worker->am_cbs);
     ucp_worker_destroy_eps(worker);
     ucp_worker_remove_am_handlers(worker);
     UCS_ASYNC_UNBLOCK(&worker->async);

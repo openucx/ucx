@@ -67,7 +67,7 @@ extern const ucp_proto_t ucp_tag_eager_sync_proto;
 
 void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_flags);
 
-void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag,
+void ucp_tag_eager_sync_completion(ucp_request_t *req, uint32_t flag,
                                    ucs_status_t status);
 
 void ucp_tag_eager_zcopy_completion(uct_completion_t *self, ucs_status_t status);

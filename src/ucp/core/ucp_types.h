@@ -84,7 +84,12 @@ enum {
     UCP_AM_ID_ATOMIC_REQ        =  20, /* Remote memory atomic request */
     UCP_AM_ID_ATOMIC_REP        =  21, /* Remote memory atomic reply */
     UCP_AM_ID_CMPL              =  22, /* Remote memory operation completion */
-
+    UCP_AM_ID_SINGLE            =  23, /* For user defined Active Messages */
+    UCP_AM_ID_MULTI             =  24, /* For user defined AM if message 
+                                          does not fit in one AM */
+    UCP_AM_ID_SINGLE_REPLY      =  25, /* For user defined AM when a reply
+                                          is needed */
+    UCP_AM_ID_MULTI_REPLY       =  26,
     UCP_AM_ID_LAST
 };
 

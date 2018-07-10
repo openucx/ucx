@@ -203,7 +203,7 @@ const ucp_proto_t ucp_tag_eager_proto = {
 
 /* eager sync */
 
-void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag,
+void ucp_tag_eager_sync_completion(ucp_request_t *req, uint32_t flag,
                                    ucs_status_t status)
 {
     static const uint16_t all_completed = UCP_REQUEST_FLAG_LOCAL_COMPLETED |

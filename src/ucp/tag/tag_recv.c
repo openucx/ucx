@@ -33,7 +33,7 @@ ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                     uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
-                    ucp_request_t *req, uint16_t req_flags, ucp_tag_recv_callback_t cb,
+                    ucp_request_t *req, uint32_t req_flags, ucp_tag_recv_callback_t cb,
                     ucp_recv_desc_t *rdesc, const char *debug_name)
 {
     unsigned common_flags = UCP_REQUEST_FLAG_RECV | UCP_REQUEST_FLAG_EXPECTED;

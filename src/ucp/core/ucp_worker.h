@@ -180,6 +180,15 @@ struct ucp_worker_iface {
 };
 
 
+/** 
+ * Data that is stored about each callback registered with a worker
+ */
+typedef struct ucp_worker_am_entry {
+    ucp_am_callback_t     cb;
+    void                 *context;
+    uint32_t              flags;
+} ucp_worker_am_entry_t;
+
 /**
  * UCP worker (thread context).
  */
@@ -214,10 +223,14 @@ typedef struct ucp_worker {
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
     ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */
     ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
+    uint64_t                      am_message_id; /* For matching long am's */
     ucp_ep_h                      mem_type_ep[UCT_MD_MEM_TYPE_LAST];/* memory type eps */
 
     UCS_STATS_NODE_DECLARE(stats);
     UCS_STATS_NODE_DECLARE(tm_offload_stats);
+
+    ucp_worker_am_entry_t        *am_cbs;          /*array of callbacks and their data */
+    size_t                        am_cb_array_len; /*len of callback array */
 
     ucs_cpu_set_t                 cpu_mask;        /* Save CPU mask for subsequent calls to ucp_worker_listen */
     unsigned                      ep_config_max;   /* Maximal number of configurations */

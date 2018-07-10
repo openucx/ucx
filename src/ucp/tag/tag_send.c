@@ -86,7 +86,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
         }
     } else if (ucs_unlikely((req->send.uct.func == proto->zcopy_multi) ||
                             (req->send.uct.func == proto->bcopy_multi))) {
-        req->send.tag.message_id  = req->send.ep->worker->tm.am.message_id++;
+        req->send.tag.message_id  = req->send.ep->worker->am_message_id++;
         req->send.tag.am_bw_index = 1;
     }
 
@@ -122,9 +122,9 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
                       uintptr_t datatype, size_t count, ucp_tag_t tag,
-                      uint16_t flags)
+                      uint32_t flags)
 {
-    req->flags             = flags;
+    req->flags             = flags | UCP_REQUEST_FLAG_SEND_TAG;
     req->send.ep           = ep;
     req->send.buffer       = (void*)buffer;
     req->send.datatype     = datatype;
