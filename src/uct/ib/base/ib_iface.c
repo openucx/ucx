@@ -693,14 +693,14 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     inl = config->rx.inl;
     status = uct_ib_iface_create_cq(self, tx_cq_len, &inl, preferred_cpu,
-                                    &self->cq[UCT_IB_TX]);
+                                    &self->cq[UCT_IB_DIR_TX]);
     if (status != UCS_OK) {
         goto err_destroy_comp_channel;
     }
     ucs_assert_always(inl <= UINT8_MAX);
     self->config.max_inl_resp = inl;
 
-    status = uct_ib_iface_set_moderation(self->cq[UCT_IB_TX],
+    status = uct_ib_iface_set_moderation(self->cq[UCT_IB_DIR_TX],
                                          config->tx.cq_moderation_count,
                                          config->tx.cq_moderation_period);
     if (status != UCS_OK) {
@@ -709,12 +709,12 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     inl = config->rx.inl;
     status = uct_ib_iface_create_cq(self, rx_cq_len, &inl,
-                                    preferred_cpu, &self->cq[UCT_IB_RX]);
+                                    preferred_cpu, &self->cq[UCT_IB_DIR_RX]);
     if (status != UCS_OK) {
         goto err_destroy_send_cq;
     }
 
-    status = uct_ib_iface_set_moderation(self->cq[UCT_IB_RX],
+    status = uct_ib_iface_set_moderation(self->cq[UCT_IB_DIR_RX],
                                          config->rx.cq_moderation_count,
                                          config->rx.cq_moderation_period);
     if (status != UCS_OK) {
@@ -742,9 +742,9 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     return UCS_OK;
 
 err_destroy_recv_cq:
-    ibv_destroy_cq(self->cq[UCT_IB_RX]);
+    ibv_destroy_cq(self->cq[UCT_IB_DIR_RX]);
 err_destroy_send_cq:
-    ibv_destroy_cq(self->cq[UCT_IB_TX]);
+    ibv_destroy_cq(self->cq[UCT_IB_DIR_TX]);
 err_destroy_comp_channel:
     ibv_destroy_comp_channel(self->comp_channel);
 err_put_res_domain:
@@ -761,12 +761,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 {
     int ret;
 
-    ret = ibv_destroy_cq(self->cq[UCT_IB_RX]);
+    ret = ibv_destroy_cq(self->cq[UCT_IB_DIR_RX]);
     if (ret != 0) {
         ucs_warn("ibv_destroy_cq(recv_cq) returned %d: %m", ret);
     }
 
-    ret = ibv_destroy_cq(self->cq[UCT_IB_TX]);
+    ret = ibv_destroy_cq(self->cq[UCT_IB_DIR_TX]);
     if (ret != 0) {
         ucs_warn("ibv_destroy_cq(send_cq) returned %d: %m", ret);
     }
@@ -998,12 +998,12 @@ ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface)
     do {
         res = ibv_get_cq_event(iface->comp_channel, &cq, &cq_context);
         if (0 == res) {
-            if (iface->cq[UCT_IB_TX] == cq) {
-                iface->ops->event_cq(iface, UCT_IB_TX);
+            if (iface->cq[UCT_IB_DIR_TX] == cq) {
+                iface->ops->event_cq(iface, UCT_IB_DIR_TX);
                 ++send_cq_count;
             }
-            if (iface->cq[UCT_IB_RX] == cq) {
-                iface->ops->event_cq(iface, UCT_IB_RX);
+            if (iface->cq[UCT_IB_DIR_RX] == cq) {
+                iface->ops->event_cq(iface, UCT_IB_DIR_RX);
                 ++recv_cq_count;
             }
         }
@@ -1014,11 +1014,11 @@ ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface)
     }
 
     if (send_cq_count > 0) {
-        ibv_ack_cq_events(iface->cq[UCT_IB_TX], send_cq_count);
+        ibv_ack_cq_events(iface->cq[UCT_IB_DIR_TX], send_cq_count);
     }
 
     if (recv_cq_count > 0) {
-        ibv_ack_cq_events(iface->cq[UCT_IB_RX], recv_cq_count);
+        ibv_ack_cq_events(iface->cq[UCT_IB_DIR_RX], recv_cq_count);
     }
 
     /* avoid re-arming the interface if any events exists */
@@ -1032,15 +1032,15 @@ ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface)
 }
 
 ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
-                                 uct_ib_direction_t rxtx,
+                                 uct_ib_dir_t dir,
                                  int solicited_only)
 {
     int ret;
 
-    ret = ibv_req_notify_cq(iface->cq[rxtx], solicited_only);
+    ret = ibv_req_notify_cq(iface->cq[dir], solicited_only);
     if (ret != 0) {
         ucs_error("ibv_req_notify_cq("UCT_IB_IFACE_FMT", %d, sol=%d) failed: %m",
-                  UCT_IB_IFACE_ARG(iface), rxtx, solicited_only);
+                  UCT_IB_IFACE_ARG(iface), dir, solicited_only);
         return UCS_ERR_IO_ERROR;
     }
     return UCS_OK;

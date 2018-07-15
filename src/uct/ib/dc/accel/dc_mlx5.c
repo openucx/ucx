@@ -682,7 +682,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super.super,
-                              &iface->mlx5_common.cq[UCT_IB_TX]);
+                              &iface->mlx5_common.cq[UCT_IB_DIR_TX]);
     if (cqe == NULL) {
         return 0;
     }
@@ -1070,7 +1070,7 @@ static ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_iface_t *dc_iface, int dc
     uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->mlx5_common,
                                          &iface->super.super.super);
 
-    uct_rc_mlx5_iface_commom_clean(&iface->mlx5_common.cq[UCT_IB_TX], NULL,
+    uct_rc_mlx5_iface_commom_clean(&iface->mlx5_common.cq[UCT_IB_DIR_TX], NULL,
                                    iface->super.tx.dcis[dci].txqp.qp->qp_num);
 
     /* Resume posting from to the beginning of the QP */
@@ -1080,11 +1080,11 @@ static ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_iface_t *dc_iface, int dc
 }
 
 static void uct_dc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
-                                       uct_ib_direction_t rxtx)
+                                       uct_ib_dir_t dir)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
 
-    iface->mlx5_common.cq[rxtx].cq_sn++;
+    iface->mlx5_common.cq[dir].cq_sn++;
 }
 
 static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {

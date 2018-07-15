@@ -60,6 +60,8 @@
 #define UCT_IB_MLX5_CQE_VENDOR_SYND_ODP 0x93
 #define UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK 0x80
 #define UCT_IB_MLX5_MAX_SEND_WQE_SIZE   (UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB)
+#define UCT_IB_MLX5_CQ_SET_CI           0
+#define UCT_IB_MLX5_CQ_ARM_DB           1
 
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
