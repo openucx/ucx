@@ -423,17 +423,21 @@ typedef enum {
  * @brief  Memory allocation/registration flags.
  */
 enum uct_md_mem_flags {
-    UCT_MD_MEM_FLAG_NONBLOCK = UCS_BIT(0), /**< Hint to perform non-blocking
-                                                allocation/registration: page
-                                                mapping may be deferred until
-                                                it is accessed by the CPU or a
-                                                transport. */
-    UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1), /**< Place the mapping at exactly
-                                                defined address */
-    UCT_MD_MEM_FLAG_LOCK     = UCS_BIT(2), /**< Registered memory should be
-                                                locked. May incur extra cost for
-                                                registration, but memory access
-                                                is usually faster. */
+    UCT_MD_MEM_FLAG_NONBLOCK    = UCS_BIT(0), /**< Hint to perform non-blocking
+                                                   allocation/registration: page
+                                                   mapping may be deferred until
+                                                   it is accessed by the CPU or a
+                                                   transport. */
+    UCT_MD_MEM_FLAG_FIXED       = UCS_BIT(1), /**< Place the mapping at exactly
+                                                   defined address */
+    UCT_MD_MEM_FLAG_LOCK        = UCS_BIT(2), /**< Registered memory should be
+                                                   locked. May incur extra cost for
+                                                   registration, but memory access
+                                                   is usually faster. */
+    UCT_MD_MEM_FLAG_HIDE_ERRORS = UCS_BIT(3), /**< Hide errors on memory registration.
+                                                   In some cases registration failure
+                                                   is not an error (e. g. for merged
+                                                   memory regions). */
 
     /* memory access flags */
     UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), /**< enable remote put access */

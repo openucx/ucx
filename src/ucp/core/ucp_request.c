@@ -195,26 +195,29 @@ static void ucp_request_dt_dereg(ucp_context_t *context, ucp_dt_reg_t *dt_reg,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
-                 (context, md_map, buffer, length, datatype, state, mem_type, req_dbg),
+                 (context, md_map, buffer, length, datatype, state, mem_type, req_dbg, uct_flags),
                  ucp_context_t *context, ucp_md_map_t md_map, void *buffer,
                  size_t length, ucp_datatype_t datatype, ucp_dt_state_t *state,
-                 uct_memory_type_t mem_type, ucp_request_t *req_dbg)
+                 uct_memory_type_t mem_type, ucp_request_t *req_dbg, unsigned uct_flags)
 {
     size_t iov_it, iovcnt;
     const ucp_dt_iov_t *iov;
     ucp_dt_reg_t *dt_reg;
     ucs_status_t status;
+    int flags;
+    int level;
 
     ucs_trace_func("context=%p md_map=0x%lx buffer=%p length=%zu datatype=0x%lu "
                    "state=%p", context, md_map, buffer, length, datatype, state);
 
     status = UCS_OK;
+    flags  = UCT_MD_MEM_ACCESS_RMA | uct_flags;
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
         ucs_assert(ucs_count_one_bits(md_map) <= UCP_MAX_OP_MDS);
-        status = ucp_mem_rereg_mds(context, md_map, buffer, length,
-                                   UCT_MD_MEM_ACCESS_RMA, NULL, mem_type, NULL,
-                                   state->dt.contig.memh, &state->dt.contig.md_map);
+        status = ucp_mem_rereg_mds(context, md_map, buffer, length, flags,
+                                   NULL, mem_type, NULL, state->dt.contig.memh,
+                                   &state->dt.contig.md_map);
         ucp_trace_req(req_dbg, "mem reg md_map 0x%"PRIx64"/0x%"PRIx64,
                       state->dt.contig.md_map, md_map);
         break;
@@ -230,10 +233,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
             dt_reg[iov_it].md_map = 0;
             if (iov[iov_it].length) {
                 status = ucp_mem_rereg_mds(context, md_map, iov[iov_it].buffer,
-                                           iov[iov_it].length,
-                                           UCT_MD_MEM_ACCESS_RMA, NULL,
-                                           mem_type, NULL,
-                                           dt_reg[iov_it].memh,
+                                           iov[iov_it].length, flags, NULL,
+                                           mem_type, NULL, dt_reg[iov_it].memh,
                                            &dt_reg[iov_it].md_map);
                 if (status != UCS_OK) {
                     /* unregister previously registered memory */
@@ -255,8 +256,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
 
 err:
     if (status != UCS_OK) {
-        ucs_error("failed to register user buffer datatype 0x%lx address %p len %zu:"
-                  " %s", datatype, buffer, length, ucs_status_string(status));
+        level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
+                UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+        ucs_log(level,
+                "failed to register user buffer datatype 0x%lx address %p len %zu:"
+                " %s", datatype, buffer, length, ucs_status_string(status));
     }
     return status;
 }
