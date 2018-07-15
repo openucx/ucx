@@ -650,7 +650,7 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
     srq_init_attr->base.srq_context    = iface;
     srq_init_attr->srq_type            = IBV_EXP_SRQT_TAG_MATCHING;
     srq_init_attr->pd                  = md->pd;
-    srq_init_attr->cq                  = iface->super.cq[UCT_IB_RX];
+    srq_init_attr->cq                  = iface->super.cq[UCT_IB_DIR_RX];
     srq_init_attr->tm_cap.max_num_tags = iface->tm.num_tags;
 
     /* 2 ops for each tag (ADD + DEL) and extra ops for SYNC.
@@ -917,8 +917,8 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
     qp_init_attr.qp_context          = NULL;
-    qp_init_attr.send_cq             = iface->super.cq[UCT_IB_TX];
-    qp_init_attr.recv_cq             = iface->super.cq[UCT_IB_RX];
+    qp_init_attr.send_cq             = iface->super.cq[UCT_IB_DIR_TX];
+    qp_init_attr.recv_cq             = iface->super.cq[UCT_IB_DIR_RX];
     if (qp_type == IBV_QPT_RC) {
         qp_init_attr.srq             = iface->rx.srq.srq;
     }
@@ -1102,7 +1102,7 @@ ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
     }
 
     if (events & UCT_EVENT_SEND_COMP) {
-        status = iface->super.ops->arm_cq(&iface->super, UCT_IB_TX, 0);
+        status = iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_TX, 0);
         if (status != UCS_OK) {
             return status;
         }
@@ -1119,7 +1119,7 @@ ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
     }
 
     if (arm_rx_solicited || arm_rx_all) {
-        status = iface->super.ops->arm_cq(&iface->super, UCT_IB_RX,
+        status = iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_RX,
                                           arm_rx_solicited && !arm_rx_all);
         if (status != UCS_OK) {
             return status;
