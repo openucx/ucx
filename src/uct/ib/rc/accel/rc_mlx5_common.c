@@ -393,12 +393,12 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
 {
     ucs_status_t status;
 
-    status = uct_ib_mlx5_get_cq(rc_iface->super.send_cq, &iface->tx.cq);
+    status = uct_ib_mlx5_get_cq(rc_iface->super.cq[UCT_IB_DIR_TX], &iface->cq[UCT_IB_DIR_TX]);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = uct_ib_mlx5_get_cq(rc_iface->super.recv_cq, &iface->rx.cq);
+    status = uct_ib_mlx5_get_cq(rc_iface->super.cq[UCT_IB_DIR_RX], &iface->cq[UCT_IB_DIR_RX]);
     if (status != UCS_OK) {
         return status;
     }
@@ -515,21 +515,20 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *iface, uct_iface_attr_t *ifa
 void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                             uct_ib_iface_t *ib_iface)
 {
-    uct_ib_mlx5_update_cq_ci(ib_iface->send_cq, iface->tx.cq.cq_ci);
-    uct_ib_mlx5_update_cq_ci(ib_iface->recv_cq, iface->rx.cq.cq_ci);
+    uct_ib_mlx5_update_cq_ci(ib_iface->cq[UCT_IB_DIR_TX], iface->cq[UCT_IB_DIR_TX].cq_ci);
+    uct_ib_mlx5_update_cq_ci(ib_iface->cq[UCT_IB_DIR_RX], iface->cq[UCT_IB_DIR_RX].cq_ci);
 }
 
 void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                           uct_ib_iface_t *ib_iface)
 {
-    iface->tx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->send_cq);
-    iface->rx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->recv_cq);
+    iface->cq[UCT_IB_DIR_TX].cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->cq[UCT_IB_DIR_TX]);
+    iface->cq[UCT_IB_DIR_RX].cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->cq[UCT_IB_DIR_RX]);
 }
 
-void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
-                                        uct_rc_iface_t *rc_iface, uint32_t qpn)
+int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
+                                   uct_ib_mlx5_srq_t *srq, uint32_t qpn)
 {
-    uct_ib_mlx5_cq_t *mlx5_cq = &mlx5_common_iface->rx.cq;
     const size_t cqe_sz       = 1ul << mlx5_cq->cqe_size_log;
     struct mlx5_cqe64 *cqe, *dest;
     uct_ib_mlx5_srq_seg_t *seg;
@@ -561,10 +560,12 @@ void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_
         cqe = uct_ib_mlx5_get_cqe(mlx5_cq, pi);
         if ((ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER)) == qpn) {
             idx = ntohs(cqe->wqe_counter);
-            seg = uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq, idx);
-            seg->srq.free = 1;
-            ucs_trace("iface %p: freed srq seg[%d] of qpn 0x%x",
-                      mlx5_common_iface, idx, qpn);
+            if (srq) {
+                seg = uct_ib_mlx5_srq_get_wqe(srq, idx);
+                seg->srq.free = 1;
+                ucs_trace("cq %p: freed srq seg[%d] of qpn 0x%x",
+                          mlx5_cq, idx, qpn);
+            }
             ++nfreed;
         } else if (nfreed) {
             dest = uct_ib_mlx5_get_cqe(mlx5_cq, pi + nfreed);
@@ -575,5 +576,6 @@ void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_
     }
 
     mlx5_cq->cq_ci             += nfreed;
-    rc_iface->rx.srq.available += nfreed;
+
+    return nfreed;
 }
