@@ -20,26 +20,23 @@ static int ucp_rndv_is_get_zcopy(ucp_request_t *sreq, ucp_rndv_mode_t rndv_mode)
 }
 
 static int ucp_rndv_is_pipeline_needed(ucp_request_t *sreq) {
-    ucp_rndv_mode_t rndv_mode;
     uct_md_attr_t *md_attr;
     unsigned md_index;
 
-    rndv_mode = sreq->send.ep->worker->context->config.ext.rndv_mode;
+    if (UCP_MEM_IS_HOST(sreq->send.mem_type)) {
+        return 0;
+    }
+
+    if (sreq->send.ep->worker->context->config.ext.rndv_mode ==
+        UCP_RNDV_MODE_PUT_ZCOPY) {
+        return 0;
+    }
+
     md_index  = ucp_ep_md_index(sreq->send.ep, sreq->send.lane);
     md_attr   = &sreq->send.ep->worker->context->tl_mds[md_index].attr;
 
-    if ((rndv_mode == UCP_RNDV_MODE_PUT_ZCOPY) ||
-        ((rndv_mode == UCP_RNDV_MODE_AUTO) &&
-         UCP_MEM_IS_HOST(sreq->send.mem_type))) {
-        return 0;
-    }
-
-    if (!(md_attr->cap.reg_mem_types & UCS_BIT(UCT_MD_MEM_TYPE_HOST))) {
-        /* lane support only mem type. cann't pipeline staging over it */
-        return 0;
-    }
-
-    return 1;
+    /*  check if lane support only mem type */
+    return md_attr->cap.reg_mem_types & UCS_BIT(UCT_MD_MEM_TYPE_HOST);
 }
 
 size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
