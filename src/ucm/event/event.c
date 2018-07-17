@@ -686,7 +686,7 @@ static ucs_status_t ucm_event_install(int events)
                          UCM_EVENT_SHMAT | UCM_EVENT_SBRK;
     }
     if (events & UCM_EVENT_VM_UNMAPPED) {
-        native_events |= UCM_EVENT_MUNMAP | UCM_EVENT_MREMAP |
+        native_events |= UCM_EVENT_MMAP | UCM_EVENT_MUNMAP | UCM_EVENT_MREMAP |
                          UCM_EVENT_SHMDT | UCM_EVENT_SHMAT |
                          UCM_EVENT_SBRK;
     }
