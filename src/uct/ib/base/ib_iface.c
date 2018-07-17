@@ -80,7 +80,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    ucs_offsetof(uct_ib_iface_config_t, tx.min_sge), UCS_CONFIG_TYPE_UINT},
 
   {"TX_CQ_MODERATION", "64",
-   "Number of send WQEs for which completion is requested.",
+   "Maximum number of send WQEs which can be posted without requesting a completion.",
    ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation), UCS_CONFIG_TYPE_UINT},
 
 #if HAVE_DECL_IBV_EXP_CQ_MODERATION
