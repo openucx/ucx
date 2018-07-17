@@ -67,9 +67,10 @@ static void usage() {
     printf("Options are:\n");
     printf("  -h         Print this info.\n");
     printf("  -t <name>  Test name to execute (malloc_hooks)\n");
-    printf("                 malloc_hooks     : General UCM test.\n");
-    printf("                 external_events  : Test of ucm_set_external_event() API.\n");
-    printf("                 flag_no_install  : Test of UCM_EVENT_FLAG_NO_INSTALL flag.\n");
+    printf("                 malloc_hooks          : General UCM test for VM_MAPPED and VM_UNMAPPED\n");
+    printf("                 malloc_hooks_unmapped : Test VM_UNMAPPED event only\n");
+    printf("                 external_events       : Test of ucm_set_external_event() API\n");
+    printf("                 flag_no_install       : Test of UCM_EVENT_FLAG_NO_INSTALL flag\n");
     printf("\n");
 }
 
@@ -213,7 +214,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
     if (events & UCM_EVENT_VM_MAPPED) {
         CHKERR_JUMP(total_mapped < size, "No callback for shmat", fail_close_ucm);
     }
-    printf("After shmat: mapped=%zu\n", total_mapped);
+    printf("After shmat: reported mapped=%zu\n", total_mapped);
 
     /* Detach SysV segment */
     total_unmapped = 0;
@@ -222,7 +223,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
     if (events & UCM_EVENT_VM_UNMAPPED) {
         CHKERR_JUMP(total_unmapped < size, "No callback for shmdt", fail_close_ucm);
     }
-    printf("After shmdt: unmapped=%zu\n", total_unmapped);
+    printf("After shmdt: reported unmapped=%zu\n", total_unmapped);
 
     /* Attach SysV segment at fixed address */
     total_mapped = 0;
@@ -237,7 +238,8 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
         CHKERR_JUMP(total_unmapped < size, "No unmap callback for shmat(REMAP)",
                     fail_close_ucm);
     }
-    printf("After shmat(REMAP): mapped=%zu unmapped=%zu\n", total_mapped, total_unmapped);
+    printf("After shmat(REMAP): reported mapped=%zu unmapped=%zu\n", total_mapped,
+           total_unmapped);
 
     /* Detach SysV segment */
     total_unmapped = 0;
@@ -246,7 +248,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
     if (events & UCM_EVENT_VM_UNMAPPED) {
         CHKERR_JUMP(total_unmapped < size, "No callback for shmdt", fail_close_ucm);
     }
-    printf("After shmdt: unmapped=%zu\n", total_unmapped);
+    printf("After shmdt: reported unmapped=%zu\n", total_unmapped);
 
     /* Destroy SysV segment */
     shmctl(shmid, IPC_RMID, NULL);
@@ -261,7 +263,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
         CHKERR_JUMP(total_mapped == 0, "No callback for core malloc",
                     fail_close_ucm);
     }
-    printf("After core malloc: mapped=%zu\n", total_mapped);
+    printf("After core malloc: reported mapped=%zu\n", total_mapped);
 
     /* Allocate using mmap */
     mallopt(M_MMAP_THRESHOLD, size / 2);
@@ -271,7 +273,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
         CHKERR_JUMP(total_mapped == 0, "No callback for mmap malloc",
                     fail_close_ucm);
     }
-    printf("After mmap malloc: mapped=%zu\n", total_mapped);
+    printf("After mmap malloc: reported mapped=%zu\n", total_mapped);
 
     /* Allocate directly with mmap */
     total_mapped = 0;
@@ -280,7 +282,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
     if (events & UCM_EVENT_VM_MAPPED) {
         CHKERR_JUMP(total_mapped < size, "No callback for mmap", fail_close_ucm);
     }
-    printf("After mmap: mapped=%zu\n", total_mapped);
+    printf("After mmap: reported mapped=%zu\n", total_mapped);
 
     /* Remap */
     total_unmapped = 0;
@@ -290,7 +292,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
         CHKERR_JUMP(total_unmapped < size, "No unmap callback for mmap(FIXED)",
                     fail_close_ucm);
     }
-    printf("After mmap(FIXED): unmapped=%zu\n", total_unmapped);
+    printf("After mmap(FIXED): reported unmapped=%zu\n", total_unmapped);
 
     /* Call munmap directly */
     total_unmapped = 0;
@@ -298,7 +300,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
     if (events & UCM_EVENT_VM_UNMAPPED) {
         CHKERR_JUMP(total_unmapped == 0, "No callback for munmap", fail_close_ucm);
     }
-    printf("After munmap: unmapped=%zu\n", total_unmapped);
+    printf("After munmap: reported unmapped=%zu\n", total_unmapped);
 
     /* Release indirectly */
     total_unmapped = 0;
@@ -309,7 +311,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
         CHKERR_JUMP(total_unmapped == 0, "No callback for munmap from free",
                     fail_close_ucm);
     }
-    printf("After mmap free + trim: unmapped=%zu\n", total_unmapped);
+    printf("After mmap free + trim: reported unmapped=%zu\n", total_unmapped);
 
     /* Call mmap from a library we load after hooks are installed */
     dl_test = open_dyn_lib(lib_path);
@@ -324,7 +326,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
         CHKERR_JUMP(total_mapped == 0,"No callback for mmap from dynamic lib",
                     fail_close_all);
     }
-    printf("After another mmap from dynamic lib: mapped=%zu\n", total_mapped);
+    printf("After another mmap from dynamic lib: reported mapped=%zu\n", total_mapped);
     munmap(ptr_direct_mmap, size);
     ptr_direct_mmap = MAP_FAILED;
 
@@ -341,7 +343,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
     if (events & UCM_EVENT_VM_UNMAPPED) {
         CHKERR_JUMP(total_unmapped == 0, "No callback for munmap from malloc", fail);
     }
-    printf("After core malloc free: unmapped=%zu\n", total_unmapped);
+    printf("After core malloc free: reported unmapped=%zu\n", total_unmapped);
 
     return 0;
 
