@@ -572,7 +572,7 @@ run_ucx_perftest_mpi() {
 # Test malloc hooks with mpi
 #
 test_malloc_hooks_mpi() {
-	for tname in malloc_hooks external_events flag_no_install
+	for tname in malloc_hooks malloc_hooks_unmapped external_events flag_no_install
 	do
 		echo "==== Running memory hook (${tname}) on MPI ===="
 		$MPIRUN -np 1 $AFFINITY ./test/mpi/test_memhooks -t $tname
