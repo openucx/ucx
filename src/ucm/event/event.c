@@ -352,16 +352,27 @@ void *ucm_sbrk(intptr_t increment)
 }
 
 #if HAVE_CUDA
-cudaError_t ucm_cudaFree(void *addr)
+cudaError_t ucm_cudaFree(void *devPtr)
 {
     cudaError_t ret;
+    CUresult cuerr;
+    CUdeviceptr pbase;
+    size_t psize;
 
     ucm_event_enter();
 
-    ucm_trace("ucm_cudaFree(addr=%p )", addr);
+    cuerr = cuMemGetAddressRange(&pbase, &psize, (CUdeviceptr) devPtr);
+    if (cuerr != CUDA_SUCCESS) {
+        ucm_warn("cuMemGetAddressRange(devPtr=%p) failed", devPtr);
+        psize = 1; /* set mininum length */
+    }
+    ucs_assert((void *)pbase == devPtr);
 
-    ucm_dispatch_vm_munmap(addr, 0);
-    ret = ucm_orig_cudaFree(addr);
+    ucm_trace("ucm_cudaFree(devPtr=%p)", devPtr);
+
+    ucm_dispatch_vm_munmap(devPtr, psize);
+
+    ret = ucm_orig_cudaFree(devPtr);
 
     ucm_event_leave();
 
@@ -405,8 +416,9 @@ static ucs_status_t ucm_event_install(int events)
                          UCM_EVENT_SHMAT | UCM_EVENT_SBRK;
     }
     if (events & UCM_EVENT_VM_UNMAPPED) {
-        native_events |= UCM_EVENT_MUNMAP | UCM_EVENT_MREMAP |
-                         UCM_EVENT_SHMDT | UCM_EVENT_SBRK;
+        native_events |= UCM_EVENT_MMAP | UCM_EVENT_MUNMAP | UCM_EVENT_MREMAP |
+                         UCM_EVENT_SHMDT | UCM_EVENT_SHMAT |
+                         UCM_EVENT_SBRK;
     }
 
     /* TODO lock */
