@@ -734,8 +734,8 @@ static ucs_status_t ucm_event_install(int events)
     }
     if (events & UCM_EVENT_VM_UNMAPPED) {
         native_events |= UCM_EVENT_MUNMAP | UCM_EVENT_MREMAP |
-                         UCM_EVENT_SHMDT | UCM_EVENT_SBRK |
-                         UCM_EVENT_MADVISE;
+                         UCM_EVENT_SHMDT | UCM_EVENT_SHMAT |
+                         UCM_EVENT_SBRK | UCM_EVENT_MADVISE;
     }
 
     /* TODO lock */
