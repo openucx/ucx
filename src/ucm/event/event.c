@@ -352,16 +352,27 @@ void *ucm_sbrk(intptr_t increment)
 }
 
 #if HAVE_CUDA
-cudaError_t ucm_cudaFree(void *addr)
+cudaError_t ucm_cudaFree(void *devPtr)
 {
     cudaError_t ret;
+    CUresult cuerr;
+    CUdeviceptr pbase;
+    size_t psize;
 
     ucm_event_enter();
 
-    ucm_trace("ucm_cudaFree(addr=%p )", addr);
+    cuerr = cuMemGetAddressRange(&pbase, &psize, (CUdeviceptr) devPtr);
+    if (cuerr != CUDA_SUCCESS) {
+        ucm_warn("cuMemGetAddressRange(devPtr=%p) failed", devPtr);
+        psize = 4; /* set mininum length */
+    }
+    ucs_assert((void *)pbase == devPtr);
 
-    ucm_dispatch_vm_munmap(addr, 0);
-    ret = ucm_orig_cudaFree(addr);
+    ucm_trace("ucm_cudaFree(devPtr=%p)", devPtr);
+
+    ucm_dispatch_vm_munmap(devPtr, psize);
+
+    ret = ucm_orig_cudaFree(devPtr);
 
     ucm_event_leave();
 
