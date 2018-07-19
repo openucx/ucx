@@ -45,6 +45,14 @@ typedef struct ucs_async_thread_context {
             ucs_spin_unlock(&(_async)->thread.spinlock); \
     }
 
+#ifdef ENABLE_ASSERT
+
+#define UCS_ASYNC_THREAD_IS_RECURSIVELY_BLOCKED(_async) \
+    ((RUNNING_ON_VALGRIND) ? 0 : \
+     ucs_spin_is_owner(&(_async)->thread.spinlock, pthread_self()))
+
+#endif /* ENABLE_ASSERT */
+
 #endif /* NVALGRIND */
 
 #endif

@@ -160,14 +160,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,
     ucp_request_t *req = (ucp_request_t *)request - 1;
     ucp_recv_desc_t *rdesc;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 1, "recv_nbr");
     ucp_tag_recv_common(worker, buffer, count, datatype, tag, tag_mask,
                         req, UCP_REQUEST_DEBUG_FLAG_EXTERNAL, NULL, rdesc,
                         "recv_nbr");
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return UCS_OK;
 }
 
@@ -181,7 +181,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nb,
     ucs_status_ptr_t ret;
     ucp_request_t *req;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     req = ucp_request_get(worker);
     if (ucs_likely(req != NULL)) {
@@ -193,7 +193,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nb,
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return ret;
 }
 
@@ -207,7 +207,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
     ucs_status_ptr_t ret;
     ucp_request_t *req;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     req = ucp_request_get(worker);
     if (ucs_likely(req != NULL)) {
@@ -219,6 +219,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return ret;
 }

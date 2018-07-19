@@ -26,6 +26,19 @@
 #define UCP_WORKER_HEADROOM_PRIV_SIZE 24
 
 
+#define UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(_worker)                 \
+    {                                                                   \
+        ucs_assert(!UCP_THREAD_IS_REQUIRED(&(_worker)->mt_lock) ||      \
+                   UCP_THREAD_CS_IS_RECURSIVELY_LOCKED(&(_worker)->mt_lock) || \
+                   !UCS_ASYNC_IS_RECURSIVELY_BLOCKED(&(_worker)->async)); \
+        UCP_THREAD_CS_ENTER_CONDITIONAL(&(_worker)->mt_lock);           \
+    }
+
+
+#define UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(_worker)                  \
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&(_worker)->mt_lock)
+
+
 /**
  * UCP worker flags
  */

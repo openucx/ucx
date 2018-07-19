@@ -475,7 +475,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     unsigned flags;
     ucp_ep_h ep = NULL;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     UCS_ASYNC_BLOCK(&worker->async);
 
     flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
@@ -496,7 +496,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
 }
 
@@ -511,13 +511,13 @@ ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params)
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     UCS_ASYNC_BLOCK(&worker->async);
 
     status = ucp_ep_adjust_params(ep, params);
 
     UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return UCS_STATUS_PTR(status);
 }
@@ -646,7 +646,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -661,7 +661,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 
     UCS_ASYNC_UNBLOCK(&worker->async);
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return request;
 }
@@ -677,7 +677,7 @@ void ucp_ep_destroy(ucp_ep_h ep)
     ucs_status_ptr_t *request;
     ucs_status_t status;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     request = ucp_disconnect_nb(ep);
     if (request == NULL) {
         goto out;
@@ -695,7 +695,7 @@ void ucp_ep_destroy(ucp_ep_h ep)
     }
 
 out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return;
 }
 
@@ -1370,7 +1370,7 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
     ucp_lane_index_t wireup_lane;
     uct_ep_h wireup_ep;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     fprintf(stream, "#\n");
     fprintf(stream, "# UCP endpoint\n");
@@ -1392,7 +1392,7 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 
     fprintf(stream, "#\n");
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
 }
 
 size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
