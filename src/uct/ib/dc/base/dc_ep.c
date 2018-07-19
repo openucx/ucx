@@ -129,11 +129,9 @@ uct_dc_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
     uct_dc_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_dc_ep_t, arb_group);
     uct_dc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_iface_t);
 
-    /**
-     * stop if dci can not be allocated
-     * else move group to the dci arbiter
-     */
-    ucs_assert_always(ep->dci == UCT_DC_EP_NO_DCI);
+    if (ep->dci != UCT_DC_EP_NO_DCI) {
+        return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
+    }
 
     if (!uct_dc_iface_dci_can_alloc(iface)) {
         return UCS_ARBITER_CB_RESULT_STOP;
