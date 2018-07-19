@@ -306,7 +306,7 @@ UCS_TEST_P(test_dc, dcs_ep_flush_pending) {
     preq.uct_req.func = uct_pending_flush;
     status = uct_ep_pending_add(m_e1->ep(0), &preq.uct_req);
     EXPECT_UCS_OK(status);
-    
+
     /* progress till ep is flushed */
     do {
         progress();
@@ -317,6 +317,48 @@ UCS_TEST_P(test_dc, dcs_ep_flush_pending) {
 
     /* check that ep does not hold dci */
     EXPECT_EQ(0, iface->tx.stack_top);
+}
+
+/* Check that the following sequnce works ok:
+ * - Add some pending request to DCI wait queue
+ * - Try to send something from this ep. This will force ep to take free DCI
+ *   (the send will not succeed anyway)
+ * - Progress all pendings
+ * - Make sure that there is no any assertion and everyting is ok
+ *   (just send something).
+ * */
+UCS_TEST_P(test_dc, dcs_ep_am_pending) {
+
+    ucs_status_t status;
+    uct_dc_iface_t *iface;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    m_e1->connect_to_iface(1, *m_e2);
+
+    /* use all iface resources */
+    iface = dc_iface(m_e1);
+    iface->super.tx.cq_available = 8;
+    do {
+        status = uct_ep_am_short(m_e1->ep(1), 0, 0, NULL, 0);
+    } while (status == UCS_OK);
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+
+    /* put AM op on pending */
+    preq.e            = m_e1;
+    preq.uct_req.func = uct_pending_flush;
+    status            = uct_ep_pending_add(m_e1->ep(0), &preq.uct_req);
+    EXPECT_UCS_OK(status);
+
+    status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+
+    flush();
+
+    status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
+    EXPECT_EQ(UCS_OK, status);
+
+    flush();
 }
 
 /* check that ep does not hold dci after
