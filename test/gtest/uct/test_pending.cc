@@ -10,6 +10,7 @@ extern "C" {
 #include <ucs/arch/atomic.h>
 }
 #include <common/test.h>
+#include <sys/resource.h>
 #include "uct_test.h"
 
 class test_uct_pending : public uct_test {
@@ -366,6 +367,13 @@ UCS_TEST_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug)
         N = 2048;
     } else {
         N = 128;
+    }
+
+    /* Limit numer of endpoints to number of open files, for TCP */
+    struct rlimit rlim;
+    int ret = getrlimit(RLIMIT_NOFILE, &rlim);
+    if (ret == 0) {
+        N = ucs_min(N, static_cast<int>(rlim.rlim_cur) / 2 - 100);
     }
 
     /* idx 0 is setup in initialize(). only need to alloc request */
