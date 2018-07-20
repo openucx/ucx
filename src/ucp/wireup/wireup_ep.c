@@ -489,7 +489,8 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     uint64_t tl_bitmap;
     char aux_tls_str[64];
 
-    status = ucp_worker_get_address(worker, &worker_address, &address_length);
+    status = ucp_address_pack(worker, NULL, -1, NULL, &address_length,
+                              (void**)&worker_address);
     if (status != UCS_OK) {
         goto err;
     }
