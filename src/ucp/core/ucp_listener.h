@@ -9,6 +9,7 @@
 #define UCP_LISTENER_H_
 
 #include "ucp_worker.h"
+#include "wireup/wireup_ep.h"
 
 
 /**
@@ -26,10 +27,9 @@ typedef struct ucp_listener {
  * Accepted connection on a listener
  */
 typedef struct ucp_listener_accept {
-    ucp_listener_h                  listener; /* Listener on which the connection
-                                                 was accepted */
-    ucp_ep_h                        ep;       /* New endpoint which was created
-                                                 for the connection */
+    ucp_listener_h          listener;       /* Listener on which the
+                                               connection was accepted */
+    void                    *wireup_data;   /* Wireup private data*/
 } ucp_listener_accept_t;
 
 void ucp_listener_schedule_accept_cb(ucp_ep_h ep);
