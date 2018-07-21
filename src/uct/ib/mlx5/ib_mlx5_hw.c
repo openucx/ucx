@@ -193,10 +193,12 @@ unsigned uct_ib_mlx5_get_cq_ci(struct ibv_cq *cq)
     return mcq->cons_index;
 }
 
+#if !HAVE_DECL_MLX5DV_OBJ_AH
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
 {
     memcpy(av, &ucs_container_of(ah, struct mlx5_ah, ibv_ah)->av, sizeof(*av));
 }
+#endif
 
 struct ibv_qp *uct_dv_get_cmd_qp(struct ibv_srq *srq)
 {
