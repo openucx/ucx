@@ -11,6 +11,8 @@
 #  include "config.h"
 #endif
 
+#include <ucs/async/async.h>
+#include <ucs/async/thread.h>
 #include <ucs/type/spinlock.h>
 
 

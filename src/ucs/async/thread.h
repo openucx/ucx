@@ -29,6 +29,8 @@ typedef struct ucs_async_thread_context {
 #define UCS_ASYNC_THREAD_UNBLOCK(_async) \
     ucs_spin_unlock(&(_async)->thread.spinlock)
 
+#define UCS_ASYNC_THREAD_IS_RECURSIVELY_BLOCKED(...)    0
+
 #else
 
 #define UCS_ASYNC_THREAD_BLOCK(_async) \

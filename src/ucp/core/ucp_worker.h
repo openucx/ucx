@@ -16,7 +16,6 @@
 #include <ucp/wireup/ep_match.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
-#include <ucs/async/async.h>
 #include <ucs/datastruct/strided_alloc.h>
 
 
@@ -27,12 +26,12 @@
 
 
 #define UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(_worker)                 \
-    {                                                                   \
+    do {                                                                   \
         ucs_assert(!UCP_THREAD_IS_REQUIRED(&(_worker)->mt_lock) ||      \
                    UCP_THREAD_CS_IS_RECURSIVELY_LOCKED(&(_worker)->mt_lock) || \
                    !UCS_ASYNC_IS_RECURSIVELY_BLOCKED(&(_worker)->async)); \
         UCP_THREAD_CS_ENTER_CONDITIONAL(&(_worker)->mt_lock);           \
-    }
+    } while (0)
 
 
 #define UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(_worker)                  \
