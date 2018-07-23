@@ -23,7 +23,7 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
       ucs_offsetof(uct_cuda_ipc_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
     {"CACHE", "y",
-     "Enable remote eendpoint IPC memhandle mapping cache",
+     "Enable remote endpoint IPC memhandle mapping cache",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, enable_cache),
      UCS_CONFIG_TYPE_BOOL},
 

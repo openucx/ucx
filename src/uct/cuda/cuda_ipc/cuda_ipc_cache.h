@@ -9,7 +9,6 @@
 
 #include <ucs/datastruct/pgtable.h>
 #include <ucs/datastruct/list.h>
-#include <ucs/stats/stats_fwd.h>
 #include "cuda_ipc_md.h"
 #include <cuda.h>
 #include <cuda_runtime.h>
