@@ -50,8 +50,8 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
     ucs_trace("%s: cuda ipc cache purged", cache->name);
 }
 
-static ucs_status_t uct_cuda_ipc_openmemhandle(CUipcMemHandle memh,
-                                               CUdeviceptr *mapped_addr)
+static ucs_status_t uct_cuda_ipc_open_memhandle(CUipcMemHandle memh,
+                                                CUdeviceptr *mapped_addr)
 {
     CUresult cuerr;
 
@@ -68,7 +68,7 @@ static ucs_status_t uct_cuda_ipc_openmemhandle(CUipcMemHandle memh,
 }
 
 static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
-                                            void *from, void *to)
+                                                  void *from, void *to)
 {
     ucs_list_link_t region_list;
     ucs_status_t status;
@@ -82,8 +82,8 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
         status = ucs_pgtable_remove(&cache->pgtable, &region->super);
         if (status != UCS_OK) {
-            ucs_error("failed to remove address:%p from cache",
-                      (void *)region->key.d_bptr);
+            ucs_error("failed to remove address:%p from cache (%s)",
+                      (void *)region->key.d_bptr, ucs_status_string(status));
         }
         UCT_CUDADRV_FUNC(cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
         ucs_free(region);
@@ -134,22 +134,22 @@ ucs_status_t uct_cuda_ipc_cache_map_memhandle(void *arg, uct_cuda_ipc_key_t *key
         }
     }
 
-    status = uct_cuda_ipc_openmemhandle(key->ph, (CUdeviceptr *)mapped_addr);
+    status = uct_cuda_ipc_open_memhandle(key->ph, (CUdeviceptr *)mapped_addr);
     if (ucs_unlikely(status != UCS_OK)) {
         if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
             /* unmap all overlapping regions and retry*/
             uct_cuda_ipc_cache_invalidate_regions(cache, (void *)key->d_bptr,
                                                   (void *)key->d_bptr + key->b_len);
-            status = uct_cuda_ipc_openmemhandle(key->ph, (CUdeviceptr *)mapped_addr);
+            status = uct_cuda_ipc_open_memhandle(key->ph, (CUdeviceptr *)mapped_addr);
             if (ucs_unlikely(status != UCS_OK)) {
                 if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
                     /* unmap all cache entries and retry */
                     uct_cuda_ipc_cache_purge(cache);
-                    status = uct_cuda_ipc_openmemhandle(key->ph, (CUdeviceptr *)mapped_addr);
+                    status = uct_cuda_ipc_open_memhandle(key->ph, (CUdeviceptr *)mapped_addr);
                     if (status != UCS_OK) {
                         ucs_fatal("%s: failed to open ipc mem handle. addr:%p "
-                                  "len:%lu", cache->name, (void *)key->d_bptr,
-                                  key->b_len);
+                                  "len:%lu (%s)", cache->name, (void *)key->d_bptr,
+                                  key->b_len, ucs_status_string(status));
                     }
                 } else {
                     ucs_fatal("%s: failed to open ipc mem handle. addr:%p len:%lu",
@@ -168,6 +168,7 @@ ucs_status_t uct_cuda_ipc_cache_map_memhandle(void *arg, uct_cuda_ipc_key_t *key
                           "uct_cuda_ipc_cache_region");
     if (region == NULL) {
         ucs_warn("failed to allocate uct_cuda_ipc_cache region");
+        status = UCS_ERR_NO_MEMORY;
         goto err;
     }
 
@@ -226,7 +227,7 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
     }
 
     cache_desc->name = strdup(name);
-    if(cache_desc->name == NULL) {
+    if (cache_desc->name == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_destroy_rwlock;
     }

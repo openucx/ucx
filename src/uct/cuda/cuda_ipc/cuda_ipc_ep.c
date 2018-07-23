@@ -25,15 +25,14 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, uct_iface_t *tl_iface,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
     self->remote_memh_cache = NULL;
-    snprintf(target_name, sizeof(target_name), "dest:%d", *(pid_t*)iface_addr);
 
     if (iface->config.enable_cache) {
+        snprintf(target_name, sizeof(target_name), "dest:%d", *(pid_t*)iface_addr);
         status = uct_cuda_ipc_create_cache(&self->remote_memh_cache, target_name);
         if (status != UCS_OK) {
-            ucs_assert(self->remote_memh_cache != NULL);
-                ucs_error("could not create create cuda ipc cache: %s",
-                          ucs_status_string(status));
-                return status;
+            ucs_error("could not create create cuda ipc cache: %s",
+                       ucs_status_string(status));
+            return status;
         }
     }
 
