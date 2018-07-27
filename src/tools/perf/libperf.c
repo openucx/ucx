@@ -1436,6 +1436,32 @@ static struct {
 static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
                                  ucx_perf_result_t* result);
 
+#if HAVE_CUDA
+static ucs_status_t ucx_perf_init_cuda_device(ucx_perf_context_t *perf)
+{
+    cudaError_t cerr;
+    unsigned group_index;
+    int num_gpus;
+    int gpu_index;
+
+    group_index = rte_call(perf, group_index);
+
+    cerr = cudaGetDeviceCount(&num_gpus);
+    if (cerr != cudaSuccess) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    gpu_index = group_index % num_gpus;
+
+    cerr = cudaSetDevice(gpu_index);
+    if (cerr != cudaSuccess) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    return UCS_OK;
+}
+#endif
+
 ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
 {
     ucx_perf_context_t *perf;
@@ -1460,6 +1486,15 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
     }
 
     ucx_perf_test_reset(perf, params);
+
+#if HAVE_CUDA
+    if (params->mem_type == UCT_MD_MEM_TYPE_CUDA) {
+        status = ucx_perf_init_cuda_device(perf);
+        if (status != UCS_OK) {
+            goto out_free;
+        }
+    }
+#endif
 
     status = ucx_perf_funcs[params->api].setup(perf, params);
     if (status != UCS_OK) {

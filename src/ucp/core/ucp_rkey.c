@@ -221,22 +221,25 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
             ucs_assert(rkey_index < md_count);
 
             status = uct_rkey_unpack(p, &rkey->uct[rkey_index]);
-            if (status != UCS_OK) {
+
+            if (status == UCS_OK) {
+                ucs_trace("rkey[%d] for remote md %d is 0x%lx", rkey_index,
+                          remote_md_index, rkey->uct[rkey_index].rkey);
+                rkey->md_map |= UCS_BIT(remote_md_index);
+                ++rkey_index;
+            } else if (status == UCS_ERR_UNREACHABLE) {
+                rkey->md_map &= ~UCS_BIT(remote_md_index);
+                ucs_trace("rkey[%d] for remote md %d is 0x%lx not reachable", rkey_index,
+                          remote_md_index, rkey->uct[rkey_index].rkey);
+            } else {
                 ucs_error("Failed to unpack remote key from remote md[%d]: %s",
                           remote_md_index, ucs_status_string(status));
                 goto err_destroy;
             }
-
-            ucs_trace("rkey[%d] for remote md %d is 0x%lx", rkey_index,
-                      remote_md_index, rkey->uct[rkey_index].rkey);
-            rkey->md_map |= UCS_BIT(remote_md_index);
-            ++rkey_index;
         }
 
         p += md_size;
     }
-
-    ucs_assert(rkey_index == md_count);
 
     ucp_rkey_resolve_inner(rkey, ep);
     *rkey_p = rkey;
