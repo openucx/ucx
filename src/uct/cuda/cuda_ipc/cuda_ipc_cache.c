@@ -108,17 +108,18 @@ ucs_status_t uct_cuda_ipc_cache_map_memhandle(void *arg, uct_cuda_ipc_key_t *key
         if (memcmp((const void *)&key->ph, (const void *)&region->key.ph,
                    sizeof(key->ph)) == 0) {
             /*cache hit */
-            ucs_trace("%s: cuda_ipc cache hit addr:%p size:%lu",
-                      cache->name, (void *)key->d_bptr, key->b_len);
+            ucs_trace("%s: cuda_ipc cache hit addr:%p size:%lu region:"
+                      UCS_PGT_REGION_FMT, cache->name, (void *)key->d_bptr,
+                      key->b_len, UCS_PGT_REGION_ARG(&region->super));
 
             *mapped_addr = region->mapped_addr;
             pthread_rwlock_unlock(&cache->lock);
             return UCS_OK;
         } else {
-            ucs_trace("%s: cuda_ipc cache found stale handle. "
-                      " old_addr:%p old_size:%lu new_addr:%p new_size:%lu",
-                      cache->name, (void *)region->key.d_bptr,
-                      region->key.b_len, (void *)key->d_bptr, key->b_len);
+            ucs_trace("%s: cuda_ipc cache remove stale region:"
+                      UCS_PGT_REGION_FMT " new_addr:%p new_size:%lu",
+                      cache->name, UCS_PGT_REGION_ARG(&region->super),
+                      (void *)key->d_bptr, key->b_len);
 
             status = ucs_pgtable_remove(&cache->pgtable, &region->super);
             if (status != UCS_OK) {
@@ -148,8 +149,9 @@ ucs_status_t uct_cuda_ipc_cache_map_memhandle(void *arg, uct_cuda_ipc_key_t *key
                     status = uct_cuda_ipc_open_memhandle(key->ph, (CUdeviceptr *)mapped_addr);
                     if (status != UCS_OK) {
                         ucs_fatal("%s: failed to open ipc mem handle. addr:%p "
-                                  "len:%lu (%s)", cache->name, (void *)key->d_bptr,
-                                  key->b_len, ucs_status_string(status));
+                                  "len:%lu (%s)", cache->name,
+                                  (void *)key->d_bptr, key->b_len,
+                                  ucs_status_string(status));
                     }
                 } else {
                     ucs_fatal("%s: failed to open ipc mem handle. addr:%p len:%lu",
@@ -181,16 +183,25 @@ ucs_status_t uct_cuda_ipc_cache_map_memhandle(void *arg, uct_cuda_ipc_key_t *key
 
     status = UCS_PROFILE_CALL(ucs_pgtable_insert,
                               &cache->pgtable, &region->super);
+    if (status == UCS_ERR_ALREADY_EXISTS) {
+        /* overlapped region means memory freed at source. remove and try insert */
+        uct_cuda_ipc_cache_invalidate_regions(cache,
+                                              (void *)region->super.start,
+                                              (void *)region->super.end);
+        status = UCS_PROFILE_CALL(ucs_pgtable_insert,
+                                  &cache->pgtable, &region->super);
+    }
     if (status != UCS_OK) {
-        ucs_error("%s: failed to insert region " UCS_PGT_REGION_FMT ": %s",
-                  cache->name, UCS_PGT_REGION_ARG(&region->super),
+
+        ucs_error("%s: failed to insert region:"UCS_PGT_REGION_FMT" size:%lu :%s",
+                  cache->name, UCS_PGT_REGION_ARG(&region->super), key->b_len,
                   ucs_status_string(status));
         ucs_free(region);
         goto err;
     }
 
-    ucs_trace("%s: cuda_ipc cache new enrtry. addr:%p size:%lu",
-              cache->name, (void *)key->d_bptr, key->b_len);
+    ucs_trace("%s: cuda_ipc cache new region:"UCS_PGT_REGION_FMT" size:%lu",
+              cache->name, UCS_PGT_REGION_ARG(&region->super), key->b_len);
 
     pthread_rwlock_unlock(&cache->lock);
     return UCS_OK;
