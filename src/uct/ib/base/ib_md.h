@@ -35,9 +35,11 @@ enum {
                                                        demand paging enabled */
     UCT_IB_MEM_FLAG_ATOMIC_MR       = UCS_BIT(1), /**< The memory region has UMR
                                                        for the atomic access */
-    UCT_IB_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(2)  /**< An atomic access was 
+    UCT_IB_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(2), /**< An atomic access was
                                                        requested for the memory
                                                        region */
+    UCT_IB_MEM_FLAG_DM              = UCS_BIT(3), /**< The memory region is on
+                                                       DM localed */
 };
 
 
@@ -46,6 +48,7 @@ typedef struct uct_ib_md_ext_config {
                                                 enabled on the Ethernet network */
     int                      prefer_nearest_device; /**< Give priority for near
                                                          device */
+    int                      enable_umr_pack;
     int                      enable_contig_pages; /** Enable contiguous pages */
     int                      enable_indirect_atomic; /** Enable indirect atomic */
 
@@ -65,6 +68,7 @@ typedef struct uct_ib_mem {
     uint32_t                flags;
     struct ibv_mr           *mr;
     struct ibv_mr           *atomic_mr;
+    struct ibv_exp_dm       *dm;
 } uct_ib_mem_t;
 
 /**

@@ -99,15 +99,21 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                     return status;
                 }
 
-                /* Check if MD supports allocation */
-                if (!(md_attr.cap.flags & UCT_MD_FLAG_ALLOC)) {
-                    continue;
-                }
+                if (!(flags & UCT_MD_MEM_FLAG_DM)) {
+                    /* Check if MD supports allocation */
+                    if (!(md_attr.cap.flags & UCT_MD_FLAG_ALLOC)) {
+                        continue;
+                    }
 
-                /* Check if MD supports allocation with fixed address
-                 * if it's requested */
-                if ((flags & UCT_MD_MEM_FLAG_FIXED) &&
-                    !(md_attr.cap.flags & UCT_MD_FLAG_FIXED)) {
+                    /* Check if MD supports allocation with fixed address
+                     * if it's requested */
+                    if ((flags & UCT_MD_MEM_FLAG_FIXED) &&
+                        !(md_attr.cap.flags & UCT_MD_FLAG_FIXED)) {
+                        continue;
+                    }
+                } else if (!(md_attr.cap.flags & UCT_MD_FLAG_DM)) {
+                        /* Check if MD supports allocation on DM
+                         * if it's requested */
                     continue;
                 }
 
