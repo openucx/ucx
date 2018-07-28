@@ -9,35 +9,8 @@
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/type/class.h>
-#include <ucs/datastruct/khash.h>
 #include "cuda_ipc_md.h"
-
-typedef struct uct_cuda_ipc_rem_seg uct_cuda_ipc_rem_seg_t;
-
-struct uct_cuda_ipc_rem_seg {
-    CUipcMemHandle         ph;         /* Memory handle of GPU memory */
-    CUdeviceptr            d_bptr;     /* Allocation base address */
-    size_t                 b_len;      /* Allocation size */
-    int                    dev_num;    /* GPU Device number */
-};
-
-static inline khint_t uct_cuda_ipc_memh_hash_func(CUipcMemHandle seg)
-{
-    int hash_val = 7;
-    int i;
-
-    for (i = 0; i < sizeof(seg); i++) {
-        hash_val = (hash_val * 31) + seg.reserved[i];
-    }
-
-    return hash_val;
-}
-
-#define uct_cuda_ipc_memh_hash_equal(_sg1, _sg2)                        \
-    !strncmp((const char *) &(_sg1), (const char *) &(_sg2), sizeof(CUipcMemHandle))
-
-KHASH_INIT(uct_cuda_ipc_memh_hash, CUipcMemHandle, CUdeviceptr, 1,
-           uct_cuda_ipc_memh_hash_func, uct_cuda_ipc_memh_hash_equal);
+#include "cuda_ipc_cache.h"
 
 typedef struct uct_cuda_ipc_ep_addr {
     int                ep_id;
@@ -45,7 +18,7 @@ typedef struct uct_cuda_ipc_ep_addr {
 
 typedef struct uct_cuda_ipc_ep {
     uct_base_ep_t                   super;
-    khash_t(uct_cuda_ipc_memh_hash) memh_hash;
+    uct_cuda_ipc_cache_t            *remote_memh_cache;
 } uct_cuda_ipc_ep_t;
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_cuda_ipc_ep_t, uct_ep_t, uct_iface_t*,
