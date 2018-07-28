@@ -953,12 +953,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
             sreq->send.uct.func = ucp_rndv_progress_am_zcopy_single;
         } else {
             sreq->send.uct.func        = ucp_rndv_progress_am_zcopy_multi;
-            sreq->send.tag.am_bw_index = 0;
+            sreq->send.tag.am_bw_index = 1;
         }
     } else {
         ucp_request_send_state_reset(sreq, NULL, UCP_REQUEST_SEND_PROTO_BCOPY_AM);
         sreq->send.uct.func        = ucp_rndv_progress_am_bcopy;
-        sreq->send.tag.am_bw_index = 0;
+        sreq->send.tag.am_bw_index = 1;
     }
 
 out_send:
