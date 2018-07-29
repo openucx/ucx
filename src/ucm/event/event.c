@@ -408,6 +408,10 @@ static void ucm_cudafree_dispatch_events(void *dptr)
     CUdeviceptr pbase;
     size_t psize;
 
+    if (dptr == NULL) {
+        return;
+    }
+
     ret = cuMemGetAddressRange(&pbase, &psize, (CUdeviceptr) dptr);
     if (ret != CUDA_SUCCESS) {
         ucm_warn("cuMemGetAddressRange(devPtr=%p) failed", (void *)dptr);
