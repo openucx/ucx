@@ -5,7 +5,8 @@
 * See file LICENSE for terms.
 */
 
-#include <ucp/amo/amo.inl>
+#include "amo.inl"
+
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/preprocessor.h>
