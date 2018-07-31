@@ -22,6 +22,7 @@ typedef struct ucm_reloc_patch {
     void             *value;
     void             *prev_value;
     ucs_list_link_t  list;
+    char             **black_list;
 } ucm_reloc_patch_t;
 
 

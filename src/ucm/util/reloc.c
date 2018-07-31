@@ -205,6 +205,18 @@ static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size, void 
 {
     ucm_reloc_dl_iter_context_t *ctx = data;
     int phsize;
+    int i;
+
+    /* check if module is black-listed for this patch */
+    if (ctx->patch->black_list) {
+        for (i = 0; ctx->patch->black_list[i]; i++) {
+            if (strstr(info->dlpi_name, ctx->patch->black_list[i])) {
+                /* module is black-listed */
+                ctx->status = UCS_OK;
+                return 0;
+            }
+        }
+    }
 
     phsize = ucm_reloc_get_aux_phsize();
     if (phsize <= 0) {

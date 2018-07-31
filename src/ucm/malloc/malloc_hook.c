@@ -619,20 +619,25 @@ static int ucm_malloc_mallopt(int param_number, int value)
     return success;
 }
 
+static char *ucm_malloc_black_list[] = {
+    "libnvidia-fatbinaryloader.so",
+    NULL
+};
+
 static ucm_reloc_patch_t ucm_malloc_symbol_patches[] = {
-    { "free", ucm_free },
-    { "realloc", ucm_realloc },
-    { "malloc", ucm_malloc },
-    { "memalign", ucm_memalign },
-    { "calloc", ucm_calloc },
-    { "valloc", ucm_valloc },
-    { "posix_memalign", ucm_posix_memalign },
-    { "setenv", ucm_setenv },
-    { UCM_OPERATOR_NEW_SYMBOL, ucm_operator_new },
-    { UCM_OPERATOR_DELETE_SYMBOL, ucm_operator_delete },
-    { UCM_OPERATOR_VEC_NEW_SYMBOL, ucm_operator_vec_new },
-    { UCM_OPERATOR_VEC_DELETE_SYMBOL, ucm_operator_vec_delete },
-    { NULL, NULL }
+    { .symbol = "free", .value = ucm_free, .black_list = ucm_malloc_black_list },
+    { .symbol = "realloc", .value = ucm_realloc, .black_list = ucm_malloc_black_list },
+    { .symbol = "malloc", .value = ucm_malloc, .black_list = ucm_malloc_black_list },
+    { .symbol = "memalign", .value = ucm_memalign, .black_list = ucm_malloc_black_list },
+    { .symbol = "calloc", .value = ucm_calloc, .black_list = ucm_malloc_black_list },
+    { .symbol = "valloc", .value = ucm_valloc, .black_list = ucm_malloc_black_list },
+    { .symbol = "posix_memalign", .value = ucm_posix_memalign, .black_list = ucm_malloc_black_list },
+    { .symbol = "setenv", .value = ucm_setenv, .black_list = ucm_malloc_black_list },
+    { .symbol = UCM_OPERATOR_NEW_SYMBOL, .value = ucm_operator_new, .black_list = ucm_malloc_black_list },
+    { .symbol = UCM_OPERATOR_DELETE_SYMBOL, .value = ucm_operator_delete, .black_list = ucm_malloc_black_list },
+    { .symbol = UCM_OPERATOR_VEC_NEW_SYMBOL, .value = ucm_operator_vec_new, .black_list = ucm_malloc_black_list },
+    { .symbol = UCM_OPERATOR_VEC_DELETE_SYMBOL, .value = ucm_operator_vec_delete, .black_list = ucm_malloc_black_list },
+    { .symbol = NULL, .value = NULL }
 };
 
 static ucm_reloc_patch_t ucm_malloc_optional_symbol_patches[] = {
