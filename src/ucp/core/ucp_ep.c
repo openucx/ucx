@@ -11,6 +11,7 @@
 
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/wireup/wireup.h>
+#include <ucp/rma/rma.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/stream/stream.h>
@@ -1096,6 +1097,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
         rma_config->put_zcopy_thresh = SIZE_MAX;
         rma_config->get_zcopy_thresh = SIZE_MAX;
+        rma_config->rma_proto        = &ucp_rma_basic_proto;
 
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = &worker->ifaces[rsc_index].attr;
@@ -1136,6 +1138,16 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         } else {
             rma_config->max_put_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
         }
+    }
+
+    /* Configuration for remote atomic operations */
+    for (lane = 0; lane < config->key.num_lanes; ++lane) {
+        if (ucp_ep_config_get_multi_lane_prio(config->key.amo_lanes, lane) == -1) {
+            continue;
+        }
+
+        rma_config = &config->rma[lane];
+        rma_config->amo_proto = &ucp_amo_basic_proto;
     }
 }
 

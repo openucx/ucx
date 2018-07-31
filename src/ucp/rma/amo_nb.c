@@ -5,13 +5,16 @@
  * See file LICENSE for terms.
  */
 
+#include "rma.h"
 #include "amo.inl"
+
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/profile/profile.h>
 #include <ucs/debug/log.h>
 #include <inttypes.h>
+
 
 static uct_atomic_op_t ucp_uct_op_table[] = {
     [UCP_ATOMIC_POST_OP_ADD]    = UCT_ATOMIC_OP_ADD,
@@ -28,7 +31,6 @@ static uct_atomic_op_t ucp_uct_fop_table[] = {
     [UCP_ATOMIC_FETCH_OP_SWAP]  = UCT_ATOMIC_OP_SWAP,
     [UCP_ATOMIC_FETCH_OP_CSWAP] = UCT_ATOMIC_OP_CSWAP,
 };
-
 
 static void ucp_amo_completed_single(uct_completion_t *self,
                                      ucs_status_t status)
@@ -140,11 +142,13 @@ static inline void init_amo_fetch(ucp_request_t *req, ucp_ep_h ep, void *buffer,
                                   uct_atomic_op_t op, size_t op_size,
                                   uint64_t remote_addr, ucp_rkey_h rkey, uint64_t value)
 {
+    ucp_ep_rma_config_t *rma_config =
+                    &ucp_ep_config(ep)->rma[rkey->cache.amo_lane];
     init_amo_common(req, ep, op, remote_addr, rkey, value, op_size);
     req->send.state.uct_comp.count  = 1;
     req->send.state.uct_comp.func   = ucp_amo_completed_single;
     req->send.amo.result            = buffer;
-    req->send.uct.func              = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_fetch);
+    req->send.uct.func              = rma_config->amo_proto->progress_fetch;
 }
 
 static inline void init_amo_post(ucp_request_t *req, ucp_ep_h ep,
@@ -152,8 +156,10 @@ static inline void init_amo_post(ucp_request_t *req, ucp_ep_h ep,
                                  size_t op_size, uint64_t remote_addr,
                                  ucp_rkey_h rkey, uint64_t value)
 {
+    ucp_ep_rma_config_t *rma_config =
+                     &ucp_ep_config(ep)->rma[rkey->cache.amo_lane];
     init_amo_common(req, ep, op, remote_addr, rkey, value, op_size);
-    req->send.uct.func = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_post);
+    req->send.uct.func = rma_config->amo_proto->progress_post;
 }
 
 ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
@@ -185,7 +191,7 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
 }
 
 ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t value,
-                             size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey)    
+                             size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey)
 {
     ucs_status_ptr_t status_p;
     ucs_status_t status;
@@ -240,3 +246,9 @@ out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return status;
 }
+
+ucp_amo_proto_t ucp_amo_basic_proto = {
+    .name           = "basic_amo",
+    .progress_fetch = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_fetch),
+    .progress_post  = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_post)
+};
