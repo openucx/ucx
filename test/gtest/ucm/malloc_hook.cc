@@ -30,49 +30,42 @@ extern "C" {
 
 class malloc_hook : public ucs::test {
 protected:
-    virtual void init() {
-        size_t free_space, min_free_space, prev_free_space, alloc_size;
-        struct mallinfo mi;
+    static void mem_event_callback(ucm_event_type_t event_type, ucm_event_t *event,
+            void *arg) {
+        malloc_hook *self = reinterpret_cast<malloc_hook*>(arg);
+        self->m_got_event = 1;
+    }
 
+    virtual void init() {
+        ucs_status_t status;
+
+        m_got_event = 0;
         ucm_malloc_state_reset(128 * 1024, 128 * 1024);
         malloc_trim(0);
-
-        /* Take up free space so we would definitely get mmap events */
-        min_free_space  = SIZE_MAX;
-        alloc_size      = 0;
-        mi = mallinfo();
-        prev_free_space = mi.fsmblks + mi.fordblks;
-
-        while (alloc_size < (size_t)(prev_free_space * 0.90)) {
-            m_pts.push_back(malloc(small_alloc_size));
-            alloc_size += small_alloc_size;
-        }
+        status = ucm_set_event_handler(UCM_EVENT_VM_MAPPED,
+                                       0, mem_event_callback,
+                                       reinterpret_cast<void*>(this));
+        ASSERT_UCS_OK(status);
 
         for (;;) {
             void *ptr = malloc(small_alloc_size);
-            mi = mallinfo();
-            free_space = mi.fsmblks + mi.fordblks;
-            if (free_space > min_free_space) {
+            if (m_got_event) {
                 /* If the heap grew, the minimal size is the previous one */
                 free(ptr);
-                min_free_space = free_space;
                 break;
             } else {
                 m_pts.push_back(ptr);
-                alloc_size += small_alloc_size;
-                min_free_space = free_space;
             }
         }
-
-        UCS_TEST_MESSAGE << "Reduced heap free space from " << prev_free_space <<
-                            " to " << free_space << " after allocating " <<
-                            alloc_size << " bytes";
+        ucm_unset_event_handler(UCM_EVENT_VM_MAPPED, mem_event_callback,
+                                reinterpret_cast<void*>(this));
     }
 
 public:
     static int            small_alloc_count;
     static const size_t   small_alloc_size  = 10000;
     ucs::ptr_vector<void> m_pts;
+    int                   m_got_event;
 };
 
 int malloc_hook::small_alloc_count = 1000 / ucs::test_time_multiplier();
