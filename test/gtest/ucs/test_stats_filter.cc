@@ -248,7 +248,9 @@ UCS_TEST_F(stats_filter_agg, report_agg) {
 
 UCS_TEST_F(stats_filter_summary, summary) {
     prepare_nodes();
+    hide_warnings();
     ucs_stats_dump();
+    restore_errors();
     free_nodes();
 
     std::string data = get_data();
