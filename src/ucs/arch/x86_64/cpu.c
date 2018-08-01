@@ -158,6 +158,20 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
        case 0x2c:
        case 0x2f:
            return UCS_CPU_MODEL_INTEL_WESTMERE;
+       case 0x3c:
+       case 0x3f:
+       case 0x45:
+       case 0x46:
+           return UCS_CPU_MODEL_INTEL_HASWELL;
+       case 0x3d:
+       case 0x47:
+       case 0x4f:
+       case 0x56:
+           return UCS_CPU_MODEL_INTEL_BROADWELL;
+       case 0x5e:
+       case 0x4e:
+       case 0x55:
+           return UCS_CPU_MODEL_INTEL_SKYLAKE;
        }
     }
 
