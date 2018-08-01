@@ -44,6 +44,7 @@ public:
         modify_config("STATS_DEST",    stats_dest_config().c_str());
         modify_config("STATS_TRIGGER", stats_trigger_config().c_str());
         modify_config("STATS_FORMAT", stats_format_config().c_str());
+        modify_config("WARN_INVARIANT_TSC", "n");
         ucs_stats_init();
         ASSERT_TRUE(ucs_stats_is_active());
     }
@@ -248,9 +249,7 @@ UCS_TEST_F(stats_filter_agg, report_agg) {
 
 UCS_TEST_F(stats_filter_summary, summary) {
     prepare_nodes();
-    hide_warnings();
     ucs_stats_dump();
-    restore_errors();
     free_nodes();
 
     std::string data = get_data();

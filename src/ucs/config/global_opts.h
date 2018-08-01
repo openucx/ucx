@@ -109,6 +109,8 @@ typedef struct {
     /* registration cache checks if physical page is not moved */
     int                      rcache_check_pfn;
 
+    /* Prompt/suppress invariant TSC warning (used in gtest) */
+    int                      warn_inv_tsc;
 } ucs_global_opts_t;
 
 
