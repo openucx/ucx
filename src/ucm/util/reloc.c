@@ -208,9 +208,9 @@ static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size, void 
     int i;
 
     /* check if module is black-listed for this patch */
-    if (ctx->patch->black_list) {
-        for (i = 0; ctx->patch->black_list[i]; i++) {
-            if (strstr(info->dlpi_name, ctx->patch->black_list[i])) {
+    if (ctx->patch->blacklist) {
+        for (i = 0; ctx->patch->blacklist[i]; i++) {
+            if (strstr(info->dlpi_name, ctx->patch->blacklist[i])) {
                 /* module is black-listed */
                 ctx->status = UCS_OK;
                 return 0;
