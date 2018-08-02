@@ -49,7 +49,9 @@ static void ucs_x86_check_invariant_tsc()
 
     return;
 warn:
-    ucs_warn("CPU does not support invariant TSC, time may be unstable");
+    if (ucs_global_opts.warn_inv_tsc) {
+        ucs_warn("CPU does not support invariant TSC, time may be unstable");
+    }
 }
 
 static double ucs_x86_tsc_freq_from_cpu_model()
