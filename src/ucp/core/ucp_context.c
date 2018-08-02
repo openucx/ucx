@@ -74,15 +74,16 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"TLS", UCP_RSC_CONFIG_ALL,
    "Comma-separated list of transports to use. The order is not meaningful.\n"
-   "In addition it's possible to use a combination of the following aliases:\n"
    " - all    : use all the available transports.\n"
    " - sm/shm : all shared memory transports.\n"
    " - mm     : shared memory transports - only memory mappers.\n"
    " - ugni   : ugni_rdma and ugni_udt.\n"
    " - ib     : all infiniband transports.\n"
-   " - rc     : rc and ud.\n"
-   " - rc_x   : rc with accelerated verbs and ud.\n"
+   " - rc     : rc verbs (uses ud for bootstrap).\n"
+   " - rc_x   : rc with accelerated verbs (uses ud_x for bootstrap).\n"
+   " - ud     : ud verbs.\n"
    " - ud_x   : ud with accelerated verbs.\n"
+   " - dc     : dc verbs.\n"
    " - dc_x   : dc with accelerated verbs.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
    " and disables aliasing.\n",
