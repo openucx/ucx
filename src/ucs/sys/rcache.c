@@ -307,10 +307,20 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
     ucs_rcache_inv_entry_t *entry;
     ucs_pgt_addr_t start, end;
 
-    ucs_assert(event_type == UCM_EVENT_VM_UNMAPPED);
+    ucs_assert(event_type == UCM_EVENT_VM_UNMAPPED ||
+               event_type == UCM_EVENT_MEM_TYPE_FREE);
 
-    start = (uintptr_t)event->vm_unmapped.address;
-    end   = (uintptr_t)event->vm_unmapped.address + event->vm_unmapped.size;
+    if (event_type == UCM_EVENT_VM_UNMAPPED) {
+        start = (uintptr_t)event->vm_unmapped.address;
+        end   = (uintptr_t)event->vm_unmapped.address + event->vm_unmapped.size;
+    } else if(event_type == UCM_EVENT_MEM_TYPE_FREE) {
+        start = (uintptr_t)event->mem_type.address;
+        end   = (uintptr_t)event->mem_type.address + event->mem_type.size;
+    } else {
+        ucs_warn("%s: unknown event type: %x", rcache->name, event_type);
+        return;
+    }
+
     ucs_trace_func("%s: event vm_unmapped 0x%lx..0x%lx", rcache->name, start, end);
 
     pthread_spin_lock(&rcache->inv_lock);
@@ -673,7 +683,7 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
 
     ucs_queue_head_init(&self->inv_q);
 
-    status = ucm_set_event_handler(UCM_EVENT_VM_UNMAPPED, params->ucm_event_priority,
+    status = ucm_set_event_handler(params->ucm_events, params->ucm_event_priority,
                                    ucs_rcache_unmapped_callback, self);
     if (status != UCS_OK) {
         goto err_destroy_mp;
@@ -699,7 +709,7 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
 {
-    ucm_unset_event_handler(UCM_EVENT_VM_UNMAPPED, ucs_rcache_unmapped_callback,
+    ucm_unset_event_handler(self->params.ucm_events, ucs_rcache_unmapped_callback,
                             self);
     ucs_rcache_check_inv_queue(self);
     ucs_rcache_purge(self);

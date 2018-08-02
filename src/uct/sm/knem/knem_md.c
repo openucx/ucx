@@ -9,6 +9,7 @@
 #include "knem_io.h"
 
 #include <ucs/arch/cpu.h>
+#include <ucm/api/ucm.h>
 
 static ucs_config_field_t uct_knem_md_config_table[] = {
     {"", "", NULL,
@@ -349,6 +350,7 @@ static ucs_status_t uct_knem_md_open(const char *md_name,
         rcache_params.region_struct_size = sizeof(uct_knem_rcache_region_t);
         rcache_params.alignment          = md_config->rcache.alignment;
         rcache_params.max_alignment      = ucs_get_page_size();
+        rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = knem_md;
         rcache_params.ops                = &uct_knem_rcache_ops;

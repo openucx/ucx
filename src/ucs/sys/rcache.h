@@ -106,6 +106,7 @@ struct ucs_rcache_params {
                                                      Must be smaller or equal to
                                                      system page size. */
     size_t                 max_alignment;       /**< Maximum alignment */
+    int                    ucm_events;          /**< UCM events to register */
     int                    ucm_event_priority;  /**< Priority of memory events */
     const ucs_rcache_ops_t *ops;                /**< Memory operations functions */
     void                   *context;            /**< User-defined context that will

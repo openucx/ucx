@@ -12,6 +12,7 @@ extern "C" {
 #include <ucs/sys/rcache.h>
 #include <ucs/sys/rcache_int.h>
 #include <ucs/sys/sys.h>
+#include <ucm/api/ucm.h>
 }
 
 
@@ -38,6 +39,7 @@ protected:
             sizeof(region),
             UCS_PGT_ADDR_ALIGN,
             ucs_get_page_size(),
+            UCM_EVENT_VM_UNMAPPED,
             1000,
             &ops,
             reinterpret_cast<void*>(this)
