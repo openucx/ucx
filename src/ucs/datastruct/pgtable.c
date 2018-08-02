@@ -287,7 +287,10 @@ ucs_pgtable_insert_page(ucs_pgtable_t *pgtable, ucs_pgt_addr_t address,
             ++pgd->count;
             break;
         } else {
-            ucs_assert(!ucs_pgt_entry_test(pte, UCS_PGT_ENTRY_FLAG_REGION));
+            if (ucs_pgt_entry_test(pte, UCS_PGT_ENTRY_FLAG_REGION)) {
+                goto err;
+            }
+
             ucs_assertv(shift >= UCS_PGT_ENTRY_SHIFT + order,
                         "shift=%u order=%u", shift, order);  /* sub PTE should be able to hold it */
 
