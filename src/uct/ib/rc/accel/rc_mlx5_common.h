@@ -519,9 +519,11 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                                  txqp->qp->qp_num, fm_ce_se, wqe_size);
     }
 
+#if HAVE_TL_DC
     if (qp_type == IBV_EXP_QPT_DC_INI) {
         uct_ib_mlx5_set_dgram_seg((void*)(ctrl + 1), av, grh_av, qp_type);
     }
+#endif
 
     uct_ib_mlx5_log_tx(&iface->super, qp_type, ctrl, txwq->qstart,
                        txwq->qend, max_log_sge, log_sge,

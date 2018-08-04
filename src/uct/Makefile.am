@@ -117,7 +117,7 @@ libuct_la_SOURCES += \
 	ib/dc/base/dc_ep.c \
 	ib/dc/verbs/dc_verbs.c
 
-if HAVE_MLX5_HW
+if HAVE_MLX5_HW_AV
 noinst_HEADERS += \
 	ib/dc/accel/dc_mlx5.h
 
@@ -142,7 +142,7 @@ noinst_HEADERS += \
 	ib/ud/base/ud_inl.h \
 	ib/ud/verbs/ud_verbs.h 
 
-if HAVE_MLX5_HW
+if HAVE_MLX5_HW_AV
 noinst_HEADERS += \
 	ib/ud/accel/ud_mlx5_common.h \
 	ib/ud/accel/ud_mlx5.h

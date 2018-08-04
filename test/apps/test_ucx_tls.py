@@ -56,11 +56,12 @@ if os.path.exists("/bin/ofed_info"):
 
 else:
         # temp fix: upstream doesn't support accel tls yet
+        # rc_mlx5 - supported
 	mlx5_am = {
-	       2 :      "rc",
-	      16 :      "rc",
-	      32 :      "rc",
-	      64 :      "rc",
+	       2 :      "rc_mlx5",
+	      16 :      "rc_mlx5",
+	      32 :      "rc_mlx5",
+	      64 :      "rc_mlx5",
 	     256 :      "ud",
 	    1024 :      "ud",
 	 1000000 :      "ud",
@@ -70,13 +71,13 @@ else:
 
 	# check that UCX_NUM_EPS work
 	mlx5_am_override = {
-	       2 :      "rc",
-	      16 :      "rc",
-	      32 :      "rc",
-	      64 :      "rc",
-	     256 :      "rc",
-	    1024 :      "rc",
-	 1000000 :      "rc",
+	       2 :      "rc_mlx5",
+	      16 :      "rc_mlx5",
+	      32 :      "rc_mlx5",
+	      64 :      "rc_mlx5",
+	     256 :      "rc_mlx5",
+	    1024 :      "rc_mlx5",
+	 1000000 :      "rc_mlx5",
 	}
 
 
