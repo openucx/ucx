@@ -1167,7 +1167,7 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
             rcache_params.alignment          = md_config->rcache.alignment;
             rcache_params.max_alignment      = ucs_get_page_size();
             rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
-            if (md_attr->cap.reg_mem_types & UCS_BIT(UCT_MD_MEM_TYPE_CUDA)) {
+            if (md_attr->cap.reg_mem_types & ~UCS_BIT(UCT_MD_MEM_TYPE_HOST)) {
                 rcache_params.ucm_events     |= UCM_EVENT_MEM_TYPE_FREE;
             }
             rcache_params.ucm_event_priority = md_config->rcache.event_prio;
