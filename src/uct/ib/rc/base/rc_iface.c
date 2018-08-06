@@ -963,7 +963,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
     qp = ibv_create_qp(uct_ib_iface_md(&iface->super)->pd, &qp_init_attr);
 #endif
     if (qp == NULL) {
-        ucs_error("failed to create qp: %m");
+        ucs_error("failed to create %s qp type: %m", qp_type_str);
         return UCS_ERR_IO_ERROR;
     }
 

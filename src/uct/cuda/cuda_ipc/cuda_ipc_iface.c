@@ -22,6 +22,11 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
      "Max number of event completions to pick during cuda events polling",
       ucs_offsetof(uct_cuda_ipc_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
+    {"CACHE", "y",
+     "Enable remote endpoint IPC memhandle mapping cache",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, enable_cache),
+     UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
 
@@ -119,7 +124,8 @@ uct_cuda_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_cuda_ipc_progress_event_q(ucs_queue_head_t *event_q, unsigned max_events)
+uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
+                              ucs_queue_head_t *event_q, unsigned max_events)
 {
     unsigned count = 0;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
@@ -139,6 +145,11 @@ uct_cuda_ipc_progress_event_q(ucs_queue_head_t *event_q, unsigned max_events)
             uct_invoke_completion(cuda_ipc_event->comp, UCS_OK);
         }
 
+        status = iface->unmap_memhandle(cuda_ipc_event->mapped_addr);
+        if (status != UCS_OK) {
+            ucs_fatal("failed to unmap addr:%p", cuda_ipc_event->mapped_addr);
+        }
+
         ucs_trace_poll("CUDA_IPC Event Done :%p", cuda_ipc_event);
         ucs_mpool_put(cuda_ipc_event);
         count++;
@@ -156,7 +167,7 @@ static unsigned uct_cuda_ipc_iface_progress(uct_iface_h tl_iface)
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
     unsigned max_events         = iface->config.max_poll;
 
-    return uct_cuda_ipc_progress_event_q(&iface->outstanding_d2d_event_q,
+    return uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q,
                                          max_events);
 }
 
@@ -221,6 +232,18 @@ static ucs_mpool_ops_t uct_cuda_ipc_event_desc_mpool_ops = {
     .obj_cleanup   = uct_cuda_ipc_event_desc_cleanup,
 };
 
+ucs_status_t uct_cuda_ipc_map_memhandle(void *arg, uct_cuda_ipc_key_t *key,
+                                        void **mapped_addr)
+{
+    return  UCT_CUDADRV_FUNC(cuIpcOpenMemHandle((CUdeviceptr *)mapped_addr,
+                             key->ph, CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS));
+}
+
+ucs_status_t uct_cuda_ipc_unmap_memhandle(void *mapped_addr)
+{
+    return UCT_CUDADRV_FUNC(cuIpcCloseMemHandle((CUdeviceptr)mapped_addr));
+}
+
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -246,8 +269,18 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     }
     ucs_assert(dev_count <= UCT_CUDA_IPC_MAX_PEERS);
 
-    self->device_count    = dev_count;
-    self->config.max_poll = config->max_poll;
+    self->device_count        = dev_count;
+    self->config.max_poll     = config->max_poll;
+    self->config.enable_cache = config->enable_cache;
+
+    if (self->config.enable_cache) {
+        self->map_memhandle   = uct_cuda_ipc_cache_map_memhandle;
+        self->unmap_memhandle = ucs_empty_function_return_success;
+    } else {
+        self->map_memhandle   = uct_cuda_ipc_map_memhandle;
+        self->unmap_memhandle = uct_cuda_ipc_unmap_memhandle;
+    }
+
     status = ucs_mpool_init(&self->event_desc,
                             0,
                             sizeof(uct_cuda_ipc_event_desc_t),

@@ -77,7 +77,7 @@ public:
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
-            if ((strstr(err_str.c_str(), "no supported transports found for")) ||
+            if ((strstr(err_str.c_str(), "no supported sockaddr auxiliary transports found for")) ||
                 (strstr(err_str.c_str(), "sockaddr aux resources addresses")) ||
                 (strstr(err_str.c_str(), "no peer failure handler")) ||
                 /* when the "peer failure" error happens, it is followed by: */
@@ -408,9 +408,9 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup_for_rma_atomic) {
                         "matching transport");
     }
     EXPECT_EQ(0, err_handler_count);
-    restore_errors();
 
     wait_for_server_ep(false);
+    restore_errors();
 
     /* allow the connection establishment flow to complete */
     short_progress_loop();

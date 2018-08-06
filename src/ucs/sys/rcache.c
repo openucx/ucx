@@ -531,8 +531,8 @@ retry:
             ucs_rcache_region_invalidate(rcache, region, 1, 1);
             goto retry;
         } else {
-            ucs_warn("failed to register region " UCS_PGT_REGION_FMT ": %s",
-                     UCS_PGT_REGION_ARG(&region->super), ucs_status_string(status));
+            ucs_debug("failed to register region " UCS_PGT_REGION_FMT ": %s",
+                      UCS_PGT_REGION_ARG(&region->super), ucs_status_string(status));
             goto out_unlock;
         }
     }

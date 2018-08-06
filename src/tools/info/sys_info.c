@@ -21,7 +21,10 @@ static const char* cpu_model_names[] = {
     [UCS_CPU_MODEL_INTEL_IVYBRIDGE]   = "IvyBridge",
     [UCS_CPU_MODEL_INTEL_SANDYBRIDGE] = "SandyBridge",
     [UCS_CPU_MODEL_INTEL_NEHALEM]     = "Nehalem",
-    [UCS_CPU_MODEL_INTEL_WESTMERE]    = "Westmere"
+    [UCS_CPU_MODEL_INTEL_WESTMERE]    = "Westmere",
+    [UCS_CPU_MODEL_INTEL_HASWELL]     = "Haswell",
+    [UCS_CPU_MODEL_INTEL_BROADWELL]   = "Broadwell",
+    [UCS_CPU_MODEL_INTEL_SKYLAKE]     = "Skylake"
 };
 
 static double measure_memcpy_bandwidth(size_t size)

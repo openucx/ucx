@@ -36,14 +36,6 @@ public:
     };
 
     struct send_ctx {
-        send_ctx(mapped_buffer *b, uct_tag_t t, uint64_t i) :
-                 mbuf(b), rndv_op(NULL), tag(t), imm_data(i) {
-
-            uct_comp.count = 1;
-            uct_comp.func  = send_completion;
-            sw_rndv        = comp = false;
-            status         = UCS_ERR_NO_PROGRESS;
-        }
         mapped_buffer    *mbuf;
         void             *rndv_op;
         uct_tag_t        tag;
@@ -88,6 +80,18 @@ public:
 
             sender->connect(0, *receiver, 0);
         }
+    }
+
+    void init_send_ctx(send_ctx &s,mapped_buffer *b, uct_tag_t t, uint64_t i)
+    {
+        s.mbuf           = b;
+        s.rndv_op        = NULL;
+        s.tag            = t;
+        s.imm_data       = i;
+        s.uct_comp.count = 1;
+        s.uct_comp.func  = send_completion;
+        s.sw_rndv        = s.comp = false;
+        s.status         = UCS_ERR_NO_PROGRESS;
     }
 
     void init_recv_ctx(recv_ctx &r,  mapped_buffer *b, uct_tag_t t,
@@ -230,7 +234,8 @@ public:
         short_progress_loop();
 
         mapped_buffer sendbuf(length, SEND_SEED, sender());
-        send_ctx s_ctx(&sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
+        send_ctx s_ctx;
+        init_send_ctx(s_ctx, &sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
         ASSERT_UCS_OK((this->*sfunc)(sender(), s_ctx));
 
         wait_for_flag(&r_ctx.comp);
@@ -256,7 +261,8 @@ public:
         mapped_buffer sendbuf(length, SEND_SEED, sender());
         recv_ctx r_ctx;
         init_recv_ctx(r_ctx, &recvbuf, tag, MASK, take_uct_desc);
-        send_ctx s_ctx(&sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
+        send_ctx s_ctx;
+        init_send_ctx(s_ctx, &sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
         ASSERT_UCS_OK((this->*sfunc)(sender(), s_ctx));
 
         wait_for_flag(&r_ctx.unexp);
@@ -283,7 +289,8 @@ public:
         // and not to be macthed.
         recv_ctx r_ctx;
         init_recv_ctx(r_ctx, &recvbuf, tag + 1);
-        send_ctx s_ctx(&sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
+        send_ctx s_ctx;
+        init_send_ctx(s_ctx, &sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
 
         ASSERT_UCS_OK((this->*sfunc)(sender(), s_ctx));
 
@@ -314,7 +321,8 @@ public:
         short_progress_loop();
 
         mapped_buffer sendbuf(length, SEND_SEED, sender());
-        send_ctx s_ctx(&sendbuf, 0xffff, reinterpret_cast<uint64_t>(&r_ctx));
+        send_ctx s_ctx;
+        init_send_ctx(s_ctx, &sendbuf, 0xffff, reinterpret_cast<uint64_t>(&r_ctx));
         ASSERT_UCS_OK((this->*sfunc)(sender(), s_ctx));
         wait_for_flag(&r_ctx.comp);
 
@@ -580,7 +588,8 @@ UCS_TEST_P(test_tag, tag_cancel_force)
     short_progress_loop();
 
     mapped_buffer sendbuf(length, SEND_SEED, sender());
-    send_ctx s_ctx(&sendbuf, 1, reinterpret_cast<uint64_t>(&r_ctx));
+    send_ctx s_ctx;
+    init_send_ctx(s_ctx, &sendbuf, 1, reinterpret_cast<uint64_t>(&r_ctx));
     ASSERT_UCS_OK(tag_eager_bcopy(sender(), s_ctx));
 
     // Message should arrive unexpected, since tag was cancelled
@@ -660,7 +669,8 @@ UCS_TEST_P(test_tag, sw_rndv_expected)
     short_progress_loop();
 
     mapped_buffer sendbuf(length, SEND_SEED, sender());
-    send_ctx s_ctx(&sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
+    send_ctx s_ctx;
+    init_send_ctx(s_ctx, &sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
 
     ASSERT_UCS_OK(uct_ep_tag_rndv_request(sender().ep(0), s_ctx.tag,
                                           s_ctx.mbuf->ptr(),
@@ -684,7 +694,8 @@ UCS_TEST_P(test_tag, rndv_limit)
     void *op;
 
     do {
-        sctx_p = new send_ctx(&sendbuf, 0xffff, 0);
+        sctx_p = new send_ctx;
+        init_send_ctx(*sctx_p, &sendbuf, 0xffff, 0);
         status = tag_rndv_zcopy(sender(), *sctx_p);
         sctxs.push_back(sctx_p);
     } while (status == UCS_OK);

@@ -234,6 +234,10 @@ UCS_TEST_F(cuda_hooks, test_cuda_Malloc_Free) {
     ASSERT_EQ(ret, cudaSuccess);
     ASSERT_EQ(ptr, free_ptr);
     check_mem_free_events(ptr, (1 * 1024 *1024));
+
+    /* cudaFree with NULL */
+    ret = cudaFree(NULL);
+    ASSERT_EQ(ret, cudaSuccess);
 }
 
 UCS_TEST_F(cuda_hooks, test_cudaMallocManaged) {

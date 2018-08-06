@@ -465,7 +465,7 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
 
         UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     } else {
-        ucs_error("no supported transports found for %s", dev_name);
+        ucs_error("no supported sockaddr auxiliary transports found for %s", dev_name);
         status = UCS_ERR_UNREACHABLE;
     }
 
