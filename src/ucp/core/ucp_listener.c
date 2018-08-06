@@ -71,7 +71,8 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
 
             /* send wireup request message, to connect the client to the server's new endpoint */
             ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
-            if ((status = ucp_wireup_send_request(ep)) != UCS_OK) {
+            status = ucp_wireup_send_request(ep);
+            if (status != UCS_OK) {
                 ucp_ep_destroy_internal(ep);
             }
         }
@@ -130,14 +131,20 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
     ucs_trace("listener %p: got connection request", listener);
 
     /* Defer wireup init and user's callback to be invoked from the main thread */
-    accept = ucs_malloc(sizeof(*accept), "ucp_listener_accept");
+    accept = ucs_malloc(sizeof(*accept), "ucp_listener accept");
     if (accept == NULL) {
         ucs_error("failed to allocate listener accept context");
         return UCS_ERR_NO_MEMORY;
     }
 
     accept->listener    = listener;
-    accept->wireup_data = malloc(length);
+    accept->wireup_data = ucs_malloc(length, "ucp_listener accept wireup data");
+    if (accept->wireup_data == NULL) {
+        ucs_error("failed to allocate listener accept wireup context");
+        ucs_free(accept);
+        return UCS_ERR_NO_MEMORY;
+    }
+
     memcpy(accept->wireup_data, conn_priv_data, length);
 
     prog_id = UCS_CALLBACKQ_ID_NULL;
