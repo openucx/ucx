@@ -95,7 +95,7 @@ struct uct_ib_iface_config {
     unsigned                pkey_value;
 
     /* Multiple resource domains */
-    int                     res_domain;
+    int                     disable_res_domain;
 };
 
 
@@ -147,8 +147,8 @@ struct uct_ib_iface {
         uint8_t             port_num;
         uint8_t             sl;
         uint8_t             traffic_class;
+        int                 disable_res_domain;  /* Disable multiple resource domains */
         size_t              max_iov;             /* Maximum buffers in IOV array */
-        int                 res_domain;          /* Enable multiple resource domains */
     } config;
 
     uct_ib_iface_ops_t      *ops;

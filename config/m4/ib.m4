@@ -7,11 +7,6 @@
 #
 
 
-AC_ARG_ENABLE(res-domain,
-        AC_HELP_STRING([--enable-res-domain], [Enable multiple IB resource domains, experimental (default: yes)]),
-        [],
-        [enable_res_domain=yes])
-
 AC_ARG_WITH([verbs],
         [AC_HELP_STRING([--with-verbs(=DIR)],
             [Build OpenFabrics support, adding DIR/include, DIR/lib, and DIR/lib64 to the search path for headers and libraries])],
@@ -192,7 +187,7 @@ AS_IF([test "x$with_ib" == xyes],
                        IBV_EXP_RES_DOMAIN_THREAD_MODEL,
                        ibv_exp_create_res_domain,
                        ibv_exp_destroy_res_domain],
-                      [AS_IF([test "x$enable_res_domain" == "xyes"], [AC_DEFINE([HAVE_IBV_EXP_RES_DOMAIN], 1, [IB resource domain])], [])],
+                      [AC_DEFINE([HAVE_IBV_EXP_RES_DOMAIN], 1, [IB resource domain])],
                       [AC_MSG_WARN([Cannot use mlx5 accel because resource domains are not supported])
                        AC_MSG_WARN([Please upgrade MellanoxOFED to 3.1 or above])
                        with_mlx5_hw=no],

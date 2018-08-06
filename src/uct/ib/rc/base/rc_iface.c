@@ -952,7 +952,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 #  endif
 
 #if HAVE_IBV_EXP_RES_DOMAIN
-    if (iface->super.config.res_domain && (iface->super.res_domain != NULL)) {
+    if (iface->super.res_domain != NULL) {
         qp_init_attr.comp_mask       |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
         qp_init_attr.res_domain       = iface->super.res_domain->ibv_domain;
     }
