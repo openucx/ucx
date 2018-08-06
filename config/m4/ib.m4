@@ -8,7 +8,7 @@
 
 
 AC_ARG_ENABLE(res-domain,
-        AC_HELP_STRING([--enable-res-domain], [Enable multiple IB resource domains (default: yes)]),
+        AC_HELP_STRING([--enable-res-domain], [Enable multiple IB resource domains, experimental (default: yes)]),
         [],
         [enable_res_domain=yes])
 

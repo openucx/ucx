@@ -276,7 +276,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     qp_init_attr.pd                  = uct_ib_iface_md(&self->super)->pd;
     qp_init_attr.comp_mask           = IBV_QP_INIT_ATTR_PD;
 #if HAVE_IBV_EXP_RES_DOMAIN
-    if (self->super.res_domain != NULL) {
+    if (self->super.config.res_domain && (self->super.res_domain != NULL)) {
         qp_init_attr.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
         qp_init_attr.res_domain      = self->super.res_domain->ibv_domain;
     }

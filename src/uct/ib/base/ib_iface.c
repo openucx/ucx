@@ -150,6 +150,12 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Which pkey value to use. Should be between 0 and 0x7fff.",
    ucs_offsetof(uct_ib_iface_config_t, pkey_value), UCS_CONFIG_TYPE_HEX},
 
+#if HAVE_IBV_EXP_RES_DOMAIN
+  {"RESOURCE_DOMAIN", "y",
+   "Enable multiple resource domains (experimental).",
+   ucs_offsetof(uct_ib_iface_config_t, res_domain), UCS_CONFIG_TYPE_BOOL},
+#endif
+
 
   {NULL}
 };
@@ -536,7 +542,11 @@ static int uct_ib_iface_res_domain_cmp(uct_ib_iface_res_domain_t *res_domain,
 #if HAVE_IBV_EXP_RES_DOMAIN
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
 
-    return res_domain->ibv_domain->context == dev->ibv_context;
+    if (iface->config.res_domain) {
+        return res_domain->ibv_domain->context == dev->ibv_context;
+    } else {
+        return 1;
+    }
 #else
     return 1;
 #endif
@@ -550,43 +560,47 @@ uct_ib_iface_res_domain_init(uct_ib_iface_res_domain_t *res_domain,
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     struct ibv_exp_res_domain_init_attr attr;
 
-    attr.comp_mask    = IBV_EXP_RES_DOMAIN_THREAD_MODEL |
-                        IBV_EXP_RES_DOMAIN_MSG_MODEL;
-    attr.msg_model    = IBV_EXP_MSG_LOW_LATENCY;
+    if (iface->config.res_domain) {
+        attr.comp_mask    = IBV_EXP_RES_DOMAIN_THREAD_MODEL |
+                            IBV_EXP_RES_DOMAIN_MSG_MODEL;
+        attr.msg_model    = IBV_EXP_MSG_LOW_LATENCY;
 
-    switch (iface->super.worker->thread_mode) {
-    case UCS_THREAD_MODE_SINGLE:
-        attr.thread_model = IBV_EXP_THREAD_SINGLE;
-        break;
-    case UCS_THREAD_MODE_SERIALIZED:
-        attr.thread_model = IBV_EXP_THREAD_UNSAFE;
-        break;
-    default:
-        attr.thread_model = IBV_EXP_THREAD_SAFE;
-        break;
-    }
+        switch (iface->super.worker->thread_mode) {
+        case UCS_THREAD_MODE_SINGLE:
+            attr.thread_model = IBV_EXP_THREAD_SINGLE;
+            break;
+        case UCS_THREAD_MODE_SERIALIZED:
+            attr.thread_model = IBV_EXP_THREAD_UNSAFE;
+            break;
+        default:
+            attr.thread_model = IBV_EXP_THREAD_SAFE;
+            break;
+        }
 
-    res_domain->ibv_domain = ibv_exp_create_res_domain(dev->ibv_context, &attr);
-    if (res_domain->ibv_domain == NULL) {
-        ucs_error("ibv_exp_create_res_domain() on %s failed: %m",
-                  uct_ib_device_name(dev));
-        return UCS_ERR_IO_ERROR;
+        res_domain->ibv_domain = ibv_exp_create_res_domain(dev->ibv_context, &attr);
+        if (res_domain->ibv_domain == NULL) {
+            ucs_error("ibv_exp_create_res_domain() on %s failed: %m",
+                      uct_ib_device_name(dev));
+            return UCS_ERR_IO_ERROR;
+        }
     }
 #endif
     return UCS_OK;
 }
 
-static void uct_ib_iface_res_domain_cleanup(uct_ib_iface_res_domain_t *res_domain)
+static void uct_ib_iface_res_domain_cleanup(uct_ib_iface_res_domain_t *res_domain, int enabled)
 {
 #if HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_destroy_res_domain_attr attr;
     int ret;
 
-    attr.comp_mask = 0;
-    ret = ibv_exp_destroy_res_domain(res_domain->ibv_domain->context,
-                                     res_domain->ibv_domain, &attr);
-    if (ret != 0) {
-        ucs_warn("ibv_exp_destroy_res_domain() failed: %m");
+    if (enabled) {
+        attr.comp_mask = 0;
+        ret = ibv_exp_destroy_res_domain(res_domain->ibv_domain->context,
+                                         res_domain->ibv_domain, &attr);
+        if (ret != 0) {
+            ucs_warn("ibv_exp_destroy_res_domain() failed: %m");
+        }
     }
 #endif
 }
@@ -647,6 +661,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.sl                = config->sl;
     self->config.traffic_class     = config->traffic_class;
     self->release_desc.cb          = uct_ib_iface_release_desc;
+
+    self->config.res_domain        = config->res_domain;
 
     status = uct_ib_iface_init_pkey(self, config);
     if (status != UCS_OK) {
@@ -744,13 +760,14 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 err_destroy_recv_cq:
     ibv_destroy_cq(self->cq[UCT_IB_DIR_RX]);
 err_destroy_send_cq:
-    ibv_destroy_cq(self->cq[UCT_IB_DIR_TX]);
+    if (self->config.res_domain) {
+        ibv_destroy_cq(self->cq[UCT_IB_DIR_TX]);
+    }
 err_destroy_comp_channel:
     ibv_destroy_comp_channel(self->comp_channel);
 err_put_res_domain:
-    if (self->res_domain != NULL) {
-        uct_worker_tl_data_put(self->res_domain, uct_ib_iface_res_domain_cleanup);
-    }
+    uct_worker_tl_data_put(self->res_domain, uct_ib_iface_res_domain_cleanup,
+                           self->config.res_domain);
 err_free_path_bits:
     ucs_free(self->path_bits);
 err:
@@ -776,9 +793,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
         ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m", ret);
     }
 
-    if (self->res_domain != NULL) {
-        uct_worker_tl_data_put(self->res_domain, uct_ib_iface_res_domain_cleanup);
-    }
+    uct_worker_tl_data_put(self->res_domain, uct_ib_iface_res_domain_cleanup,
+                           self->config.res_domain);
     ucs_free(self->path_bits);
 }
 

@@ -93,6 +93,9 @@ struct uct_ib_iface_config {
 
     /* IB PKEY to use */
     unsigned                pkey_value;
+
+    /* Multiple resource domains */
+    int                     res_domain;
 };
 
 
@@ -145,6 +148,7 @@ struct uct_ib_iface {
         uint8_t             sl;
         uint8_t             traffic_class;
         size_t              max_iov;             /* Maximum buffers in IOV array */
+        int                 res_domain;          /* Enable multiple resource domains */
     } config;
 
     uct_ib_iface_ops_t      *ops;
