@@ -395,6 +395,7 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
+#if HAVE_DECL_IBV_EXP_SETENV
 static int uct_ib_max_cqe_size()
 {
     static int max_cqe_size = -1;
@@ -423,18 +424,20 @@ static int uct_ib_max_cqe_size()
 
     return max_cqe_size;
 }
+#endif
 
 static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
                                            size_t *inl, int preferred_cpu,
                                            struct ibv_cq **cq_p)
 {
-    static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    struct ibv_cq *cq;
+#if HAVE_DECL_IBV_EXP_SETENV
+    static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
     const char *cqe_size_env_value;
     size_t cqe_size_min, cqe_size;
     char cqe_size_buf[32];
     ucs_status_t status;
-    struct ibv_cq *cq;
     int env_var_added = 0;
     int ret;
 
@@ -492,6 +495,19 @@ out_unsetenv:
     }
 out:
     return status;
+#else
+    cq = ibv_create_cq(dev->ibv_context, cq_length, NULL, iface->comp_channel,
+                       preferred_cpu);
+    if (cq == NULL) {
+        ucs_error("ibv_create_cq(cqe=%d) failed: %m", cq_length);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *cq_p = cq;
+    *inl = 32;
+
+    return UCS_OK;
+#endif
 }
 
 
