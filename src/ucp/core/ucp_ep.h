@@ -146,6 +146,8 @@ typedef struct ucp_ep_rma_config {
     size_t                 max_get_zcopy;
     size_t                 put_zcopy_thresh;
     size_t                 get_zcopy_thresh;
+    const ucp_rma_proto_t  *rma_proto;
+    const ucp_amo_proto_t  *amo_proto;
 } ucp_ep_rma_config_t;
 
 
