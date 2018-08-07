@@ -19,6 +19,7 @@
 #define UCT_IB_MD_MAX_MR_SIZE       0x80000000UL
 #define UCT_IB_MD_PACKED_RKEY_SIZE  sizeof(uint64_t)
 
+#define UCT_IB_DEFAULT_GID_INDEX    0   /**< The gid index used by default for an IB port */
 
 /**
  * IB MD statistics counters
@@ -57,7 +58,7 @@ typedef struct uct_ib_md_ext_config {
         size_t               max_size;     /**< Maximal memory region size for ODP */
     } odp;
 
-    unsigned                 gid_index;    /**< IB GID index to use  */
+    size_t                   gid_index;    /**< IB GID index to use  */
 } uct_ib_md_ext_config_t;
 
 

@@ -110,9 +110,9 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Use indirect atomic\n",
      ucs_offsetof(uct_ib_md_config_t, ext.enable_indirect_atomic), UCS_CONFIG_TYPE_BOOL},
 
-    {"GID_INDEX", "0",
+    {"GID_INDEX", "auto",
      "Port GID index to use.",
-     ucs_offsetof(uct_ib_md_config_t, ext.gid_index), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_ib_md_config_t, ext.gid_index), UCS_CONFIG_TYPE_ULUNITS},
 
     {"SUBNET_PREFIX", "",
      "Infiniband subnet prefix to filter ports by, empty means no filter. "

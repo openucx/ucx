@@ -350,6 +350,15 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
                     default settings for unknown devices */
 }
 
+static size_t uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
+{
+    if (md->config.gid_index == UCS_CONFIG_ULUNITS_AUTO) {
+        return UCT_IB_DEFAULT_GID_INDEX;
+    } else {
+        return md->config.gid_index;
+    }
+}
+
 ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
                                       unsigned flags)
 {
@@ -393,7 +402,8 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     }
 
     if (md->check_subnet_filter && uct_ib_device_is_port_ib(dev, port_num)) {
-        status = uct_ib_device_query_gid(dev, port_num, md->config.gid_index, &gid);
+        status = uct_ib_device_query_gid(dev, port_num,
+                                         uct_ib_device_get_ib_gid_index(md), &gid);
         if (status) {
             return status;
         }
