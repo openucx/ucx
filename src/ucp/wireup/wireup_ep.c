@@ -458,12 +458,8 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
     }
 
     if (found_supported_tl) {
-        UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
         status = ucp_address_pack(worker, NULL, tl_bitmap, NULL,
                                   address_length_p, (void**)address_p);
-
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     } else {
         ucs_error("no supported sockaddr auxiliary transports found for %s", dev_name);
         status = UCS_ERR_UNREACHABLE;
