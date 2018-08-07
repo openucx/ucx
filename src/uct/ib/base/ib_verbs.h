@@ -215,7 +215,7 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 /*
  * Resource domain
  */
-#if !HAVE_IBV_EXP_RES_DOMAIN
+#if !HAVE_DECL_IBV_EXP_CREATE_RES_DOMAIN
 
 struct ibv_exp_res_domain {
 };

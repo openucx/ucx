@@ -150,6 +150,12 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Which pkey value to use. Should be between 0 and 0x7fff.",
    ucs_offsetof(uct_ib_iface_config_t, pkey_value), UCS_CONFIG_TYPE_HEX},
 
+#if HAVE_IBV_EXP_RES_DOMAIN
+  {"RESOURCE_DOMAIN", "y",
+   "Enable multiple resource domains (experimental).",
+   ucs_offsetof(uct_ib_iface_config_t, enable_res_domain), UCS_CONFIG_TYPE_BOOL},
+#endif
+
 
   {NULL}
 };
@@ -629,24 +635,26 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    self->ops                      = ops;
+    self->ops                       = ops;
 
-    self->config.rx_payload_offset = sizeof(uct_ib_iface_recv_desc_t) +
-                                     ucs_max(sizeof(uct_recv_desc_t) +
-                                             params->rx_headroom,
-                                             rx_priv_len + rx_hdr_len);
-    self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;
-    self->config.rx_headroom_offset= self->config.rx_payload_offset -
-                                     params->rx_headroom;
-    self->config.seg_size          = seg_size;
-    self->config.tx_max_poll       = config->tx.max_poll;
-    self->config.rx_max_poll       = config->rx.max_poll;
-    self->config.rx_max_batch      = ucs_min(config->rx.max_batch,
-                                             config->rx.queue_len / 4);
-    self->config.port_num          = port_num;
-    self->config.sl                = config->sl;
-    self->config.traffic_class     = config->traffic_class;
-    self->release_desc.cb          = uct_ib_iface_release_desc;
+    self->config.rx_payload_offset  = sizeof(uct_ib_iface_recv_desc_t) +
+                                      ucs_max(sizeof(uct_recv_desc_t) +
+                                              params->rx_headroom,
+                                              rx_priv_len + rx_hdr_len);
+    self->config.rx_hdr_offset      = self->config.rx_payload_offset - rx_hdr_len;
+    self->config.rx_headroom_offset = self->config.rx_payload_offset -
+                                      params->rx_headroom;
+    self->config.seg_size           = seg_size;
+    self->config.tx_max_poll        = config->tx.max_poll;
+    self->config.rx_max_poll        = config->rx.max_poll;
+    self->config.rx_max_batch       = ucs_min(config->rx.max_batch,
+                                              config->rx.queue_len / 4);
+    self->config.port_num           = port_num;
+    self->config.sl                 = config->sl;
+    self->config.traffic_class      = config->traffic_class;
+    self->release_desc.cb           = uct_ib_iface_release_desc;
+
+    self->config.enable_res_domain  = config->enable_res_domain;
 
     status = uct_ib_iface_init_pkey(self, config);
     if (status != UCS_OK) {
@@ -664,7 +672,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    if (res_domain_key == UCT_IB_IFACE_NULL_RES_DOMAIN_KEY) {
+    if ((res_domain_key == UCT_IB_IFACE_NULL_RES_DOMAIN_KEY) ||
+        !self->config.enable_res_domain) {
         self->res_domain = NULL;
     } else {
         self->res_domain = uct_worker_tl_data_get(self->super.worker,
