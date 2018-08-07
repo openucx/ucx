@@ -97,6 +97,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Prefer nearest device to cpu when selecting a device from NET_DEVICES list.\n",
      ucs_offsetof(uct_ib_md_config_t, ext.prefer_nearest_device), UCS_CONFIG_TYPE_BOOL},
 
+    {"INDIRECT_ATOMIC", "y",
+     "Use indirect memory key for atomic operation\n",
+     ucs_offsetof(uct_ib_md_config_t, ext.enable_umr_pack), UCS_CONFIG_TYPE_BOOL},
+
     {"CONTIG_PAGES", "n",
      "Enable allocation with contiguous pages. Warning: enabling this option may\n"
      "cause stack smashing.\n",
@@ -866,7 +870,8 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
      */
     if ((memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) &&
         !(memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) &&
-        (memh != &md->global_odp))
+        (memh != &md->global_odp) &&
+        md->config.enable_umr_pack)
     {
         /* create UMR on-demand */
         ucs_assert(memh->atomic_mr == NULL);
