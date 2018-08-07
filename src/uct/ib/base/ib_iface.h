@@ -23,7 +23,7 @@
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
 typedef struct uct_ib_iface_ops      uct_ib_iface_ops_t;
-typedef struct uct_ib_iface         uct_ib_iface_t;
+typedef struct uct_ib_iface          uct_ib_iface_t;
 
 
 /**
@@ -147,8 +147,8 @@ struct uct_ib_iface {
         uint8_t             port_num;
         uint8_t             sl;
         uint8_t             traffic_class;
+        uint8_t             gid_index;           /* IB GID index to use  */
         int                 enable_res_domain;   /* Disable multiple resource domains */
-        size_t              gid_index;           /* IB GID index to use  */
         size_t              max_iov;             /* Maximum buffers in IOV array */
     } config;
 
@@ -234,11 +234,6 @@ uct_ib_iface_invoke_am_desc(uct_ib_iface_t *iface, uint8_t am_id, void *data,
         uct_recv_desc(desc) = &iface->release_desc;
     }
 }
-
-ucs_status_t uct_ib_iface_set_gid_index(size_t md_config_index,
-                                        uct_ib_device_t *dev,
-                                        uint8_t port_num,
-                                        size_t *ib_iface_gid_index);
 
 ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr);

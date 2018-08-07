@@ -91,7 +91,7 @@ public:
         uct_md_h uct_md;
         uct_ib_md_t *ib_md;
         ucs_status_t status;
-        size_t gid_index;
+        uint8_t gid_index;
 
         /* no pkeys for Ethernet */
         port_desc->have_pkey = 0;
@@ -99,12 +99,13 @@ public:
         uct_ib_make_md_name(md_name, device);
 
         status = uct_ib_md_open(md_name, m_md_config, &uct_md);
-        ASSERT_UCS_OK((ucs_status_t)status);
+        ASSERT_UCS_OK(status);
 
         ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
-        status = uct_ib_iface_set_gid_index(md_config->ext.gid_index, &ib_md->dev,
-                                            port_num, &gid_index);
-        ASSERT_UCS_OK((ucs_status_t)status);
+        status = uct_ib_device_select_gid_index(&ib_md->dev,
+                                                port_num, md_config->ext.gid_index,
+                                                &gid_index);
+        ASSERT_UCS_OK(status);
 
         /* check the gid index */
         if (ibv_query_gid(ibctx, port_num, gid_index, &gid) != 0) {

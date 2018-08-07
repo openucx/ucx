@@ -597,133 +597,6 @@ static void uct_ib_iface_res_domain_cleanup(uct_ib_iface_res_domain_t *res_domai
 #endif
 }
 
-#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
-static size_t uct_iface_get_priority_gid_index(unsigned *gid_idx_rates, int len)
-{
-    unsigned best_priority = gid_idx_rates[0];
-    size_t gid_index       = 0;
-    int i;
-
-    for (i = 1; i < len; i++) {
-        if (gid_idx_rates[i] < best_priority) {
-            best_priority = gid_idx_rates[i];
-            gid_index = i;
-        }
-    }
-
-    return gid_index;
-}
-#endif
-
-static int uct_iface_is_gid_ipv4(union ibv_gid *gid, int gid_index)
-{
-    const struct in6_addr *raw = (struct in6_addr *)gid->raw;
-    char p[128];
-
-    ucs_debug("testing is_ipv4 on gid index %d: %s",
-              gid_index, inet_ntop(AF_INET6, gid, p, sizeof(p)));
-
-    return ((raw->s6_addr32[0] | raw->s6_addr32[1]) |
-            (raw->s6_addr32[2] ^ htonl(0x0000ffff))) == 0UL ||
-           /* IPv4 encoded multicast addresses */
-           (raw->s6_addr32[0] == htonl(0xff0e0000) &&
-            ((raw->s6_addr32[1] | (raw->s6_addr32[2] ^ htonl(0x0000ffff))) == 0UL));
-}
-
-static ucs_status_t uct_ib_iface_set_roce_gid_index(uct_ib_device_t *dev,
-                                                    uint8_t port_num,
-                                                    size_t *gid_index)
-{
-    int i, gid_tbl_len      = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
-    ucs_status_t status     = UCS_OK;
-#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
-    struct ibv_exp_gid_attr attr;
-    unsigned *gid_idx_rates = ucs_alloca(gid_tbl_len * sizeof(*gid_idx_rates));
-#else
-    union ibv_gid gid;
-#endif
-
-    for (i = 0; i < gid_tbl_len; i++) {
-#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
-        attr.comp_mask = IBV_EXP_QUERY_GID_ATTR_TYPE | IBV_EXP_QUERY_GID_ATTR_GID;
-        if (ibv_exp_query_gid_attr(dev->ibv_context, port_num, i, &attr)) {
-            ucs_error("failed to query gid attributes "
-                      "(" UCT_IB_IFACE_FMT" gid_idx %d). %m",
-                      uct_ib_device_name(dev), port_num, i);
-            status = UCS_ERR_INVALID_PARAM;
-            goto out;
-        }
-
-        switch (attr.type) {
-        case IBV_EXP_ROCE_V2_GID_TYPE:
-            if (uct_iface_is_gid_ipv4(&attr.gid ,i)) {
-                gid_idx_rates[i] = 1;   /* first priority */
-            } else {
-                gid_idx_rates[i] = 2;
-            }
-            break;
-        case IBV_EXP_IB_ROCE_V1_GID_TYPE:
-            if (uct_iface_is_gid_ipv4(&attr.gid,i)) {
-                gid_idx_rates[i] = 3;
-            } else {
-                gid_idx_rates[i] = 4;   /* last priority */
-            }
-            break;
-        default:
-            ucs_error("unknown roce gid type %d", attr.type);
-            status = UCS_ERR_INVALID_PARAM;
-            goto out;
-        }
-
-#else
-        status = uct_ib_device_query_gid(dev, port_num, i, &gid);
-        if (status != UCS_OK) {
-            goto out;
-        }
-
-        /* assume RoCE v1 */
-        if (uct_iface_is_gid_ipv4(&gid, i)) {
-            /* take the first gid that has IPv4 */
-            *gid_index = i;
-            goto out_print;
-        }
-#endif
-    }
-
-#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
-    *gid_index = uct_iface_get_priority_gid_index(gid_idx_rates, gid_tbl_len);
-    goto out_print;
-#else
-    *gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
-#endif
-
-out_print:
-    ucs_debug(UCT_IB_IFACE_FMT" set gid_index %zu",
-              uct_ib_device_name(dev), port_num, *gid_index);
-out:
-    return status;
-}
-
-ucs_status_t uct_ib_iface_set_gid_index(size_t md_config_index,
-                                        uct_ib_device_t *dev,
-                                        uint8_t port_num,
-                                        size_t *ib_iface_gid_index)
-{
-    ucs_status_t status = UCS_OK;
-
-    if (md_config_index == UCS_CONFIG_ULUNITS_AUTO) {
-        if (uct_ib_device_is_port_ib(dev, port_num)) {
-            *ib_iface_gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
-        } else {
-            status = uct_ib_iface_set_roce_gid_index(dev, port_num, ib_iface_gid_index);
-        }
-    } else {
-        *ib_iface_gid_index = md_config_index;
-    }
-
-    return status;
-}
-
 /**
  * @param rx_headroom   Headroom requested by the user.
  * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
@@ -788,9 +661,9 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    status = uct_ib_iface_set_gid_index(ib_md->config.gid_index, dev,
-                                        self->config.port_num,
-                                        &self->config.gid_index);
+    status = uct_ib_device_select_gid_index(dev, self->config.port_num,
+                                            ib_md->config.gid_index,
+                                            &self->config.gid_index);
     if (status != UCS_OK) {
         goto err;
     }
