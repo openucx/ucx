@@ -13,6 +13,7 @@
 #include <ucs/profile/profile.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
+#include <ucm/api/ucm.h>
 #include <pthread.h>
 #include <sys/resource.h>
 
@@ -1153,7 +1154,8 @@ static void uct_ib_md_release_device_config(uct_ib_md_t *md)
 }
 
 static ucs_status_t
-uct_ib_md_parse_reg_methods(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
+uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
+                            const uct_ib_md_config_t *md_config)
 {
     ucs_rcache_params_t rcache_params;
     ucs_status_t status;
@@ -1164,6 +1166,10 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, const uct_ib_md_config_t *md_config
             rcache_params.region_struct_size = sizeof(uct_ib_rcache_region_t);
             rcache_params.alignment          = md_config->rcache.alignment;
             rcache_params.max_alignment      = ucs_get_page_size();
+            rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
+            if (md_attr->cap.reg_mem_types & ~UCS_BIT(UCT_MD_MEM_TYPE_HOST)) {
+                rcache_params.ucm_events     |= UCM_EVENT_MEM_TYPE_FREE;
+            }
             rcache_params.ucm_event_priority = md_config->rcache.event_prio;
             rcache_params.context            = md;
             rcache_params.ops                = &uct_ib_rcache_ops;
@@ -1361,6 +1367,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto out_free_dev_list;
     }
 
+    md->super.ops             = &uct_ib_md_ops;
     md->super.component       = &uct_ib_mdc;
     md->config                = md_config->ext;
 
@@ -1431,17 +1438,17 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto err_dealloc_pd;
     }
 
-    status = uct_ib_md_parse_reg_methods(md, md_config);
+    status = uct_md_query(&md->super, &md_attr);
+    if (status != UCS_OK) {
+        goto err_destroy_umr_qp;
+    }
+
+    status = uct_ib_md_parse_reg_methods(md, &md_attr, md_config);
     if (status != UCS_OK) {
         goto err_destroy_umr_qp;
     }
 
     status = uct_ib_md_parse_device_config(md, md_config);
-    if (status != UCS_OK) {
-        goto err_release_reg_method;
-    }
-
-    status = uct_md_query(&md->super, &md_attr);
     if (status != UCS_OK) {
         goto err_release_reg_method;
     }
