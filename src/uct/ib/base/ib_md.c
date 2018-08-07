@@ -97,8 +97,8 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Prefer nearest device to cpu when selecting a device from NET_DEVICES list.\n",
      ucs_offsetof(uct_ib_md_config_t, ext.prefer_nearest_device), UCS_CONFIG_TYPE_BOOL},
 
-    {"ENABLE_UMR_PACK", "y",
-     "Enable UMR pack\n",
+    {"INDIRECT_ATOMIC", "y",
+     "Use indirect memory key for atomic operation\n",
      ucs_offsetof(uct_ib_md_config_t, ext.enable_umr_pack), UCS_CONFIG_TYPE_BOOL},
 
     {"CONTIG_PAGES", "n",
