@@ -200,8 +200,10 @@ uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
 {
     if (qp_type == IBV_QPT_UD) {
         mlx5_av_base(&seg->av)->key.qkey.qkey  = htonl(UCT_IB_KEY);
+#if HAVE_TL_DC
     } else if (qp_type == IBV_EXP_QPT_DC_INI) {
         mlx5_av_base(&seg->av)->key.dc_key     = htobe64(UCT_IB_KEY);
+#endif
     }
     mlx5_av_base(&seg->av)->dqp_dct            = av->dqp_dct;
     mlx5_av_base(&seg->av)->stat_rate_sl       = av->stat_rate_sl;
