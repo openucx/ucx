@@ -600,9 +600,9 @@ static void uct_ib_iface_res_domain_cleanup(uct_ib_iface_res_domain_t *res_domai
 #if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
 static size_t uct_iface_get_priority_gid_index(unsigned *gid_idx_rates, int len)
 {
-    int i;
     unsigned best_priority = gid_idx_rates[0];
     size_t gid_index       = 0;
+    int i;
 
     for (i = 1; i < len; i++) {
         if (gid_idx_rates[i] < best_priority) {
@@ -630,13 +630,11 @@ static int uct_iface_is_gid_ipv4(union ibv_gid *gid, int gid_index)
             ((raw->s6_addr32[1] | (raw->s6_addr32[2] ^ htonl(0x0000ffff))) == 0UL));
 }
 
-static ucs_status_t uct_ib_iface_set_roce_gid_index(uct_ib_md_t *md,
-                                                    uct_ib_iface_t *iface,
+static ucs_status_t uct_ib_iface_set_roce_gid_index(uct_ib_device_t *dev,
+                                                    uint8_t port_num,
                                                     size_t *gid_index)
 {
-    uct_ib_device_t dev     = md->dev;
-    uint8_t port_num        = iface->config.port_num;
-    int i, gid_tbl_len      = uct_ib_iface_port_attr(iface)->gid_tbl_len;
+    int i, gid_tbl_len      = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
     ucs_status_t status     = UCS_OK;
 #if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
     struct ibv_exp_gid_attr attr;
@@ -648,10 +646,10 @@ static ucs_status_t uct_ib_iface_set_roce_gid_index(uct_ib_md_t *md,
     for (i = 0; i < gid_tbl_len; i++) {
 #if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
         attr.comp_mask = IBV_EXP_QUERY_GID_ATTR_TYPE | IBV_EXP_QUERY_GID_ATTR_GID;
-        if (ibv_exp_query_gid_attr(dev.ibv_context, port_num, i, &attr)) {
-            ucs_error("iface %p failed to query gid attributes "
+        if (ibv_exp_query_gid_attr(dev->ibv_context, port_num, i, &attr)) {
+            ucs_error("failed to query gid attributes "
                       "(" UCT_IB_IFACE_FMT" gid_idx %d). %m",
-                      iface, uct_ib_device_name(&dev), port_num, i);
+                      uct_ib_device_name(dev), port_num, i);
             status = UCS_ERR_INVALID_PARAM;
             goto out;
         }
@@ -678,7 +676,7 @@ static ucs_status_t uct_ib_iface_set_roce_gid_index(uct_ib_md_t *md,
         }
 
 #else
-        status = uct_ib_device_query_gid(&dev, port_num, i, &gid);
+        status = uct_ib_device_query_gid(dev, port_num, i, &gid);
         if (status != UCS_OK) {
             goto out;
         }
@@ -696,29 +694,31 @@ static ucs_status_t uct_ib_iface_set_roce_gid_index(uct_ib_md_t *md,
     *gid_index = uct_iface_get_priority_gid_index(gid_idx_rates, gid_tbl_len);
     goto out_print;
 #else
-    *gid_index = 0;
+    *gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
 #endif
 
 out_print:
-    ucs_debug("ib iface %p on "UCT_IB_IFACE_FMT" set gid_index %zu",
-              iface, uct_ib_device_name(&dev), port_num, *gid_index);
+    ucs_debug(UCT_IB_IFACE_FMT" set gid_index %zu",
+              uct_ib_device_name(dev), port_num, *gid_index);
 out:
     return status;
 }
 
-static ucs_status_t uct_ib_iface_set_gid_index(uct_ib_md_t *md,
-                                               uct_ib_iface_t *iface)
+ucs_status_t uct_ib_iface_set_gid_index(size_t md_config_index,
+                                        uct_ib_device_t *dev,
+                                        uint8_t port_num,
+                                        size_t *ib_iface_gid_index)
 {
     ucs_status_t status = UCS_OK;
 
-    if (md->config.gid_index == UCS_CONFIG_ULUNITS_AUTO) {
-        if (uct_ib_device_is_port_ib(&md->dev, iface->config.port_num)) {
-            iface->config.gid_index = UCT_IB_DEFAULT_GID_INDEX;
+    if (md_config_index == UCS_CONFIG_ULUNITS_AUTO) {
+        if (uct_ib_device_is_port_ib(dev, port_num)) {
+            *ib_iface_gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
         } else {
-            status = uct_ib_iface_set_roce_gid_index(md, iface, &iface->config.gid_index);
+            status = uct_ib_iface_set_roce_gid_index(dev, port_num, ib_iface_gid_index);
         }
     } else {
-        iface->config.gid_index = md->config.gid_index;
+        *ib_iface_gid_index = md_config_index;
     }
 
     return status;
@@ -788,7 +788,9 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    status = uct_ib_iface_set_gid_index(ib_md, self);
+    status = uct_ib_iface_set_gid_index(ib_md->config.gid_index, dev,
+                                        self->config.port_num,
+                                        &self->config.gid_index);
     if (status != UCS_OK) {
         goto err;
     }

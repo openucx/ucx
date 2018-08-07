@@ -13,6 +13,7 @@ extern "C" {
 #include <ucs/time/time.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_iface.h>
+#include <uct/ib/base/ib_md.h>
 }
 
 
@@ -80,18 +81,34 @@ public:
     }
 
 #if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
-    void test_eth_port(struct ibv_port_attr port_attr, struct ibv_context *ibctx,
-                       unsigned port_num, ib_port_desc_t *port_desc) {
+    void test_eth_port(struct ibv_device *device, struct ibv_port_attr port_attr,
+                       struct ibv_context *ibctx, unsigned port_num,
+                       ib_port_desc_t *port_desc) {
 
         union ibv_gid gid;
         uct_ib_md_config_t *md_config = ucs_derived_of(m_md_config, uct_ib_md_config_t);
+        char md_name[UCT_MD_NAME_MAX];
+        uct_md_h uct_md;
+        uct_ib_md_t *ib_md;
+        ucs_status_t status;
+        size_t gid_index;
 
         /* no pkeys for Ethernet */
         port_desc->have_pkey = 0;
 
+        uct_ib_make_md_name(md_name, device);
+
+        status = uct_ib_md_open(md_name, m_md_config, &uct_md);
+        ASSERT_UCS_OK((ucs_status_t)status);
+
+        ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
+        status = uct_ib_iface_set_gid_index(md_config->ext.gid_index, &ib_md->dev,
+                                            port_num, &gid_index);
+        ASSERT_UCS_OK((ucs_status_t)status);
+
         /* check the gid index */
-        if (ibv_query_gid(ibctx, port_num, md_config->ext.gid_index, &gid) != 0) {
-            UCS_TEST_ABORT("Failed to query gid (index=" << md_config->ext.gid_index << ")");
+        if (ibv_query_gid(ibctx, port_num, gid_index, &gid) != 0) {
+            UCS_TEST_ABORT("Failed to query gid (index=" << gid_index << ")");
         }
         if (uct_ib_device_is_gid_raw_empty(gid.raw)) {
             port_desc->have_valid_gid_idx = 0;
@@ -99,6 +116,7 @@ public:
             port_desc->have_valid_gid_idx = 1;
         }
 
+        uct_ib_md_close(uct_md);
     }
 #endif
 
@@ -146,7 +164,7 @@ public:
         lmc_find(port_attr, port_desc);
 
         if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
-            test_eth_port(port_attr, ibctx, port_num, port_desc);
+            test_eth_port(device_list[i], port_attr, ibctx, port_num, port_desc);
             goto out;
         }
 

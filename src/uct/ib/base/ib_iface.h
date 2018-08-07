@@ -235,6 +235,11 @@ uct_ib_iface_invoke_am_desc(uct_ib_iface_t *iface, uint8_t am_id, void *data,
     }
 }
 
+ucs_status_t uct_ib_iface_set_gid_index(size_t md_config_index,
+                                        uct_ib_device_t *dev,
+                                        uint8_t port_num,
+                                        size_t *ib_iface_gid_index);
+
 ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr);
 

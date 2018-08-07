@@ -353,7 +353,7 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
 static size_t uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
 {
     if (md->config.gid_index == UCS_CONFIG_ULUNITS_AUTO) {
-        return UCT_IB_DEFAULT_GID_INDEX;
+        return UCT_IB_MD_DEFAULT_GID_INDEX;
     } else {
         return md->config.gid_index;
     }
