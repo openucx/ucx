@@ -428,19 +428,25 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     return UCS_OK;
 }
 
-static int uct_device_get_addr_family(union ibv_gid *gid, int gid_index)
+static int uct_ib_device_is_addr_ipv4_mcast(const struct in6_addr *raw,
+                                            const uint32_t addr_last_bits)
 {
-    const struct in6_addr *raw = (struct in6_addr *)gid->raw;
+    /* IPv4 encoded multicast addresses */
+    return (raw->s6_addr32[0] == htonl(0xff0e0000)) &&
+           !(raw->s6_addr32[1] | addr_last_bits);
+}
+
+static int uct_ib_device_get_addr_family(union ibv_gid *gid, int gid_index)
+{
+    const struct in6_addr *raw    = (struct in6_addr *)gid->raw;
+    const uint32_t addr_last_bits = raw->s6_addr32[2] ^ htonl(0x0000ffff);
     char p[128];
 
     ucs_debug("testing addr_family on gid index %d: %s",
               gid_index, inet_ntop(AF_INET6, gid, p, sizeof(p)));
 
-    if (((raw->s6_addr32[0] | raw->s6_addr32[1]) |
-         (raw->s6_addr32[2] ^ htonl(0x0000ffff))) == 0UL ||
-        /* IPv4 encoded multicast addresses */
-        (raw->s6_addr32[0] == htonl(0xff0e0000) &&
-         ((raw->s6_addr32[1] | (raw->s6_addr32[2] ^ htonl(0x0000ffff))) == 0UL))) {
+    if (!((raw->s6_addr32[0] | raw->s6_addr32[1]) | addr_last_bits) ||
+        uct_ib_device_is_addr_ipv4_mcast(raw, addr_last_bits)) {
         return AF_INET;
     } else {
         return AF_INET6;
@@ -454,8 +460,7 @@ static ucs_status_t uct_ib_device_set_roce_gid_index(uct_ib_device_t *dev,
     int i, gid_tbl_len      = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
     ucs_status_t status     = UCS_OK;
 #if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
-    int priorities_arr_len  = sizeof(roce_versions_priorities) /
-                              sizeof(roce_versions_priorities[0]);
+    int priorities_arr_len  = ucs_static_array_size(roce_versions_priorities);
     struct ibv_exp_gid_attr attr;
     int prio_idx;
 #else
@@ -475,7 +480,7 @@ static ucs_status_t uct_ib_device_set_roce_gid_index(uct_ib_device_t *dev,
 
             if ((roce_versions_priorities[prio_idx].type == attr.type) &&
                 (roce_versions_priorities[prio_idx].address_family ==
-                 uct_device_get_addr_family(&attr.gid ,i))) {
+                 uct_ib_device_get_addr_family(&attr.gid, i))) {
                 *gid_index = i;
                 goto out_print;
             }
@@ -494,7 +499,7 @@ static ucs_status_t uct_ib_device_set_roce_gid_index(uct_ib_device_t *dev,
         }
 
         /* assume RoCE v1 */
-        if (uct_device_get_addr_family(&gid, i) == AF_INET) {
+        if (uct_ib_device_get_addr_family(&gid, i) == AF_INET) {
             /* take the first gid that has IPv4 */
             *gid_index = i;
             goto out_print;
