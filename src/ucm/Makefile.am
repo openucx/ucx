@@ -35,7 +35,8 @@ noinst_HEADERS = \
 	util/replace.h \
 	util/log.h \
 	util/reloc.h \
-	util/sys.h
+	util/sys.h \
+	util/bistro.h
 
 if HAVE_CUDA
 noinst_HEADERS += \
@@ -49,7 +50,8 @@ libucm_la_SOURCES = \
 	util/replace.c \
 	util/log.c \
 	util/reloc.c \
-	util/sys.c
+	util/sys.c \
+	util/bistro.c
 
 if HAVE_CUDA
 libucm_la_SOURCES += \

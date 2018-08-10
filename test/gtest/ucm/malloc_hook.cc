@@ -15,10 +15,12 @@
 #include <pthread.h>
 #include <sstream>
 #include <stdint.h>
+#include <dlfcn.h>
 
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucm/malloc/malloc_hook.h>
+#include <ucm/util/bistro.h>
 #include <ucs/sys/sys.h>
 #include <malloc.h>
 }
@@ -63,14 +65,26 @@ protected:
                                 reinterpret_cast<void*>(this));
     }
 
+    static int bistro_munmap_hook(void *addr, size_t length)
+    {
+        UCM_BISTRO_PROLOGUE;
+        bistro_call_counter++;
+        int res = (intptr_t)syscall(SYS_munmap, addr, length);
+        UCM_BISTRO_EPILOGUE;
+        return res;
+    }
+
+
 public:
     static int            small_alloc_count;
-    static const size_t   small_alloc_size  = 10000;
+    static const size_t   small_alloc_size    = 10000;
     ucs::ptr_vector<void> m_pts;
     int                   m_got_event;
+    static volatile int   bistro_call_counter;
 };
 
-int malloc_hook::small_alloc_count = 1000 / ucs::test_time_multiplier();
+int malloc_hook::small_alloc_count   = 1000 / ucs::test_time_multiplier();
+volatile int malloc_hook::bistro_call_counter = 0;
 
 class test_thread {
 public:
@@ -727,4 +741,65 @@ UCS_TEST_F(malloc_hook_cplusplus, remap_override) {
     }
 
     unset();
+}
+
+typedef int (munmap_f_t)(void *addr, size_t len);
+
+UCS_TEST_F(malloc_hook, bistro_patch) {
+    const char *symbol = "munmap";
+    ucm_bistro_restore_point_h rp = NULL;
+    ucs_status_t status;
+    munmap_f_t *munmap_f;
+    void *ptr;
+    int res;
+    uint64_t UCS_V_UNUSED patched;
+    uint64_t UCS_V_UNUSED origin;
+
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+
+    /* set hook to mmap call */
+    status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook, &rp);
+    ASSERT_UCS_OK(status);
+    EXPECT_NE((uintptr_t)rp, NULL);
+
+    munmap_f = (munmap_f_t*)ucm_bistro_restore_addr(rp);
+    EXPECT_NE((uintptr_t)munmap_f, NULL);
+
+    /* save partial body of patched function */
+    patched = *(uint64_t*)munmap_f;
+
+    bistro_call_counter = 0;
+    ptr = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+    EXPECT_NE(ptr, MAP_FAILED);
+
+    /* try to call munmap, we should jump into munmap_hook instead */
+    res = munmap_f(ptr, 4096);
+    EXPECT_EQ(res, 0);
+    /* due to cache coherency issues on ARM systems could be executed
+     * original function body, so, skip counter evaluation */
+#if !defined (__aarch64__)
+    EXPECT_GT(bistro_call_counter, 0);
+#endif
+
+    /* restore original mmap body */
+    status = ucm_bistro_restore(rp);
+    ASSERT_UCS_OK(status);
+
+    bistro_call_counter = 0;
+    /* now try to call mmap, we should NOT jump into mmap_hook */
+    ptr = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+    EXPECT_NE(ptr, MAP_FAILED);
+    res = munmap_f(ptr, 4096);
+    EXPECT_EQ(res, 0);
+#if !defined (__aarch64__)
+    EXPECT_EQ(bistro_call_counter, 0);  /* hook is not called */
+#endif
+    /* save partial body of restored function */
+    origin = *(uint64_t*)munmap_f;
+
+#if !defined (__powerpc64__)
+    EXPECT_NE(patched, origin);
+#endif
 }
