@@ -148,6 +148,10 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
 {
     ucs_status_t status;
 
+    if (RUNNING_ON_VALGRIND) {
+        VALGRIND_MAKE_MEM_DEFINED(&self, sizeof(self));
+    }
+
     if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
         return UCS_ERR_INVALID_PARAM;
     }

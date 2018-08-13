@@ -778,7 +778,10 @@ run_gtest() {
 			module load tools/valgrind-latest
 		fi
 
-		export VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes --gen-suppressions=all"
+		if [ -f /bin/ofed_info ] ; then
+			VALGRIND_XML="--xml=yes --xml-file=valgrind.xml"
+		fi
+		export VALGRIND_EXTRA_ARGS="$VALGRIND_XML --child-silent-after-fork=yes --gen-suppressions=all"
 		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
 		(cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 		module unload tools/valgrind-latest
