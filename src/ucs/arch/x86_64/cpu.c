@@ -54,65 +54,9 @@ warn:
     }
 }
 
-static double ucs_x86_tsc_freq_from_cpu_model()
-{
-    char buf[256];
-    char model[256];
-    char *rate;
-    char newline;
-    double ghz, max_ghz;
-    FILE* f;
-    int rc;
-    int warn;
-
-    f = fopen("/proc/cpuinfo","r");
-    if (!f) {
-        return -1;
-    }
-
-    warn = 0;
-    max_ghz = 0.0;
-    while (fgets(buf, sizeof(buf), f)) {
-        rc = sscanf(buf, "model name : %s", model);
-        if (rc != 1) {
-            continue;
-        }
-
-        rate = strrchr(buf, '@');
-        if (rate == NULL) {
-            continue;
-        }
-
-        rc = sscanf(rate, "@ %lfGHz%[\n]", &ghz, &newline);
-        if (rc != 2) {
-            continue;
-        }
-
-        max_ghz = ucs_max(max_ghz, ghz);
-        if (max_ghz != ghz) {
-            warn = 1;
-        }
-    }
-    fclose(f);
-
-    if (warn) {
-        ucs_warn("Conflicting CPU frequencies detected, using: %.2f MHz",
-                 max_ghz * 1e3);
-    }
-    return max_ghz * 1e9;
-}
-
 double ucs_arch_get_clocks_per_sec()
 {
-    double result;
-
     ucs_x86_check_invariant_tsc();
-
-    /* First, try to find the information in the model name string (will work on Intel) */
-    result = ucs_x86_tsc_freq_from_cpu_model();
-    if (result > 0) {
-        return result;
-    }
 
     /* Read clock speed from cpuinfo */
     return ucs_get_cpuinfo_clock_freq("cpu MHz", 1e6);
