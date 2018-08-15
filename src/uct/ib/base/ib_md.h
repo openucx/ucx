@@ -19,6 +19,7 @@
 #define UCT_IB_MD_MAX_MR_SIZE       0x80000000UL
 #define UCT_IB_MD_PACKED_RKEY_SIZE  sizeof(uint64_t)
 
+#define UCT_IB_MD_DEFAULT_GID_INDEX 0   /**< The gid index used by default for an IB/RoCE port */
 
 /**
  * IB MD statistics counters
@@ -57,7 +58,7 @@ typedef struct uct_ib_md_ext_config {
         size_t               max_size;     /**< Maximal memory region size for ODP */
     } odp;
 
-    unsigned                 gid_index;    /**< IB GID index to use  */
+    size_t                   gid_index;    /**< IB GID index to use  */
 } uct_ib_md_ext_config_t;
 
 
@@ -177,5 +178,13 @@ static inline uint16_t uct_ib_md_atomic_offset(uint8_t atomic_mr_id)
 {
     return 8 * atomic_mr_id;
 }
+
+
+void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device);
+
+ucs_status_t
+uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p);
+
+void uct_ib_md_close(uct_md_h uct_md);
 
 #endif

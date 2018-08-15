@@ -63,6 +63,16 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {0, 0, "Generic HCA", 0, 0}
 };
 
+#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
+/* This struct defines the RoCE versions priorities */
+static uct_ib_roce_version_desc_t roce_versions_priorities[] = {
+        {IBV_EXP_ROCE_V2_GID_TYPE,    AF_INET,  1},
+        {IBV_EXP_ROCE_V2_GID_TYPE,    AF_INET6, 2},
+        {IBV_EXP_IB_ROCE_V1_GID_TYPE, AF_INET,  3},
+        {IBV_EXP_IB_ROCE_V1_GID_TYPE, AF_INET6, 4}
+};
+#endif
+
 static void uct_ib_device_get_locailty(const char *dev_name, cpu_set_t *cpu_mask,
                                        int *numa_node)
 {
@@ -350,6 +360,15 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
                     default settings for unknown devices */
 }
 
+static size_t uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
+{
+    if (md->config.gid_index == UCS_CONFIG_ULUNITS_AUTO) {
+        return UCT_IB_MD_DEFAULT_GID_INDEX;
+    } else {
+        return md->config.gid_index;
+    }
+}
+
 ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
                                       unsigned flags)
 {
@@ -393,7 +412,8 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     }
 
     if (md->check_subnet_filter && uct_ib_device_is_port_ib(dev, port_num)) {
-        status = uct_ib_device_query_gid(dev, port_num, md->config.gid_index, &gid);
+        status = uct_ib_device_query_gid(dev, port_num,
+                                         uct_ib_device_get_ib_gid_index(md), &gid);
         if (status) {
             return status;
         }
@@ -406,6 +426,114 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     }
 
     return UCS_OK;
+}
+
+static int uct_ib_device_is_addr_ipv4_mcast(const struct in6_addr *raw,
+                                            const uint32_t addr_last_bits)
+{
+    /* IPv4 encoded multicast addresses */
+    return (raw->s6_addr32[0] == htonl(0xff0e0000)) &&
+           !(raw->s6_addr32[1] | addr_last_bits);
+}
+
+static int uct_ib_device_get_addr_family(union ibv_gid *gid, int gid_index)
+{
+    const struct in6_addr *raw    = (struct in6_addr *)gid->raw;
+    const uint32_t addr_last_bits = raw->s6_addr32[2] ^ htonl(0x0000ffff);
+    char p[128];
+
+    ucs_debug("testing addr_family on gid index %d: %s",
+              gid_index, inet_ntop(AF_INET6, gid, p, sizeof(p)));
+
+    if (!((raw->s6_addr32[0] | raw->s6_addr32[1]) | addr_last_bits) ||
+        uct_ib_device_is_addr_ipv4_mcast(raw, addr_last_bits)) {
+        return AF_INET;
+    } else {
+        return AF_INET6;
+    }
+}
+
+static ucs_status_t uct_ib_device_set_roce_gid_index(uct_ib_device_t *dev,
+                                                     uint8_t port_num,
+                                                     uint8_t *gid_index)
+{
+    int i, gid_tbl_len      = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
+    ucs_status_t status     = UCS_OK;
+#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
+    int priorities_arr_len  = ucs_static_array_size(roce_versions_priorities);
+    struct ibv_exp_gid_attr attr;
+    int prio_idx;
+#else
+    union ibv_gid gid;
+#endif
+
+#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
+    for (prio_idx = 0; prio_idx < priorities_arr_len; prio_idx++) {
+        for (i = 0; i < gid_tbl_len; i++) {
+            attr.comp_mask = IBV_EXP_QUERY_GID_ATTR_TYPE | IBV_EXP_QUERY_GID_ATTR_GID;
+            if (ibv_exp_query_gid_attr(dev->ibv_context, port_num, i, &attr)) {
+                ucs_error("failed to query gid attributes "
+                          "(%s:%d gid_idx %d). %m", uct_ib_device_name(dev), port_num, i);
+                status = UCS_ERR_INVALID_PARAM;
+                goto out;
+            }
+
+            if ((roce_versions_priorities[prio_idx].type == attr.type) &&
+                (roce_versions_priorities[prio_idx].address_family ==
+                 uct_ib_device_get_addr_family(&attr.gid, i))) {
+                *gid_index = i;
+                goto out_print;
+            }
+        }
+    }
+
+    ucs_error("failed to find a gid index that matches one of the RoCE priorities");
+    status = UCS_ERR_INVALID_PARAM;
+    goto out;
+
+#else
+    for (i = 0; i < gid_tbl_len; i++) {
+        status = uct_ib_device_query_gid(dev, port_num, i, &gid);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
+        /* assume RoCE v1 */
+        if (uct_ib_device_get_addr_family(&gid, i) == AF_INET) {
+            /* take the first gid that has IPv4 */
+            *gid_index = i;
+            goto out_print;
+        }
+    }
+
+    *gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
+#endif
+
+out_print:
+    ucs_debug("%s:%d set gid_index %d",
+              uct_ib_device_name(dev), port_num, *gid_index);
+out:
+    return status;
+}
+
+ucs_status_t uct_ib_device_select_gid_index(uct_ib_device_t *dev,
+                                            uint8_t port_num,
+                                            size_t md_config_index,
+                                            uint8_t *ib_gid_index)
+{
+    ucs_status_t status = UCS_OK;
+
+    if (md_config_index == UCS_CONFIG_ULUNITS_AUTO) {
+        if (uct_ib_device_is_port_ib(dev, port_num)) {
+            *ib_gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
+        } else {
+            status = uct_ib_device_set_roce_gid_index(dev, port_num, ib_gid_index);
+        }
+    } else {
+        *ib_gid_index = md_config_index;
+    }
+
+    return status;
 }
 
 const char *uct_ib_device_name(uct_ib_device_t *dev)

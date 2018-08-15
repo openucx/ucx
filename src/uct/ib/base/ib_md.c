@@ -110,9 +110,9 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Use indirect atomic\n",
      ucs_offsetof(uct_ib_md_config_t, ext.enable_indirect_atomic), UCS_CONFIG_TYPE_BOOL},
 
-    {"GID_INDEX", "0",
+    {"GID_INDEX", "auto",
      "Port GID index to use.",
-     ucs_offsetof(uct_ib_md_config_t, ext.gid_index), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_ib_md_config_t, ext.gid_index), UCS_CONFIG_TYPE_ULUNITS},
 
     {"SUBNET_PREFIX", "",
      "Infiniband subnet prefix to filter ports by, empty means no filter. "
@@ -243,7 +243,8 @@ static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
     qp_attr.ah_attr.port_num         = port_num;
     qp_attr.ah_attr.dlid             = port_attr->lid;
     qp_attr.ah_attr.is_global        = 1;
-    if (uct_ib_device_query_gid(ibdev, port_num, 0, &qp_attr.ah_attr.grh.dgid) != UCS_OK) {
+    if (uct_ib_device_query_gid(ibdev, port_num, UCT_IB_MD_DEFAULT_GID_INDEX,
+                                &qp_attr.ah_attr.grh.dgid) != UCS_OK) {
         goto err_destroy_qp;
     }
     qp_attr.rq_psn                   = 0;
@@ -911,8 +912,6 @@ static ucs_status_t uct_ib_rkey_unpack(uct_md_component_t *mdc,
     return UCS_OK;
 }
 
-static void uct_ib_md_close(uct_md_h md);
-
 static uct_md_ops_t uct_ib_md_ops = {
     .close             = uct_ib_md_close,
     .query             = uct_ib_md_query,
@@ -1085,7 +1084,7 @@ static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
     .is_mem_type_owned = (void*)ucs_empty_function_return_zero,
 };
 
-static void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device)
+void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device)
 {
     snprintf(md_name, UCT_MD_NAME_MAX, "%s/", UCT_IB_MD_PREFIX);
     strncat(md_name, device->name, UCT_MD_NAME_MAX - strlen(device->name) - 1);
@@ -1334,7 +1333,7 @@ uct_ib_md_parse_subnet_prefix(const char *subnet_prefix_str,
     return UCS_OK;
 }
 
-static ucs_status_t
+ucs_status_t
 uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
     const uct_ib_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_ib_md_config_t);
@@ -1486,7 +1485,7 @@ err_free_md:
     goto out_free_dev_list;
 }
 
-static void uct_ib_md_close(uct_md_h uct_md)
+void uct_ib_md_close(uct_md_h uct_md)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 

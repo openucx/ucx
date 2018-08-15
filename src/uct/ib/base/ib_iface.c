@@ -661,8 +661,15 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
+    status = uct_ib_device_select_gid_index(dev, self->config.port_num,
+                                            ib_md->config.gid_index,
+                                            &self->config.gid_index);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
     status = uct_ib_device_query_gid(dev, self->config.port_num,
-                                     ib_md->config.gid_index, &self->gid);
+                                     self->config.gid_index, &self->gid);
     if (status != UCS_OK) {
         goto err;
     }

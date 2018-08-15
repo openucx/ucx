@@ -130,6 +130,18 @@ typedef struct uct_ib_device {
 } uct_ib_device_t;
 
 
+#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
+/**
+ * RoCE version description
+ */
+typedef struct uct_ib_roce_version_desc {
+    enum ibv_exp_roce_gid_type type;
+    int address_family;
+    int priority;
+} uct_ib_roce_version_desc_t;
+#endif
+
+
 /**
  * Check if a port on a device is active and supports the given flags.
  */
@@ -163,6 +175,20 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev);
  * @return device specification.
  */
 const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev);
+
+
+/**
+ * Select the IB gid index to use.
+ *
+ * @param dev                   IB device.
+ * @param port_num              Port number.
+ * @param md_config_index       Gid index from the md configuration.
+ * @param ib_gid_index          Filled with the selected gid index.
+ */
+ucs_status_t uct_ib_device_select_gid_index(uct_ib_device_t *dev,
+                                            uint8_t port_num,
+                                            size_t md_config_index,
+                                            uint8_t *ib_gid_index);
 
 
 /**

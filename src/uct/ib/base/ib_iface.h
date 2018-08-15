@@ -23,7 +23,7 @@
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
 typedef struct uct_ib_iface_ops      uct_ib_iface_ops_t;
-typedef struct uct_ib_iface         uct_ib_iface_t;
+typedef struct uct_ib_iface          uct_ib_iface_t;
 
 
 /**
@@ -147,6 +147,7 @@ struct uct_ib_iface {
         uint8_t             port_num;
         uint8_t             sl;
         uint8_t             traffic_class;
+        uint8_t             gid_index;           /* IB GID index to use  */
         int                 enable_res_domain;   /* Disable multiple resource domains */
         size_t              max_iov;             /* Maximum buffers in IOV array */
     } config;
@@ -381,7 +382,6 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             uint8_t path_bits,
                                             struct ibv_ah_attr *ah_attr)
 {
-    uct_ib_md_t *md = ucs_derived_of(iface->super.md, uct_ib_md_t);
     memset(ah_attr, 0, sizeof(*ah_attr));
 
     ah_attr->sl                = iface->config.sl;
@@ -395,7 +395,7 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
          (iface->addr_type == UCT_IB_ADDRESS_TYPE_GLOBAL) ||
          (iface->gid.global.subnet_prefix != gid->global.subnet_prefix))) {
         ah_attr->is_global = 1;
-        ah_attr->grh.sgid_index = md->config.gid_index;
+        ah_attr->grh.sgid_index = iface->config.gid_index;
         ah_attr->grh.dgid = *gid;
     } else {
         ah_attr->is_global = 0;

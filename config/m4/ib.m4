@@ -218,7 +218,8 @@ AS_IF([test "x$with_ib" == xyes],
                        ibv_exp_create_qp,
                        ibv_exp_prefetch_mr,
                        ibv_exp_create_srq,
-                       ibv_exp_setenv],
+                       ibv_exp_setenv,
+                       ibv_exp_query_gid_attr],
                       [], [], [[#include <infiniband/verbs_exp.h>]])
 
        AC_CHECK_DECLS([ibv_exp_post_send,
