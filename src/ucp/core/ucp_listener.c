@@ -84,7 +84,8 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
             /* the listener's ep should be aware of the sent address from the client */
             ep->flags |= UCP_EP_FLAG_LISTENER;
 
-            if ((status = ucp_wireup_send_pre_request(ep)) != UCS_OK) {
+            status = ucp_wireup_send_pre_request(ep);
+            if (status != UCS_OK) {
                 ucp_ep_destroy_internal(ep);
             }
         }
