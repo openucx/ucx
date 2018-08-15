@@ -95,7 +95,12 @@ static void ucm_event_call_orig(ucm_event_type_t event_type, ucm_event_t *event,
         break;
     case UCM_EVENT_SBRK:
         if (event->sbrk.result == MAP_FAILED) {
+#if HAVE_DECL_SYS_BRK
+            event->sbrk.result = ucm_orig_brk(ucm_orig_sbrk(0) + event->sbrk.increment) ?
+                                 MAP_FAILED : ucm_orig_sbrk(0) - event->sbrk.increment;
+#else
             event->sbrk.result = ucm_orig_sbrk(event->sbrk.increment);
+#endif
         }
         break;
     case UCM_EVENT_MADVISE:
@@ -389,6 +394,34 @@ void *ucm_sbrk(intptr_t increment)
     ucm_event_leave();
 
     return event.sbrk.result;
+}
+
+int ucm_brk(void *addr)
+{
+    void *old_addr      = ucm_orig_sbrk(0);
+    intptr_t increment = (intptr_t)addr - (intptr_t)old_addr;
+
+    ucm_event_t event;
+
+    ucm_event_enter();
+
+    ucm_trace("ucm_brk(addr=%p)", addr);
+
+    if (increment < 0) {
+        ucm_dispatch_vm_munmap(old_addr, -increment);
+    }
+
+    event.sbrk.result    = MAP_FAILED;
+    event.sbrk.increment = increment;
+    ucm_event_dispatch(UCM_EVENT_SBRK, &event);
+
+    if ((increment > 0) && (event.sbrk.result != MAP_FAILED)) {
+        ucm_dispatch_vm_mmap(old_addr, increment);
+    }
+
+    ucm_event_leave();
+
+    return event.sbrk.result == MAP_FAILED ? -1 : 0;
 }
 
 int ucm_madvise(void *addr, size_t length, int advice)

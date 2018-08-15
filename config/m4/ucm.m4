@@ -67,13 +67,13 @@ AC_CHECK_DECLS([SYS_mmap,
                 SYS_mremap,
                 SYS_shmat,
                 SYS_shmdt,
-                SYS_sbrk,
                 SYS_brk,
                 SYS_madvise],
                [],
                [],
                [#include <sys/syscall.h>])
 
+AC_CHECK_FUNCS([__curbrk], [], [], [])
 
 #
 # tcmalloc library - for testing only

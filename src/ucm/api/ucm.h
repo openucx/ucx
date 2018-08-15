@@ -332,6 +332,12 @@ void *ucm_orig_sbrk(intptr_t increment);
 
 
 /**
+ * @brief Call the original implementation of @ref brk without triggering events.
+ */
+int ucm_orig_brk(void *addr);
+
+
+/**
  * @brief Call the original implementation of @ref madvise without triggering events.
  */
 int ucm_orig_madvise(void *addr, size_t length, int advice);
