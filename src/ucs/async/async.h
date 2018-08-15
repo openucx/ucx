@@ -122,7 +122,7 @@ static inline int ucs_async_check_miss(ucs_async_context_t *async)
 
 
 /**
- * Check if asynchronous event delivery is blocked.
+ * Check if asynchronous event delivery is blocked by the current thread.
  *
  * @param _async Event context to check status for.
  */
