@@ -7,6 +7,7 @@
 #include <common/test.h>
 extern "C" {
 #include <ucs/stats/stats.h>
+#include <ucs/stats/libstats.h>
 #include <ucs/sys/sys.h>
 }
 
@@ -235,8 +236,11 @@ UCS_TEST_F(stats_filter_agg, report_agg) {
         }
     }
 
-    std::string compared_string = std::string(ucs_get_host_name()) + ":" +
-                                  ucs::to_string(getpid()) + ":" +
+    std::string header = std::string(ucs_get_host_name()) + ":" +
+                                     ucs::to_string(getpid());
+
+    std::string compared_string = header.substr(0, UCS_STAT_NAME_MAX - 1) +
+                                  ":" +
                                   "\n  category:\n"
                                   "    data*:\n"
                                   "      counter0: 30\n"
