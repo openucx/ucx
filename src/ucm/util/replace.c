@@ -8,6 +8,9 @@
 #  include "config.h"
 #endif
 
+#include <unistd.h>
+#include <sys/syscall.h>
+
 #include <ucm/event/event.h>
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
@@ -34,14 +37,54 @@ UCM_DEFINE_REPLACE_FUNC(shmdt,   int,   -1,         const void*)
 UCM_DEFINE_REPLACE_FUNC(sbrk,    void*, MAP_FAILED, intptr_t)
 UCM_DEFINE_REPLACE_FUNC(madvise, int,   -1,         void*, size_t, int)
 
+#ifdef HAVE_DECL_SYS_MMAP
+UCM_DEFINE_SYSCALL_FUNC(mmap, void*, SYS_mmap, void*, size_t, int, int, int, off_t)
+#else
+UCM_DEFINE_ORIG_FUNC(mmap, void*, MAP_FAILED, void*, size_t, int, int, int, off_t)
+#endif
+
+#ifdef HAVE_DECL_SYS_MUNMAP
+UCM_DEFINE_SYSCALL_FUNC(munmap, int, SYS_munmap, void*, size_t)
+#else
+UCM_DEFINE_ORIG_FUNC(munmap, int, -1, void*, size_t)
+#endif
+
+#ifdef HAVE_DECL_SYS_MREMAP
+UCM_DEFINE_SYSCALL_FUNC(mremap, void*, SYS_mremap, void*, size_t, size_t, int)
+#else
+UCM_DEFINE_ORIG_FUNC(mremap, void*, MAP_FAILED, void*, size_t, size_t, int)
+#endif
+
+#ifdef HAVE_DECL_SYS_SHMAT
+UCM_DEFINE_SYSCALL_FUNC(shmat, void*, SYS_shmat, int, const void*, int)
+#else
+UCM_DEFINE_ORIG_FUNC(shmat, void*, MAP_FAILED, int, const void*, int)
+#endif
+
+#ifdef HAVE_DECL_SYS_SHMDT
+UCM_DEFINE_SYSCALL_FUNC(shmdt, int, SYS_shmdt, const void*)
+#else
+UCM_DEFINE_ORIG_FUNC(shmdt, int, -1, const void*)
+#endif
+
+/* sbrk has no own syscall */
+UCM_DEFINE_ORIG_FUNC(sbrk, void*, MAP_FAILED, intptr_t)
+
+#ifdef HAVE_DECL_SYS_MADVISE
+UCM_DEFINE_SYSCALL_FUNC(madvise, int, SYS_madvise, void*, size_t, int)
+#else
+UCM_DEFINE_ORIG_FUNC(madvise, int, -1, void*, size_t, int)
+#endif
+
+
 #if ENABLE_SYMBOL_OVERRIDE
-UCM_OVERRIDE_FUNC(mmap, void)
-UCM_OVERRIDE_FUNC(munmap, void)
-UCM_OVERRIDE_FUNC(mremap, void)
-UCM_OVERRIDE_FUNC(shmat, void)
-UCM_OVERRIDE_FUNC(shmdt, void)
-UCM_OVERRIDE_FUNC(sbrk, void)
-UCM_OVERRIDE_FUNC(madvise, void)
+UCM_OVERRIDE_FUNC(mmap, void*)
+UCM_OVERRIDE_FUNC(munmap, int)
+UCM_OVERRIDE_FUNC(mremap, void*)
+UCM_OVERRIDE_FUNC(shmat, void*)
+UCM_OVERRIDE_FUNC(shmdt, int)
+UCM_OVERRIDE_FUNC(sbrk, void*)
+UCM_OVERRIDE_FUNC(madvise, int)
 #endif
 
 #if HAVE_CUDA

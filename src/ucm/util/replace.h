@@ -24,6 +24,21 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
     \
     _rettype ucm_override_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)); \
     \
+    /* Define a symbol which goes to the replacement - in case we are loaded first */ \
+    _rettype ucm_override_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+    { \
+        ucm_trace("%s()", __FUNCTION__); \
+        \
+        if (ucs_unlikely(ucm_reloc_get_orig_thread == pthread_self())) { \
+            return _fail_val; \
+        } \
+        return ucm_##_name(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+    }
+
+#define UCM_OVERRIDE_FUNC(_name, _rettype) \
+    _rettype _name() __attribute__ ((alias (UCS_PP_QUOTE(ucm_override_##_name)))); \
+
+#define UCM_DEFINE_ORIG_FUNC(_name, _rettype, _fail_val, ...) \
     /* Call the original function using dlsym(RTLD_NEXT) */ \
     _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
@@ -41,22 +56,14 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
             pthread_mutex_unlock(&ucm_reloc_get_orig_lock); \
         } \
         return orig_func_ptr(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
-    } \
-    \
-    /* Define a symbol which goes to the replacement - in case we are loaded first */ \
-    _rettype ucm_override_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
-    { \
-        ucm_trace("%s()", __FUNCTION__); \
-        \
-        if (ucs_unlikely(ucm_reloc_get_orig_thread == pthread_self())) { \
-            return _fail_val; \
-        } \
-        return ucm_##_name(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
 
-#define UCM_OVERRIDE_FUNC(_name, _rettype) \
-    _rettype _name() __attribute__ ((alias (UCS_PP_QUOTE(ucm_override_##_name)))); \
-
+#define UCM_DEFINE_SYSCALL_FUNC(_name, _rettype, _syscall_id, ...) \
+    /* Call syscall */ \
+    _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+    { \
+        return (_rettype)syscall(_syscall_id, UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+    }
 
 /*
  * Define argument list with given types.
