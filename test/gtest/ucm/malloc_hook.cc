@@ -30,8 +30,10 @@ extern "C" {
 
 class malloc_hook : public ucs::test {
 protected:
-    static void mem_event_callback(ucm_event_type_t event_type, ucm_event_t *event,
-            void *arg) {
+    static void mem_event_callback(ucm_event_type_t event_type,
+                                   ucm_event_t *event,
+                                   void *arg)
+    {
         malloc_hook *self = reinterpret_cast<malloc_hook*>(arg);
         self->m_got_event = 1;
     }

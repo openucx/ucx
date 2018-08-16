@@ -218,7 +218,7 @@ static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg, int is_et
     }
 }
 
-static int is_qp_require_av_seg(int qp_type)
+static int uct_ib_mlx5_is_qp_require_av_seg(int qp_type)
 {
     if (qp_type == IBV_QPT_UD) {
         return 1;
@@ -279,7 +279,7 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
         seg = qstart;
     }
 
-    if (is_qp_require_av_seg(qp_type)) {
+    if (uct_ib_mlx5_is_qp_require_av_seg(qp_type)) {
         is_eth = IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface));
         dg_size = uct_ib_mlx5_dump_dgram(s, ends - s, seg, is_eth);
         s += strlen(s);
@@ -417,7 +417,7 @@ void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
     size_t length;
 
     length = ntohl(cqe->byte_cnt);
-    if (is_qp_require_av_seg(qp_type)) {
+    if (uct_ib_mlx5_is_qp_require_av_seg(qp_type)) {
         length -= UCT_IB_GRH_LEN;
         data   += UCT_IB_GRH_LEN;
     }

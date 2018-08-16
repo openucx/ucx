@@ -432,12 +432,13 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     struct ibv_cq *cq;
+    size_t cqe_size = 64;
+    ucs_status_t status;
 #if HAVE_DECL_IBV_EXP_SETENV
     static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
     const char *cqe_size_env_value;
-    size_t cqe_size_min, cqe_size;
+    size_t cqe_size_min;
     char cqe_size_buf[32];
-    ucs_status_t status;
     int env_var_added = 0;
     int ret;
 
@@ -449,8 +450,7 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
         if (cqe_size < cqe_size_min) {
             ucs_error("%s is set to %zu, but at least %zu is required (inl: %zu)",
                       cqe_size_env_var, cqe_size, cqe_size_min, *inl);
-            status = UCS_ERR_INVALID_PARAM;
-            goto out;
+            return UCS_ERR_INVALID_PARAM;
         }
     } else {
         /* CQE size is not defined by the environment, set it according to inline
@@ -466,13 +466,12 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
         if (ret) {
             ucs_error("ibv_exp_setenv(%s=%s) failed: %m", cqe_size_env_var,
                       cqe_size_buf);
-            status = UCS_ERR_INVALID_PARAM;
-            goto out;
+            return UCS_ERR_INVALID_PARAM;
         }
 
         env_var_added = 1;
     }
-
+#endif
     cq = ibv_create_cq(dev->ibv_context, cq_length, NULL, iface->comp_channel,
                        preferred_cpu);
     if (cq == NULL) {
@@ -486,6 +485,7 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
     status = UCS_OK;
 
 out_unsetenv:
+#if HAVE_DECL_IBV_EXP_SETENV
     if (env_var_added) {
         /* if we created a new environment variable, remove it */
         ret = ibv_exp_unsetenv(dev->ibv_context, cqe_size_env_var);
@@ -493,21 +493,8 @@ out_unsetenv:
             ucs_warn("unsetenv(%s) failed: %m", cqe_size_env_var);
         }
     }
-out:
-    return status;
-#else
-    cq = ibv_create_cq(dev->ibv_context, cq_length, NULL, iface->comp_channel,
-                       preferred_cpu);
-    if (cq == NULL) {
-        ucs_error("ibv_create_cq(cqe=%d) failed: %m", cq_length);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    *cq_p = cq;
-    *inl = 32;
-
-    return UCS_OK;
 #endif
+    return status;
 }
 
 
