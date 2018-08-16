@@ -685,11 +685,10 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         ucs_queue_push(&iface->rx.pending_q, &skb->u.am.queue);
     } else {
         /* Avoid reordering with respect to pending operations, if user AM handler
-         * initiates sends. This flag would be cleared after all incoming messages
+         * initiates sends from any endpoint created on the iface.
+         * This flag would be cleared after all incoming messages
          * are processed. */
-        if (ucs_unlikely(!ucs_arbiter_group_is_empty(&ep->tx.pending.group))) {
-            uct_ud_iface_raise_pending_async_ev(iface);
-        }
+        uct_ud_iface_raise_pending_async_ev(iface);
 
         uct_ib_iface_invoke_am_desc(&iface->super, am_id, neth + 1,
                                     byte_len - sizeof(*neth), &skb->super);
