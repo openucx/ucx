@@ -81,6 +81,17 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
         return (_rettype)syscall(_syscall_id, UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
 
+#define UCM_DEFINE_ORIG_SYSCALL_FUNC(_name, _rettype, _fail_val, _syscall_id, ...) \
+    _UCM_DEFINE_ORIG_FUNC(_name, ucm_orig_##_name##_dlsym, ucm_override_##_name, \
+                          _rettype, _fail_val, __VA_ARGS__) \
+    UCM_DEFINE_SYSCALL_FUNC(_name##_syscall, _rettype, _syscall_id, __VA_ARGS__) \
+    _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+    { \
+        return ucm_global_opts.hook_origin_syscall ? \
+               ucm_orig_##_name##_syscall(UCM_FUNC_PASS_ARGS(__VA_ARGS__)) : \
+               ucm_orig_##_name##_dlsym(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+    }
+
 /*
  * Define argument list with given types.
  */

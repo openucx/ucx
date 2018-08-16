@@ -179,6 +179,7 @@ typedef struct ucm_global_config {
     int             enable_cuda_reloc;           /* Enable installing CUDA relocations */
     int             enable_dynamic_mmap_thresh;  /* Enable adaptive mmap threshold */
     size_t          alloc_alignment;             /* Alignment for memory allocations */
+    int             hook_origin_syscall;         /* Enable installing malloc hooks */
 } ucm_global_config_t;
 
 
