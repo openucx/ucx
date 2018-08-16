@@ -130,8 +130,13 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_dc_ep_basic_init(uct_dc_iface_t *ifa
                                                              uct_dc_ep_t *ep)
 {
     ucs_arbiter_group_init(&ep->arb_group);
-    ep->dci = uct_dc_iface_is_dci_rand(iface) ? (rand() % iface->tx.ndci) :
-                                                UCT_DC_EP_NO_DCI;
+
+    if (uct_dc_iface_is_dci_rand(iface)) {
+        /* coverity[dont_call] */
+        ep->dci = rand() % iface->tx.ndci;
+    } else {
+        ep->dci = UCT_DC_EP_NO_DCI;
+    }
 
     /* valid = 1, global = 0, tx_wait = 0 */
     ep->flags = UCT_DC_EP_FLAG_VALID;
