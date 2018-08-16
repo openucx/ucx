@@ -41,6 +41,7 @@ typedef struct uct_dc_iface_addr {
 typedef enum {
     UCT_DC_TX_POLICY_DCS,
     UCT_DC_TX_POLICY_DCS_QUOTA,
+    UCT_DC_TX_POLICY_RAND,
     UCT_DC_TX_POLICY_LAST
 } uct_dc_tx_policty_t;
 

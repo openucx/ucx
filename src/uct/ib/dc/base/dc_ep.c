@@ -27,7 +27,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_ep_t)
 
     ucs_assert_always(self->flags & UCT_DC_EP_FLAG_VALID);
 
-    if (self->dci == UCT_DC_EP_NO_DCI) {
+    if ((self->dci == UCT_DC_EP_NO_DCI) || uct_dc_iface_is_dci_rand(iface)) {
         return;
     }
 
@@ -83,7 +83,7 @@ ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
     uct_dc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_iface_t);
     uct_dc_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_ep_t);
 
-    /* ep can tx iff
+    /* ep can tx if:
      * - iface has resources: cqe and tx skb
      * - dci is either assigned or can be assigned
      * - dci has resources
@@ -106,7 +106,7 @@ ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
     /* no dci:
      *  Do not grab dci here. Instead put the group on dci allocation arbiter.
      *  This way we can assure fairness between all eps waiting for
-     *  dci allocation.
+     *  dci allocation. Relevant for dcs and dcs_quota policies.
      */
     if (ep->dci == UCT_DC_EP_NO_DCI) {
         ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*)r->priv);
@@ -120,7 +120,8 @@ ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
 }
 
 /**
- * dispatch requests waiting for dci allocation
+ * Dispatch requests waiting for dci allocation.
+ * Relevant for dcs and dcs_quota policies only.
  */
 ucs_arbiter_cb_result_t
 uct_dc_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
@@ -129,6 +130,8 @@ uct_dc_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
 {
     uct_dc_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_dc_ep_t, arb_group);
     uct_dc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_iface_t);
+
+    ucs_assert(!uct_dc_iface_is_dci_rand(iface));
 
     if (ep->dci != UCT_DC_EP_NO_DCI) {
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
@@ -165,11 +168,12 @@ uct_dc_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
     ucs_trace_data("progress pending request %p returned: %s", req,
                    ucs_status_string(status));
     if (status == UCS_OK) {
-        /* Release dci if this is the last elem in the group and the dci has no
-         * outstanding operations. For example pending callback did not send
-         * anything. (uct_ep_flush or just return ok)
+        /* For dcs* policies release dci if this is the last elem in the group
+         * and the dci has no outstanding operations. For example pending
+         * callback did not send anything. (uct_ep_flush or just return ok)
          */
-        if (ucs_arbiter_elem_is_last(&ep->arb_group, elem)) {
+        if (!uct_dc_iface_is_dci_rand(iface) &&
+            ucs_arbiter_elem_is_last(&ep->arb_group, elem)) {
             uct_dc_iface_dci_free(iface, ep);
         }
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
@@ -230,7 +234,9 @@ void uct_dc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb, vo
     } else {
         ucs_arbiter_group_purge(uct_dc_iface_tx_waitq(iface), &ep->arb_group,
                                 uct_dc_ep_abriter_purge_cb, &args);
-        uct_dc_iface_dci_free(iface, ep);
+        if (!uct_dc_iface_is_dci_rand(iface)) {
+            uct_dc_iface_dci_free(iface, ep);
+        }
     }
 }
 
