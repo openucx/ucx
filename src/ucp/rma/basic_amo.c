@@ -23,7 +23,7 @@
             goto out; \
         } \
         \
-        UCP_THREAD_CS_ENTER_CONDITIONAL(&(_ep)->worker->mt_lock); \
+        UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL((_ep)->worker); \
         for (;;) { \
             status = UCP_RKEY_RESOLVE(_rkey, _ep, amo); \
             if (status != UCS_OK) { \
@@ -34,7 +34,7 @@
                                       (_ep)->uct_eps[(_rkey)->cache.amo_lane], _op, \
                                       _param, _remote_addr, (_rkey)->cache.amo_rkey); \
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) { \
-                UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
+                UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL((_ep)->worker); \
                 return status; \
             } \
             ucp_worker_progress((_ep)->worker); \
@@ -42,7 +42,7 @@
         \
         status = UCS_OK; \
     out_unlock: \
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
+        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL((_ep)->worker); \
     out: \
         return status; \
     }
@@ -57,7 +57,7 @@
             goto out; \
         } \
         \
-        UCP_THREAD_CS_ENTER_CONDITIONAL(&(_ep)->worker->mt_lock); \
+        UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL((_ep)->worker); \
         comp.count = 2; \
         \
         for (;;) { \
@@ -84,7 +84,7 @@
         } while (comp.count != 1); \
         status = UCS_OK; \
     out_unlock: \
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
+        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL((_ep)->worker); \
     out: \
         return status; \
     }

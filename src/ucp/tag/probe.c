@@ -21,7 +21,7 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
     ucp_recv_desc_t *rdesc;
     uint16_t flags;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     ucs_trace_req("probe_nb tag %"PRIx64"/%"PRIx64" remove=%d", tag, tag_mask,
                   remove);
@@ -41,7 +41,7 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
         }
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return rdesc;
 }

@@ -337,7 +337,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
     ucs_status_t status;
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     status = UCP_RKEY_RESOLVE(rkey, ep, rma);
     if (status != UCS_OK) {
@@ -369,7 +369,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
     status = ucp_rma_blocking(ep, buffer, length, remote_addr, rkey,
                               ucp_progress_put, rma_config->put_zcopy_thresh);
 out_unlock:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status;
 }
 
@@ -381,7 +381,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get, (ep, buffer, length, remote_addr, rkey),
     ucs_status_t status;
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     status = UCP_RKEY_RESOLVE(rkey, ep, rma);
     if (status != UCS_OK) {
@@ -392,7 +392,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get, (ep, buffer, length, remote_addr, rkey),
     status = ucp_rma_blocking(ep, buffer, length, remote_addr, rkey, 
                               ucp_progress_get, rma_config->get_zcopy_thresh);
 out_unlock:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status;
 }
 
@@ -403,7 +403,7 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     ucs_status_t status;
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     status = UCP_RKEY_RESOLVE(rkey, ep, rma);
     if (status != UCS_OK) {
@@ -423,7 +423,7 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     status = ucp_rma_nonblocking(ep, buffer, length, remote_addr, rkey,
                                  ucp_progress_put, rma_config->put_zcopy_thresh);
 out_unlock:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status;
 }
 
@@ -436,7 +436,7 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
     ucs_status_t status;
 
     UCP_RMA_CHECK_PARAMS_PTR(buffer, length);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     status = UCP_RKEY_RESOLVE(rkey, ep, rma);
     if (status != UCS_OK) {
@@ -459,7 +459,7 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
                                         ucp_progress_put, rma_config->put_zcopy_thresh,
                                         cb);
 out_unlock:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ptr_status;
 }
 
@@ -470,7 +470,7 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
     ucs_status_t status;
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     status = UCP_RKEY_RESOLVE(rkey, ep, rma);
     if (status != UCS_OK) {
@@ -481,7 +481,7 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
     status = ucp_rma_nonblocking(ep, buffer, length, remote_addr, rkey,
                          ucp_progress_get, rma_config->get_zcopy_thresh);
 out_unlock:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status;
 }
 
@@ -494,7 +494,7 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
     ucs_status_t status;
 
     UCP_RMA_CHECK_PARAMS_PTR(buffer, length);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     status = UCP_RKEY_RESOLVE(rkey, ep, rma);
     if (status != UCS_OK) {
@@ -507,7 +507,7 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
                                         ucp_progress_get, rma_config->get_zcopy_thresh,
                                         cb);
 out_unlock:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ptr_status;
 }
 
@@ -516,7 +516,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
     unsigned rsc_index;
     ucs_status_t status;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
         if (worker->ifaces[rsc_index].iface == NULL) {
@@ -531,7 +531,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
     status = UCS_OK;
 
 out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
 }
 

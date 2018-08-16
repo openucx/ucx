@@ -1374,7 +1374,7 @@ unsigned ucp_worker_progress(ucp_worker_h worker)
     /* worker->inprogress is used only for assertion check.
      * coverity[assert_side_effect]
      */
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     /* check that ucp_worker_progress is not called from within ucp_worker_progress */
     ucs_assert(worker->inprogress++ == 0);
@@ -1384,7 +1384,7 @@ unsigned ucp_worker_progress(ucp_worker_h worker)
     /* coverity[assert_side_effect] */
     ucs_assert(--worker->inprogress == 0);
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return count;
 }
@@ -1397,7 +1397,7 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
     ssize_t count = 0;
     ucp_ep_h ep;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     while ((count < max_eps) && !ucs_list_is_empty(&worker->stream_ready_eps)) {
         ep_ext                    = ucp_stream_worker_dequeue_ep_head(worker);
@@ -1407,7 +1407,7 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
         ++count;
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return count;
 }
@@ -1416,14 +1416,14 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
 {
     ucs_status_t status;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     if (worker->flags & UCP_WORKER_FLAG_EXTERNAL_EVENT_FD) {
         status = UCS_ERR_UNSUPPORTED;
     } else {
         *fd = worker->epfd;
         status = UCS_OK;
     }
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
 }
 
@@ -1457,7 +1457,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
         }
     } while (ret != 0);
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     /* Go over arm_list of active interfaces which support events and arm them */
     ucs_list_for_each(wiface, &worker->arm_ifaces, arm_list) {
@@ -1473,7 +1473,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     status = UCS_OK;
 
 out_unlock:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 out:
     ucs_trace("ucp_worker_arm returning %s", ucs_status_string(status));
     return status;
@@ -1494,7 +1494,7 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
 
     ucs_trace_func("worker %p", worker);
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     status = ucp_worker_arm(worker);
     if (status == UCS_ERR_BUSY) { /* if UCS_ERR_BUSY returned - no poll() must called */
@@ -1535,7 +1535,7 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
     }
 
 out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
 }
 
@@ -1550,12 +1550,12 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
 {
     ucs_status_t status;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     status = ucp_address_pack(worker, NULL, -1, NULL, address_length_p,
                               (void**)address_p);
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return status;
 }
@@ -1575,7 +1575,7 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
     ucp_rsc_index_t rsc_index;
     int first;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     fprintf(stream, "#\n");
     fprintf(stream, "# UCP worker '%s'\n", ucp_worker_get_name(worker));
@@ -1607,5 +1607,5 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
 
     fprintf(stream, "#\n");
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 }

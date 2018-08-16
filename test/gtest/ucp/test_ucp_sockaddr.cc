@@ -23,12 +23,30 @@
          * and skipped */
 
 class test_ucp_sockaddr : public ucp_test {
+    enum {
+        MT_PARAM_VARIANT = DEFAULT_PARAM_VARIANT + 1
+    };
+
 public:
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
         params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
         params.features     = UCP_FEATURE_TAG;
         return params;
+    }
+
+    static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
+                                                        const std::string& name,
+                                                        const std::string& test_case_name,
+                                                        const std::string& tls)
+    {
+        std::vector<ucp_test_param> result =
+                ucp_test::enum_test_params(ctx_params, name, test_case_name, tls);
+
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     MT_PARAM_VARIANT, result,
+                                     MULTI_THREAD_WORKER);
+        return result;
     }
 
     void init()

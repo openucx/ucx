@@ -29,10 +29,17 @@ typedef struct ucs_async_signal_context {
         ucs_memory_cpu_fence(); \
     }
 
+
 #define UCS_ASYNC_SIGNAL_UNBLOCK(_async) \
     { \
         ucs_memory_cpu_fence(); \
         --(_async)->signal.block_count; \
     }
+
+
+#define UCS_ASYNC_SIGNAL_IS_RECURSIVELY_BLOCKED(_async) \
+    (((_async)->signal.block_count > 0) && \
+     ((_async)->signal.tid == ucs_get_tid()))
+
 
 #endif

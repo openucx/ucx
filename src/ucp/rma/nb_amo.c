@@ -169,10 +169,10 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
     req = ucp_request_get(ep->worker);
     if (ucs_unlikely(NULL == req)) {
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
@@ -180,7 +180,7 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
                    remote_addr, rkey, value);
 
     status_p = ucp_amo_send_request(req, cb);
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status_p;
 }
 
@@ -201,7 +201,7 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
     if (status != UCS_OK) {
         return status;
     }
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     status = UCP_RKEY_RESOLVE(rkey, ep, amo);
     if (status != UCS_OK) {
@@ -237,6 +237,6 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
         }
     }
 out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status;
 }

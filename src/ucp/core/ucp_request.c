@@ -66,7 +66,7 @@ ucp_request_release_common(void *request, uint8_t cb_flag, const char *debug_nam
                                                         ucp_worker_t, req_mp);
     uint16_t flags;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     flags = req->flags;
     ucs_trace_req("%s request %p (%p) "UCP_REQUEST_FLAGS_FMT, debug_name,
@@ -81,7 +81,7 @@ ucp_request_release_common(void *request, uint8_t cb_flag, const char *debug_nam
         req->flags = (flags | UCP_REQUEST_FLAG_RELEASED) & ~cb_flag;
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 }
 
 UCS_PROFILE_FUNC_VOID(ucp_request_release, (request), void *request)
@@ -106,7 +106,7 @@ UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
     }
 
     if (req->flags & UCP_REQUEST_FLAG_EXPECTED) {
-        UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+        UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
         ucp_tag_exp_remove(&worker->tm, req);
         /* If tag posted to the transport need to wait its completion */
@@ -114,7 +114,7 @@ UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
             ucp_request_complete_tag_recv(req, UCS_ERR_CANCELED);
         }
 
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     }
 }
 
