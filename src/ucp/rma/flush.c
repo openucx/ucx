@@ -378,3 +378,27 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status;
 }
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
+{
+    unsigned rsc_index;
+    ucs_status_t status;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+
+    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
+        if (worker->ifaces[rsc_index].iface == NULL) {
+            continue;
+        }
+
+        status = uct_iface_fence(worker->ifaces[rsc_index].iface, 0);
+        if (status != UCS_OK) {
+            goto out;
+        }
+    }
+    status = UCS_OK;
+
+out:
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    return status;
+}

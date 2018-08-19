@@ -38,7 +38,7 @@ noinst_HEADERS = \
 	dt/dt_generic.h \
 	proto/proto.h \
 	proto/proto_am.inl \
-	rma/amo.inl \
+	rma/rma.inl \
 	tag/eager.h \
 	tag/rndv.h \
 	tag/tag_match.h \
@@ -65,10 +65,9 @@ libucp_la_SOURCES = \
 	dt/dt_generic.c \
 	dt/dt.c \
 	proto/proto_am.c \
-	rma/basic_amo.c \
-	rma/basic_rma.c \
+	rma/amo_basic.c \
+	rma/rma_basic.c \
 	rma/flush.c \
-	rma/nb_amo.c \
 	tag/eager_rcv.c \
 	tag/eager_snd.c \
 	tag/probe.c \
