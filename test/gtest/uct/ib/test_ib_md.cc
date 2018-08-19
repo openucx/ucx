@@ -5,11 +5,10 @@
 * See file LICENSE for terms.
 */
 
-extern "C" {
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
 #include <uct/ib/base/ib_md.h>
-}
+
 #include <common/test.h>
 #include <uct/test_md.h>
 

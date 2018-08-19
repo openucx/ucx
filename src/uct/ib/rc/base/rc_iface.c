@@ -200,6 +200,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                               UCS_BIT(UCT_ATOMIC_OP_CSWAP);
     }
 
+#if HAVE_IB_EXT_ATOMICS
     if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint64_t))) {
         /* TODO: remove deprecated flags */
         iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
@@ -216,6 +217,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                               UCS_BIT(UCT_ATOMIC_OP_SWAP) |
                                               UCS_BIT(UCT_ATOMIC_OP_CSWAP);
     }
+#endif
 
     iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
     iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
@@ -932,7 +934,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD;
-    qp_init_attr.pd                  = uct_ib_iface_md(&iface->super)->pd;
+    qp_init_attr.pd                  = uct_ib_iface_qp_pd(&iface->super);
 
 #  if HAVE_IB_EXT_ATOMICS
     qp_init_attr.comp_mask          |= IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
@@ -960,7 +962,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 
     qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
 #else
-    qp = ibv_create_qp(uct_ib_iface_md(&iface->super)->pd, &qp_init_attr);
+    qp = ibv_create_qp(uct_ib_iface_qp_pd(&iface->super), &qp_init_attr);
 #endif
     if (qp == NULL) {
         ucs_error("failed to create %s qp type: %m", qp_type_str);
