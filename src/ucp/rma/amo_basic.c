@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -55,7 +55,7 @@ static void ucp_amo_completed_single(uct_completion_t *self,
     ucp_request_complete_send(req, status);
 }
 
-static inline
+static UCS_F_ALWAYS_INLINE
 ucs_status_t ucp_amo_check_send_status(ucp_request_t *req, ucs_status_t status)
 {
     if (status == UCS_INPROGRESS) {
@@ -166,13 +166,13 @@ ucp_amo_init_fetch(ucp_request_t *req, ucp_ep_h ep, void *buffer,
     req->send.buffer                = buffer;
 }
 
-static UCS_F_ALWAYS_INLINE
-void ucp_amo_init_post(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
-                       size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey,
-                       uint64_t value)
+static UCS_F_ALWAYS_INLINE void
+ucp_amo_init_post(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
+                  size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey,
+                  uint64_t value)
 {
     ucp_amo_init_common(req, ep, op, remote_addr, rkey, value, op_size);
-    req->send.uct.func              = ucp_amo_basic_progress_post;
+    req->send.uct.func = ucp_amo_basic_progress_post;
 }
 
 ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
@@ -289,33 +289,41 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_fadd64, (ep, add, remote_addr, rkey, r
                  ucp_ep_h ep, uint64_t add, uint64_t remote_addr, ucp_rkey_h rkey,
                  uint64_t *result)
 {
-    return ucp_rma_wait(ep->worker,
-                        ucp_atomic_fetch_nb(ep, UCP_ATOMIC_FETCH_OP_FADD, add,
-                                            result, sizeof(add), remote_addr,
-                                            rkey, (void*)ucs_empty_function),
-                        "atomic_fadd64");
+    return ucp_atomic_fetch_b(ep, UCP_ATOMIC_FETCH_OP_FADD, add, result,
+                              sizeof(add), remote_addr, rkey, "atomic_fadd64");
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_swap32, (ep, swap, remote_addr, rkey, result),
                  ucp_ep_h ep, uint32_t swap, uint64_t remote_addr, ucp_rkey_h rkey,
                  uint32_t *result)
 {
-    return ucp_rma_wait(ep->worker,
-                        ucp_atomic_fetch_nb(ep, UCP_ATOMIC_FETCH_OP_SWAP, swap,
-                                            result, sizeof(swap), remote_addr,
-                                            rkey, (void*)ucs_empty_function),
-                        "atomic_swap32");
+    return ucp_atomic_fetch_b(ep, UCP_ATOMIC_FETCH_OP_SWAP, swap, result,
+                              sizeof(swap), remote_addr, rkey, "atomic_swap32");
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_swap64, (ep, swap, remote_addr, rkey, result),
                  ucp_ep_h ep, uint64_t swap, uint64_t remote_addr, ucp_rkey_h rkey,
                  uint64_t *result)
 {
-    return ucp_rma_wait(ep->worker,
-                        ucp_atomic_fetch_nb(ep, UCP_ATOMIC_FETCH_OP_SWAP, swap,
-                                            result, sizeof(swap), remote_addr,
-                                            rkey, (void*)ucs_empty_function),
-                        "atomic_swap64");
+    return ucp_atomic_fetch_b(ep, UCP_ATOMIC_FETCH_OP_SWAP, swap, result,
+                              sizeof(swap), remote_addr, rkey, "atomic_swap64");
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_atomic_cswap_b(ucp_ep_h ep, uint64_t compare, uint64_t swap, size_t size,
+                   uint64_t remote_addr, ucp_rkey_h rkey, void *result,
+                   const char *op_name)
+{
+    char tmp[sizeof(swap)]; /* sufficient storage for maximal operand size */
+    ucs_status_t status;
+
+    memcpy(tmp, &swap, size);
+    status = ucp_atomic_fetch_b(ep, UCP_ATOMIC_FETCH_OP_CSWAP, compare, &tmp,
+                                size, remote_addr, rkey, op_name);
+    if (status == UCS_OK) {
+        memcpy(result, tmp, size);
+    }
+    return status;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_cswap32,
@@ -323,15 +331,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_cswap32,
                  ucp_ep_h ep, uint32_t compare, uint32_t swap,
                  uint64_t remote_addr, ucp_rkey_h rkey, uint32_t *result)
 {
-    ucs_status_t status;
-    uint32_t tmp = swap;
-
-    status = ucp_atomic_fetch_b(ep, UCP_ATOMIC_FETCH_OP_CSWAP, compare, &tmp,
-                                sizeof(swap), remote_addr, rkey, "atomic_cswap32");
-    if (status == UCS_OK) {
-        *result = tmp;
-    }
-    return status;
+    return ucp_atomic_cswap_b(ep, compare, swap, sizeof(swap), remote_addr,
+                              rkey, result, "atomic_cswap32");
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_cswap64,
@@ -339,13 +340,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_cswap64,
                  ucp_ep_h ep, uint64_t compare, uint64_t swap,
                  uint64_t remote_addr, ucp_rkey_h rkey, uint64_t *result)
 {
-    ucs_status_t status;
-    uint64_t tmp = swap;
-
-    status = ucp_atomic_fetch_b(ep, UCP_ATOMIC_FETCH_OP_CSWAP, compare, &tmp,
-                                sizeof(swap), remote_addr, rkey, "atomic_cswap64");
-    if (status == UCS_OK) {
-        *result = tmp;
-    }
-    return status;
+    return ucp_atomic_cswap_b(ep, compare, swap, sizeof(swap), remote_addr,
+                              rkey, result, "atomic_cswap64");
 }

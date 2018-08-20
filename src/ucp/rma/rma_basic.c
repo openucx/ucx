@@ -301,9 +301,9 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
-    status = ucp_rma_nonblocking(ep, (void*)buffer, length, remote_addr, rkey,
-                                 ucp_rma_basic_progress_put,
-                                 rma_config->put_zcopy_thresh);
+    status     = ucp_rma_nonblocking(ep, (void*)buffer, length, remote_addr, rkey,
+                                     ucp_rma_basic_progress_put,
+                                     rma_config->put_zcopy_thresh);
 out_unlock:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status;
