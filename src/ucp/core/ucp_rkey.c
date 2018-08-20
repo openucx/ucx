@@ -12,11 +12,6 @@
 #include <inttypes.h>
 
 
-static ucp_rkey_t ucp_mem_dummy_rkey = {
-                                        // TODO cache?
-    .md_map = 0
-};
-
 static ucp_md_map_t ucp_mem_dummy_buffer = 0;
 
 
@@ -173,13 +168,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
     ucs_trace("unpacking rkey with md_map 0x%lx", remote_md_map);
 
     /* MD map for the unpacked rkey */
-    md_map = remote_md_map & ucp_ep_config(ep)->key.reachable_md_map;
-    if (md_map == 0) {
-        /* Dummy key return ok */
-        *rkey_p = &ucp_mem_dummy_rkey;
-        return UCS_OK;
-    }
-
+    md_map   = remote_md_map & ucp_ep_config(ep)->key.reachable_md_map;
     md_count = ucs_count_one_bits(md_map);
     p       += sizeof(ucp_md_map_t);
 
@@ -296,10 +285,6 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p)
     unsigned i;
     ucs_status_t status;
 
-    if (rkey == &ucp_mem_dummy_rkey) {
-        return UCS_ERR_UNREACHABLE;
-    }
-
     num_rkeys = ucs_count_one_bits(rkey->md_map);
 
     for (i = 0; i < num_rkeys; ++i) {
@@ -318,10 +303,6 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
     ucp_context_h UCS_V_UNUSED context;
     unsigned num_rkeys;
     unsigned i;
-
-    if (rkey == &ucp_mem_dummy_rkey) {
-        return;
-    }
 
     num_rkeys = ucs_count_one_bits(rkey->md_map);
 
