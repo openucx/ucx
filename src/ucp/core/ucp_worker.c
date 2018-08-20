@@ -1180,7 +1180,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     worker->context           = context;
     worker->uuid              = ucs_generate_uuid((uintptr_t)worker);
-    worker->wireup_pend_count = 0;
+    worker->flush_ops_count   = 0;
     worker->flags             = 0;
     worker->inprogress        = 0;
     worker->ep_config_max     = config_count;
