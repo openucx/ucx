@@ -134,15 +134,19 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    UCS_CONFIG_TYPE_ENUM(uct_ib_iface_addr_types)},
 
   {"SL", "0",
-   "Which IB service level to use.\n",
+   "IB Service Level / RoCEv2 Ethernet Priority.\n",
    ucs_offsetof(uct_ib_iface_config_t, sl), UCS_CONFIG_TYPE_UINT},
 
   {"TRAFFIC_CLASS", "0",
-   "Which IB traffic class to use.\n",
+   "IB Traffic Class / RoCEv2 Differentiated Services Code Point (DSCP)\n",
    ucs_offsetof(uct_ib_iface_config_t, traffic_class), UCS_CONFIG_TYPE_UINT},
 
+  {"HOP_LIMIT", "255",
+   "IB Hop limit / RoCEv2 Time to Live. Should be between 0 and 255.\n",
+   ucs_offsetof(uct_ib_iface_config_t, hop_limit), UCS_CONFIG_TYPE_UINT},
+
   {"LID_PATH_BITS", "0-17",
-   "list of IB Path bits separated by comma (a,b,c) "
+   "List of IB Path bits separated by comma (a,b,c) "
    "which will be the low portion of the LID, according to the LMC in the fabric.",
    ucs_offsetof(uct_ib_iface_config_t, lid_path_bits), UCS_CONFIG_TYPE_ARRAY(path_bits_spec)},
 
@@ -652,6 +656,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.port_num           = port_num;
     self->config.sl                 = config->sl;
     self->config.traffic_class      = config->traffic_class;
+    self->config.hop_limit          = config->hop_limit;
     self->release_desc.cb           = uct_ib_iface_release_desc;
 
     self->config.enable_res_domain  = config->enable_res_domain;
