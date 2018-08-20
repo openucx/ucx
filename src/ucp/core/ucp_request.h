@@ -93,7 +93,7 @@ struct ucp_request {
     union {
         struct {
             ucp_ep_h              ep;
-            const void            *buffer;  /* Send buffer */
+            void                  *buffer;  /* Send buffer */
             ucp_datatype_t        datatype; /* Send type */
             size_t                length;   /* Total length, in bytes */
             uct_memory_type_t     mem_type; /* Memory type */

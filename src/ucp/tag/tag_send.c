@@ -122,7 +122,7 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
 {
     req->flags             = flags;
     req->send.ep           = ep;
-    req->send.buffer       = buffer;
+    req->send.buffer       = (void*)buffer;
     req->send.datatype     = datatype;
     req->send.tag.tag      = tag;
     ucp_request_send_state_init(req, datatype, count);
