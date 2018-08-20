@@ -30,6 +30,15 @@ struct ucp_amo_proto {
 };
 
 
+/**
+ * Atomic reply data
+ */
+typedef union {
+    uint32_t           reply32; /* 32-bit reply */
+    uint64_t           reply64; /* 64-bit reply */
+} ucp_atomic_reply_t;
+
+
 typedef struct {
     uint64_t                  address;
     uintptr_t                 ep_ptr;
@@ -53,9 +62,18 @@ typedef struct {
 } UCS_S_PACKED ucp_rma_rep_hdr_t;
 
 
+typedef struct {
+    uint64_t                  address;
+    ucp_request_hdr_t         req; // NULL if no reply
+    uint8_t                   length;
+    uint8_t                   opcode;
+} UCS_S_PACKED ucp_atomic_req_hdr_t;
+
+
 extern ucp_rma_proto_t ucp_rma_basic_proto;
 extern ucp_rma_proto_t ucp_rma_sw_proto;
 extern ucp_amo_proto_t ucp_amo_basic_proto;
+extern ucp_amo_proto_t ucp_amo_sw_proto;
 
 
 ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,

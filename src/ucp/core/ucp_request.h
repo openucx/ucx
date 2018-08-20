@@ -174,11 +174,9 @@ struct ucp_request {
 
                 struct {
                     uint64_t              remote_addr; /* Remote address */
-                    uct_atomic_op_t       uct_op;      /* Requested UCT AMO */
                     ucp_rkey_h            rkey;        /* Remote memory key */
-                    uint64_t              value;
-                    size_t                size;
-                    void                  *result;
+                    uint64_t              value;       /* Atomic argument */
+                    uct_atomic_op_t       uct_op;      /* Requested UCT AMO */
                 } amo;
 
                 struct {
@@ -191,6 +189,11 @@ struct ucp_request {
                 struct {
                     uintptr_t              req;  /* Remote get request pointer */
                 } get_reply;
+
+                struct {
+                    uintptr_t              req;  /* Remote atomic request pointer */
+                    ucp_atomic_reply_t     data; /* Atomic reply data */
+                } atomic_reply;
             };
 
             /* This structure holds all mutable fields, and everything else

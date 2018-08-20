@@ -770,13 +770,16 @@ static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, const ucp_ep_params_t 
                                              unsigned address_count,
                                              const ucp_address_entry_t *address_list,
                                              ucp_wireup_lane_desc_t *lane_descs,
-                                             ucp_lane_index_t *num_lanes_p)
+                                             ucp_lane_index_t *num_lanes_p,
+                                             int *need_am)
 {
     ucp_worker_h worker            = ep->worker;
     ucp_context_h context          = worker->context;
     ucp_wireup_criteria_t criteria = {0};
     ucp_rsc_index_t rsc_index;
+    ucs_status_t status;
     uint64_t tl_bitmap;
+    int allow_am;
 
     if (!ucs_test_flags(context->config.features, UCP_FEATURE_AMO32, UCP_FEATURE_AMO64) ||
         (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) {
@@ -803,10 +806,20 @@ static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, const ucp_ep_params_t 
         }
     }
 
-    return ucp_wireup_add_memaccess_lanes(ep, address_count, address_list,
-                                          lane_descs, num_lanes_p, &criteria,
-                                          tl_bitmap, UCP_WIREUP_LANE_USAGE_AMO,
-                                          1, 1);
+    allow_am = !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
+               !ucp_wireup_ep_params_is_err_mode_peer(params);
+    status = ucp_wireup_add_memaccess_lanes(ep, address_count, address_list,
+                                            lane_descs, num_lanes_p, &criteria,
+                                            tl_bitmap, UCP_WIREUP_LANE_USAGE_AMO,
+                                            1, !allow_am);
+    if (status == UCS_OK) {
+        return status; /* using transport AMO operations */
+    } else if (allow_am) {
+        *need_am = 1;  /* using emulation over active messages */
+        return UCS_OK;
+    } else {
+        return status;
+    }
 }
 
 static double ucp_wireup_am_score_func(ucp_context_h context,
@@ -1279,7 +1292,8 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     }
 
     status = ucp_wireup_add_amo_lanes(ep, params, ep_init_flags, address_count,
-                                      address_list, lane_descs, &key->num_lanes);
+                                      address_list, lane_descs, &key->num_lanes,
+                                      &need_am);
     if (status != UCS_OK) {
         return status;
     }
