@@ -39,6 +39,7 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 #if HAVE_STRUCT_MLX5DV_CQ_CQ_UAR
     mlx5_cq->uar       = dcq.dv.cq_uar;
 #else
+    /* coverity[var_deref_model] */
     mlx5_cq->uar       = uct_dv_get_info_uar0(dcq.dv.uar);
 #endif
     mlx5_cq->dbrec     = dcq.dv.dbrec;
