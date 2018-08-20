@@ -209,6 +209,8 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
 
     /* Receive next chunk of data */
     recv_length = iface->config.buf_size - ep->length;
+    ucs_assertv(recv_length > 0, "ep=%p", ep);
+
     status = uct_tcp_recv(ep->fd, ep->buf + ep->length, &recv_length);
     if (status != UCS_OK) {
         if (status == UCS_ERR_CANCELED) {
@@ -225,6 +227,8 @@ unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
     /* Parse received active messages */
     while ((remainder = ep->length - ep->offset) >= sizeof(*hdr)) {
         hdr = ep->buf + ep->offset;
+        ucs_assert(hdr->length <= (iface->config.buf_size - sizeof(uct_tcp_am_hdr_t)));
+
         if (remainder < sizeof(*hdr) + hdr->length) {
             break;
         }
@@ -272,6 +276,9 @@ ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
     hdr->length = packed_length = pack_cb(hdr + 1, arg);
     ep->length  = sizeof(*hdr) + packed_length;
 
+    UCT_CHECK_LENGTH(hdr->length, 0,
+                     iface->config.buf_size - sizeof(uct_tcp_am_hdr_t),
+                     "am_bcopy");
     UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, hdr->length);
     uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, hdr->am_id,
                        hdr + 1, hdr->length, "SEND fd %d", ep->fd);
