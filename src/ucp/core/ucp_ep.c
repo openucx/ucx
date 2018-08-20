@@ -421,6 +421,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
             ucp_ep_destroy_internal(ep);
         }
 
+        ucp_ep_remote_comp_reset(ep);
         ucp_stream_ep_activate(ep);
         goto out_free_address;
     }
@@ -443,6 +444,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     if ((remote_address.uuid == worker->uuid) &&
         !(flags & UCP_EP_PARAMS_FLAGS_NO_LOOPBACK)) {
         ucp_ep_update_dest_ep_ptr(ep, (uintptr_t)ep);
+        ucp_ep_remote_comp_reset(ep);
     } else {
         ucp_ep_match_insert_exp(&worker->ep_match_ctx, remote_address.uuid, ep);
     }
@@ -654,7 +656,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
                                     (mode == UCP_EP_CLOSE_MODE_FLUSH) ?
                                     UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL,
                                     NULL, 0,
-                                    ucp_ep_close_flushed_callback);
+                                    ucp_ep_close_flushed_callback, "close");
     if (!UCS_PTR_IS_PTR(request)) {
         ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
     }
@@ -1085,17 +1087,21 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         }
     }
 
+    memset(&config->rma, 0, sizeof(config->rma));
+
     /* Configuration for remote memory access */
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
+        rma_config                   = &config->rma[lane];
+        rma_config->put_zcopy_thresh = SIZE_MAX;
+        rma_config->get_zcopy_thresh = SIZE_MAX;
+        rma_config->max_put_short    = -1;
+        rma_config->max_get_short    = -1;
+
         if (ucp_ep_config_get_multi_lane_prio(config->key.rma_lanes, lane) == -1) {
             continue;
         }
 
-        rma_config = &config->rma[lane];
         rsc_index  = config->key.lanes[lane].rsc_index;
-
-        rma_config->put_zcopy_thresh = SIZE_MAX;
-        rma_config->get_zcopy_thresh = SIZE_MAX;
 
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = &worker->ifaces[rsc_index].attr;
@@ -1126,7 +1132,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                 /* TODO: formula */
                 rma_config->max_get_zcopy = iface_attr->cap.get.max_zcopy;
                 if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
-                    rma_config->get_zcopy_thresh = 16384; 
+                    rma_config->get_zcopy_thresh = 16384;
                 } else {
                     rma_config->get_zcopy_thresh = context->config.ext.zcopy_thresh; 
                 }

@@ -78,6 +78,11 @@ enum {
 
     UCP_AM_ID_RNDV_ATP          =  16, /* Ack-to-put complete after finishing a put_zcopy */
 
+    UCP_AM_ID_PUT               =  17, /* Remote memory write */
+    UCP_AM_ID_GET_REQ           =  18, /* Remote memory read request */
+    UCP_AM_ID_GET_REP           =  19, /* Remote memory read reply */
+    UCP_AM_ID_CMPL              =  22, /* Remote memory operation completion */
+
     UCP_AM_ID_LAST
 };
 
