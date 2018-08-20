@@ -389,7 +389,7 @@ void ucp_test_base::entity::connect(const entity* other,
 
         if (status == UCS_ERR_UNREACHABLE) {
             ucp_worker_release_address(other->worker(i), address);
-            UCS_TEST_SKIP_R(m_errors.empty() ? "" : m_errors.back());
+            UCS_TEST_SKIP_R(m_errors.empty() ? "Unreachable" : m_errors.back());
         }
 
         ASSERT_UCS_OK(status);

@@ -13,19 +13,16 @@ public:
                                                  uint64_t *result_buf, void *memheap_addr,
                                                  ucp_rkey_h rkey);
 
+    static void send_cb(void *request, ucs_status_t status)
+    {
+    }
+
     template <typename T>
     void blocking_add(entity *e, uint64_t *initial_buf, uint64_t *result_buf,
                       void *memheap_addr, ucp_rkey_h rkey) {
-        ucs_status_t status;
-        if (sizeof(T) == sizeof(uint32_t)) {
-            status = ucp_atomic_add32(e->ep(), (uint32_t)(*initial_buf),
-                                      (uintptr_t)memheap_addr, rkey);
-        } else if (sizeof(T) == sizeof(uint64_t)) {
-            status = ucp_atomic_add64(e->ep(), (uint64_t)(*initial_buf),
-                                      (uintptr_t)memheap_addr, rkey);
-        } else {
-            status = UCS_ERR_UNSUPPORTED;
-        }
+        ucs_status_t status = ucp_atomic_post(e->ep(), UCP_ATOMIC_POST_OP_ADD,
+                                              *initial_buf, sizeof(T),
+                                              (uintptr_t)memheap_addr, rkey);
         ASSERT_UCS_OK(status);
     }
 
@@ -33,19 +30,10 @@ public:
     void blocking_fadd(entity *e, uint64_t *initial_buf, uint64_t *result_buf,
                        void *memheap_addr, ucp_rkey_h rkey)
     {
-        ucs_status_t status;
-        if (sizeof(T) == sizeof(uint32_t)) {
-            status = ucp_atomic_fadd32(e->ep(), (uint32_t)(*initial_buf),
-                                       (uintptr_t)memheap_addr,
-                                       rkey, (uint32_t*)(void*)result_buf);
-        } else if (sizeof(T) == sizeof(uint64_t)) {
-            status = ucp_atomic_fadd64(e->ep(), (uint64_t)(*initial_buf),
-                                       (uintptr_t)memheap_addr,
-                                       rkey, (uint64_t*)(void*)result_buf);
-        } else {
-            status = UCS_ERR_UNSUPPORTED;
-        }
-        ASSERT_UCS_OK(status);
+        void *request = ucp_atomic_fetch_nb(e->ep(), UCP_ATOMIC_FETCH_OP_FADD,
+                                            *initial_buf, (T*)result_buf, sizeof(T),
+                                            (uintptr_t)memheap_addr, rkey, send_cb);
+        wait(request);
     }
 
     template <typename T, typename F>
