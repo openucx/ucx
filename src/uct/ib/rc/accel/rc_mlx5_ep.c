@@ -761,8 +761,9 @@ static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, struct ibv_qp *qp)
     (void)uct_ib_modify_qp(qp, IBV_QPS_ERR);
 #endif
 
-    uct_rc_mlx5_iface_commom_clean_srq(&iface->mlx5_common, &iface->super,
-                                       qp->qp_num);
+    iface->super.rx.srq.available += uct_rc_mlx5_iface_commom_clean(
+            &iface->mlx5_common.cq[UCT_IB_DIR_RX],
+            &iface->mlx5_common.rx.srq, qp->qp_num);
 
     /* Synchronize CQ index with the driver, since it would remove pending
      * completions for this QP (both send and receive) during ibv_destroy_qp().

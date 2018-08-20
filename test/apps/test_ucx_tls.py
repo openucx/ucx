@@ -21,36 +21,65 @@ mlx4_am = {
  1000000 :      "ud",
 }
 
-mlx5_am = {
-       2 :      "rc_mlx5",
-      16 :      "rc_mlx5",
-      32 :      "rc_mlx5",
-      64 :      "dc_mlx5",
-     256 :      "dc_mlx5",
-    1024 :      "dc_mlx5",
- 1000000 :      "dc_mlx5",
-}
 
-mlx5_am_roce = {
-       2 :      "rc_mlx5",
-      16 :      "rc_mlx5",
-      32 :      "rc_mlx5",
-      64 :      "rc_mlx5",
-     256 :      "ud_mlx5",
-    1024 :      "ud_mlx5",
- 1000000 :      "ud_mlx5",
-}
+if os.path.exists("/bin/ofed_info"):
+	mlx5_am = {
+	       2 :      "rc_mlx5",
+	      16 :      "rc_mlx5",
+	      32 :      "rc_mlx5",
+	      64 :      "dc_mlx5",
+	     256 :      "dc_mlx5",
+	    1024 :      "dc_mlx5",
+	 1000000 :      "dc_mlx5",
+	}
 
-# check that UCX_NUM_EPS work
-mlx5_am_override = {
-       2 :      "rc_mlx5",
-      16 :      "rc_mlx5",
-      32 :      "rc_mlx5",
-      64 :      "rc_mlx5",
-     256 :      "rc_mlx5",
-    1024 :      "rc_mlx5",
- 1000000 :      "rc_mlx5",
-}
+	mlx5_am_roce = {
+	       2 :      "rc_mlx5",
+	      16 :      "rc_mlx5",
+	      32 :      "rc_mlx5",
+	      64 :      "rc_mlx5",
+	     256 :      "ud_mlx5",
+	    1024 :      "ud_mlx5",
+	 1000000 :      "ud_mlx5",
+	}
+
+	# check that UCX_NUM_EPS work
+	mlx5_am_override = {
+	       2 :      "rc_mlx5",
+	      16 :      "rc_mlx5",
+	      32 :      "rc_mlx5",
+	      64 :      "rc_mlx5",
+	     256 :      "rc_mlx5",
+	    1024 :      "rc_mlx5",
+	 1000000 :      "rc_mlx5",
+	}
+
+else:
+        # temp fix: upstream doesn't support accel tls yet
+	mlx5_am = {
+	       2 :      "rc",
+	      16 :      "rc",
+	      32 :      "rc",
+	      64 :      "rc",
+	     256 :      "ud",
+	    1024 :      "ud",
+	 1000000 :      "ud",
+	}
+
+	mlx5_am_roce = mlx5_am
+
+	# check that UCX_NUM_EPS work
+	mlx5_am_override = {
+	       2 :      "rc",
+	      16 :      "rc",
+	      32 :      "rc",
+	      64 :      "rc",
+	     256 :      "rc",
+	    1024 :      "rc",
+	 1000000 :      "rc",
+	}
+
+
 
 mlx4_am_override = {
        2 :      "rc",

@@ -681,7 +681,8 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     uint16_t hw_ci;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
-    cqe = uct_ib_mlx5_poll_cq(&iface->super.super.super, &iface->mlx5_common.tx.cq);
+    cqe = uct_ib_mlx5_poll_cq(&iface->super.super.super,
+                              &iface->mlx5_common.cq[UCT_IB_DIR_TX]);
     if (cqe == NULL) {
         return 0;
     }
@@ -1069,10 +1070,21 @@ static ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_iface_t *dc_iface, int dc
     uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->mlx5_common,
                                          &iface->super.super.super);
 
+    uct_rc_mlx5_iface_commom_clean(&iface->mlx5_common.cq[UCT_IB_DIR_TX], NULL,
+                                   iface->super.tx.dcis[dci].txqp.qp->qp_num);
+
     /* Resume posting from to the beginning of the QP */
     uct_ib_mlx5_txwq_reset(&iface->dci_wqs[dci]);
 
     return status;
+}
+
+static void uct_dc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
+                                       uct_ib_dir_t dir)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
+
+    iface->mlx5_common.cq[dir].cq_sn++;
 }
 
 static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
@@ -1122,8 +1134,8 @@ static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_is_reachable       = uct_dc_iface_is_reachable,
     .iface_get_address        = uct_dc_iface_get_address,
     },
-    .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
-    .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
+    .arm_cq                   = uct_ib_iface_arm_cq,
+    .event_cq                 = uct_dc_mlx5_iface_event_cq,
     .handle_failure           = uct_dc_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_dc_mlx5_ep_set_failed
     },

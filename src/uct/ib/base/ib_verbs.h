@@ -211,18 +211,6 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define ibv_exp_create_srq_attr           ibv_srq_init_attr
 #endif
 
-
-/*
- * Resource domain
- */
-#if !HAVE_IBV_EXP_RES_DOMAIN
-
-struct ibv_exp_res_domain {
-};
-
-#endif
-
-
 typedef uint8_t uct_ib_uint24_t[3];
 
 static inline void uct_ib_pack_uint24(uct_ib_uint24_t buf, const uint32_t qp_num)

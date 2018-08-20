@@ -56,12 +56,15 @@ AC_ARG_WITH([cm],
 
 
 #
-# mlx5 bare-metal support
+# mlx5 DV support
 #
-AC_ARG_WITH([mlx5-hw],
-            [AC_HELP_STRING([--with-mlx5-hw], [Compile with mlx5 bare-metal support])],
+AC_ARG_WITH([mlx5-dv],
+            [AC_HELP_STRING([--with-mlx5-dv], [Compile with mlx5 Direct Verbs
+                support. Direct Verbs (DV) support provides additional
+                acceleration capabilities that are not available in a
+                regular mode.])],
             [],
-            [with_mlx5_hw=yes])
+            [with_mlx5_dv=yes])
 
 
 #
@@ -142,37 +145,72 @@ AS_IF([test "x$with_ib" == xyes],
            verbs_exp=yes],
            [verbs_exp=no])
 
-       AS_IF([test "x$with_mlx5_hw" != xno],
-             [AC_CHECK_HEADERS([infiniband/mlx5_hw.h],
-                               [with_mlx5_hw=yes],
-                               [with_mlx5_hw=no])])
+       AC_CHECK_MEMBERS([struct ibv_exp_device_attr.exp_device_cap_flags,
+                         struct ibv_exp_device_attr.odp_caps,
+                         struct ibv_exp_device_attr.odp_caps.per_transport_caps.dc_odp_caps,
+                         struct ibv_exp_device_attr.odp_mr_max_size,
+                         struct ibv_exp_qp_init_attr.max_inl_recv,
+                         struct ibv_async_event.element.dct],
+                        [], [], [[#include <infiniband/verbs_exp.h>]])
 
-       AC_CHECK_DECLS([ibv_mlx5_exp_get_qp_info,
-                       ibv_mlx5_exp_get_cq_info,
-                       ibv_mlx5_exp_get_srq_info,
-                       ibv_mlx5_exp_update_cq_ci,
-                       MLX5_WQE_CTRL_SOLICITED],
-                      [], [], [[#include <infiniband/mlx5_hw.h>]])
-
-       # Disable mlx5_hw if the driver does not provide BF locking information
-       AS_IF([test "x$ac_cv_have_decl_ibv_mlx5_exp_get_qp_info" == "xyes"],
-             [AC_CHECK_MEMBERS([struct ibv_mlx5_qp_info.bf.need_lock],
+       AS_IF([test "x$with_mlx5_dv" != xno], [
+               AC_MSG_NOTICE([Checking for legacy bare-metal support])
+               AC_CHECK_HEADERS([infiniband/mlx5_hw.h],
+                               [with_mlx5_hw=yes
+                                mlx5_include=mlx5_hw.h
+                       AC_CHECK_DECLS([
+                           ibv_mlx5_exp_get_qp_info,
+                           ibv_mlx5_exp_get_cq_info,
+                           ibv_mlx5_exp_get_srq_info,
+                           ibv_mlx5_exp_update_cq_ci,
+                           MLX5_WQE_CTRL_SOLICITED],
+                                  [], [], [[#include <infiniband/mlx5_hw.h>]])
+                       AC_CHECK_MEMBERS([struct mlx5_srq.cmd_qp],
+                                  [], [with_ib_hw_tm=no],
+                                      [[#include <infiniband/mlx5_hw.h>]])
+                       AC_CHECK_MEMBERS([struct mlx5_ah.ibv_ah],
+                                  [has_get_av=yes], [],
+                                      [[#include <infiniband/mlx5_hw.h>]])
+                       AC_CHECK_MEMBERS([struct ibv_mlx5_qp_info.bf.need_lock],
                                [],
                                [AC_MSG_WARN([Cannot use mlx5 QP because it assumes dedicated BF])
                                 AC_MSG_WARN([Please upgrade MellanoxOFED to 3.0 or above])
                                 with_mlx5_hw=no],
-                               [[#include <infiniband/mlx5_hw.h>]])],
-             [])
+                               [[#include <infiniband/mlx5_hw.h>]])
+                       AC_CHECK_DECLS([
+                           IBV_EXP_QP_INIT_ATTR_RES_DOMAIN,
+                           IBV_EXP_RES_DOMAIN_THREAD_MODEL,
+                           ibv_exp_create_res_domain,
+                           ibv_exp_destroy_res_domain],
+                                [AC_DEFINE([HAVE_IBV_EXP_RES_DOMAIN], 1, [IB resource domain])
+                                 has_res_domain=yes], [], [[#include <infiniband/verbs_exp.h>]])
+                               ], [with_mlx5_hw=no])
 
-       AC_CHECK_DECLS([IBV_EXP_QP_INIT_ATTR_RES_DOMAIN,
-                       IBV_EXP_RES_DOMAIN_THREAD_MODEL,
-                       ibv_exp_create_res_domain,
-                       ibv_exp_destroy_res_domain],
-                      [AC_DEFINE([HAVE_IBV_EXP_RES_DOMAIN], 1, [IB resource domain])],
-                      [AC_MSG_WARN([Cannot use mlx5 accel because resource domains are not supported])
-                       AC_MSG_WARN([Please upgrade MellanoxOFED to 3.1 or above])
-                       with_mlx5_hw=no],
-                      [[#include <infiniband/verbs_exp.h>]])
+              AC_MSG_NOTICE([Checking for DV bare-metal support])
+              AC_CHECK_HEADERS([infiniband/mlx5dv.h],
+                               [with_mlx5_hw=yes
+                                with_mlx5_dv=yes
+                                mlx5_include=mlx5dv.h
+                       AC_CHECK_LIB([mlx5-rdmav2], [mlx5dv_query_device],
+                                    [AC_SUBST(LIB_MLX5, [-lmlx5-rdmav2])],[
+                       AC_CHECK_LIB([mlx5], [mlx5dv_query_device],
+                                    [AC_SUBST(LIB_MLX5, [-lmlx5])],
+                                    [with_mlx5_dv=no])])])
+
+              AS_IF([test "x$has_get_av" == xyes ], [
+                       AC_CHECK_DECLS([
+                           mlx5dv_init_obj],
+                                  [], [], [[#include <infiniband/mlx5dv.h>]])
+                       AC_CHECK_MEMBERS([struct mlx5dv_cq.cq_uar],
+                                  [], [], [[#include <infiniband/mlx5dv.h>]])
+                       AC_CHECK_DECLS([ibv_alloc_td],
+                                  [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])
+                               ], [with_mlx5_hw=no])])
+
+       AS_IF([test "x$has_res_domain" == xyes], [], [
+               AC_MSG_WARN([Cannot use mlx5 accel because resource domains are not supported])
+               AC_MSG_WARN([Please upgrade MellanoxOFED to 3.1 or above])
+               with_mlx5_hw=no])
 
        AS_IF([test "x$with_mlx5_hw" == xyes],
              [AC_MSG_NOTICE([Compiling with mlx5 bare-metal support])
@@ -248,17 +286,9 @@ AS_IF([test "x$with_ib" == xyes],
        AC_CHECK_DECLS(IBV_EXP_ODP_SUPPORT_IMPLICIT, [], [],
                       [[#include <infiniband/verbs.h>]])
 
-       AC_CHECK_MEMBERS([struct ibv_exp_device_attr.exp_device_cap_flags,
-                         struct ibv_exp_device_attr.odp_caps,
-                         struct ibv_exp_device_attr.odp_caps.per_transport_caps.dc_odp_caps,
-                         struct ibv_exp_device_attr.odp_mr_max_size,
-                         struct ibv_exp_qp_init_attr.max_inl_recv,
-                         struct ibv_async_event.element.dct],
-                        [], [], [[#include <infiniband/verbs_exp.h>]])
-
        AC_CHECK_MEMBERS([struct mlx5_wqe_av.base,
                          struct mlx5_grh_av.rmac],
-                        [], [], [[#include <infiniband/mlx5_hw.h>]])
+                        [], [], [[#include <infiniband/$mlx5_include>]])
 
        AC_DEFINE([HAVE_IB], 1, [IB support])
 
@@ -334,6 +364,7 @@ AS_IF([test "x$with_ib" == xyes],
         with_rc=no
         with_ud=no
         with_mlx5_hw=no
+        with_mlx5_dv=no
         with_ib_hw_tm=no
     ])
 
@@ -347,4 +378,5 @@ AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_TL_CM],   [test "x$with_cm" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
+AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" != xno])
 AM_CONDITIONAL([HAVE_IBV_EX_HW_TM], [test "x$with_ib_hw_tm"  != xno])

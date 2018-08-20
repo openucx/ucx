@@ -39,6 +39,16 @@ typedef enum uct_ib_mtu {
 } uct_ib_mtu_t;
 
 
+/**
+ * Traffic direction.
+ */
+typedef enum {
+    UCT_IB_DIR_RX,
+    UCT_IB_DIR_TX,
+    UCT_IB_DIR_NUM
+} uct_ib_dir_t;
+
+
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
 
@@ -88,8 +98,11 @@ struct uct_ib_iface_config {
 
 struct uct_ib_iface_ops {
     uct_iface_ops_t         super;
-    ucs_status_t            (*arm_tx_cq)(uct_ib_iface_t *iface);
-    ucs_status_t            (*arm_rx_cq)(uct_ib_iface_t *iface, int solicited_only);
+    ucs_status_t            (*arm_cq)(uct_ib_iface_t *iface,
+                                      uct_ib_dir_t dir,
+                                      int solicited_only);
+    void                    (*event_cq)(uct_ib_iface_t *iface,
+                                        uct_ib_dir_t dir);
     void                    (*handle_failure)(uct_ib_iface_t *iface, void *arg,
                                               ucs_status_t status);
     ucs_status_t            (*set_ep_failed)(uct_ib_iface_t *iface, uct_ep_h ep,
@@ -99,15 +112,20 @@ struct uct_ib_iface_ops {
 
 typedef struct uct_ib_iface_res_domain {
     uct_worker_tl_data_t        super;
+#if HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_res_domain   *ibv_domain;
+#elif HAVE_DECL_IBV_ALLOC_TD
+    struct ibv_td               *td;
+    struct ibv_pd               *pd;
+    struct ibv_pd               *ibv_domain;
+#endif
 } uct_ib_iface_res_domain_t;
 
 
 struct uct_ib_iface {
     uct_base_iface_t        super;
 
-    struct ibv_cq           *send_cq;
-    struct ibv_cq           *recv_cq;
+    struct ibv_cq           *cq[UCT_IB_DIR_NUM];
     struct ibv_comp_channel *comp_channel;
     uct_recv_desc_t         release_desc;
 
@@ -273,10 +291,9 @@ ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 
 ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h iface, int *fd_p);
 
-ucs_status_t uct_ib_iface_arm_tx_cq(uct_ib_iface_t *iface);
-
-ucs_status_t uct_ib_iface_arm_rx_cq(uct_ib_iface_t *iface, int solicited_only);
-
+ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
+                                 uct_ib_dir_t dir,
+                                 int solicited_only);
 
 static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
 {
@@ -405,6 +422,20 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
     }
 
     uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, gid_p, path_bits, ah_attr);
+}
+
+static UCS_F_ALWAYS_INLINE
+struct ibv_pd *uct_ib_iface_qp_pd(uct_ib_iface_t *iface)
+{
+    struct ibv_pd *pd;
+
+    pd = uct_ib_iface_md(iface)->pd;
+#if HAVE_DECL_IBV_ALLOC_TD
+    if (iface->res_domain && iface->res_domain->ibv_domain) {
+        pd = iface->res_domain->ibv_domain;
+    }
+#endif
+    return pd;
 }
 
 #endif
