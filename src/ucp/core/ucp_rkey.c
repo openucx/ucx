@@ -8,6 +8,7 @@
 #include "ucp_request.h"
 #include "ucp_ep.inl"
 
+#include <ucp/rma/rma.h>
 #include <ucs/datastruct/mpool.inl>
 #include <inttypes.h>
 
@@ -402,6 +403,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
                                                     0, &uct_rkey);
     if (rkey->cache.rma_lane != UCP_NULL_LANE) {
         rkey->cache.rma_rkey      = uct_rkey;
+        rkey->cache.rma_proto     = &ucp_rma_basic_proto;
         rkey->cache.max_put_short = config->rma[rkey->cache.rma_lane].max_put_short;
     }
 
@@ -411,6 +413,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
                                                     0, &uct_rkey);
     if (rkey->cache.amo_lane != UCP_NULL_LANE) {
         rkey->cache.amo_rkey      = uct_rkey;
+        rkey->cache.amo_proto     = &ucp_amo_basic_proto;
     }
 
     rkey->cache.ep_cfg_index  = ep->cfg_index;

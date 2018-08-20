@@ -38,6 +38,8 @@ typedef struct ucp_rkey {
         unsigned                  max_put_short;/* Cached value of max_put_short */
         uct_rkey_t                rma_rkey;     /* Key to use for RMAs */
         uct_rkey_t                amo_rkey;     /* Key to use for AMOs */
+        ucp_amo_proto_t           *amo_proto;   /* Protocol for AMOs */
+        ucp_rma_proto_t           *rma_proto;   /* Protocol for RMAs */
     } cache;
     ucp_md_map_t                  md_map;  /* Which *remote* MDs have valid memory handles */
     uct_rkey_bundle_t             uct[0];  /* Remote key for every MD */

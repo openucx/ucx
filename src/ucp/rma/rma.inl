@@ -8,7 +8,6 @@
 #define UCP_RMA_INL_
 
 #include <ucp/api/ucp.h>
-#include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucs/debug/log.h>
 

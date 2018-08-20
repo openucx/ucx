@@ -384,7 +384,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
     unsigned rsc_index;
     ucs_status_t status;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
         if (worker->ifaces[rsc_index].iface == NULL) {
@@ -399,6 +399,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
     status = UCS_OK;
 
 out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
 }
