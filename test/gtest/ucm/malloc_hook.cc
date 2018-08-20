@@ -20,7 +20,7 @@
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucm/malloc/malloc_hook.h>
-#include <ucm/util/bistro.h>
+#include <ucm/bistro/bistro.h>
 #include <ucs/sys/sys.h>
 #include <malloc.h>
 }
@@ -779,9 +779,7 @@ UCS_TEST_F(malloc_hook, bistro_patch) {
     EXPECT_EQ(res, 0);
     /* due to cache coherency issues on ARM systems could be executed
      * original function body, so, skip counter evaluation */
-#if !defined (__aarch64__)
     EXPECT_GT(bistro_call_counter, 0);
-#endif
 
     /* restore original mmap body */
     status = ucm_bistro_restore(rp);
@@ -793,9 +791,7 @@ UCS_TEST_F(malloc_hook, bistro_patch) {
     EXPECT_NE(ptr, MAP_FAILED);
     res = munmap_f(ptr, 4096);
     EXPECT_EQ(res, 0);
-#if !defined (__aarch64__)
     EXPECT_EQ(bistro_call_counter, 0);  /* hook is not called */
-#endif
     /* save partial body of restored function */
     origin = *(uint64_t*)munmap_f;
 

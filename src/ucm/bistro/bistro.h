@@ -1,12 +1,12 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2018        ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2018.       ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
 
 
-#ifndef UCM_UTIL_BISTRO_H_
-#define UCM_UTIL_BISTRO_H_
+#ifndef UCM_BISTRO_BISTRO_H_
+#define UCM_BISTRO_BISTRO_H_
 
 #include <stdint.h>
 
