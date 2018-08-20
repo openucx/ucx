@@ -178,13 +178,11 @@ UCS_TEST_P(test_ucp_perf, envelope) {
     ucs::scoped_setenv warn_invalid("UCX_WARN_INVALID_CONFIG", "no");
 
     for (test_spec *test = tests; test->title != NULL; ++test) {
-        unsigned flags = (test->command == UCX_PERF_CMD_TAG) ? 0 :
-                                 UCX_PERF_TEST_FLAG_ONE_SIDED;
         if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
             test->max *= UCP_ARM_PERF_TEST_MULTIPLIER;
             test->min /= UCP_ARM_PERF_TEST_MULTIPLIER;
         }
-        run_test(*test, flags, check_perf, "", "");
+        run_test(*test, 0, check_perf, "", "");
     }
 }
 

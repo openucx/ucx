@@ -80,7 +80,9 @@ public:
     }
 
     void UCS_F_ALWAYS_INLINE progress_responder() {
-        if (!(FLAGS & UCX_PERF_TEST_FLAG_ONE_SIDED)) {
+        if (!(FLAGS & UCX_PERF_TEST_FLAG_ONE_SIDED) &&
+            !(m_perf.params.flags & UCX_PERF_TEST_FLAG_ONE_SIDED))
+        {
             ucp_worker_progress(m_perf.ucp.worker);
         }
     }
@@ -299,7 +301,7 @@ public:
 #endif
         }
 
-        rte_call(&m_perf, barrier);
+        ucp_perf_barrier(&m_perf);
 
         my_index      = rte_call(&m_perf, group_index);
 
@@ -339,7 +341,7 @@ public:
 
         wait_window(m_max_outstanding);
         ucp_worker_flush(m_perf.ucp.worker);
-        rte_call(&m_perf, barrier);
+        ucp_perf_barrier(&m_perf);
         return UCS_OK;
     }
 
@@ -360,7 +362,7 @@ public:
 
         ucp_perf_test_prepare_iov_buffers();
 
-        rte_call(&m_perf, barrier);
+        ucp_perf_barrier(&m_perf);
 
         my_index      = rte_call(&m_perf, group_index);
 
@@ -404,7 +406,7 @@ public:
             ucx_perf_update(&m_perf, 0, 0);
         }
 
-        rte_call(&m_perf, barrier);
+        ucp_perf_barrier(&m_perf);
         return UCS_OK;
     }
 

@@ -78,8 +78,8 @@ typedef enum {
 
 enum ucx_perf_test_flags {
     UCX_PERF_TEST_FLAG_VALIDATE         = UCS_BIT(1), /* Validate data. Affects performance. */
-    UCX_PERF_TEST_FLAG_ONE_SIDED        = UCS_BIT(2), /* For test which involve only one side,
-                                                         the responder would not call progress(). */
+    UCX_PERF_TEST_FLAG_ONE_SIDED        = UCS_BIT(2), /* For tests which involves only one side,
+                                                         the responder should not call progress(). */
     UCX_PERF_TEST_FLAG_MAP_NONBLOCK     = UCS_BIT(3), /* Map memory in non-blocking mode */
     UCX_PERF_TEST_FLAG_TAG_WILDCARD     = UCS_BIT(4), /* For tag tests, use wildcard mask */
     UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE  = UCS_BIT(5), /* For tag tests, use probe to get unexpected receive */
@@ -128,7 +128,8 @@ typedef struct ucx_perf_rte {
     unsigned   (*group_index)(void *rte_group);
 
     /* Barrier */
-    void        (*barrier)(void *rte_group);
+    void        (*barrier)(void *rte_group, void (*progress)(void *arg),
+                           void *arg);
 
     /* Direct modex */
     void        (*post_vec)(void *rte_group, const struct iovec *iovec,
