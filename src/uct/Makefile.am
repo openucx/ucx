@@ -63,14 +63,21 @@ libuct_la_CPPFLAGS += \
 
 libuct_la_SOURCES += \
 	ib/mlx5/ib_mlx5_log.c \
-	ib/mlx5/ib_mlx5.c
+	ib/mlx5/ib_mlx5.c \
+	ib/mlx5/ib_mlx5_dv.c \
+	ib/mlx5/ib_mlx5_hw.c
 
 noinst_HEADERS += \
 	ib/mlx5/ib_mlx5_log.h \
 	ib/mlx5/ib_mlx5.h \
-	ib/mlx5/ib_mlx5.inl
-endif
+	ib/mlx5/ib_mlx5.inl \
+	ib/mlx5/ib_mlx5_dv.h \
+	ib/mlx5/ib_mlx5_hw.h
 
+if HAVE_MLX5_DV
+libuct_la_LDFLAGS += $(LIB_MLX5)
+endif
+endif
 
 if HAVE_TL_RC
 noinst_HEADERS += \
@@ -234,12 +241,14 @@ libuct_la_SOURCES += \
 noinst_HEADERS += \
     cuda/cuda_ipc/cuda_ipc_md.h \
     cuda/cuda_ipc/cuda_ipc_iface.h \
-    cuda/cuda_ipc/cuda_ipc_ep.h
+    cuda/cuda_ipc/cuda_ipc_ep.h \
+    cuda/cuda_ipc/cuda_ipc_cache.h
 
 libuct_la_SOURCES += \
     cuda/cuda_ipc/cuda_ipc_md.c \
     cuda/cuda_ipc/cuda_ipc_iface.c \
-    cuda/cuda_ipc/cuda_ipc_ep.c
+    cuda/cuda_ipc/cuda_ipc_ep.c \
+    cuda/cuda_ipc/cuda_ipc_cache.c
 
 endif
 

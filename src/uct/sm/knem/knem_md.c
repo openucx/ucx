@@ -9,6 +9,7 @@
 #include "knem_io.h"
 
 #include <ucs/arch/cpu.h>
+#include <ucm/api/ucm.h>
 
 static ucs_config_field_t uct_knem_md_config_table[] = {
     {"", "", NULL,
@@ -278,7 +279,8 @@ static uct_md_ops_t uct_knem_md_rcache_ops = {
 
 
 static ucs_status_t uct_knem_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
-                                               void *arg, ucs_rcache_region_t *rregion)
+                                               void *arg, ucs_rcache_region_t *rregion,
+                                               uint16_t rcache_mem_reg_flags)
 {
     uct_knem_rcache_region_t *region = ucs_derived_of(rregion, uct_knem_rcache_region_t);
     uct_knem_md_t *md                = context;
@@ -286,7 +288,9 @@ static ucs_status_t uct_knem_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcac
 
     return uct_knem_mem_reg_internal(&md->super, (void*)region->super.super.start,
                                      region->super.super.end - region->super.super.start,
-                                     *flags, 1, &region->key);
+                                     *flags,
+                                     rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS,
+                                     &region->key);
 }
 
 static void uct_knem_rcache_mem_dereg_cb(void *context, ucs_rcache_t *rcache,
@@ -346,6 +350,7 @@ static ucs_status_t uct_knem_md_open(const char *md_name,
         rcache_params.region_struct_size = sizeof(uct_knem_rcache_region_t);
         rcache_params.alignment          = md_config->rcache.alignment;
         rcache_params.max_alignment      = ucs_get_page_size();
+        rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = knem_md;
         rcache_params.ops                = &uct_knem_rcache_ops;

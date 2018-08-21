@@ -20,21 +20,30 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, uct_iface_t *tl_iface,
                            const uct_iface_addr_t *iface_addr)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    ucs_status_t status;
+    char target_name[64];
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
+    self->remote_memh_cache = NULL;
 
-    kh_init_inplace(uct_cuda_ipc_memh_hash, &self->memh_hash);
+    if (iface->config.enable_cache) {
+        snprintf(target_name, sizeof(target_name), "dest:%d", *(pid_t*)iface_addr);
+        status = uct_cuda_ipc_create_cache(&self->remote_memh_cache, target_name);
+        if (status != UCS_OK) {
+            ucs_error("could not create create cuda ipc cache: %s",
+                       ucs_status_string(status));
+            return status;
+        }
+    }
 
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
 {
-    CUdeviceptr dptr;
-
-    kh_foreach_value(&self->memh_hash, dptr,
-                     UCT_CUDADRV_FUNC(cuIpcCloseMemHandle(dptr)));
-    kh_destroy_inplace(uct_cuda_ipc_memh_hash, &self->memh_hash);
+    if (self->remote_memh_cache) {
+        uct_cuda_ipc_destroy_cache(self->remote_memh_cache);
+    }
 }
 
 UCS_CLASS_DEFINE(uct_cuda_ipc_ep_t, uct_base_ep_t)
@@ -45,87 +54,6 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_ipc_ep_t, uct_ep_t);
 #define uct_cuda_ipc_trace_data(_addr, _rkey, _fmt, ...)     \
     ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_addr), (_rkey))
 
-void *uct_cuda_ipc_ep_attach_rem_seg(uct_cuda_ipc_ep_t *ep,
-                                     uct_cuda_ipc_iface_t *iface,
-                                     uct_cuda_ipc_key_t *rkey)
-{
-    unsigned int cuda_ipc_mh_flags = CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS;
-    ucs_status_t status;
-    CUdeviceptr dptr;
-    khiter_t hash_it;
-    int ret;
-
-    hash_it = kh_put(uct_cuda_ipc_memh_hash, &ep->memh_hash,
-                     rkey->ph, &ret);
-    if (ret > 0) {
-        /* memhandle not found */
-        status = UCT_CUDADRV_FUNC(cuIpcOpenMemHandle(&dptr, rkey->ph,
-                                                     cuda_ipc_mh_flags));
-        if (UCS_OK != status) {
-            kh_del(uct_cuda_ipc_memh_hash, &ep->memh_hash, hash_it);
-            return NULL;
-        }
-        kh_value(&ep->memh_hash, hash_it) = (CUdeviceptr)dptr;
-    }
-    else {
-        dptr = (CUdeviceptr)kh_value(&ep->memh_hash, hash_it);
-    }
-
-    return (void *)dptr;
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_cuda_ipc_get_mapped_addr(uct_cuda_ipc_ep_t *ep, uct_cuda_ipc_iface_t *iface,
-                             uct_cuda_ipc_key_t *key, int cu_device,
-                             uint64_t remote_addr, void **mapped_rem_addr,
-                             void *buffer)
-{
-    int offset, same_ctx = 0;
-    void *mapped_addr;
-    ucs_status_t status;
-    CUcontext local_ptr_ctx;
-    CUcontext remote_ptr_ctx;
-    CUpointer_attribute attrib;
-
-    if (key->dev_num == (int) cu_device) {
-        attrib = CU_POINTER_ATTRIBUTE_CONTEXT;
-        status = UCT_CUDADRV_FUNC(cuPointerGetAttribute((void *) &remote_ptr_ctx,
-                                                        attrib,
-                                                        (CUdeviceptr) remote_addr));
-        if (UCS_OK != status) {
-            return status;
-        }
-
-        status = UCT_CUDADRV_FUNC(cuPointerGetAttribute((void *) &local_ptr_ctx,
-                                                        attrib,
-                                                        (CUdeviceptr) buffer));
-        if (UCS_OK != status) {
-            return status;
-        }
-
-        same_ctx = (local_ptr_ctx == remote_ptr_ctx);
-    }
-
-    if (same_ctx) {
-        *mapped_rem_addr = (void *) remote_addr;
-    } else {
-        mapped_addr = uct_cuda_ipc_ep_attach_rem_seg(ep, iface, key);
-        if (NULL == mapped_addr) {
-            return UCS_ERR_IO_ERROR;
-        }
-
-        offset = (uintptr_t)remote_addr - (uintptr_t)key->d_rem_bptr;
-        if (offset > key->b_rem_len) {
-            ucs_fatal("Access memory outside memory range attempt\n");
-            return UCS_ERR_IO_ERROR;
-        }
-
-        *mapped_rem_addr = (void *) ((uintptr_t) mapped_addr + offset);
-    }
-
-    return UCS_OK;
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
                                   const uct_iov_t *iov, uct_rkey_t rkey,
@@ -134,13 +62,15 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_ipc_iface_t);
     uct_cuda_ipc_ep_t *ep       = ucs_derived_of(tl_ep, uct_cuda_ipc_ep_t);
     uct_cuda_ipc_key_t *key     = (uct_cuda_ipc_key_t *) rkey;
-    void *mapped_rem_addr       = NULL;
+    void *mapped_rem_addr;
+    void *mapped_addr;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
     ucs_queue_head_t *outstanding_queue;
     ucs_status_t status;
     CUdeviceptr dst, src;
     CUdevice cu_device;
     CUstream stream;
+    size_t offset;
 
     if (0 == iov[0].length) {
         ucs_trace_data("Zero length request: skip it");
@@ -149,11 +79,14 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
 
     UCT_CUDA_IPC_GET_DEVICE(cu_device);
 
-    status = uct_cuda_ipc_get_mapped_addr(ep, iface, key, cu_device, remote_addr,
-                                          &mapped_rem_addr, iov[0].buffer);
-    if (UCS_OK != status) {
-        return status;
+    status = iface->map_memhandle((void *)ep->remote_memh_cache, key, &mapped_addr);
+    if (status != UCS_OK) {
+        return UCS_ERR_IO_ERROR;
     }
+
+    offset          = (uintptr_t)remote_addr - (uintptr_t)key->d_bptr;
+    mapped_rem_addr = (void *) ((uintptr_t) mapped_addr + offset);
+    ucs_assert(offset <= key->b_len);
 
     if (!iface->streams_initialized) {
         status = uct_cuda_ipc_iface_init_streams(iface);
@@ -189,7 +122,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     }
 
     ucs_queue_push(outstanding_queue, &cuda_ipc_event->queue);
-    cuda_ipc_event->comp = comp;
+    cuda_ipc_event->comp        = comp;
+    cuda_ipc_event->mapped_addr = mapped_addr;
     ucs_trace("cuMemcpyDtoDAsync issued :%p dst:%p, src:%p  len:%ld",
              cuda_ipc_event, (void *) dst, (void *) src, iov[0].length);
     return UCS_INPROGRESS;

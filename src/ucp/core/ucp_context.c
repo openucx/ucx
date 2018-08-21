@@ -14,6 +14,7 @@
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/debug.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/bitops.h>
@@ -73,15 +74,16 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"TLS", UCP_RSC_CONFIG_ALL,
    "Comma-separated list of transports to use. The order is not meaningful.\n"
-   "In addition it's possible to use a combination of the following aliases:\n"
    " - all    : use all the available transports.\n"
    " - sm/shm : all shared memory transports.\n"
    " - mm     : shared memory transports - only memory mappers.\n"
    " - ugni   : ugni_rdma and ugni_udt.\n"
    " - ib     : all infiniband transports.\n"
-   " - rc     : rc and ud.\n"
-   " - rc_x   : rc with accelerated verbs and ud.\n"
+   " - rc     : rc verbs (uses ud for bootstrap).\n"
+   " - rc_x   : rc with accelerated verbs (uses ud_x for bootstrap).\n"
+   " - ud     : ud verbs.\n"
    " - ud_x   : ud with accelerated verbs.\n"
+   " - dc     : dc verbs.\n"
    " - dc_x   : dc with accelerated verbs.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
    " and disables aliasing.\n",
@@ -182,7 +184,7 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.use_mt_mutex), UCS_CONFIG_TYPE_BOOL},
 
   {"ADAPTIVE_PROGRESS", "y",
-   "Enable apaptive progress mechanism, which turns on polling only on active\n"
+   "Enable adaptive progress mechanism, which turns on polling only on active\n"
    "transport interfaces.",
    ucs_offsetof(ucp_config_t, ctx.adaptive_progress), UCS_CONFIG_TYPE_BOOL},
 
@@ -190,19 +192,19 @@ static ucs_config_field_t ucp_config_table[] = {
    "Size of a segment in the worker preregistered memory pool.",
    ucs_offsetof(ucp_config_t, ctx.seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TM_THRESH", "1024", /* TODO: calculate automaticlly */
+  {"TM_THRESH", "1024", /* TODO: calculate automatically */
    "Threshold for using tag matching offload capabilities.\n"
    "Smaller buffers will not be posted to the transport.",
    ucs_offsetof(ucp_config_t, ctx.tm_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TM_MAX_BB_SIZE", "1024", /* TODO: calculate automaticlly */
-   "Maximal size for posting \"bounce buffer\" (UCX interal preregistered memory) for\n"
+  {"TM_MAX_BB_SIZE", "1024", /* TODO: calculate automatically */
+   "Maximal size for posting \"bounce buffer\" (UCX internal preregistered memory) for\n"
    "tag offload receives. When message arrives, it is copied into the user buffer (similar\n"
    "to eager protocol). The size values has to be equal or less than segment size.\n"
    "Also the value has to be bigger than UCX_TM_THRESH to take an effect." ,
    ucs_offsetof(ucp_config_t, ctx.tm_max_bb_size), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TM_FORCE_THRESH", "8192", /* TODO: calculate automaticlly */
+  {"TM_FORCE_THRESH", "8192", /* TODO: calculate automatically */
    "Threshold for forcing tag matching offload mode. Every tag receive operation\n"
    "with buffer bigger than this threshold would force offloading of all uncompleted\n"
    "non-offloaded receive operations to the transport (e. g. operations with\n"
@@ -556,7 +558,7 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context, ucp_tl_md_t *md,
                                        dev_cfg_masks, tl_cfg_mask);
     }
 
-    /* add sockaddr dummy resource, if md suports it */
+    /* add sockaddr dummy resource, if md supports it */
     if (md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
         sa_rsc.dev_type = UCT_DEVICE_TYPE_NET;
         ucs_snprintf_zero(sa_rsc.tl_name, UCT_TL_NAME_MAX, "%s", md->rsc.md_name);
@@ -876,7 +878,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     for (i = 0; i < num_md_resources; ++i) {
         status = ucp_fill_tl_md(&md_rscs[i], &context->tl_mds[md_index]);
         if (status != UCS_OK) {
-            goto err_free_context_resources;
+            continue;
         }
 
         /* Add communication resources of each MD */
@@ -1121,14 +1123,17 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     ucp_config_t *dfl_config = NULL;
     ucp_context_t *context;
     ucs_status_t status;
+    ucs_debug_address_info_t addr_info;
 
     ucp_get_version(&major_version, &minor_version, &release_number);
 
     if ((api_major_version != major_version) ||
         ((api_major_version == major_version) && (api_minor_version > minor_version))) {
-        ucs_warn("UCP version is incompatible, required: %d.%d, actual: %d.%d (release %d)",
+        status = ucs_debug_lookup_address(ucp_init_version, &addr_info);
+        ucs_warn("UCP version is incompatible, required: %d.%d, actual: %d.%d (release %d %s)",
                   api_major_version, api_minor_version,
-                  major_version, minor_version, release_number);
+                  major_version, minor_version, release_number,
+                  status == UCS_OK ? addr_info.file.path : "");
     }
 
     if (config == NULL) {

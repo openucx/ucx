@@ -12,6 +12,7 @@ extern "C" {
 #include <ucs/sys/rcache.h>
 #include <ucs/sys/rcache_int.h>
 #include <ucs/sys/sys.h>
+#include <ucm/api/ucm.h>
 }
 
 
@@ -38,6 +39,7 @@ protected:
             sizeof(region),
             UCS_PGT_ADDR_ALIGN,
             ucs_get_page_size(),
+            UCM_EVENT_VM_UNMAPPED,
             1000,
             &ops,
             reinterpret_cast<void*>(this)
@@ -135,7 +137,8 @@ protected:
 private:
 
     static ucs_status_t mem_reg_cb(void *context, ucs_rcache_t *rcache,
-                                   void *arg, ucs_rcache_region_t *r)
+                                   void *arg, ucs_rcache_region_t *r,
+                                   uint16_t rcache_mem_reg_flags)
     {
         return reinterpret_cast<test_rcache*>(context)->mem_reg(
                         ucs_derived_of(r, struct region));

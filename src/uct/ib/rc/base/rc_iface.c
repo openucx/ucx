@@ -200,6 +200,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                               UCS_BIT(UCT_ATOMIC_OP_CSWAP);
     }
 
+#if HAVE_IB_EXT_ATOMICS
     if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint64_t))) {
         /* TODO: remove deprecated flags */
         iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
@@ -216,6 +217,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                               UCS_BIT(UCT_ATOMIC_OP_SWAP) |
                                               UCS_BIT(UCT_ATOMIC_OP_CSWAP);
     }
+#endif
 
     iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
     iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
@@ -650,7 +652,7 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
     srq_init_attr->base.srq_context    = iface;
     srq_init_attr->srq_type            = IBV_EXP_SRQT_TAG_MATCHING;
     srq_init_attr->pd                  = md->pd;
-    srq_init_attr->cq                  = iface->super.recv_cq;
+    srq_init_attr->cq                  = iface->super.cq[UCT_IB_DIR_RX];
     srq_init_attr->tm_cap.max_num_tags = iface->tm.num_tags;
 
     /* 2 ops for each tag (ADD + DEL) and extra ops for SYNC.
@@ -917,8 +919,8 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
     qp_init_attr.qp_context          = NULL;
-    qp_init_attr.send_cq             = iface->super.send_cq;
-    qp_init_attr.recv_cq             = iface->super.recv_cq;
+    qp_init_attr.send_cq             = iface->super.cq[UCT_IB_DIR_TX];
+    qp_init_attr.recv_cq             = iface->super.cq[UCT_IB_DIR_RX];
     if (qp_type == IBV_QPT_RC) {
         qp_init_attr.srq             = iface->rx.srq.srq;
     }
@@ -932,7 +934,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD;
-    qp_init_attr.pd                  = uct_ib_iface_md(&iface->super)->pd;
+    qp_init_attr.pd                  = uct_ib_iface_qp_pd(&iface->super);
 
 #  if HAVE_IB_EXT_ATOMICS
     qp_init_attr.comp_mask          |= IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
@@ -960,10 +962,10 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 
     qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
 #else
-    qp = ibv_create_qp(uct_ib_iface_md(&iface->super)->pd, &qp_init_attr);
+    qp = ibv_create_qp(uct_ib_iface_qp_pd(&iface->super), &qp_init_attr);
 #endif
     if (qp == NULL) {
-        ucs_error("failed to create qp: %m");
+        ucs_error("failed to create %s qp type: %m", qp_type_str);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -1102,7 +1104,7 @@ ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
     }
 
     if (events & UCT_EVENT_SEND_COMP) {
-        status = iface->super.ops->arm_tx_cq(&iface->super);
+        status = iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_TX, 0);
         if (status != UCS_OK) {
             return status;
         }
@@ -1119,8 +1121,8 @@ ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
     }
 
     if (arm_rx_solicited || arm_rx_all) {
-        status = iface->super.ops->arm_rx_cq(&iface->super,
-                                             arm_rx_solicited && !arm_rx_all);
+        status = iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_RX,
+                                          arm_rx_solicited && !arm_rx_all);
         if (status != UCS_OK) {
             return status;
         }

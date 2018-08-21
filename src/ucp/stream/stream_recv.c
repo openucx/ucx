@@ -94,16 +94,16 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb, (ep, length),
     ucp_recv_desc_t      *rdesc;
     ucp_stream_am_data_t *am_data;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     if (ucs_unlikely(!ucp_stream_ep_has_data(ep_ext))) {
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
         return UCS_STATUS_PTR(UCS_OK);
     }
 
     rdesc = ucp_stream_rdesc_dequeue(ep_ext);
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
 
     *length         = rdesc->length;
     am_data         = ucp_stream_rdesc_am_data(rdesc);
@@ -128,11 +128,11 @@ UCS_PROFILE_FUNC_VOID(ucp_stream_data_release, (ep, data),
 {
     ucp_recv_desc_t *rdesc = ucp_stream_rdesc_from_data(data);
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     ucp_recv_desc_release(rdesc);
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
 }
 
 static UCS_F_ALWAYS_INLINE ssize_t
@@ -255,7 +255,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
     ucp_request_t       *req;
     ucp_recv_desc_t     *rdesc;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     if (ucs_likely(!UCP_DT_IS_GENERIC(datatype))) {
         dt_length = ucp_dt_length(datatype, count, buffer, NULL);
@@ -319,7 +319,7 @@ out_status:
     req = UCS_STATUS_PTR(status);
 
 out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return req;
 }
 

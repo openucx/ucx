@@ -135,8 +135,8 @@ ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
                                    uct_conn_request_h conn_request,
                                    const void *conn_priv_data, size_t length)
 {
-    const ucp_wireup_sockaddr_priv_t *client_data = conn_priv_data;
     ucp_listener_h listener                       = arg;
+    const ucp_wireup_sockaddr_priv_t *client_data = conn_priv_data;
     uct_worker_cb_id_t prog_id                    = UCS_CALLBACKQ_ID_NULL;
     ucp_listener_accept_t *accept;
     ucp_worker_h worker;
@@ -209,7 +209,7 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     UCS_ASYNC_BLOCK(&worker->async);
 
     /* Go through all the available resources and for each one, check if the given
@@ -288,7 +288,7 @@ err_free:
     ucs_free(listener);
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
 }
 

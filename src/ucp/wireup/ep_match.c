@@ -16,7 +16,7 @@ __KHASH_IMPL(ucp_ep_match, static UCS_F_MAYBE_UNUSED inline, uint64_t,
 
 #define ucp_ep_match_list_for_each(_elem, _head, _member) \
     for (_elem = ucs_container_of((_head)->next, typeof(*_elem), _member); \
-         &(_elem)->_member != NULL; \
+         (_elem) != ucs_container_of(NULL, typeof(*_elem), _member); \
          _elem = ucs_container_of((_elem)->_member.next, typeof(*_elem), _member))
 
 static inline void ucp_ep_match_list_add_tail(ucs_list_link_t *head,

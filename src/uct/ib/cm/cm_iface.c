@@ -451,8 +451,7 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     .iface_get_address        = uct_cm_iface_get_address,
     .iface_is_reachable       = uct_ib_iface_is_reachable
     },
-    .arm_tx_cq                = (void*)ucs_empty_function_return_success,
-    .arm_rx_cq                = (void*)ucs_empty_function_return_success
+    .arm_cq                   = (void*)ucs_empty_function_return_success,
 };
 
 static ucs_status_t uct_cm_query_resources(uct_md_h md,

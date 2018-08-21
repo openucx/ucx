@@ -9,6 +9,7 @@
 #define UCP_LISTENER_H_
 
 #include "ucp_worker.h"
+#include "wireup/wireup_ep.h"
 
 
 /**

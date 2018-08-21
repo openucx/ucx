@@ -220,13 +220,20 @@ build_release_pkg() {
 	# Show UCX info
 	./src/tools/info/ucx_info -f -c -v -y -d -b -p -w -e -uart
 
-	set +e
-	out=$(rpm -q rpm 2>/dev/null)
-	rc=$?
-	set -e
-	rpm_based=yes
-	if [[ $rc != 0 || "$out" == *"not installed"* ]]; then
+	if [ -f /etc/redhat-release -o -f /etc/fedora-release ]; then
+		rpm_based=yes
+	elif [ `cat /etc/os-release | grep -i "ubuntu\|mint"|wc -l` -gt 0 ]; then
 		rpm_based=no
+	else
+		# try rpm tool to detect distro
+		set +e
+		out=$(rpm -q rpm 2>/dev/null)
+		rc=$?
+		set -e
+		rpm_based=yes
+		if [[ $rc != 0 || "$out" == *"not installed"* ]]; then
+			rpm_based=no
+		fi
 	fi
 
 	if [[ "$rpm_based" == "no" && -x /usr/bin/dpkg-buildpackage ]]; then
@@ -319,6 +326,8 @@ build_clang() {
 		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
 		$MAKE clean
 		$MAKE
+		$MAKE install
+		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
 		$MAKE distclean
 		echo "ok 1 - build successful " >> build_clang.tap
 	else
@@ -338,8 +347,11 @@ build_armclang() {
         ../contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
         $MAKE clean
         $MAKE
+        $MAKE install
+        UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
         $MAKE distclean
         echo "ok 1 - build successful " >> build_armclang.tap
+        module unload arm-compiler/latest
     else
         echo "==== Not building with armclang compiler ===="
         echo "ok 1 - # SKIP because armclang not installed" >> build_armclang.tap
@@ -560,7 +572,7 @@ run_ucx_perftest_mpi() {
 # Test malloc hooks with mpi
 #
 test_malloc_hooks_mpi() {
-	for tname in malloc_hooks external_events flag_no_install
+	for tname in malloc_hooks malloc_hooks_unmapped external_events flag_no_install
 	do
 		echo "==== Running memory hook (${tname}) on MPI ===="
 		$MPIRUN -np 1 $AFFINITY ./test/mpi/test_memhooks -t $tname
@@ -766,9 +778,8 @@ run_gtest() {
 			module load tools/valgrind-latest
 		fi
 
-		export VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes"
-		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind \
-			VALGRIND_EXTRA_ARGS="--gen-suppressions=all"
+		export VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes --gen-suppressions=all"
+		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
 		(cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 		module unload tools/valgrind-latest
 	else

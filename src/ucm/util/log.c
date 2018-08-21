@@ -156,6 +156,9 @@ static void ucm_log_vsnprintf(char *buf, size_t max, const char *fmt, va_list ap
             /* String */
             case 's':
                 value.s = va_arg(ap, char *);
+                if (!value.s) {
+                    value.s = "(null)";
+                }
                 pad -= strlen(value.s);
                 if (!(flags & UCM_LOG_LTOA_PAD_LEFT)) {
                     pb = ucm_log_add_padding(pb, endb, pad, ' ');

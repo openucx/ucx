@@ -7,6 +7,7 @@
 #include <common/test.h>
 extern "C" {
 #include <ucs/stats/stats.h>
+#include <ucs/stats/libstats.h>
 #include <ucs/sys/sys.h>
 }
 
@@ -44,6 +45,7 @@ public:
         modify_config("STATS_DEST",    stats_dest_config().c_str());
         modify_config("STATS_TRIGGER", stats_trigger_config().c_str());
         modify_config("STATS_FORMAT", stats_format_config().c_str());
+        modify_config("WARN_INVARIANT_TSC", "n");
         ucs_stats_init();
         ASSERT_TRUE(ucs_stats_is_active());
     }
@@ -234,8 +236,11 @@ UCS_TEST_F(stats_filter_agg, report_agg) {
         }
     }
 
-    std::string compared_string = std::string(ucs_get_host_name()) + ":" +
-                                  ucs::to_string(getpid()) + ":" +
+    std::string header = std::string(ucs_get_host_name()) + ":" +
+                                     ucs::to_string(getpid());
+
+    std::string compared_string = header.substr(0, UCS_STAT_NAME_MAX - 1) +
+                                  ":" +
                                   "\n  category:\n"
                                   "    data*:\n"
                                   "      counter0: 30\n"
@@ -264,8 +269,11 @@ UCS_TEST_F(stats_filter_summary, summary) {
             break;
         }
     }
-    std::string compared_string = std::string(ucs_get_host_name()) + ":" +
-                                  ucs::to_string(getpid()) +
+
+    std::string node_name = std::string(ucs_get_host_name()) + ":" +
+                            ucs::to_string(getpid());
+    node_name.resize(std::min<size_t>(node_name.length(), UCS_STAT_NAME_MAX - 1));
+    std::string compared_string = node_name +
                                   ":data*:{counter0:30 counter1:60 " +
                                   "counter2:90 counter3:120} \n";
     EXPECT_EQ(compared_string, output);

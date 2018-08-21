@@ -32,8 +32,9 @@ public:
     }
 
     enum {
-        CONN_REQ = DEFAULT_PARAM_VARIANT + 1,
-        CONN_REQ_STREAM
+        MT_PARAM_VARIANT = DEFAULT_PARAM_VARIANT + 1,
+        CONN_REQ,
+        CONN_REQ_STREAM,
     };
 
     typedef enum {
@@ -50,6 +51,9 @@ public:
         std::vector<ucp_test_param> result =
             ucp_test::enum_test_params(ctx_params, name, test_case_name, tls);
 
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     MT_PARAM_VARIANT, result,
+                                     MULTI_THREAD_WORKER);
         generate_test_params_variant(ctx_params, name, test_case_name, tls,
                                      CONN_REQ, result);
         generate_test_params_variant(ctx_params, name, test_case_name, tls,
@@ -85,7 +89,7 @@ public:
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
-            if ((strstr(err_str.c_str(), "no supported transports found for")) ||
+            if ((strstr(err_str.c_str(), "no supported sockaddr auxiliary transports found for")) ||
                 (strstr(err_str.c_str(), "sockaddr aux resources addresses")) ||
                 (strstr(err_str.c_str(), "no peer failure handler")) ||
                 /* when the "peer failure" error happens, it is followed by: */
@@ -557,9 +561,9 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup_for_rma_atomic) {
                         "matching transport");
     }
     EXPECT_EQ(0, err_handler_count);
-    restore_errors();
 
     wait_for_server_ep(false);
+    restore_errors();
 
     /* allow the connection establishment flow to complete */
     short_progress_loop();

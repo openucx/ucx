@@ -414,6 +414,28 @@ UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
     ucs_async_context_cleanup(&async);
 }
 
+UCS_TEST_P(test_async, many_timers) {
+
+    for (int count = 0; count < 4010; ++count) {
+        std::vector<int> timers;
+        ucs_status_t status;
+        int timer_id;
+
+        for (int count2 = 0; count2 < 250; ++count2) {
+            status = ucs_async_add_timer(GetParam(), ucs_time_from_sec(1.0),
+                                         (ucs_async_event_cb_t)ucs_empty_function,
+                                         NULL, NULL, &timer_id);
+            ASSERT_UCS_OK(status);
+            timers.push_back(timer_id);
+        }
+
+        while (!timers.empty()) {
+            ucs_async_remove_handler(timers.back(), 0);
+            timers.pop_back();
+        }
+    }
+}
+
 UCS_TEST_P(test_async, ctx_event) {
     local_event le(GetParam());
     le.push_event();

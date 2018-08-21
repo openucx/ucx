@@ -152,8 +152,7 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
 {
     ucs_status_t status = UCS_OK;
 #if IBV_EXP_HW_TM
-    struct ibv_srq *srq;
-    struct mlx5_srq *msrq;
+    struct ibv_qp *cmd_qp;
     int i;
 
     if (!UCT_RC_IFACE_TM_ENABLED(rc_iface)) {
@@ -166,26 +165,19 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
         goto err;
     }
 
-    srq = rc_iface->rx.srq.srq;
-    if (srq->handle == LEGACY_XRC_SRQ_HANDLE) {
-        srq = (struct ibv_srq *)(((struct ibv_srq_legacy *)srq)->ibv_srq);
-    }
-
-    msrq = ucs_container_of(srq, struct mlx5_srq, vsrq.srq);
-    if (msrq->counter != 0) {
-        ucs_error("SRQ counter is not 0 (%d)", msrq->counter);
+    cmd_qp = uct_dv_get_cmd_qp(rc_iface->rx.srq.srq);
+    if (!cmd_qp) {
         status = UCS_ERR_NO_DEVICE;
         goto err_tag_cleanup;
     }
 
     status = uct_ib_mlx5_txwq_init(rc_iface->super.super.worker,
-                                   &iface->tm.cmd_wq.super,
-                                   &msrq->cmd_qp->verbs_qp.qp);
+                                   &iface->tm.cmd_wq.super, cmd_qp);
     if (status != UCS_OK) {
         goto err_tag_cleanup;
     }
 
-    iface->tm.cmd_wq.qp_num   = msrq->cmd_qp->verbs_qp.qp.qp_num;
+    iface->tm.cmd_wq.qp_num   = cmd_qp->qp_num;
     iface->tm.cmd_wq.ops_mask = rc_iface->tm.cmd_qp_len - 1;
     iface->tm.cmd_wq.ops_head = iface->tm.cmd_wq.ops_tail = 0;
     iface->tm.cmd_wq.ops      = ucs_calloc(rc_iface->tm.cmd_qp_len,
@@ -401,12 +393,12 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
 {
     ucs_status_t status;
 
-    status = uct_ib_mlx5_get_cq(rc_iface->super.send_cq, &iface->tx.cq);
+    status = uct_ib_mlx5_get_cq(rc_iface->super.cq[UCT_IB_DIR_TX], &iface->cq[UCT_IB_DIR_TX]);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = uct_ib_mlx5_get_cq(rc_iface->super.recv_cq, &iface->rx.cq);
+    status = uct_ib_mlx5_get_cq(rc_iface->super.cq[UCT_IB_DIR_RX], &iface->cq[UCT_IB_DIR_RX]);
     if (status != UCS_OK) {
         return status;
     }
@@ -523,21 +515,24 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *iface, uct_iface_attr_t *ifa
 void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                             uct_ib_iface_t *ib_iface)
 {
-    uct_ib_mlx5_update_cq_ci(ib_iface->send_cq, iface->tx.cq.cq_ci);
-    uct_ib_mlx5_update_cq_ci(ib_iface->recv_cq, iface->rx.cq.cq_ci);
+#if !HAVE_DECL_MLX5DV_INIT_OBJ
+    uct_ib_mlx5_update_cq_ci(ib_iface->cq[UCT_IB_DIR_TX], iface->cq[UCT_IB_DIR_TX].cq_ci);
+    uct_ib_mlx5_update_cq_ci(ib_iface->cq[UCT_IB_DIR_RX], iface->cq[UCT_IB_DIR_RX].cq_ci);
+#endif
 }
 
 void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                           uct_ib_iface_t *ib_iface)
 {
-    iface->tx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->send_cq);
-    iface->rx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->recv_cq);
+#if !HAVE_DECL_MLX5DV_INIT_OBJ
+    iface->cq[UCT_IB_DIR_TX].cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->cq[UCT_IB_DIR_TX]);
+    iface->cq[UCT_IB_DIR_RX].cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->cq[UCT_IB_DIR_RX]);
+#endif
 }
 
-void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
-                                        uct_rc_iface_t *rc_iface, uint32_t qpn)
+int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
+                                   uct_ib_mlx5_srq_t *srq, uint32_t qpn)
 {
-    uct_ib_mlx5_cq_t *mlx5_cq = &mlx5_common_iface->rx.cq;
     const size_t cqe_sz       = 1ul << mlx5_cq->cqe_size_log;
     struct mlx5_cqe64 *cqe, *dest;
     uct_ib_mlx5_srq_seg_t *seg;
@@ -569,10 +564,12 @@ void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_
         cqe = uct_ib_mlx5_get_cqe(mlx5_cq, pi);
         if ((ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER)) == qpn) {
             idx = ntohs(cqe->wqe_counter);
-            seg = uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq, idx);
-            seg->srq.free = 1;
-            ucs_trace("iface %p: freed srq seg[%d] of qpn 0x%x",
-                      mlx5_common_iface, idx, qpn);
+            if (srq) {
+                seg = uct_ib_mlx5_srq_get_wqe(srq, idx);
+                seg->srq.free = 1;
+                ucs_trace("cq %p: freed srq seg[%d] of qpn 0x%x",
+                          mlx5_cq, idx, qpn);
+            }
             ++nfreed;
         } else if (nfreed) {
             dest = uct_ib_mlx5_get_cqe(mlx5_cq, pi + nfreed);
@@ -583,5 +580,6 @@ void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_
     }
 
     mlx5_cq->cq_ci             += nfreed;
-    rc_iface->rx.srq.available += nfreed;
+
+    return nfreed;
 }

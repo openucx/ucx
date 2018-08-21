@@ -9,7 +9,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)
-define([ucx_ver_minor], 4)
+define([ucx_ver_minor], 5)
 define([ucx_ver_patch], 0)
 define([ts], esyscmd([sh -c "date +%Y%m%d%H%M%S"]))
 
@@ -113,6 +113,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      AM_CONDITIONAL([HAVE_MEMTRACK], [false])
      AM_CONDITIONAL([HAVE_IB], [false])
      AM_CONDITIONAL([HAVE_MLX5_HW], [false])
+     AM_CONDITIONAL([HAVE_MLX5_DV], [false])
      AM_CONDITIONAL([HAVE_TL_RC], [false])
      AM_CONDITIONAL([HAVE_TL_DC], [false])
      AM_CONDITIONAL([HAVE_TL_UD], [false])

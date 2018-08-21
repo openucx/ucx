@@ -237,13 +237,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nb, (ep, flags, cb),
 {
     void *request;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL,
                                     cb, UCP_REQUEST_FLAG_CALLBACK,
                                     ucp_ep_flushed_callback);
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
 
     return request;
 }
@@ -320,12 +320,12 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_worker_flush_nb, (worker, flags, cb),
 {
     void *request;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     request = ucp_worker_flush_nb_internal(worker, cb,
                                            UCP_REQUEST_FLAG_CALLBACK);
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return request;
 }
@@ -354,12 +354,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
     ucs_status_t status;
     void *request;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     request = ucp_worker_flush_nb_internal(worker, NULL, 0);
     status = ucp_flush_wait(worker, request);
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return status;
 }
@@ -369,12 +369,36 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)
     ucs_status_t status;
     void *request;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0,
                                     ucp_ep_flushed_callback);
     status = ucp_flush_wait(ep->worker, request);
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+    return status;
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
+{
+    unsigned rsc_index;
+    ucs_status_t status;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+
+    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
+        if (worker->ifaces[rsc_index].iface == NULL) {
+            continue;
+        }
+
+        status = uct_iface_fence(worker->ifaces[rsc_index].iface, 0);
+        if (status != UCS_OK) {
+            goto out;
+        }
+    }
+    status = UCS_OK;
+
+out:
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return status;
 }

@@ -27,6 +27,7 @@ typedef struct uct_cuda_copy_iface {
     cudaStream_t                stream_h2d;
     struct {
         unsigned                max_poll;
+        unsigned                max_cuda_events;
     } config;
 } uct_cuda_copy_iface_t;
 
@@ -34,6 +35,7 @@ typedef struct uct_cuda_copy_iface {
 typedef struct uct_cuda_copy_iface_config {
     uct_iface_config_t      super;
     unsigned                max_poll;
+    unsigned                max_cuda_events;
 } uct_cuda_copy_iface_config_t;
 
 

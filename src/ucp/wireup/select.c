@@ -929,7 +929,7 @@ static ucs_status_t ucp_wireup_add_bw_lanes(ucp_ep_h ep,
                                             unsigned address_count,
                                             const ucp_address_entry_t *address_list,
                                             const ucp_wireup_select_bw_info_t *bw_info,
-                                            int allow_proxy,
+                                            int allow_proxy, uint64_t tl_bitmap,
                                             ucp_wireup_lane_desc_t *lane_descs,
                                             ucp_lane_index_t *num_lanes_p)
 {
@@ -956,7 +956,7 @@ static ucs_status_t ucp_wireup_add_bw_lanes(ucp_ep_h ep,
     while ((num_lanes < bw_info->max_lanes) &&
            (ucs_count_one_bits(md_map) < UCP_MAX_OP_MDS)) {
         status = ucp_wireup_select_transport(ep, address_list, address_count,
-                                             &bw_info->criteria, -1, -1,
+                                             &bw_info->criteria, tl_bitmap, -1,
                                              local_dev_bitmap, remote_dev_bitmap,
                                              0, &rsc_index, &addr_index, &score);
         if (status != UCS_OK) {
@@ -1048,7 +1048,7 @@ static ucs_status_t ucp_wireup_add_am_bw_lanes(ucp_ep_h ep, const ucp_ep_params_
     }
 
     return ucp_wireup_add_bw_lanes(ep, address_count, address_list, &bw_info, 1,
-                                   lane_descs, num_lanes_p);
+                                   -1, lane_descs, num_lanes_p);
 }
 
 static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
@@ -1059,6 +1059,7 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
                                                 ucp_lane_index_t *num_lanes_p)
 {
     ucp_wireup_select_bw_info_t bw_info;
+    uct_memory_type_t mem_type;
 
     if ((ucp_ep_get_context_features(ep) & UCP_FEATURE_RMA) ||
         (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) {
@@ -1093,8 +1094,17 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
     bw_info.max_lanes         = ep->worker->context->config.ext.max_rndv_lanes;
     bw_info.usage             = UCP_WIREUP_LANE_USAGE_RMA_BW;
 
-    return ucp_wireup_add_bw_lanes(ep, address_count, address_list, &bw_info, 0,
-                                   lane_descs, num_lanes_p);
+    for (mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+        if (!ep->worker->context->mem_type_tls[mem_type]) {
+            continue;
+        }
+
+        ucp_wireup_add_bw_lanes(ep, address_count, address_list, &bw_info, 0,
+                                ep->worker->context->mem_type_tls[mem_type],
+                                lane_descs, num_lanes_p);
+    }
+
+    return UCS_OK;
 }
 
 /* Lane for transport offloaded tag interface */

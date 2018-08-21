@@ -20,7 +20,11 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
 
     {"MAX_POLL", "16",
      "Max number of event completions to pick during cuda events polling",
-      ucs_offsetof(uct_cuda_copy_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_cuda_copy_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
+
+    {"MAX_EVENTS", "1024",
+     "Max number of cuda events. -1 is infinite",
+     ucs_offsetof(uct_cuda_copy_iface_config_t, max_cuda_events), UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
@@ -229,8 +233,9 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
         return UCS_ERR_NO_DEVICE;
     }
 
-    self->id              = ucs_generate_uuid((uintptr_t)self);
-    self->config.max_poll = config->max_poll;
+    self->id                     = ucs_generate_uuid((uintptr_t)self);
+    self->config.max_poll        = config->max_poll;
+    self->config.max_cuda_events = config->max_cuda_events;
 
     status = ucs_mpool_init(&self->cuda_event_desc,
                             0,
@@ -238,7 +243,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
                             0,
                             UCS_SYS_CACHE_LINE_SIZE,
                             128,
-                            1024,
+                            self->config.max_cuda_events,
                             &uct_cuda_copy_event_desc_mpool_ops,
                             "CUDA EVENT objects");
 

@@ -287,7 +287,10 @@ ucs_pgtable_insert_page(ucs_pgtable_t *pgtable, ucs_pgt_addr_t address,
             ++pgd->count;
             break;
         } else {
-            ucs_assert(!ucs_pgt_entry_test(pte, UCS_PGT_ENTRY_FLAG_REGION));
+            if (ucs_pgt_entry_test(pte, UCS_PGT_ENTRY_FLAG_REGION)) {
+                goto err;
+            }
+
             ucs_assertv(shift >= UCS_PGT_ENTRY_SHIFT + order,
                         "shift=%u order=%u", shift, order);  /* sub PTE should be able to hold it */
 
@@ -584,6 +587,7 @@ void ucs_pgtable_purge(ucs_pgtable_t *pgtable, ucs_pgt_search_callback_t cb,
     unsigned num_regions = pgtable->num_regions;
     ucs_pgt_region_t **all_regions, **next_region, *region;
     ucs_pgt_addr_t from, to;
+    ucs_status_t status;
     unsigned i;
 
     all_regions = ucs_calloc(num_regions, sizeof(*all_regions),
@@ -604,7 +608,11 @@ void ucs_pgtable_purge(ucs_pgtable_t *pgtable, ucs_pgt_search_callback_t cb,
 
     for (i = 0; i < num_regions; ++i) {
         region = all_regions[i];
-        ucs_pgtable_remove(pgtable, region);
+        status = ucs_pgtable_remove(pgtable, region);
+        if (status != UCS_OK) {
+            ucs_warn("failed to remove pgtable region" UCS_PGT_REGION_FMT,
+                     UCS_PGT_REGION_ARG(region));
+        }
         cb(pgtable, region, arg);
     }
 

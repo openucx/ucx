@@ -121,6 +121,25 @@ static inline int ucs_async_check_miss(ucs_async_context_t *async)
     } while (0)
 
 
+/**
+ * Check if asynchronous event delivery is blocked by the current thread.
+ *
+ * @param _async Event context to check status for.
+ */
+#define UCS_ASYNC_IS_RECURSIVELY_BLOCKED(_async) \
+    ({  \
+        int _ret; \
+        if ((_async)->mode == UCS_ASYNC_MODE_THREAD) { \
+            _ret = UCS_ASYNC_THREAD_IS_RECURSIVELY_BLOCKED(_async); \
+        } else if ((_async)->mode == UCS_ASYNC_MODE_SIGNAL) { \
+            _ret = UCS_ASYNC_SIGNAL_IS_RECURSIVELY_BLOCKED(_async); \
+        } else { \
+            _ret = (_async)->poll_block; \
+        } \
+        _ret; \
+    })
+
+
 END_C_DECLS
 
 #endif

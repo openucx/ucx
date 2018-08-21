@@ -30,49 +30,44 @@ extern "C" {
 
 class malloc_hook : public ucs::test {
 protected:
-    virtual void init() {
-        size_t free_space, min_free_space, prev_free_space, alloc_size;
-        struct mallinfo mi;
+    static void mem_event_callback(ucm_event_type_t event_type,
+                                   ucm_event_t *event,
+                                   void *arg)
+    {
+        malloc_hook *self = reinterpret_cast<malloc_hook*>(arg);
+        self->m_got_event = 1;
+    }
 
+    virtual void init() {
+        ucs_status_t status;
+
+        m_got_event = 0;
         ucm_malloc_state_reset(128 * 1024, 128 * 1024);
         malloc_trim(0);
-
-        /* Take up free space so we would definitely get mmap events */
-        min_free_space  = SIZE_MAX;
-        alloc_size      = 0;
-        mi = mallinfo();
-        prev_free_space = mi.fsmblks + mi.fordblks;
-
-        while (alloc_size < (size_t)(prev_free_space * 0.90)) {
-            m_pts.push_back(malloc(small_alloc_size));
-            alloc_size += small_alloc_size;
-        }
+        status = ucm_set_event_handler(UCM_EVENT_VM_MAPPED,
+                                       0, mem_event_callback,
+                                       reinterpret_cast<void*>(this));
+        ASSERT_UCS_OK(status);
 
         for (;;) {
             void *ptr = malloc(small_alloc_size);
-            mi = mallinfo();
-            free_space = mi.fsmblks + mi.fordblks;
-            if (free_space > min_free_space) {
+            if (m_got_event) {
                 /* If the heap grew, the minimal size is the previous one */
                 free(ptr);
-                min_free_space = free_space;
                 break;
             } else {
                 m_pts.push_back(ptr);
-                alloc_size += small_alloc_size;
-                min_free_space = free_space;
             }
         }
-
-        UCS_TEST_MESSAGE << "Reduced heap free space from " << prev_free_space <<
-                            " to " << free_space << " after allocating " <<
-                            alloc_size << " bytes";
+        ucm_unset_event_handler(UCM_EVENT_VM_MAPPED, mem_event_callback,
+                                reinterpret_cast<void*>(this));
     }
 
 public:
     static int            small_alloc_count;
     static const size_t   small_alloc_size  = 10000;
     ucs::ptr_vector<void> m_pts;
+    int                   m_got_event;
 };
 
 int malloc_hook::small_alloc_count = 1000 / ucs::test_time_multiplier();
@@ -645,4 +640,91 @@ UCS_TEST_F(malloc_hook_cplusplus, mmap_ptrs) {
 
     unset();
 
+}
+
+UCS_TEST_F(malloc_hook_cplusplus, remap_override) {
+
+    /*
+     * Test memory mapping functions which override an existing mapping
+     */
+
+    size_t size = ucs_get_page_size() * 800;
+    void *buffer;
+    int shmid;
+
+    set();
+
+    EXPECT_EQ(0u, m_mapped_size);
+    EXPECT_EQ(0u, m_unmapped_size);
+
+    /* 1. Map a large buffer */
+    {
+        buffer = mmap(NULL, size, PROT_READ|PROT_WRITE,
+                            MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+        ASSERT_NE(MAP_FAILED, buffer) << strerror(errno);
+
+        EXPECT_EQ(size, m_mapped_size);
+        EXPECT_EQ(0u,   m_unmapped_size);
+    }
+
+    /*
+     * 2. Map another buffer in the same place.
+     *    Expected behavior: unmap event on the old buffer
+     */
+    {
+        m_mapped_size = m_unmapped_size = 0;
+
+        void *remap = mmap(buffer, size, PROT_READ|PROT_WRITE,
+                           MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED, -1, 0);
+        ASSERT_EQ(buffer, remap);
+
+        EXPECT_EQ(size, m_mapped_size);
+        EXPECT_EQ(size, m_unmapped_size);
+    }
+
+    /* 3. Create a shared memory segment */
+    {
+        shmid = shmget(IPC_PRIVATE, size, IPC_CREAT | SHM_R | SHM_W);
+        ASSERT_NE(-1, shmid) << strerror(errno);
+    }
+
+    /*
+     * 4. Attach the segment at the same buffer address.
+     *    Expected behavior: unmap event on the old buffer
+     */
+    {
+        m_mapped_size = m_unmapped_size = 0;
+
+        void *shmaddr = shmat(shmid, buffer, SHM_REMAP);
+        ASSERT_EQ(buffer, shmaddr);
+
+        EXPECT_EQ(size, m_mapped_size);
+        EXPECT_EQ(size, m_unmapped_size);
+    }
+
+    /* 5. Detach the sysv segment */
+    {
+        m_mapped_size = m_unmapped_size = 0;
+
+        shmdt(buffer);
+
+        EXPECT_EQ(size, m_unmapped_size);
+    }
+
+    /* 6. Remove the shared memory segment */
+    {
+        int ret = shmctl(shmid, IPC_RMID, NULL);
+        ASSERT_NE(-1, ret) << strerror(errno);
+    }
+
+    /* 7. Unmap the buffer */
+    {
+        m_mapped_size = m_unmapped_size = 0;
+
+        munmap(buffer, size);
+
+        EXPECT_EQ(size, m_unmapped_size);
+    }
+
+    unset();
 }

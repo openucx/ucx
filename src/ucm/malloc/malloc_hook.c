@@ -619,20 +619,25 @@ static int ucm_malloc_mallopt(int param_number, int value)
     return success;
 }
 
+static char *ucm_malloc_blacklist[] = {
+    "libnvidia-fatbinaryloader.so",
+    NULL
+};
+
 static ucm_reloc_patch_t ucm_malloc_symbol_patches[] = {
-    { "free", ucm_free },
-    { "realloc", ucm_realloc },
-    { "malloc", ucm_malloc },
-    { "memalign", ucm_memalign },
-    { "calloc", ucm_calloc },
-    { "valloc", ucm_valloc },
-    { "posix_memalign", ucm_posix_memalign },
-    { "setenv", ucm_setenv },
-    { UCM_OPERATOR_NEW_SYMBOL, ucm_operator_new },
-    { UCM_OPERATOR_DELETE_SYMBOL, ucm_operator_delete },
-    { UCM_OPERATOR_VEC_NEW_SYMBOL, ucm_operator_vec_new },
-    { UCM_OPERATOR_VEC_DELETE_SYMBOL, ucm_operator_vec_delete },
-    { NULL, NULL }
+    { .symbol = "free", .value = ucm_free, .blacklist = ucm_malloc_blacklist },
+    { .symbol = "realloc", .value = ucm_realloc, .blacklist = ucm_malloc_blacklist },
+    { .symbol = "malloc", .value = ucm_malloc, .blacklist = ucm_malloc_blacklist },
+    { .symbol = "memalign", .value = ucm_memalign, .blacklist = ucm_malloc_blacklist },
+    { .symbol = "calloc", .value = ucm_calloc, .blacklist = ucm_malloc_blacklist },
+    { .symbol = "valloc", .value = ucm_valloc, .blacklist = ucm_malloc_blacklist },
+    { .symbol = "posix_memalign", .value = ucm_posix_memalign, .blacklist = ucm_malloc_blacklist },
+    { .symbol = "setenv", .value = ucm_setenv, .blacklist = ucm_malloc_blacklist },
+    { .symbol = UCM_OPERATOR_NEW_SYMBOL, .value = ucm_operator_new, .blacklist = ucm_malloc_blacklist },
+    { .symbol = UCM_OPERATOR_DELETE_SYMBOL, .value = ucm_operator_delete, .blacklist = ucm_malloc_blacklist },
+    { .symbol = UCM_OPERATOR_VEC_NEW_SYMBOL, .value = ucm_operator_vec_new, .blacklist = ucm_malloc_blacklist },
+    { .symbol = UCM_OPERATOR_VEC_DELETE_SYMBOL, .value = ucm_operator_vec_delete, .blacklist = ucm_malloc_blacklist },
+    { .symbol = NULL, .value = NULL }
 };
 
 static ucm_reloc_patch_t ucm_malloc_optional_symbol_patches[] = {

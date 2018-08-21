@@ -203,6 +203,8 @@ typedef struct ucp_ep_config {
         /* Lane used for tag matching operations. */
         ucp_lane_index_t    lane;
 
+        ssize_t             max_eager_short;
+
         /* Configuration of the lane used for eager protocols
          * (can be AM or tag offload). */
         ucp_ep_msg_config_t eager;

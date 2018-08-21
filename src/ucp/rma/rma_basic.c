@@ -1,21 +1,16 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2018. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
 
-#include <ucp/core/ucp_mm.h>
+#include "rma.inl"
 
-#include <ucp/core/ucp_ep.h>
-#include <ucp/core/ucp_worker.h>
-#include <ucp/core/ucp_context.h>
+#include <ucp/core/ucp_mm.h>
 #include <ucp/dt/dt_contig.h>
 #include <ucs/profile/profile.h>
-
-#include <ucp/proto/proto_am.inl>
-#include <ucs/datastruct/mpool.inl>
 
 
 #define UCP_RMA_CHECK_PARAMS(_buffer, _length) \
@@ -34,10 +29,11 @@
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
     }
 
-/* request can be released if 
+
+/* request can be released if
  *  - all fragments were sent (length == 0) (bcopy & zcopy mix)
  *  - all zcopy fragments are done (uct_comp.count == 0)
- *  - and request was allocated from the mpool 
+ *  - and request was allocated from the mpool
  *    (checked in ucp_request_complete_send)
  *
  * Request can be released either immediately or in the completion callback.
@@ -59,6 +55,8 @@ ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
         return status;
     }
 
+    ucs_assert(frag_length >= 0);
+    ucs_assert(req->send.length >= frag_length);
     req->send.length -= frag_length;
     if (req->send.length == 0) {
         /* bcopy is the fast path */
@@ -97,7 +95,7 @@ static void ucp_rma_request_zcopy_completion(uct_completion_t *self,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer, 
+ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
                      size_t length, uint64_t remote_addr, ucp_rkey_h rkey,
                      uct_pending_callback_t cb, size_t zcopy_thresh, int flags)
 {
@@ -127,7 +125,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     return ucp_request_send_buffer_reg_lane(req, req->send.lane);
 }
 
-static ucs_status_t ucp_progress_put(uct_pending_req_t *self)
+static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
 {
     ucp_request_t *req              = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep                    = req->send.ep;
@@ -172,7 +170,7 @@ static ucs_status_t ucp_progress_put(uct_pending_req_t *self)
 
         status = UCS_PROFILE_CALL(uct_ep_put_zcopy,
                                   ep->uct_eps[lane],
-                                  &iov, 1, 
+                                  &iov, 1,
                                   req->send.rma.remote_addr,
                                   rkey->cache.rma_rkey,
                                   &req->send.state.uct_comp);
@@ -183,7 +181,7 @@ static ucs_status_t ucp_progress_put(uct_pending_req_t *self)
     return ucp_rma_request_advance(req, packed_len, status);
 }
 
-static ucs_status_t ucp_progress_get(uct_pending_req_t *self)
+static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
 {
     ucp_request_t *req              = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep                    = req->send.ep;
@@ -216,7 +214,7 @@ static ucs_status_t ucp_progress_get(uct_pending_req_t *self)
 
         status = UCS_PROFILE_CALL(uct_ep_get_zcopy,
                                   ep->uct_eps[lane],
-                                  &iov, 1, 
+                                  &iov, 1,
                                   req->send.rma.remote_addr,
                                   rkey->cache.rma_rkey,
                                   &req->send.state.uct_comp);
@@ -228,59 +226,6 @@ static ucs_status_t ucp_progress_get(uct_pending_req_t *self)
     }
 
     return ucp_rma_request_advance(req, frag_length, status);
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_rma_blocking(ucp_ep_h ep, const void *buffer, size_t length,
-                 uint64_t remote_addr, ucp_rkey_h rkey,
-                 uct_pending_callback_t progress_cb, size_t zcopy_thresh)
-{
-    ucs_status_t status;
-    ucp_request_t req;
-
-    status = ucp_rma_request_init(&req, ep, buffer, length, remote_addr, rkey,
-                                  NULL, zcopy_thresh, 0);
-    if (ucs_unlikely(status != UCS_OK)) {
-        return status;
-    }
-
-    /* Loop until all message has been sent.
-     * We re-check the configuration on every iteration except for zcopy, 
-     * because it can be * changed by transport switch.
-     */
-    for (;;) {
-        /* coverity[callee_ptr_arith] */
-        status = progress_cb(&req.send.uct);
-        if (ucs_likely(status == UCS_OK)) {
-            break;
-        } else if (status == UCS_INPROGRESS) {
-            continue;
-        } else if (status != UCS_ERR_NO_RESOURCE) {
-            break;
-        } else {
-            ucp_worker_progress(ep->worker);
-        }
-    }
-
-    ucp_request_wait_uct_comp(&req);
-    return status;
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
-ucp_rma_send_request_cb(ucp_request_t *req, ucp_send_callback_t cb)
-{
-    ucs_status_t status = ucp_request_send(req);
-
-    if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
-        ucs_trace_req("releasing send request %p, returning status %s", req,
-                      ucs_status_string(status));
-        ucs_mpool_put(req);
-        return UCS_STATUS_PTR(status);
-    }
-    ucs_trace_req("returning rma request %p, status %s", req,
-                  ucs_status_string(status));
-    ucp_request_set_callback(req, send.cb, cb);
-    return req + 1;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -326,74 +271,7 @@ ucp_rma_nonblocking_cb(ucp_ep_h ep, const void *buffer, size_t length,
         return UCS_STATUS_PTR(status);
     }
 
-    return ucp_rma_send_request_cb (req, cb);
-}
-
-UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
-                 ucp_ep_h ep, const void *buffer, size_t length,
-                 uint64_t remote_addr, ucp_rkey_h rkey)
-{
-    ucp_ep_rma_config_t *rma_config;
-    ucs_status_t status;
-
-    UCP_RMA_CHECK_PARAMS(buffer, length);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
-
-    status = UCP_RKEY_RESOLVE(rkey, ep, rma);
-    if (status != UCS_OK) {
-        goto out_unlock;
-    }
-
-    if (ucs_likely(length <= rkey->cache.max_put_short)) {
-        do {
-            /* testing shows that for put message rate it is better to finish
-             * put_short here instead of doing it once, getting NO_RESOURCE 
-             * and continuing to ucp_rma_blocking()
-             */
-            status = UCS_PROFILE_CALL(uct_ep_put_short, ep->uct_eps[rkey->cache.rma_lane],
-                                      buffer, length, remote_addr, rkey->cache.rma_rkey);
-            if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
-                goto out_unlock;
-            }
-
-            ucp_worker_progress(ep->worker);
-
-            status = UCP_RKEY_RESOLVE(rkey, ep, rma);
-            if (status != UCS_OK) {
-                goto out_unlock;
-            }
-        } while (1);
-    }
-
-    rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
-    status = ucp_rma_blocking(ep, buffer, length, remote_addr, rkey,
-                              ucp_progress_put, rma_config->put_zcopy_thresh);
-out_unlock:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
-    return status;
-}
-
-UCS_PROFILE_FUNC(ucs_status_t, ucp_get, (ep, buffer, length, remote_addr, rkey),
-                 ucp_ep_h ep, void *buffer, size_t length,
-                 uint64_t remote_addr, ucp_rkey_h rkey)
-{
-    ucp_ep_rma_config_t *rma_config;
-    ucs_status_t status;
-
-    UCP_RMA_CHECK_PARAMS(buffer, length);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
-
-    status = UCP_RKEY_RESOLVE(rkey, ep, rma);
-    if (status != UCS_OK) {
-        goto out_unlock;
-    }
-
-    rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
-    status = ucp_rma_blocking(ep, buffer, length, remote_addr, rkey, 
-                              ucp_progress_get, rma_config->get_zcopy_thresh);
-out_unlock:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
-    return status;
+    return ucp_rma_send_request_cb(req, cb);
 }
 
 ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
@@ -403,7 +281,10 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     ucs_status_t status;
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+
+    ucs_trace_req("put_nbi buffer %p length %zu remote_addr %"PRIx64" rkey %p to %s",
+                   buffer, length, remote_addr, rkey, ucp_ep_peer_name(ep));
 
     status = UCP_RKEY_RESOLVE(rkey, ep, rma);
     if (status != UCS_OK) {
@@ -411,7 +292,7 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     /* Fast path for a single short message */
-    if (ucs_likely(length <= rkey->cache.max_put_short)) {
+    if (ucs_likely((ssize_t)length <= (int)rkey->cache.max_put_short)) {
         status = UCS_PROFILE_CALL(uct_ep_put_short, ep->uct_eps[rkey->cache.rma_lane],
                                   buffer, length, remote_addr, rkey->cache.rma_rkey);
         if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
@@ -420,10 +301,11 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
-    status = ucp_rma_nonblocking(ep, buffer, length, remote_addr, rkey,
-                                 ucp_progress_put, rma_config->put_zcopy_thresh);
+    status     = ucp_rma_nonblocking(ep, (void*)buffer, length, remote_addr, rkey,
+                                     ucp_rma_basic_progress_put,
+                                     rma_config->put_zcopy_thresh);
 out_unlock:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status;
 }
 
@@ -436,7 +318,10 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
     ucs_status_t status;
 
     UCP_RMA_CHECK_PARAMS_PTR(buffer, length);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+
+    ucs_trace_req("put_nb buffer %p length %zu remote_addr %"PRIx64" rkey %p to %s cb %p",
+                   buffer, length, remote_addr, rkey, ucp_ep_peer_name(ep), cb);
 
     status = UCP_RKEY_RESOLVE(rkey, ep, rma);
     if (status != UCS_OK) {
@@ -445,7 +330,7 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     /* Fast path for a single short message */
-    if (ucs_likely(length <= rkey->cache.max_put_short)) {
+    if (ucs_likely((ssize_t)length <= (int)rkey->cache.max_put_short)) {
         status = UCS_PROFILE_CALL(uct_ep_put_short, ep->uct_eps[rkey->cache.rma_lane],
                                   buffer, length, remote_addr, rkey->cache.rma_rkey);
         if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
@@ -455,11 +340,11 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
-    ptr_status = ucp_rma_nonblocking_cb(ep, buffer, length, remote_addr, rkey,
-                                        ucp_progress_put, rma_config->put_zcopy_thresh,
-                                        cb);
+    ptr_status = ucp_rma_nonblocking_cb(ep, (void*)buffer, length, remote_addr, rkey,
+                                        ucp_rma_basic_progress_put,
+                                        rma_config->put_zcopy_thresh, cb);
 out_unlock:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ptr_status;
 }
 
@@ -470,7 +355,10 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
     ucs_status_t status;
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+
+    ucs_trace_req("get_nbi buffer %p length %zu remote_addr %"PRIx64" rkey %p from %s",
+                   buffer, length, remote_addr, rkey, ucp_ep_peer_name(ep));
 
     status = UCP_RKEY_RESOLVE(rkey, ep, rma);
     if (status != UCS_OK) {
@@ -479,9 +367,10 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
 
     rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
     status = ucp_rma_nonblocking(ep, buffer, length, remote_addr, rkey,
-                         ucp_progress_get, rma_config->get_zcopy_thresh);
+                                 ucp_rma_basic_progress_get,
+                                 rma_config->get_zcopy_thresh);
 out_unlock:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return status;
 }
 
@@ -494,7 +383,10 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
     ucs_status_t status;
 
     UCP_RMA_CHECK_PARAMS_PTR(buffer, length);
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+
+    ucs_trace_req("get_nb buffer %p length %zu remote_addr %"PRIx64" rkey %p from %s cb %p",
+                   buffer, length, remote_addr, rkey, ucp_ep_peer_name(ep), cb);
 
     status = UCP_RKEY_RESOLVE(rkey, ep, rma);
     if (status != UCS_OK) {
@@ -504,34 +396,29 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
 
     rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
     ptr_status = ucp_rma_nonblocking_cb(ep, buffer, length, remote_addr, rkey,
-                                        ucp_progress_get, rma_config->get_zcopy_thresh,
-                                        cb);
+                                        ucp_rma_basic_progress_get,
+                                        rma_config->get_zcopy_thresh, cb);
 out_unlock:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ptr_status;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
+                 ucp_ep_h ep, const void *buffer, size_t length,
+                 uint64_t remote_addr, ucp_rkey_h rkey)
 {
-    unsigned rsc_index;
-    ucs_status_t status;
-
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
-    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
-        if (worker->ifaces[rsc_index].iface == NULL) {
-            continue;
-        }
-
-        status = uct_iface_fence(worker->ifaces[rsc_index].iface, 0);
-        if (status != UCS_OK) {
-            goto out;
-        }
-    }
-    status = UCS_OK;
-
-out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
-    return status;
+    return ucp_rma_wait(ep->worker,
+                        ucp_put_nb(ep, buffer, length, remote_addr, rkey,
+                                   (void*)ucs_empty_function),
+                        "put");
 }
 
+UCS_PROFILE_FUNC(ucs_status_t, ucp_get, (ep, buffer, length, remote_addr, rkey),
+                 ucp_ep_h ep, void *buffer, size_t length,
+                 uint64_t remote_addr, ucp_rkey_h rkey)
+{
+    return ucp_rma_wait(ep->worker,
+                        ucp_get_nb(ep, buffer, length, remote_addr, rkey,
+                                   (void*)ucs_empty_function),
+                        "get");
+}

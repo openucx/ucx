@@ -312,6 +312,7 @@ bool ucp_test::check_test_param(const std::string& name,
     UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
                            ucp_config_read, NULL, NULL);
     set_ucp_config(config, test_param);
+    ucp_config_modify(config.get(), "WARN_INVARIANT_TSC", "n");
 
     ucp_context_h ucph;
     ucs_status_t status;
@@ -365,8 +366,10 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
 
     ucp_test::set_ucp_config(ucp_config, entity_param);
 
+    hide_errors();
     UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init,
                            &entity_param.ctx_params, ucp_config);
+    restore_errors();
 
     m_workers.resize(num_workers);
     for (int i = 0; i < num_workers; i++) {

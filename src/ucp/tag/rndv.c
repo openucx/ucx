@@ -19,6 +19,26 @@ static int ucp_rndv_is_get_zcopy(ucp_request_t *sreq, ucp_rndv_mode_t rndv_mode)
              UCP_MEM_IS_HOST(sreq->send.mem_type)));
 }
 
+static int ucp_rndv_is_pipeline_needed(ucp_request_t *sreq) {
+    uct_md_attr_t *md_attr;
+    unsigned md_index;
+
+    if (UCP_MEM_IS_HOST(sreq->send.mem_type)) {
+        return 0;
+    }
+
+    if (sreq->send.ep->worker->context->config.ext.rndv_mode ==
+        UCP_RNDV_MODE_PUT_ZCOPY) {
+        return 0;
+    }
+
+    md_index  = ucp_ep_md_index(sreq->send.ep, sreq->send.lane);
+    md_attr   = &sreq->send.ep->worker->context->tl_mds[md_index].attr;
+
+    /*  check if lane support only mem type */
+    return md_attr->cap.reg_mem_types & UCS_BIT(UCT_MD_MEM_TYPE_HOST);
+}
+
 size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
 {
     ucp_request_t *sreq              = arg;   /* send request */
@@ -875,7 +895,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = data;
     ucp_request_t *sreq              = (ucp_request_t*)rndv_rtr_hdr->sreq_ptr;
     ucp_ep_h ep                      = sreq->send.ep;
-    ucp_rndv_mode_t rndv_mode        = ep->worker->context->config.ext.rndv_mode;
     ucs_status_t status;
 
     ucp_trace_req(sreq, "received rtr address 0x%lx remote rreq 0x%lx",
@@ -900,9 +919,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
                                                    sreq->send.mem_type,
                                                    &sreq->send.rndv_put.uct_rkey, 0);
         if (sreq->send.lane != UCP_NULL_LANE) {
-            if ((rndv_mode == UCP_RNDV_MODE_PUT_ZCOPY) ||
-                ((rndv_mode == UCP_RNDV_MODE_AUTO) &&
-                 UCP_MEM_IS_HOST(sreq->send.mem_type))) {
+            if (!ucp_rndv_is_pipeline_needed(sreq)) {
                 ucp_request_send_state_reset(sreq, ucp_rndv_put_completion,
                                              UCP_REQUEST_SEND_PROTO_RNDV_PUT);
                 sreq->send.uct.func                = ucp_rndv_progress_rma_put_zcopy;
@@ -936,12 +953,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
             sreq->send.uct.func = ucp_rndv_progress_am_zcopy_single;
         } else {
             sreq->send.uct.func        = ucp_rndv_progress_am_zcopy_multi;
-            sreq->send.tag.am_bw_index = 0;
+            sreq->send.tag.am_bw_index = 1;
         }
     } else {
         ucp_request_send_state_reset(sreq, NULL, UCP_REQUEST_SEND_PROTO_BCOPY_AM);
         sreq->send.uct.func        = ucp_rndv_progress_am_bcopy;
-        sreq->send.tag.am_bw_index = 0;
+        sreq->send.tag.am_bw_index = 1;
     }
 
 out_send:

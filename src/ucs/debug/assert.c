@@ -30,7 +30,7 @@ void ucs_fatal_error(const char *error_type, const char *file, unsigned line,
 
     short_file = strrchr(file, '/');
     short_file = (short_file == NULL) ? file : short_file + 1;
-    ucs_handle_error(error_type, "%13s:%-4u %s", short_file, line, buffer);
+    ucs_handle_error(error_type, "%13s:%-4u UCX %s", short_file, line, buffer);
 
     abort();
 }

@@ -12,7 +12,10 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/string.h>
+#include <ucm/api/ucm.h>
 #include <pthread.h>
+#include <sys/resource.h>
 
 
 #define UCT_IB_MD_PREFIX         "ib"
@@ -94,6 +97,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Prefer nearest device to cpu when selecting a device from NET_DEVICES list.\n",
      ucs_offsetof(uct_ib_md_config_t, ext.prefer_nearest_device), UCS_CONFIG_TYPE_BOOL},
 
+    {"INDIRECT_ATOMIC", "y",
+     "Use indirect memory key for atomic operation\n",
+     ucs_offsetof(uct_ib_md_config_t, ext.enable_umr_pack), UCS_CONFIG_TYPE_BOOL},
+
     {"CONTIG_PAGES", "n",
      "Enable allocation with contiguous pages. Warning: enabling this option may\n"
      "cause stack smashing.\n",
@@ -103,9 +110,9 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Use indirect atomic\n",
      ucs_offsetof(uct_ib_md_config_t, ext.enable_indirect_atomic), UCS_CONFIG_TYPE_BOOL},
 
-    {"GID_INDEX", "0",
+    {"GID_INDEX", "auto",
      "Port GID index to use.",
-     ucs_offsetof(uct_ib_md_config_t, ext.gid_index), UCS_CONFIG_TYPE_UINT},
+     ucs_offsetof(uct_ib_md_config_t, ext.gid_index), UCS_CONFIG_TYPE_ULUNITS},
 
     {"SUBNET_PREFIX", "",
      "Infiniband subnet prefix to filter ports by, empty means no filter. "
@@ -236,7 +243,8 @@ static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
     qp_attr.ah_attr.port_num         = port_num;
     qp_attr.ah_attr.dlid             = port_attr->lid;
     qp_attr.ah_attr.is_global        = 1;
-    if (uct_ib_device_query_gid(ibdev, port_num, 0, &qp_attr.ah_attr.grh.dgid) != UCS_OK) {
+    if (uct_ib_device_query_gid(ibdev, port_num, UCT_IB_MD_DEFAULT_GID_INDEX,
+                                &qp_attr.ah_attr.grh.dgid) != UCS_OK) {
         goto err_destroy_qp;
     }
     qp_attr.rq_psn                   = 0;
@@ -309,6 +317,29 @@ uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
 #endif
 }
 
+static void uct_ib_md_print_mem_reg_err_msg(ucs_log_level_t level, void *address,
+                                            size_t length, uint64_t exp_access,
+                                            const char *exp_prefix)
+{
+    char msg[200] = {0};
+    struct rlimit limit_info;
+
+    ucs_snprintf_zero(msg, sizeof(msg),
+                      "ibv_%sreg_mr(address=%p, length=%zu, %saccess=0x%lx) failed: %m",
+                      exp_prefix, address, length, exp_prefix, exp_access);
+
+    /* Check the value of the max locked memory which is set on the system
+     * (ulimit -l) */
+    if (!getrlimit(RLIMIT_MEMLOCK, &limit_info) &&
+        (limit_info.rlim_cur != RLIM_INFINITY)) {
+        ucs_snprintf_zero(msg + strlen(msg), sizeof(msg) - strlen(msg),
+                          ". Please set max locked memory (ulimit -l) to 'unlimited' "
+                          "(current: %llu kbytes)", limit_info.rlim_cur / UCS_KBYTE);
+    }
+
+    ucs_log(level, "%s", msg);
+}
+
 static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
                                      size_t length, uint64_t exp_access,
                                      int silent, struct ibv_mr **mr_p)
@@ -328,8 +359,8 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
 
         mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &in);
         if (mr == NULL) {
-            ucs_log(level, "ibv_exp_reg_mr(address=%p, length=%zu, exp_access=0x%lx) failed: %m",
-                    in.addr, in.length, in.exp_access);
+            uct_ib_md_print_mem_reg_err_msg(level, in.addr, in.length,
+                                            in.exp_access, "exp_");
             return UCS_ERR_IO_ERROR;
         }
 #else
@@ -339,8 +370,8 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
         mr = UCS_PROFILE_CALL(ibv_reg_mr, md->pd, address, length,
                               UCT_IB_MEM_ACCESS_FLAGS);
         if (mr == NULL) {
-            ucs_log(level, "ibv_reg_mr(address=%p, length=%zu, access=0x%x) failed: %m",
-                      address, length, UCT_IB_MEM_ACCESS_FLAGS);
+            uct_ib_md_print_mem_reg_err_msg(level, address, length,
+                                            UCT_IB_MEM_ACCESS_FLAGS, "");
             return UCS_ERR_IO_ERROR;
         }
     }
@@ -840,7 +871,8 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
      */
     if ((memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) &&
         !(memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) &&
-        (memh != &md->global_odp))
+        (memh != &md->global_odp) &&
+        md->config.enable_umr_pack)
     {
         /* create UMR on-demand */
         ucs_assert(memh->atomic_mr == NULL);
@@ -879,8 +911,6 @@ static ucs_status_t uct_ib_rkey_unpack(uct_md_component_t *mdc,
               uct_ib_md_direct_rkey(*rkey_p), uct_ib_md_indirect_rkey(*rkey_p));
     return UCS_OK;
 }
-
-static void uct_ib_md_close(uct_md_h md);
 
 static uct_md_ops_t uct_ib_md_ops = {
     .close             = uct_ib_md_close,
@@ -949,16 +979,19 @@ static uct_md_ops_t uct_ib_md_rcache_ops = {
 };
 
 static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
-                                             void *arg, ucs_rcache_region_t *rregion)
+                                             void *arg, ucs_rcache_region_t *rregion,
+                                             uint16_t rcache_mem_reg_flags)
 {
     uct_ib_rcache_region_t *region = ucs_derived_of(rregion, uct_ib_rcache_region_t);
     uct_ib_md_t *md = context;
-    int *flags = arg;
+    int *flags      = arg;
+    int silent      = (rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS) ||
+                      (*flags & UCT_MD_MEM_FLAG_HIDE_ERRORS);
     ucs_status_t status;
 
     status = uct_ib_mem_reg_internal(&md->super, (void*)region->super.super.start,
                                      region->super.super.end - region->super.super.start,
-                                     *flags, 1, &region->memh);
+                                     *flags, silent, &region->memh);
     if (status != UCS_OK) {
         return status;
     }
@@ -1051,7 +1084,7 @@ static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
     .is_mem_type_owned = (void*)ucs_empty_function_return_zero,
 };
 
-static void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device)
+void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device)
 {
     snprintf(md_name, UCT_MD_NAME_MAX, "%s/", UCT_IB_MD_PREFIX);
     strncat(md_name, device->name, UCT_MD_NAME_MAX - strlen(device->name) - 1);
@@ -1125,7 +1158,8 @@ static void uct_ib_md_release_device_config(uct_ib_md_t *md)
 }
 
 static ucs_status_t
-uct_ib_md_parse_reg_methods(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
+uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
+                            const uct_ib_md_config_t *md_config)
 {
     ucs_rcache_params_t rcache_params;
     ucs_status_t status;
@@ -1136,6 +1170,10 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, const uct_ib_md_config_t *md_config
             rcache_params.region_struct_size = sizeof(uct_ib_rcache_region_t);
             rcache_params.alignment          = md_config->rcache.alignment;
             rcache_params.max_alignment      = ucs_get_page_size();
+            rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
+            if (md_attr->cap.reg_mem_types & ~UCS_BIT(UCT_MD_MEM_TYPE_HOST)) {
+                rcache_params.ucm_events     |= UCM_EVENT_MEM_TYPE_FREE;
+            }
             rcache_params.ucm_event_priority = md_config->rcache.event_prio;
             rcache_params.context            = md;
             rcache_params.ops                = &uct_ib_rcache_ops;
@@ -1295,7 +1333,7 @@ uct_ib_md_parse_subnet_prefix(const char *subnet_prefix_str,
     return UCS_OK;
 }
 
-static ucs_status_t
+ucs_status_t
 uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
     const uct_ib_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_ib_md_config_t);
@@ -1333,6 +1371,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto out_free_dev_list;
     }
 
+    md->super.ops             = &uct_ib_md_ops;
     md->super.component       = &uct_ib_mdc;
     md->config                = md_config->ext;
 
@@ -1403,17 +1442,17 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto err_dealloc_pd;
     }
 
-    status = uct_ib_md_parse_reg_methods(md, md_config);
+    status = uct_md_query(&md->super, &md_attr);
+    if (status != UCS_OK) {
+        goto err_destroy_umr_qp;
+    }
+
+    status = uct_ib_md_parse_reg_methods(md, &md_attr, md_config);
     if (status != UCS_OK) {
         goto err_destroy_umr_qp;
     }
 
     status = uct_ib_md_parse_device_config(md, md_config);
-    if (status != UCS_OK) {
-        goto err_release_reg_method;
-    }
-
-    status = uct_md_query(&md->super, &md_attr);
     if (status != UCS_OK) {
         goto err_release_reg_method;
     }
@@ -1446,7 +1485,7 @@ err_free_md:
     goto out_free_dev_list;
 }
 
-static void uct_ib_md_close(uct_md_h uct_md)
+void uct_ib_md_close(uct_md_h uct_md)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 

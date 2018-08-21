@@ -17,7 +17,7 @@
 
 
 #define UCT_RC_VERBS_IFACE_FOREACH_TXWQE(_iface, _i, _wc, _num_wcs) \
-      status = uct_ib_poll_cq((_iface)->super.send_cq, &_num_wcs, _wc); \
+      status = uct_ib_poll_cq((_iface)->super.cq[UCT_IB_DIR_TX], &_num_wcs, _wc); \
       if (status != UCS_OK) { \
           return 0; \
       } \
@@ -179,7 +179,7 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
     unsigned num_wcs = iface->super.config.rx_max_poll;
     struct ibv_wc wc[num_wcs];
 
-    status = uct_ib_poll_cq(iface->super.recv_cq, &num_wcs, wc);
+    status = uct_ib_poll_cq(iface->super.cq[UCT_IB_DIR_RX], &num_wcs, wc);
     if (status != UCS_OK) {
         num_wcs = 0;
         goto out;
@@ -539,7 +539,7 @@ uct_rc_verbs_iface_poll_rx_tm(uct_rc_verbs_iface_common_t *iface,
     uct_rc_iface_ctx_priv_t *priv;
     int num_wcs, i;
 
-    num_wcs = ibv_exp_poll_cq(rc_iface->super.recv_cq, max_wcs, wc,
+    num_wcs = ibv_exp_poll_cq(rc_iface->super.cq[UCT_IB_DIR_RX], max_wcs, wc,
                               sizeof(wc[0]));
     if (num_wcs <= 0) {
         if (ucs_unlikely(num_wcs < 0)) {
