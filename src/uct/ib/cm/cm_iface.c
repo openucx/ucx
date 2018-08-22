@@ -271,19 +271,20 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_config_t *tl_config)
 {
     uct_cm_iface_config_t *config = ucs_derived_of(tl_config, uct_cm_iface_config_t);
+    uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
     int ret;
 
     ucs_trace_func("");
 
+    init_attr.tx_cq_len      = 1;
+    init_attr.rx_cq_len      = config->super.rx.queue_len;
+    init_attr.seg_size       = ucs_min(IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE,
+                                       config->super.super.max_bcopy);
+    init_attr.res_domain_key = UCT_IB_IFACE_NULL_RES_DOMAIN_KEY;
+
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &uct_cm_iface_ops, md, worker,
-                              params, 0 /* rx_priv_len */, 0 /* rx_hdr_len */,
-                              1 /* tx_cq_len */,
-                              config->super.rx.queue_len /* rx_cq_len */,
-                              ucs_min(IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE,
-                                      config->super.super.max_bcopy) /* seg_size */,
-                              UCT_IB_IFACE_NULL_RES_DOMAIN_KEY,
-                              &config->super);
+                              params, &config->super, &init_attr);
 
     if (self->super.super.worker->async == NULL) {
         ucs_error("cm must have async!=NULL");

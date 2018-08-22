@@ -651,17 +651,10 @@ static void uct_ib_iface_res_domain_cleanup(uct_ib_iface_res_domain_t *res_domai
 #endif
 }
 
-/**
- * @param rx_headroom   Headroom requested by the user.
- * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
- * @param rx_hdr_len    Length of transport network header.
- * @param seg_size      Transport segment size.
- */
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
-                    unsigned rx_priv_len, unsigned rx_hdr_len,
-                    unsigned tx_cq_len, unsigned rx_cq_len, size_t seg_size,
-                    uint32_t res_domain_key, const uct_ib_iface_config_t *config)
+                    const uct_ib_iface_config_t *config,
+                    uct_ib_iface_init_attr_t *init_attr)
 {
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
     uct_ib_device_t *dev = &ib_md->dev;
@@ -694,11 +687,13 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.rx_payload_offset  = sizeof(uct_ib_iface_recv_desc_t) +
                                       ucs_max(sizeof(uct_recv_desc_t) +
                                               params->rx_headroom,
-                                              rx_priv_len + rx_hdr_len);
-    self->config.rx_hdr_offset      = self->config.rx_payload_offset - rx_hdr_len;
+                                              init_attr->rx_priv_len +
+                                              init_attr->rx_hdr_len);
+    self->config.rx_hdr_offset      = self->config.rx_payload_offset -
+                                      init_attr->rx_hdr_len;
     self->config.rx_headroom_offset = self->config.rx_payload_offset -
                                       params->rx_headroom;
-    self->config.seg_size           = seg_size;
+    self->config.seg_size           = init_attr->seg_size;
     self->config.tx_max_poll        = config->tx.max_poll;
     self->config.rx_max_poll        = config->rx.max_poll;
     self->config.rx_max_batch       = ucs_min(config->rx.max_batch,
@@ -733,12 +728,12 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    if ((res_domain_key == UCT_IB_IFACE_NULL_RES_DOMAIN_KEY) ||
+    if ((init_attr->res_domain_key == UCT_IB_IFACE_NULL_RES_DOMAIN_KEY) ||
         !self->config.enable_res_domain) {
         self->res_domain = NULL;
     } else {
         self->res_domain = uct_worker_tl_data_get(self->super.worker,
-                                                  res_domain_key,
+                                                  init_attr->res_domain_key,
                                                   uct_ib_iface_res_domain_t,
                                                   uct_ib_iface_res_domain_cmp,
                                                   uct_ib_iface_res_domain_init,
@@ -762,8 +757,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     }
 
     inl = config->rx.inl;
-    status = uct_ib_iface_create_cq(self, tx_cq_len, &inl, preferred_cpu,
-                                    &self->cq[UCT_IB_DIR_TX]);
+    status = uct_ib_iface_create_cq(self, init_attr->tx_cq_len, &inl,
+                                    preferred_cpu, &self->cq[UCT_IB_DIR_TX]);
     if (status != UCS_OK) {
         goto err_destroy_comp_channel;
     }
@@ -778,7 +773,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     }
 
     inl = config->rx.inl;
-    status = uct_ib_iface_create_cq(self, rx_cq_len, &inl,
+    status = uct_ib_iface_create_cq(self, init_attr->rx_cq_len, &inl,
                                     preferred_cpu, &self->cq[UCT_IB_DIR_RX]);
     if (status != UCS_OK) {
         goto err_destroy_send_cq;
