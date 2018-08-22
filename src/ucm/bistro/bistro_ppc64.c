@@ -28,6 +28,9 @@
 /* PowerPC instructions used in patching                  */
 /* Reference: "PowerPC User Instruction Set Architecture" */
 
+/* Use r11 register for jump address */
+#define R11 11
+
 #define OPCODE(_rt, _rs, _op) \
      (((_op) << 26) + ((_rt) << 21) + ((_rs) << 16))
 
@@ -114,11 +117,11 @@ static ucs_status_t ucm_bistro_patch_hook(void *hook, ucm_bistro_restore_point_t
     /* locate reserved code space in hook function */
     for (toc_ptr = hook;; toc_ptr++) {
         toc_patch = (ucm_bistro_base_patch_t*)toc_ptr;
-        if (toc_patch->addis  == nop &&
-            toc_patch->ori1   == nop &&
-            toc_patch->rldicr == nop &&
-            toc_patch->oris   == nop &&
-            toc_patch->ori2   == nop) {
+        if ((toc_patch->addis  == nop) &&
+            (toc_patch->ori1   == nop) &&
+            (toc_patch->rldicr == nop) &&
+            (toc_patch->oris   == nop) &&
+            (toc_patch->ori2   == nop)) {
             break;
         }
     }
@@ -141,10 +144,9 @@ static void *ucm_bistro_get_text_addr(void *addr) {
 }
 
 ucs_status_t ucm_bistro_patch_toc(const char *symbol, void *hook,
-                                  ucm_bistro_restore_point_h *rp,
+                                  ucm_bistro_restore_point_t **rp,
                                   uint64_t toc)
 {
-    const uint32_t r11 = 11;
     ucs_status_t status;
     void *func;
     ucm_bistro_restore_point_t restore;
@@ -167,7 +169,7 @@ ucs_status_t ucm_bistro_patch_toc(const char *symbol, void *hook,
     hook += 8;
 #endif
 
-    ucm_bistro_fill_patch(&patch, r11, (uintptr_t)hook);
+    ucm_bistro_fill_patch(&patch, R11, (uintptr_t)hook);
 
     restore.func       = func;
     restore.func_patch = *(ucm_bistro_patch_t*)func;
@@ -182,13 +184,13 @@ ucs_status_t ucm_bistro_patch_toc(const char *symbol, void *hook,
         if (!(*rp)) {
             return UCS_ERR_NO_MEMORY;
         }
-        *(*rp) = restore;
+        **rp = restore;
     }
 
     return UCS_OK;
 }
 
-ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_h rp)
+ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_t *rp)
 {
     ucs_status_t status;
 
@@ -207,9 +209,10 @@ ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_h rp)
     return status;
 }
 
-void *ucm_bistro_restore_addr(ucm_bistro_restore_point_h rp)
+void *ucm_bistro_restore_addr(ucm_bistro_restore_point_t *rp)
 {
     ucs_assert(rp != NULL);
     return rp->entry;
 }
+
 #endif

@@ -47,7 +47,7 @@ typedef struct ucm_bistro_patch {
 ucs_status_t ucm_bistro_apply_patch(void *dst, void *patch, size_t len);
 
 #if defined(__x86_64__) || defined (__aarch64__)
-ucs_status_t ucm_bistro_create_restore_point(void *addr, ucm_bistro_restore_point_h *rp);
+ucs_status_t ucm_bistro_create_restore_point(void *addr, ucm_bistro_restore_point_t **rp);
 #endif
 
 static inline

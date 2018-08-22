@@ -49,7 +49,7 @@
 #define BR(_reg) ((0xd61f << 16) + ((_reg) << 5))
 
 ucs_status_t ucm_bistro_patch(const char *symbol, void *hook,
-                              ucm_bistro_restore_point_h *rp)
+                              ucm_bistro_restore_point_t **rp)
 {
     void *func;
     ucs_status_t status;

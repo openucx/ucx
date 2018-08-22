@@ -13,6 +13,7 @@
 #include <sys/times.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/arch/generic/cpu.h>
+#include <ucs/sys/math.h>
 #if __ARM_NEON
 #include <arm_neon.h>
 #endif
@@ -92,6 +93,33 @@ static inline void ucs_arch_wait_mem(void *address)
                   "wfe           \n"
                   : "=&r"(tmp)
                   : "Q"(address));
+}
+
+static inline void ucs_clear_cache(void *start, void *end)
+{
+#if HAVE___CLEAR_CACHE
+    /* do not allow global declaration of compiler intrinsic */
+    void __clear_cache(void* beg, void* end);
+
+    __clear_cache(start, end);
+#elif HAVE___AARCH64_SYNC_CACHE_RANGE
+    void __aarch64_sync_cache_range(void* beg, void* end);
+
+    __aarch64_sync_cache_range(start, end);
+#else
+    uintptr_t sptr = ucs_align_down((uintptr_t)start, UCS_ARCH_CACHE_LINE_SIZE);
+    uintptr_t ptr;
+
+    for (ptr = sptr; ptr < (uintptr_t)end; ptr += UCS_ARCH_CACHE_LINE_SIZE) {
+        asm volatile ("dc cvau, %0" :: "r" (ptr) : "memory");
+    }
+    asm volatile ("dsb ish" ::: "memory");
+
+    for (ptr = sptr; ptr < (uintptr_t)end; ptr += UCS_ARCH_CACHE_LINE_SIZE) {
+        asm volatile ("ic ivau, %0" :: "r" (ptr) : "memory");
+    }
+    asm volatile ("dsb ish; isb" ::: "memory");
+#endif
 }
 
 END_C_DECLS

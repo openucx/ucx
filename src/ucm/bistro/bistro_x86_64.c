@@ -31,7 +31,7 @@ static const ucm_bistro_patch_t patch_tmpl = {
 };
 
 ucs_status_t ucm_bistro_patch(const char *symbol, void *hook,
-                              ucm_bistro_restore_point_h *rp)
+                              ucm_bistro_restore_point_t **rp)
 {
     ucm_bistro_patch_t patch = patch_tmpl;
     ucs_status_t status;

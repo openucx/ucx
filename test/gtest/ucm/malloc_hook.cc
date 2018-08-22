@@ -77,13 +77,13 @@ protected:
 
 public:
     static int            small_alloc_count;
-    static const size_t   small_alloc_size    = 10000;
+    static const size_t   small_alloc_size = 10000;
     ucs::ptr_vector<void> m_pts;
     int                   m_got_event;
     static volatile int   bistro_call_counter;
 };
 
-int malloc_hook::small_alloc_count   = 1000 / ucs::test_time_multiplier();
+int malloc_hook::small_alloc_count            = 1000 / ucs::test_time_multiplier();
 volatile int malloc_hook::bistro_call_counter = 0;
 
 class test_thread {
@@ -747,7 +747,7 @@ typedef int (munmap_f_t)(void *addr, size_t len);
 
 UCS_TEST_F(malloc_hook, bistro_patch) {
     const char *symbol = "munmap";
-    ucm_bistro_restore_point_h rp = NULL;
+    ucm_bistro_restore_point_t *rp = NULL;
     ucs_status_t status;
     munmap_f_t *munmap_f;
     void *ptr;

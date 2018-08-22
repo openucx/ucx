@@ -36,8 +36,11 @@ noinst_HEADERS = \
 	util/log.h \
 	util/reloc.h \
 	util/sys.h \
+	bistro/bistro_int.h \
 	bistro/bistro.h \
-	bistro/bistro_int.h
+	bistro/bistro_x86_64.h \
+	bistro/bistro_aarch64.h \
+	bistro/bistro_ppc64.h
 
 if HAVE_CUDA
 noinst_HEADERS += \

@@ -68,5 +68,3 @@ AC_CHECK_LIB([tcmalloc], [tc_malloc],
               TCMALLOC_LIB="-ltcmalloc"],
              [have_tcmalloc=no])
 AM_CONDITIONAL([HAVE_TCMALLOC],[test "x$have_tcmalloc" = "xyes"])
-
-AC_CHECK_FUNCS([__clear_cache], [], [], [])

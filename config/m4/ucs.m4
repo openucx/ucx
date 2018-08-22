@@ -207,3 +207,8 @@ case ${host} in
     # HW timer is supported for all other architectures
     AC_DEFINE([HAVE_HW_TIMER], [1], [high-resolution hardware timer disabled])
 esac
+
+AC_CHECK_FUNCS([__clear_cache],
+               [],
+               [AC_MSG_WARN([__clear_cache is not found! Internal implementation will be used])])
+AC_CHECK_FUNCS([__aarch64_sync_cache_range], [], [])

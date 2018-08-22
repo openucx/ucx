@@ -14,11 +14,7 @@
 #include <ucm/bistro/bistro.h>
 #include <ucm/bistro/bistro_int.h>
 
-#if HAVE___CLEAR_CACHE
-void __clear_cache(char* beg, char* end);
-#endif
-
-ucs_status_t ucm_bistro_remove_restore_point(ucm_bistro_restore_point_h rp)
+ucs_status_t ucm_bistro_remove_restore_point(ucm_bistro_restore_point_t *rp)
 {
     ucs_assert(rp != NULL);
     free(rp);
@@ -41,6 +37,7 @@ static ucs_status_t ucm_bistro_protect(void *addr, size_t len, int prot)
         ucm_error("Failed to change page protection: %m");
         return UCS_ERR_INVALID_PARAM;
     }
+
     return UCS_OK;
 }
 
@@ -57,11 +54,7 @@ ucs_status_t ucm_bistro_apply_patch(void *dst, void *patch, size_t len)
 
     status = ucm_bistro_protect(dst, len, UCM_PROT_READ_EXEC);
     if (!UCS_STATUS_IS_ERR(status)) {
-#if HAVE___CLEAR_CACHE
-        __clear_cache(dst, dst + len);
-#else
-        ucs_memory_cpu_fence();
-#endif
+        ucs_clear_cache(dst, dst + len);
     }
     return status;
 }
@@ -72,7 +65,7 @@ struct ucm_bistro_restore_point {
     ucm_bistro_patch_t patch; /* original function body */
 };
 
-ucs_status_t ucm_bistro_create_restore_point(void *addr, ucm_bistro_restore_point_h *rp)
+ucs_status_t ucm_bistro_create_restore_point(void *addr, ucm_bistro_restore_point_t **rp)
 {
     ucm_bistro_restore_point_t *point;
 
@@ -87,11 +80,11 @@ ucs_status_t ucm_bistro_create_restore_point(void *addr, ucm_bistro_restore_poin
 
     point->addr  = addr;
     point->patch = *(ucm_bistro_patch_t*)addr;
-    *rp = point;
+    *rp          = point;
     return UCS_OK;
 }
 
-ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_h rp)
+ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_t *rp)
 {
     ucs_status_t status;
 
@@ -102,7 +95,7 @@ ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_h rp)
     return status;
 }
 
-void *ucm_bistro_restore_addr(ucm_bistro_restore_point_h rp)
+void *ucm_bistro_restore_addr(ucm_bistro_restore_point_t *rp)
 {
     ucs_assert(rp != NULL);
     return rp->addr;
