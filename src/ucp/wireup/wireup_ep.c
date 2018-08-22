@@ -90,7 +90,7 @@ static unsigned ucp_wireup_ep_progress(void *arg)
         req = ucs_container_of(uct_req, ucp_request_t, send.uct);
         ucs_assert(req->send.ep == ucp_ep);
         ucp_request_send(req);
-        --ucp_ep->worker->wireup_pend_count;
+        --ucp_ep->worker->flush_ops_count;
     }
 
     return 0;
@@ -191,7 +191,7 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
         }
     } else {
         ucs_queue_push(&wireup_ep->pending_q, ucp_wireup_ep_req_priv(req));
-        ++ucp_ep->worker->wireup_pend_count;
+        ++ucp_ep->worker->flush_ops_count;
         status = UCS_OK;
     }
 out:
@@ -213,7 +213,7 @@ ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
     ucs_queue_for_each_extract(req, &wireup_ep->pending_q, priv, 1) {
         ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
         UCS_ASYNC_BLOCK(&worker->async);
-        --worker->wireup_pend_count;
+        --worker->flush_ops_count;
         UCS_ASYNC_UNBLOCK(&worker->async);
         cb(&ucp_req->send.uct, arg);
     }
@@ -343,7 +343,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     ucs_queue_head_init(&self->pending_q);
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
-    ++ucp_ep->worker->wireup_pend_count;
+    ++ucp_ep->worker->flush_ops_count;
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 
     ucs_trace("ep %p: created wireup ep %p to %s ", ucp_ep, self,
@@ -371,7 +371,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
-    --worker->wireup_pend_count;
+    --worker->flush_ops_count;
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 

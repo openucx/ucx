@@ -253,7 +253,7 @@ static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
     ucs_status_t status;
     unsigned rsc_index;
 
-    if (worker->wireup_pend_count > 0) {
+    if (worker->flush_ops_count) {
         return UCS_INPROGRESS;
     }
 

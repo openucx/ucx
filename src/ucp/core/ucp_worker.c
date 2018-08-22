@@ -1036,7 +1036,7 @@ static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
 
     worker->atomic_tls = 0;
 
-    if (context->config.features & (UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)) {
+    if (context->config.features & UCP_FEATURE_AMO) {
         switch(context->config.ext.atomic_mode) {
         case UCP_ATOMIC_MODE_CPU:
             ucp_worker_init_cpu_atomics(worker);
@@ -1180,7 +1180,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     worker->context           = context;
     worker->uuid              = ucs_generate_uuid((uintptr_t)worker);
-    worker->wireup_pend_count = 0;
+    worker->flush_ops_count   = 0;
     worker->flags             = 0;
     worker->inprogress        = 0;
     worker->ep_config_max     = config_count;
@@ -1589,7 +1589,7 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
         fprintf(stream, "# <failed to get address>\n");
     }
 
-    if (context->config.features & (UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)) {
+    if (context->config.features & UCP_FEATURE_AMO) {
         fprintf(stream, "#                 atomics: ");
         first = 1;
         for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
