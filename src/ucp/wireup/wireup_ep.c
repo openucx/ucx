@@ -218,10 +218,12 @@ ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
         cb(&ucp_req->send.uct, arg);
     }
 
-    if (wireup_ep->aux_ep != NULL) {
-        uct_ep_pending_purge(wireup_ep->aux_ep,
+    if (wireup_ep->pending_count > 0) {
+        uct_ep_pending_purge(ucp_wireup_ep_get_msg_ep(wireup_ep),
                              ucp_wireup_ep_pending_req_release, arg);
     }
+
+    ucs_assert(wireup_ep->pending_count == 0);
 }
 
 static ssize_t ucp_wireup_ep_am_bcopy(uct_ep_h uct_ep, uint8_t id,
