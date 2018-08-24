@@ -105,6 +105,7 @@ AS_IF([test "x$with_ib" == xyes],
                         [AC_MSG_WARN([ibverbs header files not found]); with_ib=no])
         AC_CHECK_LIB([ibverbs], [ibv_get_device_list],
             [
+            LIBS="-libverbs $LIBS"
             AC_SUBST(IBVERBS_LDFLAGS,  ["$verbs_libs -libverbs"])
             AC_SUBST(IBVERBS_DIR,      ["$with_verbs"])
             AC_SUBST(IBVERBS_CPPFLAGS, ["$verbs_incl"])
