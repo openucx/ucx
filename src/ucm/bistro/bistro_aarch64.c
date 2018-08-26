@@ -25,6 +25,12 @@
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/assert.h>
 
+
+/* Register number used to store indirect jump address.
+ * r15 is the highest numbered temporary register, assuming this one is safe
+ * to use. */
+#define R15 15
+
 #define _MOV(_reg, _shift, _val, _opcode) \
     (((_opcode) << 23) + ((uint32_t)(_shift) << 21) + ((uint32_t)((_val) & 0xffff) << 5) + (_reg))
 
@@ -46,6 +52,11 @@
  */
 #define MOVK(_reg, _shift, _val) _MOV(_reg, _shift, _val, 0x1e5)
 
+/**
+ * @brief Branch to address stored in register
+ *
+ * @param[in] _reg   register number (0-31)
+ */
 #define BR(_reg) ((0xd61f << 16) + ((_reg) << 5))
 
 ucs_status_t ucm_bistro_patch(const char *symbol, void *hook,
@@ -54,23 +65,13 @@ ucs_status_t ucm_bistro_patch(const char *symbol, void *hook,
     void *func;
     ucs_status_t status;
 
-    /* r15 is the highest numbered temporary register, assuming this one is safe
-     * to use. */
-    const uint32_t r15 = 15;
     ucm_bistro_patch_t patch = {
-        .reg3 = MOVZ(r15, 3, (uintptr_t)hook >> 48),
-        .reg2 = MOVK(r15, 2, (uintptr_t)hook >> 32),
-        .reg1 = MOVK(r15, 1, (uintptr_t)hook >> 16),
-        .reg0 = MOVK(r15, 0, (uintptr_t)hook),
-        .br   = BR(r15)
+        .reg3 = MOVZ(R15, 3, (uintptr_t)hook >> 48),
+        .reg2 = MOVK(R15, 2, (uintptr_t)hook >> 32),
+        .reg1 = MOVK(R15, 1, (uintptr_t)hook >> 16),
+        .reg0 = MOVK(R15, 0, (uintptr_t)hook),
+        .br   = BR(R15)
     };
-
-    UCS_STATIC_ASSERT(sizeof(patch) == 20);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_patch_t, reg3) == 0);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_patch_t, reg2) == 4);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_patch_t, reg1) == 8);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_patch_t, reg0) == 12);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_patch_t, br) == 16);
 
     UCM_LOOKUP_SYMBOL(func, symbol);
 
@@ -81,4 +82,5 @@ ucs_status_t ucm_bistro_patch(const char *symbol, void *hook,
 
     return ucm_bistro_apply_patch(func, &patch, sizeof(patch));
 }
+
 #endif

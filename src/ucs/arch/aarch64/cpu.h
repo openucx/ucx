@@ -95,14 +95,11 @@ static inline void ucs_arch_wait_mem(void *address)
                   : "Q"(address));
 }
 
-static inline void ucs_clear_cache(void *start, void *end)
+#if !HAVE___CLEAR_CACHE
+static inline void ucs_arch_clear_cache(void *start, void *end)
 {
-#if HAVE___CLEAR_CACHE
+#if HAVE___AARCH64_SYNC_CACHE_RANGE
     /* do not allow global declaration of compiler intrinsic */
-    void __clear_cache(void* beg, void* end);
-
-    __clear_cache(start, end);
-#elif HAVE___AARCH64_SYNC_CACHE_RANGE
     void __aarch64_sync_cache_range(void* beg, void* end);
 
     __aarch64_sync_cache_range(start, end);
@@ -121,6 +118,7 @@ static inline void ucs_clear_cache(void *start, void *end)
     asm volatile ("dsb ish; isb" ::: "memory");
 #endif
 }
+#endif
 
 END_C_DECLS
 

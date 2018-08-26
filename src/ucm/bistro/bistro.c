@@ -69,9 +69,7 @@ ucs_status_t ucm_bistro_create_restore_point(void *addr, ucm_bistro_restore_poin
 {
     ucm_bistro_restore_point_t *point;
 
-    if (!rp) {
-        return UCS_OK;
-    }
+    ucs_assert(rp != NULL);
 
     point = malloc(sizeof(*point));
     if (!point) {
@@ -100,4 +98,5 @@ void *ucm_bistro_restore_addr(ucm_bistro_restore_point_t *rp)
     ucs_assert(rp != NULL);
     return rp->addr;
 }
+
 #endif

@@ -11,10 +11,16 @@
 #include <stdint.h>
 
 #include <ucs/type/status.h>
+#include <ucs/sys/compiler_def.h>
 
 #define UCM_BISTRO_PROLOGUE
 #define UCM_BISTRO_EPILOGUE
 
+typedef struct ucm_bistro_patch {
+    uint8_t mov_r11[2];  /* mov %r11, addr */
+    void    *ptr;
+    uint8_t jmp_r11[3];  /* jmp r11        */
+} UCS_S_PACKED ucm_bistro_patch_t;
 
 /**
  * Set library function call hook using Binary Instrumentation

@@ -42,6 +42,7 @@
 
 #define BCCTR(_bo, _bi, _bh) \
     (OPCODE(_bo, _bi, 19) + ((_bh) << 11) + (528<<1))
+
 #define RLDICR(_rt, _rs, _sh, _mb) \
     (OPCODE(_rs, _rt, 30) + (((_sh) & UCS_MASK(5)) << 11) + ((_sh & ~UCS_MASK(5)) >> 4) + \
     (((_mb) & UCS_MASK(5)) << 6) + ((_mb) && ~UCS_MASK(5)) + UCS_BIT(2))
@@ -77,12 +78,6 @@ static void ucm_bistro_fill_base_patch(ucm_bistro_base_patch_t *patch,
 {
     ucs_assert(patch != NULL);
 
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_base_patch_t, addis)  == 0);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_base_patch_t, ori1)   == 4);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_base_patch_t, rldicr) == 8);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_base_patch_t, oris)   == 12);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_base_patch_t, ori2)   == 16);
-
     patch->addis  = ADDIS ( reg, 0,   (value >> 48));
     patch->ori1   = ORI   ( reg, reg, (value >> 32));
     patch->rldicr = RLDICR( reg, reg, 32, 31);
@@ -97,14 +92,9 @@ static void ucm_bistro_fill_patch(ucm_bistro_patch_t *patch,
 
     ucm_bistro_fill_base_patch(&patch->super, reg, value);
 
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_patch_t, super) == 0);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_patch_t, mtspr) == 20);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_patch_t, bcctr) == 24);
-
     patch->mtspr = MTSPR(9, reg);   /* 9 = CTR     */
     patch->bcctr = BCCTR(20, 0, 0); /* 20 = always */
 }
-
 
 static ucs_status_t ucm_bistro_patch_hook(void *hook, ucm_bistro_restore_point_t *rp,
                                           uint64_t toc)
@@ -135,7 +125,8 @@ static ucs_status_t ucm_bistro_patch_hook(void *hook, ucm_bistro_restore_point_t
     return ucm_bistro_apply_patch(toc_ptr, &patch, sizeof(patch));
 }
 
-static void *ucm_bistro_get_text_addr(void *addr) {
+static void *ucm_bistro_get_text_addr(void *addr)
+{
 #if !defined (_CALL_ELF) || (_CALL_ELF != 2)
     return addr ? *(void**)addr : 0;
 #else

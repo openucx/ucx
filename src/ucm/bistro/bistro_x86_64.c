@@ -39,11 +39,6 @@ ucs_status_t ucm_bistro_patch(const char *symbol, void *hook,
 
     UCM_LOOKUP_SYMBOL(func, symbol);
 
-    UCS_STATIC_ASSERT(sizeof(patch) == 13);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_patch_t, mov_r11) == 0);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_patch_t, ptr) == 2);
-    UCS_STATIC_ASSERT(ucs_offsetof(ucm_bistro_patch_t, jmp_r11) == 10);
-
     patch.ptr = hook;
 
     status = ucm_bistro_create_restore_point(func, rp);

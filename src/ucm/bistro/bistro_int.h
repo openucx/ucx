@@ -28,30 +28,11 @@
         return UCS_ERR_NO_ELEM;           \
     }
 
-#if defined(__x86_64__)
-typedef struct ucm_bistro_patch {
-    uint8_t mov_r11[2];  /* mov %r11, addr */
-    void    *ptr;
-    uint8_t jmp_r11[3];  /* jmp r11        */
-} UCS_S_PACKED ucm_bistro_patch_t;
-#elif defined (__aarch64__)
-typedef struct ucm_bistro_patch {
-    uint32_t reg3;  /* movz    x15, addr, lsl #48 */
-    uint32_t reg2;  /* movk    x15, addr, lsl #32 */
-    uint32_t reg1;  /* movk    x15, addr, lsl #16 */
-    uint32_t reg0;  /* movk    x15, addr          */
-    uint32_t br;    /* br      x15                */
-} UCS_S_PACKED ucm_bistro_patch_t;
-#endif
-
 ucs_status_t ucm_bistro_apply_patch(void *dst, void *patch, size_t len);
 
-#if defined(__x86_64__) || defined (__aarch64__)
 ucs_status_t ucm_bistro_create_restore_point(void *addr, ucm_bistro_restore_point_t **rp);
-#endif
 
-static inline
-void *ucm_bistro_lookup(const char *symbol)
+static inline void *ucm_bistro_lookup(const char *symbol)
 {
     void *addr;
 
@@ -63,4 +44,5 @@ void *ucm_bistro_lookup(const char *symbol)
     }
     return addr;
 }
+
 #endif
