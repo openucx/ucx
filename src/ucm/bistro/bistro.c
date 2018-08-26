@@ -90,6 +90,7 @@ ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_t *rp)
     if (!UCS_STATUS_IS_ERR(status)) {
         ucm_bistro_remove_restore_point(rp);
     }
+
     return status;
 }
 

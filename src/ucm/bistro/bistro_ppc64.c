@@ -61,8 +61,8 @@ typedef struct ucm_bistro_base_patch {
 
 typedef struct ucm_bistro_patch {
     ucm_bistro_base_patch_t super;
-    uint32_t mtspr;    /* mtctr   r11 */
-    uint32_t bcctr;    /* bcctr       */
+    uint32_t                mtspr;    /* mtspr r11 */
+    uint32_t                bcctr;    /* bcctr     */
 } UCS_S_PACKED ucm_bistro_patch_t;
 
 struct ucm_bistro_restore_point {
