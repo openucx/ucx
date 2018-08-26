@@ -696,7 +696,11 @@ run_coverity() {
 		rc=$(($rc+$nerrors))
 
 		index_html=$(cd $cov_build && find . -name index.html | cut -c 3-)
-		cov_url="$WS_URL/$cov_build_id/${index_html}"
+		if [ -z "$BUILD_URL" ]; then
+			cov_url="${WS_URL}/${cov_build_id}/${index_html}"
+		else
+			cov_url="${BUILD_URL}/artifact/${cov_build_id}/${index_html}"
+		fi
 		rm -f jenkins_sidelinks.txt
 		if [ $nerrors -gt 0 ]; then
 			cov-format-errors --dir $cov_build --emacs-style
