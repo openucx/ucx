@@ -124,3 +124,9 @@
    ...
    fun:ibv_dereg_mr@@IBVERBS_1.1
 }
+{
+   exp_query_device_cond
+   Memcheck:Cond
+   fun:ibv_exp_cmd_query_device
+}
+
