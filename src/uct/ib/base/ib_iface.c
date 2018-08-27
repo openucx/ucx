@@ -432,7 +432,7 @@ struct ibv_cq *uct_ib_create_cq(struct ibv_context *context, int cqe,
 {
     struct ibv_cq *cq;
 #if HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
-    struct ibv_cq_init_attr_ex cq_attr = {0};
+    struct ibv_cq_init_attr_ex cq_attr = {};
 
     cq_attr.cqe = cqe;
     cq_attr.channel = channel;
@@ -444,7 +444,6 @@ struct ibv_cq *uct_ib_create_cq(struct ibv_context *context, int cqe,
 
     cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(context, &cq_attr));
 #else
-
     cq = ibv_create_cq(context, cqe, NULL, channel, comp_vector);
 #endif
     return cq;
@@ -452,8 +451,7 @@ struct ibv_cq *uct_ib_create_cq(struct ibv_context *context, int cqe,
 
 static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
                                            size_t *inl, int preferred_cpu,
-                                           struct ibv_cq **cq_p,
-                                           int flags)
+                                           int flags, struct ibv_cq **cq_p)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     struct ibv_cq *cq;
@@ -679,7 +677,7 @@ static void uct_ib_iface_res_domain_cleanup(uct_ib_iface_res_domain_t *res_domai
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_ib_iface_config_t *config,
-                    uct_ib_iface_init_attr_t *init_attr)
+                    const uct_ib_iface_init_attr_t *init_attr)
 {
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
     uct_ib_device_t *dev = &ib_md->dev;
@@ -783,8 +781,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     inl = config->rx.inl;
     status = uct_ib_iface_create_cq(self, init_attr->tx_cq_len, &inl,
-                                    preferred_cpu, &self->cq[UCT_IB_DIR_TX],
-                                    init_attr->flags);
+                                    preferred_cpu, init_attr->flags,
+                                    &self->cq[UCT_IB_DIR_TX]);
     if (status != UCS_OK) {
         goto err_destroy_comp_channel;
     }
@@ -800,8 +798,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     inl = config->rx.inl;
     status = uct_ib_iface_create_cq(self, init_attr->rx_cq_len, &inl,
-                                    preferred_cpu, &self->cq[UCT_IB_DIR_RX],
-                                    init_attr->flags);
+                                    preferred_cpu, init_attr->flags,
+                                    &self->cq[UCT_IB_DIR_RX]);
     if (status != UCS_OK) {
         goto err_destroy_send_cq;
     }

@@ -168,20 +168,20 @@ enum {
 
 typedef struct uct_ib_iface_init_attr {
 
-    unsigned    rx_priv_len;  /* Length of transport private data to reserve */
-    unsigned    rx_hdr_len;   /* Length of transport network header. */
-    unsigned    tx_cq_len;
-    unsigned    rx_cq_len;
-    size_t      seg_size;     /* Transport segment size. */
-    uint32_t    res_domain_key;
-    int         tm_cap_bit;
-    unsigned    fc_req_size;
-    int         flags;
+    unsigned    rx_priv_len;     /* Length of transport private data to reserve */
+    unsigned    rx_hdr_len;      /* Length of transport network header */
+    unsigned    tx_cq_len;       /* Send CQ length */
+    unsigned    rx_cq_len;       /* Receive CQ length */
+    size_t      seg_size;        /* Transport segment size */
+    uint32_t    res_domain_key;  /* Resource domain key */
+    int         tm_cap_bit;      /* Required HW tag-matching capabilities */
+    unsigned    fc_req_size;     /* Flow control request size */
+    int         flags;           /* Various flags (see enum) */
 } uct_ib_iface_init_attr_t;
 
 UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, const uct_ib_iface_config_t*,
-                  uct_ib_iface_init_attr_t*);
+                  const uct_ib_iface_init_attr_t*);
 
 /*
  * The offset to the payload is the maximum between user-requested headroom
