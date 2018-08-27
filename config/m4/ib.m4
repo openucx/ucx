@@ -105,7 +105,6 @@ AS_IF([test "x$with_ib" == xyes],
                         [AC_MSG_WARN([ibverbs header files not found]); with_ib=no])
         AC_CHECK_LIB([ibverbs], [ibv_get_device_list],
             [
-            LIBS="-libverbs $LIBS"
             AC_SUBST(IBVERBS_LDFLAGS,  ["$verbs_libs -libverbs"])
             AC_SUBST(IBVERBS_DIR,      ["$with_verbs"])
             AC_SUBST(IBVERBS_CPPFLAGS, ["$verbs_incl"])
@@ -202,7 +201,7 @@ AS_IF([test "x$with_ib" == xyes],
                                     [AC_SUBST(LIB_MLX5, [-lmlx5-rdmav2])],[
                        AC_CHECK_LIB([mlx5], [mlx5dv_query_device],
                                     [AC_SUBST(LIB_MLX5, [-lmlx5])],
-                                    [with_mlx5_dv=no])])])
+                                    [with_mlx5_dv=no], [-libverbs])], [-libverbs])])
 
               AS_IF([test "x$have_cq_io" == xyes ], [
                        AC_CHECK_DECLS([
