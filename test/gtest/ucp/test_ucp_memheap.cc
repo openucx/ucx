@@ -102,9 +102,8 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
 
         ucs_assert(size * i + alignment <= memheap_size);
 
-        (this->*send)(&sender(), size,
-                      (void*)((uintptr_t)memheap + alignment + i * size),
-                      rkey, expected_data[i]);
+        char *ptr = (char*)memheap + alignment + i * size;
+        (this->*send)(&sender(), size, (void*)ptr, rkey, expected_data[i]);
 
         ASSERT_UCS_OK(status);
 
@@ -117,9 +116,10 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     }
 
     for (int i = 0; i < max_iter; ++i) {
-        EXPECT_EQ(expected_data[i],
-                  std::string((char *)((uintptr_t)memheap + alignment + i * size),
-                              expected_data[i].length()));
+        char *ptr = (char*)memheap + alignment + i * size;
+        EXPECT_EQ(expected_data[i].substr(0, 20),
+                  std::string(ptr, expected_data[i].length()).substr(0, 20)) <<
+                        ((void*)ptr);
     }
 
     ucp_rkey_destroy(rkey);
@@ -226,7 +226,6 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
         expected_data.resize(size);
 
         ucs::fill_random(expected_data);
-
         (this->*send)(&sender(), size, (void*)((uintptr_t)memheap + offset),
                       rkey, expected_data);
 

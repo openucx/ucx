@@ -73,99 +73,6 @@ void test_ucp_atomic::unaligned_blocking_add64(entity *e,  size_t max_size,
 }
 
 template <typename T>
-void test_ucp_atomic::blocking_fadd(entity *e,  size_t max_size,
-                                    void *memheap_addr, ucp_rkey_h rkey,
-                                    std::string& expected_data)
-{
-    ucs_status_t status;
-    T add, prev, result;
-
-    prev = *(T*)memheap_addr;
-    add  = (T)ucs::rand() * (T)ucs::rand();
-
-    if (sizeof(T) == sizeof(uint32_t)) {
-        status = ucp_atomic_fadd32(e->ep(), add, (uintptr_t)memheap_addr, rkey,
-                                   (uint32_t*)(void*)&result);
-    } else if (sizeof(T) == sizeof(uint64_t)) {
-        status = ucp_atomic_fadd64(e->ep(), add, (uintptr_t)memheap_addr, rkey,
-                                   (uint64_t*)(void*)&result);
-    } else {
-        status = UCS_ERR_UNSUPPORTED;
-    }
-    ASSERT_UCS_OK(status);
-
-    EXPECT_EQ(prev, result);
-
-    expected_data.resize(sizeof(T));
-    *(T*)&expected_data[0] = add + prev;
-}
-
-template <typename T>
-void test_ucp_atomic::blocking_swap(entity *e,  size_t max_size, void *memheap_addr,
-                                    ucp_rkey_h rkey, std::string& expected_data)
-{
-    ucs_status_t status;
-    T swap, prev, result;
-
-    prev = *(T*)memheap_addr;
-    swap = (T)ucs::rand() * (T)ucs::rand();
-
-    if (sizeof(T) == sizeof(uint32_t)) {
-        status = ucp_atomic_swap32(e->ep(), swap, (uintptr_t)memheap_addr,
-                                   rkey, (uint32_t*)(void*)&result);
-    } else if (sizeof(T) == sizeof(uint64_t)) {
-        status = ucp_atomic_swap64(e->ep(), swap, (uintptr_t)memheap_addr,
-                                   rkey, (uint64_t*)(void*)&result);
-    } else {
-        status = UCS_ERR_UNSUPPORTED;
-    }
-    ASSERT_UCS_OK(status);
-
-    EXPECT_EQ(prev, result);
-
-    expected_data.resize(sizeof(T));
-    *(T*)&expected_data[0] = swap;
-}
-
-template <typename T>
-void test_ucp_atomic::blocking_cswap(entity *e,  size_t max_size, void *memheap_addr,
-                    ucp_rkey_h rkey, std::string& expected_data)
-{
-    ucs_status_t status;
-    T compare, swap, prev, result;
-
-    prev = *(T*)memheap_addr;
-    if ((ucs::rand() % 2) == 0) {
-        compare = prev; /* success mode */
-    } else {
-        compare = ~prev; /* fail mode */
-    }
-    swap = (T)ucs::rand() * (T)ucs::rand();
-
-    if (sizeof(T) == sizeof(uint32_t)) {
-        status = ucp_atomic_cswap32(e->ep(), compare, swap,
-                                    (uintptr_t)memheap_addr, rkey,
-                                    (uint32_t*)(void*)&result);
-    } else if (sizeof(T) == sizeof(uint64_t)) {
-        status = ucp_atomic_cswap64(e->ep(), compare, swap,
-                                    (uintptr_t)memheap_addr, rkey,
-                                    (uint64_t*)(void*)&result);
-    } else {
-        status = UCS_ERR_UNSUPPORTED;
-    }
-    ASSERT_UCS_OK(status);
-
-    EXPECT_EQ(prev, result);
-
-    expected_data.resize(sizeof(T));
-    if (compare == prev) {
-        *(T*)&expected_data[0] = swap;
-    } else {
-        *(T*)&expected_data[0] = prev;
-    }
-}
-
-template <typename T>
 ucs_status_t test_ucp_atomic::ucp_atomic_post_nbi(ucp_ep_h ep, ucp_atomic_post_op_t opcode,
                                                   T value, void *remote_addr,
                                                   ucp_rkey_h rkey)
@@ -319,11 +226,6 @@ UCS_TEST_P(test_ucp_atomic32, atomic_xor_nb) {
     test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_XOR>, true);
 }
 
-UCS_TEST_P(test_ucp_atomic32, atomic_fadd) {
-    test<uint32_t>(&test_ucp_atomic32::blocking_fadd<uint32_t>, false);
-    test<uint32_t>(&test_ucp_atomic32::blocking_fadd<uint32_t>, true);
-}
-
 UCS_TEST_P(test_ucp_atomic32, atomic_fadd_nb) {
     test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_FADD>, false);
     test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_FADD>, true);
@@ -344,19 +246,9 @@ UCS_TEST_P(test_ucp_atomic32, atomic_fxor_nb) {
     test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_FXOR>, true);
 }
 
-UCS_TEST_P(test_ucp_atomic32, atomic_swap) {
-    test<uint32_t>(&test_ucp_atomic32::blocking_swap<uint32_t>, false);
-    test<uint32_t>(&test_ucp_atomic32::blocking_swap<uint32_t>, true);
-}
-
 UCS_TEST_P(test_ucp_atomic32, atomic_swap_nb) {
     test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_SWAP>, false);
     test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_SWAP>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_cswap) {
-    test<uint32_t>(&test_ucp_atomic32::blocking_cswap<uint32_t>, false);
-    test<uint32_t>(&test_ucp_atomic32::blocking_cswap<uint32_t>, true);
 }
 
 UCS_TEST_P(test_ucp_atomic32, atomic_cswap_nb) {
@@ -400,11 +292,6 @@ UCS_TEST_P(test_ucp_atomic64, atomic_xor_nb) {
     test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_XOR>, true);
 }
 
-UCS_TEST_P(test_ucp_atomic64, atomic_fadd) {
-    test<uint64_t>(&test_ucp_atomic64::blocking_fadd<uint64_t>, false);
-    test<uint64_t>(&test_ucp_atomic64::blocking_fadd<uint64_t>, true);
-}
-
 UCS_TEST_P(test_ucp_atomic64, atomic_fadd_nb) {
     test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_FADD>, false);
     test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_FADD>, true);
@@ -425,21 +312,10 @@ UCS_TEST_P(test_ucp_atomic64, atomic_fxor_nb) {
     test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_FXOR>, true);
 }
 
-UCS_TEST_P(test_ucp_atomic64, atomic_swap) {
-    test<uint64_t>(&test_ucp_atomic64::blocking_swap<uint64_t>, false);
-    test<uint64_t>(&test_ucp_atomic64::blocking_swap<uint64_t>, true);
-}
-
 UCS_TEST_P(test_ucp_atomic64, atomic_swap_nb) {
     test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_SWAP>, false);
     test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_SWAP>, true);
 }
-
-UCS_TEST_P(test_ucp_atomic64, atomic_cswap) {
-    test<uint64_t>(&test_ucp_atomic64::blocking_cswap<uint64_t>, false);
-    test<uint64_t>(&test_ucp_atomic64::blocking_cswap<uint64_t>, true);
-}
-
 
 UCS_TEST_P(test_ucp_atomic64, atomic_cswap_nb) {
     test<uint64_t>(&test_ucp_atomic64::nb_cswap<uint64_t>, false);

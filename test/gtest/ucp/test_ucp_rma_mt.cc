@@ -33,6 +33,10 @@ public:
         }
     }
 
+    static void send_cb(void *req, ucs_status_t status)
+    {
+    }
+
     static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
                                                         const std::string& name,
                                                         const std::string& test_case_name,
@@ -94,15 +98,16 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
 #if _OPENMP && ENABLE_MT
 #pragma omp parallel for
     for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
-        ucs_status_t status;
         int worker_index = 0;
 
-        if (GetParam().thread_type == MULTI_THREAD_CONTEXT)
+        if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
             worker_index = i;
+        }
 
-        status = ucp_put(sender().ep(worker_index), &orig_data[i], sizeof(uint64_t),
-                         (uintptr_t)((uint64_t *)memheap + i), rkey[worker_index]);
-        ASSERT_UCS_OK(status);
+        void* req = ucp_put_nb(sender().ep(worker_index), &orig_data[i],
+                               sizeof(uint64_t), (uintptr_t)((uint64_t*)memheap + i),
+                               rkey[worker_index], send_cb);
+        wait(req, worker_index);
 
         flush_worker(sender(), worker_index);
 
@@ -127,7 +132,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
             worker_index = i;
 
         status = ucp_put_nbi(sender().ep(worker_index), &orig_data[i], sizeof(uint64_t),
-                             (uintptr_t)((uint64_t *)memheap + i), rkey[worker_index]);
+                             (uintptr_t)((uint64_t*)memheap + i), rkey[worker_index]);
         ASSERT_UCS_OK_OR_INPROGRESS(status);
 
         flush_worker(sender(), worker_index);
@@ -146,15 +151,16 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
 #if _OPENMP && ENABLE_MT
 #pragma omp parallel for
     for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
-        ucs_status_t status;
         int worker_index = 0;
 
-        if (GetParam().thread_type == MULTI_THREAD_CONTEXT)
+        if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
             worker_index = i;
+        }
 
-        status = ucp_get(sender().ep(worker_index), &orig_data[i], sizeof(uint64_t),
-                         (uintptr_t)((uint64_t *)memheap + i), rkey[worker_index]);
-        ASSERT_UCS_OK(status);
+        void *req = ucp_get_nb(sender().ep(worker_index), &orig_data[i],
+                               sizeof(uint64_t), (uintptr_t)((uint64_t*)memheap + i),
+                               rkey[worker_index], send_cb);
+        wait(req, worker_index);
 
         flush_worker(sender(), worker_index);
 

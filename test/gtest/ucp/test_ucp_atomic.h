@@ -30,18 +30,6 @@ public:
     void unaligned_blocking_add64(entity *e,  size_t max_size, void *memheap_addr,
                                   ucp_rkey_h rkey, std::string& expected_data);
 
-    template <typename T>
-    void blocking_fadd(entity *e,  size_t max_size, void *memheap_addr,
-                       ucp_rkey_h rkey, std::string& expected_data);
-
-    template <typename T>
-    void blocking_swap(entity *e,  size_t max_size, void *memheap_addr,
-                       ucp_rkey_h rkey, std::string& expected_data);
-
-    template <typename T>
-    void blocking_cswap(entity *e,  size_t max_size, void *memheap_addr,
-                        ucp_rkey_h rkey, std::string& expected_data);
-
     template <ucp_atomic_post_op_t OP>
     void unaligned_nb_post(entity *e,  size_t max_size, void *memheap_addr,
                            ucp_rkey_h rkey, std::string& expected_data);
