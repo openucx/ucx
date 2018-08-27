@@ -570,13 +570,15 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
 {
     uct_ud_iface_config_t *config = ucs_derived_of(tl_config,
                                                    uct_ud_iface_config_t);
+    uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
 
     ucs_trace_func("");
 
+    init_attr.res_domain_key = UCT_IB_IFACE_NULL_RES_DOMAIN_KEY;
+
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, md,
-                              worker, params, 0, UCT_IB_IFACE_NULL_RES_DOMAIN_KEY,
-                              config);
+                              worker, params, config, &init_attr);
 
     memset(&self->tx.wr_inl, 0, sizeof(self->tx.wr_inl));
     self->tx.wr_inl.opcode            = IBV_WR_SEND;

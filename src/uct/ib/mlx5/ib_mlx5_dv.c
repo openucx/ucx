@@ -45,3 +45,23 @@ int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
     return 0;
 }
 
+#if HAVE_DECL_MLX5DV_OBJ_AH
+void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
+{
+    struct mlx5dv_obj  dv;
+    struct mlx5dv_ah   dah;
+
+    dv.ah.in = ah;
+    dv.ah.out = &dah;
+    mlx5dv_init_obj(&dv, MLX5DV_OBJ_AH);
+
+    *av = *(dah.av);
+    av->dqp_dct |= UCT_IB_MLX5_EXTENDED_UD_AV;
+}
+#elif !HAVE_INFINIBAND_MLX5_HW_H
+void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
+{
+    ucs_bug("MLX5DV_OBJ_AH not supported");
+}
+#endif
+

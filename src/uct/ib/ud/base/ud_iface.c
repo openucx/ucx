@@ -427,17 +427,16 @@ static void uct_ud_iface_calc_gid_len(uct_ud_iface_t *iface)
 
 UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
-                    unsigned ud_rx_priv_len, uint32_t res_domain_key,
-                    const uct_ud_iface_config_t *config)
+                    const uct_ud_iface_config_t *config,
+                    uct_ib_iface_init_attr_t *init_attr)
 {
-    unsigned rx_priv_len, rx_hdr_len;
     ucs_status_t status;
     size_t data_size;
     int mtu;
 
-    ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%zu ud_rx_priv_len=%u",
+    ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%zu",
                    params->mode.device.dev_name, self, ops, worker,
-                   params->rx_headroom, ud_rx_priv_len);
+                   params->rx_headroom);
 
     if (config->super.tx.queue_len <= UCT_UD_TX_MODERATION) {
         ucs_error("%s ud iface tx queue is too short (%d <= %d)",
@@ -451,16 +450,15 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
         return status;
     }
 
-    rx_priv_len = ud_rx_priv_len +
-                  sizeof(uct_ud_recv_skb_t) - sizeof(uct_ib_iface_recv_desc_t);
-    rx_hdr_len  = UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t);
+    init_attr->rx_priv_len = sizeof(uct_ud_recv_skb_t) -
+                             sizeof(uct_ib_iface_recv_desc_t);
+    init_attr->rx_hdr_len  = UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t);
+    init_attr->tx_cq_len   = config->super.tx.queue_len;
+    init_attr->rx_cq_len   = config->super.rx.queue_len;
+    init_attr->seg_size    = ucs_min(mtu, config->super.super.max_bcopy);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker,
-                              params, rx_priv_len, rx_hdr_len,
-                              config->super.tx.queue_len,
-                              config->super.rx.queue_len,
-                              ucs_min(mtu, config->super.super.max_bcopy),
-                              res_domain_key, &config->super);
+                              params, &config->super, init_attr);
 
     if (self->super.super.worker->async == NULL) {
         ucs_error("%s ud iface must have valid async context", params->mode.device.dev_name);

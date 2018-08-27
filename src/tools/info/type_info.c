@@ -59,7 +59,7 @@
 #if HAVE_TL_UD
 #  include <uct/ib/ud/base/ud_def.h>
 #  include <uct/ib/ud/verbs/ud_verbs.h>
-#  if HAVE_MLX5_HW
+#  if HAVE_MLX5_HW_UD
 #    include <uct/ib/ud/accel/ud_mlx5.h>
 #  endif
 #endif
@@ -248,7 +248,7 @@ void print_type_info(const char * tl_name)
             PRINT_SIZE(uct_ud_verbs_iface_t);
         }
 
-#if HAVE_MLX5_HW
+#if HAVE_MLX5_HW_UD
         if (tl_name == NULL || !strcasecmp(tl_name, "ud_mlx5")) {
             PRINT_SIZE(uct_ud_mlx5_ep_t);
             PRINT_SIZE(uct_ud_mlx5_iface_t);

@@ -430,9 +430,32 @@ static int uct_ib_max_cqe_size()
 }
 #endif
 
+struct ibv_cq *uct_ib_create_cq(struct ibv_context *context, int cqe,
+                                struct ibv_comp_channel *channel,
+                                int comp_vector, int ignore_overrun)
+{
+    struct ibv_cq *cq;
+#if HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
+    struct ibv_cq_init_attr_ex cq_attr = {};
+
+    cq_attr.cqe = cqe;
+    cq_attr.channel = channel;
+    cq_attr.comp_vector = comp_vector;
+    if (ignore_overrun) {
+        cq_attr.comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS;
+        cq_attr.flags = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
+    }
+
+    cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(context, &cq_attr));
+#else
+    cq = ibv_create_cq(context, cqe, NULL, channel, comp_vector);
+#endif
+    return cq;
+}
+
 static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
                                            size_t *inl, int preferred_cpu,
-                                           struct ibv_cq **cq_p)
+                                           int flags, struct ibv_cq **cq_p)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     struct ibv_cq *cq;
@@ -476,8 +499,8 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
         env_var_added = 1;
     }
 #endif
-    cq = ibv_create_cq(dev->ibv_context, cq_length, NULL, iface->comp_channel,
-                       preferred_cpu);
+    cq = uct_ib_create_cq(dev->ibv_context, cq_length, iface->comp_channel,
+                          preferred_cpu, flags & UCT_IB_CQ_IGNORE_OVERRUN);
     if (cq == NULL) {
         ucs_error("ibv_create_cq(cqe=%d) failed: %m", cq_length);
         status = UCS_ERR_IO_ERROR;
@@ -655,17 +678,10 @@ static void uct_ib_iface_res_domain_cleanup(uct_ib_iface_res_domain_t *res_domai
 #endif
 }
 
-/**
- * @param rx_headroom   Headroom requested by the user.
- * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
- * @param rx_hdr_len    Length of transport network header.
- * @param seg_size      Transport segment size.
- */
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
-                    unsigned rx_priv_len, unsigned rx_hdr_len,
-                    unsigned tx_cq_len, unsigned rx_cq_len, size_t seg_size,
-                    uint32_t res_domain_key, const uct_ib_iface_config_t *config)
+                    const uct_ib_iface_config_t *config,
+                    const uct_ib_iface_init_attr_t *init_attr)
 {
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
     uct_ib_device_t *dev = &ib_md->dev;
@@ -698,11 +714,13 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.rx_payload_offset  = sizeof(uct_ib_iface_recv_desc_t) +
                                       ucs_max(sizeof(uct_recv_desc_t) +
                                               params->rx_headroom,
-                                              rx_priv_len + rx_hdr_len);
-    self->config.rx_hdr_offset      = self->config.rx_payload_offset - rx_hdr_len;
+                                              init_attr->rx_priv_len +
+                                              init_attr->rx_hdr_len);
+    self->config.rx_hdr_offset      = self->config.rx_payload_offset -
+                                      init_attr->rx_hdr_len;
     self->config.rx_headroom_offset = self->config.rx_payload_offset -
                                       params->rx_headroom;
-    self->config.seg_size           = seg_size;
+    self->config.seg_size           = init_attr->seg_size;
     self->config.tx_max_poll        = config->tx.max_poll;
     self->config.rx_max_poll        = config->rx.max_poll;
     self->config.rx_max_batch       = ucs_min(config->rx.max_batch,
@@ -738,12 +756,12 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    if ((res_domain_key == UCT_IB_IFACE_NULL_RES_DOMAIN_KEY) ||
+    if ((init_attr->res_domain_key == UCT_IB_IFACE_NULL_RES_DOMAIN_KEY) ||
         !self->config.enable_res_domain) {
         self->res_domain = NULL;
     } else {
         self->res_domain = uct_worker_tl_data_get(self->super.worker,
-                                                  res_domain_key,
+                                                  init_attr->res_domain_key,
                                                   uct_ib_iface_res_domain_t,
                                                   uct_ib_iface_res_domain_cmp,
                                                   uct_ib_iface_res_domain_init,
@@ -767,7 +785,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     }
 
     inl = config->rx.inl;
-    status = uct_ib_iface_create_cq(self, tx_cq_len, &inl, preferred_cpu,
+    status = uct_ib_iface_create_cq(self, init_attr->tx_cq_len, &inl,
+                                    preferred_cpu, init_attr->flags,
                                     &self->cq[UCT_IB_DIR_TX]);
     if (status != UCS_OK) {
         goto err_destroy_comp_channel;
@@ -783,8 +802,9 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     }
 
     inl = config->rx.inl;
-    status = uct_ib_iface_create_cq(self, rx_cq_len, &inl,
-                                    preferred_cpu, &self->cq[UCT_IB_DIR_RX]);
+    status = uct_ib_iface_create_cq(self, init_attr->rx_cq_len, &inl,
+                                    preferred_cpu, init_attr->flags,
+                                    &self->cq[UCT_IB_DIR_RX]);
     if (status != UCS_OK) {
         goto err_destroy_send_cq;
     }

@@ -1231,12 +1231,17 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 {
     uct_dc_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
                                                         uct_dc_mlx5_iface_config_t);
+    uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
 
     ucs_trace_func("");
+
+    init_attr.res_domain_key = UCT_IB_MLX5_RES_DOMAIN_KEY;
+    init_attr.tm_cap_bit     = IBV_EXP_TM_CAP_DC;
+    init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
+
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_mlx5_iface_ops, md,
-                              worker, params, 0, &config->super,
-                              IBV_EXP_TM_CAP_DC, UCT_IB_MLX5_RES_DOMAIN_KEY);
+                              worker, params, &config->super, &init_attr);
 
     status = uct_dc_mlx5_iface_tag_init(self, &config->super.super);
     if (status != UCS_OK) {

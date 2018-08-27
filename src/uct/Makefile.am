@@ -142,7 +142,7 @@ noinst_HEADERS += \
 	ib/ud/base/ud_inl.h \
 	ib/ud/verbs/ud_verbs.h 
 
-if HAVE_MLX5_HW
+if HAVE_MLX5_HW_UD
 noinst_HEADERS += \
 	ib/ud/accel/ud_mlx5_common.h \
 	ib/ud/accel/ud_mlx5.h

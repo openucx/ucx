@@ -149,11 +149,13 @@
 #if HAVE_DECL_IBV_EXP_CQ_IGNORE_OVERRUN
 static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 {
-    struct ibv_exp_cq_attr cq_attr = {0};
+    struct ibv_exp_cq_attr cq_attr = {};
     cq_attr.comp_mask    = IBV_EXP_CQ_ATTR_CQ_CAP_FLAGS;
     cq_attr.cq_cap_flags = IBV_EXP_CQ_IGNORE_OVERRUN;
     return ibv_exp_modify_cq(cq, &cq_attr, IBV_EXP_CQ_CAP_FLAGS);
 }
+#elif HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
+static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq) { return 0; }
 #else
 static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 {

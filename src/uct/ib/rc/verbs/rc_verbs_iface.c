@@ -222,13 +222,16 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     uct_rc_verbs_iface_config_t *config =
                     ucs_derived_of(tl_config, uct_rc_verbs_iface_config_t);
     ucs_status_t status;
+    uct_ib_iface_init_attr_t init_attr = {};
     struct ibv_qp_cap cap;
     struct ibv_qp *qp;
 
+    init_attr.res_domain_key = UCT_IB_IFACE_NULL_RES_DOMAIN_KEY;
+    init_attr.tm_cap_bit     = IBV_EXP_TM_CAP_RC;
+    init_attr.fc_req_size    = sizeof(uct_rc_fc_request_t);
+
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
-                              worker, params, &config->super, 0,
-                              sizeof(uct_rc_fc_request_t), IBV_EXP_TM_CAP_RC,
-                              UCT_IB_IFACE_NULL_RES_DOMAIN_KEY);
+                              worker, params, &config->super, &init_attr);
 
     self->config.tx_max_wr           = ucs_min(config->verbs_common.tx_max_wr,
                                                self->super.config.tx_qp_len);

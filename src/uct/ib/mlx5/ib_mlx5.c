@@ -18,8 +18,8 @@
 
 ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 {
-    uct_ib_mlx5dv_t obj;
-    uct_ib_mlx5dv_cq_t dcq;
+    uct_ib_mlx5dv_cq_t dcq = {};
+    uct_ib_mlx5dv_t obj = {};
     unsigned cqe_size;
     ucs_status_t status;
     int ret;
@@ -39,6 +39,7 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 #if HAVE_STRUCT_MLX5DV_CQ_CQ_UAR
     mlx5_cq->uar       = dcq.dv.cq_uar;
 #else
+    /* coverity[var_deref_model] */
     mlx5_cq->uar       = uct_dv_get_info_uar0(dcq.dv.uar);
 #endif
     mlx5_cq->dbrec     = dcq.dv.dbrec;
@@ -150,8 +151,8 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_txwq_t *txwq,
                                    struct ibv_qp *verbs_qp)
 {
-    uct_ib_mlx5dv_qp_t qp_info;
-    uct_ib_mlx5dv_t obj;
+    uct_ib_mlx5dv_qp_t qp_info = {};
+    uct_ib_mlx5dv_t obj = {};
     ucs_status_t status;
 
     obj.dv.qp.in = verbs_qp;
@@ -210,8 +211,8 @@ void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq)
 
 ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *rxwq)
 {
-    uct_ib_mlx5dv_qp_t qp_info;
-    uct_ib_mlx5dv_t obj;
+    uct_ib_mlx5dv_qp_t qp_info = {};
+    uct_ib_mlx5dv_t obj = {};
     ucs_status_t status;
 
     obj.dv.qp.in = verbs_qp;
@@ -242,9 +243,9 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
 ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
                                   size_t sg_byte_count)
 {
-    uct_ib_mlx5dv_srq_t srq_info;
+    uct_ib_mlx5dv_srq_t srq_info = {};
     uct_ib_mlx5_srq_seg_t *seg;
-    uct_ib_mlx5dv_t obj;
+    uct_ib_mlx5dv_t obj = {};
     ucs_status_t status;
     unsigned i;
 
@@ -292,8 +293,8 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
 
 void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq)
 {
-    uct_ib_mlx5dv_srq_t srq_info;
-    uct_ib_mlx5dv_t obj;
+    uct_ib_mlx5dv_srq_t srq_info = {};
+    uct_ib_mlx5dv_t obj = {};
     ucs_status_t status;
 
     obj.dv.srq.in = verbs_srq;

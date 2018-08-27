@@ -153,6 +153,12 @@ AS_IF([test "x$with_ib" == xyes],
                          struct ibv_async_event.element.dct],
                         [], [], [[#include <infiniband/verbs_exp.h>]])
 
+       AC_CHECK_DECLS([IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN],
+                      [have_cq_io=yes], [], [[#include <infiniband/verbs.h>]])
+
+       AC_CHECK_DECLS([IBV_EXP_CQ_IGNORE_OVERRUN],
+                      [have_cq_io=yes], [], [[#include <infiniband/verbs_exp.h>]])
+
        AS_IF([test "x$with_mlx5_dv" != xno], [
                AC_MSG_NOTICE([Checking for legacy bare-metal support])
                AC_CHECK_HEADERS([infiniband/mlx5_hw.h],
@@ -195,17 +201,18 @@ AS_IF([test "x$with_ib" == xyes],
                                     [AC_SUBST(LIB_MLX5, [-lmlx5-rdmav2])],[
                        AC_CHECK_LIB([mlx5], [mlx5dv_query_device],
                                     [AC_SUBST(LIB_MLX5, [-lmlx5])],
-                                    [with_mlx5_dv=no])])])
+                                    [with_mlx5_dv=no], [-libverbs])], [-libverbs])])
 
-              AS_IF([test "x$has_get_av" == xyes ], [
+              AS_IF([test "x$have_cq_io" == xyes ], [
                        AC_CHECK_DECLS([
                            mlx5dv_init_obj],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
                        AC_CHECK_MEMBERS([struct mlx5dv_cq.cq_uar],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
+                       AC_CHECK_DECLS([MLX5DV_OBJ_AH], [has_get_av=yes],
+                                      [], [[#include <infiniband/mlx5dv.h>]])
                        AC_CHECK_DECLS([ibv_alloc_td],
-                                  [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])
-                               ], [with_mlx5_hw=no])])
+                                  [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])])])
 
        AS_IF([test "x$has_res_domain" == xyes], [], [
                AC_MSG_WARN([Cannot use mlx5 accel because resource domains are not supported])
@@ -214,16 +221,16 @@ AS_IF([test "x$with_ib" == xyes],
 
        AS_IF([test "x$with_mlx5_hw" == xyes],
              [AC_MSG_NOTICE([Compiling with mlx5 bare-metal support])
-              AC_DEFINE([HAVE_MLX5_HW], 1, [mlx5 bare-metal support])],
-             [])
+              AC_DEFINE([HAVE_MLX5_HW], 1, [mlx5 bare-metal support])
+              AS_IF([test "x$has_get_av" == xyes],
+                 [AC_DEFINE([HAVE_MLX5_HW_UD], 1, [mlx5 UD bare-metal support])], [])], [])
 
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_LINK_LAYER_ETHERNET,
                        IBV_EVENT_GID_CHANGE],
                       [], [], [[#include <infiniband/verbs.h>]])
 
-       AC_CHECK_DECLS([IBV_EXP_CQ_IGNORE_OVERRUN,
-                       IBV_EXP_ACCESS_ALLOCATE_MR,
+       AC_CHECK_DECLS([IBV_EXP_ACCESS_ALLOCATE_MR,
                        IBV_EXP_ACCESS_ON_DEMAND,
                        IBV_EXP_DEVICE_MR_ALLOCATE,
                        IBV_EXP_WR_NOP,
@@ -380,4 +387,5 @@ AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_TL_CM],   [test "x$with_cm" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
 AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" != xno])
+AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
 AM_CONDITIONAL([HAVE_IBV_EX_HW_TM], [test "x$with_ib_hw_tm"  != xno])

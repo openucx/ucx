@@ -680,14 +680,17 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 {
     uct_ud_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
                                                         uct_ud_mlx5_iface_config_t);
+    uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
     int i;
 
     ucs_trace_func("");
 
+    init_attr.res_domain_key = UCT_IB_IFACE_NULL_RES_DOMAIN_KEY;
+    init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
+
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
-                              md, worker, params, 0, UCT_IB_MLX5_RES_DOMAIN_KEY,
-                              &config->super);
+                              md, worker, params, &config->super, &init_attr);
 
     uct_ib_iface_set_max_iov(&self->super.super, UCT_IB_MLX5_AM_ZCOPY_MAX_IOV);
     self->super.config.max_inline = UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE);
