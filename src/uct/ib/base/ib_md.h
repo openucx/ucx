@@ -50,6 +50,7 @@ typedef struct uct_ib_md_ext_config {
     int                      enable_umr_pack;
     int                      enable_contig_pages; /** Enable contiguous pages */
     int                      enable_indirect_atomic; /** Enable indirect atomic */
+    int                      enable_gpudirect_rdma; /** Enable GPUDirect RDMA */
 
     struct {
         ucs_numa_policy_t    numa_policy;  /**< NUMA policy flags for ODP */
