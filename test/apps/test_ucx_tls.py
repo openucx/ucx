@@ -54,10 +54,6 @@ mlx5_am_override = {
  1000000 :      "rc_mlx5",
 }
 
-# temp fix: upstream doesn't support DC accel tls yet
-if not os.path.exists("/bin/ofed_info"):
-        mlx5_am = mlx5_am_no_dc
-
 mlx4_am_override = {
        2 :      "rc",
       16 :      "rc",
