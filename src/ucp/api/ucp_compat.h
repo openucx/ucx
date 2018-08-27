@@ -64,26 +64,94 @@ ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info);
  */
 ucs_status_t ucp_ep_flush(ucp_ep_h ep);
 
+
 /**
  * @ingroup UCP_WORKER
- *
- * @brief Flush outstanding AMO and RMA operations on the @ref ucp_worker_h
- * "worker"
- *
- * This routine flushes all outstanding AMO and RMA communications on the
- * @ref ucp_worker_h "worker". All the AMO and RMA operations issued on the
- * @a worker prior to this call are completed both at the origin and at the
- * target when this call returns.
- *
- * @note For description of the differences between @ref ucp_worker_flush
- * "flush" and @ref ucp_worker_fence "fence" operations please see
- * @ref ucp_worker_fence "ucp_worker_fence()"
- *
- * @param [in] worker        UCP worker.
- *
- * @return Error code as defined by @ref ucs_status_t
+ * @deprecated Replaced by @ref ucp_worker_flush_nb.
  */
 ucs_status_t ucp_worker_flush(ucp_worker_h worker);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @deprecated Replaced by @ref ucp_put_nb.
+ */
+ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
+                     uint64_t remote_addr, ucp_rkey_h rkey);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @deprecated Replaced by @ref ucp_get_nb.
+ */
+ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
+                     uint64_t remote_addr, ucp_rkey_h rkey);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @deprecated Replaced by @ref ucp_atomic_post.
+ */
+ucs_status_t ucp_atomic_add32(ucp_ep_h ep, uint32_t add,
+                              uint64_t remote_addr, ucp_rkey_h rkey);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @deprecated Replaced by @ref ucp_atomic_post.
+ */
+ucs_status_t ucp_atomic_add64(ucp_ep_h ep, uint64_t add,
+                              uint64_t remote_addr, ucp_rkey_h rkey);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @deprecated Replaced by @ref ucp_atomic_fetch_nb.
+ */
+ucs_status_t ucp_atomic_fadd32(ucp_ep_h ep, uint32_t add, uint64_t remote_addr,
+                               ucp_rkey_h rkey, uint32_t *result);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @deprecated Replaced by @ref ucp_atomic_fetch_nb.
+ */
+ucs_status_t ucp_atomic_fadd64(ucp_ep_h ep, uint64_t add, uint64_t remote_addr,
+                               ucp_rkey_h rkey, uint64_t *result);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @deprecated Replaced by @ref ucp_atomic_fetch_nb.
+ */
+ucs_status_t ucp_atomic_swap32(ucp_ep_h ep, uint32_t swap, uint64_t remote_addr,
+                               ucp_rkey_h rkey, uint32_t *result);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @deprecated Replaced by @ref ucp_atomic_fetch_nb.
+ */
+ucs_status_t ucp_atomic_swap64(ucp_ep_h ep, uint64_t swap, uint64_t remote_addr,
+                               ucp_rkey_h rkey, uint64_t *result);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @deprecated Replaced by @ref ucp_atomic_fetch_nb.
+ */
+ucs_status_t ucp_atomic_cswap32(ucp_ep_h ep, uint32_t compare, uint32_t swap,
+                                uint64_t remote_addr, ucp_rkey_h rkey,
+                                uint32_t *result);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @deprecated Replaced by @ref ucp_atomic_fetch_nb.
+ */
+ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
+                                uint64_t remote_addr, ucp_rkey_h rkey,
+                                uint64_t *result);
 
 END_C_DECLS
 
