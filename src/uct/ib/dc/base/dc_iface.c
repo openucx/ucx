@@ -51,9 +51,9 @@ ucs_config_field_t uct_dc_iface_config_table[] = {
     {NULL}
 };
 
+#if HAVE_DC_EXP
 ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
 {
-#if HAVE_DC_EXP
     struct ibv_exp_dct_init_attr init_attr;
 
     memset(&init_attr, 0, sizeof(init_attr));
@@ -89,16 +89,13 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
         ucs_error("Failed to created DC target %m");
         return UCS_ERR_INVALID_PARAM;
     }
-#endif
-
     return UCS_OK;
 }
 
 /* take dc qp to rts state */
-static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
-                                             uct_rc_txqp_t *dci)
+ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
+                                      uct_rc_txqp_t *dci)
 {
-#if HAVE_DC_EXP
     struct ibv_exp_qp_attr attr;
     long attr_mask;
 
@@ -167,10 +164,21 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
         ucs_error("error modifying QP to RTS: %m");
         return UCS_ERR_IO_ERROR;
     }
-#endif
 
     return UCS_OK;
 }
+
+static ucs_status_t uct_dc_device_init(uct_ib_device_t *dev)
+{
+#if HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_EXP_DEVICE_CAP_FLAGS
+    if (dev->dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT) {
+        dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+    }
+#endif
+    return UCS_OK;
+}
+UCT_DEVICE_INITIALIZER(uct_dc_device_init);
+#endif
 
 static void uct_dc_iface_dcis_destroy(uct_dc_iface_t *iface, int max)
 {

@@ -51,7 +51,7 @@
 #  include <uct/ib/dc/base/dc_iface.h>
 #  include <uct/ib/dc/base/dc_ep.h>
 #  include <uct/ib/dc/verbs/dc_verbs.h>
-#  if HAVE_MLX5_HW
+#  if HAVE_MLX5_HW_DC
 #    include <uct/ib/dc/accel/dc_mlx5.h>
 #  endif
 #endif
@@ -217,7 +217,7 @@ void print_type_info(const char * tl_name)
             PRINT_SIZE(uct_dc_verbs_iface_t);
         }
 
-#if HAVE_MLX5_HW
+#if HAVE_MLX5_HW_DC
         if (tl_name == NULL || !strcasecmp(tl_name, "dc_mlx5")) {
             PRINT_SIZE(uct_dc_mlx5_ep_t);
             PRINT_SIZE(uct_dc_mlx5_grh_ep_t);

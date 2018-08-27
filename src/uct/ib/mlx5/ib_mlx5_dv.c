@@ -22,6 +22,55 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 }
 #endif
 
+#if HAVE_DC_DV
+static ucs_status_t uct_ib_mlx5_device_init(uct_ib_device_t *dev)
+{
+    struct ibv_context *ctx = dev->ibv_context;
+    struct ibv_qp_init_attr_ex qp_attr = {};
+    struct mlx5dv_qp_init_attr dv_attr = {};
+    ucs_status_t status = UCS_OK;
+    struct ibv_pd *pd;
+    struct ibv_cq *cq;
+    struct ibv_qp *qp;
+
+    pd = ibv_alloc_pd(ctx);
+    if (pd == NULL) {
+        ucs_error("ibv_alloc_pd() failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
+    if (cq == NULL) {
+        ucs_error("ibv_create_cq() failed: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto err_cq;
+    }
+
+    qp_attr.send_cq              = cq;
+    qp_attr.recv_cq              = cq;
+    qp_attr.cap.max_send_wr      = 1;
+    qp_attr.cap.max_send_sge     = 1;
+    qp_attr.qp_type              = IBV_QPT_DRIVER;
+    qp_attr.comp_mask            = IBV_QP_INIT_ATTR_PD;
+    qp_attr.pd                   = pd;
+
+    dv_attr.comp_mask            = MLX5DV_QP_INIT_ATTR_MASK_DC;
+    dv_attr.dc_init_attr.dc_type = MLX5DV_DCTYPE_DCI;
+
+    qp = mlx5dv_create_qp(ctx, &qp_attr, &dv_attr);
+    if (qp) {
+        ibv_destroy_qp(qp);
+        dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+    }
+
+    ibv_destroy_cq(cq);
+err_cq:
+    ibv_dealloc_pd(pd);
+    return status;
+}
+UCT_DEVICE_INITIALIZER(uct_ib_mlx5_device_init);
+#endif
+
 int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
 {
     uint64_t doorbell, sn_ci_cmd;

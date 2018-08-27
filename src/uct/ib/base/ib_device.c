@@ -63,6 +63,8 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {0, 0, "Generic HCA", 0, 0}
 };
 
+UCS_LIST_HEAD(uct_ib_device_init_list);
+
 #if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
 /* This struct defines the RoCE versions priorities */
 static uct_ib_roce_version_desc_t roce_versions_priorities[] = {
@@ -225,6 +227,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                                 struct ibv_device *ibv_device, int async_events
                                 UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
+    uct_ib_device_init_t *init_entry;
     ucs_status_t status;
     uint8_t i;
     int ret;
@@ -260,6 +263,13 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
         dev->first_port = 1;
         dev->num_ports  = dev->dev_attr.phys_port_cnt;
         break;
+    }
+
+    ucs_list_for_each(init_entry, &uct_ib_device_init_list, list) {
+        status = init_entry->init(dev);
+        if (status != UCS_OK) {
+            goto err_free_context;
+        }
     }
 
     if (dev->num_ports > UCT_IB_DEV_MAX_PORTS) {
@@ -395,7 +405,7 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     }
 
     if (flags & UCT_IB_DEVICE_FLAG_DC) {
-        if (!IBV_DEVICE_HAS_DC(&dev->dev_attr)) {
+        if (!IBV_DEVICE_HAS_DC(dev)) {
             ucs_trace("%s:%d does not support DC", uct_ib_device_name(dev), port_num);
             return UCS_ERR_UNSUPPORTED;
         }
@@ -963,7 +973,7 @@ size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
         return 0;
     }
 
-    if (IBV_DEVICE_HAS_DC(dev_attr)
+    if (IBV_DEVICE_HAS_DC(dev)
 #  if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS_PER_TRANSPORT_CAPS_DC_ODP_CAPS
         && !ucs_test_all_flags(IBV_EXP_ODP_CAPS(dev_attr, dc), required_rc_odp_caps)
 #  endif

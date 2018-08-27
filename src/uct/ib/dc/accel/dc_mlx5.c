@@ -1087,6 +1087,163 @@ static void uct_dc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
     iface->mlx5_common.cq[dir].cq_sn++;
 }
 
+#if HAVE_DC_DV
+static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_ib_iface_t *iface,
+                                                uct_ib_qp_attr_t *attr,
+                                                struct ibv_qp **qp_p)
+{
+    uct_ib_device_t *dev               = uct_ib_iface_device(iface);
+    struct mlx5dv_qp_init_attr dv_attr = {};
+    struct ibv_qp *qp;
+
+    uct_ib_iface_fill_attr(iface, attr);
+    attr->ibv.cap.max_recv_sge          = 0;
+
+    dv_attr.comp_mask                   = MLX5DV_QP_INIT_ATTR_MASK_DC;
+    dv_attr.dc_init_attr.dc_type        = MLX5DV_DCTYPE_DCI;
+    dv_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
+    qp = mlx5dv_create_qp(dev->ibv_context, &attr->ibv, &dv_attr);
+
+    if (qp == NULL) {
+        ucs_error("iface=%p: failed to create DCI: %m", iface);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    attr->cap = attr->ibv.cap;
+    *qp_p = qp;
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
+                                      uct_rc_txqp_t *dci)
+{
+    struct ibv_qp_attr attr;
+    long attr_mask;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.qp_state        = IBV_QPS_INIT;
+    attr.pkey_index      = 0;
+    attr.qp_access_flags = 0;
+    attr.port_num        = iface->super.super.config.port_num;
+
+    if (ibv_modify_qp(dci->qp, &attr,
+                      IBV_QP_STATE        |
+                      IBV_QP_PKEY_INDEX   |
+                      IBV_QP_PORT)) {
+        ucs_error("error modifying QP to INIT : %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    /* Move QP to the RTR state */
+    memset(&attr, 0, sizeof(attr));
+    attr.qp_state                   = IBV_QPS_RTR;
+    attr.path_mtu                   = iface->super.config.path_mtu;
+    attr.min_rnr_timer              = iface->super.config.min_rnr_timer;
+    attr.max_dest_rd_atomic         = 1;
+    if ((iface->super.super.addr_type == UCT_IB_ADDRESS_TYPE_ETH) ||
+        (iface->super.super.addr_type == UCT_IB_ADDRESS_TYPE_GLOBAL))
+    {
+        attr.ah_attr.is_global      = 1;
+    }
+    attr.ah_attr.sl                 = iface->super.super.config.sl;
+    attr_mask                       = IBV_QP_STATE     |
+                                      IBV_QP_PATH_MTU;
+
+    if (ibv_modify_qp(dci->qp, &attr, attr_mask)) {
+        ucs_error("error modifying DCI QP to RTR: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    /* Move QP to the RTS state */
+    memset(&attr, 0, sizeof(attr));
+    attr.qp_state       = IBV_QPS_RTS;
+    attr.timeout        = iface->super.config.timeout;
+    attr.rnr_retry      = iface->super.config.rnr_retry;
+    attr.retry_cnt      = iface->super.config.retry_cnt;
+    attr.max_rd_atomic  = iface->super.config.max_rd_atomic;
+    attr_mask           = IBV_QP_STATE      |
+                          IBV_QP_SQ_PSN     |
+                          IBV_QP_TIMEOUT    |
+                          IBV_QP_RETRY_CNT  |
+                          IBV_QP_RNR_RETRY  |
+                          IBV_QP_MAX_QP_RD_ATOMIC;
+
+    if (ibv_modify_qp(dci->qp, &attr, attr_mask)) {
+        ucs_error("error modifying DCI QP to RTS: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super);
+    struct mlx5dv_qp_init_attr dv_init_attr = {};
+    struct ibv_qp_init_attr_ex init_attr = {};
+    struct ibv_qp_attr attr = {};
+    int ret;
+
+    init_attr.comp_mask             = IBV_QP_INIT_ATTR_PD;
+    init_attr.pd                    = uct_ib_iface_md(&iface->super.super)->pd;
+    init_attr.recv_cq               = iface->super.super.cq[UCT_IB_DIR_RX];
+    init_attr.send_cq               = iface->super.super.cq[UCT_IB_DIR_RX];
+    init_attr.srq                   = iface->super.rx.srq.srq;
+    init_attr.qp_type               = IBV_QPT_DRIVER;
+    init_attr.cap.max_inline_data   = iface->super.config.rx_inline;
+
+    dv_init_attr.comp_mask                   = MLX5DV_QP_INIT_ATTR_MASK_DC;
+    dv_init_attr.dc_init_attr.dc_type        = MLX5DV_DCTYPE_DCT;
+    dv_init_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
+
+    iface->rx.dct = mlx5dv_create_qp(dev->ibv_context,
+                                     &init_attr, &dv_init_attr);
+    if (iface->rx.dct == NULL) {
+        ucs_error("Failed to created DC target %m");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    attr.qp_state        = IBV_QPS_INIT;
+    attr.port_num        = iface->super.super.config.port_num;
+    attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
+                           IBV_ACCESS_REMOTE_READ  |
+                           IBV_ACCESS_REMOTE_ATOMIC;
+
+    ret = ibv_modify_qp(iface->rx.dct, &attr, IBV_QP_STATE |
+                                              IBV_QP_PKEY_INDEX |
+                                              IBV_QP_PORT |
+                                              IBV_QP_ACCESS_FLAGS);
+
+    if (ret) {
+         ucs_error("error modifying DCT to INIT: %m");
+         goto err;
+    }
+
+    attr.qp_state                  = IBV_QPS_RTR;
+    attr.path_mtu                  = iface->super.config.path_mtu;
+    attr.min_rnr_timer             = iface->super.config.min_rnr_timer;
+    attr.ah_attr.grh.hop_limit     = iface->super.super.config.hop_limit;
+    attr.ah_attr.grh.traffic_class = iface->super.super.config.traffic_class;
+    attr.ah_attr.grh.sgid_index    = uct_ib_iface_md(&iface->super.super)->config.gid_index;
+    attr.ah_attr.port_num          = iface->super.super.config.port_num;
+
+    ret = ibv_modify_qp(iface->rx.dct, &attr, IBV_QP_STATE |
+                                              IBV_QP_MIN_RNR_TIMER |
+                                              IBV_QP_AV |
+                                              IBV_QP_PATH_MTU);
+    if (ret) {
+         ucs_error("error modifying DCT to RTR: %m");
+         goto err;
+    }
+    return UCS_OK;
+
+err:
+    ibv_destroy_qp(iface->rx.dct);
+    return UCS_ERR_IO_ERROR;
+}
+#endif
+
 static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     {
     {
@@ -1138,7 +1295,11 @@ static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .event_cq                 = uct_dc_mlx5_iface_event_cq,
     .handle_failure           = uct_dc_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_dc_mlx5_ep_set_failed,
+#if HAVE_DC_DV
+    .create_qp                = uct_dc_mlx5_iface_create_qp
+#else
     .create_qp                = uct_ib_iface_create_qp
+#endif
     },
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_dc_iface_fc_handler,

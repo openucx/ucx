@@ -121,6 +121,10 @@ struct uct_dc_iface {
     struct {
 #if HAVE_DC_EXP
         struct ibv_exp_dct        *dct;
+#elif HAVE_DC_DV
+        struct ibv_qp             *dct;
+#else
+#  error "DC support not configured properly"
 #endif
     } rx;
 
@@ -157,6 +161,8 @@ ucs_status_t uct_dc_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_comple
 void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config);
 
 ucs_status_t uct_dc_iface_init_fc_ep(uct_dc_iface_t *iface);
+
+ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_t *dci);
 
 void uct_dc_iface_cleanup_fc_ep(uct_dc_iface_t *iface);
 
@@ -246,8 +252,8 @@ static inline int uct_dc_get_dct_num(uct_dc_iface_t *iface)
 {
 #if HAVE_DC_EXP
     return iface->rx.dct->dct_num;
-#else
-    return 0;
+#elif HAVE_DC_DV
+    return iface->rx.dct->qp_num;
 #endif
 }
 
@@ -255,6 +261,8 @@ static inline void uct_dc_destroy_dct(uct_dc_iface_t *iface)
 {
 #if HAVE_DC_EXP
     ibv_exp_destroy_dct(iface->rx.dct);
+#elif HAVE_DC_DV
+    ibv_destroy_qp(iface->rx.dct);
 #endif
     iface->rx.dct = NULL;
 }
