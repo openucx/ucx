@@ -300,7 +300,7 @@ enum ucp_mem_map_params_field {
  */
 enum ucp_mem_advise_params_field {
     UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of the memory */
-    UCP_MEM_ADVISE_PARAM_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory */
+    UCP_MEM_ADVISE_PARAM_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory */ 
     UCP_MEM_ADVISE_PARAM_FIELD_ADVICE  = UCS_BIT(2)  /**< Advice on memory usage */
 };
 
@@ -438,13 +438,13 @@ typedef enum {
     UCP_STREAM_POLL_FLAG_IN     = UCS_BIT(0),
 
     /**
-     * The stream connection closed by remote peer. If the flag set together
+     * Remote peer closed the stream connection by @ref ucp_ep_close_nb in @ref
+     * UCP_EP_CLOSE_MODE_STREAM_CLOSE mode. If the flag set together
      * with @ref UCP_STREAM_POLL_FLAG_IN, the data can be received by @ref
      * ucp_stream_recv_nb or @ref ucp_stream_recv_data_nb before closing the
      * local endpoint by @ref ucp_ep_close_nb. The local endpoint should be
-     * closed in @ref UCP_EP_CLOSE_MODE_STREAM_CLOSE mode to avoid protocol
-     * mismatch, excepting remote failure cases where @ref
-     * UCP_EP_CLOSE_MODE_FORCE may be used.
+     * closed in @ref UCP_EP_CLOSE_MODE_STREAM_CLOSE mode too, excepting remote
+     * failure cases where @ref UCP_EP_CLOSE_MODE_FORCE may be used.
      */
     UCP_STREAM_POLL_FLAG_CLOSED = UCS_BIT(1)
 } ucp_stream_poll_flags_t;
@@ -1653,7 +1653,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  * This routine modifies @ref ucp_ep_h "endpoint" created by @ref ucp_ep_create
  * or @ref ucp_listener_accept_callback_t. For example, this API can be used
  * to setup custom parameters like @ref ucp_ep_params_t::user_data or
- * @ref ucp_ep_params_t::err_handler_cb to endpoint created by
+ * @ref ucp_ep_params_t::err_handler_cb to endpoint created by 
  * @ref ucp_listener_accept_callback_t.
  *
  * @param [in]  ep          A handle to the endpoint.
@@ -1700,7 +1700,7 @@ ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params);
  *                            is responsible for releasing the handle using the
  *                            @ref ucp_request_free routine.
  *
- * @note @ref ucp_ep_close_nb replaces deprecated @ref ucp_disconnect_nb and
+ * @note @ref ucp_ep_close_nb replaces deprecated @ref ucp_disconnect_nb and 
  *       @ref ucp_ep_destroy
  */
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode);
@@ -1911,7 +1911,7 @@ typedef enum ucp_mem_advice {
     UCP_MADV_NORMAL   = 0,  /**< No special treatment */
     UCP_MADV_WILLNEED       /**< can be used on the memory mapped with
                                  @ref UCP_MEM_MAP_NONBLOCK to speed up memory
-                                 mapping and to avoid page faults when
+                                 mapping and to avoid page faults when 
                                  the memory is accessed for the first time. */
 } ucp_mem_advice_t;
 
@@ -1921,7 +1921,7 @@ typedef enum ucp_mem_advice {
  * @brief Tuning parameters for the UCP memory advice.
  *
  * This structure defines the parameters that are used for the
- * UCP memory advice tuning during the @ref ucp_mem_advise "ucp_mem_advise"
+ * UCP memory advice tuning during the @ref ucp_mem_advise "ucp_mem_advise" 
  * routine.
  */
 typedef struct ucp_mem_advise_params {
@@ -1933,7 +1933,7 @@ typedef struct ucp_mem_advise_params {
     uint64_t                field_mask;
 
     /**
-     * Memory base address.
+     * Memory base address. 
      */
      void                   *address;
 
@@ -1955,20 +1955,20 @@ typedef struct ucp_mem_advise_params {
  *
  * This routine advises the UCP about how to handle memory range beginning at
  * address and size of length bytes. This call does not influence the semantics
- * of the application, but may influence its performance. The UCP may ignore
+ * of the application, but may influence its performance. The UCP may ignore 
  * the advice.
  *
  * @param [in]  context     Application @ref ucp_context_h "context" which was
  *                          used to allocate/map the memory.
  * @param [in]  memh        @ref ucp_mem_h "Handle" to memory region.
- * @param [in]  params      Memory base address and length. The advice field
- *                          is used to pass memory use advice as defined in
+ * @param [in]  params      Memory base address and length. The advice field 
+ *                          is used to pass memory use advice as defined in 
  *                          the @ref ucp_mem_advice list
  *                          The memory range must belong to the @a memh
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
+ucs_status_t ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,  
                             ucp_mem_advise_params_t *params);
 
 
@@ -2294,7 +2294,7 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
 
 /**
  * @ingroup UCP_COMM
- * @brief Non-blocking stream receive operation of structured data into a
+ * @brief Non-blocking stream receive operation of structured data into a 
  *        user-supplied buffer.
  *
  * This routine receives data that is described by the local address @a buffer,
