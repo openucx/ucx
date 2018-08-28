@@ -120,7 +120,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "For example a filter for the default subnet prefix can be specified as: fe80:0:0:0",
      ucs_offsetof(uct_ib_md_config_t, subnet_prefix), UCS_CONFIG_TYPE_STRING},
 
-    {"GPUDIRECT_RDMA", "try",
+    {"GPU_DIRECT_RDMA", "try",
      "Use GPU Direct RDMA for HCA to access GPU pages directly\n",
      ucs_offsetof(uct_ib_md_config_t, ext.enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
 
@@ -156,12 +156,12 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
         if (!access("/sys/kernel/mm/memory_peers/nv_mem/version", F_OK)) {
             md_attr->cap.reg_mem_types |= UCS_BIT(UCT_MD_MEM_TYPE_CUDA);
             ucs_debug("%s: GPUDirect RDMA is enabled", uct_ib_device_name(&md->dev));
+        } else if (md->config.enable_gpudirect_rdma == UCS_YES) {
+            ucs_error("%s: Couldn't enable GPUDirect RDMA. Please make sure nv_peer_mem"
+                      " plugin installed correctly.", uct_ib_device_name(&md->dev));
+            return UCS_ERR_UNSUPPORTED;
         } else {
-            if (md->config.enable_gpudirect_rdma == UCS_YES) {
-                ucs_error("%s Couldn't enable GPUDirect RDMA. Please make sure nv_peer_mem"
-                          " plugin installed correctly.", uct_ib_device_name(&md->dev));
-                return UCS_ERR_UNSUPPORTED;
-            }
+            ucs_debug("%s: GPUDirect RDMA is disabled", uct_ib_device_name(&md->dev));
         }
     }
 #endif
