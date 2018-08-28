@@ -57,6 +57,13 @@ double ucs_arch_get_clocks_per_sec();
 
 #define ucs_arch_wait_mem ucs_arch_generic_wait_mem
 
+#if !HAVE___CLEAR_CACHE
+static inline void ucs_arch_clear_cache(void *start, void *end)
+{
+    ucs_memory_cpu_fence();
+}
+#endif
+
 END_C_DECLS
 
 #endif

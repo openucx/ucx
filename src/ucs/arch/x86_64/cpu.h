@@ -50,6 +50,17 @@ ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
 
 #define ucs_arch_wait_mem ucs_arch_generic_wait_mem
 
+#if !HAVE___CLEAR_CACHE
+static inline void ucs_arch_clear_cache(void *start, void *end)
+{
+    char *ptr;
+
+    for (ptr = (char*)start; ptr < (char*)end; ptr++) {
+        asm volatile("mfence; clflush %0; mfence" :: "m" (*ptr));
+    }
+}
+#endif
+
 END_C_DECLS
 
 #endif
