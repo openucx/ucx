@@ -1089,9 +1089,9 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
     }
 
     status = ucs_mpool_init(&worker->rndv_frag_mp, 0,
-                            context->config.ext.rndv_frag_size,
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                            &ucp_frag_mpool_ops, "ucp_rndv_frags");
+                            context->config.ext.rndv_frag_size + sizeof(ucp_mem_desc_t),
+                            sizeof(ucp_mem_desc_t), UCS_SYS_CACHE_LINE_SIZE, 128,
+                            UINT_MAX, &ucp_frag_mpool_ops, "ucp_rndv_frags");
     if (status != UCS_OK) {
         goto err_release_reg_mpool;
     }
