@@ -98,14 +98,22 @@ void am_short_params_pack(char *buf, size_t len, am_short_args_t *args)
     }
 }
 
-ucs_status_t do_am_short(uct_ep_h ep, uint8_t id, const cmd_args_t *cmd_args,
-                         char *buf)
+ucs_status_t do_am_short(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
+                         const cmd_args_t *cmd_args, char *buf)
 {
+    ucs_status_t    status;
     am_short_args_t send_args;
+
     am_short_params_pack(buf, cmd_args->test_strlen, &send_args);
-    /* Send active message to remote endpoint */
-    return uct_ep_am_short(ep, id, send_args.header, send_args.payload,
-                           send_args.len);
+
+    do {
+        /* Send active message to remote endpoint */
+        status = uct_ep_am_short(ep, id, send_args.header, send_args.payload,
+                                 send_args.len);
+        uct_worker_progress(if_info->worker);
+    } while (status == UCS_ERR_NO_RESOURCE);
+
+    return status;
 }
 
 /* Pack callback for am_bcopy */
@@ -601,7 +609,7 @@ int main(int argc, char **argv)
 
         /* Send active message to remote endpoint */
         if (cmd_args.func_am_type == FUNC_AM_SHORT) {
-            status = do_am_short(ep, id, &cmd_args, str);
+            status = do_am_short(&if_info, ep, id, &cmd_args, str);
         } else if (cmd_args.func_am_type == FUNC_AM_BCOPY) {
             status = do_am_bcopy(&if_info, ep, id, &cmd_args, str);
         } else if (cmd_args.func_am_type == FUNC_AM_ZCOPY) {
