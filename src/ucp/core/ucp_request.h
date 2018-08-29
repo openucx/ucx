@@ -91,6 +91,9 @@ struct ucp_request {
     uint16_t                      flags;   /* Request flags */
 
     union {
+
+        /* "send" part - used for tag_send, stream_send,  put, get, and atomic
+         * operations */
         struct {
             ucp_ep_h              ep;
             void                  *buffer;  /* Send buffer */
@@ -197,6 +200,7 @@ struct ucp_request {
             ucp_mem_desc_t        *mdesc;
         } send;
 
+        /* "receive" part - used for tag_recv and stream_recv operations */
         struct {
             ucs_queue_elem_t      queue;    /* Expected queue element */
             void                  *buffer;  /* Buffer to receive data to */
