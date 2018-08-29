@@ -102,7 +102,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
 {
     req->flags                = flags; /* Implicit release */
     req->send.ep              = ep;
-    req->send.buffer          = buffer;
+    req->send.buffer          = (void*)buffer;
     req->send.datatype        = ucp_dt_make_contig(1);
     req->send.mem_type        = UCT_MD_MEM_TYPE_HOST;
     req->send.length          = length;
@@ -199,7 +199,7 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
-    status = ucp_rma_nonblocking(ep, (void*)buffer, length, remote_addr, rkey,
+    status = ucp_rma_nonblocking(ep, buffer, length, remote_addr, rkey,
                                  rkey->cache.rma_proto->progress_put,
                                  rma_config->put_zcopy_thresh);
 out_unlock:
@@ -238,7 +238,7 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
-    ptr_status = ucp_rma_nonblocking_cb(ep, (void*)buffer, length, remote_addr, rkey,
+    ptr_status = ucp_rma_nonblocking_cb(ep, buffer, length, remote_addr, rkey,
                                         rkey->cache.rma_proto->progress_put,
                                         rma_config->put_zcopy_thresh, cb);
 out_unlock:

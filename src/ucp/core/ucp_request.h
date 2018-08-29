@@ -91,9 +91,12 @@ struct ucp_request {
     uint16_t                      flags;   /* Request flags */
 
     union {
+
+        /* "send" part - used for tag_send, stream_send,  put, get, and atomic
+         * operations */
         struct {
             ucp_ep_h              ep;
-            const void            *buffer;  /* Send buffer */
+            void                  *buffer;  /* Send buffer */
             ucp_datatype_t        datatype; /* Send type */
             size_t                length;   /* Total length, in bytes */
             uct_memory_type_t     mem_type; /* Memory type */
@@ -197,6 +200,7 @@ struct ucp_request {
             ucp_mem_desc_t        *mdesc;
         } send;
 
+        /* "receive" part - used for tag_recv and stream_recv operations */
         struct {
             ucs_queue_elem_t      queue;    /* Expected queue element */
             void                  *buffer;  /* Buffer to receive data to */

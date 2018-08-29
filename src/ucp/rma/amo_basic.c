@@ -55,7 +55,7 @@ static ucs_status_t ucp_amo_basic_progress_fetch(uct_pending_req_t *self)
     ucp_rkey_h rkey       = req->send.amo.rkey;
     ucp_ep_t *ep          = req->send.ep;
     uint64_t value        = req->send.amo.value;
-    uint64_t *result      = (void*)req->send.buffer;
+    uint64_t *result      = req->send.buffer;
     uint64_t remote_addr  = req->send.amo.remote_addr;
     uct_atomic_op_t op    = req->send.amo.uct_op;
     ucs_status_t status;
