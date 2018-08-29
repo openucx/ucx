@@ -27,6 +27,7 @@
 #include <getopt.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/poll.h>
 #include <locale.h>
 #if HAVE_MPI
 #  include <mpi.h>
@@ -152,36 +153,53 @@ test_type_t tests[] = {
      {NULL}
 };
 
-static int safe_send(int sock, void *data, size_t size)
+static int sock_io(int sock, ssize_t (*sock_call)(int, void *, size_t, int),
+                   int poll_events, void *data, size_t size,
+                   void (*progress)(void *arg), void *arg, const char *name)
 {
     size_t total = 0;
+    struct pollfd pfd;
     int ret;
 
     while (total < size) {
-        ret = send(sock, (char*)data + total, size - total, 0);
-        if (ret < 0) {
-            ucs_error("send() failed: %m");
+        pfd.fd      = sock;
+        pfd.events  = poll_events;
+        pfd.revents = 0;
+
+        ret = poll(&pfd, 1, 1); /* poll for 1ms */
+        if (ret > 0) {
+            ucs_assert(ret == 1);
+            ucs_assert(pfd.revents & poll_events);
+
+            ret = sock_call(sock, (char*)data + total, size - total, 0);
+            if (ret < 0) {
+                ucs_error("%s() failed: %m", name);
+                return -1;
+            }
+            total += ret;
+        } else if ((ret < 0) && (errno != EINTR)) {
+            ucs_error("poll(fd=%d) failed: %m", sock);
             return -1;
         }
-        total += ret;
+
+        /* progress user context */
+        if (progress != NULL) {
+            progress(arg);
+        }
     }
     return 0;
 }
 
-static int safe_recv(int sock, void *data, size_t size)
+static int safe_send(int sock, void *data, size_t size,
+                     void (*progress)(void *arg), void *arg)
 {
-    size_t total = 0;
-    int ret;
+    return sock_io(sock, (void*)send, POLLOUT, data, size, progress, arg, "send");
+}
 
-    while (total < size) {
-        ret = recv(sock, (char*)data + total, size - total, 0);
-        if (ret < 0) {
-            ucs_error("recv() failed: %m");
-            return -1;
-        }
-        total += ret;
-    }
-    return 0;
+static int safe_recv(int sock, void *data, size_t size,
+                     void (*progress)(void *arg), void *arg)
+{
+    return sock_io(sock, recv, POLLIN, data, size, progress, arg, "recv");
 }
 
 static void print_progress(char **test_names, unsigned num_names,
@@ -756,7 +774,8 @@ static unsigned sock_rte_group_index(void *rte_group)
     return group->is_server ? 0 : 1;
 }
 
-static void sock_rte_barrier(void *rte_group)
+static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
+                             void *arg)
 {
 #pragma omp master
   {
@@ -765,10 +784,10 @@ static void sock_rte_barrier(void *rte_group)
     unsigned sync;
 
     sync = magic;
-    safe_send(group->connfd, &sync, sizeof(unsigned));
+    safe_send(group->connfd, &sync, sizeof(unsigned), progress, arg);
 
     sync = 0;
-    safe_recv(group->connfd, &sync, sizeof(unsigned));
+    safe_recv(group->connfd, &sync, sizeof(unsigned), progress, arg);
 
     ucs_assert(sync == magic);
   }
@@ -787,9 +806,10 @@ static void sock_rte_post_vec(void *rte_group, const struct iovec *iovec,
         size += iovec[i].iov_len;
     }
 
-    safe_send(group->connfd, &size, sizeof(size));
+    safe_send(group->connfd, &size, sizeof(size), NULL, NULL);
     for (i = 0; i < iovcnt; ++i) {
-        safe_send(group->connfd, iovec[i].iov_base, iovec[i].iov_len);
+        safe_send(group->connfd, iovec[i].iov_base, iovec[i].iov_len, NULL,
+                  NULL);
     }
 }
 
@@ -806,9 +826,9 @@ static void sock_rte_recv(void *rte_group, unsigned src, void *buffer,
     }
 
     ucs_assert_always(src == (1 - group_index));
-    safe_recv(group->connfd, &size, sizeof(size));
+    safe_recv(group->connfd, &size, sizeof(size), NULL, NULL);
     ucs_assert_always(size <= max);
-    safe_recv(group->connfd, buffer, size);
+    safe_recv(group->connfd, buffer, size, NULL, NULL);
 }
 
 static void sock_rte_report(void *rte_group, const ucx_perf_result_t *result,
@@ -883,7 +903,7 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
         }
 
         close(sockfd);
-        safe_recv(connfd, &ctx->params, sizeof(ctx->params));
+        safe_recv(connfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
         if (ctx->params.msg_size_cnt) {
             ctx->params.msg_size_list = malloc(sizeof(*ctx->params.msg_size_list) *
                                                ctx->params.msg_size_cnt);
@@ -892,7 +912,8 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
                 goto err_close_connfd;
             }
             safe_recv(connfd, ctx->params.msg_size_list,
-                      sizeof(*ctx->params.msg_size_list) * ctx->params.msg_size_cnt);
+                      sizeof(*ctx->params.msg_size_list) * ctx->params.msg_size_cnt,
+                      NULL, NULL);
         }
 
         ctx->sock_rte_group.connfd    = connfd;
@@ -919,10 +940,11 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
             goto err_close_sockfd;
         }
 
-        safe_send(sockfd, &ctx->params, sizeof(ctx->params));
+        safe_send(sockfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
         if (ctx->params.msg_size_cnt) {
             safe_send(sockfd, ctx->params.msg_size_list,
-                      sizeof(*ctx->params.msg_size_list) * ctx->params.msg_size_cnt);
+                      sizeof(*ctx->params.msg_size_list) * ctx->params.msg_size_cnt,
+                      NULL, NULL);
         }
 
         ctx->sock_rte_group.connfd    = sockfd;
@@ -970,10 +992,67 @@ static unsigned mpi_rte_group_index(void *rte_group)
     return rank;
 }
 
-static void mpi_rte_barrier(void *rte_group)
+static void mpi_rte_barrier(void *rte_group, void (*progress)(void *arg),
+                            void *arg)
 {
+    int group_size, my_rank, i;
+    MPI_Request *reqs;
+    int nreqs = 0;
+    int dummy;
+    int flag;
+
 #pragma omp master
-    MPI_Barrier(MPI_COMM_WORLD);
+
+    /*
+     * Naive non-blocking barrier implementation over send/recv, to call user
+     * progress while waiting for completion.
+     * Not using MPI_Ibarrier to be compatible with MPI-1.
+     */
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &group_size);
+
+    /* allocate maximal possible number of requests */
+    reqs = (MPI_Request*)alloca(sizeof(*reqs) * group_size);
+
+    if (my_rank == 0) {
+        /* root gathers "ping" from all other ranks */
+        for (i = 1; i < group_size; ++i) {
+            MPI_Irecv(&dummy, 0, MPI_INT,
+                      i /* source */,
+                      1 /* tag */,
+                      MPI_COMM_WORLD,
+                      &reqs[nreqs++]);
+        }
+    } else {
+        /* every non-root rank sends "ping" and waits for "pong" */
+        MPI_Send(&dummy, 0, MPI_INT,
+                 0 /* dest */,
+                 1 /* tag */,
+                 MPI_COMM_WORLD);
+        MPI_Irecv(&dummy, 0, MPI_INT,
+                  0 /* source */,
+                  2 /* tag */,
+                  MPI_COMM_WORLD,
+                  &reqs[nreqs++]);
+    }
+
+    /* Waiting for receive requests */
+    do {
+        MPI_Testall(nreqs, reqs, &flag, MPI_STATUSES_IGNORE);
+        progress(arg);
+    } while (!flag);
+
+    if (my_rank == 0) {
+        /* root sends "pong" to all ranks */
+        for (i = 1; i < group_size; ++i) {
+            MPI_Send(&dummy, 0, MPI_INT,
+                     i /* dest */,
+                     2 /* tag */,
+                     MPI_COMM_WORLD);
+       }
+    }
+
 #pragma omp barrier
 }
 
@@ -1055,7 +1134,8 @@ static unsigned ext_rte_group_index(void *rte_group)
     return rte_group_rank(group);
 }
 
-static void ext_rte_barrier(void *rte_group)
+static void ext_rte_barrier(void *rte_group, void (*progress)(void *arg),
+                            void *arg)
 {
 #pragma omp master
   {

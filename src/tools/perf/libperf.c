@@ -737,7 +737,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     uct_perf_iface_flush_b(perf);
 
     free(buffer);
-    rte_call(perf, barrier);
+    uct_perf_barrier(perf);
     return UCS_OK;
 
 err_destroy_eps:
@@ -760,7 +760,7 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 {
     unsigned group_size, group_index, i;
 
-    rte_call(perf, barrier);
+    uct_perf_barrier(perf);
 
     uct_iface_set_am_handler(perf->uct.iface, UCT_PERF_TEST_AM_ID, NULL, NULL, UCT_CB_FLAG_SYNC);
 
@@ -1192,7 +1192,7 @@ static void ucp_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 {
     unsigned group_size;
 
-    rte_call(perf, barrier);
+    ucp_perf_barrier(perf);
 
     group_size  = rte_call(perf, group_size);
 
@@ -1261,6 +1261,18 @@ out_release_md_resources:
     uct_release_md_resource_list(md_resources);
 out:
     return status;
+}
+
+void uct_perf_barrier(ucx_perf_context_t *perf)
+{
+    rte_call(perf, barrier, (void(*)(void*))uct_worker_progress,
+             (void*)perf->uct.worker);
+}
+
+void ucp_perf_barrier(ucx_perf_context_t *perf)
+{
+    rte_call(perf, barrier, (void(*)(void*))ucp_worker_progress,
+             (void*)perf->ucp.worker);
 }
 
 static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *params)
@@ -1418,7 +1430,7 @@ err:
 static void ucp_perf_cleanup(ucx_perf_context_t *perf)
 {
     ucp_perf_test_cleanup_endpoints(perf);
-    rte_call(perf, barrier);
+    ucp_perf_barrier(perf);
     ucp_perf_test_free_mem(perf);
     ucp_worker_destroy(perf->ucp.worker);
     ucp_cleanup(perf->ucp.context);
@@ -1428,9 +1440,12 @@ static struct {
     ucs_status_t (*setup)(ucx_perf_context_t *perf, ucx_perf_params_t *params);
     void         (*cleanup)(ucx_perf_context_t *perf);
     ucs_status_t (*run)(ucx_perf_context_t *perf);
+    void         (*barrier)(ucx_perf_context_t *perf);
 } ucx_perf_funcs[] = {
-    [UCX_PERF_API_UCT] = {uct_perf_setup, uct_perf_cleanup, uct_perf_test_dispatch},
-    [UCX_PERF_API_UCP] = {ucp_perf_setup, ucp_perf_cleanup, ucp_perf_test_dispatch}
+    [UCX_PERF_API_UCT] = {uct_perf_setup, uct_perf_cleanup,
+                          uct_perf_test_dispatch, uct_perf_barrier},
+    [UCX_PERF_API_UCP] = {ucp_perf_setup, ucp_perf_cleanup,
+                          ucp_perf_test_dispatch, ucp_perf_barrier}
 };
 
 static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
@@ -1509,13 +1524,13 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
                 goto out_cleanup;
             }
 
-            rte_call(perf, barrier);
+            ucx_perf_funcs[params->api].barrier(perf);
             ucx_perf_test_reset(perf, params);
         }
 
         /* Run test */
         status = ucx_perf_funcs[params->api].run(perf);
-        rte_call(perf, barrier);
+        ucx_perf_funcs[params->api].barrier(perf);
         if (status == UCS_OK) {
             ucx_perf_calc_result(perf, result);
             rte_call(perf, report, result, perf->params.report_arg, 1);
@@ -1559,7 +1574,7 @@ static void* ucx_perf_thread_run_test(void* arg)
     if (params->warmup_iter > 0) {
         ucx_perf_set_warmup(perf, params);
         statuses[tid] = ucx_perf_funcs[params->api].run(perf);
-        rte_call(perf, barrier);
+        ucx_perf_funcs[params->api].barrier(perf);
         for (i = 0; i < tctx->ntid; i++) {
             if (UCS_OK != statuses[i]) {
                 goto out;
@@ -1572,7 +1587,7 @@ static void* ucx_perf_thread_run_test(void* arg)
     /* Run test */
 #pragma omp barrier
     statuses[tid] = ucx_perf_funcs[params->api].run(perf);
-    rte_call(perf, barrier);
+    ucx_perf_funcs[params->api].barrier(perf);
     for (i = 0; i < tctx->ntid; i++) {
         if (UCS_OK != statuses[i]) {
             goto out;

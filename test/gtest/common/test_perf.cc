@@ -28,7 +28,8 @@ void test_perf::rte_comm::push(const void *data, size_t size) {
     pthread_mutex_unlock(&m_mutex);
 }
 
-void test_perf::rte_comm::pop(void *data, size_t size) {
+void test_perf::rte_comm::pop(void *data, size_t size,
+                              void (*progress)(void *arg), void *arg) {
     bool done = false;
     do {
         pthread_mutex_lock(&m_mutex);
@@ -38,6 +39,9 @@ void test_perf::rte_comm::pop(void *data, size_t size) {
             done = true;
         }
         pthread_mutex_unlock(&m_mutex);
+        if (!done) {
+            progress(arg);
+        }
     } while (!done);
 }
 
@@ -59,13 +63,14 @@ unsigned test_perf::rte::group_index(void *rte_group) {
     return self->index();
 }
 
-void test_perf::rte::barrier(void *rte_group) {
+void test_perf::rte::barrier(void *rte_group, void (*progress)(void *arg),
+                             void *arg) {
     static const uint32_t magic = 0xdeadbeed;
     rte *self = reinterpret_cast<rte*>(rte_group);
     uint32_t dummy = magic;
     self->m_send.push(&dummy, sizeof(dummy));
     dummy = 0;
-    self->m_recv.pop(&dummy, sizeof(dummy));
+    self->m_recv.pop(&dummy, sizeof(dummy), progress, arg);
     ucs_assert_always(dummy == magic);
 }
 
@@ -97,9 +102,9 @@ void test_perf::rte::recv(void *rte_group, unsigned src, void *buffer,
         return;
     }
 
-    self->m_recv.pop(&size, sizeof(size));
+    self->m_recv.pop(&size, sizeof(size), (void(*)(void*))ucs_empty_function, NULL);
     ucs_assert_always(size <= max);
-    self->m_recv.pop(buffer, size);
+    self->m_recv.pop(buffer, size, (void(*)(void*))ucs_empty_function, NULL);
 }
 
 void test_perf::rte::exchange_vec(void *rte_group, void * req)

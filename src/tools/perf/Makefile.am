@@ -56,16 +56,19 @@ libucxperf_la_LIBADD = \
 #libucxperf_la_LINK = $(CXX)
 
 ucx_perftest_SOURCES  = perftest.c
-ucx_perftest_LDFLAGS    = \
-     $(RTE_LDFLAGS) \
-     $(OPENMP_CFLAGS)
-ucx_perftest_CFLAGS   = \
-     $(OPENMP_CFLAGS)
-ucx_perftest_LDADD    = \
-     $(abs_top_builddir)/src/uct/libuct.la \
-     $(abs_top_builddir)/src/ucp/libucp.la \
-     $(abs_top_builddir)/src/ucs/libucs.la \
-     libucxperf.la
+ucx_perftest_LDFLAGS = \
+	$(RTE_LDFLAGS) \
+	$(OPENMP_CFLAGS)
+ucx_perftest_CPPFLAGS = \
+	$(BASE_CPPFLAGS)
+ucx_perftest_CFLAGS = \
+	$(BASE_CFLAGS) \
+	$(OPENMP_CFLAGS)
+ucx_perftest_LDADD = \
+	$(abs_top_builddir)/src/uct/libuct.la \
+	$(abs_top_builddir)/src/ucp/libucp.la \
+	$(abs_top_builddir)/src/ucs/libucs.la \
+	libucxperf.la
 ucx_perftest_SOURCE_FILES = \
 	$(patsubst %, $(srcdir)/%, $(ucx_perftest_SOURCES))
 

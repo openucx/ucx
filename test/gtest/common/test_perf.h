@@ -45,7 +45,7 @@ private:
 
         void push(const void *data, size_t size);
 
-        void pop(void *data, size_t size);
+        void pop(void *data, size_t size, void (*progress)(void *arg), void *arg);
 
     private:
         pthread_mutex_t  m_mutex;
@@ -63,7 +63,8 @@ private:
 
         static unsigned group_index(void *rte_group);
 
-        static void barrier(void *rte_group);
+        static void barrier(void *rte_group, void (*progress)(void *arg),
+                            void *arg);
 
         static void post_vec(void *rte_group, const struct iovec *iovec,
                              int iovcnt, void **req);

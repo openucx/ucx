@@ -312,7 +312,7 @@ public:
         uct_perf_test_prepare_iov_buffer();
 
         *recv_sn  = -1;
-        rte_call(&m_perf, barrier);
+        uct_perf_barrier(&m_perf);
 
         my_index = rte_call(&m_perf, group_index);
 
@@ -376,7 +376,7 @@ public:
                                             (psn_t*)m_perf.send_buffer;
         my_index = rte_call(&m_perf, group_index);
 
-        rte_call(&m_perf, barrier);
+        uct_perf_barrier(&m_perf);
 
         ucx_perf_test_start_clock(&m_perf);
 
