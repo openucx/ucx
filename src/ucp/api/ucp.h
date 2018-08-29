@@ -262,12 +262,14 @@ enum ucp_ep_close_mode {
                                               ucp_stream_worker_poll is called
                                               on the remote worker. This event
                                               puts the remote endpoint into an
-                                              error state. The UCP should be
+                                              error state, all following @ref
+                                              ucp_stream_send_nb calls on the
+                                              remote endpoint will return @ref
+                                              UCS_ERR_REMOTE_DISCONNECT error
+                                              code. The UCP should be
                                               initialized with @ref
                                               UCP_FEATURE_STREAM, otherwise
-                                              calling of @ref
-                                              ucp_stream_worker_poll routine is
-                                              invalid. */
+                                              using of stream API is invalid. */
 };
 
 
