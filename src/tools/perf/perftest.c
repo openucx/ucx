@@ -165,6 +165,7 @@ static int sock_io(int sock, ssize_t (*sock_call)(int, void *, size_t, int),
         pfd.fd      = sock;
         pfd.events  = poll_events;
         pfd.revents = 0;
+
         ret = poll(&pfd, 1, 1); /* poll for 1ms */
         if (ret > 0) {
             ucs_assert(ret == 1);
@@ -1003,8 +1004,9 @@ static void mpi_rte_barrier(void *rte_group, void (*progress)(void *arg),
 #pragma omp master
 
     /*
-     * Naive barrier implementation over send/recv, to call user progress
-     * while waiting for barrier to complete.
+     * Naive non-blocking barrier implementation over send/recv, to call user
+     * progress while waiting for completion.
+     * Not using MPI_Ibarrier to be compatible with MPI-1.
      */
 
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
