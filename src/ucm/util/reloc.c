@@ -29,6 +29,7 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <link.h>
+#include <malloc.h>
 
 
 typedef struct ucm_auxv {
@@ -155,6 +156,8 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     void *page;
     int ret;
     int i;
+    Dl_info def_info, entry_info;
+    int success;
 
     page_size = sysconf(_SC_PAGESIZE);
     if (page_size < 0) {
@@ -180,6 +183,10 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     strtab   = (void*)ucm_reloc_get_entry(base, dphdr, DT_STRTAB);
     pltrelsz = ucm_reloc_get_entry(base, dphdr, DT_PLTRELSZ);
 
+    /* Find default shared object, usually libc */
+    success = dladdr(malloc_trim, &def_info);
+    ucs_assertv_always(success, "can't find malloc_trim symbol");
+
     /* Find matching symbol and replace it */
     for (reloc = jmprel; (void*)reloc < jmprel + pltrelsz; ++reloc) {
         elf_sym = (char*)strtab + symtab[ELF64_R_SYM(reloc->r_info)].st_name;
@@ -195,7 +202,16 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
                 ucm_error("failed to modify GOT page %p to rw: %m", page);
                 return UCS_ERR_UNSUPPORTED;
             }
-            patch->prev_value = *entry;
+            success = dladdr(*entry, &entry_info);
+            ucs_assertv_always(success, "can't find symbol by address %p",
+                               *entry);
+
+            /* store default entry to prev_value to guarantee valid pointers
+             * throughout life time of the process */
+            if (def_info.dli_fbase == entry_info.dli_fbase) {
+                patch->prev_value = *entry;
+            }
+
             *entry = patch->value;
             break;
         }
