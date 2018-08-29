@@ -98,14 +98,22 @@ void am_short_params_pack(char *buf, size_t len, am_short_args_t *args)
     }
 }
 
-ucs_status_t do_am_short(uct_ep_h ep, uint8_t id, const cmd_args_t *cmd_args,
-                         char *buf)
+ucs_status_t do_am_short(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
+                         const cmd_args_t *cmd_args, char *buf)
 {
+    ucs_status_t    status;
     am_short_args_t send_args;
+
     am_short_params_pack(buf, cmd_args->test_strlen, &send_args);
-    /* Send active message to remote endpoint */
-    return uct_ep_am_short(ep, id, send_args.header, send_args.payload,
-                           send_args.len);
+
+    do {
+        /* Send active message to remote endpoint */
+        status = uct_ep_am_short(ep, id, send_args.header, send_args.payload,
+                                 send_args.len);
+        uct_worker_progress(if_info->worker);
+    } while (status == UCS_ERR_NO_RESOURCE);
+
+    return status;
 }
 
 /* Pack callback for am_bcopy */
@@ -116,8 +124,8 @@ size_t am_bcopy_data_pack_cb(void *dest, void *arg)
     return bc_args->len;
 }
 
-ucs_status_t do_am_bcopy(uct_ep_h ep, uint8_t id, const cmd_args_t *cmd_args,
-                         char *buf)
+ucs_status_t do_am_bcopy(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
+                         const cmd_args_t *cmd_args, char *buf)
 {
     am_bcopy_args_t args;
     ssize_t len;
@@ -126,7 +134,10 @@ ucs_status_t do_am_bcopy(uct_ep_h ep, uint8_t id, const cmd_args_t *cmd_args,
     args.len  = cmd_args->test_strlen;
 
     /* Send active message to remote endpoint */
-    len = uct_ep_am_bcopy(ep, id, am_bcopy_data_pack_cb, &args, 0);
+    do {
+        len = uct_ep_am_bcopy(ep, id, am_bcopy_data_pack_cb, &args, 0);
+        uct_worker_progress(if_info->worker);
+    } while (len == UCS_ERR_NO_RESOURCE);
     /* Negative len is an error code */
     return (len >= 0) ? UCS_OK : len;
 }
@@ -148,7 +159,7 @@ ucs_status_t do_am_zcopy(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
     zcopy_comp_t comp;
 
     ucs_status_t status = uct_md_mem_reg(if_info->pd, buf, cmd_args->test_strlen,
-                                         0, &memh);
+                                         UCT_MD_MEM_ACCESS_RMA, &memh);
     iov.buffer          = buf;
     iov.length          = cmd_args->test_strlen;
     iov.memh            = memh;
@@ -161,8 +172,12 @@ ucs_status_t do_am_zcopy(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
     comp.memh           = memh;
 
     if (status == UCS_OK) {
-        status = uct_ep_am_zcopy(ep, id, NULL, 0, &iov, 1, 0,
-                                 (uct_completion_t *)&comp);
+        do {
+            status = uct_ep_am_zcopy(ep, id, NULL, 0, &iov, 1, 0,
+                                     (uct_completion_t *)&comp);
+            uct_worker_progress(if_info->worker);
+        } while (status == UCS_ERR_NO_RESOURCE);
+
         if (status == UCS_INPROGRESS) {
             while (!desc_holder) {
                 /* Explicitly progress outstanding active message request */
@@ -594,9 +609,9 @@ int main(int argc, char **argv)
 
         /* Send active message to remote endpoint */
         if (cmd_args.func_am_type == FUNC_AM_SHORT) {
-            status = do_am_short(ep, id, &cmd_args, str);
+            status = do_am_short(&if_info, ep, id, &cmd_args, str);
         } else if (cmd_args.func_am_type == FUNC_AM_BCOPY) {
-            status = do_am_bcopy(ep, id, &cmd_args, str);
+            status = do_am_bcopy(&if_info, ep, id, &cmd_args, str);
         } else if (cmd_args.func_am_type == FUNC_AM_ZCOPY) {
             status = do_am_zcopy(&if_info, ep, id, &cmd_args, str);
         }
