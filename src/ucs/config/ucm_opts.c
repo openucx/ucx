@@ -55,9 +55,9 @@ static ucs_config_field_t ucm_global_config_table[] = {
    ucs_offsetof(ucm_global_config_t, enable_dynamic_mmap_thresh),
    UCS_CONFIG_TYPE_BOOL},
 
-  {"HOOK_ORIGIN_SYSCALL", "no",
-   "Use direct syscall to call origin hooked routine of memory mapping API",
-   ucs_offsetof(ucm_global_config_t, hook_origin_syscall),
+  {"ENABLE_SYSCALL", "no",
+   "Use syscalls when possible to implement the functionality of replaced libc routines",
+   ucs_offsetof(ucm_global_config_t, enable_syscall),
    UCS_CONFIG_TYPE_BOOL},
 
   {NULL}

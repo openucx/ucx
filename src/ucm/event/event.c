@@ -398,9 +398,8 @@ void *ucm_sbrk(intptr_t increment)
 
 int ucm_brk(void *addr)
 {
-    void *old_addr      = ucm_orig_sbrk(0);
+    void *old_addr     = ucm_orig_sbrk(0);
     intptr_t increment = (intptr_t)addr - (intptr_t)old_addr;
-
     ucm_event_t event;
 
     ucm_event_enter();
@@ -411,7 +410,7 @@ int ucm_brk(void *addr)
         ucm_dispatch_vm_munmap(old_addr, -increment);
     }
 
-    event.sbrk.result    = MAP_FAILED;
+    event.sbrk.result    = (void*)-1;
     event.sbrk.increment = increment;
     ucm_event_dispatch(UCM_EVENT_SBRK, &event);
 

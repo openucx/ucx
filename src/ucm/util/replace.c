@@ -150,7 +150,9 @@ int ucm_orig_brk(void *addr)
         return 0;
     }
 }
+
 #else
+
 static int ucm_override_brk(void *addr)
 {
     return -1;
