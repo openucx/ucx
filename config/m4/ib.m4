@@ -227,7 +227,8 @@ AS_IF([test "x$with_ib" == xyes],
 
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_LINK_LAYER_ETHERNET,
-                       IBV_EVENT_GID_CHANGE],
+                       IBV_EVENT_GID_CHANGE,
+                       ibv_create_qp_ex],
                       [], [], [[#include <infiniband/verbs.h>]])
 
        AC_CHECK_DECLS([IBV_EXP_ACCESS_ALLOCATE_MR,

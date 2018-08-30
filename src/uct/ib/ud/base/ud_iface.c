@@ -250,21 +250,13 @@ static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
 static ucs_status_t
 uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config)
 {
-    /* TODO: exp attrs autoconf */
-    struct ibv_exp_qp_init_attr qp_init_attr;
+    uct_ib_qp_attr_t qp_init_attr      = {};
     struct ibv_qp_attr qp_attr;
+    static ucs_status_t status;
     int ret;
 
-    /* Create QP */
-    memset(&qp_init_attr, 0, sizeof(qp_init_attr));
-    qp_init_attr.qp_context          = NULL;
-    qp_init_attr.send_cq             = self->super.cq[UCT_IB_DIR_TX];
-    qp_init_attr.recv_cq             = self->super.cq[UCT_IB_DIR_RX];
-    qp_init_attr.srq                 = NULL; /* TODO */
     qp_init_attr.qp_type             = IBV_QPT_UD;
     qp_init_attr.sq_sig_all          = 0;
-
-    /* TODO: cap setting */
     qp_init_attr.cap.max_send_wr     = config->super.tx.queue_len;
     qp_init_attr.cap.max_recv_wr     = config->super.rx.queue_len;
     qp_init_attr.cap.max_send_sge    = 2;
@@ -272,35 +264,9 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     qp_init_attr.cap.max_inline_data = ucs_max(config->super.tx.min_inline,
                                                UCT_UD_MIN_INLINE);
 
-#if HAVE_VERBS_EXP_H
-    qp_init_attr.pd                  = uct_ib_iface_qp_pd(&self->super);
-    qp_init_attr.comp_mask           = IBV_QP_INIT_ATTR_PD;
-#if HAVE_IBV_EXP_RES_DOMAIN
-    if (self->super.res_domain != NULL) {
-        qp_init_attr.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
-        qp_init_attr.res_domain      = self->super.res_domain->ibv_domain;
-    }
-    #endif
-
-    /* TODO: inline rcv */
-#if 0
-    if (mxm_ud_ep_opts(ep)->ud.ib.rx.max_inline > 0) {
-        qp_init_attr.comp_mask      |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
-        qp_init_attr.max_inl_recv    = mxm_ud_ep_opts(ep)->ud.ib.rx.max_inline;
-    }
-#endif
-    self->qp = ibv_exp_create_qp(uct_ib_iface_device(&self->super)->ibv_context,
-                                 &qp_init_attr);
-#else
-    self->qp = ibv_exp_create_qp(uct_ib_iface_qp_pd(&self->super), &qp_init_attr);
-#endif
-    if (self->qp == NULL) {
-        ucs_error("Failed to create qp: %s [inline: %u rsge: %u ssge: %u rwr: %u swr: %u]",
-                  strerror(errno),
-                  qp_init_attr.cap.max_inline_data, qp_init_attr.cap.max_recv_sge,
-                  qp_init_attr.cap.max_send_sge, qp_init_attr.cap.max_recv_wr,
-                  qp_init_attr.cap.max_send_wr);
-        goto err;
+    status = self->super.ops->create_qp(&self->super, &qp_init_attr, &self->qp);
+    if (status != UCS_OK) {
+        return status;
     }
 
     self->config.max_inline = qp_init_attr.cap.max_inline_data;
@@ -337,19 +303,9 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
         goto err_destroy_qp;
     }
 
-    ucs_debug("iface=%p: created qp 0x%x on %s:%d max_send_wr %u max_recv_wr %u "
-              "max_inline %u",
-              self, self->qp->qp_num,
-              uct_ib_device_name(uct_ib_iface_device(&self->super)),
-              self->super.config.port_num,
-              qp_init_attr.cap.max_send_wr,
-              qp_init_attr.cap.max_recv_wr,
-              qp_init_attr.cap.max_inline_data);
-
     return UCS_OK;
 err_destroy_qp:
     ibv_destroy_qp(self->qp);
-err:
     return UCS_ERR_INVALID_PARAM;
 }
 

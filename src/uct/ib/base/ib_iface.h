@@ -18,6 +18,7 @@
 
 #define UCT_IB_MAX_IOV                     8UL
 #define UCT_IB_IFACE_NULL_RES_DOMAIN_KEY   0u
+#define UCT_IB_MAX_ATOMIC_SIZE             sizeof(uint64_t)
 
 
 /* Forward declarations */
@@ -102,6 +103,22 @@ struct uct_ib_iface_config {
 };
 
 
+typedef struct uct_ib_qp_attr {
+    int                         qp_type;
+    struct ibv_qp_cap           cap;
+    struct ibv_srq              *srq;
+    unsigned                    sq_sig_all;
+    unsigned                    max_inl_recv;
+#if HAVE_DECL_IBV_EXP_CREATE_QP
+    struct ibv_exp_qp_init_attr ibv;
+#elif HAVE_DECL_IBV_CREATE_QP_EX
+    struct ibv_qp_init_attr_ex  ibv;
+#else
+    struct ibv_qp_init_attr     ibv;
+#endif
+} uct_ib_qp_attr_t;
+
+
 struct uct_ib_iface_ops {
     uct_iface_ops_t         super;
     ucs_status_t            (*arm_cq)(uct_ib_iface_t *iface,
@@ -113,6 +130,8 @@ struct uct_ib_iface_ops {
                                               ucs_status_t status);
     ucs_status_t            (*set_ep_failed)(uct_ib_iface_t *iface, uct_ep_h ep,
                                              ucs_status_t status);
+    ucs_status_t            (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
+                                         struct ibv_qp **qp_p);
 };
 
 
@@ -325,6 +344,13 @@ static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
 {
     return uct_ib_md_get_atomic_mr_id(ucs_derived_of(iface->super.md, uct_ib_md_t));
 }
+
+ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
+                                    uct_ib_qp_attr_t *attr,
+                                    struct ibv_qp **qp_p);
+
+void uct_ib_iface_fill_attr(uct_ib_iface_t *iface,
+                            uct_ib_qp_attr_t *attr);
 
 
 #define UCT_IB_IFACE_FMT \

@@ -142,7 +142,7 @@ ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
     /* Configuration */
     iface->config.short_desc_size = ucs_max(sizeof(uct_rc_hdr_t),
                                             config->max_am_hdr);
-    iface->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE,
+    iface->config.short_desc_size = ucs_max(UCT_IB_MAX_ATOMIC_SIZE,
                                             iface->config.short_desc_size);
 
     /* Create AM headers and Atomic mempool */

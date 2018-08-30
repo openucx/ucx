@@ -362,7 +362,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .arm_cq                   = uct_rc_mlx5_iface_arm_cq,
     .event_cq                 = uct_rc_mlx5_iface_event_cq,
     .handle_failure           = uct_rc_mlx5_iface_handle_failure,
-    .set_ep_failed            = uct_rc_mlx5_ep_set_failed
+    .set_ep_failed            = uct_rc_mlx5_ep_set_failed,
+    .create_qp                = uct_ib_iface_create_qp
     },
     .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_rc_iface_fc_handler
