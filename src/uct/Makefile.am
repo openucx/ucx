@@ -235,6 +235,9 @@ libuct_la_SOURCES += \
 endif
 
 if HAVE_ROCM
+libuct_la_CPPFLAGS += $(ROCM_CPPFLAGS)
+libuct_la_LDFLAGS +=  $(ROCM_LDFLAGS) $(ROCM_LIBS)
+
 noinst_HEADERS += \
     rocm/rocm_cma_md.h \
     rocm/rocm_cma_iface.h \
