@@ -194,6 +194,8 @@ static void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
     if (status == UCS_OK) {
         ucp_ep_flush_progress(req);
     } else {
+        /* force flush completion in case of error */
+        req->send.flush.sw_done        = 1;
         req->send.state.uct_comp.count = 0;
     }
 
