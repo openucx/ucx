@@ -14,6 +14,7 @@
 const static char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS]           = "dcs",
     [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
+    [UCT_DC_TX_POLICY_RAND]          = "rand",
     [UCT_DC_TX_POLICY_LAST]          = NULL
 };
 
@@ -40,7 +41,10 @@ ucs_config_field_t uct_dc_iface_config_table[] = {
      "dcs_quota  Same as \"dcs\" but in addition the DCI is scheduled for release\n"
      "           if it has sent more than quota, and there are endpoints waiting for a DCI.\n"
      "           The dci is released once it completes all outstanding operations.\n"
-     "           This policy ensures that there will be no starvation among endpoints.",
+     "           This policy ensures that there will be no starvation among endpoints.\n"
+     "\n"
+     "rand       Every endpoint is assigned with its own DCI, selected in the random order.\n"
+     "           Multiple endpoints may share the same DCI.",
      ucs_offsetof(uct_dc_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
 
