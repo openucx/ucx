@@ -57,7 +57,8 @@ enum {
     UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(21),/* DEBUG: Partial worker address was sent
                                                                to the remote peer when starting
                                                                connection establishment on this EP */
-    UCP_EP_FLAG_REMOTE_COMP_VALID      = UCS_BIT(22) /* DEBUG: remote_comp is valid */
+    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(22) /* DEBUG: flush_state is valid */
+
 };
 
 
@@ -275,11 +276,11 @@ typedef struct ucp_ep {
  * Status of protocol-level remote completions
  */
 typedef struct {
-    ucs_queue_head_t              flush_reqs;   /* Queue of flush requests which
+    ucs_queue_head_t              reqs;         /* Queue of flush requests which
                                                    are waiting for remote completion */
     uint32_t                      send_sn;      /* Sequence number of sent operations */
-    uint32_t                      comp_sn;      /* Sequence number of completions */
-} ucp_ep_remote_comp_t;
+    uint32_t                      cmpl_sn;      /* Sequence number of completions */
+} ucp_ep_flush_state_t;
 
 
 /*
@@ -300,7 +301,7 @@ typedef struct {
      */
     union {
         ucp_ep_match_t            ep_match;      /* Matching with remote endpoints */
-        ucp_ep_remote_comp_t      remote_comp;   /* Remove completion status */
+        ucp_ep_flush_state_t      flush_state;   /* Remove completion status */
     };
 } ucp_ep_ext_gen_t;
 

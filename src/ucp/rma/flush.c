@@ -29,7 +29,7 @@ static int ucp_ep_flush_is_completed(ucp_request_t *req)
 static void ucp_ep_flush_progress(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
-    ucp_ep_remote_comp_t *rcomp;
+    ucp_ep_flush_state_t *flush_state;
     ucp_lane_index_t lane;
     ucs_status_t status;
     uct_ep_h uct_ep;
@@ -92,16 +92,16 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
         /* we start the SW flush only after all lanes are flushed, so we are sure
          * all our requests were sent, to get the right "num_sent" counter
          */
-        rcomp = (ep->flags & UCP_EP_FLAG_REMOTE_COMP_VALID) ?
-                ucp_ep_remote_comp(ep) : NULL;
-        if ((rcomp == NULL) || (rcomp->send_sn == rcomp->comp_sn)) {
+        flush_state = (ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ?
+                      ucp_ep_flush_state(ep) : NULL;
+        if ((flush_state == NULL) || (flush_state->send_sn == flush_state->cmpl_sn)) {
             req->send.flush.sw_done = 1;
             ucs_trace_req("flush request %p remote completions done", req);
         } else {
-            req->send.flush.rcomp_sn = rcomp->send_sn;
-            ucs_queue_push(&rcomp->flush_reqs, &req->send.flush.queue);
+            req->send.flush.cmpl_sn = flush_state->send_sn;
+            ucs_queue_push(&flush_state->reqs, &req->send.flush.queue);
             ucs_trace_req("added flush request %p to ep remote completion queue"
-                          " with sn %d", req, req->send.flush.rcomp_sn);
+                          " with sn %d", req, req->send.flush.cmpl_sn);
         }
         req->send.flush.sw_started = 1;
     }

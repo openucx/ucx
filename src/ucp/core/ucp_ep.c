@@ -421,7 +421,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
             ucp_ep_destroy_internal(ep);
         }
 
-        ucp_ep_remote_comp_reset(ep);
+        ucp_ep_flush_state_reset(ep);
         ucp_stream_ep_activate(ep);
         goto out_free_address;
     }
@@ -444,7 +444,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     if ((remote_address.uuid == worker->uuid) &&
         !(flags & UCP_EP_PARAMS_FLAGS_NO_LOOPBACK)) {
         ucp_ep_update_dest_ep_ptr(ep, (uintptr_t)ep);
-        ucp_ep_remote_comp_reset(ep);
+        ucp_ep_flush_state_reset(ep);
     } else {
         ucp_ep_match_insert_exp(&worker->ep_match_ctx, remote_address.uuid, ep);
     }

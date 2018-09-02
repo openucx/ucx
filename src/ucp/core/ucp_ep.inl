@@ -132,11 +132,11 @@ static UCS_F_ALWAYS_INLINE ucp_ep_h ucp_ep_from_ext_proto(ucp_ep_ext_proto_t *ep
     return (ucp_ep_h)ucs_strided_elem_get(ep_ext, 2, 0);
 }
 
-static UCS_F_ALWAYS_INLINE ucp_ep_remote_comp_t* ucp_ep_remote_comp(ucp_ep_h ep)
+static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
 {
-    ucs_assert(ep->flags & UCP_EP_FLAG_REMOTE_COMP_VALID);
+    ucs_assert(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
     ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
-    return &ucp_ep_ext_gen(ep)->remote_comp;
+    return &ucp_ep_ext_gen(ep)->flush_state;
 }
 
 static UCS_F_ALWAYS_INLINE uintptr_t ucp_ep_dest_ep_ptr(ucp_ep_h ep)
@@ -186,18 +186,20 @@ static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
 #endif
 }
 
-static inline void ucp_ep_remote_comp_reset(ucp_ep_h ep)
+static inline void ucp_ep_flush_state_reset(ucp_ep_h ep)
 {
+    ucp_ep_flush_state_t *flush_state = &ucp_ep_ext_gen(ep)->flush_state;
+
     ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
-    if (!(ep->flags & UCP_EP_FLAG_REMOTE_COMP_VALID)) {
-        ucp_ep_ext_gen(ep)->remote_comp.send_sn = 0;
-        ucp_ep_ext_gen(ep)->remote_comp.comp_sn = 0;
-        ucs_queue_head_init(&ucp_ep_ext_gen(ep)->remote_comp.flush_reqs);
-        ep->flags |= UCP_EP_FLAG_REMOTE_COMP_VALID;
+    if (!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID)) {
+        flush_state->send_sn = 0;
+        flush_state->cmpl_sn = 0;
+        ucs_queue_head_init(&flush_state->reqs);
+        ep->flags |= UCP_EP_FLAG_FLUSH_STATE_VALID;
     } else {
-        ucs_assert(ucp_ep_ext_gen(ep)->remote_comp.send_sn == 0);
-        ucs_assert(ucp_ep_ext_gen(ep)->remote_comp.comp_sn == 0);
-        ucs_assert(ucs_queue_is_empty(&ucp_ep_ext_gen(ep)->remote_comp.flush_reqs));
+        ucs_assert(flush_state->send_sn == 0);
+        ucs_assert(flush_state->cmpl_sn == 0);
+        ucs_assert(ucs_queue_is_empty(&flush_state->reqs));
     }
 }
 

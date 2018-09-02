@@ -161,7 +161,7 @@ struct ucp_request {
                     ucs_queue_elem_t       queue;     /* Queue element in proto_status */
                     unsigned               uct_flags; /* Flags to pass to @ref uct_ep_flush */
                     uct_worker_cb_id_t     prog_id;   /* Progress callback ID */
-                    uint32_t               rcomp_sn;  /* Sequence number of the remote completion
+                    uint32_t               cmpl_sn;   /* Sequence number of the remote completion
                                                          this request is waiting for */
                     uint8_t                sw_started;
                     uint8_t                sw_done;
