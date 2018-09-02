@@ -762,10 +762,10 @@ UCS_TEST_F(malloc_hook, bistro_patch) {
     /* set hook to mmap call */
     status = ucm_bistro_patch(symbol, (void*)bistro_munmap_hook, &rp);
     ASSERT_UCS_OK(status);
-    EXPECT_NE((uintptr_t)rp, NULL);
+    EXPECT_NE((intptr_t)rp, NULL);
 
     munmap_f = (munmap_f_t*)ucm_bistro_restore_addr(rp);
-    EXPECT_NE((uintptr_t)munmap_f, NULL);
+    EXPECT_NE((intptr_t)munmap_f, NULL);
 
     /* save partial body of patched function */
     patched = *(uint64_t*)munmap_f;
