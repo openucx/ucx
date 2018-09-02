@@ -39,6 +39,7 @@ typedef struct ucm_auxv {
 
 
 typedef struct ucm_reloc_dl_iter_context {
+    Dl_info            def_dlinfo;
     ucm_reloc_patch_t  *patch;
     ucs_status_t       status;
 } ucm_reloc_dl_iter_context_t;
@@ -143,7 +144,8 @@ static int ucm_reloc_get_aux_phsize()
 
 static ucs_status_t
 ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname,
-                     int phnum, int phsize, ucm_reloc_patch_t *patch)
+                     int phnum, int phsize,
+                     const ucm_reloc_dl_iter_context_t *ctx)
 {
     ElfW(Phdr) *dphdr;
     ElfW(Rela) *reloc;
@@ -156,6 +158,8 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     void *page;
     int ret;
     int i;
+    Dl_info entry_dlinfo;
+    int success;
 
     page_size = ucm_get_page_size();
 
@@ -180,10 +184,10 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
     /* Find matching symbol and replace it */
     for (reloc = jmprel; (void*)reloc < jmprel + pltrelsz; ++reloc) {
         elf_sym = (char*)strtab + symtab[ELF64_R_SYM(reloc->r_info)].st_name;
-        if (!strcmp(patch->symbol, elf_sym)) {
+        if (!strcmp(ctx->patch->symbol, elf_sym)) {
             entry = (void *)(base + reloc->r_offset);
 
-            ucm_trace("'%s' entry in '%s' is at %p", patch->symbol,
+            ucm_trace("'%s' entry in '%s' is at %p", ctx->patch->symbol,
                       basename(phname), entry);
 
             page  = (void *)((intptr_t)entry & ~(page_size - 1));
@@ -192,8 +196,21 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
                 ucm_error("failed to modify GOT page %p to rw: %m", page);
                 return UCS_ERR_UNSUPPORTED;
             }
-            patch->prev_value = *entry;
-            *entry = patch->value;
+
+            success = dladdr(*entry, &entry_dlinfo);
+            ucs_assertv_always(success, "can't find shared object with entry %p",
+                               *entry);
+
+            /* store default entry to prev_value to guarantee valid pointers
+             * throughout life time of the process */
+            if (ctx->def_dlinfo.dli_fbase == entry_dlinfo.dli_fbase) {
+                ctx->patch->prev_value = *entry;
+                ucm_trace("'%s' by address %p in '%s' is stored as original for %p",
+                          ctx->patch->symbol, *entry,
+                          basename(entry_dlinfo.dli_fname), ctx->patch->value);
+            }
+
+            *entry = ctx->patch->value;
             break;
         }
     }
@@ -227,7 +244,7 @@ static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size, void 
 
     ctx->status = ucm_reloc_modify_got(info->dlpi_addr, info->dlpi_phdr,
                                        info->dlpi_name, info->dlpi_phnum,
-                                       phsize, ctx->patch);
+                                       phsize, ctx);
     if (ctx->status == UCS_OK) {
         return 0; /* continue iteration and patch all objects */
     } else {
@@ -238,10 +255,17 @@ static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size, void 
 /* called with lock held */
 static ucs_status_t ucm_reloc_apply_patch(ucm_reloc_patch_t *patch)
 {
-    ucm_reloc_dl_iter_context_t ctx = {
-        .patch  = patch,
-        .status = UCS_OK
-    };
+    ucm_reloc_dl_iter_context_t ctx;
+    int                         success;
+
+    /* Find default shared object, usually libc */
+    success = dladdr(getpid, &ctx.def_dlinfo);
+    if (!success) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    ctx.patch  = patch;
+    ctx.status = UCS_OK;
 
     /* Avoid locks here because we don't modify ELF data structures.
      * Worst case the same symbol will be written more than once.
