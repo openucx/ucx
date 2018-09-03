@@ -9,11 +9,10 @@
 
 #include "ucp_types.h"
 
+#include <ucp/wireup/ep_match.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/queue.h>
-#include <ucs/debug/log.h>
 #include <ucs/stats/stats.h>
-#include <limits.h>
 #include <ucs/datastruct/strided_alloc.h>
 
 #define UCP_MAX_IOV                16UL
@@ -55,9 +54,11 @@ enum {
     UCP_EP_FLAG_CONNECT_ACK_SENT       = UCS_BIT(18),/* DEBUG: Connection ACK was sent */
     UCP_EP_FLAG_CONNECT_REQ_IGNORED    = UCS_BIT(19),/* DEBUG: Connection request was ignored */
     UCP_EP_FLAG_CONNECT_PRE_REQ_SENT   = UCS_BIT(20),/* DEBUG: Connection pre-request was sent */
-    UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(21) /* DEBUG: Partial worker address was sent
+    UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(21),/* DEBUG: Partial worker address was sent
                                                                to the remote peer when starting
                                                                connection establishment on this EP */
+    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(22) /* DEBUG: flush_state is valid */
+
 };
 
 
@@ -271,6 +272,17 @@ typedef struct ucp_ep {
 } ucp_ep_t;
 
 
+/**
+ * Status of protocol-level remote completions
+ */
+typedef struct {
+    ucs_queue_head_t              reqs;         /* Queue of flush requests which
+                                                   are waiting for remote completion */
+    uint32_t                      send_sn;      /* Sequence number of sent operations */
+    uint32_t                      cmpl_sn;      /* Sequence number of completions */
+} ucp_ep_flush_state_t;
+
+
 /*
  * Endpoint extension for generic non fast-path data
  */
@@ -283,12 +295,14 @@ typedef struct {
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
 
-    /* matching with remote endpoints */
-    struct {
-        uint64_t                  dest_uuid;     /* Destination worker UUID */
-        ucs_list_link_t           list;          /* List entry into endpoint
-                                                    matching structure */
-    } ep_match;
+    /* Endpoint match context and remote completion status are mutually exclusive,
+     * since remote completions are counted only after the endpoint is already
+     * matched to a remote peer.
+     */
+    union {
+        ucp_ep_match_t            ep_match;      /* Matching with remote endpoints */
+        ucp_ep_flush_state_t      flush_state;   /* Remove completion status */
+    };
 } ucp_ep_ext_gen_t;
 
 
@@ -330,7 +344,8 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_send_callback_t req_cb,
                                        unsigned req_flags,
-                                       ucp_request_callback_t flushed_cb);
+                                       ucp_request_callback_t flushed_cb,
+                                       const char *debug_name);
 
 ucs_status_t ucp_ep_create_sockaddr_aux(ucp_worker_h worker,
                                         const ucp_ep_params_t *params,

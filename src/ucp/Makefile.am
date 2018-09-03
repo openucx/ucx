@@ -70,6 +70,7 @@ libucp_la_SOURCES = \
 	rma/amo_send.c \
 	rma/rma_basic.c \
 	rma/rma_send.c \
+	rma/rma_sw.c \
 	rma/flush.c \
 	tag/eager_rcv.c \
 	tag/eager_snd.c \

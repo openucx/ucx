@@ -12,6 +12,16 @@
 #include <ucs/datastruct/list.h>
 
 
+/*
+ * Structure to embed in a UCP endpoint to support matching with remote endpoints
+ */
+typedef struct {
+    uint64_t                  dest_uuid;     /* Destination worker UUID */
+    ucs_list_link_t           list;          /* List entry into endpoint
+                                                matching structure */
+} ucp_ep_match_t;
+
+
 /**
  * Endpoint-to-endpoint matching entry - allows *ordered* matching of endpoints
  * between a pair of workers.

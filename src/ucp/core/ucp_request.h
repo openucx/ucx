@@ -17,6 +17,7 @@
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucp/dt/dt.h>
+#include <ucp/rma/rma.h>
 #include <ucp/wireup/wireup.h>
 
 
@@ -157,10 +158,14 @@ struct ucp_request {
 
                 struct {
                     ucp_request_callback_t flushed_cb;/* Called when flushed */
+                    ucs_queue_elem_t       queue;     /* Queue element in proto_status */
+                    unsigned               uct_flags; /* Flags to pass to @ref uct_ep_flush */
                     uct_worker_cb_id_t     prog_id;   /* Progress callback ID */
+                    uint32_t               cmpl_sn;   /* Sequence number of the remote completion
+                                                         this request is waiting for */
+                    uint8_t                sw_started;
+                    uint8_t                sw_done;
                     ucp_lane_map_t         lanes;     /* Which lanes need to be flushed */
-                    unsigned               uct_flags; /* Flags to pass to
-                                                            @ref uct_ep_flush */
                 } flush;
 
                 struct {
@@ -181,7 +186,11 @@ struct ucp_request {
                     ucp_tag_t         ssend_tag; /* Tag in offload sync send */
                     void              *rndv_op;  /* Handler of issued rndv send. Need to cancel
                                                     the operation if it is completed by SW. */
-                 } tag_offload;
+                } tag_offload;
+
+                struct {
+                    uintptr_t              req;  /* Remote get request pointer */
+                } get_reply;
             };
 
             /* This structure holds all mutable fields, and everything else

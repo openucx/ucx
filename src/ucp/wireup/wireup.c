@@ -242,6 +242,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     ucs_assert(ep->flags & UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR);
 
     ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
+    ucp_ep_flush_state_reset(ep);
 
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     params.err_mode   = ucp_ep_config(ep)->key.err_mode;
@@ -289,6 +290,7 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         /* wireup request for a specific ep */
         ep = ucp_worker_get_ep_by_ptr(worker, msg->dest_ep_ptr);
         ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
+        ucp_ep_flush_state_reset(ep);
 
         ep_init_flags |= UCP_EP_CREATE_AM_LANE;
     } else {
@@ -305,6 +307,8 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
             /* add internal endpoint to hash */
             ep->conn_sn = msg->conn_sn;
             ucp_ep_match_insert_unexp(&worker->ep_match_ctx, remote_uuid, ep);
+        } else {
+            ucp_ep_flush_state_reset(ep);
         }
 
         ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
@@ -432,6 +436,7 @@ ucp_wireup_process_reply(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     ucp_ep_match_remove_ep(&worker->ep_match_ctx, ep);
     ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
+    ucp_ep_flush_state_reset(ep);
 
     /* Connect p2p addresses to remote endpoint */
     if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {

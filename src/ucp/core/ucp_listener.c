@@ -68,6 +68,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
                                               &ep);
         if (status == UCS_OK) {
             ucp_ep_update_dest_ep_ptr(ep, client_data->ep_ptr);
+            ucp_ep_flush_state_reset(ep);
 
             /* send wireup request message, to connect the client to the server's new endpoint */
             ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
@@ -81,6 +82,8 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
                                             &params, &client_address, &ep);
         if (status == UCS_OK) {
             ucp_ep_update_dest_ep_ptr(ep, client_data->ep_ptr);
+            ucp_ep_flush_state_reset(ep);
+
             /* the listener's ep should be aware of the sent address from the client */
             ep->flags |= UCP_EP_FLAG_LISTENER;
 
