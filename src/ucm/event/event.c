@@ -95,12 +95,7 @@ static void ucm_event_call_orig(ucm_event_type_t event_type, ucm_event_t *event,
         break;
     case UCM_EVENT_SBRK:
         if (event->sbrk.result == MAP_FAILED) {
-#if HAVE_DECL_SYS_BRK
-            event->sbrk.result = ucm_orig_brk(ucm_orig_sbrk(0) + event->sbrk.increment) ?
-                                 MAP_FAILED : ucm_orig_sbrk(0) - event->sbrk.increment;
-#else
             event->sbrk.result = ucm_orig_sbrk(event->sbrk.increment);
-#endif
         }
         break;
     case UCM_EVENT_MADVISE:

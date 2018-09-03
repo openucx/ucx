@@ -42,11 +42,11 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
 #define UCM_OVERRIDE_FUNC(_name, _rettype) \
     _rettype _name() __attribute__ ((alias (UCS_PP_QUOTE(ucm_override_##_name)))); \
 
-#define UCM_DEFINE_ORIG_FUNC(_name, _rettype, _fail_val, ...) \
-    _UCM_DEFINE_ORIG_FUNC(_name, ucm_orig_##_name, ucm_override_##_name, \
+#define UCM_DEFINE_DLSYM_FUNC(_name, _rettype, _fail_val, ...) \
+    _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name, ucm_override_##_name, \
                           _rettype, _fail_val, __VA_ARGS__)
 
-#define _UCM_DEFINE_ORIG_FUNC(_name, _orig_name, _over_name, _rettype, _fail_val, ...) \
+#define _UCM_DEFINE_DLSYM_FUNC(_name, _orig_name, _over_name, _rettype, _fail_val, ...) \
     _rettype _over_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)); \
     \
     /* Call the original function using dlsym(RTLD_NEXT) */ \
@@ -68,8 +68,8 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
         return orig_func_ptr(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
 
-#define UCM_DEFINE_REPLACE_ORIG_FUNC(_name, _rettype, _fail_val, ...) \
-    _UCM_DEFINE_ORIG_FUNC(_name, ucm_orig_##_name, ucm_override_##_name, \
+#define UCM_DEFINE_REPLACE_DLSYM_FUNC(_name, _rettype, _fail_val, ...) \
+    _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name, ucm_override_##_name, \
                           _rettype, _fail_val, __VA_ARGS__) \
     _UCM_DEFINE_REPLACE_FUNC(ucm_override_##_name, ucm_##_name, \
                              _rettype, _fail_val, __VA_ARGS__)
@@ -81,8 +81,8 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
         return (_rettype)syscall(_syscall_id, UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
 
-#define UCM_DEFINE_ORIG_SYSCALL_FUNC(_name, _rettype, _fail_val, _syscall_id, ...) \
-    _UCM_DEFINE_ORIG_FUNC(_name, ucm_orig_##_name##_dlsym, ucm_override_##_name, \
+#define UCM_DEFINE_SELECT_FUNC(_name, _rettype, _fail_val, _syscall_id, ...) \
+    _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name##_dlsym, ucm_override_##_name, \
                           _rettype, _fail_val, __VA_ARGS__) \
     UCM_DEFINE_SYSCALL_FUNC(_name##_syscall, _rettype, _syscall_id, __VA_ARGS__) \
     _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
