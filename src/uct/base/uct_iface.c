@@ -452,6 +452,20 @@ static UCS_CLASS_CLEANUP_FUNC(uct_base_iface_t)
 UCS_CLASS_DEFINE(uct_base_iface_t, uct_iface_t);
 
 
+ucs_status_t uct_iface_accept(uct_iface_h iface,
+                              uct_conn_request_h conn_request)
+{
+    return iface->ops.iface_accept(iface, conn_request);
+}
+
+
+ucs_status_t uct_iface_reject(uct_iface_h iface,
+                              uct_conn_request_h conn_request)
+{
+    return iface->ops.iface_reject(iface, conn_request);
+}
+
+
 ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p)
 {
     return iface->ops.ep_create(iface, ep_p);
