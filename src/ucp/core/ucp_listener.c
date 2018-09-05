@@ -165,6 +165,7 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
      * that he can wake-up on this event */
     ucp_worker_signal_internal(listener->wiface.worker);
 
+    uct_iface_accept(tl_iface, uct_req);
     return;
 }
 
