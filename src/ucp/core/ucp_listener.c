@@ -124,9 +124,10 @@ static int ucp_listener_remove_filter(const ucs_callbackq_elem_t *elem,
     return (elem->cb == ucp_listener_conn_request_progress) && (listener == arg);
 }
 
-static ucs_status_t ucp_listener_conn_request_callback(void *arg,
-                                                       const void *conn_priv_data,
-                                                       size_t length)
+static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
+                                               uct_conn_request_h uct_req,
+                                               const void *conn_priv_data,
+                                               size_t length)
 {
     ucp_listener_h        listener = arg;
     ucp_listener_accept_t *accept;
@@ -136,9 +137,11 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
 
     /* Defer wireup init and user's callback to be invoked from the main thread */
     accept = ucs_malloc(sizeof(*accept), "ucp_listener accept");
+    
     if (accept == NULL) {
         ucs_error("failed to allocate listener accept context");
-        return UCS_ERR_NO_MEMORY;
+        uct_iface_reject(tl_iface, uct_req);
+        return;
     }
 
     accept->listener    = listener;
@@ -146,7 +149,8 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
     if (accept->wireup_data == NULL) {
         ucs_error("failed to allocate listener accept wireup context");
         ucs_free(accept);
-        return UCS_ERR_NO_MEMORY;
+        uct_iface_reject(tl_iface, uct_req);
+        return;
     }
 
     memcpy(accept->wireup_data, conn_priv_data, length);
@@ -161,7 +165,7 @@ static ucs_status_t ucp_listener_conn_request_callback(void *arg,
      * that he can wake-up on this event */
     ucp_worker_signal_internal(listener->wiface.worker);
 
-    return UCS_OK;
+    return;
 }
 
 ucs_status_t ucp_listener_create(ucp_worker_h worker,
