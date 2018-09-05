@@ -10,6 +10,7 @@
 #define UCP_DEF_H_
 
 #include <ucs/type/status.h>
+#include <ucs/config/types.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -82,6 +83,17 @@ typedef struct ucp_ep                    *ucp_ep_h;
 
 
 /**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP connection request
+ *
+ * The connection request is an opaque object that is used to establish
+ * connection on server side calling @ref ucp_ep_create or reject it by @ref
+ * ucp_listener_reject.
+ */
+typedef struct ucp_conn_request          *ucp_conn_request_h;
+
+
+/**
  * @ingroup UCP_WORKER
  * @brief UCP worker address
  *
@@ -94,7 +106,7 @@ typedef struct ucp_address               ucp_address_t;
 /**
  * @ingroup UCP_ENDPOINT
  * @brief Error handling mode for the UCP endpoint.
- * 
+ *
  * Specifies error handling mode for the UCP endpoint.
  */
 typedef enum {
@@ -311,7 +323,7 @@ typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status
  /**
  * @ingroup UCP_COMM
  * @brief UCP endpoint error handling context.
- * 
+ *
  * This structure should be initialized in @ref ucp_ep_params_t to handle peer failure
  */
 typedef struct ucp_err_handler {
@@ -343,22 +355,42 @@ typedef void (*ucp_listener_accept_callback_t)(ucp_ep_h ep, void *arg);
 
 /**
  * @ingroup UCP_WORKER
- * @brief UCP callback to handle the creation of an endpoint in a client-server
+ * @brief A callback for handling of incoming connection request @a conn_request
+ * from a client to a listener @ref ucp_listener_h.
+ *
+ *  This callback routine is invoked on the server side upon a remote client
+ *  creates an endpoint. The user can pass an argument to this callback.
+ *  The user is responsible for releasing the @a conn_request handle using the
+ *  @ref ucp_ep_create or @ref ucp_ep_reject routine.
+ *
+ *  @param [in]  conn_request   Connection request handle.
+ *  @param [in]  arg            User's argument for the callback.
+ */
+typedef void
+(*ucp_listener_conn_callback_t)(ucp_conn_request_h conn_request, void *arg);
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief UCP callback to handle the connection request in a client-server
  * connection establishment flow.
  *
- * This structure is used for handling the creation of an endpoint
- * to the remote peer after an incoming connection request on the listener.
+ * This structure is used for handling an incoming connection request on
+ * the listener. Setting this type of handler allows to create an endpoint on
+ * other worker and not limited to the worker associated with the listener.
  * Other than communication progress routines, it is allowed to call other
- * communication routines from the callback in the struct.
- * The callback should be thread safe with respect to the worker it is invoked
- * on. If the callback is called from different threads, this callback needs
- * thread safety support.
+ * communication routines from the callback in the struct. The callback is
+ * thread safe with respect to the worker it is invoked on. Also it is an
+ * user's responsibility to avoid possible dead lock accessing different worker.
+ * If the callback is called from different threads, this callback needs thread
+ * safety support.
  */
-typedef struct ucp_listener_accept_handler {
-   ucp_listener_accept_callback_t  cb;       /**< Endpoint creation callback */
-   void                            *arg;     /**< User defined argument for the
-                                                  callback */
-} ucp_listener_accept_handler_t;
+typedef struct ucp_listener_conn_handler {
+   ucp_listener_conn_callback_t cb;      /**< Connection request accepting
+                                              callback */
+   void                         *arg;    /**< User defined argument for the
+                                              callback */
+} ucp_listener_conn_handler_t;
 
 
 /**
@@ -437,5 +469,82 @@ typedef enum ucp_wakeup_event_types {
                                               for new events, rather than existing
                                               ones. */
 } ucp_wakeup_event_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Tuning parameters for the UCP endpoint.
+ *
+ * The structure defines the parameters that are used for the
+ * UCP endpoint tuning during the UCP ep @ref ucp_ep_create "creation".
+ */
+typedef struct ucp_ep_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_ep_params_field.
+     * Fields not specified in this mask would be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                field_mask;
+
+    /**
+     * Destination address; this field should be set along with its
+     * corresponding bit in the field_mask - @ref
+     * UCP_EP_PARAM_FIELD_REMOTE_ADDRESS and must be obtained using @ref
+     * ucp_worker_get_address. This field cannot be changed by @ref
+     * ucp_ep_modify_nb.
+     */
+    const ucp_address_t     *address;
+
+    /**
+     * Desired error handling mode, optional parameter. Default value is
+     * @ref UCP_ERR_HANDLING_MODE_NONE. This field cannot be changed by
+     * @ref ucp_ep_modify_nb.
+     */
+    ucp_err_handling_mode_t err_mode;
+
+    /**
+     * Handler to process transport level failure.
+     */
+    ucp_err_handler_t       err_handler;
+
+    /**
+     * User data associated with an endpoint. See @ref ucp_stream_poll_ep_t and
+     * @ref ucp_err_handler_t
+     */
+    void                    *user_data;
+
+    /**
+     * Endpoint flags from @ref ucp_ep_params_flags_field.
+     * This value is optional.
+     * If it's not set (along with its corresponding bit in the field_mask -
+     * @ref UCP_EP_PARAM_FIELD_FLAGS), the @ref ucp_ep_create() routine will
+     * consider the flags as set to zero.
+     */
+     unsigned               flags;
+
+    /**
+     * Destination address in the form of a sockaddr; this field should be set
+     * along with its corresponding bit in the field_mask - @ref
+     * UCP_EP_PARAM_FIELD_SOCK_ADDR and must be obtained from the user, it means
+     * that this type of the endpoint creation is possible only on client side
+     * in client-server connection establishment flow. This field cannot be
+     * changed by @ref ucp_ep_modify_nb.
+     */
+    ucs_sock_addr_t         sockaddr;
+
+    /**
+     * Connection request from client;this field should be set along with its
+     * corresponding bit in the field_mask - @ref
+     * UCP_EP_PARAM_FIELD_CONN_REQUEST and must be obtained using @ref
+     * ucp_listener_accept_addr_callback_t, it means that this type of the
+     * endpoint creation is possible only on server side in client-server
+     * connection establishment flow. This field cannot be changed by
+     * @ref ucp_ep_modify_nb.
+     */
+    ucp_conn_request_h      conn_request;
+
+} ucp_ep_params_t;
+
 
 #endif
