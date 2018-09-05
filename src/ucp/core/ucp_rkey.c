@@ -407,7 +407,6 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     } else {
         rkey->cache.amo_proto     = &ucp_amo_basic_proto;
         rkey->cache.amo_rkey      = uct_rkey;
-        rkey->cache.amo_proto     = &ucp_amo_basic_proto;
     }
 
     /* If we use sw rma/amo need to resolve destination endpoint in order to

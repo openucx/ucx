@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -196,7 +196,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
     ucp_atomic_req_hdr_t *atomicreqh = data;
     ucp_worker_h worker              = arg;
     ucp_ep_h ep                      = ucp_worker_get_ep_by_ptr(worker,
-                                                                atomicreqh->req.ep_ptr);;
+                                                                atomicreqh->req.ep_ptr);
     ucp_request_t *req;
 
     if (atomicreqh->req.reqptr == 0) {
