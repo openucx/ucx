@@ -82,6 +82,8 @@ ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r)
     uct_dc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_iface_t);
     uct_dc_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_ep_t);
 
+    uct_pending_request_check_flags(r);
+
     /* ep can tx iff
      * - iface has resources: cqe and tx skb
      * - dci is either assigned or can be assigned

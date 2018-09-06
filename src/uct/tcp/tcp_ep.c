@@ -295,6 +295,8 @@ ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req)
 {
     uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
 
+    uct_pending_request_check_flags(req);
+
     if (uct_tcp_ep_can_send(ep)) {
         return UCS_ERR_BUSY;
     }

@@ -513,11 +513,12 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
             ucs_error("Failed to allocate FC request");
             return UCS_ERR_NO_MEMORY;
         }
-        dc_req->super.super.func = uct_dc_iface_fc_grant;
-        dc_req->super.ep         = &ep->super.super;
-        dc_req->dct_num          = imm_data;
-        dc_req->lid              = lid;
-        dc_req->sender           = *((uct_dc_fc_sender_data_t*)(hdr + 1));
+        dc_req->super.super.func  = uct_dc_iface_fc_grant;
+        dc_req->super.super.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
+        dc_req->super.ep          = &ep->super.super;
+        dc_req->dct_num           = imm_data;
+        dc_req->lid               = lid;
+        dc_req->sender            = *((uct_dc_fc_sender_data_t*)(hdr + 1));
 
         status = uct_dc_iface_fc_grant(&dc_req->super.super);
         if (status == UCS_ERR_NO_RESOURCE){

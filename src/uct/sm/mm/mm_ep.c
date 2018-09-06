@@ -335,6 +335,8 @@ ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
+    uct_pending_request_check_flags(n);
+
     /* check if resources became available */
     if (uct_mm_ep_has_tx_resources(ep)) {
         ucs_assert(ucs_arbiter_group_is_empty(&ep->arb_group));

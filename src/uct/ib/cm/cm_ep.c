@@ -204,6 +204,8 @@ ucs_status_t uct_cm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req)
     uct_cm_ep_t *ep = ucs_derived_of(tl_ep, uct_cm_ep_t);
     ucs_status_t status;
 
+    uct_pending_request_check_flags(req);
+
     uct_cm_enter(iface);
     if (iface->num_outstanding < iface->config.max_outstanding) {
         status = UCS_ERR_BUSY;

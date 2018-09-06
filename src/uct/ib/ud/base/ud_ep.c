@@ -1136,6 +1136,8 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req)
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
 
+    uct_pending_request_check_flags(req);
+
     uct_ud_enter(iface);
 
     /* if there was an async progress all 'send' ops return
