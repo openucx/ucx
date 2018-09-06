@@ -86,6 +86,7 @@ ucp_amo_init_fetch(ucp_request_t *req, ucp_ep_h ep, void *buffer,
     req->send.state.uct_comp.count  = 1;
     req->send.state.uct_comp.func   = ucp_amo_completed_single;
     req->send.uct.func              = proto->progress_fetch;
+    req->send.uct.flags             = UCT_PENDING_REQUEST_FLAG_SYNC;
     req->send.buffer                = buffer;
 }
 
@@ -95,7 +96,8 @@ void ucp_amo_init_post(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
                        uint64_t value, const ucp_amo_proto_t *proto)
 {
     ucp_amo_init_common(req, ep, op, remote_addr, rkey, value, op_size);
-    req->send.uct.func = proto->progress_post;
+    req->send.uct.func  = proto->progress_post;
+    req->send.uct.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
 }
 
 ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,

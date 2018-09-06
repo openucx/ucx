@@ -109,6 +109,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     req->send.rma.remote_addr = remote_addr;
     req->send.rma.rkey        = rkey;
     req->send.uct.func        = cb;
+    req->send.uct.flags       = UCT_PENDING_REQUEST_FLAG_SYNC;
     req->send.lane            = rkey->cache.rma_lane;
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), length);
     ucp_request_send_state_reset(req,

@@ -314,6 +314,8 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
     ucs_status_t status;
     int          multi;
 
+    req->send.uct.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
+
     if ((ssize_t)length <= max_short) {
         /* short */
         req->send.uct.func = proto->contig_short;
