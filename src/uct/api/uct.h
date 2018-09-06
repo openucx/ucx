@@ -359,6 +359,39 @@ enum uct_cb_flags {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Pending request flags.
+ *
+ * List of flags for a pending request @ref uct_pending_req::flags.
+ * A pending request must have either the SYNC or ASYNC flag set.
+ */
+enum uct_pending_request_flags {
+    UCT_PENDING_REQUEST_FLAG_SYNC  = UCS_BIT(1), /**< Request is always
+                                                      progressed from the
+                                                      context (thread, process)
+                                                      that called @ref
+                                                      uct_iface_progress. */
+    UCT_PENDING_REQUEST_FLAG_ASYNC = UCS_BIT(2)  /**< Request may be progressed
+                                                      from any context. For example,
+                                                      it may be called from a
+                                                      transport async progress
+                                                      thread. To guarantee async
+                                                      progress, the interface
+                                                      must have the @ref
+                                                      UCT_IFACE_FLAG_CB_ASYNC
+                                                      flag set. If async request
+                                                      is added to pending on an
+                                                      interface which only
+                                                      supports sync callback
+                                                      (i.e., only the @ref
+                                                      UCT_IFACE_FLAG_CB_SYNC
+                                                      flag is set), it will
+                                                      behave exactly like a sync
+                                                      request.  */
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Mode in which to open the interface.
  */
 enum uct_iface_open_mode {
@@ -755,6 +788,8 @@ struct uct_completion {
  */
 struct uct_pending_req {
     uct_pending_callback_t    func;   /**< User callback function */
+    unsigned                  flags;  /**< flags as described in @ref
+                                           uct_pending_request_flags */
     char                      priv[UCT_PENDING_REQ_PRIV_LEN]; /**< Used internally by UCT */
 };
 
