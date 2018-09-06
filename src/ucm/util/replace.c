@@ -164,11 +164,13 @@ _UCM_DEFINE_DLSYM_FUNC(sbrk, ucm_orig_dlsym_sbrk, ucm_override_sbrk,
 
 void *ucm_orig_sbrk(intptr_t increment)
 {
+    void *prev;
+
     if (!ucm_global_opts.enable_syscall) {
         return ucm_orig_dlsym_sbrk(increment);
     } else {
-        return ucm_orig_brk(ucm_orig_dlsym_sbrk(0) + increment) ?
-               MAP_FAILED : ucm_orig_dlsym_sbrk(0) - increment;
+        prev = ucm_orig_dlsym_sbrk(0);
+        return ucm_orig_brk(prev + increment) ? MAP_FAILED : prev;
     }
 }
 
