@@ -37,7 +37,8 @@ public:
 
         /* queuee some work */
         for(i = 0; i < N; i++) {
-            m_r[i].func = pending_cb_dispatch;
+            m_r[i].func  = pending_cb_dispatch;
+            m_r[i].flags = UCT_PENDING_REQUEST_FLAG_SYNC;
             EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &m_r[i]));
         }
     }
@@ -92,8 +93,10 @@ test_ud_pending *test_ud_pending::me = 0;
 
 /* add/purge requests */
 UCS_TEST_P(test_ud_pending, async_progress) {
-    uct_pending_req_t r[N];
-    int i;
+    uct_pending_req_t tmpl;
+    tmpl.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
+    std::vector<uct_pending_req_t> r;
+    r.resize(N, tmpl);
 
     req_count = 0;
     connect();
@@ -101,7 +104,7 @@ UCS_TEST_P(test_ud_pending, async_progress) {
     set_tx_win(m_e1, 2);
     EXPECT_UCS_OK(tx(m_e1));
 
-    for(i = 0; i < N; i++) {
+    for(int i = 0; i < N; i++) {
         EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r[i]));
     }
     twait(300);
@@ -112,8 +115,10 @@ UCS_TEST_P(test_ud_pending, async_progress) {
 }
 
 UCS_TEST_P(test_ud_pending, sync_progress) {
-    uct_pending_req_t r[N];
-    int i;
+    uct_pending_req_t tmpl;
+    tmpl.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
+    std::vector<uct_pending_req_t> r;
+    r.resize(N, tmpl);
 
     req_count = 0;
     connect();
@@ -121,7 +126,7 @@ UCS_TEST_P(test_ud_pending, sync_progress) {
     set_tx_win(m_e1, 2);
     EXPECT_UCS_OK(tx(m_e1));
 
-    for(i = 0; i < N; i++) {
+    for(int i = 0; i < N; i++) {
         r[i].func = pending_cb;
         EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r[i]));
     }
@@ -133,8 +138,10 @@ UCS_TEST_P(test_ud_pending, sync_progress) {
 }
 
 UCS_TEST_P(test_ud_pending, err_busy) {
-    uct_pending_req_t r[N];
-    int i;
+    uct_pending_req_t tmpl;
+    tmpl.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
+    std::vector<uct_pending_req_t> r;
+    r.resize(N, tmpl);
 
     req_count = 0;
     connect();
@@ -142,7 +149,7 @@ UCS_TEST_P(test_ud_pending, err_busy) {
     set_tx_win(m_e1, 2);
     EXPECT_UCS_OK(tx(m_e1));
 
-    for(i = 0; i < N; i++) {
+    for(int i = 0; i < N; i++) {
         r[i].func = pending_cb_busy;
         EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r[i]));
     }
@@ -182,7 +189,8 @@ UCS_TEST_P(test_ud_pending, window)
         EXPECT_UCS_OK(tx(m_e1));
     }
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
-    r.func = pending_cb_dispatch;
+    r.func  = pending_cb_dispatch;
+    r.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
     EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r));
     wait_for_value(&req_count, 1, true);
     EXPECT_EQ(1, req_count);
@@ -207,7 +215,8 @@ UCS_TEST_P(test_ud_pending, tx_wqe)
        i++;
     } while (status == UCS_OK);
 
-    r.func = pending_cb_dispatch;
+    r.func  = pending_cb_dispatch;
+    r.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
     EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r));
     wait_for_value(&req_count, 1, true);
     EXPECT_EQ(1, req_count);
