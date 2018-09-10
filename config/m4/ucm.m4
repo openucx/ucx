@@ -60,6 +60,22 @@ AC_CHECK_DECLS([MADV_FREE,
 
 
 #
+# SYS_xxx macro
+#
+AC_CHECK_DECLS([SYS_mmap,
+                SYS_munmap,
+                SYS_mremap,
+                SYS_shmat,
+                SYS_shmdt,
+                SYS_brk,
+                SYS_madvise],
+               [],
+               [],
+               [#include <sys/syscall.h>])
+
+AC_CHECK_FUNCS([__curbrk], [], [], [])
+
+#
 # tcmalloc library - for testing only
 #
 SAVE_LDFLAGS="$LDFLAGS"

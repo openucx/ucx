@@ -32,7 +32,8 @@ ucm_global_config_t ucm_global_opts = {
     .enable_malloc_reloc        = 0,
     .enable_cuda_reloc          = 1,
     .enable_dynamic_mmap_thresh = 1,
-    .alloc_alignment            = 16
+    .alloc_alignment            = 16,
+    .enable_syscall             = 0
 };
 
 size_t ucm_get_page_size()

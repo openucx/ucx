@@ -55,6 +55,11 @@ static ucs_config_field_t ucm_global_config_table[] = {
    ucs_offsetof(ucm_global_config_t, enable_dynamic_mmap_thresh),
    UCS_CONFIG_TYPE_BOOL},
 
+  {"ENABLE_SYSCALL", "no",
+   "Use syscalls when possible to implement the functionality of replaced libc routines",
+   ucs_offsetof(ucm_global_config_t, enable_syscall),
+   UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 

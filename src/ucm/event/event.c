@@ -391,6 +391,33 @@ void *ucm_sbrk(intptr_t increment)
     return event.sbrk.result;
 }
 
+int ucm_brk(void *addr)
+{
+    void *old_addr     = ucm_orig_sbrk(0);
+    intptr_t increment = (intptr_t)addr - (intptr_t)old_addr;
+    ucm_event_t event;
+
+    ucm_event_enter();
+
+    ucm_trace("ucm_brk(addr=%p)", addr);
+
+    if (increment < 0) {
+        ucm_dispatch_vm_munmap(old_addr, -increment);
+    }
+
+    event.sbrk.result    = (void*)-1;
+    event.sbrk.increment = increment;
+    ucm_event_dispatch(UCM_EVENT_SBRK, &event);
+
+    if ((increment > 0) && (event.sbrk.result != MAP_FAILED)) {
+        ucm_dispatch_vm_mmap(old_addr, increment);
+    }
+
+    ucm_event_leave();
+
+    return event.sbrk.result == MAP_FAILED ? -1 : 0;
+}
+
 int ucm_madvise(void *addr, size_t length, int advice)
 {
     ucm_event_t event;

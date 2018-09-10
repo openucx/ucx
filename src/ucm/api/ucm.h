@@ -179,6 +179,8 @@ typedef struct ucm_global_config {
     int             enable_cuda_reloc;           /* Enable installing CUDA relocations */
     int             enable_dynamic_mmap_thresh;  /* Enable adaptive mmap threshold */
     size_t          alloc_alignment;             /* Alignment for memory allocations */
+    int             enable_syscall;              /* Use syscalls when possible to implement
+                                                    the functionality of replaced libc routines */
 } ucm_global_config_t;
 
 
@@ -329,6 +331,12 @@ int ucm_orig_shmdt(const void *shmaddr);
  * @brief Call the original implementation of @ref sbrk without triggering events.
  */
 void *ucm_orig_sbrk(intptr_t increment);
+
+
+/**
+ * @brief Call the original implementation of @ref brk without triggering events.
+ */
+int ucm_orig_brk(void *addr);
 
 
 /**
