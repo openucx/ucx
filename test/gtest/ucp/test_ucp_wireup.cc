@@ -7,6 +7,8 @@
 #define __STDC_LIMIT_MACROS
 
 #include "ucp_test.h"
+#include "common/test.h"
+#include "ucp/ucp_test.h"
 
 #include <algorithm>
 #include <set>
@@ -62,6 +64,11 @@ protected:
 
     void disconnect(ucp_test::entity &e);
 
+    static void send_completion(void *request, ucs_status_t status);
+
+    static void tag_recv_completion(void *request, ucs_status_t status,
+                                    ucp_tag_recv_info_t *info);
+
 private:
     vec_type                               m_send_data;
     vec_type                               m_recv_data;
@@ -72,11 +79,6 @@ private:
     void clear_recv_data();
 
     ucp_rkey_h get_rkey(ucp_ep_h ep, ucp_mem_h memh);
-
-    static void send_completion(void *request, ucs_status_t status);
-
-    static void tag_recv_completion(void *request, ucs_status_t status,
-                                    ucp_tag_recv_info_t *info);
 
     static void stream_recv_completion(void *request, ucs_status_t status,
                                        size_t length);
@@ -670,6 +672,28 @@ UCS_TEST_P(test_ucp_wireup_2sided, no_loopback) {
 
 UCS_TEST_P(test_ucp_wireup_2sided, no_loopback_with_delay) {
     test_connect_loopback(true, false);
+}
+
+UCS_TEST_P(test_ucp_wireup_2sided, async_connect) {
+    if (!(GetParam().ctx_params.features & UCP_FEATURE_TAG)) {
+        UCS_TEST_SKIP_R("The test requires UCP_FEATURE_TAG");
+    }
+    sender().connect(&receiver(), get_ep_params());
+    ucp_ep_h send_ep = sender().ep();
+    std::vector<void *> reqs;
+
+    reqs.push_back(ucp_tag_send_nb(send_ep, NULL, 0, DT_U64, 1, send_completion));
+    EXPECT_FALSE(UCS_PTR_IS_ERR(reqs.back()));
+
+    /* waiting of async reply on wiriup without calling progress on receiver */
+    while(!(send_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
+        ucp_worker_progress(sender().worker());
+    }
+
+    reqs.push_back(ucp_tag_recv_nb(receiver().worker(), NULL, 0, DT_U64, 1,
+                                   (ucp_tag_t)-1, tag_recv_completion));
+    EXPECT_FALSE(UCS_PTR_IS_ERR(reqs.back()));
+    waitall(reqs);
 }
 
 UCS_TEST_P(test_ucp_wireup_2sided, connect_disconnect) {
