@@ -1047,11 +1047,17 @@ ucs_arbiter_cb_result_t
 uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
                      void *arg)
 {
-    uct_ud_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem),
-                                       uct_ud_ep_t, tx.pending.group);
-    uct_ud_iface_t *iface = ucs_container_of(arbiter, uct_ud_iface_t,
-                                             tx.pending_q);
+    uct_ud_iface_t *iface       = ucs_container_of(arbiter, uct_ud_iface_t,
+                                                   tx.pending_q);
+    uct_pending_req_t *req      = ucs_container_of(elem, uct_pending_req_t,
+                                                   priv);
+    uct_ud_ep_t *ep             = ucs_container_of(ucs_arbiter_elem_group(elem),
+                                                   uct_ud_ep_t,
+                                                   tx.pending.group);
     uintptr_t in_async_progress = (uintptr_t)arg;
+    int async_before_pending;
+    ucs_status_t status;
+
 
     /* check if we have global resources
      * - tx_wqe
@@ -1099,19 +1105,19 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
      * - not in async progress
      * - there are only low priority ctl pending or not ctl at all
      */
-    if (!in_async_progress &&
+    if ((!in_async_progress || (req->flags & UCT_PENDING_REQUEST_FLAG_ASYNC)) &&
         (uct_ud_ep_ctl_op_check_ex(ep, UCT_UD_EP_OP_CTL_LOW_PRIO) ||
         !uct_ud_ep_ctl_op_isany(ep))) {
 
-        uct_pending_req_t *req;
-        ucs_status_t status;
-
-        req = ucs_container_of(elem, uct_pending_req_t, priv);
-
         ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_IN_PENDING));
-        ep->flags |= UCT_UD_EP_FLAG_IN_PENDING;
-        status = req->func(req);
-        ep->flags &= ~UCT_UD_EP_FLAG_IN_PENDING;
+        ep->flags                     |= UCT_UD_EP_FLAG_IN_PENDING;
+        async_before_pending           = iface->tx.async_before_pending;
+        if (req->flags & UCT_PENDING_REQUEST_FLAG_ASYNC) {
+            iface->tx.async_before_pending = 0;
+        }
+        status                         = req->func(req);
+        iface->tx.async_before_pending = async_before_pending;
+        ep->flags                     &= ~UCT_UD_EP_FLAG_IN_PENDING;
 
         if (status == UCS_INPROGRESS) {
             return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
@@ -1147,6 +1153,11 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req)
      * avoid a deadlock.
      */
     if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
+        goto add_req;
+    }
+
+    if (ucs_unlikely((req->flags & UCT_PENDING_REQUEST_FLAG_ASYNC))) {
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CTL_LOW_PRIO);
         goto add_req;
     }
 
