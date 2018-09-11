@@ -39,16 +39,18 @@
 /**
  * Copy words from _src to _dst.
  *
+ * @param _dst_type    Type to use for destination buffer.
  * @param _dst         Destination buffer.
+ * @param _src_type    Type to use for source buffer.
  * @param _src         Source buffer.
- * @param _word_type   Type to use for copying.
  * @param _size        Number of bytes to copy.
  */
-#define UCS_WORD_COPY(_dst, _src, _word_type, _size) \
+#define UCS_WORD_COPY(_dst_type, _dst, _src_type, _src, _size) \
     { \
         unsigned i; \
-        for (i = 0; i < (_size) / sizeof(_word_type); ++i) { \
-            *((_word_type*)(_dst) + i) = *((_word_type*)(_src) + i); \
+        UCS_STATIC_ASSERT(sizeof(_src_type) == sizeof(_dst_type)); \
+        for (i = 0; i < (_size) / sizeof(_src_type); ++i) { \
+            *((_dst_type*)(_dst) + i) = *((_src_type*)(_src) + i); \
         } \
     }
 
