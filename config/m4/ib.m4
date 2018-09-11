@@ -201,7 +201,7 @@ AS_IF([test "x$with_ib" == xyes],
                                     [AC_SUBST(LIB_MLX5, [-lmlx5-rdmav2])],[
                        AC_CHECK_LIB([mlx5], [mlx5dv_query_device],
                                     [AC_SUBST(LIB_MLX5, [-lmlx5])],
-                                    [with_mlx5_dv=no], [-libverbs])], [-libverbs])])
+                                    [with_mlx5_dv=no], [-libverbs])], [-libverbs])], [], [ ])
 
               AS_IF([test "x$have_cq_io" == xyes ], [
                        AC_CHECK_DECLS([
