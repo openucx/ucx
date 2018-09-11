@@ -16,6 +16,7 @@
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/sys.h>
+#include <ucm/bistro/bistro.h>
 #include <ucs/sys/math.h>
 
 #include <sys/mman.h>
@@ -23,11 +24,22 @@
 #include <unistd.h>
 #include <pthread.h>
 
+#define UCM_IS_HOOK_ENABLED(_entry)                                                      \
+    (((_entry)->hook_type == UCM_HOOK_BOTH) ||                                           \
+     (!ucm_global_opts.enable_bistro_hook && ((_entry)->hook_type == UCM_HOOK_RELOC)) || \
+     (ucm_global_opts.enable_bistro_hook && ((_entry)->hook_type == UCM_HOOK_BISTRO)))
+
+typedef enum ucm_mmap_hook_type {
+    UCM_HOOK_BOTH   = 0,
+    UCM_HOOK_RELOC  = 1,
+    UCM_HOOK_BISTRO = 2
+} ucm_mmap_hook_type_t;
 
 typedef struct ucm_mmap_func {
-    ucm_reloc_patch_t patch;
-    ucm_event_type_t  event_type;
-    ucm_event_type_t  deps;
+    ucm_reloc_patch_t    patch;
+    ucm_event_type_t     event_type;
+    ucm_event_type_t     deps;
+    ucm_mmap_hook_type_t hook_type;
 } ucm_mmap_func_t;
 
 static ucm_mmap_func_t ucm_mmap_funcs[] = {
@@ -36,7 +48,8 @@ static ucm_mmap_func_t ucm_mmap_funcs[] = {
     { {"mremap",  ucm_override_mremap},  UCM_EVENT_MREMAP,  0},
     { {"shmat",   ucm_override_shmat},   UCM_EVENT_SHMAT,   0},
     { {"shmdt",   ucm_override_shmdt},   UCM_EVENT_SHMDT,   UCM_EVENT_SHMAT},
-    { {"sbrk",    ucm_override_sbrk},    UCM_EVENT_SBRK,    0},
+    { {"sbrk",    ucm_override_sbrk},    UCM_EVENT_SBRK,    0, UCM_HOOK_RELOC},
+    { {"brk",     ucm_override_brk},     UCM_EVENT_SBRK,    0, UCM_HOOK_BISTRO},
     { {"madvise", ucm_override_madvise}, UCM_EVENT_MADVISE, 0},
     { {NULL, NULL}, 0}
 };
@@ -137,17 +150,23 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
             continue;
         }
 
-        ucm_debug("mmap: installing relocation table entry for %s = %p for event 0x%x",
-                  entry->patch.symbol, entry->patch.value, entry->event_type);
+        if (UCM_IS_HOOK_ENABLED(entry)) {
+            ucm_debug("mmap: installing relocation table entry for %s = %p for event 0x%x",
+                      entry->patch.symbol, entry->patch.value, entry->event_type);
 
-        status = ucm_reloc_modify(&entry->patch);
-        if (status != UCS_OK) {
-            ucm_warn("failed to install relocation table entry for '%s'",
-                     entry->patch.symbol);
-            return status;
+            if (ucm_global_opts.enable_bistro_hook) {
+                status = ucm_bistro_patch(entry->patch.symbol, entry->patch.value, NULL);
+            } else {
+                status = ucm_reloc_modify(&entry->patch);
+            }
+            if (status != UCS_OK) {
+                ucm_warn("failed to install relocation table entry for '%s'",
+                         entry->patch.symbol);
+                return status;
+            }
+
+            installed_events |= entry->event_type;
         }
-
-        installed_events |= entry->event_type;
     }
 
     return UCS_OK;

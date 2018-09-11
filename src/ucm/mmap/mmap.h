@@ -17,6 +17,9 @@ void *ucm_override_mremap(void *old_address, size_t old_size, size_t new_size, i
 void *ucm_override_shmat(int shmid, const void *shmaddr, int shmflg);
 int ucm_override_shmdt(const void *shmaddr);
 void *ucm_override_sbrk(intptr_t increment);
+void *ucm_sbrk_select(intptr_t increment);
+int ucm_override_brk(void *addr);
+void *ucm_brk_syscall(void *addr);
 int ucm_override_madvise(void *addr, size_t length, int advice);
 
 #endif

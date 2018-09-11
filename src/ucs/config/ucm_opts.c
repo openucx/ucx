@@ -60,6 +60,11 @@ static ucs_config_field_t ucm_global_config_table[] = {
    ucs_offsetof(ucm_global_config_t, enable_syscall),
    UCS_CONFIG_TYPE_BOOL},
 
+  {"ENABLE_BISTRO_HOOKS", "no",
+   "Use binary instrumentation (BISTRO) to hook mmap events",
+   ucs_offsetof(ucm_global_config_t, enable_bistro_hook),
+   UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 

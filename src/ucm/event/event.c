@@ -393,9 +393,13 @@ void *ucm_sbrk(intptr_t increment)
 
 int ucm_brk(void *addr)
 {
-    void *old_addr     = ucm_orig_sbrk(0);
-    intptr_t increment = (intptr_t)addr - (intptr_t)old_addr;
+    void *old_addr;
+    intptr_t increment;
     ucm_event_t event;
+
+    old_addr  = ucm_brk_syscall(0);
+    /* in case if addr == NULL - it just returns current pointer */
+    increment = addr ? ((intptr_t)addr - (intptr_t)old_addr) : 0;
 
     ucm_event_enter();
 

@@ -181,6 +181,7 @@ typedef struct ucm_global_config {
     size_t          alloc_alignment;             /* Alignment for memory allocations */
     int             enable_syscall;              /* Use syscalls when possible to implement
                                                     the functionality of replaced libc routines */
+    int             enable_bistro_hook;          /* Use BISTRO to hook mmap API calls */
 } ucm_global_config_t;
 
 
@@ -398,6 +399,13 @@ int ucm_shmdt(const void *shmaddr);
  * associated with it.
  */
 void *ucm_sbrk(intptr_t increment);
+
+
+/**
+ * @brief Call the original implementation of @ref brk and all handlers
+ * associated with it.
+ */
+int ucm_brk(void *addr);
 
 
 /**

@@ -36,6 +36,7 @@ UCM_DEFINE_REPLACE_FUNC(mremap,  void*, MAP_FAILED, void*, size_t, size_t, int)
 UCM_DEFINE_REPLACE_FUNC(shmat,   void*, MAP_FAILED, int, const void*, int)
 UCM_DEFINE_REPLACE_FUNC(shmdt,   int,   -1,         const void*)
 UCM_DEFINE_REPLACE_FUNC(sbrk,    void*, MAP_FAILED, intptr_t)
+UCM_DEFINE_REPLACE_FUNC(brk,     int,   -1,         void*)
 UCM_DEFINE_REPLACE_FUNC(madvise, int,   -1,         void*, size_t, int)
 
 #if HAVE_DECL_SYS_MMAP
@@ -131,25 +132,26 @@ extern void *__curbrk;
 #endif
 
 #if HAVE_DECL_SYS_BRK
-static int ucm_override_brk(void *addr)
-{
-    return -1;
-}
-
 _UCM_DEFINE_DLSYM_FUNC(brk, ucm_orig_dlsym_brk, ucm_override_brk, int, -1, void*)
+
+void *ucm_brk_syscall(void *addr)
+{
+    return
+#if HAVE___CURBRK
+        __curbrk =
+#endif
+        (void*)syscall(SYS_brk, addr);
+}
 
 int ucm_orig_brk(void *addr)
 {
     void *new_addr;
 
-    if (!ucm_global_opts.enable_syscall) {
+    if (!ucm_global_opts.enable_syscall && !ucm_global_opts.enable_bistro_hook) {
         return ucm_orig_dlsym_brk(addr);
     }
 
-#if HAVE___CURBRK
-    __curbrk =
-#endif
-    new_addr = (void*)syscall(SYS_brk, addr);
+    new_addr = ucm_brk_syscall(addr);
 
     if (new_addr < addr) {
         errno = ENOMEM;
@@ -166,15 +168,20 @@ void *ucm_orig_sbrk(intptr_t increment)
 {
     void *prev;
 
-    if (!ucm_global_opts.enable_syscall) {
+    if (!ucm_global_opts.enable_syscall && !ucm_global_opts.enable_bistro_hook) {
         return ucm_orig_dlsym_sbrk(increment);
     } else {
-        prev = ucm_orig_dlsym_sbrk(0);
+        prev = ucm_brk_syscall(0);
         return ucm_orig_brk(prev + increment) ? MAP_FAILED : prev;
     }
 }
 
 #else
+
+void *ucm_brk_syscall(void *addr)
+{
+    return (void*)-1;
+}
 
 static int ucm_override_brk(void *addr)
 {
@@ -185,4 +192,3 @@ UCM_DEFINE_DLSYM_FUNC(brk, int, -1, void*)
 UCM_DEFINE_DLSYM_FUNC(sbrk, void*, MAP_FAILED, intptr_t)
 
 #endif
-
