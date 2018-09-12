@@ -13,7 +13,7 @@ dist_examples_DATA = \
 	ucx_profiling.c \
 	ucp_client_server.c
 
-EXAMPLE_CC_FLAGS = -lucs -I$(includedir) -L$(libdir) -Wall -Werror -Wl,-rpath,$(libdir)
+EXAMPLE_CC_FLAGS = -lucs -lucm -I$(includedir) -L$(libdir) -Wall -Werror -Wl,-rpath,$(libdir)
 
 installcheck-local:
 	@echo "INSTALLCHECK: Compiling examples with installed library"
