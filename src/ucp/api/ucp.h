@@ -833,10 +833,10 @@ typedef struct ucp_listener_params {
     ucp_listener_accept_handler_t       accept_handler;
 
     /**
-     * Handler to processing of incoming connection request in a client-server
-     * connection flow. In order for the callback inside this handler to be
-     * invoked, the UCP_LISTENER_PARAM_FIELD_CONN_HANDLER needs to be set  in
-     * the field_mask.
+     * Handler of an incoming connection request in a client-server connection
+     * flow. In order for the callback inside this handler to be invoked, the
+     * @ref UCP_LISTENER_PARAM_FIELD_CONN_HANDLER needs to be set in the
+     * field_mask.
      */
     ucp_listener_conn_handler_t         conn_handler;
 } ucp_listener_params_t;
@@ -1548,8 +1548,7 @@ void ucp_listener_destroy(ucp_listener_h listener);
  *
  * @return Error code as defined by @ref ucs_status_t
  *
- * @note Destination address is mandatory for filling in one from supported
- * formats as it is required for following fields:
+ * @note One of the following fields has to be specified:
  *  - ucp_ep_params_t::address
  *  - ucp_ep_params_t::sockaddr
  *  - ucp_ep_params_t::conn_request
@@ -1597,13 +1596,14 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode);
 /**
  * @ingroup UCP_WORKER
  *
- * @brief Reject @ref ucp_ep_h "endpoint" creation.
+ * @brief Reject an incoming connection request.
  *
- * This routine releases the @ref ucp_ep_address_h and notifies client if there
- * was set @ref ucp_ep_params_t::err_handler with status @ref UCS_ERR_REJECTED.
+ * Reject the incoming connection request and release associated resources. If
+ * the remote initiator endpoint has set an @ref ucp_ep_params_t::err_handler,
+ * it will be invoked with status @ref UCS_ERR_REJECTED.
  *
- * @param [in]  listener        Handle to the listener which created
- *                              @a conn_request.
+ * @param [in]  listener        Handle to the listener on which the connection
+ *                              request was received.
  * @param [in]  conn_request    Handle to the connection request to reject.
  *
  * @return Error code as defined by @ref ucs_status_t
