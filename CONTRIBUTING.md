@@ -1,7 +1,7 @@
 
 1. Please sign the [UCX contributors agreement](http://www.openucx.org/license).
 
-1. Please follow the [code style](https://github.com/openucx/ucx/blob/master/doc/CodeStyle) and [logging style](https://github.com/openucx/ucx/blob/master/doc/LoggingStyle).
+1. Please follow the [code style](https://github.com/openucx/ucx/blob/master/doc/CodeStyle.md) and [logging style](https://github.com/openucx/ucx/blob/master/doc/LoggingStyle.md).
 
 1. Make sure automatic tests pass.
 
