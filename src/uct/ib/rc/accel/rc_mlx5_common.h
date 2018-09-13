@@ -1414,6 +1414,7 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
     uint64_t *dst    = dm;
     uint64_t padding = 0; /* init by 0 to suppress valgrind error */
     int i            = 0;
+    typedef uint64_t misaligned_uint64_t UCS_V_ALIGNED(1);
 
     ucs_assert(sizeof(*cache) >= hdr_len);
     ucs_assert(head + body + tail == length);
@@ -1445,7 +1446,7 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
     log_sge->num_sge = i;
 
     /* copy payload to DM */
-    UCS_WORD_COPY(dst, payload + head, uint64_t, body);
+    UCS_WORD_COPY(uint64_t, dst, misaligned_uint64_t, payload + head, body);
     if (tail) {
         memcpy(&padding, payload + head + body, tail);
         *(dst + (body / sizeof(uint64_t))) = padding;
