@@ -1270,7 +1270,7 @@ ucs_status_t uct_iface_set_am_tracer(uct_iface_h iface, uct_am_tracer_t tracer,
  * @ingroup UCT_RESOURCE
  * @brief Accept connection request.
  *
- * @param [in] iface        Interface which generated connection establishment
+ * @param [in] iface        Transport interface which generated connection
  *                          request @a conn_request.
  * @param [in] conn_request Connection establishment request passed as parameter
  *                          of @ref uct_sockaddr_conn_request_callback_t.
@@ -1283,8 +1283,8 @@ ucs_status_t uct_iface_accept(uct_iface_h iface,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Reject connection request, will invoke the error handling flow on the
- *        client side.
+ * @brief Reject connection request. Will invoke an error handler @ref
+ *        uct_error_handler_t on the remote transport interface, if set.
  *
  * @param [in] iface        Interface which generated connection establishment
  *                          request @a conn_request.

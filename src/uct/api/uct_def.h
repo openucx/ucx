@@ -281,12 +281,12 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  * Other than communication progress routines, it is allowed to call other UCT
  * communication routines from this callback.
  *
- * @param [in]  iface            Communication interface context.
+ * @param [in]  iface            Transport interface.
  * @param [in]  arg              User defined argument for this callback.
  * @param [in]  conn_request     Transport level connection request. The user
- *                               should accept or reject the request calling
+ *                               should accept or reject the request by calling
  *                               @ref uct_iface_accept or @ref uct_iface_reject
- *                               routines correspondingly.
+ *                               routines respectively.
  * @param [in]  conn_priv_data   Points to the received data.
  *                               This is the private data that was passed to the
  *                               @ref uct_ep_create_sockaddr function on the
