@@ -98,6 +98,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
     self->pack_cb       = pack_cb;
     self->pack_cb_arg   = arg;
     self->pack_cb_flags = cb_flags;
+    ucs_queue_head_init(&self->ops);
 
     /* Save the remote address */
     if (sockaddr->addr->sa_family == AF_INET) {
@@ -143,9 +144,11 @@ out:
                iface, iface->event_ch, iface->cm_id,
                ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
                                 ip_port_str, UCS_SOCKADDR_STRING_LEN));
+    self->status = UCS_INPROGRESS;
     return UCS_OK;
 
 err:
+    self->status = status;
     return status;
 }
 

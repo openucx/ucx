@@ -137,7 +137,6 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
 
     /* Defer wireup init and user's callback to be invoked from the main thread */
     accept = ucs_malloc(sizeof(*accept), "ucp_listener accept");
-    
     if (accept == NULL) {
         ucs_error("failed to allocate listener accept context");
         uct_iface_reject(tl_iface, uct_req);
@@ -166,7 +165,6 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
     ucp_worker_signal_internal(listener->wiface.worker);
 
     uct_iface_accept(tl_iface, uct_req);
-    return;
 }
 
 ucs_status_t ucp_listener_create(ucp_worker_h worker,

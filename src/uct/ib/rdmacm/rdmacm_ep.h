@@ -8,13 +8,23 @@
 
 #include "rdmacm_iface.h"
 
+
+typedef struct uct_rdmacm_ep_op uct_rdmacm_ep_op_t;
+
+struct uct_rdmacm_ep_op {
+    ucs_queue_elem_t    queue_elem;
+    uct_completion_t    *user_comp;
+};
+
+
 struct uct_rdmacm_ep {
     uct_base_ep_t                      super;
     uct_sockaddr_priv_pack_callback_t  pack_cb;
     void                               *pack_cb_arg;
     uint32_t                           pack_cb_flags;
     int                                is_on_pending;
-    ucs_status_t                       status;     /* client error handling status */
+    ucs_queue_head_t                   ops;
+    ucs_status_t                       status;     /* client EP status */
     ucs_list_link_t                    list_elem;  /* for the pending_eps_list */
     struct sockaddr_storage            remote_addr;
     uct_worker_cb_id_t                 slow_prog_id;

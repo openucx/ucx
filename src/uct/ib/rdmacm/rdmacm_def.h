@@ -25,6 +25,7 @@ typedef struct uct_rdmacm_ep      uct_rdmacm_ep_t;
 
 typedef struct uct_rdmacm_priv_data_hdr {
     uint8_t length;     /* length of the private data */
+    int8_t  status;
 } uct_rdmacm_priv_data_hdr_t;
 
 typedef struct uct_rdmacm_ctx {
