@@ -9,6 +9,8 @@ import sys
 import subprocess
 import os
 import re
+from distutils.version import LooseVersion
+
 
 #expected AM transport selections per given number of eps
 mlx4_am = {
@@ -33,7 +35,7 @@ if os.path.exists("/bin/ofed_info"):
 	 1000000 :      "dc_mlx5",
 	}
 
-	mlx5_am_roce = {
+	mlx5_am_no_dc = {
 	       2 :      "rc_mlx5",
 	      16 :      "rc_mlx5",
 	      32 :      "rc_mlx5",
@@ -66,7 +68,7 @@ else:
 	 1000000 :      "ud",
 	}
 
-	mlx5_am_roce = mlx5_am
+	mlx5_am_no_dc = mlx5_am
 
 	# check that UCX_NUM_EPS work
 	mlx5_am_override = {
@@ -92,11 +94,12 @@ mlx4_am_override = {
 }
 
 am_tls = {
-    "mlx4"          : mlx4_am,
-    "mlx5"          : mlx5_am,
-    "mlx5_roce"     : mlx5_am_roce,
-    "mlx4_override" : mlx4_am_override,
-    "mlx5_override" : mlx5_am_override
+    "mlx4"            : mlx4_am,
+    "mlx5"            : mlx5_am,
+    "mlx5_roce_dc"    : mlx5_am,       # mlx5 RoCE port which supports DC
+    "mlx5_roce_no_dc" : mlx5_am_no_dc, # mlx5 RoCE port which doesn't support DC
+    "mlx4_override"   : mlx4_am_override,
+    "mlx5_override"   : mlx5_am_override
 }
 
 def find_am_transport(dev, neps, override = 0) :
@@ -140,7 +143,11 @@ for dev in sorted(dev_list):
         dev_tl_override_map = am_tls[dev[0:dev.index('_')] + "_override"]
         override = 1
     else:
-        dev_tl_map = am_tls[dev[0:dev.index('_')]+"_roce"]
+        fw_ver = open("/sys/class/infiniband/%s/fw_ver" % dev).read()
+        if LooseVersion(fw_ver) >= LooseVersion("16.23.0"):
+            dev_tl_map = am_tls[dev[0:dev.index('_')]+"_roce_dc"]
+        else:
+            dev_tl_map = am_tls[dev[0:dev.index('_')]+"_roce_no_dc"]
         override = 0
 
     for n_eps in sorted(dev_tl_map):
