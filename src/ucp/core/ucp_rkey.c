@@ -378,7 +378,7 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     ucp_ep_config_t *config = ucp_ep_config(ep);
     ucs_status_t status;
     uct_rkey_t uct_rkey;
-    int rma_sw;
+    int rma_sw, amo_sw;
 
     rkey->cache.rma_lane = ucp_config_find_rma_lane(context, config,
                                                     UCT_MD_MEM_TYPE_HOST,
@@ -400,23 +400,30 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
                                                     UCT_MD_MEM_TYPE_HOST,
                                                     config->key.amo_lanes, rkey,
                                                     0, &uct_rkey);
-    if (rkey->cache.amo_lane != UCP_NULL_LANE) {
-        rkey->cache.amo_rkey      = uct_rkey;
+    amo_sw = (rkey->cache.amo_lane == UCP_NULL_LANE);
+    if (amo_sw) {
+        rkey->cache.amo_proto     = &ucp_amo_sw_proto;
+        rkey->cache.amo_rkey      = UCT_INVALID_RKEY;
+    } else {
         rkey->cache.amo_proto     = &ucp_amo_basic_proto;
+        rkey->cache.amo_rkey      = uct_rkey;
     }
 
-    /* If we use sw rma need to resolve destination endpoint in order to
+    /* If we use sw rma/amo need to resolve destination endpoint in order to
      * receive responses and completion messages
      */
-    if (rma_sw && (config->key.am_lane != UCP_NULL_LANE)) {
+    if ((amo_sw || rma_sw) && (config->key.am_lane != UCP_NULL_LANE)) {
         status = ucp_ep_resolve_dest_ep_ptr(ep, config->key.am_lane);
         if (status != UCS_OK) {
             ucs_debug("ep %p: failed to resolve destination ep, "
                       "sw rma cannot be used", ep);
         } else {
             /* if we can resolve destination ep, save the active message lane
-             * as the rma lane in the rkey cache
+             * as the rma/amo lane in the rkey cache
              */
+            if (amo_sw) {
+                rkey->cache.amo_lane = config->key.am_lane;
+            }
             if (rma_sw) {
                 rkey->cache.rma_lane = config->key.am_lane;
             }
@@ -425,10 +432,10 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
 
     rkey->cache.ep_cfg_index  = ep->cfg_index;
 
-    ucs_trace("rkey %p ep %p @ cfg[%d] %s lane %d amo_lane %d",
+    ucs_trace("rkey %p ep %p @ cfg[%d] %s lane %d %s lane %d",
               rkey, ep, ep->cfg_index,
               rkey->cache.rma_proto->name, rkey->cache.rma_lane,
-              rkey->cache.amo_lane);
+              rkey->cache.amo_proto->name, rkey->cache.amo_lane);
 }
 
 ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,

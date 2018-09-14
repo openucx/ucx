@@ -52,7 +52,6 @@ public:
     void init()
     {
         test_base::init();
-        ucp_ep_params_t ep_params = ucp_test::get_ep_params();
 
         /* create dummy sender and receiver entities */
         create_entity();
@@ -62,7 +61,7 @@ public:
          * can support the requested features from ucp_params.
          * regular flow is used here (not client-server) */
         wrap_errors();
-        sender().connect(&receiver(), ep_params, 0, 0);
+        sender().connect(&receiver(), get_ep_params(), 0, 0);
         restore_errors();
 
         /* remove the dummy sender and receiver entities */
@@ -247,12 +246,10 @@ public:
         }
     }
 
-    void client_ep_connect(struct sockaddr *connect_addr)
+    virtual ucp_ep_params_t get_ep_params()
     {
         ucp_ep_params_t ep_params = ucp_test::get_ep_params();
-        ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
-                                     UCP_EP_PARAM_FIELD_SOCK_ADDR |
-                                     UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+        ep_params.field_mask      |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
                                      UCP_EP_PARAM_FIELD_ERR_HANDLER |
                                      UCP_EP_PARAM_FIELD_USER_DATA;
         /* The error handling requirement is needed since we need to take
@@ -262,6 +259,14 @@ public:
         ep_params.err_handler.cb   = err_handler_cb;
         ep_params.err_handler.arg  = NULL;
         ep_params.user_data        = reinterpret_cast<void*>(this);
+        return ep_params;
+    }
+
+    void client_ep_connect(struct sockaddr *connect_addr)
+    {
+        ucp_ep_params_t ep_params = get_ep_params();
+        ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
+                                     UCP_EP_PARAM_FIELD_SOCK_ADDR;
         ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
         ep_params.sockaddr.addr    = connect_addr;
         ep_params.sockaddr.addrlen = sizeof(*connect_addr);

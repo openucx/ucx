@@ -140,14 +140,12 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
     ucs_status_ptr_t status_p;
     ucs_status_t status;
     ucp_request_t *req;
-    uct_atomic_op_t op;
 
     UCP_AMO_CHECK_PARAM(remote_addr, op_size, opcode, UCP_ATOMIC_POST_OP_LAST,
                         UCS_ERR_INVALID_PARAM);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
-    op     = ucp_uct_op_table[opcode];
     status = UCP_RKEY_RESOLVE(rkey, ep, amo);
     if (status != UCS_OK) {
         goto out;
@@ -159,8 +157,8 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
         goto out;
     }
 
-    ucp_amo_init_post(req, ep, op, op_size, remote_addr, rkey, value,
-                      rkey->cache.amo_proto);
+    ucp_amo_init_post(req, ep, ucp_uct_op_table[opcode], op_size, remote_addr,
+                      rkey, value, rkey->cache.amo_proto);
 
     status_p = ucp_rma_send_request_cb(req, (ucp_send_callback_t)ucs_empty_function);
     if (UCS_PTR_IS_PTR(status_p)) {

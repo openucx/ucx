@@ -68,6 +68,7 @@ libucp_la_SOURCES = \
 	proto/proto_am.c \
 	rma/amo_basic.c \
 	rma/amo_send.c \
+	rma/amo_sw.c \
 	rma/rma_basic.c \
 	rma/rma_send.c \
 	rma/rma_sw.c \
