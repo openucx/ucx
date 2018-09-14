@@ -17,6 +17,28 @@ extern "C" {
 
 class test_uct_sockaddr : public uct_test {
 public:
+    struct completion : public uct_completion_t {
+        volatile bool m_flag;
+
+        completion() : m_flag(false), m_status(UCS_INPROGRESS) {
+            count = 1;
+            func  = completion_cb;
+        }
+
+        ucs_status_t status() const {
+            return m_status;
+        }
+    private:
+        static void completion_cb(uct_completion_t *self, ucs_status_t status)
+        {
+            completion *c = static_cast<completion*>(self);
+            c->m_status   = status;
+            c->m_flag     = true;
+        }
+
+        ucs_status_t m_status;
+    };
+
     test_uct_sockaddr() : server(NULL), client(NULL), err_count(0),
                           server_recv_req(0), delay_conn_reply(false) {
         memset(&listen_sock_addr,  0, sizeof(listen_sock_addr));
@@ -144,15 +166,22 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
     while (server_recv_req == 0) {
         progress();
     }
-    ASSERT_EQ(1, server_recv_req);
+    ASSERT_EQ(1,   server_recv_req);
     ASSERT_EQ(1ul, delayed_conn_reqs.size());
-    EXPECT_EQ(0, err_count);
+    EXPECT_EQ(0,   err_count);
     while (!delayed_conn_reqs.empty()) {
         uct_iface_accept(server->iface(), delayed_conn_reqs.front());
         delayed_conn_reqs.pop();
     }
-    sleep(3);
-    while (progress());
+
+    completion comp;
+    ucs_status_t status = uct_ep_flush(client->ep(0), 0, &comp);
+    if (status == UCS_INPROGRESS) {
+        wait_for_flag(&comp.m_flag);
+        EXPECT_EQ(UCS_OK, comp.status());
+    } else {
+        EXPECT_EQ(UCS_OK, status);
+    }
     EXPECT_EQ(0, err_count);
 }
 
@@ -270,11 +299,16 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
     wrap_errors();
     /* client - try to connect to a non-existing port on the server side */
     client->connect(0, *server, 0, &connect_sock_addr);
-
+    completion comp;
+    ucs_status_t status = uct_ep_flush(client->ep(0), 0, &comp);
+    if (status == UCS_INPROGRESS) {
+        wait_for_flag(&comp.m_flag);
+        EXPECT_EQ(UCS_ERR_UNREACHABLE, comp.status());
+    } else {
+        EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
+    }
     /* destroy the client's ep. this ep shouldn't be accessed anymore */
     client->destroy_ep(0);
-    /* wait for the transport's events to arrive */
-    sleep(3);
     restore_errors();
 
     /* restore the previous existing port */
