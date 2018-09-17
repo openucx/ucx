@@ -379,13 +379,11 @@ typedef void
  * any other worker and not limited to the worker on which the listener was
  * created.
  * @note
- * - Other than communication progress routines, it is allowed to call
+ * - Other than communication progress routines, it is allowed to call all
  *   other communication routines from the callback in the struct.
  * - The callback is thread safe with respect to the worker it is invoked on.
- * - It is an user's responsibility to avoid possible dead lock accessing
+ * - It is the user's responsibility to avoid potential dead lock accessing
  *   different worker.
- * - If the callback is called from different threads, this callback needs
- *   thread safety support.
  */
 typedef struct ucp_listener_conn_handler {
    ucp_listener_conn_callback_t cb;      /**< Connection request callback */
