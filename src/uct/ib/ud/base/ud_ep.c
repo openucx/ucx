@@ -1157,7 +1157,6 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req)
     }
 
     if (ucs_unlikely((req->flags & UCT_PENDING_REQUEST_FLAG_ASYNC))) {
-        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CTL_LOW_PRIO);
         goto add_req;
     }
 
