@@ -11,6 +11,7 @@
 #include <common/test.h>
 #include <ucs/type/cpu_set.h>
 
+extern "C" {
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_types.h>
@@ -30,6 +31,7 @@
 #  include <uct/ib/ud/base/ud_ep.h>
 #  include <uct/ib/ud/verbs/ud_verbs.h>
 #endif
+}
 
 class test_obj_size : public ucs::test {
 };
