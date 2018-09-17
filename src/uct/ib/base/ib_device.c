@@ -1034,3 +1034,8 @@ int uct_ib_device_odp_has_global_mr(uct_ib_device_t *dev)
 
     return 1;
 }
+
+const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status)
+{
+    return ibv_wc_status_str(wc_status);
+}
