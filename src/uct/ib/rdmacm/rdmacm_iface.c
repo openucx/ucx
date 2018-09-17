@@ -123,7 +123,7 @@ static ucs_status_t uct_rdmacm_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
 
     if (comp != NULL) {
-        op = ucs_malloc(sizeof(op), "uct_rdmacm_ep_flush op");
+        op = ucs_malloc(sizeof(*op), "uct_rdmacm_ep_flush op");
         if (op == NULL) {
             return UCS_ERR_NO_MEMORY;
         }
@@ -272,6 +272,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
     uct_rdmacm_priv_data_hdr_t hdr;
     struct rdma_conn_param conn_param;
     uct_rdmacm_ctx_t *cm_id_ctx;
+    ucs_queue_head_t completed_ops;
     uct_rdmacm_ep_op_t *op;
     ucs_queue_iter_t iter;
     ssize_t priv_data_ret;
@@ -378,12 +379,16 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
         ret_flags |= UCT_RDMACM_PROCESS_EVENT_DESTROY_CM_ID_FLAG;
         if (ep) {
             ep->status = UCS_OK;
+            ucs_queue_head_init(&completed_ops);
             ucs_queue_for_each_safe(op, iter, &ep->ops, queue_elem) {
                 if (--op->user_comp->count == 0) {
                     op->user_comp->func(op->user_comp, UCS_OK);
                     ucs_queue_del_iter(&ep->ops, iter);
-                    ucs_free(op);
+                    ucs_queue_push(&completed_ops, &op->queue_elem);
                 }
+            }
+            ucs_queue_for_each_extract(op, &completed_ops, queue_elem, 1) {
+                ucs_free(op);
             }
         }
         break;
