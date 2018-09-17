@@ -446,12 +446,17 @@ run_ucp_hello() {
 # Compile and run UCT hello world example
 #
 run_uct_hello() {
-	for ucx_dev in $(get_active_ib_devices)
+	for send_func in -i -b -z
 	do
-		for send_func in -i -b -z
+		for ucx_dev in $(get_active_ib_devices)
 		do
-			echo "==== Running UCT hello world server on ${ucx_dev} with sending ${send_func} ===="
-			run_hello uct  -d ${ucx_dev} -t "rc"
+			echo "==== Running UCT hello world server on rc/${ucx_dev} with sending ${send_func} ===="
+			run_hello uct  -d ${ucx_dev} -t "rc" ${send_func}
+		done
+		for ucx_dev in $(ip addr | awk '/state UP/ {print $2}' | sed s/://)
+		do
+			echo "==== Running UCT hello world server on tcp/${ucx_dev} with sending ${send_func} ===="
+			run_hello uct -d ${ucx_dev} -t "tcp" ${send_func}
 		done
 	done
 	rm -f ./uct_hello_world
