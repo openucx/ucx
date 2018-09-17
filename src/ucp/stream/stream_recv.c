@@ -218,7 +218,7 @@ ucp_stream_process_rdesc(ucp_recv_desc_t *rdesc, ucp_ep_ext_proto_t *ep_ext,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_stream_recv_request_init(ucp_ep_h ep, ucp_request_t *req, void *buffer,
+ucp_stream_recv_request_init(ucp_request_t *req, ucp_ep_h ep, void *buffer,
                              size_t count, size_t length,
                              ucp_datatype_t datatype,
                              ucp_stream_recv_callback_t cb,
@@ -284,7 +284,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
         goto out_status;
     }
 
-    ucp_stream_recv_request_init(ep, req, buffer, count, dt_length, datatype,
+    ucp_stream_recv_request_init(req, ep, buffer, count, dt_length, datatype,
                                  cb, (flags & UCP_STREAM_RECV_FLAG_WAITALL) ?
                                  UCP_REQUEST_FLAG_STREAM_RECV_WAITALL : 0);
 
