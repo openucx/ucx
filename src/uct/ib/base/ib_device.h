@@ -291,6 +291,8 @@ size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev);
 
 int uct_ib_device_odp_has_global_mr(uct_ib_device_t *dev);
 
+const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status);
+
 static inline struct ibv_exp_port_attr*
 uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)
 {

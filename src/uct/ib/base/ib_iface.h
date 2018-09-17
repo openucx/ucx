@@ -336,7 +336,7 @@ static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
 #define UCT_IB_IFACE_VERBS_COMPLETION_ERR(_type, _iface, _i,  _wc) \
     ucs_fatal("%s completion[%d] with error on %s/%p: %s, vendor_err 0x%x wr_id 0x%lx", \
               _type, _i, uct_ib_device_name(uct_ib_iface_device(_iface)), _iface, \
-              ibv_wc_status_str(_wc[i].status), _wc[i].vendor_err, \
+              uct_ib_wc_status_str(_wc[i].status), _wc[i].vendor_err, \
               _wc[i].wr_id);
 
 #define UCT_IB_IFACE_VERBS_FOREACH_RXWQE(_iface, _i, _hdr, _wc, _wc_count) \
