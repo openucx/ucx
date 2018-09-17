@@ -408,7 +408,7 @@ uct_rc_verbs_iface_wc_error(enum ibv_wc_status status)
 {
     /* TODO: handle MSG TRUNCATED error */
     ucs_fatal("Receive completion with error on XRQ: %s",
-              ibv_wc_status_str(status));
+              uct_ib_wc_status_str(status));
 }
 
 static UCS_F_ALWAYS_INLINE void
