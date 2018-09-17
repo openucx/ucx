@@ -488,7 +488,7 @@ int main(int argc, char **argv)
     uct_device_addr_t   *peer_dev   = NULL;
     uct_iface_addr_t    *own_iface;
     uct_iface_addr_t    *peer_iface = NULL;
-    uct_ep_addr_t       *own_ep;
+    uct_ep_addr_t       *own_ep     = NULL;
     uct_ep_addr_t       *peer_ep    = NULL;
     ucs_status_t        status      = UCS_OK; /* status codes for UCS */
     uct_ep_h            ep;                   /* Remote endpoint */
