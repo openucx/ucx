@@ -19,6 +19,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/type/component.h>
+#include <ucm/bistro/bistro.h>
 
 #if HAVE_CUDA
 #include "ucm/cuda/cudamem.h"
@@ -75,16 +76,6 @@ UCM_DEFINE_SELECT_FUNC(madvise, int, -1, SYS_madvise, void*, size_t, int)
 UCM_DEFINE_DLSYM_FUNC(madvise, int, -1, void*, size_t, int)
 #endif
 
-
-#if ENABLE_SYMBOL_OVERRIDE
-UCM_OVERRIDE_FUNC(mmap, void*)
-UCM_OVERRIDE_FUNC(munmap, int)
-UCM_OVERRIDE_FUNC(mremap, void*)
-UCM_OVERRIDE_FUNC(shmat, void*)
-UCM_OVERRIDE_FUNC(shmdt, int)
-UCM_OVERRIDE_FUNC(sbrk, void*)
-UCM_OVERRIDE_FUNC(madvise, int)
-#endif
 
 #if HAVE_CUDA
 
@@ -147,10 +138,6 @@ int ucm_orig_brk(void *addr)
 {
     void *new_addr;
 
-    if (!ucm_global_opts.enable_syscall && !ucm_global_opts.enable_bistro_hook) {
-        return ucm_orig_dlsym_brk(addr);
-    }
-
     new_addr = ucm_brk_syscall(addr);
 
     if (new_addr < addr) {
@@ -168,11 +155,11 @@ void *ucm_orig_sbrk(intptr_t increment)
 {
     void *prev;
 
-    if (!ucm_global_opts.enable_syscall && !ucm_global_opts.enable_bistro_hook) {
+    if (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_RELOC) {
         return ucm_orig_dlsym_sbrk(increment);
     } else {
         prev = ucm_brk_syscall(0);
-        return ucm_orig_brk(prev + increment) ? MAP_FAILED : prev;
+        return ucm_orig_brk(prev + increment) ? (void*)-1 : prev;
     }
 }
 

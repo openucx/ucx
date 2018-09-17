@@ -406,7 +406,7 @@ int ucm_brk(void *addr)
     ucm_trace("ucm_brk(addr=%p)", addr);
 
     if (increment < 0) {
-        ucm_dispatch_vm_munmap(old_addr, -increment);
+        ucm_dispatch_vm_munmap(old_addr + increment, -increment);
     }
 
     event.sbrk.result    = (void*)-1;
