@@ -618,8 +618,7 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
         sreq->send.uct.func = ucp_tag_offload_sw_rndv;
     }
 
-    sreq->send.uct.flags    = UCT_PENDING_REQUEST_FLAG_SYNC;
-
+    sreq->send.uct.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
     return UCS_OK;
 }
 
