@@ -287,6 +287,10 @@ protected:
     unsigned                     m_am_count;
 private:
     struct test_req_t {
+        test_req_t() : sendbuf(NULL), test(NULL) {
+            memset(&uct, 0, sizeof(uct));
+        }
+
         uct_pending_req_t  uct;
         mapped_buffer      *sendbuf;
         uct_p2p_am_test    *test;
