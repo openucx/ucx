@@ -173,13 +173,19 @@ enum ucp_worker_params_field {
  * are present. It is used for the enablement of backward compatibility support.
  */
 enum ucp_listener_params_field {
-    UCP_LISTENER_PARAM_FIELD_SOCK_ADDR       = UCS_BIT(0), /**< Sock address and
-                                                                length */
-    UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER  = UCS_BIT(1)  /**< User's callback
-                                                                and argument
-                                                                for handling the
-                                                                creation of an
-                                                                endpoint */
+    /**
+     * Sock address and length.
+     */
+    UCP_LISTENER_PARAM_FIELD_SOCK_ADDR           = UCS_BIT(0),
+
+    /**
+     * User's callback and argument for handling the creation of an endpoint.
+     * */
+    UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER      = UCS_BIT(1),
+
+    /**< User's callback and argument for handling the incoming connection
+     *   request. */
+    UCP_LISTENER_PARAM_FIELD_CONN_HANDLER        = UCS_BIT(2)
 };
 
 
@@ -199,7 +205,8 @@ enum ucp_ep_params_field {
                                                             transport level errors */
     UCP_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(3), /**< User data pointer */
     UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(4), /**< Socket address field */
-    UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(5)  /**< Endpoint flags */
+    UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(5), /**< Endpoint flags */
+    UCP_EP_PARAM_FIELD_CONN_REQUEST      = UCS_BIT(6)  /**< Connection request field */
 };
 
 
@@ -806,7 +813,7 @@ typedef struct ucp_listener_params {
      * Fields not specified in this mask would be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
-    uint64_t                       field_mask;
+    uint64_t                            field_mask;
 
     /**
      * An address in the form of a sockaddr.
@@ -815,7 +822,7 @@ typedef struct ucp_listener_params {
      * The @ref ucp_listener_create routine will return with an error if sockaddr
      * is not specified.
      */
-    ucs_sock_addr_t                sockaddr;
+    ucs_sock_addr_t                     sockaddr;
 
     /**
      * Handler to endpoint creation in a client-server connection flow.
@@ -823,73 +830,16 @@ typedef struct ucp_listener_params {
      * UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER needs to be set in the
      * field_mask.
      */
-    ucp_listener_accept_handler_t  accept_handler;
+    ucp_listener_accept_handler_t       accept_handler;
+
+    /**
+     * Handler of an incoming connection request in a client-server connection
+     * flow. In order for the callback inside this handler to be invoked, the
+     * @ref UCP_LISTENER_PARAM_FIELD_CONN_HANDLER needs to be set in the
+     * field_mask.
+     */
+    ucp_listener_conn_handler_t         conn_handler;
 } ucp_listener_params_t;
-
-
-/**
- * @ingroup UCP_ENDPOINT
- * @brief Tuning parameters for the UCP endpoint.
- *
- * The structure defines the parameters that are used for the
- * UCP endpoint tuning during the UCP ep @ref ucp_ep_create "creation".
- */
-typedef struct ucp_ep_params {
-    /**
-     * Mask of valid fields in this structure, using bits from
-     * @ref ucp_ep_params_field.
-     * Fields not specified in this mask would be ignored.
-     * Provides ABI compatibility with respect to adding new fields.
-     */
-    uint64_t                field_mask;
-
-    /**
-     * Destination address; if the @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag
-     * is not set, this address is mandatory for filling
-     * (along with its corresponding bit in the field_mask - @ref
-     * UCP_EP_PARAM_FIELD_REMOTE_ADDRESS) and must be obtained using
-     * @ref ucp_worker_get_address. This field cannot be changed by
-     * @ref ucp_ep_modify_nb.
-     */
-    const ucp_address_t     *address;
-
-    /**
-     * Desired error handling mode, optional parameter. Default value is
-     * @ref UCP_ERR_HANDLING_MODE_NONE. This field cannot be changed by
-     * @ref ucp_ep_modify_nb.
-     */
-    ucp_err_handling_mode_t err_mode;
-
-    /**
-     * Handler to process transport level failure.
-     */
-    ucp_err_handler_t       err_handler;
-
-    /**
-     * User data associated with an endpoint. See @ref ucp_stream_poll_ep_t and
-     * @ref ucp_err_handler_t
-     */
-    void                    *user_data;
-
-    /**
-     * Endpoint flags from @ref ucp_ep_params_flags_field.
-     * This value is optional.
-     * If it's not set (along with its corresponding bit in the field_mask -
-     * @ref UCP_EP_PARAM_FIELD_FLAGS), the @ref ucp_ep_create() routine will
-     * consider the flags as set to zero.
-     */
-     unsigned               flags;
-
-    /**
-     * Destination address in the form of a sockaddr;
-     * if the @ref UCP_EP_PARAMS_FLAGS_CLIENT_SERVER flag is set, this address
-     * is mandatory for filling (along with its corresponding bit in the
-     * field_mask - @ref UCP_EP_PARAM_FIELD_SOCK_ADDR) and should be obtained
-     * from the user. This field cannot be changed by @ref ucp_ep_modify_nb.
-     */
-    ucs_sock_addr_t         sockaddr;
-
-} ucp_ep_params_t;
 
 
 /**
@@ -1598,6 +1548,11 @@ void ucp_listener_destroy(ucp_listener_h listener);
  *
  * @return Error code as defined by @ref ucs_status_t
  *
+ * @note One of the following fields has to be specified:
+ *  - ucp_ep_params_t::address
+ *  - ucp_ep_params_t::sockaddr
+ *  - ucp_ep_params_t::conn_request
+
  * @note By default, ucp_ep_create() will connect an endpoint to itself if
  * the endpoint is destined to the same @a worker on which it was created,
  * i.e. @a params.address belongs to @a worker. This behavior can be changed by
@@ -1607,37 +1562,6 @@ void ucp_listener_destroy(ucp_listener_h listener);
  */
 ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
                            ucp_ep_h *ep_p);
-
-
-/**
- * @ingroup UCP_ENDPOINT
- * @brief Modify endpoint parameters.
- *
- * This routine modifies @ref ucp_ep_h "endpoint" created by @ref ucp_ep_create
- * or @ref ucp_listener_accept_callback_t. For example, this API can be used
- * to setup custom parameters like @ref ucp_ep_params_t::user_data or
- * @ref ucp_ep_params_t::err_handler_cb to endpoint created by 
- * @ref ucp_listener_accept_callback_t.
- *
- * @param [in]  ep          A handle to the endpoint.
- * @param [in]  params      User defined @ref ucp_ep_params_t configurations
- *                          for the @ref ucp_ep_h "UCP endpoint".
- *
- * @return NULL             - The endpoint is modified successfully.
- * @return UCS_PTR_IS_ERR(_ptr) - The reconfiguration failed and an error code
- *                                indicates the status. However, the @a endpoint
- *                                is not modified and can be used further.
- * @return otherwise        - The reconfiguration process is started, and can be
- *                            completed at any point in time. A request handle
- *                            is returned to the application in order to track
- *                            progress of the endpoint modification.
- *                            The application is responsible for releasing the
- *                            handle using the @ref ucp_request_free routine.
- *
- * @note See the documentation of @ref ucp_ep_params_t for details, only some of
- *       the parameters can be modified.
- */
-ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params);
 
 
 /**
@@ -1667,6 +1591,26 @@ ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params);
  *       @ref ucp_ep_destroy
  */
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode);
+
+
+/**
+ * @ingroup UCP_WORKER
+ *
+ * @brief Reject an incoming connection request.
+ *
+ * Reject the incoming connection request and release associated resources. If
+ * the remote initiator endpoint has set an @ref ucp_ep_params_t::err_handler,
+ * it will be invoked with status @ref UCS_ERR_REJECTED.
+ *
+ * @param [in]  listener        Handle to the listener on which the connection
+ *                              request was received.
+ * @param [in]  conn_request    Handle to the connection request to reject.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ *
+ */
+ucs_status_t ucp_listener_reject(ucp_listener_h listener,
+                                 ucp_conn_request_h conn_request);
 
 
 /**

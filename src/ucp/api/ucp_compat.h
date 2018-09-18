@@ -14,6 +14,18 @@
 
 BEGIN_C_DECLS
 
+
+/**
+ * @ingroup UCP_WORKER
+ * @deprecated Replaced by @ref ucp_listener_accept_conn_handler_t.
+ */
+typedef struct ucp_listener_accept_handler {
+   ucp_listener_accept_callback_t  cb;       /**< Endpoint creation callback */
+   void                            *arg;     /**< User defined argument for the
+                                                  callback */
+} ucp_listener_accept_handler_t;
+
+
 /**
  * @ingroup UCP_COMM
  * @deprecated Replaced by @ref ucp_request_test.
@@ -448,6 +460,42 @@ ucs_status_t ucp_atomic_cswap32(ucp_ep_h ep, uint32_t compare, uint32_t swap,
 ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
                                 uint64_t remote_addr, ucp_rkey_h rkey,
                                 uint64_t *result);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Modify endpoint parameters.
+ *
+ * @deprecated Use @ref ucp_listener_accept_conn_handler_t instead of @ref
+ *             ucp_listener_accept_handler_t, if you have other use case please
+ *             submit an issue on https://github.com/openucx/ucx or report to
+ *             ucx-group@elist.ornl.gov
+ *
+ * This routine modifies @ref ucp_ep_h "endpoint" created by @ref ucp_ep_create
+ * or @ref ucp_listener_accept_callback_t. For example, this API can be used
+ * to setup custom parameters like @ref ucp_ep_params_t::user_data or
+ * @ref ucp_ep_params_t::err_handler_cb to endpoint created by
+ * @ref ucp_listener_accept_callback_t.
+ *
+ * @param [in]  ep          A handle to the endpoint.
+ * @param [in]  params      User defined @ref ucp_ep_params_t configurations
+ *                          for the @ref ucp_ep_h "UCP endpoint".
+ *
+ * @return NULL             - The endpoint is modified successfully.
+ * @return UCS_PTR_IS_ERR(_ptr) - The reconfiguration failed and an error code
+ *                                indicates the status. However, the @a endpoint
+ *                                is not modified and can be used further.
+ * @return otherwise        - The reconfiguration process is started, and can be
+ *                            completed at any point in time. A request handle
+ *                            is returned to the application in order to track
+ *                            progress of the endpoint modification.
+ *                            The application is responsible for releasing the
+ *                            handle using the @ref ucp_request_free routine.
+ *
+ * @note See the documentation of @ref ucp_ep_params_t for details, only some of
+ *       the parameters can be modified.
+ */
+ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params);
 
 
 END_C_DECLS
