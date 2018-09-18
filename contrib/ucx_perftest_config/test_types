@@ -42,4 +42,8 @@ ucp_contig_stream_lat       -t stream_lat -r recv
 #CUDA
 ucp_contig_contig_cuda_tag_lat   -t tag_lat -D contig,contig -m cuda
 ucp_contig_contig_cuda_tag_bw    -t tag_bw  -D contig,contig -m cuda
+ucp_contig_cuda_stream_bw        -t stream_bw  -r recv_data -m cuda
+ucp_contig_cuda_stream_lat       -t stream_lat -r recv_data -m cuda
+ucp_contig_cuda_stream_bw        -t stream_bw  -r recv -m cuda
+ucp_contig_cuda_stream_lat       -t stream_lat -r recv -m cuda
 
