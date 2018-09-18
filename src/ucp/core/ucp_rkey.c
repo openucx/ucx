@@ -164,9 +164,6 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
     uint8_t md_size;
     const void *p;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(context, UCP_FEATURE_RMA | UCP_FEATURE_AMO,
-                                    status, return status);
-
     /* Count the number of remote MDs in the rkey buffer */
     p = rkey_buffer;
 

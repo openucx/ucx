@@ -675,6 +675,7 @@ const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
         if (feature_str) {
             ucs_snprintf_zero(p, endp - p, "%s%s", count == 0 ? "" : "|",
                               feature_str);
+            count++;
             p += strlen(p);
         }
     }
