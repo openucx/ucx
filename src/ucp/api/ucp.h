@@ -293,7 +293,7 @@ enum ucp_mem_map_params_field {
  */
 enum ucp_mem_advise_params_field {
     UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of the memory */
-    UCP_MEM_ADVISE_PARAM_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory */ 
+    UCP_MEM_ADVISE_PARAM_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory */
     UCP_MEM_ADVISE_PARAM_FIELD_ADVICE  = UCS_BIT(2)  /**< Advice on memory usage */
 };
 
@@ -1479,7 +1479,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker);
  * mechanism. This function causes a blocking call to @ref ucp_worker_wait or
  * waiting on a file descriptor from @ref ucp_worker_get_efd to return, even
  * if no event from the underlying interfaces has taken place.
- * 
+ *
  * @note It’s safe to use this routine from any thread, even if UCX is compiled
  *       without multi-threading support and/or initialized with any value of
  *       @ref ucp_params_t::mt_workers_shared and
@@ -1587,7 +1587,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  *                            is responsible for releasing the handle using the
  *                            @ref ucp_request_free routine.
  *
- * @note @ref ucp_ep_close_nb replaces deprecated @ref ucp_disconnect_nb and 
+ * @note @ref ucp_ep_close_nb replaces deprecated @ref ucp_disconnect_nb and
  *       @ref ucp_ep_destroy
  */
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode);
@@ -1629,11 +1629,11 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream);
 /**
  * @ingroup UCP_ENDPOINT
  *
- * @brief Non-blocking flush of outstanding AMO and RMA operations on the
+ * @brief Non-blocking flush of outstanding SEND, AMO and RMA operations on the
  * @ref ucp_ep_h "endpoint".
  *
- * This routine flushes all outstanding AMO and RMA communications on the
- * @ref ucp_ep_h "endpoint". All the AMO and RMA operations issued on the
+ * This routine flushes all outstanding SEND, AMO and RMA communications on the
+ * @ref ucp_ep_h "endpoint". All the SEND, AMO and RMA operations issued on the
  * @a ep prior to this call are completed both at the origin and at the target
  * @ref ucp_ep_h "endpoint" when this call returns.
  *
@@ -1818,7 +1818,7 @@ typedef enum ucp_mem_advice {
     UCP_MADV_NORMAL   = 0,  /**< No special treatment */
     UCP_MADV_WILLNEED       /**< can be used on the memory mapped with
                                  @ref UCP_MEM_MAP_NONBLOCK to speed up memory
-                                 mapping and to avoid page faults when 
+                                 mapping and to avoid page faults when
                                  the memory is accessed for the first time. */
 } ucp_mem_advice_t;
 
@@ -1828,7 +1828,7 @@ typedef enum ucp_mem_advice {
  * @brief Tuning parameters for the UCP memory advice.
  *
  * This structure defines the parameters that are used for the
- * UCP memory advice tuning during the @ref ucp_mem_advise "ucp_mem_advise" 
+ * UCP memory advice tuning during the @ref ucp_mem_advise "ucp_mem_advise"
  * routine.
  */
 typedef struct ucp_mem_advise_params {
@@ -1840,7 +1840,7 @@ typedef struct ucp_mem_advise_params {
     uint64_t                field_mask;
 
     /**
-     * Memory base address. 
+     * Memory base address.
      */
      void                   *address;
 
@@ -1862,20 +1862,20 @@ typedef struct ucp_mem_advise_params {
  *
  * This routine advises the UCP about how to handle memory range beginning at
  * address and size of length bytes. This call does not influence the semantics
- * of the application, but may influence its performance. The UCP may ignore 
+ * of the application, but may influence its performance. The UCP may ignore
  * the advice.
  *
  * @param [in]  context     Application @ref ucp_context_h "context" which was
  *                          used to allocate/map the memory.
  * @param [in]  memh        @ref ucp_mem_h "Handle" to memory region.
- * @param [in]  params      Memory base address and length. The advice field 
- *                          is used to pass memory use advice as defined in 
+ * @param [in]  params      Memory base address and length. The advice field
+ *                          is used to pass memory use advice as defined in
  *                          the @ref ucp_mem_advice list
  *                          The memory range must belong to the @a memh
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,  
+ucs_status_t ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
                             ucp_mem_advise_params_t *params);
 
 
@@ -2201,7 +2201,7 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
 
 /**
  * @ingroup UCP_COMM
- * @brief Non-blocking stream receive operation of structured data into a 
+ * @brief Non-blocking stream receive operation of structured data into a
  *        user-supplied buffer.
  *
  * This routine receives data that is described by the local address @a buffer,
@@ -2847,11 +2847,11 @@ ucs_status_t ucp_worker_fence(ucp_worker_h worker);
 /**
  * @ingroup UCP_WORKER
  *
- * @brief Flush outstanding AMO and RMA operations on the @ref ucp_worker_h
+ * @brief Flush outstanding SEND, AMO and RMA operations on the @ref ucp_worker_h
  * "worker"
  *
- * This routine flushes all outstanding AMO and RMA communications on the
- * @ref ucp_worker_h "worker". All the AMO and RMA operations issued on the
+ * This routine flushes all outstanding SEND, AMO and RMA communications on the
+ * @ref ucp_worker_h "worker". All the SEND, AMO and RMA operations issued on the
  * @a worker prior to this call are completed both at the origin and at the
  * target when this call returns.
  *
