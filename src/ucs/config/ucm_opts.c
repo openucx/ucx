@@ -43,7 +43,7 @@ static ucs_config_field_t ucm_global_config_table[] = {
 
   {"CUDA_RELOC", "yes",
    "Enable installing CUDA symbols in the relocation table",
-   ucs_offsetof(ucm_global_config_t, enable_dynamic_mmap_thresh),
+   ucs_offsetof(ucm_global_config_t, enable_cuda_reloc),
    UCS_CONFIG_TYPE_BOOL},
 
   {"DYNAMIC_MMAP_THRESH", "yes",
