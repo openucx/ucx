@@ -159,7 +159,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,
 {
     ucp_request_t *req = (ucp_request_t *)request - 1;
     ucp_recv_desc_t *rdesc;
+    ucs_status_t status;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG, status,
+                                    return status);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 1, "recv_nbr");
@@ -180,7 +183,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nb,
     ucp_recv_desc_t *rdesc;
     ucs_status_ptr_t ret;
     ucp_request_t *req;
+    ucs_status_t status;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG, status,
+                                    return UCS_STATUS_PTR(status));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     req = ucp_request_get(worker);
@@ -206,7 +212,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
     ucp_recv_desc_t *rdesc = message;
     ucs_status_ptr_t ret;
     ucp_request_t *req;
+    ucs_status_t status;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG, status,
+                                    return UCS_STATUS_PTR(status));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     req = ucp_request_get(worker);

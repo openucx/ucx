@@ -96,6 +96,9 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
     ssize_t packed_size;
     size_t size;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(context, UCP_FEATURE_RMA | UCP_FEATURE_AMO,
+                                    status, return status);
+
     /* always acquire context lock */
     UCP_THREAD_CS_ENTER(&context->mt_lock);
 
@@ -160,6 +163,9 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
     ucp_rkey_h rkey;
     uint8_t md_size;
     const void *p;
+
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(context, UCP_FEATURE_RMA | UCP_FEATURE_AMO,
+                                    status, return status);
 
     /* Count the number of remote MDs in the rkey buffer */
     p = rkey_buffer;

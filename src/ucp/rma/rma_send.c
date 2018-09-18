@@ -178,6 +178,8 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     ucp_ep_rma_config_t *rma_config;
     ucs_status_t status;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_RMA, status,
+                                    return status);
     UCP_RMA_CHECK_PARAMS(buffer, length);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
@@ -215,6 +217,8 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
     ucs_status_ptr_t ptr_status;
     ucs_status_t status;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_RMA, status,
+                                    return UCS_STATUS_PTR(status));
     UCP_RMA_CHECK_PARAMS_PTR(buffer, length);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
@@ -252,6 +256,8 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
     ucp_ep_rma_config_t *rma_config;
     ucs_status_t status;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_RMA, status,
+                                    return status);
     UCP_RMA_CHECK_PARAMS(buffer, length);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
@@ -280,6 +286,8 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
     ucs_status_ptr_t ptr_status;
     ucs_status_t status;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_RMA, status,
+                                    return UCS_STATUS_PTR(status));
     UCP_RMA_CHECK_PARAMS_PTR(buffer, length);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 

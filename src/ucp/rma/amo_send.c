@@ -107,6 +107,8 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
     ucs_status_t status;
     ucp_request_t *req;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_AMO,
+                                    status, return UCS_STATUS_PTR(status));
     UCP_AMO_CHECK_PARAM(remote_addr, op_size, opcode, UCP_ATOMIC_FETCH_OP_LAST,
                         UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
 
@@ -141,6 +143,8 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
     ucs_status_t status;
     ucp_request_t *req;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_AMO,
+                                    status, return status);
     UCP_AMO_CHECK_PARAM(remote_addr, op_size, opcode, UCP_ATOMIC_POST_OP_LAST,
                         UCS_ERR_INVALID_PARAM);
 
