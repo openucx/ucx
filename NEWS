@@ -1,21 +1,33 @@
 #
 ## Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 ## Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
-## Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED.
+## Copyright (C) ARM Ltd. 2017-2018.  ALL RIGHTS RESERVED.
 ##
 ## See file LICENSE for terms.
 ##
 #
 
 ## Current
+Feaures:
+- New emulation mode enabling full UCX functionality (Atomic, Put, Get)
+  over TCP and RDMA-CORE interconnects that to do implement full RDMA semantics.
+- Non-blocking API for all one-sided operations. All blocking communication APIs marked
+  as depricated.
+- New client/server API
+- Added CUDA support for stream API
 
 ## 1.4.0-rc1(September 7, 2018)
 
 Features:
 - Improved support for installation with latest ROCm
 - Improved support for latest rdma-core
-- Adding support for CUDA IPC for inter node GPU
+- Adding support for CUDA IPC for intra-node GPU
+- Added support for CUDA memory allocation cache for mem-type detection
 - Added support for latest Mellanox devices
+- Added support for multiple connections between same pair of endpoints
+- Added support large worker address for client/server connection establishment
+  and INARRD_ANY
+- Added support for bitwise atomics operations
 
 Bugfixes:
 - Performance fixes for rendezvous' protocol
