@@ -202,6 +202,9 @@ enum ucp_am_cb_flags {
     UCP_AM_FLAG_WHOLE_MSG = UCS_BIT(0)
 };
 
+enum ucp_send_am_flags {
+    UCP_AM_SEND_REPLY = UCS_BIT(0)
+};
 /**
  * @ingroup UCP_WORKER
  * @brief UCP worker address flags.
@@ -2188,13 +2191,14 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  * @ingroup UCP_COMM
  * @brief Send Active Message
  *
- * This routine sends an Active Message to an ep.
+ * This routine sends an Active Message to an ep. It does not support
+ * CUDA memory.
  *
  * @param [in]  ep          UCP endpoint where the active message will be run
  * @param [in]  id          Active Message id. Specifies which registered 
  *                          callback to run.
- * @param [in]  payload     Pointer to the data to be sent to the target node 
- *                          for the AM
+ * @param [in]  buffer      Pointer to the data to be sent to the target node 
+ *                          for the AM.
  * @param [in]  count       Number of elements to send.
  * @param [in]  datatype    Datatype descriptor for the elements in the buffer. 
  * @param [in]  cb          Callback that is invoked upon completion of the data
@@ -2207,7 +2211,7 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  *                          to be completed after cb is run
  */
 ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
-                                const void *payload, size_t count,
+                                const void *buffer, size_t count,
                                 ucp_datatype_t datatype,
                                 ucp_send_callback_t cb, unsigned flags);
 
