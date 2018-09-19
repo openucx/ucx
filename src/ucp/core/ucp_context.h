@@ -267,7 +267,8 @@ typedef struct ucp_tl_iface_atomic_flags {
     do { \
         if (ENABLE_PARAMS_CHECK && !((_context)->config.features & (_flags))) { \
             char feature_list_str[512] = {0}; \
-            ucs_error("required feature flags \"%s\" are not enabled", \
+            ucs_error("required feature flags \"%s\" are not enabled, " \
+                      "the features can be enabled using ucp_init call", \
                       ucp_feature_flags_str((_flags), feature_list_str, 512)); \
             (_status) = UCS_ERR_INVALID_PARAM; \
             _action; \
