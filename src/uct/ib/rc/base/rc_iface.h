@@ -189,6 +189,19 @@ typedef struct uct_rc_srq {
 
 #if IBV_EXP_HW_TM
 
+enum {
+    UCT_RC_IFACE_STAT_TAG_RX_EXP,
+    UCT_RC_IFACE_STAT_TAG_RX_EAGER_UNEXP,
+    UCT_RC_IFACE_STAT_TAG_RX_RNDV_UNEXP,
+    UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_EXP,
+    UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_UNEXP,
+    UCT_RC_IFACE_STAT_TAG_RX_RNDV_FIN,
+    UCT_RC_IFACE_STAT_TAG_LIST_ADD,
+    UCT_RC_IFACE_STAT_TAG_LIST_DEL,
+    UCT_RC_IFACE_STAT_TAG_LIST_SYNC,
+    UCT_RC_IFACE_STAT_TAG_LAST
+};
+
 typedef struct uct_rc_iface_tmh_priv_data {
     uint8_t                     length;
     uint16_t                    data;
@@ -254,7 +267,7 @@ struct uct_rc_iface {
         } rndv_unexp;
         uct_rc_iface_release_desc_t  eager_desc;
         uct_rc_iface_release_desc_t  rndv_desc;
-
+        UCS_STATS_NODE_DECLARE(stats);
     } tm;
 #endif
 
@@ -344,7 +357,12 @@ typedef struct uct_rc_am_short_hdr {
 
 #if IBV_EXP_HW_TM
 
+#  define UCT_RC_IFACE_TM_STAT(_iface, _op) \
+       UCS_STATS_UPDATE_COUNTER((_iface)->tm.stats, UCT_RC_IFACE_STAT_TAG_##_op, 1)
+
 #  define UCT_RC_IFACE_TM_ENABLED(_iface) (_iface)->tm.enabled
+
+
 
 /* TMH can carry 2 bytes of data in its reserved filed */
 #  define UCT_RC_IFACE_TMH_PRIV_LEN       ucs_field_sizeof(uct_rc_iface_tmh_priv_data_t, \

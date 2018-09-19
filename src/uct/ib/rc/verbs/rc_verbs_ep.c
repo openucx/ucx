@@ -574,6 +574,9 @@ ucs_status_t uct_rc_verbs_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
     uct_rc_verbs_iface_fill_inl_sge(&iface->verbs_common, &tmh, sizeof(tmh), data, length);
 
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE, INT_MAX);
+
+    UCT_TL_EP_STAT_OP(&ep->super.super, TAG, SHORT, length);
+
     return UCS_OK;
 }
 
@@ -598,6 +601,9 @@ ssize_t uct_rc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                    pack_cb, arg, length);
     UCT_RC_VERBS_FILL_SGE(wr, sge, length + sizeof(struct ibv_exp_tmh));
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, 0, INT_MAX);
+
+    UCT_TL_EP_STAT_OP(&ep->super.super, TAG, BCOPY, length);
+
     return length;
 }
 
@@ -634,6 +640,10 @@ ucs_status_t uct_rc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
     wr.sg_list = sge;
 
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, send_flags, INT_MAX);
+
+    UCT_TL_EP_STAT_OP(&ep->super.super, TAG, ZCOPY,
+                      uct_iov_total_length(iov, iovcnt));
+
     return UCS_INPROGRESS;
 }
 

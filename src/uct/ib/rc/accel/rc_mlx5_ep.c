@@ -578,6 +578,9 @@ uct_rc_mlx5_ep_tag_eager_short_inline(uct_ep_h tl_ep, uct_tag_t tag,
                                      &ep->tx.wq, MLX5_OPCODE_SEND, data, length,
                                      NULL, tag, 0, IBV_EXP_TMH_EAGER, 0, NULL,
                                      NULL, 0, NULL, 0, MLX5_WQE_CTRL_SOLICITED);
+
+    UCT_TL_EP_STAT_OP(&ep->super.super, TAG, SHORT, length);
+
     return UCS_OK;
 }
 
@@ -589,6 +592,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
     uct_rc_iface_t *rc_iface   = &iface->super;
     uct_rc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     uct_rc_mlx5_dm_copy_data_t cache;
+    ucs_status_t status;
 
     if (ucs_likely((sizeof(struct ibv_exp_tmh) + length <= UCT_IB_MLX5_AM_MAX_SHORT(0)) ||
                    !iface->mlx5_common.dm.dm)) {
@@ -603,10 +607,15 @@ ucs_status_t uct_rc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
 
     uct_rc_mlx5_fill_tmh(ucs_unaligned_ptr(&cache.tm_hdr), tag, 0, IBV_EXP_TMH_EAGER);
 
-    return uct_rc_mlx5_ep_short_dm(ep, &cache, sizeof(cache.tm_hdr), data, length,
+    status = uct_rc_mlx5_ep_short_dm(ep, &cache, sizeof(cache.tm_hdr), data, length,
                                    MLX5_OPCODE_SEND,
                                    MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE,
                                    0, 0);
+    if (!UCS_STATUS_IS_ERR(status)) {
+        UCT_TL_EP_STAT_OP(&ep->super.super, TAG, SHORT, length);
+    }
+
+    return status;
 #endif
 }
 
@@ -634,6 +643,9 @@ ssize_t uct_rc_mlx5_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                 opcode, sizeof(struct ibv_exp_tmh) + length,
                                 0, 0, MLX5_WQE_CTRL_SOLICITED, ib_imm,
                                 desc, desc + 1, NULL);
+
+    UCT_TL_EP_STAT_OP(&ep->super.super, TAG, BCOPY, length);
+
     return length;
 }
 
@@ -655,6 +667,9 @@ ucs_status_t uct_rc_mlx5_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     UCT_RC_IFACE_FILL_TM_IMM(imm, app_ctx, ib_imm, opcode, MLX5_OPCODE_SEND,
                              _IMM);
+
+    UCT_TL_EP_STAT_OP(&ep->super.super, TAG, ZCOPY,
+                      uct_iov_total_length(iov, iovcnt));
 
     return uct_rc_mlx5_ep_zcopy_post(ep, opcode|UCT_RC_MLX5_OPCODE_FLAG_TM,
                                      iov, iovcnt, 0, "", 0, 0, 0,
