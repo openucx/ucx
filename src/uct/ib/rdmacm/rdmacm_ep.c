@@ -148,7 +148,6 @@ out:
     return UCS_OK;
 
 err:
-    self->status = status;
     return status;
 }
 
@@ -220,5 +219,15 @@ void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t stat
     } else {
         uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), &rdmacm_ep->super.super,
                           &rdmacm_iface->super.super, status);
+    }
+}
+
+void uct_rdmacm_ep_purge_outstanding(uct_rdmacm_ep_t *ep, ucs_status_t status)
+{
+    uct_rdmacm_ep_op_t *op;
+
+    ucs_queue_for_each_extract(op, &ep->ops, queue_elem, 1) {
+        uct_invoke_completion(op->user_comp, status);
+        ucs_free(op);
     }
 }

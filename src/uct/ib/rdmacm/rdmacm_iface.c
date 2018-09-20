@@ -62,7 +62,7 @@ static ucs_status_t uct_rdmacm_iface_get_address(uct_iface_h tl_iface, uct_iface
     return UCS_OK;
 }
 
-static ucs_status_t uct_rdmacm_accept(struct rdma_cm_id	*id)
+static ucs_status_t uct_rdmacm_accept(struct rdma_cm_id *id)
 {
     /* The server will not send any reply data back to the client */
     struct rdma_conn_param conn_param = {0};
@@ -200,16 +200,10 @@ static void uct_rdmacm_client_handle_failure(uct_rdmacm_iface_t *iface,
                                              uct_rdmacm_ep_t *ep,
                                              ucs_status_t status)
 {
-    uct_rdmacm_ep_op_t *op;
-
     ucs_assert(!iface->is_server);
     if (ep != NULL) {
         uct_rdmacm_ep_set_failed(&iface->super.super, &ep->super.super, status);
-        ucs_queue_for_each_extract(op, &ep->ops, queue_elem, 1) {
-            op->user_comp->count = 0;
-            op->user_comp->func(op->user_comp, status);
-            ucs_free(op);
-        }
+        uct_rdmacm_ep_purge_outstanding(ep, status);
     }
 }
 
@@ -272,9 +266,6 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
     uct_rdmacm_priv_data_hdr_t hdr;
     struct rdma_conn_param conn_param;
     uct_rdmacm_ctx_t *cm_id_ctx;
-    ucs_queue_head_t completed_ops;
-    uct_rdmacm_ep_op_t *op;
-    ucs_queue_iter_t iter;
     ssize_t priv_data_ret;
     ucs_status_t status;
 
@@ -377,19 +368,9 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
         /* Client - connection is ready */
         ucs_assert(!iface->is_server);
         ret_flags |= UCT_RDMACM_PROCESS_EVENT_DESTROY_CM_ID_FLAG;
-        if (ep) {
+        if (ep != NULL) {
             ep->status = UCS_OK;
-            ucs_queue_head_init(&completed_ops);
-            ucs_queue_for_each_safe(op, iter, &ep->ops, queue_elem) {
-                if (--op->user_comp->count == 0) {
-                    op->user_comp->func(op->user_comp, UCS_OK);
-                    ucs_queue_del_iter(&ep->ops, iter);
-                    ucs_queue_push(&completed_ops, &op->queue_elem);
-                }
-            }
-            ucs_queue_for_each_extract(op, &completed_ops, queue_elem, 1) {
-                ucs_free(op);
-            }
+            uct_rdmacm_ep_purge_outstanding(ep, UCS_OK);
         }
         break;
 
