@@ -1629,11 +1629,11 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream);
 /**
  * @ingroup UCP_ENDPOINT
  *
- * @brief Non-blocking flush of outstanding SEND, AMO and RMA operations on the
+ * @brief Non-blocking flush of outstanding AMO and RMA operations on the
  * @ref ucp_ep_h "endpoint".
  *
- * This routine flushes all outstanding SEND, AMO and RMA communications on the
- * @ref ucp_ep_h "endpoint". All the SEND, AMO and RMA operations issued on the
+ * This routine flushes all outstanding AMO and RMA communications on the
+ * @ref ucp_ep_h "endpoint". All the AMO and RMA operations issued on the
  * @a ep prior to this call are completed both at the origin and at the target
  * @ref ucp_ep_h "endpoint" when this call returns.
  *
@@ -2847,11 +2847,11 @@ ucs_status_t ucp_worker_fence(ucp_worker_h worker);
 /**
  * @ingroup UCP_WORKER
  *
- * @brief Flush outstanding SEND, AMO and RMA operations on the @ref ucp_worker_h
+ * @brief Flush outstanding AMO and RMA operations on the @ref ucp_worker_h
  * "worker"
  *
- * This routine flushes all outstanding SEND, AMO and RMA communications on the
- * @ref ucp_worker_h "worker". All the SEND, AMO and RMA operations issued on the
+ * This routine flushes all outstanding AMO and RMA communications on the
+ * @ref ucp_worker_h "worker". All the AMO and RMA operations issued on the
  * @a worker prior to this call are completed both at the origin and at the
  * target when this call returns.
  *
