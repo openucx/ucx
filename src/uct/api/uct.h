@@ -414,7 +414,7 @@ enum {
 typedef enum {
     UCT_MD_MEM_TYPE_HOST = 0,      /**< Default system memory */
     UCT_MD_MEM_TYPE_CUDA,          /**< NVIDIA CUDA memory */
-    UCT_MD_MEM_TYPE_CUDA_MANAGED,  /**< NVIDIA CUDA managed memory */
+    UCT_MD_MEM_TYPE_CUDA_MANAGED,  /**< NVIDIA CUDA managed (or unified) memory*/
     UCT_MD_MEM_TYPE_LAST
 } uct_memory_type_t;
 

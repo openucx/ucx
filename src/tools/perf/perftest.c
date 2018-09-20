@@ -377,7 +377,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        host - system memory(default)\n");
 #if HAVE_CUDA
     printf("                        cuda - NVIDIA GPU memory\n");
-    printf("                        managed - NVIDIA GPU managed memory\n");
+    printf("                        cuda-managed - NVIDIA cuda managed/unified memory\n");
 #endif
     printf("     -h             show this help message\n");
     printf("\n");
@@ -643,17 +643,10 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         if (!strcmp(optarg, "host")) {
             params->mem_type = UCT_MD_MEM_TYPE_HOST;
             return UCS_OK;
-        } else if(!strcmp(optarg, "cuda")) {
+        } else if(!strncmp(optarg, "cuda", 4)) {
 #if HAVE_CUDA
-            params->mem_type = UCT_MD_MEM_TYPE_CUDA;
-            return UCS_OK;
-#else
-            ucs_error("not built with cuda support");
-            return UCS_ERR_INVALID_PARAM;
-#endif
-        } else if(!strcmp(optarg, "managed")) {
-#if HAVE_CUDA
-            params->mem_type = UCT_MD_MEM_TYPE_CUDA_MANAGED;
+            params->mem_type = (!strcmp(optarg, "cuda-managed")) ?
+                UCT_MD_MEM_TYPE_CUDA_MANAGED : UCT_MD_MEM_TYPE_CUDA;
             return UCS_OK;
 #else
             ucs_error("not built with cuda support");
