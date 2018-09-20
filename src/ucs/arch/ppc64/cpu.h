@@ -26,7 +26,8 @@ BEGIN_C_DECLS
 #define ucs_memory_bus_store_fence()  ucs_memory_bus_fence()
 #define ucs_memory_bus_load_fence()   ucs_memory_bus_fence()
 #define ucs_memory_cpu_fence()        ucs_memory_bus_fence()
-#define ucs_memory_cpu_store_fence()  ucs_memory_bus_fence()
+#define ucs_memory_cpu_store_fence()  asm volatile ("lwsync \n" \
+                                                    ::: "memory")
 #define ucs_memory_cpu_load_fence()   asm volatile ("lwsync \n" \
                                                     "isync  \n" \
                                                     ::: "memory")
