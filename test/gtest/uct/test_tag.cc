@@ -725,7 +725,7 @@ UCS_TEST_P(test_tag, sw_rndv_unexpected)
 UCT_TAG_INSTANTIATE_TEST_CASE(test_tag)
 
 
-#if ENABLE_STATS
+#if ENABLE_STATS && IBV_EXP_HW_TM
 extern "C" {
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_iface.h>
@@ -759,8 +759,12 @@ public:
 
         v = UCS_STATS_GET_COUNTER(ep_stats(sender()), op);
         EXPECT_EQ(op_val, v);
-        v = UCS_STATS_GET_COUNTER(ep_stats(sender()), type);
-        EXPECT_EQ(len, v);
+
+        // With valgrind reduced messages is sent
+        if (!RUNNING_ON_VALGRIND) {
+            v = UCS_STATS_GET_COUNTER(ep_stats(sender()), type);
+            EXPECT_EQ(len, v);
+        }
     }
 
     void check_rx_counter(int op, uint64_t val, entity &e)
