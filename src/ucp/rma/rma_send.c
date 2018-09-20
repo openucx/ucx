@@ -17,7 +17,7 @@
     if ((_length) == 0) { \
         return UCS_OK; \
     } \
-    if (ENABLE_PARAMS_CHECK && ((_buffer) == NULL)) { \
+    if (ENABLE_PARAMS_CHECK && ucs_unlikely((_buffer) == NULL)) { \
         return UCS_ERR_INVALID_PARAM; \
     }
 
@@ -25,7 +25,7 @@
     if ((_length) == 0) { \
         return UCS_STATUS_PTR(UCS_OK);          \
     } \
-    if (ENABLE_PARAMS_CHECK && ((_buffer) == NULL)) { \
+    if (ENABLE_PARAMS_CHECK && ucs_unlikely((_buffer) == NULL)) { \
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
     }
 

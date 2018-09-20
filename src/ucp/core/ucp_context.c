@@ -638,25 +638,24 @@ const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
     return str;
 }
 
-static char* ucp_feature_flag_str(unsigned feature_flag)
+static const char* ucp_feature_flag_str(unsigned feature_flag)
 {
     switch (feature_flag) {
-        case UCP_FEATURE_TAG:
-            return "UCP_FEATURE_TAG";
-        case UCP_FEATURE_RMA:
-            return "UCP_FEATURE_RMA";
-        case UCP_FEATURE_AMO32:
-            return "UCP_FEATURE_AMO32";
-        case UCP_FEATURE_AMO64:
-            return "UCP_FEATURE_AMO64";
-        case UCP_FEATURE_WAKEUP:
-            return "UCP_FEATURE_WAKEUP";
-        case UCP_FEATURE_STREAM:
-            return "UCP_FEATURE_STREAM";
-        default:
-            ucs_error("Unknown feature flag value %u", feature_flag);
-            return NULL;
+    case UCP_FEATURE_TAG:
+        return "UCP_FEATURE_TAG";
+    case UCP_FEATURE_RMA:
+        return "UCP_FEATURE_RMA";
+    case UCP_FEATURE_AMO32:
+        return "UCP_FEATURE_AMO32";
+    case UCP_FEATURE_AMO64:
+        return "UCP_FEATURE_AMO64";
+    case UCP_FEATURE_WAKEUP:
+        return "UCP_FEATURE_WAKEUP";
+    case UCP_FEATURE_STREAM:
+        return "UCP_FEATURE_STREAM";
     }
+
+    ucs_fatal("Unknown feature flag value %u", feature_flag);
 }
 
 const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
@@ -664,20 +663,21 @@ const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
 {
     unsigned i, count;
     char *p, *endp;
-    char *feature_str;
 
     p    = str;
     endp = str + max_str_len;
     count = 0;
 
     ucs_for_each_bit(i, feature_flags) {
-        feature_str = ucp_feature_flag_str(UCS_BIT(i));
-        if (feature_str) {
-            ucs_snprintf_zero(p, endp - p, "%s%s", count == 0 ? "" : "|",
-                              feature_str);
-            count++;
-            p += strlen(p);
-        }
+        ucs_snprintf_zero(p, endp - p, "%s%s", count == 0 ? "" : "|",
+                          ucp_feature_flag_str(UCS_BIT(i)));
+        count++;
+        p += strlen(p);
+    }
+
+    if (count == 0) {
+        ucs_assert(max_str_len > 0);
+        str[0] = '\0'; /* empty string */
     }
 
     return str;
