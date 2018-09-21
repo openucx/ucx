@@ -24,7 +24,7 @@ Features:
 - Adding support for CUDA IPC for intra-node GPU
 - Added support for CUDA memory allocation cache for mem-type detection
 - Added support for latest Mellanox devices
-- Added support for multiple connections between same pair of endpoints
+- Added support for multiple connections between the same pair of workers
 - Added support large worker address for client/server connection establishment
   and INARRD_ANY
 - Added support for bitwise atomics operations
