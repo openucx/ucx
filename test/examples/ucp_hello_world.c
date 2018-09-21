@@ -4,8 +4,10 @@
 * See file LICENSE for terms.
 */
 
-#define HAVE_CONFIG_H /* Force using config.h, so test would fail if header
-                         actually tries to use it */
+#ifndef HAVE_CONFIG_H
+#  define HAVE_CONFIG_H /* Force using config.h, so test would fail if header
+                           actually tries to use it */
+#endif
 
 /*
  * UCP hello world client / server example utility

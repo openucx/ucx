@@ -272,7 +272,7 @@ build_icc() {
 #
 build_debug() {
 	echo "==== Build with --enable-debug option ===="
-	../contrib/configure-devel --prefix=$ucx_inst --enable-debug
+	../contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
 	$MAKE clean
 	$MAKE
 	$MAKE distclean
