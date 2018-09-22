@@ -275,11 +275,12 @@ public:
 
     void connect_and_send_recv(struct sockaddr *connect_addr, bool wakeup)
     {
-        detect_error();
-        client_ep_connect(connect_addr);
-
-        tag_send_recv(sender(), receiver(), wakeup);
-        restore_errors();
+        {
+            detect_error();
+            UCS_TEST_SCOPE_EXIT() { restore_errors(); } UCS_TEST_SCOPE_EXIT_END
+            client_ep_connect(connect_addr);
+            tag_send_recv(sender(), receiver(), wakeup);
+        }
 
         wait_for_server_ep(wakeup);
 
