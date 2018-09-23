@@ -227,7 +227,7 @@ void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, unsigned m
 }
 
 static UCS_F_ALWAYS_INLINE int
-ucp_tag_offload_do_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
+ucp_tag_offload_do_post(ucp_request_t *req)
 {
     ucp_worker_t *worker   = req->recv.worker;
     ucp_context_t *context = worker->context;
@@ -328,7 +328,6 @@ static UCS_F_ALWAYS_INLINE int
 ucp_tag_offload_post_sw_reqs(ucp_request_t *req, ucp_request_queue_t *req_queue)
 {
     ucp_worker_t *worker = req->recv.worker;
-    ucs_queue_iter_t iter;
     ucs_status_t status;
     ucp_request_t *req_exp;
     ucp_worker_iface_t *wiface;
@@ -359,12 +358,12 @@ ucp_tag_offload_post_sw_reqs(ucp_request_t *req, ucp_request_queue_t *req_queue)
         return 0;
     }
 
-    ucs_queue_for_each_safe(req_exp, iter, &req_queue->queue, recv.queue) {
+    ucs_queue_for_each(req_exp, &req_queue->queue, recv.queue) {
         if (req_exp->flags & UCP_REQUEST_FLAG_OFFLOADED) {
             continue;
         }
         ucs_assert(req_exp != req);
-        status = ucp_tag_offload_do_post(req_exp, req_queue);
+        status = ucp_tag_offload_do_post(req_exp);
         if (status != UCS_OK) {
             return 0;
         }
@@ -404,7 +403,7 @@ int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
         return 0;
     }
 
-    if (ucp_tag_offload_do_post(req, req_queue) != UCS_OK) {
+    if (ucp_tag_offload_do_post(req) != UCS_OK) {
         return 0;
     }
 
