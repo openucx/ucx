@@ -387,7 +387,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     }
 
     status = flush_ep(ucp_worker, client_ep);
-    fprintf(stderr, "ucp_ep_flush_nb completed with status %d (%s)\n",
+    printf("flush_ep completed with status %d (%s)\n",
             status, ucs_status_string(status));
 
     ret = 0;
