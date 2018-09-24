@@ -13,8 +13,38 @@ extern "C" {
 #include <ucs/sys/string.h>
 }
 
+#include <queue>
+
 class test_uct_sockaddr : public uct_test {
 public:
+    struct completion : public uct_completion_t {
+        volatile bool m_flag;
+
+        completion() : m_flag(false), m_status(UCS_INPROGRESS) {
+            count = 1;
+            func  = completion_cb;
+        }
+
+        ucs_status_t status() const {
+            return m_status;
+        }
+    private:
+        static void completion_cb(uct_completion_t *self, ucs_status_t status)
+        {
+            completion *c = static_cast<completion*>(self);
+            c->m_status   = status;
+            c->m_flag     = true;
+        }
+
+        ucs_status_t m_status;
+    };
+
+    test_uct_sockaddr() : server(NULL), client(NULL), err_count(0),
+                          server_recv_req(0), delay_conn_reply(false) {
+        memset(&listen_sock_addr,  0, sizeof(listen_sock_addr));
+        memset(&connect_sock_addr, 0, sizeof(connect_sock_addr));
+    }
+
     void init() {
         uct_test::init();
 
@@ -69,8 +99,9 @@ public:
         client->client_cb_arg = server->iface_attr().max_conn_priv;
     }
 
-    static ucs_status_t conn_request_cb(void *arg, const void *conn_priv_data,
-                                        size_t length)
+    static void conn_request_cb(uct_iface_h iface, void *arg,
+                                uct_conn_request_h conn_request,
+                                const void *conn_priv_data, size_t length)
     {
         test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr*>(arg);
 
@@ -79,8 +110,12 @@ public:
                   std::string(reinterpret_cast<const char *>(conn_priv_data)));
 
         EXPECT_EQ(1 + uct_test::entity::client_priv_data.length(), length);
+        if (self->delay_conn_reply) {
+            self->delayed_conn_reqs.push(conn_request);
+        } else {
+            uct_iface_accept(iface, conn_request);
+        }
         self->server_recv_req++;
-        return UCS_OK;
     }
 
     static ucs_status_t err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
@@ -94,6 +129,8 @@ protected:
     entity *server, *client;
     ucs_sock_addr_t listen_sock_addr, connect_sock_addr;
     volatile int err_count, server_recv_req;
+    std::queue<uct_conn_request_h> delayed_conn_reqs;
+    bool delay_conn_reply;
 };
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
@@ -101,8 +138,6 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
                      << " Interface: " << GetParam()->dev_name.c_str();
 
-    server_recv_req = 0;
-    err_count = 0;
     client->connect(0, *server, 0, &connect_sock_addr);
 
     /* wait for the server to connect */
@@ -120,12 +155,64 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
      * test ends and the client's ep was destroyed */
 }
 
+UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
+{
+    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
+                     << " Interface: " << GetParam()->dev_name.c_str();
+    delay_conn_reply = true;
+    client->connect(0, *server, 0, &connect_sock_addr);
+
+    /* wait for the server to connect */
+    while (server_recv_req == 0) {
+        progress();
+    }
+    ASSERT_EQ(1,   server_recv_req);
+    ASSERT_EQ(1ul, delayed_conn_reqs.size());
+    EXPECT_EQ(0,   err_count);
+    while (!delayed_conn_reqs.empty()) {
+        uct_iface_accept(server->iface(), delayed_conn_reqs.front());
+        delayed_conn_reqs.pop();
+    }
+
+    completion comp;
+    ucs_status_t status = uct_ep_flush(client->ep(0), 0, &comp);
+    if (status == UCS_INPROGRESS) {
+        wait_for_flag(&comp.m_flag);
+        EXPECT_EQ(UCS_OK, comp.status());
+    } else {
+        EXPECT_EQ(UCS_OK, status);
+    }
+    EXPECT_EQ(0, err_count);
+}
+
+UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
+{
+    UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
+                     << " Interface: " << GetParam()->dev_name.c_str();
+    delay_conn_reply = true;
+    client->connect(0, *server, 0, &connect_sock_addr);
+
+    /* wait for the server to connect */
+    while (server_recv_req == 0) {
+        progress();
+    }
+    ASSERT_EQ(1, server_recv_req);
+    ASSERT_EQ(1ul, delayed_conn_reqs.size());
+    EXPECT_EQ(0, err_count);
+    while (!delayed_conn_reqs.empty()) {
+        uct_iface_reject(server->iface(), delayed_conn_reqs.front());
+        delayed_conn_reqs.pop();
+    }
+    while (err_count == 0) {
+        progress();
+    }
+    EXPECT_EQ(1, err_count);
+}
+
 UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
 {
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
                      << " Interface: " << GetParam()->dev_name.c_str();
-    server_recv_req = 0;
-    err_count = 0;
 
     uct_iface_params client_params;
     entity *client_test;
@@ -158,8 +245,6 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 {
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
                      << " Interface: " << GetParam()->dev_name.c_str();
-    server_recv_req = 0;
-    err_count = 0;
 
     int i, num_conns_on_client = 100;
 
@@ -180,9 +265,6 @@ UCS_TEST_P(test_uct_sockaddr, err_handle)
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
                      << " Interface: " << GetParam()->dev_name.c_str();
-
-    server_recv_req = 0;
-    err_count = 0;
 
     client->connect(0, *server, 0, &connect_sock_addr);
 
@@ -217,11 +299,16 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
     wrap_errors();
     /* client - try to connect to a non-existing port on the server side */
     client->connect(0, *server, 0, &connect_sock_addr);
-
+    completion comp;
+    ucs_status_t status = uct_ep_flush(client->ep(0), 0, &comp);
+    if (status == UCS_INPROGRESS) {
+        wait_for_flag(&comp.m_flag);
+        EXPECT_EQ(UCS_ERR_UNREACHABLE, comp.status());
+    } else {
+        EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
+    }
     /* destroy the client's ep. this ep shouldn't be accessed anymore */
     client->destroy_ep(0);
-    /* wait for the transport's events to arrive */
-    sleep(3);
     restore_errors();
 
     /* restore the previous existing port */
