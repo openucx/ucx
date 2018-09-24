@@ -234,7 +234,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      AC_ARG_ENABLE([examples],
                    [AC_HELP_STRING([--enable-examples],
                                    [Enable examples build])],
-                   [AM_CONDITIONAL([HAVE_EXAMPLES], [test $enable_examples == yes])],
+                   [AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" == "xyes"])],
                    [AM_CONDITIONAL([HAVE_EXAMPLES], [false])])
 
     ]) # Docs only
