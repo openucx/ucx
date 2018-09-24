@@ -269,7 +269,7 @@ typedef struct ucp_tl_iface_atomic_flags {
             ucs_unlikely(!((_context)->config.features & (_flags)))) { \
             size_t feature_list_str_max = 512; \
             char *feature_list_str = ucs_alloca(feature_list_str_max); \
-            ucs_error("feature flags %s were not enabled for ucp_init call()", \
+            ucs_error("feature flags %s were not set for ucp_init", \
                       ucp_feature_flags_str((_flags) & \
                                             ~(_context)->config.features, \
                       feature_list_str, feature_list_str_max)); \

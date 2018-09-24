@@ -653,9 +653,9 @@ static const char* ucp_feature_flag_str(unsigned feature_flag)
         return "UCP_FEATURE_WAKEUP";
     case UCP_FEATURE_STREAM:
         return "UCP_FEATURE_STREAM";
+    default:
+        ucs_fatal("Unknown feature flag value %u", feature_flag);
     }
-
-    ucs_fatal("Unknown feature flag value %u", feature_flag);
 }
 
 const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
@@ -669,7 +669,7 @@ const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
     count = 0;
 
     ucs_for_each_bit(i, feature_flags) {
-        ucs_snprintf_zero(p, endp - p, "%s%s", count == 0 ? "" : "|",
+        ucs_snprintf_zero(p, endp - p, "%s%s", (count == 0) ? "" : "|",
                           ucp_feature_flag_str(UCS_BIT(i)));
         count++;
         p += strlen(p);
