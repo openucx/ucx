@@ -48,8 +48,8 @@ protected:
 UCS_TEST_P(uct_p2p_rma_test_alloc_methods, xfer_reg_odp,
            "REG_METHODS=odp,direct")
 {
-#if defined(__powerpc64__) || defined(__aarch64__)
-    UCS_TEST_SKIP_R("odp on ppc64/aarch64");
+#if defined(__powerpc64__)
+    UCS_TEST_SKIP_R("odp on ppc64");
 #endif
     test_put_zcopy();
     test_get_zcopy();
@@ -77,7 +77,7 @@ class uct_p2p_mix_test_alloc_methods : public uct_p2p_mix_test {};
 UCS_TEST_P(uct_p2p_mix_test_alloc_methods, mix1000_odp,
            "REG_METHODS=odp,direct")
 {
-#if defined(__powerpc64__) || defined(__aarch64__)
+#if defined(__powerpc64__)
     UCS_TEST_SKIP_R("odp on ppc64");
 #endif
     run(1000);
