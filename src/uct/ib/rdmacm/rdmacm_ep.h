@@ -39,6 +39,6 @@ UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_ep_t, uct_ep_t);
 
 void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t status);
 
-void uct_rdmacm_ep_purge_outstanding(uct_rdmacm_ep_t *ep, ucs_status_t status);
+void uct_rdmacm_ep_invoke_completions(uct_rdmacm_ep_t *ep, ucs_status_t status);
 
 #endif

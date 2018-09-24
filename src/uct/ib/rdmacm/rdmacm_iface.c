@@ -203,7 +203,7 @@ static void uct_rdmacm_client_handle_failure(uct_rdmacm_iface_t *iface,
     ucs_assert(!iface->is_server);
     if (ep != NULL) {
         uct_rdmacm_ep_set_failed(&iface->super.super, &ep->super.super, status);
-        uct_rdmacm_ep_purge_outstanding(ep, status);
+        uct_rdmacm_ep_invoke_completions(ep, status);
     }
 }
 
@@ -370,7 +370,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
         ret_flags |= UCT_RDMACM_PROCESS_EVENT_DESTROY_CM_ID_FLAG;
         if (ep != NULL) {
             ep->status = UCS_OK;
-            uct_rdmacm_ep_purge_outstanding(ep, UCS_OK);
+            uct_rdmacm_ep_invoke_completions(ep, UCS_OK);
         }
         break;
 

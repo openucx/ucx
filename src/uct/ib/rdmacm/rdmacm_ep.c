@@ -222,7 +222,7 @@ void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t stat
     }
 }
 
-void uct_rdmacm_ep_purge_outstanding(uct_rdmacm_ep_t *ep, ucs_status_t status)
+void uct_rdmacm_ep_invoke_completions(uct_rdmacm_ep_t *ep, ucs_status_t status)
 {
     uct_rdmacm_ep_op_t *op;
 
