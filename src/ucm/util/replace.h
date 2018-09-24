@@ -91,7 +91,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
     UCM_DEFINE_SYSCALL_FUNC(_name##_syscall, _rettype, _syscall_id, __VA_ARGS__) \
     _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
-        return (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) ? \
+        return (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO) ? \
                ucm_orig_##_name##_syscall(UCM_FUNC_PASS_ARGS(__VA_ARGS__)) : \
                ucm_orig_##_name##_dlsym(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }

@@ -25,17 +25,17 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#define UCM_IS_HOOK_ENABLED(_entry)                                \
-     (((_entry)->hook_type == UCM_HOOK_FORCE_RELOC) ||             \
-      ((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_RELOC) &&  \
-       ((_entry)->hook_type & UCM_HOOK_RELOC)) ||                  \
-      ((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) && \
+#define UCM_IS_HOOK_ENABLED(_entry)                      \
+     (((_entry)->hook_type == UCM_HOOK_FORCE_RELOC) ||   \
+      ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) &&  \
+       ((_entry)->hook_type & UCM_HOOK_RELOC)) ||        \
+      ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO) && \
        ((_entry)->hook_type & UCM_HOOK_BISTRO)))
 
 
-#define UCM_HOOK_STR(_entry)                                      \
-    (((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_RELOC) ||  \
-      ((_entry)->hook_type == UCM_HOOK_FORCE_RELOC)) ?            \
+#define UCM_HOOK_STR(_entry)                            \
+    (((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) ||  \
+      ((_entry)->hook_type == UCM_HOOK_FORCE_RELOC)) ?  \
       "relocation table entry" : "bistro hook")
 
 #if HAVE_DECL_SYS_SHMAT
@@ -85,13 +85,45 @@ static void ucm_mmap_event_test_callback(ucm_event_type_t event_type,
     *out_events |= event_type;
 }
 
+void ucm_fire_mmap_events(int events)
+{
+    void *p;
+
+    if (events & (UCM_EVENT_MMAP|UCM_EVENT_MUNMAP|UCM_EVENT_MREMAP|
+                  UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
+        p = mmap(NULL, 0, 0, 0, -1 ,0);
+        p = mremap(p, 0, 0, 0);
+        munmap(p, 0);
+    }
+
+    if (events & (UCM_EVENT_SHMAT|UCM_EVENT_SHMDT|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
+        p = shmat(0, NULL, 0);
+        shmdt(p);
+    }
+
+    if (events & (UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
+        (void)sbrk(ucm_get_page_size());
+        (void)sbrk(-ucm_get_page_size());
+    }
+
+    if (events & UCM_EVENT_MADVISE) {
+        p = mmap(NULL, ucm_get_page_size(), PROT_READ|PROT_WRITE,
+                 MAP_PRIVATE|MAP_ANON, -1, 0);
+        if (p != MAP_FAILED) {
+            madvise(p, ucm_get_page_size(), MADV_NORMAL);
+            munmap(p, ucm_get_page_size());
+        } else {
+            ucm_debug("mmap failed: %m");
+        }
+    }
+}
+
 /* Called with lock held */
 static ucs_status_t ucm_mmap_test(int events)
 {
     static int installed_events = 0;
     ucm_event_handler_t handler;
     int out_events;
-    void *p;
 
     if (ucs_test_all_flags(installed_events, events)) {
         /* All requested events are already installed */
@@ -109,31 +141,7 @@ static ucs_status_t ucm_mmap_test(int events)
 
     ucm_event_handler_add(&handler);
 
-    if (events & (UCM_EVENT_MMAP|UCM_EVENT_MUNMAP|UCM_EVENT_MREMAP)) {
-        p = mmap(NULL, 0, 0, 0, -1 ,0);
-        p = mremap(p, 0, 0, 0);
-        munmap(p, 0);
-    }
-
-    if (events & (UCM_EVENT_SHMAT|UCM_EVENT_SHMDT)) {
-        p = shmat(0, NULL, 0);
-        shmdt(p);
-    }
-
-    if (events & UCM_EVENT_SBRK) {
-        (void)sbrk(0);
-    }
-
-    if (events & UCM_EVENT_MADVISE) {
-        p = mmap(NULL, ucm_get_page_size(), PROT_READ|PROT_WRITE,
-                 MAP_PRIVATE|MAP_ANON, -1, 0);
-        if (p != MAP_FAILED) {
-            madvise(p, ucm_get_page_size(), MADV_NORMAL);
-            munmap(p, ucm_get_page_size());
-        } else {
-            ucm_debug("mmap failed: %m");
-        }
-    }
+    ucm_fire_mmap_events(events);
 
     ucm_event_handler_remove(&handler);
 
@@ -157,12 +165,9 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
     ucm_mmap_func_t *entry;
     ucs_status_t status;
 
-    if (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_NONE) {
+    if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_NONE) {
         ucm_debug("installing mmap hooks is disabled by configuration");
         return UCS_ERR_UNSUPPORTED;
-    } else if (RUNNING_ON_VALGRIND && (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO)) {
-        ucm_debug("MMAP hook mode bistro is not supported on valgrind, force reloc mode");
-        ucm_global_opts.mmap_hook_mode = UCM_MMAP_HOOK_RELOC;
     }
 
     for (entry = ucm_mmap_funcs; entry->patch.symbol != NULL; ++entry) {
@@ -181,7 +186,7 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
                       entry->patch.symbol, entry->patch.value, entry->event_type);
 
             if ((entry->hook_type == UCM_HOOK_FORCE_RELOC) ||
-                (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_RELOC)) {
+                (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC)) {
                 status = ucm_reloc_modify(&entry->patch);
             } else {
                 status = ucm_bistro_patch(entry->patch.symbol, entry->patch.value, NULL);

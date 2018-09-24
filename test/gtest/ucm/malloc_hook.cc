@@ -187,7 +187,8 @@ void test_thread::test() {
     int small_alloc_iter;
 
     small_alloc_iter = m_test->small_alloc_count *
-                       (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO ? 10 : 1);
+                       (((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) &&
+                         !RUNNING_ON_VALGRIND) ? 10 : 1);
 
     /* Allocate some pointers with old heap manager */
     for (unsigned i = 0; i < 10; ++i) {
@@ -416,6 +417,11 @@ public:
                                 mem_event_callback, reinterpret_cast<void*>(this));
     }
 
+    void skip_on_bistro() {
+        if (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) {
+            UCS_TEST_SKIP_R("skipping on BISTRO hooks");
+        }
+    }
 protected:
     static void mem_event_callback(ucm_event_type_t event_type,
                                    ucm_event_t *event, void *arg)
@@ -515,18 +521,16 @@ UCS_TEST_F(malloc_hook_cplusplus, dynamic_mmap_enable) {
     if (RUNNING_ON_VALGRIND) {
         UCS_TEST_SKIP_R("skipping on valgrind");
     }
-    if (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) {
-        UCS_TEST_SKIP_R("skipping on BISTRO hooks");
-    }
+    skip_on_bistro();
     EXPECT_TRUE(ucm_global_opts.enable_dynamic_mmap_thresh);
     test_dynamic_mmap_thresh();
 }
 
 UCS_TEST_F(malloc_hook_cplusplus, dynamic_mmap_disable) {
-    if (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) {
-        UCS_TEST_SKIP_R("skipping on BISTRO hooks");
-    }
+    skip_on_bistro();
+
     ucm_global_opts.enable_dynamic_mmap_thresh = 0;
+
     test_dynamic_mmap_thresh();
 }
 
@@ -541,9 +545,7 @@ UCS_TEST_F(malloc_hook_cplusplus, mallopt) {
     char *p;
     size_t size;
 
-    if (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) {
-        UCS_TEST_SKIP_R("skipping on BISTRO hooks");
-    }
+    skip_on_bistro();
 
     /* This test can not be run with the other
      * tests because it assumes that malloc hooks

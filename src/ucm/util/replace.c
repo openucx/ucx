@@ -16,6 +16,7 @@
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/replace.h>
+#include <ucm/mmap/mmap.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/type/component.h>
@@ -155,7 +156,7 @@ void *ucm_orig_sbrk(intptr_t increment)
 {
     void *prev;
 
-    if (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_RELOC) {
+    if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) {
         return ucm_orig_dlsym_sbrk(increment);
     } else {
         prev = ucm_brk_syscall(0);

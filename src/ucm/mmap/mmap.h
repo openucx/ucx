@@ -8,6 +8,7 @@
 #define UCM_MMAP_H_
 
 #include <ucm/api/ucm.h>
+#include <ucs/sys/checker.h>
 
 ucs_status_t ucm_mmap_install(int events);
 
@@ -21,5 +22,12 @@ void *ucm_sbrk_select(intptr_t increment);
 int ucm_override_brk(void *addr);
 void *ucm_brk_syscall(void *addr);
 int ucm_override_madvise(void *addr, size_t length, int advice);
+void ucm_fire_mmap_events(int events);
+
+static UCS_F_ALWAYS_INLINE ucm_mmap_hook_mode_t ucm_mmap_hook_mode(void)
+{
+    return (RUNNING_ON_VALGRIND && (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO)) ?
+           UCM_MMAP_HOOK_RELOC : ucm_global_opts.mmap_hook_mode;
+}
 
 #endif
