@@ -75,9 +75,13 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     ep->am_lane                     = UCP_NULL_LANE;
     ep->flags                       = 0;
     ep->conn_sn                     = -1;
-    ucp_ep_ext_gen(ep)->dest_ep_ptr = 0;
     ucp_ep_ext_gen(ep)->user_data   = NULL;
+    ucp_ep_ext_gen(ep)->dest_ep_ptr = 0;
     ucp_ep_ext_gen(ep)->err_cb      = NULL;
+    UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
+                      sizeof(ucp_ep_ext_gen(ep)->listener));
+    memset(&ucp_ep_ext_gen(ep)->ep_match, 0,
+           sizeof(ucp_ep_ext_gen(ep)->ep_match));
 
     ucp_stream_ep_init(ep);
 
@@ -378,6 +382,103 @@ err:
     return status;
 }
 
+/**
+ * Create an endpoint on the server side connected to the client endpoint.
+ */
+ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
+                                  const ucp_wireup_client_data_t *client_data,
+                                  ucp_ep_h *ep_p)
+{
+    ucp_ep_params_t        params;
+    ucp_unpacked_address_t remote_address;
+    ucs_status_t           status;
+
+    params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+    params.err_mode   = client_data->err_mode;
+
+    status = ucp_address_unpack(client_data + 1, &remote_address);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    if (client_data->is_full_addr) {
+        /* create endpoint to the worker address we got in the private data */
+        status = ucp_ep_create_to_worker_addr(worker, &params, &remote_address,
+                                              UCP_EP_CREATE_AM_LANE, "listener",
+                                              ep_p);
+        if (status == UCS_OK) {
+            ucp_ep_flush_state_reset(*ep_p);
+        } else {
+            goto out_free_address;
+        }
+    } else {
+        status = ucp_ep_create_sockaddr_aux(worker, &params, &remote_address,
+                                            ep_p);
+        if (status == UCS_OK) {
+            /* the server's ep should be aware of the sent address from the client */
+            (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
+        } else {
+            goto out_free_address;
+        }
+    }
+
+    ucp_ep_update_dest_ep_ptr(*ep_p, client_data->ep_ptr);
+
+out_free_address:
+    ucs_free(remote_address.address_list);
+out:
+    return status;
+}
+
+static ucs_status_t
+ucp_ep_create_api_conn_request(ucp_worker_h worker,
+                               const ucp_ep_params_t *params, ucp_ep_h *ep_p)
+{
+    ucp_conn_request_h conn_request = params->conn_request;
+    ucp_ep_h           ep;
+    ucs_status_t       status;
+
+    /* coverity[overrun-buffer-val] */
+    status = ucp_ep_create_accept(worker, &conn_request->client_data, &ep);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = ucp_ep_adjust_params(ep, params);
+    if (status != UCS_OK) {
+        goto out_ep_destroy;
+    }
+
+    if (ep->flags & UCP_EP_FLAG_LISTENER) {
+        status = ucp_wireup_send_pre_request(ep);
+    } else {
+        /* send wireup request message, to connect the client to the server's
+           new endpoint */
+        ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
+        status = ucp_wireup_send_request(ep);
+    }
+
+    if (status == UCS_OK) {
+        *ep_p = ep;
+        goto out;
+    }
+
+out_ep_destroy:
+    ucp_ep_destroy_internal(ep);
+
+out:
+    if (status == UCS_OK) {
+        uct_iface_accept(conn_request->listener->wiface.iface,
+                         conn_request->uct_req);
+    } else {
+        uct_iface_reject(conn_request->listener->wiface.iface,
+                         conn_request->uct_req);
+    }
+    ucs_free(params->conn_request);
+
+    return status;
+}
+
 static ucs_status_t
 ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
                                  const ucp_ep_params_t *params, ucp_ep_h *ep_p)
@@ -483,20 +584,19 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
     if (flags & UCP_EP_PARAMS_FLAGS_CLIENT_SERVER) {
         status = ucp_ep_create_to_sock_addr(worker, params, &ep);
-        if (status != UCS_OK) {
-            goto out;
-        }
-    } else {
+    } else if (params->field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST) {
+        status = ucp_ep_create_api_conn_request(worker, params, &ep);
+    } else if (params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS) {
         status = ucp_ep_create_api_to_worker_addr(worker, params, &ep);
-        if (status != UCS_OK) {
-            goto out;
-        }
+    } else {
+        status = UCS_ERR_INVALID_PARAM;
     }
 
-    ep->flags |= UCP_EP_FLAG_USED;
-    *ep_p = ep;
+    if (status == UCS_OK) {
+        ep->flags |= UCP_EP_FLAG_USED;
+        *ep_p      = ep;
+    }
 
-out:
     UCS_ASYNC_UNBLOCK(&worker->async);
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;

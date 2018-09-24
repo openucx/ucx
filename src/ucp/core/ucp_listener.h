@@ -16,21 +16,19 @@
  * UCP listener
  */
 typedef struct ucp_listener {
-    ucp_worker_iface_t              wiface;  /* UCT iface to listen on */
-    ucp_listener_accept_callback_t  cb;      /* Listen accept callback */
-    void                            *arg;    /* User's arg for the accept callback */
-    uct_worker_cb_id_t              prog_id; /* Slow-path callback */
+    ucp_worker_iface_t                  wiface;    /* UCT iface to listen on */
+    ucp_listener_accept_callback_t      accept_cb; /* Listen accept callback
+                                                      which creates an endpoint
+                                                    */
+    ucp_listener_conn_callback_t        conn_cb;   /* Listen callback which
+                                                      creates a handle to
+                                                      connection request to the
+                                                      remote endpoint */
+    void                                *arg;      /* User's arg for the accept
+                                                      callback */
+    uct_worker_cb_id_t                  prog_id;   /* Slow-path callback */
 } ucp_listener_t;
 
-
-/**
- * Accepted connection on a listener
- */
-typedef struct ucp_listener_accept {
-    ucp_listener_h          listener;       /* Listener on which the
-                                               connection was accepted */
-    void                    *wireup_data;   /* Wireup private data*/
-} ucp_listener_accept_t;
 
 void ucp_listener_schedule_accept_cb(ucp_ep_h ep);
 

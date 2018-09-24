@@ -252,18 +252,16 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                                    remote_address->address_count,
                                    remote_address->address_list, addr_indices);
     if (status != UCS_OK) {
+        ucp_worker_set_ep_failed(worker, ep,
+                                 ep->uct_eps[ucp_ep_get_wireup_msg_lane(ep)],
+                                 ucp_ep_get_wireup_msg_lane(ep), status);
         return;
     }
 
     status = ucp_wireup_send_request(ep);
     if (status != UCS_OK) {
-        goto err_cleanup_lanes;
+        ucp_ep_cleanup_lanes(ep);
     }
-
-    return;
-
-err_cleanup_lanes:
-    ucp_ep_cleanup_lanes(ep);
 }
 
 static UCS_F_NOINLINE void

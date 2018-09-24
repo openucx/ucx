@@ -288,12 +288,9 @@ typedef struct {
  */
 typedef struct {
     uintptr_t                     dest_ep_ptr;   /* Remote EP pointer */
-    union {
-        void                      *user_data;    /* User data associated with ep */
-        ucp_listener_h            listener;      /* Listener that may be associated with ep */
-    };
-    ucp_err_handler_cb_t          err_cb;        /* Error handler */
+    void                          *user_data;    /* User data associated with ep */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
+    ucp_err_handler_cb_t          err_cb;        /* Error handler */
 
     /* Endpoint match context and remote completion status are mutually exclusive,
      * since remote completions are counted only after the endpoint is already
@@ -301,7 +298,10 @@ typedef struct {
      */
     union {
         ucp_ep_match_t            ep_match;      /* Matching with remote endpoints */
-        ucp_ep_flush_state_t      flush_state;   /* Remove completion status */
+        struct {
+            ucp_ep_flush_state_t  flush_state;   /* Remove completion status */
+            ucp_listener_h        listener;      /* Listener that may be associated with ep */
+        };
     };
 } ucp_ep_ext_gen_t;
 
@@ -316,6 +316,24 @@ typedef struct {
                                                     depends on UCP_EP_FLAG_STREAM_HAS_DATA */
     } stream;
 } ucp_ep_ext_proto_t;
+
+
+typedef struct ucp_wireup_client_data {
+    uintptr_t                 ep_ptr;        /**< Client-side endpoint pointer */
+    ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
+    uint8_t                   is_full_addr;  /**< Whether the attached address is
+                                                  full or partial */
+    /* packed worker address follows */
+} UCS_S_PACKED ucp_wireup_client_data_t;
+
+
+typedef struct ucp_conn_request {
+    ucp_listener_h              listener;
+    uct_conn_request_h          uct_req;
+    ucp_wireup_client_data_t    client_data;
+    /* packed worker address follows */
+} UCS_S_PACKED ucp_conn_request_t;
+
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
 
@@ -340,6 +358,10 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                                           const ucp_unpacked_address_t *remote_address,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p);
+
+ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
+                                  const ucp_wireup_client_data_t *client_data,
+                                  ucp_ep_h *ep_p);
 
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_send_callback_t req_cb,

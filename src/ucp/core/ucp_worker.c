@@ -441,40 +441,16 @@ int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
            (err_handle_arg->ucp_ep == arg);
 }
 
-static ucs_status_t
-ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
+ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
+                                      uct_ep_h uct_ep, ucp_lane_index_t lane,
+                                      ucs_status_t status)
 {
-    ucp_worker_h worker         = (ucp_worker_h)arg;
-    uct_worker_cb_id_t prog_id  = UCS_CALLBACKQ_ID_NULL;
-    uct_tl_resource_desc_t* tl_rsc;
-    ucp_lane_index_t lane, failed_lane;
+    uct_worker_cb_id_t          prog_id    = UCS_CALLBACKQ_ID_NULL;
+    ucs_status_t                ret_status = UCS_OK;
+    ucp_rsc_index_t             rsc_index;
+    uct_tl_resource_desc_t      *tl_rsc;
     ucp_worker_err_handle_arg_t *err_handle_arg;
-    ucs_status_t ret_status;
-    ucp_rsc_index_t rsc_index;
-    ucp_ep_ext_gen_t *ep_ext;
-    ucp_ep_h ucp_ep;
 
-    UCS_ASYNC_BLOCK(&worker->async);
-
-    ucs_debug("worker %p: error handler called for uct_ep %p: %s",
-              worker, uct_ep, ucs_status_string(status));
-
-    /* TODO: need to optimize uct_ep -> ucp_ep lookup */
-    ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
-        ucp_ep = ucp_ep_from_ext_gen(ep_ext);
-        for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
-            if ((uct_ep == ucp_ep->uct_eps[lane]) ||
-                ucp_wireup_ep_is_owner(ucp_ep->uct_eps[lane], uct_ep)) {
-                failed_lane = lane;
-                goto found_ucp_ep;
-            }
-        }
-    }
-
-    ucs_fatal("no uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
-              uct_ep, worker);
-
-found_ucp_ep:
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         goto out_ok;
     }
@@ -500,7 +476,7 @@ found_ucp_ep:
     err_handle_arg->ucp_ep      = ucp_ep;
     err_handle_arg->uct_ep      = uct_ep;
     err_handle_arg->status      = status;
-    err_handle_arg->failed_lane = failed_lane;
+    err_handle_arg->failed_lane = lane;
 
     /* invoke the rest of the error handling flow from the main thread */
     uct_worker_progress_register_safe(worker->uct,
@@ -527,9 +503,39 @@ out:
      * that he can wake-up on this event */
     ucp_worker_signal_internal(worker);
 
-    UCS_ASYNC_UNBLOCK(&worker->async);
-
     return ret_status;
+}
+
+static ucs_status_t
+ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
+{
+    ucp_worker_h worker         = (ucp_worker_h)arg;
+    ucp_lane_index_t lane;
+    ucs_status_t ret_status;
+    ucp_ep_ext_gen_t *ep_ext;
+    ucp_ep_h ucp_ep;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    ucs_debug("worker %p: error handler called for uct_ep %p: %s",
+              worker, uct_ep, ucs_status_string(status));
+
+    /* TODO: need to optimize uct_ep -> ucp_ep lookup */
+    ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
+        ucp_ep = ucp_ep_from_ext_gen(ep_ext);
+        for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+            if ((uct_ep == ucp_ep->uct_eps[lane]) ||
+                ucp_wireup_ep_is_owner(ucp_ep->uct_eps[lane], uct_ep)) {
+                ret_status = ucp_worker_set_ep_failed(worker, ucp_ep, uct_ep,
+                                                      lane, status);
+                UCS_ASYNC_UNBLOCK(&worker->async);
+                return ret_status;
+            }
+        }
+    }
+
+    ucs_fatal("no uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
+              uct_ep, worker);
 }
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
