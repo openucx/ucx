@@ -25,34 +25,18 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#define UCM_IS_HOOK_ENABLED(_entry)                      \
-     (((_entry)->hook_type == UCM_HOOK_FORCE_RELOC) ||   \
-      ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) &&  \
-       ((_entry)->hook_type & UCM_HOOK_RELOC)) ||        \
-      ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO) && \
-       ((_entry)->hook_type & UCM_HOOK_BISTRO)))
+#define UCM_IS_HOOK_ENABLED(_entry)                     \
+    (((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) &&  \
+      ((_entry)->hook_type & UCM_HOOK_RELOC)) ||        \
+     ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO) && \
+      ((_entry)->hook_type & UCM_HOOK_BISTRO)))
 
 
-#define UCM_HOOK_STR(_entry)                            \
-    (((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) ||  \
-      ((_entry)->hook_type == UCM_HOOK_FORCE_RELOC)) ?  \
+#define UCM_HOOK_STR                                  \
+    ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) ? \
       "relocation table entry" : "bistro hook")
 
-#if HAVE_DECL_SYS_SHMAT
-#  define UCM_SHMAT_MODE UCM_HOOK_BOTH
-#else
-#  define UCM_SHMAT_MODE UCM_HOOK_FORCE_RELOC
-#endif
-
-#if HAVE_DECL_SYS_SHMDT
-#  define UCM_SHMDT_MODE UCM_HOOK_BOTH
-#else
-#  define UCM_SHMDT_MODE UCM_HOOK_FORCE_RELOC
-#endif
-
 typedef enum ucm_mmap_hook_type {
-    UCM_HOOK_FORCE_RELOC = 0, /* special case when BISTRO could not be used due to
-                                 missing syscall, PPC64 spesific */
     UCM_HOOK_RELOC       = UCS_BIT(0),
     UCM_HOOK_BISTRO      = UCS_BIT(1),
     UCM_HOOK_BOTH        = UCM_HOOK_RELOC | UCM_HOOK_BISTRO
@@ -69,8 +53,8 @@ static ucm_mmap_func_t ucm_mmap_funcs[] = {
     { {"mmap",    ucm_override_mmap},    UCM_EVENT_MMAP,    0, UCM_HOOK_BOTH},
     { {"munmap",  ucm_override_munmap},  UCM_EVENT_MUNMAP,  0, UCM_HOOK_BOTH},
     { {"mremap",  ucm_override_mremap},  UCM_EVENT_MREMAP,  0, UCM_HOOK_BOTH},
-    { {"shmat",   ucm_override_shmat},   UCM_EVENT_SHMAT,   0, UCM_SHMAT_MODE},
-    { {"shmdt",   ucm_override_shmdt},   UCM_EVENT_SHMDT,   UCM_EVENT_SHMAT, UCM_SHMDT_MODE},
+    { {"shmat",   ucm_override_shmat},   UCM_EVENT_SHMAT,   0, UCM_HOOK_BOTH},
+    { {"shmdt",   ucm_override_shmdt},   UCM_EVENT_SHMDT,   UCM_EVENT_SHMAT, UCM_HOOK_BOTH},
     { {"sbrk",    ucm_override_sbrk},    UCM_EVENT_SBRK,    0, UCM_HOOK_RELOC},
     { {"brk",     ucm_override_brk},     UCM_EVENT_SBRK,    0, UCM_HOOK_BISTRO},
     { {"madvise", ucm_override_madvise}, UCM_EVENT_MADVISE, 0, UCM_HOOK_BOTH},
@@ -182,18 +166,17 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
         }
 
         if (UCM_IS_HOOK_ENABLED(entry)) {
-            ucm_debug("mmap: installing %s for %s = %p for event 0x%x", UCM_HOOK_STR(entry),
+            ucm_debug("mmap: installing %s for %s = %p for event 0x%x", UCM_HOOK_STR,
                       entry->patch.symbol, entry->patch.value, entry->event_type);
 
-            if ((entry->hook_type == UCM_HOOK_FORCE_RELOC) ||
-                (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC)) {
+            if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) {
                 status = ucm_reloc_modify(&entry->patch);
             } else {
                 status = ucm_bistro_patch(entry->patch.symbol, entry->patch.value, NULL);
             }
             if (status != UCS_OK) {
                 ucm_warn("failed to install %s for '%s'",
-                         UCM_HOOK_STR(entry), entry->patch.symbol);
+                         UCM_HOOK_STR, entry->patch.symbol);
                 return status;
             }
 
