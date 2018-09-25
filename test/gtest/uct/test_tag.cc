@@ -729,6 +729,7 @@ UCT_TAG_INSTANTIATE_TEST_CASE(test_tag)
 extern "C" {
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_iface.h>
+#include <uct/ib/base/ib_verbs.h>
 }
 
 class test_tag_stats : public test_tag {
@@ -751,6 +752,16 @@ public:
     ucs_stats_node_t *iface_stats(const entity &e)
     {
         return ucs_derived_of(e.iface(), uct_rc_iface_t)->tm.stats;
+    }
+
+    void provoke_sync(const entity &e)
+    {
+        uct_rc_iface_t *iface = ucs_derived_of(e.iface(), uct_rc_iface_t);
+
+        // Counters are synced every IBV_DEVICE_MAX_UNEXP_COUNT ops, set
+        // it one op before, so that any following unexpected message would
+        // cause HW ans SW counters sync.
+        iface->tm.unexpected_cnt = IBV_DEVICE_MAX_UNEXP_COUNT - 1;
     }
 
     void check_tx_counters(int op, uint64_t op_val, int type, size_t len)
@@ -839,8 +850,15 @@ UCS_TEST_P(test_tag_stats, tag_list_ops)
     ASSERT_UCS_OK(tag_cancel(receiver(), rctx, 1));
     check_rx_counter(UCT_RC_IFACE_STAT_TAG_LIST_DEL, 1ul, receiver());
 
-    // every ADD and DEL is paired with SYNC
-    check_rx_counter(UCT_RC_IFACE_STAT_TAG_LIST_SYNC, 2ul, receiver());
+    // Every ADD and DEL is paired with SYNC, but stats counter is increased
+    // when separate SYNC op is issued only. So, we expect it to be 0 after
+    // ADD and DEL operations.
+    check_rx_counter(UCT_RC_IFACE_STAT_TAG_LIST_SYNC, 0ul, receiver());
+
+    // Provoke real SYNC op and send a message unexpectedly
+    provoke_sync(receiver());
+    test_tag_unexpected(static_cast<send_func>(&test_tag::tag_eager_bcopy));
+    check_rx_counter(UCT_RC_IFACE_STAT_TAG_LIST_SYNC, 1ul, receiver());
 }
 
 

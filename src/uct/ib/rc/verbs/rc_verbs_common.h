@@ -337,7 +337,6 @@ uct_rc_verbs_iface_common_tag_recv(uct_rc_verbs_iface_common_t *iface,
     priv->length     = uct_iov_total_length(iov, iovcnt);
 
     UCT_RC_IFACE_TM_STAT(rc_iface, LIST_ADD);
-    UCT_RC_IFACE_TM_STAT(rc_iface, LIST_SYNC);
 
     return UCS_OK;
 }
@@ -376,7 +375,6 @@ uct_rc_verbs_iface_common_tag_recv_cancel(uct_rc_verbs_iface_common_t *iface,
    }
 
    UCT_RC_IFACE_TM_STAT(rc_iface, LIST_DEL);
-   UCT_RC_IFACE_TM_STAT(rc_iface, LIST_SYNC);
 
    return UCS_OK;
 }
