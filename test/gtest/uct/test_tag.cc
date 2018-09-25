@@ -10,6 +10,11 @@ extern "C" {
 #include <common/test.h>
 #include "uct_test.h"
 
+#define UCT_TAG_INSTANTIATE_TEST_CASE(_test_case) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, rc) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, dc) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_mlx5) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
 
 class test_tag : public uct_test {
 public:
@@ -44,6 +49,7 @@ public:
         ucs_status_t     status;
         bool             sw_rndv;
         bool             comp;
+        bool             unexp;
     };
 
     typedef ucs_status_t (test_tag::*send_func)(entity&, send_ctx&);
@@ -82,7 +88,8 @@ public:
         }
     }
 
-    void init_send_ctx(send_ctx &s,mapped_buffer *b, uct_tag_t t, uint64_t i)
+    void init_send_ctx(send_ctx &s,mapped_buffer *b, uct_tag_t t, uint64_t i,
+                       bool unexp_flow = true)
     {
         s.mbuf           = b;
         s.rndv_op        = NULL;
@@ -91,6 +98,7 @@ public:
         s.uct_comp.count = 1;
         s.uct_comp.func  = send_completion;
         s.sw_rndv        = s.comp = false;
+        s.unexp          = unexp_flow;
         s.status         = UCS_ERR_NO_PROGRESS;
     }
 
@@ -170,14 +178,25 @@ public:
 
     ucs_status_t tag_rndv_request(entity &e, send_ctx &ctx)
     {
-        rndv_hdr hdr = {{ctx.imm_data,
-                         reinterpret_cast<uint64_t>(&ctx)
-                        },
-                        0xFAFA
-                       };
         ctx.sw_rndv = true;
 
-        return uct_ep_tag_rndv_request(e.ep(0), ctx.tag, &hdr, sizeof(hdr), 0);
+        if (ctx.unexp) {
+            // Unexpected flow, will need to analyze ctx data on the receiver
+            rndv_hdr hdr = {{ctx.imm_data,
+                             reinterpret_cast<uint64_t>(&ctx)
+                            },
+                            0xFAFA
+                           };
+            ctx.status = uct_ep_tag_rndv_request(e.ep(0), ctx.tag, &hdr,
+                                                 sizeof(hdr), 0);
+        } else {
+            // Expected flow, send just plain data (will be stored in rx buf by HCA)
+            ctx.status = uct_ep_tag_rndv_request(e.ep(0), ctx.tag, ctx.mbuf->ptr(),
+                                                 ctx.mbuf->length(), 0);
+        }
+        ctx.comp = true;
+
+        return ctx.status;
     }
 
     ucs_status_t tag_post(entity &e, recv_ctx &ctx)
@@ -219,7 +238,8 @@ public:
         EXPECT_EQ(ctx.status, UCS_OK);
     }
 
-    void test_tag_expected(send_func sfunc, size_t length = 75) {
+    void test_tag_expected(send_func sfunc, size_t length = 75,
+                           bool is_sw_rndv = false) {
         uct_tag_t tag = 11;
 
         if (RUNNING_ON_VALGRIND) {
@@ -235,12 +255,13 @@ public:
 
         mapped_buffer sendbuf(length, SEND_SEED, sender());
         send_ctx s_ctx;
-        init_send_ctx(s_ctx, &sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
+        init_send_ctx(s_ctx, &sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx),
+                      false);
         ASSERT_UCS_OK((this->*sfunc)(sender(), s_ctx));
 
-        wait_for_flag(&r_ctx.comp);
+        wait_for_flag(is_sw_rndv ? &r_ctx.sw_rndv : &r_ctx.comp);
 
-        check_rx_completion(r_ctx, true, SEND_SEED);
+        check_rx_completion(r_ctx, true, SEND_SEED, UCS_OK, is_sw_rndv);
 
         // If it was RNDV send, need to wait send completion as well
         check_tx_completion(s_ctx);
@@ -658,29 +679,8 @@ UCS_TEST_P(test_tag, sw_rndv_expected)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY | UCT_IFACE_FLAG_TAG_RNDV_ZCOPY);
 
-    uct_tag_t    tag    = 11;
-    const size_t length = sender().iface_attr().cap.tag.rndv.max_hdr;
-
-    mapped_buffer recvbuf(length, RECV_SEED, receiver());
-    recv_ctx r_ctx;
-    init_recv_ctx(r_ctx, &recvbuf, tag);
-    ASSERT_UCS_OK(tag_post(receiver(), r_ctx));
-
-    short_progress_loop();
-
-    mapped_buffer sendbuf(length, SEND_SEED, sender());
-    send_ctx s_ctx;
-    init_send_ctx(s_ctx, &sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
-
-    ASSERT_UCS_OK(uct_ep_tag_rndv_request(sender().ep(0), s_ctx.tag,
-                                          s_ctx.mbuf->ptr(),
-                                          s_ctx.mbuf->length(), 0));
-
-    wait_for_flag(&r_ctx.sw_rndv);
-
-    check_rx_completion(r_ctx, true, SEND_SEED, UCS_OK, true);
-
-    flush();
+    test_tag_expected(static_cast<send_func>(&test_tag::tag_rndv_request),
+                      sender().iface_attr().cap.tag.rndv.max_hdr, true);
 }
 
 UCS_TEST_P(test_tag, rndv_limit)
@@ -722,7 +722,171 @@ UCS_TEST_P(test_tag, sw_rndv_unexpected)
     test_tag_unexpected(static_cast<send_func>(&test_tag::tag_rndv_request));
 }
 
-_UCT_INSTANTIATE_TEST_CASE(test_tag, rc)
-_UCT_INSTANTIATE_TEST_CASE(test_tag, dc)
-_UCT_INSTANTIATE_TEST_CASE(test_tag, rc_mlx5)
-_UCT_INSTANTIATE_TEST_CASE(test_tag, dc_mlx5)
+UCT_TAG_INSTANTIATE_TEST_CASE(test_tag)
+
+
+#if ENABLE_STATS && IBV_EXP_HW_TM
+extern "C" {
+#include <uct/api/uct.h>
+#include <uct/ib/rc/base/rc_iface.h>
+#include <uct/ib/base/ib_verbs.h>
+}
+
+class test_tag_stats : public test_tag {
+public:
+    void init() {
+        stats_activate();
+        test_tag::init();
+    }
+
+    void cleanup() {
+        test_tag::cleanup();
+        stats_restore();
+    }
+
+    ucs_stats_node_t *ep_stats(const entity &e)
+    {
+        return ucs_derived_of(e.ep(0), uct_base_ep_t)->stats;
+    }
+
+    ucs_stats_node_t *iface_stats(const entity &e)
+    {
+        return ucs_derived_of(e.iface(), uct_rc_iface_t)->tm.stats;
+    }
+
+    void provoke_sync(const entity &e)
+    {
+        uct_rc_iface_t *iface = ucs_derived_of(e.iface(), uct_rc_iface_t);
+
+        // Counters are synced every IBV_DEVICE_MAX_UNEXP_COUNT ops, set
+        // it one op before, so that any following unexpected message would
+        // cause HW ans SW counters sync.
+        iface->tm.unexpected_cnt = IBV_DEVICE_MAX_UNEXP_COUNT - 1;
+    }
+
+    void check_tx_counters(int op, uint64_t op_val, int type, size_t len)
+    {
+        uint64_t v;
+
+        v = UCS_STATS_GET_COUNTER(ep_stats(sender()), op);
+        EXPECT_EQ(op_val, v);
+
+        // With valgrind reduced messages is sent
+        if (!RUNNING_ON_VALGRIND) {
+            v = UCS_STATS_GET_COUNTER(ep_stats(sender()), type);
+            EXPECT_EQ(len, v);
+        }
+    }
+
+    void check_rx_counter(int op, uint64_t val, entity &e)
+    {
+        EXPECT_EQ(val, UCS_STATS_GET_COUNTER(iface_stats(e), op));
+    }
+};
+
+UCS_TEST_P(test_tag_stats, tag_expected_eager)
+{
+    check_caps(UCT_IFACE_FLAG_TAG_EAGER_SHORT |
+               UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+               UCT_IFACE_FLAG_TAG_EAGER_ZCOPY);
+
+    std::pair<send_func, std::pair<size_t, int> > sfuncs[3] = {
+                std::make_pair(static_cast<send_func>(&test_tag::tag_eager_short),
+                std::make_pair(sender().iface_attr().cap.tag.eager.max_short,
+                static_cast<int>(UCT_EP_STAT_BYTES_SHORT))),
+
+                std::make_pair(static_cast<send_func>(&test_tag::tag_eager_bcopy),
+                std::make_pair(sender().iface_attr().cap.tag.eager.max_bcopy,
+                static_cast<int>(UCT_EP_STAT_BYTES_BCOPY))),
+
+                std::make_pair(static_cast<send_func>(&test_tag::tag_eager_zcopy),
+                std::make_pair(sender().iface_attr().cap.tag.eager.max_zcopy,
+                static_cast<int>(UCT_EP_STAT_BYTES_ZCOPY)))
+    };
+
+    for (int i = 0; i < 3; ++i) {
+        test_tag_expected(sfuncs[i].first, sfuncs[i].second.first);
+        check_tx_counters(UCT_EP_STAT_TAG, i + 1,
+                          sfuncs[i].second.second,
+                          sfuncs[i].second.first);
+        check_rx_counter(UCT_RC_IFACE_STAT_TAG_RX_EXP, i + 1, receiver());
+    }
+}
+
+UCS_TEST_P(test_tag_stats, tag_unexpected_eager)
+{
+    check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY | UCT_IFACE_FLAG_TAG_EAGER_ZCOPY);
+
+    std::pair<send_func, std::pair<size_t, int> > sfuncs[2] = {
+                std::make_pair(static_cast<send_func>(&test_tag::tag_eager_bcopy),
+                std::make_pair(sender().iface_attr().cap.tag.eager.max_bcopy,
+                static_cast<int>(UCT_EP_STAT_BYTES_BCOPY))),
+
+                std::make_pair(static_cast<send_func>(&test_tag::tag_eager_zcopy),
+                std::make_pair(sender().iface_attr().cap.tag.eager.max_zcopy,
+                static_cast<int>(UCT_EP_STAT_BYTES_ZCOPY)))
+    };
+
+    for (int i = 0; i < 2; ++i) {
+        test_tag_unexpected(sfuncs[i].first, sfuncs[i].second.first);
+        check_tx_counters(UCT_EP_STAT_TAG, i + 1,
+                          sfuncs[i].second.second,
+                          sfuncs[i].second.first);
+        check_rx_counter(UCT_RC_IFACE_STAT_TAG_RX_EAGER_UNEXP, i + 1, receiver());
+    }
+}
+
+UCS_TEST_P(test_tag_stats, tag_list_ops)
+{
+    check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
+    mapped_buffer recvbuf(32, RECV_SEED, receiver());
+    recv_ctx rctx;
+
+    init_recv_ctx(rctx, &recvbuf, 1);
+
+    ASSERT_UCS_OK(tag_post(receiver(), rctx));
+    check_rx_counter(UCT_RC_IFACE_STAT_TAG_LIST_ADD, 1ul, receiver());
+
+    ASSERT_UCS_OK(tag_cancel(receiver(), rctx, 1));
+    check_rx_counter(UCT_RC_IFACE_STAT_TAG_LIST_DEL, 1ul, receiver());
+
+    // Every ADD and DEL is paired with SYNC, but stats counter is increased
+    // when separate SYNC op is issued only. So, we expect it to be 0 after
+    // ADD and DEL operations.
+    check_rx_counter(UCT_RC_IFACE_STAT_TAG_LIST_SYNC, 0ul, receiver());
+
+    // Provoke real SYNC op and send a message unexpectedly
+    provoke_sync(receiver());
+    test_tag_unexpected(static_cast<send_func>(&test_tag::tag_eager_bcopy));
+    check_rx_counter(UCT_RC_IFACE_STAT_TAG_LIST_SYNC, 1ul, receiver());
+}
+
+
+UCS_TEST_P(test_tag_stats, tag_rndv)
+{
+    check_caps(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY | UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
+
+    size_t len = sender().iface_attr().cap.tag.rndv.max_zcopy / 8;
+
+    // Check UNEXP_RNDV on the receiver
+    test_tag_unexpected(static_cast<send_func>(&test_tag::tag_rndv_zcopy), len);
+    check_rx_counter(UCT_RC_IFACE_STAT_TAG_RX_RNDV_UNEXP, 1ul, receiver());
+
+    // Check that sender receives RNDV_FIN in case of expected rndv message
+    test_tag_expected(static_cast<send_func>(&test_tag::tag_rndv_zcopy), len);
+    check_rx_counter(UCT_RC_IFACE_STAT_TAG_RX_RNDV_FIN, 1ul, sender());
+
+
+    // Check UNEXP_RNDV_REQ on the receiver
+    test_tag_unexpected(static_cast<send_func>(&test_tag::tag_rndv_request));
+    check_rx_counter(UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_UNEXP, 1ul, receiver());
+
+    // Check NEXP_RNDV_REQ on the receiver
+    test_tag_expected(static_cast<send_func>(&test_tag::tag_rndv_request),
+                     sender().iface_attr().cap.tag.rndv.max_hdr, true);
+    check_rx_counter(UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_EXP, 1ul, receiver());
+}
+
+UCT_TAG_INSTANTIATE_TEST_CASE(test_tag_stats)
+
+#endif

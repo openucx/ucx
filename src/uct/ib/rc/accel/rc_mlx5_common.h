@@ -1097,6 +1097,9 @@ uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
                                          tag_mask,
                                          UCT_RC_MLX5_SRQ_FLAG_TM_CQE_REQ |
                                          UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT);
+
+    UCT_RC_IFACE_TM_STAT(rc_iface, LIST_ADD);
+
     return UCS_OK;
 }
 
@@ -1124,6 +1127,9 @@ uct_rc_mlx5_iface_common_tag_recv_cancel(uct_rc_mlx5_iface_common_t *iface,
                                          UCT_RC_MLX5_TM_OPCODE_REMOVE, index,
                                          rc_iface->tm.unexpected_cnt, 0ul, 0ul,
                                          flags);
+
+    UCT_RC_IFACE_TM_STAT(rc_iface, LIST_DEL);
+
     return UCS_OK;
 }
 
@@ -1198,8 +1204,10 @@ uct_rc_mlx5_iface_handle_expected(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
 
     if (UCT_RC_MLX5_TM_IS_SW_RNDV(cqe, imm_data)) {
         ctx->rndv_cb(ctx, tag, priv->buffer, byte_len, UCS_OK);
+        UCT_RC_IFACE_TM_STAT(rc_iface, RX_RNDV_REQ_EXP);
     } else {
         ctx->completed_cb(ctx, tag, imm_data, byte_len, UCS_OK);
+        UCT_RC_IFACE_TM_STAT(rc_iface, RX_EXP);
     }
 }
 
@@ -1221,6 +1229,8 @@ uct_rc_mlx5_iface_unexp_consumed(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                              UCT_RC_MLX5_TM_OPCODE_NOP, 0,
                                              rc_iface->tm.unexpected_cnt, 0ul, 0ul,
                                              UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT);
+
+        UCT_RC_IFACE_TM_STAT(rc_iface, LIST_SYNC);
     }
 }
 
@@ -1247,6 +1257,8 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *mlx5_common_iface
                                          &rc_iface->tm.eager_desc, status,
                                          ntohs(cqe->wqe_counter));
 
+        UCT_RC_IFACE_TM_STAT(rc_iface, RX_EAGER_UNEXP);
+
     } else if (tmh->opcode == IBV_EXP_TMH_EAGER) {
         imm_data = uct_rc_iface_tag_imm_data_unpack(cqe->imm_inval_pkey,
                                                     tmh->app_ctx, 1);
@@ -1257,10 +1269,14 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *mlx5_common_iface
                                                 flags, tmh->tag, tmh + 1,
                                                 byte_len - sizeof(*tmh),
                                                 0ul, 0, NULL);
+
+            UCT_RC_IFACE_TM_STAT(rc_iface, RX_RNDV_REQ_UNEXP);
         } else {
             status = rc_iface->tm.eager_unexp.cb(rc_iface->tm.eager_unexp.arg,
                                                  tmh + 1, byte_len - sizeof(*tmh),
                                                  flags, tmh->tag, imm_data);
+
+            UCT_RC_IFACE_TM_STAT(rc_iface, RX_EAGER_UNEXP);
         }
 
         uct_rc_mlx5_iface_unexp_consumed(mlx5_common_iface, rc_iface,
@@ -1274,6 +1290,8 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *mlx5_common_iface
         uct_rc_mlx5_iface_unexp_consumed(mlx5_common_iface, rc_iface,
                                          &rc_iface->tm.rndv_desc, status,
                                          ntohs(cqe->wqe_counter));
+
+        UCT_RC_IFACE_TM_STAT(rc_iface, RX_RNDV_UNEXP);
     }
 }
 
@@ -1359,6 +1377,8 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
             uct_rc_mlx5_iface_release_srq_seg(mlx5_common_iface, rc_iface, seg,
                                               ntohs(cqe->wqe_counter), UCS_OK, 0,
                                               NULL);
+
+            UCT_RC_IFACE_TM_STAT(rc_iface, RX_RNDV_FIN);
         }
         break;
 
