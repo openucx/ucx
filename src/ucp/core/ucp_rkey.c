@@ -347,7 +347,8 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
 
         md_index = config->md_index[lane];
         if ((md_index != UCP_NULL_RESOURCE) &&
-            (!(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY)))
+            (!(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY)) &&
+            (context->tl_mds[md_index].attr.cap.mem_type == mem_type))
         {
             /* Lane does not need rkey, can use the lane with invalid rkey  */
             *uct_rkey_p = UCT_INVALID_RKEY;
