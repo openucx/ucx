@@ -77,6 +77,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     worker = listener->wiface.worker;
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     UCS_ASYNC_BLOCK(&worker->async);
+    /* coverity[overrun-buffer-val] */
     status = ucp_ep_create_accept(worker, client_data, &ep);
     UCS_ASYNC_UNBLOCK(&worker->async);
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
