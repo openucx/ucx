@@ -90,7 +90,7 @@ AS_IF([test "x$mmap_hooks_happy" == "xyes"],
       AS_IF([test "x$ipc_hooks_happy" == "xyes" -o "x$shm_hooks_happy" == "xyes"],
             [bistro_hooks_happy=yes]))
 
-AS_IF([test "x$bistro_hooks_happy" == "xyes__"],
+AS_IF([test "x$bistro_hooks_happy" == "xyes"],
       [AC_DEFINE([UCM_BISTRO_HOOKS], [1], [Enable BISTRO hooks])],
       [AC_DEFINE([UCM_BISTRO_HOOKS], [0], [Enable BISTRO hooks])
        AC_MSG_WARN([Some of required syscalls could not be found])
