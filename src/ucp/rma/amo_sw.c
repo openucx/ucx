@@ -232,7 +232,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
         req->send.atomic_reply.req = atomicreqh->req.reqptr;
         req->send.length           = atomicreqh->length;
         req->send.uct.func         = ucp_progress_atomic_reply;
-        req->send.uct.flags        = UCT_PENDING_REQUEST_FLAG_SYNC;
+        req->send.uct.flags        = UCT_PENDING_REQ_FLAG_SYNC;
         ucp_request_send(req);
     }
 

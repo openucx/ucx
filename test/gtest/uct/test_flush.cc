@@ -341,7 +341,7 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
          it->sendbuf    = &sendbuf;
          it->test       = this;
          it->uct.func   = am_progress;
-         it->uct.flags  = UCT_PENDING_REQUEST_FLAG_SYNC;
+         it->uct.flags  = UCT_PENDING_REQ_FLAG_SYNC;
          it->comp.count = 2;
          it->comp.func  = NULL;
          status = uct_ep_pending_add(sender().ep(0), &it->uct);
@@ -374,7 +374,7 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
              /* If flush returned NO_RESOURCE, add to pending must succeed */
              flush_req.test      = this;
              flush_req.uct.func  = flush_progress;
-             flush_req.uct.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
+             flush_req.uct.flags = UCT_PENDING_REQ_FLAG_SYNC;
              status = uct_ep_pending_add(sender().ep(0), &flush_req.uct);
              if (status == UCS_ERR_BUSY) {
                  continue;

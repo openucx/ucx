@@ -449,7 +449,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
         }
         fc_req->ep          = &ep->super.super;
         fc_req->super.func  = uct_rc_ep_fc_grant;
-        fc_req->super.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
+        fc_req->super.flags = UCT_PENDING_REQ_FLAG_SYNC;
 
         /* Got hard credit request. Send grant to the peer immediately */
         status = uct_rc_ep_fc_grant(&fc_req->super);

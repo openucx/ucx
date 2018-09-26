@@ -274,7 +274,7 @@ UCS_TEST_P(test_uct_peer_failure, purge_failed_peer)
     uct_pending_req_t reqs[num_pend_sends];
     for (size_t i = 0; i < num_pend_sends; i ++) {
         reqs[i].func  = pending_cb;
-        reqs[i].flags = UCT_PENDING_REQUEST_FLAG_ASYNC;
+        reqs[i].flags = UCT_PENDING_REQ_FLAG_ASYNC;
         EXPECT_EQ(uct_ep_pending_add(ep0(), &reqs[i]), UCS_OK);
     }
 

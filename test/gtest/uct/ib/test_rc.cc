@@ -191,7 +191,7 @@ void test_rc_flow_control::test_pending_purge(int wnd, int num_pend_sends)
      * Add some user pending requests as well */
     for (int i = 0; i < num_pend_sends; i++) {
         reqs[i].uct.func    = NULL; /* make valgrind happy */
-        reqs[i].uct.flags   = UCT_PENDING_REQUEST_FLAG_SYNC;
+        reqs[i].uct.flags   = UCT_PENDING_REQ_FLAG_SYNC;
         reqs[i].purge_count = 0;
         EXPECT_EQ(uct_ep_pending_add(m_e2->ep(0), &reqs[i].uct), UCS_OK);
     }

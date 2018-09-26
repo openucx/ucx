@@ -576,8 +576,8 @@ static UCS_F_ALWAYS_INLINE
 void uct_pending_request_check_flags(const uct_pending_req_t *req)
 {
     /* Must be set only one flag */
-    ucs_assert((req->flags == UCT_PENDING_REQUEST_FLAG_SYNC) ||
-               (req->flags == UCT_PENDING_REQUEST_FLAG_ASYNC));
+    ucs_assert((req->flags == UCT_PENDING_REQ_FLAG_SYNC) ||
+               (req->flags == UCT_PENDING_REQ_FLAG_ASYNC));
 }
 
 #endif

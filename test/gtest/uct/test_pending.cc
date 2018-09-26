@@ -122,7 +122,7 @@ public:
         req->data      = send_data;
         req->countdown = 5;
         req->uct.func  = pending_send_op;
-        req->uct.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
+        req->uct.flags = UCT_PENDING_REQ_FLAG_SYNC;
         return req;
     }
 
@@ -132,7 +132,7 @@ public:
         req->data      = send_data;
         req->countdown = 0;
         req->uct.func  = pending_send_op_simple;
-        req->uct.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
+        req->uct.flags = UCT_PENDING_REQ_FLAG_SYNC;
         req->active    = 0;
         req->id        = idx;
         return req;
@@ -144,7 +144,7 @@ public:
         req->buf       = sbuf;
         req->countdown = 0;
         req->uct.func  = pending_send_op_bcopy;
-        req->uct.flags = UCT_PENDING_REQUEST_FLAG_SYNC;
+        req->uct.flags = UCT_PENDING_REQ_FLAG_SYNC;
         req->active    = 0;
         req->id        = idx;
         return req;
