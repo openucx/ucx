@@ -10,6 +10,17 @@
 #include <ucm/api/ucm.h>
 #include <ucs/sys/checker.h>
 
+#define UCM_MMAP_HOOK_RELOC_STR  "reloc"
+#define UCM_MMAP_HOOK_BISTRO_STR "bistro"
+
+#if UCM_BISTRO_HOOKS
+#  define UCM_DEFAULT_HOOK_MODE UCM_MMAP_HOOK_BISTRO
+#  define UCM_DEFAULT_HOOK_MODE_STR UCM_MMAP_HOOK_BISTRO_STR
+#else
+#  define UCM_DEFAULT_HOOK_MODE UCM_MMAP_HOOK_RELOC
+#  define UCM_DEFAULT_HOOK_MODE_STR UCM_MMAP_HOOK_RELOC_STR
+#endif
+
 ucs_status_t ucm_mmap_install(int events);
 
 void *ucm_override_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);

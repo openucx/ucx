@@ -185,10 +185,10 @@ void *ucm_orig_sbrk(intptr_t increment)
     }
 }
 
-#else
+#else /* UCM_BISTRO_HOOKS */
 
 UCM_DEFINE_DLSYM_FUNC(sbrk, void*, MAP_FAILED, intptr_t)
 UCM_DEFINE_DLSYM_FUNC(shmat, void*, MAP_FAILED, int, const void*, int)
 UCM_DEFINE_DLSYM_FUNC(shmdt, int, -1, const void*)
 
-#endif
+#endif /* UCM_BISTRO_HOOKS */

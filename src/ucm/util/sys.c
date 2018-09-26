@@ -12,6 +12,7 @@
 
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
+#include <ucm/mmap/mmap.h>
 #include <ucs/sys/math.h>
 #include <linux/mman.h>
 #include <sys/mman.h>
@@ -23,12 +24,6 @@
 
 
 #define UCM_PROC_SELF_MAPS "/proc/self/maps"
-
-#if UCM_BISTRO_HOOKS
-#  define UCM_DEFAULT_HOOK_MODE UCM_MMAP_HOOK_BISTRO
-#else
-#  define UCM_DEFAULT_HOOK_MODE UCM_MMAP_HOOK_RELOC
-#endif
 
 ucm_global_config_t ucm_global_opts = {
     .log_level                  = UCS_LOG_LEVEL_WARN,

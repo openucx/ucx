@@ -8,24 +8,19 @@
 
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
+#include <ucm/mmap/mmap.h>
 
 
 #define UCM_CONFIG_PREFIX   "MEM_"
 
 static const char *ucm_mmap_hook_modes[] = {
     [UCM_MMAP_HOOK_NONE]   = "none",
-    [UCM_MMAP_HOOK_RELOC]  = "reloc",
+    [UCM_MMAP_HOOK_RELOC]  = UCM_MMAP_HOOK_RELOC_STR,
 #if UCM_BISTRO_HOOKS
-    [UCM_MMAP_HOOK_BISTRO] = "bistro",
+    [UCM_MMAP_HOOK_BISTRO] = UCM_MMAP_HOOK_BISTRO_STR,
 #endif
     [UCM_MMAP_HOOK_LAST]   = NULL
 };
-
-#if UCM_BISTRO_HOOKS
-#  define UCM_DEFAULT_HOOK_MODE_STR "bistro"
-#else
-#  define UCM_DEFAULT_HOOK_MODE_STR "reloc"
-#endif
 
 static ucs_config_field_t ucm_global_config_table[] = {
   {"LOG_LEVEL", "warn",
