@@ -190,7 +190,8 @@ static inline void ucp_ep_flush_state_reset(ucp_ep_h ep)
 {
     ucp_ep_flush_state_t *flush_state = &ucp_ep_ext_gen(ep)->flush_state;
 
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
+    ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
+                              UCP_EP_FLAG_LISTENER)));
     if (!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID)) {
         flush_state->send_sn = 0;
         flush_state->cmpl_sn = 0;

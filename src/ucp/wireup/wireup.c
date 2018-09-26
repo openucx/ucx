@@ -268,17 +268,18 @@ static UCS_F_NOINLINE void
 ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                            const ucp_unpacked_address_t *remote_address)
 {
-    uint64_t remote_uuid = remote_address->uuid;
+    uint64_t remote_uuid   = remote_address->uuid;
+    uint64_t tl_bitmap     = 0;
+    int send_reply         = 0;
+    unsigned ep_init_flags = 0;
     ucp_rsc_index_t rsc_tli[UCP_MAX_LANES];
     uint8_t addr_indices[UCP_MAX_LANES];
     ucp_lane_index_t lane, remote_lane;
     ucp_rsc_index_t rsc_index;
     ucp_ep_params_t params;
     ucs_status_t status;
-    uint64_t tl_bitmap = 0;
-    int send_reply = 0, reset_listener_flag = 0;
+    ucp_ep_flags_t listener_flag;
     ucp_ep_h ep;
-    unsigned ep_init_flags = 0;
 
     ucs_assert(msg->type == UCP_WIREUP_MSG_REQUEST);
     ucs_trace("got wireup request from 0x%"PRIx64" src_ep 0x%lx dst_ep 0x%lx conn_sn %d",
@@ -288,8 +289,12 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         /* wireup request for a specific ep */
         ep = ucp_worker_get_ep_by_ptr(worker, msg->dest_ep_ptr);
         ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
-        ucp_ep_flush_state_reset(ep);
-
+        if (!(ep->flags & UCP_EP_FLAG_LISTENER) &&
+            ucp_ep_config(ep)->p2p_lanes) {
+            ucp_ep_flush_state_reset(ep);
+        } else {
+            /* reset flush state after user's listener callback is called */
+        }
         ep_init_flags |= UCP_EP_CREATE_AM_LANE;
     } else {
         ep = ucp_ep_match_retrieve_exp(&worker->ep_match_ctx, remote_uuid,
@@ -375,11 +380,10 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     if (send_reply) {
 
-        if (ep->flags & UCP_EP_FLAG_LISTENER) {
-            /* Remove this flag at this point (so that address packing would be correct) */
-            ep->flags &= ~UCP_EP_FLAG_LISTENER;
-            reset_listener_flag = 1;
-        }
+        listener_flag = ep->flags & UCP_EP_FLAG_LISTENER;
+        /* Remove this flag at this point if it's set
+         * (so that address packing would be correct) */
+        ep->flags &= ~UCP_EP_FLAG_LISTENER;
 
         /* Construct the list that tells the remote side with which address we
          * have connected to each of its lanes.
@@ -403,9 +407,8 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
             return;
         }
 
-        if (reset_listener_flag) {
-            ep->flags |= UCP_EP_FLAG_LISTENER;
-        }
+        /* Restore saved flag value */
+        ep->flags |= listener_flag;
     } else {
         /* if in client-server flow, schedule invoking the user's callback
          * (if server is connected) from the main thread */

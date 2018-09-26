@@ -80,6 +80,8 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     ucp_ep_ext_gen(ep)->err_cb      = NULL;
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
                       sizeof(ucp_ep_ext_gen(ep)->listener));
+    UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
+                      sizeof(ucp_ep_ext_gen(ep)->flush_state));
     memset(&ucp_ep_ext_gen(ep)->ep_match, 0,
            sizeof(ucp_ep_ext_gen(ep)->ep_match));
 
@@ -417,6 +419,9 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
         if (status == UCS_OK) {
             /* the server's ep should be aware of the sent address from the client */
             (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
+            /* NOTE: protect union */
+            ucs_assert(!((*ep_p)->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
+                                           UCP_EP_FLAG_FLUSH_STATE_VALID)));
         } else {
             goto out_free_address;
         }

@@ -20,10 +20,14 @@ static unsigned ucp_listener_accept_cb_progress(void *arg)
     ucp_listener_h listener = ucp_ep_ext_gen(ep)->listener;
 
     /* NOTE: protect union */
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
+    ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
+                              UCP_EP_FLAG_FLUSH_STATE_VALID)));
+    ucs_assert(ep->flags   & UCP_EP_FLAG_LISTENER);
 
+    ep->flags &= ~UCP_EP_FLAG_LISTENER;
     ep->flags |= UCP_EP_FLAG_USED;
     ucp_stream_ep_activate(ep);
+    ucp_ep_flush_state_reset(ep);
 
     /*
      * listener is NULL if the EP was created with UCP_EP_PARAM_FIELD_EP_ADDR
@@ -92,7 +96,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
         uct_iface_accept(listener->wiface.iface, conn_request->uct_req);
         if (listener->accept_cb != NULL) {
             if (ep->flags & UCP_EP_FLAG_LISTENER) {
-                ep->flags &= ~UCP_EP_FLAG_USED;
+                ucs_assert(!(ep->flags & UCP_EP_FLAG_USED));
                 ucp_ep_ext_gen(ep)->listener = listener;
             } else {
                 ep->flags |= UCP_EP_FLAG_USED;
