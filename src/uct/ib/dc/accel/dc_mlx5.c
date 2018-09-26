@@ -853,7 +853,7 @@ ucs_status_ptr_t uct_dc_mlx5_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     op_index = uct_rc_iface_tag_get_op_id(&iface->super.super, comp);
 
-    uct_dc_iface_fill_ravh(&ravh, iface->super.rx.dct->dct_num);
+    uct_dc_iface_fill_ravh(&ravh, uct_dc_get_dct_num(&iface->super));
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, &ep->super, txqp, txwq);
 
@@ -1179,6 +1179,7 @@ ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
 
 ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
 {
+    uct_dc_mlx5_iface_t *mlx5 = ucs_derived_of(iface, uct_dc_mlx5_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super);
     struct mlx5dv_qp_init_attr dv_init_attr = {};
     struct ibv_qp_init_attr_ex init_attr = {};
@@ -1197,9 +1198,9 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
     dv_init_attr.dc_init_attr.dc_type        = MLX5DV_DCTYPE_DCT;
     dv_init_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
 
-    iface->rx.dct = mlx5dv_create_qp(dev->ibv_context,
-                                     &init_attr, &dv_init_attr);
-    if (iface->rx.dct == NULL) {
+    mlx5->rx_dct = mlx5dv_create_qp(dev->ibv_context,
+                                    &init_attr, &dv_init_attr);
+    if (mlx5->rx_dct == NULL) {
         ucs_error("Failed to created DC target %m");
         return UCS_ERR_INVALID_PARAM;
     }
@@ -1210,10 +1211,10 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
                            IBV_ACCESS_REMOTE_READ  |
                            IBV_ACCESS_REMOTE_ATOMIC;
 
-    ret = ibv_modify_qp(iface->rx.dct, &attr, IBV_QP_STATE |
-                                              IBV_QP_PKEY_INDEX |
-                                              IBV_QP_PORT |
-                                              IBV_QP_ACCESS_FLAGS);
+    ret = ibv_modify_qp(mlx5->rx_dct, &attr, IBV_QP_STATE |
+                                             IBV_QP_PKEY_INDEX |
+                                             IBV_QP_PORT |
+                                             IBV_QP_ACCESS_FLAGS);
 
     if (ret) {
          ucs_error("error modifying DCT to INIT: %m");
@@ -1228,10 +1229,10 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
     attr.ah_attr.grh.sgid_index    = uct_ib_iface_md(&iface->super.super)->config.gid_index;
     attr.ah_attr.port_num          = iface->super.super.config.port_num;
 
-    ret = ibv_modify_qp(iface->rx.dct, &attr, IBV_QP_STATE |
-                                              IBV_QP_MIN_RNR_TIMER |
-                                              IBV_QP_AV |
-                                              IBV_QP_PATH_MTU);
+    ret = ibv_modify_qp(mlx5->rx_dct, &attr, IBV_QP_STATE |
+                                             IBV_QP_MIN_RNR_TIMER |
+                                             IBV_QP_AV |
+                                             IBV_QP_PATH_MTU);
     if (ret) {
          ucs_error("error modifying DCT to RTR: %m");
          goto err;
@@ -1239,8 +1240,25 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
     return UCS_OK;
 
 err:
-    ibv_destroy_qp(iface->rx.dct);
+    ibv_destroy_qp(mlx5->rx_dct);
     return UCS_ERR_IO_ERROR;
+}
+
+int uct_dc_get_dct_num(uct_dc_iface_t *iface)
+{
+    uct_dc_mlx5_iface_t *mlx5 = ucs_derived_of(iface, uct_dc_mlx5_iface_t);
+
+    return mlx5->rx_dct->qp_num;
+}
+
+void uct_dc_destroy_dct(uct_dc_iface_t *iface)
+{
+    uct_dc_mlx5_iface_t *mlx5 = ucs_derived_of(iface, uct_dc_mlx5_iface_t);
+
+    if (mlx5->rx_dct != NULL) {
+        ibv_destroy_qp(mlx5->rx_dct);
+    }
+    mlx5->rx_dct = NULL;
 }
 #endif
 

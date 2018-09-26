@@ -168,6 +168,19 @@ ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
     return UCS_OK;
 }
 
+int uct_dc_get_dct_num(uct_dc_iface_t *iface)
+{
+    return iface->rx.dct->dct_num;
+}
+
+void uct_dc_destroy_dct(uct_dc_iface_t *iface)
+{
+    if (iface->rx.dct != NULL) {
+        ibv_exp_destroy_dct(iface->rx.dct);
+    }
+    iface->rx.dct = NULL;
+}
+
 static ucs_status_t uct_dc_device_init(uct_ib_device_t *dev)
 {
 #if HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_EXP_DEVICE_CAP_FLAGS
@@ -322,9 +335,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
     uct_dc_ep_t *ep, *tmp;
 
     ucs_trace_func("");
-    if (self->rx.dct != NULL) {
-        uct_dc_destroy_dct(self);
-    }
+    uct_dc_destroy_dct(self);
     ucs_list_for_each_safe(ep, tmp, &self->tx.gc_list, list) {
         uct_dc_ep_release(ep);
     }

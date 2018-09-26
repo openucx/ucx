@@ -25,6 +25,7 @@ typedef struct uct_dc_mlx5_iface {
     uct_rc_mlx5_iface_common_t          mlx5_common;
     uct_ud_mlx5_iface_common_t          ud_common;
     uct_ib_mlx5_txwq_t                  dci_wqs[UCT_DC_IFACE_MAX_DCIS];
+    struct ibv_qp                       *rx_dct;
 } uct_dc_mlx5_iface_t;
 
 

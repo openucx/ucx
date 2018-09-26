@@ -121,10 +121,6 @@ struct uct_dc_iface {
     struct {
 #if HAVE_DC_EXP
         struct ibv_exp_dct        *dct;
-#elif HAVE_DC_DV
-        struct ibv_qp             *dct;
-#else
-#  error "DC support not configured properly"
 #endif
     } rx;
 
@@ -174,6 +170,10 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
 
 ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
                                    ucs_status_t status);
+
+int uct_dc_get_dct_num(uct_dc_iface_t *iface);
+
+void uct_dc_destroy_dct(uct_dc_iface_t *iface);
 
 #if IBV_EXP_HW_TM_DC
 void uct_dc_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,
@@ -246,25 +246,6 @@ static inline ucs_status_t uct_dc_iface_flush_dci(uct_dc_iface_t *iface, int dci
     ucs_assertv(uct_rc_txqp_unsignaled(&iface->tx.dcis[dci].txqp) == 0,
                 "unsignalled send is not supported!!!");
     return UCS_INPROGRESS;
-}
-
-static inline int uct_dc_get_dct_num(uct_dc_iface_t *iface)
-{
-#if HAVE_DC_EXP
-    return iface->rx.dct->dct_num;
-#elif HAVE_DC_DV
-    return iface->rx.dct->qp_num;
-#endif
-}
-
-static inline void uct_dc_destroy_dct(uct_dc_iface_t *iface)
-{
-#if HAVE_DC_EXP
-    ibv_exp_destroy_dct(iface->rx.dct);
-#elif HAVE_DC_DV
-    ibv_destroy_qp(iface->rx.dct);
-#endif
-    iface->rx.dct = NULL;
 }
 
 #endif
