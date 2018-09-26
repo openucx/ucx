@@ -13,16 +13,17 @@
 #include <ucs/profile/profile.h>
 
 
-#define UCP_RMA_CHECK_PARAMS(_context, _buffer, _length, _status, _action) \
+#define UCP_RMA_CHECK_BUFFER(_buffer, _action) \
     do { \
-        UCP_CONTEXT_CHECK_FEATURE_FLAGS(_context, UCP_FEATURE_RMA, _status, \
-                                        _action); \
-        if ((_length) == 0) { \
-            (_status) = UCS_OK; \
+        if (ENABLE_PARAMS_CHECK && ucs_unlikely((_buffer) == NULL)) { \
             _action; \
         } \
-        if (ENABLE_PARAMS_CHECK && ucs_unlikely((_buffer) == NULL)) { \
-            (_status) = UCS_ERR_INVALID_PARAM; \
+    } while (0)
+
+
+#define UCP_RMA_CHECK_ZERO_LENGTH(_length, _action) \
+    do { \
+        if ((_length) == 0) { \
             _action; \
         } \
     } while (0)
@@ -176,8 +177,11 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     ucp_ep_rma_config_t *rma_config;
     ucs_status_t status;
 
-    UCP_RMA_CHECK_PARAMS(ep->worker->context, buffer, length, status,
-                         return status);
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_RMA,
+                                    return UCS_ERR_INVALID_PARAM);
+    UCP_RMA_CHECK_ZERO_LENGTH(length, return UCS_OK);
+    UCP_RMA_CHECK_BUFFER(buffer, return UCS_ERR_INVALID_PARAM);
+
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     ucs_trace_req("put_nbi buffer %p length %zu remote_addr %"PRIx64" rkey %p to %s",
@@ -214,8 +218,10 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
     ucs_status_ptr_t ptr_status;
     ucs_status_t status;
 
-    UCP_RMA_CHECK_PARAMS(ep->worker->context, buffer, length, status,
-                         return UCS_STATUS_PTR(status));
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_RMA,
+                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+    UCP_RMA_CHECK_ZERO_LENGTH(length, return NULL);
+    UCP_RMA_CHECK_BUFFER(buffer, return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     ucs_trace_req("put_nb buffer %p length %zu remote_addr %"PRIx64" rkey %p to %s cb %p",
@@ -252,8 +258,10 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
     ucp_ep_rma_config_t *rma_config;
     ucs_status_t status;
 
-    UCP_RMA_CHECK_PARAMS(ep->worker->context, buffer, length, status,
-                         return status);
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_RMA,
+                                    return UCS_ERR_INVALID_PARAM);
+    UCP_RMA_CHECK_ZERO_LENGTH(length, return UCS_OK);
+    UCP_RMA_CHECK_BUFFER(buffer, return UCS_ERR_INVALID_PARAM);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     ucs_trace_req("get_nbi buffer %p length %zu remote_addr %"PRIx64" rkey %p from %s",
@@ -281,8 +289,10 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
     ucs_status_ptr_t ptr_status;
     ucs_status_t status;
 
-    UCP_RMA_CHECK_PARAMS(ep->worker->context, buffer, length, status,
-                         return UCS_STATUS_PTR(status));
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_RMA,
+                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+    UCP_RMA_CHECK_ZERO_LENGTH(length, return NULL);
+    UCP_RMA_CHECK_BUFFER(buffer, return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     ucs_trace_req("get_nb buffer %p length %zu remote_addr %"PRIx64" rkey %p from %s cb %p",

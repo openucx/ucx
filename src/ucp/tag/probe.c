@@ -20,9 +20,8 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
     ucp_context_h UCS_V_UNUSED context = worker->context;
     ucp_recv_desc_t *rdesc;
     uint16_t flags;
-    UCS_V_UNUSED ucs_status_t status;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG, status,
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
                                     return NULL);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 

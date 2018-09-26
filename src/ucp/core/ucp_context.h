@@ -263,7 +263,7 @@ typedef struct ucp_tl_iface_atomic_flags {
 /**
  * Check if at least one feature flag from @a _flags is initialized.
  */
-#define UCP_CONTEXT_CHECK_FEATURE_FLAGS(_context, _flags, _status, _action) \
+#define UCP_CONTEXT_CHECK_FEATURE_FLAGS(_context, _flags, _action) \
     do { \
         if (ENABLE_PARAMS_CHECK && \
             ucs_unlikely(!((_context)->config.features & (_flags)))) { \
@@ -273,7 +273,6 @@ typedef struct ucp_tl_iface_atomic_flags {
                       ucp_feature_flags_str((_flags) & \
                                             ~(_context)->config.features, \
                       feature_list_str, feature_list_str_max)); \
-            (_status) = UCS_ERR_INVALID_PARAM; \
             _action; \
         } \
     } while (0)

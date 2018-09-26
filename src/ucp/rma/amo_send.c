@@ -16,32 +16,29 @@
 
 
 #define UCP_AMO_CHECK_PARAM(_context, _remote_addr, _size, _opcode, \
-                            _last_opcode, _status, _action) \
+                            _last_opcode, _action) \
     { \
-        UCP_CONTEXT_CHECK_FEATURE_FLAGS((_context), ((_size) == 4) ? \
-                                        UCP_FEATURE_AMO32 : UCP_FEATURE_AMO64, \
-                                        (_status), _action); \
-        \
         if (ENABLE_PARAMS_CHECK && \
             ucs_unlikely(((_remote_addr) % (_size)) != 0)) { \
             ucs_error("atomic variable must be naturally aligned " \
                       "(remote address 0x%"PRIx64", size %zu)", (_remote_addr), \
                       (_size)); \
-            (_status) = UCS_ERR_INVALID_PARAM; \
             _action; \
         } \
         \
         if (ENABLE_PARAMS_CHECK && \
             ucs_unlikely(((_size) != 4) && (_size != 8))) { \
-            ucs_error("not supported size of atomic value, size %zu", (_size)); \
-            (_status) = UCS_ERR_INVALID_PARAM; \
+            ucs_error("invalid atomic operation size: %zu", (_size)); \
             _action; \
         } \
+        \
+        UCP_CONTEXT_CHECK_FEATURE_FLAGS((_context), ((_size) == 4) ? \
+                                        UCP_FEATURE_AMO32 : UCP_FEATURE_AMO64, \
+                                        _action); \
         \
         if (ENABLE_PARAMS_CHECK && \
             (ucs_unlikely((_opcode) >= (_last_opcode)))) { \
             ucs_error("invalid atomic opcode %d ", _opcode); \
-            (_status) = UCS_ERR_INVALID_PARAM; \
             _action; \
         } \
     }
@@ -121,8 +118,8 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
     ucp_request_t *req;
 
     UCP_AMO_CHECK_PARAM(ep->worker->context, remote_addr, op_size, opcode,
-                        UCP_ATOMIC_FETCH_OP_LAST, status,
-                        return UCS_STATUS_PTR(status));
+                        UCP_ATOMIC_FETCH_OP_LAST,
+                        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
@@ -156,7 +153,7 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
     ucp_request_t *req;
 
     UCP_AMO_CHECK_PARAM(ep->worker->context, remote_addr, op_size, opcode,
-                        UCP_ATOMIC_POST_OP_LAST, status, return status);
+                        UCP_ATOMIC_POST_OP_LAST, return UCS_ERR_INVALID_PARAM);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 

@@ -93,10 +93,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb, (ep, length),
     ucp_ep_ext_proto_t   *ep_ext = ucp_ep_ext_proto(ep);
     ucp_recv_desc_t      *rdesc;
     ucp_stream_am_data_t *am_data;
-    ucs_status_t         status;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_STREAM,
-                                    status, return UCS_STATUS_PTR(status));
+                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     if (ucs_unlikely(!ucp_stream_ep_has_data(ep_ext))) {
@@ -259,7 +258,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nb,
     ucp_recv_desc_t     *rdesc;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_STREAM,
-                                    status, return UCS_STATUS_PTR(status));
+                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     if (ucs_likely(!UCP_DT_IS_GENERIC(datatype))) {

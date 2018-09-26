@@ -1400,10 +1400,9 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
     ssize_t            count = 0;
     ucp_ep_ext_proto_t *ep_ext;
     ucp_ep_h           ep;
-    ucs_status_t       status;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_STREAM, status,
-                                    return status);
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_STREAM,
+                                    return UCS_ERR_INVALID_PARAM);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -1425,7 +1424,7 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
     ucs_status_t status;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
-                                    status, return status);
+                                    return UCS_ERR_INVALID_PARAM);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     if (worker->flags & UCP_WORKER_FLAG_EXTERNAL_EVENT_FD) {
@@ -1448,7 +1447,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     ucs_trace_func("worker=%p", worker);
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
-                                    status, return status);
+                                    return UCS_ERR_INVALID_PARAM);
 
     /* Read from event pipe. If some events are found, return BUSY,
      * Otherwise, continue to arm the transport interfaces.
@@ -1498,8 +1497,8 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address)
     UCS_V_UNUSED ucs_status_t status;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
-                                    status, /*no action*/);
-   ucs_arch_wait_mem(address);
+                                    /*no action*/);
+    ucs_arch_wait_mem(address);
 }
 
 ucs_status_t ucp_worker_wait(ucp_worker_h worker)
@@ -1513,7 +1512,7 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
     ucs_trace_func("worker %p", worker);
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
-                                    status, return status);
+                                    return UCS_ERR_INVALID_PARAM);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -1562,11 +1561,9 @@ out:
 
 ucs_status_t ucp_worker_signal(ucp_worker_h worker)
 {
-    ucs_status_t status;
-
     ucs_trace_func("worker %p", worker);
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
-                                    status, return status);
+                                    return UCS_ERR_INVALID_PARAM);
     return ucp_worker_wakeup_signal_fd(worker);
 }
 
