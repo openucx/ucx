@@ -350,6 +350,8 @@ static ucs_status_t ucm_reloc_install_dlopen()
         return status;
     }
 
+    ucs_list_add_tail(&ucm_reloc_patch_list, &ucm_reloc_dlopen_patch.list);
+
     installed = 1;
     return UCS_OK;
 }
