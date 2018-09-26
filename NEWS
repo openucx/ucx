@@ -16,7 +16,7 @@ Feaures:
 - New client/server connection establishment API
 - Added CUDA support for stream API
 
-## 1.4.0-rc1(September 25, 2018)
+## 1.4.0-rc1 (September 26, 2018)
 
 Features:
 - Improved support for installation with latest ROCm
