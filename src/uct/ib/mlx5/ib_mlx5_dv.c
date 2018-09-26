@@ -57,6 +57,7 @@ static ucs_status_t uct_ib_mlx5_device_init(uct_ib_device_t *dev)
     dv_attr.comp_mask            = MLX5DV_QP_INIT_ATTR_MASK_DC;
     dv_attr.dc_init_attr.dc_type = MLX5DV_DCTYPE_DCI;
 
+    /* create DCI qp successful means DC is supported */
     qp = mlx5dv_create_qp(ctx, &qp_attr, &dv_attr);
     if (qp) {
         ibv_destroy_qp(qp);
@@ -68,7 +69,9 @@ err_cq:
     ibv_dealloc_pd(pd);
     return status;
 }
-UCT_DEVICE_INITIALIZER(uct_ib_mlx5_device_init);
+
+UCT_IB_DEVICE_INIT(uct_ib_mlx5_device_init);
+
 #endif
 
 int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)

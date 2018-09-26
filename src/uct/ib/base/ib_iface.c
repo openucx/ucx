@@ -399,22 +399,24 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
-const char *uct_ib_qp_type_str(int qp_type)
+static const char *uct_ib_qp_type_str(int qp_type)
 {
     switch (qp_type) {
-        case IBV_QPT_RC: return "rc";
-        case IBV_QPT_UD: return "ud";
+    case IBV_QPT_RC:
+        return "rc";
+    case IBV_QPT_UD:
+        return "ud";
 #if HAVE_TL_DC
-        case UCT_IB_QPT_DCI: return "dci";
+    case UCT_IB_QPT_DCI:
+        return "dci";
 #endif
-        default:
-            ucs_bug("invalid qp type: %d", qp_type);
-            return "unknown";
+    default:
+        ucs_bug("invalid qp type: %d", qp_type);
+        return "unknown";
     }
 }
 
-void uct_ib_iface_fill_attr(uct_ib_iface_t *iface,
-                            uct_ib_qp_attr_t *attr)
+void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
 {
     attr->ibv.send_cq             = iface->cq[UCT_IB_DIR_TX];
     attr->ibv.recv_cq             = iface->cq[UCT_IB_DIR_RX];

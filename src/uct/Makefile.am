@@ -123,7 +123,7 @@ libuct_la_SOURCES += \
 	ib/dc/verbs/dc_verbs.c
 endif
 
-if HAVE_MLX5_HW
+if HAVE_MLX5_HW_DC
 noinst_HEADERS += \
 	ib/dc/accel/dc_mlx5.h
 

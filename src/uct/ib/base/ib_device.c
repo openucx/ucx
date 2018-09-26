@@ -227,7 +227,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                                 struct ibv_device *ibv_device, int async_events
                                 UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
-    uct_ib_device_init_t *init_entry;
+    uct_ib_device_init_entry_t *init_entry;
     ucs_status_t status;
     uint8_t i;
     int ret;

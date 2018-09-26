@@ -134,18 +134,18 @@ typedef struct uct_ib_device {
 /**
  * IB device private initializer.
  */
-typedef struct uct_ib_device_init {
+typedef struct uct_ib_device_init_entry {
     ucs_list_link_t             list;
     ucs_status_t                (*init)(uct_ib_device_t *dev);
-} uct_ib_device_init_t;
+} uct_ib_device_init_entry_t;
 
-#define UCT_DEVICE_INITIALIZER(_init_fn) \
+#define UCT_IB_DEVICE_INIT(_init_fn) \
     UCS_STATIC_INIT { \
         extern ucs_list_link_t uct_ib_device_init_list; \
-        static uct_ib_device_init_t __init = { \
+        static uct_ib_device_init_entry_t init_entry = { \
             .init = _init_fn, \
         }; \
-        ucs_list_add_tail(&uct_ib_device_init_list, &__init.list); \
+        ucs_list_add_tail(&uct_ib_device_init_list, &init_entry.list); \
     }
 
 

@@ -1103,14 +1103,13 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_ib_iface_t *iface,
     dv_attr.dc_init_attr.dc_type        = MLX5DV_DCTYPE_DCI;
     dv_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
     qp = mlx5dv_create_qp(dev->ibv_context, &attr->ibv, &dv_attr);
-
     if (qp == NULL) {
         ucs_error("iface=%p: failed to create DCI: %m", iface);
         return UCS_ERR_IO_ERROR;
     }
 
     attr->cap = attr->ibv.cap;
-    *qp_p = qp;
+    *qp_p     = qp;
 
     return UCS_OK;
 }
@@ -1189,6 +1188,7 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
     init_attr.comp_mask             = IBV_QP_INIT_ATTR_PD;
     init_attr.pd                    = uct_ib_iface_md(&iface->super.super)->pd;
     init_attr.recv_cq               = iface->super.super.cq[UCT_IB_DIR_RX];
+    /* DCT can't send, but send_cq have to point to valid CQ */
     init_attr.send_cq               = iface->super.super.cq[UCT_IB_DIR_RX];
     init_attr.srq                   = iface->super.rx.srq.srq;
     init_attr.qp_type               = IBV_QPT_DRIVER;
@@ -1237,6 +1237,7 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
          ucs_error("error modifying DCT to RTR: %m");
          goto err;
     }
+
     return UCS_OK;
 
 err:

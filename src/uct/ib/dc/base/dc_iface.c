@@ -190,7 +190,9 @@ static ucs_status_t uct_dc_device_init(uct_ib_device_t *dev)
 #endif
     return UCS_OK;
 }
-UCT_DEVICE_INITIALIZER(uct_dc_device_init);
+
+UCT_IB_DEVICE_INIT(uct_dc_device_init);
+
 #endif
 
 static void uct_dc_iface_dcis_destroy(uct_dc_iface_t *iface, int max)
