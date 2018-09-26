@@ -537,8 +537,8 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
     ucp_worker_h worker = wiface->worker;
     ucs_status_t status;
 
-    ucs_trace("activate iface %p acount=%u", wiface->iface,
-              wiface->activate_count);
+    ucs_trace("activate iface %p acount=%u aifaces=%u", wiface->iface,
+              wiface->activate_count, worker->num_active_ifaces);
 
     if (wiface->activate_count++ > 0) {
         return; /* was already activated */
@@ -558,20 +558,24 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
         ucs_list_add_tail(&worker->arm_ifaces, &wiface->arm_list);
     }
 
+    ++worker->num_active_ifaces;
+
     uct_iface_progress_enable(wiface->iface,
                               UCT_PROGRESS_SEND | UCT_PROGRESS_RECV | uct_flags);
 }
 
 static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
 {
-    ucs_trace("deactivate iface %p force=%d acount=%u", wiface->iface, force,
-              wiface->activate_count);
+    ucs_trace("deactivate iface %p force=%d acount=%u aifaces=%u",
+              wiface->iface, force, wiface->activate_count,
+              wiface->worker->num_active_ifaces);
 
     if (!force) {
         ucs_assert(wiface->activate_count > 0);
         if (--wiface->activate_count > 0) {
             return; /* not completely deactivated yet */
         }
+        --wiface->worker->num_active_ifaces;
     }
 
     /* Avoid progress on the interface to reduce overhead */
@@ -833,8 +837,8 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     }
 
     ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
-               tl_id, wiface->iface, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),
-               worker);
+              tl_id, wiface->iface, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),
+              worker);
 
     VALGRIND_MAKE_MEM_UNDEFINED(&wiface->attr, sizeof(wiface->attr));
     status = uct_iface_query(wiface->iface, &wiface->attr);
@@ -1189,6 +1193,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->inprogress        = 0;
     worker->ep_config_max     = config_count;
     worker->ep_config_count   = 0;
+    worker->num_active_ifaces = 0;
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
     ucs_list_head_init(&worker->all_eps);

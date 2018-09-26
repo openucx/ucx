@@ -21,28 +21,28 @@ int ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
     ucp_worker_t *worker   = iface->worker;
     ucp_context_t *context = worker->context;
 
-    if (!worker->tm.offload.num_ifaces) {
+    if (!worker->tm.offload.activated) {
         ucs_assert(worker->tm.offload.thresh       == SIZE_MAX);
         ucs_assert(worker->tm.offload.zcopy_thresh == SIZE_MAX);
         ucs_assert(worker->tm.offload.iface        == NULL);
 
         worker->tm.offload.thresh       = context->config.ext.tm_thresh;
         worker->tm.offload.zcopy_thresh = context->config.ext.tm_max_bb_size;
+        worker->tm.offload.activated    = 1;
 
-        /* Cache active offload iface, in most cases only one iface should be
-         * used for offload. If more ifaces will be activated, they will be
-         * added to offload hash table. */
+        /* Cache active offload iface. Can use it if this will be the only
+         * active iface on the worker. Otherwise would need to retrieve
+         * offload-capable iface from the offload hash table. */
         worker->tm.offload.iface        = iface;
 
         ucs_debug("Enable TM offload: thresh %zu, zcopy_thresh %zu",
                   worker->tm.offload.thresh, worker->tm.offload.zcopy_thresh);
     }
 
-    ++worker->tm.offload.num_ifaces;
     iface->flags |= UCP_WORKER_IFACE_FLAG_OFFLOAD_ACTIVATED;
 
-    ucs_debug("Activate tag offload iface %p, num of offload ifaces %d",
-              iface, worker->tm.offload.num_ifaces);
+    ucs_debug("Activate tag offload iface %p", iface);
+
     return 1;
 }
 
@@ -52,7 +52,7 @@ ucp_tag_offload_iface(ucp_worker_t *worker, ucp_tag_t tag)
     khiter_t hash_it;
     ucp_tag_t key_tag;
 
-    if (ucs_likely(worker->tm.offload.num_ifaces == 1)) {
+    if (worker->num_active_ifaces == 1) {
         ucs_assert(worker->tm.offload.iface != NULL);
         return worker->tm.offload.iface;
     }
@@ -198,7 +198,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         ucp_rndv_process_rts(worker, (void*)hdr, hdr_length, 0);
     }
 
-    ucp_tag_offload_unexp(iface, stag);
+    /* Unexpected RNDV (both SW and HW) need to enable offload capabilities.
+     * Pass TM_THRESH value as a length to make sure tag is added to the
+     * hash table if there is a need (i.e. we have several active ifaces). */
+    ucp_tag_offload_unexp(iface, stag, worker->tm.offload.thresh);
 
     return UCS_OK;
 }
