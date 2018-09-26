@@ -46,63 +46,6 @@ UCM_DEFINE_SELECT_FUNC(munmap, int, -1, SYS_munmap, void*, size_t)
 UCM_DEFINE_SELECT_FUNC(mremap, void*, MAP_FAILED, SYS_mremap, void*, size_t, size_t, int)
 UCM_DEFINE_SELECT_FUNC(madvise, int, -1, SYS_madvise, void*, size_t, int)
 
-#if HAVE_DECL_SYS_SHMAT
-
-UCM_DEFINE_SELECT_FUNC(shmat, void*, MAP_FAILED, SYS_shmat, int, const void*, int)
-
-#elif HAVE_DECL_SYS_IPC
-#  ifndef IPCOP_shmat
-#    define IPCOP_shmat 21
-#  endif
-
-_UCM_DEFINE_DLSYM_FUNC(shmat, ucm_orig_dlsym_shmat, ucm_override_shmat,
-                       void*, MAP_FAILED, int, const void*, int)
-
-void *ucm_orig_shmat(int shmid, const void *shmaddr, int shmflg)
-{
-    unsigned long res;
-    void *addr;
-
-    if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) {
-        return ucm_orig_dlsym_shmat(shmid, shmaddr, shmflg);
-    } else {
-        /* Using IPC syscall of shmat implementation */
-        res = syscall(SYS_ipc, IPCOP_shmat, shmid, shmflg, &addr, shmaddr);
-
-        return res ? MAP_FAILED : addr;
-    }
-}
-
-#else
-#  error "Unsupported architecture"
-#endif
-
-#if HAVE_DECL_SYS_SHMDT
-
-UCM_DEFINE_SELECT_FUNC(shmdt, int, -1, SYS_shmdt, const void*)
-
-#elif HAVE_DECL_SYS_IPC
-#  ifndef IPCOP_shmdt
-#    define IPCOP_shmdt 22
-#  endif
-
-_UCM_DEFINE_DLSYM_FUNC(shmdt, ucm_orig_dlsym_shmdt, ucm_override_shmdt,
-                       int, -1, const void*)
-
-int ucm_orig_shmdt(const void *shmaddr)
-{
-    if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) {
-        return ucm_orig_dlsym_shmdt(shmaddr);
-    } else {
-        /* Using IPC syscall of shmdt implementation */
-        return syscall(SYS_ipc, IPCOP_shmdt, 0, 0, 0, shmaddr);
-    }
-}
-
-#else
-#  error "Unsupported architecture"
-#endif
-
 #if HAVE_CUDA
 
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemFree, CUresult,-1, CUdeviceptr)
@@ -141,6 +84,60 @@ UCM_OVERRIDE_FUNC(cudaMallocPitch,           cudaError_t)
 UCM_OVERRIDE_FUNC(cudaHostGetDevicePointer,  cudaError_t)
 UCM_OVERRIDE_FUNC(cudaHostUnregister,        cudaError_t)
 #endif
+
+#endif
+
+#if UCM_BISTRO_HOOKS
+#if HAVE_DECL_SYS_SHMAT
+
+UCM_DEFINE_SELECT_FUNC(shmat, void*, MAP_FAILED, SYS_shmat, int, const void*, int)
+
+#elif HAVE_DECL_SYS_IPC
+#  ifndef IPCOP_shmat
+#    define IPCOP_shmat 21
+#  endif
+
+_UCM_DEFINE_DLSYM_FUNC(shmat, ucm_orig_dlsym_shmat, ucm_override_shmat,
+                       void*, MAP_FAILED, int, const void*, int)
+
+void *ucm_orig_shmat(int shmid, const void *shmaddr, int shmflg)
+{
+    unsigned long res;
+    void *addr;
+
+    if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) {
+        return ucm_orig_dlsym_shmat(shmid, shmaddr, shmflg);
+    } else {
+        /* Using IPC syscall of shmat implementation */
+        res = syscall(SYS_ipc, IPCOP_shmat, shmid, shmflg, &addr, shmaddr);
+
+        return res ? MAP_FAILED : addr;
+    }
+}
+
+#endif
+
+#if HAVE_DECL_SYS_SHMDT
+
+UCM_DEFINE_SELECT_FUNC(shmdt, int, -1, SYS_shmdt, const void*)
+
+#elif HAVE_DECL_SYS_IPC
+#  ifndef IPCOP_shmdt
+#    define IPCOP_shmdt 22
+#  endif
+
+_UCM_DEFINE_DLSYM_FUNC(shmdt, ucm_orig_dlsym_shmdt, ucm_override_shmdt,
+                       int, -1, const void*)
+
+int ucm_orig_shmdt(const void *shmaddr)
+{
+    if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) {
+        return ucm_orig_dlsym_shmdt(shmaddr);
+    } else {
+        /* Using IPC syscall of shmdt implementation */
+        return syscall(SYS_ipc, IPCOP_shmdt, 0, 0, 0, shmaddr);
+    }
+}
 
 #endif
 
@@ -187,3 +184,11 @@ void *ucm_orig_sbrk(intptr_t increment)
         return ucm_orig_brk(prev + increment) ? (void*)-1 : prev;
     }
 }
+
+#else
+
+UCM_DEFINE_DLSYM_FUNC(sbrk, void*, MAP_FAILED, intptr_t)
+UCM_DEFINE_DLSYM_FUNC(shmat, void*, MAP_FAILED, int, const void*, int)
+UCM_DEFINE_DLSYM_FUNC(shmdt, int, -1, const void*)
+
+#endif

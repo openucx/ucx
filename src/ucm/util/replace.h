@@ -85,7 +85,8 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
         return (_rettype)syscall(_syscall_id, UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
 
-#define UCM_DEFINE_SELECT_FUNC(_name, _rettype, _fail_val, _syscall_id, ...) \
+#if UCM_BISTRO_HOOKS
+#  define UCM_DEFINE_SELECT_FUNC(_name, _rettype, _fail_val, _syscall_id, ...) \
     _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name##_dlsym, ucm_override_##_name, \
                           _rettype, _fail_val, __VA_ARGS__) \
     UCM_DEFINE_SYSCALL_FUNC(_name##_syscall, _rettype, _syscall_id, __VA_ARGS__) \
@@ -95,6 +96,10 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
                ucm_orig_##_name##_syscall(UCM_FUNC_PASS_ARGS(__VA_ARGS__)) : \
                ucm_orig_##_name##_dlsym(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
+#else
+#  define UCM_DEFINE_SELECT_FUNC(_name, _rettype, _fail_val, _syscall_id, ...) \
+    UCM_DEFINE_DLSYM_FUNC(_name, _rettype, _fail_val, __VA_ARGS__)
+#endif
 
 /*
  * Define argument list with given types.

@@ -15,9 +15,17 @@
 static const char *ucm_mmap_hook_modes[] = {
     [UCM_MMAP_HOOK_NONE]   = "none",
     [UCM_MMAP_HOOK_RELOC]  = "reloc",
+#if UCM_BISTRO_HOOKS
     [UCM_MMAP_HOOK_BISTRO] = "bistro",
+#endif
     [UCM_MMAP_HOOK_LAST]   = NULL
 };
+
+#if UCM_BISTRO_HOOKS
+#  define UCM_DEFAULT_HOOK_MODE_STR "bistro"
+#else
+#  define UCM_DEFAULT_HOOK_MODE_STR "reloc"
+#endif
 
 static ucs_config_field_t ucm_global_config_table[] = {
   {"LOG_LEVEL", "warn",
@@ -32,12 +40,14 @@ static ucs_config_field_t ucm_global_config_table[] = {
    "Enable memory events",
    ucs_offsetof(ucm_global_config_t, enable_events), UCS_CONFIG_TYPE_BOOL},
 
-  {"MMAP_HOOK_MODE", "bistro",
+  {"MMAP_HOOK_MODE", UCM_DEFAULT_HOOK_MODE_STR,
    "MMAP hook mode\n"
    " none   - don't set mmap hooks.\n"
    " reloc  - use ELF relocation table to set hooks.\n"
-   " bistro - use binary instrumentation to set hooks.\n",
-   ucs_offsetof(ucm_global_config_t, mmap_hook_mode), UCS_CONFIG_TYPE_ENUM(ucm_mmap_hook_modes)},
+#if UCM_BISTRO_HOOKS
+   " bistro - use binary instrumentation to set hooks.\n"
+#endif
+   ,ucs_offsetof(ucm_global_config_t, mmap_hook_mode), UCS_CONFIG_TYPE_ENUM(ucm_mmap_hook_modes)},
 
   {"MALLOC_HOOKS", "yes",
    "Enable using glibc malloc hooks",

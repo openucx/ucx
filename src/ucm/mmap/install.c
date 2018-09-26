@@ -54,7 +54,9 @@ static ucm_mmap_func_t ucm_mmap_funcs[] = {
     { {"shmat",   ucm_override_shmat},   UCM_EVENT_SHMAT,   0, UCM_HOOK_BOTH},
     { {"shmdt",   ucm_override_shmdt},   UCM_EVENT_SHMDT,   UCM_EVENT_SHMAT, UCM_HOOK_BOTH},
     { {"sbrk",    ucm_override_sbrk},    UCM_EVENT_SBRK,    0, UCM_HOOK_RELOC},
+#if UCM_BISTRO_HOOKS
     { {"brk",     ucm_override_brk},     UCM_EVENT_SBRK,    0, UCM_HOOK_BISTRO},
+#endif
     { {"madvise", ucm_override_madvise}, UCM_EVENT_MADVISE, 0, UCM_HOOK_BOTH},
     { {NULL, NULL}, 0}
 };

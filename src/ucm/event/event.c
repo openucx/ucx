@@ -393,6 +393,7 @@ void *ucm_sbrk(intptr_t increment)
 
 int ucm_brk(void *addr)
 {
+#if UCM_BISTRO_HOOKS
     void *old_addr;
     intptr_t increment;
     ucm_event_t event;
@@ -420,6 +421,9 @@ int ucm_brk(void *addr)
     ucm_event_leave();
 
     return event.sbrk.result == MAP_FAILED ? -1 : 0;
+#else
+    return -1;
+#endif
 }
 
 int ucm_madvise(void *addr, size_t length, int advice)

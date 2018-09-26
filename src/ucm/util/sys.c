@@ -24,10 +24,16 @@
 
 #define UCM_PROC_SELF_MAPS "/proc/self/maps"
 
+#if UCM_BISTRO_HOOKS
+#  define UCM_DEFAULT_HOOK_MODE UCM_MMAP_HOOK_BISTRO
+#else
+#  define UCM_DEFAULT_HOOK_MODE UCM_MMAP_HOOK_RELOC
+#endif
+
 ucm_global_config_t ucm_global_opts = {
     .log_level                  = UCS_LOG_LEVEL_WARN,
     .enable_events              = 1,
-    .mmap_hook_mode             = UCM_MMAP_HOOK_BISTRO,
+    .mmap_hook_mode             = UCM_DEFAULT_HOOK_MODE,
     .enable_malloc_hooks        = 1,
     .enable_malloc_reloc        = 0,
     .enable_cuda_reloc          = 1,
