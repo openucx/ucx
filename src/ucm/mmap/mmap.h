@@ -26,8 +26,11 @@ void ucm_fire_mmap_events(int events);
 
 static UCS_F_ALWAYS_INLINE ucm_mmap_hook_mode_t ucm_mmap_hook_mode(void)
 {
-    return (RUNNING_ON_VALGRIND && (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO)) ?
-           UCM_MMAP_HOOK_RELOC : ucm_global_opts.mmap_hook_mode;
+    if (RUNNING_ON_VALGRIND && (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO)) {
+        return UCM_MMAP_HOOK_RELOC;
+    }
+
+    return ucm_global_opts.mmap_hook_mode;
 }
 
 #endif

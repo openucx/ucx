@@ -19,27 +19,25 @@
 #include <ucm/bistro/bistro.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/checker.h>
+#include <ucs/debug/assert.h>
 
 #include <sys/mman.h>
 #include <sys/shm.h>
 #include <unistd.h>
 #include <pthread.h>
 
-#define UCM_IS_HOOK_ENABLED(_entry)                     \
-    (((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) &&  \
-      ((_entry)->hook_type & UCM_HOOK_RELOC)) ||        \
-     ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO) && \
-      ((_entry)->hook_type & UCM_HOOK_BISTRO)))
+#define UCM_IS_HOOK_ENABLED(_entry) \
+    ((_entry)->hook_type & UCS_BIT(ucm_mmap_hook_mode()))
 
+#define UCM_HOOK_STR \
+    ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) ?  "reloc" : "bistro")
 
-#define UCM_HOOK_STR                                  \
-    ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) ? \
-      "relocation table entry" : "bistro hook")
+extern const char *ucm_mmap_hook_modes[];
 
 typedef enum ucm_mmap_hook_type {
-    UCM_HOOK_RELOC       = UCS_BIT(0),
-    UCM_HOOK_BISTRO      = UCS_BIT(1),
-    UCM_HOOK_BOTH        = UCM_HOOK_RELOC | UCM_HOOK_BISTRO
+    UCM_HOOK_RELOC  = UCS_BIT(UCM_MMAP_HOOK_RELOC),
+    UCM_HOOK_BISTRO = UCS_BIT(UCM_MMAP_HOOK_BISTRO),
+    UCM_HOOK_BOTH   = UCM_HOOK_RELOC | UCM_HOOK_BISTRO
 } ucm_mmap_hook_type_t;
 
 typedef struct ucm_mmap_func {
@@ -166,16 +164,17 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
         }
 
         if (UCM_IS_HOOK_ENABLED(entry)) {
-            ucm_debug("mmap: installing %s for %s = %p for event 0x%x", UCM_HOOK_STR,
+            ucm_debug("mmap: installing %s hook for %s = %p for event 0x%x", UCM_HOOK_STR,
                       entry->patch.symbol, entry->patch.value, entry->event_type);
 
             if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) {
                 status = ucm_reloc_modify(&entry->patch);
             } else {
+                ucs_assert(ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO);
                 status = ucm_bistro_patch(entry->patch.symbol, entry->patch.value, NULL);
             }
             if (status != UCS_OK) {
-                ucm_warn("failed to install %s for '%s'",
+                ucm_warn("failed to install %s hook for '%s'",
                          UCM_HOOK_STR, entry->patch.symbol);
                 return status;
             }

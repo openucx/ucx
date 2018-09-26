@@ -47,12 +47,13 @@ UCM_DEFINE_SELECT_FUNC(mremap, void*, MAP_FAILED, SYS_mremap, void*, size_t, siz
 UCM_DEFINE_SELECT_FUNC(madvise, int, -1, SYS_madvise, void*, size_t, int)
 
 #if HAVE_DECL_SYS_SHMAT
+
 UCM_DEFINE_SELECT_FUNC(shmat, void*, MAP_FAILED, SYS_shmat, int, const void*, int)
-#else
-#  if defined(__powerpc64__) && HAVE_DECL_SYS_IPC
-#    ifndef IPCOP_shmat
-#      define IPCOP_shmat 21
-#    endif
+
+#elif HAVE_DECL_SYS_IPC
+#  ifndef IPCOP_shmat
+#    define IPCOP_shmat 21
+#  endif
 
 _UCM_DEFINE_DLSYM_FUNC(shmat, ucm_orig_dlsym_shmat, ucm_override_shmat,
                        void*, MAP_FAILED, int, const void*, int)
@@ -72,19 +73,18 @@ void *ucm_orig_shmat(int shmid, const void *shmaddr, int shmflg)
     }
 }
 
-#  else
-#    error "Unsupported architecture"
-#  endif
+#else
+#  error "Unsupported architecture"
 #endif
 
 #if HAVE_DECL_SYS_SHMDT
 
 UCM_DEFINE_SELECT_FUNC(shmdt, int, -1, SYS_shmdt, const void*)
-#else
-#  if defined(__powerpc64__) && HAVE_DECL_SYS_IPC
-#    ifndef IPCOP_shmdt
-#      define IPCOP_shmdt 22
-#    endif
+
+#elif HAVE_DECL_SYS_IPC
+#  ifndef IPCOP_shmdt
+#    define IPCOP_shmdt 22
+#  endif
 
 _UCM_DEFINE_DLSYM_FUNC(shmdt, ucm_orig_dlsym_shmdt, ucm_override_shmdt,
                        int, -1, const void*)
@@ -99,11 +99,9 @@ int ucm_orig_shmdt(const void *shmaddr)
     }
 }
 
-#  else
-#    error "Unsupported architecture"
-#  endif
+#else
+#  error "Unsupported architecture"
 #endif
-
 
 #if HAVE_CUDA
 
