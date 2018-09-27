@@ -188,7 +188,7 @@ void test_thread::test() {
 
     small_alloc_iter = m_test->small_alloc_count *
                        (((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) &&
-                         !RUNNING_ON_VALGRIND) ? 10 : 1);
+                         !RUNNING_ON_VALGRIND) ? 100 : 1);
 
     /* Allocate some pointers with old heap manager */
     for (unsigned i = 0; i < 10; ++i) {
