@@ -95,6 +95,56 @@ AC_DEFUN([COMPILER_OPTION],
 
 
 #
+# Check platform uarch and apply micro-architecture specific optimizations
+#
+AC_DEFUN([DETECT_UARCH],
+[
+    cpuimpl=`grep 'CPU implementer' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
+    cpuarch=`grep 'CPU architecture' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
+    cpuvar=`grep 'CPU variant' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
+    cpupart=`grep 'CPU part' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
+   
+    ax_cpu=""
+    ax_arch=""
+    
+    AC_MSG_NOTICE(Detected CPU implementation: ${cpuimpl})
+    AC_MSG_NOTICE(Detected CPU arhitecture: ${cpuarch})
+    AC_MSG_NOTICE(Detected CPU variant: ${cpuvar})
+    AC_MSG_NOTICE(Detected CPU part: ${cpupart})
+   
+    case $cpuimpl in
+      0x42) case $cpupart in
+        0x516 | 0x0516)
+          AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
+          ax_cpu="thunderx2t99"
+          ax_arch="armv8.1-a+lse" ;;
+        0xaf | 0x0af)
+          AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
+          ax_cpu="thunderx2t99"
+          ax_arch="armv8.1-a+lse" ;;
+        esac
+        ;;
+      0x43) case $cpupart in
+        0x516 | 0x0516)
+          AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
+          ax_cpu="thunderx2t99"
+          ax_arch="armv8.1-a+lse" ;;
+        0xaf | 0x0af)
+          AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
+          ax_cpu="thunderx2t99"
+          ax_arch="armv8.1-a+lse" ;;
+        0xa1 | 0x0a1)
+          AC_DEFINE([HAVE_AARCH64_THUNDERX1], 1, [Cavium ThunderX1])
+          ax_cpu="thunderxt88" ;;
+        esac
+        ;;
+      *) ax_cpu="native"
+         ;;
+    esac 
+])
+
+
+#
 # CHECK_DEPRECATED_DECL_FLAG (flag, variable)
 #
 # The macro checks if the given compiler flag enables usig deprecated declarations.
@@ -166,59 +216,24 @@ AS_IF([test "x$with_avx" != xyes],
       ])
 
 
-AC_ARG_ENABLE(aarch64-tuned,
-	AC_HELP_STRING([--enable-aarch64-tuned], [Enable ARM 64bit micro-architecture specific optimizations, default: NO]),
-                       [cpuimpl=`grep 'CPU implementer' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
-                        cpuarch=`grep 'CPU architecture' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
-                        cpuvar=`grep 'CPU variant' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
-                        cpupart=`grep 'CPU part' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
+DETECT_UARCH()
 
-                        ax_cpu=""
-                        ax_arch=""
-			
-			AC_MSG_NOTICE(Detected CPU implementation: ${cpuimpl})
-                        AC_MSG_NOTICE(Detected CPU arhitecture: ${cpuarch})
-                        AC_MSG_NOTICE(Detected CPU variant: ${cpuvar})
-                        AC_MSG_NOTICE(Detected CPU part: ${cpupart})
+#
+# CPU tuning
+#
+AS_IF([test "x$ax_cpu" != "x"],
+      [COMPILER_OPTION([mcpu], [CPU Model], [-mcpu=$ax_cpu], [$enable_optimizations],
+		 [int main() { return 0;}])
+      ])
 
-                        case $cpuimpl in
-                          0x42) case $cpupart in
-                            0x516 | 0x0516)
-			      AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
-                              ax_cpu="thunderx2t99"
-                              ax_arch="armv8.1-a+lse" ;;
-                            0xaf | 0x0af)
-			      AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
-                              ax_cpu="thunderx2t99"
-                              ax_arch="armv8.1-a+lse" ;;
-                            esac
-                            ;;
-                          0x43) case $cpupart in
-                            0x516 | 0x0516)
-			      AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
-                              ax_cpu="thunderx2t99"
-                              ax_arch="armv8.1-a+lse" ;;
-                            0xaf | 0x0af)
-			      AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
-                              ax_cpu="thunderx2t99"
-                              ax_arch="armv8.1-a+lse" ;;
-                            0xa1 | 0x0a1)
-			      AC_DEFINE([HAVE_AARCH64_THUNDERX1], 1, [Cavium ThunderX1])
-                              ax_cpu="thunderxt88" ;;
-                            esac
-                            ;;
-                          *) ax_cpu="native"
-                             ;;
-                        esac 
-                        if test "x$ax_cpu" != "x"; then
-                            COMPILER_OPTION([mcpu], [CPU Model], [-mcpu=$ax_cpu], [yes],
-                                            [int main() { return 0;}])
-                        fi
-			if test "x$ax_arch" != "x"; then
-			    COMPILER_OPTION([march], [architecture tuning], [-march=$ax_arch], [yes],
-					    [int main() { return 0;}])
-			fi
-                        ], [])
+# 
+# Architecture tuning
+# 
+AS_IF([test "x$ax_arch" != "x"],
+      [COMPILER_OPTION([march], [architecture tuning], [-march=$ax_arch], [$enable_optimizations],
+		 [int main() { return 0;}])
+      ])
+
 
 #
 # Check for compiler attribute which disables optimizations per-function.
