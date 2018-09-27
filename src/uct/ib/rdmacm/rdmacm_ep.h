@@ -23,8 +23,11 @@ struct uct_rdmacm_ep {
     void                               *pack_cb_arg;
     uint32_t                           pack_cb_flags;
     int                                is_on_pending;
+
+    pthread_mutex_t                    mutex;      /* guards ops and status */
     ucs_queue_head_t                   ops;
     ucs_status_t                       status;     /* client EP status */
+
     ucs_list_link_t                    list_elem;  /* for the pending_eps_list */
     struct sockaddr_storage            remote_addr;
     uct_worker_cb_id_t                 slow_prog_id;

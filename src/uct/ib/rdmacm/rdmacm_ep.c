@@ -98,6 +98,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
     self->pack_cb       = pack_cb;
     self->pack_cb_arg   = arg;
     self->pack_cb_flags = cb_flags;
+    pthread_mutex_init(&self->mutex, NULL);
     ucs_queue_head_init(&self->ops);
 
     /* Save the remote address */
@@ -148,6 +149,8 @@ out:
     return UCS_OK;
 
 err:
+    pthread_mutex_destroy(&self->mutex);
+
     return status;
 }
 
@@ -168,6 +171,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
      * chain but wasn't invoked yet */
     uct_worker_progress_unregister_safe(&iface->super.worker->super,
                                         &self->slow_prog_id);
+
+    pthread_mutex_destroy(&self->mutex);
+    if (!ucs_queue_is_empty(&self->ops)) {
+        ucs_warn("destroying endpoint %p with not completed operations", self);
+    }
 
     /* mark this ep as destroyed so that arriving events on it won't try to
      * use it */
