@@ -9,6 +9,7 @@
 
 ## Current
 Feaures:
+- Statistics for UCT tag API
 - New emulation mode enabling full UCX functionality (Atomic, Put, Get)
   over TCP and RDMA-CORE interconnects that don't implement full RDMA semantics.
 - Non-blocking API for all one-sided operations. All blocking communication APIs marked
