@@ -1494,8 +1494,6 @@ out:
 
 void ucp_worker_wait_mem(ucp_worker_h worker, void *address)
 {
-    UCS_V_UNUSED ucs_status_t status;
-
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
                                     /*no action*/);
     ucs_arch_wait_mem(address);

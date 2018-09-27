@@ -29,6 +29,25 @@
     } while (0)
 
 
+#define UCP_RMA_CHECK(_context, _buffer, _length) \
+    do { \
+        UCP_CONTEXT_CHECK_FEATURE_FLAGS(_context, UCP_FEATURE_RMA, \
+                                        return UCS_ERR_INVALID_PARAM); \
+        UCP_RMA_CHECK_ZERO_LENGTH(_length, return UCS_OK); \
+        UCP_RMA_CHECK_BUFFER(_buffer, return UCS_ERR_INVALID_PARAM); \
+    } while (0)
+
+
+#define UCP_RMA_CHECK_PTR(_context, _buffer, _length) \
+    do { \
+        UCP_CONTEXT_CHECK_FEATURE_FLAGS(_context, UCP_FEATURE_RMA, \
+                                        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM)); \
+        UCP_RMA_CHECK_ZERO_LENGTH(_length, return NULL); \
+        UCP_RMA_CHECK_BUFFER(_buffer, \
+                             return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM)); \
+    } while (0)
+
+
 /* request can be released if
  *  - all fragments were sent (length == 0) (bcopy & zcopy mix)
  *  - all zcopy fragments are done (uct_comp.count == 0)
@@ -177,10 +196,7 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     ucp_ep_rma_config_t *rma_config;
     ucs_status_t status;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_RMA,
-                                    return UCS_ERR_INVALID_PARAM);
-    UCP_RMA_CHECK_ZERO_LENGTH(length, return UCS_OK);
-    UCP_RMA_CHECK_BUFFER(buffer, return UCS_ERR_INVALID_PARAM);
+    UCP_RMA_CHECK(ep->worker->context, buffer, length);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
@@ -218,10 +234,7 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
     ucs_status_ptr_t ptr_status;
     ucs_status_t status;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_RMA,
-                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
-    UCP_RMA_CHECK_ZERO_LENGTH(length, return NULL);
-    UCP_RMA_CHECK_BUFFER(buffer, return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+    UCP_RMA_CHECK_PTR(ep->worker->context, buffer, length);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     ucs_trace_req("put_nb buffer %p length %zu remote_addr %"PRIx64" rkey %p to %s cb %p",
@@ -258,10 +271,7 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
     ucp_ep_rma_config_t *rma_config;
     ucs_status_t status;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_RMA,
-                                    return UCS_ERR_INVALID_PARAM);
-    UCP_RMA_CHECK_ZERO_LENGTH(length, return UCS_OK);
-    UCP_RMA_CHECK_BUFFER(buffer, return UCS_ERR_INVALID_PARAM);
+    UCP_RMA_CHECK(ep->worker->context, buffer, length);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     ucs_trace_req("get_nbi buffer %p length %zu remote_addr %"PRIx64" rkey %p from %s",
@@ -289,10 +299,7 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
     ucs_status_ptr_t ptr_status;
     ucs_status_t status;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_RMA,
-                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
-    UCP_RMA_CHECK_ZERO_LENGTH(length, return NULL);
-    UCP_RMA_CHECK_BUFFER(buffer, return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+    UCP_RMA_CHECK_PTR(ep->worker->context, buffer, length);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     ucs_trace_req("get_nb buffer %p length %zu remote_addr %"PRIx64" rkey %p from %s cb %p",
