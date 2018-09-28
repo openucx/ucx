@@ -149,17 +149,16 @@ _UCM_DEFINE_DLSYM_FUNC(brk, ucm_orig_dlsym_brk, ucm_override_brk, int, -1, void*
 
 void *ucm_brk_syscall(void *addr)
 {
-    return
-#if HAVE___CURBRK
-        __curbrk =
-#endif
-        (void*)syscall(SYS_brk, addr);
+    return (void*)syscall(SYS_brk, addr);
 }
 
 int ucm_orig_brk(void *addr)
 {
     void *new_addr;
 
+#if HAVE___CURBRK
+    __curbrk =
+#endif
     new_addr = ucm_brk_syscall(addr);
 
     if (new_addr < addr) {

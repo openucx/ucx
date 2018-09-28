@@ -74,6 +74,13 @@ protected:
         return res;
     }
 
+    void skip_on_bistro() {
+        /* BISTRO is disabled under valgrind, we may run tests */
+        if ((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) &&
+             !RUNNING_ON_VALGRIND) {
+            UCS_TEST_SKIP_R("skipping on BISTRO hooks");
+        }
+    }
 
 public:
     static int            small_alloc_count;
@@ -184,11 +191,6 @@ void test_thread::test() {
     const size_t small_alloc_size = malloc_hook::small_alloc_size;
     int num_ptrs_in_range;
     static volatile uint32_t total_ptrs_in_range = 0;
-    int small_alloc_iter;
-
-    small_alloc_iter = m_test->small_alloc_count *
-                       (((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) &&
-                         !RUNNING_ON_VALGRIND) ? 100 : 1);
 
     /* Allocate some pointers with old heap manager */
     for (unsigned i = 0; i < 10; ++i) {
@@ -211,7 +213,7 @@ void test_thread::test() {
     ASSERT_UCS_OK(result);
 
     /* Allocate small pointers with new heap manager */
-    for (int i = 0; i < small_alloc_iter; ++i) {
+    for (int i = 0; i < m_test->small_alloc_count; ++i) {
         new_ptrs.push_back(malloc(small_alloc_size));
     }
     small_map_size = m_map_size;
@@ -335,6 +337,8 @@ void test_thread::test() {
 }
 
 UCS_TEST_F(malloc_hook, single_thread) {
+    skip_on_bistro();
+
     pthread_barrier_t barrier;
     pthread_barrier_init(&barrier, NULL, 1);
     {
@@ -347,6 +351,8 @@ UCS_TEST_F(malloc_hook, multi_threads) {
     static const int num_threads = 8;
     ucs::ptr_vector<test_thread> threads;
     pthread_barrier_t barrier;
+
+    skip_on_bistro();
 
     malloc_trim(0);
 
@@ -417,11 +423,6 @@ public:
                                 mem_event_callback, reinterpret_cast<void*>(this));
     }
 
-    void skip_on_bistro() {
-        if (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) {
-            UCS_TEST_SKIP_R("skipping on BISTRO hooks");
-        }
-    }
 protected:
     static void mem_event_callback(ucm_event_type_t event_type,
                                    ucm_event_t *event, void *arg)
@@ -754,6 +755,21 @@ UCS_TEST_F(malloc_hook_cplusplus, remap_override) {
         munmap(buffer, size);
 
         EXPECT_EQ(size, m_unmapped_size);
+    }
+
+    /* 8. sbrk call */
+    {
+        if (!RUNNING_ON_VALGRIND) {
+            /* valgrind failed when sbrk is called directly */
+            m_mapped_size = m_unmapped_size = 0;
+
+            /* call sbrk +/- closely to prevent heap destruction */
+            sbrk(size);
+            sbrk(-size);
+
+            EXPECT_EQ(size, m_mapped_size);
+            EXPECT_EQ(size, m_unmapped_size);
+        }
     }
 
     unset();
