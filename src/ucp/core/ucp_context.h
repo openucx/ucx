@@ -260,6 +260,24 @@ typedef struct ucp_tl_iface_atomic_flags {
     };
 
 
+/**
+ * Check if at least one feature flag from @a _flags is initialized.
+ */
+#define UCP_CONTEXT_CHECK_FEATURE_FLAGS(_context, _flags, _action) \
+    do { \
+        if (ENABLE_PARAMS_CHECK && \
+            ucs_unlikely(!((_context)->config.features & (_flags)))) { \
+            size_t feature_list_str_max = 512; \
+            char *feature_list_str = ucs_alloca(feature_list_str_max); \
+            ucs_error("feature flags %s were not set for ucp_init()", \
+                      ucp_feature_flags_str((_flags) & \
+                                            ~(_context)->config.features, \
+                      feature_list_str, feature_list_str_max)); \
+            _action; \
+        } \
+    } while (0)
+
+
 #define UCP_PARAM_VALUE(_obj, _params, _name, _flag, _default) \
     (((_params)->field_mask & (UCP_##_obj##_PARAM_FIELD_##_flag)) ? \
                     (_params)->_name : (_default))
@@ -280,6 +298,9 @@ const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_c
 
 const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
                               char *str, size_t max_str_len);
+
+const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
+                                  size_t max_str_len);
 
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)
