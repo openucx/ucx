@@ -22,6 +22,9 @@ static ucs_stats_class_t uct_ep_stats_class = {
         [UCT_EP_STAT_PUT]         = "put",
         [UCT_EP_STAT_GET]         = "get",
         [UCT_EP_STAT_ATOMIC]      = "atomic",
+#if IBV_EXP_HW_TM
+        [UCT_EP_STAT_TAG]         = "tag",
+#endif
         [UCT_EP_STAT_BYTES_SHORT] = "bytes_short",
         [UCT_EP_STAT_BYTES_BCOPY] = "bytes_bcopy",
         [UCT_EP_STAT_BYTES_ZCOPY] = "bytes_zcopy",

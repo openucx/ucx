@@ -391,6 +391,10 @@ UCS_TEST_P(test_ucp_peer_failure, disable_sync_send) {
     std::vector<char>   buf(max_size, 0);
     void                *req;
 
+    if (!(GetParam().variant & TEST_TAG)) {
+        UCS_TEST_SKIP_R("Skip non-tagged variant");
+    }
+
     sender().connect(&receiver(), get_ep_params());
 
     /* Make sure API is disabled for any size and data type */

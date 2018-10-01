@@ -1403,9 +1403,12 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
                                ucp_stream_poll_ep_t *poll_eps,
                                size_t max_eps, unsigned flags)
 {
+    ssize_t            count = 0;
     ucp_ep_ext_proto_t *ep_ext;
-    ssize_t count = 0;
-    ucp_ep_h ep;
+    ucp_ep_h           ep;
+
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_STREAM,
+                                    return UCS_ERR_INVALID_PARAM);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -1426,6 +1429,9 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
 {
     ucs_status_t status;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
+                                    return UCS_ERR_INVALID_PARAM);
+
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     if (worker->flags & UCP_WORKER_FLAG_EXTERNAL_EVENT_FD) {
         status = UCS_ERR_UNSUPPORTED;
@@ -1445,6 +1451,9 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     int ret;
 
     ucs_trace_func("worker=%p", worker);
+
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
+                                    return UCS_ERR_INVALID_PARAM);
 
     /* Read from event pipe. If some events are found, return BUSY,
      * Otherwise, continue to arm the transport interfaces.
@@ -1491,7 +1500,7 @@ out:
 
 void ucp_worker_wait_mem(ucp_worker_h worker, void *address)
 {
-   ucs_arch_wait_mem(address);
+    ucs_arch_wait_mem(address);
 }
 
 ucs_status_t ucp_worker_wait(ucp_worker_h worker)
@@ -1503,6 +1512,9 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
     int ret;
 
     ucs_trace_func("worker %p", worker);
+
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
+                                    return UCS_ERR_INVALID_PARAM);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -1552,6 +1564,8 @@ out:
 ucs_status_t ucp_worker_signal(ucp_worker_h worker)
 {
     ucs_trace_func("worker %p", worker);
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
+                                    return UCS_ERR_INVALID_PARAM);
     return ucp_worker_wakeup_signal_fd(worker);
 }
 
