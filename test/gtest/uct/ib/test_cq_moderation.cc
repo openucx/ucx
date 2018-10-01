@@ -88,7 +88,8 @@ protected:
         } while (poll(&pfd, 1, 0) > 0);
     }
 
-    static ucs_status_t am_cb(void *arg, void *data, size_t len, unsigned flags) {
+    static UCS_F_ALIGNED ucs_status_t am_cb(void *arg, void *data, size_t len,
+                                            unsigned flags) {
         ucs_assert_always(arg != NULL);
         test_uct_cq_moderation *self = static_cast<test_uct_cq_moderation*>(arg);
 
@@ -117,7 +118,7 @@ void test_uct_cq_moderation::run_test(uct_iface_h iface) {
     check_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP);
     check_caps(UCT_IFACE_FLAG_EVENT_RECV);
 
-    uct_iface_set_am_handler(m_receiver->iface(), 0, am_cb, this, UCT_CB_FLAG_SYNC);
+    uct_iface_set_am_handler(m_receiver->iface(), 0, am_cb, this, 0);
 
     connect();
 

@@ -38,8 +38,8 @@ public:
         mapped_buffer    *buf;
     } pending_send_request_t;
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length,
-                                   unsigned flags) {
+    static UCS_F_ALIGNED ucs_status_t am_handler(void *arg, void *data,
+                                                 size_t length, unsigned flags) {
 
         volatile unsigned *counter = (volatile unsigned*) arg;
         uint64_t test_hdr = *(uint64_t *) data;
@@ -54,12 +54,13 @@ public:
         return UCS_OK;
     }
 
-    static ucs_status_t am_handler_simple(void *arg, void *data, size_t length,
-                                          unsigned flags) {
+    static UCS_F_ALIGNED ucs_status_t am_handler_simple(void *arg, void *data,
+                                                        size_t length,
+                                                        unsigned flags) {
         return UCS_OK;
     }
 
-    static ucs_status_t pending_send_op(uct_pending_req_t *self) {
+    static UCS_F_ALIGNED ucs_status_t pending_send_op(uct_pending_req_t *self) {
 
         pending_send_request_t *req = ucs_container_of(self, pending_send_request_t, uct);
         ucs_status_t status;
@@ -77,7 +78,7 @@ public:
         return status;
     }
 
-    static ucs_status_t pending_send_op_simple(uct_pending_req_t *self) {
+    static UCS_F_ALIGNED ucs_status_t pending_send_op_simple(uct_pending_req_t *self) {
 
         pending_send_request_t *req = ucs_container_of(self, pending_send_request_t, uct);
         ucs_status_t status;
@@ -93,7 +94,7 @@ public:
         return status;
     }
 
-    static ucs_status_t pending_send_op_bcopy(uct_pending_req_t *self) {
+    static UCS_F_ALIGNED ucs_status_t pending_send_op_bcopy(uct_pending_req_t *self) {
 
         pending_send_request_t *req = ucs_container_of(self, pending_send_request_t, uct);
         ssize_t packed_len;
@@ -108,7 +109,7 @@ public:
         return (ucs_status_t)packed_len;
     }
 
-    static ucs_status_t pending_send_op_ok(uct_pending_req_t *self) {
+    static UCS_F_ALIGNED ucs_status_t pending_send_op_ok(uct_pending_req_t *self) {
         pending_send_request_t *req = ucs_container_of(self, pending_send_request_t, uct);
 
         pending_delete(req);
@@ -121,7 +122,7 @@ public:
         req->ep        = m_e1->ep(0);
         req->data      = send_data;
         req->countdown = 5;
-        req->uct.func  = pending_send_op;
+        UCT_PENDING_REQ_INIT(&req->uct, pending_send_op, 0);
         return req;
     }
 
@@ -130,9 +131,9 @@ public:
         req->ep        = m_e1->ep(idx);
         req->data      = send_data;
         req->countdown = 0;
-        req->uct.func  = pending_send_op_simple;
         req->active    = 0;
         req->id        = idx;
+        UCT_PENDING_REQ_INIT(&req->uct, pending_send_op_simple, 0);
         return req;
     }
 
@@ -141,9 +142,9 @@ public:
         req->ep        = m_e1->ep(idx);
         req->buf       = sbuf;
         req->countdown = 0;
-        req->uct.func  = pending_send_op_bcopy;
         req->active    = 0;
         req->id        = idx;
+        UCT_PENDING_REQ_INIT(&req->uct, pending_send_op_bcopy, 0);
         return req;
     }
 
@@ -168,7 +169,7 @@ void install_handler_sync_or_async(uct_iface_t *iface, uint8_t id, uct_am_callba
     ASSERT_UCS_OK(status);
 
     if (attr.cap.flags & UCT_IFACE_FLAG_CB_SYNC) {
-        uct_iface_set_am_handler(iface, id, cb, arg, UCT_CB_FLAG_SYNC);
+        uct_iface_set_am_handler(iface, id, cb, arg, 0);
     } else {
         uct_iface_set_am_handler(iface, id, cb, arg, UCT_CB_FLAG_ASYNC);
     }
@@ -392,8 +393,7 @@ UCS_TEST_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug)
 
         if (packed_len == UCS_ERR_NO_RESOURCE) {
             pending_send_request_t *req = pending_alloc(i);
-
-            req->uct.func = pending_send_op_ok;
+            UCT_PENDING_REQ_INIT(&req->uct, pending_send_op_ok, 0);
             status = uct_ep_pending_add(m_e1->ep(i), &req->uct);
             EXPECT_UCS_OK(status);
             n_pending++;

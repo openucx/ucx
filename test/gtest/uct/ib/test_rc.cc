@@ -31,10 +31,8 @@ void test_rc::connect()
     m_e1->connect(0, *m_e2, 0);
     m_e2->connect(0, *m_e1, 0);
 
-    uct_iface_set_am_handler(m_e1->iface(), 0, am_dummy_handler,
-                             NULL, UCT_CB_FLAG_SYNC);
-    uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler,
-                             NULL, UCT_CB_FLAG_SYNC);
+    uct_iface_set_am_handler(m_e1->iface(), 0, am_dummy_handler, NULL, 0);
+    uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler, NULL, 0);
 }
 
 
@@ -80,10 +78,8 @@ void test_rc_flow_control::init()
     ucs_assert(rc_iface(m_e1)->config.fc_enabled);
     ucs_assert(rc_iface(m_e2)->config.fc_enabled);
 
-    uct_iface_set_am_handler(m_e1->iface(), FLUSH_AM_ID, am_handler,
-                             NULL, UCT_CB_FLAG_SYNC);
-    uct_iface_set_am_handler(m_e2->iface(), FLUSH_AM_ID, am_handler,
-                             NULL, UCT_CB_FLAG_SYNC);
+    uct_iface_set_am_handler(m_e1->iface(), FLUSH_AM_ID, am_handler, NULL, 0);
+    uct_iface_set_am_handler(m_e2->iface(), FLUSH_AM_ID, am_handler, NULL, 0);
 
 }
 
@@ -190,7 +186,7 @@ void test_rc_flow_control::test_pending_purge(int wnd, int num_pend_sends)
     /* Now m2 ep should have FC grant message in the pending queue.
      * Add some user pending requests as well */
     for (int i = 0; i < num_pend_sends; i++) {
-        reqs[i].uct.func    = NULL; /* make valgrind happy */
+        UCT_PENDING_REQ_INIT(&reqs[i].uct, NULL, 0); /* make valgrind happy */
         reqs[i].purge_count = 0;
         EXPECT_EQ(uct_ep_pending_add(m_e2->ep(0), &reqs[i].uct), UCS_OK);
     }

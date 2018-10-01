@@ -87,8 +87,8 @@ public:
          }
     }
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length,
-                                   unsigned flags)
+    static UCS_F_ALIGNED ucs_status_t am_handler(void *arg, void *data,
+                                                 size_t length, unsigned flags)
     {
         if (arg == NULL) {
             /* This is not completely canceled message, drop it */
@@ -114,13 +114,13 @@ public:
         }
     }
 
-    static ucs_status_t am_progress(uct_pending_req_t *req)
+    static UCS_F_ALIGNED ucs_status_t am_progress(uct_pending_req_t *req)
     {
         test_req_t *am_req = ucs_container_of(req, test_req_t, uct);
         return am_req->test->am_send_pending(am_req);
     }
 
-    static ucs_status_t flush_progress(uct_pending_req_t *req)
+    static UCS_F_ALIGNED ucs_status_t flush_progress(uct_pending_req_t *req)
     {
         test_req_t *flush_req = ucs_container_of(req, test_req_t, uct);
         ucs_status_t status;
@@ -340,9 +340,9 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
      for (std::vector<test_req_t>::iterator it = reqs.begin(); it != reqs.end();) {
          it->sendbuf    = &sendbuf;
          it->test       = this;
-         it->uct.func   = am_progress;
          it->comp.count = 2;
          it->comp.func  = NULL;
+         UCT_PENDING_REQ_INIT(&it->uct, am_progress, 0);
          status = uct_ep_pending_add(sender().ep(0), &it->uct);
          if (UCS_ERR_BUSY == status) {
              /* User advised to retry the send. It means no requests added
@@ -372,7 +372,7 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
              }
              /* If flush returned NO_RESOURCE, add to pending must succeed */
              flush_req.test      = this;
-             flush_req.uct.func  = flush_progress;
+             UCT_PENDING_REQ_INIT(&flush_req.uct, flush_progress, 0);
              status = uct_ep_pending_add(sender().ep(0), &flush_req.uct);
              if (status == UCS_ERR_BUSY) {
                  continue;

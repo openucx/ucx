@@ -35,8 +35,8 @@ public:
         /* data follows */
     } recv_desc_t;
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length,
-                                   unsigned flags) {
+    static UCS_F_ALIGNED ucs_status_t am_handler(void *arg, void *data,
+                                                 size_t length, unsigned flags) {
         recv_desc_t *my_desc  = (recv_desc_t *) arg;
         uint64_t *test_ib_hdr = (uint64_t *) data;
         uint64_t *actual_data = (uint64_t *) test_ib_hdr + 1;
@@ -110,8 +110,7 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     recv_buffer->length = 0; /* Initialize length to 0 */
 
     /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler, recv_buffer,
-                             UCT_CB_FLAG_SYNC);
+    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler, recv_buffer, 0);
 
     /* create receiver wakeup */
     status = uct_iface_event_fd_get(m_e2->iface(), &wakeup_fd.fd);

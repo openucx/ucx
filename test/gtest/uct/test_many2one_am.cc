@@ -24,8 +24,8 @@ public:
     test_many2one_am() : m_am_count(0) {
     }
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length,
-                                   unsigned flags) {
+    static UCS_F_ALIGNED ucs_status_t am_handler(void *arg, void *data,
+                                                 size_t length, unsigned flags) {
         test_many2one_am *self = reinterpret_cast<test_many2one_am*>(arg);
         return self->am_handler(data, length, flags);
     }
@@ -100,7 +100,7 @@ UCS_TEST_P(test_many2one_am, am_bcopy, "MAX_BCOPY=16384")
     m_am_count = 0;
 
     status = uct_iface_set_am_handler(receiver->iface(), AM_ID, am_handler,
-                                      (void*)this, UCT_CB_FLAG_SYNC);
+                                      (void*)this, 0);
     ASSERT_UCS_OK(status);
 
     for (unsigned i = 0; i < num_sends; ++i) {
@@ -129,8 +129,7 @@ UCS_TEST_P(test_many2one_am, am_bcopy, "MAX_BCOPY=16384")
         progress();
     }
 
-    status = uct_iface_set_am_handler(receiver->iface(), AM_ID, NULL, NULL,
-                                      UCT_CB_FLAG_SYNC);
+    status = uct_iface_set_am_handler(receiver->iface(), AM_ID, NULL, NULL, 0);
     ASSERT_UCS_OK(status);
 
     check_backlog();
