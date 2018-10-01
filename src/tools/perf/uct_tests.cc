@@ -39,13 +39,13 @@ public:
         ucs_assert_always(status == UCS_OK);
         if (attr.cap.flags & (UCT_IFACE_FLAG_AM_SHORT|UCT_IFACE_FLAG_AM_BCOPY|UCT_IFACE_FLAG_AM_ZCOPY)) {
             status = uct_iface_set_am_handler(m_perf.uct.iface, UCT_PERF_TEST_AM_ID,
-                                              am_hander, m_perf.recv_buffer, UCT_CB_FLAG_SYNC);
+                                              am_hander, m_perf.recv_buffer, 0);
             ucs_assert_always(status == UCS_OK);
         }
     }
 
     ~uct_perf_test_runner() {
-        uct_iface_set_am_handler(m_perf.uct.iface, UCT_PERF_TEST_AM_ID, NULL, NULL, UCT_CB_FLAG_SYNC);
+        uct_iface_set_am_handler(m_perf.uct.iface, UCT_PERF_TEST_AM_ID, NULL, NULL, 0);
     }
 
     /**
@@ -132,8 +132,8 @@ public:
         }
     }
 
-    static ucs_status_t am_hander(void *arg, void *data, size_t length,
-                                  unsigned flags)
+    static UCS_F_ALIGNED ucs_status_t am_hander(void *arg, void *data,
+                                                size_t length, unsigned flags)
     {
         ucs_assert(UCS_CIRCULAR_COMPARE8(*(psn_t*)arg, <=, *(psn_t*)data));
         *(psn_t*)arg = *(psn_t*)data;
