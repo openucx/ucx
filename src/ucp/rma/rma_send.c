@@ -108,7 +108,6 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     req->send.length          = length;
     req->send.rma.remote_addr = remote_addr;
     req->send.rma.rkey        = rkey;
-    req->send.uct.func        = cb;
     req->send.lane            = rkey->cache.rma_lane;
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), length);
     ucp_request_send_state_reset(req,
@@ -116,6 +115,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
                                  ucp_rma_request_bcopy_completion :
                                  ucp_rma_request_zcopy_completion,
                                  UCP_REQUEST_SEND_PROTO_RMA);
+    UCT_PENDING_REQ_INIT(&req->send.uct, cb, 0);
 #if ENABLE_ASSERT
     req->send.cb              = NULL;
 #endif

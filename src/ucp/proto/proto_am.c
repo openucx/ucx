@@ -35,7 +35,8 @@ static size_t ucp_proto_pack(void *dest, void *arg)
     return 0;
 }
 
-ucs_status_t ucp_proto_progress_am_bcopy_single(uct_pending_req_t *self)
+UCS_F_ALIGNED ucs_status_t
+ucp_proto_progress_am_bcopy_single(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
@@ -54,8 +55,8 @@ void ucp_proto_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
     ucp_request_complete_send(req, status);
 }
 
-void ucp_proto_am_zcopy_completion(uct_completion_t *self,
-                                    ucs_status_t status)
+UCS_F_ALIGNED void ucp_proto_am_zcopy_completion(uct_completion_t *self,
+                                                 ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);

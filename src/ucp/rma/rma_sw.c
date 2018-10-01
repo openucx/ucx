@@ -30,7 +30,8 @@ static size_t ucp_rma_sw_put_pack_cb(void *dest, void *arg)
     return sizeof(*puth) + length;
 }
 
-static ucs_status_t ucp_rma_sw_progress_put(uct_pending_req_t *self)
+static UCS_F_ALIGNED ucs_status_t
+ucp_rma_sw_progress_put(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
@@ -66,7 +67,8 @@ static size_t ucp_rma_sw_get_req_pack_cb(void *dest, void *arg)
     return sizeof(*getreqh);
 }
 
-static ucs_status_t ucp_rma_sw_progress_get(uct_pending_req_t *self)
+static UCS_F_ALIGNED ucs_status_t
+ucp_rma_sw_progress_get(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
@@ -106,7 +108,7 @@ static size_t ucp_rma_sw_pack_rma_ack(void *dest, void *arg)
     return sizeof(*hdr);
 }
 
-static ucs_status_t ucp_progress_rma_cmpl(uct_pending_req_t *self)
+static UCS_F_ALIGNED ucs_status_t ucp_progress_rma_cmpl(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
@@ -132,12 +134,14 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep)
     req = ucp_request_get(ep->worker);
     ucs_assert(req != NULL);
 
-    req->send.ep       = ep;
-    req->send.uct.func = ucp_progress_rma_cmpl;
+    req->send.ep = ep;
+    UCT_PENDING_REQ_INIT(&req->send.uct, ucp_progress_rma_cmpl, 0);
+
     ucp_request_send(req);
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
+UCS_PROFILE_FUNC(UCS_F_ALIGNED ucs_status_t, ucp_put_handler,
+                 (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
     ucp_put_hdr_t *puth = data;
@@ -148,7 +152,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
     return UCS_OK;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_rma_cmpl_handler, (arg, data, length, am_flags),
+UCS_PROFILE_FUNC(UCS_F_ALIGNED ucs_status_t, ucp_rma_cmpl_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
     ucp_cmpl_hdr_t *putackh = data;
@@ -173,7 +177,8 @@ static size_t ucp_rma_sw_pack_get_reply(void *dest, void *arg)
     return sizeof(*hdr) + length;
 }
 
-static ucs_status_t ucp_progress_get_reply(uct_pending_req_t *self)
+static UCS_F_ALIGNED ucs_status_t
+ucp_progress_get_reply(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
@@ -200,7 +205,8 @@ static ucs_status_t ucp_progress_get_reply(uct_pending_req_t *self)
     }
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags),
+UCS_PROFILE_FUNC(UCS_F_ALIGNED ucs_status_t, ucp_get_req_handler,
+                 (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
     ucp_get_req_hdr_t *getreqh = data;
@@ -216,13 +222,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
     req->send.buffer        = (void*)getreqh->address;
     req->send.length        = getreqh->length;
     req->send.get_reply.req = getreqh->req.reqptr;
-    req->send.uct.func      = ucp_progress_get_reply;
+    UCT_PENDING_REQ_INIT(&req->send.uct, ucp_progress_get_reply, 0);
 
     ucp_request_send(req);
     return UCS_OK;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags),
+UCS_PROFILE_FUNC(UCS_F_ALIGNED ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
     ucp_rma_rep_hdr_t *getreph = data;
@@ -282,13 +288,13 @@ static void ucp_rma_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
 }
 
 UCP_DEFINE_AM(UCP_FEATURE_RMA, UCP_AM_ID_PUT, ucp_put_handler,
-              ucp_rma_sw_dump_packet, UCT_CB_FLAG_SYNC);
+              ucp_rma_sw_dump_packet, 0);
 UCP_DEFINE_AM(UCP_FEATURE_RMA, UCP_AM_ID_GET_REQ, ucp_get_req_handler,
-              ucp_rma_sw_dump_packet, UCT_CB_FLAG_SYNC);
+              ucp_rma_sw_dump_packet, 0);
 UCP_DEFINE_AM(UCP_FEATURE_RMA, UCP_AM_ID_GET_REP, ucp_get_rep_handler,
-              ucp_rma_sw_dump_packet, UCT_CB_FLAG_SYNC);
+              ucp_rma_sw_dump_packet, 0);
 UCP_DEFINE_AM(UCP_FEATURE_RMA|UCP_FEATURE_AMO, UCP_AM_ID_CMPL,
-              ucp_rma_cmpl_handler, ucp_rma_sw_dump_packet, UCT_CB_FLAG_SYNC);
+              ucp_rma_cmpl_handler, ucp_rma_sw_dump_packet, 0);
 
 UCP_DEFINE_AM_PROXY(UCP_AM_ID_PUT);
 UCP_DEFINE_AM_PROXY(UCP_AM_ID_GET_REQ);

@@ -133,7 +133,7 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
             continue;
         }
 
-        if ((ucp_am_handlers[am_id].flags & UCT_CB_FLAG_SYNC) &&
+        if ((ucp_am_handlers[am_id].flags == 0) &&
             !(wiface->attr.cap.flags & UCT_IFACE_FLAG_CB_SYNC))
         {
             /* Do not register a sync callback on interface which does not
@@ -147,7 +147,7 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
             /* we care only about sync active messages, and this also makes sure
              * the counter is not accessed from another thread.
              */
-            ucs_assert(ucp_am_handlers[am_id].flags & UCT_CB_FLAG_SYNC);
+            ucs_assert(ucp_am_handlers[am_id].flags == 0);
             status = uct_iface_set_am_handler(wiface->iface, am_id,
                                               ucp_am_handlers[am_id].proxy_cb,
                                               wiface,
@@ -165,8 +165,9 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
     }
 }
 
-static ucs_status_t ucp_stub_am_handler(void *arg, void *data, size_t length,
-                                        unsigned flags)
+static UCS_F_ALIGNED ucs_status_t ucp_stub_am_handler(void *arg, void *data,
+                                                      size_t length,
+                                                      unsigned flags)
 {
     ucp_worker_h worker = arg;
     ucs_trace("worker %p: drop message", worker);

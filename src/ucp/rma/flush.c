@@ -137,7 +137,8 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
     return 0;
 }
 
-static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
+static UCS_F_ALIGNED ucs_status_t
+ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_lane_index_t lane = req->send.lane;
@@ -254,9 +255,9 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
     req->send.flush.sw_done     = 0;
 
     req->send.lane              = UCP_NULL_LANE;
-    req->send.uct.func          = ucp_ep_flush_progress_pending;
     req->send.state.uct_comp.func   = ucp_ep_flush_completion;
     req->send.state.uct_comp.count  = ucp_ep_num_lanes(ep);
+    UCT_PENDING_REQ_INIT(&req->send.uct, ucp_ep_flush_progress_pending, 0);
 
     ucp_ep_flush_progress(req);
 

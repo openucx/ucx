@@ -238,7 +238,7 @@ typedef struct ucp_tl_iface_atomic_flags {
  */
 #define UCP_DEFINE_AM_PROXY(_id) \
     \
-    static ucs_status_t \
+    static UCS_F_ALIGNED ucs_status_t \
     ucp_am_##_id##_counting_proxy(void *arg, void *data, size_t length, \
                                   unsigned flags) \
     { \

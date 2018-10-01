@@ -165,7 +165,7 @@ ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status)
 {
     ucs_status_t status;
 
-    status = req->send.uct.func(&req->send.uct);
+    status = UCT_PENDING_REQ_FUNC(&req->send.uct)(&req->send.uct);
     if (status == UCS_OK) {
         /* Completed the operation */
         *req_status = UCS_OK;
