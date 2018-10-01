@@ -466,8 +466,8 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
                       "Grant will not be sent on ep %p", ep);
             return UCS_ERR_NO_MEMORY;
         }
-        fc_req->ep         = &ep->super.super;
-        fc_req->super.func = uct_rc_ep_fc_grant;
+        fc_req->ep = &ep->super.super;
+        UCT_PENDING_REQ_INIT(&fc_req->super, uct_rc_ep_fc_grant, 0);
 
         /* Got hard credit request. Send grant to the peer immediately */
         status = uct_rc_ep_fc_grant(&fc_req->super);

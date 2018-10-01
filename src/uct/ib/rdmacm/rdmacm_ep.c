@@ -208,7 +208,7 @@ void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t stat
     uct_rdmacm_iface_t *rdmacm_iface = ucs_derived_of(iface, uct_rdmacm_iface_t);
     uct_rdmacm_ep_t *rdmacm_ep       = ucs_derived_of(ep, uct_rdmacm_ep_t);
 
-    if (rdmacm_iface->super.err_handler_flags == UCT_CB_FLAG_SYNC) {
+    if (rdmacm_iface->super.err_handler_flags == 0) {
         rdmacm_ep->status = status;
 
         /* invoke the error handling flow from the main thread */
@@ -217,6 +217,7 @@ void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t stat
                                           rdmacm_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
                                           &rdmacm_ep->slow_prog_id);
     } else {
+        ucs_assert(rdmacm_iface->super.err_handler_flags == UCT_CB_FLAG_ASYNC);
         uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), &rdmacm_ep->super.super,
                           &rdmacm_iface->super.super, status);
     }

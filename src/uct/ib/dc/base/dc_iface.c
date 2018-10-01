@@ -473,7 +473,7 @@ void uct_dc_iface_cleanup_fc_ep(uct_dc_iface_t *iface)
     ucs_free(iface->tx.fc_ep);
 }
 
-ucs_status_t uct_dc_iface_fc_grant(uct_pending_req_t *self)
+UCS_F_ALIGNED ucs_status_t uct_dc_iface_fc_grant(uct_pending_req_t *self)
 {
     ucs_status_t status;
     uct_rc_fc_request_t *freq = ucs_derived_of(self, uct_rc_fc_request_t);
@@ -513,7 +513,7 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
             ucs_error("Failed to allocate FC request");
             return UCS_ERR_NO_MEMORY;
         }
-        dc_req->super.super.func = uct_dc_iface_fc_grant;
+        UCT_PENDING_REQ_INIT(&dc_req->super.super, uct_dc_iface_fc_grant, 0);
         dc_req->super.ep         = &ep->super.super;
         dc_req->dct_num          = imm_data;
         dc_req->lid              = lid;
