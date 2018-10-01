@@ -1368,6 +1368,10 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
         }
     }
 
+    if (attr->field_mask & UCP_WORKER_ATTR_FIELD_EMULATION_MODE) {
+        attr->emulation_mode = (worker->flags & UCP_WORKER_FLAG_EMULATION_MODE) != 0;
+    }
+
     return UCS_OK;
 }
 
