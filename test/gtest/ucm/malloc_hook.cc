@@ -16,6 +16,7 @@
 #include <sstream>
 #include <stdint.h>
 #include <dlfcn.h>
+#include <libgen.h>
 
 extern "C" {
 #include <ucs/time/time.h>
@@ -938,4 +939,79 @@ UCS_TEST_F(malloc_hook, bistro_patch) {
 #if !defined (__powerpc64__)
     EXPECT_NE(patched, origin);
 #endif
+}
+
+/* test for mmap events are fired from non-direct load modules
+ * we are trying to load lib1, from lib1 load lib2, and
+ * fire mmap event from lib2 */
+UCS_TEST_F(malloc_hook, dlopen) {
+    typedef void (fire_mmap_f)(void);
+    typedef void* (load_lib_f)(const char *path);
+
+    const char *libdlopen_test  = "/.libs/libdlopen_test.so";
+    const char *libdlopen_test2 = "/.libs/libdlopen_test2.so";
+    const char *load_lib        = "load_lib";
+    const char *fire_mmap       = "fire_mmap";
+
+    char *exe_name;
+    char *dir_name;
+    char *lib_name;
+    char *lib2_name;
+    void *lib;
+    void *lib2;
+    load_lib_f *load;
+    fire_mmap_f *fire;
+    ucs_status_t status;
+
+    status = ucm_set_event_handler(UCM_EVENT_VM_MAPPED,
+                                   0, mem_event_callback,
+                                   reinterpret_cast<void*>(this));
+    ASSERT_UCS_OK(status);
+
+    exe_name  = strdup(ucs_get_exe());
+    dir_name  = dirname(exe_name);
+    lib_name  = (char*)malloc(strlen(dir_name) + 1 + strlen(libdlopen_test) + 1);
+    lib2_name = (char*)malloc(strlen(dir_name) + 1 + strlen(libdlopen_test2) + 1);
+    strcat(strcpy(lib_name, dir_name), libdlopen_test);
+    strcat(strcpy(lib2_name, dir_name), libdlopen_test2);
+
+    lib = dlopen(lib_name, RTLD_NOW);
+    EXPECT_NE((uintptr_t)lib, NULL);
+    if (!lib) {
+        goto no_lib;
+    }
+
+    load = (load_lib_f*)dlsym(lib, load_lib);
+    EXPECT_NE((uintptr_t)load, NULL);
+    if (!load) {
+        goto no_load;
+    }
+
+    lib2 = load(lib2_name);
+    EXPECT_NE((uintptr_t)lib2, NULL);
+    if (!lib2) {
+        goto no_load;
+    }
+
+    fire = (fire_mmap_f*)dlsym(lib2, fire_mmap);
+    EXPECT_NE((uintptr_t)fire, NULL);
+    if (!fire) {
+        goto no_fire;
+    }
+
+    m_got_event = 0;
+    fire();
+    EXPECT_GT(m_got_event, 0);
+
+no_fire:
+    dlclose(lib2);
+no_load:
+    dlclose(lib);
+no_lib:
+    free(exe_name);
+    free(lib_name);
+    free(lib2_name);
+    ucm_unset_event_handler(UCM_EVENT_VM_MAPPED, mem_event_callback,
+                            reinterpret_cast<void*>(this));
+    return;
 }

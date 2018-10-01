@@ -35,6 +35,14 @@ VALGRIND_ARGS = \
 
 noinst_PROGRAMS = gtest
 
+noinst_lib_LTLIBRARIES = \
+	libdlopen_test.la \
+	libdlopen_test2.la
+
+libdlopen_test_la_SOURCES  = ucm/libtest_dlopen.c
+libdlopen_test2_la_SOURCES = ucm/libtest_dlopen2.c
+noinst_libdir = ${PWD}/.noinst
+
 gtestdir  = $(includedir)
 gtest_LDADD = \
 	$(top_builddir)/src/ucs/libucs.la \
