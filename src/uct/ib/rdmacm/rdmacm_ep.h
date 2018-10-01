@@ -24,7 +24,7 @@ struct uct_rdmacm_ep {
     uint32_t                           pack_cb_flags;
     int                                is_on_pending;
 
-    pthread_mutex_t                    mutex;      /* guards ops and status */
+    pthread_mutex_t                    ops_mutex;  /* guards ops and status */
     ucs_queue_head_t                   ops;
     ucs_status_t                       status;     /* client EP status */
 
