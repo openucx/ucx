@@ -16,6 +16,8 @@ GTEST_EXTRA_ARGS         ?=
 LAUNCHER                 ?=
 VALGRIND_EXTRA_ARGS      ?=
 
+SUBDIRS = ucm/test_dlopen
+
 export UCX_HANDLE_ERRORS
 export UCX_LOG_LEVEL
 export UCX_LOG_PRINT_ENABLE
@@ -34,14 +36,6 @@ VALGRIND_ARGS = \
 	$(VALGRIND_EXTRA_ARGS)
 
 noinst_PROGRAMS = gtest
-
-noinst_lib_LTLIBRARIES = \
-	libdlopen_test.la \
-	libdlopen_test2.la
-
-libdlopen_test_la_SOURCES  = ucm/libtest_dlopen.c
-libdlopen_test2_la_SOURCES = ucm/libtest_dlopen2.c
-noinst_libdir = ${PWD}/.noinst
 
 gtestdir  = $(includedir)
 gtest_LDADD = \
@@ -63,7 +57,8 @@ gtest_CPPFLAGS = \
 
 gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install
 gtest_CFLAGS   = $(BASE_CFLAGS)
-gtest_CXXFLAGS = $(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -g -fno-tree-vectorize
+gtest_CXXFLAGS = $(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -g -fno-tree-vectorize \
+				 -DGTEST_UCM_HOOK_LIB_DIR="\"${PWD}/ucm/test_dlopen/.libs\""
 
 gtest_SOURCES = \
 	common/gtest-all.cc \

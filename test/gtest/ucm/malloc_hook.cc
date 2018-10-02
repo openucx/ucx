@@ -945,16 +945,17 @@ UCS_TEST_F(malloc_hook, bistro_patch) {
  * we are trying to load lib1, from lib1 load lib2, and
  * fire mmap event from lib2 */
 UCS_TEST_F(malloc_hook, dlopen) {
+#ifndef GTEST_UCM_HOOK_LIB_DIR
+    UCS_TEST_SKIP_R("missing build configuration");
+#else
     typedef void (fire_mmap_f)(void);
     typedef void* (load_lib_f)(const char *path);
 
-    const char *libdlopen_test  = "/.libs/libdlopen_test.so";
-    const char *libdlopen_test2 = "/.libs/libdlopen_test2.so";
+    const char *libdlopen_test  = "/libdlopen_test.so";
+    const char *libdlopen_test2 = "/libdlopen_test2.so";
     const char *load_lib        = "load_lib";
     const char *fire_mmap       = "fire_mmap";
 
-    char *exe_name;
-    char *dir_name;
     char *lib_name;
     char *lib2_name;
     void *lib;
@@ -968,12 +969,10 @@ UCS_TEST_F(malloc_hook, dlopen) {
                                    reinterpret_cast<void*>(this));
     ASSERT_UCS_OK(status);
 
-    exe_name  = strdup(ucs_get_exe());
-    dir_name  = dirname(exe_name);
-    lib_name  = (char*)malloc(strlen(dir_name) + 1 + strlen(libdlopen_test) + 1);
-    lib2_name = (char*)malloc(strlen(dir_name) + 1 + strlen(libdlopen_test2) + 1);
-    strcat(strcpy(lib_name, dir_name), libdlopen_test);
-    strcat(strcpy(lib2_name, dir_name), libdlopen_test2);
+    lib_name  = (char*)malloc(strlen(GTEST_UCM_HOOK_LIB_DIR) + strlen(libdlopen_test) + 1);
+    lib2_name = (char*)malloc(strlen(GTEST_UCM_HOOK_LIB_DIR) + strlen(libdlopen_test2) + 1);
+    strcat(strcpy(lib_name, GTEST_UCM_HOOK_LIB_DIR), libdlopen_test);
+    strcat(strcpy(lib2_name, GTEST_UCM_HOOK_LIB_DIR), libdlopen_test2);
 
     lib = dlopen(lib_name, RTLD_NOW);
     EXPECT_NE((uintptr_t)lib, NULL);
@@ -1008,10 +1007,10 @@ no_fire:
 no_load:
     dlclose(lib);
 no_lib:
-    free(exe_name);
     free(lib_name);
     free(lib2_name);
     ucm_unset_event_handler(UCM_EVENT_VM_MAPPED, mem_event_callback,
                             reinterpret_cast<void*>(this));
     return;
+#endif /* GTEST_UCM_HOOK_LIB_DIR */
 }

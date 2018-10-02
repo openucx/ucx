@@ -286,6 +286,7 @@ AC_CONFIG_FILES([
                  test/apps/sockaddr/Makefile
                  test/examples/Makefile
                  test/gtest/Makefile
+                 test/gtest/ucm/test_dlopen/Makefile
                  test/mpi/Makefile
                  bindings/java/src/main/native/Makefile
                  ])
