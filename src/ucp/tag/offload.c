@@ -76,7 +76,8 @@ ucp_tag_offload_release_buf(ucp_request_t *req, int dereg)
 }
 
 /* Tag consumed by the transport - need to remove it from expected queue */
-void ucp_tag_offload_tag_consumed(uct_tag_context_t *self)
+UCS_PROFILE_FUNC_VOID(ucp_tag_offload_tag_consumed, (self),
+                      uct_tag_context_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
     ucs_queue_head_t *queue;
@@ -86,8 +87,10 @@ void ucp_tag_offload_tag_consumed(uct_tag_context_t *self)
 }
 
 /* Message is scattered to user buffer by the transport, complete the request */
-void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
-                               uint64_t imm, size_t length, ucs_status_t status)
+UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
+                      (self, stag, imm, length, status),
+                      uct_tag_context_t *self, uct_tag_t stag,
+                      uint64_t imm, size_t length, ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
     ucp_eager_sync_hdr_t hdr;
@@ -127,9 +130,11 @@ out:
 }
 
 /* RNDV request matched by the transport. Need to proceed with SW based RNDV */
-void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
-                             const void *header, unsigned header_length,
-                             ucs_status_t status)
+UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
+                      (self, stag, header, header_length, status),
+                      uct_tag_context_t *self, uct_tag_t stag,
+                      const void *header, unsigned header_length,
+                      ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
 
