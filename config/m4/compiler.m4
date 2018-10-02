@@ -88,6 +88,9 @@ AC_DEFUN([COMPILER_OPTION],
            AC_MSG_CHECKING([$3])
            CHECK_CROSS_COMP([AC_LANG_SOURCE([$5])],
                             [AC_MSG_RESULT([yes])
+			     # TODO: Add CPU UARCH detector and validator in UCX init.
+			     # As for now we will avoid passing this information to
+			     # library.
 			     AS_IF([test "x$1" != "xmcpu" -a "x$1" != "xmarch"],
                              [OPT_CFLAGS="$OPT_CFLAGS|$1"],[])],
                             [AC_MSG_RESULT([no])])
