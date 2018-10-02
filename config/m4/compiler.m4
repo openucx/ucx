@@ -1,6 +1,7 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
+# Copyright (C) ARM Ltd. 2016-2018.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -84,12 +85,66 @@ AC_DEFUN([COMPILER_OPTION],
     AS_IF([test "x$with_$1" != "xno"],
           [SAVE_CFLAGS="$CFLAGS"
            CFLAGS="$BASE_CFLAGS $CFLAGS $3"
-           AC_MSG_CHECKING([$2])
+           AC_MSG_CHECKING([$3])
            CHECK_CROSS_COMP([AC_LANG_SOURCE([$5])],
                             [AC_MSG_RESULT([yes])
-                             OPT_CFLAGS="$OPT_CFLAGS|$1"],
+			     # TODO: Add CPU UARCH detector and validator in UCX init.
+			     # As for now we will avoid passing this information to
+			     # library.
+			     AS_IF([test "x$1" != "xmcpu" -a "x$1" != "xmarch"],
+                             [OPT_CFLAGS="$OPT_CFLAGS|$1"],[])],
                             [AC_MSG_RESULT([no])])
            CFLAGS="$SAVE_CFLAGS"])
+])
+
+
+#
+# Check platform uarch and apply micro-architecture specific optimizations
+#
+AC_DEFUN([DETECT_UARCH],
+[
+    cpuimpl=`grep 'CPU implementer' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
+    cpuarch=`grep 'CPU architecture' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
+    cpuvar=`grep 'CPU variant' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
+    cpupart=`grep 'CPU part' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
+   
+    ax_cpu=""
+    ax_arch=""
+    
+    AC_MSG_NOTICE(Detected CPU implementation: ${cpuimpl})
+    AC_MSG_NOTICE(Detected CPU arhitecture: ${cpuarch})
+    AC_MSG_NOTICE(Detected CPU variant: ${cpuvar})
+    AC_MSG_NOTICE(Detected CPU part: ${cpupart})
+   
+    case $cpuimpl in
+      0x42) case $cpupart in
+        0x516 | 0x0516)
+          AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
+          ax_cpu="thunderx2t99"
+          ax_arch="armv8.1-a+lse" ;;
+        0xaf | 0x0af)
+          AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
+          ax_cpu="thunderx2t99"
+          ax_arch="armv8.1-a+lse" ;;
+        esac
+        ;;
+      0x43) case $cpupart in
+        0x516 | 0x0516)
+          AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
+          ax_cpu="thunderx2t99"
+          ax_arch="armv8.1-a+lse" ;;
+        0xaf | 0x0af)
+          AC_DEFINE([HAVE_AARCH64_THUNDERX2], 1, [Cavium ThunderX2])
+          ax_cpu="thunderx2t99"
+          ax_arch="armv8.1-a+lse" ;;
+        0xa1 | 0x0a1)
+          AC_DEFINE([HAVE_AARCH64_THUNDERX1], 1, [Cavium ThunderX1])
+          ax_cpu="thunderxt88" ;;
+        esac
+        ;;
+      *) ax_cpu="native"
+         ;;
+    esac 
 ])
 
 
@@ -162,6 +217,25 @@ AS_IF([test "x$with_avx" != xyes],
        COMPILER_OPTION([sse42], [SSE 4.2], [-msse4.2], [$enable_optimizations],
                        [#include <popcntintrin.h>
                         int main() { return _mm_popcnt_u32(0x101) - 2; }])
+      ])
+
+
+DETECT_UARCH()
+
+#
+# CPU tuning
+#
+AS_IF([test "x$ax_cpu" != "x"],
+      [COMPILER_OPTION([mcpu], [CPU Model], [-mcpu=$ax_cpu], [$enable_optimizations],
+		 [int main() { return 0;}])
+      ])
+
+# 
+# Architecture tuning
+# 
+AS_IF([test "x$ax_arch" != "x"],
+      [COMPILER_OPTION([march], [architecture tuning], [-march=$ax_arch], [$enable_optimizations],
+		 [int main() { return 0;}])
       ])
 
 
