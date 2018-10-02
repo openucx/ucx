@@ -318,8 +318,8 @@ enum ucp_context_attr_field {
  * present. It is used for the enablement of backward compatibility support.
  */
 enum ucp_worker_attr_field {
-    UCP_WORKER_ATTR_FIELD_THREAD_MODE    = UCS_BIT(0), /**< UCP thread mode */
-    UCP_WORKER_ATTR_FIELD_EMULATION_MODE = UCS_BIT(1)  /**< UCP emulation mode */
+    UCP_WORKER_ATTR_FIELD_THREAD_MODE  = UCS_BIT(0), /**< UCP thread mode */
+    UCP_WORKER_ATTR_FIELD_EXT_PROGRESS = UCS_BIT(1)  /**< UCP emulation mode */
 };
 
 /**

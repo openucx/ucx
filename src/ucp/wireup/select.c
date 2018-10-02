@@ -1300,7 +1300,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
 
     if (need_am) {
         ep_init_flags |= UCP_EP_CREATE_AM_LANE;
-        worker->flags |= UCP_WORKER_FLAG_EMULATION_MODE;
+        worker->flags |= UCP_WORKER_FLAG_EXT_PROGRESS;
     }
 
     status = ucp_wireup_add_am_lane(ep, params, ep_init_flags, address_count,
