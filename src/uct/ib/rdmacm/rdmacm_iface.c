@@ -116,22 +116,23 @@ static ucs_status_t uct_rdmacm_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                         uct_completion_t *comp)
 {
     uct_rdmacm_ep_t    *ep = ucs_derived_of(tl_ep, uct_rdmacm_ep_t);
+    ucs_status_t       status;
     uct_rdmacm_ep_op_t *op;
 
-    if (ep->status != UCS_INPROGRESS) {
-        return ep->status;
-    }
-
-    if (comp != NULL) {
+    pthread_mutex_lock(&ep->ops_mutex);
+    status = ep->status;
+    if ((status == UCS_INPROGRESS) && (comp != NULL)) {
         op = ucs_malloc(sizeof(*op), "uct_rdmacm_ep_flush op");
-        if (op == NULL) {
-            return UCS_ERR_NO_MEMORY;
+        if (op != NULL) {
+            op->user_comp = comp;
+            ucs_queue_push(&ep->ops, &op->queue_elem);
+        } else {
+            status = UCS_ERR_NO_MEMORY;
         }
-        op->user_comp = comp;
-        ucs_queue_push(&ep->ops, &op->queue_elem);
     }
+    pthread_mutex_unlock(&ep->ops_mutex);
 
-    return UCS_INPROGRESS;
+    return status;
 }
 
 static uct_iface_ops_t uct_rdmacm_iface_ops = {
@@ -202,8 +203,10 @@ static void uct_rdmacm_client_handle_failure(uct_rdmacm_iface_t *iface,
 {
     ucs_assert(!iface->is_server);
     if (ep != NULL) {
+        pthread_mutex_lock(&ep->ops_mutex);
         uct_rdmacm_ep_set_failed(&iface->super.super, &ep->super.super, status);
         uct_rdmacm_ep_invoke_completions(ep, status);
+        pthread_mutex_unlock(&ep->ops_mutex);
     }
 }
 
@@ -369,8 +372,10 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
         ucs_assert(!iface->is_server);
         ret_flags |= UCT_RDMACM_PROCESS_EVENT_DESTROY_CM_ID_FLAG;
         if (ep != NULL) {
+            pthread_mutex_lock(&ep->ops_mutex);
             ep->status = UCS_OK;
             uct_rdmacm_ep_invoke_completions(ep, UCS_OK);
+            pthread_mutex_unlock(&ep->ops_mutex);
         }
         break;
 
