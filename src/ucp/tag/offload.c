@@ -21,14 +21,13 @@ int ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
     ucp_worker_t *worker   = iface->worker;
     ucp_context_t *context = worker->context;
 
-    if (!worker->tm.offload.activated) {
+    if (worker->tm.offload.iface == NULL) {
         ucs_assert(worker->tm.offload.thresh       == SIZE_MAX);
         ucs_assert(worker->tm.offload.zcopy_thresh == SIZE_MAX);
         ucs_assert(worker->tm.offload.iface        == NULL);
 
         worker->tm.offload.thresh       = context->config.ext.tm_thresh;
         worker->tm.offload.zcopy_thresh = context->config.ext.tm_max_bb_size;
-        worker->tm.offload.activated    = 1;
 
         /* Cache active offload iface. Can use it if this will be the only
          * active iface on the worker. Otherwise would need to retrieve

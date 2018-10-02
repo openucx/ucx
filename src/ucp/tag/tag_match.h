@@ -96,7 +96,6 @@ typedef struct ucp_tag_match {
                                                    or not be used with tag-matching
                                                    offload at all, according to
                                                    'thresh' configuration. */
-        unsigned              activated;        /* Indicates offload activation status */
     } offload;
 
     struct {
