@@ -319,7 +319,7 @@ enum ucp_context_attr_field {
  */
 enum ucp_worker_attr_field {
     UCP_WORKER_ATTR_FIELD_THREAD_MODE  = UCS_BIT(0), /**< UCP thread mode */
-    UCP_WORKER_ATTR_FIELD_EXT_PROGRESS = UCS_BIT(1)  /**< UCP emulation mode */
+    UCP_WORKER_ATTR_FIELD_EXT_PROGRESS = UCS_BIT(1)  /**< UCP e.g. emulation mode */
 };
 
 /**
@@ -729,9 +729,9 @@ typedef struct ucp_worker_attr {
     ucs_thread_mode_t     thread_mode;
 
     /**
-     * is emulation being used?
+     * is emulation being used / external progress required?
      */
-    int emulation_mode;
+    int ext_progress;
 } ucp_worker_attr_t;
 
 
