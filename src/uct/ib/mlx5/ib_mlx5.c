@@ -185,7 +185,7 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
         if (worker->thread_mode == UCS_THREAD_MODE_SINGLE) {
             mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST;
         } else if (worker->thread_mode == UCS_THREAD_MODE_SERIALIZED) {
-            mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_FLUSH;
+            mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST_MT;
         } else {
             ucs_error("unsupported thread mode for mlx5: %d", worker->thread_mode);
             return UCS_ERR_UNSUPPORTED;

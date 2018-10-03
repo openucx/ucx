@@ -411,9 +411,12 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     ucs_assert(num_bb <= UCT_IB_MLX5_MAX_BB);
     if (ucs_likely(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_BF_POST)) {
         src = uct_ib_mlx5_bf_copy(dst, src, num_bb, wq);
-    } else if (wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_BF_FLUSH) {
+    } else if (wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_BF_POST_MT) {
         src = uct_ib_mlx5_bf_copy(dst, src, num_bb, wq);
-        ucs_memory_bus_store_fence();
+        /* Make sure that HW observes WC writes in order, in case of multiple
+         * threads which use the same BF register in a serialized way
+         */
+        ucs_memory_cpu_wc_fence();
     } else {
         ucs_assert(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_DB);
         *(volatile uint64_t*)dst = *(volatile uint64_t*)src;

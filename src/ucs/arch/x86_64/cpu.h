@@ -34,6 +34,7 @@ BEGIN_C_DECLS
 #define ucs_memory_cpu_fence()        ucs_compiler_fence()
 #define ucs_memory_cpu_store_fence()  ucs_compiler_fence()
 #define ucs_memory_cpu_load_fence()   ucs_compiler_fence()
+#define ucs_memory_cpu_wc_fence()     asm volatile ("sfence" ::: "memory")
 
 
 static inline uint64_t ucs_arch_read_hres_clock()

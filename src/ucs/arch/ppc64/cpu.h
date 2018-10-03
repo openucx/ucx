@@ -30,6 +30,7 @@ BEGIN_C_DECLS
 #define ucs_memory_cpu_load_fence()   asm volatile ("lwsync \n" \
                                                     "isync  \n" \
                                                     ::: "memory")
+#define ucs_memory_cpu_wc_fence()     ucs_memory_bus_fence()
 
 
 static inline uint64_t ucs_arch_read_hres_clock()
