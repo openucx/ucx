@@ -28,10 +28,10 @@ BEGIN_C_DECLS
 #define ucs_memory_bus_fence()        asm volatile ("dsb sy" ::: "memory");
 #define ucs_memory_bus_store_fence()  asm volatile ("dsb st" ::: "memory");
 #define ucs_memory_bus_load_fence()   asm volatile ("dsb ld" ::: "memory");
-
 #define ucs_memory_cpu_fence()        asm volatile ("dmb ish" ::: "memory");
 #define ucs_memory_cpu_store_fence()  asm volatile ("dmb ishst" ::: "memory");
 #define ucs_memory_cpu_load_fence()   asm volatile ("dmb ishld" ::: "memory");
+#define ucs_memory_cpu_wc_fence()     asm volatile ("dmb st" ::: "memory");
 
 
 /*

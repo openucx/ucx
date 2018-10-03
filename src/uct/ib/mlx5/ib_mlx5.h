@@ -119,11 +119,11 @@ struct mlx5_grh_av {
                                   sizeof(struct mlx5_wqe_data_seg))
 
 typedef enum {
-    UCT_IB_MLX5_MMIO_MODE_BF_POST,  /* BF without flush, can be used only from
-                                       one thread */
-    UCT_IB_MLX5_MMIO_MODE_BF_FLUSH, /* BF with flush, can be used by multiple
-                                       threads (not concurrently) */
-    UCT_IB_MLX5_MMIO_MODE_DB,       /* 8-byte doorbell (with the mandatory flush) */
+    UCT_IB_MLX5_MMIO_MODE_BF_POST,    /* BF without flush, can be used only from
+                                         one thread */
+    UCT_IB_MLX5_MMIO_MODE_BF_POST_MT, /* BF with order, can be used by multiple
+                                         serialized threads */
+    UCT_IB_MLX5_MMIO_MODE_DB,         /* 8-byte doorbell (with the mandatory flush) */
     UCT_IB_MLX5_MMIO_MODE_LAST
 } uct_ib_mlx5_mmio_mode_t;
 
