@@ -330,7 +330,8 @@ static inline int uct_mm_ep_has_tx_resources(uct_mm_ep_t *ep)
                                      iface->config.fifo_size);
 }
 
-ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
+ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
+                                   unsigned flags)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);

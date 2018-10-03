@@ -274,7 +274,8 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
                                      const uct_ib_address_t *ib_addr,
                                      const uct_ud_ep_addr_t *ep_addr);
 
-ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep, uct_pending_req_t *n);
+ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep, uct_pending_req_t *n,
+                                   unsigned flags);
 
 void   uct_ud_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
                                void *arg);

@@ -11,10 +11,11 @@
 
 #define uct_ugni_udt_can_send(_ep) ((uct_ugni_ep_can_send(&_ep->super)) && (_ep->posted_desc == NULL))
 
-ucs_status_t uct_ugni_udt_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
+ucs_status_t uct_ugni_udt_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
+                                         unsigned flags)
 {
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
-    ucs_status_t status = uct_ugni_ep_pending_add(tl_ep, n);
+    ucs_status_t status = uct_ugni_ep_pending_add(tl_ep, n, flags);
 
     if (UCS_OK == status) {
         uct_worker_progress_add_safe(iface->super.worker, uct_ugni_udt_progress,

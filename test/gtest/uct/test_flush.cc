@@ -343,7 +343,7 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
          it->uct.func   = am_progress;
          it->comp.count = 2;
          it->comp.func  = NULL;
-         status = uct_ep_pending_add(sender().ep(0), &it->uct);
+         status = uct_ep_pending_add(sender().ep(0), &it->uct, 0);
          if (UCS_ERR_BUSY == status) {
              /* User advised to retry the send. It means no requests added
               * to the queue
@@ -373,7 +373,7 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
              /* If flush returned NO_RESOURCE, add to pending must succeed */
              flush_req.test      = this;
              flush_req.uct.func  = flush_progress;
-             status = uct_ep_pending_add(sender().ep(0), &flush_req.uct);
+             status = uct_ep_pending_add(sender().ep(0), &flush_req.uct, 0);
              if (status == UCS_ERR_BUSY) {
                  continue;
              }

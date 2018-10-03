@@ -198,7 +198,8 @@ err:
     return status;
 }
 
-ucs_status_t uct_cm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req)
+ucs_status_t uct_cm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
+                                   unsigned flags)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cm_iface_t);
     uct_cm_ep_t *ep = ucs_derived_of(tl_ep, uct_cm_ep_t);

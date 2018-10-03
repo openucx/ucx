@@ -159,7 +159,8 @@ ucp_wireup_ep_pending_req_release(uct_pending_req_t *self, void *arg)
 }
 
 static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
-                                              uct_pending_req_t *req)
+                                              uct_pending_req_t *req,
+                                              unsigned flags)
 {
     ucp_wireup_ep_t *wireup_ep = ucs_derived_of(uct_ep, ucp_wireup_ep_t);
     ucp_ep_h ucp_ep = wireup_ep->super.ucp_ep;
@@ -183,7 +184,7 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
         proxy_req->send.proxy.wireup_ep     = wireup_ep;
         proxy_req->send.state.uct_comp.func = NULL;
 
-        status = uct_ep_pending_add(wireup_msg_ep, &proxy_req->send.uct);
+        status = uct_ep_pending_add(wireup_msg_ep, &proxy_req->send.uct, 0);
         if (status == UCS_OK) {
             ucs_atomic_add32(&wireup_ep->pending_count, +1);
         } else {
