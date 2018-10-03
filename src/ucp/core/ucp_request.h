@@ -233,7 +233,7 @@ struct ucp_request {
                     ucp_mem_desc_t          *rdesc;   /* Offload bounce buffer */
                     ssize_t                 remaining; /* How much more data to be received */
                     ucp_worker_iface_t      *wiface;  /* Cached iface this request
-                                                         is received on. Used in 
+                                                         is received on. Used in
                                                          tag offload expected callbacks*/
                 } tag;
 
@@ -291,7 +291,8 @@ extern ucs_mpool_ops_t ucp_request_mpool_ops;
 extern ucs_mpool_ops_t ucp_rndv_get_mpool_ops;
 
 
-int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status);
+int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status,
+                            unsigned pending_flags);
 
 ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
                                     void *buffer, size_t length, ucp_datatype_t datatype,

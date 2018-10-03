@@ -97,4 +97,6 @@ int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep);
 
 void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep);
 
+ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self);
+
 #endif

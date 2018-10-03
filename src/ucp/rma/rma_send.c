@@ -109,7 +109,6 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     req->send.rma.remote_addr = remote_addr;
     req->send.rma.rkey        = rkey;
     req->send.uct.func        = cb;
-    req->send.uct.flags       = UCT_PENDING_REQ_FLAG_SYNC;
     req->send.lane            = rkey->cache.rma_lane;
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), length);
     ucp_request_send_state_reset(req,
@@ -147,7 +146,7 @@ ucp_rma_nonblocking(ucp_ep_h ep, const void *buffer, size_t length,
         return status;
     }
 
-    return ucp_request_send(req);
+    return ucp_request_send(req, UCT_PENDING_REQ_FLAG_SYNC);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t

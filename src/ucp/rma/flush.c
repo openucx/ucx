@@ -72,7 +72,8 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                 break;
             }
 
-            status = uct_ep_pending_add(uct_ep, &req->send.uct);
+            status = uct_ep_pending_add(uct_ep, &req->send.uct,
+                                        UCT_PENDING_REQ_FLAG_SYNC);
             ucs_trace("adding pending flush on ep %p lane[%d]: %s", ep, lane,
                       ucs_status_string(status));
             if (status == UCS_OK) {
@@ -255,7 +256,6 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
 
     req->send.lane                  = UCP_NULL_LANE;
     req->send.uct.func              = ucp_ep_flush_progress_pending;
-    req->send.uct.flags             = UCT_PENDING_REQ_FLAG_SYNC;
     req->send.state.uct_comp.func   = ucp_ep_flush_completion;
     req->send.state.uct_comp.count  = ucp_ep_num_lanes(ep);
 

@@ -97,7 +97,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
      * If it is completed immediately, release the request and return the status.
      * Otherwise, return the request.
      */
-    status = ucp_request_send(req);
+    status = ucp_request_send(req, UCT_PENDING_REQ_FLAG_SYNC);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucs_trace_req("releasing send request %p, returning status %s", req,
                       ucs_status_string(status));

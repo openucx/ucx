@@ -134,8 +134,7 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep)
 
     req->send.ep        = ep;
     req->send.uct.func  = ucp_progress_rma_cmpl;
-    req->send.uct.flags = UCT_PENDING_REQ_FLAG_SYNC;
-    ucp_request_send(req);
+    ucp_request_send(req, UCT_PENDING_REQ_FLAG_SYNC);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
@@ -218,9 +217,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
     req->send.length        = getreqh->length;
     req->send.get_reply.req = getreqh->req.reqptr;
     req->send.uct.func      = ucp_progress_get_reply;
-    req->send.uct.flags     = UCT_PENDING_REQ_FLAG_SYNC;
 
-    ucp_request_send(req);
+    ucp_request_send(req, UCT_PENDING_REQ_FLAG_SYNC);
     return UCS_OK;
 }
 

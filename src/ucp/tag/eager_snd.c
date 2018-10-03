@@ -338,7 +338,6 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
     req->flags              = 0;
     req->send.ep            = ucp_worker_get_ep_by_ptr(worker, reqhdr->ep_ptr);
     req->send.uct.func      = ucp_proto_progress_am_bcopy_single;
-    req->send.uct.flags     = UCT_PENDING_REQ_FLAG_SYNC;
     req->send.proto.comp_cb = ucp_request_put;
     req->send.proto.status  = UCS_OK;
 
@@ -354,5 +353,5 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
         req->send.proto.remote_request = reqhdr->reqptr;
     }
 
-    ucp_request_send(req);
+    ucp_request_send(req, UCT_PENDING_REQ_FLAG_SYNC);
 }
