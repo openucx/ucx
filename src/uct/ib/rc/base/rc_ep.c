@@ -400,7 +400,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
     ucs_status_t status;
     uct_rc_ep_t *ep;
 
-    status = req->func(req);
+    status = UCT_PENDING_REQ_FUNC(req)(req);
     ucs_trace_data("progress pending request %p returned: %s", req,
                    ucs_status_string(status));
 
@@ -435,7 +435,7 @@ static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
                                                  uct_rc_ep_t, arb_group);
 
     /* Invoke user's callback only if it is not internal FC message */
-    if (ucs_likely(req->func != uct_rc_ep_fc_grant)){
+    if (ucs_likely(UCT_PENDING_REQ_FUNC(req) != uct_rc_ep_fc_grant)){
         if (cb != NULL) {
             cb(req, cb_args->arg);
         } else {
@@ -459,7 +459,7 @@ void uct_rc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
                             uct_rc_ep_abriter_purge_cb, &args);
 }
 
-ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
+UCS_F_ALIGNED ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
 {
     ucs_status_t status;
     uct_rc_fc_request_t *freq = ucs_derived_of(self, uct_rc_fc_request_t);

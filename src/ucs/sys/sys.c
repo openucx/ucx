@@ -927,7 +927,7 @@ unsigned ucs_empty_function_return_zero()
     return 0;
 }
 
-ucs_status_t ucs_empty_function_return_success()
+UCS_F_ALIGNED ucs_status_t ucs_empty_function_return_success()
 {
     return UCS_OK;
 }
@@ -942,7 +942,7 @@ ucs_status_t ucs_empty_function_return_inprogress()
     return UCS_INPROGRESS;
 }
 
-ucs_status_t ucs_empty_function_return_no_resource()
+UCS_F_ALIGNED ucs_status_t ucs_empty_function_return_no_resource()
 {
     return UCS_ERR_NO_RESOURCE;
 }

@@ -123,14 +123,15 @@ static uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
     return wireup_msg_ep;
 }
 
-static ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
+static UCS_F_ALIGNED ucs_status_t
+ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
 {
     ucp_request_t *proxy_req = ucs_container_of(self, ucp_request_t, send.uct);
     uct_pending_req_t *req = proxy_req->send.proxy.req;
     ucp_wireup_ep_t *wireup_ep = proxy_req->send.proxy.wireup_ep;
     ucs_status_t status;
 
-    status = req->func(req);
+    status = UCT_PENDING_REQ_FUNC(req)(req);
     if (status == UCS_OK) {
         ucs_atomic_add32(&wireup_ep->pending_count, -1);
         ucs_free(proxy_req);
@@ -148,7 +149,7 @@ ucp_wireup_ep_pending_req_release(uct_pending_req_t *self, void *arg)
 
     ucs_atomic_add32(&wireup_ep->pending_count, -1);
  
-    if (proxy_req->send.proxy.req->func == ucp_wireup_msg_progress) {
+    if (UCT_PENDING_REQ_FUNC(proxy_req->send.proxy.req) == ucp_wireup_msg_progress) {
         req = ucs_container_of(proxy_req->send.proxy.req, ucp_request_t,
                                send.uct);
         ucs_free((void*)req->send.buffer);
@@ -169,7 +170,7 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
-    if (req->func == ucp_wireup_msg_progress) {
+    if (UCT_PENDING_REQ_FUNC(req) == ucp_wireup_msg_progress) {
         proxy_req = ucs_malloc(sizeof(*proxy_req), "ucp_wireup_proxy_req");
         if (proxy_req == NULL) {
             status = UCS_ERR_NO_MEMORY;
@@ -178,7 +179,8 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
 
         wireup_msg_ep = ucp_wireup_ep_get_msg_ep(wireup_ep);
 
-        proxy_req->send.uct.func            = ucp_wireup_ep_progress_pending;
+        UCT_PENDING_REQ_INIT(&proxy_req->send.uct,
+                             ucp_wireup_ep_progress_pending, 0);
         proxy_req->send.proxy.req           = req;
         proxy_req->send.proxy.wireup_ep     = wireup_ep;
         proxy_req->send.state.uct_comp.func = NULL;

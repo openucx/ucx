@@ -124,7 +124,7 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
     return status;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_only_handler,
+UCS_PROFILE_FUNC(UCS_F_ALIGNED ucs_status_t, ucp_eager_only_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -134,7 +134,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_only_handler,
                                     sizeof(ucp_eager_hdr_t), 0);
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_first_handler,
+UCS_PROFILE_FUNC(UCS_F_ALIGNED ucs_status_t, ucp_eager_first_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -143,7 +143,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_first_handler,
                                     sizeof(ucp_eager_first_hdr_t), 0);
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
+UCS_PROFILE_FUNC(UCS_F_ALIGNED ucs_status_t, ucp_eager_middle_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -191,7 +191,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
     return status;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_only_handler,
+UCS_PROFILE_FUNC(UCS_F_ALIGNED ucs_status_t, ucp_eager_sync_only_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -202,7 +202,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_only_handler,
                                     sizeof(ucp_eager_sync_hdr_t), 0);
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_first_handler,
+UCS_PROFILE_FUNC(UCS_F_ALIGNED ucs_status_t, ucp_eager_sync_first_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -212,7 +212,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_first_handler,
                                     sizeof(ucp_eager_sync_first_hdr_t), 0);
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_offload_sync_ack_handler,
+UCS_PROFILE_FUNC(UCS_F_ALIGNED ucs_status_t, ucp_eager_offload_sync_ack_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -236,7 +236,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_offload_sync_ack_handler,
     return UCS_OK;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_ack_handler,
+UCS_PROFILE_FUNC(UCS_F_ALIGNED ucs_status_t, ucp_eager_sync_ack_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
@@ -248,7 +248,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_ack_handler,
     return UCS_OK;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
+UCS_PROFILE_FUNC(UCS_F_ALIGNED ucs_status_t, ucp_tag_offload_unexp_eager,
                  (arg, data, length, tl_flags, stag, imm),
                  void *arg, void *data, size_t length, unsigned tl_flags,
                  uct_tag_t stag, uint64_t imm)
@@ -357,19 +357,19 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 }
 
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_ONLY, ucp_eager_only_handler,
-              ucp_eager_dump, UCT_CB_FLAG_SYNC);
+              ucp_eager_dump, 0);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_FIRST, ucp_eager_first_handler,
-              ucp_eager_dump, UCT_CB_FLAG_SYNC);
+              ucp_eager_dump, 0);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_MIDDLE, ucp_eager_middle_handler,
-              ucp_eager_dump, UCT_CB_FLAG_SYNC);
+              ucp_eager_dump, 0);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_SYNC_ONLY, ucp_eager_sync_only_handler,
-              ucp_eager_dump, UCT_CB_FLAG_SYNC);
+              ucp_eager_dump, 0);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_SYNC_FIRST, ucp_eager_sync_first_handler,
-              ucp_eager_dump, UCT_CB_FLAG_SYNC);
+              ucp_eager_dump, 0);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_SYNC_ACK, ucp_eager_sync_ack_handler,
-              ucp_eager_dump, UCT_CB_FLAG_SYNC);
+              ucp_eager_dump, 0);
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_OFFLOAD_SYNC_ACK,
-              ucp_eager_offload_sync_ack_handler, ucp_eager_dump, UCT_CB_FLAG_SYNC);
+              ucp_eager_offload_sync_ack_handler, ucp_eager_dump, 0);
 
 UCP_DEFINE_AM_PROXY(UCP_AM_ID_EAGER_ONLY);
 UCP_DEFINE_AM_PROXY(UCP_AM_ID_EAGER_FIRST);

@@ -430,8 +430,9 @@ public:
         return self->unexpected_handler(r_ctx, const_cast<void*>(header), flags);
     }
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length,
-                                   unsigned flags)
+    static UCS_F_ALIGNED ucs_status_t am_handler(void *arg, void *data,
+                                                 size_t length,
+                                                 unsigned flags)
     {
         is_am_received = true;
         return UCS_OK;
@@ -583,8 +584,7 @@ UCS_TEST_P(test_tag, tag_send_no_tag)
 {
   check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
 
-  uct_iface_set_am_handler(receiver().iface(), 0, am_handler,
-                           NULL, UCT_CB_FLAG_SYNC);
+  uct_iface_set_am_handler(receiver().iface(), 0, am_handler, NULL, 0);
   mapped_buffer lbuf(200, SEND_SEED, sender());
   ssize_t len = uct_ep_am_bcopy(sender().ep(0), 0, mapped_buffer::pack,
                                 reinterpret_cast<void*>(&lbuf), 0);

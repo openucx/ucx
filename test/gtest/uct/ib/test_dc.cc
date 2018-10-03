@@ -33,10 +33,8 @@ public:
         m_e2 = uct_test::create_entity(0);
         m_entities.push_back(m_e2);
 
-        uct_iface_set_am_handler(m_e1->iface(), 0, am_dummy_handler,
-                                 NULL, UCT_CB_FLAG_SYNC);
-        uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler,
-                                 NULL, UCT_CB_FLAG_SYNC);
+        uct_iface_set_am_handler(m_e1->iface(), 0, am_dummy_handler, NULL, 0);
+        uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler, NULL, 0);
     }
 
     static uct_dc_iface_t* dc_iface(entity *e) {
@@ -47,8 +45,9 @@ public:
         return ucs_derived_of(e->ep(idx), uct_dc_ep_t);
     }
 
-    static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length,
-                                         unsigned flags) {
+    static UCS_F_ALIGNED ucs_status_t am_dummy_handler(void *arg, void *data,
+                                                       size_t length,
+                                                       unsigned flags) {
         return UCS_OK;
     }
 
@@ -99,7 +98,7 @@ protected:
         int is_done;
     } preq;
 
-    static ucs_status_t uct_pending_flush(uct_pending_req_t *uct_req) 
+    static UCS_F_ALIGNED ucs_status_t uct_pending_flush(uct_pending_req_t *uct_req) 
     {
         struct dcs_pending *preq = (struct dcs_pending *)uct_req;
         ucs_status_t status;
@@ -115,7 +114,7 @@ protected:
         return status;
     }
 
-    static ucs_status_t uct_pending_dummy(uct_pending_req_t *uct_req) 
+    static UCS_F_ALIGNED ucs_status_t uct_pending_dummy(uct_pending_req_t *uct_req) 
     {
         struct dcs_pending *preq = (struct dcs_pending *)uct_req;
         uct_dc_ep_t *ep;
@@ -303,7 +302,7 @@ UCS_TEST_P(test_dc, dcs_ep_flush_pending) {
     /* put flush op on pending */
     preq.is_done = 0;
     preq.e = m_e1;
-    preq.uct_req.func = uct_pending_flush;
+    UCT_PENDING_REQ_INIT(&preq.uct_req, uct_pending_flush, 0);
     status = uct_ep_pending_add(m_e1->ep(0), &preq.uct_req);
     EXPECT_UCS_OK(status);
 
@@ -346,7 +345,7 @@ UCS_TEST_P(test_dc, dcs_ep_am_pending) {
 
     /* put AM op on pending */
     preq.e            = m_e1;
-    preq.uct_req.func = uct_pending_flush;
+    UCT_PENDING_REQ_INIT(&preq.uct_req, uct_pending_flush, 0);
     status            = uct_ep_pending_add(m_e1->ep(0), &preq.uct_req);
     EXPECT_UCS_OK(status);
 
@@ -391,7 +390,7 @@ UCS_TEST_P(test_dc, dcs_ep_purge_pending) {
     /* put flush op on pending */
     preq.is_done = 0;
     preq.e = m_e1;
-    preq.uct_req.func = uct_pending_dummy;
+    UCT_PENDING_REQ_INIT(&preq.uct_req, uct_pending_dummy, 0);
     status = uct_ep_pending_add(m_e1->ep(0), &preq.uct_req);
     EXPECT_UCS_OK(status);
 
@@ -445,7 +444,7 @@ UCS_TEST_P(test_dc_flow_control, fc_disabled_flush)
 UCS_TEST_P(test_dc_flow_control, fc_disabled_pending_no_dci) {
 
     pending_send_request_t pending_req;
-    pending_req.uct.func = pending_cb;
+    UCT_PENDING_REQ_INIT(&pending_req.uct, pending_cb, 0);
     pending_req.cb_count = 0;
 
     set_fc_disabled(m_e1);
@@ -542,8 +541,7 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
     send_am_messages(m_e1, wnd, UCS_OK);
     send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
     uct_pending_req_t req;
-    req.func = reinterpret_cast<ucs_status_t (*)(uct_pending_req*)>
-                               (ucs_empty_function_return_no_resource);
+    UCT_PENDING_REQ_INIT(&req, ucs_empty_function_return_no_resource, 0);
     EXPECT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &req));
 
     /* Make sure that ep does not hold dci when sends completed */

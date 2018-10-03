@@ -680,7 +680,8 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     }
 
     if (ucs_unlikely(is_async &&
-                     (iface->super.super.am[am_id].flags & UCT_CB_FLAG_SYNC))) {
+                     !(UCT_AM_HANDLER_FLAGS(&iface->super.super.am[am_id]) &
+                       UCT_CB_FLAG_ASYNC))) {
         skb->u.am.len = byte_len - sizeof(*neth);
         ucs_queue_push(&iface->rx.pending_q, &skb->u.am.queue);
     } else {
@@ -1110,7 +1111,7 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
 
         ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_IN_PENDING));
         ep->flags |= UCT_UD_EP_FLAG_IN_PENDING;
-        status = req->func(req);
+        status = UCT_PENDING_REQ_FUNC(req)(req);
         ep->flags &= ~UCT_UD_EP_FLAG_IN_PENDING;
 
         if (status == UCS_INPROGRESS) {

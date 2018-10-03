@@ -368,7 +368,7 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
         return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
     }
 
-    status = req->func(req);
+    status = UCT_PENDING_REQ_FUNC(req)(req);
     ucs_trace_data("progress pending request %p returned %s", req,
                    ucs_status_string(status));
 

@@ -47,8 +47,8 @@ public:
 #endif
     } ib_port_desc_t;
 
-    static ucs_status_t ib_am_handler(void *arg, void *data, size_t length,
-                                      unsigned flags) {
+    static UCS_F_ALIGNED ucs_status_t ib_am_handler(void *arg, void *data,
+                                                    size_t length, unsigned flags) {
         recv_desc_t *my_desc  = (recv_desc_t *) arg;
         uint64_t *test_ib_hdr = (uint64_t *) data;
         uint64_t *actual_data = (uint64_t *) test_ib_hdr + 1;
@@ -235,7 +235,7 @@ out:
         recv_buffer->length = 0; /* Initialize length to 0 */
 
         /* set a callback for the uct to invoke for receiving the data */
-        uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler , recv_buffer, UCT_CB_FLAG_SYNC);
+        uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler , recv_buffer, 0);
 
         /* send the data */
         uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
@@ -362,7 +362,7 @@ public:
 
         /* set a callback for the uct to invoke for receiving the data */
         uct_iface_set_am_handler(m_e1->iface(), 0, ib_am_handler, m_buf1->ptr(),
-                                 UCT_CB_FLAG_SYNC);
+                                 0);
 
         test_uct_event_ib::bcopy_pack_count = 0;
     }

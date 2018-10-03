@@ -95,8 +95,8 @@ ucp_amo_init_fetch(ucp_request_t *req, ucp_ep_h ep, void *buffer,
     ucp_amo_init_common(req, ep, op, remote_addr, rkey, value, op_size);
     req->send.state.uct_comp.count  = 1;
     req->send.state.uct_comp.func   = ucp_amo_completed_single;
-    req->send.uct.func              = proto->progress_fetch;
     req->send.buffer                = buffer;
+    UCT_PENDING_REQ_INIT(&req->send.uct, proto->progress_fetch, 0);
 }
 
 static UCS_F_ALWAYS_INLINE

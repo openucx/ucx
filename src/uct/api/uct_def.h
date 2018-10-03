@@ -27,6 +27,50 @@
 #define UCT_INLINE_API           static UCS_F_ALWAYS_INLINE
 
 
+#define UCS_PTR_ALIGN_MASK  ((uintptr_t)sizeof(void *) - 1)
+
+
+#define UCS_PTR_ALIGN_PACK(_ptr, _aling_value, _flags) \
+    do { \
+        ucs_assert(((uintptr_t)(_aling_value) % sizeof(void *)) == 0); \
+        ucs_assert((_flags) < sizeof(void *)); \
+        (_ptr) = (_aling_value); \
+        *((uintptr_t *)&(_ptr)) |= ((_flags) & UCS_PTR_ALIGN_MASK); \
+    } while (0)
+
+
+#define UCS_PTR_ALIGN_VALUE(_ptr) \
+    ((void *)(((uintptr_t)(_ptr)) & (~UCS_PTR_ALIGN_MASK)))
+
+#define UCS_PTR_ALIGN_FLAGS(_ptr) \
+    (((uintptr_t)(_ptr)) & UCS_PTR_ALIGN_MASK)
+
+#define UCT_PENDING_REQ_INIT(_req, _func, _flags) \
+    UCS_PTR_ALIGN_PACK((_req)->func, (uct_pending_callback_t)(_func), _flags)
+
+
+#define UCT_PENDING_REQ_FUNC(_req) \
+    ((uct_pending_callback_t)UCS_PTR_ALIGN_VALUE((_req)->func))
+
+
+#define UCT_PENDING_REQ_FLAGS(_req) \
+    UCS_PTR_ALIGN_FLAGS((_req)->func)
+
+
+#define UCT_AM_HANDLER_INIT(_am_handler, _cb, _arg, _flags) \
+    do { \
+        UCS_PTR_ALIGN_PACK((_am_handler)->cb, (uct_am_callback_t)(_cb), _flags); \
+        (_am_handler)->arg = (void *)(uintptr_t)(_arg); \
+    } while (0)
+
+
+#define UCT_AM_HANDLER_FUNC(_am_handler) \
+    ((uct_am_callback_t)UCS_PTR_ALIGN_VALUE((_am_handler)->cb))
+
+
+#define UCT_AM_HANDLER_FLAGS(_am_handler) \
+    UCS_PTR_ALIGN_FLAGS((_am_handler)->cb)
+
 /**
  * @ingroup UCT_AM
  * @brief Trace types for active message tracer.

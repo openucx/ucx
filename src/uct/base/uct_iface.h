@@ -161,7 +161,6 @@ UCS_CLASS_DECLARE(uct_ep_t, uct_iface_h);
 typedef struct uct_am_handler {
     uct_am_callback_t cb;
     void              *arg;
-    uint32_t          flags;
 } uct_am_handler_t;
 
 
@@ -519,11 +518,12 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
 {
     ucs_status_t     status;
     uct_am_handler_t *handler = &iface->am[id];
+    uct_am_callback_t cb      = UCT_AM_HANDLER_FUNC(handler);
 
     ucs_assert(id < UCT_AM_ID_MAX);
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM, 1);
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM_BYTES, length);
-    status = handler->cb(handler->arg, data, length, flags);
+    status = cb(handler->arg, data, length, flags);
     ucs_assert((status == UCS_OK) ||
                ((status == UCS_INPROGRESS) && (flags & UCT_CB_PARAM_FLAG_DESC)));
     return status;

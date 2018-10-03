@@ -13,6 +13,7 @@
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
 #include <ucs/async/async_fwd.h>
+#include <ucs/debug/assert.h>
 #include <ucs/config/types.h>
 #include <ucs/datastruct/callbackq.h>
 #include <ucs/type/status.h>
@@ -341,12 +342,7 @@ enum uct_msg_flags {
  * A callback must have either the SYNC or ASYNC flag set.
  */
 enum uct_cb_flags {
-    UCT_CB_FLAG_SYNC  = UCS_BIT(1), /**< Callback is always invoked from the context (thread, process)
-                                         that called uct_iface_progress(). An interface must
-                                         have the @ref UCT_IFACE_FLAG_CB_SYNC flag set to support sync
-                                         callback invocation. */
-
-    UCT_CB_FLAG_ASYNC = UCS_BIT(2)  /**< Callback may be invoked from any context. For example,
+    UCT_CB_FLAG_ASYNC = UCS_BIT(0)  /**< Callback may be invoked from any context. For example,
                                          it may be called from a transport async progress thread. To guarantee
                                          async invocation, the interface must have the @ref UCT_IFACE_FLAG_CB_ASYNC
                                          flag set.
@@ -1442,12 +1438,12 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
 
 /**
  * @ingroup UCT_MD
- * @brief Give advice about the use of memory 
+ * @brief Give advice about the use of memory
  *
  * This routine advises the UCT about how to handle memory range beginning at
  * address and size of length bytes. This call does not influence the semantics
- * of the application, but may influence its performance. The advice may be 
- * ignored. 
+ * of the application, but may influence its performance. The advice may be
+ * ignored.
  *
  * @param [in]     md          Memory domain memory was allocated or registered on.
  * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc
@@ -2030,6 +2026,7 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t o
  */
 UCT_INLINE_API ucs_status_t uct_ep_pending_add(uct_ep_h ep, uct_pending_req_t *req)
 {
+    ucs_assert((req == NULL) || !(UCT_PENDING_REQ_FLAGS(req) & UCT_CB_FLAG_ASYNC));
     return ep->iface->ops.ep_pending_add(ep, req);
 }
 

@@ -49,7 +49,8 @@ static ucs_status_t ucp_amo_basic_progress_post(uct_pending_req_t *self)
     return ucp_amo_check_send_status(req, status);
 }
 
-static ucs_status_t ucp_amo_basic_progress_fetch(uct_pending_req_t *self)
+static UCS_F_ALIGNED ucs_status_t
+ucp_amo_basic_progress_fetch(uct_pending_req_t *self)
 {
     ucp_request_t *req    = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_rkey_h rkey       = req->send.amo.rkey;

@@ -48,6 +48,8 @@
 /* Silence "defined but not used" error for static function */
 #define UCS_F_MAYBE_UNUSED __attribute__((used))
 
+#define UCS_F_ALIGNED __attribute__ ((aligned(sizeof(void *))))
+
 /* Always inline the function */
 #ifdef __GNUC__
 #define UCS_F_ALWAYS_INLINE      inline __attribute__ ((always_inline))

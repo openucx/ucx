@@ -154,13 +154,14 @@ uct_dc_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
     uct_dc_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_dc_ep_t, arb_group);
     uct_dc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_iface_t);
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_pending_callback_t pending_cb = UCT_PENDING_REQ_FUNC(req);
     ucs_status_t status;
 
     if (!uct_rc_iface_has_tx_resources(&iface->super)) {
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
-    status = req->func(req);
+    status = pending_cb(req);
     ucs_trace_data("progress pending request %p returned: %s", req,
                    ucs_status_string(status));
     if (status == UCS_OK) {
@@ -202,7 +203,7 @@ static ucs_arbiter_cb_result_t uct_dc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
     uct_dc_ep_t *ep                 = ucs_container_of(ucs_arbiter_elem_group(elem),
                                                        uct_dc_ep_t, arb_group);
 
-    if (ucs_likely(req->func != uct_dc_iface_fc_grant)){
+    if (ucs_likely(UCT_PENDING_REQ_FUNC(req) != uct_dc_iface_fc_grant)){
         if (cb != NULL) {
             cb(req, cb_args->arg);
         } else {

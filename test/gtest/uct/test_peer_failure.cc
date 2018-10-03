@@ -22,8 +22,7 @@ private:
         void operator() (test_uct_peer_failure::entity *e) {
             uct_iface_set_am_handler(e->iface(), 0,
                                      am_dummy_handler,
-                                     reinterpret_cast<void*>(m_test),
-                                     UCT_CB_FLAG_SYNC);
+                                     reinterpret_cast<void*>(m_test), 0);
         }
 
         test_uct_peer_failure* m_test;
@@ -42,7 +41,7 @@ public:
         memset(&params, 0, sizeof(params));
         params.err_handler       = get_err_handler();
         params.err_handler_arg   = reinterpret_cast<void*>(this);
-        params.err_handler_flags = UCT_CB_FLAG_SYNC;
+        params.err_handler_flags = 0;
         return params;
     }
 
@@ -50,13 +49,14 @@ public:
         return err_cb;
     }
 
-    static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length,
-                                         unsigned flags) {
+    static UCS_F_ALIGNED ucs_status_t am_dummy_handler(void *arg, void *data,
+                                                       size_t length,
+                                                       unsigned flags) {
         reinterpret_cast<test_uct_peer_failure*>(arg)->m_am_count++;
         return UCS_OK;
     }
 
-    static ucs_status_t pending_cb(uct_pending_req_t *self)
+    static UCS_F_ALIGNED ucs_status_t pending_cb(uct_pending_req_t *self)
     {
         m_req_count++;
         return UCS_OK;
@@ -273,7 +273,7 @@ UCS_TEST_P(test_uct_peer_failure, purge_failed_peer)
     const size_t num_pend_sends = 3ul;
     uct_pending_req_t reqs[num_pend_sends];
     for (size_t i = 0; i < num_pend_sends; i ++) {
-        reqs[i].func = pending_cb;
+        UCT_PENDING_REQ_INIT(&reqs[i], pending_cb, 0);
         EXPECT_EQ(uct_ep_pending_add(ep0(), &reqs[i]), UCS_OK);
     }
 

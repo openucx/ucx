@@ -36,8 +36,8 @@ public:
         /* data follows */
     } recv_desc_t;
 
-    static ucs_status_t mm_am_handler(void *arg, void *data, size_t length,
-                                      unsigned flags) {
+    static UCS_F_ALIGNED ucs_status_t mm_am_handler(void *arg, void *data,
+                                                    size_t length, unsigned flags) {
         recv_desc_t *my_desc = (recv_desc_t *) arg;
         uint64_t *test_mm_hdr = (uint64_t *) data;
         uint64_t *actual_data = (uint64_t *) test_mm_hdr + 1;
@@ -84,7 +84,7 @@ UCS_TEST_P(test_uct_mm, open_for_posix) {
 
         /* set a callback for the uct to invoke for receiving the data */
         uct_iface_set_am_handler(m_e2->iface(), 0, mm_am_handler , recv_buffer,
-                                 UCT_CB_FLAG_SYNC);
+                                 0);
 
         /* send the data */
         uct_ep_am_short(m_e1->ep(0), 0, test_mm_hdr, &send_data, sizeof(send_data));

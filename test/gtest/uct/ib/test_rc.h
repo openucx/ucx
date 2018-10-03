@@ -41,8 +41,9 @@ public:
         uct_test::short_progress_loop(delta_ms);
     }
 
-    static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length,
-                                         unsigned flags) {
+    static UCS_F_ALIGNED ucs_status_t am_dummy_handler(void *arg, void *data,
+                                                       size_t length,
+                                                       unsigned flags) {
         return UCS_OK;
     }
 
@@ -101,8 +102,8 @@ public:
         return UCS_OK;
     }
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length,
-                                   unsigned flags)
+    static UCS_F_ALIGNED ucs_status_t am_handler(void *arg, void *data,
+                                                 size_t length, unsigned flags)
     {
         ++m_am_rx_count;
         return UCS_OK;
@@ -115,7 +116,7 @@ public:
         ++req->purge_count;
     }
 
-    static ucs_status_t pending_cb(uct_pending_req_t *self) {
+    static UCS_F_ALIGNED ucs_status_t pending_cb(uct_pending_req_t *self) {
         pending_send_request_t *req = ucs_container_of(self,
                                                        pending_send_request_t,
                                                        uct);

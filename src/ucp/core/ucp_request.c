@@ -316,17 +316,17 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
 
     if ((ssize_t)length <= max_short) {
         /* short */
-        req->send.uct.func = proto->contig_short;
+        UCT_PENDING_REQ_INIT(&req->send.uct, proto->contig_short, 0);
         UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
         return UCS_OK;
     } else if (length < zcopy_thresh) {
         /* bcopy */
         ucp_request_send_state_reset(req, NULL, UCP_REQUEST_SEND_PROTO_BCOPY_AM);
         if (length <= msg_config->max_bcopy - proto->only_hdr_size) {
-            req->send.uct.func   = proto->bcopy_single;
+            UCT_PENDING_REQ_INIT(&req->send.uct, proto->bcopy_single, 0);
             UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_single", req->send.length);
         } else {
-            req->send.uct.func        = proto->bcopy_multi;
+            UCT_PENDING_REQ_INIT(&req->send.uct, proto->bcopy_multi, 0);
             req->send.tag.message_id  = req->send.ep->worker->tm.am.message_id++;
             req->send.tag.am_bw_index = 1;
             req->send.pending_lane    = UCP_NULL_LANE;
@@ -356,13 +356,13 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
         }
 
         if (multi) {
-            req->send.uct.func        = proto->zcopy_multi;
+            UCT_PENDING_REQ_INIT(&req->send.uct, proto->zcopy_multi, 0);
             req->send.tag.message_id  = req->send.ep->worker->tm.am.message_id++;
             req->send.tag.am_bw_index = 1;
             req->send.pending_lane    = UCP_NULL_LANE;
             UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_multi", req->send.length);
         } else {
-            req->send.uct.func   = proto->zcopy_single;
+            UCT_PENDING_REQ_INIT(&req->send.uct, proto->zcopy_single, 0);
             UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_single", req->send.length);
         }
         return UCS_OK;

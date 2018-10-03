@@ -31,7 +31,7 @@ static size_t ucp_wireup_msg_pack(void *dest, void *arg)
     return sizeof(ucp_wireup_msg_t) + req->send.length;
 }
 
-ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
+UCS_F_ALIGNED ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_h ep = req->send.ep;
@@ -142,8 +142,8 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
         req->send.wireup.dest_ep_ptr = 0;
     }
 
-    req->send.uct.func           = ucp_wireup_msg_progress;
-    req->send.datatype           = ucp_dt_make_contig(1);
+   UCT_PENDING_REQ_INIT(&req->send.uct, ucp_wireup_msg_progress, 0);
+    req->send.datatype = ucp_dt_make_contig(1);
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
 
     /* pack all addresses */
@@ -490,8 +490,9 @@ void ucp_wireup_process_ack(ucp_worker_h worker, const ucp_wireup_msg_t *msg)
     }
 }
 
-static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
-                                           size_t length, unsigned flags)
+static UCS_F_ALIGNED ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
+                                                         size_t length,
+                                                         unsigned flags)
 {
     ucp_worker_h worker   = arg;
     ucp_wireup_msg_t *msg = data;

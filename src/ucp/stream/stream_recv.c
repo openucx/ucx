@@ -437,7 +437,7 @@ void ucp_stream_ep_activate(ucp_ep_h ep)
     }
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_ALIGNED ucs_status_t
 ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
                       unsigned am_flags)
 {
@@ -492,7 +492,6 @@ static void ucp_stream_am_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 }
 
 UCP_DEFINE_AM(UCP_FEATURE_STREAM, UCP_AM_ID_STREAM_DATA,
-              ucp_stream_am_handler, ucp_stream_am_dump,
-              UCT_CB_FLAG_SYNC);
+              ucp_stream_am_handler, ucp_stream_am_dump, 0);
 
 UCP_DEFINE_AM_PROXY(UCP_AM_ID_STREAM_DATA);
