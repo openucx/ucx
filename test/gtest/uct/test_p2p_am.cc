@@ -89,13 +89,13 @@ public:
         pthread_mutex_lock(&self->m_lock);
 
         self->m_pending_req.uct.func   = resp_progress;
-        self->m_pending_req.uct.flags  = UCT_PENDING_REQ_FLAG_ASYNC;
         self->m_pending_req.sendbuf    = new mapped_buffer(8, SEED1,
                                                            self->receiver());
         self->m_pending_req.test       = self;
 
         ucs_status_t status = uct_ep_pending_add(self->receiver().ep(0),
-                                                 &self->m_pending_req.uct);
+                                                 &self->m_pending_req.uct,
+                                                 UCT_PENDING_REQ_FLAG_ASYNC);
         EXPECT_EQ(UCS_OK, status);
 
         pthread_mutex_unlock(&self->m_lock);
