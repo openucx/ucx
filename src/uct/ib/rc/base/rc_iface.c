@@ -449,13 +449,13 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
         }
         fc_req->ep          = &ep->super.super;
         fc_req->super.func  = uct_rc_ep_fc_grant;
-        fc_req->super.flags = UCT_PENDING_REQ_FLAG_SYNC;
 
         /* Got hard credit request. Send grant to the peer immediately */
         status = uct_rc_ep_fc_grant(&fc_req->super);
 
         if (status == UCS_ERR_NO_RESOURCE){
-            status = uct_ep_pending_add(&ep->super.super, &fc_req->super);
+            status = uct_ep_pending_add(&ep->super.super, &fc_req->super,
+                                        UCT_PENDING_REQ_FLAG_SYNC);
         }
         ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",
                            ucs_status_string(status));

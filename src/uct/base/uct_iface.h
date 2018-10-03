@@ -12,6 +12,7 @@
 #include <uct/api/uct.h>
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.h>
+#include <ucs/datastruct/arbiter.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
@@ -346,7 +347,14 @@ typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj,
  * a queue element so we can put this on a queue.
  */
 typedef struct {
-    ucs_queue_elem_t  queue;
+    union {
+        ucs_arbiter_elem_t  arbiter;
+        struct {
+            ucs_queue_elem_t    queue;
+            uct_ep_h            ep;
+        };
+    };
+    unsigned                flags;
 } uct_pending_req_priv_t;
 
 
@@ -361,6 +369,13 @@ typedef struct {
  */
 #define uct_pending_req_push(_queue, _req) \
     ucs_queue_push((_queue), &uct_pending_req_priv(_req)->queue);
+
+
+/**
+ * Set flags to pending request.
+ */
+#define uct_pending_req_set_flags(_req, _flags) \
+    (uct_pending_req_priv(_req)->flags = (_flags))
 
 
 /**
@@ -567,17 +582,6 @@ size_t uct_iov_total_length(const uct_iov_t *iov, size_t iovcnt)
     }
 
     return total_length;
-}
-
-/**
- * Debug check pending request flags.
- */
-static UCS_F_ALWAYS_INLINE
-void uct_pending_request_check_flags(const uct_pending_req_t *req)
-{
-    /* Must be set only one flag */
-    ucs_assert((req->flags == UCT_PENDING_REQ_FLAG_SYNC) ||
-               (req->flags == UCT_PENDING_REQ_FLAG_ASYNC));
 }
 
 #endif

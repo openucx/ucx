@@ -1105,14 +1105,15 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
      * - not in async progress
      * - there are only low priority ctl pending or not ctl at all
      */
-    if ((!in_async_progress || (req->flags & UCT_PENDING_REQ_FLAG_ASYNC)) &&
+    if ((!in_async_progress || (uct_pending_req_priv(req)->flags &
+                                UCT_PENDING_REQ_FLAG_ASYNC)) &&
         (uct_ud_ep_ctl_op_check_ex(ep, UCT_UD_EP_OP_CTL_LOW_PRIO) ||
         !uct_ud_ep_ctl_op_isany(ep))) {
 
         ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_IN_PENDING));
         ep->flags           |= UCT_UD_EP_FLAG_IN_PENDING;
         async_before_pending = iface->tx.async_before_pending;
-        if (req->flags & UCT_PENDING_REQ_FLAG_ASYNC) {
+        if (uct_pending_req_priv(req)->flags & UCT_PENDING_REQ_FLAG_ASYNC) {
             iface->tx.async_before_pending = 0;
         }
         status                         = req->func(req);
@@ -1136,13 +1137,12 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
     return uct_ud_ep_ctl_op_next(ep);
 }
 
-ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req)
+ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req,
+                                   unsigned flags)
 {
     uct_ud_ep_t *ep = ucs_derived_of(ep_h, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
-
-    uct_pending_request_check_flags(req);
 
     uct_ud_enter(iface);
 
@@ -1156,7 +1156,7 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req)
         goto add_req;
     }
 
-    if (ucs_unlikely(req->flags & UCT_PENDING_REQ_FLAG_ASYNC)) {
+    if (ucs_unlikely(flags & UCT_PENDING_REQ_FLAG_ASYNC)) {
         goto add_req;
     }
 
@@ -1170,9 +1170,10 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req)
     }
 
 add_req:
-    ucs_arbiter_elem_init((ucs_arbiter_elem_t *)req->priv);
+    uct_pending_req_set_flags(req, flags);
+    ucs_arbiter_elem_init(&uct_pending_req_priv(req)->arbiter);
     ucs_arbiter_group_push_elem(&ep->tx.pending.group,
-                                (ucs_arbiter_elem_t *)req->priv);
+                                &uct_pending_req_priv(req)->arbiter);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
 
     uct_ud_leave(iface);
