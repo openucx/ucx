@@ -784,8 +784,6 @@ struct uct_completion {
  */
 struct uct_pending_req {
     uct_pending_callback_t    func;   /**< User callback function */
-    unsigned                  flags;  /**< flags as described in @ref
-                                           uct_pending_request_flags */
     char                      priv[UCT_PENDING_REQ_PRIV_LEN]; /**< Used internally by UCT */
 };
 
@@ -2022,15 +2020,19 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t o
  *                    the "func" field.
  *                    After passed to the function, the request is owned by UCT,
  *                    until the callback is called and returns UCS_OK.
+ * @param [in]  flags Pending request flags as defined in @ref
+ *                    uct_pending_req_flags.
  *
  * @return UCS_OK       - request added to pending queue
  *         UCS_ERR_BUSY - request was not added to pending queue, because send
  *                        resources are available now. The user is advised to
  *                        retry.
  */
-UCT_INLINE_API ucs_status_t uct_ep_pending_add(uct_ep_h ep, uct_pending_req_t *req)
+UCT_INLINE_API ucs_status_t uct_ep_pending_add(uct_ep_h ep,
+                                               uct_pending_req_t *req,
+                                               unsigned flags)
 {
-    return ep->iface->ops.ep_pending_add(ep, req);
+    return ep->iface->ops.ep_pending_add(ep, req, flags);
 }
 
 
