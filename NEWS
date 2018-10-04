@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.4.0-rc1 (September 26, 2018)
+## 1.4.0-rc1 (October 4, 2018)
 
 Features:
 - Improved support for installation with latest ROCm
@@ -33,6 +33,12 @@ Tested configurations:
 - XPMEM: 2.6.2
 - KNEM: 1.1.2
 - Multiple bugfixes (full list on github)
+
+Known issues:
+  #2919 - Segfault in CUDA support when KNEM not present and CMA is active
+  intra-node RMA transpor. As a workaround user can disable CMA support at
+  compile time: --disable-cma. Alternatively user can remove CMA from UCX_TLS
+  list, for example: UCX_TLS=mm,rc,cuda_copy,cuda_ipc,gdr_copy.
 
 ## 1.3.1 (August 20, 2018)
 
