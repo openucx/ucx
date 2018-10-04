@@ -330,7 +330,7 @@ typedef struct ucp_conn_request {
     uct_conn_request_h          uct_req;
     ucp_wireup_client_data_t    client_data;
     /* packed worker address follows */
-} UCS_S_PACKED ucp_conn_request_t;
+} ucp_conn_request_t;
 
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
