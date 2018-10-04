@@ -57,7 +57,7 @@ gtest_CPPFLAGS = \
 
 gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install
 gtest_CFLAGS   = $(BASE_CFLAGS)
-gtest_CXXFLAGS = $(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -g -fno-tree-vectorize \
+gtest_CXXFLAGS = $(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -fno-tree-vectorize \
 				 -DGTEST_UCM_HOOK_LIB_DIR="\"${PWD}/ucm/test_dlopen/.libs\""
 
 gtest_SOURCES = \
