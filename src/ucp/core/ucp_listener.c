@@ -180,7 +180,7 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
     if (ucs_test_all_flags(params->field_mask,
                            UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER |
                            UCP_LISTENER_PARAM_FIELD_CONN_HANDLER)) {
-        ucs_error("Only one accept handler is valid");
+        ucs_error("Only one accept handler should be provided");
         return UCS_ERR_INVALID_PARAM;
     }
 
