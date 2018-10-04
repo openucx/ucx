@@ -1520,8 +1520,8 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
     ucx_perf_test_reset(perf, params);
 
 #if HAVE_CUDA
-    if (params->mem_type == UCT_MD_MEM_TYPE_CUDA
-        || params->mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED) {
+    if ((params->mem_type == UCT_MD_MEM_TYPE_CUDA) ||
+        (params->mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED)) {
         status = ucx_perf_init_cuda_device(perf);
         if (status != UCS_OK) {
             goto out_free;
