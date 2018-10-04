@@ -359,35 +359,6 @@ enum uct_cb_flags {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Pending request flags.
- *
- * List of flags for a pending request @ref uct_pending_req::flags.
- * A pending request must have either the SYNC or ASYNC flag set.
- */
-enum uct_pending_req_flags {
-    UCT_PENDING_REQ_FLAG_SYNC  = UCS_BIT(1), /**< Request is always progressed
-                                                  from the context (thread,
-                                                  process) that called @ref
-                                                  uct_iface_progress. */
-    UCT_PENDING_REQ_FLAG_ASYNC = UCS_BIT(2)  /**< Request may be progressed from
-                                                  any context. For example, it
-                                                  may be called from a transport
-                                                  async progress thread. To
-                                                  guarantee async progress, the
-                                                  interface must have the @ref
-                                                  UCT_IFACE_FLAG_CB_ASYNC flag
-                                                  set. If async request is added
-                                                  to pending on an interface
-                                                  which only supports sync
-                                                  callback (i.e., only the @ref
-                                                  UCT_IFACE_FLAG_CB_SYNC flag is
-                                                  set), it will behave exactly
-                                                  like a sync request.  */
-};
-
-
-/**
- * @ingroup UCT_RESOURCE
  * @brief Mode in which to open the interface.
  */
 enum uct_iface_open_mode {
@@ -2051,8 +2022,7 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t o
  *                    the "func" field.
  *                    After passed to the function, the request is owned by UCT,
  *                    until the callback is called and returns UCS_OK.
- * @param [in]  flags Pending request flags as defined in @ref
- *                    uct_pending_req_flags.
+ * @param [in]  flags Reserved for future use.
  *
  * @return UCS_OK       - request added to pending queue
  *         UCS_ERR_BUSY - request was not added to pending queue, because send
