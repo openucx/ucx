@@ -187,25 +187,28 @@ AS_IF([test "x$with_ib" == xyes],
                                ], [with_mlx5_hw=no])
 
               AC_MSG_NOTICE([Checking for DV bare-metal support])
-              AC_CHECK_HEADERS([infiniband/mlx5dv.h],
+
+              AC_CHECK_LIB([mlx5-rdmav2], [mlx5dv_query_device],
+                                    [AC_SUBST(LIB_MLX5, [-lmlx5-rdmav2])],[
+              AC_CHECK_LIB([mlx5], [mlx5dv_query_device],
+                                    [AC_SUBST(LIB_MLX5, [-lmlx5])],
+                                    [with_mlx5_dv=no], [-libverbs])], [-libverbs])
+
+              AS_IF([test "x$with_mlx5_dv" != xno], [
+                       AC_CHECK_HEADERS([infiniband/mlx5dv.h],
                                [with_mlx5_hw=yes
                                 with_mlx5_dv=yes
-                                mlx5_include=mlx5dv.h
-                       AC_CHECK_LIB([mlx5-rdmav2], [mlx5dv_query_device],
-                                    [AC_SUBST(LIB_MLX5, [-lmlx5-rdmav2])],[
-                       AC_CHECK_LIB([mlx5], [mlx5dv_query_device],
-                                    [AC_SUBST(LIB_MLX5, [-lmlx5])],
-                                    [with_mlx5_dv=no])])])
+                                mlx5_include=mlx5dv.h], [], [ ])])
 
-              AS_IF([test "x$has_get_av" == xyes ], [
+              AS_IF([test "x$with_mlx5_dv" == xyes -a "x$has_get_av" == xyes ], [
                        AC_CHECK_DECLS([
                            mlx5dv_init_obj],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
                        AC_CHECK_MEMBERS([struct mlx5dv_cq.cq_uar],
-                                  [], [], [[#include <infiniband/mlx5dv.h>]])
-                       AC_CHECK_DECLS([ibv_alloc_td],
-                                  [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])
-                               ], [with_mlx5_hw=no])])
+                                  [], [], [[#include <infiniband/mlx5dv.h>]])])
+
+              AC_CHECK_DECLS([ibv_alloc_td],
+                      [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])])
 
        AS_IF([test "x$has_res_domain" == xyes], [], [
                AC_MSG_WARN([Cannot use mlx5 accel because resource domains are not supported])
