@@ -1099,8 +1099,8 @@ static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
 
 void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device)
 {
-    snprintf(md_name, UCT_MD_NAME_MAX, "%s/", UCT_IB_MD_PREFIX);
-    strncat(md_name, device->name, UCT_MD_NAME_MAX - strlen(UCT_IB_MD_PREFIX) - 1);
+    snprintf(md_name, UCT_MD_NAME_MAX, "%s/%s", UCT_IB_MD_PREFIX,
+             ibv_get_device_name(device));
 }
 
 static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources_p,
