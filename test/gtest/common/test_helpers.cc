@@ -10,6 +10,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/time/time.h>
 #include <ucs/sys/string.h>
+#include <sys/resource.h>
 
 namespace ucs {
 
@@ -23,6 +24,21 @@ int test_time_multiplier()
         factor *= 20;
     }
     return factor;
+}
+
+int max_tcp_connections()
+{
+    int max_conn = 65535 - 1024; /* limit on number of ports */
+
+    /* Limit numer of endpoints to number of open files, for TCP */
+    struct rlimit rlim;
+    int ret = getrlimit(RLIMIT_NOFILE, &rlim);
+    if (ret == 0) {
+        /* assume no more than 100 fd-s are already used */
+        max_conn = ucs_min((static_cast<int>(rlim.rlim_cur) - 100) / 2, max_conn);
+    }
+
+    return max_conn;
 }
 
 void fill_random(void *data, size_t size)

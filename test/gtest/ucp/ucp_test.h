@@ -161,6 +161,7 @@ protected:
     void disconnect(const entity& entity);
     void wait(void *req, int worker_index = 0);
     void set_ucp_config(ucp_config_t *config);
+    int max_connections();
 
     template <typename T>
     void wait_for_flag(volatile T *flag, double timeout = 10.0) {

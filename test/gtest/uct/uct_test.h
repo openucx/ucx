@@ -248,6 +248,7 @@ protected:
     uct_test::entity* create_entity(size_t rx_headroom,
                                     uct_error_handler_t err_handler = NULL);
     uct_test::entity* create_entity(uct_iface_params_t &params);
+    int max_connections();
 
     ucs::ptr_vector<entity> m_entities;
     uct_iface_config_t      *m_iface_config;

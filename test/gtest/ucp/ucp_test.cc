@@ -186,6 +186,15 @@ void ucp_test::set_ucp_config(ucp_config_t *config) {
     set_ucp_config(config, GetParam());
 }
 
+int ucp_test::max_connections() {
+    std::vector<std::string>::const_iterator end = GetParam().transports.end();
+    if (std::find(GetParam().transports.begin(), end, "tcp") != end) {
+        return ucs::max_tcp_connections();
+    } else {
+        return std::numeric_limits<int>::max();
+    }
+}
+
 std::vector<ucp_test_param>
 ucp_test::enum_test_params(const ucp_params_t& ctx_params,
                            const std::string& name,
