@@ -392,7 +392,7 @@ void ucp_test_base::entity::connect(const entity* other,
             UCS_TEST_SKIP_R(m_errors.empty() ? "Unreachable" : m_errors.back());
         }
 
-        ASSERT_UCS_OK(status);
+        ASSERT_UCS_OK(status, << " (" << m_errors.back() << ")");
 
         if (do_set_ep) {
             set_ep(ep, i, ep_idx);

@@ -173,6 +173,14 @@ static ucs_status_t uct_tcp_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
+static void uct_tcp_iface_listen_close(uct_tcp_iface_t *iface)
+{
+    if (iface->listen_fd != -1) {
+        close(iface->listen_fd);
+        iface->listen_fd = -1;
+    }
+}
+
 static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
 {
     uct_tcp_iface_t *iface = arg;
@@ -189,6 +197,7 @@ static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
     if (fd < 0) {
         if ((errno != EAGAIN) && (errno != EINTR)) {
             ucs_error("accept() failed: %m");
+            uct_tcp_iface_listen_close(iface);
         }
         return;
     }
@@ -366,7 +375,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
         uct_tcp_ep_destroy(&ep->super.super);
     }
 
-    close(self->listen_fd);
+    uct_tcp_iface_listen_close(self);
     close(self->epfd);
 }
 
