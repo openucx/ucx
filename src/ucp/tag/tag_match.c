@@ -45,7 +45,6 @@ ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm)
     tm->offload.thresh       = SIZE_MAX;
     tm->offload.zcopy_thresh = SIZE_MAX;
     tm->offload.iface        = NULL;
-    tm->offload.num_ifaces   = 0;
     tm->am.message_id        = ucs_generate_uuid(0);
     return UCS_OK;
 }

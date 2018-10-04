@@ -82,8 +82,9 @@ typedef struct ucp_tag_match {
     struct {
         ucs_queue_head_t      sync_reqs;        /* Outgoing sync send requests */
         khash_t(ucp_tag_offload_hash) tag_hash; /* Hash table of offload ifaces */
-        ucp_worker_iface_t    *iface;           /* Active offload iface (relevant if num_ifaces
-                                                   is 1, otherwise hash should be used) */
+        ucp_worker_iface_t    *iface;           /* Active offload iface (relevant if just
+                                                   one iface is activated on the worker,
+                                                   otherwise hash should be used) */
         size_t                thresh;           /* Minimal receive buffer size to be
                                                    used with tag-matching offload. */
         size_t                zcopy_thresh;     /* Minimal size of user-provided
@@ -95,8 +96,6 @@ typedef struct ucp_tag_match {
                                                    or not be used with tag-matching
                                                    offload at all, according to
                                                    'thresh' configuration. */
-        unsigned              num_ifaces;       /* Number of active offload
-                                                   capable interfaces */
     } offload;
 
     struct {

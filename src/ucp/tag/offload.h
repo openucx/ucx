@@ -102,18 +102,21 @@ ucp_tag_offload_try_cancel(ucp_worker_t *worker, ucp_request_t *req, unsigned mo
  * message received on this interface. Also it maintains hash of tags, if
  * more than one interface is active. Then, when expected receive request needs
  * to be offloaded, the corresponding offload-capable interface is retrieved
- * from the hash. Having just one offload-capable interface is supposed to be
- * a fast path, because it matches homogeneous cluster configurations. So, no
- * hashing is done, while only one offload-capable interface is active.
+ * from the hash.
  *
  * @note Hash key is a tag masked with 'tag_sender_mask', because it needs to
  *       identify a particular sender, rather than every single tag.
+ *
+ * @note Tag is added to the hash table for messages bigger than TM_THRESH.
+ *       Smaller messages are not supposed to be matched in HW, thus no need
+ *       to waste time on hashing for them.
+ *
  *
  * @param [in]  wiface        UCP worker interface.
  * @param [in]  tag           Tag of the arrived unexpected message.
  */
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_offload_unexp(ucp_worker_iface_t *wiface, ucp_tag_t tag)
+ucp_tag_offload_unexp(ucp_worker_iface_t *wiface, ucp_tag_t tag, size_t length)
 {
     ucp_worker_t *worker = wiface->worker;
     ucp_tag_t tag_key;
@@ -128,7 +131,8 @@ ucp_tag_offload_unexp(ucp_worker_iface_t *wiface, ucp_tag_t tag)
         }
     }
 
-    if (ucs_unlikely(worker->tm.offload.num_ifaces > 1)) {
+    if (ucs_unlikely((length >= worker->tm.offload.thresh) &&
+                     (worker->num_active_ifaces > 1))) {
         tag_key = worker->context->config.tag_sender_mask & tag;
         hash_it = kh_put(ucp_tag_offload_hash, &worker->tm.offload.tag_hash,
                          tag_key, &ret);

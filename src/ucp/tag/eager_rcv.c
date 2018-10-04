@@ -263,7 +263,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
 
     UCP_WORKER_STAT_TAG_OFFLOAD(wiface->worker, RX_UNEXP_EGR);
 
-    ucp_tag_offload_unexp(wiface, stag);
+    ucp_tag_offload_unexp(wiface, stag, length);
 
     if (ucs_likely(!imm)) {
         return ucp_eager_offload_handler(wiface->worker, data, length, tl_flags,

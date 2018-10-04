@@ -32,30 +32,31 @@ public:
         return req;
     }
 
-    void send_b_from(entity &se, const void *buffer, size_t count,
-                     ucp_datatype_t datatype, ucp_tag_t tag)
+    void send_recv(entity &se, ucp_tag_t tag, size_t length)
     {
+        std::vector<uint8_t> sendbuf(length);
+        std::vector<uint8_t> recvbuf(length);
 
-        request *req = (request*)ucp_tag_send_nb(se.ep(), buffer, count,
-                                                 datatype, tag, send_callback);
-        if (UCS_PTR_IS_ERR(req)) {
-            ASSERT_UCS_OK(UCS_PTR_STATUS(req));
-        } else if (req != NULL) {
-            wait(req);
-            request_free(req);
+        request *rreq = recv_nb_and_check(&recvbuf[0], length, DATATYPE, tag,
+                                          UCP_TAG_MASK_FULL);
+        request *sreq = (request*)ucp_tag_send_nb(se.ep(), &sendbuf[0], length,
+                                                  DATATYPE, tag, send_callback);
+        if (UCS_PTR_IS_ERR(sreq)) {
+            ASSERT_UCS_OK(UCS_PTR_STATUS(sreq));
+        } else if (sreq != NULL) {
+            wait(sreq);
+            request_free(sreq);
         }
+
+        wait(rreq);
+        request_free(rreq);
     }
 
     void activate_offload(entity &se, ucp_tag_t tag = 0x11)
     {
         uint64_t small_val = 0xFAFA;
 
-        request *req = recv_nb_and_check(&small_val, sizeof(small_val),
-                                         DATATYPE, tag, UCP_TAG_MASK_FULL);
-
-        send_b_from(se, &small_val, sizeof(small_val), DATATYPE, tag);
-        wait(req);
-        request_free(req);
+        send_recv(se, tag, sizeof(small_val));
     }
 
     void req_cancel(entity &e, request *req)
@@ -288,18 +289,19 @@ public:
 
         // TODO: add more tls which support tag offloading
         std::vector<std::string> tls;
-        tls.push_back("rc");
+        tls.push_back("dc_x");
         tls.push_back("dc");
         tls.push_back("rc_x");
-        tls.push_back("dc_x");
         ucp_test_param params = GetParam();
 
+        // Create new entity and add to to the end of vector
+        // (thus it will be receiver without any connections)
+        create_entity(false);
         for (std::vector<std::string>::const_iterator i = tls.begin();
              i != tls.end(); ++i) {
             params.transports.clear();
             params.transports.push_back(*i);
             create_entity(true, params);
-            e(0).connect(&receiver(), get_ep_params());
         }
     }
 
@@ -313,6 +315,15 @@ public:
              }
         }
         return (i << 48) | t;
+    }
+
+    void activate_offload_hashing(entity &se, ucp_tag_t tag)
+    {
+        se.connect(&receiver(), get_ep_params());
+        // Need to send twice, since the first message may not enable hashing
+        // (num_active_iface on worker is increased after unexpected offload handler)
+        send_recv(se, tag, 2048);
+        send_recv(se, tag, 2048);
     }
 
     void post_recv_and_check(entity &e, unsigned sw_count, ucp_tag_t tag,
@@ -337,19 +348,20 @@ UCS_TEST_P(test_ucp_tag_offload_multi, recv_from_multi)
     ucp_tag_t tag = 0x11;
 
     // Activate first offload iface. Tag hashing is not done yet, since we
-    // have only one iface so far.
-    activate_offload(e(0), make_tag(e(0), tag));
+    // have only one active iface so far.
+    activate_offload_hashing(e(0), make_tag(e(0), tag));
     EXPECT_EQ(0u, kh_size(&receiver().worker()->tm.offload.tag_hash));
 
     // Activate second offload iface. The tag has been added to the hash.
     // From now requests will be offloaded only for those tags which are
     // in the hash.
-    activate_offload(e(1), make_tag(e(1), tag));
+    activate_offload_hashing(e(1), make_tag(e(1), tag));
     EXPECT_EQ(1u, kh_size(&receiver().worker()->tm.offload.tag_hash));
 
     // Need to send a message on the first iface again, for its 'tag_sender'
     // part of the tag to be added to the hash.
-    activate_offload(e(0), make_tag(e(0), tag));
+    send_recv(e(0), make_tag(e(0), tag), 2048);
+    EXPECT_EQ(2u, kh_size(&receiver().worker()->tm.offload.tag_hash));
 
     // Now requests from first two senders should be always offloaded regardless
     // of the tag value. Tag does not matter, because hashing is done with
@@ -362,7 +374,9 @@ UCS_TEST_P(test_ucp_tag_offload_multi, recv_from_multi)
     // sender and its 'tag_sender_mask' is not added to the hash yet.
     post_recv_and_check(e(2), 1u, tag, UCP_TAG_MASK_FULL);
 
-    activate_offload(e(2), make_tag(e(2), tag));
+    activate_offload_hashing(e(2), make_tag(e(2), tag));
+    EXPECT_EQ(3u, kh_size(&receiver().worker()->tm.offload.tag_hash));
+
     // Check that this sender was added as well
     post_recv_and_check(e(2), 0u, tag + 1, UCP_TAG_MASK_FULL);
 }
