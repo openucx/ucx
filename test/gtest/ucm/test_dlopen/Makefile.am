@@ -1,16 +1,16 @@
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
 
 
 noinst_lib_LTLIBRARIES = \
-	libdlopen_test.la \
-	libdlopen_test2.la
+	libdlopen_test_do_mmap.la \
+	libdlopen_test_do_load.la
 
-libdlopen_test_la_SOURCES   = libtest_dlopen.c
-libdlopen_test2_la_SOURCES  = libtest_dlopen2.c
+libdlopen_test_do_mmap_la_SOURCES = dlopen_test_do_mmap.c
+libdlopen_test_do_load_la_SOURCES = dlopen_test_do_load.c
 noinst_libdir = ${PWD}/.noinst
 
 

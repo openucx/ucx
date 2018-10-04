@@ -1,5 +1,10 @@
+/**
+ * Copyright (C) Mellanox Technologies Ltd.      2018.  ALL RIGHTS RESERVED.
+ *
+ * See file LICENSE for terms.
+ */
+
 #include <sys/mman.h>
-#include <errno.h>
 
 void fire_mmap(void)
 {

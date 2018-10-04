@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -951,13 +951,13 @@ UCS_TEST_F(malloc_hook, dlopen) {
     typedef void (fire_mmap_f)(void);
     typedef void* (load_lib_f)(const char *path);
 
-    const char *libdlopen_test  = "/libdlopen_test.so";
-    const char *libdlopen_test2 = "/libdlopen_test2.so";
-    const char *load_lib        = "load_lib";
-    const char *fire_mmap       = "fire_mmap";
+    const char *libdlopen_load = "/libdlopen_test_do_load.so";
+    const char *libdlopen_mmap = "/libdlopen_test_do_mmap.so";
+    const char *load_lib       = "load_lib";
+    const char *fire_mmap      = "fire_mmap";
 
-    char *lib_name;
-    char *lib2_name;
+    std::string lib_load;
+    std::string lib_mmap;
     void *lib;
     void *lib2;
     load_lib_f *load;
@@ -969,12 +969,13 @@ UCS_TEST_F(malloc_hook, dlopen) {
                                    reinterpret_cast<void*>(this));
     ASSERT_UCS_OK(status);
 
-    lib_name  = (char*)malloc(strlen(GTEST_UCM_HOOK_LIB_DIR) + strlen(libdlopen_test) + 1);
-    lib2_name = (char*)malloc(strlen(GTEST_UCM_HOOK_LIB_DIR) + strlen(libdlopen_test2) + 1);
-    strcat(strcpy(lib_name, GTEST_UCM_HOOK_LIB_DIR), libdlopen_test);
-    strcat(strcpy(lib2_name, GTEST_UCM_HOOK_LIB_DIR), libdlopen_test2);
+    lib_load = std::string(GTEST_UCM_HOOK_LIB_DIR) + libdlopen_load;
+    lib_mmap = std::string(GTEST_UCM_HOOK_LIB_DIR) + libdlopen_mmap;
 
-    lib = dlopen(lib_name, RTLD_NOW);
+    UCS_TEST_MESSAGE << lib_load;
+    UCS_TEST_MESSAGE << lib_mmap;
+
+    lib = dlopen(lib_load.c_str(), RTLD_NOW);
     EXPECT_NE((uintptr_t)lib, NULL);
     if (!lib) {
         goto no_lib;
@@ -986,7 +987,7 @@ UCS_TEST_F(malloc_hook, dlopen) {
         goto no_load;
     }
 
-    lib2 = load(lib2_name);
+    lib2 = load(lib_mmap.c_str());
     EXPECT_NE((uintptr_t)lib2, NULL);
     if (!lib2) {
         goto no_load;
@@ -1007,8 +1008,6 @@ no_fire:
 no_load:
     dlclose(lib);
 no_lib:
-    free(lib_name);
-    free(lib2_name);
     ucm_unset_event_handler(UCM_EVENT_VM_MAPPED, mem_event_callback,
                             reinterpret_cast<void*>(this));
     return;
