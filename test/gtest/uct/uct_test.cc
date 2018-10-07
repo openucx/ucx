@@ -364,6 +364,15 @@ void uct_test::twait(int delta_ms) const {
     } while (now + ucs_time_from_msec(delta_ms) > ucs_get_time());
 }
 
+int uct_test::max_connections()
+{
+    if (GetParam()->tl_name == "tcp") {
+        return ucs::max_tcp_connections();
+    } else {
+        return std::numeric_limits<int>::max();
+    }
+}
+
 std::string uct_test::entity::client_priv_data = "";
 size_t uct_test::entity::client_cb_arg = 0;
 
