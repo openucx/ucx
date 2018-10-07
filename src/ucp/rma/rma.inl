@@ -77,4 +77,47 @@ static inline void ucp_ep_rma_remote_request_completed(ucp_ep_t *ep)
     }
 }
 
+#ifdef __aarch64__
+
+/* On aarch64, the default memcpy() uses byte-wise copy for length < 16 bytes,
+ * which may copy inconsistent values from memory written by DMA operation.
+ * With RMA operations, we want to provide a consistent view of memory state,
+ * at least for basic data types, so use short/int/long instructions when possible.
+ */
+static inline void ucp_rma_memcpy(void *dst, const void *src, size_t length)
+{
+    /* check length and pointer alignment in one shot by ORing their bits
+     * we also check that length<15 by comparing high-order bits to 0, therefore
+     * need to zero-out the high-order pointer bits as well. */
+    uintptr_t ptr_align_check = (((uintptr_t)dst | (uintptr_t)src) & 0xf) | length;
+
+    if (ptr_align_check == 8) {
+        /* length and pointers are 8-byte aligned, length < 16 */
+        *(uint64_t*)dst = *(const uint64_t*)src;
+    } else if (!(ptr_align_check & ~(8|4))) {
+        /* length and pointers are 4-byte aligned, length < 16 */
+        UCS_STATIC_ASSERT(sizeof(uint32_t) == 4);
+        for (; length > 0; length -= 4) {
+            *(uint32_t*)dst = *(uint32_t*)src;
+            src += 4;
+            dst += 4;
+        }
+    } else if (!(ptr_align_check & ~(8|4|2))) {
+        /* length and pointers are 2-byte aligned, length < 16 */
+        UCS_STATIC_ASSERT(sizeof(uint16_t) == 2);
+        for (; length > 0; length -= 2) {
+            *(uint16_t*)dst = *(uint16_t*)src;
+            src += 2;
+            dst += 2;
+         }
+    } else {
+        /* fallback to system memcpy() */
+        memcpy(dst, src, length);
+    }
+}
+
+#else
+#define ucp_rma_memcpy  memcpy
+#endif
+
 #endif

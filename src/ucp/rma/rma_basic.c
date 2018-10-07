@@ -7,9 +7,18 @@
 */
 
 #include "rma.h"
+#include "rma.inl"
 
 #include <ucp/proto/proto_am.inl>
 
+
+size_t ucp_rma_memcpy_pack(void *dest, void *arg)
+{
+    ucp_memcpy_pack_context_t *ctx = arg;
+    size_t length = ctx->length;
+    UCS_PROFILE_CALL_VOID(ucp_rma_memcpy, dest, ctx->src, length);
+    return length;
+}
 
 static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
 {
@@ -38,7 +47,7 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
         pack_ctx.length = ucs_min(req->send.length, rma_config->max_put_bcopy);
         packed_len = UCS_PROFILE_CALL(uct_ep_put_bcopy,
                                       ep->uct_eps[lane],
-                                      ucp_memcpy_pack,
+                                      ucp_rma_memcpy_pack,
                                       &pack_ctx,
                                       req->send.rma.remote_addr,
                                       rkey->cache.rma_rkey);
@@ -84,7 +93,7 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
         frag_length = ucs_min(rma_config->max_get_bcopy, req->send.length);
         status = UCS_PROFILE_CALL(uct_ep_get_bcopy,
                                   ep->uct_eps[lane],
-                                  (uct_unpack_callback_t)memcpy,
+                                  (uct_unpack_callback_t)ucp_rma_memcpy,
                                   (void*)req->send.buffer,
                                   frag_length,
                                   req->send.rma.remote_addr,
