@@ -944,8 +944,8 @@ static void ucp_perf_test_free_contig(ucx_perf_context_t *perf, void *addr, ucp_
         if (status != UCS_OK) {
             ucs_warn("ucp_mem_unmap() failed: %s", ucs_status_string(status));
         }
-    } else if (perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA
-               || perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED) {
+    } else if ((perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA) ||
+               (perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED)) {
 #if HAVE_CUDA
         cudaFree(addr);
 #endif
