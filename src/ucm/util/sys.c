@@ -12,6 +12,7 @@
 
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
+#include <ucm/mmap/mmap.h>
 #include <ucs/sys/math.h>
 #include <linux/mman.h>
 #include <sys/mman.h>
@@ -27,13 +28,12 @@
 ucm_global_config_t ucm_global_opts = {
     .log_level                  = UCS_LOG_LEVEL_WARN,
     .enable_events              = 1,
-    .enable_mmap_reloc          = 1,
+    .mmap_hook_mode             = UCM_DEFAULT_HOOK_MODE,
     .enable_malloc_hooks        = 1,
     .enable_malloc_reloc        = 0,
     .enable_cuda_reloc          = 1,
     .enable_dynamic_mmap_thresh = 1,
-    .alloc_alignment            = 16,
-    .enable_syscall             = 0
+    .alloc_alignment            = 16
 };
 
 size_t ucm_get_page_size()

@@ -31,12 +31,16 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
     /* Define a symbol which goes to the replacement - in case we are loaded first */ \
     _rettype _over_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
+        _rettype res; \
+        UCM_BISTRO_PROLOGUE; \
         ucm_trace("%s()", __FUNCTION__); \
         \
         if (ucs_unlikely(ucm_reloc_get_orig_thread == pthread_self())) { \
             return _fail_val; \
         } \
-        return _ucm_name(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        res = _ucm_name(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        UCM_BISTRO_EPILOGUE; \
+        return res; \
     }
 
 #define UCM_OVERRIDE_FUNC(_name, _rettype) \
@@ -81,16 +85,21 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
         return (_rettype)syscall(_syscall_id, UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
 
-#define UCM_DEFINE_SELECT_FUNC(_name, _rettype, _fail_val, _syscall_id, ...) \
+#if UCM_BISTRO_HOOKS
+#  define UCM_DEFINE_SELECT_FUNC(_name, _rettype, _fail_val, _syscall_id, ...) \
     _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name##_dlsym, ucm_override_##_name, \
                           _rettype, _fail_val, __VA_ARGS__) \
     UCM_DEFINE_SYSCALL_FUNC(_name##_syscall, _rettype, _syscall_id, __VA_ARGS__) \
     _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
-        return ucm_global_opts.enable_syscall ? \
+        return (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO) ? \
                ucm_orig_##_name##_syscall(UCM_FUNC_PASS_ARGS(__VA_ARGS__)) : \
                ucm_orig_##_name##_dlsym(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
+#else
+#  define UCM_DEFINE_SELECT_FUNC(_name, _rettype, _fail_val, _syscall_id, ...) \
+    UCM_DEFINE_DLSYM_FUNC(_name, _rettype, _fail_val, __VA_ARGS__)
+#endif
 
 /*
  * Define argument list with given types.

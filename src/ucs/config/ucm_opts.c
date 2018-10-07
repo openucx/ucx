@@ -8,9 +8,19 @@
 
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
+#include <ucm/mmap/mmap.h>
 
 
 #define UCM_CONFIG_PREFIX   "MEM_"
+
+static const char *ucm_mmap_hook_modes[] = {
+    [UCM_MMAP_HOOK_NONE]   = "none",
+    [UCM_MMAP_HOOK_RELOC]  = UCM_MMAP_HOOK_RELOC_STR,
+#if UCM_BISTRO_HOOKS
+    [UCM_MMAP_HOOK_BISTRO] = UCM_MMAP_HOOK_BISTRO_STR,
+#endif
+    [UCM_MMAP_HOOK_LAST]   = NULL
+};
 
 static ucs_config_field_t ucm_global_config_table[] = {
   {"LOG_LEVEL", "warn",
@@ -25,9 +35,14 @@ static ucs_config_field_t ucm_global_config_table[] = {
    "Enable memory events",
    ucs_offsetof(ucm_global_config_t, enable_events), UCS_CONFIG_TYPE_BOOL},
 
-  {"MMAP_RELOC", "yes",
-   "Enable installing mmap symbols in the relocation table",
-   ucs_offsetof(ucm_global_config_t, enable_mmap_reloc), UCS_CONFIG_TYPE_BOOL},
+  {"MMAP_HOOK_MODE", UCM_DEFAULT_HOOK_MODE_STR,
+   "MMAP hook mode\n"
+   " none   - don't set mmap hooks.\n"
+   " reloc  - use ELF relocation table to set hooks.\n"
+#if UCM_BISTRO_HOOKS
+   " bistro - use binary instrumentation to set hooks.\n"
+#endif
+   ,ucs_offsetof(ucm_global_config_t, mmap_hook_mode), UCS_CONFIG_TYPE_ENUM(ucm_mmap_hook_modes)},
 
   {"MALLOC_HOOKS", "yes",
    "Enable using glibc malloc hooks",
@@ -53,11 +68,6 @@ static ucs_config_field_t ucm_global_config_table[] = {
    "the dynamic mmap threshold.\n"
    "Note: dynamic mmap threshold is disabled when running on valgrind.",
    ucs_offsetof(ucm_global_config_t, enable_dynamic_mmap_thresh),
-   UCS_CONFIG_TYPE_BOOL},
-
-  {"ENABLE_SYSCALL", "no",
-   "Use syscalls when possible to implement the functionality of replaced libc routines",
-   ucs_offsetof(ucm_global_config_t, enable_syscall),
    UCS_CONFIG_TYPE_BOOL},
 
   {NULL}

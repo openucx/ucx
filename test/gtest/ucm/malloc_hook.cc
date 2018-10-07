@@ -29,26 +29,103 @@ extern "C" {
 #  define HAVE_MALLOC_STATES 1
 #endif /* HAVE_MALLOC_SET_STATE && HAVE_MALLOC_GET_STATE */
 
+#define EXPECT_INCREASED(_value, _prev, _size, _name)  \
+    {                                                  \
+        EXPECT_GE(_value, (_prev) + (_size)) << _name; \
+        _prev = _value;                                \
+    }
 
-class malloc_hook : public ucs::test {
+template <class T>
+class mhook_thread {
+public:
+    mhook_thread(T *test): m_test(test)
+    {
+        pthread_create(&m_thread, NULL, thread_func, reinterpret_cast<void*>(m_test));
+    }
+
+    ~mhook_thread() {
+        join();
+        delete m_test;
+    }
+
+    void join() {
+        void *retval;
+        pthread_join(m_thread, &retval);
+    }
+
 protected:
+    T         *m_test;
+    pthread_t m_thread;
+
+    static void *thread_func(void *arg) {
+        T *test = reinterpret_cast<T*>(arg);
+        test->test();
+        return NULL;
+    }
+};
+
+template <class T>
+class mmap_event {
+public:
+    mmap_event(T *test): m_test(test), m_events(0)
+    {
+    }
+
+    ~mmap_event()
+    {
+        unset();
+    }
+
+    ucs_status_t set(int events)
+    {
+        ucs_status_t status;
+
+        status = ucm_set_event_handler(events, 0, mem_event_callback,
+                                       reinterpret_cast<void*>(m_test));
+        ASSERT_UCS_OK(status);
+        m_events |= events;
+        return status;
+    }
+
+    void unset()
+    {
+        if (m_events) {
+            ucm_unset_event_handler(m_events, mem_event_callback,
+                                    reinterpret_cast<void*>(m_test));
+            m_events = 0;
+        }
+    }
+
+protected:
+    T   *m_test;
+    int m_events;
+
     static void mem_event_callback(ucm_event_type_t event_type,
                                    ucm_event_t *event,
                                    void *arg)
     {
-        malloc_hook *self = reinterpret_cast<malloc_hook*>(arg);
-        self->m_got_event = 1;
+        T *test = reinterpret_cast<T*>(arg);
+        test->mem_event(event_type, event);
+    }
+};
+
+
+class malloc_hook : public ucs::test {
+    friend class mmap_event<malloc_hook>;
+protected:
+    void mem_event(ucm_event_type_t event_type, ucm_event_t *event)
+    {
+        m_got_event = 1;
     }
 
     virtual void init() {
         ucs_status_t status;
+        mmap_event<malloc_hook> event(this);
 
         m_got_event = 0;
         ucm_malloc_state_reset(128 * 1024, 128 * 1024);
         malloc_trim(0);
-        status = ucm_set_event_handler(UCM_EVENT_VM_MAPPED,
-                                       0, mem_event_callback,
-                                       reinterpret_cast<void*>(this));
+        status = event.set(UCM_EVENT_VM_MAPPED);
         ASSERT_UCS_OK(status);
 
         for (;;) {
@@ -61,8 +138,7 @@ protected:
                 m_pts.push_back(ptr);
             }
         }
-        ucm_unset_event_handler(UCM_EVENT_VM_MAPPED, mem_event_callback,
-                                reinterpret_cast<void*>(this));
+        event.unset();
     }
 
     static int bistro_munmap_hook(void *addr, size_t length)
@@ -74,6 +150,13 @@ protected:
         return res;
     }
 
+    void skip_on_bistro() {
+        /* BISTRO is disabled under valgrind, we may run tests */
+        if ((ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO) &&
+             !RUNNING_ON_VALGRIND) {
+            UCS_TEST_SKIP_R("skipping on BISTRO hooks");
+        }
+    }
 
 public:
     static int            small_alloc_count;
@@ -89,39 +172,22 @@ volatile int malloc_hook::bistro_call_counter = 0;
 class test_thread {
 public:
     test_thread(const std::string& name, int num_threads, pthread_barrier_t *barrier,
-                malloc_hook *test) :
+                malloc_hook *test, void (test_thread::*test_func)() = &test_thread::test) :
         m_name(name), m_num_threads(num_threads), m_barrier(barrier),
-        m_map_size(0), m_unmap_size(0), m_test(test)
+        m_map_size(0), m_unmap_size(0), m_test(test), m_event(this)
     {
         pthread_mutex_init(&m_stats_lock, NULL);
-        pthread_create(&m_thread, NULL, thread_func, reinterpret_cast<void*>(this));
     }
 
     ~test_thread() {
-        join();
         pthread_mutex_destroy(&m_stats_lock);
     }
 
-    void join() {
-        void *retval;
-        pthread_join(m_thread, &retval);
-    }
+    void test();
+    void mem_event(ucm_event_type_t event_type, ucm_event_t *event);
 
 private:
     typedef std::pair<void*, void*> range;
-
-    static void *thread_func(void *arg) {
-        test_thread *self = reinterpret_cast<test_thread*>(arg);
-        self->test();
-        return NULL;
-    }
-
-    static void mem_event_callback(ucm_event_type_t event_type, ucm_event_t *event,
-                                   void *arg)
-    {
-        test_thread *self = reinterpret_cast<test_thread*>(arg);
-        self->mem_event(event_type, event);
-    }
 
     bool is_ptr_in_range(void *ptr, size_t size, const std::vector<range> &ranges) {
         for (std::vector<range>::const_iterator iter = ranges.begin(); iter != ranges.end(); ++iter) {
@@ -132,16 +198,12 @@ private:
         return false;
     }
 
-    void test();
-    void mem_event(ucm_event_type_t event_type, ucm_event_t *event);
-
     static pthread_mutex_t   lock;
     static pthread_barrier_t barrier;
 
     std::string        m_name;
     int                m_num_threads;
     pthread_barrier_t  *m_barrier;
-    pthread_t          m_thread;
 
     pthread_mutex_t    m_stats_lock;
     size_t             m_map_size;
@@ -150,6 +212,7 @@ private:
     std::vector<range> m_unmap_ranges;
 
     malloc_hook        *m_test;
+    mmap_event<test_thread> m_event;
 };
 
 pthread_mutex_t test_thread::lock = PTHREAD_MUTEX_INITIALIZER;
@@ -200,9 +263,7 @@ void test_thread::test() {
     pthread_barrier_wait(m_barrier);
 
     /* Install memory hooks */
-    result = ucm_set_event_handler(UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED,
-                                   0, mem_event_callback,
-                                   reinterpret_cast<void*>(this));
+    result = m_event.set(UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED);
     ASSERT_UCS_OK(result);
 
     /* Allocate small pointers with new heap manager */
@@ -324,24 +385,28 @@ void test_thread::test() {
     std::cout.flush();
     pthread_mutex_unlock(&lock);
 
-    ucm_unset_event_handler(UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED,
-                            mem_event_callback,
-                            reinterpret_cast<void*>(this));
+    m_event.unset();
 }
 
 UCS_TEST_F(malloc_hook, single_thread) {
+    skip_on_bistro();
+
     pthread_barrier_t barrier;
     pthread_barrier_init(&barrier, NULL, 1);
     {
-        test_thread thread("single-thread", 1, &barrier, this);
+        mhook_thread<test_thread>(new test_thread("single-thread", 1, &barrier, this));
     }
     pthread_barrier_destroy(&barrier);
 }
 
 UCS_TEST_F(malloc_hook, multi_threads) {
+    typedef mhook_thread<test_thread> thread_t;
+
     static const int num_threads = 8;
-    ucs::ptr_vector<test_thread> threads;
+    ucs::ptr_vector<thread_t> threads;
     pthread_barrier_t barrier;
+
+    skip_on_bistro();
 
     malloc_trim(0);
 
@@ -349,7 +414,7 @@ UCS_TEST_F(malloc_hook, multi_threads) {
     for (int i = 0; i < num_threads; ++i) {
         std::stringstream ss;
         ss << "thread " << i << "/" << num_threads;
-        threads.push_back(new test_thread(ss.str(), num_threads, &barrier, this));
+        threads.push_back(new thread_t(new test_thread(ss.str(), num_threads, &barrier, this)));
     }
 
     threads.clear();
@@ -392,7 +457,8 @@ public:
 
     malloc_hook_cplusplus() :
         m_mapped_size(0), m_unmapped_size(0),
-        m_dynamic_mmap_config(ucm_global_opts.enable_dynamic_mmap_thresh) {
+        m_dynamic_mmap_config(ucm_global_opts.enable_dynamic_mmap_thresh),
+        m_event(this) {
     }
 
     ~malloc_hook_cplusplus() {
@@ -401,35 +467,29 @@ public:
 
     void set() {
         ucs_status_t status;
-        status = ucm_set_event_handler(UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED,
-                                       0, mem_event_callback,
-                                       reinterpret_cast<void*>(this));
+        status = m_event.set(UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED);
         ASSERT_UCS_OK(status);
     }
 
     void unset() {
-        ucm_unset_event_handler(UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED,
-                                mem_event_callback, reinterpret_cast<void*>(this));
+        m_event.unset();
     }
 
-protected:
-    static void mem_event_callback(ucm_event_type_t event_type,
-                                   ucm_event_t *event, void *arg)
+    void mem_event(ucm_event_type_t event_type, ucm_event_t *event)
     {
-        malloc_hook_cplusplus *self =
-                        reinterpret_cast<malloc_hook_cplusplus*>(arg);
         switch (event_type) {
         case UCM_EVENT_VM_MAPPED:
-            self->m_mapped_size   += event->vm_mapped.size;
+            m_mapped_size   += event->vm_mapped.size;
             break;
         case UCM_EVENT_VM_UNMAPPED:
-            self->m_unmapped_size += event->vm_unmapped.size;
+            m_unmapped_size += event->vm_unmapped.size;
             break;
         default:
             break;
         }
     }
 
+protected:
     double measure_alloc_time(size_t size, unsigned iters)
     {
         ucs_time_t start_time = ucs_get_time();
@@ -479,6 +539,140 @@ protected:
     size_t m_mapped_size;
     size_t m_unmapped_size;
     int    m_dynamic_mmap_config;
+    mmap_event<malloc_hook_cplusplus> m_event;
+};
+
+
+class mmap_hooks {
+public:
+    mmap_hooks(const std::string& name, int num_threads, pthread_barrier_t *barrier):
+        m_num_threads(num_threads), m_mapped_size(0), m_unmapped_size(0),
+        m_name(name), m_barrier(barrier)
+    {
+    }
+
+    void mem_event(ucm_event_type_t event_type, ucm_event_t *event)
+    {
+        switch (event_type) {
+        case UCM_EVENT_VM_MAPPED:
+            m_mapped_size   += event->vm_mapped.size;
+            break;
+        case UCM_EVENT_VM_UNMAPPED:
+            m_unmapped_size += event->vm_unmapped.size;
+            break;
+        default:
+            break;
+        }
+    }
+
+    void test()
+    {
+        /*
+         * Test memory mapping functions which override an existing mapping
+         */
+        size_t size          = ucs_get_page_size() * 800;
+        size_t mapped_size   = 0;
+        size_t unmapped_size = 0;
+        void *buffer;
+        int shmid;
+        ucs_status_t status;
+        mmap_event<mmap_hooks> event(this);
+
+        pthread_barrier_wait(m_barrier);
+
+        EXPECT_EQ(0u, m_mapped_size) << m_name;
+        EXPECT_EQ(0u, m_unmapped_size) << m_name;
+
+        status = event.set(UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED);
+        ASSERT_UCS_OK(status);
+
+        /* 1. Map a large buffer */
+        {
+            buffer = mmap(NULL, size, PROT_READ|PROT_WRITE,
+                                MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+            ASSERT_NE(MAP_FAILED, buffer) << strerror(errno);
+
+            EXPECT_INCREASED(m_mapped_size, mapped_size, size, m_name);
+            EXPECT_INCREASED(m_unmapped_size, unmapped_size, 0, m_name);
+        }
+
+        /*
+         * 2. Map another buffer in the same place.
+         *    Expected behavior: unmap event on the old buffer
+         */
+        {
+            void *remap = mmap(buffer, size, PROT_READ|PROT_WRITE,
+                               MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED, -1, 0);
+            ASSERT_EQ(buffer, remap);
+
+            EXPECT_INCREASED(m_mapped_size, mapped_size, size, m_name);
+            EXPECT_INCREASED(m_unmapped_size, unmapped_size, size, m_name);
+        }
+
+        /* 3. Create a shared memory segment */
+        {
+            shmid = shmget(IPC_PRIVATE, size, IPC_CREAT | SHM_R | SHM_W);
+            ASSERT_NE(-1, shmid) << strerror(errno) << m_name;
+        }
+
+        /*
+         * 4. Attach the segment at the same buffer address.
+         *    Expected behavior: unmap event on the old buffer
+         */
+        {
+            void *shmaddr = shmat(shmid, buffer, SHM_REMAP);
+            ASSERT_EQ(buffer, shmaddr) << m_name;
+
+            EXPECT_INCREASED(m_mapped_size, mapped_size, size, m_name);
+            EXPECT_INCREASED(m_unmapped_size, unmapped_size, size, m_name);
+        }
+
+        /* 5. Detach the sysv segment */
+        {
+            shmdt(buffer);
+
+            EXPECT_INCREASED(m_unmapped_size, unmapped_size, size, m_name);
+        }
+
+        /* 6. Remove the shared memory segment */
+        {
+            int ret = shmctl(shmid, IPC_RMID, NULL);
+            ASSERT_NE(-1, ret) << strerror(errno);
+        }
+
+        /* 7. Unmap the buffer */
+        {
+            munmap(buffer, size);
+
+            EXPECT_INCREASED(m_unmapped_size, unmapped_size, size, m_name);
+        }
+
+        /* 8. sbrk call - single thread only */
+        {
+            if (!RUNNING_ON_VALGRIND && m_num_threads < 2) {
+                /* valgrind failed when sbrk is called directly,
+                 * also sbrk is not thread safe */
+
+                /* sbrk call is used to extend/cut memory heap,
+                 * don't add any evaluations between calls sbrk+/sbrk- - it
+                 * may break heap */
+                sbrk(size);
+                sbrk(-size);
+
+                EXPECT_INCREASED(m_mapped_size, mapped_size, size, m_name);
+                EXPECT_INCREASED(m_unmapped_size, unmapped_size, size, m_name);
+            }
+        }
+
+        event.unset();
+    }
+
+protected:
+    int                     m_num_threads;
+    size_t                  m_mapped_size;
+    size_t                  m_unmapped_size;
+    std::string             m_name;
+    pthread_barrier_t       *m_barrier;
 };
 
 
@@ -511,12 +705,16 @@ UCS_TEST_F(malloc_hook_cplusplus, dynamic_mmap_enable) {
     if (RUNNING_ON_VALGRIND) {
         UCS_TEST_SKIP_R("skipping on valgrind");
     }
+    skip_on_bistro();
     EXPECT_TRUE(ucm_global_opts.enable_dynamic_mmap_thresh);
     test_dynamic_mmap_thresh();
 }
 
 UCS_TEST_F(malloc_hook_cplusplus, dynamic_mmap_disable) {
+    skip_on_bistro();
+
     ucm_global_opts.enable_dynamic_mmap_thresh = 0;
+
     test_dynamic_mmap_thresh();
 }
 
@@ -530,6 +728,8 @@ UCS_TEST_F(malloc_hook_cplusplus, mallopt) {
     int trim_thresh, mmap_thresh;
     char *p;
     size_t size;
+
+    skip_on_bistro();
 
     /* This test can not be run with the other
      * tests because it assumes that malloc hooks
@@ -656,91 +856,31 @@ UCS_TEST_F(malloc_hook_cplusplus, mmap_ptrs) {
 
 }
 
-UCS_TEST_F(malloc_hook_cplusplus, remap_override) {
-
-    /*
-     * Test memory mapping functions which override an existing mapping
-     */
-
-    size_t size = ucs_get_page_size() * 800;
-    void *buffer;
-    int shmid;
-
-    set();
-
-    EXPECT_EQ(0u, m_mapped_size);
-    EXPECT_EQ(0u, m_unmapped_size);
-
-    /* 1. Map a large buffer */
+UCS_TEST_F(malloc_hook_cplusplus, remap_override_single_thread) {
+    pthread_barrier_t barrier;
+    pthread_barrier_init(&barrier, NULL, 1);
     {
-        buffer = mmap(NULL, size, PROT_READ|PROT_WRITE,
-                            MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
-        ASSERT_NE(MAP_FAILED, buffer) << strerror(errno);
+        mhook_thread<mmap_hooks>(new mmap_hooks("single-thread", 1, &barrier));
+    }
+    pthread_barrier_destroy(&barrier);
+}
 
-        EXPECT_EQ(size, m_mapped_size);
-        EXPECT_EQ(0u,   m_unmapped_size);
+UCS_TEST_F(malloc_hook_cplusplus, remap_override_multi_threads) {
+    typedef mhook_thread<mmap_hooks> thread_t;
+
+    static const int num_threads = 8;
+    ucs::ptr_vector<thread_t> threads;
+    pthread_barrier_t barrier;
+
+    pthread_barrier_init(&barrier, NULL, num_threads);
+    for (int i = 0; i < num_threads; ++i) {
+        std::stringstream ss;
+        ss << "thread " << i << "/" << num_threads;
+        threads.push_back(new thread_t(new mmap_hooks(ss.str(), num_threads, &barrier)));
     }
 
-    /*
-     * 2. Map another buffer in the same place.
-     *    Expected behavior: unmap event on the old buffer
-     */
-    {
-        m_mapped_size = m_unmapped_size = 0;
-
-        void *remap = mmap(buffer, size, PROT_READ|PROT_WRITE,
-                           MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED, -1, 0);
-        ASSERT_EQ(buffer, remap);
-
-        EXPECT_EQ(size, m_mapped_size);
-        EXPECT_EQ(size, m_unmapped_size);
-    }
-
-    /* 3. Create a shared memory segment */
-    {
-        shmid = shmget(IPC_PRIVATE, size, IPC_CREAT | SHM_R | SHM_W);
-        ASSERT_NE(-1, shmid) << strerror(errno);
-    }
-
-    /*
-     * 4. Attach the segment at the same buffer address.
-     *    Expected behavior: unmap event on the old buffer
-     */
-    {
-        m_mapped_size = m_unmapped_size = 0;
-
-        void *shmaddr = shmat(shmid, buffer, SHM_REMAP);
-        ASSERT_EQ(buffer, shmaddr);
-
-        EXPECT_EQ(size, m_mapped_size);
-        EXPECT_EQ(size, m_unmapped_size);
-    }
-
-    /* 5. Detach the sysv segment */
-    {
-        m_mapped_size = m_unmapped_size = 0;
-
-        shmdt(buffer);
-
-        EXPECT_EQ(size, m_unmapped_size);
-    }
-
-    /* 6. Remove the shared memory segment */
-    {
-        int ret = shmctl(shmid, IPC_RMID, NULL);
-        ASSERT_NE(-1, ret) << strerror(errno);
-    }
-
-    /* 7. Unmap the buffer */
-    {
-        m_mapped_size = m_unmapped_size = 0;
-
-        munmap(buffer, size);
-
-        EXPECT_EQ(size, m_unmapped_size);
-    }
-
-    unset();
+    threads.clear();
+    pthread_barrier_destroy(&barrier);
 }
 
 typedef int (munmap_f_t)(void *addr, size_t len);

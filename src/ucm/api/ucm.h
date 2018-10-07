@@ -58,6 +58,16 @@ typedef enum ucm_mem_type {
 
 
 /**
+ * @brief MMAP hook modes
+ */
+typedef enum ucm_mmap_hook_mode {
+    UCM_MMAP_HOOK_NONE,
+    UCM_MMAP_HOOK_RELOC,
+    UCM_MMAP_HOOK_BISTRO,
+    UCM_MMAP_HOOK_LAST
+} ucm_mmap_hook_mode_t;
+
+/**
  * @brief Memory event parameters and result.
  */
 typedef union ucm_event {
@@ -171,16 +181,14 @@ typedef union ucm_event {
  * Can be safely modified before using UCM functions.
  */
 typedef struct ucm_global_config {
-    ucs_log_level_t log_level;                   /* Logging level */
-    int             enable_events;               /* Enable memory events */
-    int             enable_mmap_reloc;           /* Enable installing mmap relocations */
-    int             enable_malloc_hooks;         /* Enable installing malloc hooks */
-    int             enable_malloc_reloc;         /* Enable installing malloc relocations */
-    int             enable_cuda_reloc;           /* Enable installing CUDA relocations */
-    int             enable_dynamic_mmap_thresh;  /* Enable adaptive mmap threshold */
-    size_t          alloc_alignment;             /* Alignment for memory allocations */
-    int             enable_syscall;              /* Use syscalls when possible to implement
-                                                    the functionality of replaced libc routines */
+    ucs_log_level_t      log_level;                   /* Logging level */
+    int                  enable_events;               /* Enable memory events */
+    ucm_mmap_hook_mode_t mmap_hook_mode;              /* MMAP hook mode */
+    int                  enable_malloc_hooks;         /* Enable installing malloc hooks */
+    int                  enable_malloc_reloc;         /* Enable installing malloc relocations */
+    int                  enable_cuda_reloc;           /* Enable installing CUDA relocations */
+    int                  enable_dynamic_mmap_thresh;  /* Enable adaptive mmap threshold */
+    size_t               alloc_alignment;             /* Alignment for memory allocations */
 } ucm_global_config_t;
 
 
@@ -398,6 +406,13 @@ int ucm_shmdt(const void *shmaddr);
  * associated with it.
  */
 void *ucm_sbrk(intptr_t increment);
+
+
+/**
+ * @brief Call the original implementation of @ref brk and all handlers
+ * associated with it.
+ */
+int ucm_brk(void *addr);
 
 
 /**

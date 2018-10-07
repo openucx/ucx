@@ -16,28 +16,48 @@
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/sys.h>
+#include <ucm/bistro/bistro.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/checker.h>
+#include <ucs/debug/assert.h>
 
 #include <sys/mman.h>
 #include <sys/shm.h>
 #include <unistd.h>
 #include <pthread.h>
 
+#define UCM_IS_HOOK_ENABLED(_entry) \
+    ((_entry)->hook_type & UCS_BIT(ucm_mmap_hook_mode()))
+
+#define UCM_HOOK_STR \
+    ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) ?  "reloc" : "bistro")
+
+extern const char *ucm_mmap_hook_modes[];
+
+typedef enum ucm_mmap_hook_type {
+    UCM_HOOK_RELOC  = UCS_BIT(UCM_MMAP_HOOK_RELOC),
+    UCM_HOOK_BISTRO = UCS_BIT(UCM_MMAP_HOOK_BISTRO),
+    UCM_HOOK_BOTH   = UCM_HOOK_RELOC | UCM_HOOK_BISTRO
+} ucm_mmap_hook_type_t;
 
 typedef struct ucm_mmap_func {
-    ucm_reloc_patch_t patch;
-    ucm_event_type_t  event_type;
-    ucm_event_type_t  deps;
+    ucm_reloc_patch_t    patch;
+    ucm_event_type_t     event_type;
+    ucm_event_type_t     deps;
+    ucm_mmap_hook_type_t hook_type;
 } ucm_mmap_func_t;
 
 static ucm_mmap_func_t ucm_mmap_funcs[] = {
-    { {"mmap",    ucm_override_mmap},    UCM_EVENT_MMAP,    0},
-    { {"munmap",  ucm_override_munmap},  UCM_EVENT_MUNMAP,  0},
-    { {"mremap",  ucm_override_mremap},  UCM_EVENT_MREMAP,  0},
-    { {"shmat",   ucm_override_shmat},   UCM_EVENT_SHMAT,   0},
-    { {"shmdt",   ucm_override_shmdt},   UCM_EVENT_SHMDT,   UCM_EVENT_SHMAT},
-    { {"sbrk",    ucm_override_sbrk},    UCM_EVENT_SBRK,    0},
-    { {"madvise", ucm_override_madvise}, UCM_EVENT_MADVISE, 0},
+    { {"mmap",    ucm_override_mmap},    UCM_EVENT_MMAP,    0, UCM_HOOK_BOTH},
+    { {"munmap",  ucm_override_munmap},  UCM_EVENT_MUNMAP,  0, UCM_HOOK_BOTH},
+    { {"mremap",  ucm_override_mremap},  UCM_EVENT_MREMAP,  0, UCM_HOOK_BOTH},
+    { {"shmat",   ucm_override_shmat},   UCM_EVENT_SHMAT,   0, UCM_HOOK_BOTH},
+    { {"shmdt",   ucm_override_shmdt},   UCM_EVENT_SHMDT,   UCM_EVENT_SHMAT, UCM_HOOK_BOTH},
+    { {"sbrk",    ucm_override_sbrk},    UCM_EVENT_SBRK,    0, UCM_HOOK_RELOC},
+#if UCM_BISTRO_HOOKS
+    { {"brk",     ucm_override_brk},     UCM_EVENT_SBRK,    0, UCM_HOOK_BISTRO},
+#endif
+    { {"madvise", ucm_override_madvise}, UCM_EVENT_MADVISE, 0, UCM_HOOK_BOTH},
     { {NULL, NULL}, 0}
 };
 
@@ -49,13 +69,45 @@ static void ucm_mmap_event_test_callback(ucm_event_type_t event_type,
     *out_events |= event_type;
 }
 
+void ucm_fire_mmap_events(int events)
+{
+    void *p;
+
+    if (events & (UCM_EVENT_MMAP|UCM_EVENT_MUNMAP|UCM_EVENT_MREMAP|
+                  UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
+        p = mmap(NULL, 0, 0, 0, -1 ,0);
+        p = mremap(p, 0, 0, 0);
+        munmap(p, 0);
+    }
+
+    if (events & (UCM_EVENT_SHMAT|UCM_EVENT_SHMDT|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
+        p = shmat(0, NULL, 0);
+        shmdt(p);
+    }
+
+    if (events & (UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
+        (void)sbrk(ucm_get_page_size());
+        (void)sbrk(-ucm_get_page_size());
+    }
+
+    if (events & UCM_EVENT_MADVISE) {
+        p = mmap(NULL, ucm_get_page_size(), PROT_READ|PROT_WRITE,
+                 MAP_PRIVATE|MAP_ANON, -1, 0);
+        if (p != MAP_FAILED) {
+            madvise(p, ucm_get_page_size(), MADV_NORMAL);
+            munmap(p, ucm_get_page_size());
+        } else {
+            ucm_debug("mmap failed: %m");
+        }
+    }
+}
+
 /* Called with lock held */
 static ucs_status_t ucm_mmap_test(int events)
 {
     static int installed_events = 0;
     ucm_event_handler_t handler;
     int out_events;
-    void *p;
 
     if (ucs_test_all_flags(installed_events, events)) {
         /* All requested events are already installed */
@@ -73,31 +125,7 @@ static ucs_status_t ucm_mmap_test(int events)
 
     ucm_event_handler_add(&handler);
 
-    if (events & (UCM_EVENT_MMAP|UCM_EVENT_MUNMAP|UCM_EVENT_MREMAP)) {
-        p = mmap(NULL, 0, 0, 0, -1 ,0);
-        p = mremap(p, 0, 0, 0);
-        munmap(p, 0);
-    }
-
-    if (events & (UCM_EVENT_SHMAT|UCM_EVENT_SHMDT)) {
-        p = shmat(0, NULL, 0);
-        shmdt(p);
-    }
-
-    if (events & UCM_EVENT_SBRK) {
-        (void)sbrk(0);
-    }
-
-    if (events & UCM_EVENT_MADVISE) {
-        p = mmap(NULL, ucm_get_page_size(), PROT_READ|PROT_WRITE,
-                 MAP_PRIVATE|MAP_ANON, -1, 0);
-        if (p != MAP_FAILED) {
-            madvise(p, ucm_get_page_size(), MADV_NORMAL);
-            munmap(p, ucm_get_page_size());
-        } else {
-            ucm_debug("mmap failed: %m");
-        }
-    }
+    ucm_fire_mmap_events(events);
 
     ucm_event_handler_remove(&handler);
 
@@ -121,8 +149,8 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
     ucm_mmap_func_t *entry;
     ucs_status_t status;
 
-    if (!ucm_global_opts.enable_mmap_reloc) {
-        ucm_debug("installing mmap relocations is disabled by configuration");
+    if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_NONE) {
+        ucm_debug("installing mmap hooks is disabled by configuration");
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -137,17 +165,24 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
             continue;
         }
 
-        ucm_debug("mmap: installing relocation table entry for %s = %p for event 0x%x",
-                  entry->patch.symbol, entry->patch.value, entry->event_type);
+        if (UCM_IS_HOOK_ENABLED(entry)) {
+            ucm_debug("mmap: installing %s hook for %s = %p for event 0x%x", UCM_HOOK_STR,
+                      entry->patch.symbol, entry->patch.value, entry->event_type);
 
-        status = ucm_reloc_modify(&entry->patch);
-        if (status != UCS_OK) {
-            ucm_warn("failed to install relocation table entry for '%s'",
-                     entry->patch.symbol);
-            return status;
+            if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) {
+                status = ucm_reloc_modify(&entry->patch);
+            } else {
+                ucs_assert(ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO);
+                status = ucm_bistro_patch(entry->patch.symbol, entry->patch.value, NULL);
+            }
+            if (status != UCS_OK) {
+                ucm_warn("failed to install %s hook for '%s'",
+                         UCM_HOOK_STR, entry->patch.symbol);
+                return status;
+            }
+
+            installed_events |= entry->event_type;
         }
-
-        installed_events |= entry->event_type;
     }
 
     return UCS_OK;

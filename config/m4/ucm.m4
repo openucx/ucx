@@ -59,19 +59,42 @@ AC_CHECK_DECLS([MADV_FREE,
                [#include <sys/mman.h>])
 
 
+# BISTRO hooks infrastructure
 #
 # SYS_xxx macro
 #
+mmap_hooks_happy=yes
 AC_CHECK_DECLS([SYS_mmap,
                 SYS_munmap,
                 SYS_mremap,
-                SYS_shmat,
-                SYS_shmdt,
                 SYS_brk,
                 SYS_madvise],
                [],
-               [],
+               [mmap_hooks_happy=no], dnl mmap syscalls are not defined
                [#include <sys/syscall.h>])
+
+shm_hooks_happy=yes
+AC_CHECK_DECLS([SYS_shmat,
+                SYS_shmdt],
+               [],
+               [shm_hooks_happy=no],
+               [#include <sys/syscall.h>])
+
+ipc_hooks_happy=yes
+AC_CHECK_DECLS([SYS_ipc],
+               [],
+               [ipc_hooks_happy=no],
+               [#include <sys/syscall.h>])
+
+AS_IF([test "x$mmap_hooks_happy" == "xyes"],
+      AS_IF([test "x$ipc_hooks_happy" == "xyes" -o "x$shm_hooks_happy" == "xyes"],
+            [bistro_hooks_happy=yes]))
+
+AS_IF([test "x$bistro_hooks_happy" == "xyes"],
+      [AC_DEFINE([UCM_BISTRO_HOOKS], [1], [Enable BISTRO hooks])],
+      [AC_DEFINE([UCM_BISTRO_HOOKS], [0], [Enable BISTRO hooks])
+       AC_MSG_WARN([Some of required syscalls could not be found])
+       AC_MSG_WARN([BISTRO mmap hook mode is disabled])])
 
 AC_CHECK_FUNCS([__curbrk], [], [], [])
 
