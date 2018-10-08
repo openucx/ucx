@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -16,6 +16,7 @@
 #include <sstream>
 #include <stdint.h>
 #include <dlfcn.h>
+#include <libgen.h>
 
 extern "C" {
 #include <ucs/time/time.h>
@@ -938,4 +939,74 @@ UCS_TEST_F(malloc_hook, bistro_patch) {
 #if !defined (__powerpc64__)
     EXPECT_NE(patched, origin);
 #endif
+}
+
+/* test for mmap events are fired from non-direct load modules
+ * we are trying to load lib1, from lib1 load lib2, and
+ * fire mmap event from lib2 */
+UCS_TEST_F(malloc_hook, dlopen) {
+#ifndef GTEST_UCM_HOOK_LIB_DIR
+#  error "Missing build configuration"
+#else
+    typedef void (fire_mmap_f)(void);
+    typedef void* (load_lib_f)(const char *path);
+
+    const char *libdlopen_load = "/libdlopen_test_do_load.so";
+    const char *libdlopen_mmap = "/libdlopen_test_do_mmap.so";
+    const char *load_lib       = "load_lib";
+    const char *fire_mmap      = "fire_mmap";
+
+    std::string lib_load;
+    std::string lib_mmap;
+    void *lib;
+    void *lib2;
+    load_lib_f *load;
+    fire_mmap_f *fire;
+    ucs_status_t status;
+    mmap_event<malloc_hook> event(this);
+
+    status = event.set(UCM_EVENT_VM_MAPPED);
+    ASSERT_UCS_OK(status);
+
+    lib_load = std::string(GTEST_UCM_HOOK_LIB_DIR) + libdlopen_load;
+    lib_mmap = std::string(GTEST_UCM_HOOK_LIB_DIR) + libdlopen_mmap;
+
+    UCS_TEST_MESSAGE << "Loading " << lib_load;
+    UCS_TEST_MESSAGE << "Loading " << lib_mmap;
+
+    lib = dlopen(lib_load.c_str(), RTLD_NOW);
+    EXPECT_NE((uintptr_t)lib, NULL);
+    if (!lib) {
+        goto no_lib;
+    }
+
+    load = (load_lib_f*)dlsym(lib, load_lib);
+    EXPECT_NE((uintptr_t)load, NULL);
+    if (!load) {
+        goto no_load;
+    }
+
+    lib2 = load(lib_mmap.c_str());
+    EXPECT_NE((uintptr_t)lib2, NULL);
+    if (!lib2) {
+        goto no_load;
+    }
+
+    fire = (fire_mmap_f*)dlsym(lib2, fire_mmap);
+    EXPECT_NE((uintptr_t)fire, NULL);
+    if (!fire) {
+        goto no_fire;
+    }
+
+    m_got_event = 0;
+    fire();
+    EXPECT_GT(m_got_event, 0);
+
+no_fire:
+    dlclose(lib2);
+no_load:
+    dlclose(lib);
+no_lib:
+    event.unset();
+#endif /* GTEST_UCM_HOOK_LIB_DIR */
 }
