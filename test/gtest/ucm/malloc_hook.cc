@@ -946,7 +946,7 @@ UCS_TEST_F(malloc_hook, bistro_patch) {
  * fire mmap event from lib2 */
 UCS_TEST_F(malloc_hook, dlopen) {
 #ifndef GTEST_UCM_HOOK_LIB_DIR
-    UCS_TEST_SKIP_R("missing build configuration");
+#  error "Missing build configuration"
 #else
     typedef void (fire_mmap_f)(void);
     typedef void* (load_lib_f)(const char *path);
@@ -963,17 +963,16 @@ UCS_TEST_F(malloc_hook, dlopen) {
     load_lib_f *load;
     fire_mmap_f *fire;
     ucs_status_t status;
+    mmap_event<malloc_hook> event(this);
 
-    status = ucm_set_event_handler(UCM_EVENT_VM_MAPPED,
-                                   0, mem_event_callback,
-                                   reinterpret_cast<void*>(this));
+    status = event.set(UCM_EVENT_VM_MAPPED);
     ASSERT_UCS_OK(status);
 
     lib_load = std::string(GTEST_UCM_HOOK_LIB_DIR) + libdlopen_load;
     lib_mmap = std::string(GTEST_UCM_HOOK_LIB_DIR) + libdlopen_mmap;
 
-    UCS_TEST_MESSAGE << lib_load;
-    UCS_TEST_MESSAGE << lib_mmap;
+    UCS_TEST_MESSAGE << "Loading " << lib_load;
+    UCS_TEST_MESSAGE << "Loading " << lib_mmap;
 
     lib = dlopen(lib_load.c_str(), RTLD_NOW);
     EXPECT_NE((uintptr_t)lib, NULL);
@@ -1008,8 +1007,6 @@ no_fire:
 no_load:
     dlclose(lib);
 no_lib:
-    ucm_unset_event_handler(UCM_EVENT_VM_MAPPED, mem_event_callback,
-                            reinterpret_cast<void*>(this));
-    return;
+    event.unset();
 #endif /* GTEST_UCM_HOOK_LIB_DIR */
 }
