@@ -407,7 +407,7 @@ public:
 
 
 UCS_TEST_P(uct_p2p_am_test, am_short) {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
+    check_caps(UCT_IFACE_FLAG_AM_SHORT, UCT_IFACE_FLAG_AM_DUP);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
                     sizeof(uint64_t),
                     sender().iface_attr().cap.am.max_short,
@@ -415,7 +415,7 @@ UCS_TEST_P(uct_p2p_am_test, am_short) {
 }
 
 UCS_TEST_P(uct_p2p_am_test, am_bcopy) {
-    check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    check_caps(UCT_IFACE_FLAG_AM_BCOPY, UCT_IFACE_FLAG_AM_DUP);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
                     0ul,
                     sender().iface_attr().cap.am.max_bcopy,
@@ -432,7 +432,7 @@ UCS_TEST_P(uct_p2p_am_test, am_short_keep_data) {
 }
 
 UCS_TEST_P(uct_p2p_am_test, am_bcopy_keep_data) {
-    check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    check_caps(UCT_IFACE_FLAG_AM_BCOPY, UCT_IFACE_FLAG_AM_DUP);
     set_keep_data(true);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
                     sizeof(uint64_t),
@@ -441,7 +441,7 @@ UCS_TEST_P(uct_p2p_am_test, am_bcopy_keep_data) {
 }
 
 UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
-    check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
+    check_caps(UCT_IFACE_FLAG_AM_ZCOPY, UCT_IFACE_FLAG_AM_DUP);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_zcopy),
                     0ul,
                     sender().iface_attr().cap.am.max_zcopy,
