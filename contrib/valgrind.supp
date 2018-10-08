@@ -107,6 +107,13 @@
     fun:ibv_exp_free_dm
 }
 {
+    ibv_exp_cmd_free_dm
+    Memcheck:Param
+    write(buf)
+    ...
+    fun:ibv_exp_cmd_free_dm
+}
+{
    res_domain_leak
    Memcheck:Leak
    ...
