@@ -547,7 +547,7 @@ class mmap_hooks {
 public:
     mmap_hooks(const std::string& name, int num_threads, pthread_barrier_t *barrier):
         m_num_threads(num_threads), m_mapped_size(0), m_unmapped_size(0),
-        m_name(name), m_barrier(barrier)
+        m_name(name), m_barrier(barrier), m_event(this)
     {
     }
 
@@ -576,15 +576,14 @@ public:
         void *buffer;
         int shmid;
         ucs_status_t status;
-        mmap_event<mmap_hooks> event(this);
-
-        pthread_barrier_wait(m_barrier);
 
         EXPECT_EQ(0u, m_mapped_size) << m_name;
         EXPECT_EQ(0u, m_unmapped_size) << m_name;
 
-        status = event.set(UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED);
+        status = m_event.set(UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED);
         ASSERT_UCS_OK(status);
+
+        pthread_barrier_wait(m_barrier);
 
         /* 1. Map a large buffer */
         {
@@ -663,8 +662,6 @@ public:
                 EXPECT_INCREASED(m_unmapped_size, unmapped_size, size, m_name);
             }
         }
-
-        event.unset();
     }
 
 protected:
@@ -673,6 +670,7 @@ protected:
     size_t                  m_unmapped_size;
     std::string             m_name;
     pthread_barrier_t       *m_barrier;
+    mmap_event<mmap_hooks>  m_event;
 };
 
 
