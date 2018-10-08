@@ -87,30 +87,38 @@ ucp_stream_rdesc_get(ucp_ep_ext_proto_t *ep_ext)
     return rdesc;
 }
 
-UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb, (ep, length),
-                 ucp_ep_h ep, size_t *length)
+static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
+ucp_stream_recv_data_nb_nolock(ucp_ep_h ep, size_t *length)
 {
     ucp_ep_ext_proto_t   *ep_ext = ucp_ep_ext_proto(ep);
     ucp_recv_desc_t      *rdesc;
     ucp_stream_am_data_t *am_data;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_STREAM,
-                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
-
     if (ucs_unlikely(!ucp_stream_ep_has_data(ep_ext))) {
-        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
         return UCS_STATUS_PTR(UCS_OK);
     }
 
     rdesc = ucp_stream_rdesc_dequeue(ep_ext);
 
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
-
     *length         = rdesc->length;
     am_data         = ucp_stream_rdesc_am_data(rdesc);
     am_data->rdesc  = rdesc;
     return am_data + 1;
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_data_nb, (ep, length),
+                 ucp_ep_h ep, size_t *length)
+{
+    ucs_status_ptr_t status_ptr;
+
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_STREAM,
+                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+    status_ptr = ucp_stream_recv_data_nb_nolock(ep, length);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+
+    return status_ptr;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -420,9 +428,13 @@ void ucp_stream_ep_cleanup(ucp_ep_h ep)
     void *data;
 
     if (ep->worker->context->config.features & UCP_FEATURE_STREAM) {
-        while ((data = ucp_stream_recv_data_nb(ep, &length)) != NULL) {
+        while ((data = ucp_stream_recv_data_nb_nolock(ep, &length)) != NULL) {
             ucs_assert_always(!UCS_PTR_IS_ERR(data));
             ucp_stream_data_release(ep, data);
+        }
+
+        if (ucp_stream_ep_is_queued(ucp_ep_ext_proto(ep))) {
+            ucp_stream_ep_dequeue(ucp_ep_ext_proto(ep));
         }
     }
 }

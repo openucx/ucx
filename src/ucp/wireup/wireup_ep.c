@@ -472,9 +472,9 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
 }
 
 ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name,
-                                                 void *priv_data)
+                                                void *priv_data)
 {
-    ucp_wireup_sockaddr_priv_t *conn_priv = priv_data;
+    ucp_wireup_client_data_t *client_data = priv_data;
     ucp_wireup_ep_t *wireup_ep            = arg;
     ucp_ep_h ucp_ep                       = wireup_ep->super.ucp_ep;
     ucp_rsc_index_t sockaddr_rsc          = wireup_ep->sockaddr_rsc_index;
@@ -493,11 +493,11 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
         goto err;
     }
 
-    conn_priv_len = sizeof(*conn_priv) + address_length;
+    conn_priv_len = sizeof(*client_data) + address_length;
 
-    /* pack private data */
-    conn_priv->err_mode = ucp_ep_config(ucp_ep)->key.err_mode;
-    conn_priv->ep_ptr   = (uintptr_t)ucp_ep;
+    /* pack client data */
+    client_data->err_mode = ucp_ep_config(ucp_ep)->key.err_mode;
+    client_data->ep_ptr   = (uintptr_t)ucp_ep;
 
     wiface = &worker->ifaces[sockaddr_rsc];
 
@@ -512,7 +512,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
             goto err_free_address;
         }
 
-        conn_priv_len = sizeof(*conn_priv) + address_length;
+        conn_priv_len = sizeof(*client_data) + address_length;
 
         /* check the private data length limitation again, now with partial
          * resources packed (and not the entire worker address) */
@@ -530,8 +530,8 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
             goto err_free_address;
         }
 
-        conn_priv->is_full_addr = 0;
-        memcpy(conn_priv + 1, rsc_address, address_length);
+        client_data->is_full_addr = 0;
+        memcpy(client_data + 1, rsc_address, address_length);
         ucp_ep->flags |= UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR;
 
         ucs_free(rsc_address);
@@ -545,8 +545,8 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
                   address_length, conn_priv_len);
 
     } else {
-        conn_priv->is_full_addr = 1;
-        memcpy(conn_priv + 1, worker_address, address_length);
+        client_data->is_full_addr = 1;
+        memcpy(client_data + 1, worker_address, address_length);
     }
 
     ucp_worker_release_address(worker, worker_address);

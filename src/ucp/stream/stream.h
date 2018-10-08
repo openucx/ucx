@@ -8,6 +8,7 @@
 #define UCP_STREAM_H_
 
 #include <ucp/core/ucp_ep.h>
+#include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_worker.h>
 
 
