@@ -291,9 +291,10 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
         if (!(ep->flags & UCP_EP_FLAG_LISTENER) &&
             ucp_ep_config(ep)->p2p_lanes) {
+            /* Reset flush state only if it's not a client-server wireup on
+             * server side with long address exchange when listener (united with
+             * flush state) should be valid until user's callback invoking */
             ucp_ep_flush_state_reset(ep);
-        } else {
-            /* reset flush state after user's listener callback is called */
         }
         ep_init_flags |= UCP_EP_CREATE_AM_LANE;
     } else {

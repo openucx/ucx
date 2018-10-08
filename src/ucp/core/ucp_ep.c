@@ -470,11 +470,10 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
 
 out_ep_destroy:
     ucp_ep_destroy_internal(ep);
-
 out:
     if (status == UCS_OK) {
-        uct_iface_accept(conn_request->listener->wiface.iface,
-                         conn_request->uct_req);
+        status = uct_iface_accept(conn_request->listener->wiface.iface,
+                                  conn_request->uct_req);
     } else {
         uct_iface_reject(conn_request->listener->wiface.iface,
                          conn_request->uct_req);
