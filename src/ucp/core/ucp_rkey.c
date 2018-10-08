@@ -337,6 +337,7 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
     ucp_lane_index_t lane;
     ucp_md_map_t dst_md_mask;
     ucp_md_index_t md_index;
+    uct_md_attr_t *md_attr;
     uint8_t rkey_index;
     int prio;
 
@@ -349,8 +350,12 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
         }
 
         md_index = config->md_index[lane];
+        md_attr  = &context->tl_mds[md_index].attr;
+
         if ((md_index != UCP_NULL_RESOURCE) &&
-            (!(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY)))
+            (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY)) &&
+            (!(context->num_mem_type_mds && UCP_MEM_IS_HOST(md_attr->cap.mem_type))))
+            /* HOST mem type lane which does not need rkey is ignored when mem types are active */
         {
             /* Lane does not need rkey, can use the lane with invalid rkey  */
             *uct_rkey_p = UCT_INVALID_RKEY;
@@ -358,7 +363,7 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
         }
 
         if ((md_index != UCP_NULL_RESOURCE) &&
-            (!(context->tl_mds[md_index].attr.cap.reg_mem_types & UCS_BIT(mem_type)))) {
+            (!(md_attr->cap.reg_mem_types & UCS_BIT(mem_type)))) {
             continue;
         }
 
