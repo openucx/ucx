@@ -87,7 +87,7 @@ public:
         ucs_log_push_handler(detect_error_logger);
     }
 
-    void get_listen_addr(struct sockaddr_in *listen_addr) throw(ucs::test_skip_exception) {
+    void get_listen_addr(struct sockaddr_in *listen_addr) {
         struct ifaddrs* ifaddrs;
         int ret = getifaddrs(&ifaddrs);
         ASSERT_EQ(ret, 0);
@@ -116,7 +116,7 @@ public:
     }
 
     void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type,
-                        const struct sockaddr* addr) throw(ucs::test_skip_exception)
+                        const struct sockaddr* addr)
     {
         ucs_status_t status = receiver().listen(cb_type, addr, sizeof(*addr));
         if (status == UCS_ERR_UNREACHABLE) {
@@ -198,7 +198,7 @@ public:
     }
 
     void send_recv(entity& from, entity& to, send_recv_type_t send_recv_type,
-                   bool wakeup) throw(ucs::test_skip_exception)
+                   bool wakeup)
     {
         const uint64_t send_data = ucs_generate_uuid(0);
         void *send_req = NULL;
@@ -333,7 +333,7 @@ public:
         return ep_params;
     }
 
-    void client_ep_connect(struct sockaddr *connect_addr) throw(ucs::test_skip_exception)
+    void client_ep_connect(struct sockaddr *connect_addr)
     {
         ucp_ep_params_t ep_params = get_ep_params();
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
@@ -344,7 +344,7 @@ public:
         sender().connect(&receiver(), ep_params);
     }
 
-    void connect_and_send_recv(struct sockaddr *connect_addr, bool wakeup) throw(ucs::test_skip_exception)
+    void connect_and_send_recv(struct sockaddr *connect_addr, bool wakeup)
     {
         {
             detect_error();
@@ -375,7 +375,7 @@ public:
     }
 
     void listen_and_communicate(ucp_test_base::entity::listen_cb_type_t cb_type,
-                                bool wakeup) throw(ucs::test_skip_exception)
+                                bool wakeup)
     {
         struct sockaddr_in connect_addr;
         get_listen_addr(&connect_addr);
@@ -390,7 +390,7 @@ public:
     }
 
     void listen_and_reject(ucp_test_base::entity::listen_cb_type_t cb_type,
-                           bool wakeup) throw(ucs::test_skip_exception)
+                           bool wakeup)
     {
         struct sockaddr_in connect_addr;
         get_listen_addr(&connect_addr);

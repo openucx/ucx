@@ -60,7 +60,7 @@ public:
         ~entity();
 
         void connect(const entity* other, const ucp_ep_params_t& ep_params,
-                     int ep_idx = 0, int do_set_ep = 1) throw(ucs::test_skip_exception);
+                     int ep_idx = 0, int do_set_ep = 1);
 
         ucp_ep_h accept(ucp_worker_h worker, ucp_conn_request_h conn_request);
 
