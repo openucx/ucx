@@ -359,6 +359,35 @@ enum uct_cb_flags {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Pending request flags.
+ *
+ * List of flags for a pending request @ref uct_pending_req::flags.
+ * A pending request must have either the SYNC or ASYNC flag set.
+ */
+enum uct_pending_req_flags {
+    UCT_PENDING_REQ_FLAG_SYNC  = UCS_BIT(1), /**< Request is always progressed
+                                                  from the context (thread,
+                                                  process) that called @ref
+                                                  uct_iface_progress. */
+    UCT_PENDING_REQ_FLAG_ASYNC = UCS_BIT(2)  /**< Request may be progressed from
+                                                  any context. For example, it
+                                                  may be called from a transport
+                                                  async progress thread. To
+                                                  guarantee async progress, the
+                                                  interface must have the @ref
+                                                  UCT_IFACE_FLAG_CB_ASYNC flag
+                                                  set. If async request is added
+                                                  to pending on an interface
+                                                  which only supports sync
+                                                  callback (i.e., only the @ref
+                                                  UCT_IFACE_FLAG_CB_SYNC flag is
+                                                  set), it will behave exactly
+                                                  like a sync request.  */
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Mode in which to open the interface.
  */
 enum uct_iface_open_mode {
@@ -1442,12 +1471,12 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
 
 /**
  * @ingroup UCT_MD
- * @brief Give advice about the use of memory 
+ * @brief Give advice about the use of memory
  *
  * This routine advises the UCT about how to handle memory range beginning at
  * address and size of length bytes. This call does not influence the semantics
- * of the application, but may influence its performance. The advice may be 
- * ignored. 
+ * of the application, but may influence its performance. The advice may be
+ * ignored.
  *
  * @param [in]     md          Memory domain memory was allocated or registered on.
  * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc
@@ -2022,15 +2051,19 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t o
  *                    the "func" field.
  *                    After passed to the function, the request is owned by UCT,
  *                    until the callback is called and returns UCS_OK.
+ * @param [in]  flags Pending request flags as defined in @ref
+ *                    uct_pending_req_flags.
  *
  * @return UCS_OK       - request added to pending queue
  *         UCS_ERR_BUSY - request was not added to pending queue, because send
  *                        resources are available now. The user is advised to
  *                        retry.
  */
-UCT_INLINE_API ucs_status_t uct_ep_pending_add(uct_ep_h ep, uct_pending_req_t *req)
+UCT_INLINE_API ucs_status_t uct_ep_pending_add(uct_ep_h ep,
+                                               uct_pending_req_t *req,
+                                               unsigned flags)
 {
-    return ep->iface->ops.ep_pending_add(ep, req);
+    return ep->iface->ops.ep_pending_add(ep, req, flags);
 }
 
 

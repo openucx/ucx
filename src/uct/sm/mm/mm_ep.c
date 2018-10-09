@@ -330,7 +330,8 @@ static inline int uct_mm_ep_has_tx_resources(uct_mm_ep_t *ep)
                                      iface->config.fifo_size);
 }
 
-ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
+ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
+                                   unsigned flags)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
@@ -341,11 +342,14 @@ ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
         return UCS_ERR_BUSY;
     }
 
-    UCS_STATIC_ASSERT(sizeof(ucs_arbiter_elem_t) <= UCT_PENDING_REQ_PRIV_LEN);
+    UCS_STATIC_ASSERT(sizeof(uct_pending_req_priv_t) <=
+                      UCT_PENDING_REQ_PRIV_LEN);
 
-    ucs_arbiter_elem_init((ucs_arbiter_elem_t *)n->priv);
+    uct_pending_req_set_flags(n, flags);
+    ucs_arbiter_elem_init(&uct_pending_req_priv(n)->arbiter);
     /* add the request to the ep's arbiter_group (pending queue) */
-    ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*) n->priv);
+    ucs_arbiter_group_push_elem(&ep->arb_group,
+                                &uct_pending_req_priv(n)->arbiter);
     /* add the ep's group to the arbiter */
     ucs_arbiter_group_schedule(&iface->arbiter, &ep->arb_group);
 

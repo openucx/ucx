@@ -164,7 +164,7 @@ ucp_rma_nonblocking(ucp_ep_h ep, const void *buffer, size_t length,
         return status;
     }
 
-    return ucp_request_send(req);
+    return ucp_request_send(req, UCT_PENDING_REQ_FLAG_SYNC);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t

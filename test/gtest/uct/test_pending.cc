@@ -197,7 +197,8 @@ UCS_TEST_P(test_uct_pending, pending_op)
 
                 pending_send_request_t *req = pending_alloc(send_data);
 
-                status = uct_ep_pending_add(m_e1->ep(0), &req->uct);
+                status = uct_ep_pending_add(m_e1->ep(0), &req->uct,
+                                            UCT_PENDING_REQ_FLAG_SYNC);
                 if (status != UCS_OK) {
                     /* the request wasn't added to the pending data structure
                      * since resources became available. retry sending this message */
@@ -247,7 +248,8 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
 
             pending_send_request_t *req = pending_alloc(send_data);
 
-            status_pend = uct_ep_pending_add(m_e1->ep(0), &req->uct);
+            status_pend = uct_ep_pending_add(m_e1->ep(0), &req->uct,
+                                             UCT_PENDING_REQ_FLAG_SYNC);
             if (status_pend == UCS_ERR_BUSY) {
                 pending_delete(req);
             } else {
@@ -321,7 +323,8 @@ UCS_TEST_P(test_uct_pending, pending_async)
 
     EXPECT_TRUE(packed_len == UCS_ERR_NO_RESOURCE);
 
-    status = uct_ep_pending_add(m_e1->ep(0), &req->uct);
+    status = uct_ep_pending_add(m_e1->ep(0), &req->uct,
+                                UCT_PENDING_REQ_FLAG_SYNC);
     EXPECT_UCS_OK(status);
     n_pending++;
 
@@ -388,7 +391,8 @@ UCS_TEST_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug)
             pending_send_request_t *req = pending_alloc(i);
 
             req->uct.func = pending_send_op_ok;
-            status = uct_ep_pending_add(m_e1->ep(i), &req->uct);
+            status = uct_ep_pending_add(m_e1->ep(i), &req->uct,
+                                        UCT_PENDING_REQ_FLAG_SYNC);
             EXPECT_UCS_OK(status);
             n_pending++;
             /* coverity[leaked_storage] */
@@ -444,7 +448,8 @@ UCS_TEST_P(test_uct_pending, pending_fairness)
                                              &send_data, sizeof(send_data));
                     if (status == UCS_ERR_NO_RESOURCE) {
                         /* schedule pending */
-                        status = uct_ep_pending_add(m_e1->ep(i), &reqs[i]->uct);
+                        status = uct_ep_pending_add(m_e1->ep(i), &reqs[i]->uct,
+                                                    UCT_PENDING_REQ_FLAG_SYNC);
                         if (status == UCS_ERR_BUSY) {
                             continue; /* retry */
                         }

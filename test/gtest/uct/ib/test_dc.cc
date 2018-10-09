@@ -303,8 +303,9 @@ UCS_TEST_P(test_dc, dcs_ep_flush_pending) {
     /* put flush op on pending */
     preq.is_done = 0;
     preq.e = m_e1;
-    preq.uct_req.func = uct_pending_flush;
-    status = uct_ep_pending_add(m_e1->ep(0), &preq.uct_req);
+    preq.uct_req.func  = uct_pending_flush;
+    status = uct_ep_pending_add(m_e1->ep(0), &preq.uct_req,
+                                UCT_PENDING_REQ_FLAG_SYNC);
     EXPECT_UCS_OK(status);
 
     /* progress till ep is flushed */
@@ -345,9 +346,10 @@ UCS_TEST_P(test_dc, dcs_ep_am_pending) {
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
 
     /* put AM op on pending */
-    preq.e            = m_e1;
-    preq.uct_req.func = uct_pending_flush;
-    status            = uct_ep_pending_add(m_e1->ep(0), &preq.uct_req);
+    preq.e             = m_e1;
+    preq.uct_req.func  = uct_pending_flush;
+    status             = uct_ep_pending_add(m_e1->ep(0), &preq.uct_req,
+                                            UCT_PENDING_REQ_FLAG_SYNC);
     EXPECT_UCS_OK(status);
 
     status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
@@ -392,7 +394,8 @@ UCS_TEST_P(test_dc, dcs_ep_purge_pending) {
     preq.is_done = 0;
     preq.e = m_e1;
     preq.uct_req.func = uct_pending_dummy;
-    status = uct_ep_pending_add(m_e1->ep(0), &preq.uct_req);
+    status = uct_ep_pending_add(m_e1->ep(0), &preq.uct_req,
+                                UCT_PENDING_REQ_FLAG_SYNC);
     EXPECT_UCS_OK(status);
 
     do {
@@ -445,8 +448,8 @@ UCS_TEST_P(test_dc_flow_control, fc_disabled_flush)
 UCS_TEST_P(test_dc_flow_control, fc_disabled_pending_no_dci) {
 
     pending_send_request_t pending_req;
-    pending_req.uct.func = pending_cb;
-    pending_req.cb_count = 0;
+    pending_req.uct.func  = pending_cb;
+    pending_req.cb_count  = 0;
 
     set_fc_disabled(m_e1);
 
@@ -460,7 +463,8 @@ UCS_TEST_P(test_dc_flow_control, fc_disabled_pending_no_dci) {
             get_fc_ptr(m_e1, ep_index)->fc_wnd = 0;
 
             /* Add to pending */
-            status = uct_ep_pending_add(m_e1->ep(ep_index), &pending_req.uct);
+            status = uct_ep_pending_add(m_e1->ep(ep_index), &pending_req.uct,
+                                        UCT_PENDING_REQ_FLAG_SYNC);
             ASSERT_UCS_OK(status);
 
             wait_for_flag(&pending_req.cb_count);
@@ -542,9 +546,10 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
     send_am_messages(m_e1, wnd, UCS_OK);
     send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
     uct_pending_req_t req;
-    req.func = reinterpret_cast<ucs_status_t (*)(uct_pending_req*)>
-                               (ucs_empty_function_return_no_resource);
-    EXPECT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &req));
+    req.func  = reinterpret_cast<ucs_status_t (*)(uct_pending_req*)>
+                                (ucs_empty_function_return_no_resource);
+    EXPECT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &req,
+                                     UCT_PENDING_REQ_FLAG_SYNC));
 
     /* Make sure that ep does not hold dci when sends completed */
     uct_dc_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_dc_iface_t);

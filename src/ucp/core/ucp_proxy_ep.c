@@ -92,7 +92,7 @@ UCP_PROXY_EP_DEFINE_OP(ucs_status_ptr_t, tag_rndv_zcopy, uct_tag_t, const void*,
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, tag_rndv_cancel, void*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, tag_rndv_request, uct_tag_t, const void*,
                        unsigned, unsigned)
-UCP_PROXY_EP_DEFINE_OP(ucs_status_t, pending_add, uct_pending_req_t*)
+UCP_PROXY_EP_DEFINE_OP(ucs_status_t, pending_add, uct_pending_req_t*, unsigned)
 UCP_PROXY_EP_DEFINE_OP(void, pending_purge, uct_pending_purge_callback_t, void*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, flush, unsigned, uct_completion_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, fence, unsigned)

@@ -77,7 +77,8 @@ void uct_dc_ep_release(uct_dc_ep_t *ep)
    currently pending code supports only dcs policy
    support hash/random policies
  */
-ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r)
+ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
+                                   unsigned flags)
 {
     uct_dc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_iface_t);
     uct_dc_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_ep_t);
@@ -99,8 +100,10 @@ ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r)
         }
     }
 
-    UCS_STATIC_ASSERT(sizeof(ucs_arbiter_elem_t) <= UCT_PENDING_REQ_PRIV_LEN);
-    ucs_arbiter_elem_init((ucs_arbiter_elem_t *)r->priv);
+    UCS_STATIC_ASSERT(sizeof(uct_pending_req_priv_t) <=
+                      UCT_PENDING_REQ_PRIV_LEN);
+    uct_pending_req_set_flags(r, flags);
+    ucs_arbiter_elem_init(&uct_pending_req_priv(r)->arbiter);
 
     /* no dci:
      *  Do not grab dci here. Instead put the group on dci allocation arbiter.
@@ -108,12 +111,14 @@ ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r)
      *  dci allocation.
      */
     if (ep->dci == UCT_DC_EP_NO_DCI) {
-        ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*)r->priv);
+        ucs_arbiter_group_push_elem(&ep->arb_group,
+                                    &uct_pending_req_priv(r)->arbiter);
         uct_dc_iface_schedule_dci_alloc(iface, ep);
         return UCS_OK;
     }
 
-    ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*)r->priv);
+    ucs_arbiter_group_push_elem(&ep->arb_group,
+                                &uct_pending_req_priv(r)->arbiter);
     uct_dc_iface_dci_sched_tx(iface, ep);
     return UCS_OK;
 }

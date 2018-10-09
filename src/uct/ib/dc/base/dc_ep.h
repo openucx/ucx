@@ -53,7 +53,8 @@ uct_dc_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
                                ucs_arbiter_elem_t *elem,
                                void *arg);
 
-ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r);
+ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
+                                   unsigned flags);
 void uct_dc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb, void *arg);
 
 void uct_dc_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls);
@@ -105,7 +106,7 @@ enum uct_dc_ep_flags {
     UCT_DC_EP_FLAG_TX_WAIT  = UCS_BIT(0), /* ep is in the tx_wait state. See
                                              description of the dcs+quota dci
                                              selection policy above */
-    UCT_DC_EP_FLAG_GRH      = UCS_BIT(1), /* ep has GRH address. Used by 
+    UCT_DC_EP_FLAG_GRH      = UCS_BIT(1), /* ep has GRH address. Used by
                                              dc_mlx5 endpoint */
     UCT_DC_EP_FLAG_VALID    = UCS_BIT(2)  /* ep is a valid endpoint */
 };

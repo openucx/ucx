@@ -17,7 +17,7 @@
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_rma_send_request_cb(ucp_request_t *req, ucp_send_callback_t cb)
 {
-    ucs_status_t status = ucp_request_send(req);
+    ucs_status_t status = ucp_request_send(req, UCT_PENDING_REQ_FLAG_SYNC);
 
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucs_trace_req("releasing send request %p, returning status %s", req,
