@@ -87,7 +87,7 @@ public:
         ucs_log_push_handler(detect_error_logger);
     }
 
-    void get_listen_addr(struct sockaddr_in *listen_addr) {
+    void get_listen_addr(struct sockaddr_in *listen_addr) throw(ucs::test_skip_exception) {
         struct ifaddrs* ifaddrs;
         int ret = getifaddrs(&ifaddrs);
         ASSERT_EQ(ret, 0);
@@ -116,7 +116,7 @@ public:
     }
 
     void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type,
-                        const struct sockaddr* addr)
+                        const struct sockaddr* addr) throw(ucs::test_skip_exception)
     {
         ucs_status_t status = receiver().listen(cb_type, addr, sizeof(*addr));
         if (status == UCS_ERR_UNREACHABLE) {
@@ -198,7 +198,7 @@ public:
     }
 
     void send_recv(entity& from, entity& to, send_recv_type_t send_recv_type,
-                   bool wakeup)
+                   bool wakeup) throw(ucs::test_skip_exception)
     {
         const uint64_t send_data = ucs_generate_uuid(0);
         void *send_req = NULL;
@@ -231,7 +231,6 @@ public:
             send_status = ucp_request_check_status(send_req);
             if (send_status == UCS_ERR_UNREACHABLE) {
                 ucp_request_free(send_req);
-                restore_errors();
 
                 UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
                                 "feature or too long worker address or no "
@@ -286,7 +285,8 @@ public:
     {
         ucs_time_t time_limit = ucs_get_time() + ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
 
-        while ((receiver().get_num_eps() == 0) && (ucs_get_time() < time_limit)) {
+        while ((receiver().get_num_eps() == 0) && !is_failed() &&
+               (ucs_get_time() < time_limit)) {
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
     }
@@ -333,7 +333,7 @@ public:
         return ep_params;
     }
 
-    void client_ep_connect(struct sockaddr *connect_addr)
+    void client_ep_connect(struct sockaddr *connect_addr) throw(ucs::test_skip_exception)
     {
         ucp_ep_params_t ep_params = get_ep_params();
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
@@ -344,18 +344,18 @@ public:
         sender().connect(&receiver(), ep_params);
     }
 
-    void connect_and_send_recv(struct sockaddr *connect_addr, bool wakeup)
+    void connect_and_send_recv(struct sockaddr *connect_addr, bool wakeup) throw(ucs::test_skip_exception)
     {
         {
             detect_error();
             UCS_TEST_SCOPE_EXIT() { restore_errors(); } UCS_TEST_SCOPE_EXIT_END
             client_ep_connect(connect_addr);
-            send_recv(sender(), receiver(),
-                      (GetParam().variant == CONN_REQ_STREAM) ? SEND_RECV_STREAM :
-                      SEND_RECV_TAG, wakeup);
+            wait_for_server_ep(wakeup);
+            if (is_failed()) {
+                UCS_TEST_SKIP_R("cannot connect to server");
+            }
         }
 
-        wait_for_server_ep(wakeup);
         send_recv(sender(), receiver(),
                   (GetParam().variant == CONN_REQ_STREAM) ? SEND_RECV_STREAM :
                   SEND_RECV_TAG, wakeup);
@@ -363,18 +363,19 @@ public:
 
     void connect_and_reject(struct sockaddr *connect_addr, bool wakeup)
     {
-        detect_error();
-        client_ep_connect(connect_addr);
-        /* Check reachability with tagged send */
-        send_recv(sender(), receiver(), SEND_RECV_TAG, wakeup);
-        restore_errors();
-
+        {
+            detect_error();
+            UCS_TEST_SCOPE_EXIT() { restore_errors(); } UCS_TEST_SCOPE_EXIT_END
+            client_ep_connect(connect_addr);
+            /* Check reachability with tagged send */
+            send_recv(sender(), receiver(), SEND_RECV_TAG, wakeup);
+        }
         wait_for_server_reject(wakeup);
         wait_for_client_reject(wakeup);
     }
 
     void listen_and_communicate(ucp_test_base::entity::listen_cb_type_t cb_type,
-                                bool wakeup)
+                                bool wakeup) throw(ucs::test_skip_exception)
     {
         struct sockaddr_in connect_addr;
         get_listen_addr(&connect_addr);
@@ -389,7 +390,7 @@ public:
     }
 
     void listen_and_reject(ucp_test_base::entity::listen_cb_type_t cb_type,
-                           bool wakeup)
+                           bool wakeup) throw(ucs::test_skip_exception)
     {
         struct sockaddr_in connect_addr;
         get_listen_addr(&connect_addr);
@@ -482,11 +483,13 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
     /* make the client try to connect to a non-existing port on the server side */
     listen_addr.sin_port = 1;
 
-    wrap_errors();
-    client_ep_connect((struct sockaddr*)&listen_addr);
-    /* allow for the unreachable event to arrive before restoring errors */
-    wait_for_flag(&err_handler_count);
-    restore_errors();
+    {
+        wrap_errors();
+        UCS_TEST_SCOPE_EXIT() { restore_errors(); } UCS_TEST_SCOPE_EXIT_END
+        client_ep_connect((struct sockaddr*)&listen_addr);
+        /* allow for the unreachable event to arrive before restoring errors */
+        wait_for_flag(&err_handler_count);
+    }
 
     EXPECT_EQ(1, err_handler_count);
 }

@@ -398,7 +398,7 @@ ucp_test_base::entity::~entity() {
 
 void ucp_test_base::entity::connect(const entity* other,
                                     const ucp_ep_params_t& ep_params,
-                                    int ep_idx, int do_set_ep) {
+                                    int ep_idx, int do_set_ep) throw(ucs::test_skip_exception) {
     assert(get_num_workers() == other->get_num_workers());
     for (unsigned i = 0; i < unsigned(get_num_workers()); i++) {
         ucs_status_t status;
