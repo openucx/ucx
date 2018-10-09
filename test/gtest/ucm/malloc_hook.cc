@@ -973,25 +973,25 @@ UCS_TEST_F(malloc_hook, dlopen) {
     UCS_TEST_MESSAGE << "Loading " << lib_mmap;
 
     lib = dlopen(lib_load.c_str(), RTLD_NOW);
-    EXPECT_NE((uintptr_t)lib, NULL);
+    EXPECT_NE((uintptr_t)lib, (uintptr_t)NULL);
     if (!lib) {
         goto no_lib;
     }
 
     load = (load_lib_f*)dlsym(lib, load_lib);
-    EXPECT_NE((uintptr_t)load, NULL);
+    EXPECT_NE((uintptr_t)load, (uintptr_t)NULL);
     if (!load) {
         goto no_load;
     }
 
     lib2 = load(lib_mmap.c_str());
-    EXPECT_NE((uintptr_t)lib2, NULL);
+    EXPECT_NE((uintptr_t)lib2, (uintptr_t)NULL);
     if (!lib2) {
         goto no_load;
     }
 
     fire = (fire_mmap_f*)dlsym(lib2, fire_mmap);
-    EXPECT_NE((uintptr_t)fire, NULL);
+    EXPECT_NE((uintptr_t)fire, (uintptr_t)NULL);
     if (!fire) {
         goto no_fire;
     }
