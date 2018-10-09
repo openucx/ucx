@@ -90,9 +90,11 @@ module_load() {
 # try load cuda modules if nvidia driver is installed
 #
 try_load_cuda_env() {
+	num_gpus=0
 	if [ -f "/proc/driver/nvidia/version" ]; then
 		module_load dev/cuda || true
 		module_load dev/gdrcopy || true
+		num_gpus=$(nvidia-smi -L | wc -l)
 	fi
 }
 
@@ -557,12 +559,14 @@ run_ucx_perftest_mpi() {
 	# run cuda tests
 	if (lsmod | grep -q "nv_peer_mem") && (lsmod | grep -q "gdrdrv")
 	then
+		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
 		cat $ucx_inst_ptest/test_types | grep cuda | sort -R > $ucx_inst_ptest/test_types_short
 		echo "==== Running ucx_perf with cuda memory===="
 		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=y $AFFINITY $UCX_PERFTEST
 		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=n $AFFINITY $UCX_PERFTEST
 		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy $AFFINITY $UCX_PERFTEST
 		$MPIRUN -np 2 $AFFINITY $UCX_PERFTEST
+		unset CUDA_VISIBLE_DEVICES
 	fi
 }
 
@@ -720,6 +724,10 @@ run_gtest() {
 	export GTEST_SHUFFLE=1
 	export GTEST_TAP=2
 	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
+
+	if [ $num_gpus -gt 0 ]; then
+		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
+	fi
 
 	GTEST_EXTRA_ARGS=""
 	if [ "$JENKINS_TEST_PERF" == 1 ]
