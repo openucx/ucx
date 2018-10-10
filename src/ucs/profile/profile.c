@@ -162,13 +162,13 @@ static void ucs_profile_get_location(ucs_profile_type_t type, const char *name,
 
     for (i = 0; i < ctx->num_locations; ++i) {
         loc = &ctx->locations[i];
-        if ((type != loc->type) || (line != loc->line)) {
-            continue;
-        }
 
-        if (!strcmp(loc->name, name) &&
+        if ((type == loc->type) &&
+            (line == loc->line) &&
+            !strcmp(loc->name, name) &&
             !strcmp(loc->file, basename(file)) &&
             !strcmp(loc->function, function)) {
+
             *loc_id_p = i + 1;
             goto out_unlock;
         }
