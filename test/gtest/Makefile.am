@@ -6,6 +6,7 @@
 # See file LICENSE for terms.
 #
 
+if HAVE_GTEST
 
 # Set default configuration for running tests
 UCX_HANDLE_ERRORS        ?= freeze
@@ -208,7 +209,6 @@ noinst_HEADERS = \
 	ucp/ucp_test.h \
 	ucp/ucp_datatype.h
 
-if HAVE_GTEST
 .PHONY: test test gdb valgrind fix_rpath ucx
 
 
