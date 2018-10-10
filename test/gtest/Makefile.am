@@ -208,6 +208,7 @@ noinst_HEADERS = \
 	ucp/ucp_test.h \
 	ucp/ucp_datatype.h
 
+if HAVE_GTEST
 .PHONY: test test gdb valgrind fix_rpath ucx
 
 
@@ -260,3 +261,4 @@ test_gdb: ucx gtest
 test_valgrind: ucx gtest
 	$(LAUNCHER) env LD_LIBRARY_PATH="$(VALGRIND_LIBPATH):${LD_LIBRARY_PATH}" \
 	stdbuf -e0 -o0 valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest $(GTEST_ARGS)
+endif
