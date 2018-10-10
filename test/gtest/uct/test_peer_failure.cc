@@ -247,7 +247,7 @@ UCS_TEST_P(test_uct_peer_failure, peer_failure)
               UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_flush(ep0(), 0, NULL), UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_get_address(ep0(), NULL), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_pending_add(ep0(), NULL), UCS_ERR_ENDPOINT_TIMEOUT);
+    EXPECT_EQ(uct_ep_pending_add(ep0(), NULL, 0), UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_connect_to_ep(ep0(), NULL, NULL), UCS_ERR_ENDPOINT_TIMEOUT);
 
     EXPECT_GT(m_err_count, 0ul);
@@ -274,7 +274,7 @@ UCS_TEST_P(test_uct_peer_failure, purge_failed_peer)
     uct_pending_req_t reqs[num_pend_sends];
     for (size_t i = 0; i < num_pend_sends; i ++) {
         reqs[i].func = pending_cb;
-        EXPECT_EQ(uct_ep_pending_add(ep0(), &reqs[i]), UCS_OK);
+        EXPECT_EQ(uct_ep_pending_add(ep0(), &reqs[i], 0), UCS_OK);
     }
 
     flush();

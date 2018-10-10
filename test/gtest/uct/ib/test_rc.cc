@@ -192,7 +192,7 @@ void test_rc_flow_control::test_pending_purge(int wnd, int num_pend_sends)
     for (int i = 0; i < num_pend_sends; i++) {
         reqs[i].uct.func    = NULL; /* make valgrind happy */
         reqs[i].purge_count = 0;
-        EXPECT_EQ(uct_ep_pending_add(m_e2->ep(0), &reqs[i].uct), UCS_OK);
+        EXPECT_EQ(uct_ep_pending_add(m_e2->ep(0), &reqs[i].uct, 0), UCS_OK);
     }
     uct_ep_pending_purge(m_e2->ep(0), purge_cb, NULL);
 

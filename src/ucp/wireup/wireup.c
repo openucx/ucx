@@ -926,7 +926,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
     ucs_queue_for_each_extract(req, &tmp_q, send.uct.priv, 1) {
         ucs_trace_req("ep %p: requeue request %p after wireup request",
                       req->send.ep, req);
-        status = uct_ep_pending_add(ep->uct_eps[lane], &req->send.uct);
+        status = uct_ep_pending_add(ep->uct_eps[lane], &req->send.uct, 0);
         ucs_assert(status == UCS_OK); /* because it's a wireup proxy */
     }
 
