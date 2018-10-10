@@ -25,7 +25,7 @@ static size_t ucp_rma_sw_put_pack_cb(void *dest, void *arg)
 
     length = ucs_min(req->send.length,
                      ucp_ep_config(ep)->am.max_bcopy - sizeof(*puth));
-    memcpy(puth + 1, req->send.buffer, length);
+    ucp_rma_memcpy(puth + 1, req->send.buffer, length);
 
     return sizeof(*puth) + length;
 }
@@ -143,7 +143,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
     ucp_put_hdr_t *puth = data;
     ucp_worker_h worker = arg;
 
-    memcpy((void*)puth->address, puth + 1, length - sizeof(*puth));
+    ucp_rma_memcpy((void*)puth->address, puth + 1, length - sizeof(*puth));
     ucp_rma_sw_send_cmpl(ucp_worker_get_ep_by_ptr(worker, puth->ep_ptr));
     return UCS_OK;
 }
@@ -168,7 +168,7 @@ static size_t ucp_rma_sw_pack_get_reply(void *dest, void *arg)
     length   = ucs_min(req->send.length,
                        ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr));
     hdr->req = req->send.get_reply.req;
-    memcpy(hdr + 1, req->send.buffer, length);
+    ucp_rma_memcpy(hdr + 1, req->send.buffer, length);
 
     return sizeof(*hdr) + length;
 }
@@ -230,7 +230,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags
     ucp_request_t *req         = (ucp_request_t*)getreph->req;
     ucp_ep_h ep                = req->send.ep;
 
-    memcpy(req->send.buffer, getreph + 1, frag_length);
+    ucp_rma_memcpy(req->send.buffer, getreph + 1, frag_length);
 
     /* complete get request on last fragment of the reply */
     if (ucp_rma_request_advance(req, frag_length, UCS_OK) == UCS_OK) {
