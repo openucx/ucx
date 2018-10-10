@@ -533,8 +533,8 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_iface_t, uct_md_h md, uct_worker_h worker,
                                    ip_port_str, UCS_SOCKADDR_STRING_LEN),
                   ntohs(rdma_get_src_port(self->cm_id)));
 
-        if (params->mode.sockaddr.cb_flags != UCT_CB_FLAG_ASYNC) {
-            ucs_fatal("UCT_CB_FLAG_SYNC is not supported");
+        if (!(params->mode.sockaddr.cb_flags & UCT_CB_FLAG_ASYNC)) {
+            ucs_fatal("Synchronous callback is not supported");
         }
 
         self->cb_flags         = params->mode.sockaddr.cb_flags;

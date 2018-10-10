@@ -300,7 +300,7 @@ uct_test::entity* uct_test::create_entity(size_t rx_headroom,
     iface_params.open_mode         = UCT_IFACE_OPEN_MODE_DEVICE;
     iface_params.err_handler       = err_handler;
     iface_params.err_handler_arg   = this;
-    iface_params.err_handler_flags = UCT_CB_FLAG_SYNC;
+    iface_params.err_handler_flags = 0;
     entity *new_ent = new entity(*GetParam(), m_iface_config, &iface_params,
                                  m_md_config);
     return new_ent;

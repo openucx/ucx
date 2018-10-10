@@ -167,8 +167,9 @@ void install_handler_sync_or_async(uct_iface_t *iface, uint8_t id, uct_am_callba
     ASSERT_UCS_OK(status);
 
     if (attr.cap.flags & UCT_IFACE_FLAG_CB_SYNC) {
-        uct_iface_set_am_handler(iface, id, cb, arg, UCT_CB_FLAG_SYNC);
+        uct_iface_set_am_handler(iface, id, cb, arg, 0);
     } else {
+        ASSERT_TRUE(attr.cap.flags & UCT_IFACE_FLAG_CB_ASYNC);
         uct_iface_set_am_handler(iface, id, cb, arg, UCT_CB_FLAG_ASYNC);
     }
 }

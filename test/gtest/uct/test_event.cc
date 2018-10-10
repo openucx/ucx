@@ -110,8 +110,7 @@ void test_uct_event_fd::test_recv_am(bool signaled)
     recv_buffer->length = 0; /* Initialize length to 0 */
 
     /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler, recv_buffer,
-                             UCT_CB_FLAG_SYNC);
+    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler, recv_buffer, 0);
 
     /* create receiver wakeup */
     status = uct_iface_event_fd_get(m_e2->iface(), &wakeup_fd.fd);

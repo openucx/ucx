@@ -88,7 +88,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (cb_flags != UCT_CB_FLAG_ASYNC) {
+    if (!(cb_flags & UCT_CB_FLAG_ASYNC)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -216,17 +216,16 @@ void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t stat
     uct_rdmacm_iface_t *rdmacm_iface = ucs_derived_of(iface, uct_rdmacm_iface_t);
     uct_rdmacm_ep_t *rdmacm_ep       = ucs_derived_of(ep, uct_rdmacm_ep_t);
 
-    if (rdmacm_iface->super.err_handler_flags == UCT_CB_FLAG_SYNC) {
-        rdmacm_ep->status = status;
-
+    if (rdmacm_iface->super.err_handler_flags & UCT_CB_FLAG_ASYNC) {
+        uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), &rdmacm_ep->super.super,
+                          &rdmacm_iface->super.super, status);
+    } else {
         /* invoke the error handling flow from the main thread */
+        rdmacm_ep->status = status;
         uct_worker_progress_register_safe(&rdmacm_iface->super.worker->super,
                                           uct_rdmacm_client_err_handle_progress,
                                           rdmacm_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
                                           &rdmacm_ep->slow_prog_id);
-    } else {
-        uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), &rdmacm_ep->super.super,
-                          &rdmacm_iface->super.super, status);
     }
 }
 

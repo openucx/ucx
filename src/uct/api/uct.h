@@ -338,22 +338,21 @@ enum uct_msg_flags {
  * @brief Callback flags.
  *
  * List of flags for a callback.
- * A callback must have either the SYNC or ASYNC flag set.
  */
 enum uct_cb_flags {
-    UCT_CB_FLAG_SYNC  = UCS_BIT(1), /**< Callback is always invoked from the context (thread, process)
-                                         that called uct_iface_progress(). An interface must
-                                         have the @ref UCT_IFACE_FLAG_CB_SYNC flag set to support sync
-                                         callback invocation. */
-
-    UCT_CB_FLAG_ASYNC = UCS_BIT(2)  /**< Callback may be invoked from any context. For example,
-                                         it may be called from a transport async progress thread. To guarantee
-                                         async invocation, the interface must have the @ref UCT_IFACE_FLAG_CB_ASYNC
-                                         flag set.
-                                         If async callback is requested on an interface
-                                         which only supports sync callback
-                                         (i.e., only the @ref UCT_IFACE_FLAG_CB_SYNC flag is set),
-                                         it will behave exactly like a sync callback.  */
+    UCT_CB_FLAG_ASYNC = UCS_BIT(0)  /**< Callback may be invoked from any
+                                         context (thread, process). For example,
+                                         it may be called from a transport async
+                                         progress thread. To guarantee async
+                                         invocation, the interface must have the
+                                         @ref UCT_IFACE_FLAG_CB_ASYNC flag set.
+                                         If async callback is requested on an
+                                         interface which only supports sync
+                                         callback (i.e., only the @ref
+                                         UCT_IFACE_FLAG_CB_SYNC flag is set),
+                                         the callback may be invoked only from
+                                         the context that called @ref
+                                         uct_iface_progress). */
 };
 
 

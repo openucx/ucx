@@ -503,8 +503,7 @@ static void ucp_stream_am_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                      length - hdr_len);
 }
 
-UCP_DEFINE_AM(UCP_FEATURE_STREAM, UCP_AM_ID_STREAM_DATA,
-              ucp_stream_am_handler, ucp_stream_am_dump,
-              UCT_CB_FLAG_SYNC);
+UCP_DEFINE_AM(UCP_FEATURE_STREAM, UCP_AM_ID_STREAM_DATA, ucp_stream_am_handler,
+              ucp_stream_am_dump, 0);
 
 UCP_DEFINE_AM_PROXY(UCP_AM_ID_STREAM_DATA);

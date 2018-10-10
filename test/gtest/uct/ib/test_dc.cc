@@ -33,10 +33,8 @@ public:
         m_e2 = uct_test::create_entity(0);
         m_entities.push_back(m_e2);
 
-        uct_iface_set_am_handler(m_e1->iface(), 0, am_dummy_handler,
-                                 NULL, UCT_CB_FLAG_SYNC);
-        uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler,
-                                 NULL, UCT_CB_FLAG_SYNC);
+        uct_iface_set_am_handler(m_e1->iface(), 0, am_dummy_handler, NULL, 0);
+        uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler, NULL, 0);
     }
 
     static uct_dc_iface_t* dc_iface(entity *e) {

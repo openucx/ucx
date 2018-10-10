@@ -117,7 +117,7 @@ void test_uct_cq_moderation::run_test(uct_iface_h iface) {
     check_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP);
     check_caps(UCT_IFACE_FLAG_EVENT_RECV);
 
-    uct_iface_set_am_handler(m_receiver->iface(), 0, am_cb, this, UCT_CB_FLAG_SYNC);
+    uct_iface_set_am_handler(m_receiver->iface(), 0, am_cb, this, 0);
 
     connect();
 
