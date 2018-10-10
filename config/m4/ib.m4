@@ -210,9 +210,7 @@ AS_IF([test "x$with_ib" == xyes],
               AC_CHECK_DECLS([ibv_alloc_td],
                       [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])])
 
-       AS_IF([test "x$has_res_domain" == xyes], [], [
-               AC_MSG_WARN([Cannot use mlx5 accel because resource domains are not supported])
-               AC_MSG_WARN([Please upgrade MellanoxOFED to 3.1 or above])
+       AS_IF([test "x$has_res_domain" == xyes -a "x$has_get_av" == xyes ], [], [
                with_mlx5_hw=no])
 
        AS_IF([test "x$with_mlx5_hw" == xyes],
