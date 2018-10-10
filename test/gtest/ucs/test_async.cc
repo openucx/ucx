@@ -240,8 +240,10 @@ public:
     UCS_TEST_BASE_IMPL;
 
 protected:
-    static const int      COUNT       = 40;
-    static const unsigned SLEEP_USEC  = 1000;
+    static const int      COUNT           = 40;
+    static const unsigned SLEEP_USEC      = 1000;
+    static const int      TIMER_RETRIES   = 100;
+    static const int      TIMER_EXP_COUNT = COUNT / 4;
 
     void suspend(double scale = 1.0) {
         ucs::safe_usleep(ucs_max(scale * SLEEP_USEC, 0) *
@@ -445,16 +447,29 @@ UCS_TEST_P(test_async, ctx_event) {
 
 UCS_TEST_P(test_async, ctx_timer) {
     local_timer lt(GetParam());
-    suspend_and_poll(&lt, COUNT * 4);
-    EXPECT_GE(lt.count(), COUNT / 4);
+    for (int i = 0; i < TIMER_RETRIES; ++i) {
+        suspend_and_poll(&lt, COUNT * 4);
+        if (lt.count() >= TIMER_EXP_COUNT) {
+            break;
+        }
+        UCS_TEST_MESSAGE << "retry " << (i + 1);
+    }
+    EXPECT_GE(lt.count(), int(TIMER_EXP_COUNT));
 }
 
 UCS_TEST_P(test_async, two_timers) {
     local_timer lt1(GetParam());
     local_timer lt2(GetParam());
-    suspend_and_poll2(&lt1, &lt2, COUNT * 4);
-    EXPECT_GE(lt1.count(), COUNT / 4);
-    EXPECT_GE(lt2.count(), COUNT / 4);
+    for (int i = 0; i < TIMER_RETRIES; ++i) {
+        suspend_and_poll2(&lt1, &lt2, COUNT * 4);
+        if ((lt1.count() >= TIMER_EXP_COUNT) &&
+            (lt2.count() >= TIMER_EXP_COUNT)) {
+             break;
+        }
+        UCS_TEST_MESSAGE << "retry " << (i + 1);
+    }
+    EXPECT_GE(lt1.count(), int(TIMER_EXP_COUNT));
+    EXPECT_GE(lt2.count(), int(TIMER_EXP_COUNT));
 }
 
 UCS_TEST_P(test_async, ctx_event_block) {
@@ -506,13 +521,19 @@ UCS_TEST_P(test_async, ctx_event_block_two_miss) {
 UCS_TEST_P(test_async, ctx_timer_block) {
     local_timer lt(GetParam());
 
-    lt.block();
-    int count = lt.count();
-    suspend_and_poll(&lt, COUNT);
-    EXPECT_EQ(count, lt.count());
-    lt.unblock();
+    for (int i = 0; i < TIMER_RETRIES; ++i) {
+        lt.block();
+        int count = lt.count();
+        suspend_and_poll(&lt, COUNT);
+        EXPECT_EQ(count, lt.count());
+        lt.unblock();
 
-    lt.check_miss();
+        lt.check_miss();
+        if (lt.count() >= 1) {
+            break;
+        }
+        UCS_TEST_MESSAGE << "retry " << (i + 1);
+    }
     EXPECT_GE(lt.count(), 1); /* Timer could expire again after unblock */
 }
 
