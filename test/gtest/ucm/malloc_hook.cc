@@ -663,6 +663,7 @@ public:
                 EXPECT_INCREASED(m_unmapped_size, unmapped_size, size, m_name);
             }
         }
+        pthread_barrier_wait(m_barrier);
     }
 
 protected:
