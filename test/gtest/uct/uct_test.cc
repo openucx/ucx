@@ -390,7 +390,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     UCS_CPU_ZERO(&params->cpu_mask);
 
     UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
-                           uct_worker_create, &m_async.m_async, UCS_THREAD_MODE_MULTI /* TODO */);
+                           uct_worker_create, &m_async.m_async, UCS_THREAD_MODE_SINGLE);
 
     UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close,
                            uct_md_open, resource.md_name.c_str(), md_config);

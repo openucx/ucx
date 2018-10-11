@@ -464,6 +464,11 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_trace_func("Creating an MM iface=%p worker=%p", self, worker);
 
+    if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
+        ucs_error("Shared memory transport does not support multi-threaded worker");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     /* check that the fifo size, from the user, is a power of two and bigger than 1 */
     if ((mm_config->fifo_size <= 1) || ucs_is_pow2(mm_config->fifo_size) != 1) {
         ucs_error("The MM FIFO size must be a power of two and bigger than 1.");

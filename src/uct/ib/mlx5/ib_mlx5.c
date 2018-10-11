@@ -119,20 +119,23 @@ void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
     }
 }
 
-static int uct_ib_mlx5_bf_cmp(uct_ib_mlx5_bf_t *bf, uintptr_t addr, unsigned bf_size)
+static int uct_ib_mlx5_mmio_cmp(uct_ib_mlx5_mmio_reg_t *reg, uintptr_t addr,
+                                unsigned bf_size)
 {
-    return (bf->reg.addr & ~UCT_IB_MLX5_BF_REG_SIZE) == (addr & ~UCT_IB_MLX5_BF_REG_SIZE);
+    return (reg->addr.uint & ~UCT_IB_MLX5_BF_REG_SIZE) ==
+           (addr & ~UCT_IB_MLX5_BF_REG_SIZE);
 }
 
-static ucs_status_t uct_ib_mlx5_bf_init(uct_ib_mlx5_bf_t *bf, uintptr_t addr,
-                                        unsigned bf_size)
+static ucs_status_t uct_ib_mlx5_mmio_init(uct_ib_mlx5_mmio_reg_t *reg,
+                                          uintptr_t addr,
+                                          uct_ib_mlx5_mmio_mode_t mmio_mode)
 {
-    bf->reg.addr  = addr;
-    bf->enable_bf = bf_size;
+    reg->addr.uint = addr;
+    reg->mode      = mmio_mode;
     return UCS_OK;
 }
 
-static void uct_ib_mlx5_bf_cleanup(uct_ib_mlx5_bf_t *bf)
+static void uct_ib_mlx5_mmio_cleanup(uct_ib_mlx5_mmio_reg_t *reg)
 {
 }
 
@@ -151,6 +154,7 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_txwq_t *txwq,
                                    struct ibv_qp *verbs_qp)
 {
+    uct_ib_mlx5_mmio_mode_t mmio_mode;
     uct_ib_mlx5dv_qp_t qp_info = {};
     uct_ib_mlx5dv_t obj = {};
     ucs_status_t status;
@@ -177,17 +181,30 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
               qp_info.dv.sq.stride * qp_info.dv.sq.wqe_cnt,
               qp_info.dv.sq.stride, qp_info.dv.sq.wqe_cnt);
 
+    if (qp_info.dv.bf.size > 0) {
+        if (worker->thread_mode == UCS_THREAD_MODE_SINGLE) {
+            mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST;
+        } else if (worker->thread_mode == UCS_THREAD_MODE_SERIALIZED) {
+            mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST_MT;
+        } else {
+            ucs_error("unsupported thread mode for mlx5: %d", worker->thread_mode);
+            return UCS_ERR_UNSUPPORTED;
+        }
+    } else {
+        mmio_mode = UCT_IB_MLX5_MMIO_MODE_DB;
+    }
+
     txwq->qstart   = qp_info.dv.sq.buf;
     txwq->qend     = qp_info.dv.sq.buf + (qp_info.dv.sq.stride * qp_info.dv.sq.wqe_cnt);
-    txwq->bf       = uct_worker_tl_data_get(worker,
+    txwq->reg      = uct_worker_tl_data_get(worker,
                                             UCT_IB_MLX5_WORKER_BF_KEY,
-                                            uct_ib_mlx5_bf_t,
-                                            uct_ib_mlx5_bf_cmp,
-                                            uct_ib_mlx5_bf_init,
+                                            uct_ib_mlx5_mmio_reg_t,
+                                            uct_ib_mlx5_mmio_cmp,
+                                            uct_ib_mlx5_mmio_init,
                                             (uintptr_t)qp_info.dv.bf.reg,
-                                            qp_info.dv.bf.size);
-    if (UCS_PTR_IS_ERR(txwq->bf)) {
-        return UCS_PTR_STATUS(txwq->bf);
+                                            mmio_mode);
+    if (UCS_PTR_IS_ERR(txwq->reg)) {
+        return UCS_PTR_STATUS(txwq->reg);
     }
 
     txwq->dbrec    = &qp_info.dv.dbrec[MLX5_SND_DBR];
@@ -206,7 +223,7 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
 
 void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq)
 {
-    uct_worker_tl_data_put(txwq->bf, uct_ib_mlx5_bf_cleanup);
+    uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
 }
 
 ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *rxwq)

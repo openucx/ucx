@@ -31,9 +31,11 @@ BEGIN_C_DECLS
 #define ucs_memory_bus_fence()        asm volatile ("mfence"::: "memory")
 #define ucs_memory_bus_store_fence()  asm volatile ("sfence" ::: "memory")
 #define ucs_memory_bus_load_fence()   asm volatile ("lfence" ::: "memory")
+#define ucs_memory_bus_wc_flush()
 #define ucs_memory_cpu_fence()        ucs_compiler_fence()
 #define ucs_memory_cpu_store_fence()  ucs_compiler_fence()
 #define ucs_memory_cpu_load_fence()   ucs_compiler_fence()
+#define ucs_memory_cpu_wc_fence()     asm volatile ("sfence" ::: "memory")
 
 
 static inline uint64_t ucs_arch_read_hres_clock()

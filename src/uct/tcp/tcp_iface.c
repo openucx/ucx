@@ -284,6 +284,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.sndbuf         = config->sockopt_sndbuf;
     ucs_list_head_init(&self->ep_list);
 
+    if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
+        ucs_error("TCP transport does not support multi-threaded worker");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     status = uct_tcp_netif_inaddr(self->if_name, &self->config.ifaddr,
                                   &self->config.netmask);
     if (status != UCS_OK) {
