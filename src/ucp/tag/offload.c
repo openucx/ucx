@@ -210,7 +210,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
     return UCS_OK;
 }
 
-void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, unsigned mode)
+UCS_PROFILE_FUNC_VOID(ucp_tag_offload_cancel, (worker, req, mode),
+                      ucp_worker_t *worker, ucp_request_t *req, unsigned mode)
 {
 
     ucp_worker_iface_t *wiface = req->recv.tag.wiface;
@@ -381,7 +382,8 @@ ucp_tag_offload_post_sw_reqs(ucp_request_t *req, ucp_request_queue_t *req_queue)
     return 1;
 }
 
-int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
+UCS_PROFILE_FUNC(int, ucp_tag_offload_post, (req, req_queue),
+                 ucp_request_t *req, ucp_request_queue_t *req_queue)
 {
     ucp_worker_t *worker   = req->recv.worker;
     ucp_context_t *context = worker->context;
