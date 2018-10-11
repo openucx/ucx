@@ -6,6 +6,7 @@
 # See file LICENSE for terms.
 #
 
+if HAVE_GTEST
 
 # Set default configuration for running tests
 UCX_HANDLE_ERRORS        ?= freeze
@@ -260,3 +261,4 @@ test_gdb: ucx gtest
 test_valgrind: ucx gtest
 	$(LAUNCHER) env LD_LIBRARY_PATH="$(VALGRIND_LIBPATH):${LD_LIBRARY_PATH}" \
 	stdbuf -e0 -o0 valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest $(GTEST_ARGS)
+endif
