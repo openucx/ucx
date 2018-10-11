@@ -198,7 +198,7 @@ public:
     }
 
     void send_recv(entity& from, entity& to, send_recv_type_t send_recv_type,
-                   bool wakeup)
+                   bool wakeup, ucp_test_base::entity::listen_cb_type_t cb_type)
     {
         const uint64_t send_data = ucs_generate_uuid(0);
         void *send_req = NULL;
@@ -224,25 +224,24 @@ public:
             while (!ucp_request_is_completed(send_req)) {
                 check_events(from.worker(), to.worker(), wakeup, send_req);
             }
+            send_status = ucp_request_check_status(send_req);
+            ucp_request_free(send_req);
+        }
+
+        if (send_status == UCS_ERR_UNREACHABLE) {
             /* Check if the error was completed due to the error handling flow.
              * If so, skip the test since a valid error occurred - the one expected
              * from the error handling flow - cases of failure to handle long worker
              * address or transport doesn't support the error handling requirement */
-            send_status = ucp_request_check_status(send_req);
-            if (send_status == UCS_ERR_UNREACHABLE) {
-                ucp_request_free(send_req);
-
-                UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
-                                "feature or too long worker address or no "
-                                "supported transport to send partial worker "
-                                "address)");
-            }
-
-            ucp_request_free(send_req);
-        }
-
-        if (send_status == UCS_ERR_REJECTED) {
+            UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
+                            "feature or too long worker address or no "
+                            "supported transport to send partial worker "
+                            "address)");
+        } else if ((send_status == UCS_ERR_REJECTED) &&
+                   (cb_type == ucp_test_base::entity::LISTEN_CB_REJECT)) {
             return;
+        } else {
+            ASSERT_UCS_OK(send_status);
         }
 
         uint64_t recv_data = 0;
@@ -291,30 +290,17 @@ public:
         }
     }
 
-    void wait_for_server_reject(bool wakeup)
+    void wait_for_reject(entity &e, bool wakeup)
     {
         ucs_time_t time_limit = ucs_get_time() +
                                 ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
 
-        while ((receiver().get_rejected_cntr() == 0) &&
+        while ((e.get_rejected_cntr() == 0) &&
                (ucs_get_time() < time_limit)) {
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
         EXPECT_GT(time_limit, ucs_get_time());
-        EXPECT_EQ(1ul, receiver().get_rejected_cntr());
-    }
-
-    void wait_for_client_reject(bool wakeup)
-    {
-        ucs_time_t time_limit = ucs_get_time() +
-                                ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
-
-        while ((sender().get_rejected_cntr() == 0) &&
-               (ucs_get_time() < time_limit)) {
-            check_events(sender().worker(), receiver().worker(), wakeup, NULL);
-        }
-        EXPECT_GT(time_limit, ucs_get_time());
-        EXPECT_EQ(1ul, sender().get_rejected_cntr());
+        EXPECT_EQ(1ul, e.get_rejected_cntr());
     }
 
     virtual ucp_ep_params_t get_ep_params()
@@ -358,7 +344,7 @@ public:
 
         send_recv(sender(), receiver(),
                   (GetParam().variant == CONN_REQ_STREAM) ? SEND_RECV_STREAM :
-                  SEND_RECV_TAG, wakeup);
+                  SEND_RECV_TAG, wakeup, cb_type());
     }
 
     void connect_and_reject(struct sockaddr *connect_addr, bool wakeup)
@@ -368,10 +354,11 @@ public:
             UCS_TEST_SCOPE_EXIT() { restore_errors(); } UCS_TEST_SCOPE_EXIT_END
             client_ep_connect(connect_addr);
             /* Check reachability with tagged send */
-            send_recv(sender(), receiver(), SEND_RECV_TAG, wakeup);
+            send_recv(sender(), receiver(), SEND_RECV_TAG, wakeup,
+                      ucp_test_base::entity::LISTEN_CB_REJECT);
         }
-        wait_for_server_reject(wakeup);
-        wait_for_client_reject(wakeup);
+        wait_for_reject(receiver(), wakeup);
+        wait_for_reject(sender(),   wakeup);
     }
 
     void listen_and_communicate(ucp_test_base::entity::listen_cb_type_t cb_type,

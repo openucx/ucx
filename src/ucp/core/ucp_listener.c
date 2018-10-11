@@ -99,6 +99,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
 
     status = uct_iface_accept(listener->wiface.iface, conn_request->uct_req);
     if (status != UCS_OK) {
+        ucp_ep_destroy_internal(ep);
         goto out;
     }
 
@@ -111,17 +112,16 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
             listener->accept_cb(ep, listener->arg);
         }
     }
-    goto out;
 
 out:
-    UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
-
     if (status != UCS_OK) {
         ucs_error("connection request failed on listener %p with status %s",
                   listener, ucs_status_string(status));
         uct_iface_reject(listener->wiface.iface, conn_request->uct_req);
     }
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     ucs_free(conn_request);
     return 1;
 }
