@@ -81,7 +81,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     status = ucp_ep_create_accept(worker, client_data, &ep);
 
     if (status != UCS_OK) {
-        goto out_reject;
+        goto out;
     }
 
     if (ep->flags & UCP_EP_FLAG_LISTENER) {
@@ -94,12 +94,13 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     }
 
     if (status != UCS_OK) {
-        goto out_reject;
+        goto out;
     }
 
     status = uct_iface_accept(listener->wiface.iface, conn_request->uct_req);
     if (status != UCS_OK) {
-        goto out_ep_destroy;
+        ucp_ep_destroy_internal(ep);
+        goto out;
     }
 
     if (listener->accept_cb != NULL) {
@@ -111,20 +112,16 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
             listener->accept_cb(ep, listener->arg);
         }
     }
-    goto out;
 
-out_reject:
-    uct_iface_reject(listener->wiface.iface, conn_request->uct_req);
-out_ep_destroy:
-    ucp_ep_destroy_internal(ep);
 out:
-    UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
-
     if (status != UCS_OK) {
         ucs_error("connection request failed on listener %p with status %s",
                   listener, ucs_status_string(status));
+        uct_iface_reject(listener->wiface.iface, conn_request->uct_req);
     }
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     ucs_free(conn_request);
     return 1;
 }
