@@ -522,7 +522,7 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup_for_rma_atomic) {
+UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
 
     /* This test makes sure that the client-server flow works when the required
      * features are RMA/ATOMIC. With these features, need to make sure that
@@ -535,20 +535,22 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup_for_rma_atomic) {
 
     start_listener(cb_type(), (const struct sockaddr*)&connect_addr);
 
-    wrap_errors();
-    client_ep_connect((struct sockaddr*)&connect_addr);
+    {
+        wrap_errors();
+        UCS_TEST_SCOPE_EXIT() { restore_errors(); } UCS_TEST_SCOPE_EXIT_END
 
-    /* allow the err_handler callback to be invoked if needed */
-    short_progress_loop();
-    if (err_handler_count == 1) {
-        restore_errors();
-        UCS_TEST_SKIP_R("Skipping due to too long worker address error or no "
-                        "matching transport");
+        client_ep_connect((struct sockaddr*)&connect_addr);
+
+        /* allow the err_handler callback to be invoked if needed */
+        short_progress_loop();
+        if (err_handler_count == 1) {
+            UCS_TEST_SKIP_R("Skipping due to too long worker address error or no "
+                            "matching transport");
+        }
+        EXPECT_EQ(0, err_handler_count);
+
+        wait_for_server_ep(false);
     }
-    EXPECT_EQ(0, err_handler_count);
-
-    wait_for_server_ep(false);
-    restore_errors();
 
     /* allow the connection establishment flow to complete */
     short_progress_loop();
