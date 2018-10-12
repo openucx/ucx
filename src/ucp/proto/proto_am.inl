@@ -263,6 +263,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                 req->send.buffer,  req->send.datatype,
                                 max_middle - hdr_size_first + hdr_size_middle,
                                 ucp_ep_md_index(ep, req->send.lane), NULL);
+            ucs_assertv(state.offset != 0, "state must be changed on 1st stage");
             ucs_assertv(state.offset < req->send.length, "state.offset=%zu",
                         state.offset);
 
@@ -280,9 +281,15 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                 req->send.buffer, req->send.datatype, mid_len,
                                 ucp_ep_md_index(ep, req->send.lane), NULL);
 
-            status = uct_ep_am_zcopy(uct_ep, am_id_middle, (void*)hdr_middle,
-                                     hdr_size_middle, iov, iovcnt, 0,
-                                     &req->send.state.uct_comp);
+            if (offset < state.offset) {
+                status = uct_ep_am_zcopy(uct_ep, am_id_middle, (void*)hdr_middle,
+                                         hdr_size_middle, iov, iovcnt, 0,
+                                         &req->send.state.uct_comp);
+            } else {
+                ucs_assert(state.offset == req->send.length);
+                /* Empty IOVs on last stage */
+                return UCS_OK;
+            }
 
             UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_zcopy_middle",
                                                    iov[0].length, status);
