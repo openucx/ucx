@@ -340,7 +340,8 @@ enum uct_msg_flags {
  * List of flags for a callback.
  */
 enum uct_cb_flags {
-    UCT_CB_FLAG_ASYNC = UCS_BIT(0)  /**< Callback may be invoked from any
+    UCT_CB_FLAG_DEPRECATED = UCS_BIT(1), /**< Deprecated value. */
+    UCT_CB_FLAG_ASYNC = UCS_BIT(2)  /**< Callback may be invoked from any
                                          context (thread, process). For example,
                                          it may be called from a transport async
                                          progress thread. To guarantee async

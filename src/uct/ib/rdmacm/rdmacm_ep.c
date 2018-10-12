@@ -92,6 +92,10 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
         return UCS_ERR_UNSUPPORTED;
     }
 
+    if (cb_flags & UCT_CB_FLAG_DEPRECATED) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     /* Initialize these fields before calling rdma_resolve_addr to avoid a race
      * where they are used before being initialized (from the async thread
      * - after an RDMA_CM_EVENT_ROUTE_RESOLVED event) */
