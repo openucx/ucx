@@ -339,6 +339,27 @@ build_clang() {
 }
 
 #
+# Build with gcc-latest module
+#
+build_gcc_latest() {
+	echo 1..1 > build_gcc_latest.tap
+	if module_load dev/gcc-latest
+	then
+		echo "==== Build with GCC compiler ($(gcc --version|head -1)) ===="
+		../contrib/configure-devel --prefix=$ucx_inst
+		$MAKE clean
+		$MAKE
+		$MAKE install
+		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
+		$MAKE distclean
+		echo "ok 1 - build successful " >> build_gcc_latest.tap
+	else
+		echo "==== Not building with latest gcc compiler ===="
+		echo "ok 1 - # SKIP because dev/gcc-latest module is not available" >> build_gcc_latest.tap
+	fi
+}
+
+#
 # Build with armclang compiler
 #
 build_armclang() {
@@ -856,6 +877,7 @@ run_tests() {
 	do_distributed_task 2 4 build_cuda
 	do_distributed_task 3 4 build_clang
 	do_distributed_task 0 4 build_armclang
+	do_distributed_task 1 4 build_gcc_latest
 
 	# all are running mpi tests
 	run_mpi_tests
