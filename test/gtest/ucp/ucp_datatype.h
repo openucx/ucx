@@ -19,6 +19,7 @@ extern "C" {
 
 namespace ucp {
 
+/* Can't be destroyed before related UCP request is completed */
 class data_type_desc_t {
 public: 
     enum {

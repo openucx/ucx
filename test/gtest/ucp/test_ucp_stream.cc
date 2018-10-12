@@ -67,8 +67,9 @@ UCS_TEST_P(test_ucp_stream_onesided, send_recv_no_ep) {
     /* connect from sender side only and send */
     sender().connect(&receiver(), get_ep_params());
     uint64_t send_data = ucs::rand();
-    void *sreq = stream_send_nb(ucp::data_type_desc_t(
-                    ucp_dt_make_contig(sizeof(uint64_t)), &send_data, sizeof(send_data)));
+    ucp::data_type_desc_t dt_desc(ucp_dt_make_contig(sizeof(uint64_t)),
+                                  &send_data, sizeof(send_data));
+    void *sreq = stream_send_nb(dt_desc);
     wait(sreq);
 
     /* must not receive data before ep is created on receiver side */
@@ -156,7 +157,8 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
             check_pattern.insert(check_pattern.end(), sbuf.begin(),
                                  sbuf.begin() + i);
         }
-        sstatus = stream_send_nb(ucp::data_type_desc_t(datatype, sbuf.data(), i));
+        ucp::data_type_desc_t dt_desc(datatype, sbuf.data(), i);
+        sstatus = stream_send_nb(dt_desc);
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
         wait(sstatus);
         ssize += i;
@@ -206,7 +208,8 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
             check_pattern.insert(check_pattern.end(), sbuf.begin(),
                                  sbuf.begin() + i);
         }
-        sstatus = stream_send_nb(ucp::data_type_desc_t(dt, sbuf.data(), i));
+        ucp::data_type_desc_t dt_desc(dt, sbuf.data(), i);
+        sstatus = stream_send_nb(dt_desc);
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
         wait(sstatus);
         ssize += i;
@@ -217,8 +220,9 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
     if (align_tail != 0) {
         ucs::fill_random(sbuf, align_tail);
         check_pattern.insert(check_pattern.end(), sbuf.begin(), sbuf.begin() + align_tail);
-        sstatus = stream_send_nb(ucp::data_type_desc_t(ucp_dt_make_contig(align_tail),
-                                                       sbuf.data(), align_tail));
+        ucp::data_type_desc_t dt_desc(ucp_dt_make_contig(align_tail),
+                                      sbuf.data(), align_tail);
+        sstatus = stream_send_nb(dt_desc);
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
         wait(sstatus);
         ssize += align_tail;
@@ -361,8 +365,8 @@ void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
             ucs::fill_random(sbuf, send_i);
             check_pattern.insert(check_pattern.end(), sbuf.begin(),
                                  sbuf.begin() + send_i);
-            sstatus = stream_send_nb(ucp::data_type_desc_t(datatype, sbuf.data(),
-                                                           send_i));
+            ucp::data_type_desc_t dt_desc(datatype, sbuf.data(), send_i);
+            sstatus = stream_send_nb(dt_desc);
             EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
             wait(sstatus);
             ssize += send_i;
@@ -509,6 +513,55 @@ UCS_TEST_P(test_ucp_stream, send_recv_data_recv_64) {
 
 UCS_TEST_P(test_ucp_stream, send_recv_data_recv_iov) {
     do_send_recv_data_recv_test(DATATYPE_IOV);
+}
+
+UCS_TEST_P(test_ucp_stream, send_zero_ending_iov_recv_data) {
+    const size_t min_size         = 1024;
+    const size_t max_size         = min_size * 64;
+    const size_t iov_num          = 8; /* must be divisible by 4 without a
+                                        * remainder, caught on mlx5 based TLs
+                                        * where max_iov = 3 for zcopy multi
+                                        * protocol, where every posting includes:
+                                        * 1 header + 2 nonempty IOVs */
+    const size_t iov_num_nonempty = iov_num / 2;
+
+    std::vector<uint8_t> buf(max_size * 2);
+    ucs::fill_random(buf, buf.size());
+    std::vector<std::vector<ucp_dt_iov_t> > iov;
+    iov.resize(max_size - min_size);
+    for (size_t size = min_size; size < max_size; ++size) {
+        const size_t iov_idx = size - min_size;
+        size_t slen = 0;
+
+        std::vector<ucp_dt_iov_t> v(iov_num);
+        for (size_t j = 0; j < iov_num; ++j) {
+            if ((j % 2) == 0) {
+                v[j].buffer = &buf[j * size / iov_num_nonempty];
+                v[j].length = size / iov_num_nonempty;
+                slen       += v[j].length;
+            } else {
+                v[j].buffer = NULL;
+                v[j].length = 0;
+            }
+        }
+        std::swap(iov[iov_idx], v);
+
+        void *sreq = ucp_stream_send_nb(sender().ep(), &iov[iov_idx][0], iov_num,
+                                        ucp_dt_make_iov(), ucp_send_cb, 0);
+
+        size_t rlen = 0;
+        while (rlen < slen) {
+            progress();
+            size_t length;
+            void *rdata = ucp_stream_recv_data_nb(receiver().ep(), &length);
+            ASSERT_FALSE(UCS_PTR_IS_ERR(rdata));
+            if (rdata != NULL) {
+                rlen += length;
+                ucp_stream_data_release(receiver().ep(), rdata);
+            }
+        }
+        wait(sreq);
+    }
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_stream)
