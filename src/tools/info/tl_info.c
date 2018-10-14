@@ -340,7 +340,7 @@ static ucs_status_t print_tl_info(uct_md_h md, const char *tl_name,
     }
 
     /* coverity[alloc_arg] */
-    status = uct_worker_create(&async, UCS_THREAD_MODE_MULTI, &worker);
+    status = uct_worker_create(&async, UCS_THREAD_MODE_SINGLE, &worker);
     if (status != UCS_OK) {
         goto out;
     }

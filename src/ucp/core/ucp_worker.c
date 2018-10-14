@@ -1146,11 +1146,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
 {
-    ucp_worker_h worker;
-    ucs_status_t status;
+    ucs_thread_mode_t uct_thread_mode;
+    ucs_thread_mode_t thread_mode;
     unsigned config_count;
     unsigned name_length;
-    ucs_thread_mode_t thread_mode;
+    ucp_worker_h worker;
+    ucs_status_t status;
 
     config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
                            UINT8_MAX);
@@ -1174,6 +1175,13 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         worker->mt_lock.mt_type = UCP_MT_TYPE_MUTEX;
     } else {
         worker->mt_lock.mt_type = UCP_MT_TYPE_SPINLOCK;
+    }
+
+    if (thread_mode == UCS_THREAD_MODE_SINGLE) {
+        uct_thread_mode = UCS_THREAD_MODE_SINGLE;
+    } else {
+        /* UCT is serialized by UCP lock or by UCP user */
+        uct_thread_mode = UCS_THREAD_MODE_SERIALIZED;
     }
 
     UCP_THREAD_LOCK_INIT(&worker->mt_lock);
@@ -1236,7 +1244,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     /* Create the underlying UCT worker */
-    status = uct_worker_create(&worker->async, thread_mode, &worker->uct);
+    status = uct_worker_create(&worker->async, uct_thread_mode, &worker->uct);
     if (status != UCS_OK) {
         goto err_destroy_async;
     }

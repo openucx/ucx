@@ -118,6 +118,15 @@ struct mlx5_grh_av {
 #define UCT_IB_MLX5_SRQ_STRIDE   (sizeof(struct mlx5_wqe_srq_next_seg) + \
                                   sizeof(struct mlx5_wqe_data_seg))
 
+typedef enum {
+    UCT_IB_MLX5_MMIO_MODE_BF_POST,    /* BF without flush, can be used only from
+                                         one thread */
+    UCT_IB_MLX5_MMIO_MODE_BF_POST_MT, /* BF with order, can be used by multiple
+                                         serialized threads */
+    UCT_IB_MLX5_MMIO_MODE_DB,         /* 8-byte doorbell (with the mandatory flush) */
+    UCT_IB_MLX5_MMIO_MODE_LAST
+} uct_ib_mlx5_mmio_mode_t;
+
 
 /* Shared receive queue */
 typedef struct uct_ib_mlx5_srq {
@@ -145,21 +154,21 @@ typedef struct uct_ib_mlx5_cq {
 
 
 /* Blue flame register */
-typedef struct uct_ib_mlx5_bf {
+typedef struct uct_ib_mlx5_mmio_reg {
     uct_worker_tl_data_t        super;
     union {
         void                    *ptr;
-        uintptr_t               addr;
-    } reg;
-    unsigned                    enable_bf;       /* BF/DB method selector. DB used if zero */
-} uct_ib_mlx5_bf_t;
+        uintptr_t               uint;
+    } addr;
+    uct_ib_mlx5_mmio_mode_t     mode;
+} uct_ib_mlx5_mmio_reg_t;
 
 
 /* Send work-queue */
 typedef struct uct_ib_mlx5_txwq {
     uint16_t                    sw_pi;      /* PI for next WQE */
     uint16_t                    prev_sw_pi; /* PI where last WQE *started*  */
-    uct_ib_mlx5_bf_t            *bf;
+    uct_ib_mlx5_mmio_reg_t      *reg;
     void                        *curr;
     volatile uint32_t           *dbrec;
     void                        *qstart;

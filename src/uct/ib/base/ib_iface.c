@@ -666,17 +666,11 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     ucs_assert(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE);
 
-    if (params->stats_root == NULL) {
-        UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
-                                  params, &config->super
-                                  UCS_STATS_ARG(dev->stats)
-                                  UCS_STATS_ARG(params->mode.device.dev_name));
-    } else {
-        UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
-                                  params, &config->super
-                                  UCS_STATS_ARG(params->stats_root)
-                                  UCS_STATS_ARG(params->mode.device.dev_name));
-    }
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
+                              params, &config->super
+                              UCS_STATS_ARG((params->stats_root == NULL) ?
+                                            dev->stats : params->stats_root)
+                              UCS_STATS_ARG(params->mode.device.dev_name));
 
     status = uct_ib_device_find_port(dev, params->mode.device.dev_name, &port_num);
     if (status != UCS_OK) {
@@ -701,6 +695,11 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.sl                = config->sl;
     self->config.traffic_class     = config->traffic_class;
     self->release_desc.cb          = uct_ib_iface_release_desc;
+
+    if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
+        ucs_error("IB transports do not support multi-threaded worker");
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     status = uct_ib_iface_init_pkey(self, config);
     if (status != UCS_OK) {
