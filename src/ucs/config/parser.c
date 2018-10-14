@@ -20,6 +20,10 @@
 #include <fnmatch.h>
 
 
+/* configuration value which specifies "infinity" for a numeric variable */
+#define UCS_CONFIG_PARSER_NUMERIC_INF_STR      "inf"
+
+
 typedef UCS_CONFIG_ARRAY_FIELD(void, data) ucs_config_array_field_t;
 
 KHASH_SET_INIT_STR(ucs_config_env_vars)
@@ -107,7 +111,12 @@ int ucs_config_sprintf_int(char *buf, size_t max, void *src, const void *arg)
 
 int ucs_config_sscanf_uint(const char *buf, void *dest, const void *arg)
 {
-    return sscanf(buf, "%u", (unsigned*)dest);
+    if (!strcasecmp(buf, UCS_CONFIG_PARSER_NUMERIC_INF_STR)) {
+        *(unsigned*)dest = UINT_MAX;
+        return 1;
+    } else {
+        return sscanf(buf, "%u", (unsigned*)dest);
+    }
 }
 
 ucs_status_t ucs_config_clone_uint(void *src, void *dest, const void *arg)
@@ -118,7 +127,13 @@ ucs_status_t ucs_config_clone_uint(void *src, void *dest, const void *arg)
 
 int ucs_config_sprintf_uint(char *buf, size_t max, void *src, const void *arg)
 {
-    return snprintf(buf, max, "%u", *(unsigned*)src);
+    unsigned value = *(unsigned*)src;
+    if (value == UINT_MAX) {
+        snprintf(buf, max, UCS_CONFIG_PARSER_NUMERIC_INF_STR);
+        return 1;
+    } else {
+        return snprintf(buf, max, "%u", value);
+    }
 }
 
 int ucs_config_sscanf_ulong(const char *buf, void *dest, const void *arg)
@@ -380,7 +395,7 @@ int ucs_config_sscanf_memunits(const char *buf, void *dest, const void *arg)
     size_t bytes;
 
     /* Special value: infinity */
-    if (!strcasecmp(buf, "inf")) {
+    if (!strcasecmp(buf, UCS_CONFIG_PARSER_NUMERIC_INF_STR)) {
         *(size_t*)dest = UCS_CONFIG_MEMUNITS_INF;
         return 1;
     }
@@ -422,7 +437,7 @@ int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *ar
     size_t sz = *(size_t*)src;
 
     if (sz == UCS_CONFIG_MEMUNITS_INF) {
-        snprintf(buf, max, "inf");
+        snprintf(buf, max, UCS_CONFIG_PARSER_NUMERIC_INF_STR);
     } else if (sz == UCS_CONFIG_MEMUNITS_AUTO) {
         snprintf(buf, max, "auto");
     } else {
