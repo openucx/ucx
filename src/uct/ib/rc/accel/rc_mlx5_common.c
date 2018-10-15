@@ -543,8 +543,7 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
     pi = mlx5_cq->cq_ci;
     for (;;) {
         cqe = uct_ib_mlx5_get_cqe(mlx5_cq, pi);
-        if (((cqe->op_own & MLX5_CQE_OWNER_MASK) == !(pi & mlx5_cq->cq_length)) ||
-            ((cqe->op_own >> 4) == MLX5_CQE_INVALID)) {
+        if (uct_ib_mlx5_no_cqe(cqe->op_own, pi, mlx5_cq->cq_length)) {
             break;
         }
 
