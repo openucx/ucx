@@ -17,7 +17,7 @@ Feaures:
 - New client/server connection establishment API
 - Added CUDA support for stream API
 
-## 1.4.0-rc1 (September 26, 2018)
+## 1.4.0-rc1 (October 15, 2018)
 
 Features:
 - Improved support for installation with latest ROCm
@@ -25,6 +25,7 @@ Features:
 - Adding support for CUDA IPC for intra-node GPU
 - Added support for CUDA memory allocation cache for mem-type detection
 - Added support for latest Mellanox devices
+- Added support for Nvidia GPU managed memory
 - Added support for multiple connections between the same pair of workers
 - Added support large worker address for client/server connection establishment
   and INADDR_ANY
@@ -35,6 +36,8 @@ Bugfixes:
 - Memory hook fixes
 - Clang support fixes
 - Self tl multi-rail fix
+- Thread safety fixes in IB/RDMA transport
+- Compilation fixes with upstream rdma-core
 - Multiple minor bugfixes (full list on github)
 
 Tested configurations:
@@ -43,6 +46,12 @@ Tested configurations:
 - XPMEM: 2.6.2
 - KNEM: 1.1.2
 - Multiple bugfixes (full list on github)
+
+Known issues:
+  #2919 - Segfault in CUDA support when KNEM not present and CMA is active
+  intra-node RMA transpor. As a workaround user can disable CMA support at
+  compile time: --disable-cma. Alternatively user can remove CMA from UCX_TLS
+  list, for example: UCX_TLS=mm,rc,cuda_copy,cuda_ipc,gdr_copy.
 
 ## 1.3.1 (August 20, 2018)
 
