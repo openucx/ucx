@@ -62,6 +62,7 @@ public:
         uct_test::init();
 
         uct_iface_params params;
+        memset(&params, 0, sizeof(params));
 
         // tl and dev names are taken from resources via GetParam, no need
         // to fill it here
