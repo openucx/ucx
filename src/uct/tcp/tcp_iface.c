@@ -173,6 +173,14 @@ static ucs_status_t uct_tcp_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
+static void uct_tcp_iface_listen_close(uct_tcp_iface_t *iface)
+{
+    if (iface->listen_fd != -1) {
+        close(iface->listen_fd);
+        iface->listen_fd = -1;
+    }
+}
+
 static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
 {
     uct_tcp_iface_t *iface = arg;
@@ -189,6 +197,7 @@ static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
     if (fd < 0) {
         if ((errno != EAGAIN) && (errno != EINTR)) {
             ucs_error("accept() failed: %m");
+            uct_tcp_iface_listen_close(iface);
         }
         return;
     }
@@ -274,6 +283,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.nodelay        = config->sockopt_nodelay;
     self->sockopt.sndbuf         = config->sockopt_sndbuf;
     ucs_list_head_init(&self->ep_list);
+
+    if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
+        ucs_error("TCP transport does not support multi-threaded worker");
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     status = uct_tcp_netif_inaddr(self->if_name, &self->config.ifaddr,
                                   &self->config.netmask);
@@ -366,7 +380,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
         uct_tcp_ep_destroy(&ep->super.super);
     }
 
-    close(self->listen_fd);
+    uct_tcp_iface_listen_close(self);
     close(self->epfd);
 }
 

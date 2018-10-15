@@ -365,12 +365,28 @@ static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
 #endif
 }
 
+static UCS_F_ALWAYS_INLINE
+void *uct_ib_mlx5_bf_copy(void *dst, void *src, uint16_t num_bb,
+                          const uct_ib_mlx5_txwq_t *wq)
+{
+    uint16_t n;
+
+    for (n = 0; n < num_bb; ++n) {
+        uct_ib_mlx5_bf_copy_bb(dst, src);
+        dst += MLX5_SEND_WQE_BB;
+        src += MLX5_SEND_WQE_BB;
+        if (ucs_unlikely(src == wq->qend)) {
+            src = wq->qstart;
+        }
+    }
+    return src;
+}
 
 static UCS_F_ALWAYS_INLINE uint16_t
 uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
                       struct mlx5_wqe_ctrl_seg *ctrl, unsigned wqe_size)
 {
-    uint16_t n, sw_pi, num_bb, res_count;
+    uint16_t sw_pi, num_bb, res_count;
     void *src, *dst;
 
     ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
@@ -388,24 +404,23 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     ucs_memory_bus_store_fence();
 
     /* Set up copy pointers */
-    dst = wq->bf->reg.ptr;
+    dst = wq->reg->addr.ptr;
     src = ctrl;
 
     ucs_assert(wqe_size <= UCT_IB_MLX5_BF_REG_SIZE);
     ucs_assert(num_bb <= UCT_IB_MLX5_MAX_BB);
-    if (ucs_likely(wq->bf->enable_bf)) {
-        /* BF copy */
-        for (n = 0; n < num_bb; ++n) {
-            uct_ib_mlx5_bf_copy_bb(dst, src);
-            dst += MLX5_SEND_WQE_BB;
-            src += MLX5_SEND_WQE_BB;
-            if (ucs_unlikely(src == wq->qend)) {
-                src = wq->qstart;
-            }
-        }
+    if (ucs_likely(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_BF_POST)) {
+        src = uct_ib_mlx5_bf_copy(dst, src, num_bb, wq);
+        ucs_memory_bus_wc_flush();
+    } else if (wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_BF_POST_MT) {
+        src = uct_ib_mlx5_bf_copy(dst, src, num_bb, wq);
+        /* Make sure that HW observes WC writes in order, in case of multiple
+         * threads which use the same BF register in a serialized way
+         */
+        ucs_memory_cpu_wc_fence();
     } else {
-        /* DB copy */
-        *(volatile uint64_t *)dst = *(volatile uint64_t *)src;
+        ucs_assert(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_DB);
+        *(volatile uint64_t*)dst = *(volatile uint64_t*)src;
         ucs_memory_bus_store_fence();
         src = uct_ib_mlx5_txwq_wrap_any(wq, src + (num_bb * MLX5_SEND_WQE_BB));
     }
@@ -427,7 +442,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     wq->sw_pi       = sw_pi;
 
     /* Flip BF register */
-    wq->bf->reg.addr ^= UCT_IB_MLX5_BF_REG_SIZE;
+    wq->reg->addr.uint ^= UCT_IB_MLX5_BF_REG_SIZE;
     return res_count;
 }
 

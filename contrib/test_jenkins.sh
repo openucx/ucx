@@ -90,9 +90,11 @@ module_load() {
 # try load cuda modules if nvidia driver is installed
 #
 try_load_cuda_env() {
+	num_gpus=0
 	if [ -f "/proc/driver/nvidia/version" ]; then
 		module_load dev/cuda || true
 		module_load dev/gdrcopy || true
+		num_gpus=$(nvidia-smi -L | wc -l)
 	fi
 }
 
@@ -272,7 +274,7 @@ build_icc() {
 #
 build_debug() {
 	echo "==== Build with --enable-debug option ===="
-	../contrib/configure-devel --prefix=$ucx_inst --enable-debug
+	../contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
 	$MAKE clean
 	$MAKE
 	$MAKE distclean
@@ -333,6 +335,27 @@ build_clang() {
 	else
 		echo "==== Not building with clang compiler ===="
 		echo "ok 1 - # SKIP because clang not installed" >> build_clang.tap
+	fi
+}
+
+#
+# Build with gcc-latest module
+#
+build_gcc_latest() {
+	echo 1..1 > build_gcc_latest.tap
+	if module_load dev/gcc-latest
+	then
+		echo "==== Build with GCC compiler ($(gcc --version|head -1)) ===="
+		../contrib/configure-devel --prefix=$ucx_inst
+		$MAKE clean
+		$MAKE
+		$MAKE install
+		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
+		$MAKE distclean
+		echo "ok 1 - build successful " >> build_gcc_latest.tap
+	else
+		echo "==== Not building with latest gcc compiler ===="
+		echo "ok 1 - # SKIP because dev/gcc-latest module is not available" >> build_gcc_latest.tap
 	fi
 }
 
@@ -564,12 +587,14 @@ run_ucx_perftest_mpi() {
 	# run cuda tests
 	if (lsmod | grep -q "nv_peer_mem") && (lsmod | grep -q "gdrdrv")
 	then
+		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
 		cat $ucx_inst_ptest/test_types | grep cuda | sort -R > $ucx_inst_ptest/test_types_short
 		echo "==== Running ucx_perf with cuda memory===="
 		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=y $AFFINITY $UCX_PERFTEST
 		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=n $AFFINITY $UCX_PERFTEST
 		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy $AFFINITY $UCX_PERFTEST
 		$MPIRUN -np 2 $AFFINITY $UCX_PERFTEST
+		unset CUDA_VISIBLE_DEVICES
 	fi
 }
 
@@ -740,6 +765,10 @@ run_gtest() {
 	export GTEST_TAP=2
 	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
 
+	if [ $num_gpus -gt 0 ]; then
+		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
+	fi
+
 	GTEST_EXTRA_ARGS=""
 	if [ "$JENKINS_TEST_PERF" == 1 ]
 	then
@@ -848,6 +877,7 @@ run_tests() {
 	do_distributed_task 2 4 build_cuda
 	do_distributed_task 3 4 build_clang
 	do_distributed_task 0 4 build_armclang
+	do_distributed_task 1 4 build_gcc_latest
 
 	# all are running mpi tests
 	run_mpi_tests

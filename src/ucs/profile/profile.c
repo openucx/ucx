@@ -140,8 +140,10 @@ static void ucs_profile_get_location(ucs_profile_type_t type, const char *name,
                                      const char *file, int line,
                                      const char *function, volatile int *loc_id_p)
 {
+    ucs_profile_global_context_t *ctx = &ucs_profile_ctx;
     ucs_profile_location_t *loc;
     int location;
+    int i;
 
     pthread_mutex_lock(&ucs_profile_ctx.mutex);
 
@@ -157,6 +159,20 @@ static void ucs_profile_get_location(ucs_profile_type_t type, const char *name,
 
     /* Location ID must be uninitialized */
     ucs_assert(*loc_id_p == -1);
+
+    for (i = 0; i < ctx->num_locations; ++i) {
+        loc = &ctx->locations[i];
+
+        if ((type == loc->type) &&
+            (line == loc->line) &&
+            !strcmp(loc->name, name) &&
+            !strcmp(loc->file, basename(file)) &&
+            !strcmp(loc->function, function)) {
+
+            *loc_id_p = i + 1;
+            goto out_unlock;
+        }
+    }
 
     location = ucs_profile_ctx.num_locations++;
 

@@ -189,6 +189,7 @@ typedef struct ucp_worker {
     ucs_list_link_t               all_eps;       /* List of all endpoints */
     ucp_ep_match_ctx_t            ep_match_ctx;  /* Endpoint-to-endpoint matching context */
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
+    unsigned                      num_active_ifaces; /* Number of activated ifaces  */
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
     ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */
@@ -237,6 +238,9 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags);
 
 int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
                                         void *arg);
+ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
+                                      uct_ep_h uct_ep, ucp_lane_index_t lane,
+                                      ucs_status_t status);
 
 static inline const char* ucp_worker_get_name(ucp_worker_h worker)
 {

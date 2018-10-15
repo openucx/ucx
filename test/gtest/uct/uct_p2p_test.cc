@@ -149,8 +149,12 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
 {
 
     for (int mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
+        /* test mem type if md supports mem type
+         * (or) if HOST MD can register mem type
+         */
         if (!((sender().md_attr().cap.mem_type == mem_type) ||
-            (sender().md_attr().cap.reg_mem_types & UCS_BIT(mem_type)))) {
+            (sender().md_attr().cap.mem_type == UCT_MD_MEM_TYPE_HOST &&
+		sender().md_attr().cap.reg_mem_types & UCS_BIT(mem_type)))) {
             continue;
         }
         if (mem_type == UCT_MD_MEM_TYPE_CUDA) {

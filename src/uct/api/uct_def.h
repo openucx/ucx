@@ -18,7 +18,7 @@
 #define UCT_MD_COMPONENT_NAME_MAX  8
 #define UCT_MD_NAME_MAX          16
 #define UCT_DEVICE_NAME_MAX      32
-#define UCT_PENDING_REQ_PRIV_LEN 32
+#define UCT_PENDING_REQ_PRIV_LEN 40
 #define UCT_TAG_PRIV_LEN         32
 #define UCT_AM_ID_BITS           5
 #define UCT_AM_ID_MAX            UCS_BIT(UCT_AM_ID_BITS)
@@ -91,6 +91,7 @@ typedef struct uct_ep_addr       uct_ep_addr_t;
 typedef struct uct_tag_context   uct_tag_context_t;
 typedef uint64_t                 uct_tag_t;  /* tag type - 64 bit */
 typedef int                      uct_worker_cb_id_t;
+typedef void*                    uct_conn_request_h;
 /**
  * @}
  */
@@ -280,23 +281,24 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  * Other than communication progress routines, it is allowed to call other UCT
  * communication routines from this callback.
  *
+ * @param [in]  iface            Transport interface.
  * @param [in]  arg              User defined argument for this callback.
+ * @param [in]  conn_request     Transport level connection request. The user
+ *                               should accept or reject the request by calling
+ *                               @ref uct_iface_accept or @ref uct_iface_reject
+ *                               routines respectively.
  * @param [in]  conn_priv_data   Points to the received data.
  *                               This is the private data that was passed to the
  *                               @ref uct_ep_create_sockaddr function on the
  *                               client side.
  * @param [in]  length           Length of the received data.
  *
- * @retval UCS_OK         - the server will accept the connection request from
- *                          the client.
- * @retval Otherwise      - the server will reject the connection request from
- *                          the client which will invoke the error handling flow
- *                          on the client side.
- *
  */
-typedef ucs_status_t (*uct_sockaddr_conn_request_callback_t)(void *arg,
-                                                             const void *conn_priv_data,
-                                                             size_t length);
+typedef void
+(*uct_sockaddr_conn_request_callback_t)(uct_iface_h iface, void *arg,
+                                        uct_conn_request_h conn_request,
+                                        const void *conn_priv_data,
+                                        size_t length);
 
 
 /**

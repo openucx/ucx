@@ -414,6 +414,7 @@ enum {
 typedef enum {
     UCT_MD_MEM_TYPE_HOST = 0,      /**< Default system memory */
     UCT_MD_MEM_TYPE_CUDA,          /**< NVIDIA CUDA memory */
+    UCT_MD_MEM_TYPE_CUDA_MANAGED,  /**< NVIDIA CUDA managed (or unified) memory*/
     UCT_MD_MEM_TYPE_LAST
 } uct_memory_type_t;
 
@@ -1268,6 +1269,37 @@ ucs_status_t uct_iface_set_am_tracer(uct_iface_h iface, uct_am_tracer_t tracer,
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Accept connection request.
+ *
+ * @param [in] iface        Transport interface which generated connection
+ *                          request @a conn_request.
+ * @param [in] conn_request Connection establishment request passed as parameter
+ *                          of @ref uct_sockaddr_conn_request_callback_t.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t uct_iface_accept(uct_iface_h iface,
+                              uct_conn_request_h conn_request);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Reject connection request. Will invoke an error handler @ref
+ *        uct_error_handler_t on the remote transport interface, if set.
+ *
+ * @param [in] iface        Interface which generated connection establishment
+ *                          request @a conn_request.
+ * @param [in] conn_request Connection establishment request passed as parameter
+ *                          of @ref uct_sockaddr_conn_request_callback_t.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t uct_iface_reject(uct_iface_h iface,
+                              uct_conn_request_h conn_request);
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Create new endpoint.
  *
  * @param [in]  iface   Interface to create the endpoint on.
@@ -1991,15 +2023,18 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t o
  *                    the "func" field.
  *                    After passed to the function, the request is owned by UCT,
  *                    until the callback is called and returns UCS_OK.
+ * @param [in]  flags Reserved for future use.
  *
  * @return UCS_OK       - request added to pending queue
  *         UCS_ERR_BUSY - request was not added to pending queue, because send
  *                        resources are available now. The user is advised to
  *                        retry.
  */
-UCT_INLINE_API ucs_status_t uct_ep_pending_add(uct_ep_h ep, uct_pending_req_t *req)
+UCT_INLINE_API ucs_status_t uct_ep_pending_add(uct_ep_h ep,
+                                               uct_pending_req_t *req,
+                                               unsigned flags)
 {
-    return ep->iface->ops.ep_pending_add(ep, req);
+    return ep->iface->ops.ep_pending_add(ep, req, flags);
 }
 
 

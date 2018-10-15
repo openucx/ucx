@@ -905,6 +905,20 @@ ucp_perf_test_alloc_cuda(void **addr, size_t length)
 }
 
 static ucs_status_t
+ucp_perf_test_alloc_cuda_managed(void **addr, size_t length)
+{
+#if HAVE_CUDA
+    cudaError_t cerr;
+
+    cerr = cudaMallocManaged(addr, length, cudaMemAttachGlobal);
+    if (cerr != cudaSuccess) {
+        return UCS_ERR_NO_MEMORY;
+    }
+#endif
+    return UCS_OK;
+}
+
+static ucs_status_t
 ucp_perf_test_alloc_contig(ucx_perf_context_t *perf, ucx_perf_params_t *params,
                            void **addr, size_t length, ucp_mem_h *memh,
                            int check_non_blk_flag)
@@ -914,6 +928,8 @@ ucp_perf_test_alloc_contig(ucx_perf_context_t *perf, ucx_perf_params_t *params,
                                         check_non_blk_flag);
     } else if (perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA) {
         return ucp_perf_test_alloc_cuda(addr, length);
+    } else if (perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED) {
+        return ucp_perf_test_alloc_cuda_managed(addr, length);
     }
 
     return UCS_ERR_UNSUPPORTED;
@@ -928,7 +944,8 @@ static void ucp_perf_test_free_contig(ucx_perf_context_t *perf, void *addr, ucp_
         if (status != UCS_OK) {
             ucs_warn("ucp_mem_unmap() failed: %s", ucs_status_string(status));
         }
-    } else if (perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA) {
+    } else if ((perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA) ||
+               (perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED)) {
 #if HAVE_CUDA
         cudaFree(addr);
 #endif
@@ -1503,7 +1520,8 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
     ucx_perf_test_reset(perf, params);
 
 #if HAVE_CUDA
-    if (params->mem_type == UCT_MD_MEM_TYPE_CUDA) {
+    if ((params->mem_type == UCT_MD_MEM_TYPE_CUDA) ||
+        (params->mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED)) {
         status = ucx_perf_init_cuda_device(perf);
         if (status != UCS_OK) {
             goto out_free;

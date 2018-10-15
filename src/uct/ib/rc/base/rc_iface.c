@@ -103,10 +103,29 @@ static ucs_stats_class_t uct_rc_iface_stats_class = {
     .counter_names = {
         [UCT_RC_IFACE_STAT_RX_COMPLETION] = "rx_completion",
         [UCT_RC_IFACE_STAT_TX_COMPLETION] = "tx_completion",
-        [UCT_RC_IFACE_STAT_NO_CQE]        = "no_cqe",
+        [UCT_RC_IFACE_STAT_NO_CQE]        = "no_cqe"
+    }
+};
+
+#if IBV_EXP_HW_TM
+static ucs_stats_class_t uct_rc_iface_tag_stats_class = {
+    .name = "tag",
+    .num_counters = UCT_RC_IFACE_STAT_TAG_LAST,
+    .counter_names = {
+        [UCT_RC_IFACE_STAT_TAG_RX_EXP]            = "rx_exp",
+        [UCT_RC_IFACE_STAT_TAG_RX_EAGER_UNEXP]    = "rx_unexp_eager",
+        [UCT_RC_IFACE_STAT_TAG_RX_RNDV_UNEXP]     = "rx_unexp_rndv",
+        [UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_EXP]   = "rx_exp_rndv_req",
+        [UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_UNEXP] = "rx_unexp_rndv_req",
+        [UCT_RC_IFACE_STAT_TAG_RX_RNDV_FIN]       = "rx_rndv_fin",
+        [UCT_RC_IFACE_STAT_TAG_LIST_ADD]          = "tx_add_op",
+        [UCT_RC_IFACE_STAT_TAG_LIST_DEL]          = "tx_del_op",
+        [UCT_RC_IFACE_STAT_TAG_LIST_SYNC]         = "tx_sync_op"
     }
 };
 #endif
+
+#endif /* ENABLE_STATS */
 
 
 static ucs_mpool_ops_t uct_rc_fc_pending_mpool_ops = {
@@ -454,7 +473,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
         status = uct_rc_ep_fc_grant(&fc_req->super);
 
         if (status == UCS_ERR_NO_RESOURCE){
-            status = uct_ep_pending_add(&ep->super.super, &fc_req->super);
+            status = uct_ep_pending_add(&ep->super.super, &fc_req->super, 0);
         }
         ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",
                            ucs_status_string(status));
@@ -624,6 +643,7 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
 #if IBV_EXP_HW_TM
     uct_ib_md_t *md       = uct_ib_iface_md(&iface->super);
     unsigned tmh_hdrs_len = sizeof(struct ibv_exp_tmh) + rndv_hdr_len;
+    ucs_status_t status;
 
     if (!UCT_RC_IFACE_TM_ENABLED(iface)) {
         goto out_tm_disabled;
@@ -675,6 +695,12 @@ ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
 
     iface->rx.srq.quota = srq_init_attr->base.attr.max_wr;
 
+    status = UCS_STATS_NODE_ALLOC(&iface->tm.stats, &uct_rc_iface_tag_stats_class,
+                                  iface->stats);
+    if (status != UCS_OK) {
+        ucs_bug("Failed to allocate tag stats: %s", ucs_status_string(status));
+    }
+
     ucs_debug("Tag Matching enabled: tag list size %d", iface->tm.num_tags);
 
 out_tm_disabled:
@@ -688,6 +714,7 @@ void uct_rc_iface_tag_cleanup(uct_rc_iface_t *iface)
 #if IBV_EXP_HW_TM
     if (UCT_RC_IFACE_TM_ENABLED(iface)) {
         ucs_ptr_array_cleanup(&iface->tm.rndv_comps);
+        UCS_STATS_NODE_FREE(iface->tm.stats);
     }
 #endif
 }

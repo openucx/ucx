@@ -48,7 +48,7 @@ static const char * ucp_rndv_modes[] = {
 
 uct_memory_type_t ucm_to_uct_mem_type_map[] = {
     [UCM_MEM_TYPE_CUDA]         = UCT_MD_MEM_TYPE_CUDA,
-    [UCM_MEM_TYPE_CUDA_MANAGED] = UCT_MD_MEM_TYPE_HOST
+    [UCM_MEM_TYPE_CUDA_MANAGED] = UCT_MD_MEM_TYPE_CUDA_MANAGED
 };
 
 static ucs_config_field_t ucp_config_table[] = {
@@ -633,6 +633,51 @@ const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
         ucs_snprintf_zero(p, endp - p, "%s ",
                           context->tl_rscs[i].tl_rsc.tl_name);
         p += strlen(p);
+    }
+
+    return str;
+}
+
+static const char* ucp_feature_flag_str(unsigned feature_flag)
+{
+    switch (feature_flag) {
+    case UCP_FEATURE_TAG:
+        return "UCP_FEATURE_TAG";
+    case UCP_FEATURE_RMA:
+        return "UCP_FEATURE_RMA";
+    case UCP_FEATURE_AMO32:
+        return "UCP_FEATURE_AMO32";
+    case UCP_FEATURE_AMO64:
+        return "UCP_FEATURE_AMO64";
+    case UCP_FEATURE_WAKEUP:
+        return "UCP_FEATURE_WAKEUP";
+    case UCP_FEATURE_STREAM:
+        return "UCP_FEATURE_STREAM";
+    default:
+        ucs_fatal("Unknown feature flag value %u", feature_flag);
+    }
+}
+
+const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
+                                  size_t max_str_len)
+{
+    unsigned i, count;
+    char *p, *endp;
+
+    p    = str;
+    endp = str + max_str_len;
+    count = 0;
+
+    ucs_for_each_bit(i, feature_flags) {
+        ucs_snprintf_zero(p, endp - p, "%s%s", (count == 0) ? "" : "|",
+                          ucp_feature_flag_str(UCS_BIT(i)));
+        count++;
+        p += strlen(p);
+    }
+
+    if (count == 0) {
+        ucs_assert(max_str_len > 0);
+        str[0] = '\0'; /* empty string */
     }
 
     return str;

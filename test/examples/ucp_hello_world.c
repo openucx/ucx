@@ -1,11 +1,14 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2018. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
 
-#define HAVE_CONFIG_H /* Force using config.h, so test would fail if header
-                         actually tries to use it */
+#ifndef HAVE_CONFIG_H
+#  define HAVE_CONFIG_H /* Force using config.h, so test would fail if header
+                           actually tries to use it */
+#endif
 
 /*
  * UCP hello world client / server example utility
@@ -88,7 +91,7 @@ static void request_init(void *request)
     ctx->completed = 0;
 }
 
-static void send_handle(void *request, ucs_status_t status)
+static void send_handler(void *request, ucs_status_t status)
 {
     struct ucx_context *context = (struct ucx_context *) request;
 
@@ -108,7 +111,7 @@ static void failure_handler(void *arg, ucp_ep_h ep, ucs_status_t status)
     *arg_status = status;
 }
 
-static void recv_handle(void *request, ucs_status_t status,
+static void recv_handler(void *request, ucs_status_t status,
                         ucp_tag_recv_info_t *info)
 {
     struct ucx_context *context = (struct ucx_context *) request;
@@ -197,7 +200,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
 
     request = ucp_tag_send_nb(server_ep, msg, msg_len,
                               ucp_dt_make_contig(1), tag,
-                              send_handle);
+                              send_handler);
     if (UCS_PTR_IS_ERR(request)) {
         fprintf(stderr, "unable to send UCX address message\n");
         free(msg);
@@ -247,7 +250,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
 
     request = ucp_tag_msg_recv_nb(ucp_worker, msg, info_tag.length,
                                   ucp_dt_make_contig(1), msg_tag,
-                                  recv_handle);
+                                  recv_handler);
 
     if (UCS_PTR_IS_ERR(request)) {
         fprintf(stderr, "unable to receive UCX data message (%u)\n",
@@ -324,7 +327,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     msg = malloc(info_tag.length);
     CHKERR_JUMP(!msg, "allocate memory\n", err);
     request = ucp_tag_msg_recv_nb(ucp_worker, msg, info_tag.length,
-                                  ucp_dt_make_contig(1), msg_tag, recv_handle);
+                                  ucp_dt_make_contig(1), msg_tag, recv_handler);
 
     if (UCS_PTR_IS_ERR(request)) {
         fprintf(stderr, "unable to receive UCX address message (%s)\n",
@@ -373,7 +376,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
 
     request = ucp_tag_send_nb(client_ep, msg, msg_len,
                               ucp_dt_make_contig(1), tag,
-                              send_handle);
+                              send_handler);
     if (UCS_PTR_IS_ERR(request)) {
         fprintf(stderr, "unable to send UCX data message\n");
         free(msg);
@@ -386,7 +389,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     }
 
     status = flush_ep(ucp_worker, client_ep);
-    fprintf(stderr, "ucp_ep_flush is completed with status %d (%s)\n",
+    printf("flush_ep completed with status %d (%s)\n",
             status, ucs_status_string(status));
 
     ret = 0;
@@ -598,79 +601,4 @@ int parse_cmd(int argc, char * const argv[], char **server_name)
         fprintf(stderr, "WARNING: Non-option argument %s\n", argv[index]);
     }
     return UCS_OK;
-}
-
-int run_server()
-{
-    struct sockaddr_in inaddr;
-    int lsock  = -1;
-    int dsock  = -1;
-    int optval = 1;
-    int ret;
-
-    lsock = socket(AF_INET, SOCK_STREAM, 0);
-    CHKERR_JUMP(lsock < 0, "open server socket\n", err);
-
-    optval = 1;
-    ret = setsockopt(lsock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-    CHKERR_JUMP(ret < 0, "setsockopt server\n", err_sock);
-
-    inaddr.sin_family      = AF_INET;
-    inaddr.sin_port        = htons(server_port);
-    inaddr.sin_addr.s_addr = INADDR_ANY;
-    memset(inaddr.sin_zero, 0, sizeof(inaddr.sin_zero));
-    ret = bind(lsock, (struct sockaddr*)&inaddr, sizeof(inaddr));
-    CHKERR_JUMP(ret < 0, "bind server\n", err_sock);
-
-    ret = listen(lsock, 0);
-    CHKERR_JUMP(ret < 0, "listen server\n", err_sock);
-
-    printf("Waiting for connection...\n");
-
-    /* Accept next connection */
-    dsock = accept(lsock, NULL, NULL);
-    CHKERR_JUMP(dsock < 0, "accept server\n", err_sock);
-
-    close(lsock);
-
-    return dsock;
-
-err_sock:
-    close(lsock);
-
-err:
-    return -1;
-}
-
-int run_client(const char *server)
-{
-    struct sockaddr_in conn_addr;
-    struct hostent *he;
-    int connfd;
-    int ret;
-
-    connfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (connfd < 0) {
-        fprintf(stderr, "socket() failed: %s\n", strerror(errno));
-        return -1;
-    }
-
-    he = gethostbyname(server);
-    CHKERR_JUMP((he == NULL || he->h_addr_list == NULL), "found host\n", err_conn);
-
-    conn_addr.sin_family = he->h_addrtype;
-    conn_addr.sin_port   = htons(server_port);
-
-    memcpy(&conn_addr.sin_addr, he->h_addr_list[0], he->h_length);
-    memset(conn_addr.sin_zero, 0, sizeof(conn_addr.sin_zero));
-
-    ret = connect(connfd, (struct sockaddr*)&conn_addr, sizeof(conn_addr));
-    CHKERR_JUMP(ret < 0, "connect client\n", err_conn);
-
-    return connfd;
-
-err_conn:
-    close(connfd);
-
-    return -1;
 }

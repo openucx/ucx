@@ -8,6 +8,7 @@
 #include <common/test_helpers.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/stats/stats.h>
+#include <queue>
 
 
 namespace ucp {
@@ -30,7 +31,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
 const ucp_datatype_t ucp_test::DATATYPE     = ucp_dt_make_contig(1);
 const ucp_datatype_t ucp_test::DATATYPE_IOV = ucp_dt_make_iov();
 
-ucp_test::ucp_test() {
+ucp_test::ucp_test() : m_failed(false) {
     ucs_status_t status;
     status = ucp_config_read(NULL, NULL, &m_ucp_config);
     ASSERT_UCS_OK(status);
@@ -91,6 +92,20 @@ ucp_test_base::entity* ucp_test::create_entity(bool add_in_front,
     return e;
 }
 
+ucp_test::entity* ucp_test::get_entity_by_ep(ucp_ep_h ep) {
+    ucs::ptr_vector<entity>::const_iterator e_it;
+    for (e_it = entities().begin(); e_it != entities().end(); ++e_it) {
+        for (int w_idx = 0; w_idx < (*e_it)->get_num_workers(); ++w_idx) {
+            for (int ep_idx = 0; ep_idx < (*e_it)->get_num_eps(w_idx); ++ep_idx) {
+                if (ep == (*e_it)->ep(w_idx, ep_idx)) {
+                    return *e_it;
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
 ucp_params_t ucp_test::get_ctx_params() {
     ucp_params_t params;
     memset(&params, 0, sizeof(params));
@@ -144,9 +159,14 @@ void ucp_test::flush_worker(const entity &e, int worker_index)
 
 void ucp_test::disconnect(const entity& entity) {
     for (int i = 0; i < entity.get_num_workers(); i++) {
-        flush_worker(entity, i);
+        if (!is_failed()) {
+            flush_worker(entity, i);
+        }
+
         for (int j = 0; j < entity.get_num_eps(i); j++) {
-            void *dreq = entity.disconnect_nb(i, j);
+            void *dreq = entity.disconnect_nb(i, j, is_failed() ?
+                                                    UCP_EP_CLOSE_MODE_FORCE :
+                                                    UCP_EP_CLOSE_MODE_FLUSH);
             if (!UCS_PTR_IS_PTR(dreq)) {
                 ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
             }
@@ -184,6 +204,15 @@ void ucp_test::wait(void *req, int worker_index)
 
 void ucp_test::set_ucp_config(ucp_config_t *config) {
     set_ucp_config(config, GetParam());
+}
+
+int ucp_test::max_connections() {
+    std::vector<std::string>::const_iterator end = GetParam().transports.end();
+    if (std::find(GetParam().transports.begin(), end, "tcp") != end) {
+        return ucs::max_tcp_connections();
+    } else {
+        return std::numeric_limits<int>::max();
+    }
 }
 
 std::vector<ucp_test_param>
@@ -325,6 +354,7 @@ bool ucp_test::check_test_param(const std::string& name,
 ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               ucp_config_t* ucp_config,
                               const ucp_worker_params_t& worker_params)
+    : m_rejected_cntr(0)
 {
     ucp_test_param entity_param = test_param;
     ucp_worker_params_t local_worker_params = worker_params;
@@ -392,7 +422,7 @@ void ucp_test_base::entity::connect(const entity* other,
             UCS_TEST_SKIP_R(m_errors.empty() ? "Unreachable" : m_errors.back());
         }
 
-        ASSERT_UCS_OK(status);
+        ASSERT_UCS_OK(status, << " (" << m_errors.back() << ")");
 
         if (do_set_ep) {
             set_ep(ep, i, ep_idx);
@@ -401,6 +431,27 @@ void ucp_test_base::entity::connect(const entity* other,
         ucp_worker_release_address(other->worker(i), address);
     }
 }
+
+ucp_ep_h ucp_test_base::entity::accept(ucp_worker_h worker,
+                                       ucp_conn_request_h conn_request)
+{
+    ucp_ep_h        ep;
+    ucp_ep_params_t ep_params;
+    ep_params.field_mask   = UCP_EP_PARAM_FIELD_USER_DATA |
+                             UCP_EP_PARAM_FIELD_CONN_REQUEST;
+    ep_params.user_data    = (void *)0xdeadbeef;
+    ep_params.conn_request = conn_request;
+
+    ucs_status_t status    = ucp_ep_create(worker, &ep_params, &ep);
+    if (status == UCS_ERR_UNREACHABLE) {
+        UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
+                        "feature or no supported transport to send partial "
+                        "worker address)");
+    }
+    ASSERT_UCS_OK(status);
+    return ep;
+}
+
 
 void* ucp_test_base::entity::modify_ep(const ucp_ep_params_t& ep_params,
                                       int worker_idx, int ep_idx) {
@@ -421,10 +472,23 @@ void ucp_test_base::entity::set_ep(ucp_ep_h ep, int worker_index, int ep_index)
 void ucp_test_base::entity::empty_send_completion(void *r, ucs_status_t status) {
 }
 
-void ucp_test_base::entity::accept_cb(ucp_ep_h ep, void *arg) {
+void ucp_test_base::entity::accept_ep_cb(ucp_ep_h ep, void *arg) {
     entity *self = reinterpret_cast<entity*>(arg);
     int worker_index = 0; /* TODO pass worker index in arg */
     self->set_ep(ep, worker_index, self->get_num_eps(worker_index));
+}
+
+void ucp_test_base::entity::accept_conn_cb(ucp_conn_request_h conn_req, void* arg)
+{
+    entity *self = reinterpret_cast<entity*>(arg);
+    self->m_conn_reqs.push(conn_req);
+}
+
+void ucp_test_base::entity::reject_conn_cb(ucp_conn_request_h conn_req, void* arg)
+{
+    entity *self = reinterpret_cast<entity*>(arg);
+    ucp_listener_reject(self->m_listener, conn_req);
+    self->m_rejected_cntr++;
 }
 
 void* ucp_test_base::entity::flush_ep_nb(int worker_index, int ep_index) const {
@@ -443,12 +507,13 @@ void ucp_test_base::entity::fence(int worker_index) const {
     ASSERT_UCS_OK(status);
 }
 
-void* ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index) const {
+void* ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index,
+                                           enum ucp_ep_close_mode mode) const {
     ucp_ep_h ep = revoke_ep(worker_index, ep_index);
     if (ep == NULL) {
         return NULL;
     }
-    return ucp_disconnect_nb(ep);
+    return ucp_ep_close_nb(ep, mode);
 }
 
 void ucp_test_base::entity::destroy_worker(int worker_index) {
@@ -477,18 +542,36 @@ ucp_ep_h ucp_test_base::entity::revoke_ep(int worker_index, int ep_index) const 
     return ucp_ep;
 }
 
-ucs_status_t ucp_test_base::entity::listen(const struct sockaddr* saddr,
+ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
+                                           const struct sockaddr* saddr,
                                            socklen_t addrlen, int worker_index)
 {
     ucp_listener_params_t params;
-    ucp_listener_h listener;
+    ucp_listener_h        listener;
 
-    params.field_mask         = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
-                                UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
-    params.sockaddr.addr      = saddr;
-    params.sockaddr.addrlen   = addrlen;
-    params.accept_handler.cb  = accept_cb;
-    params.accept_handler.arg = reinterpret_cast<void*>(this);
+    params.field_mask             = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR;
+    params.sockaddr.addr          = saddr;
+    params.sockaddr.addrlen       = addrlen;
+
+    switch (cb_type) {
+    case LISTEN_CB_EP:
+        params.field_mask        |= UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
+        params.accept_handler.cb  = accept_ep_cb;
+        params.accept_handler.arg = reinterpret_cast<void*>(this);
+        break;
+    case LISTEN_CB_CONN:
+        params.field_mask        |= UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+        params.conn_handler.cb    = accept_conn_cb;
+        params.conn_handler.arg   = reinterpret_cast<void*>(this);
+        break;
+    case LISTEN_CB_REJECT:
+        params.field_mask        |= UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+        params.conn_handler.cb    = reject_conn_cb;
+        params.conn_handler.arg   = reinterpret_cast<void*>(this);
+        break;
+    default:
+        UCS_TEST_ABORT("invalid test parameter");
+    }
 
     wrap_errors();
     ucs_status_t status = ucp_listener_create(worker(worker_index), &params, &listener);
@@ -518,7 +601,21 @@ ucp_context_h ucp_test_base::entity::ucph() const {
 unsigned ucp_test_base::entity::progress(int worker_index)
 {
     ucp_worker_h ucp_worker = worker(worker_index);
-    return ucp_worker ? ucp_worker_progress(ucp_worker) : 0;
+
+    if (ucp_worker == NULL) {
+        return 0;
+    }
+
+    unsigned progress_count = 0;
+    if (!m_conn_reqs.empty()) {
+        ucp_conn_request_h conn_req = m_conn_reqs.back();
+        m_conn_reqs.pop();
+        ucp_ep_h ep = accept(ucp_worker, conn_req);
+        set_ep(ep, worker_index, std::numeric_limits<int>::max());
+        ++progress_count;
+    }
+
+    return progress_count + ucp_worker_progress(ucp_worker);
 }
 
 int ucp_test_base::entity::get_num_workers() const {
@@ -528,6 +625,15 @@ int ucp_test_base::entity::get_num_workers() const {
 int ucp_test_base::entity::get_num_eps(int worker_index) const {
     return m_workers[worker_index].second.size();
 }
+
+size_t ucp_test_base::entity::get_rejected_cntr() const {
+    return m_rejected_cntr;
+}
+
+void ucp_test_base::entity::inc_rejected_cntr() {
+    ++m_rejected_cntr;
+}
+
 
 void ucp_test_base::entity::warn_existing_eps() const {
     for (size_t worker_index = 0; worker_index < m_workers.size(); ++worker_index) {

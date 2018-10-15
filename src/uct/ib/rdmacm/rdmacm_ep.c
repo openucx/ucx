@@ -98,6 +98,8 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
     self->pack_cb       = pack_cb;
     self->pack_cb_arg   = arg;
     self->pack_cb_flags = cb_flags;
+    pthread_mutex_init(&self->ops_mutex, NULL);
+    ucs_queue_head_init(&self->ops);
 
     /* Save the remote address */
     if (sockaddr->addr->sa_family == AF_INET) {
@@ -143,9 +145,12 @@ out:
                iface, iface->event_ch, iface->cm_id,
                ucs_sockaddr_str((struct sockaddr *)sockaddr->addr,
                                 ip_port_str, UCS_SOCKADDR_STRING_LEN));
+    self->status = UCS_INPROGRESS;
     return UCS_OK;
 
 err:
+    pthread_mutex_destroy(&self->ops_mutex);
+
     return status;
 }
 
@@ -166,6 +171,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
      * chain but wasn't invoked yet */
     uct_worker_progress_unregister_safe(&iface->super.worker->super,
                                         &self->slow_prog_id);
+
+    pthread_mutex_destroy(&self->ops_mutex);
+    if (!ucs_queue_is_empty(&self->ops)) {
+        ucs_warn("destroying endpoint %p with not completed operations", self);
+    }
 
     /* mark this ep as destroyed so that arriving events on it won't try to
      * use it */
@@ -217,5 +227,22 @@ void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t stat
     } else {
         uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), &rdmacm_ep->super.super,
                           &rdmacm_iface->super.super, status);
+    }
+}
+
+/**
+ * Caller must lock ep->ops_mutex
+ */
+void uct_rdmacm_ep_invoke_completions(uct_rdmacm_ep_t *ep, ucs_status_t status)
+{
+    uct_rdmacm_ep_op_t *op;
+
+    ucs_assert(pthread_mutex_trylock(&ep->ops_mutex) == EBUSY);
+
+    ucs_queue_for_each_extract(op, &ep->ops, queue_elem, 1) {
+        pthread_mutex_unlock(&ep->ops_mutex);
+        uct_invoke_completion(op->user_comp, status);
+        ucs_free(op);
+        pthread_mutex_lock(&ep->ops_mutex);
     }
 }

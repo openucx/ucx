@@ -41,13 +41,6 @@ struct ucp_wireup_ep {
     uct_worker_cb_id_t        progress_id;   /**< ID of progress function */
 };
 
-typedef struct ucp_wireup_client_data {
-    uintptr_t                 ep_ptr;        /**< Client-side endpoint pointer */
-    ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
-    uint8_t                   is_full_addr;  /**< Whether the attached address is
-                                                  full or partial */
-    /* packed worker address follows */
-} UCS_S_PACKED ucp_wireup_sockaddr_priv_t;
 
 /**
  * Create a proxy endpoint for wireup.

@@ -295,7 +295,8 @@ public:
 
 	if (m_perf.params.mem_type == UCT_MD_MEM_TYPE_HOST) {
             *((volatile uint8_t*)m_perf.recv_buffer + length - 1) = -1;
-	} else if (m_perf.params.mem_type == UCT_MD_MEM_TYPE_CUDA) {
+	} else if ((m_perf.params.mem_type == UCT_MD_MEM_TYPE_CUDA) ||
+                   (m_perf.params.mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED)) {
 #if HAVE_CUDA
             cudaMemset(((uint8_t*)m_perf.recv_buffer + length - 1), -1, 1);
 #endif

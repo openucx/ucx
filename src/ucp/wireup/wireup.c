@@ -252,35 +252,34 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                                    remote_address->address_count,
                                    remote_address->address_list, addr_indices);
     if (status != UCS_OK) {
+        ucp_worker_set_ep_failed(worker, ep,
+                                 ep->uct_eps[ucp_ep_get_wireup_msg_lane(ep)],
+                                 ucp_ep_get_wireup_msg_lane(ep), status);
         return;
     }
 
     status = ucp_wireup_send_request(ep);
     if (status != UCS_OK) {
-        goto err_cleanup_lanes;
+        ucp_ep_cleanup_lanes(ep);
     }
-
-    return;
-
-err_cleanup_lanes:
-    ucp_ep_cleanup_lanes(ep);
 }
 
 static UCS_F_NOINLINE void
 ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                            const ucp_unpacked_address_t *remote_address)
 {
-    uint64_t remote_uuid = remote_address->uuid;
+    uint64_t remote_uuid   = remote_address->uuid;
+    uint64_t tl_bitmap     = 0;
+    int send_reply         = 0;
+    unsigned ep_init_flags = 0;
     ucp_rsc_index_t rsc_tli[UCP_MAX_LANES];
     uint8_t addr_indices[UCP_MAX_LANES];
     ucp_lane_index_t lane, remote_lane;
     ucp_rsc_index_t rsc_index;
     ucp_ep_params_t params;
     ucs_status_t status;
-    uint64_t tl_bitmap = 0;
-    int send_reply = 0, reset_listener_flag = 0;
+    ucp_ep_flags_t listener_flag;
     ucp_ep_h ep;
-    unsigned ep_init_flags = 0;
 
     ucs_assert(msg->type == UCP_WIREUP_MSG_REQUEST);
     ucs_trace("got wireup request from 0x%"PRIx64" src_ep 0x%lx dst_ep 0x%lx conn_sn %d",
@@ -290,8 +289,13 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         /* wireup request for a specific ep */
         ep = ucp_worker_get_ep_by_ptr(worker, msg->dest_ep_ptr);
         ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
-        ucp_ep_flush_state_reset(ep);
-
+        if (!(ep->flags & UCP_EP_FLAG_LISTENER) &&
+            ucp_ep_config(ep)->p2p_lanes) {
+            /* Reset flush state only if it's not a client-server wireup on
+             * server side with long address exchange when listener (united with
+             * flush state) should be valid until user's callback invoking */
+            ucp_ep_flush_state_reset(ep);
+        }
         ep_init_flags |= UCP_EP_CREATE_AM_LANE;
     } else {
         ep = ucp_ep_match_retrieve_exp(&worker->ep_match_ctx, remote_uuid,
@@ -377,11 +381,10 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     if (send_reply) {
 
-        if (ep->flags & UCP_EP_FLAG_LISTENER) {
-            /* Remove this flag at this point (so that address packing would be correct) */
-            ep->flags &= ~UCP_EP_FLAG_LISTENER;
-            reset_listener_flag = 1;
-        }
+        listener_flag = ep->flags & UCP_EP_FLAG_LISTENER;
+        /* Remove this flag at this point if it's set
+         * (so that address packing would be correct) */
+        ep->flags &= ~UCP_EP_FLAG_LISTENER;
 
         /* Construct the list that tells the remote side with which address we
          * have connected to each of its lanes.
@@ -405,9 +408,8 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
             return;
         }
 
-        if (reset_listener_flag) {
-            ep->flags |= UCP_EP_FLAG_LISTENER;
-        }
+        /* Restore saved flag value */
+        ep->flags |= listener_flag;
     } else {
         /* if in client-server flow, schedule invoking the user's callback
          * (if server is connected) from the main thread */
@@ -924,7 +926,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
     ucs_queue_for_each_extract(req, &tmp_q, send.uct.priv, 1) {
         ucs_trace_req("ep %p: requeue request %p after wireup request",
                       req->send.ep, req);
-        status = uct_ep_pending_add(ep->uct_eps[lane], &req->send.uct);
+        status = uct_ep_pending_add(ep->uct_eps[lane], &req->send.uct, 0);
         ucs_assert(status == UCS_OK); /* because it's a wireup proxy */
     }
 

@@ -407,8 +407,10 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(sender().worker()->uuid, unpacked_address.uuid);
+#if ENABLE_DEBUG_DATA
     EXPECT_EQ(std::string(ucp_worker_get_name(sender().worker())),
               std::string(unpacked_address.name));
+#endif
     EXPECT_EQ(0u, unpacked_address.address_count);
 
     ucs_free(unpacked_address.address_list);
@@ -463,7 +465,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, stress_connect) {
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, stress_connect2) {
-    for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
+    int count = ucs_min(1000 / ucs::test_time_multiplier(), max_connections() / 2);
+    for (int i = 0; i < count; ++i) {
         sender().connect(&receiver(), get_ep_params());
         send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
         if (&sender() != &receiver()) {

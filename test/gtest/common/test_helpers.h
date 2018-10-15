@@ -203,6 +203,11 @@ int test_time_multiplier();
 
 
 /**
+ * @return System limit on number of TCP connections.
+ */
+int max_tcp_connections();
+
+/**
  * Signal-safe sleep.
  */
 void safe_sleep(double sec);

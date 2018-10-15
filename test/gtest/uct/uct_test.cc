@@ -364,6 +364,15 @@ void uct_test::twait(int delta_ms) const {
     } while (now + ucs_time_from_msec(delta_ms) > ucs_get_time());
 }
 
+int uct_test::max_connections()
+{
+    if (GetParam()->tl_name == "tcp") {
+        return ucs::max_tcp_connections();
+    } else {
+        return std::numeric_limits<int>::max();
+    }
+}
+
 std::string uct_test::entity::client_priv_data = "";
 size_t uct_test::entity::client_cb_arg = 0;
 
@@ -381,7 +390,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     UCS_CPU_ZERO(&params->cpu_mask);
 
     UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
-                           uct_worker_create, &m_async.m_async, UCS_THREAD_MODE_MULTI /* TODO */);
+                           uct_worker_create, &m_async.m_async, UCS_THREAD_MODE_SINGLE);
 
     UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close,
                            uct_md_open, resource.md_name.c_str(), md_config);

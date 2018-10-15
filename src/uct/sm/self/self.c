@@ -152,6 +152,11 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
+        ucs_error("Self transport does not support multi-threaded worker");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     if (strcmp(params->mode.device.dev_name, UCT_SELF_NAME) != 0) {
         ucs_error("No device was found: %s", params->mode.device.dev_name);
         return UCS_ERR_NO_DEVICE;

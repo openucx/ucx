@@ -21,7 +21,7 @@ int ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
     ucp_worker_t *worker   = iface->worker;
     ucp_context_t *context = worker->context;
 
-    if (!worker->tm.offload.num_ifaces) {
+    if (worker->tm.offload.iface == NULL) {
         ucs_assert(worker->tm.offload.thresh       == SIZE_MAX);
         ucs_assert(worker->tm.offload.zcopy_thresh == SIZE_MAX);
         ucs_assert(worker->tm.offload.iface        == NULL);
@@ -29,20 +29,19 @@ int ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
         worker->tm.offload.thresh       = context->config.ext.tm_thresh;
         worker->tm.offload.zcopy_thresh = context->config.ext.tm_max_bb_size;
 
-        /* Cache active offload iface, in most cases only one iface should be
-         * used for offload. If more ifaces will be activated, they will be
-         * added to offload hash table. */
+        /* Cache active offload iface. Can use it if this will be the only
+         * active iface on the worker. Otherwise would need to retrieve
+         * offload-capable iface from the offload hash table. */
         worker->tm.offload.iface        = iface;
 
         ucs_debug("Enable TM offload: thresh %zu, zcopy_thresh %zu",
                   worker->tm.offload.thresh, worker->tm.offload.zcopy_thresh);
     }
 
-    ++worker->tm.offload.num_ifaces;
     iface->flags |= UCP_WORKER_IFACE_FLAG_OFFLOAD_ACTIVATED;
 
-    ucs_debug("Activate tag offload iface %p, num of offload ifaces %d",
-              iface, worker->tm.offload.num_ifaces);
+    ucs_debug("Activate tag offload iface %p", iface);
+
     return 1;
 }
 
@@ -52,7 +51,7 @@ ucp_tag_offload_iface(ucp_worker_t *worker, ucp_tag_t tag)
     khiter_t hash_it;
     ucp_tag_t key_tag;
 
-    if (ucs_likely(worker->tm.offload.num_ifaces == 1)) {
+    if (worker->num_active_ifaces == 1) {
         ucs_assert(worker->tm.offload.iface != NULL);
         return worker->tm.offload.iface;
     }
@@ -76,7 +75,8 @@ ucp_tag_offload_release_buf(ucp_request_t *req, int dereg)
 }
 
 /* Tag consumed by the transport - need to remove it from expected queue */
-void ucp_tag_offload_tag_consumed(uct_tag_context_t *self)
+UCS_PROFILE_FUNC_VOID(ucp_tag_offload_tag_consumed, (self),
+                      uct_tag_context_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
     ucs_queue_head_t *queue;
@@ -86,8 +86,10 @@ void ucp_tag_offload_tag_consumed(uct_tag_context_t *self)
 }
 
 /* Message is scattered to user buffer by the transport, complete the request */
-void ucp_tag_offload_completed(uct_tag_context_t *self, uct_tag_t stag,
-                               uint64_t imm, size_t length, ucs_status_t status)
+UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
+                      (self, stag, imm, length, status),
+                      uct_tag_context_t *self, uct_tag_t stag,
+                      uint64_t imm, size_t length, ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
     ucp_eager_sync_hdr_t hdr;
@@ -127,9 +129,11 @@ out:
 }
 
 /* RNDV request matched by the transport. Need to proceed with SW based RNDV */
-void ucp_tag_offload_rndv_cb(uct_tag_context_t *self, uct_tag_t stag,
-                             const void *header, unsigned header_length,
-                             ucs_status_t status)
+UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
+                      (self, stag, header, header_length, status),
+                      uct_tag_context_t *self, uct_tag_t stag,
+                      const void *header, unsigned header_length,
+                      ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
 
@@ -198,12 +202,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         ucp_rndv_process_rts(worker, (void*)hdr, hdr_length, 0);
     }
 
-    ucp_tag_offload_unexp(iface, stag);
+    /* Unexpected RNDV (both SW and HW) need to enable offload capabilities.
+     * Pass TM_THRESH value as a length to make sure tag is added to the
+     * hash table if there is a need (i.e. we have several active ifaces). */
+    ucp_tag_offload_unexp(iface, stag, worker->tm.offload.thresh);
 
     return UCS_OK;
 }
 
-void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, unsigned mode)
+UCS_PROFILE_FUNC_VOID(ucp_tag_offload_cancel, (worker, req, mode),
+                      ucp_worker_t *worker, ucp_request_t *req, unsigned mode)
 {
 
     ucp_worker_iface_t *wiface = req->recv.tag.wiface;
@@ -227,7 +235,7 @@ void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, unsigned m
 }
 
 static UCS_F_ALWAYS_INLINE int
-ucp_tag_offload_do_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
+ucp_tag_offload_do_post(ucp_request_t *req)
 {
     ucp_worker_t *worker   = req->recv.worker;
     ucp_context_t *context = worker->context;
@@ -328,7 +336,6 @@ static UCS_F_ALWAYS_INLINE int
 ucp_tag_offload_post_sw_reqs(ucp_request_t *req, ucp_request_queue_t *req_queue)
 {
     ucp_worker_t *worker = req->recv.worker;
-    ucs_queue_iter_t iter;
     ucs_status_t status;
     ucp_request_t *req_exp;
     ucp_worker_iface_t *wiface;
@@ -359,12 +366,12 @@ ucp_tag_offload_post_sw_reqs(ucp_request_t *req, ucp_request_queue_t *req_queue)
         return 0;
     }
 
-    ucs_queue_for_each_safe(req_exp, iter, &req_queue->queue, recv.queue) {
+    ucs_queue_for_each(req_exp, &req_queue->queue, recv.queue) {
         if (req_exp->flags & UCP_REQUEST_FLAG_OFFLOADED) {
             continue;
         }
         ucs_assert(req_exp != req);
-        status = ucp_tag_offload_do_post(req_exp, req_queue);
+        status = ucp_tag_offload_do_post(req_exp);
         if (status != UCS_OK) {
             return 0;
         }
@@ -375,7 +382,8 @@ ucp_tag_offload_post_sw_reqs(ucp_request_t *req, ucp_request_queue_t *req_queue)
     return 1;
 }
 
-int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
+UCS_PROFILE_FUNC(int, ucp_tag_offload_post, (req, req_queue),
+                 ucp_request_t *req, ucp_request_queue_t *req_queue)
 {
     ucp_worker_t *worker   = req->recv.worker;
     ucp_context_t *context = worker->context;
@@ -404,7 +412,7 @@ int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue)
         return 0;
     }
 
-    if (ucp_tag_offload_do_post(req, req_queue) != UCS_OK) {
+    if (ucp_tag_offload_do_post(req) != UCS_OK) {
         return 0;
     }
 

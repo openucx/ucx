@@ -555,20 +555,27 @@ static void ucm_malloc_test(int events)
 
     ucm_event_handler_add(&handler);
 
-    /* Trigger both small and large allocations
-     * TODO check address / stop all threads */
-    for (i = 0; i < small_alloc_count; ++i) {
-        p[i] = malloc(small_alloc_size);
-    }
-    for (i = 0; i < small_alloc_count; ++i) {
-        free(p[i]);
-    }
-    p[0] = malloc(large_alloc_size);
-    p[0] = realloc(p[0], large_alloc_size * 2);
-    free(p[0]);
+    if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) {
+        /* Trigger both small and large allocations
+         * TODO check address / stop all threads */
+        for (i = 0; i < small_alloc_count; ++i) {
+            p[i] = malloc(small_alloc_size);
+        }
+        for (i = 0; i < small_alloc_count; ++i) {
+            free(p[i]);
+        }
 
-    if (ucm_malloc_hook_state.hook_called) {
-        ucm_dlmalloc_trim(0);
+        p[0] = malloc(large_alloc_size);
+        p[0] = realloc(p[0], large_alloc_size * 2);
+        free(p[0]);
+
+        if (ucm_malloc_hook_state.hook_called) {
+            ucm_dlmalloc_trim(0);
+        }
+    } else {
+        /* in bistro mode we can't guarantee event fire on malloc calls,
+         * let's just try to call sbrk directly & catch it */
+        ucm_fire_mmap_events(events);
     }
 
     ucm_event_handler_remove(&handler);

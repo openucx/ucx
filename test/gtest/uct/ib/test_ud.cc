@@ -434,13 +434,19 @@ UCS_TEST_P(test_ud, crep_ack_drop) {
                                       NULL, UCT_CB_FLAG_ASYNC);
     ASSERT_UCS_OK(status);
 
+    /* allow sending the active message, in case the congestion window is
+     * already reduced to minimum (=2) by the slow timer, since CREP ACK
+     * was not received.
+     */
+    set_tx_win(m_e1, 10);
+
     do {
         status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
         progress();
     } while (status == UCS_ERR_NO_RESOURCE);
     ASSERT_UCS_OK(status);
 
-    validate_recv(ep(m_e2), 3U);
+    validate_recv(ep(m_e2), 3u - no_creq_cnt(ep(m_e1)));
 
     ep(m_e1, 0)->rx.rx_hook = uct_ud_ep_null_hook;
     ep(m_e2, 0)->rx.rx_hook = uct_ud_ep_null_hook;

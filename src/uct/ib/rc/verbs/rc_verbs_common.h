@@ -335,6 +335,9 @@ uct_rc_verbs_iface_common_tag_recv(uct_rc_verbs_iface_common_t *iface,
     priv->tag        = tag;
     priv->buffer     = iov->buffer; /* Only one iov is supported so far */
     priv->length     = uct_iov_total_length(iov, iovcnt);
+
+    UCT_RC_IFACE_TM_STAT(rc_iface, LIST_ADD);
+
     return UCS_OK;
 }
 
@@ -370,6 +373,8 @@ uct_rc_verbs_iface_common_tag_recv_cancel(uct_rc_verbs_iface_common_t *iface,
                                                IBV_EXP_WR_TAG_SYNC);
        }
    }
+
+   UCT_RC_IFACE_TM_STAT(rc_iface, LIST_DEL);
 
    return UCS_OK;
 }
@@ -433,8 +438,10 @@ uct_rc_verbs_iface_tag_handle_exp(uct_rc_iface_t *iface, struct ibv_exp_wc *wc)
         VALGRIND_MAKE_MEM_DEFINED(priv->buffer, wc->byte_len);
         if (UCT_RC_VERBS_TM_IS_SW_RNDV(wc->exp_wc_flags, imm_data)) {
             ctx->rndv_cb(ctx, priv->tag, priv->buffer, wc->byte_len, UCS_OK);
+            UCT_RC_IFACE_TM_STAT(iface, RX_RNDV_REQ_EXP);
         } else {
             ctx->completed_cb(ctx, priv->tag, imm_data, wc->byte_len, UCS_OK);
+            UCT_RC_IFACE_TM_STAT(iface, RX_EXP);
         }
         ++iface->tm.num_tags;
     }
@@ -460,6 +467,7 @@ uct_rc_verbs_iface_unexp_consumed(uct_rc_verbs_iface_common_t *iface,
     if (ucs_unlikely(!(++rc_iface->tm.unexpected_cnt % IBV_DEVICE_MAX_UNEXP_COUNT))) {
         uct_rc_verbs_iface_post_signaled_op(iface, rc_iface, &wr,
                                             IBV_EXP_WR_TAG_SYNC);
+        UCT_RC_IFACE_TM_STAT(rc_iface, LIST_SYNC);
     }
 }
 
@@ -490,11 +498,15 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_common_t *iface,
                                                 be64toh(tmh->tag), tmh + 1,
                                                 wc->byte_len - sizeof(*tmh),
                                                 0ul, 0, NULL);
+
+            UCT_RC_IFACE_TM_STAT(rc_iface, RX_RNDV_REQ_UNEXP);
         } else {
             status = rc_iface->tm.eager_unexp.cb(rc_iface->tm.eager_unexp.arg,
                                                  tmh + 1, wc->byte_len - sizeof(*tmh),
                                                  UCT_CB_PARAM_FLAG_DESC,
                                                  be64toh(tmh->tag), imm_data);
+
+            UCT_RC_IFACE_TM_STAT(rc_iface, RX_EAGER_UNEXP);
         }
         uct_rc_verbs_iface_unexp_consumed(iface, rc_iface, ib_desc,
                                           &rc_iface->tm.eager_desc, status);
@@ -514,11 +526,14 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_common_t *iface,
 
         uct_rc_verbs_iface_unexp_consumed(iface, rc_iface, ib_desc,
                                           &rc_iface->tm.rndv_desc, status);
+
+        UCT_RC_IFACE_TM_STAT(rc_iface, RX_RNDV_UNEXP);
         break;
 
     case IBV_EXP_TMH_FIN:
         uct_rc_iface_handle_rndv_fin(rc_iface, ntohl(tmh->app_ctx));
         ucs_mpool_put_inline(ib_desc);
+        UCT_RC_IFACE_TM_STAT(rc_iface, RX_RNDV_FIN);
         break;
 
     default:

@@ -1099,8 +1099,8 @@ static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
 
 void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device)
 {
-    snprintf(md_name, UCT_MD_NAME_MAX, "%s/", UCT_IB_MD_PREFIX);
-    strncat(md_name, device->name, UCT_MD_NAME_MAX - strlen(device->name) - 1);
+    snprintf(md_name, UCT_MD_NAME_MAX, "%s/%s", UCT_IB_MD_PREFIX,
+             ibv_get_device_name(device));
 }
 
 static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources_p,
@@ -1357,6 +1357,8 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     uct_ib_md_t *md;
     uct_md_attr_t md_attr;
 
+    ucs_trace("opening IB device %s", md_name);
+
     /* Get device list from driver */
     ib_device_list = ibv_get_device_list(&num_devices);
     if (ib_device_list == NULL) {
@@ -1374,6 +1376,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         }
     }
     if (ib_device == NULL) {
+        ucs_debug("IB device %s not found", md_name);
         status = UCS_ERR_NO_DEVICE;
         goto out_free_dev_list;
     }

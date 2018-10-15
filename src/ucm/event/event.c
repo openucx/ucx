@@ -393,16 +393,21 @@ void *ucm_sbrk(intptr_t increment)
 
 int ucm_brk(void *addr)
 {
-    void *old_addr     = ucm_orig_sbrk(0);
-    intptr_t increment = (intptr_t)addr - (intptr_t)old_addr;
+#if UCM_BISTRO_HOOKS
+    void *old_addr;
+    intptr_t increment;
     ucm_event_t event;
+
+    old_addr  = ucm_brk_syscall(0);
+    /* in case if addr == NULL - it just returns current pointer */
+    increment = addr ? ((intptr_t)addr - (intptr_t)old_addr) : 0;
 
     ucm_event_enter();
 
     ucm_trace("ucm_brk(addr=%p)", addr);
 
     if (increment < 0) {
-        ucm_dispatch_vm_munmap(old_addr, -increment);
+        ucm_dispatch_vm_munmap(old_addr + increment, -increment);
     }
 
     event.sbrk.result    = (void*)-1;
@@ -416,6 +421,9 @@ int ucm_brk(void *addr)
     ucm_event_leave();
 
     return event.sbrk.result == MAP_FAILED ? -1 : 0;
+#else
+    return -1;
+#endif
 }
 
 int ucm_madvise(void *addr, size_t length, int advice)

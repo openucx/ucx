@@ -77,7 +77,8 @@ void uct_dc_ep_release(uct_dc_ep_t *ep)
    currently pending code supports only dcs policy
    support hash/random policies
  */
-ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r)
+ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
+                                   unsigned flags)
 {
     uct_dc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_iface_t);
     uct_dc_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_ep_t);

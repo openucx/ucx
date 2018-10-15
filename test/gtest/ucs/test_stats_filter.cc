@@ -194,8 +194,10 @@ UCS_TEST_F(stats_filter_report, report) {
         }
     }
 
-    std::string compared_string = std::string(ucs_get_host_name()) + ":" +
-                                  ucs::to_string(getpid()) + ":" +
+    std::string header = std::string(ucs_get_host_name()) + ":" +
+                                     ucs::to_string(getpid());
+
+    std::string compared_string = header.substr(0, UCS_STAT_NAME_MAX - 1) + ":" +
                                   "\n  category:\n" +
                                   "    data-0:\n" +
                                   "      counter0: 10\n" +

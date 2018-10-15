@@ -441,40 +441,16 @@ int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
            (err_handle_arg->ucp_ep == arg);
 }
 
-static ucs_status_t
-ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
+ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
+                                      uct_ep_h uct_ep, ucp_lane_index_t lane,
+                                      ucs_status_t status)
 {
-    ucp_worker_h worker         = (ucp_worker_h)arg;
-    uct_worker_cb_id_t prog_id  = UCS_CALLBACKQ_ID_NULL;
-    uct_tl_resource_desc_t* tl_rsc;
-    ucp_lane_index_t lane, failed_lane;
+    uct_worker_cb_id_t          prog_id    = UCS_CALLBACKQ_ID_NULL;
+    ucs_status_t                ret_status = UCS_OK;
+    ucp_rsc_index_t             rsc_index;
+    uct_tl_resource_desc_t      *tl_rsc;
     ucp_worker_err_handle_arg_t *err_handle_arg;
-    ucs_status_t ret_status;
-    ucp_rsc_index_t rsc_index;
-    ucp_ep_ext_gen_t *ep_ext;
-    ucp_ep_h ucp_ep;
 
-    UCS_ASYNC_BLOCK(&worker->async);
-
-    ucs_debug("worker %p: error handler called for uct_ep %p: %s",
-              worker, uct_ep, ucs_status_string(status));
-
-    /* TODO: need to optimize uct_ep -> ucp_ep lookup */
-    ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
-        ucp_ep = ucp_ep_from_ext_gen(ep_ext);
-        for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
-            if ((uct_ep == ucp_ep->uct_eps[lane]) ||
-                ucp_wireup_ep_is_owner(ucp_ep->uct_eps[lane], uct_ep)) {
-                failed_lane = lane;
-                goto found_ucp_ep;
-            }
-        }
-    }
-
-    ucs_fatal("no uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
-              uct_ep, worker);
-
-found_ucp_ep:
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         goto out_ok;
     }
@@ -500,7 +476,7 @@ found_ucp_ep:
     err_handle_arg->ucp_ep      = ucp_ep;
     err_handle_arg->uct_ep      = uct_ep;
     err_handle_arg->status      = status;
-    err_handle_arg->failed_lane = failed_lane;
+    err_handle_arg->failed_lane = lane;
 
     /* invoke the rest of the error handling flow from the main thread */
     uct_worker_progress_register_safe(worker->uct,
@@ -527,9 +503,39 @@ out:
      * that he can wake-up on this event */
     ucp_worker_signal_internal(worker);
 
-    UCS_ASYNC_UNBLOCK(&worker->async);
-
     return ret_status;
+}
+
+static ucs_status_t
+ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
+{
+    ucp_worker_h worker         = (ucp_worker_h)arg;
+    ucp_lane_index_t lane;
+    ucs_status_t ret_status;
+    ucp_ep_ext_gen_t *ep_ext;
+    ucp_ep_h ucp_ep;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    ucs_debug("worker %p: error handler called for uct_ep %p: %s",
+              worker, uct_ep, ucs_status_string(status));
+
+    /* TODO: need to optimize uct_ep -> ucp_ep lookup */
+    ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
+        ucp_ep = ucp_ep_from_ext_gen(ep_ext);
+        for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+            if ((uct_ep == ucp_ep->uct_eps[lane]) ||
+                ucp_wireup_ep_is_owner(ucp_ep->uct_eps[lane], uct_ep)) {
+                ret_status = ucp_worker_set_ep_failed(worker, ucp_ep, uct_ep,
+                                                      lane, status);
+                UCS_ASYNC_UNBLOCK(&worker->async);
+                return ret_status;
+            }
+        }
+    }
+
+    ucs_fatal("no uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
+              uct_ep, worker);
 }
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
@@ -537,8 +543,8 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
     ucp_worker_h worker = wiface->worker;
     ucs_status_t status;
 
-    ucs_trace("activate iface %p acount=%u", wiface->iface,
-              wiface->activate_count);
+    ucs_trace("activate iface %p acount=%u aifaces=%u", wiface->iface,
+              wiface->activate_count, worker->num_active_ifaces);
 
     if (wiface->activate_count++ > 0) {
         return; /* was already activated */
@@ -558,20 +564,24 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
         ucs_list_add_tail(&worker->arm_ifaces, &wiface->arm_list);
     }
 
+    ++worker->num_active_ifaces;
+
     uct_iface_progress_enable(wiface->iface,
                               UCT_PROGRESS_SEND | UCT_PROGRESS_RECV | uct_flags);
 }
 
 static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
 {
-    ucs_trace("deactivate iface %p force=%d acount=%u", wiface->iface, force,
-              wiface->activate_count);
+    ucs_trace("deactivate iface %p force=%d acount=%u aifaces=%u",
+              wiface->iface, force, wiface->activate_count,
+              wiface->worker->num_active_ifaces);
 
     if (!force) {
         ucs_assert(wiface->activate_count > 0);
         if (--wiface->activate_count > 0) {
             return; /* not completely deactivated yet */
         }
+        --wiface->worker->num_active_ifaces;
     }
 
     /* Avoid progress on the interface to reduce overhead */
@@ -833,8 +843,8 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     }
 
     ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
-               tl_id, wiface->iface, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),
-               worker);
+              tl_id, wiface->iface, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),
+              worker);
 
     VALGRIND_MAKE_MEM_UNDEFINED(&wiface->attr, sizeof(wiface->attr));
     status = uct_iface_query(wiface->iface, &wiface->attr);
@@ -1150,11 +1160,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
 {
-    ucp_worker_h worker;
-    ucs_status_t status;
+    ucs_thread_mode_t uct_thread_mode;
+    ucs_thread_mode_t thread_mode;
     unsigned config_count;
     unsigned name_length;
-    ucs_thread_mode_t thread_mode;
+    ucp_worker_h worker;
+    ucs_status_t status;
 
     config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
                            UINT8_MAX);
@@ -1180,6 +1191,13 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         worker->mt_lock.mt_type = UCP_MT_TYPE_SPINLOCK;
     }
 
+    if (thread_mode == UCS_THREAD_MODE_SINGLE) {
+        uct_thread_mode = UCS_THREAD_MODE_SINGLE;
+    } else {
+        /* UCT is serialized by UCP lock or by UCP user */
+        uct_thread_mode = UCS_THREAD_MODE_SERIALIZED;
+    }
+
     UCP_THREAD_LOCK_INIT(&worker->mt_lock);
 
     worker->context           = context;
@@ -1189,6 +1207,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->inprogress        = 0;
     worker->ep_config_max     = config_count;
     worker->ep_config_count   = 0;
+    worker->num_active_ifaces = 0;
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
     ucs_list_head_init(&worker->all_eps);
@@ -1240,7 +1259,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     /* Create the underlying UCT worker */
-    status = uct_worker_create(&worker->async, thread_mode, &worker->uct);
+    status = uct_worker_create(&worker->async, uct_thread_mode, &worker->uct);
     if (status != UCS_OK) {
         goto err_destroy_async;
     }
@@ -1397,9 +1416,12 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
                                ucp_stream_poll_ep_t *poll_eps,
                                size_t max_eps, unsigned flags)
 {
+    ssize_t            count = 0;
     ucp_ep_ext_proto_t *ep_ext;
-    ssize_t count = 0;
-    ucp_ep_h ep;
+    ucp_ep_h           ep;
+
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_STREAM,
+                                    return UCS_ERR_INVALID_PARAM);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -1420,6 +1442,9 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
 {
     ucs_status_t status;
 
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
+                                    return UCS_ERR_INVALID_PARAM);
+
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     if (worker->flags & UCP_WORKER_FLAG_EXTERNAL_EVENT_FD) {
         status = UCS_ERR_UNSUPPORTED;
@@ -1439,6 +1464,9 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     int ret;
 
     ucs_trace_func("worker=%p", worker);
+
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
+                                    return UCS_ERR_INVALID_PARAM);
 
     /* Read from event pipe. If some events are found, return BUSY,
      * Otherwise, continue to arm the transport interfaces.
@@ -1485,7 +1513,7 @@ out:
 
 void ucp_worker_wait_mem(ucp_worker_h worker, void *address)
 {
-   ucs_arch_wait_mem(address);
+    ucs_arch_wait_mem(address);
 }
 
 ucs_status_t ucp_worker_wait(ucp_worker_h worker)
@@ -1497,6 +1525,9 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
     int ret;
 
     ucs_trace_func("worker %p", worker);
+
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
+                                    return UCS_ERR_INVALID_PARAM);
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -1546,6 +1577,8 @@ out:
 ucs_status_t ucp_worker_signal(ucp_worker_h worker)
 {
     ucs_trace_func("worker %p", worker);
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
+                                    return UCS_ERR_INVALID_PARAM);
     return ucp_worker_wakeup_signal_fd(worker);
 }
 

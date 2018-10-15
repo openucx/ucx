@@ -132,7 +132,8 @@ typedef struct uct_iface_ops {
 
     /* endpoint - pending queue */
 
-    ucs_status_t (*ep_pending_add)(uct_ep_h ep, uct_pending_req_t *n);
+    ucs_status_t (*ep_pending_add)(uct_ep_h ep, uct_pending_req_t *n,
+                                   unsigned flags);
 
     void         (*ep_pending_purge)(uct_ep_h ep, uct_pending_purge_callback_t cb,
                                      void *arg);
@@ -167,6 +168,12 @@ typedef struct uct_iface_ops {
     ucs_status_t (*ep_connect_to_ep)(uct_ep_h ep,
                                      const uct_device_addr_t *dev_addr,
                                      const uct_ep_addr_t *ep_addr);
+
+    ucs_status_t (*iface_accept)(uct_iface_h iface,
+                                 uct_conn_request_h conn_request);
+
+    ucs_status_t (*iface_reject)(uct_iface_h iface,
+                                 uct_conn_request_h conn_request);
 
     /* interface - synchronization */
 

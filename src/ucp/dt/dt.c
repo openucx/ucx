@@ -102,7 +102,8 @@ size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        if (ucs_likely(UCP_MEM_IS_HOST(mem_type))) {
+        if ((ucs_likely(UCP_MEM_IS_HOST(mem_type))) ||
+            (ucs_likely(UCP_MEM_IS_CUDA_MANAGED(mem_type)))) {
             UCS_PROFILE_CALL(memcpy, dest, src + state->offset, length);
         } else {
             ucp_mem_type_pack(worker, dest, src + state->offset, length, mem_type);
