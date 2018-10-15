@@ -263,6 +263,7 @@ UCS_TEST_P(test_uct_peer_failure, purge_failed_peer)
     send_recv_am(1);
 
     const size_t num_pend_sends = 3ul;
+    uct_pending_req_t reqs[num_pend_sends];
     {
         scoped_log_handler slh(wrap_errors_logger);
 
@@ -273,7 +274,6 @@ UCS_TEST_P(test_uct_peer_failure, purge_failed_peer)
             status = uct_ep_am_short(ep0(), 0, 0, NULL, 0);
         } while (status == UCS_OK);
 
-        uct_pending_req_t reqs[num_pend_sends];
         for (size_t i = 0; i < num_pend_sends; i ++) {
             reqs[i].func = pending_cb;
             EXPECT_EQ(uct_ep_pending_add(ep0(), &reqs[i], 0), UCS_OK);
