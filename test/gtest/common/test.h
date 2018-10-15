@@ -41,15 +41,12 @@ public:
 protected:
     class scoped_log_handler {
     public:
-        enum scoped_log_handler_type_t {
-            LOG_HIDE_ERRS,
-            LOG_HIDE_WARNS,
-            LOG_WRAP_ERRS,
-            LOG_DETECT_SOCKADDR_ERRS
-        };
-
-        scoped_log_handler(scoped_log_handler_type_t type);
-        ~scoped_log_handler();
+        scoped_log_handler(ucs_log_func_t handler) {
+            ucs_log_push_handler(handler);
+        }
+        ~scoped_log_handler() {
+            ucs_log_pop_handler();
+        }
     };
 
     typedef enum {
@@ -68,6 +65,22 @@ protected:
     bool barrier();
 
     virtual void test_body() = 0;
+
+    static ucs_log_func_rc_t
+    count_warns_logger(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level, const char *message, va_list ap);
+
+    static ucs_log_func_rc_t
+    hide_errors_logger(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level, const char *message, va_list ap);
+
+    static ucs_log_func_rc_t
+    hide_warns_logger(const char *file, unsigned line, const char *function,
+                      ucs_log_level_t level, const char *message, va_list ap);
+
+    static ucs_log_func_rc_t
+    wrap_errors_logger(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level, const char *message, va_list ap);
 
     state_t                         m_state;
     bool                            m_initialized;
@@ -89,26 +102,6 @@ private:
     void skipped(const test_skip_exception& e);
     void run();
     static void *thread_func(void *arg);
-
-    static ucs_log_func_rc_t
-    count_warns_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level, const char *message, va_list ap);
-
-    static ucs_log_func_rc_t
-    hide_errors_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level, const char *message, va_list ap);
-
-    static ucs_log_func_rc_t
-    hide_warns_logger(const char *file, unsigned line, const char *function,
-                      ucs_log_level_t level, const char *message, va_list ap);
-
-    static ucs_log_func_rc_t
-    wrap_errors_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level, const char *message, va_list ap);
-
-    static ucs_log_func_rc_t
-    sockaddr_errs_detector(const char *file, unsigned line, const char *function,
-                           ucs_log_level_t level, const char *message, va_list ap);
 
     pthread_barrier_t    m_barrier;
 };

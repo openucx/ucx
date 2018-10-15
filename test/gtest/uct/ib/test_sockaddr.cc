@@ -268,7 +268,7 @@ UCS_TEST_P(test_uct_sockaddr, err_handle)
 
     client->connect(0, *server, 0, &connect_sock_addr);
 
-    scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS);
+    scoped_log_handler slh(wrap_errors_logger);
     /* kill the server */
     m_entities.remove(server);
 
@@ -296,7 +296,7 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
 
     /* wrap errors now since the client will try to connect to a non existing port */
     {
-        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
+        scoped_log_handler slh(wrap_errors_logger);
         /* client - try to connect to a non-existing port on the server side */
         client->connect(0, *server, 0, &connect_sock_addr);
         completion comp;

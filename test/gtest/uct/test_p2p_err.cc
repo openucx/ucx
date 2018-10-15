@@ -43,7 +43,7 @@ public:
     {
         pack_arg arg;
 
-        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
+        scoped_log_handler slh(wrap_errors_logger);
 
         ucs_status_t status = UCS_OK;
         ssize_t packed_len;

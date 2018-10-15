@@ -39,7 +39,7 @@ bool test_ucp_mmap::resolve_rma(entity *e, ucp_rkey_h rkey)
     ucs_status_t status;
 
     {
-        scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
+        scoped_log_handler slh(hide_errors_logger);
         status = UCP_RKEY_RESOLVE(rkey, e->ep(), rma);
     }
 
@@ -59,7 +59,7 @@ bool test_ucp_mmap::resolve_amo(entity *e, ucp_rkey_h rkey)
     ucs_status_t status;
 
     {
-        scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
+        scoped_log_handler slh(hide_errors_logger);
         status = UCP_RKEY_RESOLVE(rkey, e->ep(), amo);
     }
 

@@ -330,7 +330,7 @@ bool ucp_test::check_test_param(const std::string& name,
     ucp_context_h ucph;
     ucs_status_t status;
     {
-        scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
+        scoped_log_handler slh(hide_errors_logger);
         status = ucp_init(&test_param.ctx_params, config, &ucph);
     }
 
@@ -379,7 +379,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     ucp_test::set_ucp_config(ucp_config, entity_param);
 
     {
-        scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
+        scoped_log_handler slh(hide_errors_logger);
         UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init,
                                &entity_param.ctx_params, ucp_config);
     }
@@ -410,7 +410,7 @@ void ucp_test_base::entity::connect(const entity* other,
         ASSERT_UCS_OK(status);
 
         {
-            scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
+            scoped_log_handler slh(hide_errors_logger);
 
             ucp_ep_params_t local_ep_params = ep_params;
             local_ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
@@ -577,7 +577,7 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
 
     ucs_status_t status;
     {
-        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS);
+        scoped_log_handler wrap_err(wrap_errors_logger);
         status = ucp_listener_create(worker(worker_index), &params, &listener);
     }
 

@@ -288,7 +288,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
     EXPECT_EQ(UCS_OK, m_err_status);
 
     {
-        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS);
+        scoped_log_handler slh(wrap_errors_logger);
 
         fail_receiver();
 

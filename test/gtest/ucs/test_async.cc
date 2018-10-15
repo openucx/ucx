@@ -568,7 +568,7 @@ UCS_TEST_P(test_async, modify_event) {
 
 UCS_TEST_P(test_async, warn_block) {
     {
-        scoped_log_handler hide_warn(scoped_log_handler::LOG_HIDE_WARNS); 
+        scoped_log_handler slh(hide_warns_logger);
         {
             local_event le(GetParam());
             le.block();

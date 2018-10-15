@@ -166,7 +166,7 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             ASSERT_UCS_OK(status);
 
             {
-                scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS); 
+                scoped_log_handler slh(hide_errors_logger);
                 status = uct_md_open(md_resources[i].md_name, md_config, &pd);
             }
             uct_config_release(md_config);

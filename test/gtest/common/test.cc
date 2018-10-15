@@ -24,7 +24,8 @@ test_base::test_base() :
                 m_num_threads(1),
                 m_num_valgrind_errors_before(0),
                 m_num_errors_before(0),
-                m_num_warnings_before(0)
+                m_num_warnings_before(0),
+                m_num_log_handlers_before(0)
 {
     push_config();
 }
@@ -123,29 +124,6 @@ void test_base::pop_config()
     m_config_stack.pop_back();
 }
 
-test_base::scoped_log_handler::scoped_log_handler(scoped_log_handler_type_t type) {
-    switch (type) {
-    case LOG_HIDE_ERRS:
-        ucs_log_push_handler(hide_errors_logger);
-        break;
-    case LOG_HIDE_WARNS:
-        ucs_log_push_handler(hide_warns_logger);
-        break;
-    case LOG_WRAP_ERRS:
-        ucs_log_push_handler(wrap_errors_logger);
-        break;
-    case LOG_DETECT_SOCKADDR_ERRS:
-        ucs_log_push_handler(sockaddr_errs_detector);
-        break;
-    default:
-        UCS_TEST_ABORT("Invalid log handler type");
-    }
-}
-
-test_base::scoped_log_handler::~scoped_log_handler() {
-    ucs_log_pop_handler();
-}
-
 ucs_log_func_rc_t
 test_base::count_warns_logger(const char *file, unsigned line, const char *function,
                               ucs_log_level_t level, const char *message, va_list ap)
@@ -217,25 +195,6 @@ test_base::wrap_errors_logger(const char *file, unsigned line, const char *funct
         return UCS_LOG_FUNC_RC_STOP;
     }
 
-    return UCS_LOG_FUNC_RC_CONTINUE;
-}
-
-ucs_log_func_rc_t
-test_base::sockaddr_errs_detector(const char *file, unsigned line,
-                                  const char *function, ucs_log_level_t level,
-                                  const char *message, va_list ap)
-{
-    if (level == UCS_LOG_LEVEL_ERROR) {
-        std::string err_str = format_message(message, ap);
-        if ((strstr(err_str.c_str(), "no supported sockaddr auxiliary transports found for")) ||
-            (strstr(err_str.c_str(), "sockaddr aux resources addresses")) ||
-            (strstr(err_str.c_str(), "no peer failure handler")) ||
-            /* when the "peer failure" error happens, it is followed by: */
-            (strstr(err_str.c_str(), "received event RDMA_CM_EVENT_UNREACHABLE"))) {
-            UCS_TEST_MESSAGE << err_str;
-            return UCS_LOG_FUNC_RC_STOP;
-        }
-    }
     return UCS_LOG_FUNC_RC_CONTINUE;
 }
 

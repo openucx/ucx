@@ -212,7 +212,7 @@ UCS_TEST_P(test_uct_peer_failure, peer_failure)
     check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
     {
-        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
+        scoped_log_handler slh(wrap_errors_logger);
 
         kill_receiver();
         EXPECT_EQ(UCS_OK, uct_ep_put_short(ep0(), NULL, 0, 0, 0));
@@ -264,7 +264,7 @@ UCS_TEST_P(test_uct_peer_failure, purge_failed_peer)
 
     const size_t num_pend_sends = 3ul;
     {
-        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
+        scoped_log_handler slh(wrap_errors_logger);
 
         kill_receiver();
 
@@ -302,7 +302,7 @@ UCS_TEST_P(test_uct_peer_failure, two_pairs_send)
 
     /* kill the 1st receiver while sending on 2nd pair */
     {
-        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
+        scoped_log_handler slh(wrap_errors_logger);
         kill_receiver();
         send_am(0);
         send_recv_am(1);
@@ -330,7 +330,7 @@ UCS_TEST_P(test_uct_peer_failure, two_pairs_send_after)
     set_am_handlers();
 
     {
-        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
+        scoped_log_handler slh(wrap_errors_logger);
         kill_receiver();
         for (int i = 0; i < 100; ++i) {
             send_am(0);
@@ -369,7 +369,7 @@ UCS_TEST_P(test_uct_peer_failure_cb, desproy_ep_cb)
 {
     check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
-    scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
+    scoped_log_handler slh(wrap_errors_logger);
     kill_receiver();
     EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, 0), UCS_OK);
     flush();
@@ -446,7 +446,7 @@ UCS_TEST_P(test_uct_peer_failure_multiple, test, "RC_TM_ENABLE?=n")
                           ucs_time_from_sec(200 * ucs::test_time_multiplier());
 
     {
-        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
+        scoped_log_handler slh(wrap_errors_logger);
         for (size_t idx = 0; idx < m_nreceivers - 1; ++idx) {
             for (size_t i = 0; i < m_tx_window; ++i) {
                 send_am(idx);

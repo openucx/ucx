@@ -65,7 +65,7 @@ void test_ucp_atomic::unaligned_blocking_add64(entity *e,  size_t max_size,
 {
     {
         /* Test that unaligned addresses generate error */
-        scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
+        scoped_log_handler slh(hide_errors_logger);
         ucs_status_t status = ucp_atomic_add64(e->ep(), 0,
                                                (uintptr_t)memheap_addr + 1, rkey);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
@@ -109,7 +109,7 @@ void test_ucp_atomic::unaligned_nb_post(entity *e,  size_t max_size,
 {
     {
         /* Test that unaligned addresses generate error */
-        scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
+        scoped_log_handler slh(hide_errors_logger);
         ucs_status_t status = test_ucp_atomic::ucp_atomic_post_nbi<uint64_t>
                 (e->ep(), OP, 0, (void *)((uintptr_t)memheap_addr + 1), rkey);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
