@@ -533,7 +533,8 @@ UCS_TEST_P(test_ucp_stream, send_zero_ending_iov_recv_data) {
         size_t slen = 0;
         for (size_t j = 0; j < iov_num; ++j) {
             if ((j % 2) == 0) {
-                v[j].buffer = &buf[j * size / iov_num_nonempty];
+                uint8_t *ptr = buf.data();
+                v[j].buffer = &(ptr[j * size / iov_num_nonempty]);
                 v[j].length = size / iov_num_nonempty;
                 slen       += v[j].length;
             } else {
