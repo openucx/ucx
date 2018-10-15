@@ -880,8 +880,7 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
      */
     if ((memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) &&
         !(memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) &&
-        (memh != &md->global_odp) &&
-        md->config.enable_indirect_atomic)
+        (memh != &md->global_odp))
     {
         /* create UMR on-demand */
         ucs_assert(memh->atomic_mr == NULL);
