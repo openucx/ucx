@@ -43,9 +43,7 @@ public:
     {
         pack_arg arg;
 
-        wrap_errors();
-
-        UCS_TEST_SCOPE_EXIT() { restore_errors(); } UCS_TEST_SCOPE_EXIT_END
+        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
 
         ucs_status_t status = UCS_OK;
         ssize_t packed_len;

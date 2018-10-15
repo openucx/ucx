@@ -268,8 +268,8 @@ UCS_TEST_P(test_uct_sockaddr, err_handle)
 
     client->connect(0, *server, 0, &connect_sock_addr);
 
+    scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS);
     /* kill the server */
-    wrap_errors();
     m_entities.remove(server);
 
     /* If the server didn't receive a connection request from the client yet,
@@ -278,7 +278,6 @@ UCS_TEST_P(test_uct_sockaddr, err_handle)
         wait_for_flag(&err_count);
         EXPECT_EQ(1, err_count);
     }
-    restore_errors();
 }
 
 UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
@@ -296,21 +295,21 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server)
     err_count = 0;
 
     /* wrap errors now since the client will try to connect to a non existing port */
-    wrap_errors();
-    /* client - try to connect to a non-existing port on the server side */
-    client->connect(0, *server, 0, &connect_sock_addr);
-    completion comp;
-    ucs_status_t status = uct_ep_flush(client->ep(0), 0, &comp);
-    if (status == UCS_INPROGRESS) {
-        wait_for_flag(&comp.m_flag);
-        EXPECT_EQ(UCS_ERR_UNREACHABLE, comp.status());
-    } else {
-        EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
+    {
+        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
+        /* client - try to connect to a non-existing port on the server side */
+        client->connect(0, *server, 0, &connect_sock_addr);
+        completion comp;
+        ucs_status_t status = uct_ep_flush(client->ep(0), 0, &comp);
+        if (status == UCS_INPROGRESS) {
+            wait_for_flag(&comp.m_flag);
+            EXPECT_EQ(UCS_ERR_UNREACHABLE, comp.status());
+        } else {
+            EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
+        }
+        /* destroy the client's ep. this ep shouldn't be accessed anymore */
+        client->destroy_ep(0);
     }
-    /* destroy the client's ep. this ep shouldn't be accessed anymore */
-    client->destroy_ep(0);
-    restore_errors();
-
     /* restore the previous existing port */
     connect_addr_in->sin_port = orig_port;
 }

@@ -211,14 +211,14 @@ UCS_TEST_P(test_uct_peer_failure, peer_failure)
 {
     check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
-    wrap_errors();
+    {
+        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
 
-    kill_receiver();
-    EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, 0), UCS_OK);
+        kill_receiver();
+        EXPECT_EQ(UCS_OK, uct_ep_put_short(ep0(), NULL, 0, 0, 0));
 
-    flush();
-
-    restore_errors();
+        flush();
+    }
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, NULL, 0, NULL, 1);
 
@@ -262,23 +262,25 @@ UCS_TEST_P(test_uct_peer_failure, purge_failed_peer)
     send_recv_am(0);
     send_recv_am(1);
 
-    wrap_errors();
-    kill_receiver();
-
-    ucs_status_t status;
-    do {
-        status = uct_ep_am_short(ep0(), 0, 0, NULL, 0);
-    } while (status == UCS_OK);
-
     const size_t num_pend_sends = 3ul;
-    uct_pending_req_t reqs[num_pend_sends];
-    for (size_t i = 0; i < num_pend_sends; i ++) {
-        reqs[i].func = pending_cb;
-        EXPECT_EQ(uct_ep_pending_add(ep0(), &reqs[i], 0), UCS_OK);
-    }
+    {
+        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
 
-    flush();
-    restore_errors();
+        kill_receiver();
+
+        ucs_status_t status;
+        do {
+            status = uct_ep_am_short(ep0(), 0, 0, NULL, 0);
+        } while (status == UCS_OK);
+
+        uct_pending_req_t reqs[num_pend_sends];
+        for (size_t i = 0; i < num_pend_sends; i ++) {
+            reqs[i].func = pending_cb;
+            EXPECT_EQ(uct_ep_pending_add(ep0(), &reqs[i], 0), UCS_OK);
+        }
+
+        flush();
+    }
 
     EXPECT_EQ(uct_ep_am_short(ep0(), 0, 0, NULL, 0), UCS_ERR_ENDPOINT_TIMEOUT);
 
@@ -299,12 +301,13 @@ UCS_TEST_P(test_uct_peer_failure, two_pairs_send)
     }
 
     /* kill the 1st receiver while sending on 2nd pair */
-    wrap_errors();
-    kill_receiver();
-    send_am(0);
-    send_recv_am(1);
-    flush();
-    restore_errors();
+    {
+        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
+        kill_receiver();
+        send_am(0);
+        send_recv_am(1);
+        flush();
+    }
 
     /* test flushing one operations */
     send_recv_am(0, UCS_ERR_ENDPOINT_TIMEOUT);
@@ -326,13 +329,14 @@ UCS_TEST_P(test_uct_peer_failure, two_pairs_send_after)
 
     set_am_handlers();
 
-    wrap_errors();
-    kill_receiver();
-    for (int i = 0; i < 100; ++i) {
-        send_am(0);
+    {
+        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
+        kill_receiver();
+        for (int i = 0; i < 100; ++i) {
+            send_am(0);
+        }
+        flush();
     }
-    flush();
-    restore_errors();
 
     send_recv_am(0, UCS_ERR_ENDPOINT_TIMEOUT);
 
@@ -365,11 +369,10 @@ UCS_TEST_P(test_uct_peer_failure_cb, desproy_ep_cb)
 {
     check_caps(UCT_IFACE_FLAG_PUT_SHORT);
 
-    wrap_errors();
+    scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
     kill_receiver();
     EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, 0), UCS_OK);
     flush();
-    restore_errors();
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_cb)
@@ -442,24 +445,25 @@ UCS_TEST_P(test_uct_peer_failure_multiple, test, "RC_TM_ENABLE?=n")
     ucs_time_t timeout  = ucs_get_time() +
                           ucs_time_from_sec(200 * ucs::test_time_multiplier());
 
-    wrap_errors();
-    for (size_t idx = 0; idx < m_nreceivers - 1; ++idx) {
-        for (size_t i = 0; i < m_tx_window; ++i) {
-            send_am(idx);
+    {
+        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS); 
+        for (size_t idx = 0; idx < m_nreceivers - 1; ++idx) {
+            for (size_t i = 0; i < m_tx_window; ++i) {
+                send_am(idx);
+            }
+            kill_receiver();
         }
-        kill_receiver();
-    }
-    flush(timeout);
+        flush(timeout);
 
-    /* if EPs are not failed yet, these ops should trigger that */
-    for (size_t idx = 0; idx < m_nreceivers - 1; ++idx) {
-        for (size_t i = 0; i < m_tx_window; ++i) {
-            send_am(idx);
+        /* if EPs are not failed yet, these ops should trigger that */
+        for (size_t idx = 0; idx < m_nreceivers - 1; ++idx) {
+            for (size_t i = 0; i < m_tx_window; ++i) {
+                send_am(idx);
+            }
         }
-    }
 
-    flush(timeout);
-    restore_errors();
+        flush(timeout);
+    }
 
     for (size_t idx = 0; idx < m_nreceivers - 1; ++idx) {
         send_recv_am(idx, UCS_ERR_ENDPOINT_TIMEOUT);

@@ -38,12 +38,19 @@ public:
     virtual void push_config();
     virtual void pop_config();
 
-    static void hide_errors();
-    static void hide_warnings();
-    static void wrap_errors();
-    static void restore_errors();
-
 protected:
+    class scoped_log_handler {
+    public:
+        enum scoped_log_handler_type_t {
+            LOG_HIDE_ERRS,
+            LOG_HIDE_WARNS,
+            LOG_WRAP_ERRS,
+            LOG_DETECT_SOCKADDR_ERRS
+        };
+
+        scoped_log_handler(scoped_log_handler_type_t type);
+        ~scoped_log_handler();
+    };
 
     typedef enum {
         NEW, RUNNING, SKIPPED, ABORTED, FINISHED
@@ -70,6 +77,7 @@ protected:
     int                             m_num_valgrind_errors_before;
     unsigned                        m_num_errors_before;
     unsigned                        m_num_warnings_before;
+    unsigned                        m_num_log_handlers_before;
 
     static pthread_mutex_t          m_logger_mutex;
     static unsigned                 m_total_errors;
@@ -97,6 +105,10 @@ private:
     static ucs_log_func_rc_t
     wrap_errors_logger(const char *file, unsigned line, const char *function,
                        ucs_log_level_t level, const char *message, va_list ap);
+
+    static ucs_log_func_rc_t
+    sockaddr_errs_detector(const char *file, unsigned line, const char *function,
+                           ucs_log_level_t level, const char *message, va_list ap);
 
     pthread_barrier_t    m_barrier;
 };

@@ -287,64 +287,64 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 
     EXPECT_EQ(UCS_OK, m_err_status);
 
-    wrap_errors();
+    {
+        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS);
 
-    fail_receiver();
+        fail_receiver();
 
-    void *sreq = send_nb(failing_sender(), m_failing_rkey);
+        void *sreq = send_nb(failing_sender(), m_failing_rkey);
 
-    while (!m_err_count) {
-        progress();
-    }
-    EXPECT_NE(UCS_OK, m_err_status);
-
-    if (UCS_PTR_IS_PTR(sreq)) {
-        /* The request may either succeed or fail, even though the data is not
-         * delivered - depends on when the error is detected on sender side and
-         * if zcopy/bcopy protocol is used. In any case, the request must
-         * complete, and all resources have to be released.
-         */
-        ucs_status_t status = ucp_request_check_status(sreq);
-        EXPECT_NE(UCS_INPROGRESS, status);
-        if (request_must_fail) {
-            EXPECT_EQ(m_err_status, status);
-        } else {
-            EXPECT_TRUE((m_err_status == status) || (UCS_OK == status));
+        while (!m_err_count) {
+            progress();
         }
-        ucp_request_release(sreq);
-    }
+        EXPECT_NE(UCS_OK, m_err_status);
 
-    /* Additional sends must fail */
-    void *sreq2 = send_nb(failing_sender(), m_failing_rkey);
-    EXPECT_FALSE(UCS_PTR_IS_PTR(sreq2));
-    EXPECT_EQ(m_err_status, UCS_PTR_STATUS(sreq2));
+        if (UCS_PTR_IS_PTR(sreq)) {
+            /* The request may either succeed or fail, even though the data is
+             * not * delivered - depends on when the error is detected on sender
+             * side and if zcopy/bcopy protocol is used. In any case, the
+             * request must complete, and all resources have to be released.
+             */
+            ucs_status_t status = ucp_request_check_status(sreq);
+            EXPECT_NE(UCS_INPROGRESS, status);
+            if (request_must_fail) {
+                EXPECT_EQ(m_err_status, status);
+            } else {
+                EXPECT_TRUE((m_err_status == status) || (UCS_OK == status));
+            }
+            ucp_request_release(sreq);
+        }
 
-    if (force_close) {
-        unsigned allocd_eps_before =
-                        ucs_strided_alloc_inuse_count(&sender().worker()->ep_alloc);
+        /* Additional sends must fail */
+        void *sreq2 = send_nb(failing_sender(), m_failing_rkey);
+        EXPECT_FALSE(UCS_PTR_IS_PTR(sreq2));
+        EXPECT_EQ(m_err_status, UCS_PTR_STATUS(sreq2));
 
-        ucp_ep_h ep = sender().revoke_ep(0, FAILING_EP_INDEX);
+        if (force_close) {
+            unsigned allocd_eps_before =
+                    ucs_strided_alloc_inuse_count(&sender().worker()->ep_alloc);
 
-        void *creq = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FORCE);
-        wait(creq);
+            ucp_ep_h ep = sender().revoke_ep(0, FAILING_EP_INDEX);
 
-        unsigned allocd_eps_after =
-                        ucs_strided_alloc_inuse_count(&sender().worker()->ep_alloc);
+            void *creq = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FORCE);
+            wait(creq);
 
-        if (!(GetParam().variant & FAIL_IMM)) {
-            EXPECT_LT(allocd_eps_after, allocd_eps_before);
+            unsigned allocd_eps_after =
+                    ucs_strided_alloc_inuse_count(&sender().worker()->ep_alloc);
+
+            if (!(GetParam().variant & FAIL_IMM)) {
+                EXPECT_LT(allocd_eps_after, allocd_eps_before);
+            }
+        }
+
+        /* release requests */
+        while (!sreqs_pre.empty()) {
+            void *req = sreqs_pre.back();
+            sreqs_pre.pop_back();
+            EXPECT_NE(UCS_INPROGRESS, ucp_request_test(req, NULL));
+            ucp_request_release(req);
         }
     }
-
-    /* release requests */
-    while (!sreqs_pre.empty()) {
-        void *req = sreqs_pre.back();
-        sreqs_pre.pop_back();
-        EXPECT_NE(UCS_INPROGRESS, ucp_request_test(req, NULL));
-        ucp_request_release(req);
-    }
-
-    restore_errors();
 
     /* Check workability of stable pair */
     smoke_test(true);

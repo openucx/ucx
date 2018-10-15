@@ -64,29 +64,6 @@ public:
         return result;
     }
 
-    static ucs_log_func_rc_t
-    detect_error_logger(const char *file, unsigned line, const char *function,
-                                   ucs_log_level_t level, const char *message, va_list ap)
-    {
-        if (level == UCS_LOG_LEVEL_ERROR) {
-            std::string err_str = format_message(message, ap);
-            if ((strstr(err_str.c_str(), "no supported sockaddr auxiliary transports found for")) ||
-                (strstr(err_str.c_str(), "sockaddr aux resources addresses")) ||
-                (strstr(err_str.c_str(), "no peer failure handler")) ||
-                /* when the "peer failure" error happens, it is followed by: */
-                (strstr(err_str.c_str(), "received event RDMA_CM_EVENT_UNREACHABLE"))) {
-                UCS_TEST_MESSAGE << err_str;
-                return UCS_LOG_FUNC_RC_STOP;
-            }
-        }
-        return UCS_LOG_FUNC_RC_CONTINUE;
-    }
-
-    static void detect_error()
-    {
-        ucs_log_push_handler(detect_error_logger);
-    }
-
     void get_listen_addr(struct sockaddr_in *listen_addr) {
         struct ifaddrs* ifaddrs;
         int ret = getifaddrs(&ifaddrs);
@@ -333,8 +310,7 @@ public:
     void connect_and_send_recv(struct sockaddr *connect_addr, bool wakeup)
     {
         {
-            detect_error();
-            UCS_TEST_SCOPE_EXIT() { restore_errors(); } UCS_TEST_SCOPE_EXIT_END
+            scoped_log_handler detect_err(scoped_log_handler::LOG_DETECT_SOCKADDR_ERRS);
             client_ep_connect(connect_addr);
             wait_for_server_ep(wakeup);
             if (is_failed()) {
@@ -350,8 +326,7 @@ public:
     void connect_and_reject(struct sockaddr *connect_addr, bool wakeup)
     {
         {
-            detect_error();
-            UCS_TEST_SCOPE_EXIT() { restore_errors(); } UCS_TEST_SCOPE_EXIT_END
+            scoped_log_handler detect_err(scoped_log_handler::LOG_DETECT_SOCKADDR_ERRS);
             client_ep_connect(connect_addr);
             /* Check reachability with tagged send */
             send_recv(sender(), receiver(), SEND_RECV_TAG, wakeup,
@@ -471,8 +446,7 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
     listen_addr.sin_port = 1;
 
     {
-        wrap_errors();
-        UCS_TEST_SCOPE_EXIT() { restore_errors(); } UCS_TEST_SCOPE_EXIT_END
+        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS);
         client_ep_connect((struct sockaddr*)&listen_addr);
         /* allow for the unreachable event to arrive before restoring errors */
         wait_for_flag(&err_handler_count);
@@ -536,8 +510,7 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
     start_listener(cb_type(), (const struct sockaddr*)&connect_addr);
 
     {
-        wrap_errors();
-        UCS_TEST_SCOPE_EXIT() { restore_errors(); } UCS_TEST_SCOPE_EXIT_END
+        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS);
 
         client_ep_connect((struct sockaddr*)&connect_addr);
 

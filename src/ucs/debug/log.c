@@ -153,6 +153,11 @@ void ucs_log_pop_handler()
     }
 }
 
+unsigned ucs_log_handlers_num()
+{
+    return ucs_log_num_handlers;
+}
+
 void ucs_log_dispatch(const char *file, unsigned line, const char *function,
                       ucs_log_level_t level, const char *format, ...)
 {

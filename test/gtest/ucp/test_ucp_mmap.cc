@@ -36,9 +36,13 @@ protected:
 
 bool test_ucp_mmap::resolve_rma(entity *e, ucp_rkey_h rkey)
 {
-    hide_errors();
-    ucs_status_t status = UCP_RKEY_RESOLVE(rkey, e->ep(), rma);
-    restore_errors();
+    ucs_status_t status;
+
+    {
+        scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
+        status = UCP_RKEY_RESOLVE(rkey, e->ep(), rma);
+    }
+
     if (status == UCS_OK) {
         EXPECT_NE(UCP_NULL_LANE, rkey->cache.rma_lane);
         return true;
@@ -52,9 +56,13 @@ bool test_ucp_mmap::resolve_rma(entity *e, ucp_rkey_h rkey)
 
 bool test_ucp_mmap::resolve_amo(entity *e, ucp_rkey_h rkey)
 {
-    hide_errors();
-    ucs_status_t status = UCP_RKEY_RESOLVE(rkey, e->ep(), amo);
-    restore_errors();
+    ucs_status_t status;
+
+    {
+        scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
+        status = UCP_RKEY_RESOLVE(rkey, e->ep(), amo);
+    }
+
     if (status == UCS_OK) {
         EXPECT_NE(UCP_NULL_LANE, rkey->cache.amo_lane);
         return true;

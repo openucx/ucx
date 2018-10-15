@@ -63,12 +63,13 @@ void test_ucp_atomic::unaligned_blocking_add64(entity *e,  size_t max_size,
                                                void *memheap_addr, ucp_rkey_h rkey,
                                                std::string& expected_data)
 {
-    /* Test that unaligned addresses generate error */
-    ucs_status_t status;
-    hide_errors();
-    status = ucp_atomic_add64(e->ep(), 0, (uintptr_t)memheap_addr + 1, rkey);
-    restore_errors();
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    {
+        /* Test that unaligned addresses generate error */
+        scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
+        ucs_status_t status = ucp_atomic_add64(e->ep(), 0,
+                                               (uintptr_t)memheap_addr + 1, rkey);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    }
     expected_data.clear();
 }
 
@@ -106,15 +107,13 @@ void test_ucp_atomic::unaligned_nb_post(entity *e,  size_t max_size,
                                         void *memheap_addr, ucp_rkey_h rkey,
                                         std::string& expected_data)
 {
-    /* Test that unaligned addresses generate error */
-    ucs_status_t status;
-    
-    hide_errors();
-    status = test_ucp_atomic::ucp_atomic_post_nbi<uint64_t>(e->ep(), OP, 0,
-                                                            (void *)((uintptr_t)memheap_addr + 1),
-                                                            rkey);
-    restore_errors();
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    {
+        /* Test that unaligned addresses generate error */
+        scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
+        ucs_status_t status = test_ucp_atomic::ucp_atomic_post_nbi<uint64_t>
+                (e->ep(), OP, 0, (void *)((uintptr_t)memheap_addr + 1), rkey);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    }
     expected_data.clear();
 }
 

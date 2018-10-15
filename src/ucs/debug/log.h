@@ -148,6 +148,7 @@ const char *ucs_log_dump_hex(const void* data, size_t length, char *buf,
  */
 void ucs_log_push_handler(ucs_log_func_t handler);
 void ucs_log_pop_handler();
+unsigned ucs_log_handlers_num();
 
 END_C_DECLS
 

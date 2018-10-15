@@ -123,23 +123,26 @@ void test_base::pop_config()
     m_config_stack.pop_back();
 }
 
-void test_base::hide_errors()
-{
-    ucs_log_push_handler(hide_errors_logger);
+test_base::scoped_log_handler::scoped_log_handler(scoped_log_handler_type_t type) {
+    switch (type) {
+    case LOG_HIDE_ERRS:
+        ucs_log_push_handler(hide_errors_logger);
+        break;
+    case LOG_HIDE_WARNS:
+        ucs_log_push_handler(hide_warns_logger);
+        break;
+    case LOG_WRAP_ERRS:
+        ucs_log_push_handler(wrap_errors_logger);
+        break;
+    case LOG_DETECT_SOCKADDR_ERRS:
+        ucs_log_push_handler(sockaddr_errs_detector);
+        break;
+    default:
+        UCS_TEST_ABORT("Invalid log handler type");
+    }
 }
 
-void test_base::hide_warnings()
-{
-    ucs_log_push_handler(hide_warns_logger);
-}
-
-void test_base::wrap_errors()
-{
-    ucs_log_push_handler(wrap_errors_logger);
-}
-
-void test_base::restore_errors()
-{
+test_base::scoped_log_handler::~scoped_log_handler() {
     ucs_log_pop_handler();
 }
 
@@ -217,6 +220,25 @@ test_base::wrap_errors_logger(const char *file, unsigned line, const char *funct
     return UCS_LOG_FUNC_RC_CONTINUE;
 }
 
+ucs_log_func_rc_t
+test_base::sockaddr_errs_detector(const char *file, unsigned line,
+                                  const char *function, ucs_log_level_t level,
+                                  const char *message, va_list ap)
+{
+    if (level == UCS_LOG_LEVEL_ERROR) {
+        std::string err_str = format_message(message, ap);
+        if ((strstr(err_str.c_str(), "no supported sockaddr auxiliary transports found for")) ||
+            (strstr(err_str.c_str(), "sockaddr aux resources addresses")) ||
+            (strstr(err_str.c_str(), "no peer failure handler")) ||
+            /* when the "peer failure" error happens, it is followed by: */
+            (strstr(err_str.c_str(), "received event RDMA_CM_EVENT_UNREACHABLE"))) {
+            UCS_TEST_MESSAGE << err_str;
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+    }
+    return UCS_LOG_FUNC_RC_CONTINUE;
+}
+
 void test_base::SetUpProxy() {
     ucs_assert(m_state == NEW);
     m_num_valgrind_errors_before = VALGRIND_COUNT_ERRORS;
@@ -224,6 +246,7 @@ void test_base::SetUpProxy() {
     m_num_errors_before          = m_total_errors;
 
     m_errors.clear();
+    m_num_log_handlers_before    = ucs_log_handlers_num();
     ucs_log_push_handler(count_warns_logger);
 
     try {
@@ -248,8 +271,14 @@ void test_base::TearDownProxy() {
         cleanup();
     }
 
-    ucs_log_pop_handler();
     m_errors.clear();
+
+    ucs_log_pop_handler();
+    if (m_num_log_handlers_before != ucs_log_handlers_num()) {
+        ADD_FAILURE() << "Missed log handler cleanup, "
+                      << m_num_log_handlers_before << " != "
+                      << ucs_log_handlers_num();
+    }
 
     int num_valgrind_errors = VALGRIND_COUNT_ERRORS - m_num_valgrind_errors_before;
     if (num_valgrind_errors > 0) {

@@ -330,9 +330,8 @@ bool ucp_test::check_test_param(const std::string& name,
     ucp_context_h ucph;
     ucs_status_t status;
     {
-        hide_errors();
+        scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
         status = ucp_init(&test_param.ctx_params, config, &ucph);
-        restore_errors();
     }
 
     bool result;
@@ -379,10 +378,11 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
 
     ucp_test::set_ucp_config(ucp_config, entity_param);
 
-    hide_errors();
-    UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init,
-                           &entity_param.ctx_params, ucp_config);
-    restore_errors();
+    {
+        scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
+        UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init,
+                               &entity_param.ctx_params, ucp_config);
+    }
 
     m_workers.resize(num_workers);
     for (int i = 0; i < num_workers; i++) {
@@ -405,17 +405,19 @@ void ucp_test_base::entity::connect(const entity* other,
         ucp_address_t *address;
         size_t address_length;
         ucp_ep_h ep;
-        ucp_ep_params_t local_ep_params = ep_params;
 
         status = ucp_worker_get_address(other->worker(i), &address, &address_length);
         ASSERT_UCS_OK(status);
 
-        ucp_test::hide_errors();
-        local_ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-        local_ep_params.address     = address;
+        {
+            scoped_log_handler hide_err(scoped_log_handler::LOG_HIDE_ERRS);
 
-        status = ucp_ep_create(m_workers[i].first, &local_ep_params, &ep);
-        ucp_test::restore_errors();
+            ucp_ep_params_t local_ep_params = ep_params;
+            local_ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+            local_ep_params.address     = address;
+
+            status = ucp_ep_create(m_workers[i].first, &local_ep_params, &ep);
+        }
 
         if (status == UCS_ERR_UNREACHABLE) {
             ucp_worker_release_address(other->worker(i), address);
@@ -573,9 +575,12 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
         UCS_TEST_ABORT("invalid test parameter");
     }
 
-    wrap_errors();
-    ucs_status_t status = ucp_listener_create(worker(worker_index), &params, &listener);
-    restore_errors();
+    ucs_status_t status;
+    {
+        scoped_log_handler wrap_err(scoped_log_handler::LOG_WRAP_ERRS);
+        status = ucp_listener_create(worker(worker_index), &params, &listener);
+    }
+
     if (status == UCS_OK) {
         m_listener.reset(listener, ucp_listener_destroy);
     } else {
