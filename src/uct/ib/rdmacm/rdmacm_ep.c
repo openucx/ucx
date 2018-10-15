@@ -5,6 +5,16 @@
 
 #include "rdmacm_ep.h"
 
+
+#define UCT_RDMACM_CB_FLAGS_CHECK(_flags) \
+    do { \
+        UCT_CB_FLAGS_CHECK(_flags); \
+        if (!((_flags) & UCT_CB_FLAG_ASYNC)) { \
+            return UCS_ERR_UNSUPPORTED; \
+        } \
+    } while (0)
+
+
 ucs_status_t uct_rdmacm_ep_resolve_addr(uct_rdmacm_ep_t *ep)
 {
     uct_rdmacm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rdmacm_iface_t);
@@ -88,13 +98,7 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (!(cb_flags & UCT_CB_FLAG_ASYNC)) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    if (cb_flags & UCT_CB_FLAG_DEPRECATED) {
-        return UCS_ERR_INVALID_PARAM;
-    }
+    UCT_RDMACM_CB_FLAGS_CHECK(cb_flags);
 
     /* Initialize these fields before calling rdma_resolve_addr to avoid a race
      * where they are used before being initialized (from the async thread

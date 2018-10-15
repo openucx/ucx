@@ -89,10 +89,7 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
         return status;
     }
 
-    if (flags & UCT_CB_FLAG_DEPRECATED) {
-        ucs_error("Deprecated flags value");
-        return UCS_ERR_INVALID_PARAM;
-    }
+    UCT_CB_FLAGS_CHECK(flags);
 
     /* If user wants a synchronous callback, it must be supported, or the
      * callback could be called from another thread.
@@ -412,9 +409,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_iface_t, ops);
 
-    if (params->err_handler_flags & UCT_CB_FLAG_DEPRECATED) {
-        return UCS_ERR_INVALID_PARAM;
-    }
+    UCT_CB_FLAGS_CHECK(params->err_handler_flags);
 
     self->md                = md;
     self->worker            = ucs_derived_of(worker, uct_priv_worker_t);
