@@ -527,13 +527,10 @@ UCS_TEST_P(test_ucp_stream, send_zero_ending_iov_recv_data) {
 
     std::vector<uint8_t> buf(max_size * 2);
     ucs::fill_random(buf, buf.size());
-    std::vector<std::vector<ucp_dt_iov_t> > iov;
-    iov.resize(max_size - min_size);
-    for (size_t size = min_size; size < max_size; ++size) {
-        const size_t iov_idx = size - min_size;
-        size_t slen = 0;
+    std::vector<ucp_dt_iov_t> v(iov_num);
 
-        std::vector<ucp_dt_iov_t> v(iov_num);
+    for (size_t size = min_size; size < max_size; ++size) {
+        size_t slen = 0;
         for (size_t j = 0; j < iov_num; ++j) {
             if ((j % 2) == 0) {
                 v[j].buffer = &buf[j * size / iov_num_nonempty];
@@ -544,17 +541,16 @@ UCS_TEST_P(test_ucp_stream, send_zero_ending_iov_recv_data) {
                 v[j].length = 0;
             }
         }
-        std::swap(iov[iov_idx], v);
 
-        void *sreq = ucp_stream_send_nb(sender().ep(), &iov[iov_idx][0], iov_num,
-                                        ucp_dt_make_iov(), ucp_send_cb, 0);
+        void *sreq = ucp_stream_send_nb(sender().ep(), &v[0], iov_num,
+                                        DATATYPE_IOV, ucp_send_cb, 0);
 
         size_t rlen = 0;
         while (rlen < slen) {
             progress();
             size_t length;
             void *rdata = ucp_stream_recv_data_nb(receiver().ep(), &length);
-            ASSERT_FALSE(UCS_PTR_IS_ERR(rdata));
+            EXPECT_FALSE(UCS_PTR_IS_ERR(rdata));
             if (rdata != NULL) {
                 rlen += length;
                 ucp_stream_data_release(receiver().ep(), rdata);
