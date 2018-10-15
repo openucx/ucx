@@ -428,7 +428,8 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
 
     switch (req->recv.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        if (ucs_likely(UCP_MEM_IS_HOST(req->recv.mem_type))) {
+        if ((ucs_likely(UCP_MEM_IS_HOST(req->recv.mem_type))) ||
+            (ucs_likely(UCP_MEM_IS_CUDA_MANAGED(req->recv.mem_type)))) {
             UCS_PROFILE_NAMED_CALL("memcpy_recv", memcpy, req->recv.buffer + offset,
                                    data, length);
         } else {

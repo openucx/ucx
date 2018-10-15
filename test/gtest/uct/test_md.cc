@@ -24,7 +24,7 @@ extern "C" {
 #include <cuda_runtime.h>
 #endif
 
-std::string const test_md::mem_types[] = {"host", "cuda"};
+std::string const test_md::mem_types[] = {"host", "cuda", "cuda-managed"};
 
 void* test_md::alloc_thread(void *arg)
 {
