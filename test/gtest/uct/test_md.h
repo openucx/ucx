@@ -34,16 +34,22 @@ protected:
 
     void test_registration();
 
-    uct_md_h pd() {
-        return m_pd;
+    uct_md_h md() const {
+        return m_md;
     }
+
+    const uct_md_attr_t& md_attr() const {
+        return m_md_attr;
+    }
+
 
     static void* alloc_thread(void *arg);
     static std::string const mem_types[];
 
 private:
     ucs::handle<uct_md_config_t*> m_md_config;
-    ucs::handle<uct_md_h>         m_pd;
+    ucs::handle<uct_md_h>         m_md;
+    uct_md_attr_t                 m_md_attr;
 };
 
 

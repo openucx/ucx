@@ -18,6 +18,7 @@ protected:
     void ib_md_umr_check(void *rkey_buffer,
                          bool amo_access,
                          size_t size = 8192);
+    bool has_ksm() const;
 };
 
 
@@ -31,11 +32,24 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
                                  size_t size)
 {
     ucs_status_t status;
-    void *buffer = malloc(size);
-    ASSERT_TRUE(buffer != NULL);
+    size_t alloc_size;
+    void *buffer;
+
+    if (ucs_get_phys_mem_size() < size * 8) {
+        UCS_TEST_SKIP_R("not enough physical memory");
+    }
+    if (ucs_get_memfree_size() < size * 4) {
+        UCS_TEST_SKIP_R("not enough free memory");
+    }
+
+    buffer     = NULL;
+    alloc_size = size;
+    status     = ucs_mmap_alloc(&alloc_size, &buffer, 0
+                                UCS_MEMTRACK_NAME("test_umr"));
+    ASSERT_UCS_OK(status);
 
     uct_mem_h memh;
-    status = uct_md_mem_reg(pd(), buffer, size, 
+    status = uct_md_mem_reg(md(), buffer, size,
                             amo_access ? UCT_MD_MEM_ACCESS_REMOTE_ATOMIC :
                                          UCT_MD_MEM_ACCESS_RMA,
                             &memh);
@@ -43,7 +57,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
     ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
     uct_ib_mem_t *ib_memh = (uct_ib_mem_t *)memh;
-    uct_ib_md_t  *ib_md = (uct_ib_md_t *)pd();
+    uct_ib_md_t  *ib_md = (uct_ib_md_t *)md();
 
     if (amo_access) {
         EXPECT_TRUE(ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC);
@@ -53,7 +67,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
         EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
     }
 
-    status = uct_md_mkey_pack(pd(), memh, rkey_buffer);
+    status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
 
     if (amo_access) {
@@ -69,74 +83,56 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
         EXPECT_TRUE(ib_memh->atomic_mr == NULL);
     }
 
-    status = uct_md_mem_dereg(pd(), memh);
+    status = uct_md_mem_dereg(md(), memh);
     EXPECT_UCS_OK(status);
-    free(buffer);
+
+    ucs_mmap_free(buffer, alloc_size);
+}
+
+bool test_ib_md::has_ksm() const {
+#ifdef HAVE_EXP_UMR_KSM
+    return ucs_derived_of(md(), uct_ib_md_t)->dev.dev_attr.exp_device_cap_flags &
+           IBV_EXP_DEVICE_UMR_FIXED_SIZE;
+#else
+    return false;
+#endif
 }
 
 UCS_TEST_P(test_ib_md, ib_md_umr_rcache, "REG_METHODS=rcache") {
-
-    ucs_status_t status;
-    uct_md_attr_t md_attr;
-    void *rkey_buffer;
-
-    status = uct_md_query(pd(), &md_attr);
-    ASSERT_UCS_OK(status);
-    rkey_buffer = malloc(md_attr.rkey_packed_size);
-    ASSERT_TRUE(rkey_buffer != NULL);
+    std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
 
     /* The order is important here because
      * of registration cache. A cached region will
      * be promoted to atomic access but it will never be demoted 
      */
-    ib_md_umr_check(rkey_buffer, false);
-    ib_md_umr_check(rkey_buffer, true);
-
-    free(rkey_buffer);
+    ib_md_umr_check(&rkey_buffer[0], false);
+    ib_md_umr_check(&rkey_buffer[0], true);
 }
 
 UCS_TEST_P(test_ib_md, ib_md_umr_direct, "REG_METHODS=direct") {
-
-    ucs_status_t status;
-    uct_md_attr_t md_attr;
-    void *rkey_buffer;
-
-    status = uct_md_query(pd(), &md_attr);
-    ASSERT_UCS_OK(status);
-    rkey_buffer = malloc(md_attr.rkey_packed_size);
-    ASSERT_TRUE(rkey_buffer != NULL);
+    std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
 
     /* without rcache the order is not really important */
-    ib_md_umr_check(rkey_buffer, true);
-    ib_md_umr_check(rkey_buffer, false);
-    ib_md_umr_check(rkey_buffer, true);
-    ib_md_umr_check(rkey_buffer, false);
-
-    free(rkey_buffer);
+    ib_md_umr_check(&rkey_buffer[0], true);
+    ib_md_umr_check(&rkey_buffer[0], false);
+    ib_md_umr_check(&rkey_buffer[0], true);
+    ib_md_umr_check(&rkey_buffer[0], false);
 }
 
 UCS_TEST_P(test_ib_md, ib_md_umr_ksm) {
-
-    ucs_status_t status;
-    uct_md_attr_t md_attr;
-    void *rkey_buffer;
-    bool has_ksm;
-
-    status = uct_md_query(pd(), &md_attr);
-    ASSERT_UCS_OK(status);
-    rkey_buffer = malloc(md_attr.rkey_packed_size);
-    ASSERT_TRUE(rkey_buffer != NULL);
-
-#ifdef HAVE_EXP_UMR_KSM
-    has_ksm = ucs_derived_of(pd(), uct_ib_md_t)->dev.dev_attr.exp_device_cap_flags &
-              IBV_EXP_DEVICE_UMR_FIXED_SIZE;
-#else
-    has_ksm = false;
-#endif
-
-    ib_md_umr_check(rkey_buffer, has_ksm, UCT_IB_MD_MAX_MR_SIZE + 0x1000);
-
-    free(rkey_buffer);
+    std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
+    ib_md_umr_check(&rkey_buffer[0], has_ksm(), UCT_IB_MD_MAX_MR_SIZE + 0x1000);
 }
+
+#if HAVE_UMR_KSM
+UCS_TEST_P(test_ib_md, umr_noninline_klm, "MAX_INLINE_KLM_LIST=1") {
+
+    /* KLM list size would be 2, and setting MAX_INLINE_KLM_LIST=1 would force
+     * using non-inline UMR post_send.
+     */
+    std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
+    ib_md_umr_check(&rkey_buffer[0], has_ksm(), UCT_IB_MD_MAX_MR_SIZE + 0x1000);
+}
+#endif
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md, ib)

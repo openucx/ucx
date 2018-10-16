@@ -75,18 +75,22 @@ test_md::test_md()
     UCS_TEST_CREATE_HANDLE(uct_md_config_t*, m_md_config,
                            (void (*)(uct_md_config_t*))uct_config_release,
                            uct_md_config_read, GetParam().c_str(), NULL, NULL);
+    memset(&m_md_attr, 0, sizeof(m_md_attr));
 }
 
 void test_md::init()
 {
     ucs::test_base::init();
-    UCS_TEST_CREATE_HANDLE(uct_md_h, m_pd, uct_md_close, uct_md_open,
+    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
                            GetParam().c_str(), m_md_config);
+
+    ucs_status_t status = uct_md_query(m_md, &m_md_attr);
+    ASSERT_UCS_OK(status);
 }
 
 void test_md::cleanup()
 {
-    m_pd.reset();
+    m_md.reset();
     ucs::test_base::cleanup();
 }
 
@@ -104,7 +108,7 @@ void test_md::modify_config(const std::string& name, const std::string& value,
 void test_md::check_caps(uint64_t flags, const std::string& name)
 {
     uct_md_attr_t md_attr;
-    ucs_status_t status = uct_md_query(pd(), &md_attr);
+    ucs_status_t status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
     if (!ucs_test_all_flags(md_attr.cap.flags, flags)) {
         std::stringstream ss;
@@ -187,23 +191,23 @@ UCS_TEST_P(test_md, rkey_ptr) {
     check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_RKEY_PTR, "allocation+direct access");
     // alloc (should work with both sysv and xpmem
     size = 1024 * 1024 * sizeof(unsigned);
-    status = uct_md_mem_alloc(pd(), &size, (void **)&rva,
+    status = uct_md_mem_alloc(md(), &size, (void **)&rva,
                               UCT_MD_MEM_ACCESS_ALL,
                               "test", &memh);
     ASSERT_UCS_OK(status);
     EXPECT_LE(1024 * 1024 * sizeof(unsigned), size);
 
     // pack
-    status = uct_md_query(pd(), &md_attr);
+    status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
     rkey_buffer = malloc(md_attr.rkey_packed_size);
     if (rkey_buffer == NULL) {
         // make coverity happy
-        uct_md_mem_free(pd(), memh);
+        uct_md_mem_free(md(), memh);
         GTEST_FAIL();
     }
 
-    status = uct_md_mkey_pack(pd(), memh, rkey_buffer);
+    status = uct_md_mkey_pack(md(), memh, rkey_buffer);
 
     // unpack
     status = uct_rkey_unpack(rkey_buffer, &rkey_bundle);
@@ -234,7 +238,7 @@ UCS_TEST_P(test_md, rkey_ptr) {
     EXPECT_EQ(UCS_ERR_INVALID_ADDR, status);
 
     free(rkey_buffer);
-    uct_md_mem_free(pd(), memh);
+    uct_md_mem_free(md(), memh);
     uct_rkey_release(&rkey_bundle);
 }
 
@@ -252,7 +256,7 @@ UCS_TEST_P(test_md, alloc) {
             continue;
         }
 
-        status = uct_md_mem_alloc(pd(), &size, &address,
+        status = uct_md_mem_alloc(md(), &size, &address,
                                   UCT_MD_MEM_ACCESS_ALL, "test", &memh);
         EXPECT_GT(size, 0ul);
 
@@ -262,7 +266,7 @@ UCS_TEST_P(test_md, alloc) {
         EXPECT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
         memset(address, 0xBB, size);
-        uct_md_mem_free(pd(), memh);
+        uct_md_mem_free(md(), memh);
     }
 }
 
@@ -273,7 +277,7 @@ UCS_TEST_P(test_md, mem_type_owned) {
     int ret;
     void *address;
 
-    status = uct_md_query(pd(), &md_attr);
+    status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
 
     if (md_attr.cap.mem_type == UCT_MD_MEM_TYPE_HOST) {
@@ -282,7 +286,7 @@ UCS_TEST_P(test_md, mem_type_owned) {
 
     alloc_memory(&address, 1024, NULL, md_attr.cap.mem_type);
 
-    ret = uct_md_is_mem_type_owned(pd(), address, 1024);
+    ret = uct_md_is_mem_type_owned(md(), address, 1024);
     EXPECT_TRUE(ret > 0);
 }
 
@@ -295,7 +299,7 @@ UCS_TEST_P(test_md, reg) {
 
     check_caps(UCT_MD_FLAG_REG, "registration");
 
-    status = uct_md_query(pd(), &md_attr);
+    status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
     for (unsigned mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
         if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
@@ -314,13 +318,13 @@ UCS_TEST_P(test_md, reg) {
 
             alloc_memory(&address, size, &fill_buffer[0], mem_type);
 
-            status = uct_md_mem_reg(pd(), address, size, UCT_MD_MEM_ACCESS_ALL, &memh);
+            status = uct_md_mem_reg(md(), address, size, UCT_MD_MEM_ACCESS_ALL, &memh);
 
             ASSERT_UCS_OK(status);
             ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
             check_memory(address, &fill_buffer[0], size, mem_type);
 
-            status = uct_md_mem_dereg(pd(), memh);
+            status = uct_md_mem_dereg(md(), memh);
             ASSERT_UCS_OK(status);
             check_memory(address, &fill_buffer[0], size, mem_type);
 
@@ -338,7 +342,7 @@ UCS_TEST_P(test_md, reg_perf) {
 
     check_caps(UCT_MD_FLAG_REG, "registration");
 
-    status = uct_md_query(pd(), &md_attr);
+    status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
     for (unsigned mem_type = 0; mem_type < UCT_MD_MEM_TYPE_LAST; mem_type++) {
         if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type))) {
@@ -355,12 +359,12 @@ UCS_TEST_P(test_md, reg_perf) {
             unsigned n = 0;
             while (n < count) {
                 uct_mem_h memh;
-                status = uct_md_mem_reg(pd(), ptr, size, UCT_MD_MEM_ACCESS_ALL,
+                status = uct_md_mem_reg(md(), ptr, size, UCT_MD_MEM_ACCESS_ALL,
                         &memh);
                 ASSERT_UCS_OK(status);
                 ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
-                status = uct_md_mem_dereg(pd(), memh);
+                status = uct_md_mem_dereg(md(), memh);
                 ASSERT_UCS_OK(status);
 
                 ++n;
@@ -392,16 +396,16 @@ UCS_TEST_P(test_md, reg_advise) {
     address = malloc(size);
     ASSERT_TRUE(address != NULL);
 
-    status = uct_md_mem_reg(pd(), address, size,
+    status = uct_md_mem_reg(md(), address, size,
                             UCT_MD_MEM_FLAG_NONBLOCK|UCT_MD_MEM_ACCESS_ALL,
                             &memh);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
-    status = uct_md_mem_advise(pd(), memh, (char *)address + 7, 32*1024, UCT_MADV_WILLNEED);
+    status = uct_md_mem_advise(md(), memh, (char *)address + 7, 32*1024, UCT_MADV_WILLNEED);
     EXPECT_UCS_OK(status);
 
-    status = uct_md_mem_dereg(pd(), memh);
+    status = uct_md_mem_dereg(md(), memh);
     EXPECT_UCS_OK(status);
     free(address);
 }
@@ -416,7 +420,7 @@ UCS_TEST_P(test_md, alloc_advise) {
 
     orig_size = size = 128 * 1024 * 1024;
 
-    status = uct_md_mem_alloc(pd(), &size, &address,
+    status = uct_md_mem_alloc(md(), &size, &address,
                               UCT_MD_MEM_FLAG_NONBLOCK|
                               UCT_MD_MEM_ACCESS_ALL,
                               "test", &memh);
@@ -425,11 +429,11 @@ UCS_TEST_P(test_md, alloc_advise) {
     EXPECT_TRUE(address != NULL);
     EXPECT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
-    status = uct_md_mem_advise(pd(), memh, (char *)address + 7, 32*1024, UCT_MADV_WILLNEED);
+    status = uct_md_mem_advise(md(), memh, (char *)address + 7, 32*1024, UCT_MADV_WILLNEED);
     EXPECT_UCS_OK(status);
 
     memset(address, 0xBB, size);
-    uct_md_mem_free(pd(), memh);
+    uct_md_mem_free(md(), memh);
 }
 
 /*
@@ -442,7 +446,7 @@ UCS_TEST_P(test_md, reg_multi_thread) {
 
     check_caps(UCT_MD_FLAG_REG, "registration");
 
-    status = uct_md_query(pd(), &md_attr);
+    status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
 
     if (!(md_attr.cap.reg_mem_types & UCS_BIT(UCT_MD_MEM_TYPE_HOST))) {
@@ -461,7 +465,7 @@ UCS_TEST_P(test_md, reg_multi_thread) {
         ASSERT_TRUE(buffer != NULL);
 
         uct_mem_h memh;
-        status = uct_md_mem_reg(pd(), buffer, size,
+        status = uct_md_mem_reg(md(), buffer, size,
                                 UCT_MD_MEM_FLAG_NONBLOCK|
                                 UCT_MD_MEM_ACCESS_ALL,
                                 &memh);
@@ -470,7 +474,7 @@ UCS_TEST_P(test_md, reg_multi_thread) {
 
         sched_yield();
 
-        status = uct_md_mem_dereg(pd(), memh);
+        status = uct_md_mem_dereg(md(), memh);
         EXPECT_UCS_OK(status);
         free(buffer);
     }
@@ -497,18 +501,18 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
                 if (ucs::is_rdmacm_netdev(ifa->ifa_name)) {
                     UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
                                         ucs::sockaddr_to_str(ifa->ifa_addr);
-                    ASSERT_TRUE(uct_md_is_sockaddr_accessible(pd(), &sock_addr,
+                    ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
                                                               UCT_SOCKADDR_ACC_LOCAL));
-                    ASSERT_TRUE(uct_md_is_sockaddr_accessible(pd(), &sock_addr,
+                    ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
                                                               UCT_SOCKADDR_ACC_REMOTE));
                     found_ipoib = 1;
                 }
             } else {
                 UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
                                     ucs::sockaddr_to_str(ifa->ifa_addr);
-                ASSERT_TRUE(uct_md_is_sockaddr_accessible(pd(), &sock_addr,
+                ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
                                                           UCT_SOCKADDR_ACC_LOCAL));
-                ASSERT_TRUE(uct_md_is_sockaddr_accessible(pd(), &sock_addr,
+                ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
                                                           UCT_SOCKADDR_ACC_REMOTE));
             }
         }

@@ -120,6 +120,13 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Use GPU Direct RDMA for HCA to access GPU pages directly\n",
      ucs_offsetof(uct_ib_md_config_t, ext.enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
 
+#if HAVE_EXP_UMR
+    {"MAX_INLINE_KLM_LIST", "inf",
+     "When posting a UMR, KLM lists shorter or equal to this value will be posted as inline.\n"
+     "The actual maximal length is also limited by device capabilities.",
+     ucs_offsetof(uct_ib_md_config_t, ext.max_inline_klm_list), UCS_CONFIG_TYPE_UINT},
+#endif
+
     {NULL}
 };
 
@@ -205,6 +212,9 @@ static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
         goto err;
     }
 
+    md->config.max_inline_klm_list = ucs_min(md->config.max_inline_klm_list,
+                                             ibdev->dev_attr.umr_caps.max_send_wqe_inline_klms);
+
     qp_init_attr.qp_type             = IBV_QPT_RC;
     qp_init_attr.send_cq             = md->umr_cq;
     qp_init_attr.recv_cq             = md->umr_cq;
@@ -217,7 +227,7 @@ static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
     qp_init_attr.pd                  = md->pd;
     qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD|IBV_EXP_QP_INIT_ATTR_MAX_INL_KLMS;
     qp_init_attr.max_inl_recv        = 0;
-    qp_init_attr.max_inl_send_klms   = ibdev->dev_attr.umr_caps.max_send_wqe_inline_klms;
+    qp_init_attr.max_inl_send_klms   = md->config.max_inline_klm_list;
 
 #if HAVE_IBV_EXP_QP_CREATE_UMR
     qp_init_attr.comp_mask          |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
@@ -283,6 +293,9 @@ static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
         ucs_error("Failed to modify UMR QP to RTS: %m");
         goto err_destroy_qp;
     }
+
+    ucs_debug("initialized UMR QP 0x%x, max_inline_klm_list %u",
+              md->umr_qp->qp_num, md->config.max_inline_klm_list);
     return UCS_OK;
 
 err_destroy_qp:
@@ -414,8 +427,7 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
 
     mrin.pd                             = md->pd;
     wr.exp_opcode                       = IBV_EXP_WR_UMR_FILL;
-    wr.exp_send_flags                   = IBV_EXP_SEND_INLINE |
-                                          IBV_EXP_SEND_SIGNALED;
+    wr.exp_send_flags                   = IBV_EXP_SEND_SIGNALED;
     wr.ext_op.umr.exp_access            = UCT_IB_MEM_ACCESS_FLAGS;
 
     reg_length = UCT_IB_MD_MAX_MR_SIZE;
@@ -478,6 +490,27 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
     wr.ext_op.umr.base_addr             = (uint64_t) (uintptr_t) mr->addr + offset;
     wr.ext_op.umr.num_mrs               = list_size;
     wr.ext_op.umr.modified_mr           = umr;
+
+    /* If the list exceeds max inline size, allocate a container object */
+    if (list_size > md->config.max_inline_klm_list) {
+        struct ibv_exp_mkey_list_container_attr in = {
+            .pd                = md->pd,
+            .mkey_list_type    = IBV_EXP_MKEY_LIST_TYPE_INDIRECT_MR,
+            .max_klm_list_size = list_size
+        };
+
+        wr.ext_op.umr.memory_objects = ibv_exp_alloc_mkey_list_memory(&in);
+        if (wr.ext_op.umr.memory_objects == NULL) {
+            ucs_error("ibv_exp_alloc_mkey_list_memory(list_size=%d) failed: %m",
+                      list_size);
+            status = UCS_ERR_IO_ERROR;
+            goto err_free_umr;
+        }
+    } else {
+        wr.ext_op.umr.memory_objects = NULL;
+        wr.exp_send_flags           |= IBV_EXP_SEND_INLINE;
+    }
+
     ucs_trace_data("UMR_FILL qp 0x%x lkey 0x%x base 0x%lx [addr %lx len %zu lkey 0x%x] list_size %d",
                    md->umr_qp->qp_num, wr.ext_op.umr.modified_mr->lkey,
                    wr.ext_op.umr.base_addr, mem_reg[0].base_addr,
@@ -488,7 +521,7 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
     if (ret) {
         ucs_error("ibv_exp_post_send(UMR_FILL) failed: %m");
         status = UCS_ERR_IO_ERROR;
-        goto err_free_umr;
+        goto err_free_klm_container;
     }
 
     /* Wait for send UMR completion */
@@ -497,20 +530,24 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
         if (ret < 0) {
             ucs_error("ibv_exp_poll_cq(umr_cq) failed: %m");
             status = UCS_ERR_IO_ERROR;
-            goto err_free_umr;
+            goto err_free_klm_container;
         }
         if (ret == 1) {
             if (wc.status != IBV_WC_SUCCESS) {
                 ucs_error("UMR_FILL completed with error: %s vendor_err %d",
                           ibv_wc_status_str(wc.status), wc.vendor_err);
                 status = UCS_ERR_IO_ERROR;
-                goto err_free_umr;
+                goto err_free_klm_container;
             }
             break;
         }
     }
 
-    ucs_trace("UMR registered memory %p..%p offset 0x%lx on %s lkey 0x%x rkey 0x%x",
+    if (wr.ext_op.umr.memory_objects != NULL) {
+        ibv_exp_dealloc_mkey_list_memory(wr.ext_op.umr.memory_objects);
+    }
+
+    ucs_debug("UMR registered memory %p..%p offset 0x%lx on %s lkey 0x%x rkey 0x%x",
               mr->addr, mr->addr + mr->length, offset, uct_ib_device_name(&md->dev),
               umr->lkey, umr->rkey);
     *umr_p = umr;
@@ -518,6 +555,10 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
     ucs_free(mem_reg);
     return UCS_OK;
 
+err_free_klm_container:
+    if (wr.ext_op.umr.memory_objects != NULL) {
+        ibv_exp_dealloc_mkey_list_memory(wr.ext_op.umr.memory_objects);
+    }
 err_free_umr:
     UCS_PROFILE_CALL(ibv_dereg_mr, umr);
 err:
