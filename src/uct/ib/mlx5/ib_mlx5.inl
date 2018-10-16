@@ -196,12 +196,12 @@ uct_ib_mlx5_ep_set_rdma_seg(struct mlx5_wqe_raddr_seg *raddr, uint64_t rdma_radd
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
                           uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
-                          enum ibv_qp_type qp_type)
+                          int qp_type)
 {
     if (qp_type == IBV_QPT_UD) {
         mlx5_av_base(&seg->av)->key.qkey.qkey  = htonl(UCT_IB_KEY);
 #if HAVE_TL_DC
-    } else if (qp_type == IBV_EXP_QPT_DC_INI) {
+    } else if (qp_type == UCT_IB_QPT_DCI) {
         mlx5_av_base(&seg->av)->key.dc_key     = htobe64(UCT_IB_KEY);
 #endif
     }

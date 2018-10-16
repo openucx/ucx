@@ -925,27 +925,9 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
                                     struct ibv_qp **qp_p, struct ibv_qp_cap *cap,
                                     unsigned max_send_wr)
 {
-    uct_ib_device_t *dev UCS_V_UNUSED = uct_ib_iface_device(&iface->super);
-    struct ibv_exp_qp_init_attr qp_init_attr;
-    const char *qp_type_str;
-    struct ibv_qp *qp;
-    int inline_recv = 0;
+    uct_ib_qp_attr_t qp_init_attr    = {};
+    static ucs_status_t status;
 
-    /* Check QP type */
-    if (qp_type == IBV_QPT_RC) {
-        qp_type_str = "rc";
-#if HAVE_DECL_IBV_EXP_QPT_DC_INI
-    } else if (qp_type == IBV_EXP_QPT_DC_INI) {
-        qp_type_str = "dci";
-#endif
-    } else {
-        ucs_bug("invalid qp type: %d", qp_type);
-    }
-
-    memset(&qp_init_attr, 0, sizeof(qp_init_attr));
-    qp_init_attr.qp_context          = NULL;
-    qp_init_attr.send_cq             = iface->super.cq[UCT_IB_DIR_TX];
-    qp_init_attr.recv_cq             = iface->super.cq[UCT_IB_DIR_RX];
     if (qp_type == IBV_QPT_RC) {
         qp_init_attr.srq             = iface->rx.srq.srq;
     }
@@ -956,57 +938,14 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
     qp_init_attr.cap.max_inline_data = iface->config.tx_min_inline;
     qp_init_attr.qp_type             = qp_type;
     qp_init_attr.sq_sig_all          = !iface->config.tx_moderation;
+    qp_init_attr.max_inl_recv        = iface->config.rx_inline;
 
-#if HAVE_DECL_IBV_EXP_CREATE_QP
-    qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD;
-    qp_init_attr.pd                  = uct_ib_iface_qp_pd(&iface->super);
-
-#  if HAVE_IB_EXT_ATOMICS
-    qp_init_attr.comp_mask          |= IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
-    qp_init_attr.max_atomic_arg      = UCT_RC_MAX_ATOMIC_SIZE;
-#  endif
-
-#  if HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE
-    if (dev->dev_attr.exp_atomic_cap == IBV_EXP_ATOMIC_HCA_REPLY_BE) {
-        qp_init_attr.comp_mask       |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
-        qp_init_attr.exp_create_flags = IBV_EXP_QP_CREATE_ATOMIC_BE_REPLY;
-    }
-#  endif
-
-#  if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
-    qp_init_attr.comp_mask           |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
-    qp_init_attr.max_inl_recv         = iface->config.rx_inline;
-#  endif
-
-#if HAVE_IBV_EXP_RES_DOMAIN
-    if (iface->super.res_domain != NULL) {
-        qp_init_attr.comp_mask       |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
-        qp_init_attr.res_domain       = iface->super.res_domain->ibv_domain;
-    }
-#endif
-
-    qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
-#else
-    qp = ibv_create_qp(uct_ib_iface_qp_pd(&iface->super), &qp_init_attr);
-#endif
-    if (qp == NULL) {
-        ucs_error("failed to create %s qp type: %m", qp_type_str);
-        return UCS_ERR_IO_ERROR;
+    status = iface->super.ops->create_qp(&iface->super, &qp_init_attr, qp_p);
+    if (status == UCS_OK) {
+        *cap = qp_init_attr.cap;
     }
 
-#if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
-    qp_init_attr.max_inl_recv = qp_init_attr.max_inl_recv / 2; /* Driver bug W/A */
-    inline_recv = qp_init_attr.max_inl_recv;
-#endif
-
-    ucs_debug("created %s qp 0x%x tx %d rx %d tx_inline %d rx_inline %d",
-              qp_type_str, qp->qp_num, qp_init_attr.cap.max_send_wr,
-              qp_init_attr.cap.max_recv_wr, qp_init_attr.cap.max_inline_data,
-              inline_recv);
-
-    *qp_p = qp;
-    *cap  = qp_init_attr.cap;
-    return UCS_OK;
+    return status;
 }
 
 ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)

@@ -118,9 +118,9 @@ struct uct_dc_iface {
         ucs_list_link_t           gc_list;
     } tx;
 
-    struct {
-        struct ibv_exp_dct        *dct;
-    } rx;
+#if HAVE_DC_EXP
+    struct ibv_exp_dct            *rx_dct;
+#endif
 
     uint8_t                       version_flag;
 };
@@ -156,6 +156,8 @@ void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config
 
 ucs_status_t uct_dc_iface_init_fc_ep(uct_dc_iface_t *iface);
 
+ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_t *dci);
+
 void uct_dc_iface_cleanup_fc_ep(uct_dc_iface_t *iface);
 
 ucs_status_t uct_dc_iface_fc_grant(uct_pending_req_t *self);
@@ -166,6 +168,10 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
 
 ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
                                    ucs_status_t status);
+
+int uct_dc_get_dct_num(uct_dc_iface_t *iface);
+
+void uct_dc_destroy_dct(uct_dc_iface_t *iface);
 
 #if IBV_EXP_HW_TM_DC
 void uct_dc_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,

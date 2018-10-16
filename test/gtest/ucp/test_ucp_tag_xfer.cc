@@ -588,6 +588,11 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp) {
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp) {
+#if HAVE_DC_DV
+    if (GetParam().transports.front().compare("dc_x") == 0) {
+        UCS_TEST_SKIP_R("DCI stuck bug");
+    }
+#endif
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, false, false, false);
 }
 

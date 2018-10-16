@@ -399,6 +399,107 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
+static const char *uct_ib_qp_type_str(int qp_type)
+{
+    switch (qp_type) {
+    case IBV_QPT_RC:
+        return "rc";
+    case IBV_QPT_UD:
+        return "ud";
+#if HAVE_TL_DC
+    case UCT_IB_QPT_DCI:
+        return "dci";
+#endif
+    default:
+        ucs_bug("invalid qp type: %d", qp_type);
+        return "unknown";
+    }
+}
+
+void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
+{
+    attr->ibv.send_cq             = iface->cq[UCT_IB_DIR_TX];
+    attr->ibv.recv_cq             = iface->cq[UCT_IB_DIR_RX];
+
+    attr->ibv.srq                 = attr->srq;
+    attr->ibv.cap                 = attr->cap;
+    attr->ibv.qp_type             = attr->qp_type;
+    attr->ibv.sq_sig_all          = attr->sq_sig_all;
+
+#if HAVE_DECL_IBV_EXP_CREATE_QP
+    attr->ibv.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD;
+    attr->ibv.pd                  = uct_ib_iface_qp_pd(iface);
+#elif HAVE_DECL_IBV_CREATE_QP_EX
+    attr->ibv.comp_mask           = IBV_QP_INIT_ATTR_PD;
+    attr->ibv.pd                  = uct_ib_iface_qp_pd(iface);
+#endif
+
+#if HAVE_IBV_EXP_RES_DOMAIN
+    if (iface->res_domain != NULL) {
+        attr->ibv.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
+        attr->ibv.res_domain      = iface->res_domain->ibv_domain;
+    }
+#endif
+
+    if (attr->qp_type == IBV_QPT_UD) {
+        return;
+    }
+
+#if HAVE_IB_EXT_ATOMICS
+    attr->ibv.comp_mask          |= IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
+    attr->ibv.max_atomic_arg      = UCT_IB_MAX_ATOMIC_SIZE;
+#endif
+
+#if HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE
+    if (uct_ib_iface_device(iface)->dev_attr.exp_atomic_cap ==
+                                     IBV_EXP_ATOMIC_HCA_REPLY_BE) {
+        attr->ibv.comp_mask       |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
+        attr->ibv.exp_create_flags = IBV_EXP_QP_CREATE_ATOMIC_BE_REPLY;
+    }
+#endif
+
+#if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
+    attr->ibv.comp_mask           |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
+    attr->ibv.max_inl_recv         = attr->max_inl_recv;
+#endif
+}
+
+ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
+                                    uct_ib_qp_attr_t *attr,
+                                    struct ibv_qp **qp_p)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    struct ibv_qp *qp;
+
+    uct_ib_iface_fill_attr(iface, attr);
+
+#if HAVE_DECL_IBV_EXP_CREATE_QP
+    qp = ibv_exp_create_qp(dev->ibv_context, &attr->ibv);
+#elif HAVE_DECL_IBV_CREATE_QP_EX
+    qp = ibv_create_qp_ex(dev->ibv_context, &attr->ibv);
+#else
+    qp = ibv_create_qp(uct_ib_iface_qp_pd(iface), &attr->ibv);
+#endif
+    if (qp == NULL) {
+        ucs_error("iface=%p: failed to create %s QP TX wr:%d sge:%d inl:%d RX wr:%d sge:%d inl %d: %m",
+                  iface, uct_ib_qp_type_str(attr->qp_type),
+                  attr->cap.max_send_wr, attr->cap.max_send_sge, attr->cap.max_inline_data,
+                  attr->cap.max_recv_wr, attr->cap.max_recv_sge, attr->max_inl_recv);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    attr->cap  = attr->ibv.cap;
+    *qp_p      = qp;
+
+    ucs_debug("iface=%p: created %s QP 0x%x on %s:%d TX wr:%d sge:%d inl:%d RX wr:%d sge:%d inl %d",
+              iface, uct_ib_qp_type_str(attr->qp_type), qp->qp_num,
+              uct_ib_device_name(dev), iface->config.port_num,
+              attr->cap.max_send_wr, attr->cap.max_send_sge, attr->cap.max_inline_data,
+              attr->cap.max_recv_wr, attr->cap.max_recv_sge, attr->max_inl_recv);
+
+    return UCS_OK;
+}
+
 #if HAVE_DECL_IBV_EXP_SETENV
 static int uct_ib_max_cqe_size()
 {

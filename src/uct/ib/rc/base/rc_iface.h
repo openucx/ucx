@@ -21,7 +21,6 @@
 #define UCT_RC_QP_TABLE_ORDER       12
 #define UCT_RC_QP_TABLE_SIZE        UCS_BIT(UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
-#define UCT_RC_MAX_ATOMIC_SIZE      sizeof(uint64_t)
 #define UCR_RC_QP_MAX_RETRY_COUNT   7
 
 #define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _max_inline) \

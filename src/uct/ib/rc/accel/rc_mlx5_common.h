@@ -499,7 +499,7 @@ uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *mlx5_iface,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
+uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, int qp_type,
                              uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                              uint8_t opcode, uint8_t opmod, uint8_t fm_ce_se,
                              size_t wqe_size, uct_ib_mlx5_base_av_t *av,
@@ -521,7 +521,7 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     }
 
 #if HAVE_TL_DC
-    if (qp_type == IBV_EXP_QPT_DC_INI) {
+    if (qp_type == UCT_IB_QPT_DCI) {
         uct_ib_mlx5_set_dgram_seg((void*)(ctrl + 1), av, grh_av, qp_type);
     }
 #endif
@@ -556,7 +556,7 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
  * is a compile time constant
  */
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
+uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, int qp_type,
                              uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                              unsigned opcode, const void *buffer, unsigned length,
                   /* SEND */ uint8_t am_id, uint64_t am_hdr, uint32_t imm_val_be,
@@ -651,7 +651,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
  * is a compile time constant
  */
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
+uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, int qp_type,
                            uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                            unsigned opcode_flags, const void *buffer,
                            unsigned length, uint32_t *lkey_p,
@@ -811,7 +811,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
 }
 
 static UCS_F_ALWAYS_INLINE
-void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
+void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, int qp_type,
                                     uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                                     unsigned opcode_flags,
                          /* IOV  */ const uct_iov_t *iov, size_t iovcnt,
@@ -951,7 +951,7 @@ uct_rc_mlx5_add_cmd_qp_op(uct_rc_mlx5_iface_common_t *iface,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
+uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, int qp_type,
                                  uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                                  unsigned opcode, const void *buffer, unsigned length,
                                  const uct_iov_t *iov, /* relevant for RNDV */
@@ -991,7 +991,7 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type
                               ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
         uct_ib_mlx5_inline_copy(tmh + 1, &rvh, sizeof(rvh), txwq);
 
-        if (qp_type == IBV_EXP_QPT_DC_INI) {
+        if (qp_type == UCT_IB_QPT_DCI) {
             /* RAVH can be wrapped as well */
             ravh_ptr = uct_ib_mlx5_txwq_wrap_data(txwq, (char*)tmh +
                                                   sizeof(*tmh) + sizeof(rvh));

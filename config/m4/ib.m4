@@ -213,7 +213,11 @@ AS_IF([test "x$with_ib" == xyes],
                        AC_CHECK_MEMBERS([struct mlx5dv_cq.cq_uar],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
                        AC_CHECK_DECLS([MLX5DV_OBJ_AH], [has_get_av=yes],
-                                      [], [[#include <infiniband/mlx5dv.h>]])])
+                                      [], [[#include <infiniband/mlx5dv.h>]])
+                       AC_CHECK_DECLS([MLX5DV_DCTYPE_DCT],
+                                  [have_dc_dv=yes], [], [[#include <infiniband/mlx5dv.h>]])
+                       AC_CHECK_DECLS([ibv_alloc_td],
+                                  [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])])
 
               AC_CHECK_DECLS([ibv_alloc_td],
                       [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])])
@@ -225,11 +229,13 @@ AS_IF([test "x$with_ib" == xyes],
              [AC_MSG_NOTICE([Compiling with mlx5 bare-metal support])
               AC_DEFINE([HAVE_MLX5_HW], 1, [mlx5 bare-metal support])
               AS_IF([test "x$has_get_av" == xyes],
-                 [AC_DEFINE([HAVE_MLX5_HW_UD], 1, [mlx5 UD bare-metal support])], [])], [])
+                 [AC_DEFINE([HAVE_MLX5_HW_UD], 1, [mlx5 UD bare-metal support])
+                  AC_DEFINE([HAVE_MLX5_HW_DC], 1, [mlx5 DC bare-metal support])], [])], [])
 
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_LINK_LAYER_ETHERNET,
-                       IBV_EVENT_GID_CHANGE],
+                       IBV_EVENT_GID_CHANGE,
+                       ibv_create_qp_ex],
                       [], [], [[#include <infiniband/verbs.h>]])
 
        AC_CHECK_DECLS([IBV_EXP_ACCESS_ALLOCATE_MR,
@@ -302,13 +308,17 @@ AS_IF([test "x$with_ib" == xyes],
 
        AC_DEFINE([HAVE_IB], 1, [IB support])
 
-       AS_IF([test "x$with_dc" != xno],
-           [AC_CHECK_DECLS(IBV_EXP_QPT_DC_INI, [], [with_dc=no], [[#include <infiniband/verbs.h>]])
-           AC_CHECK_MEMBERS([struct ibv_exp_dct_init_attr.inline_size], [] , [with_dc=no], [[#include <infiniband/verbs.h>]])
-           ])
-       AS_IF([test "x$with_dc" != xno],
-           [AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
-           transports="${transports},dc"])
+       AC_CHECK_DECLS([IBV_EXP_QPT_DC_INI],
+                [have_dc_exp=yes], [], [[#include <infiniband/verbs.h>]])
+
+       AS_IF([test "x$with_dc" != xno -a \( "x$have_dc_exp" = xyes -o "x$have_dc_dv" = xyes \)], [
+           AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
+           transports="${transports},dc"
+           AS_IF([test -n "$have_dc_dv"],
+                 [AC_DEFINE([HAVE_DC_DV], 1, [DC DV support])], [
+           AS_IF([test -n "$have_dc_exp"],
+                 [AC_DEFINE([HAVE_DC_EXP], 1, [DC EXP support])])])],
+           [with_dc=no])
 
        AS_IF([test "x$with_rc" != xno],
            [AC_DEFINE([HAVE_TL_RC], 1, [RC transport support])
@@ -385,9 +395,12 @@ AS_IF([test "x$with_ib" == xyes],
 AM_CONDITIONAL([HAVE_IB],      [test "x$with_ib" != xno])
 AM_CONDITIONAL([HAVE_TL_RC],   [test "x$with_rc" != xno])
 AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
+AM_CONDITIONAL([HAVE_DC_DV],   [test -n "$have_dc_dv"])
+AM_CONDITIONAL([HAVE_DC_EXP],  [test -n "$have_dc_exp"])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_TL_CM],   [test "x$with_cm" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
 AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
+AM_CONDITIONAL([HAVE_MLX5_HW_DC], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno -a "x$have_dc" != xno])
 AM_CONDITIONAL([HAVE_IBV_EX_HW_TM], [test "x$with_ib_hw_tm"  != xno])

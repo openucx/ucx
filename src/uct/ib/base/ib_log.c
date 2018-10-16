@@ -86,7 +86,7 @@ void uct_ib_log_dump_atomic_masked_cswap(int argsize, uint64_t compare, uint64_t
              argsize * 8, compare, compare_mask, swap, swap_mask);
 }
 
-void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
+void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, int qp_type,
                                      uint32_t local_qp, uint32_t sender_qp,
                                      uint16_t sender_lid, void *data, size_t length,
                                      uct_log_data_dump_func_t data_dump,
@@ -200,7 +200,7 @@ void __uct_ib_log_post_send(const char *file, int line, const char *function,
 }
 
 void __uct_ib_log_recv_completion(const char *file, int line, const char *function,
-                                  uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
+                                  uct_ib_iface_t *iface, int qp_type,
                                   uint32_t l_qp, uint32_t r_qp, uint16_t slid,
                                   void *data, size_t length,
                                   uct_log_data_dump_func_t packet_dump_cb)

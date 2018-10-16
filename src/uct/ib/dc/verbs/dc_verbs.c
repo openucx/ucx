@@ -695,7 +695,7 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
 
         /* Send out DCT number to the peer, so it will be able
          * to send grants back */
-        wr.ex.imm_data                        = iface->super.rx.dct->dct_num;
+        wr.ex.imm_data                        = iface->super.rx_dct->dct_num;
 
         dc_verbs_ep = ucs_derived_of(dc_ep, uct_dc_verbs_ep_t);
         uct_dc_verbs_iface_post_send(iface, dc_verbs_ep, &wr,
@@ -879,7 +879,7 @@ ucs_status_ptr_t uct_dc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                                  tmh_len, tag, iov, comp);
 
     uct_dc_iface_fill_ravh(rvh + sizeof(struct ibv_exp_tmh_rvh),
-                           iface->super.rx.dct->dct_num);
+                           iface->super.rx_dct->dct_num);
 
     uct_dc_verbs_iface_post_send(iface, ep, &iface->inl_am_wr,
                                  IBV_SEND_INLINE | IBV_SEND_SOLICITED,
@@ -1006,8 +1006,8 @@ uct_dc_verbs_iface_tag_init(uct_dc_verbs_iface_t *iface,
 static void uct_dc_verbs_iface_tag_cleanup(uct_dc_verbs_iface_t *iface)
 {
     if (UCT_RC_IFACE_TM_ENABLED(&iface->super.super)) {
-        ibv_exp_destroy_dct(iface->super.rx.dct);
-        iface->super.rx.dct = NULL;
+        ibv_exp_destroy_dct(iface->super.rx_dct);
+        iface->super.rx_dct = NULL;
     }
 
     uct_rc_iface_tag_cleanup(&iface->super.super);
@@ -1075,7 +1075,8 @@ static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
     .arm_cq                   = uct_ib_iface_arm_cq,
     .event_cq                 = (void*)ucs_empty_function,
     .handle_failure           = uct_dc_verbs_handle_failure,
-    .set_ep_failed            = uct_dc_verbs_ep_set_failed
+    .set_ep_failed            = uct_dc_verbs_ep_set_failed,
+    .create_qp                = uct_ib_iface_create_qp
     },
     .fc_ctrl                  = uct_dc_verbs_ep_fc_ctrl,
     .fc_handler               = uct_dc_iface_fc_handler,

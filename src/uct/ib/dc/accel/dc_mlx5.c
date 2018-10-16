@@ -171,7 +171,7 @@ uct_dc_mlx5_iface_bcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, &ep->super, txqp, txwq);
     desc->super.sn = txwq->sw_pi;
-    uct_rc_mlx5_txqp_dptr_post(&iface->super.super, IBV_EXP_QPT_DC_INI, txqp, txwq,
+    uct_rc_mlx5_txqp_dptr_post(&iface->super.super, UCT_IB_QPT_DCI, txqp, txwq,
                                opcode, buffer, length, &desc->lkey,
                                rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
                                0, 0, 0, 0,
@@ -197,7 +197,7 @@ uct_dc_mlx5_iface_zcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, &ep->super, txqp, txwq);
 
     sn = txwq->sw_pi;
-    uct_rc_mlx5_txqp_dptr_post_iov(&iface->super.super, IBV_EXP_QPT_DC_INI, txqp,
+    uct_rc_mlx5_txqp_dptr_post_iov(&iface->super.super, UCT_IB_QPT_DCI, txqp,
                                    txwq, opcode, iov, iovcnt,
                                    am_id, am_hdr, am_hdr_len,
                                    rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
@@ -224,7 +224,7 @@ uct_dc_mlx5_iface_atomic_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, &ep->super, txqp, txwq);
 
     desc->super.sn = txwq->sw_pi;
-    uct_rc_mlx5_txqp_dptr_post(&iface->super.super, IBV_EXP_QPT_DC_INI, txqp, txwq,
+    uct_rc_mlx5_txqp_dptr_post(&iface->super.super, UCT_IB_QPT_DCI, txqp, txwq,
                                opcode, desc + 1, length, &desc->lkey,
                                remote_addr, ib_rkey,
                                compare_mask, compare, swap_mask, swap_add,
@@ -385,7 +385,7 @@ uct_dc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, &ep->super, txqp, txwq);
 
-    uct_rc_mlx5_txqp_inline_post(&iface->super.super, IBV_EXP_QPT_DC_INI,
+    uct_rc_mlx5_txqp_inline_post(&iface->super.super, UCT_IB_QPT_DCI,
                                  txqp, txwq,
                                  MLX5_OPCODE_SEND,
                                  buffer, length, id, hdr, 0,
@@ -528,7 +528,7 @@ uct_dc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer,
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, &ep->super, txqp, txwq);
-    uct_rc_mlx5_txqp_inline_post(&iface->super.super, IBV_EXP_QPT_DC_INI,
+    uct_rc_mlx5_txqp_inline_post(&iface->super.super, UCT_IB_QPT_DCI,
                                  txqp, txwq,
                                  MLX5_OPCODE_RDMA_WRITE,
                                  buffer, length, 0, 0, 0,
@@ -737,7 +737,7 @@ uct_dc_mlx5_ep_tag_eager_short_inline(uct_ep_h tl_ep, uct_tag_t tag,
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, &ep->super, txqp, txwq);
 
-    uct_rc_mlx5_txqp_tag_inline_post(&iface->super.super, IBV_EXP_QPT_DC_INI,
+    uct_rc_mlx5_txqp_tag_inline_post(&iface->super.super, UCT_IB_QPT_DCI,
                                      txqp, txwq, MLX5_OPCODE_SEND, data, length,
                                      NULL, tag, 0, IBV_EXP_TMH_EAGER, 0,
                                      &ep->av, uct_dc_mlx5_ep_get_grh(ep),
@@ -866,11 +866,11 @@ ucs_status_ptr_t uct_dc_mlx5_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     op_index = uct_rc_iface_tag_get_op_id(&iface->super.super, comp);
 
-    uct_dc_iface_fill_ravh(&ravh, iface->super.rx.dct->dct_num);
+    uct_dc_iface_fill_ravh(&ravh, uct_dc_get_dct_num(&iface->super));
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, &ep->super, txqp, txwq);
 
-    uct_rc_mlx5_txqp_tag_inline_post(&iface->super.super, IBV_EXP_QPT_DC_INI,
+    uct_rc_mlx5_txqp_tag_inline_post(&iface->super.super, UCT_IB_QPT_DCI,
                                      txqp, txwq, MLX5_OPCODE_SEND, header,
                                      header_length, iov, tag, op_index,
                                      IBV_EXP_TMH_RNDV, 0, &ep->av,
@@ -897,7 +897,7 @@ ucs_status_t uct_dc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, &ep->super, txqp, txwq);
 
-    uct_rc_mlx5_txqp_tag_inline_post(&iface->super.super, IBV_EXP_QPT_DC_INI,
+    uct_rc_mlx5_txqp_tag_inline_post(&iface->super.super, UCT_IB_QPT_DCI,
                                      txqp, txwq, MLX5_OPCODE_SEND_IMM, header,
                                      header_length, NULL, tag, 0,
                                      IBV_EXP_TMH_EAGER, 0, &ep->av,
@@ -1034,7 +1034,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
             av.dqp_dct |= UCT_IB_MLX5_EXTENDED_UD_AV;
         }
 
-        uct_rc_mlx5_txqp_inline_post(&iface->super.super, IBV_EXP_QPT_DC_INI,
+        uct_rc_mlx5_txqp_inline_post(&iface->super.super, UCT_IB_QPT_DCI,
                                      txqp, txwq, MLX5_OPCODE_SEND,
                                      &av /*dummy*/, 0, op, sender_ep, 0,
                                      0, 0,
@@ -1050,10 +1050,10 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         UCS_STATS_UPDATE_COUNTER(dc_ep->fc.stats,
                                  UCT_RC_FC_STAT_TX_HARD_REQ, 1);
 
-        uct_rc_mlx5_txqp_inline_post(&iface->super.super, IBV_EXP_QPT_DC_INI,
+        uct_rc_mlx5_txqp_inline_post(&iface->super.super, UCT_IB_QPT_DCI,
                                      txqp, txwq, MLX5_OPCODE_SEND_IMM,
                                      &sender.global, sizeof(sender.global), op, sender.ep,
-                                     iface->super.rx.dct->dct_num,
+                                     uct_dc_get_dct_num(&iface->super),
                                      0, 0,
                                      &dc_mlx5_ep->av,
                                      uct_dc_mlx5_ep_get_grh(dc_mlx5_ep),
@@ -1099,6 +1099,182 @@ static void uct_dc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
 
     iface->mlx5_common.cq[dir].cq_sn++;
 }
+
+#if HAVE_DC_DV
+static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_ib_iface_t *iface,
+                                                uct_ib_qp_attr_t *attr,
+                                                struct ibv_qp **qp_p)
+{
+    uct_ib_device_t *dev               = uct_ib_iface_device(iface);
+    struct mlx5dv_qp_init_attr dv_attr = {};
+    struct ibv_qp *qp;
+
+    uct_ib_iface_fill_attr(iface, attr);
+    attr->ibv.cap.max_recv_sge          = 0;
+
+    dv_attr.comp_mask                   = MLX5DV_QP_INIT_ATTR_MASK_DC;
+    dv_attr.dc_init_attr.dc_type        = MLX5DV_DCTYPE_DCI;
+    dv_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
+    qp = mlx5dv_create_qp(dev->ibv_context, &attr->ibv, &dv_attr);
+    if (qp == NULL) {
+        ucs_error("iface=%p: failed to create DCI: %m", iface);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    attr->cap = attr->ibv.cap;
+    *qp_p     = qp;
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
+                                      uct_rc_txqp_t *dci)
+{
+    struct ibv_qp_attr attr;
+    long attr_mask;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.qp_state        = IBV_QPS_INIT;
+    attr.pkey_index      = 0;
+    attr.qp_access_flags = 0;
+    attr.port_num        = iface->super.super.config.port_num;
+
+    if (ibv_modify_qp(dci->qp, &attr,
+                      IBV_QP_STATE        |
+                      IBV_QP_PKEY_INDEX   |
+                      IBV_QP_PORT)) {
+        ucs_error("error modifying QP to INIT : %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    /* Move QP to the RTR state */
+    memset(&attr, 0, sizeof(attr));
+    attr.qp_state                   = IBV_QPS_RTR;
+    attr.path_mtu                   = iface->super.config.path_mtu;
+    attr.min_rnr_timer              = iface->super.config.min_rnr_timer;
+    attr.max_dest_rd_atomic         = 1;
+    if ((iface->super.super.addr_type == UCT_IB_ADDRESS_TYPE_ETH) ||
+        (iface->super.super.addr_type == UCT_IB_ADDRESS_TYPE_GLOBAL))
+    {
+        attr.ah_attr.is_global      = 1;
+    }
+    attr.ah_attr.sl                 = iface->super.super.config.sl;
+    attr_mask                       = IBV_QP_STATE     |
+                                      IBV_QP_PATH_MTU;
+
+    if (ibv_modify_qp(dci->qp, &attr, attr_mask)) {
+        ucs_error("error modifying DCI QP to RTR: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    /* Move QP to the RTS state */
+    memset(&attr, 0, sizeof(attr));
+    attr.qp_state       = IBV_QPS_RTS;
+    attr.timeout        = iface->super.config.timeout;
+    attr.rnr_retry      = iface->super.config.rnr_retry;
+    attr.retry_cnt      = iface->super.config.retry_cnt;
+    attr.max_rd_atomic  = iface->super.config.max_rd_atomic;
+    attr_mask           = IBV_QP_STATE      |
+                          IBV_QP_SQ_PSN     |
+                          IBV_QP_TIMEOUT    |
+                          IBV_QP_RETRY_CNT  |
+                          IBV_QP_RNR_RETRY  |
+                          IBV_QP_MAX_QP_RD_ATOMIC;
+
+    if (ibv_modify_qp(dci->qp, &attr, attr_mask)) {
+        ucs_error("error modifying DCI QP to RTS: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
+{
+    uct_dc_mlx5_iface_t *mlx5 = ucs_derived_of(iface, uct_dc_mlx5_iface_t);
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super);
+    struct mlx5dv_qp_init_attr dv_init_attr = {};
+    struct ibv_qp_init_attr_ex init_attr = {};
+    struct ibv_qp_attr attr = {};
+    int ret;
+
+    init_attr.comp_mask             = IBV_QP_INIT_ATTR_PD;
+    init_attr.pd                    = uct_ib_iface_md(&iface->super.super)->pd;
+    init_attr.recv_cq               = iface->super.super.cq[UCT_IB_DIR_RX];
+    /* DCT can't send, but send_cq have to point to valid CQ */
+    init_attr.send_cq               = iface->super.super.cq[UCT_IB_DIR_RX];
+    init_attr.srq                   = iface->super.rx.srq.srq;
+    init_attr.qp_type               = IBV_QPT_DRIVER;
+    init_attr.cap.max_inline_data   = iface->super.config.rx_inline;
+
+    dv_init_attr.comp_mask                   = MLX5DV_QP_INIT_ATTR_MASK_DC;
+    dv_init_attr.dc_init_attr.dc_type        = MLX5DV_DCTYPE_DCT;
+    dv_init_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
+
+    mlx5->rx_dct = mlx5dv_create_qp(dev->ibv_context,
+                                    &init_attr, &dv_init_attr);
+    if (mlx5->rx_dct == NULL) {
+        ucs_error("Failed to created DC target %m");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    attr.qp_state        = IBV_QPS_INIT;
+    attr.port_num        = iface->super.super.config.port_num;
+    attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
+                           IBV_ACCESS_REMOTE_READ  |
+                           IBV_ACCESS_REMOTE_ATOMIC;
+
+    ret = ibv_modify_qp(mlx5->rx_dct, &attr, IBV_QP_STATE |
+                                             IBV_QP_PKEY_INDEX |
+                                             IBV_QP_PORT |
+                                             IBV_QP_ACCESS_FLAGS);
+
+    if (ret) {
+         ucs_error("error modifying DCT to INIT: %m");
+         goto err;
+    }
+
+    attr.qp_state                  = IBV_QPS_RTR;
+    attr.path_mtu                  = iface->super.config.path_mtu;
+    attr.min_rnr_timer             = iface->super.config.min_rnr_timer;
+    attr.ah_attr.grh.hop_limit     = iface->super.super.config.hop_limit;
+    attr.ah_attr.grh.traffic_class = iface->super.super.config.traffic_class;
+    attr.ah_attr.grh.sgid_index    = uct_ib_iface_md(&iface->super.super)->config.gid_index;
+    attr.ah_attr.port_num          = iface->super.super.config.port_num;
+
+    ret = ibv_modify_qp(mlx5->rx_dct, &attr, IBV_QP_STATE |
+                                             IBV_QP_MIN_RNR_TIMER |
+                                             IBV_QP_AV |
+                                             IBV_QP_PATH_MTU);
+    if (ret) {
+         ucs_error("error modifying DCT to RTR: %m");
+         goto err;
+    }
+
+    return UCS_OK;
+
+err:
+    ibv_destroy_qp(mlx5->rx_dct);
+    return UCS_ERR_IO_ERROR;
+}
+
+int uct_dc_get_dct_num(uct_dc_iface_t *iface)
+{
+    uct_dc_mlx5_iface_t *mlx5 = ucs_derived_of(iface, uct_dc_mlx5_iface_t);
+
+    return mlx5->rx_dct->qp_num;
+}
+
+void uct_dc_destroy_dct(uct_dc_iface_t *iface)
+{
+    uct_dc_mlx5_iface_t *mlx5 = ucs_derived_of(iface, uct_dc_mlx5_iface_t);
+
+    if (mlx5->rx_dct != NULL) {
+        ibv_destroy_qp(mlx5->rx_dct);
+    }
+    mlx5->rx_dct = NULL;
+}
+#endif
 
 static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     {
@@ -1150,7 +1326,12 @@ static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .arm_cq                   = uct_ib_iface_arm_cq,
     .event_cq                 = uct_dc_mlx5_iface_event_cq,
     .handle_failure           = uct_dc_mlx5_iface_handle_failure,
-    .set_ep_failed            = uct_dc_mlx5_ep_set_failed
+    .set_ep_failed            = uct_dc_mlx5_ep_set_failed,
+#if HAVE_DC_DV
+    .create_qp                = uct_dc_mlx5_iface_create_qp
+#else
+    .create_qp                = uct_ib_iface_create_qp
+#endif
     },
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_dc_iface_fc_handler,
@@ -1231,8 +1412,7 @@ static ucs_status_t uct_dc_mlx5_iface_tag_init(uct_dc_mlx5_iface_t *iface,
 static void uct_dc_mlx5_iface_tag_cleanup(uct_dc_mlx5_iface_t *iface)
 {
     if (UCT_RC_IFACE_TM_ENABLED(&iface->super.super)) {
-        ibv_exp_destroy_dct(iface->super.rx.dct);
-        iface->super.rx.dct = NULL;
+        uct_dc_destroy_dct(&iface->super);
     }
 
     uct_rc_mlx5_iface_common_tag_cleanup(&iface->mlx5_common, &iface->super.super);

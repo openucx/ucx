@@ -346,7 +346,8 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .arm_cq                   = uct_ib_iface_arm_cq,
     .event_cq                 = (void*)ucs_empty_function,
     .handle_failure           = uct_rc_verbs_handle_failure,
-    .set_ep_failed            = uct_rc_verbs_ep_set_failed
+    .set_ep_failed            = uct_rc_verbs_ep_set_failed,
+    .create_qp                = uct_ib_iface_create_qp
     },
     .fc_ctrl                  = uct_rc_verbs_ep_fc_ctrl,
     .fc_handler               = uct_rc_iface_fc_handler

@@ -104,12 +104,7 @@
 /*
  * DC support
  */
-#if HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_EXP_DEVICE_CAP_FLAGS
-#  define IBV_DEVICE_HAS_DC(_attr)                  ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT)
-#else
-#  define IBV_DEVICE_HAS_DC(_attr)                  0
-#endif /* HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT */
-
+#define IBV_DEVICE_HAS_DC(dev)                      (dev->flags & UCT_IB_DEVICE_FLAG_DC)
 
 /*
  * NOP support
