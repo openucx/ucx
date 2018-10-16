@@ -83,9 +83,9 @@ ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
     }
 #endif
 
-    iface->rx.dct = ibv_exp_create_dct(uct_ib_iface_device(&iface->super.super)->ibv_context,
+    iface->rx_dct = ibv_exp_create_dct(uct_ib_iface_device(&iface->super.super)->ibv_context,
                                        &init_attr);
-    if (iface->rx.dct == NULL) {
+    if (iface->rx_dct == NULL) {
         ucs_error("Failed to created DC target %m");
         return UCS_ERR_INVALID_PARAM;
     }
@@ -170,15 +170,15 @@ ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
 
 int uct_dc_get_dct_num(uct_dc_iface_t *iface)
 {
-    return iface->rx.dct->dct_num;
+    return iface->rx_dct->dct_num;
 }
 
 void uct_dc_destroy_dct(uct_dc_iface_t *iface)
 {
-    if (iface->rx.dct != NULL) {
-        ibv_exp_destroy_dct(iface->rx.dct);
+    if (iface->rx_dct != NULL) {
+        ibv_exp_destroy_dct(iface->rx_dct);
     }
-    iface->rx.dct = NULL;
+    iface->rx_dct = NULL;
 }
 
 static ucs_status_t uct_dc_device_init(uct_ib_device_t *dev)

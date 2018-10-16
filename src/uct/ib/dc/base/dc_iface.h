@@ -118,11 +118,9 @@ struct uct_dc_iface {
         ucs_list_link_t           gc_list;
     } tx;
 
-    struct {
 #if HAVE_DC_EXP
-        struct ibv_exp_dct        *dct;
+    struct ibv_exp_dct            *rx_dct;
 #endif
-    } rx;
 
     uint8_t                       version_flag;
 };
