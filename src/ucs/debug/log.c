@@ -32,7 +32,7 @@ const char *ucs_log_level_names[] = {
     [UCS_LOG_LEVEL_PRINT]        = "PRINT"
 };
 
-static unsigned ucs_log_num_handlers   = 0;
+static unsigned ucs_log_handlers_count = 0;
 static ucs_log_func_t ucs_log_handlers[UCS_MAX_LOG_HANDLERS];
 static int ucs_log_initialized         = 0;
 static char ucs_log_hostname[256]      = {0};
@@ -141,21 +141,21 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
 
 void ucs_log_push_handler(ucs_log_func_t handler)
 {
-    if (ucs_log_num_handlers < UCS_MAX_LOG_HANDLERS) {
-        ucs_log_handlers[ucs_log_num_handlers++] = handler;
+    if (ucs_log_handlers_count < UCS_MAX_LOG_HANDLERS) {
+        ucs_log_handlers[ucs_log_handlers_count++] = handler;
     }
 }
 
 void ucs_log_pop_handler()
 {
-    if (ucs_log_num_handlers > 0) {
-        --ucs_log_num_handlers;
+    if (ucs_log_handlers_count > 0) {
+        --ucs_log_handlers_count;
     }
 }
 
-unsigned ucs_log_handlers_num()
+unsigned ucs_log_num_handlers()
 {
-    return ucs_log_num_handlers;
+    return ucs_log_handlers_count;
 }
 
 void ucs_log_dispatch(const char *file, unsigned line, const char *function,
@@ -167,7 +167,7 @@ void ucs_log_dispatch(const char *file, unsigned line, const char *function,
 
     /* Call handlers in reverse order */
     rc    = UCS_LOG_FUNC_RC_CONTINUE;
-    index = ucs_log_num_handlers;
+    index = ucs_log_handlers_count;
     while ((index > 0) && (rc == UCS_LOG_FUNC_RC_CONTINUE)) {
         --index;
         va_start(ap, format);
@@ -336,7 +336,7 @@ void ucs_log_cleanup()
     if (ucs_log_file_close) {
         fclose(ucs_log_file);
     }
-    ucs_log_file = NULL;
-    ucs_log_initialized  = 0;
-    ucs_log_num_handlers = 0;
+    ucs_log_file           = NULL;
+    ucs_log_initialized    = 0;
+    ucs_log_handlers_count = 0;
 }

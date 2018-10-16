@@ -205,7 +205,7 @@ void test_base::SetUpProxy() {
     m_num_errors_before          = m_total_errors;
 
     m_errors.clear();
-    m_num_log_handlers_before    = ucs_log_handlers_num();
+    m_num_log_handlers_before    = ucs_log_num_handlers();
     ucs_log_push_handler(count_warns_logger);
 
     try {
@@ -233,10 +233,10 @@ void test_base::TearDownProxy() {
     m_errors.clear();
 
     ucs_log_pop_handler();
-    if (m_num_log_handlers_before != ucs_log_handlers_num()) {
-        ADD_FAILURE() << "Missed log handler cleanup, "
-                      << m_num_log_handlers_before << " != "
-                      << ucs_log_handlers_num();
+
+    unsigned num_not_removed = ucs_log_num_handlers() - m_num_log_handlers_before;
+    if (num_not_removed != 0) {
+         ADD_FAILURE() << num_not_removed << " log handlers were not removed";
     }
 
     int num_valgrind_errors = VALGRIND_COUNT_ERRORS - m_num_valgrind_errors_before;
