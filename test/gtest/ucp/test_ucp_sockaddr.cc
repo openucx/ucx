@@ -275,7 +275,7 @@ public:
         EXPECT_EQ(send_data, recv_data);
     }
 
-    void wait_for_server_ep(bool wakeup)
+    bool wait_for_server_ep(bool wakeup)
     {
         ucs_time_t time_limit = ucs_get_time() + ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
 
@@ -283,6 +283,7 @@ public:
                (ucs_get_time() < time_limit)) {
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
+        return !is_failed() && (receiver().get_num_eps() > 0);
     }
 
     void wait_for_reject(entity &e, bool wakeup)
@@ -330,8 +331,7 @@ public:
         {
             scoped_log_handler slh(detect_error_logger);
             client_ep_connect(connect_addr);
-            wait_for_server_ep(wakeup);
-            if (is_failed()) {
+            if (wait_for_server_ep(wakeup) == false) {
                 UCS_TEST_SKIP_R("cannot connect to server");
             }
         }
@@ -540,7 +540,9 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
         }
         EXPECT_EQ(0, err_handler_count);
 
-        wait_for_server_ep(false);
+        if (wait_for_server_ep(false) == false) {
+            UCS_TEST_SKIP_R("cannot connect to server");
+        }
     }
 
     /* allow the connection establishment flow to complete */
