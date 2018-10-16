@@ -49,7 +49,7 @@ Tested configurations:
 
 Known issues:
   #2919 - Segfault in CUDA support when KNEM not present and CMA is active
-  intra-node RMA transpor. As a workaround user can disable CMA support at
+  intra-node RMA transport. As a workaround user can disable CMA support at
   compile time: --disable-cma. Alternatively user can remove CMA from UCX_TLS
   list, for example: UCX_TLS=mm,rc,cuda_copy,cuda_ipc,gdr_copy.
 
