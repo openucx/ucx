@@ -331,7 +331,7 @@ public:
         {
             scoped_log_handler slh(detect_error_logger);
             client_ep_connect(connect_addr);
-            if (wait_for_server_ep(wakeup) == false) {
+            if (!wait_for_server_ep(wakeup)) {
                 UCS_TEST_SKIP_R("cannot connect to server");
             }
         }
@@ -540,7 +540,7 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
         }
         EXPECT_EQ(0, err_handler_count);
 
-        if (wait_for_server_ep(false) == false) {
+        if (!wait_for_server_ep(false)) {
             UCS_TEST_SKIP_R("cannot connect to server");
         }
     }
