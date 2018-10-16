@@ -24,7 +24,8 @@ test_base::test_base() :
                 m_num_threads(1),
                 m_num_valgrind_errors_before(0),
                 m_num_errors_before(0),
-                m_num_warnings_before(0)
+                m_num_warnings_before(0),
+                m_num_log_handlers_before(0)
 {
     push_config();
 }
@@ -123,26 +124,6 @@ void test_base::pop_config()
     m_config_stack.pop_back();
 }
 
-void test_base::hide_errors()
-{
-    ucs_log_push_handler(hide_errors_logger);
-}
-
-void test_base::hide_warnings()
-{
-    ucs_log_push_handler(hide_warns_logger);
-}
-
-void test_base::wrap_errors()
-{
-    ucs_log_push_handler(wrap_errors_logger);
-}
-
-void test_base::restore_errors()
-{
-    ucs_log_pop_handler();
-}
-
 ucs_log_func_rc_t
 test_base::count_warns_logger(const char *file, unsigned line, const char *function,
                               ucs_log_level_t level, const char *message, va_list ap)
@@ -224,6 +205,7 @@ void test_base::SetUpProxy() {
     m_num_errors_before          = m_total_errors;
 
     m_errors.clear();
+    m_num_log_handlers_before    = ucs_log_handlers_num();
     ucs_log_push_handler(count_warns_logger);
 
     try {
@@ -248,8 +230,14 @@ void test_base::TearDownProxy() {
         cleanup();
     }
 
-    ucs_log_pop_handler();
     m_errors.clear();
+
+    ucs_log_pop_handler();
+    if (m_num_log_handlers_before != ucs_log_handlers_num()) {
+        ADD_FAILURE() << "Missed log handler cleanup, "
+                      << m_num_log_handlers_before << " != "
+                      << ucs_log_handlers_num();
+    }
 
     int num_valgrind_errors = VALGRIND_COUNT_ERRORS - m_num_valgrind_errors_before;
     if (num_valgrind_errors > 0) {

@@ -80,10 +80,9 @@ UCS_TEST_P(test_ucp_version, wrong_api_version) {
     ucs_status_t status;
     size_t warn_count;
     {
-        hide_warnings();
+        scoped_log_handler slh(hide_warns_logger);
         warn_count = m_warnings.size();
         status = ucp_init_version(99, 99, &params, config.get(), &ucph);
-        restore_errors();
     }
     if (status != UCS_OK) {
         ADD_FAILURE() << "Failed to create UCP with wrong version";

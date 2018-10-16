@@ -38,12 +38,16 @@ public:
     virtual void push_config();
     virtual void pop_config();
 
-    static void hide_errors();
-    static void hide_warnings();
-    static void wrap_errors();
-    static void restore_errors();
-
 protected:
+    class scoped_log_handler {
+    public:
+        scoped_log_handler(ucs_log_func_t handler) {
+            ucs_log_push_handler(handler);
+        }
+        ~scoped_log_handler() {
+            ucs_log_pop_handler();
+        }
+    };
 
     typedef enum {
         NEW, RUNNING, SKIPPED, ABORTED, FINISHED
@@ -62,26 +66,6 @@ protected:
 
     virtual void test_body() = 0;
 
-    state_t                         m_state;
-    bool                            m_initialized;
-    unsigned                        m_num_threads;
-    config_stack_t                  m_config_stack;
-    ptr_vector<scoped_setenv>       m_env_stack;
-    int                             m_num_valgrind_errors_before;
-    unsigned                        m_num_errors_before;
-    unsigned                        m_num_warnings_before;
-
-    static pthread_mutex_t          m_logger_mutex;
-    static unsigned                 m_total_errors;
-    static unsigned                 m_total_warnings;
-    static std::vector<std::string> m_errors;
-    static std::vector<std::string> m_warnings;
-
-private:
-    void skipped(const test_skip_exception& e);
-    void run();
-    static void *thread_func(void *arg);
-
     static ucs_log_func_rc_t
     count_warns_logger(const char *file, unsigned line, const char *function,
                        ucs_log_level_t level, const char *message, va_list ap);
@@ -97,6 +81,27 @@ private:
     static ucs_log_func_rc_t
     wrap_errors_logger(const char *file, unsigned line, const char *function,
                        ucs_log_level_t level, const char *message, va_list ap);
+
+    state_t                         m_state;
+    bool                            m_initialized;
+    unsigned                        m_num_threads;
+    config_stack_t                  m_config_stack;
+    ptr_vector<scoped_setenv>       m_env_stack;
+    int                             m_num_valgrind_errors_before;
+    unsigned                        m_num_errors_before;
+    unsigned                        m_num_warnings_before;
+    unsigned                        m_num_log_handlers_before;
+
+    static pthread_mutex_t          m_logger_mutex;
+    static unsigned                 m_total_errors;
+    static unsigned                 m_total_warnings;
+    static std::vector<std::string> m_errors;
+    static std::vector<std::string> m_warnings;
+
+private:
+    void skipped(const test_skip_exception& e);
+    void run();
+    static void *thread_func(void *arg);
 
     pthread_barrier_t    m_barrier;
 };

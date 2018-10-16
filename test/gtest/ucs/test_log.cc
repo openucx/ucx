@@ -41,6 +41,7 @@ public:
 
     virtual void cleanup() {
         ucs_log_cleanup();
+        m_num_log_handlers_before = 0;
         pop_config();
         check_log_file();
         unlink(logfile);
