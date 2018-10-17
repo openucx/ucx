@@ -599,8 +599,7 @@ int main(int argc, char **argv)
 
     /*Set active message handler */
     status = uct_iface_set_am_handler(if_info.iface, id, hello_world,
-                                      &cmd_args.func_am_type,
-                                      UCT_CB_FLAG_SYNC);
+                                      &cmd_args.func_am_type, 0);
     CHKERR_JUMP(UCS_OK != status, "set callback", out_free_ep);
 
     if (cmd_args.server_name) {

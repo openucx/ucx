@@ -208,7 +208,7 @@ public:
                            uct_memory_type_t mem_type) {
 
         if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_CB_SYNC) {
-            test_xfer_do(send, length, flags, UCT_CB_FLAG_SYNC, mem_type);
+            test_xfer_do(send, length, flags, 0, mem_type);
         }
         if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_CB_ASYNC) {
             test_xfer_do(send, length, flags, UCT_CB_FLAG_ASYNC, mem_type);
@@ -263,7 +263,7 @@ UCS_TEST_P(uct_p2p_am_test, am_sync) {
     unsigned am_count = m_am_count = 0;
 
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
-                                      this, UCT_CB_FLAG_SYNC);
+                                      this, 0);
     ASSERT_UCS_OK(status);
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
@@ -476,7 +476,7 @@ UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
 
     /* set a callback for the uct to invoke for receiving the data */
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
-                                      (void*)this, UCT_CB_FLAG_SYNC);
+                                      (void*)this, 0);
     ASSERT_UCS_OK(status);
 
     /* send many messages and progress the receiver. the receiver will keep getting

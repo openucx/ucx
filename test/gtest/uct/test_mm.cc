@@ -84,7 +84,7 @@ UCS_TEST_P(test_uct_mm, open_for_posix) {
 
         /* set a callback for the uct to invoke for receiving the data */
         uct_iface_set_am_handler(m_e2->iface(), 0, mm_am_handler , recv_buffer,
-                                 UCT_CB_FLAG_SYNC);
+                                 0);
 
         /* send the data */
         uct_ep_am_short(m_e1->ep(0), 0, test_mm_hdr, &send_data, sizeof(send_data));

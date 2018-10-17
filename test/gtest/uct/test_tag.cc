@@ -62,6 +62,7 @@ public:
         uct_test::init();
 
         uct_iface_params params;
+        memset(&params, 0, sizeof(params));
 
         // tl and dev names are taken from resources via GetParam, no need
         // to fill it here
@@ -583,8 +584,7 @@ UCS_TEST_P(test_tag, tag_send_no_tag)
 {
   check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
 
-  uct_iface_set_am_handler(receiver().iface(), 0, am_handler,
-                           NULL, UCT_CB_FLAG_SYNC);
+  uct_iface_set_am_handler(receiver().iface(), 0, am_handler, NULL, 0);
   mapped_buffer lbuf(200, SEND_SEED, sender());
   ssize_t len = uct_ep_am_bcopy(sender().ep(0), 0, mapped_buffer::pack,
                                 reinterpret_cast<void*>(&lbuf), 0);

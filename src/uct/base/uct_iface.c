@@ -84,20 +84,17 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
         return UCS_OK;
     }
 
-    if (!(flags & (UCT_CB_FLAG_SYNC|UCT_CB_FLAG_ASYNC))) {
-        ucs_error("invalid active message flags 0x%x", flags);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
     status = uct_iface_query(tl_iface, &attr);
     if (status != UCS_OK) {
         return status;
     }
 
+    UCT_CB_FLAGS_CHECK(flags);
+
     /* If user wants a synchronous callback, it must be supported, or the
      * callback could be called from another thread.
      */
-    if ((flags & UCT_CB_FLAG_SYNC) && !(attr.cap.flags & UCT_IFACE_FLAG_CB_SYNC)) {
+    if (!(flags & UCT_CB_FLAG_ASYNC) && !(attr.cap.flags & UCT_IFACE_FLAG_CB_SYNC)) {
         ucs_error("Synchronous callback requested, but not supported");
         return UCS_ERR_INVALID_PARAM;
     }
@@ -411,6 +408,8 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
     uint8_t id;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_iface_t, ops);
+
+    UCT_CB_FLAGS_CHECK(params->err_handler_flags);
 
     self->md                = md;
     self->worker            = ucs_derived_of(worker, uct_priv_worker_t);

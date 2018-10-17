@@ -22,8 +22,7 @@ private:
         void operator() (test_uct_peer_failure::entity *e) {
             uct_iface_set_am_handler(e->iface(), 0,
                                      am_dummy_handler,
-                                     reinterpret_cast<void*>(m_test),
-                                     UCT_CB_FLAG_SYNC);
+                                     reinterpret_cast<void*>(m_test), 0);
         }
 
         test_uct_peer_failure* m_test;
@@ -42,7 +41,7 @@ public:
         memset(&params, 0, sizeof(params));
         params.err_handler       = get_err_handler();
         params.err_handler_arg   = reinterpret_cast<void*>(this);
-        params.err_handler_flags = UCT_CB_FLAG_SYNC;
+        params.err_handler_flags = 0;
         return params;
     }
 

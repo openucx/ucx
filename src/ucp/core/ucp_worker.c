@@ -133,7 +133,7 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
             continue;
         }
 
-        if ((ucp_am_handlers[am_id].flags & UCT_CB_FLAG_SYNC) &&
+        if (!(ucp_am_handlers[am_id].flags & UCT_CB_FLAG_ASYNC) &&
             !(wiface->attr.cap.flags & UCT_IFACE_FLAG_CB_SYNC))
         {
             /* Do not register a sync callback on interface which does not
@@ -147,7 +147,7 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
             /* we care only about sync active messages, and this also makes sure
              * the counter is not accessed from another thread.
              */
-            ucs_assert(ucp_am_handlers[am_id].flags & UCT_CB_FLAG_SYNC);
+            ucs_assert(!(ucp_am_handlers[am_id].flags & UCT_CB_FLAG_ASYNC));
             status = uct_iface_set_am_handler(wiface->iface, am_id,
                                               ucp_am_handlers[am_id].proxy_cb,
                                               wiface,

@@ -79,6 +79,15 @@ enum {
     UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_TX_NO_DESC, 1);
 
 
+#define UCT_CB_FLAGS_CHECK(_flags) \
+    do { \
+        if ((_flags) & UCT_CB_FLAG_RESERVED) { \
+            ucs_error("Unsupported callback flag 0x%x", UCT_CB_FLAG_RESERVED); \
+            return UCS_ERR_INVALID_PARAM; \
+        } \
+    } while (0)
+
+
 /**
  * In release mode - do nothing.
  *
