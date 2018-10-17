@@ -11,6 +11,7 @@
 
 #include <uct/api/uct.h>
 #include <ucs/config/parser.h>
+#include <ucs/datastruct/arbiter.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
@@ -357,7 +358,14 @@ typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj,
  * a queue element so we can put this on a queue.
  */
 typedef struct {
-    ucs_queue_elem_t  queue;
+    union {
+        ucs_arbiter_elem_t      arbiter;
+        struct {
+            ucs_queue_elem_t    queue;
+            uct_ep_h            ep;
+        };
+    };
+    unsigned                    flags;
 } uct_pending_req_priv_t;
 
 
@@ -372,6 +380,13 @@ typedef struct {
  */
 #define uct_pending_req_push(_queue, _req) \
     ucs_queue_push((_queue), &uct_pending_req_priv(_req)->queue);
+
+
+/**
+ * Set flags to pending request.
+ */
+#define uct_pending_req_set_flags(_req, _flags) \
+    (uct_pending_req_priv(_req)->flags = (_flags))
 
 
 /**

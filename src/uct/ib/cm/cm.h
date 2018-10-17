@@ -83,15 +83,6 @@ typedef struct uct_cm_hdr {
 } UCS_S_PACKED uct_cm_hdr_t;
 
 
-/**
- * CM pending request private data
- */
-typedef struct {
-    uct_pending_req_priv_t super;
-    uct_cm_ep_t            *ep;
-} uct_cm_pending_req_priv_t;
-
-
 UCS_CLASS_DECLARE_NEW_FUNC(uct_cm_ep_t, uct_ep_t, uct_iface_h,
                            const uct_device_addr_t *, const uct_iface_addr_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_cm_ep_t, uct_ep_t);
