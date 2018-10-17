@@ -934,7 +934,9 @@ UCS_TEST_P(test_ucp_stream_many2one, drop_data) {
 
     /* data from disconnected EP should be dropped */
     std::set<ucp_ep_h> others = check_no_data(m_entities.at(0));
-    EXPECT_EQ(m_nsenders - 1, others.size());
+    /* since ordering between EPs is not guaranteed, some data may be still in
+     * the network or buffered by transport */
+    EXPECT_LE(others.size(), m_nsenders - 1);
 
     /* reconnect */
     m_entities.at(0).connect(&m_entities.at(m_receiver_idx), get_ep_params(), 0);
