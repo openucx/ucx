@@ -16,8 +16,7 @@ uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned index)
 static UCS_F_ALWAYS_INLINE int
 uct_ib_mlx5_no_cqe(uint8_t op_own, unsigned index, unsigned mask)
 {
-    return ((op_own & MLX5_CQE_OWNER_MASK) == !(index & mask)) ||
-           ((op_own >> 4) == MLX5_CQE_INVALID);
+    return (op_own & MLX5_CQE_OWNER_MASK) == !(index & mask);
 }
 
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
