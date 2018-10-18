@@ -188,7 +188,7 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
 
     ucp_dt_iov_copy_uct(ep->worker->context,iov, &iovcnt, max_iov,
                         &state, req->send.buffer, req->send.datatype,
-                        req->send.length, 0, NULL);
+                        req->send.length, ucp_ep_md_index(ep, req->send.lane), NULL);
 
     status = uct_ep_am_zcopy(ep->uct_eps[req->send.lane], am_id, (void*)hdr,
                              hdr_size, iov, iovcnt, 0,
