@@ -413,7 +413,7 @@ uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     cqe    = uct_ib_mlx5_get_cqe(cq, index);
     op_own = cqe->op_own;
 
-    if (ucs_unlikely(uct_ib_mlx5_no_cqe(op_own, index, cq->cq_length))) {
+    if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, index, cq->cq_length))) {
         return NULL;
     } else if (ucs_unlikely(op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK)) {
         uct_rc_mlx5_iface_check_rx_completion(mlx5_common_iface, rc_iface, cqe);
