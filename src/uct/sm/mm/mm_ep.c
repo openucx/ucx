@@ -342,14 +342,11 @@ ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
         return UCS_ERR_BUSY;
     }
 
-    UCS_STATIC_ASSERT(sizeof(uct_pending_req_priv_t) <=
-                      UCT_PENDING_REQ_PRIV_LEN);
-
     uct_pending_req_set_flags(n, flags);
-    ucs_arbiter_elem_init(&uct_pending_req_priv(n)->arbiter);
+    ucs_arbiter_elem_init(&uct_pending_req_priv(n)->arb_elem);
     /* add the request to the ep's arbiter_group (pending queue) */
     ucs_arbiter_group_push_elem(&ep->arb_group,
-                                &uct_pending_req_priv(n)->arbiter);
+                                &uct_pending_req_priv(n)->arb_elem);
     /* add the ep's group to the arbiter */
     ucs_arbiter_group_schedule(&iface->arbiter, &ep->arb_group);
 

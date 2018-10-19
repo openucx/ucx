@@ -1170,9 +1170,9 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req,
 
 add_req:
     uct_pending_req_set_flags(req, flags);
-    ucs_arbiter_elem_init(&uct_pending_req_priv(req)->arbiter);
+    ucs_arbiter_elem_init(&uct_pending_req_priv(req)->arb_elem);
     ucs_arbiter_group_push_elem(&ep->tx.pending.group,
-                                &uct_pending_req_priv(req)->arbiter);
+                                &uct_pending_req_priv(req)->arb_elem);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
 
     uct_ud_leave(iface);
