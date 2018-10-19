@@ -6,6 +6,7 @@
 
 #include "ib_mlx5.h"
 #include "ib_mlx5_log.h"
+#include "ib_mlx5_ifc.h"
 
 #if HAVE_DECL_MLX5DV_INIT_OBJ
 ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
@@ -22,13 +23,13 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 }
 #endif
 
-#if HAVE_DC_DV
-static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
+static ucs_status_t uct_ib_mlx5_check_dc(uct_ib_device_t *dev)
 {
+    ucs_status_t status = UCS_OK;
+#if HAVE_DC_DV
     struct ibv_context *ctx = dev->ibv_context;
     struct ibv_qp_init_attr_ex qp_attr = {};
     struct mlx5dv_qp_init_attr dv_attr = {};
-    ucs_status_t status = UCS_OK;
     struct ibv_pd *pd;
     struct ibv_cq *cq;
     struct ibv_qp *qp;
@@ -67,11 +68,44 @@ static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
     ibv_destroy_cq(cq);
 err_cq:
     ibv_dealloc_pd(pd);
+#endif
+    return status;
+}
+
+static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
+{
+    ucs_status_t status = UCS_OK;
+    int no_dc = 0;
+
+#if HAVE_DECL_MLX5DV_DEVX_GENERAL_CMD
+    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {0};
+    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_in)] = {0};
+    struct ibv_context *ctx = dev->ibv_context;
+    int ret;
+
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX |
+                                          (UCT_IB_MLX5_CAP_GENERAL << 1));
+    ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out));
+    if (ret == 0) {
+        if (!UCT_IB_MLX5DV_GET(query_hca_cap_out, out, capability.cmd_hca_cap.dct)) {
+            no_dc = 1;
+        }
+    } else if ((errno != EPERM) &&
+               (errno != EPROTONOSUPPORT) &&
+               (errno != EOPNOTSUPP)) {
+        ucs_error("MLX5_CMD_OP_QUERY_HCA_CAP failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+#endif
+    if (!no_dc) {
+        status = uct_ib_mlx5_check_dc(dev);
+    }
+
     return status;
 }
 
 UCT_IB_DEVICE_INIT(uct_ib_mlx5dv_device_init);
-#endif
 
 int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
 {
