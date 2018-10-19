@@ -182,8 +182,7 @@ typedef union uct_rc_mlx5_dm_copy_data {
 #if IBV_EXP_HW_TM
     struct ibv_exp_tmh    tm_hdr;
 #endif
-    uint64_t              out[2];
-    char                  in[sizeof(uint64_t) * 2];
+    char                  bytes[sizeof(uint64_t) * 2];
 } UCS_S_PACKED uct_rc_mlx5_dm_copy_data_t;
 #endif
 
@@ -1421,7 +1420,7 @@ done:
 }
 
 #if HAVE_IBV_EXP_DM
-/* DM memory should be written by 8 bytes (int64) to eliminate
+/* DM memory should be written by 8 or 4 (arm64) bytes to eliminate
  * processor cache issues. To make this used uct_rc_mlx5_dm_copy_data_t
  * datatype where first hdr_len bytes are filled by message header
  * and tail is filled by head of message. */
@@ -1430,30 +1429,37 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
                                     const void *payload, size_t length, void *dm,
                                     uct_ib_log_sge_t *log_sge)
 {
-    size_t head      = (cache && hdr_len) ? ucs_min(length, sizeof(*cache) - hdr_len) : 0;
-    size_t body      = ucs_align_down(length - head, sizeof(uint64_t));
-    size_t tail      = length - (head + body);
-    uint64_t *dst    = dm;
-    uint64_t padding = 0; /* init by 0 to suppress valgrind error */
-    int i            = 0;
-    typedef uint64_t misaligned_uint64_t UCS_V_ALIGNED(1);
+#if defined(__aarch64__)
+    typedef uint32_t aligned_t;
+#else
+    typedef uint64_t aligned_t;
+#endif
+
+    typedef aligned_t unaligned_t UCS_V_ALIGNED(1);
+
+    aligned_t padding = 0; /* init by 0 to suppress valgrind error */
+    size_t head       = (cache && hdr_len) ? ucs_min(length, sizeof(*cache) - hdr_len) : 0;
+    size_t body       = ucs_align_down(length - head, sizeof(padding));
+    size_t tail       = length - (head + body);
+    char   *dst       = dm;
+    int i             = 0;
 
     ucs_assert(sizeof(*cache) >= hdr_len);
     ucs_assert(head + body + tail == length);
-    ucs_assert(tail < sizeof(uint64_t));
+    ucs_assert(tail < sizeof(padding));
 
     /* copy head of payload to tail of cache */
-    memcpy(cache->in + hdr_len, payload, head);
+    memcpy(cache->bytes + hdr_len, payload, head);
 
-    UCS_STATIC_ASSERT(sizeof(*cache) == sizeof(cache->out));
-    UCS_STATIC_ASSERT(sizeof(cache->in) == sizeof(cache->out));
+    UCS_STATIC_ASSERT(sizeof(*cache) == sizeof(cache->bytes));
     UCS_STATIC_ASSERT(sizeof(log_sge->sg_list) / sizeof(log_sge->sg_list[0]) >= 2);
 
     /* condition is static-evaluated */
     if (cache && hdr_len) {
-        /* atomically by 8 bytes copy data to DM */
-        *(dst++) = cache->out[0];
-        *(dst++) = cache->out[1];
+        /* atomically by 8 or 4 bytes copy data to DM */
+        /* cache buffer must be aligned, so, source data type is aligned */
+        UCS_WORD_COPY(volatile aligned_t, dst, aligned_t, cache->bytes, sizeof(cache->bytes));
+        dst += sizeof(cache->bytes);
         if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
             log_sge->sg_list[0].addr   = (uint64_t)cache;
             log_sge->sg_list[0].length = (uint32_t)hdr_len;
@@ -1468,10 +1474,12 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
     log_sge->num_sge = i;
 
     /* copy payload to DM */
-    UCS_WORD_COPY(uint64_t, dst, misaligned_uint64_t, payload + head, body);
+    UCS_WORD_COPY(volatile aligned_t, dst, unaligned_t, payload + head, body);
     if (tail) {
+        dst += body;
         memcpy(&padding, payload + head + body, tail);
-        *(dst + (body / sizeof(uint64_t))) = padding;
+        /* use aligned_t for source datatype because it is aligned buffer on stack */
+        UCS_WORD_COPY(volatile aligned_t, dst, aligned_t, &padding, sizeof(padding));
     }
 }
 
@@ -1499,7 +1507,7 @@ uct_rc_mlx5_common_dm_make_data(uct_rc_mlx5_iface_common_t *iface,
 
         /* condition is static-evaluated, no performance penalty */
         if (cache && hdr_len) {
-            memcpy(buffer, cache->out, hdr_len);
+            memcpy(buffer, cache->bytes, hdr_len);
         }
         memcpy(UCS_PTR_BYTE_OFFSET(buffer, hdr_len), payload, length);
         log_sge->num_sge = 0;
