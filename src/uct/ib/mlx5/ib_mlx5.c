@@ -20,9 +20,10 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 {
     uct_ib_mlx5dv_cq_t dcq = {};
     uct_ib_mlx5dv_t obj = {};
+    struct mlx5_cqe64 *cqe;
     unsigned cqe_size;
     ucs_status_t status;
-    int ret;
+    int ret, i;
 
     obj.dv.cq.in = cq;
     obj.dv.cq.out = &dcq.dv;
@@ -58,6 +59,17 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 
     mlx5_cq->cqe_size_log = ucs_ilog2(cqe_size);
     ucs_assert_always((1<<mlx5_cq->cqe_size_log) == cqe_size);
+
+    /* Set owner bit for all CQEs, so that CQE would look like it is in HW
+     * ownership. In this case CQ polling functions will return immediately if
+     * no any CQE ready, there is no need to check opcode for
+     * MLX5_CQE_INVALID value anymore. */
+    for (i = 0; i < mlx5_cq->cq_length; ++i) {
+        cqe = uct_ib_mlx5_get_cqe(mlx5_cq, i);
+        cqe->op_own |= MLX5_CQE_OWNER_MASK;
+    }
+
+
     return UCS_OK;
 }
 
