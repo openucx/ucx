@@ -91,6 +91,10 @@ static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
         if (!UCT_IB_MLX5DV_GET(query_hca_cap_out, out, capability.cmd_hca_cap.dct)) {
             no_dc = 1;
         }
+        if (UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
+                    capability.cmd_hca_cap.compact_address_vector)) {
+            dev->flags |= UCT_IB_DEVICE_FLAG_AV;
+        }
     } else if ((errno != EPERM) &&
                (errno != EPROTONOSUPPORT) &&
                (errno != EOPNOTSUPP)) {
@@ -106,6 +110,15 @@ static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
 }
 
 UCT_IB_DEVICE_INIT(uct_ib_mlx5dv_device_init);
+
+#if HAVE_DECL_MLX5DV_DEVX_GENERAL_CMD
+ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
+{
+    *compact_av = !!(uct_ib_iface_device(iface)->flags & UCT_IB_DEVICE_FLAG_AV);
+
+    return UCS_OK;
+}
+#endif
 
 int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
 {
