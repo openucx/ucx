@@ -121,9 +121,9 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 status = uct_md_mem_alloc(md, &alloc_length, &address, flags,
                                           alloc_name, &memh);
                 if (status != UCS_OK) {
-                    ucs_error("failed to allocate %zu bytes using md %s: %s",
+                    ucs_error("failed to allocate %zu bytes using md %s for %s: %s",
                               alloc_length, md->component->name,
-                              ucs_status_string(status));
+                              alloc_name, ucs_status_string(status));
                     return status;
                 }
 
@@ -212,7 +212,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             alloc_length = min_length;
             address = (flags & UCT_MD_MEM_FLAG_FIXED) ? addr : NULL;
             status = ucs_sysv_alloc(&alloc_length, min_length * 2, &address,
-                                    SHM_HUGETLB, &shmid UCS_MEMTRACK_VAL);
+                                    SHM_HUGETLB, alloc_name, &shmid);
             if (status == UCS_OK) {
                 goto allocated_without_md;
             }
