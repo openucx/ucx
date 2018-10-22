@@ -1420,7 +1420,7 @@ done:
 }
 
 #if HAVE_IBV_EXP_DM
-/* DM memory should be written by 8 or 4 (arm64) bytes to eliminate
+/* DM memory should be written by 8 bytes to eliminate
  * processor cache issues. To make this used uct_rc_mlx5_dm_copy_data_t
  * datatype where first hdr_len bytes are filled by message header
  * and tail is filled by head of message. */
@@ -1429,12 +1429,7 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
                                     const void *payload, size_t length, void *dm,
                                     uct_ib_log_sge_t *log_sge)
 {
-#if defined(__aarch64__)
-    typedef uint32_t aligned_t;
-#else
     typedef uint64_t aligned_t;
-#endif
-
     typedef aligned_t unaligned_t UCS_V_ALIGNED(1);
 
     aligned_t padding = 0; /* init by 0 to suppress valgrind error */
@@ -1456,7 +1451,7 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
 
     /* condition is static-evaluated */
     if (cache && hdr_len) {
-        /* atomically by 8 or 4 bytes copy data to DM */
+        /* atomically by 8 bytes copy data to DM */
         /* cache buffer must be aligned, so, source data type is aligned */
         UCS_WORD_COPY(volatile aligned_t, dst, aligned_t, cache->bytes, sizeof(cache->bytes));
         dst += sizeof(cache->bytes);
