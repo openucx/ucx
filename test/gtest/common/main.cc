@@ -8,6 +8,7 @@
 #  include "config.h"
 #endif
 #include <ucs/config/parser.h>
+#include <ucs/config/global_opts.h>
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
 #include "test_helpers.h"
@@ -82,5 +83,7 @@ int main(int argc, char **argv) {
         ucm_global_opts.enable_malloc_reloc = 1; /* Test reloc hooks with valgrind,
                                                     though it's generally unsafe. */
     }
+    ucs_global_opts.warn_unused_env_vars = 0; /* Avoid warnings if not all
+                                                 config vars are being used */
     return RUN_ALL_TESTS();
 }

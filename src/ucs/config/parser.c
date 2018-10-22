@@ -9,6 +9,7 @@
 #endif
 #include "parser.h"
 
+#include <ucs/arch/atomic.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 #include <ucs/datastruct/list.h>
@@ -35,6 +36,7 @@ extern char **environ;
 
 UCS_LIST_HEAD(ucs_config_global_list);
 static khash_t(ucs_config_env_vars) ucs_config_parser_env_vars = {0};
+static pthread_mutex_t ucs_config_parser_env_vars_hash_lock    = PTHREAD_MUTEX_INITIALIZER;
 
 
 const char *ucs_async_mode_names[] = {
@@ -868,7 +870,6 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
 
 static void ucs_config_parser_mark_env_var_used(const char *name)
 {
-    static pthread_mutex_t hash_lock = PTHREAD_MUTEX_INITIALIZER;
     khiter_t iter;
     char *key;
     int ret;
@@ -877,7 +878,7 @@ static void ucs_config_parser_mark_env_var_used(const char *name)
         return;
     }
 
-    pthread_mutex_lock(&hash_lock);
+    pthread_mutex_lock(&ucs_config_parser_env_vars_hash_lock);
 
     iter = kh_get(ucs_config_env_vars, &ucs_config_parser_env_vars, name);
     if (iter != kh_end(&ucs_config_parser_env_vars)) {
@@ -892,7 +893,7 @@ static void ucs_config_parser_mark_env_var_used(const char *name)
 
     kh_put(ucs_config_env_vars, &ucs_config_parser_env_vars, key, &ret);
 out:
-    pthread_mutex_unlock(&hash_lock);
+    pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
 }
 
 static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fields,
@@ -1266,6 +1267,7 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
 
 void ucs_config_parser_warn_unused_env_vars()
 {
+    static uint32_t warn_once = 1;
     char unused_env_vars_names[40];
     int num_unused_vars;
     char **envp, *envstr;
@@ -1280,6 +1282,12 @@ void ucs_config_parser_warn_unused_env_vars()
     if (!ucs_global_opts.warn_unused_env_vars) {
         return;
     }
+
+    if (!ucs_atomic_cswap32(&warn_once, 1, 0)) {
+        return;
+    }
+
+    pthread_mutex_lock(&ucs_config_parser_env_vars_hash_lock);
 
     prefix_len      = strlen(UCS_CONFIG_PREFIX);
     p               = unused_env_vars_names;
@@ -1324,6 +1332,8 @@ void ucs_config_parser_warn_unused_env_vars()
                  truncated ? "..." : "", UCS_CONFIG_PREFIX,
                  UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
     }
+
+    pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
 }
 
 size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,
