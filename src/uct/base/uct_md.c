@@ -492,7 +492,7 @@ ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
         return status;
     }
 
-    return md->ops->mem_alloc(md, length_p, address_p, flags, memh_p UCS_MEMTRACK_VAL);
+    return md->ops->mem_alloc(md, length_p, address_p, flags, alloc_name, memh_p);
 }
 
 ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh)

@@ -758,7 +758,7 @@ static void uct_ib_mem_init(uct_ib_mem_t *memh, unsigned uct_flags,
 
 static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
                                      void **address_p, unsigned flags,
-                                     uct_mem_h *memh_p UCS_MEMTRACK_ARG)
+                                     const char *alloc_name, uct_mem_h *memh_p)
 {
 #if HAVE_DECL_IBV_EXP_ACCESS_ALLOCATE_MR
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
