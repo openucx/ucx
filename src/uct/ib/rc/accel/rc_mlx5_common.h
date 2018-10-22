@@ -186,15 +186,6 @@ typedef union uct_rc_mlx5_dm_copy_data {
 } UCS_S_PACKED uct_rc_mlx5_dm_copy_data_t;
 #endif
 
-typedef struct uct_common_mlx5_iface_config {
-#if HAVE_IBV_EXP_DM
-    struct {
-        size_t               seg_len;
-        unsigned             count;
-    } dm;
-#endif
-} uct_common_mlx5_iface_config_t;
-
 typedef struct uct_rc_mlx5_iface_common {
     struct {
         ucs_mpool_t               atomic_desc_mp;
@@ -228,7 +219,7 @@ typedef struct uct_rc_mlx5_iface_common {
 } uct_rc_mlx5_iface_common_t;
 
 
-extern ucs_config_field_t uct_mlx5_common_config_table[];
+extern ucs_config_field_t uct_ib_mlx5_iface_config_table[];
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq);
 
@@ -237,8 +228,8 @@ void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_iface_t *iface,
 
 ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                            uct_rc_iface_t *rc_iface,
-                                           uct_rc_iface_config_t *config,
-                                           uct_common_mlx5_iface_config_t *common_config);
+                                           const uct_rc_iface_config_t *config,
+                                           const uct_ib_mlx5_iface_config_t *mlx5_config);
 
 void uct_rc_mlx5_iface_common_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
@@ -257,6 +248,7 @@ ucs_status_t
 uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
                                   uct_rc_iface_t *rc_iface,
                                   uct_rc_iface_config_t *rc_config,
+                                  const uct_ib_mlx5_iface_config_t *mlx5_config,
                                   struct ibv_exp_create_srq_attr *srq_init_attr,
                                   unsigned rndv_hdr_len);
 

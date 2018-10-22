@@ -19,10 +19,10 @@
  * RC mlx5 interface configuration
  */
 typedef struct uct_rc_mlx5_iface_config {
-    uct_rc_iface_config_t          super;
-    uct_rc_fc_config_t             fc;
-    uct_common_mlx5_iface_config_t mlx5_common;
-    unsigned                       tx_max_bb;
+    uct_rc_iface_config_t             super;
+    uct_rc_fc_config_t                fc;
+    uct_ib_mlx5_iface_config_t mlx5_common;
+    unsigned                          tx_max_bb;
     /* TODO wc_mode, UAR mode SnB W/A... */
 } uct_rc_mlx5_iface_config_t;
 
@@ -48,7 +48,8 @@ typedef struct {
     uct_rc_iface_t              super;
     uct_rc_mlx5_iface_common_t  mlx5_common;
     struct {
-        uint16_t           bb_max;     /* limit number of outstanding WQE BBs */
+        uct_ib_mlx5_mmio_mode_t mmio_mode;
+        uint16_t                bb_max;     /* limit number of outstanding WQE BBs */
     } tx;
 } uct_rc_mlx5_iface_t;
 

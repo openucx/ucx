@@ -737,7 +737,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super);
 
-    status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker, &self->tx.wq,
+    status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
+                                   iface->tx.mmio_mode, &self->tx.wq,
                                    self->super.txqp.qp);
     if (status != UCS_OK) {
         ucs_error("Failed to get mlx5 QP information");

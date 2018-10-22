@@ -124,8 +124,21 @@ typedef enum {
     UCT_IB_MLX5_MMIO_MODE_BF_POST_MT, /* BF with order, can be used by multiple
                                          serialized threads */
     UCT_IB_MLX5_MMIO_MODE_DB,         /* 8-byte doorbell (with the mandatory flush) */
+    UCT_IB_MLX5_MMIO_MODE_AUTO,       /* Auto-select according to driver/HW capabilities
+                                         and multi-thread support level */
     UCT_IB_MLX5_MMIO_MODE_LAST
 } uct_ib_mlx5_mmio_mode_t;
+
+
+typedef struct uct_ib_mlx5_iface_config {
+#if HAVE_IBV_EXP_DM
+    struct {
+        size_t               seg_len;
+        unsigned             count;
+    } dm;
+#endif
+    uct_ib_mlx5_mmio_mode_t  mmio_mode;
+} uct_ib_mlx5_iface_config_t;
 
 
 /* Shared receive queue */
@@ -255,6 +268,8 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
 } UCS_S_PACKED;
 
 
+extern ucs_config_field_t uct_ib_mlx5_iface_config_table[];
+
 /**
  * Get internal CQ information.
  */
@@ -279,8 +294,9 @@ void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
 /**
  * Initialize txwq structure.
  */
-ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker, uct_ib_mlx5_txwq_t *txwq,
-                                   struct ibv_qp *verbs_qp);
+ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
+                                   uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
+                                   uct_ib_mlx5_txwq_t *txwq, struct ibv_qp *verbs_qp);
 void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq);
 
 /**

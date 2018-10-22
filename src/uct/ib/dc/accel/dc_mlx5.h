@@ -16,7 +16,7 @@
 typedef struct uct_dc_mlx5_iface_config {
     uct_dc_iface_config_t               super;
     uct_ud_mlx5_iface_common_config_t   ud_common;
-    uct_common_mlx5_iface_config_t      mlx5_common;
+    uct_ib_mlx5_iface_config_t   mlx5_common;
 } uct_dc_mlx5_iface_config_t;
 
 
