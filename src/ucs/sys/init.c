@@ -92,7 +92,6 @@ static void UCS_F_CTOR ucs_init()
 
 static void UCS_F_DTOR ucs_cleanup(void)
 {
-    ucs_config_parser_warn_unused_env_vars();
     ucs_async_global_cleanup();
     ucs_profile_global_cleanup();
     ucs_debug_cleanup();

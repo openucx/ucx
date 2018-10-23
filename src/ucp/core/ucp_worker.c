@@ -14,6 +14,7 @@
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/stream/stream.h>
+#include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/cpu_set.h>
@@ -1311,6 +1312,11 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     /* Select atomic resources */
     ucp_worker_init_atomic_tls(worker);
+
+    /* At this point all UCT memory domains and interfaces are already created
+     * so warn about unused environment variables.
+     */
+    ucs_config_parser_warn_unused_env_vars();
 
     *worker_p = worker;
     return UCS_OK;
