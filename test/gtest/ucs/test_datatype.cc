@@ -147,13 +147,14 @@ UCS_TEST_F(test_datatype, queue) {
 
 UCS_TEST_F(test_datatype, queue_iter) {
 
+    const int num_elems = 4;
     ucs_queue_head_t head;
-    std::vector<elem_t> elems(4);
+    std::vector<elem_t> elems(num_elems);
 
     ucs_queue_head_init(&head);
     EXPECT_TRUE(ucs_queue_is_empty(&head));
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < num_elems; ++i) {
         elems[i].i = i + 1;
         ucs_queue_push(&head, &elems[i].queue);
     }
@@ -165,7 +166,7 @@ UCS_TEST_F(test_datatype, queue_iter) {
         ucs_queue_for_each(elem, &head, queue) {
             vec.push_back(elem->i);
         }
-        ASSERT_EQ(4u, vec.size());
+        ASSERT_EQ(static_cast<size_t>(num_elems), vec.size());
         EXPECT_EQ(1, vec[0]);
         EXPECT_EQ(2, vec[1]);
         EXPECT_EQ(3, vec[2]);
