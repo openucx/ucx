@@ -23,6 +23,18 @@
 /* configuration value which specifies "infinity" for a numeric variable */
 #define UCS_CONFIG_PARSER_NUMERIC_INF_STR      "inf"
 
+/* width of titles in docstring */
+#define UCP_CONFIG_PARSER_DOCSTR_WIDTH         10
+
+
+/* list of prefixes for a configuration variable, used to dump all possible
+ * aliases.
+ */
+typedef struct ucs_config_parser_prefix_list {
+    const char                  *prefix;
+    ucs_list_link_t             list;
+} ucs_config_parser_prefix_t;
+
 
 typedef UCS_CONFIG_ARRAY_FIELD(void, data) ucs_config_array_field_t;
 
@@ -1128,13 +1140,17 @@ static void __print_stream_cb(int num, const char *line, void *arg)
 
 static void
 ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_prefix,
-                              const char *prefix, const char *name,
-                              const ucs_config_field_t *field,
-                              unsigned long flags, const char *docstr, ...)
+                              ucs_list_link_t *prefix_list, const char *name,
+                              const ucs_config_field_t *field, unsigned long flags,
+                              const char *docstr, ...)
 {
-    char value_buf[128] = {0};
+    ucs_config_parser_prefix_t *prefix, *head;
+    char value_buf[128]  = {0};
     char syntax_buf[256] = {0};
     va_list ap;
+
+    ucs_assert(!ucs_list_is_empty(prefix_list));
+    head = ucs_list_head(prefix_list, ucs_config_parser_prefix_t, list);
 
     field->parser.write(value_buf, sizeof(value_buf) - 1, (char*)opts + field->offset,
                         field->parser.arg);
@@ -1144,8 +1160,8 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
         fprintf(stream, "#\n");
         ucs_config_print_doc_line_by_line(field, __print_stream_cb, stream);
         fprintf(stream, "#\n");
-        fprintf(stream, "# Syntax: %s\n", syntax_buf);
-        fprintf(stream, "#\n");
+        fprintf(stream, "# %-*s %s\n", UCP_CONFIG_PARSER_DOCSTR_WIDTH, "syntax:",
+                syntax_buf);
 
         /* Extra docstring */
         if (docstr != NULL) {
@@ -1155,9 +1171,27 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
             va_end(ap);
             fprintf(stream, "\n");
         }
-     }
 
-    fprintf(stream, "%s%s%s=%s\n", env_prefix, prefix, name, value_buf);
+        /* Parents in configuration hierarchy */
+        if (prefix_list->next != prefix_list->prev) {
+            fprintf(stream, "# %-*s", UCP_CONFIG_PARSER_DOCSTR_WIDTH, "inherits:");
+            ucs_list_for_each(prefix, prefix_list, list) {
+                if (prefix == head) {
+                    continue;
+                }
+
+                fprintf(stream, " %s%s%s", env_prefix, prefix->prefix, name);
+                if (prefix != ucs_list_tail(prefix_list, ucs_config_parser_prefix_t, list)) {
+                    fprintf(stream, ",");
+                }
+            }
+            fprintf(stream, "\n");
+        }
+
+        fprintf(stream, "#\n");
+    }
+
+    fprintf(stream, "%s%s%s=%s\n", env_prefix, head->prefix, name, value_buf);
 
     if (flags & UCS_CONFIG_PRINT_DOC) {
         fprintf(stream, "\n");
@@ -1168,26 +1202,23 @@ static void
 ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                                     const ucs_config_field_t *fields,
                                     unsigned flags, const char *env_prefix,
-                                    const char *table_prefix)
+                                    ucs_list_link_t *prefix_list)
 {
     const ucs_config_field_t *field, *aliased_field;
+    ucs_config_parser_prefix_t inner_prefix;
     size_t alias_table_offset;
-    const char *prefix;
-
-    prefix = table_prefix == NULL ? "" : table_prefix;
 
     for (field = fields; field->name; ++field) {
         if (ucs_config_is_table_field(field)) {
-            /* Parse with sub-table prefix */
-            if (table_prefix == NULL) {
-                ucs_config_parser_print_opts_recurs(stream, opts + field->offset,
-                                                    field->parser.arg, flags,
-                                                    env_prefix, field->name);
-            } else {
-                ucs_config_parser_print_opts_recurs(stream, opts + field->offset,
-                                                    field->parser.arg, flags,
-                                                    env_prefix, table_prefix);
-            }
+            /* Parse with sub-table prefix.
+             * We start the leaf prefix and continue up the hierarchy.
+             */
+            inner_prefix.prefix = field->name;
+            ucs_list_add_tail(prefix_list, &inner_prefix.list);
+            ucs_config_parser_print_opts_recurs(stream, opts + field->offset,
+                                                field->parser.arg, flags,
+                                                env_prefix, prefix_list);
+            ucs_list_del(&inner_prefix.list);
         } else if (ucs_config_is_alias_field(field)) {
             if (flags & UCS_CONFIG_PRINT_HIDDEN) {
                 aliased_field = ucs_config_find_aliased_field(fields, field,
@@ -1197,15 +1228,15 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                 }
                 ucs_config_parser_print_field(stream,
                                               opts + alias_table_offset,
-                                              env_prefix, table_prefix,
+                                              env_prefix, prefix_list,
                                               field->name, aliased_field,
-                                              flags, "(alias of %s%s%s)",
-                                              env_prefix,
-                                              table_prefix ? table_prefix : "",
+                                              flags, "%-*s %s%s%s", "alias of:",
+                                              UCP_CONFIG_PARSER_DOCSTR_WIDTH,
+                                              env_prefix, prefix_list,
                                               aliased_field->name);
             }
         } else {
-            ucs_config_parser_print_field(stream, opts, env_prefix, prefix,
+            ucs_config_parser_print_field(stream, opts, env_prefix, prefix_list,
                                           field->name, field, flags, NULL);
         }
      }
@@ -1216,6 +1247,9 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *o
                                   ucs_config_field_t *fields, const char *table_prefix,
                                   ucs_config_print_flags_t flags)
 {
+    ucs_config_parser_prefix_t table_prefix_elem;
+    UCS_LIST_HEAD(prefix_list);
+
     if (flags & UCS_CONFIG_PRINT_HEADER) {
         fprintf(stream, "\n");
         fprintf(stream, "#\n");
@@ -1225,8 +1259,10 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *o
     }
 
     if (flags & UCS_CONFIG_PRINT_CONFIG) {
+        table_prefix_elem.prefix = table_prefix ? table_prefix : "";
+        ucs_list_add_tail(&prefix_list, &table_prefix_elem.list);
         ucs_config_parser_print_opts_recurs(stream, opts, fields, flags,
-                                            UCS_CONFIG_PREFIX, table_prefix);
+                                            UCS_CONFIG_PREFIX, &prefix_list);
     }
 
     if (flags & UCS_CONFIG_PRINT_HEADER) {
