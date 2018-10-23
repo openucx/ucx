@@ -1429,8 +1429,7 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
                                     const void *payload, size_t length, void *dm,
                                     uct_ib_log_sge_t *log_sge)
 {
-    typedef uint64_t  aligned_t;
-    typedef aligned_t unaligned_t UCS_V_ALIGNED(1);
+    typedef uint64_t misaligned_t UCS_V_ALIGNED(1);
 
     uint64_t padding = 0; /* init by 0 to suppress valgrind error */
     size_t head      = (cache && hdr_len) ? ucs_min(length, sizeof(*cache) - hdr_len) : 0;
@@ -1453,7 +1452,7 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
     if (cache && hdr_len) {
         /* atomically by 8 bytes copy data to DM */
         /* cache buffer must be aligned, so, source data type is aligned */
-        UCS_WORD_COPY(volatile aligned_t, dst, aligned_t, cache->bytes, sizeof(cache->bytes));
+        UCS_WORD_COPY(volatile uint64_t, dst, uint64_t, cache->bytes, sizeof(cache->bytes));
         dst += sizeof(cache->bytes);
         if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
             log_sge->sg_list[0].addr   = (uint64_t)cache;
@@ -1469,12 +1468,12 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
     log_sge->num_sge = i;
 
     /* copy payload to DM */
-    UCS_WORD_COPY(volatile aligned_t, dst, unaligned_t, payload + head, body);
+    UCS_WORD_COPY(volatile uint64_t, dst, misaligned_t, payload + head, body);
     if (tail) {
         dst += body;
         memcpy(&padding, payload + head + body, tail);
-        /* use aligned_t for source datatype because it is aligned buffer on stack */
-        UCS_WORD_COPY(volatile aligned_t, dst, aligned_t, &padding, sizeof(padding));
+        /* use uint64_t for source datatype because it is aligned buffer on stack */
+        UCS_WORD_COPY(volatile uint64_t, dst, uint64_t, &padding, sizeof(padding));
     }
 }
 
