@@ -1429,15 +1429,15 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
                                     const void *payload, size_t length, void *dm,
                                     uct_ib_log_sge_t *log_sge)
 {
-    typedef uint64_t aligned_t;
+    typedef uint64_t  aligned_t;
     typedef aligned_t unaligned_t UCS_V_ALIGNED(1);
 
-    aligned_t padding = 0; /* init by 0 to suppress valgrind error */
-    size_t head       = (cache && hdr_len) ? ucs_min(length, sizeof(*cache) - hdr_len) : 0;
-    size_t body       = ucs_align_down(length - head, sizeof(padding));
-    size_t tail       = length - (head + body);
-    char   *dst       = dm;
-    int i             = 0;
+    uint64_t padding = 0; /* init by 0 to suppress valgrind error */
+    size_t head      = (cache && hdr_len) ? ucs_min(length, sizeof(*cache) - hdr_len) : 0;
+    size_t body      = ucs_align_down(length - head, sizeof(padding));
+    size_t tail      = length - (head + body);
+    char   *dst      = dm;
+    int i            = 0;
 
     ucs_assert(sizeof(*cache) >= hdr_len);
     ucs_assert(head + body + tail == length);
