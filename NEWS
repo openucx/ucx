@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.4.0-rc1 (October 15, 2018)
+## 1.4.0-rc2 (October 23, 2018)
 
 Features:
 - Improved support for installation with latest ROCm
@@ -29,6 +29,8 @@ Bugfixes:
 - Thread safety fixes in IB/RDMA transport
 - Compilation fixes with upstream rdma-core
 - Multiple minor bugfixes (full list on github)
+- Compile-time fixes for Arm clang
+- Memory domain indexing for Mellanox devices
 
 Tested configurations:
 - InfiniBand: MLNX_OFED 4.2-4.4, distribution inbox drivers, rdma-core
