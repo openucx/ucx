@@ -100,7 +100,6 @@ ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
         }
     }
 
-    uct_pending_req_set_flags(r, flags);
     ucs_arbiter_elem_init(&uct_pending_req_priv(r)->arb_elem);
 
     /* no dci:

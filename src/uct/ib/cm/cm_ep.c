@@ -209,7 +209,6 @@ ucs_status_t uct_cm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
         status = UCS_ERR_BUSY;
     } else {
         uct_pending_req_priv(req)->ep = tl_ep;
-        uct_pending_req_set_flags(req, flags);
         uct_pending_req_push(&iface->notify_q, req);
         status = UCS_OK;
     }

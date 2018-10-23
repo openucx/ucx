@@ -380,7 +380,6 @@ ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
         return UCS_ERR_BUSY;
     }
 
-    uct_pending_req_set_flags(n, flags);
     ucs_arbiter_elem_init(&uct_pending_req_priv(n)->arb_elem);
     ucs_arbiter_group_push_elem(&ep->arb_group,
                                 &uct_pending_req_priv(n)->arb_elem);

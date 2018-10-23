@@ -300,7 +300,6 @@ ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
         return UCS_ERR_BUSY;
     }
 
-    uct_pending_req_set_flags(req, flags);
     uct_pending_req_push(&ep->pending_q, req);
     return UCS_OK;
 }
