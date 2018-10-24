@@ -93,6 +93,11 @@ static ucs_status_t uct_ib_mlx5_device_init(uct_ib_device_t *dev)
                     capability.cmd_hca_cap.compact_address_vector)) {
             dev->flags |= UCT_IB_DEVICE_FLAG_AV;
         }
+    } else if (errno != EPERM &&
+               errno != EPROTONOSUPPORT &&
+               errno != EOPNOTSUPP) {
+        ucs_error("MLX5_CMD_OP_QUERY_HCA_CAP failed: %m");
+        return UCS_ERR_IO_ERROR;
     }
 #endif
     if (ret != 0) {

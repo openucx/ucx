@@ -7,78 +7,78 @@
 #ifndef UCT_IB_MLX5_IFC_H_
 #define UCT_IB_MLX5_IFC_H_
 
+#include <ucs/sys/compiler_def.h>
+
 #include <endian.h>
 #include <linux/types.h>
 
 #define u8 uint8_t
 
-#define __uct_nullp(typ) ((struct mlx5_ifc_##typ##_bits *)0)
-#define __uct_bit_sz(typ, fld) sizeof(__uct_nullp(typ)->fld)
-#define __uct_bit_off(typ, fld) (offsetof(struct mlx5_ifc_##typ##_bits, fld))
-#define __uct_dw_off(typ, fld) (__uct_bit_off(typ, fld) / 32)
-#define __uct_64_off(typ, fld) (__uct_bit_off(typ, fld) / 64)
-#define __uct_dw_bit_off(typ, fld) (32 - __uct_bit_sz(typ, fld) - (__uct_bit_off(typ, fld) & 0x1f))
-#define __uct_mask(typ, fld) ((uint32_t)((1ull << __uct_bit_sz(typ, fld)) - 1))
-#define __uct_dw_mask(typ, fld) (__uct_mask(typ, fld) << __uct_dw_bit_off(typ, fld))
-#define __uct_st_sz_bits(typ) sizeof(struct mlx5_ifc_##typ##_bits)
+#define __uct_nullp(_typ) ((struct mlx5_ifc_##_typ##_bits *)0)
+#define __uct_bit_sz(_typ, _fld) sizeof(__uct_nullp(_typ)->_fld)
+#define __uct_bit_off(_typ, _fld) (offsetof(struct mlx5_ifc_##_typ##_bits, _fld))
+#define __uct_dw_off(_typ, _fld) (__uct_bit_off(_typ, _fld) / 32)
+#define __uct_64_off(_typ, _fld) (__uct_bit_off(_typ, _fld) / 64)
+#define __uct_dw_bit_off(_typ, _fld) (32 - __uct_bit_sz(_typ, _fld) - (__uct_bit_off(_typ, _fld) & 0x1f))
+#define __uct_mask(_typ, _fld) ((uint32_t)((1ull << __uct_bit_sz(_typ, _fld)) - 1))
+#define __uct_dw_mask(_typ, _fld) (__uct_mask(_typ, _fld) << __uct_dw_bit_off(_typ, _fld))
+#define __uct_st_sz_bits(_typ) sizeof(struct mlx5_ifc_##_typ##_bits)
 
-#define UCT_FLD_SZ_BYTES(typ, fld) (__uct_bit_sz(typ, fld) / 8)
-#define UCT_ST_SZ_BYTES(typ) (sizeof(struct mlx5_ifc_##typ##_bits) / 8)
-#define UCT_ST_SZ_DW(typ) (sizeof(struct mlx5_ifc_##typ##_bits) / 32)
-#define UCT_ST_SZ_QW(typ) (sizeof(struct mlx5_ifc_##typ##_bits) / 64)
-#define UCT_UN_SZ_BYTES(typ) (sizeof(union mlx5_ifc_##typ##_bits) / 8)
-#define UCT_UN_SZ_DW(typ) (sizeof(union mlx5_ifc_##typ##_bits) / 32)
-#define UCT_BYTE_OFF(typ, fld) (__uct_bit_off(typ, fld) / 8)
-#define UCT_ADDR_OF(typ, p, fld) ((char *)(p) + UCT_BYTE_OFF(typ, fld))
-
-#define BUILD_BUG_ON(a) /*TODO*/
+#define UCT_FLD_SZ_BYTES(_typ, _fld) (__uct_bit_sz(_typ, _fld) / 8)
+#define UCT_ST_SZ_BYTES(_typ) (sizeof(struct mlx5_ifc_##_typ##_bits) / 8)
+#define UCT_ST_SZ_DW(_typ) (sizeof(struct mlx5_ifc_##_typ##_bits) / 32)
+#define UCT_ST_SZ_QW(_typ) (sizeof(struct mlx5_ifc_##_typ##_bits) / 64)
+#define UCT_UN_SZ_BYTES(_typ) (sizeof(union mlx5_ifc_##_typ##_bits) / 8)
+#define UCT_UN_SZ_DW(_typ) (sizeof(union mlx5_ifc_##_typ##_bits) / 32)
+#define UCT_BYTE_OFF(_typ, _fld) (__uct_bit_off(_typ, _fld) / 8)
+#define UCT_ADDR_OF(_typ, _p, _fld) ((char *)(_p) + UCT_BYTE_OFF(_typ, _fld))
 
 /* insert a value to a struct */
-#define UCT_SET(typ, p, fld, v) do { \
-        uint32_t _v = v; \
-        BUILD_BUG_ON(__uct_st_sz_bits(typ) % 32);   \
-        *((__be32 *)(p) + __uct_dw_off(typ, fld)) = \
-        htobe32((be32toh(*((__be32 *)(p) + __uct_dw_off(typ, fld))) & \
-                                (~__uct_dw_mask(typ, fld))) | (((_v) & __uct_mask(typ, fld)) \
-                                        << __uct_dw_bit_off(typ, fld))); \
+#define UCT_SET(_typ, _p, _fld, _v) \
+do { \
+    uint32_t ___v = _v; \
+    UCS_STATIC_ASSERT(__uct_st_sz_bits(_typ) % 32 == 0); \
+    *((__be32 *)(_p) + __uct_dw_off(_typ, _fld)) = \
+        htobe32((be32toh(*((__be32 *)(_p) + __uct_dw_off(_typ, _fld))) & \
+        (~__uct_dw_mask(_typ, _fld))) | (((___v) & __uct_mask(_typ, _fld)) \
+        << __uct_dw_bit_off(_typ, _fld))); \
 } while (0)
 
-#define UCT_GET(typ, p, fld) ((be32toh(*((__be32 *)(p) +\
-                                        __uct_dw_off(typ, fld))) >> __uct_dw_bit_off(typ, fld)) & \
-                __uct_mask(typ, fld))
+#define UCT_GET(_typ, _p, _fld) \
+    ((be32toh(*((__be32 *)(_p) + \
+        __uct_dw_off(_typ, _fld))) >> __uct_dw_bit_off(_typ, _fld)) & \
+        __uct_mask(_typ, _fld))
 
-#define __UCT_SET64(typ, p, fld, v) do { \
-        BUILD_BUG_ON(__uct_bit_sz(typ, fld) != 64); \
-        *((__be64 *)(p) + __uct_64_off(typ, fld)) = htobe64(v); \
+#define UCT_SET64(_typ, _p, _fld, _v) \
+do { \
+    UCS_STATIC_ASSERT(__uct_st_sz_bits(_typ) % 64 == 0); \
+    UCS_STATIC_ASSERT(__uct_bit_sz(_typ, _fld) == 64); \
+    *((__be64 *)(_p) + __uct_64_off(_typ, _fld)) = htobe64(_v); \
 } while (0)
 
-#define UCT_SET64(typ, p, fld, v) do { \
-        BUILD_BUG_ON(__uct_bit_off(typ, fld) % 64); \
-        __UCT_SET64(typ, p, fld, v); \
-} while (0)
+#define UCT_GET64(_typ, _p, _fld) \
+    be64toh(*((__be64 *)(_p) + __uct_64_off(_typ, _fld)))
 
-#define UCT_GET64(typ, p, fld) \
-        be64toh(*((__be64 *)(p) + __uct_64_off(typ, fld)))
-
-#define UCT_SET_TO_ONES(typ, p, fld) do { \
-        BUILD_BUG_ON(__uct_st_sz_bits(typ) % 32); \
-        *((__be32 *)(p) + __uct_dw_off(typ, fld)) = \
-        htobe32((be32toh(*((__be32 *)(p) + __uct_dw_off(typ, fld))) & \
-                                (~__uct_dw_mask(typ, fld))) | ((__uct_mask(typ, fld)) \
-                                        << __uct_dw_bit_off(typ, fld))); \
+#define UCT_SET_TO_ONES(_typ, _p, _fld) \
+do { \
+    UCS_STATIC_ASSERT(__uct_st_sz_bits(_typ) % 32 == 0); \
+    *((__be32 *)(_p) + __uct_dw_off(_typ, _fld)) = \
+    htobe32((be32toh(*((__be32 *)(_p) + __uct_dw_off(_typ, _fld))) & \
+        (~__uct_dw_mask(_typ, _fld))) | ((__uct_mask(_typ, _fld)) \
+        << __uct_dw_bit_off(_typ, _fld))); \
 } while (0)
 
 enum {
-	MLX5_CMD_OP_QUERY_HCA_CAP                 = 0x100,
+	MLX5_CMD_OP_QUERY_HCA_CAP                 = 0x100
 };
 
 enum mlx5_cap_mode {
 	HCA_CAP_OPMOD_GET_MAX	= 0,
-	HCA_CAP_OPMOD_GET_CUR	= 1,
+	HCA_CAP_OPMOD_GET_CUR	= 1
 };
 
 enum mlx5_cap_type {
-	MLX5_CAP_GENERAL = 0,
+	MLX5_CAP_GENERAL = 0
 };
 
 struct mlx5_ifc_cmd_hca_cap_bits {
