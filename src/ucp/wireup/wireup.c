@@ -252,9 +252,6 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                                    remote_address->address_count,
                                    remote_address->address_list, addr_indices);
     if (status != UCS_OK) {
-        ucp_worker_set_ep_failed(worker, ep,
-                                 ep->uct_eps[ucp_ep_get_wireup_msg_lane(ep)],
-                                 ucp_ep_get_wireup_msg_lane(ep), status);
         return;
     }
 
@@ -727,6 +724,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                    uint8_t *addr_indices)
 {
     ucp_worker_h worker = ep->worker;
+    ucp_lane_index_t failed_lane = UCP_NULL_LANE;
     ucp_ep_config_key_t key;
     uint16_t new_cfg_index;
     ucp_lane_index_t lane;
@@ -738,7 +736,19 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     status = ucp_wireup_select_lanes(ep, params, ep_init_flags, address_count,
                                      address_list, addr_indices, &key);
     if (status != UCS_OK) {
-        goto err;
+        if (ep->flags & UCP_EP_FLAG_USED) {
+            failed_lane = 0; /* lanes aren't selected but need to invoke err
+                                handler, lane number doesn't matter here */
+            goto err;
+        }
+
+        for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            if (ep->uct_eps[lane] != NULL) {
+                uct_ep_destroy(ep->uct_eps[lane]);
+                ep->uct_eps[lane] = NULL;
+            }
+        }
+        return status;
     }
 
     key.reachable_md_map |= ucp_ep_config(ep)->key.reachable_md_map;
@@ -796,12 +806,12 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     return UCS_OK;
 
 err:
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (ep->uct_eps[lane] != NULL) {
-            uct_ep_destroy(ep->uct_eps[lane]);
-            ep->uct_eps[lane] = NULL;
-        }
+    if (failed_lane == UCP_NULL_LANE) {
+        failed_lane = ucp_ep_get_wireup_msg_lane(ep);
     }
+
+    ucp_worker_set_ep_failed(worker, ep, ep->uct_eps[failed_lane], failed_lane,
+                             status);
     return status;
 }
 
