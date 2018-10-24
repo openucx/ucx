@@ -147,27 +147,17 @@ UCS_TEST_F(test_datatype, queue) {
 
 UCS_TEST_F(test_datatype, queue_iter) {
 
+    const int num_elems = 4;
     ucs_queue_head_t head;
-    elem_t *elem1, *elem2, *elem3, *elem4;
+    std::vector<elem_t> elems(num_elems);
 
     ucs_queue_head_init(&head);
     EXPECT_TRUE(ucs_queue_is_empty(&head));
 
-    elem1 = (elem_t*)malloc(sizeof(elem_t));
-    elem2 = (elem_t*)malloc(sizeof(elem_t));
-    elem3 = (elem_t*)malloc(sizeof(elem_t));
-    elem4 = (elem_t*)malloc(sizeof(elem_t));
-
-    elem1->i = 1;
-    elem2->i = 2;
-    elem3->i = 3;
-    elem4->i = 4;
-
-    ucs_queue_push(&head, &elem1->queue);
-    ucs_queue_push(&head, &elem2->queue);
-    ucs_queue_push(&head, &elem3->queue);
-    ucs_queue_push(&head, &elem4->queue);
-
+    for (int i = 0; i < num_elems; ++i) {
+        elems[i].i = i + 1;
+        ucs_queue_push(&head, &elems[i].queue);
+    }
 
     {
         std::vector<int> vec;
@@ -176,7 +166,7 @@ UCS_TEST_F(test_datatype, queue_iter) {
         ucs_queue_for_each(elem, &head, queue) {
             vec.push_back(elem->i);
         }
-        ASSERT_EQ(4u, vec.size());
+        ASSERT_EQ(static_cast<size_t>(num_elems), vec.size());
         EXPECT_EQ(1, vec[0]);
         EXPECT_EQ(2, vec[1]);
         EXPECT_EQ(3, vec[2]);
@@ -192,7 +182,7 @@ UCS_TEST_F(test_datatype, queue_iter) {
         {
             if (elem->i == 3 || elem->i == 4) {
                 ucs_queue_del_iter(&head, iter);
-                free(elem);
+                memset(elem, 0xff, sizeof(*elem));
             }
         }
         ASSERT_EQ((unsigned long)2, ucs_queue_length(&head));
@@ -200,7 +190,7 @@ UCS_TEST_F(test_datatype, queue_iter) {
         ucs_queue_for_each_safe(elem, iter, &head, queue) {
             vec.push_back(elem->i);
             ucs_queue_del_iter(&head, iter);
-            free(elem);
+            memset(elem, 0xff, sizeof(*elem));
         }
         ASSERT_EQ(2u, vec.size());
         EXPECT_EQ(1, vec[0]);
