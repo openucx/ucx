@@ -268,7 +268,7 @@ static int uct_ib_iface_ah_cmp(uct_ib_ah_attr_t *ah_data,
                                uct_ib_iface_t *iface)
 {
     return !memcmp(&ah_data->attr, attr, sizeof(*attr)) &&
-                   (uct_ib_iface_md(iface)->pd == ah_data->pd);
+           (uct_ib_iface_md(iface)->pd == ah_data->pd);
 }
 
 static ucs_status_t
