@@ -354,43 +354,72 @@ typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj,
 
 
 /**
- * Structure for private data held inside a pending request.
+ * Base structure for private data held inside a pending request for TLs
+ * which use ucs_arbiter_t to progress pending requests.
  */
 typedef struct {
-    union {
-        ucs_arbiter_elem_t      arb_elem;   /* Used if transport uses
-                                               ucs_arbiter_t to progress pending
-                                               requests */
-        struct {
-            ucs_queue_elem_t    queue_elem; /* Used if transport uses
-                                               ucs_queue_t to progress pending
-                                               requests*/
-            uct_ep_h            ep;         /* Endpoint which request pended on */
-        };
-    };
-    unsigned                    flags;      /* uct_am_cb_flags passed to @ref
-                                               uct_ep_pending_add as a parameter */
-} uct_pending_req_priv_t;
+    ucs_arbiter_elem_t  arb_elem;
+} uct_pending_req_priv_arb_base_t;
+
+
+static UCS_F_ALWAYS_INLINE uct_pending_req_priv_arb_base_t *
+uct_pending_req_priv_arb_base(uct_pending_req_t* req)
+{
+    return (uct_pending_req_priv_arb_base_t *)&req->priv;
+}
+
+
+static UCS_F_ALWAYS_INLINE ucs_arbiter_elem_t *
+uct_pending_req_priv_arb_elem(uct_pending_req_t* req)
+{
+    return &(uct_pending_req_priv_arb_base(req))->arb_elem;
+}
+
+
+/**
+ * Add a pending request to the arbiter.
+ */
+#define uct_pending_req_arb_group_push(_arbiter_group, _req) \
+    do { \
+        ucs_arbiter_elem_init(uct_pending_req_priv_arb_elem(_req)); \
+        ucs_arbiter_group_push_elem(_arbiter_group, \
+                                    uct_pending_req_priv_arb_elem(_req)); \
+    } while (0)
+
+
+/**
+ * Base structure for private data held inside a pending request for TLs
+ * which use ucs_queue_t to progress pending requests.
+ */
+typedef struct {
+    ucs_queue_elem_t    queue_elem;
+} uct_pending_req_priv_queue_base_t;
+
+
+static UCS_F_ALWAYS_INLINE uct_pending_req_priv_queue_base_t *
+uct_pending_req_priv_queue_base(uct_pending_req_t* req)
+{
+    return (uct_pending_req_priv_queue_base_t *)&req->priv;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_queue_elem_t *
+uct_pending_req_priv_queue_elem(uct_pending_req_t* req)
+{
+    return &(uct_pending_req_priv_queue_base(req))->queue_elem;
+}
+
+
+/**
+ * Add a pending request to the queue.
+ */
+#define uct_pending_req_queue_push(_queue, _req) \
+    ucs_queue_push((_queue), uct_pending_req_priv_queue_elem(_req))
 
 
 typedef struct {
     uct_pending_purge_callback_t cb;
     void *arg;
 } uct_purge_cb_args_t;
-
-
-/**
- * Add a pending request to the queue.
- */
-#define uct_pending_req_push(_queue, _req) \
-    ucs_queue_push((_queue), &uct_pending_req_priv(_req)->queue_elem);
-
-
-/**
- * Set flags to pending request.
- */
-#define uct_pending_req_set_flags(_req, _flags) \
-    (uct_pending_req_priv(_req)->flags = (_flags))
 
 
 /**
@@ -405,13 +434,14 @@ typedef struct {
  */
 #define uct_pending_queue_dispatch(_priv, _queue, _cond) \
     while (!ucs_queue_is_empty(_queue)) { \
-        uct_pending_req_priv_t *_base_priv; \
+        uct_pending_req_priv_queue_base_t *_base_priv; \
         uct_pending_req_t *_req; \
         ucs_status_t _status; \
         \
-        _base_priv = ucs_queue_head_elem_non_empty((_queue), \
-                                                   uct_pending_req_priv_t, \
-                                                   queue_elem); \
+        _base_priv = \
+            ucs_queue_head_elem_non_empty((_queue), \
+                                          uct_pending_req_priv_queue_base_t, \
+                                          queue_elem); \
         \
         UCS_STATIC_ASSERT(sizeof(*(_priv)) <= UCT_PENDING_REQ_PRIV_LEN); \
         _priv = (typeof(_priv))(_base_priv); \
@@ -440,7 +470,7 @@ typedef struct {
  */
 #define uct_pending_queue_purge(_priv, _queue, _cond, _cb, _arg) \
     { \
-        uct_pending_req_priv_t *_base_priv; \
+        uct_pending_req_priv_queue_base_t *_base_priv; \
         ucs_queue_iter_t _iter; \
         \
         ucs_queue_for_each_safe(_base_priv, _iter, _queue, queue_elem) { \
@@ -470,15 +500,6 @@ typedef struct {
         ucs_trace_data(_fmt " am_id %d len %zu %s", ## __VA_ARGS__, \
                        _am_id, (size_t)(_length), buf); \
     }
-
-
-/**
- * @return Private data field of a pending request.
- */
-static inline uct_pending_req_priv_t* uct_pending_req_priv(uct_pending_req_t *req)
-{
-    return (uct_pending_req_priv_t*)&req->priv;
-}
 
 
 extern ucs_config_field_t uct_iface_config_table[];

@@ -380,9 +380,9 @@ ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
         return UCS_ERR_BUSY;
     }
 
-    ucs_arbiter_elem_init(&uct_pending_req_priv(n)->arb_elem);
-    ucs_arbiter_group_push_elem(&ep->arb_group,
-                                &uct_pending_req_priv(n)->arb_elem);
+    UCS_STATIC_ASSERT(sizeof(uct_pending_req_priv_arb_base_t) <=
+                      UCT_PENDING_REQ_PRIV_LEN);
+    uct_pending_req_arb_group_push(&ep->arb_group, n);
 
     if (uct_rc_ep_has_tx_resources(ep)) {
         /* If we have ep (but not iface) resources, we need to schedule the ep */

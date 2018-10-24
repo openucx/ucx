@@ -83,6 +83,15 @@ typedef struct uct_cm_hdr {
 } UCS_S_PACKED uct_cm_hdr_t;
 
 
+/**
+ * CM pending request private data
+ */
+typedef struct {
+    uct_pending_req_priv_queue_base_t base;
+    uct_cm_ep_t                       *ep;
+} uct_pending_req_priv_cm_t;
+
+
 UCS_CLASS_DECLARE_NEW_FUNC(uct_cm_ep_t, uct_ep_t, uct_iface_h,
                            const uct_device_addr_t *, const uct_iface_addr_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_cm_ep_t, uct_ep_t);
@@ -109,18 +118,30 @@ static inline int uct_cm_iface_has_tx_resources(uct_cm_iface_t *iface)
     return iface->num_outstanding < iface->config.max_outstanding;
 }
 
+
+static UCS_F_ALWAYS_INLINE uct_pending_req_priv_cm_t *
+uct_pending_req_cm_priv(uct_pending_req_t *req)
+{
+    return (uct_pending_req_priv_cm_t *)&req->priv;
+}
+
+
 #define uct_cm_iface_trace_data(_iface, _type, _hdr, _fmt, ...) \
     uct_iface_trace_am(&(_iface)->super.super, _type, (_hdr)->am_id, \
                        (_hdr) + 1, (_hdr)->length, _fmt, ## __VA_ARGS__)
 
+
 #define uct_cm_iface_worker(_iface) \
     ((_iface)->super.super.worker)
+
 
 #define uct_cm_enter(_iface) \
     UCS_ASYNC_BLOCK(uct_cm_iface_worker(_iface)->async);
 
+
 #define uct_cm_leave(_iface) \
     UCS_ASYNC_UNBLOCK(uct_cm_iface_worker(_iface)->async); \
     ucs_async_check_miss(uct_cm_iface_worker(_iface)->async);
+
 
 #endif
