@@ -279,11 +279,11 @@ public:
     {
         ucs_time_t time_limit = ucs_get_time() + ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
 
-        while ((receiver().get_num_eps() == 0) && !is_failed() &&
+        while ((receiver().get_num_eps() == 0) && (err_handler_count == 0) &&
                (ucs_get_time() < time_limit)) {
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
-        return !is_failed() && (receiver().get_num_eps() > 0);
+        return (err_handler_count == 0) && (receiver().get_num_eps() > 0);
     }
 
     void wait_for_reject(entity &e, bool wakeup)
@@ -505,9 +505,9 @@ class test_ucp_sockaddr_with_rma_atomic : public test_ucp_sockaddr {
 public:
 
     static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
+        ucp_params_t params = test_ucp_sockaddr::get_ctx_params();
         params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features     = UCP_FEATURE_RMA   |
+        params.features    |= UCP_FEATURE_RMA   |
                               UCP_FEATURE_AMO32 |
                               UCP_FEATURE_AMO64;
         return params;
@@ -533,20 +533,17 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
         client_ep_connect((struct sockaddr*)&connect_addr);
 
         /* allow the err_handler callback to be invoked if needed */
-        short_progress_loop();
-        if (err_handler_count == 1) {
-            UCS_TEST_SKIP_R("Skipping due to too long worker address error or no "
-                            "matching transport");
-        }
-        EXPECT_EQ(0, err_handler_count);
-
         if (!wait_for_server_ep(false)) {
+            EXPECT_EQ(1, err_handler_count);
             UCS_TEST_SKIP_R("cannot connect to server");
         }
-    }
 
-    /* allow the connection establishment flow to complete */
-    short_progress_loop();
+        EXPECT_EQ(0, err_handler_count);
+        /* even if server EP is created, in case of long address, wireup will be
+         * done later, need to communicate */
+        send_recv(sender(), receiver(), (GetParam().variant == CONN_REQ_STREAM) ?
+                  SEND_RECV_STREAM : SEND_RECV_TAG, false, cb_type());
+    }
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_with_rma_atomic)
