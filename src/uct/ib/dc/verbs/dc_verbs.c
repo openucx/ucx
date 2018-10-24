@@ -55,8 +55,12 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_ep_t,
 
 static UCS_CLASS_CLEANUP_FUNC(uct_dc_verbs_ep_t)
 {
+    uct_dc_verbs_iface_t *iface    = ucs_derived_of(self->super.super.super.iface,
+                                                    uct_dc_verbs_iface_t);
+    uct_ib_iface_t       *ib_iface = &iface->super.super.super;
+
     ucs_trace_func("");
-    ibv_destroy_ah(self->ah);
+    uct_ib_iface_destroy_ah(ib_iface, self->ah);
 }
 
 UCS_CLASS_DEFINE(uct_dc_verbs_ep_t, uct_dc_ep_t);
@@ -686,7 +690,7 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
         uct_dc_verbs_iface_post_send_to_dci(iface, &wr, dc_ep->dci, ah,
                                             dc_req->dct_num,
                                             IBV_SEND_INLINE | IBV_SEND_SIGNALED, INT_MAX);
-        ibv_destroy_ah(ah);
+        uct_ib_iface_destroy_ah(&iface->super.super.super, ah);
     } else {
         ucs_assert(op == UCT_RC_EP_FC_FLAG_HARD_REQ);
         wr.exp_opcode                         = IBV_EXP_WR_SEND_WITH_IMM;

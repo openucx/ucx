@@ -19,6 +19,14 @@
 #include <stdlib.h>
 #include <poll.h>
 
+#define UCT_IB_WORKER_AH_KEY 0x15599029u
+
+typedef struct uct_ib_ah_attr {
+    uct_worker_tl_data_t super;
+    struct ibv_ah_attr   attr;
+    struct ibv_pd        *pd;
+    struct ibv_ah        *ah;
+} uct_ib_ah_attr_t;
 
 static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,
                                sizeof(ucs_range_spec_t),
@@ -255,31 +263,40 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
     }
 }
 
-ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
-                                    struct ibv_ah_attr *ah_attr,
-                                    struct ibv_ah **ah_p)
+static int uct_ib_iface_ah_cmp(uct_ib_ah_attr_t *ah_data,
+                               struct ibv_ah_attr *attr,
+                               uct_ib_iface_t *iface)
+{
+    return !memcmp(&ah_data->attr, attr, sizeof(*attr)) &&
+                   (uct_ib_iface_md(iface)->pd == ah_data->pd);
+}
+
+static ucs_status_t
+uct_ib_iface_ah_init(uct_ib_ah_attr_t *ah_data,
+                     struct ibv_ah_attr *attr,
+                     uct_ib_iface_t *iface)
 {
     struct ibv_ah *ah;
     char buf[128];
     char *p, *endp;
 
-    ah = ibv_create_ah(uct_ib_iface_md(iface)->pd, ah_attr);
+    ah = ibv_create_ah(uct_ib_iface_md(iface)->pd, attr);
 
     if (ah == NULL) {
         p    = buf;
         endp = buf + sizeof(buf);
         snprintf(p, endp - p, "dlid=%d sl=%d port=%d src_path_bits=%d",
-                 ah_attr->dlid, ah_attr->sl,
-                 ah_attr->port_num, ah_attr->src_path_bits);
+                 attr->dlid, attr->sl,
+                 attr->port_num, attr->src_path_bits);
         p += strlen(p);
 
-        if (ah_attr->is_global) {
+        if (attr->is_global) {
             snprintf(p, endp - p, " dgid=");
             p += strlen(p);
-            inet_ntop(AF_INET6, &ah_attr->grh.dgid, p, endp - p);
+            inet_ntop(AF_INET6, &attr->grh.dgid, p, endp - p);
             p += strlen(p);
             snprintf(p, endp - p, " sgid_index=%d traffic_class=%d",
-                     ah_attr->grh.sgid_index, ah_attr->grh.traffic_class);
+                     attr->grh.sgid_index, attr->grh.traffic_class);
         }
 
         ucs_error("ibv_create_ah(%s) on "UCT_IB_IFACE_FMT" failed: %m", buf,
@@ -287,8 +304,68 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    *ah_p        = ah;
+    ah_data->ah   = ah;
+    ah_data->attr = *attr;
+    ah_data->pd   = uct_ib_iface_md(iface)->pd;
     return UCS_OK;
+}
+
+static void uct_ib_iface_ah_cleanup(uct_ib_ah_attr_t *ah_data)
+{
+    ibv_destroy_ah(ah_data->ah);
+}
+
+
+ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
+                                    struct ibv_ah_attr *ah_attr,
+                                    struct ibv_ah **ah_p)
+{
+    int ret;
+    khiter_t iter;
+
+    /* create AH or get it from cache, key for cache is AH attr + protection domain */
+    uct_ib_ah_attr_t *ah_data = uct_worker_tl_data_get(iface->super.worker,
+                                                       UCT_IB_WORKER_AH_KEY,
+                                                       uct_ib_ah_attr_t,
+                                                       uct_ib_iface_ah_cmp,
+                                                       uct_ib_iface_ah_init,
+                                                       ah_attr, iface);
+
+    if (ah_data) {
+        *ah_p = ah_data->ah;
+
+        /* ok, AH is created (or get from cache), let's save reference of AH
+         * into iface - it allows to hold AH instance till last iface is
+         * using it */
+        UCS_STATIC_ASSERT(sizeof(ah_data->ah) <= sizeof(uint64_t));
+
+        /* check if iface hasn't same AH in hash */
+        iter = kh_get(uct_ib_ah, &iface->ah_hash, (uint64_t)ah_data->ah);
+        if (iter == kh_end(&iface->ah_hash)) {
+            /* this is new AH for iface, add it & increment reference counter
+             * of AH holder */
+            iter = kh_put(uct_ib_ah, &iface->ah_hash, (uint64_t)ah_data->ah, &ret);
+            ucs_assert(ret == 1);
+            kh_value(&iface->ah_hash, iter) = ah_data;
+            uct_worker_tl_data_refcount_inc(ah_data);
+        }
+
+        return UCS_OK;
+    }
+
+    return UCS_ERR_INVALID_ADDR;
+}
+
+void uct_ib_iface_destroy_ah(uct_ib_iface_t *iface, struct ibv_ah *ah_p)
+{
+    khiter_t iter;
+
+    /* look for AH holder where current ah_p is stored */
+    iter = kh_get(uct_ib_ah, &iface->ah_hash, (uint64_t)ah_p);
+    ucs_assert(iter != kh_end(&iface->ah_hash));
+    ucs_assert(kh_value(&iface->ah_hash, iter)->ah == ah_p);
+    /* dereference AH */
+    uct_worker_tl_data_put(kh_value(&iface->ah_hash, iter), uct_ib_iface_ah_cleanup);
 }
 
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
@@ -930,6 +1007,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     self->addr_size  = uct_ib_address_size(self->addr_type);
 
+    kh_init_inplace(uct_ib_ah, &self->ah_hash);
+
     ucs_debug("created uct_ib_iface_t headroom_ofs %d payload_ofs %d hdr_ofs %d data_sz %d",
               self->config.rx_headroom_offset, self->config.rx_payload_offset,
               self->config.rx_hdr_offset, self->config.seg_size);
@@ -955,6 +1034,16 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 {
     int ret;
+    khiter_t iter;
+
+    /* dereference all AH stored in this iface */
+    for (iter = kh_begin(&self->ah_hash); iter != kh_end(&self->ah_hash); ++iter) {
+        if (kh_exist(&self->ah_hash, iter)) {
+            uct_worker_tl_data_put(kh_value(&self->ah_hash, iter), uct_ib_iface_ah_cleanup);
+        }
+    }
+
+    kh_destroy_inplace(uct_ib_ah, &self->ah_hash);
 
     ret = ibv_destroy_cq(self->cq[UCT_IB_DIR_RX]);
     if (ret != 0) {

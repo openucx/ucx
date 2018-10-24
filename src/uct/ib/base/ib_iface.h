@@ -14,6 +14,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucs/datastruct/khash.h>
 #include <ucs/sys/math.h>
 
 #define UCT_IB_MAX_IOV                     8UL
@@ -155,6 +156,8 @@ typedef struct uct_ib_iface_res_domain {
 } uct_ib_iface_res_domain_t;
 
 
+KHASH_MAP_INIT_INT64(uct_ib_ah, struct uct_ib_ah_attr*);
+
 struct uct_ib_iface {
     uct_base_iface_t        super;
 
@@ -189,8 +192,9 @@ struct uct_ib_iface {
         size_t              max_iov;             /* Maximum buffers in IOV array */
     } config;
 
-    uct_ib_iface_ops_t      *ops;
+    khash_t(uct_ib_ah)      ah_hash;
 
+    uct_ib_iface_ops_t      *ops;
 };
 
 enum {
@@ -339,6 +343,8 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
                                     struct ibv_ah **ah_p);
+
+void uct_ib_iface_destroy_ah(uct_ib_iface_t *iface, struct ibv_ah *ah_p);
 
 ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 

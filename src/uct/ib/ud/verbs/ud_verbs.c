@@ -49,9 +49,12 @@ UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, uct_iface_h tl_iface)
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_ep_t)
 {
+    uct_ud_verbs_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
+                                                 uct_ud_verbs_iface_t);
+
     ucs_trace_func("");
     if (self->ah) {
-        ibv_destroy_ah(self->ah);
+        uct_ib_iface_destroy_ah(&iface->super.super, self->ah);
         self->ah = NULL;
     }
 }

@@ -1019,7 +1019,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
             uct_ib_mlx5_get_av(ah, &mlx5_av);
 
-            ibv_destroy_ah(ah);
+            uct_ib_iface_destroy_ah(ib_iface, ah);
         }
 
         /* Note av initialization is copied from exp verbs */
