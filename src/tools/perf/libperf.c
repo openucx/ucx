@@ -644,6 +644,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     }
 
     if (info.rkey_size > 0) {
+        memset(rkey_buffer, 0, info.rkey_size);
         status = uct_md_mkey_pack(perf->uct.md, perf->uct.recv_mem.memh, rkey_buffer);
         if (status != UCS_OK) {
             ucs_error("Failed to uct_rkey_pack: %s", ucs_status_string(status));
