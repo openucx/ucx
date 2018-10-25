@@ -359,20 +359,13 @@ typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj,
  */
 typedef struct {
     ucs_arbiter_elem_t  arb_elem;
-} uct_pending_req_priv_arb_base_t;
-
-
-static UCS_F_ALWAYS_INLINE uct_pending_req_priv_arb_base_t *
-uct_pending_req_priv_arb_base(uct_pending_req_t* req)
-{
-    return (uct_pending_req_priv_arb_base_t *)&req->priv;
-}
+} uct_pending_req_priv_arb_t;
 
 
 static UCS_F_ALWAYS_INLINE ucs_arbiter_elem_t *
 uct_pending_req_priv_arb_elem(uct_pending_req_t* req)
 {
-    return &(uct_pending_req_priv_arb_base(req))->arb_elem;
+    return &((uct_pending_req_priv_arb_t *)&req->priv)->arb_elem;
 }
 
 
@@ -393,19 +386,13 @@ uct_pending_req_priv_arb_elem(uct_pending_req_t* req)
  */
 typedef struct {
     ucs_queue_elem_t    queue_elem;
-} uct_pending_req_priv_queue_base_t;
+} uct_pending_req_priv_queue_t;
 
-
-static UCS_F_ALWAYS_INLINE uct_pending_req_priv_queue_base_t *
-uct_pending_req_priv_queue_base(uct_pending_req_t* req)
-{
-    return (uct_pending_req_priv_queue_base_t *)&req->priv;
-}
 
 static UCS_F_ALWAYS_INLINE ucs_queue_elem_t *
 uct_pending_req_priv_queue_elem(uct_pending_req_t* req)
 {
-    return &(uct_pending_req_priv_queue_base(req))->queue_elem;
+    return &((uct_pending_req_priv_queue_t *)&req->priv)->queue_elem;
 }
 
 
@@ -418,7 +405,7 @@ uct_pending_req_priv_queue_elem(uct_pending_req_t* req)
 
 typedef struct {
     uct_pending_purge_callback_t cb;
-    void *arg;
+    void                         *arg;
 } uct_purge_cb_args_t;
 
 
@@ -434,13 +421,13 @@ typedef struct {
  */
 #define uct_pending_queue_dispatch(_priv, _queue, _cond) \
     while (!ucs_queue_is_empty(_queue)) { \
-        uct_pending_req_priv_queue_base_t *_base_priv; \
+        uct_pending_req_priv_queue_t *_base_priv; \
         uct_pending_req_t *_req; \
         ucs_status_t _status; \
         \
         _base_priv = \
             ucs_queue_head_elem_non_empty((_queue), \
-                                          uct_pending_req_priv_queue_base_t, \
+                                          uct_pending_req_priv_queue_t, \
                                           queue_elem); \
         \
         UCS_STATIC_ASSERT(sizeof(*(_priv)) <= UCT_PENDING_REQ_PRIV_LEN); \
@@ -470,8 +457,8 @@ typedef struct {
  */
 #define uct_pending_queue_purge(_priv, _queue, _cond, _cb, _arg) \
     { \
-        uct_pending_req_priv_queue_base_t *_base_priv; \
-        ucs_queue_iter_t _iter; \
+        uct_pending_req_priv_queue_t *_base_priv; \
+        ucs_queue_iter_t             _iter; \
         \
         ucs_queue_for_each_safe(_base_priv, _iter, _queue, queue_elem) { \
             _priv = (typeof(_priv))(_base_priv); \

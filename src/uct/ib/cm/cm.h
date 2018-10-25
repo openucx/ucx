@@ -87,9 +87,9 @@ typedef struct uct_cm_hdr {
  * CM pending request private data
  */
 typedef struct {
-    uct_pending_req_priv_queue_base_t base;
-    uct_cm_ep_t                       *ep;
-} uct_pending_req_priv_cm_t;
+    uct_pending_req_priv_queue_t base;
+    uct_cm_ep_t                  *ep;
+} uct_cm_pending_req_priv_t;
 
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_cm_ep_t, uct_ep_t, uct_iface_h,
@@ -119,10 +119,10 @@ static inline int uct_cm_iface_has_tx_resources(uct_cm_iface_t *iface)
 }
 
 
-static UCS_F_ALWAYS_INLINE uct_pending_req_priv_cm_t *
-uct_pending_req_cm_priv(uct_pending_req_t *req)
+static UCS_F_ALWAYS_INLINE uct_cm_pending_req_priv_t *
+uct_cm_pending_req_priv(uct_pending_req_t *req)
 {
-    return (uct_pending_req_priv_cm_t *)&req->priv;
+    return (uct_cm_pending_req_priv_t *)&req->priv;
 }
 
 

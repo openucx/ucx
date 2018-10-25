@@ -415,14 +415,20 @@ UCS_TEST_P(uct_p2p_am_test, am_async_response) {
         mapped_buffer sendbuf_short(sender().iface_attr().cap.am.max_short,
                                     SEED1, sender());
         am_count = m_am_count + 2;
+
+        const double timeout = 10.;
+        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
         do {
             sender().progress();
             status = am_short(sender_ep(), sendbuf_short, recvbuf);
-        } while (status == UCS_ERR_NO_RESOURCE);
+        } while ((status == UCS_ERR_NO_RESOURCE) && (ucs_get_time() < deadline));
+        EXPECT_EQ(UCS_OK, status);
 
-        while (am_count != m_am_count) {
+        deadline = ucs_get_time() + ucs_time_from_sec(timeout);
+        while ((am_count != m_am_count) && (ucs_get_time() < deadline)) {
             sender().progress();
         }
+        EXPECT_EQ(am_count, m_am_count);
     }
 
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);

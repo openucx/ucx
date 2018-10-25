@@ -1104,7 +1104,7 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
      * - not in async progress
      * - there are only low priority ctl pending or not ctl at all
      */
-    if ((!in_async_progress || (uct_pending_req_ud_priv(req)->flags &
+    if ((!in_async_progress || (uct_ud_pending_req_priv(req)->flags &
                                 UCT_CB_FLAG_ASYNC)) &&
         (uct_ud_ep_ctl_op_check_ex(ep, UCT_UD_EP_OP_CTL_LOW_PRIO) ||
          !uct_ud_ep_ctl_op_isany(ep))) {
@@ -1112,7 +1112,8 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
         ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_IN_PENDING));
         ep->flags |= UCT_UD_EP_FLAG_IN_PENDING;
         async_before_pending = iface->tx.async_before_pending;
-        if (uct_pending_req_ud_priv(req)->flags & UCT_CB_FLAG_ASYNC) {
+        if (uct_ud_pending_req_priv(req)->flags & UCT_CB_FLAG_ASYNC) {
+            /* temporary reset the flag to unblock sends from async context */
             iface->tx.async_before_pending = 0;
         }
         status = req->func(req);
@@ -1169,9 +1170,9 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req,
     }
 
 add_req:
-    UCS_STATIC_ASSERT(sizeof(uct_pending_req_priv_ud_t) <=
+    UCS_STATIC_ASSERT(sizeof(uct_ud_pending_req_priv_t) <=
                       UCT_PENDING_REQ_PRIV_LEN);
-    uct_pending_req_ud_priv(req)->flags = flags;
+    uct_ud_pending_req_priv(req)->flags = flags;
     uct_pending_req_arb_group_push(&ep->tx.pending.group, req);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
 

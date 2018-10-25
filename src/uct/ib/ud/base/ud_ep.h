@@ -263,15 +263,15 @@ UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
  * UD pending request private data
  */
 typedef struct {
-    uct_pending_req_priv_arb_base_t base;
-    unsigned                        flags;
-} uct_pending_req_priv_ud_t;
+    uct_pending_req_priv_arb_t arb;
+    unsigned                   flags;
+} uct_ud_pending_req_priv_t;
 
 
-static UCS_F_ALWAYS_INLINE uct_pending_req_priv_ud_t *
-uct_pending_req_ud_priv(uct_pending_req_t *req)
+static UCS_F_ALWAYS_INLINE uct_ud_pending_req_priv_t *
+uct_ud_pending_req_priv(uct_pending_req_t *req)
 {
-    return (uct_pending_req_priv_ud_t *)&(req)->priv;
+    return (uct_ud_pending_req_priv_t *)&(req)->priv;
 }
 
 
