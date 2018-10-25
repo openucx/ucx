@@ -77,7 +77,7 @@ struct perftest_context {
     sock_rte_group_t             sock_rte_group;
 };
 
-#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oSCqMr:T:d:x:A:BUm:"
+#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oSCqM:r:T:d:x:A:BUm:"
 
 
 test_type_t tests[] = {
