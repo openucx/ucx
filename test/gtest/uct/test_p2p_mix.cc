@@ -155,6 +155,8 @@ void uct_p2p_mix_test::run(unsigned count) {
     for (unsigned i = 0; i < count; ++i) {
         random_op(sendbuf, recvbuf);
     }
+
+    sender().flush();
 }
 
 void uct_p2p_mix_test::init() {
