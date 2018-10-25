@@ -197,25 +197,28 @@ out:
         free(dev_name);
     }
 
-    void test_address_pack(uct_ib_address_type_t scope, uint64_t subnet_prefix) {
+    void test_address_pack(uint64_t subnet_prefix) {
+        uct_ib_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
         static const uint16_t lid_in = 0x1ee7;
         union ibv_gid gid_in, gid_out;
         uct_ib_address_t *ib_addr;
         uint16_t lid_out;
-        uint8_t is_global;
 
-        ib_addr = (uct_ib_address_t*)malloc(uct_ib_address_size(scope));
+        ib_addr = (uct_ib_address_t*)malloc(uct_ib_address_size(iface));
 
         gid_in.global.subnet_prefix = subnet_prefix;
         gid_in.global.interface_id  = 0xdeadbeef;
-        uct_ib_address_pack(ib_device(m_e1), scope, &gid_in, lid_in, ib_addr);
+        uct_ib_address_pack(iface, &gid_in, lid_in, ib_addr);
 
-        uct_ib_address_unpack(ib_addr, &lid_out, &is_global, &gid_out);
+        uct_ib_address_unpack(ib_addr, &lid_out, &gid_out);
 
-        EXPECT_EQ((scope != UCT_IB_ADDRESS_TYPE_LINK_LOCAL), is_global);
-        EXPECT_EQ(lid_in, lid_out);
+        if (IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface))) {
+            EXPECT_TRUE(iface->is_global);
+        } else {
+            EXPECT_EQ(lid_in, lid_out);
+        }
 
-        if (is_global) {
+        if (iface->is_global) {
             EXPECT_EQ(gid_in.global.subnet_prefix, gid_out.global.subnet_prefix);
             EXPECT_EQ(gid_in.global.interface_id,  gid_out.global.interface_id);
         }
@@ -321,9 +324,9 @@ UCS_TEST_P(test_uct_ib, non_default_gid_idx, "GID_INDEX=1")
 
 UCS_TEST_P(test_uct_ib, address_pack) {
     initialize();
-    test_address_pack(UCT_IB_ADDRESS_TYPE_LINK_LOCAL, UCT_IB_LINK_LOCAL_PREFIX);
-    test_address_pack(UCT_IB_ADDRESS_TYPE_SITE_LOCAL, UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
-    test_address_pack(UCT_IB_ADDRESS_TYPE_GLOBAL,     0xdeadfeedbeefa880ul);
+    test_address_pack(UCT_IB_LINK_LOCAL_PREFIX);
+    test_address_pack(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
+    test_address_pack(0xdeadfeedbeefa880ul);
 }
 
 

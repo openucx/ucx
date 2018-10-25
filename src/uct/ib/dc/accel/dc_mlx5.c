@@ -1153,11 +1153,7 @@ ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
     attr.path_mtu                   = iface->super.config.path_mtu;
     attr.min_rnr_timer              = iface->super.config.min_rnr_timer;
     attr.max_dest_rd_atomic         = 1;
-    if ((iface->super.super.addr_type == UCT_IB_ADDRESS_TYPE_ETH) ||
-        (iface->super.super.addr_type == UCT_IB_ADDRESS_TYPE_GLOBAL))
-    {
-        attr.ah_attr.is_global      = 1;
-    }
+    attr.ah_attr.is_global          = iface->super.super.is_global;
     attr.ah_attr.sl                 = iface->super.super.config.sl;
     attr_mask                       = IBV_QP_STATE     |
                                       IBV_QP_PATH_MTU;

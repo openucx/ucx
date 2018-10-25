@@ -651,7 +651,7 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
     uct_dc_fc_sender_data_t sender = {
         .ep               = (uintptr_t)dc_ep,
         .global.gid       = ib_iface->gid,
-        .global.is_global = ib_iface->addr_type != UCT_IB_ADDRESS_TYPE_LINK_LOCAL};
+        .global.is_global = ib_iface->is_global};
 
     ucs_assert(sizeof(*hdr) + sizeof(sender) <=
                iface->verbs_common.config.max_inline);
@@ -674,8 +674,7 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
 
         status = uct_dc_verbs_iface_create_ah(
                     &iface->super, dc_req->lid,
-                    dc_req->sender.global.is_global ?
-                        ucs_unaligned_ptr(&dc_req->sender.global.gid) : NULL,
+                    ucs_unaligned_ptr(&dc_req->sender.global.gid),
                     &ah);
         if (status != UCS_OK) {
             return status;

@@ -68,7 +68,6 @@ typedef struct uct_cm_iface {
 typedef struct uct_cm_ep {
     uct_base_ep_t          super;
     uint16_t               dlid;
-    uint8_t                is_global;
     uint32_t               dest_service_id;
     union ibv_gid          dgid;
 } uct_cm_ep_t;

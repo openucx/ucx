@@ -30,7 +30,7 @@ static UCS_CLASS_INIT_FUNC(uct_cm_ep_t, uct_iface_t *tl_iface,
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     uct_ib_address_unpack((const uct_ib_address_t*)dev_addr, &self->dlid,
-                          &self->is_global, &self->dgid);
+                          &self->dgid);
     self->dest_service_id = *(const uint32_t*)iface_addr;
     return UCS_OK;
 }
@@ -54,13 +54,8 @@ static ucs_status_t uct_cm_ep_fill_path_rec(uct_cm_ep_t *ep,
     path->sgid                      = iface->super.gid;
     path->dlid                      = htons(ep->dlid);
     path->slid                      = htons(uct_ib_iface_port_attr(&iface->super)->lid);
-    if (ep->is_global) {
-        path->dgid                  = ep->dgid;
-        path->hop_limit             = iface->super.config.hop_limit;
-    } else {
-        memset(&path->dgid, 0, sizeof(path->dgid));
-        path->hop_limit             = 0;
-    }
+    path->dgid                      = ep->dgid;
+    path->hop_limit                 = iface->super.config.hop_limit;
     path->raw_traffic               = 0; /* IB traffic */
     path->flow_label                = 0;
     path->traffic_class             = iface->super.config.traffic_class;
