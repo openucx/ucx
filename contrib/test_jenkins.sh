@@ -220,7 +220,7 @@ build_release_pkg() {
 	$MAKE distcheck
 
 	# Show UCX info
-	./src/tools/info/ucx_info -f -c -v -y -d -b -p -w -e -uart
+	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart
 
 	if [ -f /etc/redhat-release -o -f /etc/fedora-release ]; then
 		rpm_based=yes

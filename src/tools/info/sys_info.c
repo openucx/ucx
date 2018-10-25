@@ -24,7 +24,8 @@ static const char* cpu_model_names[] = {
     [UCS_CPU_MODEL_INTEL_WESTMERE]    = "Westmere",
     [UCS_CPU_MODEL_INTEL_HASWELL]     = "Haswell",
     [UCS_CPU_MODEL_INTEL_BROADWELL]   = "Broadwell",
-    [UCS_CPU_MODEL_INTEL_SKYLAKE]     = "Skylake"
+    [UCS_CPU_MODEL_INTEL_SKYLAKE]     = "Skylake",
+    [UCS_CPU_MODEL_ARM_AARCH64]       = "ARM 64-bit"
 };
 
 static double measure_memcpy_bandwidth(size_t size)
