@@ -362,10 +362,16 @@ typedef struct {
 } uct_pending_req_priv_arb_t;
 
 
+static UCS_F_ALWAYS_INLINE uct_pending_req_priv_arb_t *
+uct_pending_req_priv_arb(uct_pending_req_t* req)
+{
+    return (uct_pending_req_priv_arb_t *)&req->priv;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_arbiter_elem_t *
 uct_pending_req_priv_arb_elem(uct_pending_req_t* req)
 {
-    return &((uct_pending_req_priv_arb_t *)&req->priv)->arb_elem;
+    return &uct_pending_req_priv_arb(req)->arb_elem;
 }
 
 
@@ -389,10 +395,16 @@ typedef struct {
 } uct_pending_req_priv_queue_t;
 
 
+static UCS_F_ALWAYS_INLINE uct_pending_req_priv_queue_t *
+uct_pending_req_priv_queue(uct_pending_req_t* req)
+{
+    return (uct_pending_req_priv_queue_t *)&req->priv;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_queue_elem_t *
 uct_pending_req_priv_queue_elem(uct_pending_req_t* req)
 {
-    return &((uct_pending_req_priv_queue_t *)&req->priv)->queue_elem;
+    return &uct_pending_req_priv_queue(req)->queue_elem;
 }
 
 
