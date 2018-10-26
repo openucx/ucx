@@ -379,6 +379,12 @@ static const double __ac_HASH_UPPER = 0.77;
 #define KHASH_INIT(name, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
 	KHASH_INIT2(name, static kh_inline klib_unused, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal)
 
+#define KHASH_TYPE(name, khkey_t, khval_t) \
+	__KHASH_TYPE(name, khkey_t, khval_t)
+
+#define KHASH_IMPL(name, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
+	__KHASH_IMPL(name, static kh_inline klib_unused, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal)
+
 /* --- BEGIN OF HASH FUNCTIONS --- */
 
 /*! @function

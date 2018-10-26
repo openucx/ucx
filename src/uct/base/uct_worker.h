@@ -74,13 +74,6 @@ typedef struct uct_worker_progress {
     })
 
 
-#define uct_worker_tl_data_refcount_inc(_data) \
-    { \
-        uct_worker_tl_data_t *data = (uct_worker_tl_data_t*)(_data); \
-        data->refcount++; \
-    }
-
-
 #define uct_worker_tl_data_put(_data, _cleanup_fn, ...) \
     { \
         uct_worker_tl_data_t *data = (uct_worker_tl_data_t*)(_data); \

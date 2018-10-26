@@ -156,7 +156,7 @@ typedef struct uct_ib_iface_res_domain {
 } uct_ib_iface_res_domain_t;
 
 
-KHASH_MAP_INIT_INT64(uct_ib_ah, struct uct_ib_ah_attr*);
+KHASH_TYPE(uct_ib_ah, struct ibv_ah*, struct uct_ib_ah_attr);
 
 struct uct_ib_iface {
     uct_base_iface_t        super;
@@ -193,6 +193,7 @@ struct uct_ib_iface {
     } config;
 
     khash_t(uct_ib_ah)      ah_hash;
+    struct uct_ib_ah_hash   *ah_attr_hash;
 
     uct_ib_iface_ops_t      *ops;
 };
