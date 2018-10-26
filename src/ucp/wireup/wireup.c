@@ -223,6 +223,26 @@ static void ucp_wireup_remote_connected(ucp_ep_h ep)
     ucs_assert(ep->flags & UCP_EP_FLAG_DEST_EP);
 }
 
+
+static ucs_status_t
+ucp_wireup_init_lanes_by_request(ucp_worker_h worker, ucp_ep_h ep,
+                                 const ucp_ep_params_t *params,
+                                 unsigned ep_init_flags, unsigned address_count,
+                                 const ucp_address_entry_t *address_list,
+                                 uint8_t *addr_indices)
+{
+    ucs_status_t status = ucp_wireup_init_lanes(ep, params, ep_init_flags,
+                                                address_count, address_list,
+                                                addr_indices);
+    if (status == UCS_OK) {
+        return UCS_OK;
+    }
+
+    ucp_worker_set_ep_failed(worker, ep, NULL, UCP_NULL_LANE, status);
+    return status;
+}
+
+
 static UCS_F_NOINLINE void
 ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                                const ucp_unpacked_address_t *remote_address)
@@ -248,9 +268,11 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     params.err_mode   = ucp_ep_config(ep)->key.err_mode;
 
     /* initialize transport endpoints */
-    status = ucp_wireup_init_lanes(ep, &params, UCP_EP_CREATE_AM_LANE,
-                                   remote_address->address_count,
-                                   remote_address->address_list, addr_indices);
+    status = ucp_wireup_init_lanes_by_request(worker, ep, &params,
+                                              UCP_EP_CREATE_AM_LANE,
+                                              remote_address->address_count,
+                                              remote_address->address_list,
+                                              addr_indices);
     if (status != UCS_OK) {
         return;
     }
@@ -339,15 +361,13 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
          * Therefore, remove the existing aux endpoint since will need to create
          * new lanes now */
         ucp_ep_cleanup_lanes(ep);
-        for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-            ep->uct_eps[lane] = NULL;
-        }
     }
 
     /* Initialize lanes (possible destroy existing lanes) */
-    status = ucp_wireup_init_lanes(ep, &params, ep_init_flags,
-                                   remote_address->address_count,
-                                   remote_address->address_list, addr_indices);
+    status = ucp_wireup_init_lanes_by_request(worker, ep, &params, ep_init_flags,
+                                              remote_address->address_count,
+                                              remote_address->address_list,
+                                              addr_indices);
     if (status != UCS_OK) {
         return;
     }
@@ -724,7 +744,6 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                    uint8_t *addr_indices)
 {
     ucp_worker_h worker = ep->worker;
-    ucp_lane_index_t failed_lane = UCP_NULL_LANE;
     ucp_ep_config_key_t key;
     uint16_t new_cfg_index;
     ucp_lane_index_t lane;
@@ -736,18 +755,6 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     status = ucp_wireup_select_lanes(ep, params, ep_init_flags, address_count,
                                      address_list, addr_indices, &key);
     if (status != UCS_OK) {
-        if (ep->flags & UCP_EP_FLAG_USED) {
-            failed_lane = 0; /* lanes aren't selected but need to invoke err
-                                handler, lane number doesn't matter here */
-            goto err;
-        }
-
-        for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-            if (ep->uct_eps[lane] != NULL) {
-                uct_ep_destroy(ep->uct_eps[lane]);
-                ep->uct_eps[lane] = NULL;
-            }
-        }
         return status;
     }
 
@@ -789,13 +796,13 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
         status = ucp_wireup_connect_lane(ep, params, lane, address_count,
                                          address_list, addr_indices[lane]);
         if (status != UCS_OK) {
-            goto err;
+            return status;
         }
     }
 
     status = ucp_wireup_resolve_proxy_lanes(ep);
     if (status != UCS_OK) {
-        goto err;
+        return status;
     }
 
     /* If we don't have a p2p transport, we're connected */
@@ -804,15 +811,6 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     }
 
     return UCS_OK;
-
-err:
-    if (failed_lane == UCP_NULL_LANE) {
-        failed_lane = ucp_ep_get_wireup_msg_lane(ep);
-    }
-
-    ucp_worker_set_ep_failed(worker, ep, ep->uct_eps[failed_lane], failed_lane,
-                             status);
-    return status;
 }
 
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)

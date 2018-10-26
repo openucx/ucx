@@ -386,7 +386,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     }
 
     /* Move failed lane to index 0 */
-    if (failed_lane != 0) {
+    if ((failed_lane != 0) && (failed_lane != UCP_NULL_LANE)) {
         ucp_ep->uct_eps[0] = ucp_ep->uct_eps[failed_lane];
         ucp_ep->uct_eps[failed_lane] = NULL;
     }

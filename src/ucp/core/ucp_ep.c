@@ -680,6 +680,10 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
         ucs_debug("ep %p: destroy uct_ep[%d]=%p", ep, lane, uct_ep);
         uct_ep_destroy(uct_ep);
     }
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        ep->uct_eps[lane] = NULL;
+    }
 }
 
 void ucp_ep_disconnected(ucp_ep_h ep, int force)

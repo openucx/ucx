@@ -707,6 +707,15 @@ static void ucp_wireup_clean_amo_criteria(ucp_wireup_criteria_t *criteria)
            sizeof(criteria->local_atomic_flags));
 }
 
+static int ucp_wireup_allow_am_emulation_layer(const ucp_ep_params_t *params,
+                                               unsigned ep_init_flags)
+{
+    return !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
+           /* disable emulation layer if err handling is required due to lack of
+            * keep alive protocol */
+           !ucp_wireup_ep_params_is_err_mode_peer(params);
+}
+
 static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
                                              unsigned ep_init_flags, unsigned address_count,
                                              const ucp_address_entry_t *address_list,
@@ -739,8 +748,7 @@ static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, const ucp_ep_params_t 
     criteria.tl_rsc_flags       = 0;
     ucp_wireup_fill_ep_params_criteria(&criteria, params);
 
-    allow_am = !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
-               !ucp_wireup_ep_params_is_err_mode_peer(params);
+    allow_am = ucp_wireup_allow_am_emulation_layer(params, ep_init_flags);
     status = ucp_wireup_add_memaccess_lanes(ep, address_count, address_list,
                                             lane_descs, num_lanes_p, &criteria,
                                             -1, UCP_WIREUP_LANE_USAGE_RMA, 1,
@@ -806,8 +814,7 @@ static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, const ucp_ep_params_t 
         }
     }
 
-    allow_am = !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
-               !ucp_wireup_ep_params_is_err_mode_peer(params);
+    allow_am = ucp_wireup_allow_am_emulation_layer(params, ep_init_flags);
     status = ucp_wireup_add_memaccess_lanes(ep, address_count, address_list,
                                             lane_descs, num_lanes_p, &criteria,
                                             tl_bitmap, UCP_WIREUP_LANE_USAGE_AMO,
