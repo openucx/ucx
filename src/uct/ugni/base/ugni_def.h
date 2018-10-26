@@ -60,7 +60,7 @@ if (uct_ugni_check_lock_needed(_cdm)) {    \
 }
 #else
 #define uct_ugni_cdm_init_lock(x) UCS_OK
-#define uct_ugni_cdm_destroy_lock(x) UCS_OK
+#define uct_ugni_cdm_destroy_lock(x) {}
 #define uct_ugni_cdm_lock(x)
 #define uct_ugni_cdm_unlock(x)
 #define uct_ugni_check_lock_needed(x) 0
