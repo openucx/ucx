@@ -59,6 +59,7 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
         packed_rkey_size = ucp_rkey_pack_uct(worker->context,
                                              sreq->send.state.dt.dt.contig.md_map,
                                              sreq->send.state.dt.dt.contig.memh,
+                                             sreq->send.mem_type,
                                              rndv_rts_hdr + 1);
         if (packed_rkey_size < 0) {
             ucs_fatal("failed to pack rendezvous remote key: %s",
@@ -95,6 +96,7 @@ static size_t ucp_tag_rndv_rtr_pack(void *dest, void *arg)
         packed_rkey_size = ucp_rkey_pack_uct(rndv_req->send.ep->worker->context,
                                              rreq->recv.state.dt.contig.md_map,
                                              rreq->recv.state.dt.contig.memh,
+                                             rreq->recv.mem_type,
                                              rndv_rtr_hdr + 1);
         if (packed_rkey_size < 0) {
             return packed_rkey_size;
@@ -870,10 +872,12 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
         frag_req->send.ep                        = pipeline_ep;
         frag_req->send.buffer                    = mdesc + 1;
         frag_req->send.datatype                  = ucp_dt_make_contig(1);
+        frag_req->send.mem_type                  = sreq->send.mem_type;
         frag_req->send.state.dt.dt.contig.memh[0]= ucp_memh2uct(mdesc->memh, md_index);
         frag_req->send.state.dt.dt.contig.md_map = UCS_BIT(md_index);
         frag_req->send.length                    = length;
         frag_req->send.uct.func                  = ucp_rndv_progress_rma_get_zcopy;
+        frag_req->send.rndv_get.rkey             = NULL;
         frag_req->send.rndv_get.remote_address   = (uint64_t)(sreq->send.buffer + offset);
         frag_req->send.rndv_get.lanes_map        = 0;
         frag_req->send.rndv_get.lane_count       = 0;

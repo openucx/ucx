@@ -42,6 +42,7 @@ typedef struct ucp_rkey {
         ucp_rma_proto_t           *rma_proto;   /* Protocol for RMAs */
     } cache;
     ucp_md_map_t                  md_map;  /* Which *remote* MDs have valid memory handles */
+    uct_memory_type_t             mem_type;/* Memory type of remote key memory */
     uct_rkey_bundle_t             uct[0];  /* Remote key for every MD */
 } ucp_rkey_t;
 
@@ -122,10 +123,12 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map);
 
 void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
-                          void *rkey_buffer, const void* uct_rkeys[]);
+                          uct_memory_type_t mem_type, void *rkey_buffer,
+                          const void* uct_rkeys[]);
 
 ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
-                          const uct_mem_h *memh, void *rkey_buffer);
+                          const uct_mem_h *memh, uct_memory_type_t mem_type,
+                          void *rkey_buffer);
 
 void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max);
 

@@ -22,6 +22,7 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map)
     unsigned md_index;
 
     size = sizeof(ucp_md_map_t);
+    size += sizeof(uint8_t);
     ucs_for_each_bit (md_index, md_map) {
         md_size = context->tl_mds[md_index].attr.rkey_packed_size;
         ucs_assert_always(md_size <= UINT8_MAX);
@@ -31,7 +32,8 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map)
 }
 
 void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
-                          void *rkey_buffer, const void* uct_rkeys[])
+                          uct_memory_type_t mem_type, void *rkey_buffer,
+                          const void* uct_rkeys[])
 {
     void *p = rkey_buffer;
     unsigned md_index;
@@ -39,6 +41,8 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
 
     *(ucp_md_map_t*)p = md_map;
     p += sizeof(ucp_md_map_t);
+
+    *((uint8_t *)p++) = mem_type;
 
     ucs_for_each_bit(md_index, md_map) {
         md_size = context->tl_mds[md_index].attr.rkey_packed_size;
@@ -51,7 +55,8 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
 }
 
 ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
-                          const uct_mem_h *memh, void *rkey_buffer)
+                          const uct_mem_h *memh, uct_memory_type_t mem_type,
+                          void *rkey_buffer)
 {
     void *p             = rkey_buffer;
     ucs_status_t status = UCS_OK;
@@ -65,6 +70,9 @@ ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
     /* Write the MD map */
     *(ucp_md_map_t*)p = md_map;
     p += sizeof(ucp_md_map_t);
+
+    /* Write memory type */
+    *((uint8_t*)p++) = mem_type;
 
     /* Write both size and rkey_buffer for each UCT rkey */
     uct_memh_index = 0;
@@ -122,7 +130,8 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
 
     p = rkey_buffer;
 
-    packed_size = ucp_rkey_pack_uct(context, memh->md_map, memh->uct, p);
+    packed_size = ucp_rkey_pack_uct(context, memh->md_map, memh->uct,
+                                    memh->mem_type, p);
     if (packed_size < 0) {
         status = (ucs_status_t)packed_size;
         goto err_destroy;
@@ -161,6 +170,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
     unsigned md_count;
     ucs_status_t status;
     ucp_rkey_h rkey;
+    uct_memory_type_t mem_type;
     uint8_t md_size;
     const void *p;
 
@@ -193,7 +203,11 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
         goto err;
     }
 
+    /* Read memory type */
+    mem_type = *((uint8_t*)p++);
+
     rkey->md_map = md_map;
+    rkey->mem_type = mem_type;
 
     /* Unpack rkey of each UCT MD */
     remote_md_index = 0; /* Index of remote MD */
@@ -258,6 +272,8 @@ void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max)
 
     md_map = *(ucp_md_map_t*)(rkey_buffer);
     rkey_buffer += sizeof(ucp_md_map_t);
+
+    rkey_buffer += sizeof(uint8_t);
 
     first = 1;
     ucs_for_each_bit(md_index, md_map) {
@@ -337,6 +353,7 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
     ucp_lane_index_t lane;
     ucp_md_map_t dst_md_mask;
     ucp_md_index_t md_index;
+    uct_md_attr_t *md_attr;
     uint8_t rkey_index;
     int prio;
 
@@ -349,8 +366,12 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
         }
 
         md_index = config->md_index[lane];
+        md_attr  = &context->tl_mds[md_index].attr;
+
         if ((md_index != UCP_NULL_RESOURCE) &&
-            (!(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY)))
+            (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY)) &&
+            (!rkey || (md_attr->cap.mem_type == mem_type &&
+                       md_attr->cap.mem_type == rkey->mem_type)))
         {
             /* Lane does not need rkey, can use the lane with invalid rkey  */
             *uct_rkey_p = UCT_INVALID_RKEY;
@@ -358,7 +379,7 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
         }
 
         if ((md_index != UCP_NULL_RESOURCE) &&
-            (!(context->tl_mds[md_index].attr.cap.reg_mem_types & UCS_BIT(mem_type)))) {
+            (!(md_attr->cap.reg_mem_types & UCS_BIT(mem_type)))) {
             continue;
         }
 
