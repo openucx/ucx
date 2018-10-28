@@ -335,4 +335,13 @@ ucs_arbiter_elem_is_last(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
     return group->tail == elem;
 }
 
+/**
+ * @return true if element is the only one in the group
+ */
+static inline int
+ucs_arbiter_elem_is_only(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
+{
+    return ucs_arbiter_elem_is_last(group, elem) && (elem->next == elem);
+}
+
 #endif
