@@ -18,6 +18,21 @@
 #include <sched.h>
 
 
+/* use both gid + lid data for key generarion (lid - ib based, gid - RoCE) */
+#define kh_ah_hash_func(_key) kh_int64_hash_func((_key).attr.grh.dgid.global.subnet_prefix ^ \
+                                                 (_key).attr.grh.dgid.global.interface_id  ^ \
+                                                 (_key).attr.dlid)
+#define kh_ah_hash_equal(_a, _b) (!memcmp(&(_a).attr, &(_b).attr, sizeof((_a).attr)) && \
+                                  ((_a).pd == (_b).pd))
+
+typedef struct uct_ib_ah_attr {
+    struct ibv_ah_attr   attr;
+    struct ibv_pd        *pd;
+} uct_ib_ah_attr_t;
+
+KHASH_IMPL(uct_ib_ah, uct_ib_ah_attr_t, struct ibv_ah*, 1, kh_ah_hash_func, kh_ah_hash_equal)
+
+
 #if ENABLE_STATS
 static ucs_stats_class_t uct_ib_device_stats_class = {
     .name           = "",
@@ -317,6 +332,9 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
         }
     }
 
+    kh_init_inplace(uct_ib_ah, &dev->ah_hash);
+    ucs_spinlock_init(&dev->ah_lock);
+
     ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),
               dev->num_ports);
@@ -330,9 +348,19 @@ err:
     return status;
 }
 
+void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
+{
+    struct ibv_ah *ah;
+
+    kh_foreach_value(&dev->ah_hash, ah, ibv_destroy_ah(ah));
+}
+
 void uct_ib_device_cleanup(uct_ib_device_t *dev)
 {
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
+
+    kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
+    ucs_spinlock_destroy(&dev->ah_lock);
 
     if (dev->async_events) {
         ucs_async_remove_handler(dev->ibv_context->async_fd, 1);
@@ -1048,4 +1076,88 @@ int uct_ib_device_odp_has_global_mr(uct_ib_device_t *dev)
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status)
 {
     return ibv_wc_status_str(wc_status);
+}
+
+static ucs_status_t uct_ib_device_create_ah(struct ibv_ah_attr *ah_attr,
+                                            struct ibv_pd *pd,
+                                            struct ibv_ah **ah_p)
+{
+    char buf[128];
+    char *p, *endp;
+    struct ibv_ah *ah;
+
+    ah = ibv_create_ah(pd, ah_attr);
+    if (ah == NULL) {
+        p    = buf;
+        endp = buf + sizeof(buf);
+        snprintf(p, endp - p, "dlid=%d sl=%d port=%d src_path_bits=%d",
+                 ah_attr->dlid, ah_attr->sl,
+                 ah_attr->port_num, ah_attr->src_path_bits);
+        p += strlen(p);
+
+        if (ah_attr->is_global) {
+            snprintf(p, endp - p, " dgid=");
+            p += strlen(p);
+            inet_ntop(AF_INET6, &ah_attr->grh.dgid, p, endp - p);
+            p += strlen(p);
+            snprintf(p, endp - p, " sgid_index=%d traffic_class=%d",
+                     ah_attr->grh.sgid_index, ah_attr->grh.traffic_class);
+        }
+
+        ucs_error("ibv_create_ah(%s) failed: %m", buf);
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    *ah_p = ah;
+    return UCS_OK;
+}
+
+ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
+                                            struct ibv_ah_attr *ah_attr,
+                                            struct ibv_pd *pd,
+                                            struct ibv_ah **ah_p)
+{
+    uct_ib_ah_attr_t attr = {.attr = *ah_attr, .pd = pd};
+    khiter_t iter;
+    int ret;
+    ucs_status_t status;
+
+    ucs_spin_lock(&dev->ah_lock);
+
+    /* looking for existing AH with same attributes */
+    iter = kh_get(uct_ib_ah, &dev->ah_hash, attr);
+    if (iter == kh_end(&dev->ah_hash)) {
+        /* new AH */
+        status = uct_ib_device_create_ah(ah_attr, pd, ah_p);
+
+        if (status != UCS_OK) {
+            ucs_spin_unlock(&dev->ah_lock);
+            return status;
+        }
+
+        /* store AH in hash */
+        iter = kh_put(uct_ib_ah, &dev->ah_hash, attr, &ret);
+
+        /* failed to store - rollback */
+        if (iter == kh_end(&dev->ah_hash)) {
+            ibv_destroy_ah(*ah_p);
+            ucs_spin_unlock(&dev->ah_lock);
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        kh_value(&dev->ah_hash, iter) = *ah_p;
+    } else {
+        /* found existing AH */
+        *ah_p = kh_value(&dev->ah_hash, iter);
+    }
+
+    ucs_spin_unlock(&dev->ah_lock);
+
+    return UCS_OK;
+}
+
+void uct_ib_device_destroy_ah_cached(uct_ib_device_t *dev,
+                                     struct ibv_ah *ah)
+{
+    /* do nothing - AH will be destroyed on device cleanup */
 }

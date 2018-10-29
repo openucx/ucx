@@ -1544,6 +1544,7 @@ void uct_ib_md_close(uct_md_h uct_md)
     uct_ib_md_release_device_config(md);
     uct_ib_md_release_reg_method(md);
     uct_ib_md_umr_qp_destroy(md);
+    uct_ib_device_cleanup_ah_cached(&md->dev);
     ibv_dealloc_pd(md->pd);
     uct_ib_device_cleanup(&md->dev);
     UCS_STATS_NODE_FREE(md->stats);

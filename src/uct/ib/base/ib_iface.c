@@ -19,38 +19,6 @@
 #include <stdlib.h>
 #include <poll.h>
 
-#define UCT_IB_WORKER_AH_KEY 0x15599029u
-
-/* use both gid + lid data for key generarion (lid - ib based, gid - RoCE) */
-#define kh_ah_hash_func(_key) kh_int64_hash_func((_key).attr.grh.dgid.global.subnet_prefix ^ \
-                                                 (_key).attr.grh.dgid.global.interface_id  ^ \
-                                                 (_key).attr.dlid)
-#define kh_ah_hash_equal(_a, _b) (!memcmp(&(_a), &(_b), sizeof(_a)))
-
-#define kh_ptr_hash_func(_key) kh_int64_hash_func((uintptr_t)(_key))
-#define kh_ptr_hash_equal(_a, _b) kh_int64_hash_equal((uintptr_t)(_a), (uintptr_t)(_b))
-
-typedef struct uct_ib_ah_attr {
-    struct ibv_ah_attr   attr;
-    struct ibv_pd        *pd;
-} uct_ib_ah_attr_t;
-
-typedef struct uct_ib_ah {
-    struct ibv_ah *ah;
-    int           refcount;
-} uct_ib_ah_t;
-
-/* worker hash - all created AH are stored here. key - attributes, value - AH + ref counter */
-KHASH_INIT(uct_ib_ah_attr, uct_ib_ah_attr_t, uct_ib_ah_t, 1, kh_ah_hash_func, kh_ah_hash_equal)
-/* iface hash - holds reference to worker hash, AH created for iface are stored in iface,
- * key - AH, value - creation attributes (key for worker hash) */
-KHASH_IMPL(uct_ib_ah, struct ibv_ah*, uct_ib_ah_attr_t, 1, kh_ptr_hash_func, kh_ptr_hash_equal)
-
-typedef struct uct_ib_ah_hash {
-    uct_worker_tl_data_t    super;
-    khash_t(uct_ib_ah_attr) hash;
-} uct_ib_ah_hash_t;
-
 
 static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,
                                sizeof(ucs_range_spec_t),
@@ -291,107 +259,13 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
                                     struct ibv_ah **ah_p)
 {
-    uct_ib_ah_attr_t attr = {.attr = *ah_attr, .pd = uct_ib_iface_md(iface)->pd};
-    khiter_t iter;
-    khiter_t iter_ah;
-    int ret;
-    struct ibv_ah *ah;
-    char buf[128];
-    char *p, *endp;
-
-    ucs_assert(iface->ah_attr_hash != NULL);
-
-    /* looking for existing AH with same attributes */
-    iter = kh_get(uct_ib_ah_attr, &iface->ah_attr_hash->hash, attr);
-    if (iter == kh_end(&iface->ah_attr_hash->hash)) {
-        /* new AH */
-        ah = ibv_create_ah(uct_ib_iface_md(iface)->pd, ah_attr);
-
-        if (ah == NULL) {
-            p    = buf;
-            endp = buf + sizeof(buf);
-            snprintf(p, endp - p, "dlid=%d sl=%d port=%d src_path_bits=%d",
-                     ah_attr->dlid, ah_attr->sl,
-                     ah_attr->port_num, ah_attr->src_path_bits);
-            p += strlen(p);
-
-            if (ah_attr->is_global) {
-                snprintf(p, endp - p, " dgid=");
-                p += strlen(p);
-                inet_ntop(AF_INET6, &ah_attr->grh.dgid, p, endp - p);
-                p += strlen(p);
-                snprintf(p, endp - p, " sgid_index=%d traffic_class=%d",
-                         ah_attr->grh.sgid_index, ah_attr->grh.traffic_class);
-            }
-
-            ucs_error("ibv_create_ah(%s) on "UCT_IB_IFACE_FMT" failed: %m", buf,
-                      UCT_IB_IFACE_ARG(iface));
-            return UCS_ERR_INVALID_ADDR;
-        }
-
-        /* store AH in worker hash */
-        iter = kh_put(uct_ib_ah_attr, &iface->ah_attr_hash->hash, attr, &ret);
-
-        ucs_assert(ret == 1);
-
-        /* failed to store - rollback */
-        if (iter == kh_end(&iface->ah_attr_hash->hash)) {
-            ibv_destroy_ah(ah);
-            return UCS_ERR_NO_MEMORY;
-        }
-
-        kh_value(&iface->ah_attr_hash->hash, iter).refcount = 1;
-        kh_value(&iface->ah_attr_hash->hash, iter).ah       = ah;
-    } else {
-        /* found existing AH - just increase reference counter */
-        ah = kh_value(&iface->ah_attr_hash->hash, iter).ah;
-        kh_value(&iface->ah_attr_hash->hash, iter).refcount++;
-    }
-
-    /* looking for AH in current iface */
-    iter_ah = kh_get(uct_ib_ah, &iface->ah_hash, ah);
-
-    if (iter_ah == kh_end(&iface->ah_hash)) {
-        /* missing AH in this iface - add it into iface hash.
-         * iface will hold AH reference till iface is removed */
-        iter_ah = kh_put(uct_ib_ah, &iface->ah_hash, ah, &ret);
-        ucs_assert(ret == 1);
-        if (iter_ah == kh_end(&iface->ah_hash)) {
-            /* no memory */
-            kh_value(&iface->ah_attr_hash->hash, iter).refcount--;
-            if (!kh_value(&iface->ah_attr_hash->hash, iter).refcount) {
-                ibv_destroy_ah(ah);
-                kh_del(uct_ib_ah_attr, &iface->ah_attr_hash->hash, iter);
-            }
-            return UCS_ERR_NO_MEMORY;
-        }
-        kh_value(&iface->ah_hash, iter_ah) = attr;
-        kh_value(&iface->ah_attr_hash->hash, iter).refcount++;
-    }
-
-    ucs_assert(kh_value(&iface->ah_attr_hash->hash, iter).refcount > 1);
-
-    *ah_p = ah;
-    return UCS_OK;
+    return uct_ib_device_create_ah_cached(uct_ib_iface_device(iface), ah_attr,
+                                          uct_ib_iface_md(iface)->pd, ah_p);
 }
 
 void uct_ib_iface_destroy_ah(uct_ib_iface_t *iface, struct ibv_ah *ah_p)
 {
-    khiter_t iter;
-    khiter_t iter_ah;
-
-    /* looking for AH in current iface,
-     * hash value is attr how AH was created and key for worker hash */
-    iter_ah = kh_get(uct_ib_ah, &iface->ah_hash, ah_p);
-    ucs_assert(iter_ah != kh_end(&iface->ah_hash));
-
-    iter = kh_get(uct_ib_ah_attr, &iface->ah_attr_hash->hash,
-                  kh_value(&iface->ah_hash, iter_ah));
-    ucs_assert(iter != kh_end(&iface->ah_attr_hash->hash));
-    ucs_assert(kh_value(&iface->ah_attr_hash->hash, iter).refcount > 1);
-
-    /* do not destroy AH - just remove reference */
-    kh_value(&iface->ah_attr_hash->hash, iter).refcount--;
+    uct_ib_device_destroy_ah_cached(uct_ib_iface_device(iface), ah_p);
 }
 
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
@@ -882,34 +756,6 @@ static void uct_ib_iface_res_domain_cleanup(uct_ib_iface_res_domain_t *res_domai
 #endif
 }
 
-static int uct_ib_iface_ah_cmp(uct_ib_ah_hash_t *ah_data)
-{
-    /* singletone object */
-    return 1;
-}
-
-static ucs_status_t
-uct_ib_iface_ah_init(uct_ib_ah_hash_t *hash)
-{
-    kh_init_inplace(uct_ib_ah_attr, &hash->hash);
-
-    return UCS_OK;
-}
-
-static void uct_ib_iface_ah_cleanup(uct_ib_ah_hash_t *hash)
-{
-    uct_ib_ah_t ah;
-
-    if (kh_size(&hash->hash) > 0) {
-        ucs_warn("cleanup %d leaked address handler(s)", kh_size(&hash->hash));
-
-        kh_foreach_value(&hash->hash, ah, ibv_destroy_ah(ah.ah));
-    }
-
-    kh_destroy_inplace(uct_ib_ah_attr, &hash->hash);
-}
-
-
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_ib_iface_config_t *config,
@@ -1061,19 +907,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     self->addr_size  = uct_ib_address_size(self->addr_type);
 
-    self->ah_attr_hash = uct_worker_tl_data_get(self->super.worker,
-                                                UCT_IB_WORKER_AH_KEY,
-                                                uct_ib_ah_hash_t,
-                                                uct_ib_iface_ah_cmp,
-                                                uct_ib_iface_ah_init);
-
-    if (!self->ah_attr_hash) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_destroy_recv_cq;
-    }
-
-    kh_init_inplace(uct_ib_ah, &self->ah_hash);
-
     ucs_debug("created uct_ib_iface_t headroom_ofs %d payload_ofs %d hdr_ofs %d data_sz %d",
               self->config.rx_headroom_offset, self->config.rx_payload_offset,
               self->config.rx_hdr_offset, self->config.seg_size);
@@ -1099,30 +932,6 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 {
     int ret;
-
-    khiter_t iter;
-    khiter_t iter_ah;
-
-    /* dereference all AH in current iface */
-    for (iter_ah = kh_begin(&self->ah_hash); iter_ah != kh_end(&self->ah_hash); iter_ah++) {
-        if (kh_exist(&self->ah_hash, iter_ah)) {
-            iter = kh_get(uct_ib_ah_attr, &self->ah_attr_hash->hash,
-                          kh_value(&self->ah_hash, iter_ah));
-            ucs_assert(iter != kh_end(&self->ah_attr_hash->hash));
-            ucs_assert(kh_value(&self->ah_attr_hash->hash, iter).refcount > 0);
-
-            kh_value(&self->ah_attr_hash->hash, iter).refcount--;
-            if (kh_value(&self->ah_attr_hash->hash, iter).refcount == 0) {
-                /* in case if no more references - destroy AH */
-                ibv_destroy_ah(kh_value(&self->ah_attr_hash->hash, iter).ah);
-                kh_del(uct_ib_ah_attr, &self->ah_attr_hash->hash, iter);
-            }
-        }
-    }
-
-    kh_destroy_inplace(uct_ib_ah, &self->ah_hash);
-
-    uct_worker_tl_data_put(self->ah_attr_hash, uct_ib_iface_ah_cleanup);
 
     ret = ibv_destroy_cq(self->cq[UCT_IB_DIR_RX]);
     if (ret != 0) {

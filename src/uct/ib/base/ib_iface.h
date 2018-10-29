@@ -14,7 +14,6 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.inl>
-#include <ucs/datastruct/khash.h>
 #include <ucs/sys/math.h>
 
 #define UCT_IB_MAX_IOV                     8UL
@@ -156,8 +155,6 @@ typedef struct uct_ib_iface_res_domain {
 } uct_ib_iface_res_domain_t;
 
 
-KHASH_TYPE(uct_ib_ah, struct ibv_ah*, struct uct_ib_ah_attr);
-
 struct uct_ib_iface {
     uct_base_iface_t        super;
 
@@ -191,9 +188,6 @@ struct uct_ib_iface {
         int                 enable_res_domain;   /* Disable multiple resource domains */
         size_t              max_iov;             /* Maximum buffers in IOV array */
     } config;
-
-    khash_t(uct_ib_ah)      ah_hash;
-    struct uct_ib_ah_hash   *ah_attr_hash;
 
     uct_ib_iface_ops_t      *ops;
 };
