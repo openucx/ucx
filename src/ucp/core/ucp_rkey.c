@@ -72,6 +72,7 @@ ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
     p += sizeof(ucp_md_map_t);
 
     /* Write memory type */
+    UCS_STATIC_ASSERT(UCT_MD_MEM_TYPE_LAST <= 255);
     *((uint8_t*)p++) = mem_type;
 
     /* Write both size and rkey_buffer for each UCT rkey */
