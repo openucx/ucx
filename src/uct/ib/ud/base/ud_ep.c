@@ -692,7 +692,6 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         goto out;
     }
 
-        uct_ud_iface_raise_pending_async_ev(iface);
     if (ucs_unlikely(is_async &&
                      !(iface->super.super.am[am_id].flags & UCT_CB_FLAG_ASYNC))) {
         skb->u.am.len = byte_len - sizeof(*neth);
@@ -702,6 +701,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
          * initiates sends from any endpoint created on the iface.
          * This flag would be cleared after all incoming messages
          * are processed. */
+        uct_ud_iface_raise_pending_async_ev(iface);
 
         uct_ib_iface_invoke_am_desc(&iface->super, am_id, neth + 1,
                                     byte_len - sizeof(*neth), &skb->super);
@@ -1153,6 +1153,7 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
         /* we still didn't process the current pending request because of hi-prio
          * control messages, so cannot stop sending yet. If we stop, not all
          * resources will be exhausted and out-of-order with pending can occur.
+         * (pending control ops may be cleared by uct_ud_ep_do_pending_ctl)
          */
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     }
