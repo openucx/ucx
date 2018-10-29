@@ -13,7 +13,10 @@
 #include <inttypes.h>
 
 
-static ucp_md_map_t ucp_mem_dummy_buffer = 0;
+static struct {
+    ucp_md_map_t md_map;
+    uint8_t mem_type;
+} UCS_S_PACKED ucp_mem_dummy_buffer = {0, 0};
 
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map)
