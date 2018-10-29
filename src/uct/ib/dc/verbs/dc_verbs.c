@@ -651,7 +651,7 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
     uct_dc_fc_sender_data_t sender = {
         .ep               = (uintptr_t)dc_ep,
         .global.gid       = ib_iface->gid,
-        .global.is_global = ib_iface->is_global};
+        .global.is_global = ib_iface->is_global_addr};
 
     ucs_assert(sizeof(*hdr) + sizeof(sender) <=
                iface->verbs_common.config.max_inline);

@@ -54,8 +54,13 @@ static ucs_status_t uct_cm_ep_fill_path_rec(uct_cm_ep_t *ep,
     path->sgid                      = iface->super.gid;
     path->dlid                      = htons(ep->dlid);
     path->slid                      = htons(uct_ib_iface_port_attr(&iface->super)->lid);
-    path->dgid                      = ep->dgid;
-    path->hop_limit                 = iface->super.config.hop_limit;
+    if (iface->super.is_global_addr) {
+        path->dgid                  = ep->dgid;
+        path->hop_limit             = iface->super.config.hop_limit;
+    } else {
+        memset(&path->dgid, 0, sizeof(path->dgid));
+        path->hop_limit             = 0;
+    }
     path->raw_traffic               = 0; /* IB traffic */
     path->flow_label                = 0;
     path->traffic_class             = iface->super.config.traffic_class;

@@ -169,7 +169,7 @@ struct uct_ib_iface {
     unsigned                path_bits_count;
     uint16_t                pkey_index;
     uint16_t                pkey_value;
-    uint8_t                 is_global;
+    uint8_t                 is_global_addr;
     uint8_t                 addr_size;
     union ibv_gid           gid;
     uct_ib_iface_res_domain_t *res_domain;
@@ -492,8 +492,9 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
     ah_attr->port_num          = iface->config.port_num;
     ah_attr->grh.traffic_class = iface->config.traffic_class;
 
-    if (iface->is_global ||
-        iface->gid.global.subnet_prefix != gid->global.subnet_prefix) {
+    if (iface->is_global_addr ||
+        (iface->gid.global.subnet_prefix != gid->global.subnet_prefix)) {
+        ucs_assert(gid->global.interface_id != 0);
         ah_attr->is_global      = 1;
         ah_attr->grh.dgid       = *gid;
         ah_attr->grh.sgid_index = iface->config.gid_index;

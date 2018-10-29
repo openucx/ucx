@@ -213,12 +213,12 @@ out:
         uct_ib_address_unpack(ib_addr, &lid_out, &gid_out);
 
         if (IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface))) {
-            EXPECT_TRUE(iface->is_global);
+            EXPECT_TRUE(iface->is_global_addr);
         } else {
             EXPECT_EQ(lid_in, lid_out);
         }
 
-        if (iface->is_global) {
+        if (iface->is_global_addr) {
             EXPECT_EQ(gid_in.global.subnet_prefix, gid_out.global.subnet_prefix);
             EXPECT_EQ(gid_in.global.interface_id,  gid_out.global.interface_id);
         }
