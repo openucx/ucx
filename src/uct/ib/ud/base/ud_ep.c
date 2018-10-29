@@ -1119,12 +1119,9 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
 
     /* user pending can be send iff
      * - not in async progress
-     * - there are only low priority ctl pending or not ctl at all
+     * - there are no high priority pending control messages
      */
-    if (!in_async_progress &&
-        (uct_ud_ep_ctl_op_check_ex(ep, UCT_UD_EP_OP_CTL_LOW_PRIO) ||
-        !uct_ud_ep_ctl_op_isany(ep))) {
-
+    if (!in_async_progress && !uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CTL_HI_PRIO)) {
         uct_pending_req_t *req;
         ucs_status_t status;
 
@@ -1147,9 +1144,19 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
         }
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
+
     /* try to send ctl messages */
     uct_ud_ep_do_pending_ctl(ep, iface);
-    return uct_ud_ep_ctl_op_next(ep);
+    if (in_async_progress) {
+        return uct_ud_ep_ctl_op_next(ep);
+    } else {
+        /* we still didn't process the current pending request because of hi-prio
+         * control messages, so cannot stop sending yet. If we stop, not all
+         * resources will be exhausted and out-of-order with pending can occur.
+         * (pending control ops may be cleared by uct_ud_ep_do_pending_ctl)
+         */
+        return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
+    }
 }
 
 ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req,
@@ -1185,6 +1192,8 @@ add_req:
     ucs_arbiter_group_push_elem(&ep->tx.pending.group,
                                 (ucs_arbiter_elem_t *)req->priv);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
+    ucs_trace_data("ud ep %p: added pending req %p tx_psn %d acked_psn %d cwnd %d",
+                   ep, req, ep->tx.psn, ep->tx.acked_psn, ep->ca.cwnd);
 
     uct_ud_leave(iface);
     return UCS_OK;
