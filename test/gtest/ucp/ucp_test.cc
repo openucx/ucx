@@ -31,7 +31,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
 const ucp_datatype_t ucp_test::DATATYPE     = ucp_dt_make_contig(1);
 const ucp_datatype_t ucp_test::DATATYPE_IOV = ucp_dt_make_iov();
 
-ucp_test::ucp_test() : m_failed(false) {
+ucp_test::ucp_test() : m_err_handler_count(0) {
     ucs_status_t status;
     status = ucp_config_read(NULL, NULL, &m_ucp_config);
     ASSERT_UCS_OK(status);
@@ -159,14 +159,14 @@ void ucp_test::flush_worker(const entity &e, int worker_index)
 
 void ucp_test::disconnect(const entity& entity) {
     for (int i = 0; i < entity.get_num_workers(); i++) {
-        if (!is_failed()) {
+        if (m_err_handler_count == 0) {
             flush_worker(entity, i);
         }
 
         for (int j = 0; j < entity.get_num_eps(i); j++) {
-            void *dreq = entity.disconnect_nb(i, j, is_failed() ?
-                                                    UCP_EP_CLOSE_MODE_FORCE :
-                                                    UCP_EP_CLOSE_MODE_FLUSH);
+            void *dreq = entity.disconnect_nb(i, j, m_err_handler_count == 0 ?
+                                                    UCP_EP_CLOSE_MODE_FLUSH :
+                                                    UCP_EP_CLOSE_MODE_FORCE);
             if (!UCS_PTR_IS_PTR(dreq)) {
                 ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
             }

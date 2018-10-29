@@ -184,12 +184,9 @@ protected:
     void set_ucp_config(ucp_config_t *config);
     int max_connections();
 
-    void set_failed() {
-        m_failed = true;
-    }
-
-    bool is_failed() const {
-        return m_failed;
+    static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
+        ucp_test *self = reinterpret_cast<ucp_test*>(arg);
+        self->m_err_handler_count++;
     }
 
     template <typename T>
@@ -208,7 +205,7 @@ private:
                                  const ucp_test_param& test_param);
 
 protected:
-    bool                        m_failed;
+    volatile int m_err_handler_count;
     static const ucp_datatype_t DATATYPE;
     static const ucp_datatype_t DATATYPE_IOV;
 };

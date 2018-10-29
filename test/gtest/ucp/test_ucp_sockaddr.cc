@@ -279,11 +279,11 @@ public:
     {
         ucs_time_t time_limit = ucs_get_time() + ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
 
-        while ((receiver().get_num_eps() == 0) && (err_handler_count == 0) &&
+        while ((receiver().get_num_eps() == 0) && (m_err_handler_count == 0) &&
                (ucs_get_time() < time_limit)) {
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
-        return (err_handler_count == 0) && (receiver().get_num_eps() > 0);
+        return (m_err_handler_count == 0) && (receiver().get_num_eps() > 0);
     }
 
     void wait_for_reject(entity &e, bool wakeup)
@@ -359,7 +359,6 @@ public:
     {
         struct sockaddr_in connect_addr;
         get_listen_addr(&connect_addr);
-        err_handler_count = 0;
 
         UCS_TEST_MESSAGE << "Testing "
                          << ucs::sockaddr_to_str(
@@ -374,7 +373,6 @@ public:
     {
         struct sockaddr_in connect_addr;
         get_listen_addr(&connect_addr);
-        err_handler_count = 0;
 
         UCS_TEST_MESSAGE << "Testing "
                          << ucs::sockaddr_to_str(
@@ -386,7 +384,7 @@ public:
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
         test_ucp_sockaddr *self = reinterpret_cast<test_ucp_sockaddr*>(arg);
-        self->err_handler_count++;
+        ucp_test::err_handler_cb(static_cast<ucp_test *>(self), ep, status);
 
         if (status == UCS_ERR_REJECTED) {
             entity *e = self->get_entity_by_ep(ep);
@@ -400,9 +398,7 @@ public:
          * and from transports where the worker address is too long but ud/ud_x
          * are not present, or ud/ud_x are present but their addresses are too
          * long as well */
-        if (status == UCS_ERR_UNREACHABLE) {
-            self->set_failed();
-        } else {
+        if (status != UCS_ERR_UNREACHABLE) {
             UCS_TEST_ABORT("Error: " << ucs_status_string(status));
         }
     }
@@ -415,8 +411,6 @@ protected:
         }
         return ucp_test_base::entity::LISTEN_CB_EP;
     }
-
-    volatile int err_handler_count;
 };
 
 UCS_TEST_P(test_ucp_sockaddr, listen) {
@@ -428,7 +422,6 @@ UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
     struct sockaddr_in connect_addr, inaddr_any_listen_addr;
     get_listen_addr(&connect_addr);
     inaddr_any_addr(&inaddr_any_listen_addr, connect_addr.sin_port);
-    err_handler_count = 0;
 
     UCS_TEST_MESSAGE << "Testing "
                      << ucs::sockaddr_to_str(
@@ -449,7 +442,6 @@ UCS_TEST_P(test_ucp_sockaddr, reject) {
 UCS_TEST_P(test_ucp_sockaddr, err_handle) {
 
     struct sockaddr_in listen_addr;
-    err_handler_count = 0;
 
     get_listen_addr(&listen_addr);
 
@@ -467,10 +459,10 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
         scoped_log_handler slh(wrap_errors_logger);
         client_ep_connect((struct sockaddr*)&listen_addr);
         /* allow for the unreachable event to arrive before restoring errors */
-        wait_for_flag(&err_handler_count);
+        wait_for_flag(&m_err_handler_count);
     }
 
-    EXPECT_EQ(1, err_handler_count);
+    EXPECT_EQ(1, m_err_handler_count);
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
@@ -521,7 +513,6 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
      * there is a lane for ucp-wireup (an am_lane should be created and used) */
     struct sockaddr_in connect_addr;
     get_listen_addr(&connect_addr);
-    err_handler_count = 0;
 
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str((const struct sockaddr*)&connect_addr);
 
@@ -534,11 +525,11 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
 
         /* allow the err_handler callback to be invoked if needed */
         if (!wait_for_server_ep(false)) {
-            EXPECT_EQ(1, err_handler_count);
+            EXPECT_EQ(1, m_err_handler_count);
             UCS_TEST_SKIP_R("cannot connect to server");
         }
 
-        EXPECT_EQ(0, err_handler_count);
+        EXPECT_EQ(0, m_err_handler_count);
         /* even if server EP is created, in case of long address, wireup will be
          * done later, need to communicate */
         send_recv(sender(), receiver(), (GetParam().variant == CONN_REQ_STREAM) ?
