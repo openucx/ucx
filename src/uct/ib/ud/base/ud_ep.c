@@ -1055,6 +1055,7 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
     uct_ud_iface_t *iface       = ucs_container_of(arbiter, uct_ud_iface_t,
                                                    tx.pending_q);
     uintptr_t in_async_progress = (uintptr_t)arg;
+    int allow_callback;
     int async_before_pending;
     ucs_status_t status;
 
@@ -1104,8 +1105,9 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
      * - not in async progress
      * - there are only low priority ctl pending or not ctl at all
      */
-    if ((!in_async_progress || (uct_ud_pending_req_priv(req)->flags &
-                                UCT_CB_FLAG_ASYNC)) &&
+    allow_callback = !in_async_progress ||
+                     (uct_ud_pending_req_priv(req)->flags & UCT_CB_FLAG_ASYNC);
+    if (allow_callback &&
         (uct_ud_ep_ctl_op_check_ex(ep, UCT_UD_EP_OP_CTL_LOW_PRIO) ||
          !uct_ud_ep_ctl_op_isany(ep))) {
 
@@ -1153,10 +1155,6 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req,
      * avoid a deadlock.
      */
     if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
-        goto add_req;
-    }
-
-    if (ucs_unlikely(flags & UCT_CB_FLAG_ASYNC)) {
         goto add_req;
     }
 
