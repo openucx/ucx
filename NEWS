@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.4.0-rc2 (October 23, 2018)
+## 1.4.0 (October 30, 2018)
 
 Features:
 - Improved support for installation with latest ROCm
