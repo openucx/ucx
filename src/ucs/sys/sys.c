@@ -506,14 +506,82 @@ size_t ucs_get_shmmax()
     return size;
 }
 
-ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
-                            int flags, int *shmid UCS_MEMTRACK_ARG)
+static void ucs_sysv_shmget_format_error(size_t alloc_size, int flags,
+                                         const char *alloc_name, int sys_errno,
+                                         char *buf, size_t max)
 {
-    struct shminfo shminfo, *shminfo_ptr;
+    unsigned long new_used_ids;
+    unsigned long new_shm_tot;
+    struct shm_info shm_info;
+    struct shminfo shminfo;
+    int error_detected;
+    char *p, *endp;
+    int ret;
+
+    buf[0]         = '\0';
+    p              = buf;
+    endp           = p + max;
+    error_detected = 0;
+
+    snprintf(p, endp - p, "shmget(size=%zu flags=0x%x) for %s failed: %s",
+             alloc_size, flags, alloc_name, strerror(sys_errno));
+    p += strlen(p);
+
+    ret = shmctl(0, IPC_INFO, (struct shmid_ds *)&shminfo);
+    if (ret < 0) {
+        goto out;
+    }
+
+    ret = shmctl(0, SHM_INFO, (struct shmid_ds *)&shm_info);
+    if (ret < 0) {
+        goto out;
+    }
+
+    if ((sys_errno == EINVAL) && (alloc_size > shminfo.shmmax)) {
+        snprintf(p, endp - p,
+                 ", allocation size exceeds /proc/sys/kernel/shmmax (=%zu)",
+                 shminfo.shmmax);
+        p += strlen(p);
+        error_detected = 1;
+    }
+
+    new_used_ids = shm_info.used_ids;
+    if ((sys_errno == ENOSPC) && (new_used_ids > shminfo.shmmni)) {
+        snprintf(p, endp - p,
+                 ", total number of segments in the system (%lu) would exceed the"
+                 " limit in /proc/sys/kernel/shmmni (=%lu)",
+                 new_used_ids, shminfo.shmmni);
+        p += strlen(p);
+        error_detected = 1;
+    }
+
+    new_shm_tot = shm_info.shm_tot +
+                  (alloc_size + ucs_get_page_size() - 1) / ucs_get_page_size();
+    if ((sys_errno == ENOSPC) && (new_shm_tot > shminfo.shmall)) {
+        snprintf(p, endp - p,
+                 ", total shared memory pages in the system (%lu) would exceed the"
+                 " limit in /proc/sys/kernel/shmall (=%lu)",
+                 new_shm_tot, shminfo.shmall);
+        p += strlen(p);
+        error_detected = 1;
+    }
+
+out:
+    if (!error_detected) {
+        snprintf(p, endp - p, ", please check shared memory limits by 'ipcs -l'");
+        p += strlen(p);
+    }
+}
+
+ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
+                            int flags, const char *alloc_name, int *shmid)
+{
+    char error_string[256];
     ssize_t huge_page_size;
     size_t alloc_size;
+    int sys_errno;
     void *ptr;
-    int ret, err;
+    int ret;
 
     if (flags & SHM_HUGETLB) {
         huge_page_size = ucs_get_huge_page_size();
@@ -536,32 +604,22 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
     flags |= IPC_CREAT | SHM_R | SHM_W;
     *shmid = shmget(IPC_PRIVATE, alloc_size, flags);
     if (*shmid < 0) {
-        switch (errno) {
-        case ENFILE:
+        sys_errno = errno;
+        ucs_sysv_shmget_format_error(alloc_size, flags, alloc_name, sys_errno,
+                                     error_string, sizeof(error_string));
+        switch (sys_errno) {
         case ENOMEM:
+            if (!(flags & SHM_HUGETLB)) {
+                ucs_error("%s", error_string);
+            }
+            return UCS_ERR_NO_MEMORY;
         case ENOSPC:
         case EPERM:
-            if (!(flags & SHM_HUGETLB)) {
-                err = errno;
-                shminfo_ptr = &shminfo;
-                if ((shmctl(0, IPC_INFO, (struct shmid_ds *) shminfo_ptr)) > -1) {
-                    ucs_error("shmget failed: %s. (size=%zu). The max number of shared memory segments in the system is = %ld. "
-                              "Please try to increase this value through /proc/sys/kernel/shmmni",
-                              strerror(err), alloc_size, shminfo.shmmni);
-                }
-            }
-
-            return UCS_ERR_NO_MEMORY;
         case EINVAL:
-            ucs_error("A new segment was to be created and size < SHMMIN or size > SHMMAX, "
-                      "or no new segment was to be created. A segment with given key existed, "
-                      "but size is greater than the size of that segment. "
-                      "Please check shared memory limits by 'ipcs -l'.");
+            ucs_error("%s", error_string);
             return UCS_ERR_NO_MEMORY;
         default:
-            ucs_error("shmget(size=%zu, flags=0x%x) returned unexpected error: %m. "
-                      "Please check shared memory limits by 'ipcs -l'.",
-                      alloc_size, flags);
+            ucs_error("%s", error_string);
             return UCS_ERR_SHMEM_SEGMENT;
         }
     }

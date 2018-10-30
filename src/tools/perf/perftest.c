@@ -77,7 +77,7 @@ struct perftest_context {
     sock_rte_group_t             sock_rte_group;
 };
 
-#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oSCqMr:T:d:x:A:BUm:"
+#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oSCqM:r:T:d:x:A:BUm:"
 
 
 test_type_t tests[] = {
@@ -460,8 +460,8 @@ static ucs_status_t parse_message_sizes_params(const char *optarg,
     }
     ++token_num;
 
-    free(params->msg_size_list); /* free previously allocated buffer */
-    params->msg_size_list = malloc(sizeof(*params->msg_size_list) * token_num);
+    params->msg_size_list = realloc(params->msg_size_list,
+                                    sizeof(*params->msg_size_list) * token_num);
     if (NULL == params->msg_size_list) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -487,6 +487,7 @@ static ucs_status_t parse_message_sizes_params(const char *optarg,
 
 static void init_test_params(ucx_perf_params_t *params)
 {
+    memset(params, 0, sizeof(*params));
     params->api             = UCX_PERF_API_LAST;
     params->command         = UCX_PERF_CMD_LAST;
     params->test_type       = UCX_PERF_TEST_TYPE_LAST;
@@ -724,7 +725,7 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized
             break;
         case 'b':
             if (ctx->num_batch_files < MAX_BATCH_FILES) {
-                ctx->batch_files[ctx->num_batch_files++] = strdup(optarg);
+                ctx->batch_files[ctx->num_batch_files++] = optarg;
             }
             break;
         case 'N':
@@ -1338,6 +1339,16 @@ static ucs_status_t check_system(struct perftest_context *ctx)
     return UCS_OK;
 }
 
+static void clone_params(ucx_perf_params_t *dest, const ucx_perf_params_t *src)
+{
+    size_t msg_size_list_size;
+
+    *dest               = *src;
+    msg_size_list_size  = dest->msg_size_cnt * sizeof(*dest->msg_size_list);
+    dest->msg_size_list = malloc(msg_size_list_size);
+    memcpy(dest->msg_size_list, src->msg_size_list, msg_size_list_size);
+}
+
 static ucs_status_t run_test_recurs(struct perftest_context *ctx,
                                     ucx_perf_params_t *parent_params,
                                     unsigned depth)
@@ -1361,20 +1372,19 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
         return UCS_ERR_IO_ERROR;
     }
 
-    params   = *parent_params;
+    clone_params(&params, parent_params);
     line_num = 0;
     while ((status = read_batch_file(batch_file, ctx->batch_files[depth],
                                      &line_num, &params,
                                      &ctx->test_names[depth])) == UCS_OK) {
         status = run_test_recurs(ctx, &params, depth + 1);
+        free(params.msg_size_list);
         free(ctx->test_names[depth]);
-        if ((NULL == parent_params->msg_size_list) &&
-            (NULL != params.msg_size_list)) {
-            free(params.msg_size_list);
-            params.msg_size_list = NULL;
-        }
-        params = *parent_params;
+        ctx->test_names[depth] = NULL;
+
+        clone_params(&params, parent_params);
     }
+    free(params.msg_size_list);
 
     fclose(batch_file);
     return UCS_OK;

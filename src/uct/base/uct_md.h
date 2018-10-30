@@ -130,7 +130,8 @@ struct uct_md_ops {
     ucs_status_t (*query)(uct_md_h md, uct_md_attr_t *md_attr);
 
     ucs_status_t (*mem_alloc)(uct_md_h md, size_t *length_p, void **address_p,
-                              unsigned flags, uct_mem_h *memh_p UCS_MEMTRACK_ARG);
+                              unsigned flags, const char *alloc_name,
+                              uct_mem_h *memh_p);
 
     ucs_status_t (*mem_free)(uct_md_h md, uct_mem_h memh);
     ucs_status_t (*mem_advise)(uct_md_h md, uct_mem_h memh, void *addr,

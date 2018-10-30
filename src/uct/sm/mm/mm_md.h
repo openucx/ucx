@@ -49,8 +49,8 @@ typedef struct uct_mm_mapper_ops {
     ucs_status_t (*dereg)(uct_mm_id_t mm_id);
 
     ucs_status_t (*alloc)(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
-                          unsigned flags, void **address_p, uct_mm_id_t *mmid_p,
-                          const char **path_p UCS_MEMTRACK_ARG);
+                          unsigned flags, const char *alloc_name, void **address_p,
+                          uct_mm_id_t *mmid_p, const char **path_p);
 
     ucs_status_t (*attach)(uct_mm_id_t mmid, size_t length,
                            void *remote_address, void **address, uint64_t *cookie,
@@ -142,7 +142,8 @@ typedef struct uct_mm_md {
 
 
 ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              unsigned flags, uct_mem_h *memh_p UCS_MEMTRACK_ARG);
+                              unsigned flags, const char *alloc_name,
+                              uct_mem_h *memh_p);
 
 ucs_status_t uct_mm_mem_free(uct_md_h md, uct_mem_h memh);
 

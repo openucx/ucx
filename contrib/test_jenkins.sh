@@ -220,7 +220,7 @@ build_release_pkg() {
 	$MAKE distcheck
 
 	# Show UCX info
-	./src/tools/info/ucx_info -f -c -v -y -d -b -p -w -e -uart
+	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart
 
 	if [ -f /etc/redhat-release -o -f /etc/fedora-release ]; then
 		rpm_based=yes
@@ -696,8 +696,9 @@ test_memtrack() {
 }
 
 test_unused_env_var() {
+	# We must create a UCP worker to get the warning about unused variables
 	echo "==== Running ucx_info env vars test ===="
-	UCX_TLS=dc ./src/tools/info/ucx_info -v | grep "unused" | grep -q "UCX_TLS"
+	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q "UCX_IB_PORTS"
 }
 
 test_malloc_hook() {
@@ -752,9 +753,12 @@ run_coverity() {
 
 #
 # Run the test suite (gtest)
+# Arguments: <compiler-name> [configure-flags]
 #
 run_gtest() {
-	../contrib/configure-devel --prefix=$ucx_inst
+	compiler_name=$1
+	shift
+	../contrib/configure-devel --prefix=$ucx_inst $@
 	$MAKE clean
 	$MAKE
 
@@ -779,11 +783,11 @@ run_gtest() {
 
 	mkdir -p $GTEST_REPORT_DIR
 
-	echo "==== Running unit tests ===="
+	echo "==== Running unit tests, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT make -C test/gtest test
 	(cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
-	echo "==== Running malloc hooks mallopt() test ===="
+	echo "==== Running malloc hooks mallopt() test, $compiler_name compiler ===="
 	# gtest returns with non zero exit code if there were no
 	# tests to run. As a workaround run a single test on every
 	# shard.
@@ -797,7 +801,7 @@ run_gtest() {
 		make -C test/gtest test
 	(cd test/gtest && rename .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
-	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384 ===="
+	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT \
 		env MALLOC_MMAP_THRESHOLD_=16384 \
 		GTEST_SHARD_INDEX=0 \
@@ -808,7 +812,7 @@ run_gtest() {
 
 	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]]
 	then
-		echo "==== Running valgrind tests ===="
+		echo "==== Running valgrind tests, $compiler_name compiler ===="
 
 		# Load newer valgrind if naative is older than 3.10
 		if ! (echo "valgrind-3.10.0"; valgrind --version) | sort -CV
@@ -821,11 +825,28 @@ run_gtest() {
 		(cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 		module unload tools/valgrind-latest
 	else
-		echo "==== Not running valgrind tests ===="
+		echo "==== Not running valgrind tests with $compiler_name compiler ===="
 		echo "1..1"                                          > vg_skipped.tap
 		echo "ok 1 - # SKIP because running on $(uname -m)" >> vg_skipped.tap
 	fi
 }
+
+run_gtest_default() {
+	run_gtest "default"
+}
+
+run_gtest_armclang() {
+	if module_load arm-compiler/arm-hpc-compiler && armclang -v
+	then
+		run_gtest "armclang" CC=armclang CXX=armclang++
+	else
+		echo "==== Not running with armclang compiler ===="
+		echo "1..1"                                          > armclang_skipped.tap
+		echo "ok 1 - # SKIP because armclang not found"     >> armclang_skipped.tap
+	fi
+	module unload arm-compiler/arm-hpc-compiler
+}
+
 
 #
 # Run the test suite (gtest) in release configuration
@@ -898,7 +919,8 @@ run_tests() {
 	do_distributed_task 1 3 test_malloc_hook
 
 	# all are running gtest
-	run_gtest
+	run_gtest_default
+	run_gtest_armclang
 
 	do_distributed_task 3 4 run_coverity
 	do_distributed_task 0 4 run_gtest_release

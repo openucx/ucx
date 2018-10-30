@@ -161,11 +161,17 @@ uct_ud_am_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
         return UCS_ERR_NO_RESOURCE;
     }
 
+    /* either we are executing pending operations, or there are no any pending
+     * elements, or the only pending element is for sending control messages
+     * (we don't care about reordering with respect to control messages)
+     */
     ucs_assertv((ep->flags & UCT_UD_EP_FLAG_IN_PENDING) ||
-                ucs_arbiter_group_is_empty(&ep->tx.pending.group),
-                "out-of-order send detected for ep %p am %d ep_pending %d arb_empty %d",
+                ucs_arbiter_group_is_empty(&ep->tx.pending.group) ||
+                ucs_arbiter_elem_is_only(&ep->tx.pending.group, &ep->tx.pending.elem),
+                "out-of-order send detected for ep %p am %d ep_pending %d arbtail %p arbelem %p",
                 ep, id, (ep->flags & UCT_UD_EP_FLAG_IN_PENDING),
-                ucs_arbiter_group_is_empty(&ep->tx.pending.group));
+                ep->tx.pending.group.tail,
+                &ep->tx.pending.elem);
     uct_ud_am_set_neth(skb->neth, ep, id);
 
     *skb_p = skb;

@@ -108,6 +108,7 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
     ep->resend.pos       = ucs_queue_iter_begin(&ep->tx.window);
     ep->resend.psn       = ep->tx.psn;
     ep->resend.max_psn   = ep->tx.acked_psn;
+    ep->rx_creq_count    = 0;
 
     ep->rx.acked_psn = UCT_UD_INITIAL_PSN - 1;
     ucs_frag_list_init(ep->tx.psn-1, &ep->rx.ooo_pkts, 0 /*TODO: ooo support */
@@ -527,14 +528,17 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
         }
     }
 
+    ++ep->rx_creq_count;
+
     ucs_assert_always(ctl->conn_req.conn_id == ep->conn_id);
     ucs_assert_always(uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id) == ep->dest_ep_id);
     /* creq must always have same psn */
     ucs_assertv_always(ep->rx.ooo_pkts.head_sn == neth->psn,
                        "iface=%p ep=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
-                       "neth_psn=%u ep_flags=0x%x",
+                       "neth_psn=%u ep_flags=0x%x ctl_ops=0x%x rx_creq_count=%d",
                        iface, ep, ep->conn_id, ep->ep_id, ep->dest_ep_id,
-                       ep->rx.ooo_pkts.head_sn, neth->psn, ep->flags);
+                       ep->rx.ooo_pkts.head_sn, neth->psn, ep->flags,
+                       ep->tx.pending.ops, ep->rx_creq_count);
     /* scedule connection reply op */
     UCT_UD_EP_HOOK_CALL_RX(ep, neth, sizeof(*neth) + sizeof(*ctl));
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ)) {
@@ -576,6 +580,15 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
 
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID);
     ucs_assert_always(ep->ep_id != UCT_UD_EP_NULL_ID);
+
+    /* CREQ should not be sent if CREP for the counter CREQ is scheduled
+     * (or sent already) */
+    ucs_assertv_always(!uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREP) &&
+                       !(ep->flags & UCT_UD_EP_FLAG_CREP_SENT),
+                       "iface=%p ep=%p conn_id=%d rx_psn=%u ep_flags=0x%x "
+                       "ctl_ops=0x%x rx_creq_count=%d",
+                       iface, ep, ep->conn_id, ep->rx.ooo_pkts.head_sn,
+                       ep->flags, ep->tx.pending.ops, ep->rx_creq_count);
 
     skb = uct_ud_iface_get_tx_skb(iface, ep);
     if (!skb) {
@@ -865,6 +878,15 @@ static uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
     ucs_assert_always(ep->dest_ep_id != UCT_UD_EP_NULL_ID);
     ucs_assert_always(ep->ep_id != UCT_UD_EP_NULL_ID);
 
+    /* Check that CREQ is neither sheduled nor waiting for CREP ack */
+    ucs_assertv_always(!uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ) &&
+                       ucs_queue_is_empty(&ep->tx.window),
+                       "iface=%p ep=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
+                       "ep_flags=0x%x ctl_ops=0x%x rx_creq_count=%d",
+                       iface, ep, ep->conn_id, ep->ep_id, ep->dest_ep_id,
+                       ep->rx.ooo_pkts.head_sn, ep->flags, ep->tx.pending.ops,
+                       ep->rx_creq_count);
+
     skb = uct_ud_iface_get_tx_skb(iface, ep);
     if (!skb) {
         return NULL;
@@ -1103,14 +1125,11 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
 
     /* user pending can be send iff
      * - not in async progress
-     * - there are only low priority ctl pending or not ctl at all
+     * - there are no high priority pending control messages
      */
     allow_callback = !in_async_progress ||
                      (uct_ud_pending_req_priv(req)->flags & UCT_CB_FLAG_ASYNC);
-    if (allow_callback &&
-        (uct_ud_ep_ctl_op_check_ex(ep, UCT_UD_EP_OP_CTL_LOW_PRIO) ||
-         !uct_ud_ep_ctl_op_isany(ep))) {
-
+    if (allow_callback && !uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CTL_HI_PRIO)) {
         ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_IN_PENDING));
         ep->flags |= UCT_UD_EP_FLAG_IN_PENDING;
         async_before_pending = iface->tx.async_before_pending;
@@ -1134,9 +1153,19 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
         }
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
+
     /* try to send ctl messages */
     uct_ud_ep_do_pending_ctl(ep, iface);
-    return uct_ud_ep_ctl_op_next(ep);
+    if (in_async_progress) {
+        return uct_ud_ep_ctl_op_next(ep);
+    } else {
+        /* we still didn't process the current pending request because of hi-prio
+         * control messages, so cannot stop sending yet. If we stop, not all
+         * resources will be exhausted and out-of-order with pending can occur.
+         * (pending control ops may be cleared by uct_ud_ep_do_pending_ctl)
+         */
+        return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
+    }
 }
 
 ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req,
@@ -1173,6 +1202,8 @@ add_req:
     uct_ud_pending_req_priv(req)->flags = flags;
     uct_pending_req_arb_group_push(&ep->tx.pending.group, req);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
+    ucs_trace_data("ud ep %p: added pending req %p tx_psn %d acked_psn %d cwnd %d",
+                   ep, req, ep->tx.psn, ep->tx.acked_psn, ep->ca.cwnd);
 
     uct_ud_leave(iface);
     return UCS_OK;

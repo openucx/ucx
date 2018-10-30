@@ -23,7 +23,8 @@ ucs_config_field_t uct_mm_md_config_table[] = {
 };
 
 ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              unsigned flags, uct_mem_h *memh_p UCS_MEMTRACK_ARG)
+                              unsigned flags, const char *alloc_name,
+                              uct_mem_h *memh_p)
 {
     ucs_status_t status;
     uct_mm_seg_t *seg;
@@ -36,8 +37,8 @@ ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
 
 
     status = uct_mm_md_mapper_ops(md)->alloc(md, length_p, UCS_TRY, flags,
-                                             address_p, &seg->mmid, &seg->path
-                                             UCS_MEMTRACK_VAL);
+                                             alloc_name, address_p, &seg->mmid,
+                                             &seg->path);
     if (status != UCS_OK) {
         ucs_free(seg);
         return status;

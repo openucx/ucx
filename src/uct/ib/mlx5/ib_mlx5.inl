@@ -13,6 +13,12 @@ uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned index)
     return cq->cq_buf + ((index & (cq->cq_length - 1)) << cq->cqe_size_log);
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_ib_mlx5_cqe_is_hw_owned(uint8_t op_own, unsigned index, unsigned mask)
+{
+    return (op_own & MLX5_CQE_OWNER_MASK) == !(index & mask);
+}
+
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 {
@@ -24,13 +30,12 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
     cqe    = uct_ib_mlx5_get_cqe(cq, index);
     op_own = cqe->op_own;
 
-    if (ucs_unlikely((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length))) {
+    if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, index, cq->cq_length))) {
         return NULL;
-    } else if (ucs_unlikely(op_own & 0x80)) {
+    } else if (ucs_unlikely(op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK)) {
         UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
-        if (ucs_unlikely((op_own >> 4) != MLX5_CQE_INVALID)) {
-            uct_ib_mlx5_check_completion(iface, cq, cqe);
-        }
+        ucs_assert((op_own >> 4) != MLX5_CQE_INVALID);
+        uct_ib_mlx5_check_completion(iface, cq, cqe);
         return NULL; /* No CQE */
     }
 

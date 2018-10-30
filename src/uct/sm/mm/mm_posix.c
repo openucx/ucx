@@ -250,8 +250,8 @@ out:
 
 static ucs_status_t
 uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
-                unsigned md_map_flags, void **address_p, uct_mm_id_t *mmid_p,
-                const char **path_p UCS_MEMTRACK_ARG)
+                unsigned md_map_flags, const char *alloc_name, void **address_p,
+                uct_mm_id_t *mmid_p, const char **path_p)
 {
     ucs_status_t status;
     int shm_fd = -1;
@@ -370,7 +370,8 @@ uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
            goto out_ok;
        }
 
-       ucs_debug("mm failed to allocate %zu bytes without hugetlb %m", *length_p);
+       ucs_debug("mm failed to allocate %zu bytes without hugetlb for %s: %m",
+                 *length_p, alloc_name);
     }
 
 err_shm_unlink:

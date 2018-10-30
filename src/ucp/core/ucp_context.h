@@ -319,7 +319,11 @@ ucp_memory_type_detect_mds(ucp_context_h context, void *addr, size_t length,
 
     *mem_type_p = UCT_MD_MEM_TYPE_HOST;
 
-    if (ucs_likely(context->memtype_cache != NULL)) {
+    if (ucs_likely(!context->num_mem_type_mds)) {
+        return UCS_OK;
+    }
+
+    if (context->memtype_cache != NULL) {
         if (ucs_memtype_cache_lookup(context->memtype_cache, addr,
                                      length, &ucm_mem_type) == UCS_OK) {
             *mem_type_p = ucm_to_uct_mem_type_map[ucm_mem_type];

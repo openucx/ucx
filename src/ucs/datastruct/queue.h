@@ -196,7 +196,7 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
 #define ucs_queue_for_each(elem, queue, member) \
     for (*(queue)->ptail = NULL, \
              elem = ucs_container_of((queue)->head, typeof(*elem), member); \
-         &elem->member != NULL; \
+         (elem) != ucs_container_of(NULL, typeof(*elem), member); \
          elem = ucs_container_of(elem->member.next, typeof(*elem), member))
 
 /**

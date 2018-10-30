@@ -147,7 +147,7 @@ UCS_TEST_F(test_memtrack, sysv) {
     size = ALLOC_SIZE;
 
     status = ucs_sysv_alloc(&size, std::numeric_limits<size_t>::max(), &ptr, 0,
-                            &shmid, ALLOC_NAME);
+                            ALLOC_NAME, &shmid);
     ASSERT_UCS_OK(status);
     ASSERT_NE((void *)NULL, ptr);
 
