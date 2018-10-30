@@ -30,8 +30,7 @@ public:
     } tracer_ctx_t;
 
     uct_p2p_am_test() :
-        uct_p2p_test(sizeof(receive_desc_t)),
-        m_am_count(0),
+        uct_p2p_test(sizeof(receive_desc_t)), m_am_count(0), m_am_posted(0),
         m_keep_data(false)
     {
         m_send_tracer.count = 0;
