@@ -97,7 +97,6 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     }
 
     uct_ib_mlx5_get_av(ah, &mlx5_av);
-    uct_ib_iface_destroy_ah(iface, ah);
 
     /* copy MLX5_EXTENDED_UD_AV from the driver, if the flag is not present then
      * the device supports compact address vector. */

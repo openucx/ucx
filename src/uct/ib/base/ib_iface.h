@@ -347,12 +347,6 @@ ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
                                  uct_ib_dir_t dir,
                                  int solicited_only);
 
-static UCS_F_ALWAYS_INLINE
-void uct_ib_iface_destroy_ah(uct_ib_iface_t *iface, struct ibv_ah *ah_p)
-{
-    uct_ib_device_destroy_ah_cached(uct_ib_iface_device(iface), ah_p);
-}
-
 static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
 {
     return uct_ib_md_get_atomic_mr_id(ucs_derived_of(iface->super.md, uct_ib_md_t));
