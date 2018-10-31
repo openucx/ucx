@@ -19,18 +19,22 @@
 
 
 /* use both gid + lid data for key generarion (lid - ib based, gid - RoCE) */
-#define kh_ah_hash_func(_key) kh_int64_hash_func((_key).attr.grh.dgid.global.subnet_prefix ^ \
-                                                 (_key).attr.grh.dgid.global.interface_id  ^ \
-                                                 (_key).attr.dlid)
-#define kh_ah_hash_equal(_a, _b) (!memcmp(&(_a).attr, &(_b).attr, sizeof((_a).attr)) && \
-                                  ((_a).pd == (_b).pd))
+static UCS_F_ALWAYS_INLINE
+khint32_t uct_ib_kh_ah_hash_func(struct ibv_ah_attr attr)
+{
+    return kh_int64_hash_func(attr.grh.dgid.global.subnet_prefix ^
+                              attr.grh.dgid.global.interface_id  ^
+                              attr.dlid);
+}
 
-typedef struct uct_ib_ah_attr {
-    struct ibv_ah_attr   attr;
-    struct ibv_pd        *pd;
-} uct_ib_ah_attr_t;
+static UCS_F_ALWAYS_INLINE
+int uct_ib_kh_ah_hash_equal(struct ibv_ah_attr a, struct ibv_ah_attr b)
+{
+    return !memcmp(&a, &b, sizeof(a));
+}
 
-KHASH_IMPL(uct_ib_ah, uct_ib_ah_attr_t, struct ibv_ah*, 1, kh_ah_hash_func, kh_ah_hash_equal)
+KHASH_IMPL(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*, 1,
+           uct_ib_kh_ah_hash_func, uct_ib_kh_ah_hash_equal)
 
 
 #if ENABLE_STATS
@@ -1078,7 +1082,8 @@ const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status)
     return ibv_wc_status_str(wc_status);
 }
 
-static ucs_status_t uct_ib_device_create_ah(struct ibv_ah_attr *ah_attr,
+static ucs_status_t uct_ib_device_create_ah(uct_ib_device_t *dev,
+                                            struct ibv_ah_attr *ah_attr,
                                             struct ibv_pd *pd,
                                             struct ibv_ah **ah_p)
 {
@@ -1117,32 +1122,29 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
                                             struct ibv_pd *pd,
                                             struct ibv_ah **ah_p)
 {
-    uct_ib_ah_attr_t attr = {.attr = *ah_attr, .pd = pd};
+    ucs_status_t status = UCS_OK;
     khiter_t iter;
     int ret;
-    ucs_status_t status;
 
     ucs_spin_lock(&dev->ah_lock);
 
     /* looking for existing AH with same attributes */
-    iter = kh_get(uct_ib_ah, &dev->ah_hash, attr);
+    iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
     if (iter == kh_end(&dev->ah_hash)) {
         /* new AH */
-        status = uct_ib_device_create_ah(ah_attr, pd, ah_p);
-
+        status = uct_ib_device_create_ah(dev, ah_attr, pd, ah_p);
         if (status != UCS_OK) {
-            ucs_spin_unlock(&dev->ah_lock);
-            return status;
+            goto unlock;
         }
 
         /* store AH in hash */
-        iter = kh_put(uct_ib_ah, &dev->ah_hash, attr, &ret);
+        iter = kh_put(uct_ib_ah, &dev->ah_hash, *ah_attr, &ret);
 
         /* failed to store - rollback */
         if (iter == kh_end(&dev->ah_hash)) {
             ibv_destroy_ah(*ah_p);
-            ucs_spin_unlock(&dev->ah_lock);
-            return UCS_ERR_NO_MEMORY;
+            status = UCS_ERR_NO_MEMORY;
+            goto unlock;
         }
 
         kh_value(&dev->ah_hash, iter) = *ah_p;
@@ -1151,13 +1153,7 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
         *ah_p = kh_value(&dev->ah_hash, iter);
     }
 
+unlock:
     ucs_spin_unlock(&dev->ah_lock);
-
-    return UCS_OK;
-}
-
-void uct_ib_device_destroy_ah_cached(uct_ib_device_t *dev,
-                                     struct ibv_ah *ah)
-{
-    /* do nothing - AH will be destroyed on device cleanup */
+    return status;
 }

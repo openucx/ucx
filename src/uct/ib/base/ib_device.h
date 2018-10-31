@@ -115,7 +115,7 @@ typedef struct uct_ib_device_spec {
 } uct_ib_device_spec_t;
 
 
-KHASH_TYPE(uct_ib_ah, struct uct_ib_ah_attr, struct ibv_ah*);
+KHASH_TYPE(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*);
 
 /**
  * IB device (corresponds to HCA)
@@ -324,10 +324,14 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
                                             struct ibv_pd *pd,
                                             struct ibv_ah **ah_p);
 
-void uct_ib_device_destroy_ah_cached(uct_ib_device_t *dev,
-                                     struct ibv_ah *ah);
-
 void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev);
+
+static UCS_F_ALWAYS_INLINE
+void uct_ib_device_destroy_ah_cached(uct_ib_device_t *dev,
+                                     struct ibv_ah *ah)
+{
+    /* do nothing - AH will be destroyed on device cleanup */
+}
 
 static inline struct ibv_exp_port_attr*
 uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)

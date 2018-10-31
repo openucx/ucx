@@ -339,8 +339,6 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
                                     struct ibv_ah **ah_p);
 
-void uct_ib_iface_destroy_ah(uct_ib_iface_t *iface, struct ibv_ah *ah_p);
-
 ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 
 ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h iface, int *fd_p);
@@ -348,6 +346,12 @@ ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h iface, int *fd_p);
 ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
                                  uct_ib_dir_t dir,
                                  int solicited_only);
+
+static UCS_F_ALWAYS_INLINE
+void uct_ib_iface_destroy_ah(uct_ib_iface_t *iface, struct ibv_ah *ah_p)
+{
+    uct_ib_device_destroy_ah_cached(uct_ib_iface_device(iface), ah_p);
+}
 
 static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
 {

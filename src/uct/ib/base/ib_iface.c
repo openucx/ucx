@@ -263,11 +263,6 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                           uct_ib_iface_md(iface)->pd, ah_p);
 }
 
-void uct_ib_iface_destroy_ah(uct_ib_iface_t *iface, struct ibv_ah *ah_p)
-{
-    uct_ib_device_destroy_ah_cached(uct_ib_iface_device(iface), ah_p);
-}
-
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
                                            const uct_ib_iface_config_t *config)
 {
