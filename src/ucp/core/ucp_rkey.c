@@ -15,8 +15,8 @@
 
 static struct {
     ucp_md_map_t md_map;
-    uint8_t mem_type;
-} UCS_S_PACKED ucp_mem_dummy_buffer = {0, 0};
+    uint8_t      mem_type;
+} UCS_S_PACKED ucp_mem_dummy_buffer = {0, UCT_MD_MEM_TYPE_HOST};
 
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map)
@@ -373,13 +373,14 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
         md_attr  = &context->tl_mds[md_index].attr;
 
         if ((md_index != UCP_NULL_RESOURCE) &&
-            (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY)) &&
-            (!rkey || (md_attr->cap.mem_type == mem_type &&
-                       md_attr->cap.mem_type == rkey->mem_type)))
+            (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY)))
         {
             /* Lane does not need rkey, can use the lane with invalid rkey  */
-            *uct_rkey_p = UCT_INVALID_RKEY;
-            return lane;
+            if (!rkey || ((md_attr->cap.mem_type == mem_type) &&
+                          (md_attr->cap.mem_type == rkey->mem_type))) {
+                *uct_rkey_p = UCT_INVALID_RKEY;
+                return lane;
+            }
         }
 
         if ((md_index != UCP_NULL_RESOURCE) &&
