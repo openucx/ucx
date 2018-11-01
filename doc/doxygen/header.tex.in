@@ -72,8 +72,8 @@
 \fancyhead[RO]{\fancyplain{}{\bfseries\thepage}}
 \fancyfoot[LE]{\fancyplain{}{}}
 \fancyfoot[CE]{\fancyplain{}{}}
-\fancyfoot[RE]{\fancyplain{}{\bfseries\scriptsize \textcircled{c} 2015 Unified Communication X (UCX). All rights reserved. }}
-\fancyfoot[LO]{\fancyplain{}{\bfseries\scriptsize \textcircled{c} 2015 Unified Communication X (UCX). All rights reserved. }}
+\fancyfoot[RE]{\fancyplain{}{\bfseries\scriptsize \textcircled{c} \the\year\space Unified Communication X (UCX). All rights reserved. }}
+\fancyfoot[LO]{\fancyplain{}{\bfseries\scriptsize \textcircled{c} \the\year\space Unified Communication X (UCX). All rights reserved. }}
 \fancyfoot[CO]{\fancyplain{}{}}
 \fancyfoot[RO]{\fancyplain{}{}}
 \renewcommand{\footrulewidth}{0.4pt}
