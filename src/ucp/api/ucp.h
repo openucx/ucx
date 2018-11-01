@@ -1963,13 +1963,13 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
  * that are reacheble via shared memory.
  *
  * @param [in]  rkey          A remote key handle.
- * @param [in]  raddr         A remote address within the memory area
+ * @param [in]  raddr         A remote memory address within the memory area
  *                            described by the rkey.
  * @param [out] addr_p        A pointer that can be used for direct
  *                            access to the remote memory.
  *
  * @return Error code as defined by @ref ucs_status_t if the remote memory
- *         cannot be accessed directly or the remote address is not valid.
+ *         cannot be accessed directly or the remote memory address is not valid.
  */
 ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p);
 
@@ -2461,10 +2461,10 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
  * @param [in]  buffer       Pointer to the local source address.
  * @param [in]  length       Length of the data (in bytes) stored under the
  *                           source address.
- * @param [in]  remote_addr  Pointer to the destination remote address
+ * @param [in]  remote_addr  Pointer to the destination remote memory address
  *                           to write to.
  * @param [in]  rkey         Remote memory key associated with the
- *                           remote address.
+ *                           remote memory address.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
@@ -2496,10 +2496,10 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
  * @param [in]  buffer       Pointer to the local source address.
  * @param [in]  length       Length of the data (in bytes) stored under the
  *                           source address.
- * @param [in]  remote_addr  Pointer to the destination remote address
+ * @param [in]  remote_addr  Pointer to the destination remote memory address
  *                           to write to.
  * @param [in]  rkey         Remote memory key associated with the
- *                           remote address.
+ *                           remote memory address.
  * @param [in]  cb           Call-back function that is invoked whenever the
  *                           put operation is completed and the local buffer
  *                           can be modified. Does not guarantee remote
@@ -2524,7 +2524,7 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
  * @brief Non-blocking implicit remote memory get operation.
  *
  * This routine initiate a load of contiguous block of data that is described
- * by the remote address @a remote_addr and the @ref ucp_rkey_h "memory handle"
+ * by the remote memory address @a remote_addr and the @ref ucp_rkey_h "memory handle"
  * @a rkey in the local contiguous memory region described by @a buffer
  * address.  The routine returns immediately and @b does @b not guarantee that
  * remote data is loaded and stored under the local address @e buffer.
@@ -2537,10 +2537,10 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
  * @param [in]  buffer       Pointer to the local source address.
  * @param [in]  length       Length of the data (in bytes) stored under the
  *                           source address.
- * @param [in]  remote_addr  Pointer to the destination remote address
+ * @param [in]  remote_addr  Pointer to the destination remote memory address
  *                           to write to.
  * @param [in]  rkey         Remote memory key associated with the
- *                           remote address.
+ *                           remote memory address.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
@@ -2552,7 +2552,7 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
  * @brief Non-blocking remote memory get operation.
  *
  * This routine initiates a load of a contiguous block of data that is
- * described by the remote address @a remote_addr and the @ref ucp_rkey_h
+ * described by the remote memory address @a remote_addr and the @ref ucp_rkey_h
  * "memory handle" @a rkey in the local contiguous memory region described
  * by @a buffer address. The routine returns immediately and @b does @b not
  * guarantee that remote data is loaded and stored under the local address @e
@@ -2572,10 +2572,10 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
  * @param [in]  buffer       Pointer to the local source address.
  * @param [in]  length       Length of the data (in bytes) stored under the
  *                           source address.
- * @param [in]  remote_addr  Pointer to the destination remote address
+ * @param [in]  remote_addr  Pointer to the destination remote memory address
  *                           to write to.
  * @param [in]  rkey         Remote memory key associated with the
- *                           remote address.
+ *                           remote memory address.
  * @param [in]  cb           Call-back function that is invoked whenever the
  *                           get operation is completed and the data is
  *                           visible to the local process.
@@ -2610,7 +2610,7 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
  * @param [in] value       Source operand for the atomic operation.
  * @param [in] op_size     Size of value in bytes
  * @param [in] remote_addr Remote address to operate on.
- * @param [in] rkey        Remote key handle for the remote address.
+ * @param [in] rkey        Remote key handle for the remote memory address.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
@@ -2649,7 +2649,7 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
  *                         is true.
  * @param [in] op_size     Size of value in bytes and pointer type for result
  * @param [in] remote_addr Remote address to operate on.
- * @param [in] rkey        Remote key handle for the remote address.
+ * @param [in] rkey        Remote key handle for the remote memory address.
  * @param [in] cb          Call-back function that is invoked whenever the
  *                         send operation is completed. It is important to note
  *                         that the call-back function is only invoked in a case when
