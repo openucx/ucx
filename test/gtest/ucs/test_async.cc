@@ -715,16 +715,23 @@ UCS_TEST_P(test_async_event_mt, multithread) {
     }
 }
 UCS_TEST_P(test_async_timer_mt, multithread) {
-    spawn();
+    const int exp_min_count = (int)(COUNT * 0.10);
+    int min_count = 0;
+    for (int r = 0; r < TIMER_RETRIES; ++r) {
+        spawn();
+        suspend(2 * COUNT);
+        stop();
 
-    suspend(2 * COUNT);
-
-    stop();
-
-    for (unsigned i = 0; i < NUM_THREADS; ++i) {
-        int count = thread_count(i);
-        EXPECT_GE(count, (int)(COUNT * 0.10));
+        min_count = std::numeric_limits<int>::max();
+        for (unsigned i = 0; i < NUM_THREADS; ++i) {
+            int count = thread_count(i);
+            min_count = ucs_min(count, min_count);
+        }
+        if (min_count >= exp_min_count) {
+            break;
+        }
     }
+    EXPECT_GE(min_count, exp_min_count);
 }
 
 INSTANTIATE_TEST_CASE_P(signal, test_async, ::testing::Values(UCS_ASYNC_MODE_SIGNAL));
