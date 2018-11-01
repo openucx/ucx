@@ -12,6 +12,8 @@
 #include <uct/api/uct.h>
 #include <ucs/stats/stats.h>
 #include <ucs/debug/assert.h>
+#include <ucs/datastruct/khash.h>
+#include <ucs/type/spinlock.h>
 
 #include <endian.h>
 
@@ -113,6 +115,8 @@ typedef struct uct_ib_device_spec {
 } uct_ib_device_spec_t;
 
 
+KHASH_TYPE(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*);
+
 /**
  * IB device (corresponds to HCA)
  */
@@ -128,6 +132,9 @@ typedef struct uct_ib_device {
     UCS_STATS_NODE_DECLARE(stats);
     struct ibv_exp_port_attr    port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
     unsigned                    flags;
+    /* AH hash */
+    khash_t(uct_ib_ah)          ah_hash;
+    ucs_spinlock_t              ah_lock;
 } uct_ib_device_t;
 
 
@@ -311,6 +318,13 @@ size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev);
 int uct_ib_device_odp_has_global_mr(uct_ib_device_t *dev);
 
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status);
+
+ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
+                                            struct ibv_ah_attr *ah_attr,
+                                            struct ibv_pd *pd,
+                                            struct ibv_ah **ah_p);
+
+void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev);
 
 static inline struct ibv_exp_port_attr*
 uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)

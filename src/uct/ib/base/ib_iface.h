@@ -190,7 +190,6 @@ struct uct_ib_iface {
     } config;
 
     uct_ib_iface_ops_t      *ops;
-
 };
 
 enum {

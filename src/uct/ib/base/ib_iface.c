@@ -259,36 +259,8 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
                                     struct ibv_ah **ah_p)
 {
-    struct ibv_ah *ah;
-    char buf[128];
-    char *p, *endp;
-
-    ah = ibv_create_ah(uct_ib_iface_md(iface)->pd, ah_attr);
-
-    if (ah == NULL) {
-        p    = buf;
-        endp = buf + sizeof(buf);
-        snprintf(p, endp - p, "dlid=%d sl=%d port=%d src_path_bits=%d",
-                 ah_attr->dlid, ah_attr->sl,
-                 ah_attr->port_num, ah_attr->src_path_bits);
-        p += strlen(p);
-
-        if (ah_attr->is_global) {
-            snprintf(p, endp - p, " dgid=");
-            p += strlen(p);
-            inet_ntop(AF_INET6, &ah_attr->grh.dgid, p, endp - p);
-            p += strlen(p);
-            snprintf(p, endp - p, " sgid_index=%d traffic_class=%d",
-                     ah_attr->grh.sgid_index, ah_attr->grh.traffic_class);
-        }
-
-        ucs_error("ibv_create_ah(%s) on "UCT_IB_IFACE_FMT" failed: %m", buf,
-                  UCT_IB_IFACE_ARG(iface));
-        return UCS_ERR_INVALID_ADDR;
-    }
-
-    *ah_p        = ah;
-    return UCS_OK;
+    return uct_ib_device_create_ah_cached(uct_ib_iface_device(iface), ah_attr,
+                                          uct_ib_iface_md(iface)->pd, ah_p);
 }
 
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,

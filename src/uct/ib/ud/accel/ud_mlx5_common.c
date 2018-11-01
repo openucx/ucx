@@ -49,7 +49,6 @@ ucs_status_t uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
     *is_global = ah_attr.is_global;
 
     uct_ib_mlx5_get_av(ah, &mlx5_av);
-    ibv_destroy_ah(ah);
 
     base_av->stat_rate_sl = mlx5_av_base(&mlx5_av)->stat_rate_sl;
     base_av->fl_mlid      = mlx5_av_base(&mlx5_av)->fl_mlid;
