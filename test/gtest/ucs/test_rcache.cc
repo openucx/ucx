@@ -688,20 +688,22 @@ UCS_TEST_F(test_rcache_stats, unmap_dereg) {
     r1 = get(mem, size1);
     put(r1);
 
-    /* should generate umap event but no
-     * dereg or unmap invalidation
+    /* Should generate umap event but no dereg or unmap invalidation.
+     * We can have more unmap events if releasing the region structure triggers
+     * releasing memory back to the OS.
      */
     munmap(mem, size1);
-    EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAPS));
+    EXPECT_GE(get_counter(UCS_RCACHE_UNMAPS), 1);
     EXPECT_EQ(0, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
     EXPECT_EQ(0, get_counter(UCS_RCACHE_DEREGS));
 
     mem = alloc_pages(size1, PROT_READ|PROT_WRITE);
-    /* adding a new region shall force a processing
-     * of invalidation queue and dereg
+
+    /*
+     * Adding a new region shall force a processing of invalidation queue and dereg
      */
     r1 = get(mem, size1);
-    EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAPS));
+    EXPECT_GE(get_counter(UCS_RCACHE_UNMAPS), 1);
     EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
     EXPECT_EQ(1, get_counter(UCS_RCACHE_DEREGS));
 
