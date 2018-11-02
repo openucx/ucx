@@ -376,8 +376,8 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
             (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY)))
         {
             /* Lane does not need rkey, can use the lane with invalid rkey  */
-            if (!rkey || ((md_attr->cap.mem_type == mem_type) &&
-                          (md_attr->cap.mem_type == rkey->mem_type))) {
+            if (!rkey || ((mem_type == md_attr->cap.mem_type) &&
+                          (mem_type == rkey->mem_type))) {
                 *uct_rkey_p = UCT_INVALID_RKEY;
                 return lane;
             }
