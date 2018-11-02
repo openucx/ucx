@@ -360,7 +360,7 @@ typedef void (*ucp_listener_accept_callback_t)(ucp_ep_h ep, void *arg);
  * This callback routine is invoked on the server side to handle incoming
  * connections from remote clients. The user can pass an argument to this
  * callback. The @a conn_request handle has to be released, either by @ref
- * ucp_ep_create or @ref ucp_ep_reject routine.
+ * ucp_ep_create or @ref ucp_listener_reject routine.
  *
  *  @param [in]  conn_request   Connection request handle.
  *  @param [in]  arg            User's argument for the callback.
@@ -533,9 +533,9 @@ typedef struct ucp_ep_params {
      * Connection request from client; this field should be set along with its
      * corresponding bit in the field_mask - @ref
      * UCP_EP_PARAM_FIELD_CONN_REQUEST and must be obtained from @ref
-     * ucp_listener_accept_addr_callback_t, it means that this type of the
-     * endpoint creation is possible only on server side in client-server
-     * connection establishment flow.
+     * ucp_listener_conn_callback_t, it means that this type of the endpoint
+     * creation is possible only on server side in client-server connection
+     * establishment flow.
      */
     ucp_conn_request_h      conn_request;
 

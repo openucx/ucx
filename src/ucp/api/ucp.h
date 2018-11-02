@@ -274,14 +274,12 @@ enum ucp_ep_close_mode {
 enum ucp_mem_map_params_field {
     UCP_MEM_MAP_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of the memory that
                                                        would be used in the
-                                                       @ref ucp_mem_map routine,
-                                                       see @ref ucp_mem_map_matrix
-                                                       for details */
+                                                       @ref ucp_mem_map routine. */
     UCP_MEM_MAP_PARAM_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory that
                                                        would be allocated or
                                                        registered in the
                                                        @ref ucp_mem_map routine.*/
-    UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2)  /**< Allocation flags */
+    UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2)  /**< Allocation flags. */
 };
 
 /**
@@ -635,7 +633,7 @@ typedef struct ucp_params {
      * Pointer to a routine that is responsible for final cleanup of the memory
      * associated with the request. This routine may not be called every time a
      * request is released. For some implementations, the cleanup call may be
-     * delayed and only invoked at @ref ucp_worker_cleanup.
+     * delayed and only invoked at @ref ucp_worker_destroy.
      *
      * @e NULL can be used if no such function is required, which is also the
      * default if this field is not specified by @ref field_mask.
@@ -784,12 +782,12 @@ typedef struct ucp_worker_params {
      * This value is optional.
      * If @ref UCP_WORKER_PARAM_FIELD_EVENT_FD is set in the field_mask, events
      * on the worker will be reported on the provided event file descriptor. In
-     * this case, calling @ref ucp_worker_get_efd() will result in an error.
+     * this case, calling @ref ucp_worker_get_efd will result in an error.
      * The provided file descriptor must be capable of aggregating notifications
      * for arbitrary events, for example @c epoll(7) on Linux systems.
      * @ref user_data will be used as the event user-data on systems which
      * support it. For example, on Linux, it will be placed in
-     * @ref epoll_data_t::ptr, when returned from @ref epoll_wait().
+     * @c epoll_data_t::ptr, when returned from @c epoll_wait(2).
      *
      * Otherwise, events would be reported to the event file descriptor returned
      * from @ref ucp_worker_get_efd().
@@ -944,7 +942,7 @@ struct ucp_tag_recv_info {
  * the run-time environment. Then, the fetched descriptor is used for
  * UCP library @ref ucp_init "initialization". The Application can print out the
  * descriptor using @ref ucp_config_print "print" routine. In addition
- * the application is responsible to @ref ucp_config_free "free" the
+ * the application is responsible to @ref ucp_config_release "release" the
  * descriptor back to UCP library.
  *
  * @param [in]  env_prefix    If non-NULL, the routine searches for the
@@ -1290,8 +1288,8 @@ unsigned ucp_worker_progress(ucp_worker_h worker);
  * @brief Poll for endpoints that are ready to consume streaming data.
  *
  * This non-blocking routine returns endpoints on a worker which are ready
- * to consume streaming data. The ready endpoints are placed in @poll_eps array,
- * and the function return value indicates how many are there.
+ * to consume streaming data. The ready endpoints are placed in @a poll_eps
+ * array, and the function return value indicates how many are there.
  *
  * @param [in]   worker    Worker to poll.
  * @param [out]  poll_eps  Pointer to array of endpoints, should be
@@ -1300,7 +1298,7 @@ unsigned ucp_worker_progress(ucp_worker_h worker);
  *                         in @a poll_eps.
  * @param [in]   flags     Reserved for future use.
  *
- * @return Negative value indicates an error according to @ref ucp_status_t.
+ * @return Negative value indicates an error according to @ref ucs_status_t.
  *         On success, non-negative value (less or equal @a max_eps) indicates
  *         actual number of endpoints filled in @a poll_eps array.
  *
@@ -1394,6 +1392,7 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker);
  * an opportunity for energy savings for architectures that support this
  * functionality.
  *
+ * @param [in] worker           Worker to wait for updates on.
  * @param [in] address          Local memory address
  */
 void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
@@ -1556,7 +1555,7 @@ void ucp_listener_destroy(ucp_listener_h listener);
  * @note By default, ucp_ep_create() will connect an endpoint to itself if
  * the endpoint is destined to the same @a worker on which it was created,
  * i.e. @a params.address belongs to @a worker. This behavior can be changed by
- * passing the @ref UCP_EP_PARAMS_FLAGS_NO_LOOPBACK flag in @params.flags.
+ * passing the @ref UCP_EP_PARAMS_FLAGS_NO_LOOPBACK flag in @a params.flags.
  * In that case, the endpoint will be connected to the *next* endpoint created
  * in the same way on the same @a worker.
  */
@@ -1716,7 +1715,7 @@ ucs_status_ptr_t ucp_ep_flush_nb(ucp_ep_h ep, unsigned flags,
  * management.
  *
  * <table>
- * <caption id="ucp_mem_map_matrix">Matrix of behavior</caption>
+ * <caption>Matrix of behavior</caption>
  * <tr><th>parameter/flag <td align="center">@ref UCP_MEM_MAP_NONBLOCK "NONBLOCK"</td>
  *                        <td align="center">@ref UCP_MEM_MAP_ALLOCATE "ALLOCATE"</td>
  *                        <td align="center">@ref UCP_MEM_MAP_FIXED "FIXED"</td>

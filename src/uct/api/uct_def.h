@@ -140,7 +140,7 @@ typedef struct uct_iov {
  * @brief Callback to process incoming active message
  *
  * When the callback is called, @a flags indicates how @a data should be handled.
- * If @a flags contain @ref UCT_CB_FLAG_DESC value, it means @a data is part of
+ * If @a flags contain @ref UCT_CB_PARAM_FLAG_DESC value, it means @a data is part of
  * a descriptor which must be released later by @ref uct_iface_release_desc by
  * the user if the callback returns @ref UCS_INPROGRESS.
  *
@@ -157,7 +157,7 @@ typedef struct uct_iov {
  *                          by the caller.
  * @retval UCS_INPROGRESS - descriptor is owned by the callee, and would be
  *                          released later. Supported only if @a flags contain
- *                          @ref UCT_CB_FLAG_DESC value. Otherwise, this is
+ *                          @ref UCT_CB_PARAM_FLAG_DESC value. Otherwise, this is
  *                          an error.
  *
  */
@@ -324,7 +324,7 @@ typedef void
  *                         @ref uct_md_query_tl_resources.
  * @param [out] priv_data  User's private data to be passed to the server side.
  *
- * @return Negative value indicates an error according to @ref ucp_status_t.
+ * @return Negative value indicates an error according to @ref ucs_status_t.
  *         On success, non-negative value indicates actual number of
  *         bytes written to the @a priv_data buffer.
  */

@@ -17,7 +17,7 @@ BEGIN_C_DECLS
 
 /**
  * @ingroup UCP_WORKER
- * @deprecated Replaced by @ref ucp_listener_accept_conn_handler_t.
+ * @deprecated Replaced by @ref ucp_listener_conn_handler_t.
  */
 typedef struct ucp_listener_accept_handler {
    ucp_listener_accept_callback_t  cb;       /**< Endpoint creation callback */
@@ -82,7 +82,7 @@ ucs_status_t ucp_ep_flush(ucp_ep_h ep);
  * @brief Flush outstanding AMO and RMA operations on the @ref ucp_worker_h
  * "worker"
  * @deprecated Replaced by @ref ucp_worker_flush_nb. The following example
- * implements the same functionality using @ref ucp_worker_flush_nb:
+ * implements the same functionality using @ref ucp_worker_flush_nb :
  * @code
  * ucs_status_t worker_flush(ucp_worker_h worker)
  * {
@@ -124,7 +124,7 @@ ucs_status_t ucp_worker_flush(ucp_worker_h worker);
  * @ingroup UCP_COMM
  * @brief Blocking remote memory put operation.
  * @deprecated Replaced by @ref ucp_put_nb. The following example implements
- * the same functionality using @ref ucp_put_nb:
+ * the same functionality using @ref ucp_put_nb :
  * @code
  * void empty_callback(void *request, ucs_status_t status)
  * {
@@ -466,7 +466,7 @@ ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
  * @ingroup UCP_ENDPOINT
  * @brief Modify endpoint parameters.
  *
- * @deprecated Use @ref ucp_listener_accept_conn_handler_t instead of @ref
+ * @deprecated Use @ref ucp_listener_conn_handler_t instead of @ref
  *             ucp_listener_accept_handler_t, if you have other use case please
  *             submit an issue on https://github.com/openucx/ucx or report to
  *             ucx-group@elist.ornl.gov
@@ -474,7 +474,7 @@ ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
  * This routine modifies @ref ucp_ep_h "endpoint" created by @ref ucp_ep_create
  * or @ref ucp_listener_accept_callback_t. For example, this API can be used
  * to setup custom parameters like @ref ucp_ep_params_t::user_data or
- * @ref ucp_ep_params_t::err_handler_cb to endpoint created by
+ * @ref ucp_ep_params_t::err_handler to endpoint created by
  * @ref ucp_listener_accept_callback_t.
  *
  * @param [in]  ep          A handle to the endpoint.
