@@ -99,10 +99,9 @@ uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface,
 {
     uint32_t dest_qpn = uct_ib_unpack_uint24(src_if_addr->qp_num);
     union ibv_gid dgid;
-    uint8_t is_global;
     uint16_t dlid;
 
-    uct_ib_address_unpack(src_ib_addr, &dlid, &is_global, &dgid);
+    uct_ib_address_unpack(src_ib_addr, &dlid, &dgid);
     return uct_ud_iface_cep_lookup_addr(iface, dlid, &dgid, dest_qpn);
 }
 
@@ -150,11 +149,10 @@ ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
     uint32_t dest_qpn = uct_ib_unpack_uint24(src_if_addr->qp_num);
     uct_ud_iface_peer_t *peer;
     union ibv_gid dgid;
-    uint8_t is_global;
     uct_ud_ep_t *cep;
     uint16_t dlid;
 
-    uct_ib_address_unpack(src_ib_addr, &dlid, &is_global, &dgid);
+    uct_ib_address_unpack(src_ib_addr, &dlid, &dgid);
     peer = uct_ud_iface_cep_lookup_addr(iface, dlid, &dgid, dest_qpn);
     if (peer == NULL) {
         peer = malloc(sizeof *peer);
@@ -429,7 +427,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->config.tx_qp_len       = config->super.tx.queue_len;
     self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
     self->config.check_grh_dgid  = (config->dgid_check &&
-                                    (self->super.addr_type == UCT_IB_ADDRESS_TYPE_ETH));
+                                    IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(&self->super)));
 
     if (config->slow_timer_backoff <= 0.) {
         ucs_error("The slow timer back off should be > 0 (%lf)",

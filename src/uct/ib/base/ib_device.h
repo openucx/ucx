@@ -63,15 +63,6 @@ enum {
 };
 
 
-typedef enum {
-    UCT_IB_ADDRESS_TYPE_LINK_LOCAL,   /* Subnet-local address */
-    UCT_IB_ADDRESS_TYPE_SITE_LOCAL,   /* Site local, 16-bit subnet prefix */
-    UCT_IB_ADDRESS_TYPE_GLOBAL,       /* Global, 64-bit subnet prefix */
-    UCT_IB_ADDRESS_TYPE_ETH,          /* RoCE  address */
-    UCT_IB_ADDRESS_TYPE_LAST
-} uct_ib_address_type_t;
-
-
 /**
  * Flags which specify which address fields are present
  */
@@ -245,52 +236,6 @@ uint8_t uct_ib_to_fabric_time(double time);
  * @return MTU in bytes.
  */
 size_t uct_ib_mtu_value(enum ibv_mtu mtu);
-
-
-/**
- * @return IB address scope of a given subnet prefix (according to IBTA 4.1.1 12).
- */
-uct_ib_address_type_t uct_ib_address_scope(uint64_t subnet_prefix);
-
-
-/**
- * @return IB address size of the given link scope.
- */
-size_t uct_ib_address_size(uct_ib_address_type_t type);
-
-
-/**
- * Pack IB address.
- *
- * @param [in]  dev        IB device. TODO remove this.
- * @param [in]  scope      Address scope.
- * @param [in]  gid        GID address to pack.
- * @param [in]  lid        LID address to pack.
- * @param [out] ib_addr    Filled with packed ib address. Size of the structure
- *                         must be at least what @ref uct_ib_address_size() returns
- *                         for the given scope.
- */
-void uct_ib_address_pack(uct_ib_device_t *dev, uct_ib_address_type_t scope,
-                         const union ibv_gid *gid, uint16_t lid,
-                         uct_ib_address_t *ib_addr);
-
-
-/**
- * Unpack IB address.
- *
- * @param [in]  ib_addr    IB address to unpack.
- * @param [out] lid        Filled with address LID, or 0 if not present.
- * @param [out] is_global  Filled with 0, or 1 if the address is IB global
- */
-void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
-                           uint8_t *is_global, union ibv_gid *gid);
-
-
-/**
- * Convert IB address to a human-readable string.
- */
-const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
-                               size_t max);
 
 
 /**

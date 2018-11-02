@@ -53,9 +53,11 @@ ucs_status_t uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
     base_av->stat_rate_sl = mlx5_av_base(&mlx5_av)->stat_rate_sl;
     base_av->fl_mlid      = mlx5_av_base(&mlx5_av)->fl_mlid;
     base_av->rlid         = mlx5_av_base(&mlx5_av)->rlid;
+    base_av->dqp_dct      = 0;
 
-    base_av->dqp_dct = (ud_common_iface->config.compact_av) ? 0 :
-                        UCT_IB_MLX5_EXTENDED_UD_AV;
+    if (!ud_common_iface->config.compact_av || ah_attr.is_global) {
+        base_av->dqp_dct |= UCT_IB_MLX5_EXTENDED_UD_AV;
+    }
 
     ucs_assertv_always((UCT_IB_MLX5_AV_FULL_SIZE > UCT_IB_MLX5_AV_BASE_SIZE) ||
                        (base_av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV),

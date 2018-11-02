@@ -91,6 +91,9 @@ struct uct_ib_iface_config {
     /* Change the address type */
     int                     addr_type;
 
+    /* Forice global routing */
+    int                     is_global;
+
     /* IB SL to use */
     unsigned                sl;
 
@@ -166,7 +169,7 @@ struct uct_ib_iface {
     unsigned                path_bits_count;
     uint16_t                pkey_index;
     uint16_t                pkey_value;
-    uct_ib_address_type_t   addr_type;
+    uint8_t                 is_global_addr;
     uint8_t                 addr_size;
     union ibv_gid           gid;
     uct_ib_iface_res_domain_t *res_domain;
@@ -287,6 +290,44 @@ uct_ib_iface_invoke_am_desc(uct_ib_iface_t *iface, uint8_t am_id, void *data,
         uct_recv_desc(desc) = &iface->release_desc;
     }
 }
+
+
+/**
+ * @return IB address size of the given link scope.
+ */
+size_t uct_ib_address_size(uct_ib_iface_t *iface);
+
+
+/**
+ * Pack IB address.
+ *
+ * @param [in]  dev        IB device. TODO remove this.
+ * @param [in]  gid        GID address to pack.
+ * @param [in]  lid        LID address to pack.
+ * @param [out] ib_addr    Filled with packed ib address. Size of the structure
+ *                         must be at least what @ref uct_ib_address_size() returns
+ *                         for the given scope.
+ */
+void uct_ib_address_pack(uct_ib_iface_t *iface,
+                         const union ibv_gid *gid, uint16_t lid,
+                         uct_ib_address_t *ib_addr);
+
+
+/**
+ * Unpack IB address.
+ *
+ * @param [in]  ib_addr    IB address to unpack.
+ * @param [out] lid        Filled with address LID, or 0 if not present.
+ */
+void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
+                           union ibv_gid *gid);
+
+
+/**
+ * Convert IB address to a human-readable string.
+ */
+const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
+                               size_t max);
 
 ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr);
@@ -450,10 +491,9 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
     ah_attr->port_num          = iface->config.port_num;
     ah_attr->grh.traffic_class = iface->config.traffic_class;
 
-    if ((gid != NULL) &&
-        ((iface->addr_type == UCT_IB_ADDRESS_TYPE_ETH)    ||
-         (iface->addr_type == UCT_IB_ADDRESS_TYPE_GLOBAL) ||
-         (iface->gid.global.subnet_prefix != gid->global.subnet_prefix))) {
+    if (iface->is_global_addr ||
+        (iface->gid.global.subnet_prefix != gid->global.subnet_prefix)) {
+        ucs_assert_always(gid->global.interface_id != 0);
         ah_attr->is_global      = 1;
         ah_attr->grh.dgid       = *gid;
         ah_attr->grh.sgid_index = iface->config.gid_index;
@@ -469,18 +509,12 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                                          uint8_t path_bits,
                                          struct ibv_ah_attr *ah_attr)
 {
-    union ibv_gid *gid_p = NULL;
     union ibv_gid  gid;
-    uint8_t        is_global;
     uint16_t       lid;
 
-    uct_ib_address_unpack(ib_addr, &lid, &is_global, &gid);
+    uct_ib_address_unpack(ib_addr, &lid, &gid);
 
-    if (is_global) {
-        gid_p = &gid;
-    }
-
-    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, gid_p, path_bits, ah_attr);
+    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, path_bits, ah_attr);
 }
 
 static UCS_F_ALWAYS_INLINE
