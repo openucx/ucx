@@ -132,13 +132,13 @@ public:
     static void rtag_complete_cb(void *req, ucs_status_t status,
                                  ucp_tag_recv_info_t *info)
     {
-        ASSERT_UCS_OK(status);
+        EXPECT_UCS_OK(status);
     }
 
     static void rstream_complete_cb(void *req, ucs_status_t status,
                                     size_t length)
     {
-        ASSERT_UCS_OK(status);
+        EXPECT_UCS_OK(status);
     }
 
     static void wait_for_wakeup(ucp_worker_h send_worker, ucp_worker_h recv_worker)
