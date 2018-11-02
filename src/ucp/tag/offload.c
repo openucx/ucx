@@ -186,8 +186,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         dummy_rts->address          = remote_addr;
         dummy_rts->size             = length;
 
-        ucp_rkey_packed_copy(worker->context, UCS_BIT(md_index), dummy_rts + 1,
-                             uct_rkeys);
+        ucp_rkey_packed_copy(worker->context, UCS_BIT(md_index),
+                             UCT_MD_MEM_TYPE_HOST, dummy_rts + 1, uct_rkeys);
 
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_RNDV);
         ucp_rndv_process_rts(worker, dummy_rts, dummy_rts_size, 0);
