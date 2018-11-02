@@ -97,7 +97,12 @@ UCS_TEST_P(test_ud_slow_timer, ep_destroy, "UD_TIMEOUT=1s") {
     EXPECT_TRUE(ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp));
 
     m_e1->destroy_eps();
-    twait(ucs_time_to_msec(iface->config.peer_timeout * 1.5));
+    twait(ucs_time_to_msec(iface->config.peer_timeout * 1.1));
+    /* Do more retries if test node is slow */
+    for (size_t i = 0; ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp) &&
+                       (i < 600); ++i) {
+        twait(ucs_time_to_msec(iface->config.peer_timeout * 0.1));
+    }
     EXPECT_FALSE(ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp));
 }
 
