@@ -617,17 +617,18 @@ ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
 
     ep_status = iface->super.super.ops->set_ep_failed(ib_iface,
                                                       &ep->super.super, status);
+    if (ep_status == UCS_OK) {
+        status = dc_ops->reset_dci(iface, dci);
+        if (status != UCS_OK) {
+            ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
+                       iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+        }
 
-    status = dc_ops->reset_dci(iface, dci);
-    if (status != UCS_OK) {
-        ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
-                   iface, dci, txqp->qp->qp_num, ucs_status_string(status));
-    }
-
-    status = uct_dc_iface_dci_connect(iface, txqp);
-    if (status != UCS_OK) {
-        ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
-                  iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+        status = uct_dc_iface_dci_connect(iface, txqp);
+        if (status != UCS_OK) {
+            ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
+                      iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+        }
     }
 
     return ep_status;
