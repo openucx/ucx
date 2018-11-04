@@ -28,7 +28,7 @@ static ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
 
   {"", "", NULL,
    ucs_offsetof(uct_dc_mlx5_iface_config_t, mlx5_common),
-   UCS_CONFIG_TYPE_TABLE(uct_mlx5_common_config_table)},
+   UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
 
   {NULL}
 };
@@ -1334,7 +1334,8 @@ static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
 };
 
 
-static ucs_status_t uct_dc_mlx5_iface_init_dcis(uct_dc_mlx5_iface_t *iface)
+static ucs_status_t uct_dc_mlx5_iface_init_dcis(uct_dc_mlx5_iface_t *iface,
+                                                uct_ib_mlx5_mmio_mode_t mmio_mode)
 {
     ucs_status_t status;
     uint16_t bb_max;
@@ -1343,7 +1344,7 @@ static ucs_status_t uct_dc_mlx5_iface_init_dcis(uct_dc_mlx5_iface_t *iface)
     bb_max = 0;
     for (i = 0; i < iface->super.tx.ndci; i++) {
         status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
-                                       &iface->dci_wqs[i],
+                                       mmio_mode, &iface->dci_wqs[i],
                                        iface->super.tx.dcis[i].txqp.qp);
         if (status != UCS_OK) {
             return status;
@@ -1368,7 +1369,7 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
 }
 
 static ucs_status_t uct_dc_mlx5_iface_tag_init(uct_dc_mlx5_iface_t *iface,
-                                               uct_rc_iface_config_t *rc_config)
+                                               uct_dc_mlx5_iface_config_t *config)
 {
 #if IBV_EXP_HW_TM_DC
     if (UCT_RC_IFACE_TM_ENABLED(&iface->super.super)) {
@@ -1379,7 +1380,9 @@ static ucs_status_t uct_dc_mlx5_iface_tag_init(uct_dc_mlx5_iface_t *iface,
         uct_dc_iface_fill_xrq_init_attrs(&iface->super.super, &srq_init_attr, &dc_op);
 
         status = uct_rc_mlx5_iface_common_tag_init(&iface->mlx5_common,
-                                                   &iface->super.super, rc_config,
+                                                   &iface->super.super,
+                                                   &config->super.super,
+                                                   &config->mlx5_common,
                                                    &srq_init_attr,
                                                    sizeof(struct ibv_exp_tmh_rvh) +
                                                    sizeof(struct ibv_exp_tmh_ravh));
@@ -1430,7 +1433,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_mlx5_iface_ops, md,
                               worker, params, &config->super, &init_attr);
 
-    status = uct_dc_mlx5_iface_tag_init(self, &config->super.super);
+    status = uct_dc_mlx5_iface_tag_init(self, config);
     if (status != UCS_OK) {
         goto err;
     }
@@ -1447,7 +1450,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
         goto err_rc_mlx5_common_cleanup;
     }
 
-    status = uct_dc_mlx5_iface_init_dcis(self);
+    status = uct_dc_mlx5_iface_init_dcis(self, config->mlx5_common.mmio_mode);
     if (status != UCS_OK) {
         goto err_rc_mlx5_common_cleanup;
     }

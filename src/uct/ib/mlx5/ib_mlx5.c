@@ -16,6 +16,39 @@
 #include <ucs/sys/sys.h>
 #include <string.h>
 
+
+static const char *uct_ib_mlx5_mmio_modes[] = {
+    [UCT_IB_MLX5_MMIO_MODE_BF_POST]    = "bf_post",
+    [UCT_IB_MLX5_MMIO_MODE_BF_POST_MT] = "bf_post_mt",
+    [UCT_IB_MLX5_MMIO_MODE_DB]         = "db",
+    [UCT_IB_MLX5_MMIO_MODE_AUTO]       = "auto",
+    [UCT_IB_MLX5_MMIO_MODE_LAST]       = NULL
+};
+
+ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
+#if HAVE_IBV_EXP_DM
+    {"DM_SIZE", "2k",
+     "Device Memory segment size (0 - disabled)",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, dm.seg_len), UCS_CONFIG_TYPE_MEMUNITS},
+    {"DM_COUNT", "1",
+     "Device Memory segments count (0 - disabled)",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, dm.count), UCS_CONFIG_TYPE_UINT},
+#endif
+
+    {"MMIO_MODE", "auto",
+     "How to write to MMIO register when posting sends on a QP. One of the following:\n"
+     " bf_post    - BlueFlame post, write the WQE fully to MMIO register.\n"
+     " bf_post_mt - Thread-safe BlueFlame, same as bf_post but same MMIO register can be used\n"
+     "              by multiple threads.\n"
+     " db         - Doorbell mode, write only 8 bytes to MMIO register, followed by a memory\n"
+     "              store fence, which makes sure the doorbell goes out on the bus.\n"
+     " auto       - Select best according to worker thread mode.",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, mmio_mode),
+     UCS_CONFIG_TYPE_ENUM(uct_ib_mlx5_mmio_modes)},
+
+    {NULL}
+};
+
 ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 {
     uct_ib_mlx5dv_cq_t dcq = {};
@@ -163,6 +196,7 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
 }
 
 ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
+                                   uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
                                    uct_ib_mlx5_txwq_t *txwq,
                                    struct ibv_qp *verbs_qp)
 {
@@ -189,11 +223,9 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
         return UCS_ERR_IO_ERROR;
     }
 
-    ucs_debug("tx wq %d bytes [bb=%d, nwqe=%d]",
-              qp_info.dv.sq.stride * qp_info.dv.sq.wqe_cnt,
-              qp_info.dv.sq.stride, qp_info.dv.sq.wqe_cnt);
-
-    if (qp_info.dv.bf.size > 0) {
+    if (cfg_mmio_mode != UCT_IB_MLX5_MMIO_MODE_AUTO) {
+        mmio_mode = cfg_mmio_mode;
+    } else if (qp_info.dv.bf.size > 0) {
         if (worker->thread_mode == UCS_THREAD_MODE_SINGLE) {
             mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST;
         } else if (worker->thread_mode == UCS_THREAD_MODE_SERIALIZED) {
@@ -205,6 +237,11 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
     } else {
         mmio_mode = UCT_IB_MLX5_MMIO_MODE_DB;
     }
+
+    ucs_debug("tx wq %d bytes [bb=%d, nwqe=%d] mmio_mode %s",
+              qp_info.dv.sq.stride * qp_info.dv.sq.wqe_cnt,
+              qp_info.dv.sq.stride, qp_info.dv.sq.wqe_cnt,
+              uct_ib_mlx5_mmio_modes[mmio_mode]);
 
     txwq->qstart   = qp_info.dv.sq.buf;
     txwq->qend     = qp_info.dv.sq.buf + (qp_info.dv.sq.stride * qp_info.dv.sq.wqe_cnt);

@@ -34,6 +34,10 @@ static ucs_config_field_t uct_ud_mlx5_iface_config_table[] = {
 
   {"", "", NULL,
    ucs_offsetof(uct_ud_mlx5_iface_config_t, mlx5_common),
+   UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
+
+  {"", "", NULL,
+   ucs_offsetof(uct_ud_mlx5_iface_config_t, ud_mlx5_common),
    UCS_CONFIG_TYPE_TABLE(uct_ud_mlx5_iface_common_config_table)},
 
   {NULL}
@@ -516,7 +520,7 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     ucs_status_t status;
     int is_global;
 
-    status = uct_ud_mlx5_iface_get_av(&iface->super.super, &iface->mlx5_common,
+    status = uct_ud_mlx5_iface_get_av(&iface->super.super, &iface->ud_mlx5_common,
                                       ib_addr, ep->super.path_bits, &ep->av,
                                       &ep->grh_av, &is_global);
     if (status != UCS_OK) {
@@ -706,7 +710,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         return status;
     }
 
-    status = uct_ib_mlx5_txwq_init(self->super.super.super.worker, &self->tx.wq,
+    status = uct_ib_mlx5_txwq_init(self->super.super.super.worker,
+                                   config->mlx5_common.mmio_mode, &self->tx.wq,
                                    self->super.qp);
     if (status != UCS_OK) {
         return status;
@@ -719,7 +724,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     }
 
     status = uct_ud_mlx5_iface_common_init(&self->super.super,
-                                           &self->mlx5_common, &config->mlx5_common);
+                                           &self->ud_mlx5_common,
+                                           &config->ud_mlx5_common);
     if (status != UCS_OK) {
         return status;
     }

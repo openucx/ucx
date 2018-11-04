@@ -23,18 +23,6 @@ ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
 #endif
 
 
-ucs_config_field_t uct_mlx5_common_config_table[] = {
-#if HAVE_IBV_EXP_DM
-    {"DM_SIZE", "2k",
-     "Device Memory segment size (0 - disabled)",
-     ucs_offsetof(uct_common_mlx5_iface_config_t, dm.seg_len), UCS_CONFIG_TYPE_MEMUNITS},
-    {"DM_COUNT", "1",
-     "Device Memory segments count (0 - disabled)",
-     ucs_offsetof(uct_common_mlx5_iface_config_t, dm.count), UCS_CONFIG_TYPE_UINT},
-#endif
-    {NULL}
-};
-
 #if HAVE_IBV_EXP_DM
 /* uct_mlx5_dm_va is used to get pointer to DM mapped into process address space */
 typedef struct uct_mlx5_dm_va {
@@ -147,6 +135,7 @@ ucs_status_t
 uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
                                   uct_rc_iface_t *rc_iface,
                                   uct_rc_iface_config_t *rc_config,
+                                  const uct_ib_mlx5_iface_config_t *mlx5_config,
                                   struct ibv_exp_create_srq_attr *srq_init_attr,
                                   unsigned rndv_hdr_len)
 {
@@ -172,6 +161,7 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
     }
 
     status = uct_ib_mlx5_txwq_init(rc_iface->super.super.worker,
+                                   mlx5_config->mmio_mode,
                                    &iface->tm.cmd_wq.super, cmd_qp);
     if (status != UCS_OK) {
         goto err_tag_cleanup;
@@ -268,7 +258,7 @@ static ucs_mpool_ops_t uct_dm_iface_mpool_ops = {
 
 static int uct_rc_mlx5_iface_common_dm_device_cmp(uct_mlx5_dm_data_t *dm_data,
                                                   uct_rc_iface_t *iface,
-                                                  const uct_common_mlx5_iface_config_t *config)
+                                                  const uct_ib_mlx5_iface_config_t *config)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
 
@@ -278,7 +268,7 @@ static int uct_rc_mlx5_iface_common_dm_device_cmp(uct_mlx5_dm_data_t *dm_data,
 static ucs_status_t
 uct_rc_mlx5_iface_common_dm_tl_init(uct_mlx5_dm_data_t *data,
                                     uct_rc_iface_t *iface,
-                                    const uct_common_mlx5_iface_config_t *config)
+                                    const uct_ib_mlx5_iface_config_t *config)
 {
     ucs_status_t status;
     struct ibv_exp_alloc_dm_attr dm_attr;
@@ -350,10 +340,10 @@ static void uct_rc_mlx5_iface_common_dm_tl_cleanup(uct_mlx5_dm_data_t *data)
 static ucs_status_t
 uct_rc_mlx5_iface_common_dm_init(uct_rc_mlx5_iface_common_t *iface,
                                  uct_rc_iface_t *rc_iface,
-                                 const uct_common_mlx5_iface_config_t *config)
+                                 const uct_ib_mlx5_iface_config_t *mlx5_config)
 {
 #if HAVE_IBV_EXP_DM
-    if ((config->dm.seg_len * config->dm.count) == 0) {
+    if ((mlx5_config->dm.seg_len * mlx5_config->dm.count) == 0) {
         goto fallback;
     }
 
@@ -362,7 +352,7 @@ uct_rc_mlx5_iface_common_dm_init(uct_rc_mlx5_iface_common_t *iface,
                                           uct_mlx5_dm_data_t,
                                           uct_rc_mlx5_iface_common_dm_device_cmp,
                                           uct_rc_mlx5_iface_common_dm_tl_init,
-                                          rc_iface, config);
+                                          rc_iface, mlx5_config);
     if (UCS_PTR_IS_ERR(iface->dm.dm)) {
         goto fallback;
     }
@@ -388,8 +378,8 @@ static void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *ifac
 
 ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                            uct_rc_iface_t *rc_iface,
-                                           uct_rc_iface_config_t *config,
-                                           uct_common_mlx5_iface_config_t *common_config)
+                                           const uct_rc_iface_config_t *config,
+                                           const uct_ib_mlx5_iface_config_t *mlx5_config)
 {
     ucs_status_t status;
 
@@ -409,7 +399,7 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
         return status;
     }
 
-    status = uct_rc_mlx5_iface_common_dm_init(iface, rc_iface, common_config);
+    status = uct_rc_mlx5_iface_common_dm_init(iface, rc_iface, mlx5_config);
     if (status != UCS_OK) {
         return status;
     }

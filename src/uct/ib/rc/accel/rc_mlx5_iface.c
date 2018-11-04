@@ -26,7 +26,7 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
 
   {"", "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_config_t, mlx5_common),
-   UCS_CONFIG_TYPE_TABLE(uct_mlx5_common_config_table)},
+   UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
 
   {"TX_MAX_BB", "-1",
    "Limits the number of outstanding WQE building blocks. The actual limit is\n"
@@ -219,7 +219,7 @@ static ucs_status_t uct_rc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 
 static ucs_status_t
 uct_rc_mlx5_iface_tag_init(uct_rc_mlx5_iface_t *iface,
-                           uct_rc_iface_config_t *rc_config)
+                           uct_rc_mlx5_iface_config_t *config)
 {
 #if IBV_EXP_HW_TM
     if (UCT_RC_IFACE_TM_ENABLED(&iface->super)) {
@@ -228,7 +228,8 @@ uct_rc_mlx5_iface_tag_init(uct_rc_mlx5_iface_t *iface,
         iface->super.progress = uct_rc_mlx5_iface_progress_tm;
 
         return uct_rc_mlx5_iface_common_tag_init(&iface->mlx5_common,
-                                                 &iface->super, rc_config,
+                                                 &iface->super, &config->super,
+                                                 &config->mlx5_common,
                                                  &srq_init_attr,
                                                  sizeof(struct ibv_exp_tmh_rvh));
     }
@@ -264,6 +265,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
                               params, &config->super, &init_attr);
 
 
+    self->tx.mmio_mode               = config->mlx5_common.mmio_mode;
     self->tx.bb_max                  = ucs_min(config->tx_max_bb, UINT16_MAX);
     self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
                                                self->tx.bb_max / 4);
@@ -273,7 +275,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
         return status;
     }
 
-    status = uct_rc_mlx5_iface_tag_init(self, &config->super);
+    status = uct_rc_mlx5_iface_tag_init(self, config);
     if (status != UCS_OK) {
         return status;
     }
