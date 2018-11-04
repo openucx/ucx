@@ -1147,7 +1147,8 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         [0] = 1,
         [1] = 4,
         [2] = 8,
-        [3] = 12
+        [3] = 12,
+        [4] = 16
     };
     uint8_t active_width, active_speed, active_mtu;
     double encoding, signal_rate, wire_speed;
@@ -1161,7 +1162,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 
     /* Get active width */
     if (!ucs_is_pow2(active_width) ||
-        (active_width < 1) || (ucs_ilog2(active_width) > 3))
+        (active_width < 1) || (ucs_ilog2(active_width) > 4))
     {
         ucs_error("Invalid active_width on %s:%d: %d",
                   UCT_IB_IFACE_ARG(iface), active_width);
