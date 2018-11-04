@@ -653,7 +653,7 @@ struct uct_iface_params {
     void                                         *err_handler_arg;
     /** The callback to handle transport level error.*/
     uct_error_handler_t                          err_handler;
-    /** Callback flags to indicate where the @err_handler callback can be
+    /** Callback flags to indicate where the @a err_handler callback can be
      * invoked from. @ref uct_cb_flags */
     uint32_t                                     err_handler_flags;
 
@@ -1498,7 +1498,7 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  *  @return Nonzero if memory is owned, 0 if not owned
  *
  * @param [in]     md        Memory domain to detect if memory belongs to.
- * @param [in]     address   Memory address to detect.
+ * @param [in]     addr      Memory address to detect.
  * @param [in]     length    Size of memory
  */
 int uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length);
@@ -1509,7 +1509,7 @@ int uct_md_is_mem_type_owned(uct_md_h md, void *addr, size_t length);
  *
  * Allocate potentially registered memory. Every one of the provided allocation
  * methods will be used, in turn, to perform the allocation, until one succeeds.
- *  Whenever the MD method is encountered, every one of the provided MDs will be
+ * Whenever the MD method is encountered, every one of the provided MDs will be
  * used, in turn, to allocate the memory, until one succeeds, or they are
  * exhausted. In this case the next allocation method from the initial list will
  * be attempted.
@@ -2444,7 +2444,8 @@ UCT_INLINE_API void uct_iface_progress_disable(uct_iface_h iface, unsigned flags
 
 
 /**
- * Perform a progress on an interface.
+ * @ingroup UCT_RESOURCE
+ * @brief Perform a progress on an interface.
  */
 UCT_INLINE_API unsigned uct_iface_progress(uct_iface_h iface)
 {

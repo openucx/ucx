@@ -59,6 +59,7 @@ typedef int (*ucs_callbackq_predicate_t)(const ucs_callbackq_elem_t *elem,
 
 
 /**
+ * @ingroup UCS_RESOURCE
  * Callback flags
  */
 enum ucs_callbackq_flags {

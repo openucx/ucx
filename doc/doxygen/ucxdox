@@ -761,15 +761,17 @@ WARN_LOGFILE           =
 # spaces.
 # Note: If this tag is empty the current directory is searched.
 
-INPUT                  = $(SRCDIR)/src/ucp/api/   \
-                         $(SRCDIR)/src/uct/api/   \
-                         $(SRCDIR)/src/ucs/type/  \
-                         $(SRCDIR)/src/ucs/async/ \
-                         $(SRCDIR)/src/ucs/time/  \
-                         $(SRCDIR)/src/ucs/sys/   \
-                         $(SRCDIR)/doc/doxygen/preface.md \
-                         $(SRCDIR)/doc/doxygen/intro.md \
-                         $(SRCDIR)/doc/doxygen/design.md \
+INPUT                  = $(SRCDIR)/src/ucp/api/             \
+                         $(SRCDIR)/src/uct/api/             \
+                         $(SRCDIR)/src/ucs/async/           \
+                         $(SRCDIR)/src/ucs/config/          \
+                         $(SRCDIR)/src/ucs/datastruct/      \
+                         $(SRCDIR)/src/ucs/time/            \
+                         $(SRCDIR)/src/ucs/type/            \
+                         $(SRCDIR)/src/ucs/sys/             \
+                         $(SRCDIR)/doc/doxygen/preface.md   \
+                         $(SRCDIR)/doc/doxygen/intro.md     \
+                         $(SRCDIR)/doc/doxygen/design.md    \
                          $(SRCDIR)/doc/doxygen/conventions.md
 
 # This tag can be used to specify the character encoding of the source files
@@ -799,7 +801,9 @@ FILE_PATTERNS          = ucp.h          \
                          async_fwd.h    \
                          compiler_def.h \
                          time_def.h     \
-                         thread_mode.h
+                         thread_mode.h  \
+                         callbackq.h    \
+                         types.h
 
 # The RECURSIVE tag can be used to specify whether or not subdirectories should
 # be searched for input files as well.
