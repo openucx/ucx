@@ -23,7 +23,7 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 #endif
 
 #if HAVE_DC_DV
-static ucs_status_t uct_ib_mlx5_device_init(uct_ib_device_t *dev)
+static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
 {
     struct ibv_context *ctx = dev->ibv_context;
     struct ibv_qp_init_attr_ex qp_attr = {};
@@ -70,8 +70,7 @@ err_cq:
     return status;
 }
 
-UCT_IB_DEVICE_INIT(uct_ib_mlx5_device_init);
-
+UCT_IB_DEVICE_INIT(uct_ib_mlx5dv_device_init);
 #endif
 
 int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
