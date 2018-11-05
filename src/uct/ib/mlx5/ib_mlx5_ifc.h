@@ -78,7 +78,8 @@ enum mlx5_cap_mode {
 };
 
 enum mlx5_cap_type {
-	UCT_IB_MLX5_CAP_GENERAL = 0
+	UCT_IB_MLX5_CAP_GENERAL = 0,
+	UCT_IB_MLX5_CAP_ATOMIC  = 3
 };
 
 struct uct_ib_mlx5_cmd_hca_cap_bits {
@@ -387,8 +388,39 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
 	u8	   reserved_at_61f[0x1e1];
 };
 
+enum {
+        UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP          = 1 << 0,
+        UCT_IB_MLX5_ATOMIC_OPS_FETCH_ADD         = 1 << 1,
+        UCT_IB_MLX5_ATOMIC_OPS_MASKED_CMP_SWAP   = 1 << 2,
+        UCT_IB_MLX5_ATOMIC_OPS_MASKED_FETCH_ADD  = 1 << 3,
+};
+
+struct uct_ib_mlx5_atomic_caps_bits {
+	u8         reserved_at_0[0x40];
+
+	u8         atomic_req_8B_endianness_mode[0x2];
+	u8         reserved_at_42[0x4];
+	u8         supported_atomic_req_8B_endianness_mode_1[0x1];
+
+	u8         reserved_at_47[0x19];
+
+	u8         reserved_at_60[0x20];
+
+	u8         reserved_at_80[0x10];
+	u8         atomic_operations[0x10];
+
+	u8         reserved_at_a0[0x10];
+	u8         atomic_size_qp[0x10];
+
+	u8         reserved_at_c0[0x10];
+	u8         atomic_size_dc[0x10];
+
+	u8         reserved_at_e0[0x720];
+};
+
 union uct_ib_mlx5_hca_cap_union_bits {
 	struct uct_ib_mlx5_cmd_hca_cap_bits cmd_hca_cap;
+	struct uct_ib_mlx5_atomic_caps_bits atomic_caps;
 	u8         reserved_at_0[0x8000];
 };
 

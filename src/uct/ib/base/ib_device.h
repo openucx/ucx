@@ -124,6 +124,8 @@ typedef struct uct_ib_device {
     UCS_STATS_NODE_DECLARE(stats);
     struct ibv_exp_port_attr    port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
     unsigned                    flags;
+    uint8_t                     atomic_arg_size[2];
+    uint8_t                     atomic_arg_size_be[2];
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_spinlock_t              ah_lock;
@@ -251,9 +253,15 @@ ucs_status_t uct_ib_modify_qp(struct ibv_qp *qp, enum ibv_qp_state state);
  */
 ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu);
 
-int uct_ib_atomic_is_supported(uct_ib_device_t *dev, int ext, size_t size);
+static inline int
+uct_ib_atomic_is_supported(uct_ib_device_t *dev, int ext, size_t size) {
+    return dev->atomic_arg_size[ext] & size;
+}
 
-int uct_ib_atomic_is_be_reply(uct_ib_device_t *dev, int ext, size_t size);
+static inline int
+uct_ib_atomic_is_be_reply(uct_ib_device_t *dev, int ext, size_t size) {
+    return dev->atomic_arg_size_be[ext] & size;
+}
 
 ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
                                      const char *resource_dev_name,

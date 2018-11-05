@@ -81,7 +81,7 @@ static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {0};
     uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_in)] = {0};
     struct ibv_context *ctx = dev->ibv_context;
-    int ret;
+    int ret, atomic = 0;
 
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX |
@@ -95,11 +95,59 @@ static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
                     capability.cmd_hca_cap.compact_address_vector)) {
             dev->flags |= UCT_IB_DEVICE_FLAG_AV;
         }
+        if (UCT_IB_MLX5DV_GET(query_hca_cap_out, out, capability.cmd_hca_cap.atomic)) {
+            atomic = 1;
+        }
     } else if ((errno != EPERM) &&
                (errno != EPROTONOSUPPORT) &&
                (errno != EOPNOTSUPP)) {
         ucs_error("MLX5_CMD_OP_QUERY_HCA_CAP failed: %m");
         return UCS_ERR_IO_ERROR;
+    }
+
+    if (atomic) {
+        uint8_t arg_size;
+        int cap_ops, mode8b;
+        int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP          |
+                  UCT_IB_MLX5_ATOMIC_OPS_FETCH_ADD;
+
+        UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX |
+                                                       (UCT_IB_MLX5_CAP_ATOMIC << 1));
+        ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out));
+        if (ret != 0) {
+            ucs_error("MLX5_CMD_OP_QUERY_HCA_CAP failed: %m");
+            return UCS_ERR_IO_ERROR;
+        }
+
+        arg_size = UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
+                                     capability.atomic_caps.atomic_size_qp);
+
+        cap_ops = UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
+                                    capability.atomic_caps.atomic_operations);
+
+        mode8b = UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
+                                   capability.atomic_caps.atomic_req_8B_endianness_mode);
+
+        if ((cap_ops & ops) == ops) {
+            dev->atomic_arg_size[0] = sizeof(uint64_t);
+            if (!mode8b) {
+                dev->atomic_arg_size_be[0] = sizeof(uint64_t);
+            }
+        }
+
+        ops |= UCT_IB_MLX5_ATOMIC_OPS_MASKED_CMP_SWAP   |
+               UCT_IB_MLX5_ATOMIC_OPS_MASKED_FETCH_ADD;
+
+        arg_size &= UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
+                                      capability.atomic_caps.atomic_size_dc);
+
+        if ((cap_ops & ops) == ops) {
+            dev->atomic_arg_size[1] = arg_size;
+            if (mode8b) {
+                arg_size &= ~(sizeof(uint64_t));
+            }
+            dev->atomic_arg_size_be[1] = arg_size;
+        }
     }
 #endif
     if (!no_dc) {
