@@ -219,11 +219,13 @@ size_t uct_ib_address_size(uct_ib_iface_t *iface)
     if (IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface))) {
         return sizeof(uct_ib_address_t) +
                sizeof(union ibv_gid);  /* raw gid */
-    } else if (iface->gid.global.subnet_prefix == UCT_IB_LINK_LOCAL_PREFIX) {
+    } else if ((iface->gid.global.subnet_prefix == UCT_IB_LINK_LOCAL_PREFIX) &&
+               !iface->is_global_addr) {
         return sizeof(uct_ib_address_t) +
                sizeof(uint16_t); /* lid */
-    } else if ((iface->gid.global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
-                                                  UCT_IB_SITE_LOCAL_PREFIX) {
+    } else if (((iface->gid.global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
+                                                  UCT_IB_SITE_LOCAL_PREFIX) &&
+               !iface->is_global_addr) {
         return sizeof(uct_ib_address_t) +
                sizeof(uint16_t) + /* lid */
                sizeof(uint64_t) + /* if_id */
@@ -255,13 +257,15 @@ void uct_ib_address_pack(uct_ib_iface_t *iface,
         *(uint16_t*) ptr = lid;
         ptr += sizeof(uint16_t);
 
-        if (gid->global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) {
+        if ((gid->global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) ||
+            iface->is_global_addr) {
             ib_addr->flags |= UCT_IB_ADDRESS_FLAG_IF_ID;
             *(uint64_t*) ptr = gid->global.interface_id;
             ptr += sizeof(uint64_t);
 
-            if ((gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
-                                             UCT_IB_SITE_LOCAL_PREFIX) {
+            if (((gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
+                                              UCT_IB_SITE_LOCAL_PREFIX) &&
+                !iface->is_global_addr) {
                 /* Site-local */
                 ib_addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET16;
                 *(uint16_t*) ptr = gid->global.subnet_prefix >> 48;
