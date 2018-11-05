@@ -356,7 +356,6 @@ static int init_context(ucp_context_h *ucp_context, ucp_worker_h *ucp_worker)
     /* UCP objects */
     ucp_worker_params_t worker_params;
     ucp_params_t ucp_params;
-    ucp_config_t *config;
     ucs_status_t status;
     int ret = 0;
 
@@ -364,13 +363,6 @@ static int init_context(ucp_context_h *ucp_context, ucp_worker_h *ucp_worker)
     memset(&worker_params, 0, sizeof(worker_params));
 
     /* UCP initialization */
-    status = ucp_config_read(NULL, NULL, &config);
-    if (status != UCS_OK) {
-        fprintf(stderr, "failed to ucp_config_read (%s)\n", ucs_status_string(status));
-        ret = -1;
-        goto err;
-    }
-
     ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES     |
                               UCP_PARAM_FIELD_REQUEST_SIZE |
                               UCP_PARAM_FIELD_REQUEST_INIT;
@@ -379,8 +371,7 @@ static int init_context(ucp_context_h *ucp_context, ucp_worker_h *ucp_worker)
     ucp_params.request_size = sizeof(test_req_t);
     ucp_params.request_init = request_init;
 
-    status = ucp_init(&ucp_params, config, ucp_context);
-    ucp_config_release(config);
+    status = ucp_init(&ucp_params, NULL, ucp_context);
     if (status != UCS_OK) {
         fprintf(stderr, "failed to ucp_init (%s)\n", ucs_status_string(status));
         ret = -1;
