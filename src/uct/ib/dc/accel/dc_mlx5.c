@@ -964,7 +964,7 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
         log_lvl = ib_iface->super.config.failure_level;
     }
 
-    uct_ib_mlx5_completion_with_err(arg, log_lvl);
+    uct_ib_mlx5_completion_with_err(ib_iface, arg, log_lvl);
 }
 
 static ucs_status_t uct_dc_mlx5_ep_set_failed(uct_ib_iface_t *ib_iface,

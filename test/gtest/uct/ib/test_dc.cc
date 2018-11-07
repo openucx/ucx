@@ -83,7 +83,7 @@ protected:
         struct dcs_comp *comp = (struct dcs_comp *)uct_comp;
         uct_dc_ep_t *ep;
 
-        ASSERT_UCS_OK(status);
+        EXPECT_UCS_OK(status);
 
         ep = dc_ep(comp->e, 0);
         /* dci must be released before completion cb is called */
