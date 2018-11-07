@@ -57,6 +57,18 @@ public:
             usleep(1000);
         }
     }
+
+    void wait_for_ep_destroyed(uct_ud_iface_t *iface, uint32_t ep_idx)
+    {
+        ucs_time_t deadline = ucs_get_time() +
+                              ucs_time_from_sec(10) * ucs::test_time_multiplier();
+        void *ud_ep_tmp;
+
+        while ((ucs_get_time() < deadline) &&
+               ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp)) {
+            usleep(1000);
+        }
+    }
 };
 
 int test_ud_slow_timer::rx_limit = 10;
@@ -97,12 +109,7 @@ UCS_TEST_P(test_ud_slow_timer, ep_destroy, "UD_TIMEOUT=1s") {
     EXPECT_TRUE(ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp));
 
     m_e1->destroy_eps();
-    twait(ucs_time_to_msec(iface->config.peer_timeout * 1.1));
-    /* Do more retries if test node is slow */
-    for (size_t i = 0; ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp) &&
-                       (i < 600); ++i) {
-        twait(ucs_time_to_msec(iface->config.peer_timeout * 0.1));
-    }
+    wait_for_ep_destroyed(iface, ep_idx);
     EXPECT_FALSE(ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp));
 }
 
