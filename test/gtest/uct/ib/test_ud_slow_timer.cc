@@ -61,7 +61,7 @@ public:
     void wait_for_ep_destroyed(uct_ud_iface_t *iface, uint32_t ep_idx)
     {
         ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(10) * ucs::test_time_multiplier();
+                              ucs_time_from_sec(60) * ucs::test_time_multiplier();
         void *ud_ep_tmp;
 
         while ((ucs_get_time() < deadline) &&
