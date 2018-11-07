@@ -246,6 +246,16 @@ build_release_pkg() {
 		../contrib/buildrpm.sh -s -b
 	fi
 
+	# check that UCX version is present in spec file
+	cd ${WORKSPACE}
+	# extract version from configure.ac and convert to MAJOR.MINOR.PATCH representation
+	version=$(grep -P "define\S+ucx_ver" configure.ac | awk '{print $2}' | sed 's,),,' | xargs echo | tr ' ' '.')
+	if ! grep -q "$version" ucx.spec.in; then
+		echo "Current UCX version ($version) is not present in ucx.spec.in changelog"
+		exit 1
+	fi
+	cd -
+
 	$MAKE distclean
 }
 
