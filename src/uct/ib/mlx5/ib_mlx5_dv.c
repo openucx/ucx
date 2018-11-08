@@ -75,7 +75,7 @@ err_cq:
 static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
 {
     ucs_status_t status = UCS_OK;
-    int no_dc = 0;
+    int has_dc = 1;
 
 #if HAVE_DECL_MLX5DV_DEVX_GENERAL_CMD
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {0};
@@ -85,14 +85,14 @@ static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
 
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX |
-                                          (UCT_IB_MLX5_CAP_GENERAL << 1));
+                                                   (UCT_IB_MLX5_CAP_GENERAL << 1));
     ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out));
     if (ret == 0) {
         if (!UCT_IB_MLX5DV_GET(query_hca_cap_out, out, capability.cmd_hca_cap.dct)) {
-            no_dc = 1;
+            has_dc = 0;
         }
         if (UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
-                    capability.cmd_hca_cap.compact_address_vector)) {
+                              capability.cmd_hca_cap.compact_address_vector)) {
             dev->flags |= UCT_IB_DEVICE_FLAG_AV;
         }
         if (UCT_IB_MLX5DV_GET(query_hca_cap_out, out, capability.cmd_hca_cap.atomic)) {
@@ -106,10 +106,10 @@ static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
     }
 
     if (atomic) {
+        int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
+                  UCT_IB_MLX5_ATOMIC_OPS_FETCH_ADD;
         uint8_t arg_size;
         int cap_ops, mode8b;
-        int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP          |
-                  UCT_IB_MLX5_ATOMIC_OPS_FETCH_ADD;
 
         UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX |
                                                        (UCT_IB_MLX5_CAP_ATOMIC << 1));
@@ -135,11 +135,13 @@ static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
             }
         }
 
-        ops |= UCT_IB_MLX5_ATOMIC_OPS_MASKED_CMP_SWAP   |
+        ops |= UCT_IB_MLX5_ATOMIC_OPS_MASKED_CMP_SWAP |
                UCT_IB_MLX5_ATOMIC_OPS_MASKED_FETCH_ADD;
 
-        arg_size &= UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
-                                      capability.atomic_caps.atomic_size_dc);
+        if (has_dc) {
+            arg_size &= UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
+                                          capability.atomic_caps.atomic_size_dc);
+        }
 
         if ((cap_ops & ops) == ops) {
             dev->atomic_arg_size[1] = arg_size;
@@ -150,7 +152,7 @@ static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
         }
     }
 #endif
-    if (!no_dc) {
+    if (has_dc) {
         status = uct_ib_mlx5_check_dc(dev);
     }
 

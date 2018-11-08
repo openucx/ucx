@@ -59,21 +59,12 @@
 #define UCT_IB_MLX5DV_GET64(_typ, _p, _fld) \
     be64toh(*((__be64 *)(_p) + __uct_64_off(_typ, _fld)))
 
-#define UCT_IB_MLX5DV_SET_TO_ONES(_typ, _p, _fld) \
-    do { \
-        UCS_STATIC_ASSERT(__uct_st_sz_bits(_typ) % 32 == 0); \
-        *((__be32 *)(_p) + __uct_dw_off(_typ, _fld)) = \
-        htobe32((be32toh(*((__be32 *)(_p) + __uct_dw_off(_typ, _fld))) & \
-            (~__uct_dw_mask(_typ, _fld))) | ((__uct_mask(_typ, _fld)) \
-            << __uct_dw_bit_off(_typ, _fld))); \
-    } while (0)
-
 enum {
-	UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP                 = 0x100
+        UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP        = 0x100
 };
 
 enum mlx5_cap_mode {
-	UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX	= 0,
+        UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX	= 0,
         UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR	= 1
 };
 
@@ -389,10 +380,10 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
 };
 
 enum {
-        UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP          = 1 << 0,
-        UCT_IB_MLX5_ATOMIC_OPS_FETCH_ADD         = 1 << 1,
-        UCT_IB_MLX5_ATOMIC_OPS_MASKED_CMP_SWAP   = 1 << 2,
-        UCT_IB_MLX5_ATOMIC_OPS_MASKED_FETCH_ADD  = 1 << 3,
+        UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP          = UCS_BIT(0),
+        UCT_IB_MLX5_ATOMIC_OPS_FETCH_ADD         = UCS_BIT(1),
+        UCT_IB_MLX5_ATOMIC_OPS_MASKED_CMP_SWAP   = UCS_BIT(2),
+        UCT_IB_MLX5_ATOMIC_OPS_MASKED_FETCH_ADD  = UCS_BIT(3)
 };
 
 struct uct_ib_mlx5_atomic_caps_bits {

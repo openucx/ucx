@@ -305,9 +305,9 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
 #  endif
         dev->atomic_arg_size[1] &= UCS_MASK(dev->dev_attr.ext_atom.log_max_atomic_inline + 1);
 #endif
-        dev->atomic_arg_size[0] |= sizeof(uint64_t);
+        dev->atomic_arg_size[0] = sizeof(uint64_t);
         if (IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(&dev->dev_attr)) {
-            dev->atomic_arg_size_be[0] |= sizeof(uint64_t);
+            dev->atomic_arg_size_be[0] = sizeof(uint64_t);
         }
     }
 
