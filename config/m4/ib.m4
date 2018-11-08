@@ -204,7 +204,7 @@ AS_IF([test "x$with_ib" == xyes],
                        AC_CHECK_HEADERS([infiniband/mlx5dv.h],
                                [with_mlx5_hw=yes
                                 with_mlx5_dv=yes
-                                mlx5_include=mlx5dv.h])])
+                                mlx5_include=mlx5dv.h], [], [ ])])
 
               AS_IF([test "x$with_mlx5_dv" == xyes -a "x$have_cq_io" == xyes ], [
                        AC_CHECK_DECLS([
