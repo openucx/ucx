@@ -346,16 +346,17 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
                               const uct_iface_addr_t *iface_addr)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    int is_local_eth = IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface));
     const uct_ib_address_t *ib_addr = (const void*)dev_addr;
     union ibv_gid gid;
     uint16_t lid;
 
     uct_ib_address_unpack(ib_addr, &lid, &gid);
 
-    if (!iface->is_global_addr && (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB)) {
+    if (!is_local_eth && (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB)) {
         /* same subnet prefix */
         return gid.global.subnet_prefix == iface->gid.global.subnet_prefix;
-    } else if (iface->is_global_addr && (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
+    } else if (is_local_eth && (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
         /* there shouldn't be a lid and the gid flag should be on */
         ucs_assert(ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID);
         ucs_assert(!(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID));
