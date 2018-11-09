@@ -24,7 +24,9 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
     ucs_assert(rkey->cache.ep_cfg_index == ep->cfg_index);
     ucs_assert(rkey->cache.rma_lane == lane);
 
-    if (req->send.length <= ucp_ep_config(ep)->bcopy_thresh) {
+    if ((req->send.length <= rma_config->max_put_short) ||
+        (req->send.length <= ucp_ep_config(ep)->bcopy_thresh))
+    {
         packed_len = ucs_min(req->send.length, rma_config->max_put_short);
         status = UCS_PROFILE_CALL(uct_ep_put_short,
                                   ep->uct_eps[lane],
