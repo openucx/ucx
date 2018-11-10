@@ -228,6 +228,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "Enable memory type(cuda) cache \n",
    ucs_offsetof(ucp_config_t, ctx.enable_memtype_cache), UCS_CONFIG_TYPE_BOOL},
 
+  {"FLUSH_WORKER_EPS", "y",
+   "Enable flushing the worker by flushing its endpoints. Allows completing\n"
+   "the flush operation in a bounded time even if there are new requests on\n"
+   "another thread, or incoming active messages, but consumes more resources.",
+   ucs_offsetof(ucp_config_t, ctx.flush_worker_eps), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)

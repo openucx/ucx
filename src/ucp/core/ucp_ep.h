@@ -364,6 +364,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_send_callback_t req_cb,
                                        unsigned req_flags,
+                                       ucp_request_t *worker_req,
                                        ucp_request_callback_t flushed_cb,
                                        const char *debug_name);
 

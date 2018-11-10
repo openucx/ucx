@@ -158,6 +158,7 @@ struct ucp_request {
 
                 struct {
                     ucp_request_callback_t flushed_cb;/* Called when flushed */
+                    ucp_request_t          *worker_req;
                     ucs_queue_elem_t       queue;     /* Queue element in proto_status */
                     unsigned               uct_flags; /* Flags to pass to @ref uct_ep_flush */
                     uct_worker_cb_id_t     prog_id;   /* Progress callback ID */
@@ -249,6 +250,8 @@ struct ucp_request {
             ucp_worker_h          worker;   /* Worker to flush */
             ucp_send_callback_t   cb;       /* Completion callback */
             uct_worker_cb_id_t    prog_id;  /* Progress callback ID */
+            int                   comp_count; /* Countdown to request completion */
+            ucp_ep_ext_gen_t      *next_ep; /* Next endpoint to flush */
         } flush_worker;
     };
 };
