@@ -322,7 +322,6 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
         return UCS_ERR_NO_RESOURCE;
     }
 
-    ucs_assert(ucs_queue_is_empty(&ep->pending_q));
     UCT_TL_EP_STAT_FLUSH(&ep->super);
     return UCS_OK;
 }
