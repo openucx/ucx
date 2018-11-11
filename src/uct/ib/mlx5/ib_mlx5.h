@@ -269,6 +269,13 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
     uint64_t           filed_boundary;
 } UCS_S_PACKED;
 
+/**
+ * Create CQ with DV
+ */
+ucs_status_t uct_ib_mlx5_create_cq(struct ibv_context *context, int cqe,
+                                   struct ibv_comp_channel *channel,
+                                   int comp_vector, int ignore_overrun,
+                                   size_t *inl, struct ibv_cq **cq_p);
 
 extern ucs_config_field_t uct_ib_mlx5_iface_config_table[];
 

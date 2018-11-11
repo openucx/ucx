@@ -452,6 +452,7 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     .iface_get_address        = uct_cm_iface_get_address,
     .iface_is_reachable       = uct_ib_iface_is_reachable
     },
+    .create_cq                = uct_ib_verbs_create_cq,
     .arm_cq                   = (void*)ucs_empty_function_return_success,
 };
 

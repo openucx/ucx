@@ -1069,6 +1069,7 @@ static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
     .iface_is_reachable       = uct_dc_iface_is_reachable,
     .iface_get_address        = uct_dc_iface_get_address
     },
+    .create_cq                = uct_ib_verbs_create_cq,
     .arm_cq                   = uct_ib_iface_arm_cq,
     .event_cq                 = (void*)ucs_empty_function,
     .handle_failure           = uct_dc_verbs_handle_failure,
