@@ -846,11 +846,6 @@ void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc)
 void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg,
                                  ucs_status_t status)
 {
-    if (status != UCS_ERR_ENDPOINT_TIMEOUT) {
-        /* Local side failure - treat as fatal */
-        ucs_fatal("local error: %s", ucs_status_string(status));
-    }
-
     uct_ud_tx_wnd_purge_outstanding(ucs_derived_of(iface, uct_ud_iface_t),
                                     (uct_ud_ep_t *)arg, status);
 }
