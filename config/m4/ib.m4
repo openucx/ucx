@@ -114,11 +114,11 @@ AS_IF([test "x$with_ib" == xyes],
 
         have_ib_funcs=yes
         LDFLAGS="$LDFLAGS $IBVERBS_LDFLAGS"
-        AC_CHECK_DECLS([ibv_wc_status_str, \
-                        ibv_event_type_str, \
-                        ibv_query_gid, \
-                        ibv_get_device_name, \
-                        ibv_create_srq, \
+        AC_CHECK_DECLS([ibv_wc_status_str,
+                        ibv_event_type_str,
+                        ibv_query_gid,
+                        ibv_get_device_name,
+                        ibv_create_srq,
                         ibv_get_async_event],
                        [],
                        [have_ib_funcs=no],
