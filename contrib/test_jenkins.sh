@@ -181,6 +181,11 @@ prepare() {
 #
 build_docs() {
 	echo " ==== Build docs only ===="
+	# Try load newer doxygen if native is older than 1.8.11
+	if ! (echo "1.8.11"; doxygen --version) | sort -CV
+	then
+		module_load tools/doxygen-1.8.11 || true
+	fi
 	../configure --prefix=$ucx_inst --with-docs-only
 	$MAKE clean
 	$MAKE docs
