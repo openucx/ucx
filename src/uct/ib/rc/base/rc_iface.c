@@ -210,7 +210,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                   UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                   UCT_IFACE_FLAG_EVENT_RECV;
 
-    if (uct_ib_atomic_is_supported(dev, 0, sizeof(uint64_t))) {
+    if (dev->atomic_arg_size & sizeof(uint64_t)) {
         /* TODO: remove deprecated flags */
         iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
@@ -220,14 +220,14 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     }
 
 #if HAVE_IB_EXT_ATOMICS
-    if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint64_t))) {
+    if (dev->ext_atomic_arg_size & sizeof(uint64_t)) {
         /* TODO: remove deprecated flags */
         iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
         iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_SWAP);
     }
 
-    if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint32_t))) {
+    if (dev->ext_atomic_arg_size & sizeof(uint32_t)) {
         /* TODO: remove deprecated flags */
         iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
@@ -821,13 +821,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     }
 
     /* Set atomic handlers according to atomic reply endianness */
-    self->config.atomic64_handler = uct_ib_atomic_is_be_reply(dev, 0, sizeof(uint64_t)) ?
+    self->config.atomic64_handler = dev->atomic_arg_size_be & sizeof(uint64_t) ?
                                     uct_rc_ep_atomic_handler_64_be1 :
                                     uct_rc_ep_atomic_handler_64_be0;
-    self->config.atomic32_ext_handler = uct_ib_atomic_is_be_reply(dev, 1, sizeof(uint32_t)) ?
+    self->config.atomic32_ext_handler = dev->ext_atomic_arg_size_be & sizeof(uint32_t) ?
                                         uct_rc_ep_atomic_handler_32_be1 :
                                         uct_rc_ep_atomic_handler_32_be0;
-    self->config.atomic64_ext_handler = uct_ib_atomic_is_be_reply(dev, 1, sizeof(uint64_t)) ?
+    self->config.atomic64_ext_handler = dev->ext_atomic_arg_size_be & sizeof(uint64_t) ?
                                         uct_rc_ep_atomic_handler_64_be1 :
                                         uct_rc_ep_atomic_handler_64_be0;
 
