@@ -332,22 +332,25 @@ static void ucp_worker_flush_complete_one(ucp_request_t *req, ucs_status_t statu
                                           int force_progress_unreg)
 {
     ucp_worker_h worker = req->flush_worker.worker;
-
-    if (force_progress_unreg) {
-        uct_worker_progress_unregister_safe(worker->uct, &req->flush_worker.prog_id);
-    }
+    int complete;
 
     --req->flush_worker.comp_count;
-    if ((req->flush_worker.comp_count == 0) || (status != UCS_OK)) {
+    complete = (req->flush_worker.comp_count == 0) || (status != UCS_OK);
+
+    if (complete || force_progress_unreg) {
+        uct_worker_progress_unregister_safe(worker->uct,
+                                            &req->flush_worker.prog_id);
+    }
+
+    if (complete) {
         ucs_assert(status != UCS_INPROGRESS);
-        uct_worker_progress_unregister_safe(worker->uct, &req->flush_worker.prog_id);
         ucp_request_complete(req, flush_worker.cb, status);
     }
 }
 
 static void ucp_worker_flush_ep_flushed_cb(ucp_request_t *req)
 {
-    ucp_worker_flush_complete_one(req->send.flush.worker_req, 0, UCS_OK);
+    ucp_worker_flush_complete_one(req->send.flush.worker_req, UCS_OK, 0);
     ucp_request_put(req);
 }
 
