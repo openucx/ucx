@@ -54,6 +54,7 @@ struct addr_msg {
 	uint64_t        data_len;
 	//uint64_t	addr;
 	char* addr;
+	int 		data_size;
 };
 
 struct msg {
@@ -329,8 +330,8 @@ int main(int argc, char **argv)
 
 	status = ucp_ep_create(ucp_worker, &ep_params, &server_ep);
 	CHKERR_JUMP(status != UCS_OK, "ucp_ep_create\n", err);
-
-        msg_len = sizeof(*msg) + local_addr_len;
+	printf("endpoint created! \n");
+        /*msg_len = sizeof(*msg) + local_addr_len;
         msg = malloc(msg_len);
         CHKERR_JUMP(!msg, "allocate memory\n", err_ep);
 
@@ -346,7 +347,7 @@ int main(int argc, char **argv)
                 goto err_ep;
         } else if (UCS_PTR_STATUS(request) != UCS_OK) {
                 wait(ucp_worker, request);
-                request->completed = 0; /* Reset request state before recycling it */
+                request->completed = 0; // Reset request state before recycling it
                 ucp_request_release(request);
         }
 
@@ -356,7 +357,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Emulating unexpected failure on client side\n");
                 raise(SIGKILL);
         }
-
+*/
 
 	/* Send test string to client */
 
@@ -368,17 +369,17 @@ int main(int argc, char **argv)
 	char* rkey_buf;
 	char* buff;
 
-	buff = malloc(1024);
+	buff = malloc(msg_size);
         CHKERR_JUMP(!buff, "allocate memory\n", err_ep);
 	int i;
-	for( i = 0 ; i < 1024 ; i++) buff[i] = 'a';
+	for( i = 0 ; i < msg_size ; i++) buff[i] = 'a';
 
 	params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH |
                             UCP_MEM_MAP_PARAM_FIELD_FLAGS;
         //params.address    = NULL;
         params.address    = buff;
-        params.length     = 1024;
+        params.length     = msg_size;
         //params.flags      = UCP_MEM_MAP_ALLOCATE;
         //params.flags      = !UCP_MEM_MAP_FIXED & !UCP_MEM_MAP_ALLOCATE & !UCP_MEM_MAP_NONBLOCK;
 	params.flags	  = 0;
@@ -392,6 +393,7 @@ int main(int argc, char **argv)
 	CHKERR_JUMP(!addr_msg, "allocate memory\n", err_ep);
 	addr_msg->data_len = msg_len - sizeof(struct msg);
 	addr_msg->addr = params.address;
+	addr_msg->data_size = msg_size;
 	printf("addr_msg-> addr: %d\n" , addr_msg->addr);
 	copy_msg((char*)(addr_msg+1) , rkey_buf , rkey_size);
 
@@ -410,7 +412,6 @@ int main(int argc, char **argv)
 		ucp_request_release(request);
 	}
 	msg_tag = NULL;
-
 
 	do {
 		/* Progressing before probe to update the state */

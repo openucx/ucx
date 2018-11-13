@@ -95,6 +95,8 @@ char *server_ip = NULL;
 //static size_t peer_addr_len;
 
 ucp_context_h ucp_context;
+ucp_worker_h ucp_worker;
+ucp_ep_h        client_ep;
 
 void accept_conn_cb(ucp_conn_request_h conn_req, void* arg);
 
@@ -225,8 +227,8 @@ void set_listen_addr(char* address_str , struct sockaddr_in *listen_addr)
     /* The server will listen on INADDR_ANY */
     memset(listen_addr, 0, sizeof(struct sockaddr_in));
     listen_addr->sin_family      = AF_INET;
-//    listen_addr->sin_addr.s_addr = INADDR_ANY;
-    listen_addr->sin_addr.s_addr = inet_addr(address_str);
+    listen_addr->sin_addr.s_addr = INADDR_ANY;
+   // listen_addr->sin_addr.s_addr = inet_addr(address_str);
     listen_addr->sin_port        = server_port;
 
 	printf(" ip is: %d and port is: %d\n" , listen_addr->sin_addr.s_addr , listen_addr->sin_port);
@@ -306,6 +308,7 @@ int main(int argc, char **argv)
                 pthread_join(client_threads[i],NULL);
         }
 
+       pthread_join(connection_manager_thread,NULL);
 err:
 	ucp_cleanup(ucp_context);
 	return 0;
@@ -353,9 +356,11 @@ void* run_connection_manager(void* info){
 
 	/* Create a listener on the server side to listen on the given address.*/
 	status = ucp_listener_create(cm_worker, &params, &listener);
+	printf("listener was created! \n");
 	if (status != UCS_OK) {
 		fprintf(stderr, "failed to listen (%s)\n", ucs_status_string(status));
 	}
+	while(1) ucp_worker_progress(cm_worker);
 
 err_cleanup:
  	return NULL;
@@ -364,6 +369,24 @@ err_cleanup:
 
 void accept_conn_cb(ucp_conn_request_h conn_req, void* arg){
 	printf("I'm in callback\n");
+
+	//ucp_ep_h        ep;
+	ucp_ep_params_t ep_params;
+	ep_params.field_mask   = UCP_EP_PARAM_FIELD_CONN_REQUEST;
+//	ep_params.user_data    = (void *)0xdeadbeef;
+	ep_params.conn_request = conn_req;
+
+	ucs_status_t status    = ucp_ep_create(ucp_worker, &ep_params, &client_ep);
+	//if (status == UCS_ERR_UNREACHABLE) {
+	//	UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
+	//			"feature or no supported transport to send partial "
+	//			"worker address)");
+	//}
+	//ASSERT_UCS_OK(status);
+	//return ep;
+	printf("endpoint was created!\n");
+
+
 }
 
 
@@ -381,7 +404,7 @@ void* run_server(void* thread_info){
 	ucp_worker_params_t worker_params;
 
 	/* UCP handler objects */
-	ucp_worker_h ucp_worker;
+	//ucp_worker_h ucp_worker;
 
 	/* OOB connection vars */
 	uint64_t addr_len = 0;
@@ -406,7 +429,7 @@ void* run_server(void* thread_info){
 
         /* OOB connection establishment */
 	printf("my port is: %d\n" , server_port + info->client_num);
-        oob_sock = server_connect(server_port + info->client_num);
+        /*oob_sock = server_connect(server_port + info->client_num);
         CHKERR_JUMP(oob_sock < 0, "server_connect\n", err_peer_addr);
 
         addr_len = local_addr_len;
@@ -417,11 +440,11 @@ void* run_server(void* thread_info){
         ret = send(oob_sock, local_addr, local_addr_len, 0);
         CHKERR_JUMP((ret < 0 || ret != local_addr_len),
                         "send address\n", err_peer_addr);
-
+*/
 
         ucp_tag_recv_info_t info_tag;
         ucp_tag_message_h msg_tag;
-        ucp_ep_h client_ep;
+        //ucp_ep_h client_ep;
         ucp_ep_params_t ep_params;
         struct msg *msg = 0;
         struct ucx_context *request = 0;
@@ -431,16 +454,16 @@ void* run_server(void* thread_info){
         struct addr_msg *addr_msg = 0;
 
 
-	/* Receive client UCX address */
+	// Receive client UCX address 
         do {
-                /* Progressing before probe to update the state */
+                // Progressing before probe to update the state 
                 ucp_worker_progress(ucp_worker);
 
-                /* Probing incoming events in non-block mode */
+                // Probing incoming events in non-block mode 
                 msg_tag = ucp_tag_probe_nb(ucp_worker, tag, tag_mask, 1, &info_tag);
         } while (msg_tag == NULL);
 
-
+/*
 	printf("Im waiting for %d\n" , info->client_num);
         msg = malloc(info_tag.length);
         CHKERR_JUMP(!msg, "allocate memory\n", err);
@@ -471,7 +494,6 @@ void* run_server(void* thread_info){
 
         free(msg);
 
-	/* Receive test string from server */
 	        ep_params.field_mask      = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS |
                 UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
                 UCP_EP_PARAM_FIELD_ERR_HANDLER |
@@ -484,25 +506,25 @@ void* run_server(void* thread_info){
 
         status = ucp_ep_create(ucp_worker, &ep_params, &client_ep);
         CHKERR_JUMP(status != UCS_OK, "ucp_ep_create\n", err);
+*/
+/*	for (;;) {
 
-	for (;;) {
-
-		/* Probing incoming events in non-block mode */
+		// Probing incoming events in non-block mode 
 		msg_tag = ucp_tag_probe_nb(ucp_worker, tag, tag_mask, 1, &info_tag);
 		if (msg_tag != NULL) {
-			/* Message arrived */
+			// Message arrived 
 			break;
 		} else if (ucp_worker_progress(ucp_worker)) {
-			/* Some events were polled; try again without going to sleep */
+			// Some events were polled; try again without going to sleep 
 			continue;
 		}
 
-		/* If we got here, ucp_worker_progress() returned 0, so we can sleep.
-		 * Following blocked methods used to polling internal file descriptor
-		 * to make CPU idle and don't spin loop
-		 */
+		// If we got here, ucp_worker_progress() returned 0, so we can sleep.
+		 // Following blocked methods used to polling internal file descriptor
+		// to make CPU idle and don't spin loop
+		 
 		if (ucp_test_mode == TEST_MODE_WAIT) {
-			/* Polling incoming events*/
+			// Polling incoming events
 			status = ucp_worker_wait(ucp_worker);
 			CHKERR_JUMP(status != UCS_OK, "ucp_worker_wait\n", err_ep);
 		} else if (ucp_test_mode == TEST_MODE_EVENTFD) {
@@ -510,7 +532,7 @@ void* run_server(void* thread_info){
 			CHKERR_JUMP(status != UCS_OK, "test_poll_wait\n", err_ep);
 		}
 	}
-
+*/
 	addr_msg = malloc(info_tag.length);
 	CHKERR_JUMP(!addr_msg, "allocate memory\n", err_ep);
 
