@@ -229,8 +229,7 @@ AS_IF([test "x$with_ib" == xyes],
              [AC_MSG_NOTICE([Compiling with mlx5 bare-metal support])
               AC_DEFINE([HAVE_MLX5_HW], 1, [mlx5 bare-metal support])
               AS_IF([test "x$has_get_av" == xyes],
-                 [AC_DEFINE([HAVE_MLX5_HW_UD], 1, [mlx5 UD bare-metal support])
-                  AC_DEFINE([HAVE_MLX5_HW_DC], 1, [mlx5 DC bare-metal support])], [])], [])
+                 [AC_DEFINE([HAVE_MLX5_HW_UD], 1, [mlx5 UD bare-metal support])])])
 
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_LINK_LAYER_ETHERNET,
@@ -311,7 +310,7 @@ AS_IF([test "x$with_ib" == xyes],
        AC_CHECK_DECLS([IBV_EXP_QPT_DC_INI],
                 [have_dc_exp=yes], [], [[#include <infiniband/verbs.h>]])
 
-       AS_IF([test "x$with_dc" != xno -a \( "x$have_dc_exp" = xyes -o "x$have_dc_dv" = xyes \)], [
+       AS_IF([test "x$with_dc" != xno -a \( "x$have_dc_exp" = xyes -o "x$have_dc_dv" = xyes \) -a "x$with_mlx5_hw" == xyes], [
            AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
            transports="${transports},dc"
            AS_IF([test -n "$have_dc_dv"],
@@ -402,5 +401,4 @@ AM_CONDITIONAL([HAVE_TL_CM],   [test "x$with_cm" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
 AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
-AM_CONDITIONAL([HAVE_MLX5_HW_DC], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno -a "x$have_dc" != xno])
 AM_CONDITIONAL([HAVE_IBV_EX_HW_TM], [test "x$with_ib_hw_tm"  != xno])

@@ -18,7 +18,6 @@ extern "C" {
 
 
 #define UCT_DC_INSTANTIATE_TEST_CASE(_test_case) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, dc) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
 
 

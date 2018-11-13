@@ -290,7 +290,6 @@ public:
         // TODO: add more tls which support tag offloading
         std::vector<std::string> tls;
         tls.push_back("dc_x");
-        tls.push_back("dc");
         tls.push_back("rc_x");
         ucp_test_param params = GetParam();
 
@@ -384,7 +383,7 @@ UCS_TEST_P(test_ucp_tag_offload_multi, recv_from_multi)
 // Do not include SM transports, because they would be selected for tag matching.
 // And since they do not support TM offload, this test would be skipped.
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_multi, all_rcdc,
-                              "\\rc,\\dc,\\ud,rc_x,dc_x")
+                              "\\rc,\\ud,rc_x,dc_x")
 
 
 #if ENABLE_STATS
