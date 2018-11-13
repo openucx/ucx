@@ -33,6 +33,10 @@ static ucs_status_t uct_ib_mlx5_device_init(uct_ib_device_t *dev)
     struct ibv_cq *cq;
     struct ibv_qp *qp;
 
+    if (!(uct_ib_device_spec(dev)->flags & UCT_IB_DEVICE_FLAG_MLX5_PRM)) {
+        return UCS_OK;
+    }
+
     pd = ibv_alloc_pd(ctx);
     if (pd == NULL) {
         ucs_error("ibv_alloc_pd() failed: %m");
