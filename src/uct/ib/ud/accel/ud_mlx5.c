@@ -641,12 +641,12 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t)(uct_iface_t*);
 static void uct_ud_mlx5_iface_handle_failure(uct_ib_iface_t *iface, void *arg,
                                              ucs_status_t status)
 {
-    if (status != UCS_ERR_ENDPOINT_TIMEOUT) {
+    if (status == UCS_ERR_ENDPOINT_TIMEOUT) {
+        uct_ud_iface_handle_failure(iface, arg, status);
+    } else {
         /* Local side failure - treat as fatal */
         uct_ib_mlx5_completion_with_err(iface, arg, UCS_LOG_LEVEL_FATAL);
     }
-
-    uct_ud_iface_handle_failure(iface, arg, status);
 }
 
 static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
