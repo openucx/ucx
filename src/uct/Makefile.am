@@ -97,7 +97,8 @@ libuct_la_SOURCES += \
 if HAVE_MLX5_HW
 noinst_HEADERS += \
 	ib/rc/accel/rc_mlx5.h \
-	ib/rc/accel/rc_mlx5_common.h 
+	ib/rc/accel/rc_mlx5_common.h \
+	ib/rc/accel/rc_mlx5.inl
 
 libuct_la_SOURCES += \
 	ib/rc/accel/rc_mlx5_ep.c \

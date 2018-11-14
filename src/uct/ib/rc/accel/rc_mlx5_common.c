@@ -5,7 +5,7 @@
 */
 
 
-#include "rc_mlx5_common.h"
+#include "rc_mlx5.inl"
 
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_iface.h>
