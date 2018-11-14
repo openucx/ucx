@@ -13,7 +13,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/class.h>
 
-#include "rc_mlx5_common.h"
+#include "rc_mlx5.inl"
 
 /**
  * RC mlx5 interface configuration
