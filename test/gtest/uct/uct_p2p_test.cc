@@ -166,6 +166,7 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
                                  (uct_memory_type_t) mem_type);
     }
 }
+
 void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
                                             size_t max_length, unsigned flags,
                                             uct_memory_type_t mem_type) {
