@@ -404,6 +404,37 @@ UCS_TEST_P(test_dc, dcs_ep_purge_pending) {
     EXPECT_EQ(0, iface->tx.stack_top);
 }
 
+UCS_TEST_P(test_dc, rand_dci) {
+    uct_dc_ep_t *ep;
+
+    if (UCS_OK != uct_config_modify(m_iface_config, "DC_TX_POLICY", "rand")) {
+        UCS_TEST_ABORT("Error: cannot enable random DCI policy");
+    }
+    entity *rand_e = uct_test::create_entity(0);
+    m_entities.push_back(rand_e);
+    uct_iface_set_am_handler(rand_e->iface(), 0, am_dummy_handler, NULL, 0);
+
+    uct_dc_iface_t *iface = dc_iface(rand_e);
+    int num_eps           = 2 * iface->tx.ndci;
+
+    /* Create more eps than we have dcis, all eps should have a valid dci */
+    for (int i = 0; i <= num_eps; i++) {
+        rand_e->connect_to_iface(i, *m_e2);
+        ep = dc_ep(rand_e, i);
+        EXPECT_NE(UCT_DC_EP_NO_DCI, ep->dci);
+    }
+
+    /* Try to send on all eps (taking into account available resources) */
+    int num_sends = ucs_min(num_eps, iface->super.tx.cq_available);
+
+    for (int i = 0; i <= num_sends; i++) {
+        ucs_status_t status = uct_ep_am_short(rand_e->ep(i), 0, 0, NULL, 0);
+        EXPECT_UCS_OK(status);
+    }
+
+    flush();
+}
+
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc)
 
 
