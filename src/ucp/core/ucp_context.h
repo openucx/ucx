@@ -79,6 +79,8 @@ typedef struct ucp_context_config {
     size_t                                 estimated_num_eps;
     /** Memtype cache */
     int                                    enable_memtype_cache;
+    /** Enable flushing endpoints while flushing a worker */
+    int                                    flush_worker_eps;
 } ucp_context_config_t;
 
 
