@@ -1,14 +1,10 @@
-before_script:
-  - apt-get update
-  - apt-get install -y libnuma-dev libibverbs-dev
-
 build:
   only:
   - tags
   script:
   - "./autogen.sh"
-  - "./contrib/configure-release"
-  - make
+  - "./contrib/configure-release --disable-numa"
+  - make -j
   - make dist
   - 'export upload_url=$(curl -s -H "Authorization: token $github_token" "https://api.github.com/repos/openucx/ucx/releases/latest" | grep upload_url | grep -oP "https\S+assets")'
   - 'export tar_name=$(ls *.tar.gz)'
