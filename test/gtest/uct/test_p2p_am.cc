@@ -428,7 +428,7 @@ UCS_TEST_P(uct_p2p_am_test, am_async_response) {
         mapped_buffer sendbuf_short(sender().iface_attr().cap.am.max_short,
                                     SEED1, sender());
 
-        const double timeout = 10. * ucs::test_time_multiplier();
+        const double timeout = 60. * ucs::test_time_multiplier();
         ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
         do {
             sender().progress();
