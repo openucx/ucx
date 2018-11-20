@@ -4,60 +4,13 @@
 * See file LICENSE for terms.
 */
 
-#ifndef UCT_RC_VERBS_COMMON_H
-#define UCT_RC_VERBS_COMMON_H
+#ifndef UCT_RC_VERBS_IMPL_H
+#define UCT_RC_VERBS_IMPL_H
 
 #include <ucs/arch/bitops.h>
 
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
-
-
-/* definitions common to rc_verbs and dc_verbs go here */
-
-
-#define UCT_RC_VERBS_IFACE_FOREACH_TXWQE(_iface, _i, _wc, _num_wcs) \
-      status = uct_ib_poll_cq((_iface)->super.cq[UCT_IB_DIR_TX], &_num_wcs, _wc); \
-      if (status != UCS_OK) { \
-          return 0; \
-      } \
-      UCS_STATS_UPDATE_COUNTER((_iface)->stats, \
-                               UCT_RC_IFACE_STAT_TX_COMPLETION, _num_wcs); \
-      for (_i = 0; _i < _num_wcs; ++_i)
-
-
-typedef struct uct_rc_verbs_txcnt {
-    uint16_t       pi;      /* producer (post_send) count */
-    uint16_t       ci;      /* consumer (ibv_poll_cq) completion count */
-} uct_rc_verbs_txcnt_t;
-
-
-/**
- * RC/DC verbs interface configuration
- */
-typedef struct uct_rc_verbs_iface_common_config {
-    size_t                 max_am_hdr;
-    unsigned               tx_max_wr;
-    /* TODO flags for exp APIs */
-} uct_rc_verbs_iface_common_config_t;
-
-
-typedef struct uct_rc_verbs_iface_common {
-    struct ibv_sge         inl_sge[2];
-    uct_rc_am_short_hdr_t  am_inl_hdr;
-    ucs_mpool_t            short_desc_mp;
-
-    /* TODO: make a separate datatype */
-    struct {
-        size_t             short_desc_size;
-        size_t             max_inline;
-    } config;
-} uct_rc_verbs_iface_common_t;
-
-
-extern ucs_config_field_t uct_rc_verbs_iface_common_config_table[];
-
-void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt);
 
 ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status);
 
@@ -79,13 +32,6 @@ uct_rc_verbs_txqp_completed(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt, ui
     txcnt->ci += count;
     uct_rc_txqp_available_add(txqp, count);
 }
-
-ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
-                                            uct_rc_iface_t *rc_iface,
-                                            uct_rc_verbs_iface_common_config_t *config,
-                                            uct_rc_iface_config_t *rc_config);
-
-void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *iface);
 
 ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_iface_t *iface,
                                                      unsigned max);
@@ -192,7 +138,7 @@ out:
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_verbs_iface_fill_inl_sge(uct_rc_verbs_iface_common_t *iface, const void *addr0,
+uct_rc_verbs_iface_fill_inl_sge(uct_rc_verbs_iface_t *iface, const void *addr0,
                                 unsigned len0, const void* addr1, unsigned len1)
 {
     iface->inl_sge[0].addr      = (uintptr_t)addr0;
@@ -202,7 +148,7 @@ uct_rc_verbs_iface_fill_inl_sge(uct_rc_verbs_iface_common_t *iface, const void *
 }
 
 static inline void
-uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
+uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_t *iface,
                                    uint8_t id, uint64_t hdr,
                                    const void *buffer, unsigned length)
 {
@@ -212,7 +158,6 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
     uct_rc_verbs_iface_fill_inl_sge(iface, am, sizeof(*am), buffer, length);
 }
 
-
 #define UCT_RC_VERBS_FILL_SGE(_wr, _sge, _length) \
     _wr.sg_list = &_sge; \
     _wr.num_sge = 1; \
@@ -221,8 +166,8 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
 #define UCT_RC_VERBS_FILL_INL_PUT_WR(_iface, _raddr, _rkey, _buf, _len) \
     _iface->inl_rwrite_wr.wr.rdma.remote_addr = _raddr; \
     _iface->inl_rwrite_wr.wr.rdma.rkey        = uct_ib_md_direct_rkey(_rkey); \
-    _iface->verbs_common.inl_sge[0].addr      = (uintptr_t)_buf; \
-    _iface->verbs_common.inl_sge[0].length    = _len;
+    _iface->inl_sge[0].addr      = (uintptr_t)_buf; \
+    _iface->inl_sge[0].length    = _len;
 
 #define UCT_RC_VERBS_FILL_AM_BCOPY_WR(_wr, _sge, _length, _wr_opcode) \
     UCT_RC_VERBS_FILL_SGE(_wr, _sge, _length) \
