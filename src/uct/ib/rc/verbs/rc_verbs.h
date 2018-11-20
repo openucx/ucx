@@ -47,36 +47,6 @@ typedef struct uct_rc_verbs_iface {
 } uct_rc_verbs_iface_t;
 
 
-#if IBV_EXP_HW_TM
-
-ucs_status_t uct_rc_verbs_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
-                                             const void *data, size_t length);
-
-ssize_t uct_rc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
-                                        uint64_t imm,
-                                        uct_pack_callback_t pack_cb,
-                                        void *arg, unsigned flags);
-
-ucs_status_t uct_rc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
-                                             uint64_t imm, const uct_iov_t *iov,
-                                             size_t iovcnt, unsigned flags,
-                                             uct_completion_t *comp);
-
-ucs_status_ptr_t uct_rc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
-                                                const void *header,
-                                                unsigned header_length,
-                                                const uct_iov_t *iov,
-                                                size_t iovcnt, unsigned flags,
-                                                uct_completion_t *comp);
-
-ucs_status_t uct_rc_verbs_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
-                                              const void* header,
-                                              unsigned header_length,
-                                              unsigned flags);
-#endif /* IBV_EXP_HW_TM */
-
-
-
 UCS_CLASS_DECLARE(uct_rc_verbs_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_verbs_ep_t, uct_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_verbs_ep_t, uct_ep_t);

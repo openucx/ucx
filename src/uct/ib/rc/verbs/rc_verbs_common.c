@@ -24,12 +24,6 @@ ucs_config_field_t uct_rc_verbs_iface_common_config_table[] = {
    "a minimum between this value and the TX queue length. -1 means no limit.",
    ucs_offsetof(uct_rc_verbs_iface_common_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
 
-#if IBV_EXP_HW_TM
-  {"TM_SYNC_RATIO", "0.5",
-   "Maximal portion of the tag matching list which can be canceled without requesting\n"
-   "a completion.",
-   ucs_offsetof(uct_rc_verbs_iface_common_config_t, tm_sync_ratio), UCS_CONFIG_TYPE_DOUBLE},
-#endif
   {NULL}
 };
 
@@ -89,45 +83,6 @@ void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned fl
     uct_base_iface_progress_enable_cb(&iface->super.super, iface->progress,
                                       flags);
 }
-
-#if IBV_EXP_HW_TM
-
-ucs_status_t
-uct_rc_verbs_iface_common_tag_init(uct_rc_verbs_iface_common_t *iface,
-                                   uct_rc_iface_t *rc_iface,
-                                   uct_rc_verbs_iface_common_config_t *config,
-                                   uct_rc_iface_config_t *rc_config,
-                                   struct ibv_exp_create_srq_attr *srq_init_attr,
-                                   size_t rndv_hdr_len)
-
-{
-    unsigned sync_ops_count;
-    ucs_status_t status;
-
-    if (!UCT_RC_IFACE_TM_ENABLED(rc_iface)) {
-        return UCS_OK;
-    }
-
-    /* There can be up to 1/"tag_sync_ratio" SYNC ops during cancellation. */
-    if (config->tm_sync_ratio > 0) {
-        sync_ops_count = ceil(1.0 / config->tm_sync_ratio);
-    } else {
-        sync_ops_count = rc_iface->tm.num_tags;
-    }
-
-    status = uct_rc_iface_tag_init(rc_iface, rc_config, srq_init_attr,
-                                   rndv_hdr_len, sync_ops_count);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    iface->tm.num_canceled    = 0;
-    iface->tm.tag_sync_thresh = rc_iface->tm.num_tags * config->tm_sync_ratio;
-
-    return UCS_OK;
-}
-
-#endif /* IBV_EXP_HW_TM */
 
 ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
                                             uct_rc_iface_t *rc_iface,
