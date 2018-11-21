@@ -124,10 +124,10 @@ typedef struct uct_ib_device {
     UCS_STATS_NODE_DECLARE(stats);
     struct ibv_exp_port_attr    port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
     unsigned                    flags;
-    uint8_t                     atomic_arg_size;
-    uint8_t                     atomic_arg_size_be;
-    uint8_t                     ext_atomic_arg_size;
-    uint8_t                     ext_atomic_arg_size_be;
+    uint8_t                     atomic_arg_sizes;
+    uint8_t                     atomic_arg_sizes_be;
+    uint8_t                     ext_atomic_arg_sizes;
+    uint8_t                     ext_atomic_arg_sizes_be;
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_spinlock_t              ah_lock;

@@ -293,21 +293,21 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     {
 #ifdef HAVE_IB_EXT_ATOMICS
         if (dev->dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS) {
-            dev->ext_atomic_arg_size = dev->dev_attr.ext_atom.log_atomic_arg_sizes;
+            dev->ext_atomic_arg_sizes = dev->dev_attr.ext_atom.log_atomic_arg_sizes;
         }
 #  if HAVE_MASKED_ATOMICS_ENDIANNESS
         if (dev->dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_MASKED_ATOMICS) {
-            dev->ext_atomic_arg_size |=
+            dev->ext_atomic_arg_sizes |=
                 dev->dev_attr.masked_atomic.masked_log_atomic_arg_sizes;
-            dev->ext_atomic_arg_size_be =
+            dev->ext_atomic_arg_sizes_be =
                 dev->dev_attr.masked_atomic.masked_log_atomic_arg_sizes_network_endianness;
         }
 #  endif
-        dev->ext_atomic_arg_size &= UCS_MASK(dev->dev_attr.ext_atom.log_max_atomic_inline + 1);
+        dev->ext_atomic_arg_sizes &= UCS_MASK(dev->dev_attr.ext_atom.log_max_atomic_inline + 1);
 #endif
-        dev->atomic_arg_size = sizeof(uint64_t);
+        dev->atomic_arg_sizes = sizeof(uint64_t);
         if (IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(&dev->dev_attr)) {
-            dev->atomic_arg_size_be = sizeof(uint64_t);
+            dev->atomic_arg_sizes_be = sizeof(uint64_t);
         }
     }
 

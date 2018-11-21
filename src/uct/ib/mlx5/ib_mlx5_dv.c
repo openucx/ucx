@@ -129,9 +129,9 @@ static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
                                    capability.atomic_caps.atomic_req_8B_endianness_mode);
 
         if ((cap_ops & ops) == ops) {
-            dev->atomic_arg_size = sizeof(uint64_t);
+            dev->atomic_arg_sizes = sizeof(uint64_t);
             if (!mode8b) {
-                dev->atomic_arg_size_be = sizeof(uint64_t);
+                dev->atomic_arg_sizes_be = sizeof(uint64_t);
             }
         }
 
@@ -144,11 +144,11 @@ static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
         }
 
         if ((cap_ops & ops) == ops) {
-            dev->ext_atomic_arg_size = arg_size;
+            dev->ext_atomic_arg_sizes = arg_size;
             if (mode8b) {
                 arg_size &= ~(sizeof(uint64_t));
             }
-            dev->ext_atomic_arg_size_be = arg_size;
+            dev->ext_atomic_arg_sizes_be = arg_size;
         }
     }
 #endif
