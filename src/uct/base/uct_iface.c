@@ -274,7 +274,7 @@ ucs_status_t uct_base_ep_fence(uct_ep_h tl_ep, unsigned flags)
 
 static void uct_ep_failed_purge_cb(uct_pending_req_t *self, void *arg)
 {
-    uct_pending_req_push((ucs_queue_head_t*)arg, self);
+    uct_pending_req_queue_push((ucs_queue_head_t*)arg, self);
 }
 
 static void uct_ep_failed_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
