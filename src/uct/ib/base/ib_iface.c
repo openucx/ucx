@@ -610,6 +610,7 @@ ucs_status_t uct_ib_verbs_create_cq(struct ibv_context *context, int cqe,
     }
 
     *cq_p = cq;
+    *inl  = 0;
     return UCS_OK;
 }
 
