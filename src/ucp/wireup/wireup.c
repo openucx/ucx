@@ -308,8 +308,7 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         /* wireup request for a specific ep */
         ep = ucp_worker_get_ep_by_ptr(worker, msg->dest_ep_ptr);
         ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
-        if (!(ep->flags & UCP_EP_FLAG_LISTENER) &&
-            ucp_ep_config(ep)->p2p_lanes) {
+        if (!(ep->flags & UCP_EP_FLAG_LISTENER)) {
             /* Reset flush state only if it's not a client-server wireup on
              * server side with long address exchange when listener (united with
              * flush state) should be valid until user's callback invoking */
