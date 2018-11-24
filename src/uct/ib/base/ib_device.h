@@ -58,6 +58,7 @@ enum {
     UCT_IB_DEVICE_FLAG_LINK_IB  = UCS_BIT(5),   /* Require only IB */
     UCT_IB_DEVICE_FLAG_DC_V1    = UCS_BIT(6),   /* Device supports DC ver 1 */
     UCT_IB_DEVICE_FLAG_DC_V2    = UCS_BIT(7),   /* Device supports DC ver 2 */
+    UCT_IB_DEVICE_FLAG_AV       = UCS_BIT(8),   /* Device supports compact AV */
     UCT_IB_DEVICE_FLAG_DC       = UCT_IB_DEVICE_FLAG_DC_V1 |
                                   UCT_IB_DEVICE_FLAG_DC_V2 /* Device supports DC */
 };
@@ -123,6 +124,10 @@ typedef struct uct_ib_device {
     UCS_STATS_NODE_DECLARE(stats);
     struct ibv_exp_port_attr    port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
     unsigned                    flags;
+    uint8_t                     atomic_arg_sizes;
+    uint8_t                     atomic_arg_sizes_be;
+    uint8_t                     ext_atomic_arg_sizes;
+    uint8_t                     ext_atomic_arg_sizes_be;
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_spinlock_t              ah_lock;
@@ -249,10 +254,6 @@ ucs_status_t uct_ib_modify_qp(struct ibv_qp *qp, enum ibv_qp_state state);
  * interface is created.
  */
 ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu);
-
-int uct_ib_atomic_is_supported(uct_ib_device_t *dev, int ext, size_t size);
-
-int uct_ib_atomic_is_be_reply(uct_ib_device_t *dev, int ext, size_t size);
 
 ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
                                      const char *resource_dev_name,
