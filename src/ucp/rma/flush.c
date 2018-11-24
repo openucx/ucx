@@ -302,7 +302,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nb, (ep, flags, cb),
 static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
 {
     uint64_t tl_bitmap = worker->context->tl_bitmap;
-    ucp_rsc_index_t rsc_index, if_index;
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
     ucs_status_t status;
 
     if (worker->flush_ops_count) {
@@ -310,12 +311,12 @@ static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
     }
 
     ucs_for_each_bit(rsc_index, tl_bitmap) {
-        if_index = ucs_bitmap2idx(tl_bitmap, rsc_index);
-        if (worker->ifaces[if_index].iface == NULL) {
+        wiface = ucp_worker_iface(worker, rsc_index);
+        if (wiface->iface == NULL) {
             continue;
         }
 
-        status = uct_iface_flush(worker->ifaces[if_index].iface, 0, NULL);
+        status = uct_iface_flush(wiface->iface, 0, NULL);
         if (status != UCS_OK) {
             if (UCS_STATUS_IS_ERR(status)) {
                 ucs_error("iface[%d] "UCT_TL_RESOURCE_DESC_FMT" flush failed: %s",
@@ -483,18 +484,19 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
 {
-    ucp_rsc_index_t rsc_index, if_index;
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
     ucs_status_t status;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     ucs_for_each_bit(rsc_index, worker->context->tl_bitmap) {
-        if_index = ucs_bitmap2idx(worker->context->num_tls, rsc_index);
-        if (worker->ifaces[if_index].iface == NULL) {
+        wiface = ucp_worker_iface(worker, rsc_index);
+        if (wiface->iface == NULL) {
             continue;
         }
 
-        status = uct_iface_fence(worker->ifaces[if_index].iface, 0);
+        status = uct_iface_fence(wiface->iface, 0);
         if (status != UCS_OK) {
             goto out;
         }

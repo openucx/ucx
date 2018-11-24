@@ -584,20 +584,17 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
     ucp_worker_h worker          = ep->worker;
     ucp_rsc_index_t rsc_index    = ucp_ep_get_rsc_index(ep, lane);
     ucp_lane_index_t proxy_lane  = ucp_ep_get_proxy_lane(ep, lane);
-    uct_iface_attr_t *iface_attr;
-    ucp_worker_iface_t *wiface;
+    ucp_worker_iface_t *wiface   = ucp_worker_iface(worker, rsc_index);
     uct_ep_h uct_ep;
     ucs_status_t status;
 
     ucs_trace("ep %p: connect lane[%d]", ep, lane);
 
-    wiface     = &worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, rsc_index)];
-    iface_attr = &wiface->attr;
     /*
      * if the selected transport can be connected directly to the remote
      * interface, just create a connected UCT endpoint.
      */
-    if ((iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) &&
+    if ((wiface->attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) &&
         ((ep->uct_eps[lane] == NULL) || ucp_wireup_ep_test(ep->uct_eps[lane])))
     {
         if ((proxy_lane == UCP_NULL_LANE) || (proxy_lane == lane)) {
@@ -624,7 +621,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
      * create a wireup endpoint which will start connection establishment
      * protocol using an auxiliary transport.
      */
-    if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+    if (wiface->attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
 
         /* For now, p2p transports have no reason to have proxy */
         ucs_assert_always(proxy_lane == UCP_NULL_LANE);
@@ -665,7 +662,6 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
 static ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
 {
     ucp_lane_index_t lane, proxy_lane;
-    ucp_rsc_index_t if_index;
     uct_iface_attr_t *iface_attr;
     uct_ep_h uct_ep, signaling_ep;
     ucs_status_t status;
@@ -677,9 +673,9 @@ static ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
             continue;
         }
 
-        if_index   = ucs_bitmap2idx(ep->worker->context->tl_bitmap,
-                                    ucp_ep_get_rsc_index(ep, lane));
-        iface_attr = &ep->worker->ifaces[if_index].attr;
+        iface_attr = ucp_worker_iface_get_attr(ep->worker,
+                                               ucp_ep_get_rsc_index(ep, lane));
+
         if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
             ucs_assert_always(iface_attr->cap.am.max_short <=
                               iface_attr->cap.am.max_bcopy);

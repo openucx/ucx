@@ -203,11 +203,11 @@ static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
 static int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
                                    const ucp_address_entry_t *ae)
 {
-    ucp_context_h context    = worker->context;
-    ucp_rsc_index_t if_index = ucs_bitmap2idx(context->tl_bitmap, rsc_index);
+    ucp_context_h context      = worker->context;
+    ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
+
     return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
-           uct_iface_is_reachable(worker->ifaces[if_index].iface, ae->dev_addr,
-                                  ae->iface_addr);
+           uct_iface_is_reachable(wiface->iface, ae->dev_addr, ae->iface_addr);
 }
 
 /**
@@ -300,7 +300,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
      * has a reachable tl on the remote peer */
     ucs_for_each_bit(rsc_index, context->tl_bitmap) {
         resource   = &context->tl_rscs[rsc_index].tl_rsc;
-        iface_attr = &worker->ifaces[ucs_bitmap2idx(context->tl_bitmap, rsc_index)].attr;
+        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
         md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
         if ((context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) &&
@@ -1224,21 +1224,22 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
     ucp_lane_index_t p2p_lane      = UCP_NULL_LANE;
     ucp_wireup_criteria_t criteria = {0};
     uct_tl_resource_desc_t *resource;
-    ucp_rsc_index_t rsc_index, if_index;
+    ucp_rsc_index_t rsc_index;
+    uct_iface_attr_t *attrs;
     ucp_lane_index_t lane;
     unsigned addr_index;
 
     ucp_wireup_fill_aux_criteria(&criteria, ep_params);
     for (lane = 0; lane < num_lanes; ++lane) {
         rsc_index  = lane_descs[lane].rsc_index;
-        if_index   = ucs_bitmap2idx(context->tl_bitmap, rsc_index);
         addr_index = lane_descs[lane].addr_index;
         resource   = &context->tl_rscs[rsc_index].tl_rsc;
+        attrs      = ucp_worker_iface_get_attr(worker, rsc_index);
 
         /* if the current lane satisfies the wireup criteria, choose it for wireup.
          * if it doesn't take a lane with a p2p transport */
         if (ucp_wireup_check_flags(resource,
-                                   worker->ifaces[if_index].attr.cap.flags,
+                                   attrs->cap.flags,
                                    criteria.local_iface_flags, criteria.title,
                                    ucp_wireup_iface_flags, NULL, 0) &&
             ucp_wireup_check_flags(resource,

@@ -9,6 +9,7 @@
 #define UCP_WORKER_H_
 
 #include "ucp_ep.h"
+#include "ucp_context.h"
 #include "ucp_thread.h"
 
 #include <ucp/proto/proto.h>
@@ -17,6 +18,7 @@
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/strided_alloc.h>
+#include <ucs/arch/bitops.h>
 
 
 /* The size of the private buffer in UCT descriptor headroom, which UCP may
@@ -53,10 +55,13 @@ enum {
 enum {
     UCP_WORKER_IFACE_FLAG_OFFLOAD_ACTIVATED = UCS_BIT(0), /**< UCP iface receives tag
                                                                offload messages */
-    UCP_WORKER_IFACE_FLAG_ON_ARM_LIST       = UCS_BIT(1)  /**< UCP iface is an element
+    UCP_WORKER_IFACE_FLAG_ON_ARM_LIST       = UCS_BIT(1), /**< UCP iface is an element
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
+    UCP_WORKER_IFACE_FLAG_SUBOPTIMAL        = UCS_BIT(2)  /**< There is another UCP iface
+                                                               with the same caps, but
+                                                               with better performance */
 };
 
 
@@ -261,6 +266,18 @@ static inline ucp_ep_h ucp_worker_get_ep_by_ptr(ucp_worker_h worker,
     ucs_assertv(ep->worker == worker, "worker=%p ep=%p ep->worker=%p", worker,
                 ep, ep->worker);
     return ep;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_worker_iface_t*
+ucp_worker_iface(ucp_worker_h worker, ucp_rsc_index_t idx)
+{
+    return &worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, idx)];
+}
+
+static UCS_F_ALWAYS_INLINE uct_iface_attr_t*
+ucp_worker_iface_get_attr(ucp_worker_h worker, ucp_rsc_index_t idx)
+{
+    return &ucp_worker_iface(worker, idx)->attr;
 }
 
 #endif

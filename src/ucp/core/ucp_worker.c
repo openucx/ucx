@@ -178,21 +178,22 @@ static ucs_status_t ucp_stub_am_handler(void *arg, void *data, size_t length,
 static void ucp_worker_remove_am_handlers(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
-    ucp_rsc_index_t tl_id, iface_id;
+    ucp_worker_iface_t *wiface;
+    ucp_rsc_index_t tl_id;
     unsigned am_id;
 
     ucs_debug("worker %p: remove active message handlers", worker);
 
     ucs_for_each_bit(tl_id, context->tl_bitmap) {
-        iface_id = ucs_bitmap2idx(context->tl_bitmap, tl_id);
-        if (!(worker->ifaces[iface_id].attr.cap.flags & (UCT_IFACE_FLAG_AM_SHORT |
-                                                         UCT_IFACE_FLAG_AM_BCOPY |
-                                                         UCT_IFACE_FLAG_AM_ZCOPY))) {
+        wiface = ucp_worker_iface(worker, tl_id);
+        if (!(wiface->attr.cap.flags & (UCT_IFACE_FLAG_AM_SHORT |
+                                        UCT_IFACE_FLAG_AM_BCOPY |
+                                        UCT_IFACE_FLAG_AM_ZCOPY))) {
             continue;
         }
         for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
             if (context->config.features & ucp_am_handlers[am_id].features) {
-                (void)uct_iface_set_am_handler(worker->ifaces[iface_id].iface,
+                (void)uct_iface_set_am_handler(wiface->iface,
                                                am_id, ucp_stub_am_handler,
                                                worker, UCT_CB_FLAG_ASYNC);
             }
@@ -764,6 +765,7 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
 
         /* Need to check resources which belong to the same device only */
         if ((ctx->tl_rscs[id].dev_index != ctx->tl_rscs[wiface->rsc_index].dev_index) ||
+            (if_iter->flags & UCP_WORKER_IFACE_FLAG_SUBOPTIMAL) ||
             (id == wiface->rsc_index)) {
             continue;
         }
@@ -777,6 +779,11 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
             (if_iter->attr.latency.growth    <= wiface->attr.latency.growth) &&
             (if_iter->attr.bandwidth         >= wiface->attr.bandwidth) &&
             (if_iter->attr.priority          >= wiface->attr.priority)) {
+
+            /* Do not check this iface anymore, because better one exists.
+             * It helps to avoid the case when two interfaces with the same caps
+             * and performance exclude each other. */
+            wiface->flags |= UCP_WORKER_IFACE_FLAG_SUBOPTIMAL;
             return 1;
         }
     }
@@ -916,7 +923,6 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
             return status;
         }
         ucs_assert(tl_bitmap);
-        ucs_assert(ucs_count_one_bits(tl_bitmap) <= context->num_tls);
 
         /* Cache tl_bitmap on the context, so the next workers would not need
          * to select best ifaces. */
@@ -945,7 +951,7 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
     ucs_for_each_bit(rsc_index, tl_bitmap) {
-        wiface = &worker->ifaces[ucs_bitmap2idx(tl_bitmap, rsc_index)];
+        wiface = ucp_worker_iface(worker, rsc_index);
         if (wiface->iface != NULL) {
             ucp_worker_iface_cleanup(wiface);
         }
@@ -1200,12 +1206,11 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 static void ucp_worker_init_guess_atomics(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
-    ucp_rsc_index_t rsc_index, if_index;
+    ucp_rsc_index_t rsc_index;
     uint64_t accumulated_flags = 0;
 
     ucs_for_each_bit(rsc_index, context->tl_bitmap) {
-        if_index = ucs_bitmap2idx(context->tl_bitmap, rsc_index);
-        accumulated_flags |= worker->ifaces[if_index].attr.cap.flags;
+        accumulated_flags |= ucp_worker_iface_get_attr(worker, rsc_index)->cap.flags;
     }
 
     if (accumulated_flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
@@ -1248,7 +1253,7 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
     ucs_status_t     status;
 
     ucs_for_each_bit(tl_id, context->tl_bitmap) {
-        if_attr = &worker->ifaces[ucs_bitmap2idx(context->tl_bitmap, tl_id)].attr;
+        if_attr           = ucp_worker_iface_get_attr(worker, tl_id);
         max_mp_entry_size = ucs_max(max_mp_entry_size,
                                     if_attr->cap.am.max_short);
         max_mp_entry_size = ucs_max(max_mp_entry_size,
