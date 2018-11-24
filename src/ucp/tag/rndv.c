@@ -330,7 +330,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     size_t offset, length, ucp_mtu, remainder, align, chunk;
     uct_iov_t iov[max_iovcnt];
     size_t iovcnt;
-    ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t rsc_index, if_index;
     ucp_dt_state_t state;
     uct_rkey_t uct_rkey;
     size_t min_zcopy;
@@ -360,9 +360,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     }
 
     rsc_index = ucp_ep_get_rsc_index(rndv_req->send.ep, rndv_req->send.lane);
-    align     = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.opt_zcopy_align;
-    ucp_mtu   = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.align_mtu;
-    min_zcopy = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.min_zcopy;
+    if_index  = ucs_bitmap2idx(rndv_req->send.ep->worker->context->tl_bitmap, rsc_index);
+    align     = rndv_req->send.ep->worker->ifaces[if_index].attr.cap.get.opt_zcopy_align;
+    ucp_mtu   = rndv_req->send.ep->worker->ifaces[if_index].attr.cap.get.align_mtu;
+    min_zcopy = rndv_req->send.ep->worker->ifaces[if_index].attr.cap.get.min_zcopy;
     max_zcopy = ucp_ep_config(rndv_req->send.ep)->tag.rndv.max_get_zcopy;
 
     offset    = rndv_req->send.state.dt.offset;
@@ -695,7 +696,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
     ucp_ep_h ep             = sreq->send.ep;
     ucs_status_t status;
     size_t offset, ucp_mtu, align, remainder, length;
-    ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t rsc_index, if_index;
     uct_iov_t iov[max_iovcnt];
     size_t iovcnt;
     ucp_dt_state_t state;
@@ -706,8 +707,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
     }
 
     rsc_index = ucp_ep_get_rsc_index(ep, sreq->send.lane);
-    align     = ep->worker->ifaces[rsc_index].attr.cap.put.opt_zcopy_align;
-    ucp_mtu   = ep->worker->ifaces[rsc_index].attr.cap.put.align_mtu;
+    if_index  = ucs_bitmap2idx(ep->worker->context->tl_bitmap, rsc_index);
+    align     = ep->worker->ifaces[if_index].attr.cap.put.opt_zcopy_align;
+    ucp_mtu   = ep->worker->ifaces[if_index].attr.cap.put.align_mtu;
 
     offset    = sreq->send.state.dt.offset;
     remainder = (uintptr_t)sreq->send.buffer % align;

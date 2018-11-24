@@ -12,6 +12,7 @@
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
 #include <uct/api/uct.h>
+#include <ucs/arch/bitops.h>
 
 
 /**
@@ -116,7 +117,8 @@ ucs_status_t ucp_signaling_ep_create(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
 static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    uint64_t flags = worker->ifaces[rsc_index].attr.cap.flags;
+    uint64_t flags = worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap,
+                                                   rsc_index)].attr.cap.flags;
 
     return (flags & UCT_IFACE_FLAG_CONNECT_TO_EP) &&
            !(flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);

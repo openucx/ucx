@@ -14,7 +14,6 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_listener.h>
 #include <ucp/tag/eager.h>
-#include <ucs/arch/bitops.h>
 #include <ucs/async/async.h>
 #include <ucs/datastruct/queue.h>
 
@@ -98,7 +97,7 @@ static unsigned ucp_wireup_address_index(const unsigned *order,
                                          uint64_t tl_bitmap,
                                          ucp_rsc_index_t tl_index)
 {
-    return order[ucs_count_one_bits(tl_bitmap & UCS_MASK(tl_index))];
+    return order[ucs_bitmap2idx(tl_bitmap, tl_index)];
 }
 
 static inline int ucp_wireup_is_ep_needed(ucp_ep_h ep)
@@ -585,12 +584,15 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
     ucp_worker_h worker          = ep->worker;
     ucp_rsc_index_t rsc_index    = ucp_ep_get_rsc_index(ep, lane);
     ucp_lane_index_t proxy_lane  = ucp_ep_get_proxy_lane(ep, lane);
-    uct_iface_attr_t *iface_attr = &worker->ifaces[rsc_index].attr;
+    uct_iface_attr_t *iface_attr;
+    ucp_worker_iface_t *wiface;
     uct_ep_h uct_ep;
     ucs_status_t status;
 
     ucs_trace("ep %p: connect lane[%d]", ep, lane);
 
+    wiface     = &worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, rsc_index)];
+    iface_attr = &wiface->attr;
     /*
      * if the selected transport can be connected directly to the remote
      * interface, just create a connected UCT endpoint.
@@ -602,7 +604,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
             /* create an endpoint connected to the remote interface */
             ucs_trace("ep %p: connect uct_ep[%d] to addr[%d]", ep, lane,
                       addr_index);
-            status = uct_ep_create_connected(worker->ifaces[rsc_index].iface,
+            status = uct_ep_create_connected(wiface->iface,
                                              address_list[addr_index].dev_addr,
                                              address_list[addr_index].iface_addr,
                                              &uct_ep);
@@ -614,7 +616,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
             ucp_wireup_assign_lane(ep, lane, uct_ep, "");
         }
 
-        ucp_worker_iface_progress_ep(&worker->ifaces[rsc_index]);
+        ucp_worker_iface_progress_ep(wiface);
         return UCS_OK;
     }
 
@@ -652,7 +654,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
             return status;
         }
 
-        ucp_worker_iface_progress_ep(&worker->ifaces[rsc_index]);
+        ucp_worker_iface_progress_ep(wiface);
 
         return UCS_OK;
     }
@@ -663,6 +665,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep,
 static ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
 {
     ucp_lane_index_t lane, proxy_lane;
+    ucp_rsc_index_t if_index;
     uct_iface_attr_t *iface_attr;
     uct_ep_h uct_ep, signaling_ep;
     ucs_status_t status;
@@ -674,7 +677,9 @@ static ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
             continue;
         }
 
-        iface_attr = &ep->worker->ifaces[ucp_ep_get_rsc_index(ep, lane)].attr;
+        if_index   = ucs_bitmap2idx(ep->worker->context->tl_bitmap,
+                                    ucp_ep_get_rsc_index(ep, lane));
+        iface_attr = &ep->worker->ifaces[if_index].attr;
         if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
             ucs_assert_always(iface_attr->cap.am.max_short <=
                               iface_attr->cap.am.max_bcopy);
@@ -963,6 +968,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     unsigned addr_index;
     ucs_status_t status;
     char *p, *end;
+    ucp_rsc_index_t tl;
 
     status = ucp_address_unpack(msg + 1, &unpacked_address);
     if (status != UCS_OK) {
@@ -987,7 +993,8 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 
     for (addr_index = 0; addr_index < unpacked_address.address_count; ++addr_index) {
         ae = &unpacked_address.address_list[addr_index];
-        for (rsc = context->tl_rscs; rsc < context->tl_rscs + context->num_tls; ++rsc) {
+        ucs_for_each_bit(tl, context->tl_bitmap) {
+            rsc = &context->tl_rscs[tl];
             if (ae->tl_name_csum == rsc->tl_name_csum) {
                 snprintf(p, end - p, " "UCT_TL_RESOURCE_DESC_FMT,
                          UCT_TL_RESOURCE_DESC_ARG(&rsc->tl_rsc));
@@ -1009,5 +1016,5 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     ucs_free(unpacked_address.address_list);
 }
 
-UCP_DEFINE_AM(-1, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler, 
+UCP_DEFINE_AM(-1, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler,
               ucp_wireup_msg_dump, UCT_CB_FLAG_ASYNC);

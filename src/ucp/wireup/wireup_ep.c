@@ -253,6 +253,7 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
     ucp_ep_h ucp_ep     = wireup_ep->super.ucp_ep;
     ucp_worker_h worker = ucp_ep->worker;
     const ucp_address_entry_t *aux_addr;
+    ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_index;
     unsigned aux_addr_index;
     ucs_status_t status;
@@ -269,16 +270,16 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep,
 
     wireup_ep->aux_rsc_index = rsc_index;
     aux_addr = &address_list[aux_addr_index];
+    wiface   = &worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, rsc_index)];
 
     /* create auxiliary endpoint connected to the remote iface. */
-    status = uct_ep_create_connected(worker->ifaces[rsc_index].iface,
-                                     aux_addr->dev_addr, aux_addr->iface_addr,
-                                     &wireup_ep->aux_ep);
+    status = uct_ep_create_connected(wiface->iface, aux_addr->dev_addr,
+                                     aux_addr->iface_addr, &wireup_ep->aux_ep);
     if (status != UCS_OK) {
         return status;
     }
 
-    ucp_worker_iface_progress_ep(&worker->ifaces[rsc_index]);
+    ucp_worker_iface_progress_ep(wiface);
 
     ucs_debug("ep %p: wireup_ep %p created aux_ep %p to %s using "
               UCT_TL_RESOURCE_DESC_FMT, ucp_ep, wireup_ep, wireup_ep->aux_ep,
@@ -406,7 +407,9 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, const ucp_ep_params_t *param
 
     ucs_assert(ucp_wireup_ep_test(uct_ep));
 
-    status = uct_ep_create(worker->ifaces[rsc_index].iface, &next_ep);
+    status = uct_ep_create(worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap,
+                                                         rsc_index)].iface,
+                           &next_ep);
     if (status != UCS_OK) {
         goto err;
     }
@@ -452,7 +455,8 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
     ucs_for_each_bit(tl_id, context->config.sockaddr_aux_rscs_bitmap) {
         if ((!strncmp(context->tl_rscs[tl_id].tl_rsc.dev_name, dev_name,
                       UCT_DEVICE_NAME_MAX)) &&
-            (ucs_test_all_flags(worker->ifaces[tl_id].attr.cap.flags,
+            (ucs_test_all_flags(worker->ifaces[ucs_bitmap2idx(context->tl_bitmap,
+                                                              tl_id)].attr.cap.flags,
                                 UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                 UCT_IFACE_FLAG_AM_BCOPY))) {
             found_supported_tl = 1;
@@ -500,7 +504,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     client_data->err_mode = ucp_ep_config(ucp_ep)->key.err_mode;
     client_data->ep_ptr   = (uintptr_t)ucp_ep;
 
-    wiface = &worker->ifaces[sockaddr_rsc];
+    wiface = &worker->ifaces[ucs_bitmap2idx(context->tl_bitmap, sockaddr_rsc)];
 
     /* check private data length limitation */
     if (conn_priv_len > wiface->attr.max_conn_priv) {
@@ -577,7 +581,7 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
         goto out;
     }
 
-    wiface = &worker->ifaces[sockaddr_rsc];
+    wiface = &worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, sockaddr_rsc)];
 
     wireup_ep->sockaddr_rsc_index = sockaddr_rsc;
 

@@ -355,7 +355,6 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
 {
     ucp_md_index_t dst_md_index;
     ucp_lane_index_t lane;
-    ucp_md_map_t dst_md_mask;
     ucp_md_index_t md_index;
     uct_md_attr_t *md_attr;
     uint8_t rkey_index;
@@ -389,10 +388,9 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
         }
 
         dst_md_index = config->key.lanes[lane].dst_md_index;
-        dst_md_mask  = UCS_BIT(dst_md_index);
-        if (rkey->md_map & dst_md_mask) {
+        if (rkey->md_map & UCS_BIT(dst_md_index)) {
             /* Return first matching lane */
-            rkey_index  = ucs_count_one_bits(rkey->md_map & (dst_md_mask - 1));
+            rkey_index  = ucs_bitmap2idx(rkey->md_map, dst_md_index);
             *uct_rkey_p = rkey->uct[rkey_index].rkey;
             return lane;
         }

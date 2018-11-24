@@ -234,6 +234,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "another thread, or incoming active messages, but consumes more resources.",
    ucs_offsetof(ucp_config_t, ctx.flush_worker_eps), UCS_CONFIG_TYPE_BOOL},
 
+  {"UNIFIED_MODE", "n",
+   "Enable various optimizations intended for homogeneous environment. \n",
+   ucs_offsetof(ucp_config_t, ctx.unified_mode), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
@@ -879,15 +883,16 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
 static ucs_status_t ucp_fill_resources(ucp_context_h context,
                                        const ucp_config_t *config)
 {
+    uint64_t dev_cfg_masks[UCT_DEVICE_TYPE_LAST] = {0};
+    uint64_t tl_cfg_mask = 0;
     unsigned num_tl_resources;
     unsigned num_md_resources;
     uct_md_resource_desc_t *md_rscs;
     ucs_status_t status;
     ucp_rsc_index_t i;
     unsigned md_index;
-    uint64_t dev_cfg_masks[UCT_DEVICE_TYPE_LAST] = {0};
-    uint64_t tl_cfg_mask = 0;;
     uint64_t mem_type_mask;
+    uint64_t dummy_mask;
     uct_memory_type_t mem_type;
 
     context->tl_mds      = NULL;
@@ -966,6 +971,22 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
             ucs_debug("could not create memtype cache for mem_type allocations");
             goto err_free_context_resources;
         }
+    }
+
+    /* If unified mode is enabled, and user did not select any specific
+     * transports, inittialize tl_bitmap to 0. Then the worker will open
+     * all available transport resources and will select only the best ones
+     * for each particular device.
+     */
+    if  (config->ctx.unified_mode &&
+         ucp_tls_array_is_present((const char**)config->tls.names,
+                                  config->tls.count,
+                                  UCP_RSC_CONFIG_ALL, "",
+                                  (uint8_t*)&dummy_mask, &dummy_mask)) {
+        context->tl_bitmap = 0;
+    } else {
+        /* Workers will open all available tl resources */
+        context->tl_bitmap = ~(~0 << context->num_tls);
     }
 
     /* Validate context resources */
@@ -1226,8 +1247,9 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         ucp_config_release(dfl_config);
     }
 
-    ucs_debug("created ucp context %p [%d mds %d tls] features 0x%lx", context,
-              context->num_mds, context->num_tls, context->config.features);
+    ucs_debug("created ucp context %p [%d mds %d tls] features 0x%lx tl bitmap 0x%lx",
+              context, context->num_mds, context->num_tls,
+              context->config.features, context->tl_bitmap);
 
     *context_p = context;
     return UCS_OK;

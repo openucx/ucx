@@ -81,6 +81,8 @@ typedef struct ucp_context_config {
     int                                    enable_memtype_cache;
     /** Enable flushing endpoints while flushing a worker */
     int                                    flush_worker_eps;
+    /** Enable optimizations suitable for homogeneous systems */
+    int                                    unified_mode;
 } ucp_context_config_t;
 
 
@@ -147,6 +149,9 @@ typedef struct ucp_context {
     ucs_memtype_cache_t           *memtype_cache;    /* mem type allocation cache*/
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
+    uint64_t                      tl_bitmap;  /* Cached map of tl resources used by workers.
+                                                 Not all resources may be used if unified
+                                                 mode is enabled. */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/
 
     /* Mask of memory type communication resources */

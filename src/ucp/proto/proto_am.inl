@@ -117,10 +117,10 @@ void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
     case UCP_DATATYPE_CONTIG:
         if (context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_REG) {
             if (mdesc) {
-                memh_index  = ucp_memh_map2idx(mdesc->memh->md_map, md_index);
+                memh_index  = ucs_bitmap2idx(mdesc->memh->md_map, md_index);
                 iov[0].memh = mdesc->memh->uct[memh_index];
             } else {
-                memh_index  = ucp_memh_map2idx(state->dt.contig.md_map, md_index);
+                memh_index  = ucs_bitmap2idx(state->dt.contig.md_map, md_index);
                 iov[0].memh = state->dt.contig.memh[memh_index];
             }
         } else {
@@ -343,6 +343,7 @@ ucp_proto_get_zcopy_threshold(const ucp_request_t *req,
     ucp_worker_h     worker;
     ucp_lane_index_t lane;
     ucp_rsc_index_t  rsc_index;
+    ucp_rsc_index_t  if_index;
     size_t           zcopy_thresh;
 
     if (ucs_unlikely(msg_config->max_zcopy == 0)) {
@@ -370,10 +371,11 @@ ucp_proto_get_zcopy_threshold(const ucp_request_t *req,
             lane      = req->send.lane;
             rsc_index = ucp_ep_config(req->send.ep)->key.lanes[lane].rsc_index;
             worker    = req->send.ep->worker;
+            if_index  = ucs_bitmap2idx(worker->context->tl_bitmap, rsc_index);
             zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(count,
                                &ucp_ep_md_attr(req->send.ep, lane)->reg_cost,
                                worker->context,
-                               worker->ifaces[rsc_index].attr.bandwidth);
+                               worker->ifaces[if_index].attr.bandwidth);
         }
         return ucs_min(max_zcopy, zcopy_thresh);
     } else if (UCP_DT_IS_GENERIC(req->send.datatype)) {

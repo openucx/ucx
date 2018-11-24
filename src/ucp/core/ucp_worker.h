@@ -222,6 +222,10 @@ typedef struct ucp_worker_err_handle_arg {
 unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
                                   const ucp_ep_config_key_t *key);
 
+ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
+                                   uct_iface_params_t *iface_params,
+                                   ucp_worker_iface_t *wiface);
+
 ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    uct_iface_params_t *iface_params,
                                    ucp_worker_iface_t *wiface);
