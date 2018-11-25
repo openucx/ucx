@@ -76,12 +76,14 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
     if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, cqe_index, cq->cq_length))) {
         return NULL;
     } else if (ucs_unlikely(op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK)) {
+        ucs_log_dump_hex_buf(cqe, sizeof(struct mlx5_cqe64));
         UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
         ucs_assert((op_own >> 4) != MLX5_CQE_INVALID);
         uct_ib_mlx5_check_completion(iface, cq, cqe);
         return NULL; /* No CQE */
     }
 
+    ucs_log_dump_hex_buf(cqe, sizeof(struct mlx5_cqe64));
     cq->cq_ci = cqe_index + 1;
     return cqe;
 }
@@ -462,6 +464,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     dst = wq->reg->addr.ptr;
     src = ctrl;
 
+    ucs_log_dump_hex_buf(src, wqe_size);
     ucs_assert(wqe_size <= UCT_IB_MLX5_BF_REG_SIZE);
     ucs_assert(num_bb <= UCT_IB_MLX5_MAX_BB);
     if (ucs_likely(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_BF_POST)) {

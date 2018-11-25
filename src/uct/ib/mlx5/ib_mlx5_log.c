@@ -128,6 +128,7 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
         wqe = UCS_PTR_BYTE_OFFSET(txwq->qstart, MLX5_SEND_WQE_BB * wqe_index);
         uct_ib_mlx5_wqe_dump(iface, wqe, txwq->qstart, txwq->qend, INT_MAX, 0,
                              NULL, wqe_info, sizeof(wqe_info) - 1, NULL);
+        ucs_log_dump_hex_buf_lvl(wqe, (((struct mlx5_wqe_ctrl_seg *)wqe)->qpn_ds >> 24) * 0x10, log_level);
     } else {
         snprintf(wqe_info, sizeof(wqe_info) - 1, "opcode %s",
                  uct_ib_mlx5_cqe_err_opcode(ecqe));
