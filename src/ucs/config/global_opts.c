@@ -23,6 +23,7 @@
 ucs_global_opts_t ucs_global_opts = {
     .log_component         = {UCS_LOG_LEVEL_WARN, "UCX", "*"},
     .log_print_enable      = 0,
+    .log_print_queues      = 0,
     .log_file              = "",
     .log_file_size         = SIZE_MAX,
     .log_file_rotate       = 0,
@@ -100,6 +101,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
  {"LOG_PRINT_ENABLE", "n",
   "Enable output of ucs_print(). This option is intended for use by the library developers.",
   ucs_offsetof(ucs_global_opts_t, log_print_enable), UCS_CONFIG_TYPE_BOOL},
+
+ {"LOG_QE", "n",
+  "Enable hex dump of WQE/CQE. This option is intended for use by the library developers.\n",
+  ucs_offsetof(ucs_global_opts_t, log_print_queues), UCS_CONFIG_TYPE_BOOL},
 
 #if ENABLE_DEBUG_DATA
  {"MPOOL_FIFO", "n",

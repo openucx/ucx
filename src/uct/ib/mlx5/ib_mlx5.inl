@@ -151,6 +151,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
         cq->cq_unzip.title_cqe_valid = 0;
     }
 
+    ucs_log_dump_hex_buf(cqe, sizeof(struct mlx5_cqe64));
     cq->cq_ci = idx + 1;
     return cqe; /* TODO optimize - let complier know cqe is not null */
 }
@@ -556,6 +557,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
     dst = wq->reg->addr.ptr;
     src = ctrl;
 
+    ucs_log_dump_hex_buf(src, wqe_size);
     ucs_assert(wqe_size <= UCT_IB_MLX5_BF_REG_SIZE);
     ucs_assert(num_bb <= UCT_IB_MLX5_MAX_BB);
     if (ucs_likely(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_BF_POST)) {

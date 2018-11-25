@@ -478,6 +478,23 @@ overflow:
     return buf;
 }
 
+void ucs_log_dump_hex_buf_impl(const char *file, unsigned line,
+                               const char *function, ucs_log_level_t level,
+                               ucs_log_component_config_t *comp_conf,
+                               const void* buff, size_t len)
+{
+    uint32_t *p = (uint32_t *)buff, c, i = 0;
+    char *out = alloca(len * 5), *outp = out;
+
+    while(i * 16 < len) {
+        outp += sprintf(outp, "\n%02x: ", i);
+        for (c = 0; c < 4; c++)
+            outp += sprintf(outp, "%08x ", ntohl(p[i * 4 + c]));
+        i++;
+    }
+    ucs_log_dispatch(file, line, function, level, comp_conf, "%s", out);
+}
+
 void ucs_log_early_init()
 {
     ucs_log_initialized   = 0;

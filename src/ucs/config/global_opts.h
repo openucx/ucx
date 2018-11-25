@@ -48,6 +48,9 @@ typedef struct {
     /* Enable ucs_print() output */
     int                        log_print_enable;
 
+    /* Enable WQE/CQE output */
+    int                        log_print_queues;
+
     /* Enable FIFO behavior for memory pool, instead of LIFO. Useful for
      * debugging because object pointers are not recycled. */
     int                        mpool_fifo;
