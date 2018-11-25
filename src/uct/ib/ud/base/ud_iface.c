@@ -426,8 +426,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->rx.quota               = 0;
     self->config.tx_qp_len       = config->super.tx.queue_len;
     self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
-    self->config.check_grh_dgid  = (config->dgid_check &&
-                                    IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(&self->super)));
+    self->config.check_grh_dgid  = config->dgid_check &&
+                                   uct_ib_iface_is_roce(&self->super);
 
     if (config->slow_timer_backoff <= 0.) {
         ucs_error("The slow timer back off should be > 0 (%lf)",

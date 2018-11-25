@@ -55,7 +55,7 @@ ucs_status_t uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
     base_av->rlid         = mlx5_av_base(&mlx5_av)->rlid;
     base_av->dqp_dct      = 0;
 
-    if (IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface)) &&
+    if (uct_ib_iface_is_roce(iface) &&
         (ntohs(base_av->rlid) < UCT_IB_MLX5_ROCE_SRC_PORT_MIN)) {
         base_av->rlid = htons(UCT_IB_MLX5_ROCE_SRC_PORT_MIN);
     }

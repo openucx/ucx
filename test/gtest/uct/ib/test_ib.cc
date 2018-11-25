@@ -212,7 +212,7 @@ out:
 
         uct_ib_address_unpack(ib_addr, &lid_out, &gid_out);
 
-        if (IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface))) {
+        if (uct_ib_iface_is_roce(iface)) {
             EXPECT_TRUE(iface->is_global_addr);
         } else {
             EXPECT_EQ(lid_in, lid_out);

@@ -98,7 +98,7 @@ struct uct_ib_iface_config {
     unsigned                sl;
 
     /* IB Traffic Class to use */
-    unsigned                traffic_class;
+    unsigned long           traffic_class;
 
     /* IB hop limit / TTL */
     unsigned                hop_limit;
@@ -290,6 +290,12 @@ uct_ib_iface_invoke_am_desc(uct_ib_iface_t *iface, uint8_t am_id, void *data,
         uct_recv_desc(desc) = &iface->release_desc;
     }
 }
+
+
+/**
+ * @return Whether the port used by this interface is RoCE
+ */
+int uct_ib_iface_is_roce(uct_ib_iface_t *iface);
 
 
 /**
