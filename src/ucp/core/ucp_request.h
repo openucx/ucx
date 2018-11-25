@@ -141,6 +141,8 @@ struct ucp_request {
                     ucp_rkey_h           rkey;           /* key for remote send buffer */
                     ucp_lane_map_t       lanes_map;      /* used lanes map */
                     ucp_lane_index_t     lane_count;     /* number of lanes used in transaction */
+                    size_t               min_zcopy;      /* upper low boundary for zcopy
+                                                          * accross available lanes */
                 } rndv_get;
 
                 struct {

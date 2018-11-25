@@ -273,10 +273,14 @@ static void ucp_rndv_get_lanes_count(ucp_request_t *req)
         return; /* already resolved */
     }
 
+    req->send.rndv_get.min_zcopy = 0;
     while ((lane = ucp_rkey_get_rma_bw_lane(req->send.rndv_get.rkey, ep, req->send.mem_type,
                                             &uct_rkey, map)) != UCP_NULL_LANE) {
         req->send.rndv_get.lane_count++;
         map |= UCS_BIT(lane);
+
+        req->send.rndv_get.min_zcopy = ucs_max(req->send.rndv_get.min_zcopy,
+                ucp_ep_get_iface_attr(ep, lane)->cap.get.min_zcopy);
     }
 
     req->send.rndv_get.lane_count = ucs_min(req->send.rndv_get.lane_count,
@@ -362,7 +366,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     rsc_index = ucp_ep_get_rsc_index(rndv_req->send.ep, rndv_req->send.lane);
     align     = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.opt_zcopy_align;
     ucp_mtu   = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.align_mtu;
-    min_zcopy = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.min_zcopy;
+    min_zcopy = rndv_req->send.rndv_get.min_zcopy;
     max_zcopy = ucp_ep_config(rndv_req->send.ep)->tag.rndv.max_get_zcopy;
 
     offset    = rndv_req->send.state.dt.offset;
