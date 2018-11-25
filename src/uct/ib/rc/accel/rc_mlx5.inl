@@ -291,6 +291,7 @@ uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *iface)
         return NULL;
     }
 
+    ucs_log_dump_hex_buf(cqe, sizeof(struct mlx5_cqe64));
     cq->cq_ci = idx + 1;
     return cqe; /* TODO optimize - let complier know cqe is not null */
 }
