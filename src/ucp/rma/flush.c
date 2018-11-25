@@ -103,7 +103,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                           req);
             req->send.flush.sw_done = 1;
         } else {
-            /* All pending requires were sent, so 'send_sn' value is up-to-date */
+            /* All pending requests were sent, so 'send_sn' value is up-to-date */
             flush_state = ucp_ep_flush_state(ep);
             if (flush_state->send_sn == flush_state->cmpl_sn) {
                 req->send.flush.sw_done = 1;
