@@ -23,8 +23,8 @@ extern "C" {
 #  include <uct/ib/rc/verbs/rc_verbs.h>
 #endif
 #if HAVE_TL_DC
-#  include <uct/ib/dc/base/dc_ep.h>
-#  include <uct/ib/dc/base/dc_iface.h>
+#  include <uct/ib/dc/dc_mlx5_ep.h>
+#  include <uct/ib/dc/dc_mlx5.h>
 #endif
 #if HAVE_TL_UD
 #  include <uct/ib/ud/base/ud_ep.h>
@@ -64,7 +64,7 @@ UCS_TEST_F(test_obj_size, size) {
 #    endif
 #  endif
 #  if HAVE_TL_DC
-    EXPECTED_SIZE(uct_dc_ep_t, 24);
+    EXPECTED_SIZE(uct_dc_mlx5_ep_t, 32);
 #  endif
 #  if HAVE_TL_UD
     EXPECTED_SIZE(uct_ud_ep_t, 240);
