@@ -18,8 +18,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <poll.h>
+#if HAVE_CUDA
 #include <limits.h>
 #include <cuda.h>
+#endif
 #include <ctype.h>
 
 #define MAXPATHSIZE 1024
@@ -1225,7 +1227,6 @@ static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     int score;
-    //static int min_score = 10000;
     CUdevice cuda_device;
     CUresult cu_err;
     char     *cuda_dev_path;
@@ -1244,11 +1245,9 @@ static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
 
     /* Obtain score from the cuda device and mlx device pair */
     score = uct_ib_iface_pci_distance(cuda_dev_path, mlx_dev_path);
-    /*
-    if (score < min_score) min_score = score;
-    printf("device = %d ib = %s score = %d min_score = %d\n", (int) cuda_device,
-           ((char *) uct_ib_device_name(dev)), score, min_score);
-    */
+    ucs_debug("device = %d ib = %s score = %d min_score = %d\n",
+              (int) cuda_device, ((char *) uct_ib_device_name(dev)), score,
+              min_score);
 
     /* Assign latency as a factor of score */
 
