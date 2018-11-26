@@ -58,6 +58,15 @@ enum {
 #endif
 };
 
+#if HAVE_CUDA
+enum {
+    PATH_PIX = 0,
+    PATH_PXB = 1,
+    PATH_PHB = 2,
+    PATH_SOC = 3
+};
+#endif
+
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
 

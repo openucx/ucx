@@ -18,7 +18,11 @@
 #include <string.h>
 #include <stdlib.h>
 #include <poll.h>
+#include <limits.h>
+#include <cuda.h>
+#include <ctype.h>
 
+#define MAXPATHSIZE 1024
 
 static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,
                                sizeof(ucs_range_spec_t),
@@ -1144,6 +1148,115 @@ static ucs_status_t uct_ib_iface_get_numa_latency(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
+#if HAVE_CUDA
+static int uct_ib_iface_get_cuda_path(int cuda_dev, char** path)
+{
+    char* cuda_rpath = NULL;
+    char bus_path[]  = "/sys/class/pci_bus/0000:00/device";
+    char bus_id[16];
+    char pathname[MAXPATHSIZE];
+    int i;
+    CUresult cu_err;
+
+    cu_err = cuDeviceGetPCIBusId(bus_id, 16, cuda_dev);
+    if (CUDA_SUCCESS != cu_err) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    for (i = 0; i < 16; i++) {
+        bus_id[i] = tolower(bus_id[i]);
+    }
+
+    memcpy(bus_path+sizeof("/sys/class/pci_bus/")-1, bus_id,
+           sizeof("0000:00")-1);
+    cuda_rpath = realpath(bus_path, NULL);
+    strncpy(pathname, cuda_rpath, MAXPATHSIZE);
+    strncpy(pathname+strlen(pathname), "/", MAXPATHSIZE-strlen(pathname));
+    strncpy(pathname+strlen(pathname), bus_id, MAXPATHSIZE-strlen(pathname));
+
+    *path = realpath(pathname, NULL);
+    if (*path == NULL) {
+        ucs_error("Could not find real path of %s", pathname);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    free(cuda_rpath);
+
+    return UCS_OK;
+}
+
+static int uct_ib_iface_get_mlx_path(const char* ib_name, char** path)
+{
+    char device_path[MAXPATHSIZE];
+
+    snprintf(device_path, MAXPATHSIZE, "/sys/class/infiniband/%s/device",
+             ib_name);
+
+    *path = realpath(device_path, NULL);
+    if (*path == NULL) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+static int uct_ib_iface_pci_distance(char* cuda_path, char* mlx_path)
+{
+    int score = 0;
+    int depth = 0;
+    int same = 1;
+    int i;
+
+    for (i = 0; i < strlen(cuda_path); i++) {
+        if (cuda_path[i] != mlx_path[i]) same = 0;
+        if (cuda_path[i] == '/') {
+            depth++;
+            if (same == 1) score++;
+        }
+    }
+    if (score == 3) return PATH_SOC;
+    if (score == 4) return PATH_PHB;
+    if (score == depth-1) return PATH_PIX;
+    return PATH_PXB;
+}
+
+static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
+                                                  double *latency)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    int score;
+    //static int min_score = 10000;
+    CUdevice cuda_device;
+    CUresult cu_err;
+    char     *cuda_dev_path;
+    char     *mlx_dev_path;
+
+    /* Find cuda dev that the current ctx is using and find it's path*/
+    cu_err = cuCtxGetDevice(&cuda_device);
+    if (CUDA_SUCCESS != cu_err) {
+        *latency = 0.0;
+        return UCS_OK;
+    }
+    uct_ib_iface_get_cuda_path(cuda_device, &cuda_dev_path);
+
+    /* Find mlx path for given iface */
+    uct_ib_iface_get_mlx_path(uct_ib_device_name(dev), &mlx_dev_path);
+
+    /* Obtain score from the cuda device and mlx device pair */
+    score = uct_ib_iface_pci_distance(cuda_dev_path, mlx_dev_path);
+    /*
+    if (score < min_score) min_score = score;
+    printf("device = %d ib = %s score = %d min_score = %d\n", (int) cuda_device,
+           ((char *) uct_ib_device_name(dev)), score, min_score);
+    */
+
+    /* Assign latency as a factor of score */
+
+    *latency = 200e-9 * score;
+    return UCS_OK;
+}
+#endif
+
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                                 uct_iface_attr_t *iface_attr)
 {
@@ -1160,6 +1273,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     size_t mtu, width, extra_pkt_len;
     ucs_status_t status;
     double numa_latency;
+    double cuda_latency;
     
     active_width = uct_ib_iface_port_attr(iface)->active_width;
     active_speed = uct_ib_iface_port_attr(iface)->active_speed;
@@ -1231,6 +1345,14 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     if (status != UCS_OK) {
         return status;
     }
+
+#if HAVE_CUDA
+    status = uct_ib_iface_get_cuda_latency(iface, &cuda_latency);
+    if (status != UCS_OK) {
+        return status;
+    }
+    iface_attr->latency.overhead += cuda_latency;
+#endif
 
     iface_attr->latency.overhead += numa_latency;
     iface_attr->latency.growth    = 0;
