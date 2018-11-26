@@ -260,6 +260,22 @@ struct uct_ud_ep {
 
 UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
 
+/**
+ * UD pending request private data
+ */
+typedef struct {
+    uct_pending_req_priv_arb_t arb;
+    unsigned                   flags;
+} uct_ud_pending_req_priv_t;
+
+
+static UCS_F_ALWAYS_INLINE uct_ud_pending_req_priv_t *
+uct_ud_pending_req_priv(uct_pending_req_t *req)
+{
+    return (uct_ud_pending_req_priv_t *)&(req)->priv;
+}
+
+
 void uct_ud_tx_wnd_purge_outstanding(uct_ud_iface_t *iface, uct_ud_ep_t *ud_ep,
                                      ucs_status_t status);
 

@@ -342,11 +342,9 @@ ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
         return UCS_ERR_BUSY;
     }
 
-    UCS_STATIC_ASSERT(sizeof(ucs_arbiter_elem_t) <= UCT_PENDING_REQ_PRIV_LEN);
-
-    ucs_arbiter_elem_init((ucs_arbiter_elem_t *)n->priv);
-    /* add the request to the ep's arbiter_group (pending queue) */
-    ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*) n->priv);
+    UCS_STATIC_ASSERT(sizeof(uct_pending_req_priv_arb_t) <=
+                      UCT_PENDING_REQ_PRIV_LEN);
+    uct_pending_req_arb_group_push(&ep->arb_group, n);
     /* add the ep's group to the arbiter */
     ucs_arbiter_group_schedule(&iface->arbiter, &ep->arb_group);
 
@@ -419,10 +417,15 @@ ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep, unsigned flags,
 {
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
-    uct_mm_ep_update_cached_tail(ep);
-
     if (!uct_mm_ep_has_tx_resources(ep)) {
-        return UCS_ERR_NO_RESOURCE;
+        if (!ucs_arbiter_group_is_empty(&ep->arb_group)) {
+            return UCS_ERR_NO_RESOURCE;
+        } else {
+            uct_mm_ep_update_cached_tail(ep);
+            if (!uct_mm_ep_has_tx_resources(ep)) {
+                return UCS_ERR_NO_RESOURCE;
+            }
+        }
     }
 
     ucs_memory_cpu_store_fence();

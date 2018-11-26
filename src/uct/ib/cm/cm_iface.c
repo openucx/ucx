@@ -39,8 +39,8 @@ static uct_ib_iface_ops_t uct_cm_iface_ops;
 
 static unsigned uct_cm_iface_progress(void *arg)
 {
-    uct_cm_pending_req_priv_t *priv;
     uct_cm_iface_t *iface = arg;
+    uct_cm_pending_req_priv_t *priv;
     uct_cm_iface_op_t *op;
     unsigned count;
 

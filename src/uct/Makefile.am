@@ -72,7 +72,8 @@ noinst_HEADERS += \
 	ib/mlx5/ib_mlx5.h \
 	ib/mlx5/ib_mlx5.inl \
 	ib/mlx5/ib_mlx5_dv.h \
-	ib/mlx5/ib_mlx5_hw.h
+	ib/mlx5/ib_mlx5_hw.h \
+	ib/mlx5/ib_mlx5_ifc.h
 
 if HAVE_MLX5_DV
 libuct_la_LDFLAGS += $(LIB_MLX5)
@@ -115,21 +116,11 @@ libuct_la_SOURCES += \
 	ib/dc/base/dc_iface.c \
 	ib/dc/base/dc_ep.c
 
-if HAVE_DC_EXP
-noinst_HEADERS += \
-	ib/dc/verbs/dc_verbs.h
-
-libuct_la_SOURCES += \
-	ib/dc/verbs/dc_verbs.c
-endif
-
-if HAVE_MLX5_HW_DC
 noinst_HEADERS += \
 	ib/dc/accel/dc_mlx5.h
 
 libuct_la_SOURCES += \
 	ib/dc/accel/dc_mlx5.c
-endif
 endif
 
 if HAVE_TL_UD

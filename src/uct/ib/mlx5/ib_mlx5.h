@@ -33,7 +33,6 @@
 #endif
 
 #if HAVE_INFINIBAND_MLX5DV_H
-#  include <infiniband/verbs.h>
 #  include <infiniband/mlx5dv.h>
 #else
 #  include <infiniband/mlx5_hw.h>

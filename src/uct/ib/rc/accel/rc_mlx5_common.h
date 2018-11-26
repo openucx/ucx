@@ -605,7 +605,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, int qp_type,
         inl              = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
         inl->byte_count  = htonl(length | MLX5_INLINE_SEG);
         uct_ib_mlx5_inline_copy(inl + 1, buffer, length, txwq);
-        fm_ce_se        |= MLX5_WQE_CTRL_CQ_UPDATE;
+        fm_ce_se        |= uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
         break;
 
     case MLX5_OPCODE_NOP:

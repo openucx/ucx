@@ -6,6 +6,7 @@
 
 #include "ib_mlx5.h"
 #include "ib_mlx5_log.h"
+#include "ib_mlx5_ifc.h"
 
 #if HAVE_DECL_MLX5DV_INIT_OBJ
 ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
@@ -22,16 +23,20 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 }
 #endif
 
-#if HAVE_DC_DV
-static ucs_status_t uct_ib_mlx5_device_init(uct_ib_device_t *dev)
+static ucs_status_t uct_ib_mlx5_check_dc(uct_ib_device_t *dev)
 {
+    ucs_status_t status = UCS_OK;
+#if HAVE_DC_DV
     struct ibv_context *ctx = dev->ibv_context;
     struct ibv_qp_init_attr_ex qp_attr = {};
     struct mlx5dv_qp_init_attr dv_attr = {};
-    ucs_status_t status = UCS_OK;
     struct ibv_pd *pd;
     struct ibv_cq *cq;
     struct ibv_qp *qp;
+
+    if (!(uct_ib_device_spec(dev)->flags & UCT_IB_DEVICE_FLAG_MLX5_PRM)) {
+        return UCS_OK;
+    }
 
     pd = ibv_alloc_pd(ctx);
     if (pd == NULL) {
@@ -67,11 +72,105 @@ static ucs_status_t uct_ib_mlx5_device_init(uct_ib_device_t *dev)
     ibv_destroy_cq(cq);
 err_cq:
     ibv_dealloc_pd(pd);
+#endif
     return status;
 }
 
-UCT_IB_DEVICE_INIT(uct_ib_mlx5_device_init);
+static ucs_status_t uct_ib_mlx5dv_device_init(uct_ib_device_t *dev)
+{
+    ucs_status_t status = UCS_OK;
+    int has_dc = 1;
 
+#if HAVE_DECL_MLX5DV_DEVX_GENERAL_CMD
+    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {0};
+    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_in)] = {0};
+    struct ibv_context *ctx = dev->ibv_context;
+    int ret, atomic = 0;
+
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX |
+                                                   (UCT_IB_MLX5_CAP_GENERAL << 1));
+    ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out));
+    if (ret == 0) {
+        if (!UCT_IB_MLX5DV_GET(query_hca_cap_out, out, capability.cmd_hca_cap.dct)) {
+            has_dc = 0;
+        }
+        if (UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
+                              capability.cmd_hca_cap.compact_address_vector)) {
+            dev->flags |= UCT_IB_DEVICE_FLAG_AV;
+        }
+        if (UCT_IB_MLX5DV_GET(query_hca_cap_out, out, capability.cmd_hca_cap.atomic)) {
+            atomic = 1;
+        }
+    } else if ((errno != EPERM) &&
+               (errno != EPROTONOSUPPORT) &&
+               (errno != EOPNOTSUPP)) {
+        ucs_error("MLX5_CMD_OP_QUERY_HCA_CAP failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (atomic) {
+        int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
+                  UCT_IB_MLX5_ATOMIC_OPS_FETCH_ADD;
+        uint8_t arg_size;
+        int cap_ops, mode8b;
+
+        UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX |
+                                                       (UCT_IB_MLX5_CAP_ATOMIC << 1));
+        ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out));
+        if (ret != 0) {
+            ucs_error("MLX5_CMD_OP_QUERY_HCA_CAP failed: %m");
+            return UCS_ERR_IO_ERROR;
+        }
+
+        arg_size = UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
+                                     capability.atomic_caps.atomic_size_qp);
+
+        cap_ops = UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
+                                    capability.atomic_caps.atomic_operations);
+
+        mode8b = UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
+                                   capability.atomic_caps.atomic_req_8B_endianness_mode);
+
+        if ((cap_ops & ops) == ops) {
+            dev->atomic_arg_sizes = sizeof(uint64_t);
+            if (!mode8b) {
+                dev->atomic_arg_sizes_be = sizeof(uint64_t);
+            }
+        }
+
+        ops |= UCT_IB_MLX5_ATOMIC_OPS_MASKED_CMP_SWAP |
+               UCT_IB_MLX5_ATOMIC_OPS_MASKED_FETCH_ADD;
+
+        if (has_dc) {
+            arg_size &= UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
+                                          capability.atomic_caps.atomic_size_dc);
+        }
+
+        if ((cap_ops & ops) == ops) {
+            dev->ext_atomic_arg_sizes = arg_size;
+            if (mode8b) {
+                arg_size &= ~(sizeof(uint64_t));
+            }
+            dev->ext_atomic_arg_sizes_be = arg_size;
+        }
+    }
+#endif
+    if (has_dc) {
+        status = uct_ib_mlx5_check_dc(dev);
+    }
+
+    return status;
+}
+
+UCT_IB_DEVICE_INIT(uct_ib_mlx5dv_device_init);
+
+#if HAVE_DECL_MLX5DV_DEVX_GENERAL_CMD
+ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
+{
+    *compact_av = !!(uct_ib_iface_device(iface)->flags & UCT_IB_DEVICE_FLAG_AV);
+    return UCS_OK;
+}
 #endif
 
 int uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)

@@ -763,7 +763,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     request = ucp_ep_flush_internal(ep,
                                     (mode == UCP_EP_CLOSE_MODE_FLUSH) ?
                                     UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL,
-                                    NULL, 0,
+                                    NULL, 0, NULL,
                                     ucp_ep_close_flushed_callback, "close");
     if (!UCS_PTR_IS_PTR(request)) {
         ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);

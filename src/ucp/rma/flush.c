@@ -89,19 +89,31 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     }
 
     if (!req->send.flush.sw_started && (req->send.state.uct_comp.count == 0)) {
-        /* we start the SW flush only after all lanes are flushed, so we are sure
-         * all our requests were sent, to get the right "num_sent" counter
+        /* Start waiting for remote completions only after all lanes are flushed
+         * on the transport level, so we are sure all pending requests were sent.
+         * We don't need to wait for remote completions in these cases:
+         * - The flush operation is in 'cancel' mode
+         * - The endpoint is either not used or did not resolve the peer endpoint,
+         *   which means we didn't have any user operations which require remote
+         *   completion. In this case, the flush state may not even be initialized.
          */
-        flush_state = (ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ?
-                      ucp_ep_flush_state(ep) : NULL;
-        if ((flush_state == NULL) || (flush_state->send_sn == flush_state->cmpl_sn)) {
+        if ((req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL) ||
+            !ucs_test_all_flags(ep->flags, UCP_EP_FLAG_USED|UCP_EP_FLAG_DEST_EP)) {
+            ucs_trace_req("flush request %p not waiting for remote completions",
+                          req);
             req->send.flush.sw_done = 1;
-            ucs_trace_req("flush request %p remote completions done", req);
         } else {
-            req->send.flush.cmpl_sn = flush_state->send_sn;
-            ucs_queue_push(&flush_state->reqs, &req->send.flush.queue);
-            ucs_trace_req("added flush request %p to ep remote completion queue"
-                          " with sn %d", req, req->send.flush.cmpl_sn);
+            /* All pending requests were sent, so 'send_sn' value is up-to-date */
+            flush_state = ucp_ep_flush_state(ep);
+            if (flush_state->send_sn == flush_state->cmpl_sn) {
+                req->send.flush.sw_done = 1;
+                ucs_trace_req("flush request %p remote completions done", req);
+            } else {
+                req->send.flush.cmpl_sn = flush_state->send_sn;
+                ucs_queue_push(&flush_state->reqs, &req->send.flush.queue);
+                ucs_trace_req("added flush request %p to ep remote completion queue"
+                              " with sn %d", req, req->send.flush.cmpl_sn);
+            }
         }
         req->send.flush.sw_started = 1;
     }
@@ -170,7 +182,10 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     }
 
     if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
-        req->send.lane = UCP_NULL_LANE;
+        /* flushed callback might release the request */
+        if (!completed) {
+            req->send.lane = UCP_NULL_LANE;
+        }
         return UCS_OK;
     } else if (status == UCS_ERR_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
@@ -217,6 +232,7 @@ void ucp_ep_flush_remote_completed(ucp_request_t *req)
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
                                        ucp_send_callback_t req_cb,
                                        unsigned req_flags,
+                                       ucp_request_t *worker_req,
                                        ucp_request_callback_t flushed_cb,
                                        const char *debug_name)
 {
@@ -250,6 +266,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
     req->send.flush.lanes       = UCS_MASK(ucp_ep_num_lanes(ep));
     req->send.flush.prog_id     = UCS_CALLBACKQ_ID_NULL;
     req->send.flush.uct_flags   = uct_flags;
+    req->send.flush.worker_req  = worker_req;
     req->send.flush.sw_started  = 0;
     req->send.flush.sw_done     = 0;
 
@@ -285,8 +302,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nb, (ep, flags, cb),
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
-    request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL,
-                                    cb, UCP_REQUEST_FLAG_CALLBACK,
+    request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL, cb,
+                                    UCP_REQUEST_FLAG_CALLBACK, NULL,
                                     ucp_ep_flushed_callback, "flush_nb");
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
@@ -310,6 +327,12 @@ static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
 
         status = uct_iface_flush(worker->ifaces[rsc_index].iface, 0, NULL);
         if (status != UCS_OK) {
+            if (UCS_STATUS_IS_ERR(status)) {
+                ucs_error("iface[%d] "UCT_TL_RESOURCE_DESC_FMT" flush failed: %s",
+                          rsc_index,
+                          UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_index].tl_rsc),
+                          ucs_status_string(status));
+            }
             return status;
         }
     }
@@ -317,19 +340,73 @@ static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
     return UCS_OK;
 }
 
-static unsigned ucp_worker_flush_progress(void *arg)
+static void ucp_worker_flush_complete_one(ucp_request_t *req, ucs_status_t status,
+                                          int force_progress_unreg)
 {
-    ucp_request_t *req  = arg;
     ucp_worker_h worker = req->flush_worker.worker;
-    ucs_status_t status;
+    int complete;
 
-    status = ucp_worker_flush_check(worker);
-    if ((status == UCS_INPROGRESS) || (status == UCS_ERR_NO_RESOURCE)) {
-        return 0;
+    --req->flush_worker.comp_count;
+    complete = (req->flush_worker.comp_count == 0) || (status != UCS_OK);
+
+    if (complete || force_progress_unreg) {
+        uct_worker_progress_unregister_safe(worker->uct,
+                                            &req->flush_worker.prog_id);
     }
 
-    uct_worker_progress_unregister_safe(worker->uct, &req->flush_worker.prog_id);
-    ucp_request_complete(req, flush_worker.cb, status);
+    if (complete) {
+        ucs_assert(status != UCS_INPROGRESS);
+        ucp_request_complete(req, flush_worker.cb, status);
+    }
+}
+
+static void ucp_worker_flush_ep_flushed_cb(ucp_request_t *req)
+{
+    ucp_worker_flush_complete_one(req->send.flush.worker_req, UCS_OK, 0);
+    ucp_request_put(req);
+}
+
+static unsigned ucp_worker_flush_progress(void *arg)
+{
+    ucp_request_t *req        = arg;
+    ucp_worker_h worker       = req->flush_worker.worker;
+    ucp_ep_ext_gen_t *next_ep = req->flush_worker.next_ep;
+    void *ep_flush_request;
+    ucs_status_t status;
+    ucp_ep_h ep;
+
+    status = ucp_worker_flush_check(worker);
+    if ((status == UCS_OK) || (&next_ep->ep_list == &worker->all_eps)) {
+        /* If all ifaces are flushed, or we finished going over all endpoints,
+         * no need to progress this request actively any more. Just wait until
+         * all associated endpoint flush requests are completed.
+         */
+        ucp_worker_flush_complete_one(req, UCS_OK, 1);
+    } else if (status != UCS_INPROGRESS) {
+        /* Error returned from uct iface flush */
+        ucp_worker_flush_complete_one(req, status, 1);
+    } else if (worker->context->config.ext.flush_worker_eps) {
+        /* Some endpoints are not flushed yet. Take next endpoint from the list
+         * and start flush operation on it.
+         */
+        ep                        = ucp_ep_from_ext_gen(next_ep);
+        req->flush_worker.next_ep = ucs_list_next(&next_ep->ep_list,
+                                                  ucp_ep_ext_gen_t, ep_list);
+
+        ep_flush_request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL, NULL,
+                                                 UCP_REQUEST_FLAG_RELEASED, req,
+                                                 ucp_worker_flush_ep_flushed_cb,
+                                                 "flush_worker");
+        if (UCS_PTR_IS_ERR(ep_flush_request)) {
+            /* endpoint flush resulted in an error */
+            status = UCS_PTR_STATUS(ep_flush_request);
+            ucs_warn("ucp_ep_flush_internal() failed: %s", ucs_status_string(status));
+        } else if (ep_flush_request != NULL) {
+            /* endpoint flush started, increment refcount */
+            ++req->flush_worker.comp_count;
+        }
+    }
+
     return 0;
 }
 
@@ -350,11 +427,15 @@ static ucs_status_ptr_t ucp_worker_flush_nb_internal(ucp_worker_h worker,
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
-    req->flags                = req_flags;
-    req->status               = UCS_OK;
-    req->flush_worker.worker  = worker;
-    req->flush_worker.cb      = cb;
-    req->flush_worker.prog_id = UCS_CALLBACKQ_ID_NULL;
+    req->flags                   = req_flags;
+    req->status                  = UCS_OK;
+    req->flush_worker.worker     = worker;
+    req->flush_worker.cb         = cb;
+    req->flush_worker.comp_count = 1; /* counting starts from 1, and decremented
+                                         when finished going over all endpoints */
+    req->flush_worker.prog_id    = UCS_CALLBACKQ_ID_NULL;
+    req->flush_worker.next_ep    = ucs_list_head(&worker->all_eps,
+                                                 ucp_ep_ext_gen_t, ep_list);
 
     uct_worker_progress_register_safe(worker->uct, ucp_worker_flush_progress,
                                       req, 0, &req->flush_worker.prog_id);
@@ -403,7 +484,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
-    request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0,
+    request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL, NULL, 0, NULL,
                                     ucp_ep_flushed_callback, "flush");
     status = ucp_flush_wait(ep->worker, request);
 

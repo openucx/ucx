@@ -19,8 +19,7 @@ ucs_status_t uct_ugni_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
 
     UCS_STATIC_ASSERT(sizeof(ucs_arbiter_elem_t) <= UCT_PENDING_REQ_PRIV_LEN);
     uct_ugni_enter_async(iface);
-    ucs_arbiter_elem_init((ucs_arbiter_elem_t *)n->priv);
-    ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*) n->priv);
+    uct_pending_req_arb_group_push(&ep->arb_group, n);
     ucs_arbiter_group_schedule(&iface->arbiter, &ep->arb_group);
     uct_ugni_leave_async(iface);
     return UCS_OK;

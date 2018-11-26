@@ -12,9 +12,10 @@
 class uct_p2p_am_test : public uct_p2p_test
 {
 public:
-    static const uint8_t AM_ID = 11;
-    static const uint64_t SEED1 = 0xa1a1a1a1a1a1a1a1ul;
-    static const uint64_t SEED2 = 0xa2a2a2a2a2a2a2a2ul;
+    static const uint8_t  AM_ID       = 11;
+    static const uint8_t  AM_ID_RESP  = 12;
+    static const uint64_t SEED1       = 0xa1a1a1a1a1a1a1a1ul;
+    static const uint64_t SEED2       = 0xa2a2a2a2a2a2a2a2ul;
     static const uint64_t MAGIC_DESC  = 0xdeadbeef12345678ul;
     static const uint64_t MAGIC_ALLOC = 0xbaadf00d12345678ul;
 
@@ -29,8 +30,7 @@ public:
     } tracer_ctx_t;
 
     uct_p2p_am_test() :
-        uct_p2p_test(sizeof(receive_desc_t)),
-        m_am_count(0),
+        uct_p2p_test(sizeof(receive_desc_t)), m_am_count(0), m_am_posted(0),
         m_keep_data(false)
     {
         m_send_tracer.count = 0;
@@ -57,6 +57,58 @@ public:
                                    unsigned flags) {
         uct_p2p_am_test *self = reinterpret_cast<uct_p2p_am_test*>(arg);
         return self->am_handler(data, length, flags);
+    }
+
+    static ucs_status_t resp_progress(uct_pending_req_t *req)
+    {
+        test_req_t      *resp_req = ucs_container_of(req, test_req_t, uct);
+        uct_p2p_am_test *test     = resp_req->test;
+        mapped_buffer   dummy_bufer(0, 0, test->receiver());
+        ucs_status_t    status;
+
+        uint64_t hdr = *(uint64_t*)resp_req->sendbuf->ptr();
+        status = uct_ep_am_short(test->receiver().ep(0), AM_ID_RESP, hdr,
+                                (char*)resp_req->sendbuf->ptr() + sizeof(hdr),
+                                resp_req->sendbuf->length() - sizeof(hdr));
+        if (status == UCS_OK) {
+            ++test->m_am_posted;
+            resp_req->posted = true;
+            delete resp_req->sendbuf;
+        }
+        return status;
+    }
+
+    static ucs_status_t am_handler_resp(void *arg, void *data, size_t length,
+                                        unsigned flags) {
+        uct_p2p_am_test *self = reinterpret_cast<uct_p2p_am_test*>(arg);
+
+        ucs_assert(self->receiver().iface_attr().cap.flags &
+                   UCT_IFACE_FLAG_AM_SHORT);
+
+        ucs_status_t ret = self->am_handler(data, length, flags);
+
+        pthread_mutex_lock(&self->m_lock);
+
+        self->m_pending_req.uct.func   = resp_progress;
+        self->m_pending_req.sendbuf    = new mapped_buffer(sizeof(SEED1), SEED1,
+                                                           self->receiver());
+        self->m_pending_req.test       = self;
+
+        ucs_status_t status;
+        do {
+            status = uct_ep_am_short(self->receiver().ep(0), AM_ID_RESP, SEED1,
+                                     NULL, 0);
+            self->m_am_posted += (status == UCS_OK) ? 1 : 0;
+        } while (status == UCS_OK);
+
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+        status = uct_ep_pending_add(self->receiver().ep(0),
+                                    &self->m_pending_req.uct,
+                                    UCT_CB_FLAG_ASYNC);
+        EXPECT_EQ(UCS_OK, status);
+
+        pthread_mutex_unlock(&self->m_lock);
+        return ret;
     }
 
     static void am_tracer(void *arg, uct_am_trace_type_t type, uint8_t id,
@@ -241,6 +293,19 @@ protected:
 
 protected:
     unsigned                     m_am_count;
+    unsigned                     m_am_posted;
+
+    struct test_req_t {
+        test_req_t() : sendbuf(NULL), test(NULL), posted(false) {
+            memset(&uct, 0, sizeof(uct));
+        }
+
+        uct_pending_req_t  uct;
+        mapped_buffer      *sendbuf;
+        uct_p2p_am_test    *test;
+        bool               posted;
+    }                            m_pending_req;
+
 private:
     bool                         m_keep_data;
     std::vector<receive_desc_t*> m_backlog;
@@ -338,6 +403,50 @@ UCS_TEST_P(uct_p2p_am_test, am_async) {
 
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL,
                                       UCT_CB_FLAG_ASYNC);
+    ASSERT_UCS_OK(status);
+}
+
+UCS_TEST_P(uct_p2p_am_test, am_async_response) {
+    ucs_status_t status;
+
+    check_caps(UCT_IFACE_FLAG_CB_SYNC | UCT_IFACE_FLAG_CB_ASYNC,
+               UCT_IFACE_FLAG_AM_DUP);
+
+    mapped_buffer recvbuf(0, 0, sender()); /* dummy */
+    m_am_posted = m_am_count = 0;
+    m_pending_req.posted = false;
+
+    status = uct_iface_set_am_handler(sender().iface(), AM_ID_RESP, am_handler,
+                                      this, 0);
+    ASSERT_UCS_OK(status);
+
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID,
+                                      am_handler_resp, this, UCT_CB_FLAG_ASYNC);
+    ASSERT_UCS_OK(status);
+
+    if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
+        mapped_buffer sendbuf_short(sender().iface_attr().cap.am.max_short,
+                                    SEED1, sender());
+
+        const double timeout = 60. * ucs::test_time_multiplier();
+        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
+        do {
+            sender().progress();
+            status = am_short(sender_ep(), sendbuf_short, recvbuf);
+        } while ((status == UCS_ERR_NO_RESOURCE) && (ucs_get_time() < deadline));
+        EXPECT_EQ(UCS_OK, status);
+        ++m_am_posted;
+
+        deadline = ucs_get_time() + ucs_time_from_sec(timeout);
+        while ((!m_pending_req.posted || (m_am_count != m_am_posted)) &&
+               (ucs_get_time() < deadline)) {
+            sender().progress();
+        }
+        EXPECT_TRUE(m_pending_req.posted);
+        EXPECT_EQ(m_am_posted, m_am_count);
+    }
+
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);
     ASSERT_UCS_OK(status);
 }
 

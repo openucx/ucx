@@ -9,6 +9,7 @@
 #include <limits.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/math.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
 #include <ucm/api/ucm.h>
@@ -178,8 +179,7 @@ static ucs_status_t uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t 
                                          unsigned flags, uct_mem_h *memh_p)
 {
     uct_gdr_copy_mem_t *mem_hndl = NULL;
-    size_t reg_size;
-    void *ptr;
+    void *start, *end;
     ucs_status_t status;
 
     mem_hndl = ucs_malloc(sizeof(uct_gdr_copy_mem_t), "gdr_copy handle");
@@ -188,10 +188,11 @@ static ucs_status_t uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t 
         return UCS_ERR_NO_MEMORY;
     }
 
-    reg_size = (length + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
-    ptr = (void *) ((uintptr_t)address & GPU_PAGE_MASK);
+    start = ucs_align_down_pow2_ptr(address, GPU_PAGE_SIZE);
+    end   = ucs_align_up_pow2_ptr(address + length, GPU_PAGE_SIZE);
+    ucs_assert_always(start <= end);
 
-    status = uct_gdr_copy_mem_reg_internal(uct_md, ptr, reg_size, 0, mem_hndl);
+    status = uct_gdr_copy_mem_reg_internal(uct_md, start, end - start, 0, mem_hndl);
     if (status != UCS_OK) {
         ucs_free(mem_hndl);
         return status;
@@ -283,17 +284,8 @@ uct_gdr_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
     ucs_rcache_region_t *rregion;
     ucs_status_t status;
     uct_gdr_copy_mem_t *memh;
-    CUdeviceptr d_ptr;
-    size_t d_length;
 
-
-    status = UCT_CUDADRV_FUNC(cuMemGetAddressRange(&d_ptr, &d_length,
-                                                   (CUdeviceptr)address));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = ucs_rcache_get(md->rcache, (void *)d_ptr, d_length, PROT_READ|PROT_WRITE,
+    status = ucs_rcache_get(md->rcache, (void *)address, length, PROT_READ|PROT_WRITE,
                             &flags, &rregion);
     if (status != UCS_OK) {
         return status;

@@ -177,8 +177,8 @@ static unsigned uct_tcp_ep_send(uct_tcp_ep_t *ep)
 
 unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
 {
-    uct_pending_req_priv_t *priv;
-    unsigned count = 0;
+    unsigned                     count = 0;
+    uct_pending_req_priv_queue_t *priv;
 
     ucs_trace_func("ep=%p", ep);
 
@@ -300,15 +300,15 @@ ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
         return UCS_ERR_BUSY;
     }
 
-    uct_pending_req_push(&ep->pending_q, req);
+    uct_pending_req_queue_push(&ep->pending_q, req);
     return UCS_OK;
 }
 
 void uct_tcp_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
                              void *arg)
 {
-    uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
-    uct_pending_req_priv_t *priv;
+    uct_tcp_ep_t                 *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
+    uct_pending_req_priv_queue_t *priv;
 
     uct_pending_queue_purge(priv, &ep->pending_q, 1, cb, arg);
 }
@@ -322,7 +322,6 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
         return UCS_ERR_NO_RESOURCE;
     }
 
-    ucs_assert(ucs_queue_is_empty(&ep->pending_q));
     UCT_TL_EP_STAT_FLUSH(&ep->super);
     return UCS_OK;
 }
