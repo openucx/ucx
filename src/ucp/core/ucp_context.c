@@ -986,7 +986,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         context->tl_bitmap = 0;
     } else {
         /* Workers will open all available tl resources */
-        context->tl_bitmap = ~(~0 << context->num_tls);
+        context->tl_bitmap = UCS_MASK(context->num_tls);
     }
 
     /* Validate context resources */

@@ -886,7 +886,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
         tl_bitmap  = ctx_tl_bitmap;
     } else {
         num_ifaces = context->num_tls;
-        tl_bitmap  =  ~(~0 << context->num_tls);
+        tl_bitmap  = UCS_MASK(context->num_tls);
     }
 
     worker->ifaces = ucs_calloc(num_ifaces, sizeof(ucp_worker_iface_t),
