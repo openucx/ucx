@@ -19,7 +19,7 @@ static ucs_config_field_t uct_cm_iface_config_table[] = {
   {"IB_", "RX_INLINE=0", NULL,
    ucs_offsetof(uct_cm_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
-  {"ASYNC_MODE", "thread", "Async mode to use",
+  {"ASYNC_MODE", "thread_spinlock", "Async mode to use",
    ucs_offsetof(uct_cm_iface_config_t, async_mode), UCS_CONFIG_TYPE_ENUM(ucs_async_mode_names)},
 
   {"TIMEOUT", "300ms", "Timeout for MAD layer",
