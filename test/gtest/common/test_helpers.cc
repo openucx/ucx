@@ -8,11 +8,12 @@
 
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
-#include <ucs/time/time.h>
 #include <ucs/sys/string.h>
 #include <sys/resource.h>
 
 namespace ucs {
+
+const double test_timeout_in_sec = 60.;
 
 int test_time_multiplier()
 {
@@ -24,6 +25,12 @@ int test_time_multiplier()
         factor *= 20;
     }
     return factor;
+}
+
+ucs_time_t get_deadline(double timeout_in_sec)
+{
+    return ucs_get_time() + ucs_time_from_sec(timeout_in_sec *
+                                              test_time_multiplier());
 }
 
 int max_tcp_connections()

@@ -19,7 +19,6 @@
 #include <queue>
 
 #define MT_TEST_NUM_THREADS       4
-#define UCP_TEST_TIMEOUT_IN_SEC   10.0
 
 
 namespace ucp {

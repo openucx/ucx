@@ -431,10 +431,10 @@ public:
     }
 
     void wait_counter(ucs_stats_node_t *stats, uint64_t cntr,
-                      double timeout = UCP_TEST_TIMEOUT_IN_SEC)
+                      double timeout = ucs::test_timeout_in_sec)
     {
-        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
-        uint64_t v;
+        ucs_time_t deadline = ucs::get_deadline(timeout);
+        uint64_t   v;
 
         do {
             short_progress_loop();

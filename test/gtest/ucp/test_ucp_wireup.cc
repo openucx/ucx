@@ -688,9 +688,7 @@ UCS_TEST_P(test_ucp_wireup_2sided, async_connect) {
     reqs.push_back(ucp_tag_send_nb(send_ep, NULL, 0, DT_U64, 1, send_completion));
     EXPECT_FALSE(UCS_PTR_IS_ERR(reqs.back()));
 
-
-    ucs_time_t deadline = ucs_get_time() +
-                          ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
+    ucs_time_t deadline = ucs::get_deadline();
     /* waiting of async reply on wiriup without calling progress on receiver */
     while(!(send_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) &&
           (ucs_get_time() < deadline)) {

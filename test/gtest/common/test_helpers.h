@@ -13,6 +13,7 @@
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
+#include <ucs/time/time.h>
 #include <errno.h>
 #include <iostream>
 #include <stdexcept>
@@ -159,6 +160,8 @@
 
 namespace ucs {
 
+extern const double test_timeout_in_sec;
+
 class test_abort_exception : public std::exception {
 };
 
@@ -200,6 +203,12 @@ private:
  * @return Time multiplier for performance tests.
  */
 int test_time_multiplier();
+
+
+/**
+ * Get current time + @a timeout_in_sec.
+ */
+ucs_time_t get_deadline(double timeout_in_sec = test_timeout_in_sec);
 
 
 /**
