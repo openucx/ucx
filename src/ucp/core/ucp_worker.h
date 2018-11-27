@@ -59,7 +59,7 @@ enum {
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
-    UCP_WORKER_IFACE_FLAG_SUBOPTIMAL        = UCS_BIT(2)  /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
 };
@@ -194,6 +194,7 @@ typedef struct ucp_worker {
     ucs_list_link_t               all_eps;       /* List of all endpoints */
     ucp_ep_match_ctx_t            ep_match_ctx;  /* Endpoint-to-endpoint matching context */
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
+    unsigned                      num_ifaces;    /* Number of elements in ifaces array  */
     unsigned                      num_active_ifaces; /* Number of activated ifaces  */
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
@@ -269,15 +270,15 @@ static inline ucp_ep_h ucp_worker_get_ep_by_ptr(ucp_worker_h worker,
 }
 
 static UCS_F_ALWAYS_INLINE ucp_worker_iface_t*
-ucp_worker_iface(ucp_worker_h worker, ucp_rsc_index_t idx)
+ucp_worker_iface(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return &worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, idx)];
+    return &worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, rsc_index)];
 }
 
 static UCS_F_ALWAYS_INLINE uct_iface_attr_t*
-ucp_worker_iface_get_attr(ucp_worker_h worker, ucp_rsc_index_t idx)
+ucp_worker_iface_get_attr(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return &ucp_worker_iface(worker, idx)->attr;
+    return &ucp_worker_iface(worker, rsc_index)->attr;
 }
 
 #endif

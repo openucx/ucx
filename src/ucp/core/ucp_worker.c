@@ -87,6 +87,12 @@ ucs_mpool_ops_t ucp_frag_mpool_ops = {
 
 void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force);
 
+static UCS_F_ALWAYS_INLINE double
+ucp_worker_iface_latency(ucp_worker_h worker, ucp_worker_iface_t *wiface)
+{
+    return wiface->attr.latency.overhead +
+           wiface->attr.latency.growth * worker->context->config.est_num_eps;
+}
 
 static ucs_status_t ucp_worker_wakeup_ctl_fd(ucp_worker_h worker, int op,
                                              int event_fd)
@@ -179,13 +185,13 @@ static void ucp_worker_remove_am_handlers(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
     ucp_worker_iface_t *wiface;
-    ucp_rsc_index_t tl_id;
+    ucp_rsc_index_t iface_id;
     unsigned am_id;
 
     ucs_debug("worker %p: remove active message handlers", worker);
 
-    ucs_for_each_bit(tl_id, context->tl_bitmap) {
-        wiface = ucp_worker_iface(worker, tl_id);
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        wiface = &worker->ifaces[iface_id];
         if (!(wiface->attr.cap.flags & (UCT_IFACE_FLAG_AM_SHORT |
                                         UCT_IFACE_FLAG_AM_BCOPY |
                                         UCT_IFACE_FLAG_AM_ZCOPY))) {
@@ -754,40 +760,53 @@ void ucp_worker_iface_event(int fd, void *arg)
 }
 
 static int ucp_worker_iface_find_better(ucp_worker_h worker,
-                                        ucp_worker_iface_t *wiface)
+                                        ucp_worker_iface_t *wiface,
+                                        ucp_rsc_index_t *better_index)
 {
     ucp_context_h ctx = worker->context;
-    ucp_rsc_index_t id;
+    ucp_rsc_index_t rsc_index;
     ucp_worker_iface_t *if_iter;
+    uint64_t test_flags;
+    double latency_iter, latency_cur;
+    float epsilon;
 
-    for (id = 0; id < ctx->num_tls; ++id) {
-        if_iter = &worker->ifaces[id];
+    test_flags = wiface->attr.cap.flags & ~(UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                            UCT_IFACE_FLAG_CONNECT_TO_EP);
+
+    for (rsc_index = 0; rsc_index < ctx->num_tls; ++rsc_index) {
+        if_iter = &worker->ifaces[rsc_index];
 
         /* Need to check resources which belong to the same device only */
-        if ((ctx->tl_rscs[id].dev_index != ctx->tl_rscs[wiface->rsc_index].dev_index) ||
-            (if_iter->flags & UCP_WORKER_IFACE_FLAG_SUBOPTIMAL) ||
-            (id == wiface->rsc_index)) {
+        if ((ctx->tl_rscs[rsc_index].dev_index != ctx->tl_rscs[wiface->rsc_index].dev_index) ||
+            (if_iter->flags & UCP_WORKER_IFACE_FLAG_UNUSED) ||
+            (rsc_index == wiface->rsc_index)) {
             continue;
         }
 
         /* Check that another iface:
-         * 1. Supports all capabilities of the target iface (at least)
+         * 1. Supports all capabilities of the target iface (at least), except
+         *    ...CONNECT_TO... caps.
          * 2. Has the same or better performance charasteristics */
-        if (ucs_test_all_flags(if_iter->attr.cap.flags, wiface->attr.cap.flags) &&
-            (if_iter->attr.overhead          <= wiface->attr.overhead) &&
-            (if_iter->attr.latency.overhead  <= wiface->attr.latency.overhead) &&
-            (if_iter->attr.latency.growth    <= wiface->attr.latency.growth) &&
-            (if_iter->attr.bandwidth         >= wiface->attr.bandwidth) &&
-            (if_iter->attr.priority          >= wiface->attr.priority)) {
+        if (ucs_test_all_flags(if_iter->attr.cap.flags, test_flags) &&
+            (if_iter->attr.overhead  <= wiface->attr.overhead)      &&
+            (if_iter->attr.bandwidth >= wiface->attr.bandwidth)     &&
+            (if_iter->attr.priority  >= wiface->attr.priority)) {
 
-            /* Do not check this iface anymore, because better one exists.
-             * It helps to avoid the case when two interfaces with the same caps
-             * and performance exclude each other. */
-            wiface->flags |= UCP_WORKER_IFACE_FLAG_SUBOPTIMAL;
-            return 1;
+            latency_iter = ucp_worker_iface_latency(worker, if_iter);
+            latency_cur  = ucp_worker_iface_latency(worker, wiface);
+            epsilon      = (latency_iter + latency_cur) *1e-6;
+            if (latency_iter < latency_cur + epsilon) {
+                /* Do not check this iface anymore, because better one exists.
+                 * It helps to avoid the case when two interfaces with the same caps
+                 * and performance exclude each other. */
+                wiface->flags |= UCP_WORKER_IFACE_FLAG_UNUSED;
+                *better_index  = rsc_index;
+                return 1;
+            }
         }
     }
 
+    *better_index  = 0;
     return 0;
 }
 
@@ -804,10 +823,9 @@ static ucs_status_t ucp_worker_select_best_ifaces(ucp_worker_h worker,
 {
     ucp_context_h context = worker->context;
     uint64_t tl_bitmap    = 0;
-    ucp_worker_iface_t *ifaces;
+    ucp_rsc_index_t repl_ifaces[context->num_tls];
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t tl_id, iface_id;
-    unsigned num_ifaces;
 
     /* For each iface check whether there is another iface, which:
      * 1. Supports at least the same capabilities
@@ -815,41 +833,37 @@ static ucs_status_t ucp_worker_select_best_ifaces(ucp_worker_h worker,
      */
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
         wiface = &worker->ifaces[tl_id];
-        if (!ucp_worker_iface_find_better(worker, wiface)) {
+        if (!ucp_worker_iface_find_better(worker, wiface, &repl_ifaces[tl_id])) {
             tl_bitmap |= UCS_BIT(tl_id);
         }
     }
 
-    *tl_bitmap_p = tl_bitmap;
-    num_ifaces   = ucs_count_one_bits(tl_bitmap);
-    ucs_assert(num_ifaces <= context->num_tls);
+    *tl_bitmap_p       = tl_bitmap;
+    worker->num_ifaces = ucs_count_one_bits(tl_bitmap);
+    ucs_assert(worker->num_ifaces <= context->num_tls);
 
-    if (num_ifaces < context->num_tls) {
+    if (worker->num_ifaces < context->num_tls) {
         /* Some ifaces need to be closed */
-        ifaces = ucs_calloc(num_ifaces, sizeof(ucp_worker_iface_t), "ucp iface");
-        if (ifaces == NULL) {
-            return UCS_ERR_NO_MEMORY;
-        }
-
-        iface_id = 0;
-        for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+        for (tl_id = 0, iface_id = 0; tl_id < context->num_tls; ++tl_id) {
             wiface = &worker->ifaces[tl_id];
             if (tl_bitmap & UCS_BIT(tl_id)) {
-                memcpy(ifaces + iface_id, wiface, sizeof(*wiface));
+                if (iface_id != tl_id) {
+                    memmove(worker->ifaces + iface_id, wiface, sizeof(*wiface));
+                }
                 ++iface_id;
             } else {
-                ucs_debug("closing suboptimal interface[%d]=%p on "
-                          UCT_TL_RESOURCE_DESC_FMT", worker %p",
-                          tl_id, wiface->iface,
-                          UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[tl_id].tl_rsc),
+                ucs_debug("closing resource[%d] "UCT_TL_RESOURCE_DESC_FMT
+                          ", since resource[%d] "UCT_TL_RESOURCE_DESC_FMT
+                          " is better, worker %p",
+                          tl_id, UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[tl_id].tl_rsc),
+                          repl_ifaces[tl_id],
+                          UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[repl_ifaces[tl_id]].tl_rsc),
                           worker);
                 /* Ifaces should not be initialized yet, just close it
                  * (no need for cleanup) */
                 uct_iface_close(wiface->iface);
             }
         }
-        ucs_free(worker->ifaces);
-        worker->ifaces = ifaces;
     }
 
     return UCS_OK;
@@ -926,7 +940,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
 
         /* Cache tl_bitmap on the context, so the next workers would not need
          * to select best ifaces. */
-        ucs_atomic_cswap64(&context->tl_bitmap, 0ul, tl_bitmap);
+        context->tl_bitmap = tl_bitmap;
         ucs_debug("Selected tl bitmap: 0x%lx (%d tls)",
                   tl_bitmap, ucs_count_one_bits(tl_bitmap));
     }
@@ -945,13 +959,12 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
 
 static void ucp_worker_close_ifaces(ucp_worker_h worker)
 {
-    uint64_t tl_bitmap = worker->context->tl_bitmap;
-    ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t iface_id;
     ucp_worker_iface_t *wiface;
 
     UCS_ASYNC_BLOCK(&worker->async);
-    ucs_for_each_bit(rsc_index, tl_bitmap) {
-        wiface = ucp_worker_iface(worker, rsc_index);
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        wiface = &worker->ifaces[iface_id];
         if (wiface->iface != NULL) {
             ucp_worker_iface_cleanup(wiface);
         }
@@ -1205,12 +1218,11 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 
 static void ucp_worker_init_guess_atomics(ucp_worker_h worker)
 {
-    ucp_context_h context = worker->context;
-    ucp_rsc_index_t rsc_index;
     uint64_t accumulated_flags = 0;
+    ucp_rsc_index_t iface_id;
 
-    ucs_for_each_bit(rsc_index, context->tl_bitmap) {
-        accumulated_flags |= ucp_worker_iface_get_attr(worker, rsc_index)->cap.flags;
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        accumulated_flags |= worker->ifaces[iface_id].attr.cap.flags;
     }
 
     if (accumulated_flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
@@ -1249,11 +1261,11 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
     size_t           max_mp_entry_size = 0;
     ucp_context_t    *context          = worker->context;
     uct_iface_attr_t *if_attr;
-    size_t           tl_id;
+    ucp_rsc_index_t  iface_id;
     ucs_status_t     status;
 
-    ucs_for_each_bit(tl_id, context->tl_bitmap) {
-        if_attr           = ucp_worker_iface_get_attr(worker, tl_id);
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        if_attr           = &worker->ifaces[iface_id].attr;
         max_mp_entry_size = ucs_max(max_mp_entry_size,
                                     if_attr->cap.am.max_short);
         max_mp_entry_size = ucs_max(max_mp_entry_size,

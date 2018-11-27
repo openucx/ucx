@@ -301,8 +301,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nb, (ep, flags, cb),
 
 static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
 {
-    uint64_t tl_bitmap = worker->context->tl_bitmap;
-    ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t iface_id;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
 
@@ -310,8 +309,8 @@ static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
         return UCS_INPROGRESS;
     }
 
-    ucs_for_each_bit(rsc_index, tl_bitmap) {
-        wiface = ucp_worker_iface(worker, rsc_index);
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        wiface = &worker->ifaces[iface_id];
         if (wiface->iface == NULL) {
             continue;
         }
@@ -320,8 +319,8 @@ static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
         if (status != UCS_OK) {
             if (UCS_STATUS_IS_ERR(status)) {
                 ucs_error("iface[%d] "UCT_TL_RESOURCE_DESC_FMT" flush failed: %s",
-                          rsc_index,
-                          UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_index].tl_rsc),
+                          iface_id,
+                          UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[wiface->rsc_index].tl_rsc),
                           ucs_status_string(status));
             }
             return status;
