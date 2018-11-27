@@ -225,9 +225,15 @@ static void uct_perf_test_free_mem(ucx_perf_context_t *perf)
 
 void ucx_perf_test_start_clock(ucx_perf_context_t *perf)
 {
-    perf->start_time        = ucs_get_time();
-    perf->prev_time         = perf->start_time;
-    perf->prev.time         = perf->start_time;
+    ucs_time_t start_time = ucs_get_time();
+
+    perf->start_time_acc   = ucs_get_accurate_time();
+    perf->end_time         = (perf->params.max_time == 0.0) ? UINT64_MAX :
+                              ucs_time_from_sec(perf->params.max_time) + start_time;
+    perf->prev_time        = start_time;
+    perf->prev.time        = start_time;
+    perf->prev.time_acc    = perf->start_time_acc;
+    perf->current.time_acc = perf->start_time_acc;
 }
 
 static void ucx_perf_test_reset(ucx_perf_context_t *perf,
@@ -236,10 +242,6 @@ static void ucx_perf_test_reset(ucx_perf_context_t *perf,
     unsigned i;
 
     perf->params            = *params;
-    perf->start_time        = ucs_get_time();
-    perf->prev_time         = perf->start_time;
-    perf->end_time          = (perf->params.max_time == 0.0) ? UINT64_MAX :
-                               ucs_time_from_sec(perf->params.max_time) + perf->start_time;
     perf->max_iter          = (perf->params.max_iter == 0) ? UINT64_MAX :
                                perf->params.max_iter;
     perf->report_interval   = ucs_time_from_sec(perf->params.report_interval);
@@ -247,7 +249,6 @@ static void ucx_perf_test_reset(ucx_perf_context_t *perf,
     perf->current.msgs      = 0;
     perf->current.bytes     = 0;
     perf->current.iters     = 0;
-    perf->prev.time         = perf->start_time;
     perf->prev.msgs         = 0;
     perf->prev.bytes        = 0;
     perf->prev.iters        = 0;
@@ -256,14 +257,14 @@ static void ucx_perf_test_reset(ucx_perf_context_t *perf,
     for (i = 0; i < TIMING_QUEUE_SIZE; ++i) {
         perf->timing_queue[i] = 0;
     }
+    ucx_perf_test_start_clock(perf);
 }
 
 void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 {
+    ucs_time_t median;
     double factor;
-    double sec_value;
 
-    sec_value = ucs_time_from_sec(1.0);
     if (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG) {
         factor = 2.0;
     } else {
@@ -272,25 +273,20 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
     result->iters = perf->current.iters;
     result->bytes = perf->current.bytes;
-    result->elapsed_time = perf->current.time - perf->start_time;
+    result->elapsed_time = perf->current.time_acc - perf->start_time_acc;
 
     /* Latency */
-
-    result->latency.typical =
-        __find_median_quick_select(perf->timing_queue, TIMING_QUEUE_SIZE)
-        / sec_value
-        / factor;
+    median = __find_median_quick_select(perf->timing_queue, TIMING_QUEUE_SIZE);
+    result->latency.typical = ucs_time_to_sec(median) / factor;
 
     result->latency.moment_average =
-        (double)(perf->current.time - perf->prev.time)
+        (perf->current.time_acc - perf->prev.time_acc)
         / (perf->current.iters - perf->prev.iters)
-        / sec_value
         / factor;
 
     result->latency.total_average =
-        (double)(perf->current.time - perf->start_time)
+        (perf->current.time_acc - perf->start_time_acc)
         / perf->current.iters
-        / sec_value
         / factor;
 
 
@@ -299,12 +295,12 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
     result->bandwidth.typical = 0.0; // Undefined
 
     result->bandwidth.moment_average =
-        (perf->current.bytes - perf->prev.bytes) * sec_value
-        / (double)(perf->current.time - perf->prev.time) * factor;
+        (perf->current.bytes - perf->prev.bytes) /
+        (perf->current.time_acc - perf->prev.time_acc) * factor;
 
     result->bandwidth.total_average =
-        perf->current.bytes * sec_value
-        / (double)(perf->current.time - perf->start_time) * factor;
+        perf->current.bytes /
+        (perf->current.time_acc - perf->start_time_acc) * factor;
 
 
     /* Packet rate */
@@ -312,12 +308,12 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
     result->msgrate.typical = 0.0; // Undefined
 
     result->msgrate.moment_average =
-        (perf->current.msgs - perf->prev.msgs) * sec_value
-        / (double)(perf->current.time - perf->prev.time) * factor;
+        (perf->current.msgs - perf->prev.msgs) /
+        (perf->current.time_acc - perf->prev.time_acc) * factor;
 
     result->msgrate.total_average =
-        perf->current.msgs * sec_value
-        / (double)(perf->current.time - perf->start_time) * factor;
+        perf->current.msgs /
+        (perf->current.time_acc - perf->start_time_acc) * factor;
 
 }
 

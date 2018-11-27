@@ -351,6 +351,7 @@ public:
         }
 
         uct_perf_iface_flush_b(&m_perf);
+        ucx_perf_get_time(&m_perf);
         return UCS_OK;
     }
 
@@ -489,6 +490,7 @@ public:
         }
 
         uct_perf_iface_flush_b(&m_perf);
+        ucx_perf_get_time(&m_perf);
         ucs_assert(outstanding() == 0);
         if (my_index == 1) {
             ucx_perf_update(&m_perf, 0, 0);

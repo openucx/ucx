@@ -46,6 +46,17 @@ static inline ucs_time_t ucs_get_time()
 }
 
 /**
+ * @return The current accurate time, in seconds.
+ * @note This function may have higher overheadthan @ref ucs_get_time()
+ */
+static inline double ucs_get_accurate_time()
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return tv.tv_sec + (tv.tv_usec / (double)UCS_USEC_PER_SEC);
+}
+
+/**
  * @return The clock value of a single second.
  */
 static inline double ucs_time_sec_value()
