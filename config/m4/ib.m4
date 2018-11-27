@@ -209,7 +209,8 @@ AS_IF([test "x$with_ib" == xyes],
               AS_IF([test "x$with_mlx5_dv" == xyes -a "x$have_cq_io" == xyes ], [
                        AC_CHECK_DECLS([
                            mlx5dv_init_obj,
-                           mlx5dv_devx_general_cmd],
+                           mlx5dv_devx_general_cmd,
+                           MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
                        AC_CHECK_MEMBERS([struct mlx5dv_cq.cq_uar],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
