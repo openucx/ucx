@@ -25,17 +25,35 @@
 #define UCP_WORKER_HEADROOM_PRIV_SIZE 24
 
 
+#if ENABLE_MT
+
 #define UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(_worker)                 \
-    do {                                                                   \
-        ucs_assert(!UCP_THREAD_IS_REQUIRED(&(_worker)->mt_lock) ||      \
-                   UCP_THREAD_CS_IS_RECURSIVELY_LOCKED(&(_worker)->mt_lock) || \
-                   !UCS_ASYNC_IS_RECURSIVELY_BLOCKED(&(_worker)->async)); \
-        UCP_THREAD_CS_ENTER_CONDITIONAL(&(_worker)->mt_lock);           \
+    do {                                                                \
+        if ((_worker)->flags & UCP_WORKER_FLAG_MT) {                    \
+            UCS_ASYNC_BLOCK(&(_worker)->async);                         \
+        }                                                               \
     } while (0)
 
 
 #define UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(_worker)                  \
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&(_worker)->mt_lock)
+    do {                                                                \
+        if ((_worker)->flags & UCP_WORKER_FLAG_MT) {                    \
+            UCS_ASYNC_UNBLOCK(&(_worker)->async);                       \
+        }                                                               \
+    } while (0)
+
+
+#else
+
+#define UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(_worker)
+
+
+#define UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(_worker)
+
+
+#endif
+
+
 
 
 /**
@@ -43,7 +61,8 @@
  */
 enum {
     UCP_WORKER_FLAG_EXTERNAL_EVENT_FD = UCS_BIT(0), /**< worker event fd is external */
-    UCP_WORKER_FLAG_EDGE_TRIGGERED    = UCS_BIT(1)  /**< events are edge-triggered */
+    UCP_WORKER_FLAG_EDGE_TRIGGERED    = UCS_BIT(1), /**< events are edge-triggered */
+    UCP_WORKER_FLAG_MT                = UCS_BIT(2)  /**< MT locking is required */
 };
 
 
@@ -165,6 +184,7 @@ struct ucp_worker_iface {
  * UCP worker (thread context).
  */
 typedef struct ucp_worker {
+    unsigned                      flags;         /* Worker flags */
     ucs_async_context_t           async;         /* Async context for this worker */
     ucp_context_h                 context;       /* Back-reference to UCP context */
     uint64_t                      uuid;          /* Unique ID for wireup */
@@ -177,7 +197,6 @@ typedef struct ucp_worker {
 
     unsigned                      flush_ops_count;/* Number of pending operations */
 
-    unsigned                      flags;         /* Worker flags */
     int                           epfd;          /* Allocated (on-demand) epoll fd for wakeup */
     int                           eventfd;       /* Event fd to support signal() calls */
     unsigned                      uct_events;    /* UCT arm events */
@@ -193,7 +212,6 @@ typedef struct ucp_worker {
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
     ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */
-    ucp_mt_lock_t                 mt_lock;       /* Configuration of multi-threading support */
     ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
     ucp_ep_h                      mem_type_ep[UCT_MD_MEM_TYPE_LAST];/* memory type eps */
 
