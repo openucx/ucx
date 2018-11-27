@@ -889,21 +889,20 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     uct_iface_params_t iface_params;
     ucp_rsc_index_t tl_id, iface_id;
     uint64_t ctx_tl_bitmap, tl_bitmap;
-    unsigned num_ifaces;
     ucs_status_t status;
 
     /* If tl_bitmap is already set, just use it. Otherwise open ifaces on all
      * available resources and then select the best ones. */
     ctx_tl_bitmap = context->tl_bitmap;
     if (ctx_tl_bitmap) {
-        num_ifaces = ucs_count_one_bits(ctx_tl_bitmap);
-        tl_bitmap  = ctx_tl_bitmap;
+        worker->num_ifaces = ucs_count_one_bits(ctx_tl_bitmap);
+        tl_bitmap          = ctx_tl_bitmap;
     } else {
-        num_ifaces = context->num_tls;
-        tl_bitmap  = UCS_MASK(context->num_tls);
+        worker->num_ifaces = context->num_tls;
+        tl_bitmap          = UCS_MASK(context->num_tls);
     }
 
-    worker->ifaces = ucs_calloc(num_ifaces, sizeof(ucp_worker_iface_t),
+    worker->ifaces = ucs_calloc(worker->num_ifaces, sizeof(ucp_worker_iface_t),
                                 "ucp iface");
     if (worker->ifaces == NULL) {
         return UCS_ERR_NO_MEMORY;
