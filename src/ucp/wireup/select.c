@@ -1371,6 +1371,8 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
         }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RMA_BW) {
             key->rma_bw_lanes[lane] = lane;
+            key->rma_bw_min_zcopy = ucs_max(key->rma_bw_min_zcopy,
+                                            worker->ifaces[lane_descs[lane].rsc_index].attr.cap.get.min_zcopy);
         }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AMO) {
             key->amo_lanes[lane] = lane;
