@@ -1160,6 +1160,12 @@ static int uct_ib_iface_get_cuda_path(int cuda_dev, char** path)
     int i;
     CUresult cu_err;
 
+    /* Initialize bus_id array to avoid valgrind complaints */
+
+    for (i = 0; i < 16; i++) {
+        bus_id[i] = 0;
+    }
+
     cu_err = cuDeviceGetPCIBusId(bus_id, 16, cuda_dev);
     if (CUDA_SUCCESS != cu_err) {
         return UCS_ERR_IO_ERROR;
@@ -1251,6 +1257,11 @@ static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
     /* Assign latency as a factor of score */
 
     *latency = 200e-9 * score;
+
+    /* release realpath resources */
+    free(cuda_dev_path);
+    free(mlx_dev_path);
+
     return UCS_OK;
 }
 #endif
