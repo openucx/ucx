@@ -57,7 +57,7 @@ public:
     void prepare_nodes(ucs_stats_node_t **cat_node,
                        ucs_stats_node_t *data_nodes[NUM_DATA_NODES]) {
         static ucs_stats_class_t category_stats_class = {
-            "category", 0, {}
+            "category", 0
         };
 
         ucs_status_t status = UCS_STATS_NODE_ALLOC(cat_node,
@@ -257,7 +257,7 @@ UCS_TEST_F(stats_on_demand_test, null_root) {
     ucs_stats_node_t       *cat_node;
 
     static ucs_stats_class_t category_stats_class = {
-        "category", 0, {}
+        "category", 0
     };
     ucs_status_t status = UCS_STATS_NODE_ALLOC(&cat_node, &category_stats_class,
                                                NULL);
