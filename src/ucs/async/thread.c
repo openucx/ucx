@@ -246,40 +246,49 @@ static void ucs_async_thread_stop()
     }
 }
 
-static ucs_status_t ucs_async_thread_init(ucs_async_context_t *async)
+static ucs_status_t ucs_async_thread_spinlock_init(ucs_async_context_t *async)
 {
-#if !(NVALGRIND)
-    pthread_mutexattr_t attr;
-    int ret;
-
-    if (RUNNING_ON_VALGRIND) {
-        pthread_mutexattr_init(&attr);
-        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-        ret = pthread_mutex_init(&async->thread.mutex, &attr);
-        if (ret != 0) {
-            ucs_error("failed to initialize async lock: %s", strerror(ret));
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        return UCS_OK;
-    } else
-#endif
-        return ucs_spinlock_init(&async->thread.spinlock);
+    return ucs_spinlock_init(&async->thread.spinlock);
 }
 
-static void ucs_async_thread_cleanup(ucs_async_context_t *async)
+static void ucs_async_thread_spinlock_cleanup(ucs_async_context_t *async)
 {
-#if !(NVALGRIND)
-    int ret;
+    ucs_spinlock_destroy(&async->thread.spinlock);
+}
 
-    if (RUNNING_ON_VALGRIND) {
-        ret = pthread_mutex_destroy(&async->thread.mutex);
-        if (ret != 0) {
-            ucs_warn("failed to destroy async lock: %s", strerror(ret));
-        }
-    } else
-#endif
-        ucs_spinlock_destroy(&async->thread.spinlock);
+static int ucs_async_thread_spinlock_try_block(ucs_async_context_t *async)
+{
+    return ucs_spin_trylock(&async->thread.spinlock);
+}
+
+static void ucs_async_thread_spinlock_unblock(ucs_async_context_t *async)
+{
+    ucs_spin_unlock(&async->thread.spinlock);
+}
+
+static ucs_status_t ucs_async_thread_mutex_init(ucs_async_context_t *async)
+{
+    pthread_mutexattr_t attr;
+    int                 ret;
+
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    ret = pthread_mutex_init(&async->thread.mutex, &attr);
+    if (ret == 0) {
+        return UCS_OK;
+    }
+
+    ucs_error("failed to initialize async lock: %s", strerror(ret));
+    return UCS_ERR_INVALID_PARAM;
+}
+
+static void ucs_async_thread_mutex_cleanup(ucs_async_context_t *async)
+{
+    int ret = pthread_mutex_destroy(&async->thread.mutex);
+
+    if (ret != 0) {
+        ucs_warn("failed to destroy async lock: %s", strerror(ret));
+    }
 }
 
 static ucs_status_t ucs_async_thread_add_event_fd(ucs_async_context_t *async,
@@ -352,19 +361,14 @@ static ucs_status_t ucs_async_thread_modify_event_fd(ucs_async_context_t *async,
     return UCS_OK;
 }
 
-static int ucs_async_thread_try_block(ucs_async_context_t *async)
+static int ucs_async_thread_mutex_try_block(ucs_async_context_t *async)
 {
-    return
-#if !(NVALGRIND)
-    (RUNNING_ON_VALGRIND) ?
-        (pthread_mutex_trylock(&async->thread.mutex) == 0) :
-#endif
-        ucs_spin_trylock(&async->thread.spinlock);
+    return !pthread_mutex_trylock(&async->thread.mutex);
 }
 
-static void ucs_async_thread_unblock(ucs_async_context_t *async)
+static void ucs_async_thread_mutex_unblock(ucs_async_context_t *async)
 {
-    UCS_ASYNC_THREAD_UNBLOCK(async);
+    (void)pthread_mutex_unlock(&async->thread.mutex);
 }
 
 static ucs_status_t ucs_async_thread_add_timer(ucs_async_context_t *async,
@@ -416,15 +420,31 @@ static void ucs_async_signal_global_cleanup()
     }
 }
 
-ucs_async_ops_t ucs_async_thread_ops = {
+ucs_async_ops_t ucs_async_thread_spinlock_ops = {
     .init               = ucs_empty_function,
     .cleanup            = ucs_async_signal_global_cleanup,
     .block              = ucs_empty_function,
     .unblock            = ucs_empty_function,
-    .context_init       = ucs_async_thread_init,
-    .context_cleanup    = ucs_async_thread_cleanup,
-    .context_try_block  = ucs_async_thread_try_block,
-    .context_unblock    = ucs_async_thread_unblock,
+    .context_init       = ucs_async_thread_spinlock_init,
+    .context_cleanup    = ucs_async_thread_spinlock_cleanup,
+    .context_try_block  = ucs_async_thread_spinlock_try_block,
+    .context_unblock    = ucs_async_thread_spinlock_unblock,
+    .add_event_fd       = ucs_async_thread_add_event_fd,
+    .remove_event_fd    = ucs_async_thread_remove_event_fd,
+    .modify_event_fd    = ucs_async_thread_modify_event_fd,
+    .add_timer          = ucs_async_thread_add_timer,
+    .remove_timer       = ucs_async_thread_remove_timer,
+};
+
+ucs_async_ops_t ucs_async_thread_mutex_ops = {
+    .init               = ucs_empty_function,
+    .cleanup            = ucs_async_signal_global_cleanup,
+    .block              = ucs_empty_function,
+    .unblock            = ucs_empty_function,
+    .context_init       = ucs_async_thread_mutex_init,
+    .context_cleanup    = ucs_async_thread_mutex_cleanup,
+    .context_try_block  = ucs_async_thread_mutex_try_block,
+    .context_unblock    = ucs_async_thread_mutex_unblock,
     .add_event_fd       = ucs_async_thread_add_event_fd,
     .remove_event_fd    = ucs_async_thread_remove_event_fd,
     .modify_event_fd    = ucs_async_thread_modify_event_fd,

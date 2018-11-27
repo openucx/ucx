@@ -36,14 +36,16 @@ static ucs_async_global_context_t ucs_async_global_context = {
 
 
 #define ucs_async_method_call(_mode, _func, ...) \
-    ((_mode) == UCS_ASYNC_MODE_SIGNAL) ? ucs_async_signal_ops._func(__VA_ARGS__) : \
-    ((_mode) == UCS_ASYNC_MODE_THREAD) ? ucs_async_thread_ops._func(__VA_ARGS__) : \
-                                           ucs_async_poll_ops._func(__VA_ARGS__)
+    ((_mode) == UCS_ASYNC_MODE_SIGNAL)          ? ucs_async_signal_ops._func(__VA_ARGS__) : \
+    ((_mode) == UCS_ASYNC_MODE_THREAD_SPINLOCK) ? ucs_async_thread_spinlock_ops._func(__VA_ARGS__) : \
+    ((_mode) == UCS_ASYNC_MODE_THREAD_MUTEX)    ? ucs_async_thread_mutex_ops._func(__VA_ARGS__) : \
+                                                  ucs_async_poll_ops._func(__VA_ARGS__)
 
 #define ucs_async_method_call_all(_func, ...) \
     { \
         ucs_async_signal_ops._func(__VA_ARGS__); \
-        ucs_async_thread_ops._func(__VA_ARGS__); \
+        ucs_async_thread_spinlock_ops._func(__VA_ARGS__); \
+        ucs_async_thread_mutex_ops._func(__VA_ARGS__); \
         ucs_async_poll_ops._func(__VA_ARGS__); \
     }
 
