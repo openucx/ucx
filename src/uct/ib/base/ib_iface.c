@@ -1245,9 +1245,8 @@ static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
 
     /* Obtain score from the cuda device and mlx device pair */
     score = uct_ib_iface_pci_distance(cuda_dev_path, mlx_dev_path);
-    ucs_debug("device = %d ib = %s score = %d min_score = %d\n",
-              (int) cuda_device, ((char *) uct_ib_device_name(dev)), score,
-              min_score);
+    ucs_debug("device = %d ib = %s score = %d\n",
+              (int) cuda_device, ((char *) uct_ib_device_name(dev)), score);
 
     /* Assign latency as a factor of score */
 
