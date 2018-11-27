@@ -943,8 +943,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    if (is_roce_v2 && (config->traffic_class == UCS_CONFIG_ULUNITS_AUTO)) {
-        self->config.traffic_class = UCT_IB_DEFAULT_ROCEV2_DSCP;
+    if (config->traffic_class == UCS_CONFIG_ULUNITS_AUTO) {
+        self->config.traffic_class = is_roce_v2 ? UCT_IB_DEFAULT_ROCEV2_DSCP : 0;
     } else {
         self->config.traffic_class = config->traffic_class;
     }
@@ -1023,9 +1023,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     } else {
         self->is_global_addr = 0;
     }
-
-    self->config.traffic_class      = config->traffic_class;
-
 
     self->addr_size  = uct_ib_address_size(self);
 
