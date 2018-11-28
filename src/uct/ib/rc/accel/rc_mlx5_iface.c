@@ -391,6 +391,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_rc_iface_is_reachable
     },
+    .create_cq                = uct_ib_mlx5_create_cq,
     .arm_cq                   = uct_rc_mlx5_iface_arm_cq,
     .event_cq                 = uct_rc_mlx5_iface_event_cq,
     .handle_failure           = uct_rc_mlx5_iface_handle_failure,

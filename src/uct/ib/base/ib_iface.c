@@ -584,40 +584,10 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
-#if HAVE_DECL_IBV_EXP_SETENV
-static int uct_ib_max_cqe_size()
-{
-    static int max_cqe_size = -1;
-
-    if (max_cqe_size == -1) {
-#ifdef __aarch64__
-        char arm_board_vendor[128];
-        ucs_aarch64_cpuid_t cpuid;
-        ucs_aarch64_cpuid(&cpuid);
-
-        arm_board_vendor[0] = '\0';
-        ucs_read_file(arm_board_vendor, sizeof(arm_board_vendor), 1,
-                      "/sys/devices/virtual/dmi/id/board_vendor");
-        ucs_debug("arm_board_vendor is '%s'", arm_board_vendor);
-
-        max_cqe_size = ((strcasestr(arm_board_vendor, "Huawei")) &&
-                        (cpuid.implementer == 0x41) && (cpuid.architecture == 8) &&
-                        (cpuid.variant == 0)        && (cpuid.part == 0xd08)     &&
-                        (cpuid.revision == 2))
-                       ? 64 : 128;
-#else
-        max_cqe_size = 128;
-#endif
-        ucs_debug("max IB CQE size is %d", max_cqe_size);
-    }
-
-    return max_cqe_size;
-}
-#endif
-
-struct ibv_cq *uct_ib_create_cq(struct ibv_context *context, int cqe,
-                                struct ibv_comp_channel *channel,
-                                int comp_vector, int ignore_overrun)
+ucs_status_t uct_ib_verbs_create_cq(struct ibv_context *context, int cqe,
+                                    struct ibv_comp_channel *channel,
+                                    int comp_vector, int ignore_overrun,
+                                    size_t *inl, struct ibv_cq **cq_p)
 {
     struct ibv_cq *cq;
 #if HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
@@ -635,7 +605,14 @@ struct ibv_cq *uct_ib_create_cq(struct ibv_context *context, int cqe,
 #else
     cq = ibv_create_cq(context, cqe, NULL, channel, comp_vector);
 #endif
-    return cq;
+    if (!cq) {
+        ucs_error("ibv_create_cq(cqe=%d) failed: %m", cqe);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *cq_p = cq;
+    *inl  = 0;
+    return UCS_OK;
 }
 
 static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
@@ -643,12 +620,11 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
                                            int flags, struct ibv_cq **cq_p)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    struct ibv_cq *cq;
-    size_t cqe_size = 64;
     ucs_status_t status;
-#if HAVE_DECL_IBV_EXP_SETENV
+#if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
     static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
     const char *cqe_size_env_value;
+    size_t cqe_size = 64;
     size_t cqe_size_min;
     char cqe_size_buf[32];
     int env_var_added = 0;
@@ -665,12 +641,7 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
             return UCS_ERR_INVALID_PARAM;
         }
     } else {
-        /* CQE size is not defined by the environment, set it according to inline
-         * size and cache line size.
-         */
-        cqe_size = ucs_max(cqe_size_min, UCS_SYS_CACHE_LINE_SIZE);
-        cqe_size = ucs_max(cqe_size, 64);  /* at least 64 */
-        cqe_size = ucs_min(cqe_size, uct_ib_max_cqe_size());
+        cqe_size = uct_ib_get_cqe_size(cqe_size_min);
         snprintf(cqe_size_buf, sizeof(cqe_size_buf),"%zu", cqe_size);
         ucs_debug("%s: setting %s=%s", uct_ib_device_name(dev), cqe_size_env_var,
                   cqe_size_buf);
@@ -684,20 +655,18 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
         env_var_added = 1;
     }
 #endif
-    cq = uct_ib_create_cq(dev->ibv_context, cq_length, iface->comp_channel,
-                          preferred_cpu, flags & UCT_IB_CQ_IGNORE_OVERRUN);
-    if (cq == NULL) {
-        ucs_error("ibv_create_cq(cqe=%d) failed: %m", cq_length);
-        status = UCS_ERR_IO_ERROR;
+    status = iface->ops->create_cq(dev->ibv_context, cq_length,
+                                   iface->comp_channel, preferred_cpu,
+                                   flags & UCT_IB_CQ_IGNORE_OVERRUN, inl, cq_p);
+    if (status != UCS_OK) {
         goto out_unsetenv;
     }
 
-    *cq_p = cq;
-    *inl  = cqe_size / 2;
     status = UCS_OK;
 
 out_unsetenv:
-#if HAVE_DECL_IBV_EXP_SETENV
+#if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
+    *inl = cqe_size / 2;
     if (env_var_added) {
         /* if we created a new environment variable, remove it */
         ret = ibv_exp_unsetenv(dev->ibv_context, cqe_size_env_var);

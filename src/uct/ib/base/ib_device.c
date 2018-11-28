@@ -996,3 +996,38 @@ unlock:
     ucs_spin_unlock(&dev->ah_lock);
     return status;
 }
+
+int uct_ib_get_cqe_size(int cqe_size_min)
+{
+    static int cqe_size_max = -1;
+    int cqe_size;
+
+    if (cqe_size_max == -1) {
+#ifdef __aarch64__
+        char arm_board_vendor[128];
+        ucs_aarch64_cpuid_t cpuid;
+        ucs_aarch64_cpuid(&cpuid);
+
+        arm_board_vendor[0] = '\0';
+        ucs_read_file(arm_board_vendor, sizeof(arm_board_vendor), 1,
+                      "/sys/devices/virtual/dmi/id/board_vendor");
+        ucs_debug("arm_board_vendor is '%s'", arm_board_vendor);
+
+        cqe_size_max = ((strcasestr(arm_board_vendor, "Huawei")) &&
+                        (cpuid.implementer == 0x41) && (cpuid.architecture == 8) &&
+                        (cpuid.variant == 0)        && (cpuid.part == 0xd08)     &&
+                        (cpuid.revision == 2))
+                       ? 64 : 128;
+#else
+        cqe_size_max = 128;
+#endif
+        ucs_debug("max IB CQE size is %d", cqe_size_max);
+    }
+
+    /* Set cqe size according to inline size and cache line size. */
+    cqe_size = ucs_max(cqe_size_min, UCS_SYS_CACHE_LINE_SIZE);
+    cqe_size = ucs_max(cqe_size, 64);  /* at least 64 */
+    cqe_size = ucs_min(cqe_size, cqe_size_max);
+
+    return cqe_size;
+}

@@ -343,6 +343,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_rc_iface_is_reachable,
     },
+    .create_cq                = uct_ib_verbs_create_cq,
     .arm_cq                   = uct_ib_iface_arm_cq,
     .event_cq                 = (void*)ucs_empty_function,
     .handle_failure           = uct_rc_verbs_handle_failure,

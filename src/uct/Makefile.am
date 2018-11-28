@@ -116,21 +116,11 @@ libuct_la_SOURCES += \
 	ib/dc/base/dc_iface.c \
 	ib/dc/base/dc_ep.c
 
-if HAVE_DC_EXP
-noinst_HEADERS += \
-	ib/dc/verbs/dc_verbs.h
-
-libuct_la_SOURCES += \
-	ib/dc/verbs/dc_verbs.c
-endif
-
-if HAVE_MLX5_HW_DC
 noinst_HEADERS += \
 	ib/dc/accel/dc_mlx5.h
 
 libuct_la_SOURCES += \
 	ib/dc/accel/dc_mlx5.c
-endif
 endif
 
 if HAVE_TL_UD

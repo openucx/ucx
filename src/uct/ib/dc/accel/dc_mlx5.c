@@ -1317,6 +1317,7 @@ static uct_dc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_is_reachable       = uct_dc_iface_is_reachable,
     .iface_get_address        = uct_dc_iface_get_address,
     },
+    .create_cq                = uct_ib_mlx5_create_cq,
     .arm_cq                   = uct_ib_iface_arm_cq,
     .event_cq                 = uct_dc_mlx5_iface_event_cq,
     .handle_failure           = uct_dc_mlx5_iface_handle_failure,

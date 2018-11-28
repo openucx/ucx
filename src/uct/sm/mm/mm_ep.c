@@ -417,10 +417,15 @@ ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep, unsigned flags,
 {
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
-    uct_mm_ep_update_cached_tail(ep);
-
     if (!uct_mm_ep_has_tx_resources(ep)) {
-        return UCS_ERR_NO_RESOURCE;
+        if (!ucs_arbiter_group_is_empty(&ep->arb_group)) {
+            return UCS_ERR_NO_RESOURCE;
+        } else {
+            uct_mm_ep_update_cached_tail(ep);
+            if (!uct_mm_ep_has_tx_resources(ep)) {
+                return UCS_ERR_NO_RESOURCE;
+            }
+        }
     }
 
     ucs_memory_cpu_store_fence();
