@@ -63,7 +63,7 @@ public:
 
     void prepare_nodes() {
         static ucs_stats_class_t category_stats_class = {
-            "category", 0, {}
+            "category", 0
         };
 
         ucs_status_t status = UCS_STATS_NODE_ALLOC(&cat_node, &category_stats_class,
