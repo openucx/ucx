@@ -353,5 +353,5 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
         req->send.proto.remote_request = reqhdr->reqptr;
     }
 
-    ucp_request_send(req);
+    ucp_request_send(req, 0);
 }

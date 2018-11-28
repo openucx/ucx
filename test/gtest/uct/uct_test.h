@@ -21,7 +21,6 @@
 #endif
 
 
-#define UCT_TEST_TIMEOUT_IN_SEC   10.0
 #define DEFAULT_DELAY_MS           1.0
 #define DEFAULT_TIMEOUT_SEC       10.0
 
