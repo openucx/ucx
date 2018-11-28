@@ -48,13 +48,12 @@ typedef enum {
 
 
 typedef struct uct_dc_mlx5_iface_config {
-    uct_rc_iface_config_t               super;
+    uct_rc_mlx5_iface_config_t          super;
     uct_ud_iface_common_config_t        ud_common;
     int                                 ndci;
     int                                 tx_policy;
     unsigned                            quota;
     uct_ud_mlx5_iface_common_config_t   mlx5_ud;
-    uct_ib_mlx5_iface_config_t          mlx5_common;
 } uct_dc_mlx5_iface_config_t;
 
 
@@ -95,8 +94,7 @@ typedef struct uct_dc_fc_request {
 
 
 struct uct_dc_mlx5_iface {
-    uct_rc_iface_t                super;
-
+    uct_rc_mlx5_iface_common_t    super;
     struct {
         /* Array of dcis */
         uct_dc_dci_t              dcis[UCT_DC_MLX5_IFACE_MAX_DCIS];
@@ -129,7 +127,6 @@ struct uct_dc_mlx5_iface {
 
     uint8_t                       version_flag;
 
-    uct_rc_mlx5_iface_common_t    mlx5_common;
     uct_ud_mlx5_iface_common_t    ud_common;
 };
 
@@ -234,7 +231,7 @@ static inline ucs_arbiter_t *uct_dc_mlx5_iface_tx_waitq(uct_dc_mlx5_iface_t *ifa
 /* returns pending queue of eps waiting for the dci allocation */
 static inline ucs_arbiter_t *uct_dc_mlx5_iface_dci_waitq(uct_dc_mlx5_iface_t *iface)
 {
-    return &iface->super.tx.arbiter;
+    return &iface->super.super.tx.arbiter;
 }
 
 static inline int
@@ -243,7 +240,7 @@ uct_dc_mlx5_iface_dci_has_outstanding(uct_dc_mlx5_iface_t *iface, int dci)
     uct_rc_txqp_t *txqp;
 
     txqp = &iface->tx.dcis[dci].txqp;
-    return uct_rc_txqp_available(txqp) < (int16_t)iface->super.config.tx_qp_len;
+    return uct_rc_txqp_available(txqp) < (int16_t)iface->super.super.config.tx_qp_len;
 }
 
 static inline ucs_status_t uct_dc_mlx5_iface_flush_dci(uct_dc_mlx5_iface_t *iface, int dci)
@@ -254,7 +251,7 @@ static inline ucs_status_t uct_dc_mlx5_iface_flush_dci(uct_dc_mlx5_iface_t *ifac
     }
     ucs_trace_poll("dci %d is not flushed %d/%d", dci,
                    iface->tx.dcis[dci].txqp.available,
-                   iface->super.config.tx_qp_len);
+                   iface->super.super.config.tx_qp_len);
     ucs_assertv(uct_rc_txqp_unsignaled(&iface->tx.dcis[dci].txqp) == 0,
                 "unsignalled send is not supported!!!");
     return UCS_INPROGRESS;

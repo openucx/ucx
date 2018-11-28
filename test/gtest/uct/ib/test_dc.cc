@@ -127,7 +127,7 @@ protected:
          * operation still stands on pending
          */
         preq->is_done = 1;
-        iface->super.tx.cq_available = 0;
+        iface->super.super.tx.cq_available = 0;
         return UCS_INPROGRESS;
     }
 
@@ -140,7 +140,7 @@ protected:
         ep    = dc_ep(preq->e, 0);
         iface = dc_iface(preq->e);
         EXPECT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
-        iface->super.tx.cq_available = 8;
+        iface->super.super.tx.cq_available = 8;
     }
 
 };
@@ -286,7 +286,7 @@ UCS_TEST_P(test_dc, dcs_ep_flush_pending) {
 
     /* use all iface resources */
     iface = dc_iface(m_e1);
-    iface->super.tx.cq_available = 8;
+    iface->super.super.tx.cq_available = 8;
     do {
         status = uct_ep_am_short(m_e1->ep(1), 0, 0, NULL, 0);
     } while (status == UCS_OK);
@@ -334,7 +334,7 @@ UCS_TEST_P(test_dc, dcs_ep_am_pending) {
 
     /* use all iface resources */
     iface = dc_iface(m_e1);
-    iface->super.tx.cq_available = 8;
+    iface->super.super.tx.cq_available = 8;
     do {
         status = uct_ep_am_short(m_e1->ep(1), 0, 0, NULL, 0);
     } while (status == UCS_OK);
@@ -373,7 +373,7 @@ UCS_TEST_P(test_dc, dcs_ep_purge_pending) {
     /* use all iface resources */
     iface = dc_iface(m_e1);
     ep = dc_ep(m_e1, 0);
-    iface->super.tx.cq_available = 8;
+    iface->super.super.tx.cq_available = 8;
 
     do {
         status = uct_ep_am_short(m_e1->ep(1), 0, 0, NULL, 0);

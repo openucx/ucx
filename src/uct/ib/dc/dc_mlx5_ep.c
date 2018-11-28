@@ -12,7 +12,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface, const uct_dc_m
 {
     ucs_trace_func("");
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
 
     self->atomic_mr_offset = uct_ib_md_atomic_offset(if_addr->atomic_mr_id);
     memcpy(&self->av, av, sizeof(*av));
@@ -44,7 +44,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
 
     /* we can handle it but well behaving app should not do this */
     ucs_debug("ep (%p) is destroyed with %d outstanding ops",
-              self, (int16_t)iface->super.config.tx_qp_len -
+              self, (int16_t)iface->super.super.config.tx_qp_len -
               uct_rc_txqp_available(&iface->tx.dcis[self->dci].txqp));
     uct_rc_txqp_purge_outstanding(&iface->tx.dcis[self->dci].txqp, UCS_ERR_CANCELED, 1);
     iface->tx.dcis[self->dci].ep     = NULL;
@@ -121,7 +121,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
      * - dci is either assigned or can be assigned
      * - dci has resources
      */
-    if (uct_rc_iface_has_tx_resources(&iface->super)) {
+    if (uct_rc_iface_has_tx_resources(&iface->super.super)) {
         if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
             if (uct_dc_mlx5_iface_dci_can_alloc(iface) && (ep->fc.fc_wnd > 0)) {
                 return UCS_ERR_BUSY;
@@ -189,7 +189,7 @@ uct_dc_mlx5_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     ucs_status_t status;
 
-    if (!uct_rc_iface_has_tx_resources(&iface->super)) {
+    if (!uct_rc_iface_has_tx_resources(&iface->super.super)) {
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
@@ -218,7 +218,7 @@ uct_dc_mlx5_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
     }
 
-    ucs_assertv(!uct_rc_iface_has_tx_resources(&iface->super),
+    ucs_assertv(!uct_rc_iface_has_tx_resources(&iface->super.super),
                 "pending callback returned error but send resources are available");
     return UCS_ARBITER_CB_RESULT_STOP;
 }
@@ -270,9 +270,9 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_
 {
     ucs_status_t status;
 
-    if (iface->super.config.fc_enabled) {
+    if (iface->super.super.config.fc_enabled) {
         UCT_RC_CHECK_FC_WND(&ep->fc, ep->super.stats);
-        if ((ep->fc.fc_wnd == iface->super.config.fc_hard_thresh) &&
+        if ((ep->fc.fc_wnd == iface->super.super.config.fc_hard_thresh) &&
             !(ep->fc.flags & UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT)) {
             status = uct_rc_fc_ctrl(&ep->super.super,
                                     UCT_RC_EP_FC_FLAG_HARD_REQ,

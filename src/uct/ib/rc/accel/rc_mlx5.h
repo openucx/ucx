@@ -16,19 +16,6 @@
 #include "rc_mlx5.inl"
 
 /**
- * RC mlx5 interface configuration
- */
-typedef struct uct_rc_mlx5_iface_config {
-    uct_rc_iface_config_t             super;
-    uct_rc_fc_config_t                fc;
-    uct_ib_mlx5_iface_config_t        mlx5_common;
-    unsigned                          tx_max_bb;
-    /* TODO wc_mode, UAR mode SnB W/A... */
-} uct_rc_mlx5_iface_config_t;
-
-
-
-/**
  * RC remote endpoint
  */
 typedef struct uct_rc_mlx5_ep {
@@ -39,19 +26,6 @@ typedef struct uct_rc_mlx5_ep {
         uct_ib_mlx5_txwq_t  wq;
     } tx;
 } uct_rc_mlx5_ep_t;
-
-
-/**
- * RC communication interface
- */
-typedef struct {
-    uct_rc_iface_t              super;
-    uct_rc_mlx5_iface_common_t  mlx5_common;
-    struct {
-        uct_ib_mlx5_mmio_mode_t mmio_mode;
-        uint16_t                bb_max;     /* limit number of outstanding WQE BBs */
-    } tx;
-} uct_rc_mlx5_iface_t;
 
 
 UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, uct_iface_h);

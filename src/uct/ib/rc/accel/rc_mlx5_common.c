@@ -98,16 +98,15 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
     return count;
 }
 
-void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_iface_t *iface,
-                                            uct_rc_mlx5_iface_common_t *mlx5_common)
+void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface)
 {
-    iface->rx.srq.available = iface->rx.srq.quota;
-    iface->rx.srq.quota     = 0;
-    uct_rc_mlx5_iface_srq_post_recv(iface, &mlx5_common->rx.srq);
+    iface->super.rx.srq.available = iface->super.rx.srq.quota;
+    iface->super.rx.srq.quota     = 0;
+    uct_rc_mlx5_iface_srq_post_recv(&iface->super, &iface->rx.srq);
 }
 
 #define UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(_bits) \
-    static void \
+    void \
     uct_rc_mlx5_common_atomic##_bits##_le_handler(uct_rc_iface_send_op_t *op, \
                                                   const void *resp) \
     { \
@@ -144,7 +143,7 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
     struct ibv_qp *cmd_qp;
     int i;
 
-    if (!UCT_RC_IFACE_TM_ENABLED(rc_iface)) {
+    if (!UCT_RC_IFACE_TM_ENABLED(&iface->super)) {
         return UCS_OK;
     }
 
@@ -337,7 +336,7 @@ static void uct_rc_mlx5_iface_common_dm_tl_cleanup(uct_mlx5_dm_data_t *data)
 }
 #endif
 
-static ucs_status_t
+ucs_status_t
 uct_rc_mlx5_iface_common_dm_init(uct_rc_mlx5_iface_common_t *iface,
                                  uct_rc_iface_t *rc_iface,
                                  const uct_ib_mlx5_iface_config_t *mlx5_config)
@@ -367,7 +366,7 @@ fallback:
     return UCS_OK;
 }
 
-static void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *iface)
+void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
 #if HAVE_IBV_EXP_DM
     if (iface->dm.dm) {

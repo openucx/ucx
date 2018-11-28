@@ -135,7 +135,7 @@ uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
     /* valid = 1, global = 0, tx_wait = 0 */
     ep->flags = UCT_DC_MLX5_EP_FLAG_VALID;
 
-    return uct_rc_fc_init(&ep->fc, iface->super.config.fc_wnd_size
+    return uct_rc_fc_init(&ep->fc, iface->super.super.config.fc_wnd_size
                           UCS_STATS_ARG(ep->super.stats));
 }
 
@@ -173,7 +173,7 @@ static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
     return (!(ep->flags & UCT_DC_MLX5_EP_FLAG_TX_WAIT)) &&
-           uct_rc_fc_has_resources(&iface->super, &ep->fc) &&
+           uct_rc_fc_has_resources(&iface->super.super, &ep->fc) &&
            uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci);
 }
 
@@ -182,7 +182,7 @@ void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx
 {
     /* If FC window is empty the group will be scheduled when
      * grant is received */
-    if (uct_rc_fc_has_resources(&iface->super, &ep->fc)) {
+    if (uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
         ucs_arbiter_group_schedule(uct_dc_mlx5_iface_dci_waitq(iface), &ep->arb_group);
     }
 }
@@ -241,7 +241,7 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
 static inline ucs_status_t
 uct_dc_mlx5_iface_check_txqp(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep, uct_rc_txqp_t *txqp)
 {
-    UCT_RC_CHECK_TXQP(&iface->super, ep, txqp);
+    UCT_RC_CHECK_TXQP(&iface->super.super, ep, txqp);
     return UCS_OK;
 }
 
@@ -348,7 +348,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
         if (ucs_unlikely(status != UCS_OK)) { \
             return status; \
         } \
-        UCT_RC_CHECK_CQE(&(_iface)->super, _ep, \
+        UCT_RC_CHECK_CQE(&(_iface)->super.super, _ep, \
                          &(_iface)->tx.dcis[(_ep)->dci].txqp); \
     }
 
@@ -360,7 +360,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
         if (ucs_unlikely(status != UCS_OK)) { \
             return UCS_STATUS_PTR(status); \
         } \
-        UCT_RC_CHECK_CQE_RET(&(_iface)->super, _ep, \
+        UCT_RC_CHECK_CQE_RET(&(_iface)->super.super, _ep, \
                              &(_iface)->tx.dcis[(_ep)->dci].txqp, \
                              UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)); \
     }
@@ -373,7 +373,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 #define UCT_DC_CHECK_RES_AND_FC(_iface, _ep) \
     { \
         if (ucs_unlikely((_ep)->fc.fc_wnd <= \
-                         (_iface)->super.config.fc_hard_thresh)) { \
+                         (_iface)->super.super.config.fc_hard_thresh)) { \
             ucs_status_t status = uct_dc_mlx5_ep_check_fc(_iface, _ep); \
             if (ucs_unlikely(status != UCS_OK)) { \
                 if ((_ep)->dci != UCT_DC_MLX5_EP_NO_DCI) { \
