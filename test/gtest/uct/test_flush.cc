@@ -27,6 +27,7 @@ public:
     };
 
     void init() {
+        uct_test::init();
         if (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) {
             entity *e = uct_test::create_entity(0);
             m_entities.push_back(e);
