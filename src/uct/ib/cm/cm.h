@@ -20,7 +20,6 @@
  */
 typedef struct uct_cm_iface_config {
     uct_ib_iface_config_t  super;
-    ucs_async_mode_t       async_mode;
     double                 timeout;
     unsigned               retry_count;
     unsigned               max_outstanding;
