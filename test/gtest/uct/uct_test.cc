@@ -207,6 +207,9 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 }
 
 void uct_test::init() {
+    if (RUNNING_ON_VALGRIND && (GetParam()->tl_name == "cm")) {
+        modify_config("ASYNC_MODE", "thread_mutex");
+    }
 }
 
 void uct_test::cleanup() {
