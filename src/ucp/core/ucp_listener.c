@@ -75,7 +75,6 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     }
 
     worker = listener->wiface.worker;
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     UCS_ASYNC_BLOCK(&worker->async);
     /* coverity[overrun-buffer-val] */
     status = ucp_ep_create_accept(worker, client_data, &ep);
@@ -121,7 +120,6 @@ out:
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     ucs_free(conn_request);
     return 1;
 }
@@ -196,7 +194,6 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     UCS_ASYNC_BLOCK(&worker->async);
 
     /* Go through all the available resources and for each one, check if the given
@@ -268,7 +265,6 @@ err_free:
     ucs_free(listener);
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
 }
 
@@ -288,13 +284,11 @@ ucs_status_t ucp_listener_reject(ucp_listener_h listener,
 {
     ucp_worker_h worker = listener->wiface.worker;
 
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     UCS_ASYNC_BLOCK(&worker->async);
 
     uct_iface_reject(listener->wiface.iface, conn_request->uct_req);
 
     UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     ucs_free(conn_request);
 

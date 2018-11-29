@@ -582,7 +582,6 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     unsigned flags;
     ucp_ep_h ep = NULL;
 
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     UCS_ASYNC_BLOCK(&worker->async);
 
     flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
@@ -602,7 +601,6 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
 }
 
@@ -617,13 +615,11 @@ ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params)
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     UCS_ASYNC_BLOCK(&worker->async);
 
     status = ucp_ep_adjust_params(ep, params);
 
     UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return UCS_STATUS_PTR(status);
 }
@@ -749,14 +745,12 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 {
     ucp_worker_h worker = ep->worker;
-    void *request;
+    void         *request;
 
     if ((mode == UCP_EP_CLOSE_MODE_FORCE) &&
         (ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER)) {
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
-
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -770,9 +764,6 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
-
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
-
     return request;
 }
 
