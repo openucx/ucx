@@ -1178,9 +1178,10 @@ static int uct_ib_iface_get_cuda_path(int cuda_dev, char** path)
     memcpy(bus_path+sizeof("/sys/class/pci_bus/")-1, bus_id,
            sizeof("0000:00")-1);
     cuda_rpath = realpath(bus_path, NULL);
-    strncpy(pathname, cuda_rpath, MAXPATHSIZE);
-    strncpy(pathname+strlen(pathname), "/", MAXPATHSIZE-strlen(pathname));
-    strncpy(pathname+strlen(pathname), bus_id, MAXPATHSIZE-strlen(pathname));
+    strncpy(pathname, cuda_rpath, MAXPATHSIZE - 1);
+    strncpy(pathname+strlen(pathname), "/", MAXPATHSIZE - 1 -strlen(pathname));
+    strncpy(pathname+strlen(pathname), bus_id, MAXPATHSIZE - 1 -strlen(pathname));
+    pathname[strlen(pathname)] = '\0';
 
     *path = realpath(pathname, NULL);
     if (*path == NULL) {
