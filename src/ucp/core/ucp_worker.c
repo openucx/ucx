@@ -794,7 +794,7 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
 
             latency_iter = ucp_worker_iface_latency(worker, if_iter);
             latency_cur  = ucp_worker_iface_latency(worker, wiface);
-            epsilon      = (latency_iter + latency_cur) *1e-6;
+            epsilon      = (latency_iter + latency_cur) * 1e-6;
             if (latency_iter < latency_cur + epsilon) {
                 /* Do not check this iface anymore, because better one exists.
                  * It helps to avoid the case when two interfaces with the same caps
@@ -821,9 +821,9 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
 static ucs_status_t ucp_worker_select_best_ifaces(ucp_worker_h worker,
                                                   uint64_t *tl_bitmap_p)
 {
-    ucp_context_h context = worker->context;
-    uint64_t tl_bitmap    = 0;
-    ucp_rsc_index_t repl_ifaces[context->num_tls];
+    ucp_context_h context        = worker->context;
+    uint64_t tl_bitmap           = 0;
+    ucp_rsc_index_t *repl_ifaces = ucs_alloca(context->num_tls);
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t tl_id, iface_id;
 
