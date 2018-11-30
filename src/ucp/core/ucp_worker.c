@@ -823,7 +823,7 @@ static ucs_status_t ucp_worker_select_best_ifaces(ucp_worker_h worker,
 {
     ucp_context_h context        = worker->context;
     uint64_t tl_bitmap           = 0;
-    ucp_rsc_index_t *repl_ifaces = ucs_alloca(context->num_tls);
+    ucp_rsc_index_t repl_ifaces[UCP_MAX_RESOURCES];
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t tl_id, iface_id;
 
