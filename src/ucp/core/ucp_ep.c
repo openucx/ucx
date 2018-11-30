@@ -48,7 +48,6 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->reachable_md_map = 0;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     key->status           = UCS_OK;
-    key->rma_bw_min_zcopy = 0;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->rma_bw_lanes, UCP_NULL_LANE, sizeof(key->rma_bw_lanes));
@@ -827,8 +826,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->tag_lane         != key2->tag_lane)                                 ||
         (key1->wireup_lane      != key2->wireup_lane)                              ||
         (key1->err_mode         != key2->err_mode)                                 ||
-        (key1->status           != key2->status)                                   ||
-        (key1->rma_bw_min_zcopy != key2->rma_bw_min_zcopy))
+        (key1->status           != key2->status))
     {
         return 0;
     }
@@ -1113,6 +1111,17 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         } else {
             config->md_index[lane] = UCP_NULL_RESOURCE;
         }
+    }
+
+    /* configuration for min zcopy */
+    config->tag.rndv.min_get_zcopy = 0;
+    for (lane = 0; lane < config->key.num_lanes &&
+                   config->key.rma_bw_lanes[lane] != UCP_NULL_LANE; ++lane) {
+        rsc_index = config->key.lanes[config->key.rma_bw_lanes[lane]].rsc_index;
+        ucs_assert(rsc_index != UCP_NULL_RESOURCE);
+        config->tag.rndv.min_get_zcopy =
+            ucs_max(config->tag.rndv.min_get_zcopy,
+                    worker->ifaces[rsc_index].attr.cap.get.min_zcopy);
     }
 
     /* Configuration for tag offload */

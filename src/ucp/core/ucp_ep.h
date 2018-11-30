@@ -129,9 +129,6 @@ typedef struct ucp_ep_config_key {
      */
     ucp_md_map_t           reachable_md_map;
 
-    /* upper low boundary for zcopy accross available lanes */
-    size_t                 rma_bw_min_zcopy;
-
     /* Error handling mode */
     ucp_err_handling_mode_t    err_mode;
     ucs_status_t               status;
@@ -216,6 +213,8 @@ typedef struct ucp_ep_config {
         struct {
             /* Maximal total size of rndv_get_zcopy */
             size_t          max_get_zcopy;
+            /* Minimal size of rndv_get_zcopy */
+            size_t          min_get_zcopy;
             /* Maximal total size of rndv_put_zcopy */
             size_t          max_put_zcopy;
             /* Threshold for switching from eager to RMA based rendezvous */
