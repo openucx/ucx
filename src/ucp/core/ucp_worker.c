@@ -848,7 +848,7 @@ static ucs_status_t ucp_worker_select_best_ifaces(ucp_worker_h worker,
             wiface = &worker->ifaces[tl_id];
             if (tl_bitmap & UCS_BIT(tl_id)) {
                 if (iface_id != tl_id) {
-                    memmove(worker->ifaces + iface_id, wiface, sizeof(*wiface));
+                    memcpy(worker->ifaces + iface_id, wiface, sizeof(*wiface));
                 }
                 ++iface_id;
             } else {
