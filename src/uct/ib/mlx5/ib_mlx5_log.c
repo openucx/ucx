@@ -282,7 +282,7 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, int qp_type,
     }
 
     if (uct_ib_mlx5_is_qp_require_av_seg(qp_type)) {
-        is_eth = IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface));
+        is_eth = uct_ib_iface_is_roce(iface);
         dg_size = uct_ib_mlx5_dump_dgram(s, ends - s, seg, is_eth);
         s += strlen(s);
 

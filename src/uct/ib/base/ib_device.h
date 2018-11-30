@@ -43,6 +43,7 @@
 #define UCT_IB_LINK_LOCAL_PREFIX    be64toh(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
 #define UCT_IB_SITE_LOCAL_PREFIX    be64toh(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
 #define UCT_IB_SITE_LOCAL_MASK      be64toh(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
+#define UCT_IB_DEFAULT_ROCEV2_DSCP  106  /* Default DSCP for RoCE v2 */
 
 
 enum {
@@ -152,16 +153,14 @@ typedef struct uct_ib_device_init_entry {
     }
 
 
-#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
 /**
- * RoCE version description
+ * RoCE version priorities
  */
 typedef struct uct_ib_roce_version_desc {
-    enum ibv_exp_roce_gid_type type;
-    int address_family;
-    int priority;
+    uint8_t     roce_major;
+    uint8_t     roce_minor;
+    sa_family_t address_family;
 } uct_ib_roce_version_desc_t;
-#endif
 
 
 /**
@@ -220,9 +219,15 @@ const char *uct_ib_device_name(uct_ib_device_t *dev);
 
 
 /**
- * @return 1 if the port is InfiniBand, 0 if the port is Ethernet.
+ * @return whether the port is InfiniBand
  */
 int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num);
+
+
+/**
+ * @return whether the port is RoCE
+ */
+int uct_ib_device_is_port_roce(uct_ib_device_t *dev, uint8_t port_num);
 
 
 /**
@@ -278,9 +283,9 @@ uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)
     return &dev->port_attr[port_num - dev->first_port];
 }
 
-ucs_status_t
-uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num, unsigned gid_index,
-                        union ibv_gid *gid);
+ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
+                                     unsigned gid_index, union ibv_gid *gid,
+                                     int *is_roce_v2);
 
 int uct_ib_get_cqe_size(int cqe_size_min);
 
