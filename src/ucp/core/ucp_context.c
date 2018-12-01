@@ -83,7 +83,6 @@ static ucs_config_field_t ucp_config_table[] = {
    " - rc_x   : rc with accelerated verbs (uses ud_x for bootstrap).\n"
    " - ud     : ud verbs.\n"
    " - ud_x   : ud with accelerated verbs.\n"
-   " - dc     : dc verbs.\n"
    " - dc_x   : dc with accelerated verbs.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
    " and disables aliasing.\n",
@@ -248,12 +247,12 @@ UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
 static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "mm", "knem", "cma", "rdmacm", NULL } },
   { "shm",   { "mm", "knem", "cma", "rdmacm", NULL } },
-  { "ib",    { "rc", "ud", "dc", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", NULL } },
+  { "ib",    { "rc", "ud", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", NULL } },
   { "ud",    { "ud", "rdmacm", NULL } },
   { "ud_x",  { "ud_mlx5", "rdmacm", NULL } },
   { "rc",    { "rc", "ud:aux", "rdmacm", NULL } },
   { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", "rdmacm", NULL } },
-  { "dc",    { "dc", "rdmacm", NULL } },
+  { "dc",    { "dc_mlx5", "rdmacm", NULL } },
   { "dc_x",  { "dc_mlx5", "rdmacm", NULL } },
   { "ugni",  { "ugni_smsg", "ugni_udt:aux", "ugni_rdma", NULL } },
   { NULL }

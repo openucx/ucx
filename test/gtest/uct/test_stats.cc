@@ -69,11 +69,11 @@ public:
     void check_am_rx_counters(size_t len) {
         uint64_t v;
 
-        ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
+        ucs_time_t deadline = ucs::get_deadline();
         do {
             short_progress_loop();
             v = UCS_STATS_GET_COUNTER(uct_iface(receiver())->stats, UCT_IFACE_STAT_RX_AM);
-        } while ((ucs_get_time() < timeout) && !v);
+        } while ((ucs_get_time() < deadline) && !v);
 
         EXPECT_EQ(1UL, v);
         v = UCS_STATS_GET_COUNTER(uct_iface(receiver())->stats, UCT_IFACE_STAT_RX_AM_BYTES);
@@ -120,11 +120,10 @@ public:
             --m_comp.count;
         }
 
-        ucs_time_t timeout = ucs_get_time() +
-                             ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
+        ucs_time_t deadline = ucs::get_deadline();
         do {
             short_progress_loop();
-        } while ((ucs_get_time() < timeout) && (m_comp.count > 1));
+        } while ((ucs_get_time() < deadline) && (m_comp.count > 1));
         EXPECT_EQ(1, m_comp.count);
     }
 

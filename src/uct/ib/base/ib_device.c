@@ -18,6 +18,15 @@
 #include <sched.h>
 
 
+typedef struct {
+    union ibv_gid       gid;
+    struct {
+        uint8_t         major;
+        uint8_t         minor;
+    } roce_version;
+} uct_ib_device_gid_info_t;
+
+
 /* use both gid + lid data for key generarion (lid - ib based, gid - RoCE) */
 static UCS_F_ALWAYS_INLINE
 khint32_t uct_ib_kh_ah_hash_func(struct ibv_ah_attr attr)
@@ -86,16 +95,6 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
 };
 
 UCS_LIST_HEAD(uct_ib_device_init_list);
-
-#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
-/* This struct defines the RoCE versions priorities */
-static uct_ib_roce_version_desc_t roce_versions_priorities[] = {
-        {IBV_EXP_ROCE_V2_GID_TYPE,    AF_INET,  1},
-        {IBV_EXP_ROCE_V2_GID_TYPE,    AF_INET6, 2},
-        {IBV_EXP_IB_ROCE_V1_GID_TYPE, AF_INET,  3},
-        {IBV_EXP_IB_ROCE_V1_GID_TYPE, AF_INET6, 4}
-};
-#endif
 
 static void uct_ib_device_get_locailty(const char *dev_name, cpu_set_t *cpu_mask,
                                        int *numa_node)
@@ -287,6 +286,30 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
         break;
     }
 
+    if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr) ||
+        IBV_EXP_HAVE_ATOMIC_GLOB(&dev->dev_attr) ||
+        IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(&dev->dev_attr))
+    {
+#ifdef HAVE_IB_EXT_ATOMICS
+        if (dev->dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS) {
+            dev->ext_atomic_arg_sizes = dev->dev_attr.ext_atom.log_atomic_arg_sizes;
+        }
+#  if HAVE_MASKED_ATOMICS_ENDIANNESS
+        if (dev->dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_MASKED_ATOMICS) {
+            dev->ext_atomic_arg_sizes |=
+                dev->dev_attr.masked_atomic.masked_log_atomic_arg_sizes;
+            dev->ext_atomic_arg_sizes_be =
+                dev->dev_attr.masked_atomic.masked_log_atomic_arg_sizes_network_endianness;
+        }
+#  endif
+        dev->ext_atomic_arg_sizes &= UCS_MASK(dev->dev_attr.ext_atom.log_max_atomic_inline + 1);
+#endif
+        dev->atomic_arg_sizes = sizeof(uint64_t);
+        if (IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(&dev->dev_attr)) {
+            dev->atomic_arg_sizes_be = sizeof(uint64_t);
+        }
+    }
+
     ucs_list_for_each(init_entry, &uct_ib_device_init_list, list) {
         status = init_entry->init(dev);
         if (status != UCS_OK) {
@@ -422,6 +445,7 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     uint8_t required_dev_flags;
     ucs_status_t status;
     union ibv_gid gid;
+    int is_roce_v2;
 
     if (port_num < dev->first_port || port_num >= dev->first_port + dev->num_ports) {
         return UCS_ERR_NO_DEVICE;
@@ -458,11 +482,13 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
 
     if (md->check_subnet_filter && uct_ib_device_is_port_ib(dev, port_num)) {
         status = uct_ib_device_query_gid(dev, port_num,
-                                         uct_ib_device_get_ib_gid_index(md), &gid);
+                                         uct_ib_device_get_ib_gid_index(md), &gid,
+                                         &is_roce_v2);
         if (status) {
             return status;
         }
 
+        ucs_assert(is_roce_v2 == 0);
         if (md->subnet_filter != gid.global.subnet_prefix) {
             ucs_trace("%s:%d subnet_prefix does not match",
                       uct_ib_device_name(dev), port_num);
@@ -481,7 +507,7 @@ static int uct_ib_device_is_addr_ipv4_mcast(const struct in6_addr *raw,
            !(raw->s6_addr32[1] | addr_last_bits);
 }
 
-static int uct_ib_device_get_addr_family(union ibv_gid *gid, int gid_index)
+static sa_family_t uct_ib_device_get_addr_family(union ibv_gid *gid, int gid_index)
 {
     const struct in6_addr *raw    = (struct in6_addr *)gid->raw;
     const uint32_t addr_last_bits = raw->s6_addr32[2] ^ htonl(0x0000ffff);
@@ -498,84 +524,125 @@ static int uct_ib_device_get_addr_family(union ibv_gid *gid, int gid_index)
     }
 }
 
+static ucs_status_t
+uct_ib_device_query_gid_info(uct_ib_device_t *dev, uint8_t port_num,
+                             unsigned gid_index, uct_ib_device_gid_info_t *info)
+{
+    int ret;
+
+#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
+    struct ibv_exp_gid_attr attr;
+
+    attr.comp_mask = IBV_EXP_QUERY_GID_ATTR_TYPE | IBV_EXP_QUERY_GID_ATTR_GID;
+    ret = ibv_exp_query_gid_attr(dev->ibv_context, port_num, gid_index, &attr);
+    if (ret == 0) {
+        info->gid = attr.gid;
+        switch (attr.type) {
+        case IBV_EXP_IB_ROCE_V1_GID_TYPE:
+            info->roce_version.major = 1;
+            info->roce_version.minor = 0;
+            return UCS_OK;
+        case IBV_EXP_ROCE_V1_5_GID_TYPE:
+            info->roce_version.major = 1;
+            info->roce_version.minor = 5;
+            return UCS_OK;
+        case IBV_EXP_ROCE_V2_GID_TYPE:
+            info->roce_version.major = 2;
+            info->roce_version.minor = 0;
+            return UCS_OK;
+        default:
+            ucs_error("Invalid GID[%d] type on %s:%d: %d",
+                      gid_index, uct_ib_device_name(dev), port_num, attr.type);
+            return UCS_ERR_IO_ERROR;
+        }
+    }
+#else
+    ret = ibv_query_gid(dev->ibv_context, port_num, gid_index, &info->gid);
+    if (ret == 0) {
+        info->roce_version.major = 1;
+        info->roce_version.minor = 0;
+        return UCS_OK;
+    }
+#endif
+    ucs_error("ibv_query_gid(dev=%s port=%d index=%d) failed: %m",
+              uct_ib_device_name(dev), port_num, gid_index);
+    return UCS_ERR_INVALID_PARAM;
+}
+
 static ucs_status_t uct_ib_device_set_roce_gid_index(uct_ib_device_t *dev,
                                                      uint8_t port_num,
                                                      uint8_t *gid_index)
 {
-    int i, gid_tbl_len      = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
+    static const uct_ib_roce_version_desc_t roce_prio[] = {
+        {2, 0, AF_INET},
+        {2, 0, AF_INET6},
+        {1, 0, AF_INET},
+        {1, 0, AF_INET6}
+    };
+    int gid_tbl_len         = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
     ucs_status_t status     = UCS_OK;
-#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
-    int priorities_arr_len  = ucs_static_array_size(roce_versions_priorities);
-    struct ibv_exp_gid_attr attr;
-    int prio_idx;
-#else
-    union ibv_gid gid;
-#endif
+    int priorities_arr_len  = ucs_static_array_size(roce_prio);
+    uct_ib_device_gid_info_t gid_info;
+    int i, prio_idx;
 
-#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
+    /* search for matching GID table entries, accroding to the order defined
+     * in priorities array
+     */
     for (prio_idx = 0; prio_idx < priorities_arr_len; prio_idx++) {
         for (i = 0; i < gid_tbl_len; i++) {
-            attr.comp_mask = IBV_EXP_QUERY_GID_ATTR_TYPE | IBV_EXP_QUERY_GID_ATTR_GID;
-            if (ibv_exp_query_gid_attr(dev->ibv_context, port_num, i, &attr)) {
-                ucs_error("failed to query gid attributes "
-                          "(%s:%d gid_idx %d). %m", uct_ib_device_name(dev), port_num, i);
-                status = UCS_ERR_INVALID_PARAM;
+            status = uct_ib_device_query_gid_info(dev, port_num, i, &gid_info);
+            if (status != UCS_OK) {
                 goto out;
             }
 
-            if ((roce_versions_priorities[prio_idx].type == attr.type) &&
-                (roce_versions_priorities[prio_idx].address_family ==
-                 uct_ib_device_get_addr_family(&attr.gid, i))) {
+            if ((roce_prio[prio_idx].roce_major     == gid_info.roce_version.major) &&
+                (roce_prio[prio_idx].roce_minor     == gid_info.roce_version.minor) &&
+                (roce_prio[prio_idx].address_family ==
+                                uct_ib_device_get_addr_family(&gid_info.gid, i))) {
                 *gid_index = i;
                 goto out_print;
             }
         }
     }
 
-    ucs_error("failed to find a gid index that matches one of the RoCE priorities");
-    status = UCS_ERR_INVALID_PARAM;
-    goto out;
-
-#else
-    for (i = 0; i < gid_tbl_len; i++) {
-        status = uct_ib_device_query_gid(dev, port_num, i, &gid);
-        if (status != UCS_OK) {
-            goto out;
-        }
-
-        /* assume RoCE v1 */
-        if (uct_ib_device_get_addr_family(&gid, i) == AF_INET) {
-            /* take the first gid that has IPv4 */
-            *gid_index = i;
-            goto out_print;
-        }
-    }
-
     *gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
-#endif
 
 out_print:
-    ucs_debug("%s:%d set gid_index %d",
-              uct_ib_device_name(dev), port_num, *gid_index);
+    ucs_debug("%s:%d using gid_index %d", uct_ib_device_name(dev), port_num,
+              *gid_index);
 out:
     return status;
+}
+
+int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num)
+{
+#if HAVE_DECL_IBV_LINK_LAYER_INFINIBAND
+    return uct_ib_device_port_attr(dev, port_num)->link_layer == IBV_LINK_LAYER_INFINIBAND;
+#else
+    return 1;
+#endif
+}
+
+int uct_ib_device_is_port_roce(uct_ib_device_t *dev, uint8_t port_num)
+{
+    return IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_device_port_attr(dev, port_num));
 }
 
 ucs_status_t uct_ib_device_select_gid_index(uct_ib_device_t *dev,
                                             uint8_t port_num,
                                             size_t md_config_index,
-                                            uint8_t *ib_gid_index)
+                                            uint8_t *gid_index)
 {
     ucs_status_t status = UCS_OK;
 
     if (md_config_index == UCS_CONFIG_ULUNITS_AUTO) {
-        if (uct_ib_device_is_port_ib(dev, port_num)) {
-            *ib_gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
+        if (uct_ib_device_is_port_roce(dev, port_num)) {
+            status = uct_ib_device_set_roce_gid_index(dev, port_num, gid_index);
         } else {
-            status = uct_ib_device_set_roce_gid_index(dev, port_num, ib_gid_index);
+            *gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
         }
     } else {
-        *ib_gid_index = md_config_index;
+        *gid_index = md_config_index;
     }
 
     return status;
@@ -584,23 +651,6 @@ ucs_status_t uct_ib_device_select_gid_index(uct_ib_device_t *dev,
 const char *uct_ib_device_name(uct_ib_device_t *dev)
 {
     return ibv_get_device_name(dev->ibv_context->device);
-}
-
-int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num)
-{
-#if HAVE_DECL_IBV_LINK_LAYER_INFINIBAND
-    switch (uct_ib_device_port_attr(dev, port_num)->link_layer) {
-    case IBV_LINK_LAYER_UNSPECIFIED:
-    case IBV_LINK_LAYER_INFINIBAND:
-        return 1;
-    case IBV_LINK_LAYER_ETHERNET:
-        return 0;
-    default:
-        ucs_fatal("Invalid link layer on %s:%d", uct_ib_device_name(dev), port_num);
-    }
-#else
-    return 1;
-#endif
 }
 
 size_t uct_ib_mtu_value(enum ibv_mtu mtu)
@@ -767,84 +817,32 @@ ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu)
     return UCS_OK;
 }
 
-int uct_ib_atomic_is_supported(uct_ib_device_t *dev, int ext, size_t size)
-{
-    const struct ibv_exp_device_attr *dev_attr = &dev->dev_attr;
-
-    if (!IBV_EXP_HAVE_ATOMIC_HCA(dev_attr) &&
-        !IBV_EXP_HAVE_ATOMIC_GLOB(dev_attr) &&
-        !IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(dev_attr))
-    {
-        return 0; /* No atomics support */
-    }
-
-    if (ext) {
-#ifdef HAVE_IB_EXT_ATOMICS
-        uint64_t log_atomic_arg_sizes = 0;
-
-        if (dev_attr->comp_mask & IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS) {
-            log_atomic_arg_sizes |= dev_attr->ext_atom.log_atomic_arg_sizes;
-        }
-#  if HAVE_MASKED_ATOMICS_ENDIANNESS
-        if (dev_attr->comp_mask & IBV_EXP_DEVICE_ATTR_MASKED_ATOMICS) {
-            log_atomic_arg_sizes |=
-                            dev_attr->masked_atomic.masked_log_atomic_arg_sizes;
-        }
-#  endif
-        return (log_atomic_arg_sizes & size) &&
-               (dev_attr->ext_atom.log_max_atomic_inline >= ucs_ilog2(size));
-#else
-        return 0;
-#endif
-    } else {
-        return size == sizeof(uint64_t); /* IB spec atomics are 64 bit only */
-    }
-}
-
-int uct_ib_atomic_is_be_reply(uct_ib_device_t *dev, int ext, size_t size)
-{
-#if HAVE_MASKED_ATOMICS_ENDIANNESS
-    if (ext && (dev->dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_MASKED_ATOMICS)) {
-        struct ibv_exp_masked_atomic_params masked_atom = dev->dev_attr.masked_atomic;
-        return size & masked_atom.masked_log_atomic_arg_sizes_network_endianness;
-    }
-#endif
-    return IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(&dev->dev_attr);
-}
-
 int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw)
 {
     return (*(uint64_t *)gid_raw == 0) && (*(uint64_t *)(gid_raw + 8) == 0);
 }
 
-ucs_status_t
-uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num, unsigned gid_index,
-                        union ibv_gid *gid)
+ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
+                                     unsigned gid_index, union ibv_gid *gid,
+                                     int *is_roce_v2)
 {
-    int ret;
+    uct_ib_device_gid_info_t gid_info;
+    ucs_status_t status;
 
-    ret = ibv_query_gid(dev->ibv_context, port_num, gid_index, gid);
-    if (ret != 0) {
-        ucs_error("ibv_query_gid(index=%d) failed: %m", gid_index);
-        return UCS_ERR_INVALID_PARAM;
+    status = uct_ib_device_query_gid_info(dev, port_num, gid_index, &gid_info);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    if (IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_device_port_attr(dev, port_num))) {
-        if (uct_ib_device_is_gid_raw_empty(gid->raw)) {
-            ucs_error("Invalid gid[%d] on %s:%d", gid_index,
-                      uct_ib_device_name(dev), port_num);
-            return UCS_ERR_INVALID_ADDR;
-        } else {
-            return UCS_OK;
-        }
-    }
-
-    if ((gid->global.interface_id == 0) && (gid->global.subnet_prefix == 0)) {
+    if (uct_ib_device_is_gid_raw_empty(gid_info.gid.raw)) {
         ucs_error("Invalid gid[%d] on %s:%d", gid_index,
                   uct_ib_device_name(dev), port_num);
         return UCS_ERR_INVALID_ADDR;
     }
 
+    *gid        = gid_info.gid;
+    *is_roce_v2 = uct_ib_device_is_port_roce(dev, port_num) &&
+                  (gid_info.roce_version.major >= 2);
     return UCS_OK;
 }
 
@@ -1016,4 +1014,39 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
 unlock:
     ucs_spin_unlock(&dev->ah_lock);
     return status;
+}
+
+int uct_ib_get_cqe_size(int cqe_size_min)
+{
+    static int cqe_size_max = -1;
+    int cqe_size;
+
+    if (cqe_size_max == -1) {
+#ifdef __aarch64__
+        char arm_board_vendor[128];
+        ucs_aarch64_cpuid_t cpuid;
+        ucs_aarch64_cpuid(&cpuid);
+
+        arm_board_vendor[0] = '\0';
+        ucs_read_file(arm_board_vendor, sizeof(arm_board_vendor), 1,
+                      "/sys/devices/virtual/dmi/id/board_vendor");
+        ucs_debug("arm_board_vendor is '%s'", arm_board_vendor);
+
+        cqe_size_max = ((strcasestr(arm_board_vendor, "Huawei")) &&
+                        (cpuid.implementer == 0x41) && (cpuid.architecture == 8) &&
+                        (cpuid.variant == 0)        && (cpuid.part == 0xd08)     &&
+                        (cpuid.revision == 2))
+                       ? 64 : 128;
+#else
+        cqe_size_max = 128;
+#endif
+        ucs_debug("max IB CQE size is %d", cqe_size_max);
+    }
+
+    /* Set cqe size according to inline size and cache line size. */
+    cqe_size = ucs_max(cqe_size_min, UCS_SYS_CACHE_LINE_SIZE);
+    cqe_size = ucs_max(cqe_size, 64);  /* at least 64 */
+    cqe_size = ucs_min(cqe_size, cqe_size_max);
+
+    return cqe_size;
 }

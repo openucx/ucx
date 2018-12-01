@@ -959,7 +959,9 @@ static double ucp_wireup_am_bw_score_func(ucp_context_h context,
     double size = iface_attr->cap.am.max_bcopy;
     double time = (size / ucs_min(iface_attr->bandwidth,
                                   remote_iface_attr->bandwidth)) +
-                  iface_attr->overhead + remote_iface_attr->overhead;
+                  iface_attr->overhead + remote_iface_attr->overhead +
+                  ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr);
+
     return size / time * 1e-5;
 }
 

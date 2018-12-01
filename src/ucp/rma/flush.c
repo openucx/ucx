@@ -89,19 +89,31 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     }
 
     if (!req->send.flush.sw_started && (req->send.state.uct_comp.count == 0)) {
-        /* we start the SW flush only after all lanes are flushed, so we are sure
-         * all our requests were sent, to get the right "num_sent" counter
+        /* Start waiting for remote completions only after all lanes are flushed
+         * on the transport level, so we are sure all pending requests were sent.
+         * We don't need to wait for remote completions in these cases:
+         * - The flush operation is in 'cancel' mode
+         * - The endpoint is either not used or did not resolve the peer endpoint,
+         *   which means we didn't have any user operations which require remote
+         *   completion. In this case, the flush state may not even be initialized.
          */
-        flush_state = (ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ?
-                      ucp_ep_flush_state(ep) : NULL;
-        if ((flush_state == NULL) || (flush_state->send_sn == flush_state->cmpl_sn)) {
+        if ((req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL) ||
+            !ucs_test_all_flags(ep->flags, UCP_EP_FLAG_USED|UCP_EP_FLAG_DEST_EP)) {
+            ucs_trace_req("flush request %p not waiting for remote completions",
+                          req);
             req->send.flush.sw_done = 1;
-            ucs_trace_req("flush request %p remote completions done", req);
         } else {
-            req->send.flush.cmpl_sn = flush_state->send_sn;
-            ucs_queue_push(&flush_state->reqs, &req->send.flush.queue);
-            ucs_trace_req("added flush request %p to ep remote completion queue"
-                          " with sn %d", req, req->send.flush.cmpl_sn);
+            /* All pending requests were sent, so 'send_sn' value is up-to-date */
+            flush_state = ucp_ep_flush_state(ep);
+            if (flush_state->send_sn == flush_state->cmpl_sn) {
+                req->send.flush.sw_done = 1;
+                ucs_trace_req("flush request %p remote completions done", req);
+            } else {
+                req->send.flush.cmpl_sn = flush_state->send_sn;
+                ucs_queue_push(&flush_state->reqs, &req->send.flush.queue);
+                ucs_trace_req("added flush request %p to ep remote completion queue"
+                              " with sn %d", req, req->send.flush.cmpl_sn);
+            }
         }
         req->send.flush.sw_started = 1;
     }
@@ -383,8 +395,9 @@ static unsigned ucp_worker_flush_progress(void *arg)
         req->flush_worker.next_ep = ucs_list_next(&next_ep->ep_list,
                                                   ucp_ep_ext_gen_t, ep_list);
 
-        ep_flush_request = ucp_ep_flush_internal(ep, 0, NULL, UCP_REQUEST_FLAG_RELEASED,
-                                                 req, ucp_worker_flush_ep_flushed_cb,
+        ep_flush_request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL, NULL,
+                                                 UCP_REQUEST_FLAG_RELEASED, req,
+                                                 ucp_worker_flush_ep_flushed_cb,
                                                  "flush_worker");
         if (UCS_PTR_IS_ERR(ep_flush_request)) {
             /* endpoint flush resulted in an error */

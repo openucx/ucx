@@ -98,7 +98,7 @@ struct uct_ib_iface_config {
     unsigned                sl;
 
     /* IB Traffic Class to use */
-    unsigned                traffic_class;
+    unsigned long           traffic_class;
 
     /* IB hop limit / TTL */
     unsigned                hop_limit;
@@ -132,6 +132,10 @@ typedef struct uct_ib_qp_attr {
 
 struct uct_ib_iface_ops {
     uct_iface_ops_t         super;
+    ucs_status_t            (*create_cq)(struct ibv_context *context, int cqe,
+                                         struct ibv_comp_channel *channel,
+                                         int comp_vector, int ignore_overrun,
+                                         size_t *inl, struct ibv_cq **cq_p);
     ucs_status_t            (*arm_cq)(uct_ib_iface_t *iface,
                                       uct_ib_dir_t dir,
                                       int solicited_only);
@@ -293,6 +297,12 @@ uct_ib_iface_invoke_am_desc(uct_ib_iface_t *iface, uint8_t am_id, void *data,
 
 
 /**
+ * @return Whether the port used by this interface is RoCE
+ */
+int uct_ib_iface_is_roce(uct_ib_iface_t *iface);
+
+
+/**
  * @return IB address size of the given link scope.
  */
 size_t uct_ib_address_size(uct_ib_iface_t *iface);
@@ -392,6 +402,11 @@ static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
 {
     return uct_ib_md_get_atomic_mr_id(ucs_derived_of(iface->super.md, uct_ib_md_t));
 }
+
+ucs_status_t uct_ib_verbs_create_cq(struct ibv_context *context, int cqe,
+                                    struct ibv_comp_channel *channel,
+                                    int comp_vector, int ignore_overrun,
+                                    size_t *inl, struct ibv_cq **cq_p);
 
 ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
                                     uct_ib_qp_attr_t *attr,

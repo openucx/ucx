@@ -18,7 +18,6 @@ extern "C" {
 
 
 #define UCT_DC_INSTANTIATE_TEST_CASE(_test_case) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, dc) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
 
 
@@ -546,9 +545,8 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
 
     /* Make sure that ep does not hold dci when sends completed */
     uct_dc_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_dc_iface_t);
-    ucs_time_t timeout    = ucs_get_time() +
-                            ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
-    while (iface->tx.stack_top && (ucs_get_time() < timeout)) {
+    ucs_time_t deadline   = ucs::get_deadline();
+    while (iface->tx.stack_top && (ucs_get_time() < deadline)) {
         progress();
     }
     EXPECT_EQ(0, iface->tx.stack_top);

@@ -49,6 +49,40 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
     {NULL}
 };
 
+ucs_status_t uct_ib_mlx5_create_cq(struct ibv_context *context, int cqe,
+                                   struct ibv_comp_channel *channel,
+                                   int comp_vector, int ignore_overrun,
+                                   size_t *inl, struct ibv_cq **cq_p)
+{
+#if HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
+    struct ibv_cq *cq;
+    struct ibv_cq_init_attr_ex cq_attr = {};
+    struct mlx5dv_cq_init_attr dv_attr = {};
+
+    cq_attr.cqe = cqe;
+    cq_attr.channel = channel;
+    cq_attr.comp_vector = comp_vector;
+    if (ignore_overrun) {
+        cq_attr.comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS;
+        cq_attr.flags = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
+    }
+    dv_attr.comp_mask = MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE;
+    dv_attr.cqe_size  = uct_ib_get_cqe_size(*inl > 32 ? 128 : 64);
+    cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(context, &cq_attr, &dv_attr));
+    if (!cq) {
+        ucs_error("mlx5dv_create_cq(cqe=%d) failed: %m", cqe);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *cq_p = cq;
+    *inl  = dv_attr.cqe_size / 2;
+    return UCS_OK;
+#else
+    return uct_ib_verbs_create_cq(context, cqe, channel, comp_vector,
+                                  ignore_overrun, inl, cq_p);
+#endif
+}
+
 ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 {
     uct_ib_mlx5dv_cq_t dcq = {};
@@ -106,6 +140,7 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     return UCS_OK;
 }
 
+#if !HAVE_DECL_MLX5DV_DEVX_GENERAL_CMD
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
     struct mlx5_wqe_av  mlx5_av;
@@ -137,6 +172,7 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     *compact_av = !(mlx5_av_base(&mlx5_av)->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV);
     return UCS_OK;
 }
+#endif
 
 void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
                                   struct mlx5_cqe64 *cqe)

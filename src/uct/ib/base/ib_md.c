@@ -192,6 +192,7 @@ static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
     int ret;
     uct_ib_device_t *ibdev;
     struct ibv_exp_port_attr *port_attr;
+    int is_roce_v2;
 
     ibdev = &md->dev;
 
@@ -263,7 +264,7 @@ static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
     qp_attr.ah_attr.dlid             = port_attr->lid;
     qp_attr.ah_attr.is_global        = 1;
     if (uct_ib_device_query_gid(ibdev, port_num, UCT_IB_MD_DEFAULT_GID_INDEX,
-                                &qp_attr.ah_attr.grh.dgid) != UCS_OK) {
+                                &qp_attr.ah_attr.grh.dgid, &is_roce_v2) != UCS_OK) {
         goto err_destroy_qp;
     }
     qp_attr.rq_psn                   = 0;

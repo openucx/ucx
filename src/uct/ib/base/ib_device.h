@@ -43,6 +43,7 @@
 #define UCT_IB_LINK_LOCAL_PREFIX    be64toh(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
 #define UCT_IB_SITE_LOCAL_PREFIX    be64toh(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
 #define UCT_IB_SITE_LOCAL_MASK      be64toh(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
+#define UCT_IB_DEFAULT_ROCEV2_DSCP  106  /* Default DSCP for RoCE v2 */
 
 
 enum {
@@ -58,6 +59,7 @@ enum {
     UCT_IB_DEVICE_FLAG_LINK_IB  = UCS_BIT(5),   /* Require only IB */
     UCT_IB_DEVICE_FLAG_DC_V1    = UCS_BIT(6),   /* Device supports DC ver 1 */
     UCT_IB_DEVICE_FLAG_DC_V2    = UCS_BIT(7),   /* Device supports DC ver 2 */
+    UCT_IB_DEVICE_FLAG_AV       = UCS_BIT(8),   /* Device supports compact AV */
     UCT_IB_DEVICE_FLAG_DC       = UCT_IB_DEVICE_FLAG_DC_V1 |
                                   UCT_IB_DEVICE_FLAG_DC_V2 /* Device supports DC */
 };
@@ -123,6 +125,10 @@ typedef struct uct_ib_device {
     UCS_STATS_NODE_DECLARE(stats);
     struct ibv_exp_port_attr    port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
     unsigned                    flags;
+    uint8_t                     atomic_arg_sizes;
+    uint8_t                     atomic_arg_sizes_be;
+    uint8_t                     ext_atomic_arg_sizes;
+    uint8_t                     ext_atomic_arg_sizes_be;
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_spinlock_t              ah_lock;
@@ -147,16 +153,14 @@ typedef struct uct_ib_device_init_entry {
     }
 
 
-#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
 /**
- * RoCE version description
+ * RoCE version priorities
  */
 typedef struct uct_ib_roce_version_desc {
-    enum ibv_exp_roce_gid_type type;
-    int address_family;
-    int priority;
+    uint8_t     roce_major;
+    uint8_t     roce_minor;
+    sa_family_t address_family;
 } uct_ib_roce_version_desc_t;
-#endif
 
 
 /**
@@ -215,9 +219,15 @@ const char *uct_ib_device_name(uct_ib_device_t *dev);
 
 
 /**
- * @return 1 if the port is InfiniBand, 0 if the port is Ethernet.
+ * @return whether the port is InfiniBand
  */
 int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num);
+
+
+/**
+ * @return whether the port is RoCE
+ */
+int uct_ib_device_is_port_roce(uct_ib_device_t *dev, uint8_t port_num);
 
 
 /**
@@ -250,10 +260,6 @@ ucs_status_t uct_ib_modify_qp(struct ibv_qp *qp, enum ibv_qp_state state);
  */
 ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu);
 
-int uct_ib_atomic_is_supported(uct_ib_device_t *dev, int ext, size_t size);
-
-int uct_ib_atomic_is_be_reply(uct_ib_device_t *dev, int ext, size_t size);
-
 ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
                                      const char *resource_dev_name,
                                      uint8_t *p_port_num);
@@ -277,10 +283,11 @@ uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)
     return &dev->port_attr[port_num - dev->first_port];
 }
 
-ucs_status_t
-uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num, unsigned gid_index,
-                        union ibv_gid *gid);
+ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
+                                     unsigned gid_index, union ibv_gid *gid,
+                                     int *is_roce_v2);
 
+int uct_ib_get_cqe_size(int cqe_size_min);
 
 static inline ucs_status_t uct_ib_poll_cq(struct ibv_cq *cq, unsigned *count, struct ibv_wc *wcs)
 {

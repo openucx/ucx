@@ -89,7 +89,7 @@ static unsigned ucp_wireup_ep_progress(void *arg)
     ucs_queue_for_each_extract(uct_req, &tmp_pending_queue, priv, 1) {
         req = ucs_container_of(uct_req, ucp_request_t, send.uct);
         ucs_assert(req->send.ep == ucp_ep);
-        ucp_request_send(req);
+        ucp_request_send(req, 0);
         --ucp_ep->worker->flush_ops_count;
     }
 
@@ -123,7 +123,7 @@ static uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
     return wireup_msg_ep;
 }
 
-static ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
+ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
 {
     ucp_request_t *proxy_req = ucs_container_of(self, ucp_request_t, send.uct);
     uct_pending_req_t *req = proxy_req->send.proxy.req;
@@ -184,7 +184,8 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
         proxy_req->send.proxy.wireup_ep     = wireup_ep;
         proxy_req->send.state.uct_comp.func = NULL;
 
-        status = uct_ep_pending_add(wireup_msg_ep, &proxy_req->send.uct, 0);
+        status = uct_ep_pending_add(wireup_msg_ep, &proxy_req->send.uct,
+                                    UCT_CB_FLAG_ASYNC);
         if (status == UCS_OK) {
             ucs_atomic_add32(&wireup_ep->pending_count, +1);
         } else {

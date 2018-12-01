@@ -168,7 +168,7 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
         }
     }
 
-    ucp_request_send(req);
+    ucp_request_send(req, 0);
     return UCS_OK;
 }
 
@@ -307,8 +307,7 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         /* wireup request for a specific ep */
         ep = ucp_worker_get_ep_by_ptr(worker, msg->dest_ep_ptr);
         ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
-        if (!(ep->flags & UCP_EP_FLAG_LISTENER) &&
-            ucp_ep_config(ep)->p2p_lanes) {
+        if (!(ep->flags & UCP_EP_FLAG_LISTENER)) {
             /* Reset flush state only if it's not a client-server wireup on
              * server side with long address exchange when listener (united with
              * flush state) should be valid until user's callback invoking */
@@ -935,7 +934,10 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
     ucs_queue_for_each_extract(req, &tmp_q, send.uct.priv, 1) {
         ucs_trace_req("ep %p: requeue request %p after wireup request",
                       req->send.ep, req);
-        status = uct_ep_pending_add(ep->uct_eps[lane], &req->send.uct, 0);
+        status = uct_ep_pending_add(ep->uct_eps[lane], &req->send.uct,
+                                    (req->send.uct.func == ucp_wireup_msg_progress) ||
+                                    (req->send.uct.func == ucp_wireup_ep_progress_pending) ?
+                                    UCT_CB_FLAG_ASYNC : 0);
         ucs_assert(status == UCS_OK); /* because it's a wireup proxy */
     }
 

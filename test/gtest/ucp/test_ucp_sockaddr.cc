@@ -14,10 +14,10 @@
 #define UCP_INSTANTIATE_ALL_TEST_CASE(_test_case) \
         UCP_INSTANTIATE_TEST_CASE (_test_case) \
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm, "shm") \
-        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc_ud, "dc_x,dc,ud,ud_x,mm") \
-        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, no_ud_ud_x, "dc_x,dc,mm") \
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc_ud, "dc_x,ud,ud_x,mm") \
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, no_ud_ud_x, "dc_x,mm") \
         /* dc_ud case is for testing handling of a large worker address on
-         * UCT_IFACE_FLAG_CONNECT_TO_IFACE transports (dc, dc_x) */
+         * UCT_IFACE_FLAG_CONNECT_TO_IFACE transports (dc_x) */
         /* no_ud_ud_x case is for testing handling a large worker address
          * but with the lack of ud/ud_x transports, which would return an error
          * and skipped */
@@ -277,10 +277,10 @@ public:
 
     bool wait_for_server_ep(bool wakeup)
     {
-        ucs_time_t time_limit = ucs_get_time() + ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
+        ucs_time_t deadline = ucs::get_deadline();
 
         while ((receiver().get_num_eps() == 0) && (m_err_handler_count == 0) &&
-               (ucs_get_time() < time_limit)) {
+               (ucs_get_time() < deadline)) {
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
         return (m_err_handler_count == 0) && (receiver().get_num_eps() > 0);
@@ -288,14 +288,13 @@ public:
 
     void wait_for_reject(entity &e, bool wakeup)
     {
-        ucs_time_t time_limit = ucs_get_time() +
-                                ucs_time_from_sec(UCP_TEST_TIMEOUT_IN_SEC);
+        ucs_time_t deadline = ucs::get_deadline();
 
         while ((e.get_rejected_cntr() == 0) &&
-               (ucs_get_time() < time_limit)) {
+               (ucs_get_time() < deadline)) {
             check_events(sender().worker(), receiver().worker(), wakeup, NULL);
         }
-        EXPECT_GT(time_limit, ucs_get_time());
+        EXPECT_GT(deadline, ucs_get_time());
         EXPECT_EQ(1ul, e.get_rejected_cntr());
     }
 

@@ -432,13 +432,13 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
     /* For little-endian atomic reply, override the default functions, to still
      * treat the response as big-endian when it arrives in the CQE.
      */
-    if (!uct_ib_atomic_is_be_reply(uct_ib_iface_device(&rc_iface->super), 0, sizeof(uint64_t))) {
+    if (!(uct_ib_iface_device(&rc_iface->super)->atomic_arg_sizes_be & sizeof(uint64_t))) {
         rc_iface->config.atomic64_handler    = uct_rc_mlx5_common_atomic64_le_handler;
     }
-    if (!uct_ib_atomic_is_be_reply(uct_ib_iface_device(&rc_iface->super), 1, sizeof(uint32_t))) {
+    if (!(uct_ib_iface_device(&rc_iface->super)->ext_atomic_arg_sizes_be & sizeof(uint32_t))) {
        rc_iface->config.atomic32_ext_handler = uct_rc_mlx5_common_atomic32_le_handler;
     }
-    if (!uct_ib_atomic_is_be_reply(uct_ib_iface_device(&rc_iface->super), 1, sizeof(uint64_t))) {
+    if (!(uct_ib_iface_device(&rc_iface->super)->ext_atomic_arg_sizes_be & sizeof(uint64_t))) {
        rc_iface->config.atomic64_ext_handler = uct_rc_mlx5_common_atomic64_le_handler;
     }
 
@@ -464,7 +464,7 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *iface, uct_iface_attr_t *ifa
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
                                     UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM;
 
-    if (uct_ib_atomic_is_supported(dev, 0, sizeof(uint64_t))) {
+    if (dev->atomic_arg_sizes & sizeof(uint64_t)) {
         iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD);
         iface_attr->cap.atomic64.fop_flags |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
                                               UCS_BIT(UCT_ATOMIC_OP_CSWAP);
@@ -472,7 +472,7 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *iface, uct_iface_attr_t *ifa
         iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
     }
 
-    if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint64_t))) {
+    if (dev->ext_atomic_arg_sizes & sizeof(uint64_t)) {
         iface_attr->cap.atomic64.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_AND)  |
                                               UCS_BIT(UCT_ATOMIC_OP_OR)   |
                                               UCS_BIT(UCT_ATOMIC_OP_XOR);
@@ -483,7 +483,7 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *iface, uct_iface_attr_t *ifa
         iface_attr->cap.flags              |= UCT_IFACE_FLAG_ATOMIC_DEVICE;
     }
 
-    if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint32_t))) {
+    if (dev->ext_atomic_arg_sizes & sizeof(uint32_t)) {
         iface_attr->cap.atomic32.op_flags  |= UCS_BIT(UCT_ATOMIC_OP_ADD)  |
                                               UCS_BIT(UCT_ATOMIC_OP_AND)  |
                                               UCS_BIT(UCT_ATOMIC_OP_OR)   |
