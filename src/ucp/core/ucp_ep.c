@@ -1066,6 +1066,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     size_t it;
     size_t max_rndv_thresh;
     size_t max_am_rndv_thresh;
+    int i;
 
     /* Default settings */
     for (it = 0; it < UCP_MAX_IOV; ++it) {
@@ -1115,13 +1116,16 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
     /* configuration for min zcopy */
     config->tag.rndv.min_get_zcopy = 0;
-    for (lane = 0; lane < config->key.num_lanes &&
-                   config->key.rma_bw_lanes[lane] != UCP_NULL_LANE; ++lane) {
-        rsc_index = config->key.lanes[config->key.rma_bw_lanes[lane]].rsc_index;
-        ucs_assert(rsc_index != UCP_NULL_RESOURCE);
-        config->tag.rndv.min_get_zcopy =
-            ucs_max(config->tag.rndv.min_get_zcopy,
-                    worker->ifaces[rsc_index].attr.cap.get.min_zcopy);
+    for (i = 0; (i < config->key.num_lanes) &&
+                (config->key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
+        lane      = config->key.rma_bw_lanes[i];
+        rsc_index = config->key.lanes[lane].rsc_index;
+
+        if (rsc_index != UCP_NULL_RESOURCE) {
+            config->tag.rndv.min_get_zcopy =
+                ucs_max(config->tag.rndv.min_get_zcopy,
+                        worker->ifaces[rsc_index].attr.cap.get.min_zcopy);
+        }
     }
 
     /* Configuration for tag offload */
