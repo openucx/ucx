@@ -37,8 +37,10 @@ ucx_info_SOURCES  = \
 	ucx_info.c
 
 noinst_HEADERS = \
-	build_config.h \
 	ucx_info.h
+
+nodist_ucx_info_SOURCES = \
+	build_config.h
 
 ucx_info_LDADD    = \
     $(abs_top_builddir)/src/uct/libuct.la \
