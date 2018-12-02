@@ -26,7 +26,7 @@ void print_build_config()
         const char *value;
     } config_var_t;
     static config_var_t config_vars[] = {
-        #include "build_config.h"
+        #include <build_config.h>
         {NULL, NULL}
     };
     config_var_t *var;
