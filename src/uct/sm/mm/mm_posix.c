@@ -469,6 +469,9 @@ static ucs_status_t uct_posix_attach(uct_mm_id_t mmid, size_t length,
         goto err_close_fd;
     }
 
+    ucs_trace("attached remote segment '%s' remote_address %p at address %p",
+              file_name, remote_address, ptr);
+
     *local_address = ptr;
     *cookie = 0xdeadbeef;
 

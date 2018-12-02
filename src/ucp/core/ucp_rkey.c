@@ -183,7 +183,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
 
     /* Read remote MD map */
     remote_md_map = *(ucp_md_map_t*)p;
-    ucs_trace("unpacking rkey with md_map 0x%lx", remote_md_map);
+    ucs_trace("ep %p: unpacking rkey with md_map 0x%lx", ep, remote_md_map);
 
     /* MD map for the unpacked rkey */
     md_map   = remote_md_map & ucp_ep_config(ep)->key.reachable_md_map;
@@ -459,10 +459,11 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
 
     rkey->cache.ep_cfg_index  = ep->cfg_index;
 
-    ucs_trace("rkey %p ep %p @ cfg[%d] %s lane %d %s lane %d",
+    ucs_trace("rkey %p ep %p @ cfg[%d] %s: lane[%d] rkey 0x%"PRIx64" "
+              "%s: lane[%d] rkey 0x%"PRIx64"",
               rkey, ep, ep->cfg_index,
-              rkey->cache.rma_proto->name, rkey->cache.rma_lane,
-              rkey->cache.amo_proto->name, rkey->cache.amo_lane);
+              rkey->cache.rma_proto->name, rkey->cache.rma_lane, rkey->cache.rma_rkey,
+              rkey->cache.amo_proto->name, rkey->cache.amo_lane, rkey->cache.amo_rkey);
 }
 
 ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,
