@@ -233,6 +233,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "another thread, or incoming active messages, but consumes more resources.",
    ucs_offsetof(ucp_config_t, ctx.flush_worker_eps), UCS_CONFIG_TYPE_BOOL},
 
+  {"UNIFIED_MODE", "n",
+   "Enable various optimizations intended for homogeneous environment.\n"
+   "Enabling this mode implies that the local transport resources/devices\n"
+   "of all entities which connect to each other are the same.",
+   ucs_offsetof(ucp_config_t, ctx.unified_mode), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
@@ -878,14 +884,14 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
 static ucs_status_t ucp_fill_resources(ucp_context_h context,
                                        const ucp_config_t *config)
 {
+    uint64_t dev_cfg_masks[UCT_DEVICE_TYPE_LAST] = {0};
+    uint64_t tl_cfg_mask = 0;
     unsigned num_tl_resources;
     unsigned num_md_resources;
     uct_md_resource_desc_t *md_rscs;
     ucs_status_t status;
     ucp_rsc_index_t i;
     unsigned md_index;
-    uint64_t dev_cfg_masks[UCT_DEVICE_TYPE_LAST] = {0};
-    uint64_t tl_cfg_mask = 0;;
     uint64_t mem_type_mask;
     uct_memory_type_t mem_type;
 
@@ -966,6 +972,12 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
             goto err_free_context_resources;
         }
     }
+
+    /* If unified mode is enabled, initialize tl_bitmap to 0.
+     * Then the worker will open all available transport resources and will
+     * select only the best ones for each particular device.
+     */
+    context->tl_bitmap = config->ctx.unified_mode ? 0 : UCS_MASK(context->num_tls);
 
     /* Validate context resources */
     status = ucp_check_resources(context, config);
@@ -1225,8 +1237,9 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         ucp_config_release(dfl_config);
     }
 
-    ucs_debug("created ucp context %p [%d mds %d tls] features 0x%lx", context,
-              context->num_mds, context->num_tls, context->config.features);
+    ucs_debug("created ucp context %p [%d mds %d tls] features 0x%lx tl bitmap 0x%lx",
+              context, context->num_mds, context->num_tls,
+              context->config.features, context->tl_bitmap);
 
     *context_p = context;
     return UCS_OK;

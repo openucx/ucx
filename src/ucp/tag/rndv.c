@@ -326,6 +326,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     ucp_request_t *rndv_req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_h ep             = rndv_req->send.ep;
     const size_t max_iovcnt = 1;
+    uct_iface_attr_t* attrs;
     ucs_status_t status;
     size_t offset, length, ucp_mtu, remainder, align, chunk;
     uct_iov_t iov[max_iovcnt];
@@ -361,8 +362,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     }
 
     rsc_index = ucp_ep_get_rsc_index(rndv_req->send.ep, rndv_req->send.lane);
-    align     = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.opt_zcopy_align;
-    ucp_mtu   = rndv_req->send.ep->worker->ifaces[rsc_index].attr.cap.get.align_mtu;
+    attrs     = ucp_worker_iface_get_attr(rndv_req->send.ep->worker, rsc_index);
+    align     = attrs->cap.get.opt_zcopy_align;
+    ucp_mtu   = attrs->cap.get.align_mtu;
     min_zcopy = ucp_ep_config(rndv_req->send.ep)->tag.rndv.min_get_zcopy;
     max_zcopy = ucp_ep_config(rndv_req->send.ep)->tag.rndv.max_get_zcopy;
 
@@ -697,7 +699,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
     ucp_ep_h ep             = sreq->send.ep;
     ucs_status_t status;
     size_t offset, ucp_mtu, align, remainder, length;
-    ucp_rsc_index_t rsc_index;
+    uct_iface_attr_t *attrs;
     uct_iov_t iov[max_iovcnt];
     size_t iovcnt;
     ucp_dt_state_t state;
@@ -707,9 +709,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
         ucs_assert_always(status == UCS_OK);
     }
 
-    rsc_index = ucp_ep_get_rsc_index(ep, sreq->send.lane);
-    align     = ep->worker->ifaces[rsc_index].attr.cap.put.opt_zcopy_align;
-    ucp_mtu   = ep->worker->ifaces[rsc_index].attr.cap.put.align_mtu;
+    attrs     = ucp_worker_iface_get_attr(ep->worker,
+                                          ucp_ep_get_rsc_index(ep, sreq->send.lane));
+    align     = attrs->cap.put.opt_zcopy_align;
+    ucp_mtu   = attrs->cap.put.align_mtu;
 
     offset    = sreq->send.state.dt.offset;
     remainder = (uintptr_t)sreq->send.buffer % align;

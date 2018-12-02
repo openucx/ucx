@@ -101,4 +101,8 @@
  */
 #define ucs_count_zero_bits(x)     __builtin_ctz(x)
 
+/* Returns the number of 1-bits by _idx mask */
+#define ucs_bitmap2idx(_map, _idx) \
+    ucs_count_one_bits((_map) & (UCS_MASK(_idx)))
+
 #endif

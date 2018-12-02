@@ -313,24 +313,26 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nb, (ep, flags, cb),
 
 static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
 {
+    ucp_rsc_index_t iface_id;
+    ucp_worker_iface_t *wiface;
     ucs_status_t status;
-    unsigned rsc_index;
 
     if (worker->flush_ops_count) {
         return UCS_INPROGRESS;
     }
 
-    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
-        if (worker->ifaces[rsc_index].iface == NULL) {
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        wiface = &worker->ifaces[iface_id];
+        if (wiface->iface == NULL) {
             continue;
         }
 
-        status = uct_iface_flush(worker->ifaces[rsc_index].iface, 0, NULL);
+        status = uct_iface_flush(wiface->iface, 0, NULL);
         if (status != UCS_OK) {
             if (UCS_STATUS_IS_ERR(status)) {
                 ucs_error("iface[%d] "UCT_TL_RESOURCE_DESC_FMT" flush failed: %s",
-                          rsc_index,
-                          UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_index].tl_rsc),
+                          iface_id,
+                          UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[wiface->rsc_index].tl_rsc),
                           ucs_status_string(status));
             }
             return status;
@@ -494,17 +496,19 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
 {
-    unsigned rsc_index;
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
     ucs_status_t status;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
-        if (worker->ifaces[rsc_index].iface == NULL) {
+    ucs_for_each_bit(rsc_index, worker->context->tl_bitmap) {
+        wiface = ucp_worker_iface(worker, rsc_index);
+        if (wiface->iface == NULL) {
             continue;
         }
 
-        status = uct_iface_fence(worker->ifaces[rsc_index].iface, 0);
+        status = uct_iface_fence(wiface->iface, 0);
         if (status != UCS_OK) {
             goto out;
         }

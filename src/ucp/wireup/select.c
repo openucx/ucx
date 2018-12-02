@@ -203,10 +203,11 @@ static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
 static int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
                                    const ucp_address_entry_t *ae)
 {
-    ucp_context_h context = worker->context;
+    ucp_context_h context      = worker->context;
+    ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
+
     return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
-           uct_iface_is_reachable(worker->ifaces[rsc_index].iface, ae->dev_addr,
-                                  ae->iface_addr);
+           uct_iface_is_reachable(wiface->iface, ae->dev_addr, ae->iface_addr);
 }
 
 /**
@@ -290,16 +291,17 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     if (!addr_index_map) {
          snprintf(p, endp - p, "%s  ", ucs_status_string(UCS_ERR_UNSUPPORTED));
          p += strlen(p);
+         goto out;
     }
 
     /* For each local resource try to find the best remote address to connect to.
      * Pick the best local resource to satisfy the criteria.
      * best one has the highest score (from the dedicated score_func) and
      * has a reachable tl on the remote peer */
-    for (rsc_index = 0; addr_index_map && (rsc_index < context->num_tls); ++rsc_index) {
-        resource     = &context->tl_rscs[rsc_index].tl_rsc;
-        iface_attr   = &worker->ifaces[rsc_index].attr;
-        md_attr      = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+    ucs_for_each_bit(rsc_index, context->tl_bitmap) {
+        resource   = &context->tl_rscs[rsc_index].tl_rsc;
+        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+        md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
         if ((context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) &&
             !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX)) {
@@ -395,6 +397,8 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
             p += strlen(p);
         }
     }
+
+out:
 
     if (p >= tls_info + 2) {
         *(p - 2) = '\0'; /* trim last "," */
@@ -547,7 +551,7 @@ static uint64_t ucp_wireup_unset_tl_by_md(ucp_ep_h ep, uint64_t tl_bitmap,
     ucp_rsc_index_t md_index = context->tl_rscs[rsc_index].md_index;
     ucp_rsc_index_t i;
 
-    for (i = 0; i < context->num_tls; i++) {
+    ucs_for_each_bit(i, context->tl_bitmap) {
         if (context->tl_rscs[i].md_index == md_index) {
             tl_bitmap &= ~UCS_BIT(i);
         }
@@ -1223,6 +1227,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
     ucp_wireup_criteria_t criteria = {0};
     uct_tl_resource_desc_t *resource;
     ucp_rsc_index_t rsc_index;
+    uct_iface_attr_t *attrs;
     ucp_lane_index_t lane;
     unsigned addr_index;
 
@@ -1231,11 +1236,12 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
         rsc_index  = lane_descs[lane].rsc_index;
         addr_index = lane_descs[lane].addr_index;
         resource   = &context->tl_rscs[rsc_index].tl_rsc;
+        attrs      = ucp_worker_iface_get_attr(worker, rsc_index);
 
         /* if the current lane satisfies the wireup criteria, choose it for wireup.
          * if it doesn't take a lane with a p2p transport */
         if (ucp_wireup_check_flags(resource,
-                                   worker->ifaces[rsc_index].attr.cap.flags,
+                                   attrs->cap.flags,
                                    criteria.local_iface_flags, criteria.title,
                                    ucp_wireup_iface_flags, NULL, 0) &&
             ucp_wireup_check_flags(resource,

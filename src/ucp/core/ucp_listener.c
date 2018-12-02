@@ -203,7 +203,7 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
      * sockaddr is accessible from its md. Start listening on the first md that
      * satisfies this.
      * */
-    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+    ucs_for_each_bit(tl_id, context->tl_bitmap) {
         resource = &context->tl_rscs[tl_id];
         tl_md    = &context->tl_mds[resource->md_index];
 
@@ -238,14 +238,17 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
         iface_params.mode.sockaddr.listen_sockaddr  = params->sockaddr;
         iface_params.mode.sockaddr.cb_flags         = UCT_CB_FLAG_ASYNC;
 
-        status = ucp_worker_iface_init(worker, tl_id, &iface_params,
+        status = ucp_worker_iface_open(worker, tl_id, &iface_params,
                                        &listener->wiface);
         if (status != UCS_OK) {
             goto err_free;
         }
 
-        if ((context->config.features & UCP_FEATURE_WAKEUP) &&
-            !(listener->wiface.attr.cap.flags & UCT_IFACE_FLAG_CB_ASYNC)) {
+        status = ucp_worker_iface_init(worker, tl_id, &iface_params,
+                                       &listener->wiface);
+        if ((status != UCS_OK) ||
+            ((context->config.features & UCP_FEATURE_WAKEUP) &&
+            !(listener->wiface.attr.cap.flags & UCT_IFACE_FLAG_CB_ASYNC))) {
             ucp_worker_iface_cleanup(&listener->wiface);
             ucs_free(listener);
             continue;

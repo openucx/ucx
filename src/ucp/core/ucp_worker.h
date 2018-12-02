@@ -9,6 +9,7 @@
 #define UCP_WORKER_H_
 
 #include "ucp_ep.h"
+#include "ucp_context.h"
 #include "ucp_thread.h"
 
 #include <ucp/proto/proto.h>
@@ -17,6 +18,7 @@
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/strided_alloc.h>
+#include <ucs/arch/bitops.h>
 
 
 /* The size of the private buffer in UCT descriptor headroom, which UCP may
@@ -53,10 +55,13 @@ enum {
 enum {
     UCP_WORKER_IFACE_FLAG_OFFLOAD_ACTIVATED = UCS_BIT(0), /**< UCP iface receives tag
                                                                offload messages */
-    UCP_WORKER_IFACE_FLAG_ON_ARM_LIST       = UCS_BIT(1)  /**< UCP iface is an element
+    UCP_WORKER_IFACE_FLAG_ON_ARM_LIST       = UCS_BIT(1), /**< UCP iface is an element
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
+                                                               with the same caps, but
+                                                               with better performance */
 };
 
 
@@ -189,6 +194,7 @@ typedef struct ucp_worker {
     ucs_list_link_t               all_eps;       /* List of all endpoints */
     ucp_ep_match_ctx_t            ep_match_ctx;  /* Endpoint-to-endpoint matching context */
     ucp_worker_iface_t            *ifaces;       /* Array of interfaces, one for each resource */
+    unsigned                      num_ifaces;    /* Number of elements in ifaces array  */
     unsigned                      num_active_ifaces; /* Number of activated ifaces  */
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
@@ -221,6 +227,10 @@ typedef struct ucp_worker_err_handle_arg {
 
 unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
                                   const ucp_ep_config_key_t *key);
+
+ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
+                                   uct_iface_params_t *iface_params,
+                                   ucp_worker_iface_t *wiface);
 
 ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    uct_iface_params_t *iface_params,
@@ -257,6 +267,18 @@ static inline ucp_ep_h ucp_worker_get_ep_by_ptr(ucp_worker_h worker,
     ucs_assertv(ep->worker == worker, "worker=%p ep=%p ep->worker=%p", worker,
                 ep, ep->worker);
     return ep;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_worker_iface_t*
+ucp_worker_iface(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
+{
+    return &worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, rsc_index)];
+}
+
+static UCS_F_ALWAYS_INLINE uct_iface_attr_t*
+ucp_worker_iface_get_attr(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
+{
+    return &ucp_worker_iface(worker, rsc_index)->attr;
 }
 
 #endif

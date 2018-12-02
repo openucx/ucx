@@ -67,7 +67,7 @@ static inline ucp_rsc_index_t ucp_ep_get_rsc_index(ucp_ep_h ep, ucp_lane_index_t
 
 static inline uct_iface_attr_t *ucp_ep_get_iface_attr(ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    return &ep->worker->ifaces[ucp_ep_get_rsc_index(ep, lane)].attr;
+    return ucp_worker_iface_get_attr(ep->worker, ucp_ep_get_rsc_index(ep, lane));
 }
 
 static inline size_t ucp_ep_get_max_bcopy(ucp_ep_h ep, ucp_lane_index_t lane)

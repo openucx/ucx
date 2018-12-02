@@ -133,14 +133,14 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int has_ep,
     }
 
     num_devices = 0;
-    for (i = 0; i < context->num_tls; ++i) {
+    ucs_for_each_bit(i, context->tl_bitmap) {
         mask = UCS_BIT(i);
 
         if (!(mask & tl_bitmap)) {
             continue;
         }
 
-        iface_attr = &worker->ifaces[i].attr;
+        iface_attr = ucp_worker_iface_get_attr(worker, i);
 
         if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) &&
             !(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP)) {
@@ -322,6 +322,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     const ucp_address_packed_device_t *dev;
     uct_iface_attr_t *iface_attr;
     ucp_rsc_index_t md_index;
+    ucp_worker_iface_t *wiface;
     ucs_status_t status;
     ucp_rsc_index_t i;
     size_t iface_addr_len;
@@ -364,8 +365,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
         ++ptr;
 
         /* Device address */
-        status = uct_iface_get_device_address(worker->ifaces[dev->rsc_index].iface,
-                                              (uct_device_addr_t*)ptr);
+        wiface = ucp_worker_iface(worker, dev->rsc_index);
+        status = uct_iface_get_device_address(wiface->iface, (uct_device_addr_t*)ptr);
         if (status != UCS_OK) {
             return status;
         }
@@ -374,24 +375,26 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                             &context->tl_rscs[dev->rsc_index].tl_rsc);
         ptr += dev->dev_addr_len;
 
-        for (i = 0; i < context->num_tls; ++i) {
+        ucs_for_each_bit(i, context->tl_bitmap) {
 
             if (!(UCS_BIT(i) & dev->tl_bitmap)) {
                 continue;
             }
+
+            wiface     = ucp_worker_iface(worker, i);
+            iface_attr = &wiface->attr;
 
             /* Transport name checksum */
             *(uint16_t*)ptr = context->tl_rscs[i].tl_name_csum;
             ptr += sizeof(uint16_t);
 
             /* Transport information */
-            ucp_address_pack_iface_attr(ptr, &worker->ifaces[i].attr,
+            ucp_address_pack_iface_attr(ptr, iface_attr,
                                         worker->atomic_tls & UCS_BIT(i));
             ucp_address_memchek(ptr, sizeof(ucp_address_packed_iface_attr_t),
                                 &context->tl_rscs[dev->rsc_index].tl_rsc);
             ptr += sizeof(ucp_address_packed_iface_attr_t);
 
-            iface_attr = &worker->ifaces[i].attr;
 
             if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) &&
                 !(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP)) {
@@ -402,7 +405,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             iface_addr_len = iface_attr->iface_addr_len;
             ucs_assert(iface_addr_len < UCP_ADDRESS_FLAG_EP_ADDR);
 
-            status = uct_iface_get_address(worker->ifaces[i].iface,
+            status = uct_iface_get_address(wiface->iface,
                                            (uct_iface_addr_t*)(ptr + 1));
             if (status != UCS_OK) {
                 return status;
@@ -434,7 +437,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
             /* Save the address index of this transport */
             if (order != NULL) {
-                order[ucs_count_one_bits(tl_bitmap & UCS_MASK(i))] = index;
+                order[ucs_bitmap2idx(tl_bitmap, i)] = index;
             }
 
             ucs_trace("pack addr[%d] : "UCT_TL_RESOURCE_DESC_FMT
@@ -442,11 +445,11 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                       "lat_ovh: %e dev_priority %d",
                       index,
                       UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[i].tl_rsc),
-                      md_flags, worker->ifaces[i].attr.cap.flags,
-                      worker->ifaces[i].attr.bandwidth,
-                      worker->ifaces[i].attr.overhead,
-                      worker->ifaces[i].attr.latency.overhead,
-                      worker->ifaces[i].attr.priority);
+                      md_flags, iface_attr->cap.flags,
+                      iface_attr->bandwidth,
+                      iface_attr->overhead,
+                      iface_attr->latency.overhead,
+                      iface_attr->priority);
             ++index;
         }
     }

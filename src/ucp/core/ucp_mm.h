@@ -142,12 +142,6 @@ void ucp_mem_type_unreg_buffers(ucp_worker_h worker, uct_memory_type_t mem_type,
                                 uct_mem_h *memh, ucp_md_map_t *md_map,
                                 uct_rkey_bundle_t *rkey_bundle);
 
-static UCS_F_ALWAYS_INLINE ucp_md_index_t
-ucp_memh_map2idx(ucp_md_map_t md_map, ucp_md_index_t md_idx)
-{
-    return ucs_count_one_bits(md_map & UCS_MASK(md_idx));
-}
-
 static UCS_F_ALWAYS_INLINE uct_mem_h
 ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_idx)
 {
@@ -155,7 +149,7 @@ ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_id
         return NULL;
     }
 
-    return uct[ucp_memh_map2idx(md_map, md_idx)];
+    return uct[ucs_bitmap2idx(md_map, md_idx)];
 }
 
 static UCS_F_ALWAYS_INLINE uct_mem_h
