@@ -94,7 +94,7 @@ static void UCS_F_DTOR ucs_cleanup(void)
 {
     ucs_async_global_cleanup();
     ucs_profile_global_cleanup();
-    ucs_debug_cleanup();
+    ucs_debug_cleanup(0);
     ucs_memtrack_cleanup();
 #if ENABLE_STATS
     ucs_stats_cleanup();
