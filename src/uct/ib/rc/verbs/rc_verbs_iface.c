@@ -5,7 +5,7 @@
 */
 
 #include "rc_verbs.h"
-#include "rc_verbs_common.h"
+#include "rc_verbs_impl.h"
 
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_iface.h>
@@ -24,9 +24,15 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    ucs_offsetof(uct_rc_verbs_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
-  {"", "", NULL,
-   ucs_offsetof(uct_rc_verbs_iface_config_t, verbs_common),
-   UCS_CONFIG_TYPE_TABLE(uct_rc_verbs_iface_common_config_table)},
+  {"MAX_AM_HDR", "128",
+   "Buffer size to reserve for active message headers. If set to 0, the transport will\n"
+   "not support zero-copy active messages.",
+   ucs_offsetof(uct_rc_verbs_iface_config_t, max_am_hdr), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"TX_MAX_WR", "-1",
+   "Limits the number of outstanding posted work requests. The actual limit is\n"
+   "a minimum between this value and the TX queue length. -1 means no limit.",
+   ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
 
   {"", "", NULL,
    ucs_offsetof(uct_rc_verbs_iface_config_t, fc),
@@ -68,6 +74,20 @@ static ucs_status_t uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface,
 {
     return uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_verbs_ep_t), ep,
                              &iface->super.super, status);
+}
+
+ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
+{
+    switch (status)
+    {
+    case IBV_WC_SUCCESS:
+        return UCS_OK;
+    case IBV_WC_RETRY_EXC_ERR:
+    case IBV_WC_RNR_RETRY_EXC_ERR:
+        return UCS_ERR_ENDPOINT_TIMEOUT;
+    default:
+        return UCS_ERR_IO_ERROR;
+    }
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
@@ -116,77 +136,16 @@ static unsigned uct_rc_verbs_iface_progress(void *arg)
     return uct_rc_verbs_iface_poll_tx(iface);
 }
 
-#if IBV_EXP_HW_TM
-static unsigned uct_rc_verbs_iface_progress_tm(void *arg)
-{
-    uct_rc_verbs_iface_t *iface = arg;
-    unsigned count;
-
-    count = uct_rc_verbs_iface_poll_rx_tm(&iface->verbs_common, &iface->super);
-    if (count > 0) {
-        return count;
-    }
-    return uct_rc_verbs_iface_poll_tx(iface);
-}
-
-static ucs_status_t uct_rc_verbs_iface_tag_recv_zcopy(uct_iface_h tl_iface,
-                                                      uct_tag_t tag,
-                                                      uct_tag_t tag_mask,
-                                                      const uct_iov_t *iov,
-                                                      size_t iovcnt,
-                                                      uct_tag_context_t *ctx)
-{
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface,
-                                                 uct_rc_verbs_iface_t);
-    return uct_rc_verbs_iface_common_tag_recv(&iface->verbs_common,
-                                              &iface->super, tag,
-                                              tag_mask, iov, iovcnt, ctx);
-}
-
-static ucs_status_t uct_rc_verbs_iface_tag_recv_cancel(uct_iface_h tl_iface,
-                                                       uct_tag_context_t *ctx,
-                                                       int force)
-{
-   uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface,
-                                                uct_rc_verbs_iface_t);
-
-   return uct_rc_verbs_iface_common_tag_recv_cancel(&iface->verbs_common,
-                                                    &iface->super, ctx, force);
-}
-#endif /* IBV_EXP_HW_TM */
-
-static ucs_status_t
-uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
-                            uct_rc_verbs_iface_config_t *config)
-{
-#if IBV_EXP_HW_TM
-    if (UCT_RC_IFACE_TM_ENABLED(&iface->super)) {
-        struct ibv_exp_create_srq_attr srq_init_attr = {};
-
-        iface->super.progress = uct_rc_verbs_iface_progress_tm;
-
-        return uct_rc_verbs_iface_common_tag_init(&iface->verbs_common,
-                                                  &iface->super,
-                                                  &config->verbs_common,
-                                                  &config->super,
-                                                  &srq_init_attr,
-                                                  sizeof(struct ibv_exp_tmh_rvh));
-    }
-#endif
-    iface->super.progress = uct_rc_verbs_iface_progress;
-    return UCS_OK;
-}
-
 static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
 {
     memset(&iface->inl_am_wr, 0, sizeof(iface->inl_am_wr));
-    iface->inl_am_wr.sg_list        = iface->verbs_common.inl_sge;
+    iface->inl_am_wr.sg_list        = iface->inl_sge;
     iface->inl_am_wr.num_sge        = 2;
     iface->inl_am_wr.opcode         = IBV_WR_SEND;
     iface->inl_am_wr.send_flags     = IBV_SEND_INLINE;
 
     memset(&iface->inl_rwrite_wr, 0, sizeof(iface->inl_rwrite_wr));
-    iface->inl_rwrite_wr.sg_list    = iface->verbs_common.inl_sge;
+    iface->inl_rwrite_wr.sg_list    = iface->inl_sge;
     iface->inl_rwrite_wr.num_sge    = 1;
     iface->inl_rwrite_wr.opcode     = IBV_WR_RDMA_WRITE;
     iface->inl_rwrite_wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
@@ -195,13 +154,12 @@ static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
 static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
-    uct_rc_verbs_iface_common_t *verbs_common = &iface->verbs_common;
     ucs_status_t status;
 
     status = uct_rc_iface_query(&iface->super, iface_attr,
-                                verbs_common->config.max_inline,
-                                verbs_common->config.max_inline,
-                                verbs_common->config.short_desc_size,
+                                iface->config.max_inline,
+                                iface->config.max_inline,
+                                iface->config.short_desc_size,
                                 uct_ib_iface_get_max_iov(&iface->super.super) - 1,
                                 uct_ib_iface_get_max_iov(&iface->super.super) - 1);
     if (status != UCS_OK) {
@@ -227,28 +185,40 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     struct ibv_qp *qp;
 
     init_attr.res_domain_key = UCT_IB_IFACE_NULL_RES_DOMAIN_KEY;
-    init_attr.tm_cap_bit     = IBV_EXP_TM_CAP_RC;
     init_attr.fc_req_size    = sizeof(uct_rc_fc_request_t);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
                               worker, params, &config->super, &init_attr);
 
-    self->config.tx_max_wr           = ucs_min(config->verbs_common.tx_max_wr,
+    self->config.tx_max_wr           = ucs_min(config->tx_max_wr,
                                                self->super.config.tx_qp_len);
     self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
                                                self->config.tx_max_wr / 4);
 
-    status = uct_rc_verbs_iface_tag_init(self, config);
+    self->super.progress = uct_rc_verbs_iface_progress;
+
+    memset(self->inl_sge, 0, sizeof(self->inl_sge));
+    uct_rc_am_hdr_fill(&self->am_inl_hdr.rc_hdr, 0);
+
+    /* Configuration */
+    self->config.short_desc_size = ucs_max(sizeof(uct_rc_hdr_t),
+                                           config->max_am_hdr);
+    self->config.short_desc_size = ucs_max(UCT_IB_MAX_ATOMIC_SIZE,
+                                           self->config.short_desc_size);
+
+    /* Create AM headers and Atomic mempool */
+    status = uct_iface_mpool_init(&self->super.super.super,
+                                  &self->short_desc_mp,
+                                  sizeof(uct_rc_iface_send_desc_t) +
+                                      self->config.short_desc_size,
+                                  sizeof(uct_rc_iface_send_desc_t),
+                                  UCS_SYS_CACHE_LINE_SIZE,
+                                  &config->super.super.tx.mp,
+                                  self->super.config.tx_qp_len,
+                                  uct_rc_iface_send_desc_init,
+                                  "rc_verbs_short_desc");
     if (status != UCS_OK) {
         goto err;
-    }
-
-    status = uct_rc_verbs_iface_common_init(&self->verbs_common,
-                                            &self->super,
-                                            &config->verbs_common,
-                                            &config->super);
-    if (status != UCS_OK) {
-        goto err_tag_cleanup;
     }
 
     uct_rc_verbs_iface_init_inl_wrs(self);
@@ -267,26 +237,80 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     }
     ibv_destroy_qp(qp);
 
-    self->verbs_common.config.max_inline = cap.max_inline_data;
+    self->config.max_inline = cap.max_inline_data;
     uct_ib_iface_set_max_iov(&self->super.super, cap.max_send_sge);
 
 
     return UCS_OK;
 
 err_common_cleanup:
-    uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
-err_tag_cleanup:
-    uct_rc_iface_tag_cleanup(&self->super);
+    ucs_mpool_cleanup(&self->short_desc_mp, 1);
 err:
     return status;
+}
+
+ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_iface_t *iface,
+                                                     unsigned max)
+{
+    unsigned count;
+
+    count = ucs_min(max, iface->rx.srq.quota);
+    iface->rx.srq.available += count;
+    iface->rx.srq.quota     -= count;
+    while (iface->rx.srq.available > 0) {
+        if (uct_rc_verbs_iface_post_recv_common(iface, 1) == 0) {
+            ucs_error("failed to post receives");
+            return UCS_ERR_NO_MEMORY;
+        }
+    }
+    return UCS_OK;
+}
+
+void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+
+    if (flags & UCT_PROGRESS_RECV) {
+        /* ignore return value from prepost_recv, since it's not really possible
+         * to handle here, and some receives were already pre-posted during iface
+         * creation anyway.
+         */
+        uct_rc_verbs_iface_common_prepost_recvs(iface, UINT_MAX);
+    }
+
+    uct_base_iface_progress_enable_cb(&iface->super.super, iface->progress,
+                                      flags);
+}
+
+unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface, unsigned max)
+{
+    struct ibv_recv_wr *bad_wr;
+    uct_ib_recv_wr_t *wrs;
+    unsigned count;
+    int ret;
+
+    wrs  = ucs_alloca(sizeof *wrs  * max);
+
+    count = uct_ib_iface_prepare_rx_wrs(&iface->super, &iface->rx.mp,
+                                        wrs, max);
+    if (ucs_unlikely(count == 0)) {
+        return 0;
+    }
+
+    ret = ibv_post_srq_recv(iface->rx.srq.srq, &wrs[0].ibwr, &bad_wr);
+    if (ret != 0) {
+        ucs_fatal("ibv_post_srq_recv() returned %d: %m", ret);
+    }
+    iface->rx.srq.available -= count;
+
+    return count;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
     uct_base_iface_progress_disable(&self->super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-    uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
-    uct_rc_iface_tag_cleanup(&self->super);
+    ucs_mpool_cleanup(&self->short_desc_mp, 1);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_iface_t, uct_rc_iface_t);
@@ -325,16 +349,6 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .iface_progress_enable    = uct_rc_verbs_iface_common_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,
-#if IBV_EXP_HW_TM
-    .iface_tag_recv_zcopy     = uct_rc_verbs_iface_tag_recv_zcopy,
-    .iface_tag_recv_cancel    = uct_rc_verbs_iface_tag_recv_cancel,
-    .ep_tag_eager_short       = uct_rc_verbs_ep_tag_eager_short,
-    .ep_tag_eager_bcopy       = uct_rc_verbs_ep_tag_eager_bcopy,
-    .ep_tag_eager_zcopy       = uct_rc_verbs_ep_tag_eager_zcopy,
-    .ep_tag_rndv_zcopy        = uct_rc_verbs_ep_tag_rndv_zcopy,
-    .ep_tag_rndv_cancel       = uct_rc_ep_tag_rndv_cancel,
-    .ep_tag_rndv_request      = uct_rc_verbs_ep_tag_rndv_request,
-#endif
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
     .iface_event_arm          = uct_rc_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_iface_t),

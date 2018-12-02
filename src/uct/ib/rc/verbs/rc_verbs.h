@@ -11,8 +11,20 @@
 #include <uct/ib/rc/base/rc_ep.h>
 #include <ucs/type/class.h>
 
-#include "rc_verbs_common.h"
+#define UCT_RC_VERBS_IFACE_FOREACH_TXWQE(_iface, _i, _wc, _num_wcs) \
+      status = uct_ib_poll_cq((_iface)->super.cq[UCT_IB_DIR_TX], &_num_wcs, _wc); \
+      if (status != UCS_OK) { \
+          return 0; \
+      } \
+      UCS_STATS_UPDATE_COUNTER((_iface)->stats, \
+                               UCT_RC_IFACE_STAT_TX_COMPLETION, _num_wcs); \
+      for (_i = 0; _i < _num_wcs; ++_i)
 
+
+typedef struct uct_rc_verbs_txcnt {
+    uint16_t       pi;      /* producer (post_send) count */
+    uint16_t       ci;      /* consumer (ibv_poll_cq) completion count */
+} uct_rc_verbs_txcnt_t;
 
 /**
  * RC verbs communication context.
@@ -28,7 +40,8 @@ typedef struct uct_rc_verbs_ep {
  */
 typedef struct uct_rc_verbs_iface_config {
     uct_rc_iface_config_t              super;
-    uct_rc_verbs_iface_common_config_t verbs_common;
+    size_t                             max_am_hdr;
+    unsigned                           tx_max_wr;
     uct_rc_fc_config_t                 fc;
 } uct_rc_verbs_iface_config_t;
 
@@ -40,41 +53,15 @@ typedef struct uct_rc_verbs_iface {
     uct_rc_iface_t              super;
     struct ibv_send_wr          inl_am_wr;
     struct ibv_send_wr          inl_rwrite_wr;
-    uct_rc_verbs_iface_common_t verbs_common;
+    struct ibv_sge              inl_sge[2];
+    uct_rc_am_short_hdr_t       am_inl_hdr;
+    ucs_mpool_t                 short_desc_mp;
     struct {
+        size_t                  short_desc_size;
+        size_t                  max_inline;
         unsigned                tx_max_wr;
     } config;
 } uct_rc_verbs_iface_t;
-
-
-#if IBV_EXP_HW_TM
-
-ucs_status_t uct_rc_verbs_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
-                                             const void *data, size_t length);
-
-ssize_t uct_rc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
-                                        uint64_t imm,
-                                        uct_pack_callback_t pack_cb,
-                                        void *arg, unsigned flags);
-
-ucs_status_t uct_rc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
-                                             uint64_t imm, const uct_iov_t *iov,
-                                             size_t iovcnt, unsigned flags,
-                                             uct_completion_t *comp);
-
-ucs_status_ptr_t uct_rc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
-                                                const void *header,
-                                                unsigned header_length,
-                                                const uct_iov_t *iov,
-                                                size_t iovcnt, unsigned flags,
-                                                uct_completion_t *comp);
-
-ucs_status_t uct_rc_verbs_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
-                                              const void* header,
-                                              unsigned header_length,
-                                              unsigned flags);
-#endif /* IBV_EXP_HW_TM */
-
 
 
 UCS_CLASS_DECLARE(uct_rc_verbs_ep_t, uct_iface_h);

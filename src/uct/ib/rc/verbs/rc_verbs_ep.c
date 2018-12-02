@@ -6,9 +6,22 @@
 */
 
 #include "rc_verbs.h"
+#include "rc_verbs_impl.h"
 
 #include <ucs/arch/bitops.h>
 #include <uct/ib/base/ib_log.h>
+
+void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
+{
+    txcnt->pi = txcnt->ci = 0;
+}
+
+void uct_rc_verbs_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
+                                     void *data, size_t length, size_t valid_length,
+                                     char *buffer, size_t max)
+{
+    uct_rc_ep_packet_dump(iface, type, data, length, valid_length, buffer, max, 1);
+}
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
@@ -132,7 +145,7 @@ uct_rc_verbs_ep_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
     uct_rc_iface_send_desc_t *desc;
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super, &iface->verbs_common.short_desc_mp,
+    UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super, &iface->short_desc_mp,
                                           desc, iface->super.config.atomic64_handler,
                                           result, comp);
     uct_rc_verbs_ep_atomic_post(ep, opcode, compare_add, swap, remote_addr,
@@ -171,7 +184,7 @@ uct_rc_verbs_ep_ext_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
     uct_rc_iface_send_desc_t *desc;
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super, &iface->verbs_common.short_desc_mp,
+    UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super, &iface->short_desc_mp,
                                           desc, handler, result, comp);
     uct_rc_verbs_ep_ext_atomic_post(ep, opcode, length, compare_mask, compare_add,
                                     swap, remote_addr, rkey, desc,
@@ -187,7 +200,7 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
-    UCT_CHECK_LENGTH(length, 0, iface->verbs_common.config.max_inline, "put_short");
+    UCT_CHECK_LENGTH(length, 0, iface->config.max_inline, "put_short");
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_VERBS_FILL_INL_PUT_WR(iface, remote_addr, rkey, buffer, length);
@@ -283,12 +296,11 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_verbs_iface_common_t *verbs_common = &iface->verbs_common;
 
-    UCT_RC_CHECK_AM_SHORT(id, length, verbs_common->config.max_inline);
+    UCT_RC_CHECK_AM_SHORT(id, length, iface->config.max_inline);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
-    uct_rc_verbs_iface_fill_inl_am_sge(verbs_common, id, hdr, buffer, length);
+    uct_rc_verbs_iface_fill_inl_am_sge(iface, id, hdr, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr,
                               IBV_SEND_INLINE | IBV_SEND_SOLICITED, INT_MAX);
@@ -331,7 +343,6 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     uct_rc_verbs_iface_t     *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t        *ep    = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_rc_iface_send_desc_t *desc  = NULL;
-    uct_rc_verbs_iface_common_t *verbs_common = &iface->verbs_common;
     struct ibv_sge sge[UCT_IB_MAX_IOV]; /* First sge is reserved for the header */
     struct ibv_send_wr wr;
     int send_flags;
@@ -340,12 +351,12 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super) - 1,
                        "uct_rc_verbs_ep_am_zcopy");
     UCT_RC_CHECK_AM_ZCOPY(id, header_length, uct_iov_total_length(iov, iovcnt),
-                          verbs_common->config.short_desc_size,
+                          iface->config.short_desc_size,
                           iface->super.super.config.seg_size);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
 
-    UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(&iface->super, &verbs_common->short_desc_mp,
+    UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(&iface->super, &iface->short_desc_mp,
                                       desc, id, header, header_length, comp,
                                       &send_flags);
     sge[0].length = sizeof(uct_rc_hdr_t) + header_length;
@@ -374,7 +385,7 @@ ucs_status_t uct_rc_verbs_ep_atomic64_post(uct_ep_h tl_ep, unsigned opcode, uint
 
     /* TODO don't allocate descriptor - have dummy buffer */
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->verbs_common.short_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->short_desc_mp, desc);
 
     uct_rc_verbs_ep_atomic_post(ep,
                                 IBV_WR_ATOMIC_FETCH_AND_ADD, value, 0,
@@ -396,7 +407,7 @@ ucs_status_t uct_rc_verbs_ep_atomic32_post(uct_ep_h tl_ep, unsigned opcode, uint
     }
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->verbs_common.short_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->short_desc_mp, desc);
 
     uct_rc_verbs_ep_ext_atomic_post(ep, IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD,
                                     sizeof(uint32_t), 0, value, 0, remote_addr,
@@ -533,7 +544,7 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_hdr_t *hdr     = &iface->verbs_common.am_inl_hdr.rc_hdr;
+    uct_rc_hdr_t *hdr     = &iface->am_inl_hdr.rc_hdr;
 
     /* In RC only PURE grant is sent as a separate message. Other FC
      * messages are bundled with AM. */
@@ -541,175 +552,21 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
     /* Do not check FC WND here to avoid head-to-head deadlock.
      * Credits grant should be sent regardless of FC wnd state. */
-    ucs_assert(sizeof(*hdr) <= iface->verbs_common.config.max_inline);
+    ucs_assert(sizeof(*hdr) <= iface->config.max_inline);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
     hdr->am_id    = UCT_RC_EP_FC_PURE_GRANT;
-    fc_wr.sg_list = iface->verbs_common.inl_sge;
+    fc_wr.sg_list = iface->inl_sge;
     fc_wr.opcode  = IBV_WR_SEND;
     fc_wr.next    = NULL;
     fc_wr.num_sge = 1;
 
-    iface->verbs_common.inl_sge[0].addr    = (uintptr_t)hdr;
-    iface->verbs_common.inl_sge[0].length  = sizeof(*hdr);
+    iface->inl_sge[0].addr    = (uintptr_t)hdr;
+    iface->inl_sge[0].length  = sizeof(*hdr);
 
     uct_rc_verbs_ep_post_send(iface, ep, &fc_wr, IBV_SEND_INLINE, INT_MAX);
     return UCS_OK;
 }
-
-#if IBV_EXP_HW_TM
-ucs_status_t uct_rc_verbs_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
-                                             const void *data, size_t length)
-{
-    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
-                                                 uct_rc_verbs_iface_t);
-    struct ibv_exp_tmh tmh;
-
-    UCT_CHECK_LENGTH(length + sizeof(struct ibv_exp_tmh), 0,
-                     iface->verbs_common.config.max_inline, "tag_short");
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
-
-    uct_rc_iface_fill_tmh(&tmh, tag, 0, IBV_EXP_TMH_EAGER);
-    uct_rc_verbs_iface_fill_inl_sge(&iface->verbs_common, &tmh, sizeof(tmh), data, length);
-
-    uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE, INT_MAX);
-
-    UCT_TL_EP_STAT_OP(&ep->super.super, TAG, SHORT, length);
-
-    return UCS_OK;
-}
-
-ssize_t uct_rc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
-                                        uint64_t imm,
-                                        uct_pack_callback_t pack_cb,
-                                        void *arg, unsigned flags)
-{
-    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
-    uct_rc_iface_send_desc_t *desc;
-    struct ibv_send_wr wr;
-    struct ibv_sge sge;
-    size_t length;
-    uint32_t app_ctx;
-
-    UCT_RC_CHECK_RES(iface, &ep->super);
-
-    UCT_RC_IFACE_FILL_TM_IMM(imm, app_ctx, wr.imm_data, wr.opcode, IBV_WR_SEND,
-                             _WITH_IMM);
-    UCT_RC_IFACE_GET_TM_BCOPY_DESC(iface, &iface->tx.mp, desc, tag, app_ctx,
-                                   pack_cb, arg, length);
-    UCT_RC_VERBS_FILL_SGE(wr, sge, length + sizeof(struct ibv_exp_tmh));
-    uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, 0, INT_MAX);
-
-    UCT_TL_EP_STAT_OP(&ep->super.super, TAG, BCOPY, length);
-
-    return length;
-}
-
-ucs_status_t uct_rc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
-                                             uint64_t imm, const uct_iov_t *iov,
-                                             size_t iovcnt, unsigned flags,
-                                             uct_completion_t *comp)
-{
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
-    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_iface_send_desc_t *desc;
-    struct ibv_sge sge[UCT_IB_MAX_IOV];
-    struct ibv_send_wr wr;
-    int send_flags;
-    size_t sge_cnt;
-    uint32_t app_ctx;
-
-    UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super) - 1,
-                       "uct_rc_verbs_ep_tag_eager_zcopy");
-    UCT_RC_CHECK_ZCOPY_DATA(sizeof(struct ibv_exp_tmh),
-                            uct_iov_total_length(iov, iovcnt),
-                            iface->super.super.config.seg_size);
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
-
-    sge_cnt = uct_ib_verbs_sge_fill_iov(sge + 1, iov, iovcnt);
-
-    UCT_RC_IFACE_FILL_TM_IMM(imm, app_ctx, wr.imm_data, wr.opcode, IBV_WR_SEND,
-                             _WITH_IMM);
-    UCT_RC_VERBS_GET_TM_ZCOPY_DESC(&iface->super,
-                                   &iface->verbs_common.short_desc_mp,
-                                   desc, tag, app_ctx, comp, &send_flags,
-                                   sge[0]);
-    wr.num_sge = sge_cnt + 1;
-    wr.sg_list = sge;
-
-    uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, send_flags, INT_MAX);
-
-    UCT_TL_EP_STAT_OP(&ep->super.super, TAG, ZCOPY,
-                      uct_iov_total_length(iov, iovcnt));
-
-    return UCS_INPROGRESS;
-}
-
-ucs_status_ptr_t uct_rc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
-                                                const void *header,
-                                                unsigned header_length,
-                                                const uct_iov_t *iov,
-                                                size_t iovcnt, unsigned flags,
-                                                uct_completion_t *comp)
-{
-    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
-                                                 uct_rc_verbs_iface_t);
-    unsigned tmh_len            = sizeof(struct ibv_exp_tmh) +
-                                  sizeof(struct ibv_exp_tmh_rvh);
-    struct ibv_exp_tmh *tmh     = ucs_alloca(tmh_len);
-    uint32_t rndv_idx;
-
-    UCT_RC_IFACE_CHECK_RNDV_PARAMS(iovcnt, header_length, tmh_len,
-                                   iface->verbs_common.config.max_inline,
-                                   iface->super.tm.max_rndv_data +
-                                   UCT_RC_IFACE_TMH_PRIV_LEN);
-    UCT_RC_IFACE_CHECK_RES_PTR(&iface->super, &ep->super);
-
-    rndv_idx = uct_rc_verbs_iface_fill_rndv_hdrs(&iface->super,
-                                                 &iface->verbs_common,
-                                                 tmh, header, header_length,
-                                                 iface->super.tm.max_rndv_data,
-                                                 tmh_len, tag, iov, comp);
-
-    uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE, INT_MAX);
-    return (ucs_status_ptr_t)((uint64_t)rndv_idx);
-}
-
-/* For RNDV request send regular eager packet with IBV_SEND_WITH_IMM and
- * imm_value = 0. Receiver will handle such message as rndv request. */
-ucs_status_t uct_rc_verbs_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
-                                              const void* header,
-                                              unsigned header_length,
-                                              unsigned flags)
-{
-    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
-                                                 uct_rc_verbs_iface_t);
-    struct ibv_exp_tmh tmh;
-    uint32_t app_ctx;
-    struct ibv_send_wr wr;
-
-    UCT_CHECK_LENGTH(header_length + sizeof(tmh), 0,
-                     iface->verbs_common.config.max_inline, "tag_rndv_request");
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
-
-    wr.sg_list = iface->verbs_common.inl_sge;
-    wr.num_sge = 2;
-    wr.opcode  = IBV_WR_SEND_WITH_IMM;
-    wr.next    = NULL;
-
-    uct_rc_iface_tag_imm_data_pack(&(wr.imm_data), &app_ctx, 0ul);
-    uct_rc_iface_fill_tmh(&tmh, tag, app_ctx, IBV_EXP_TMH_EAGER);
-    uct_rc_verbs_iface_fill_inl_sge(&iface->verbs_common, &tmh, sizeof(tmh),
-                                    header, header_length);
-    uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_INLINE, INT_MAX);
-    return UCS_OK;
-}
-
-#endif /* IBV_EXP_HW_TM */
 
 UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)
 {

@@ -9,7 +9,6 @@
 
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
-#include <uct/ib/rc/verbs/rc_verbs_common.h>
 #include <uct/ib/ud/base/ud_iface_common.h>
 
 
