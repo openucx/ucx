@@ -125,7 +125,7 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
     ucs_trace_req("atomic_fetch_nb opcode %d value %"PRIu64" buffer %p size %zu"
                   " remote_addr %"PRIx64" rkey %p to %s cb %p",
                   opcode, value, result, op_size, remote_addr, rkey,
-                  cp_ep_peer_name(ep), cb);
+                  ucp_ep_peer_name(ep), cb);
 
     status = UCP_RKEY_RESOLVE(rkey, ep, amo);
     if (status != UCS_OK) {

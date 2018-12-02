@@ -210,8 +210,11 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
     /* Read memory type */
     mem_type = *((uint8_t*)p++);
 
-    rkey->md_map = md_map;
+    rkey->md_map   = md_map;
     rkey->mem_type = mem_type;
+#if ENABLE_PARAMS_CHECK
+    rkey->ep       = ep;
+#endif
 
     /* Unpack rkey of each UCT MD */
     remote_md_index = 0; /* Index of remote MD */
