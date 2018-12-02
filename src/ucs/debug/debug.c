@@ -937,7 +937,7 @@ static void ucs_debug_handle_error_signal(int signo, const char *cause,
 
 static void ucs_error_signal_handler(int signo, siginfo_t *info, void *context)
 {
-    ucs_debug_cleanup();
+    ucs_debug_cleanup(1);
     ucs_log_flush();
 
     switch (signo) {
@@ -977,7 +977,7 @@ void ucs_handle_error(const char *error_type, const char *message, ...)
     char *buffer;
     va_list ap;
 
-    ucs_debug_cleanup();
+    ucs_debug_cleanup(1);
     ucs_log_flush();
 
     buffer = ucs_alloca(buffer_size + 1);
@@ -1199,7 +1199,7 @@ void ucs_debug_init()
 #endif
 }
 
-void ucs_debug_cleanup()
+void ucs_debug_cleanup(int on_error)
 {
     char *sym;
 
@@ -1209,6 +1209,8 @@ void ucs_debug_cleanup()
     if (ucs_global_opts.debug_signo > 0) {
         signal(ucs_global_opts.debug_signo, SIG_DFL);
     }
-    kh_foreach_value(&ucs_debug_symbols_cache, sym, ucs_free(sym));
-    kh_destroy_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
+    if (!on_error) {
+        kh_foreach_value(&ucs_debug_symbols_cache, sym, ucs_free(sym));
+        kh_destroy_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
+    }
 }

@@ -39,7 +39,7 @@ void ucs_debug_init();
 /**
  * Cleanup UCS debugging subsystem.
  */
-void ucs_debug_cleanup();
+void ucs_debug_cleanup(int on_error);
 
 
 /**
