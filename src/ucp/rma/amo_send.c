@@ -120,8 +120,12 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
     UCP_AMO_CHECK_PARAM(ep->worker->context, remote_addr, op_size, opcode,
                         UCP_ATOMIC_FETCH_OP_LAST,
                         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
-
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+
+    ucs_trace_req("atomic_fetch_nb opcode %d value %"PRIu64" buffer %p size %zu"
+                  " remote_addr %"PRIx64" rkey %p to %s cb %p",
+                  opcode, value, result, op_size, remote_addr, rkey,
+                  ucp_ep_peer_name(ep), cb);
 
     status = UCP_RKEY_RESOLVE(rkey, ep, amo);
     if (status != UCS_OK) {
@@ -154,8 +158,12 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
 
     UCP_AMO_CHECK_PARAM(ep->worker->context, remote_addr, op_size, opcode,
                         UCP_ATOMIC_POST_OP_LAST, return UCS_ERR_INVALID_PARAM);
-
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+
+    ucs_trace_req("atomic_post opcode %d value %"PRIu64" size %zu "
+                  "remote_addr %"PRIx64" rkey %p to %s",
+                  opcode, value, op_size, remote_addr, rkey,
+                  ucp_ep_peer_name(ep));
 
     status = UCP_RKEY_RESOLVE(rkey, ep, amo);
     if (status != UCS_OK) {

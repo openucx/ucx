@@ -43,6 +43,9 @@ typedef struct ucp_rkey {
     } cache;
     ucp_md_map_t                  md_map;  /* Which *remote* MDs have valid memory handles */
     uct_memory_type_t             mem_type;/* Memory type of remote key memory */
+#if ENABLE_PARAMS_CHECK
+    ucp_ep_h                      ep;
+#endif
     uct_rkey_bundle_t             uct[0];  /* Remote key for every MD */
 } ucp_rkey_t;
 
@@ -159,7 +162,7 @@ ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
 }
 
 
-#define UCP_RKEY_RESOLVE(_rkey, _ep, _op_type) \
+#define UCP_RKEY_RESOLVE_NOCHECK(_rkey, _ep, _op_type) \
     ({ \
         ucs_status_t status = UCS_OK; \
         if (ucs_unlikely((_ep)->cfg_index != (_rkey)->cache.ep_cfg_index)) { \
@@ -172,6 +175,23 @@ ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
         } \
         status; \
     })
+
+
+#if ENABLE_PARAMS_CHECK
+#define UCP_RKEY_RESOLVE(_rkey, _ep, _op_type) \
+    ({ \
+        ucs_status_t status; \
+        if ((_rkey)->ep != (_ep)) { \
+            ucs_error("cannot use a remote key on a different endpoint than it was unpacked on"); \
+            status = UCS_ERR_INVALID_PARAM; \
+        } else { \
+            status = UCP_RKEY_RESOLVE_NOCHECK(_rkey, _ep, _op_type); \
+        } \
+        status; \
+    })
+#else
+#define UCP_RKEY_RESOLVE  UCP_RKEY_RESOLVE_NOCHECK
+#endif
 
 #define UCP_MEM_IS_HOST(_mem_type) ((_mem_type) == UCT_MD_MEM_TYPE_HOST)
 #define UCP_MEM_IS_CUDA_MANAGED(_mem_type) ((_mem_type) == UCT_MD_MEM_TYPE_CUDA_MANAGED)
