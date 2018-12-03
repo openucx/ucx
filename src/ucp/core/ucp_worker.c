@@ -1261,10 +1261,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     status = ucs_async_context_init(&worker->async,
-                                    (RUNNING_ON_VALGRIND ||
-                                     context->config.ext.use_mt_mutex) ?
+                                    context->config.ext.use_mt_mutex ?
                                     UCS_ASYNC_MODE_THREAD_MUTEX :
-                                    UCS_ASYNC_MODE_THREAD_SPINLOCK);
+                                    UCS_ASYNC_MODE_DEFAULT);
     if (status != UCS_OK) {
         goto err_free_tm_offload_stats;
     }

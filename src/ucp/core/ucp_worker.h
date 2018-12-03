@@ -46,14 +46,9 @@
 #else
 
 #define UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(_worker)
-
-
 #define UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(_worker)
 
-
 #endif
-
-
 
 
 /**

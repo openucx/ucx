@@ -494,9 +494,7 @@ static void init_test_params(ucx_perf_params_t *params)
     params->test_type       = UCX_PERF_TEST_TYPE_LAST;
     params->thread_mode     = UCS_THREAD_MODE_SINGLE;
     params->thread_count    = 1;
-    params->async_mode      = RUNNING_ON_VALGRIND ?
-                              UCS_ASYNC_MODE_THREAD_MUTEX :
-                              UCS_ASYNC_MODE_THREAD_SPINLOCK;
+    params->async_mode      = UCS_ASYNC_MODE_DEFAULT;
     params->wait_mode       = UCX_PERF_WAIT_MODE_LAST;
     params->max_outstanding = 1;
     params->warmup_iter     = 10000;
