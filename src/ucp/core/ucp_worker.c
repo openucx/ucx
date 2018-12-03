@@ -1764,6 +1764,26 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker)
     return ucp_worker_wakeup_signal_fd(worker);
 }
 
+static uint32_t ucp_dev_type_map2uct(uint32_t ucp_dev_type_map)
+{
+    uint32_t uct_map = 0;
+
+    if (ucp_dev_type_map & UCP_DEVICE_TYPE_NET) {
+        uct_map |= UCS_BIT(UCT_DEVICE_TYPE_NET);
+    }
+    if (ucp_dev_type_map & UCP_DEVICE_TYPE_SHM) {
+        uct_map |= UCS_BIT(UCT_DEVICE_TYPE_SHM);
+    }
+    if (ucp_dev_type_map & UCP_DEVICE_TYPE_ACC) {
+        uct_map |= UCS_BIT(UCT_DEVICE_TYPE_ACC);
+    }
+    if (ucp_dev_type_map & UCP_DEVICE_TYPE_SELF) {
+        uct_map |= UCS_BIT(UCT_DEVICE_TYPE_SELF);
+    }
+
+    return uct_map;
+}
+
 ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address_p,
                                     size_t *address_length_p)
 {
@@ -1772,6 +1792,39 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     status = ucp_address_pack(worker, NULL, -1, NULL, address_length_p,
+                              (void**)address_p);
+
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+
+    return status;
+}
+
+ucs_status_t ucp_worker_get_address_type(ucp_worker_h worker,
+                                         ucp_address_params_t *params,
+                                         ucp_address_t **address_p,
+                                         size_t *address_length_p)
+{
+    ucp_context_h context = worker->context;
+    uint64_t tl_bitmap;
+    uint32_t uct_dev_type_map;
+    ucp_rsc_index_t tl_id;
+    ucs_status_t status;
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
+
+    if (params->field_mask & UCP_ADDRESS_PARAM_FIELD_DEV_TYPE_MAP) {
+        tl_bitmap = 0;
+        uct_dev_type_map = ucp_dev_type_map2uct(params->dev_type_map);
+        ucs_for_each_bit(tl_id, context->tl_bitmap) {
+            if (UCS_BIT(context->tl_rscs[tl_id].tl_rsc.dev_type) & uct_dev_type_map) {
+                tl_bitmap |= UCS_BIT(tl_id);
+            }
+        }
+    } else {
+        tl_bitmap = -1;
+    }
+
+    status = ucp_address_pack(worker, NULL, tl_bitmap, NULL, address_length_p,
                               (void**)address_p);
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);

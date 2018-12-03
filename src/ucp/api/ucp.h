@@ -190,6 +190,33 @@ enum ucp_listener_params_field {
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief UCP address parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_address_params_t
+ * are present. It is used for the enablement of backward compatibility support.
+ */
+enum ucp_address_params_field {
+    UCP_ADDRESS_PARAM_FIELD_DEV_TYPE_MAP = UCS_BIT(0) /* Device types bitmap */
+};
+
+
+/**
+ * @ingroup UCP_CONTEXT
+ * @brief UCP device type flags.
+ *
+ * The enumeration list describes possible UCP device types, which can be used as
+ * parameters to @ref ucp_worker_get_address_type() function.
+ */
+typedef enum {
+    UCP_DEVICE_TYPE_NET  = UCS_BIT(0), /**< Network devices */
+    UCP_DEVICE_TYPE_SHM  = UCS_BIT(1), /**< Shared memory devices */
+    UCP_DEVICE_TYPE_ACC  = UCS_BIT(2), /**< Acceleration devices */
+    UCP_DEVICE_TYPE_SELF = UCS_BIT(3)  /**< Loop-back device */
+} ucp_device_type_t;
+
+
+/**
  * @ingroup UCP_ENDPOINT
  * @brief UCP endpoint parameters field mask.
  *
@@ -839,6 +866,33 @@ typedef struct ucp_listener_params {
     ucp_listener_conn_handler_t         conn_handler;
 } ucp_listener_params_t;
 
+/**
+ * @ingroup UCP_WORKER
+ * @brief Parameters for a UCP address object.
+ *
+ * This structure defines parameters for @ref ucp_worker_get_address_type, which
+ * is used to obtain local worker address.
+ */
+typedef struct ucp_address_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_address_params_field.
+     * Fields not specified in this mask would be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                            field_mask;
+
+    /**
+     * A bitmap of device types, as specified by @ref ucp_device_type_t,
+     * whose transport addresses need to be included into the worker address.
+     *
+     * The field is not mandatory. All device types will be included to the
+     * worker address, if the field is not specified (along with its
+     * corresponding bit in the field_mask).
+     */
+    uint32_t                            dev_type_map;
+} ucp_address_params_t;
+
 
 /**
  * @ingroup UCP_ENDPOINT
@@ -1223,7 +1277,7 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream);
  * @brief Get the address of the worker object.
  *
  * This routine returns the address of the worker object.  This address can be
- * passed to remote instances of the UCP library in order to to connect to this
+ * passed to remote instances of the UCP library in order to connect to this
  * worker. The memory for the address handle is allocated by this function, and
  * must be released by using @ref ucp_worker_release_address
  * "ucp_worker_release_address()" routine.
@@ -1238,6 +1292,28 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker,
                                     ucp_address_t **address_p,
                                     size_t *address_length_p);
 
+/**
+ * @ingroup UCP_WORKER
+ * @brief Get the address of the worker object.
+ *
+ * This routine returns the address of the worker object.  This address can be
+ * passed to remote instances of the UCP library in order to connect to this
+ * worker. The memory for the address handle is allocated by this function, and
+ * must be released by using @ref ucp_worker_release_address
+ * "ucp_worker_release_address()" routine.
+ *
+ * @param [in]  worker            Worker object whose address to return.
+ * @param [in]  params            User defined @ref ucp_address_params_t configurations
+ *                                for the @ref ucp_address_t "UCP worker address".
+ * @param [out] address_p         A pointer to the worker address.
+ * @param [out] address_length_p  The size in bytes of the address.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_worker_get_address_type(ucp_worker_h worker,
+                                         ucp_address_params_t *params,
+                                         ucp_address_t **address_p,
+                                         size_t *address_length_p);
 
 /**
  * @ingroup UCP_WORKER
