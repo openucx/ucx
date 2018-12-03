@@ -180,7 +180,7 @@ ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
 #if ENABLE_PARAMS_CHECK
 #define UCP_RKEY_RESOLVE(_rkey, _ep, _op_type) \
     ({ \
-        ucs_status_t status = UCS_OK; \
+        ucs_status_t status; \
         if ((_rkey)->ep != (_ep)) { \
             ucs_error("cannot use a remote key on a different endpoint than it was unpacked on"); \
             status = UCS_ERR_INVALID_PARAM; \
