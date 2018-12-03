@@ -35,16 +35,19 @@ struct ucx_perf_context {
     ptrdiff_t                    offset;
 
     /* Measurements */
-    ucs_time_t                   start_time;
-    ucs_time_t                   prev_time;
-    ucs_time_t                   end_time;
-    ucs_time_t                   report_interval;
+    double                       start_time_acc;  /* accurate start time */
+    ucs_time_t                   end_time;        /* inaccurate end time (upper bound) */
+    ucs_time_t                   prev_time;       /* time of previous iteration */
+    ucs_time_t                   report_interval; /* interval of showing report */
     ucx_perf_counter_t           max_iter;
+
+    /* Measurements of current/previous **report** */
     struct {
-        ucx_perf_counter_t       msgs;
-        ucx_perf_counter_t       bytes;
-        ucx_perf_counter_t       iters;
-        ucs_time_t               time;
+        ucx_perf_counter_t       msgs;    /* number of messages */
+        ucx_perf_counter_t       bytes;   /* number of bytes */
+        ucx_perf_counter_t       iters;   /* number of iterations */
+        ucs_time_t               time;    /* inaccurate time (for median and report interval) */
+        double                   time_acc; /* accurate time (for avg latency/bw/msgrate) */
     } current, prev;
 
     ucs_time_t                   timing_queue[TIMING_QUEUE_SIZE];
@@ -127,8 +130,13 @@ static UCS_F_ALWAYS_INLINE int ucx_perf_context_done(ucx_perf_context_t *perf)
 }
 
 
-static inline void ucx_perf_update(ucx_perf_context_t *perf, ucx_perf_counter_t iters,
-                                   size_t bytes)
+static inline void ucx_perf_get_time(ucx_perf_context_t *perf)
+{
+    perf->current.time_acc = ucs_get_accurate_time();
+}
+
+static inline void ucx_perf_update(ucx_perf_context_t *perf,
+                                   ucx_perf_counter_t iters, size_t bytes)
 {
     ucx_perf_result_t result;
 
@@ -137,11 +145,17 @@ static inline void ucx_perf_update(ucx_perf_context_t *perf, ucx_perf_counter_t 
     perf->current.bytes += bytes;
     perf->current.msgs  += 1;
 
-    perf->timing_queue[perf->timing_queue_head++] = perf->current.time - perf->prev_time;
-    perf->timing_queue_head %= TIMING_QUEUE_SIZE;
+    perf->timing_queue[perf->timing_queue_head] =
+                    perf->current.time - perf->prev_time;
+    ++perf->timing_queue_head;
+    if (perf->timing_queue_head == TIMING_QUEUE_SIZE) {
+        perf->timing_queue_head = 0;
+    }
+
     perf->prev_time = perf->current.time;
 
     if (perf->current.time - perf->prev.time >= perf->report_interval) {
+        ucx_perf_get_time(perf);
         ucx_perf_calc_result(perf, &result);
         rte_call(perf, report, &result, perf->params.report_arg, 0);
         perf->prev = perf->current;

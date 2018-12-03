@@ -37,10 +37,17 @@ BEGIN_C_DECLS
 #define ucs_memory_cpu_load_fence()   ucs_compiler_fence()
 #define ucs_memory_cpu_wc_fence()     asm volatile ("sfence" ::: "memory")
 
+extern int ucs_arch_x86_enable_rdtsc;
+
 
 static inline uint64_t ucs_arch_read_hres_clock()
 {
     uint32_t low, high;
+
+    if (ucs_unlikely(!ucs_arch_x86_enable_rdtsc)) {
+        return ucs_arch_generic_read_hres_clock();
+    }
+
     asm volatile ("rdtsc" : "=a" (low), "=d" (high));
     return ((uint64_t)high << 32) | (uint64_t)low;
 }
