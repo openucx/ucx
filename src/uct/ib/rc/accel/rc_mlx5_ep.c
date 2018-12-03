@@ -65,7 +65,8 @@ uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep,
                                    (comp == NULL) ? force_sig : MLX5_WQE_CTRL_CQ_UPDATE,
                                    UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super));
 
-    uct_rc_txqp_add_send_comp(iface, &ep->super.txqp, comp, sn);
+    uct_rc_txqp_add_send_comp(iface, &ep->super.txqp, comp, sn,
+                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
     return UCS_INPROGRESS;
 }
 
@@ -534,7 +535,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         sn = ep->tx.wq.sig_pi;
     }
 
-    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, sn);
+    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, sn, 0);
     UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super.super);
     return UCS_INPROGRESS;
 }
