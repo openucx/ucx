@@ -47,7 +47,7 @@ static inline ucs_time_t ucs_get_time()
 
 /**
  * @return The current accurate time, in seconds.
- * @note This function may have higher overheadthan @ref ucs_get_time()
+ * @note This function may have higher overhead than @ref ucs_get_time()
  */
 static inline double ucs_get_accurate_time()
 {
