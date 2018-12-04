@@ -1,6 +1,7 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
  * Copyright (c) Los Alamos National Security, LLC. 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) Triad National Security, LLC. 2018. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -30,7 +31,7 @@ typedef struct uct_ugni_cdm {
     uct_ugni_device_t *dev;        /**< Ugni device the cdm is connected to */
     ucs_thread_mode_t  thread_mode;
     uint32_t           address; 
-    uint16_t           domain_id;
+    uint32_t           domain_id;
 
 #if ENABLE_MT
     ucs_spinlock_t   lock;                      /**< Device lock */
@@ -56,7 +57,7 @@ typedef struct uct_devaddr_ugni_t {
 } UCS_S_PACKED uct_devaddr_ugni_t;
 
 typedef struct uct_sockaddr_ugni {
-     uint16_t   domain_id;
+     uint32_t   domain_id;
 } UCS_S_PACKED uct_sockaddr_ugni_t;
 
 typedef struct uct_ugni_flush_group {
