@@ -191,9 +191,16 @@ ucs_status_t init_device_list()
     int i, num_active_devices;
     int *dev_ids = NULL;
     gni_return_t ugni_rc = GNI_RC_SUCCESS;
-    uct_ugni_job_info_t *inf = uct_ugni_get_job_info();
+    uct_ugni_job_info_t *inf = NULL;
 
     /* check if devices were already initilized */
+
+    inf = uct_ugni_get_job_info();
+    if (NULL == inf) {
+        ucs_error("Unable to get Cray PMI info");
+        status = UCS_ERR_IO_ERROR;
+        goto err_zero;
+    }
 
     if (-1 != inf->num_devices) {
         ucs_debug("The device list is already initialized");
