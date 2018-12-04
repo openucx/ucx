@@ -65,7 +65,8 @@ uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep,
                                    (comp == NULL) ? force_sig : MLX5_WQE_CTRL_CQ_UPDATE,
                                    UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super));
 
-    uct_rc_txqp_add_send_comp(iface, &ep->super.txqp, comp, sn);
+    uct_rc_txqp_add_send_comp(iface, &ep->super.txqp, comp, sn,
+                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
     return UCS_INPROGRESS;
 }
 
@@ -359,7 +360,7 @@ uct_rc_mlx5_ep_atomic_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
                            uct_rc_iface_send_desc_t *desc, unsigned length,
                            uint64_t remote_addr, uct_rkey_t rkey,
                            uint64_t compare_mask, uint64_t compare,
-                           uint64_t swap_mask, uint64_t swap_add, int signal)
+                           uint64_t swap_mask, uint64_t swap_add)
 {
     uct_rc_iface_t *iface  = ucs_derived_of(ep->super.super.super.iface,
                                             uct_rc_iface_t);
@@ -372,7 +373,8 @@ uct_rc_mlx5_ep_atomic_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
                                opcode, desc + 1, length, &desc->lkey,
                                remote_addr, ib_rkey,
                                compare_mask, compare, swap_mask, swap_add,
-                               NULL, NULL, 0, signal, 0, INT_MAX, NULL);
+                               NULL, NULL, 0, MLX5_WQE_CTRL_CQ_UPDATE,
+                               0, INT_MAX, NULL);
 
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_rc_txqp_add_send_op(&ep->super.txqp, &desc->super);
@@ -394,8 +396,7 @@ uct_rc_mlx5_ep_atomic_fop(uct_rc_mlx5_ep_t *ep, int opcode, void *result, int ex
                                                                             length),
                                           result, comp);
     uct_rc_mlx5_ep_atomic_post(ep, opcode, desc, length, remote_addr, rkey,
-                               compare_mask, compare, swap_mask, swap_add,
-                               MLX5_WQE_CTRL_CQ_UPDATE);
+                               compare_mask, compare, swap_mask, swap_add);
     return UCS_INPROGRESS;
 }
 
@@ -426,7 +427,7 @@ uct_rc_mlx5_ep_atomic_op_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
     UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->mlx5_common.tx.atomic_desc_mp, desc);
 
     uct_rc_mlx5_ep_atomic_post(ep, op, desc, size, remote_addr, rkey,
-                               compare_mask, compare, swap_mask, swap, 0);
+                               compare_mask, compare, swap_mask, swap);
     return UCS_OK;
 }
 
@@ -534,7 +535,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         sn = ep->tx.wq.sig_pi;
     }
 
-    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, sn);
+    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, sn, 0);
     UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super.super);
     return UCS_INPROGRESS;
 }
