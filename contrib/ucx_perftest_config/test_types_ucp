@@ -1,26 +1,3 @@
-# PUT
-put_short_bw  -t put_bw -D short
-put_bcopy_bw  -t put_bw -D bcopy
-put_zcopy_bw  -t put_bw -D zcopy
-put_short_lat -t put_lat -D short
-put_bcopy_lat -t put_lat -D bcopy
-put_zcopy_lat -t put_lat -D zcopy
-# AM
-am_short_lat  -t am_lat -D short
-am_bcopy_lat  -t am_lat -D bcopy
-am_zcopy_lat  -t am_lat -D zcopy
-am_short_bw   -t am_bw -D short
-am_bcopy_bw   -t am_bw -D bcopy
-am_zcopy_bw   -t am_bw -D zcopy
-# GET
-get_bcopy     -t get -D bcopy
-get_zcopy     -t get -D zcopy
-# ATOMICS
-add_lat       -t add_lat
-add_mr        -t add_mr
-fadd          -t fadd
-swap          -t swap
-cswap         -t cswap
 # UCP
 ucp_iov_contig_tag_lat      -t tag_lat -D iov,contig
 ucp_iov_iov_tag_lat         -t tag_lat -D iov,iov

@@ -574,8 +574,8 @@ run_ucx_perftest_mpi() {
 	# hack for perftest, no way to override params used in batch
 	# todo: fix in perftest
 	sed -s 's,-n [0-9]*,-n 1000,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
-	cat $ucx_inst_ptest/test_types | grep -v cuda | grep -v ucp | sort -R > $ucx_inst_ptest/test_types_short_uct
-	cat $ucx_inst_ptest/test_types | grep -v cuda | grep ucp | sort -R > $ucx_inst_ptest/test_types_short_ucp
+	cat $ucx_inst_ptest/test_types_uct | sort -R > $ucx_inst_ptest/test_types_short_uct
+	cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
 
 	UCT_PERFTEST="$ucx_inst/bin/ucx_perftest \
 					-b $ucx_inst_ptest/test_types_short_uct \
@@ -613,7 +613,7 @@ run_ucx_perftest_mpi() {
 	if (lsmod | grep -q "nv_peer_mem") && (lsmod | grep -q "gdrdrv")
 	then
 		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
-		cat $ucx_inst_ptest/test_types | grep cuda | sort -R > $ucx_inst_ptest/test_types_short
+		cat $ucx_inst_ptest/test_types_ucp | grep cuda | sort -R > $ucx_inst_ptest/test_types_short
 		echo "==== Running ucx_perf with cuda memory===="
 		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=y $AFFINITY $UCX_PERFTEST
 		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=n $AFFINITY $UCX_PERFTEST
@@ -963,3 +963,4 @@ do_distributed_task 3 4 check_inst_headers
 if [ -n "$JENKINS_RUN_TESTS" ]
 then
 	run_tests
+fi
