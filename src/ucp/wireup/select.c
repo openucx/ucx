@@ -1107,16 +1107,15 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
     ucp_wireup_select_bw_info_t bw_info;
     uct_memory_type_t mem_type;
 
-    if ((ucp_ep_get_context_features(ep) & UCP_FEATURE_RMA) ||
-        (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) {
-        /* if needed for RMA, need also access for remote allocated memory */
-        bw_info.criteria.remote_md_flags = bw_info.criteria.local_md_flags = 0;
-    } else {
-        if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG)) {
-            return UCS_OK;
-        }
+    if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
+        bw_info.criteria.remote_md_flags = 0;
+        bw_info.criteria.local_md_flags  = 0;
+    } else if (ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) {
         /* if needed for RNDV, need only access for remote registered memory */
-        bw_info.criteria.remote_md_flags = bw_info.criteria.local_md_flags = UCT_MD_FLAG_REG;
+        bw_info.criteria.remote_md_flags = UCT_MD_FLAG_REG;
+        bw_info.criteria.local_md_flags  = UCT_MD_FLAG_REG;
+    } else {
+        return UCS_OK;
     }
 
     bw_info.criteria.title              = "high-bw remote memory access";
