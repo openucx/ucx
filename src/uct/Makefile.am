@@ -114,8 +114,7 @@ noinst_HEADERS += \
 
 libuct_la_SOURCES += \
 	ib/dc/dc_mlx5.c \
-	ib/dc/dc_mlx5_ep.c \
-	ib/dc/dc_impl.c
+	ib/dc/dc_mlx5_ep.c
 endif
 
 if HAVE_TL_UD
