@@ -423,7 +423,7 @@ ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device,
     ucs_debug("Creating new command domain with id 0x%08x (0x80000000ul | ((%d << %d) + %d))",
               cdm->domain_id, getpid (), free_bits, ugni_domain_counter);
     modes = GNI_CDM_MODE_FORK_FULLCOPY | GNI_CDM_MODE_CACHED_AMO_ENABLED |
-        GNI_CDM_MODE_ERR_NO_KILL | GNI_CDM_MODE_FAST_DATAGRAM_POLL;
+        GNI_CDM_MODE_ERR_NO_KILL | GNI_CDM_MODE_FAST_DATAGRAM_POLL | GNI_CDM_MODE_FMA_SHARED;
     ugni_rc = GNI_CdmCreate(cdm->domain_id, job_info->ptag, job_info->cookie,
                             modes, &cdm->cdm_handle);
     if (GNI_RC_SUCCESS != ugni_rc) {
