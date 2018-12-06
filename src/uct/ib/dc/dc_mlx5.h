@@ -132,34 +132,33 @@ struct uct_dc_mlx5_iface {
 
 
 extern ucs_config_field_t uct_dc_mlx5_iface_config_table[];
-extern ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[];
 
-ucs_status_t uct_dc_iface_create_dct(uct_dc_mlx5_iface_t *iface);
+ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface);
 
-int uct_dc_iface_is_reachable(const uct_iface_h tl_iface,
-                              const uct_device_addr_t *dev_addr,
-                              const uct_iface_addr_t *iface_addr);
-ucs_status_t uct_dc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr);
+int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
+                                   const uct_device_addr_t *dev_addr,
+                                   const uct_iface_addr_t *iface_addr);
+ucs_status_t uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr);
 
 ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
                                               const char *tl_name, unsigned flags,
                                               uct_tl_resource_desc_t **resources_p,
                                               unsigned *num_resources_p);
 
-ucs_status_t uct_dc_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp);
+ucs_status_t uct_dc_mlx5_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp);
 
-void uct_dc_iface_set_quota(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_iface_config_t *config);
+void uct_dc_mlx5_iface_set_quota(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_iface_config_t *config);
 
-ucs_status_t uct_dc_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface);
+ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface);
 
-ucs_status_t uct_dc_iface_dci_connect(uct_dc_mlx5_iface_t *iface, uct_rc_txqp_t *dci);
+ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface, uct_rc_txqp_t *dci);
 
-void uct_dc_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface);
+void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface);
 
-ucs_status_t uct_dc_iface_fc_grant(uct_pending_req_t *self);
+ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self);
 
-ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
-                                     uct_rc_hdr_t *hdr, unsigned length,
+ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
+                                          uct_rc_hdr_t *hdr, unsigned length,
                                           uint32_t imm_data, uint16_t lid, unsigned flags);
 
 ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
@@ -169,14 +168,14 @@ int uct_dc_get_dct_num(uct_dc_mlx5_iface_t *iface);
 
 void uct_dc_destroy_dct(uct_dc_mlx5_iface_t *iface);
 
-void uct_dc_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
+void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
 
 ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *dc_mlx5_iface, int dci);
 
-ucs_status_t uct_dc_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
+ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_mlx5_iface_config_t *config);
 
-void uct_dc_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max);
+void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max);
 
 const static char *uct_dc_tx_policy_names[] UCS_V_UNUSED = {
     [UCT_DC_TX_POLICY_DCS]           = "dcs",
@@ -185,12 +184,12 @@ const static char *uct_dc_tx_policy_names[] UCS_V_UNUSED = {
 };
 
 #if IBV_EXP_HW_TM_DC
-void uct_dc_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,
-                                      struct ibv_exp_create_srq_attr *srq_attr,
-                                      struct ibv_exp_srq_dc_offload_params *dc_op);
+void uct_dc_mlx5_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,
+                                           struct ibv_exp_create_srq_attr *srq_attr,
+                                           struct ibv_exp_srq_dc_offload_params *dc_op);
 
 static UCS_F_ALWAYS_INLINE void
-uct_dc_iface_fill_ravh(struct ibv_exp_tmh_ravh *ravh, uint32_t dct_num)
+uct_dc_mlx5_iface_fill_ravh(struct ibv_exp_tmh_ravh *ravh, uint32_t dct_num)
 {
     ravh->sl_dct        = htobe32(dct_num);
     ravh->dc_access_key = htobe64(UCT_IB_KEY);
@@ -204,7 +203,7 @@ uct_dc_iface_fill_ravh(struct ibv_exp_tmh_ravh *ravh, uint32_t dct_num)
  * linear search is most probably the best way to go
  * because the number of dcis is usually small
  */
-static inline uint8_t uct_dc_iface_dci_find(uct_dc_mlx5_iface_t *iface, uint32_t qp_num)
+static inline uint8_t uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, uint32_t qp_num)
 {
     uct_dc_dci_t *dcis = iface->tx.dcis;
     int i, ndci = iface->tx.ndci;
@@ -217,25 +216,25 @@ static inline uint8_t uct_dc_iface_dci_find(uct_dc_mlx5_iface_t *iface, uint32_t
     ucs_fatal("DCI (qpnum=%d) does not exist", qp_num);
 }
 
-static inline int uct_dc_iface_dci_has_tx_resources(uct_dc_mlx5_iface_t *iface, uint8_t dci)
+static inline int uct_dc_mlx5_iface_dci_has_tx_resources(uct_dc_mlx5_iface_t *iface, uint8_t dci)
 {
     return uct_rc_txqp_available(&iface->tx.dcis[dci].txqp) > 0;
 }
 
 /* returns pending queue of eps waiting for tx resources */
-static inline ucs_arbiter_t *uct_dc_iface_tx_waitq(uct_dc_mlx5_iface_t *iface)
+static inline ucs_arbiter_t *uct_dc_mlx5_iface_tx_waitq(uct_dc_mlx5_iface_t *iface)
 {
     return &iface->tx.dci_arbiter;
 }
 
 /* returns pending queue of eps waiting for the dci allocation */
-static inline ucs_arbiter_t *uct_dc_iface_dci_waitq(uct_dc_mlx5_iface_t *iface)
+static inline ucs_arbiter_t *uct_dc_mlx5_iface_dci_waitq(uct_dc_mlx5_iface_t *iface)
 {
     return &iface->super.tx.arbiter;
 }
 
 static inline int
-uct_dc_iface_dci_has_outstanding(uct_dc_mlx5_iface_t *iface, int dci)
+uct_dc_mlx5_iface_dci_has_outstanding(uct_dc_mlx5_iface_t *iface, int dci)
 {
     uct_rc_txqp_t *txqp;
 
@@ -243,10 +242,10 @@ uct_dc_iface_dci_has_outstanding(uct_dc_mlx5_iface_t *iface, int dci)
     return uct_rc_txqp_available(txqp) < (int16_t)iface->super.config.tx_qp_len;
 }
 
-static inline ucs_status_t uct_dc_iface_flush_dci(uct_dc_mlx5_iface_t *iface, int dci)
+static inline ucs_status_t uct_dc_mlx5_iface_flush_dci(uct_dc_mlx5_iface_t *iface, int dci)
 {
 
-    if (!uct_dc_iface_dci_has_outstanding(iface, dci)) {
+    if (!uct_dc_mlx5_iface_dci_has_outstanding(iface, dci)) {
         return UCS_OK;
     }
     ucs_trace_poll("dci %d is not flushed %d/%d", dci,

@@ -19,22 +19,6 @@
 #include <string.h>
 
 
-ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
-    {"DC_", "", NULL, 0,
-     UCS_CONFIG_TYPE_TABLE(uct_dc_mlx5_iface_config_sub_table)},
-
-    {"", "", NULL,
-     ucs_offsetof(uct_dc_mlx5_iface_config_t, mlx5_ud),
-     UCS_CONFIG_TYPE_TABLE(uct_ud_mlx5_iface_common_config_table)},
-
-    {"", "", NULL,
-     ucs_offsetof(uct_dc_mlx5_iface_config_t, mlx5_common),
-     UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
-
-    {NULL}
-};
-
-
 static ucs_status_t
 uct_dc_mlx5_ep_create_connected(uct_iface_h tl_iface,
                                 const uct_device_addr_t *dev_addr,
@@ -66,7 +50,7 @@ uct_dc_mlx5_ep_create_connected(uct_iface_h tl_iface,
 
 static void uct_dc_mlx5_ep_destroy(uct_ep_h tl_ep)
 {
-    uct_dc_ep_cleanup(tl_ep, &UCS_CLASS_NAME(uct_dc_mlx5_ep_t));
+    uct_dc_mlx5_ep_cleanup(tl_ep, &UCS_CLASS_NAME(uct_dc_mlx5_ep_t));
 }
 
 static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
@@ -638,7 +622,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
     }
 
     if (ep->dci == UCT_DC_EP_NO_DCI) {
-        if (!uct_dc_iface_dci_can_alloc(iface)) {
+        if (!uct_dc_mlx5_iface_dci_can_alloc(iface)) {
             return UCS_ERR_NO_RESOURCE; /* waiting for dci */
         } else {
             UCT_TL_EP_STAT_FLUSH(&ep->super); /* no sends */
@@ -646,11 +630,11 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
         }
     }
 
-    if (!uct_dc_iface_dci_ep_can_send(ep)) {
+    if (!uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
         return UCS_ERR_NO_RESOURCE; /* cannot send */
     }
 
-    status = uct_dc_iface_flush_dci(iface, ep->dci);
+    status = uct_dc_mlx5_iface_flush_dci(iface, ep->dci);
     if (status == UCS_OK) {
         UCT_TL_EP_STAT_FLUSH(&ep->super);
         return UCS_OK; /* all sends completed */
@@ -684,7 +668,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     ucs_memory_cpu_load_fence();
 
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    dci = uct_dc_iface_dci_find(iface, qp_num);
+    dci = uct_dc_mlx5_iface_dci_find(iface, qp_num);
     txqp = &iface->tx.dcis[dci].txqp;
     txwq = &iface->dci_wqs[dci];
     hw_ci = ntohs(cqe->wqe_counter);
@@ -693,10 +677,10 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
                    iface, dci, qp_num, txqp, hw_ci);
 
     uct_rc_mlx5_common_update_tx_res(&iface->super, txwq, txqp, hw_ci);
-    uct_dc_iface_dci_put(iface, dci);
+    uct_dc_mlx5_iface_dci_put(iface, dci);
     uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
 
-    uct_dc_iface_progress_pending(iface);
+    uct_dc_mlx5_iface_progress_pending(iface);
     return 1;
 }
 
@@ -859,7 +843,7 @@ ucs_status_ptr_t uct_dc_mlx5_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     op_index = uct_rc_iface_tag_get_op_id(&iface->super, comp);
 
-    uct_dc_iface_fill_ravh(&ravh, uct_dc_get_dct_num(iface));
+    uct_dc_mlx5_iface_fill_ravh(&ravh, uct_dc_get_dct_num(iface));
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
 
@@ -1116,7 +1100,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
-ucs_status_t uct_dc_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
+ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                       uct_rc_txqp_t *dci)
 {
     struct ibv_qp_attr attr;
@@ -1174,7 +1158,7 @@ ucs_status_t uct_dc_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     return UCS_OK;
 }
 
-ucs_status_t uct_dc_iface_create_dct(uct_dc_mlx5_iface_t *iface)
+ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
 {
     uct_dc_mlx5_iface_t *mlx5 = ucs_derived_of(iface, uct_dc_mlx5_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super);
@@ -1278,8 +1262,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .ep_atomic32_post         = uct_dc_mlx5_ep_atomic32_post,
     .ep_atomic64_fetch        = uct_dc_mlx5_ep_atomic64_fetch,
     .ep_atomic32_fetch        = uct_dc_mlx5_ep_atomic32_fetch,
-    .ep_pending_add           = uct_dc_ep_pending_add,
-    .ep_pending_purge         = uct_dc_ep_pending_purge,
+    .ep_pending_add           = uct_dc_mlx5_ep_pending_add,
+    .ep_pending_purge         = uct_dc_mlx5_ep_pending_purge,
     .ep_flush                 = uct_dc_mlx5_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
 #if IBV_EXP_HW_TM_DC
@@ -1292,7 +1276,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_tag_recv_zcopy     = uct_dc_mlx5_iface_tag_recv_zcopy,
     .iface_tag_recv_cancel    = uct_dc_mlx5_iface_tag_recv_cancel,
 #endif
-    .iface_flush              = uct_dc_iface_flush,
+    .iface_flush              = uct_dc_mlx5_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_dc_mlx5_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
@@ -1304,8 +1288,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t),
     .iface_query              = uct_dc_mlx5_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_dc_iface_is_reachable,
-    .iface_get_address        = uct_dc_iface_get_address,
+    .iface_is_reachable       = uct_dc_mlx5_iface_is_reachable,
+    .iface_get_address        = uct_dc_mlx5_iface_get_address,
     },
     .create_cq                = uct_ib_mlx5_create_cq,
     .arm_cq                   = uct_ib_iface_arm_cq,
@@ -1319,7 +1303,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
 #endif
     },
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
-    .fc_handler               = uct_dc_iface_fc_handler,
+    .fc_handler               = uct_dc_mlx5_iface_fc_handler,
 };
 
 
@@ -1366,7 +1350,7 @@ static ucs_status_t uct_dc_mlx5_iface_tag_init(uct_dc_mlx5_iface_t *iface,
         struct ibv_exp_srq_dc_offload_params dc_op   = {};
         ucs_status_t status;
 
-        uct_dc_iface_fill_xrq_init_attrs(&iface->super, &srq_init_attr, &dc_op);
+        uct_dc_mlx5_iface_fill_xrq_init_attrs(&iface->super, &srq_init_attr, &dc_op);
 
         status = uct_rc_mlx5_iface_common_tag_init(&iface->mlx5_common,
                                                    &iface->super,
@@ -1380,7 +1364,7 @@ static ucs_status_t uct_dc_mlx5_iface_tag_init(uct_dc_mlx5_iface_t *iface,
         }
 
         /* TM XRQ is ready, can create DCT now */
-        status = uct_dc_iface_create_dct(iface);
+        status = uct_dc_mlx5_iface_create_dct(iface);
         if (status != UCS_OK) {
             uct_rc_mlx5_iface_common_tag_cleanup(&iface->mlx5_common,
                                                  &iface->super);
@@ -1433,7 +1417,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
         return UCS_ERR_INVALID_PARAM;
     }
 
-    uct_dc_iface_init_version(self, md);
+    uct_dc_mlx5_iface_init_version(self, md);
 
     self->tx.ndci                    = config->ndci;
     self->tx.policy                  = config->tx_policy;
@@ -1443,14 +1427,14 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     /* create DC target */
     if (!UCT_RC_IFACE_TM_ENABLED(&self->super)) {
-        status = uct_dc_iface_create_dct(self);
+        status = uct_dc_mlx5_iface_create_dct(self);
         if (status != UCS_OK) {
             goto err;
         }
     }
 
     /* create DC initiators */
-    status = uct_dc_iface_create_dcis(self, config);
+    status = uct_dc_mlx5_iface_create_dcis(self, config);
     if (status != UCS_OK) {
         goto err_destroy_dct;
     }
@@ -1461,7 +1445,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
               0 : uct_dc_get_dct_num(self));
 
     /* Create fake endpoint which will be used for sending FC grants */
-    uct_dc_iface_init_fc_ep(self);
+    uct_dc_mlx5_iface_init_fc_ep(self);
 
     ucs_arbiter_init(&self->tx.dci_arbiter);
 
@@ -1530,10 +1514,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
 
     uct_dc_destroy_dct(self);
     ucs_list_for_each_safe(ep, tmp, &self->tx.gc_list, list) {
-        uct_dc_ep_release(ep);
+        uct_dc_mlx5_ep_release(ep);
     }
-    uct_dc_iface_dcis_destroy(self, self->tx.ndci);
-    uct_dc_iface_cleanup_fc_ep(self);
+    uct_dc_mlx5_iface_dcis_destroy(self, self->tx.ndci);
+    uct_dc_mlx5_iface_cleanup_fc_ep(self);
     ucs_arbiter_cleanup(&self->tx.dci_arbiter);
 }
 
