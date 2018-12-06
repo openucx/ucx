@@ -613,13 +613,13 @@ run_ucx_perftest_mpi() {
 	if (lsmod | grep -q "nv_peer_mem") && (lsmod | grep -q "gdrdrv")
 	then
 		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
-		cat $ucx_inst_ptest/test_types_ucp | grep cuda | sort -R > $ucx_inst_ptest/test_types_short
+		cat $ucx_inst_ptest/test_types_ucp | grep cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
 		echo "==== Running ucx_perf with cuda memory===="
-		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=y $AFFINITY $UCX_PERFTEST
-		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=n $AFFINITY $UCX_PERFTEST
-		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy $AFFINITY $UCX_PERFTEST
-		$MPIRUN -np 2 -x UCX_TLS=self,mm,cma,cuda_copy $AFFINITY $UCX_PERFTEST
-		$MPIRUN -np 2 $AFFINITY $UCX_PERFTEST
+		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=y $AFFINITY $UCP_PERFTEST
+		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=n $AFFINITY $UCP_PERFTEST
+		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy $AFFINITY $UCP_PERFTEST
+		$MPIRUN -np 2 -x UCX_TLS=self,mm,cma,cuda_copy $AFFINITY $UCP_PERFTEST
+		$MPIRUN -np 2 $AFFINITY $UCP_PERFTEST
 		unset CUDA_VISIBLE_DEVICES
 	fi
 }
