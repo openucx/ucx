@@ -85,7 +85,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     }
 #endif
 
-    status = uct_dc_iface_query(iface, iface_attr,
+    status = uct_rc_iface_query(&iface->super, iface_attr,
                                 max_put_inline,
                                 max_am_inline,
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE),
@@ -94,6 +94,14 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     if (status != UCS_OK) {
         return status;
     }
+
+    /* fixup flags and address lengths */
+    iface_attr->cap.flags &= ~UCT_IFACE_FLAG_CONNECT_TO_EP;
+    iface_attr->cap.flags |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+    iface_attr->ep_addr_len       = 0;
+    iface_attr->max_conn_priv     = 0;
+    iface_attr->iface_addr_len    = sizeof(uct_dc_mlx5_iface_addr_t);
+    iface_attr->latency.overhead += 60e-9; /* connect packet + cqe */
 
     uct_rc_mlx5_iface_common_query(&iface->super.super, iface_attr);
     return UCS_OK;
@@ -608,20 +616,52 @@ ucs_status_t uct_dc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
 
 ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
-                                                uct_dc_mlx5_iface_t);
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t    *ep    = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     ucs_status_t        status;
 
-    status = uct_dc_ep_flush(tl_ep, flags, comp);
+    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+        if (ep->dci != UCT_DC_EP_NO_DCI) {
+            uct_rc_txqp_purge_outstanding(&iface->tx.dcis[ep->dci].txqp,
+                                          UCS_ERR_CANCELED, 0);
+#if ENABLE_ASSERT
+            iface->tx.dcis[ep->dci].flags |= UCT_DC_DCI_FLAG_EP_CANCELED;
+#endif
+        }
+
+        uct_ep_pending_purge(tl_ep, NULL, 0);
+        return UCS_OK;
+    }
+
+    if (!uct_rc_iface_has_tx_resources(&iface->super)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    if (ep->dci == UCT_DC_EP_NO_DCI) {
+        if (!uct_dc_iface_dci_can_alloc(iface)) {
+            return UCS_ERR_NO_RESOURCE; /* waiting for dci */
+        } else {
+            UCT_TL_EP_STAT_FLUSH(&ep->super); /* no sends */
+            return UCS_OK;
+        }
+    }
+
+    if (!uct_dc_iface_dci_ep_can_send(ep)) {
+        return UCS_ERR_NO_RESOURCE; /* cannot send */
+    }
+
+    status = uct_dc_iface_flush_dci(iface, ep->dci);
     if (status == UCS_OK) {
+        UCT_TL_EP_STAT_FLUSH(&ep->super);
         return UCS_OK; /* all sends completed */
     }
 
-    if (status == UCS_INPROGRESS) {
-        ucs_assert(ep->dci != UCT_DC_EP_NO_DCI);
-        uct_dc_mlx5_iface_add_send_comp(iface, ep, comp);
-    }
+    ucs_assert(status == UCS_INPROGRESS);
+    UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
+
+    ucs_assert(ep->dci != UCT_DC_EP_NO_DCI);
+    uct_dc_mlx5_iface_add_send_comp(iface, ep, comp);
+
     return status;
 }
 

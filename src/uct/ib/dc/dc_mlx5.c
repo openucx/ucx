@@ -257,34 +257,9 @@ void uct_dc_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md)
     }
 }
 
-ucs_status_t uct_dc_iface_query(uct_dc_mlx5_iface_t *iface,
-                                uct_iface_attr_t *iface_attr,
-                                size_t put_max_short, size_t max_inline,
-                                size_t am_max_hdr, size_t am_max_iov,
-                                size_t tag_max_iov)
-{
-    ucs_status_t status;
-
-    status = uct_rc_iface_query(&iface->super, iface_attr, put_max_short,
-                                max_inline, am_max_hdr, am_max_iov, tag_max_iov);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    /* fixup flags and address lengths */
-    iface_attr->cap.flags &= ~UCT_IFACE_FLAG_CONNECT_TO_EP;
-    iface_attr->cap.flags |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
-    iface_attr->ep_addr_len       = 0;
-    iface_attr->max_conn_priv     = 0;
-    iface_attr->iface_addr_len    = sizeof(uct_dc_mlx5_iface_addr_t);
-    iface_attr->latency.overhead += 60e-9; /* connect packet + cqe */
-
-    return UCS_OK;
-}
-
 int uct_dc_iface_is_reachable(const uct_iface_h tl_iface,
-                              const uct_device_addr_t *dev_addr,
-                              const uct_iface_addr_t *iface_addr)
+                                   const uct_device_addr_t *dev_addr,
+                                   const uct_iface_addr_t *iface_addr)
 {
     uct_dc_mlx5_iface_addr_t *addr = (uct_dc_mlx5_iface_addr_t *)iface_addr;
     uct_dc_mlx5_iface_t UCS_V_UNUSED *iface;

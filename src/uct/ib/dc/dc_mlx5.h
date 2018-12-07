@@ -136,12 +136,6 @@ extern ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[];
 
 ucs_status_t uct_dc_iface_create_dct(uct_dc_mlx5_iface_t *iface);
 
-ucs_status_t uct_dc_iface_query(uct_dc_mlx5_iface_t *iface,
-                                uct_iface_attr_t *iface_attr,
-                                size_t put_max_short, size_t max_inline,
-                                size_t am_max_hdr, size_t am_max_iov,
-                                size_t tag_max_iov);
-
 int uct_dc_iface_is_reachable(const uct_iface_h tl_iface,
                               const uct_device_addr_t *dev_addr,
                               const uct_iface_addr_t *iface_addr);
