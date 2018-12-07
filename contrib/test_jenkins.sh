@@ -574,10 +574,15 @@ run_ucx_perftest_mpi() {
 	# hack for perftest, no way to override params used in batch
 	# todo: fix in perftest
 	sed -s 's,-n [0-9]*,-n 1000,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
-	cat $ucx_inst_ptest/test_types | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_short
+	cat $ucx_inst_ptest/test_types_uct | sort -R > $ucx_inst_ptest/test_types_short_uct
+	cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
 
-	UCX_PERFTEST="$ucx_inst/bin/ucx_perftest \
-					-b $ucx_inst_ptest/test_types_short \
+	UCT_PERFTEST="$ucx_inst/bin/ucx_perftest \
+					-b $ucx_inst_ptest/test_types_short_uct \
+					-b $ucx_inst_ptest/msg_pow2_short -w 1"
+
+	UCP_PERFTEST="$ucx_inst/bin/ucx_perftest \
+					-b $ucx_inst_ptest/test_types_short_ucp \
 					-b $ucx_inst_ptest/msg_pow2_short -w 1"
 
 	# shared memory, IB
@@ -589,27 +594,32 @@ run_ucx_perftest_mpi() {
 	do
 		if [[ $ucx_dev =~ .*mlx5.* ]]; then
 			opt_transports="-b $ucx_inst_ptest/transports"
+			tls=`awk '{print $3 }' $ucx_inst_ptest/transports | tr '\n' ',' | sed -r 's/,$//; s/mlx5/x/g'`
+			ucx_env_vars="-x UCX_NET_DEVICES=$ucx_dev -x UCX_TLS=$tls"
 		elif [[ $ucx_dev =~ posix ]]; then
 			opt_transports="-x mm"
+			ucx_env_vars="-x UCX_TLS=mm"
 		else
 			opt_transports="-x rc"
+			ucx_env_vars="-x UCX_NET_DEVICES=$ucx_dev -x UCX_TLS=rc"
 		fi
 
 		echo "==== Running ucx_perf kit on $ucx_dev ===="
-		$MPIRUN -np 2 $AFFINITY $UCX_PERFTEST -d $ucx_dev $opt_transports
+		$MPIRUN -np 2 $AFFINITY $UCT_PERFTEST -d $ucx_dev $opt_transports
+		$MPIRUN -np 2 $ucx_env_vars $AFFINITY $UCP_PERFTEST
 	done
 
 	# run cuda tests
 	if (lsmod | grep -q "nv_peer_mem") && (lsmod | grep -q "gdrdrv")
 	then
 		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus)),$(($(($worker+1))%$num_gpus))
-		cat $ucx_inst_ptest/test_types | grep cuda | sort -R > $ucx_inst_ptest/test_types_short
+		cat $ucx_inst_ptest/test_types_ucp | grep cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
 		echo "==== Running ucx_perf with cuda memory===="
-		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=y $AFFINITY $UCX_PERFTEST
-		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=n $AFFINITY $UCX_PERFTEST
-		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy $AFFINITY $UCX_PERFTEST
-		$MPIRUN -np 2 -x UCX_TLS=self,mm,cma,cuda_copy $AFFINITY $UCX_PERFTEST
-		$MPIRUN -np 2 $AFFINITY $UCX_PERFTEST
+		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=y $AFFINITY $UCP_PERFTEST
+		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy,gdr_copy -x UCX_MEMTYPE_CACHE=n $AFFINITY $UCP_PERFTEST
+		$MPIRUN -np 2 -x UCX_TLS=rc,cuda_copy $AFFINITY $UCP_PERFTEST
+		$MPIRUN -np 2 -x UCX_TLS=self,mm,cma,cuda_copy $AFFINITY $UCP_PERFTEST
+		$MPIRUN -np 2 $AFFINITY $UCP_PERFTEST
 		unset CUDA_VISIBLE_DEVICES
 	fi
 }
