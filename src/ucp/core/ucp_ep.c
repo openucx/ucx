@@ -1219,8 +1219,10 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         rma_config                   = &config->rma[lane];
         rma_config->put_zcopy_thresh = SIZE_MAX;
         rma_config->get_zcopy_thresh = SIZE_MAX;
-        rma_config->max_put_short    = -1;
-        rma_config->max_get_short    = -1;
+        rma_config->max_put_short    = SIZE_MAX;
+        rma_config->max_get_short    = SIZE_MAX;
+        rma_config->max_put_bcopy    = SIZE_MAX;
+        rma_config->max_get_bcopy    = SIZE_MAX;
 
         if (ucp_ep_config_get_multi_lane_prio(config->key.rma_lanes, lane) == -1) {
             continue;
