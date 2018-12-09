@@ -1219,8 +1219,10 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         rma_config                   = &config->rma[lane];
         rma_config->put_zcopy_thresh = SIZE_MAX;
         rma_config->get_zcopy_thresh = SIZE_MAX;
-        rma_config->max_put_short    = -1;
-        rma_config->max_get_short    = -1;
+        rma_config->max_put_short    = SIZE_MAX;
+        rma_config->max_get_short    = SIZE_MAX;
+        rma_config->max_put_bcopy    = SIZE_MAX;
+        rma_config->max_get_bcopy    = SIZE_MAX;
 
         if (ucp_ep_config_get_multi_lane_prio(config->key.rma_lanes, lane) == -1) {
             continue;
@@ -1230,12 +1232,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
-                rma_config->max_put_short = iface_attr->cap.put.max_short;
-            }
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
-                rma_config->max_put_bcopy = iface_attr->cap.put.max_bcopy;
-            }
+            /* PUT */
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
                 rma_config->max_put_zcopy    = iface_attr->cap.put.max_zcopy;
                 /* TODO: formula */
@@ -1247,12 +1244,16 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                 rma_config->put_zcopy_thresh = ucs_max(rma_config->put_zcopy_thresh,
                                                        iface_attr->cap.put.min_zcopy);
             }
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_SHORT) {
-                rma_config->max_get_short = iface_attr->cap.get.max_short;
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
+                rma_config->max_put_bcopy = ucs_min(iface_attr->cap.put.max_bcopy,
+                                                    rma_config->put_zcopy_thresh);
             }
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) {
-                rma_config->max_get_bcopy = iface_attr->cap.get.max_bcopy;
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
+                rma_config->max_put_short = ucs_min(iface_attr->cap.put.max_short,
+                                                    rma_config->max_put_bcopy);
             }
+
+            /* GET */
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
                 /* TODO: formula */
                 rma_config->max_get_zcopy = iface_attr->cap.get.max_zcopy;
@@ -1263,6 +1264,14 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                 }
                 rma_config->get_zcopy_thresh = ucs_max(rma_config->get_zcopy_thresh,
                                                        iface_attr->cap.get.min_zcopy);
+            }
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) {
+                rma_config->max_get_bcopy = ucs_min(iface_attr->cap.get.max_bcopy,
+                                                    rma_config->get_zcopy_thresh);
+            }
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_SHORT) {
+                rma_config->max_get_short = ucs_min(iface_attr->cap.get.max_short,
+                                                    rma_config->max_get_bcopy);
             }
         } else {
             rma_config->max_put_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
