@@ -1602,7 +1602,7 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
 
         if ((attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS) &&
             (attr->address_flags != 0)) {
-            tl_bitmap = 0;
+            tl_bitmap        = 0;
             uct_dev_type_map = ucp_dev_type_map2uct(attr->address_flags);
             ucs_for_each_bit(tl_id, context->tl_bitmap) {
                 if (UCS_BIT(context->tl_rscs[tl_id].tl_rsc.dev_type) & uct_dev_type_map) {
