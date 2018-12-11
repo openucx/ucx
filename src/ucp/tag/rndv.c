@@ -325,6 +325,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
 {
     ucp_request_t *rndv_req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_h ep             = rndv_req->send.ep;
+    ucp_ep_config_t *config = ucp_ep_config(ep);
     const size_t max_iovcnt = 1;
     uct_iface_attr_t* attrs;
     ucs_status_t status;
@@ -365,8 +366,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     attrs     = ucp_worker_iface_get_attr(rndv_req->send.ep->worker, rsc_index);
     align     = attrs->cap.get.opt_zcopy_align;
     ucp_mtu   = attrs->cap.get.align_mtu;
-    min_zcopy = ucp_ep_config(rndv_req->send.ep)->tag.rndv.min_get_zcopy;
-    max_zcopy = ucp_ep_config(rndv_req->send.ep)->tag.rndv.max_get_zcopy;
+    min_zcopy = config->tag.rndv.min_get_zcopy;
+    max_zcopy = config->tag.rndv.max_get_zcopy;
 
     offset    = rndv_req->send.state.dt.offset;
     remainder = (uintptr_t)rndv_req->send.buffer % align;
@@ -374,8 +375,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     if ((offset == 0) && (remainder > 0) && (rndv_req->send.length > ucp_mtu)) {
         length = ucp_mtu - remainder;
     } else {
-        chunk = ucs_align_up(rndv_req->send.length /
-                             rndv_req->send.rndv_get.lane_count, align);
+        chunk = ucs_align_up((size_t)(rndv_req->send.length /
+                                      rndv_req->send.rndv_get.lane_count *
+                                      config->tag.rndv.scale[rndv_req->send.lane]), align);
         length = ucs_min(ucs_min(chunk, rndv_req->send.length - offset), max_zcopy);
     }
 
