@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2016-.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2016-2018.  ALL RIGHTS RESERVED.
 
 * See file LICENSE for terms.
 */
@@ -15,21 +15,21 @@
 #include <uct/ib/ud/accel/ud_mlx5_common.h>
 
 
-#define UCT_DC_IFACE_MAX_DCIS   16
+#define UCT_DC_MLX5_IFACE_MAX_DCIS   16
 
-#define UCT_DC_IFACE_ADDR_TM_ENABLED(_addr) \
-    (!!((_addr)->flags & UCT_DC_IFACE_ADDR_HW_TM))
+#define UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(_addr) \
+    (!!((_addr)->flags & UCT_DC_MLX5_IFACE_ADDR_HW_TM))
 
 typedef struct uct_dc_mlx5_ep     uct_dc_mlx5_ep_t;
 typedef struct uct_dc_mlx5_iface  uct_dc_mlx5_iface_t;
 
 
 typedef enum {
-    UCT_DC_IFACE_ADDR_HW_TM   = UCS_BIT(0),
-    UCT_DC_IFACE_ADDR_DC_V1   = UCS_BIT(1),
-    UCT_DC_IFACE_ADDR_DC_V2   = UCS_BIT(2),
-    UCT_DC_IFACE_ADDR_DC_VERS = UCT_DC_IFACE_ADDR_DC_V1 |
-                                UCT_DC_IFACE_ADDR_DC_V2
+    UCT_DC_MLX5_IFACE_ADDR_HW_TM   = UCS_BIT(0),
+    UCT_DC_MLX5_IFACE_ADDR_DC_V1   = UCS_BIT(1),
+    UCT_DC_MLX5_IFACE_ADDR_DC_V2   = UCS_BIT(2),
+    UCT_DC_MLX5_IFACE_ADDR_DC_VERS = UCT_DC_MLX5_IFACE_ADDR_DC_V1 |
+                                     UCT_DC_MLX5_IFACE_ADDR_DC_V2
 } uct_dc_mlx5_iface_addr_flags_t;
 
 
@@ -98,7 +98,10 @@ struct uct_dc_mlx5_iface {
     uct_rc_iface_t                super;
 
     struct {
-        uct_dc_dci_t              dcis[UCT_DC_IFACE_MAX_DCIS]; /* Array of dcis */
+        /* Array of dcis */
+        uct_dc_dci_t              dcis[UCT_DC_MLX5_IFACE_MAX_DCIS];
+        uct_ib_mlx5_txwq_t        dci_wqs[UCT_DC_MLX5_IFACE_MAX_DCIS];
+
         uint8_t                   ndci;                        /* Number of DCIs */
         uct_dc_tx_policty_t       policy;                      /* dci selection algorithm */
         int16_t                   available_quota;             /* if available tx is lower, let
@@ -106,7 +109,7 @@ struct uct_dc_mlx5_iface {
 
         /* LIFO is only relevant for dcs allocation policy */
         uint8_t                   stack_top;                   /* dci stack top */
-        uint8_t                   dcis_stack[UCT_DC_IFACE_MAX_DCIS];  /* LIFO of indexes of available dcis */
+        uint8_t                   dcis_stack[UCT_DC_MLX5_IFACE_MAX_DCIS];  /* LIFO of indexes of available dcis */
 
         ucs_arbiter_t             dci_arbiter;
 
@@ -115,6 +118,7 @@ struct uct_dc_mlx5_iface {
 
         /* List of destroyed endpoints waiting for credit grant */
         ucs_list_link_t           gc_list;
+
     } tx;
 
 #if HAVE_DC_EXP
@@ -127,7 +131,6 @@ struct uct_dc_mlx5_iface {
 
     uct_rc_mlx5_iface_common_t    mlx5_common;
     uct_ud_mlx5_iface_common_t    ud_common;
-    uct_ib_mlx5_txwq_t            dci_wqs[UCT_DC_IFACE_MAX_DCIS];
 };
 
 
@@ -138,6 +141,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface);
 int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
                                    const uct_device_addr_t *dev_addr,
                                    const uct_iface_addr_t *iface_addr);
+
 ucs_status_t uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr);
 
 ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
@@ -164,9 +168,9 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
 ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
                                    ucs_status_t status);
 
-int uct_dc_get_dct_num(uct_dc_mlx5_iface_t *iface);
+int uct_dc_mlx5_get_dct_num(uct_dc_mlx5_iface_t *iface);
 
-void uct_dc_destroy_dct(uct_dc_mlx5_iface_t *iface);
+void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface);
 
 void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
 

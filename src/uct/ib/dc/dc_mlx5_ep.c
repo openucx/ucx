@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -29,9 +29,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
     ucs_arbiter_group_cleanup(&self->arb_group);
     uct_rc_fc_cleanup(&self->fc);
 
-    ucs_assert_always(self->flags & UCT_DC_EP_FLAG_VALID);
+    ucs_assert_always(self->flags & UCT_DC_MLX5_EP_FLAG_VALID);
 
-    if (self->dci == UCT_DC_EP_NO_DCI) {
+    if (self->dci == UCT_DC_MLX5_EP_NO_DCI) {
         return;
     }
 
@@ -67,7 +67,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *iface,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_mlx5_ep_t, iface, if_addr, av);
 
-    self->super.flags |= UCT_DC_EP_FLAG_GRH;
+    self->super.flags |= UCT_DC_MLX5_EP_FLAG_GRH;
     memcpy(&self->grh_av, grh_av, sizeof(*grh_av));
     return UCS_OK;
 }
@@ -91,7 +91,7 @@ void uct_dc_mlx5_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls)
 
     if (uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
         ucs_trace("not releasing dc_mlx5_ep %p - waiting for grant", ep);
-        ep->flags &= ~UCT_DC_EP_FLAG_VALID;
+        ep->flags &= ~UCT_DC_MLX5_EP_FLAG_VALID;
         ucs_list_add_tail(&iface->tx.gc_list, &ep->list);
     } else {
         ucs_free(ep);
@@ -100,7 +100,7 @@ void uct_dc_mlx5_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls)
 
 void uct_dc_mlx5_ep_release(uct_dc_mlx5_ep_t *ep)
 {
-    ucs_assert_always(!(ep->flags & UCT_DC_EP_FLAG_VALID));
+    ucs_assert_always(!(ep->flags & UCT_DC_MLX5_EP_FLAG_VALID));
     ucs_debug("release dc_mlx5_ep %p", ep);
     ucs_list_del(&ep->list);
     ucs_free(ep);
@@ -122,7 +122,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
      * - dci has resources
      */
     if (uct_rc_iface_has_tx_resources(&iface->super)) {
-        if (ep->dci == UCT_DC_EP_NO_DCI) {
+        if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
             if (uct_dc_mlx5_iface_dci_can_alloc(iface) && (ep->fc.fc_wnd > 0)) {
                 return UCS_ERR_BUSY;
             }
@@ -142,7 +142,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
      *  This way we can assure fairness between all eps waiting for
      *  dci allocation.
      */
-    if (ep->dci == UCT_DC_EP_NO_DCI) {
+    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
         uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
         return UCS_OK;
     }
@@ -162,7 +162,7 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
     uct_dc_mlx5_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_dc_mlx5_ep_t, arb_group);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
 
-    if (ep->dci != UCT_DC_EP_NO_DCI) {
+    if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
     }
 
@@ -170,7 +170,7 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
         return UCS_ARBITER_CB_RESULT_STOP;
     }
     uct_dc_mlx5_iface_dci_alloc(iface, ep);
-    ucs_assert_always(ep->dci != UCT_DC_EP_NO_DCI);
+    ucs_assert_always(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
     uct_dc_mlx5_iface_dci_sched_tx(iface, ep);
     return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
 }
@@ -256,7 +256,7 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t c
     uct_dc_mlx5_ep_t *ep          = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     uct_purge_cb_args_t args = {cb, arg};
 
-    if (ep->dci == UCT_DC_EP_NO_DCI) {
+    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
         ucs_arbiter_group_purge(uct_dc_mlx5_iface_dci_waitq(iface), &ep->arb_group,
                                 uct_dc_mlx5_ep_abriter_purge_cb, &args);
     } else {
@@ -273,14 +273,14 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_
     if (iface->super.config.fc_enabled) {
         UCT_RC_CHECK_FC_WND(&ep->fc, ep->super.stats);
         if ((ep->fc.fc_wnd == iface->super.config.fc_hard_thresh) &&
-            !(ep->fc.flags & UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT)) {
+            !(ep->fc.flags & UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT)) {
             status = uct_rc_fc_ctrl(&ep->super.super,
                                     UCT_RC_EP_FC_FLAG_HARD_REQ,
                                     NULL);
             if (status != UCS_OK) {
                 return status;
             }
-            ep->fc.flags |= UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT;
+            ep->fc.flags |= UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT;
         }
     } else {
         /* Set fc_wnd to max, to send as much as possible without checks */
