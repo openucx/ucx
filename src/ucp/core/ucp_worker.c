@@ -1558,33 +1558,12 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_free(worker);
 }
 
-static uint32_t ucp_dev_type_map2uct(uint32_t ucp_dev_type_map)
-{
-    uint32_t uct_map = 0;
-
-    if (ucp_dev_type_map & UCP_WORKER_FLAG_DEVICE_TYPE_NET) {
-        uct_map |= UCS_BIT(UCT_DEVICE_TYPE_NET);
-    }
-    if (ucp_dev_type_map & UCP_WORKER_FLAG_DEVICE_TYPE_SHM) {
-        uct_map |= UCS_BIT(UCT_DEVICE_TYPE_SHM);
-    }
-    if (ucp_dev_type_map & UCP_WORKER_FLAG_DEVICE_TYPE_ACC) {
-        uct_map |= UCS_BIT(UCT_DEVICE_TYPE_ACC);
-    }
-    if (ucp_dev_type_map & UCP_WORKER_FLAG_DEVICE_TYPE_SELF) {
-        uct_map |= UCS_BIT(UCT_DEVICE_TYPE_SELF);
-    }
-
-    return uct_map;
-}
-
 ucs_status_t ucp_worker_query(ucp_worker_h worker,
                               ucp_worker_attr_t *attr)
 {
     ucp_context_h context = worker->context;
     ucs_status_t status   = UCS_OK;
     uint64_t tl_bitmap;
-    uint32_t uct_dev_type_map;
     ucp_rsc_index_t tl_id;
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_THREAD_MODE) {
@@ -1600,14 +1579,17 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
            address flags is 0, pack all tl adresses.  */
         tl_bitmap = -1;
 
-        if ((attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS) &&
-            (attr->address_flags != 0)) {
-            tl_bitmap        = 0;
-            uct_dev_type_map = ucp_dev_type_map2uct(attr->address_flags);
-            ucs_for_each_bit(tl_id, context->tl_bitmap) {
-                if (UCS_BIT(context->tl_rscs[tl_id].tl_rsc.dev_type) & uct_dev_type_map) {
-                    tl_bitmap |= UCS_BIT(tl_id);
+        if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS) {
+            if (attr->address_flags == UCP_WORKER_FLAG_NET_ADDRESS) {
+                tl_bitmap = 0;
+                ucs_for_each_bit(tl_id, context->tl_bitmap) {
+                    if (context->tl_rscs[tl_id].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
+                        tl_bitmap |= UCS_BIT(tl_id);
+                    }
                 }
+            } else if (attr->address_flags != 0) {
+                ucs_warn("worker %p: wrong worker address flags: %d",
+                         worker, attr->address_flags);
             }
         }
 

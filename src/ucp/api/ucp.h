@@ -198,10 +198,8 @@ enum ucp_listener_params_field {
  * @ref ucp_worker_query "ucp_worker_query()" routine.
  */
 typedef enum {
-    UCP_WORKER_FLAG_DEVICE_TYPE_NET  = UCS_BIT(0), /**< Pack addresses of network devices */
-    UCP_WORKER_FLAG_DEVICE_TYPE_SHM  = UCS_BIT(1), /**< Pack addresses of shared memory devices */
-    UCP_WORKER_FLAG_DEVICE_TYPE_ACC  = UCS_BIT(2), /**< Pack addresses of acceleration devices */
-    UCP_WORKER_FLAG_DEVICE_TYPE_SELF = UCS_BIT(3)  /**< Pack address of loop-back device */
+    UCP_WORKER_FLAG_NET_ADDRESS = UCS_BIT(0), /**< Pack addresses of network
+                                                   devices only */
 } ucp_worker_address_flags_t;
 
 
