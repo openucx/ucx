@@ -143,7 +143,6 @@ double ucs_arch_get_clocks_per_sec()
     }
 
 fallback:
-
     return ucs_arch_generic_get_clocks_per_sec();
 }
 
