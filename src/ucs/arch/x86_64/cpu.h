@@ -11,6 +11,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/arch/generic/cpu.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/config/types.h>
 #include <stdint.h>
 
 #ifdef __SSE4_1__
@@ -39,23 +40,35 @@ BEGIN_C_DECLS
 
 extern int ucs_arch_x86_enable_rdtsc;
 
+double ucs_arch_get_clocks_per_sec();
+int ucs_x86_tsc_freq_from_cpu_model(double *result);
+
+ucs_cpu_model_t ucs_arch_get_cpu_model() UCS_F_NOOPTIMIZE;
+ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
+
+static inline int ucs_arch_x86_rdtsc_enabled()
+{
+    double UCS_V_UNUSED dummy_freq;
+
+    if (ucs_unlikely(ucs_arch_x86_enable_rdtsc == UCS_TRY)) {
+        ucs_arch_x86_enable_rdtsc = (ucs_x86_tsc_freq_from_cpu_model(&dummy_freq) == -1) ?
+                                    UCS_NO : UCS_YES;
+    }
+
+    return ucs_arch_x86_enable_rdtsc;
+}
 
 static inline uint64_t ucs_arch_read_hres_clock()
 {
     uint32_t low, high;
 
-    if (ucs_unlikely(!ucs_arch_x86_enable_rdtsc)) {
+    if (ucs_unlikely(ucs_arch_x86_rdtsc_enabled() == UCS_NO)) {
         return ucs_arch_generic_read_hres_clock();
     }
 
     asm volatile ("rdtsc" : "=a" (low), "=d" (high));
     return ((uint64_t)high << 32) | (uint64_t)low;
 }
-
-double ucs_arch_get_clocks_per_sec();
-
-ucs_cpu_model_t ucs_arch_get_cpu_model() UCS_F_NOOPTIMIZE;
-ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
 
 #define ucs_arch_wait_mem ucs_arch_generic_wait_mem
 

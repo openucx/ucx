@@ -206,8 +206,8 @@ static ucs_config_field_t ucs_global_opts_table[] = {
    "memory region was not changed since the time the region was registered.\n",
    ucs_offsetof(ucs_global_opts_t, rcache_check_pfn), UCS_CONFIG_TYPE_BOOL},
 
-  {"WARN_INVARIANT_TSC", "y",
-   "Issue a warning in case of invariant TSC.\n",
+  {"WARN_INVARIANT_TSC", "n",
+   "Issue a warning in case of invariant TSC is not supported.\n",
    ucs_offsetof(ucs_global_opts_t, warn_inv_tsc), UCS_CONFIG_TYPE_BOOL},
 
  {NULL}

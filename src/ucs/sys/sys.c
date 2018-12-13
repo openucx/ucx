@@ -903,6 +903,7 @@ double ucs_get_cpuinfo_clock_freq(const char *header, double scale)
     char buf[256];
     char fmt[256];
     int warn;
+    int level;
 
     f = fopen("/proc/cpuinfo","r");
     if (!f) {
@@ -932,7 +933,10 @@ double ucs_get_cpuinfo_clock_freq(const char *header, double scale)
     fclose(f);
 
     if (warn) {
-        ucs_warn("Conflicting CPU frequencies detected, using: %.2f", value);
+        level = ucs_global_opts.warn_inv_tsc ? UCS_LOG_LEVEL_WARN :
+                                               UCS_LOG_LEVEL_DEBUG;
+        ucs_log(level,
+                "Conflicting CPU frequencies detected, using: %.2f", value);
     }
     return value * scale;
 }

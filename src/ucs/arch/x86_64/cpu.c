@@ -18,7 +18,7 @@
 #define X86_CPUID_INVARIANT_TSC   0x80000007u
 
 
-int ucs_arch_x86_enable_rdtsc = 1;
+int ucs_arch_x86_enable_rdtsc = UCS_TRY;
 
 static UCS_F_NOOPTIMIZE inline void ucs_x86_cpuid(uint32_t level,
                                                 uint32_t *a, uint32_t *b,
@@ -35,9 +35,10 @@ static UCS_F_NOOPTIMIZE inline void ucs_x86_cpuid(uint32_t level,
 #define ucs_x86_xgetbv(_index, _eax, _edx) \
 	asm volatile (".byte 0x0f, 0x01, 0xd0" : "=a"(_eax), "=d"(_edx) : "c" (_index))
 
-static void ucs_x86_check_invariant_tsc()
+static int ucs_x86_invariant_tsc()
 {
     uint32_t _eax, _ebx, _ecx, _edx;
+    int level;
 
     ucs_x86_cpuid(X86_CPUID_GET_MAX_VALUE, &_eax, &_ebx, &_ecx, &_edx);
     if (_eax <= X86_CPUID_INVARIANT_TSC) {
@@ -49,15 +50,17 @@ static void ucs_x86_check_invariant_tsc()
         goto warn;
     }
 
-    return;
+    return 1;
+
 warn:
-    if (ucs_global_opts.warn_inv_tsc) {
-        ucs_debug("CPU does not support invariant TSC, using fallback timer");
-        ucs_arch_x86_enable_rdtsc = 0;
-    }
+    level = ucs_global_opts.warn_inv_tsc ? UCS_LOG_LEVEL_WARN :
+                                           UCS_LOG_LEVEL_DEBUG;
+    ucs_log(level, "CPU does not support invariant TSC, using fallback timer");
+
+    return 0;
 }
 
-static double ucs_x86_tsc_freq_from_cpu_model()
+int ucs_x86_tsc_freq_from_cpu_model(double *result)
 {
     char buf[256];
     char model[256];
@@ -67,10 +70,15 @@ static double ucs_x86_tsc_freq_from_cpu_model()
     FILE* f;
     int rc;
     int warn;
+    int level;
+
+    if (!ucs_x86_invariant_tsc()) {
+        return -1;
+    }
 
     f = fopen("/proc/cpuinfo","r");
     if (!f) {
-        return -1;
+        return -2;
     }
 
     warn = 0;
@@ -94,37 +102,48 @@ static double ucs_x86_tsc_freq_from_cpu_model()
         max_ghz = ucs_max(max_ghz, ghz);
         if (max_ghz != ghz) {
             warn = 1;
+            break;
         }
     }
     fclose(f);
 
     if (warn) {
-        ucs_debug("Conflicting CPU frequencies detected, using fallback timer");
-        ucs_arch_x86_enable_rdtsc = 0;
+        level = ucs_global_opts.warn_inv_tsc ? UCS_LOG_LEVEL_WARN :
+                                               UCS_LOG_LEVEL_DEBUG;
+        ucs_log(level,
+                "Conflicting CPU frequencies detected, using fallback timer");
+
+        return -1;
     }
-    return max_ghz * 1e9;
+
+    *result = max_ghz * 1e9;
+
+    return 0;
 }
 
 double ucs_arch_get_clocks_per_sec()
 {
-    double result;
+    double freq;
+    int ret;
 
-    ucs_x86_check_invariant_tsc();
+    ret = ucs_x86_tsc_freq_from_cpu_model(&freq);
 
-    if (ucs_arch_x86_enable_rdtsc) {
-        /* First, try to find the information in the model name string (will work on Intel) */
-        result = ucs_x86_tsc_freq_from_cpu_model();
-        if (result == 0) {
-            /* Read clock speed from cpuinfo */
-            result = ucs_get_cpuinfo_clock_freq("cpu MHz", 1e6);
-        }
-        if ((result > 0.0) && ucs_arch_x86_enable_rdtsc) {
-            /* using rdtsc */
-            return result;
-        }
+    if (ret) {
+        goto fallback;
     }
 
-    /* fallback */
+    if (freq == 0) {
+        /* Read clock speed from cpuinfo */
+        freq = ucs_get_cpuinfo_clock_freq("cpu MHz", 1e6);
+    }
+
+    if (freq > 0.0) {
+        /* using rdtsc */
+        return freq;
+    }
+
+fallback:
+
     return ucs_arch_generic_get_clocks_per_sec();
 }
 
