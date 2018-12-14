@@ -141,6 +141,8 @@ static ucs_stats_class_t uct_ib_md_stats_class = {
 };
 #endif
 
+UCS_LIST_HEAD(uct_ib_device_init_list);
+
 static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
@@ -1385,11 +1387,12 @@ ucs_status_t
 uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
     const uct_ib_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_ib_md_config_t);
+    uct_ib_md_t *md = NULL;
     struct ibv_device **ib_device_list, *ib_device;
+    uct_ib_device_init_entry_t *init_entry;
     char tmp_md_name[UCT_MD_NAME_MAX];
     ucs_status_t status;
     int i, num_devices, ret;
-    uct_ib_md_t *md;
     uct_md_attr_t md_attr;
 
     ucs_trace("opening IB device %s", md_name);
@@ -1416,12 +1419,16 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto out_free_dev_list;
     }
 
-    md = ucs_calloc(1, sizeof(*md), "ib_md");
-    if (md == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out_free_dev_list;
+    ucs_list_for_each(init_entry, &uct_ib_device_init_list, list) {
+        status = init_entry->init(ib_device, &md);
+        if (status == UCS_OK) {
+            break;
+        } else if (status != UCS_ERR_UNSUPPORTED) {
+            goto out_free_dev_list;
+        }
     }
 
+    ucs_assert(md != NULL);
     md->super.ops             = &uct_ib_md_ops;
     md->super.component       = &uct_ib_mdc;
     md->config                = md_config->ext;

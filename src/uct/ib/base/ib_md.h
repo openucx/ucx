@@ -128,6 +128,29 @@ typedef struct uct_ib_rcache_region {
 } uct_ib_rcache_region_t;
 
 
+/**
+ * IB device private initializer.
+ */
+typedef struct uct_ib_device_init_entry {
+    ucs_list_link_t             list;
+    ucs_status_t                (*init)(struct ibv_device *ibv_device,
+                                        uct_ib_md_t **p_md);
+} uct_ib_device_init_entry_t;
+
+#define UCT_IB_DEVICE_INIT(_init_fn, device_specific) \
+    UCS_STATIC_INIT { \
+        extern ucs_list_link_t uct_ib_device_init_list; \
+        static uct_ib_device_init_entry_t init_entry = { \
+            .init = _init_fn, \
+        }; \
+        if (device_specific) { \
+            ucs_list_add_head(&uct_ib_device_init_list, &init_entry.list); \
+        } else { \
+            ucs_list_add_tail(&uct_ib_device_init_list, &init_entry.list); \
+        } \
+    }
+
+
 extern uct_md_component_t uct_ib_mdc;
 
 

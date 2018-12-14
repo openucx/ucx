@@ -637,19 +637,6 @@ void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface)
         iface->rx_dct = NULL;
     }
 }
-
-static ucs_status_t uct_dc_mlx5_device_init(uct_ib_device_t *dev)
-{
-#if HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_EXP_DEVICE_CAP_FLAGS
-    if (dev->dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT) {
-        dev->flags |= UCT_IB_DEVICE_FLAG_DC;
-    }
-#endif
-    return UCS_OK;
-}
-
-UCT_IB_DEVICE_INIT(uct_dc_mlx5_device_init);
-
 #endif
 
 void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max)
