@@ -198,7 +198,7 @@ enum ucp_listener_params_field {
  * @ref ucp_worker_query "ucp_worker_query()" routine.
  */
 typedef enum {
-    UCP_WORKER_FLAG_NET_ADDRESS = UCS_BIT(0), /**< Pack addresses of network
+    UCP_WORKER_FLAG_NET_ADDRESS = UCS_BIT(0)  /**< Pack addresses of network
                                                    devices only */
 } ucp_worker_address_flags_t;
 
