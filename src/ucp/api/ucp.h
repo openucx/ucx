@@ -144,7 +144,8 @@ enum ucp_feature {
                                            operations support */
     UCP_FEATURE_WAKEUP = UCS_BIT(4),  /**< Request interrupt notification
                                            support */
-    UCP_FEATURE_STREAM = UCS_BIT(5)   /**< Request stream support */
+    UCP_FEATURE_STREAM = UCS_BIT(5),  /**< Request stream support */
+    UCP_FEATURE_COLL   = UCS_BIT(6)   /**< Collective operations support */
 };
 
 
