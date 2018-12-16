@@ -20,6 +20,7 @@
 #include <string.h>
 
 
+/* DC specific parameters, expecting DC_ prefix */
 ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
     {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=y;", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, super),
@@ -55,6 +56,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
     {NULL}
 };
 
+/* Bundle of all parameters */
 ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
     {"DC_", "", NULL, 0,
      UCS_CONFIG_TYPE_TABLE(uct_dc_mlx5_iface_config_sub_table)},
