@@ -745,13 +745,13 @@ typedef struct ucp_worker_attr {
      * Worker address, which can be passed to remote instances of the UCP library
      * in order to connect to this worker. The memory for the address handle is
      * allocated by @ref ucp_worker_query "ucp_worker_query()" routine, and
-     * must be released by using  @ref ucp_worker_release_address
-     * "ucp_worker_release_address()" routine.
+     * must be released by using @ref ucp_worker_release_address
+     * "ucp_worker_release_address()" routine. @note This is an output attribute.
      */
     ucp_address_t         *address;
 
     /**
-     * Size of worker address in bytes.
+     * Size of worker address in bytes. @note This is an output attribute.
      */
     size_t                address_length;
 
@@ -759,8 +759,7 @@ typedef struct ucp_worker_attr {
      * Flags indicating requested details of the worker address.
      * If UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS bit is set in the field_mask,
      * this value should be set as well. Possible flags are specified
-     * in @ref ucp_worker_address_flags_t. If the value is not set or set to 0,
-     * the returned worker adress will contain maximum details.
+     * in @ref ucp_worker_address_flags_t.
      */
     uint32_t              address_flags;
 } ucp_worker_attr_t;

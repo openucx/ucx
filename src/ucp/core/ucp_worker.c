@@ -1575,8 +1575,8 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
     }
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS) {
-        /* If UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS is not set or
-           address flags is 0, pack all tl adresses.  */
+        /* If UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS is not set,
+         * pack all tl adresses */
         tl_bitmap = -1;
 
         if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS) {
@@ -1587,9 +1587,6 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
                         tl_bitmap |= UCS_BIT(tl_id);
                     }
                 }
-            } else if (attr->address_flags != 0) {
-                ucs_warn("worker %p: wrong worker address flags: %d",
-                         worker, attr->address_flags);
             }
         }
 
