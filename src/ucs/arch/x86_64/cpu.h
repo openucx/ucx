@@ -41,7 +41,7 @@ BEGIN_C_DECLS
 extern ucs_ternary_value_t ucs_arch_x86_enable_rdtsc;
 
 double ucs_arch_get_clocks_per_sec();
-int ucs_x86_tsc_freq_from_cpu_model(double *result);
+double ucs_x86_init_tsc_freq();
 
 ucs_cpu_model_t ucs_arch_get_cpu_model() UCS_F_NOOPTIMIZE;
 ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
@@ -51,8 +51,8 @@ static inline int ucs_arch_x86_rdtsc_enabled()
     double UCS_V_UNUSED dummy_freq;
 
     if (ucs_unlikely(ucs_arch_x86_enable_rdtsc == UCS_TRY)) {
-        ucs_arch_x86_enable_rdtsc = (ucs_x86_tsc_freq_from_cpu_model(&dummy_freq) == -1) ?
-                                    UCS_NO : UCS_YES;
+        dummy_freq = ucs_x86_init_tsc_freq();
+        ucs_assert(ucs_arch_x86_enable_rdtsc != UCS_TRY);
     }
 
     return ucs_arch_x86_enable_rdtsc;

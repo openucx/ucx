@@ -60,7 +60,7 @@ warn:
     return 0;
 }
 
-int ucs_x86_tsc_freq_from_cpu_model(double *result)
+double ucs_x86_tsc_freq_from_cpu_model()
 {
     char buf[256];
     char model[256];
@@ -72,13 +72,10 @@ int ucs_x86_tsc_freq_from_cpu_model(double *result)
     int warn;
     int level;
 
-    if (!ucs_x86_invariant_tsc()) {
-        return -1;
-    }
 
     f = fopen("/proc/cpuinfo","r");
     if (!f) {
-        return -2;
+        return -1;
     }
 
     warn = 0;
@@ -116,32 +113,43 @@ int ucs_x86_tsc_freq_from_cpu_model(double *result)
         return -1;
     }
 
-    *result = max_ghz * 1e9;
+    return max_ghz * 1e9;
+}
 
-    return 0;
+double ucs_x86_init_tsc_freq()
+{
+    double result;
+
+    if (!ucs_x86_invariant_tsc()) {
+        goto err_disable_rdtsc;
+    }
+
+    ucs_arch_x86_enable_rdtsc = UCS_YES;
+
+    result = ucs_x86_tsc_freq_from_cpu_model();
+    if (result <= 0.0) {
+        result = ucs_get_cpuinfo_clock_freq("cpu MHz", 1e6);
+    }
+
+    if (result > 0.0) {
+        return result;
+    }
+
+err_disable_rdtsc:
+    ucs_arch_x86_enable_rdtsc = UCS_NO;
+    return -1;
 }
 
 double ucs_arch_get_clocks_per_sec()
 {
     double freq;
-    int ret;
 
-    ret = ucs_x86_tsc_freq_from_cpu_model(&freq);
-    if (ret) {
-        goto fallback;
-    }
-
-    if (freq == 0) {
-        /* Read clock speed from cpuinfo */
-        freq = ucs_get_cpuinfo_clock_freq("cpu MHz", 1e6);
-    }
-
+    freq = ucs_x86_init_tsc_freq(&freq);
     if (freq > 0.0) {
         /* using rdtsc */
         return freq;
     }
 
-fallback:
     return ucs_arch_generic_get_clocks_per_sec();
 }
 
