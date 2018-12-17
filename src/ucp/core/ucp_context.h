@@ -75,8 +75,6 @@ typedef struct ucp_context_config {
     unsigned                               max_eager_lanes;
     /** Rendezvous-get multi-lane support */
     unsigned                               max_rndv_lanes;
-    /** Rendezvous-get multi-lane balancing */
-    int                                    rndv_balancing;
     /** Estimated number of endpoints */
     size_t                                 estimated_num_eps;
     /** Memtype cache */

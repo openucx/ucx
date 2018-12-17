@@ -983,7 +983,6 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
         rndv_nbr_thresh = context->config.ext.rndv_thresh;
     }
 
-    config->tag.rndv.max_get_zcopy = iface_attr->cap.get.max_zcopy;
     config->tag.rndv.max_put_zcopy = iface_attr->cap.put.max_zcopy;
     config->tag.rndv.rma_thresh    = ucp_ep_thresh(rndv_thresh,
                                                    iface_attr->cap.get.min_zcopy,
@@ -1129,6 +1128,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             config->tag.rndv.min_get_zcopy =
                 ucs_max(config->tag.rndv.min_get_zcopy,
                         worker->ifaces[rsc_index].attr.cap.get.min_zcopy);
+            config->tag.rndv.max_get_zcopy =
+                ucs_min(config->tag.rndv.max_get_zcopy,
+                        worker->ifaces[rsc_index].attr.cap.get.max_zcopy);
             rndv_max_bw = ucs_max(rndv_max_bw, worker->ifaces[rsc_index].attr.bandwidth);
         }
     }
@@ -1136,13 +1138,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     if (rndv_max_bw > 0) {
         for (i = 0; (i < config->key.num_lanes) &&
                     (config->key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
-            lane = config->key.rma_bw_lanes[i];
-            if (context->config.ext.rndv_balancing) {
-                rsc_index = config->key.lanes[lane].rsc_index;
-                config->tag.rndv.scale[lane] = worker->ifaces[rsc_index].attr.bandwidth / rndv_max_bw;
-            } else {
-                config->tag.rndv.scale[lane] = 1;
-            }
+            lane                         = config->key.rma_bw_lanes[i];
+            rsc_index                    = config->key.lanes[lane].rsc_index;
+            config->tag.rndv.scale[lane] = worker->ifaces[rsc_index].attr.bandwidth / rndv_max_bw;
         }
     }
 

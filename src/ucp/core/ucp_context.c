@@ -141,10 +141,6 @@ static ucs_config_field_t ucp_config_table[] = {
    "Maximal number of devices on which a rendezvous operation may be executed in parallel",
    ucs_offsetof(ucp_config_t, ctx.max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
 
-   {"RNDV_BALANCING_ENABLE", "y",
-    "Enable rendezvous message balancing between devices\n",
-    ucs_offsetof(ucp_config_t, ctx.rndv_balancing), UCS_CONFIG_TYPE_BOOL},
-
   {"RNDV_SCHEME", "auto",
    "Communication scheme in RNDV protocol.\n"
    " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
