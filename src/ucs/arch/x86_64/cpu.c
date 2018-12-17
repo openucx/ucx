@@ -18,7 +18,7 @@
 #define X86_CPUID_INVARIANT_TSC   0x80000007u
 
 
-int ucs_arch_x86_enable_rdtsc = UCS_TRY;
+ucs_ternary_value_t ucs_arch_x86_enable_rdtsc = UCS_TRY;
 
 static UCS_F_NOOPTIMIZE inline void ucs_x86_cpuid(uint32_t level,
                                                 uint32_t *a, uint32_t *b,
@@ -127,7 +127,6 @@ double ucs_arch_get_clocks_per_sec()
     int ret;
 
     ret = ucs_x86_tsc_freq_from_cpu_model(&freq);
-
     if (ret) {
         goto fallback;
     }

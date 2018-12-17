@@ -38,7 +38,7 @@ BEGIN_C_DECLS
 #define ucs_memory_cpu_load_fence()   ucs_compiler_fence()
 #define ucs_memory_cpu_wc_fence()     asm volatile ("sfence" ::: "memory")
 
-extern int ucs_arch_x86_enable_rdtsc;
+extern ucs_ternary_value_t ucs_arch_x86_enable_rdtsc;
 
 double ucs_arch_get_clocks_per_sec();
 int ucs_x86_tsc_freq_from_cpu_model(double *result);
