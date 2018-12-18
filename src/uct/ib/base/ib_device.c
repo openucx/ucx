@@ -242,6 +242,8 @@ static void uct_ib_async_event_handler(int fd, void *arg)
     ibv_ack_async_event(&event);
 }
 
+extern uct_ib_md_ops_t uct_ib_verbs_md_ops;
+
 static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
                                          uct_ib_md_t **p_md)
 {
@@ -254,6 +256,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     if (md == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
+    md->ops          = &uct_ib_verbs_md_ops;
     dev              = &md->dev;
 
     /* Open verbs context */

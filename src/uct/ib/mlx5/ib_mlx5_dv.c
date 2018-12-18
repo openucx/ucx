@@ -4,9 +4,18 @@
 * See file LICENSE for terms.
 */
 
+#include <ucs/arch/bitops.h>
 #include "ib_mlx5.h"
 #include "ib_mlx5_log.h"
 #include "ib_mlx5_ifc.h"
+
+/**
+ * MLX5 IB memory domain.
+ */
+typedef struct uct_ib_mlx5_mem {
+    uct_ib_mem_t             super;
+    struct mlx5dv_devx_obj   *atomic_dvmr;
+} uct_ib_mlx5_mem_t;
 
 #if HAVE_DECL_MLX5DV_INIT_OBJ
 ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
@@ -24,6 +33,110 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 #endif
 
 #if HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
+static ucs_status_t uct_ib_mlx5dv_create_ksm(uct_ib_md_t *md,
+                                             uct_ib_mem_t *ib_memh,
+                                             off_t offset)
+{
+    uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
+    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_mkey_out)] = {0};
+    struct ibv_mr *mr = memh->super.mr;
+    size_t reg_length, length, inlen;
+    ucs_status_t status = UCS_OK;
+    struct mlx5dv_pd dvpd = {};
+    struct mlx5dv_obj dv = {};
+    int list_size, i;
+    void *mkc, *klm;
+    uint32_t *in;
+    intptr_t addr;
+
+    if (!(md->dev.flags & UCT_IB_DEVICE_FLAG_KSM)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    reg_length = UCT_IB_MD_MAX_MR_SIZE;
+    addr       = (intptr_t)mr->addr & ~(reg_length - 1);
+    length     = mr->length + (intptr_t)mr->addr - addr;
+    list_size  = ucs_div_round_up(length, reg_length);
+    inlen      = UCT_IB_MLX5DV_ST_SZ_BYTES(create_mkey_in) +
+                 UCT_IB_MLX5DV_ST_SZ_BYTES(klm) * list_size;
+
+    in         = ucs_calloc(1, inlen, "mkey mailbox");
+    if (in == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    dv.pd.in   = md->pd;
+    dv.pd.out  = &dvpd;
+    mlx5dv_init_obj(&dv, MLX5DV_OBJ_PD);
+
+    UCT_IB_MLX5DV_SET(create_mkey_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_MKEY);
+    mkc = UCT_IB_MLX5DV_ADDR_OF(create_mkey_in, in, memory_key_mkey_entry);
+    UCT_IB_MLX5DV_SET(mkc, mkc, access_mode_1_0, UCT_IB_MLX5_MKC_ACCESS_MODE_KSM);
+    UCT_IB_MLX5DV_SET(mkc, mkc, a, 1);
+    UCT_IB_MLX5DV_SET(mkc, mkc, rw, 1);
+    UCT_IB_MLX5DV_SET(mkc, mkc, rr, 1);
+    UCT_IB_MLX5DV_SET(mkc, mkc, lw, 1);
+    UCT_IB_MLX5DV_SET(mkc, mkc, lr, 1);
+    UCT_IB_MLX5DV_SET(mkc, mkc, pd, dvpd.pdn);
+    UCT_IB_MLX5DV_SET(mkc, mkc, translations_octword_size, list_size);
+    UCT_IB_MLX5DV_SET(mkc, mkc, log_entity_size, ucs_ilog2(reg_length));
+    UCT_IB_MLX5DV_SET(mkc, mkc, qpn, 0xffffff);
+    UCT_IB_MLX5DV_SET(mkc, mkc, mkey_7_0, offset & 0xff);
+    UCT_IB_MLX5DV_SET64(mkc, mkc, start_addr, addr + offset);
+    UCT_IB_MLX5DV_SET64(mkc, mkc, len, length);
+    UCT_IB_MLX5DV_SET(create_mkey_in, in, translations_octword_actual_size, list_size);
+
+    klm = UCT_IB_MLX5DV_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
+    for(i = 0; i < list_size; i++) {
+        if (i == list_size - 1) {
+            UCT_IB_MLX5DV_SET(klm, klm, byte_count, length % reg_length);
+        } else {
+            UCT_IB_MLX5DV_SET(klm, klm, byte_count, reg_length);
+        }
+        UCT_IB_MLX5DV_SET(klm, klm, mkey, mr->lkey);
+        UCT_IB_MLX5DV_SET64(klm, klm, address, addr + i * reg_length);
+        klm += UCT_IB_MLX5DV_ST_SZ_BYTES(klm);
+    }
+
+    memh->atomic_dvmr = mlx5dv_devx_obj_create(md->dev.ibv_context, in, inlen,
+                                               out, sizeof(out));
+    if (memh->atomic_dvmr == NULL) {
+        ucs_error("CREATE_MKEY KSM failed: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
+
+    memh->super.atomic_rkey =
+        UCT_IB_MLX5DV_GET(create_mkey_out, out, mkey_index) << 8 |
+        (offset & 0xff);
+
+    ucs_debug("KSM registered memory %p..%p offset 0x%lx on %s rkey 0x%x",
+              mr->addr, mr->addr + mr->length, offset, uct_ib_device_name(&md->dev),
+              memh->super.atomic_rkey);
+out:
+    ucs_free(in);
+    return status;
+}
+
+static ucs_status_t uct_ib_mlx5dv_memh_dereg(uct_ib_md_t *md,
+                                             uct_ib_mem_t *ib_memh)
+{
+    uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
+    int ret;
+
+    ret = mlx5dv_devx_obj_destroy(memh->atomic_dvmr);
+    if (ret != 0) {
+        return UCS_ERR_IO_ERROR;
+    }
+    return UCS_OK;
+}
+
+static uct_ib_md_ops_t uct_ib_mlx5dv_md_ops = {
+    .struct_size      = sizeof(uct_ib_mlx5_mem_t),
+    .reg_atomic_key   = uct_ib_mlx5dv_create_ksm,
+    .dereg_atomic_key = uct_ib_mlx5dv_memh_dereg,
+};
+
 static ucs_status_t uct_ib_mlx5_check_dc(uct_ib_device_t *dev)
 {
     ucs_status_t status = UCS_OK;
@@ -107,6 +220,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
+    md->ops          = &uct_ib_mlx5dv_md_ops;
     dev              = &md->dev;
     dev->ibv_context = ctx;
 
@@ -129,6 +243,9 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         }
         if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, compact_address_vector)) {
             dev->flags |= UCT_IB_DEVICE_FLAG_AV;
+        }
+        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, fixed_buffer_size)) {
+            dev->flags |= UCT_IB_DEVICE_FLAG_KSM;
         }
         if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
             atomic = 1;

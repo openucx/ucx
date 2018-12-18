@@ -67,10 +67,25 @@ typedef struct uct_ib_md_ext_config {
 
 typedef struct uct_ib_mem {
     uint32_t                lkey;
+    uint32_t                atomic_rkey;
     uint32_t                flags;
     struct ibv_mr           *mr;
+#if HAVE_EXP_UMR
     struct ibv_mr           *atomic_mr;
+#endif
 } uct_ib_mem_t;
+
+struct uct_ib_md;
+
+typedef struct uct_ib_md_ops {
+    size_t                  struct_size;
+    ucs_status_t            (*reg_atomic_key)(struct uct_ib_md *md,
+                                              uct_ib_mem_t *memh,
+                                              off_t offset);
+    ucs_status_t            (*dereg_atomic_key)(struct uct_ib_md *md,
+                                                uct_ib_mem_t *memh);
+} uct_ib_md_ops_t;
+
 
 /**
  * IB memory domain.
@@ -82,6 +97,7 @@ typedef struct uct_ib_md {
     struct ibv_pd            *pd;       /**< IB memory domain */
     uct_ib_device_t          dev;       /**< IB device */
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
+    uct_ib_md_ops_t          *ops;
     /* keep it in md because pd is needed to create umr_qp/cq */
     struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
     struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
@@ -132,6 +148,7 @@ typedef struct uct_ib_rcache_region {
  * IB memory domain constructor. Should have following logic:
  * - probe provided IB device, may return UCS_ERR_UNSUPPORTED
  * - allocate MD and IB context
+ * - setup atomic MR ops
  * - determine device attributes and flags
  */
 typedef struct uct_ib_md_open_entry {
