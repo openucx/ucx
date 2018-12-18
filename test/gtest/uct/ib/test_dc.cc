@@ -12,8 +12,8 @@
 
 extern "C" {
 #include <uct/api/uct.h>
-#include <uct/ib/dc/base/dc_iface.h>
-#include <uct/ib/dc/base/dc_ep.h>
+#include <uct/ib/dc/dc_mlx5.h>
+#include <uct/ib/dc/dc_mlx5_ep.h>
 }
 
 
@@ -36,12 +36,12 @@ public:
         uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler, NULL, 0);
     }
 
-    static uct_dc_iface_t* dc_iface(entity *e) {
-        return ucs_derived_of(e->iface(), uct_dc_iface_t);
+    static uct_dc_mlx5_iface_t* dc_iface(entity *e) {
+        return ucs_derived_of(e->iface(), uct_dc_mlx5_iface_t);
     }
 
-    static uct_dc_ep_t* dc_ep(entity *e, int idx) {
-        return ucs_derived_of(e->ep(idx), uct_dc_ep_t);
+    static uct_dc_mlx5_ep_t* dc_ep(entity *e, int idx) {
+        return ucs_derived_of(e->ep(idx), uct_dc_mlx5_ep_t);
     }
 
     static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length,
@@ -80,13 +80,13 @@ protected:
     static void uct_comp_cb(uct_completion_t *uct_comp, ucs_status_t status)
     {
         struct dcs_comp *comp = (struct dcs_comp *)uct_comp;
-        uct_dc_ep_t *ep;
+        uct_dc_mlx5_ep_t *ep;
 
         EXPECT_UCS_OK(status);
 
         ep = dc_ep(comp->e, 0);
         /* dci must be released before completion cb is called */
-        EXPECT_EQ(UCT_DC_EP_NO_DCI, ep->dci);
+        EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
         comp->e->destroy_eps();
     }
 
@@ -100,10 +100,10 @@ protected:
     {
         struct dcs_pending *preq = (struct dcs_pending *)uct_req;
         ucs_status_t status;
-        uct_dc_ep_t *ep;
+        uct_dc_mlx5_ep_t *ep;
 
         ep = dc_ep(preq->e, 0);
-        EXPECT_NE(UCT_DC_EP_NO_DCI, ep->dci);
+        EXPECT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
 
         status = uct_ep_flush(preq->e->ep(0), 0, NULL);
         if (status == UCS_OK) {
@@ -115,13 +115,13 @@ protected:
     static ucs_status_t uct_pending_dummy(uct_pending_req_t *uct_req) 
     {
         struct dcs_pending *preq = (struct dcs_pending *)uct_req;
-        uct_dc_ep_t *ep;
-        uct_dc_iface_t *iface;
+        uct_dc_mlx5_ep_t *ep;
+        uct_dc_mlx5_iface_t *iface;
 
         ep    = dc_ep(preq->e, 0);
         iface = dc_iface(preq->e);
 
-        EXPECT_NE(UCT_DC_EP_NO_DCI, ep->dci);
+        EXPECT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
 
         /* simulate arbiter stop because lack of global resorce
          * operation still stands on pending
@@ -134,12 +134,12 @@ protected:
     static void purge_cb(uct_pending_req_t *uct_req, void *arg)
     {
         struct dcs_pending *preq = (struct dcs_pending *)uct_req;
-        uct_dc_ep_t *ep;
-        uct_dc_iface_t *iface;
+        uct_dc_mlx5_ep_t *ep;
+        uct_dc_mlx5_iface_t *iface;
 
         ep    = dc_ep(preq->e, 0);
         iface = dc_iface(preq->e);
-        EXPECT_NE(UCT_DC_EP_NO_DCI, ep->dci);
+        EXPECT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
         iface->super.tx.cq_available = 8;
     }
 
@@ -149,13 +149,13 @@ int test_dc::n_warnings = 0;
 
 UCS_TEST_P(test_dc, dcs_single) {
     ucs_status_t status;
-    uct_dc_ep_t *ep;
-    uct_dc_iface_t *iface;
+    uct_dc_mlx5_ep_t *ep;
+    uct_dc_mlx5_iface_t *iface;
 
     m_e1->connect_to_iface(0, *m_e2);
     ep = dc_ep(m_e1, 0);
     iface = dc_iface(m_e1);
-    EXPECT_EQ(UCT_DC_EP_NO_DCI, ep->dci);
+    EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
     status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
     EXPECT_UCS_OK(status);
     /* dci 0 must be assigned to the ep */
@@ -166,15 +166,15 @@ UCS_TEST_P(test_dc, dcs_single) {
     flush();
 
     /* after the flush dci must be released */
-    EXPECT_EQ(UCT_DC_EP_NO_DCI, ep->dci);
+    EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
     EXPECT_EQ(0, iface->tx.stack_top);
     EXPECT_EQ(0, iface->tx.dcis_stack[0]);
 }
 
 UCS_TEST_P(test_dc, dcs_multi) {
     ucs_status_t status;
-    uct_dc_ep_t *ep;
-    uct_dc_iface_t *iface;
+    uct_dc_mlx5_ep_t *ep;
+    uct_dc_mlx5_iface_t *iface;
     unsigned i;
 
     iface = dc_iface(m_e1);
@@ -184,7 +184,7 @@ UCS_TEST_P(test_dc, dcs_multi) {
 
     for (i = 0; i < iface->tx.ndci; i++) {
         ep = dc_ep(m_e1, i);
-        EXPECT_EQ(UCT_DC_EP_NO_DCI, ep->dci);
+        EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
         status = uct_ep_am_short(m_e1->ep(i), 0, 0, NULL, 0);
         EXPECT_UCS_OK(status);
 
@@ -205,7 +205,7 @@ UCS_TEST_P(test_dc, dcs_multi) {
     EXPECT_EQ(0, iface->tx.stack_top);
     for (i = 0; i < iface->tx.ndci; i++) {
         ep = dc_ep(m_e1, i);
-        EXPECT_EQ(UCT_DC_EP_NO_DCI, ep->dci);
+        EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
     }
 }
 
@@ -216,8 +216,8 @@ UCS_TEST_P(test_dc, dcs_multi) {
 UCS_TEST_P(test_dc, dcs_ep_destroy) {
 
     ucs_status_t status;
-    uct_dc_ep_t *ep;
-    uct_dc_iface_t *iface;
+    uct_dc_mlx5_ep_t *ep;
+    uct_dc_mlx5_iface_t *iface;
 
 
     ucs_log_push_handler(log_ep_destroy);
@@ -227,7 +227,7 @@ UCS_TEST_P(test_dc, dcs_ep_destroy) {
     ep = dc_ep(m_e1, 0);
     iface = dc_iface(m_e1);
     n_warnings = 0;
-    EXPECT_EQ(UCT_DC_EP_NO_DCI, ep->dci);
+    EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
     status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
     EXPECT_UCS_OK(status);
     /* dci 0 must be assigned to the ep */
@@ -249,13 +249,13 @@ UCS_TEST_P(test_dc, dcs_ep_destroy) {
 UCS_TEST_P(test_dc, dcs_ep_flush_destroy) {
 
     ucs_status_t status;
-    uct_dc_ep_t *ep;
-    uct_dc_iface_t *iface;
+    uct_dc_mlx5_ep_t *ep;
+    uct_dc_mlx5_iface_t *iface;
 
     m_e1->connect_to_iface(0, *m_e2);
     ep = dc_ep(m_e1, 0);
     iface = dc_iface(m_e1);
-    EXPECT_EQ(UCT_DC_EP_NO_DCI, ep->dci);
+    EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
     status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
     EXPECT_UCS_OK(status);
 
@@ -279,7 +279,7 @@ UCS_TEST_P(test_dc, dcs_ep_flush_destroy) {
 UCS_TEST_P(test_dc, dcs_ep_flush_pending) {
 
     ucs_status_t status;
-    uct_dc_iface_t *iface;
+    uct_dc_mlx5_iface_t *iface;
 
     m_e1->connect_to_iface(0, *m_e2);
     m_e1->connect_to_iface(1, *m_e2);
@@ -327,7 +327,7 @@ UCS_TEST_P(test_dc, dcs_ep_flush_pending) {
 UCS_TEST_P(test_dc, dcs_ep_am_pending) {
 
     ucs_status_t status;
-    uct_dc_iface_t *iface;
+    uct_dc_mlx5_iface_t *iface;
 
     m_e1->connect_to_iface(0, *m_e2);
     m_e1->connect_to_iface(1, *m_e2);
@@ -364,8 +364,8 @@ UCS_TEST_P(test_dc, dcs_ep_am_pending) {
 UCS_TEST_P(test_dc, dcs_ep_purge_pending) {
 
     ucs_status_t status;
-    uct_dc_iface_t *iface;
-    uct_dc_ep_t *ep;
+    uct_dc_mlx5_iface_t *iface;
+    uct_dc_mlx5_ep_t *ep;
 
     m_e1->connect_to_iface(0, *m_e2);
     m_e1->connect_to_iface(1, *m_e2);
@@ -398,7 +398,7 @@ UCS_TEST_P(test_dc, dcs_ep_purge_pending) {
 
     EXPECT_LE(1, iface->tx.stack_top);
     uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
-    EXPECT_EQ(UCT_DC_EP_NO_DCI, ep->dci);
+    EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
     flush();
     EXPECT_EQ(0, iface->tx.stack_top);
 }
@@ -411,7 +411,7 @@ public:
 
     /* virtual */
     uct_rc_fc_t* get_fc_ptr(entity *e, int ep_idx = 0) {
-        return &ucs_derived_of(e->ep(ep_idx), uct_dc_ep_t)->fc;
+        return &ucs_derived_of(e->ep(ep_idx), uct_dc_mlx5_ep_t)->fc;
     }
 };
 
@@ -544,7 +544,7 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
     EXPECT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &req, 0));
 
     /* Make sure that ep does not hold dci when sends completed */
-    uct_dc_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_dc_iface_t);
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_dc_mlx5_iface_t);
     ucs_time_t deadline   = ucs::get_deadline();
     while (iface->tx.stack_top && (ucs_get_time() < deadline)) {
         progress();
@@ -577,11 +577,11 @@ public:
     }
 
     uct_rc_fc_t* get_fc_ptr(entity *e, int ep_idx = 0) {
-        return &ucs_derived_of(e->ep(ep_idx), uct_dc_ep_t)->fc;
+        return &ucs_derived_of(e->ep(ep_idx), uct_dc_mlx5_ep_t)->fc;
     }
 
     uct_rc_fc_t* fake_ep_fc_ptr(entity *e) {
-        return &ucs_derived_of(e->iface(), uct_dc_iface_t)->tx.fc_ep->fc;
+        return &ucs_derived_of(e->iface(), uct_dc_mlx5_iface_t)->tx.fc_ep->fc;
     }
 };
 

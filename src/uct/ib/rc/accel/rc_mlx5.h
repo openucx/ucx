@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -13,7 +13,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/class.h>
 
-#include "rc_mlx5_common.h"
+#include "rc_mlx5.inl"
 
 /**
  * RC mlx5 interface configuration

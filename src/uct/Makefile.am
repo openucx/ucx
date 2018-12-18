@@ -97,7 +97,8 @@ libuct_la_SOURCES += \
 if HAVE_MLX5_HW
 noinst_HEADERS += \
 	ib/rc/accel/rc_mlx5.h \
-	ib/rc/accel/rc_mlx5_common.h 
+	ib/rc/accel/rc_mlx5_common.h \
+	ib/rc/accel/rc_mlx5.inl
 
 libuct_la_SOURCES += \
 	ib/rc/accel/rc_mlx5_ep.c \
@@ -108,18 +109,12 @@ endif
 
 if HAVE_TL_DC
 noinst_HEADERS += \
-	ib/dc/base/dc_iface.h \
-	ib/dc/base/dc_ep.h
+	ib/dc/dc_mlx5.h \
+	ib/dc/dc_mlx5_ep.h
 
 libuct_la_SOURCES += \
-	ib/dc/base/dc_iface.c \
-	ib/dc/base/dc_ep.c
-
-noinst_HEADERS += \
-	ib/dc/accel/dc_mlx5.h
-
-libuct_la_SOURCES += \
-	ib/dc/accel/dc_mlx5.c
+	ib/dc/dc_mlx5.c \
+	ib/dc/dc_mlx5_ep.c
 endif
 
 if HAVE_TL_UD

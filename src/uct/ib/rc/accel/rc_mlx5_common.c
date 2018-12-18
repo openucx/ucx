@@ -1,11 +1,11 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
 
 
-#include "rc_mlx5_common.h"
+#include "rc_mlx5.inl"
 
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_iface.h>

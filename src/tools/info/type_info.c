@@ -48,9 +48,8 @@
 #endif
 
 #if HAVE_TL_DC
-#  include <uct/ib/dc/base/dc_iface.h>
-#  include <uct/ib/dc/base/dc_ep.h>
-#  include <uct/ib/dc/accel/dc_mlx5.h>
+#  include <uct/ib/dc/dc_mlx5.h>
+#  include <uct/ib/dc/dc_mlx5_ep.h>
 #endif
 
 #if HAVE_TL_UD
@@ -201,19 +200,12 @@ void print_type_info(const char * tl_name)
 #endif
 
 #if HAVE_TL_DC
-    if (tl_name == NULL || !strcasecmp(tl_name, "dc") ||
-        !strcasecmp(tl_name, "dc_mlx5"))
+    if (tl_name == NULL || !strcasecmp(tl_name, "dc_mlx5"))
     {
         printf("DC:\n");
-        PRINT_SIZE(uct_dc_ep_t);
-        PRINT_SIZE(uct_dc_iface_t);
-        PRINT_SIZE(uct_dc_iface_config_t);
-
-        if (tl_name == NULL || !strcasecmp(tl_name, "dc_mlx5")) {
-            PRINT_SIZE(uct_dc_mlx5_ep_t);
-            PRINT_SIZE(uct_dc_mlx5_grh_ep_t);
-            PRINT_SIZE(uct_dc_mlx5_iface_t);
-        }
+        PRINT_SIZE(uct_dc_mlx5_ep_t);
+        PRINT_SIZE(uct_dc_mlx5_iface_t);
+        PRINT_SIZE(uct_dc_mlx5_iface_config_t);
         printf("\n");
     }
 #endif
