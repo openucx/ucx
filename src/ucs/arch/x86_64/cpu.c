@@ -144,7 +144,7 @@ double ucs_arch_get_clocks_per_sec()
 {
     double freq;
 
-    freq = ucs_x86_init_tsc_freq(&freq);
+    freq = ucs_x86_init_tsc_freq();
     if (freq > 0.0) {
         /* using rdtsc */
         return freq;
