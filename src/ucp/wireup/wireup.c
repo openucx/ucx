@@ -98,7 +98,7 @@ static unsigned ucp_wireup_address_index(const unsigned *order,
                                          uint64_t tl_bitmap,
                                          ucp_rsc_index_t tl_index)
 {
-    return order[ucs_count_one_bits(tl_bitmap & UCS_MASK(tl_index))];
+    return order[ucs_popcount(tl_bitmap & UCS_MASK(tl_index))];
 }
 
 static inline int ucp_wireup_is_ep_needed(ucp_ep_h ep)

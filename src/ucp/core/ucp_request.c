@@ -214,7 +214,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     flags  = UCT_MD_MEM_ACCESS_RMA | uct_flags;
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        ucs_assert(ucs_count_one_bits(md_map) <= UCP_MAX_OP_MDS);
+        ucs_assert(ucs_popcount(md_map) <= UCP_MAX_OP_MDS);
         status = ucp_mem_rereg_mds(context, md_map, buffer, length, flags,
                                    NULL, mem_type, NULL, state->dt.contig.memh,
                                    &state->dt.contig.md_map);

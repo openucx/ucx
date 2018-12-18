@@ -145,7 +145,7 @@ void ucp_mem_type_unreg_buffers(ucp_worker_h worker, uct_memory_type_t mem_type,
 static UCS_F_ALWAYS_INLINE ucp_md_index_t
 ucp_memh_map2idx(ucp_md_map_t md_map, ucp_md_index_t md_idx)
 {
-    return ucs_count_one_bits(md_map & UCS_MASK(md_idx));
+    return ucs_popcount(md_map & UCS_MASK(md_idx));
 }
 
 static UCS_F_ALWAYS_INLINE uct_mem_h

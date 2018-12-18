@@ -434,7 +434,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
             /* Save the address index of this transport */
             if (order != NULL) {
-                order[ucs_count_one_bits(tl_bitmap & UCS_MASK(i))] = index;
+                order[ucs_popcount(tl_bitmap & UCS_MASK(i))] = index;
             }
 
             ucs_trace("pack addr[%d] : "UCT_TL_RESOURCE_DESC_FMT
