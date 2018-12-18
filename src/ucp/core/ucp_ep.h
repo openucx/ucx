@@ -223,6 +223,8 @@ typedef struct ucp_ep_config {
             size_t          am_thresh;
             /* Total size of packed rkey, according to high-bw md_map */
             size_t          rkey_size;
+            /* BW based scale factor */
+            double          scale[UCP_MAX_LANES];
         } rndv;
 
         /* special thresholds for the ucp_tag_send_nbr() */
