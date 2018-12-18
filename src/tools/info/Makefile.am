@@ -5,16 +5,9 @@
 # See file LICENSE for terms.
 #
 
-bin_PROGRAMS          = ucx_info
-AM_CPPFLAGS           = \
-    $(BASE_CPPFLAGS) \
-    -I$(abs_top_srcdir)/src \
-    -I$(abs_top_builddir)/src
-if HAVE_IB
-AM_CPPFLAGS += $(IBVERBS_CPPFLAGS)
-endif
+bin_PROGRAMS = ucx_info
 
-BUILT_SOURCES = build_config.h
+BUILT_SOURCES  = build_config.h
 DISTCLEANFILES = build_config.h
 
 #
@@ -23,9 +16,13 @@ DISTCLEANFILES = build_config.h
 build_config.h: $(top_builddir)/config.h Makefile
 	$(SED) -nr 's:\s*#define\s+(\w+)(\s+(\w+)|\s+(".*")|\s*)$$:{"\1", UCS_PP_MAKE_STRING(\3\4)},:p' <$(top_builddir)/config.h >$@
 
-ucx_info_CFLAGS = $(BASE_CFLAGS)
+ucx_info_CPPFLAGS  = $(BASE_CPPFLAGS)
+ucx_info_CFLAGS    = $(BASE_CFLAGS)
+if HAVE_IB
+ucx_info_CPPFLAGS += $(IBVERBS_CPPFLAGS)
+endif
 if HAVE_CRAY_UGNI
-ucx_info_CFLAGS += $(CRAY_UGNI_CFLAGS)
+ucx_info_CFLAGS   += $(CRAY_UGNI_CFLAGS)
 endif
 
 ucx_info_SOURCES  = \

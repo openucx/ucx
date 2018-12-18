@@ -16,8 +16,6 @@ libucm_la_LDFLAGS  = \
 
 libucm_la_CPPFLAGS = \
     $(BASE_CPPFLAGS) \
-    -I$(abs_top_srcdir)/src \
-    -I$(abs_top_builddir)/src \
     -DUCM_MALLOC_PREFIX=ucm_dl
 
 libucm_la_CFLAGS = \

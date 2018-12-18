@@ -6,16 +6,14 @@
 #
 
 AUTOMAKE_OPTIONS    = nostdinc # avoid collision with built-in debug.h
-AM_CPPFLAGS         = $(BASE_CPPFLAGS) -I$(top_builddir) -I$(abs_top_srcdir)/src
-libucs_la_CFLAGS    = $(BASE_CFLAGS)
 lib_LTLIBRARIES     = libucs.la
 bin_PROGRAMS        =
 
+libucs_la_CPPFLAGS = $(BASE_CPPFLAGS)
+libucs_la_CFLAGS   = $(BASE_CFLAGS)
 libucs_la_LDFLAGS  = -ldl $(NUMA_LIBS) -version-info $(SOVERSION)
 libucs_ladir       = $(includedir)/ucs
-libucs_la_LIBADD   = \
-	$(LIBM) \
-	$(top_builddir)/src/ucm/libucm.la
+libucs_la_LIBADD   = $(LIBM) $(top_builddir)/src/ucm/libucm.la
 
 nobase_dist_libucs_la_HEADERS = \
 	algorithm/crc.h \
@@ -139,6 +137,7 @@ libucs_la_SOURCES += \
 	stats/libstats.c
 
 bin_PROGRAMS            += ucs_stats_parser
+ucs_stats_parser_CPPFLAGS = $(BASE_CPPFLAGS)
 ucs_stats_parser_LDADD   = libucs.la
 ucs_stats_parser_SOURCES = stats/stats_parser.c
 endif

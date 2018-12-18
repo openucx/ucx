@@ -28,12 +28,6 @@ dist_perftest_DATA = \
 bin_PROGRAMS          = ucx_perftest
 noinst_LTLIBRARIES    = libucxperf.la
 
-AM_CPPFLAGS           = \
-    $(BASE_CPPFLAGS) \
-    -I$(abs_top_srcdir)/src \
-    -I$(abs_top_builddir)/src \
-    $(RTE_CPPFLAGS)
-
 noinst_HEADERS = \
 	libperf.h \
 	libperf_int.h
@@ -44,6 +38,8 @@ libucxperf_la_SOURCES = \
 libucxperf_la_LDFLAGS = \
 	$(RTE_LDFLAGS) \
 	$(OPENMP_CFLAGS)
+libucxperf_la_CPPFLAGS = \
+	$(BASE_CPPFLAGS)
 libucxperf_la_CXXFLAGS = \
 	$(BASE_CXXFLAGS) \
 	$(OPENMP_CFLAGS)
@@ -61,7 +57,8 @@ ucx_perftest_LDFLAGS = \
 	$(RTE_LDFLAGS) \
 	$(OPENMP_CFLAGS)
 ucx_perftest_CPPFLAGS = \
-	$(BASE_CPPFLAGS)
+	$(BASE_CPPFLAGS) \
+	$(RTE_CPPFLAGS)
 ucx_perftest_CFLAGS = \
 	$(BASE_CFLAGS) \
 	$(OPENMP_CFLAGS)

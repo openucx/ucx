@@ -25,13 +25,6 @@ installcheck-local:
 
 if HAVE_EXAMPLES
 
-EXAMPLE_INCLUDE_FLAGS = \
-	-I$(abs_top_srcdir)/src \
-	-I$(abs_top_builddir)/src
-
-EXAMPLE_CPPFLAGS = \
-	$(EXAMPLE_INCLUDE_FLAGS)
-
 noinst_PROGRAMS = \
 	ucp_hello_world \
 	uct_hello_world \
@@ -40,22 +33,22 @@ noinst_PROGRAMS = \
 
 ucp_hello_world_SOURCES  = ucp_hello_world.c
 ucp_hello_world_CFLAGS   = $(BASE_CFLAGS)
-ucp_hello_world_CPPFLAGS = $(EXAMPLE_CPPFLAGS)
+ucp_hello_world_CPPFLAGS = $(BASE_CPPFLAGS)
 ucp_hello_world_LDADD    = $(top_builddir)/src/ucp/libucp.la
 
 uct_hello_world_SOURCES  = uct_hello_world.c
 uct_hello_world_CFLAGS   = $(BASE_CFLAGS)
-uct_hello_world_CPPFLAGS = $(EXAMPLE_CPPFLAGS)
+uct_hello_world_CPPFLAGS = $(BASE_CPPFLAGS)
 uct_hello_world_LDADD    = $(top_builddir)/src/uct/libuct.la
 
 ucp_client_server_SOURCES  = ucp_client_server.c
 ucp_client_server_CFLAGS   = $(BASE_CFLAGS)
-ucp_client_server_CPPFLAGS = $(EXAMPLE_CPPFLAGS)
+ucp_client_server_CPPFLAGS = $(BASE_CPPFLAGS)
 ucp_client_server_LDADD    = $(top_builddir)/src/ucp/libucp.la
 
 ucx_profiling_SOURCES  = ucx_profiling.c
 ucx_profiling_CFLAGS   = $(BASE_CFLAGS)
-ucx_profiling_CPPFLAGS = $(EXAMPLE_CPPFLAGS)
+ucx_profiling_CPPFLAGS = $(BASE_CPPFLAGS)
 ucx_profiling_LDADD    = $(top_builddir)/src/ucs/libucs.la
 
 endif
