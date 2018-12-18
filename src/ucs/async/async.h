@@ -125,7 +125,7 @@ static inline int ucs_async_check_miss(ucs_async_context_t *async)
     } while (0)
 
 
-#define UCS_ASYNC_MODE_DEFAULT (RUNNING_ON_VALGRIND ? \
+#define UCS_ASYNC_THREAD_LOCK_TYPE (RUNNING_ON_VALGRIND ? \
     UCS_ASYNC_MODE_THREAD_MUTEX : UCS_ASYNC_MODE_THREAD_SPINLOCK)
 
 

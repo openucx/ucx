@@ -185,7 +185,7 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     params.command         = test.command;
     params.test_type       = test.test_type;
     params.thread_mode     = UCS_THREAD_MODE_SINGLE;
-    params.async_mode      = UCS_ASYNC_MODE_DEFAULT;
+    params.async_mode      = UCS_ASYNC_THREAD_LOCK_TYPE;
     params.thread_count    = 1;
     params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
     params.flags           = test.test_flags | flags;

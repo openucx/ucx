@@ -979,7 +979,7 @@ uct_test::entity::async_wrapper::async_wrapper()
     ucs_status_t status;
 
     /* Initialize context */
-    status = ucs_async_context_init(&m_async, UCS_ASYNC_MODE_DEFAULT);
+    status = ucs_async_context_init(&m_async, UCS_ASYNC_THREAD_LOCK_TYPE);
     if (UCS_OK != status) {
         fprintf(stderr, "Failed to init async context.\n");fflush(stderr);
     }

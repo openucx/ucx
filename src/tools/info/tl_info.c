@@ -334,7 +334,7 @@ static ucs_status_t print_tl_info(uct_md_h md, const char *tl_name,
     ucs_status_t status;
     unsigned i;
 
-    status = ucs_async_context_init(&async, UCS_ASYNC_MODE_DEFAULT);
+    status = ucs_async_context_init(&async, UCS_ASYNC_THREAD_LOCK_TYPE);
     if (status != UCS_OK) {
         return status;
     }
