@@ -734,12 +734,15 @@ UCS_TEST_P(test_async_timer_mt, multithread) {
     EXPECT_GE(min_count, exp_min_count);
 }
 
-INSTANTIATE_TEST_CASE_P(signal, test_async, ::testing::Values(UCS_ASYNC_MODE_SIGNAL));
-INSTANTIATE_TEST_CASE_P(thread, test_async, ::testing::Values(UCS_ASYNC_MODE_THREAD));
-INSTANTIATE_TEST_CASE_P(poll,   test_async, ::testing::Values(UCS_ASYNC_MODE_POLL));
-INSTANTIATE_TEST_CASE_P(signal, test_async_event_mt, ::testing::Values(UCS_ASYNC_MODE_SIGNAL));
-INSTANTIATE_TEST_CASE_P(thread, test_async_event_mt, ::testing::Values(UCS_ASYNC_MODE_THREAD));
-INSTANTIATE_TEST_CASE_P(poll,   test_async_event_mt, ::testing::Values(UCS_ASYNC_MODE_POLL));
-INSTANTIATE_TEST_CASE_P(signal, test_async_timer_mt, ::testing::Values(UCS_ASYNC_MODE_SIGNAL));
-INSTANTIATE_TEST_CASE_P(thread, test_async_timer_mt, ::testing::Values(UCS_ASYNC_MODE_THREAD));
-INSTANTIATE_TEST_CASE_P(poll,   test_async_timer_mt, ::testing::Values(UCS_ASYNC_MODE_POLL));
+INSTANTIATE_TEST_CASE_P(signal,          test_async, ::testing::Values(UCS_ASYNC_MODE_SIGNAL));
+INSTANTIATE_TEST_CASE_P(thread_spinlock, test_async, ::testing::Values(UCS_ASYNC_MODE_THREAD_SPINLOCK));
+INSTANTIATE_TEST_CASE_P(thread_mutex,    test_async, ::testing::Values(UCS_ASYNC_MODE_THREAD_MUTEX));
+INSTANTIATE_TEST_CASE_P(poll,            test_async, ::testing::Values(UCS_ASYNC_MODE_POLL));
+INSTANTIATE_TEST_CASE_P(signal,          test_async_event_mt, ::testing::Values(UCS_ASYNC_MODE_SIGNAL));
+INSTANTIATE_TEST_CASE_P(thread_spinlock, test_async_event_mt, ::testing::Values(UCS_ASYNC_MODE_THREAD_SPINLOCK));
+INSTANTIATE_TEST_CASE_P(thread_mutex,    test_async_event_mt, ::testing::Values(UCS_ASYNC_MODE_THREAD_MUTEX));
+INSTANTIATE_TEST_CASE_P(poll,            test_async_event_mt, ::testing::Values(UCS_ASYNC_MODE_POLL));
+INSTANTIATE_TEST_CASE_P(signal,          test_async_timer_mt, ::testing::Values(UCS_ASYNC_MODE_SIGNAL));
+INSTANTIATE_TEST_CASE_P(thread_spinlock, test_async_timer_mt, ::testing::Values(UCS_ASYNC_MODE_THREAD_SPINLOCK));
+INSTANTIATE_TEST_CASE_P(thread_mutex,    test_async_timer_mt, ::testing::Values(UCS_ASYNC_MODE_THREAD_MUTEX));
+INSTANTIATE_TEST_CASE_P(poll,            test_async_timer_mt, ::testing::Values(UCS_ASYNC_MODE_POLL));

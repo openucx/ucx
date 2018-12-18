@@ -404,8 +404,9 @@ static void usage(const struct perftest_context *ctx, const char *program)
                                 ctx->params.uct.fc_window);
     printf("     -H <size>      active message header size (%zu)\n",
                                 ctx->params.am_hdr_size);
-    printf("     -A <mode>      asynchronous progress mode (thread)\n");
-    printf("                        thread - separate progress thread\n");
+    printf("     -A <mode>      asynchronous progress mode (thread_spinlock)\n");
+    printf("                        thread_spinlock - separate progress thread with spin locking\n");
+    printf("                        thread_mutex - separate progress thread with mutex locking\n");
     printf("                        signal - signal-based timer\n");
     printf("\n");
     printf("  UCP only:\n");
@@ -502,7 +503,7 @@ static void init_test_params(ucx_perf_params_t *params)
     params->test_type       = UCX_PERF_TEST_TYPE_LAST;
     params->thread_mode     = UCS_THREAD_MODE_SINGLE;
     params->thread_count    = 1;
-    params->async_mode      = UCS_ASYNC_MODE_THREAD;
+    params->async_mode      = UCS_ASYNC_THREAD_LOCK_TYPE;
     params->wait_mode       = UCX_PERF_WAIT_MODE_LAST;
     params->max_outstanding = 1;
     params->warmup_iter     = 10000;
@@ -630,8 +631,11 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         params->thread_mode = UCS_THREAD_MODE_MULTI;
         return UCS_OK;
     case 'A':
-        if (!strcmp(optarg, "thread")) {
-            params->async_mode = UCS_ASYNC_MODE_THREAD;
+        if (!strcmp(optarg, "thread") || !strcmp(optarg, "thread_spinlock")) {
+            params->async_mode = UCS_ASYNC_MODE_THREAD_SPINLOCK;
+            return UCS_OK;
+        } else if (!strcmp(optarg, "thread_mutex")) {
+            params->async_mode = UCS_ASYNC_MODE_THREAD_MUTEX;
             return UCS_OK;
         } else if (!strcmp(optarg, "signal")) {
             params->async_mode = UCS_ASYNC_MODE_SIGNAL;

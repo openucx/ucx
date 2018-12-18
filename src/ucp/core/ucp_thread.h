@@ -101,13 +101,4 @@ typedef struct ucp_mt_lock {
     }
 
 
-#ifdef ENABLE_ASSERT
-
-/* Debug macro */
-#define UCP_THREAD_CS_IS_RECURSIVELY_LOCKED(_lock_ptr)                  \
-    (((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) ? 0 :                  \
-     ucs_spin_is_owner(&((_lock_ptr)->lock.mt_spinlock), pthread_self()))
-
-#endif
-
 #endif

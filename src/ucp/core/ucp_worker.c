@@ -1365,17 +1365,20 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_THREAD_MODE) {
+#if !ENABLE_MT
+        if (params->thread_mode == UCS_THREAD_MODE_MULTI) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+#endif
         thread_mode = params->thread_mode;
     } else {
         thread_mode = UCS_THREAD_MODE_SINGLE;
     }
 
-    if (thread_mode != UCS_THREAD_MODE_MULTI) {
-        worker->mt_lock.mt_type = UCP_MT_TYPE_NONE;
-    } else if (context->config.ext.use_mt_mutex) {
-        worker->mt_lock.mt_type = UCP_MT_TYPE_MUTEX;
+    if (thread_mode == UCS_THREAD_MODE_MULTI) {
+        worker->flags = UCP_WORKER_FLAG_MT;
     } else {
-        worker->mt_lock.mt_type = UCP_MT_TYPE_SPINLOCK;
+        worker->flags = 0;
     }
 
     if (thread_mode == UCS_THREAD_MODE_SINGLE) {
@@ -1385,12 +1388,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         uct_thread_mode = UCS_THREAD_MODE_SERIALIZED;
     }
 
-    UCP_THREAD_LOCK_INIT(&worker->mt_lock);
-
     worker->context           = context;
     worker->uuid              = ucs_generate_uuid((uintptr_t)worker);
     worker->flush_ops_count   = 0;
-    worker->flags             = 0;
     worker->inprogress        = 0;
     worker->ep_config_max     = config_count;
     worker->ep_config_count   = 0;
@@ -1433,7 +1433,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_free_stats;
     }
 
-    status = ucs_async_context_init(&worker->async, UCS_ASYNC_MODE_THREAD);
+    status = ucs_async_context_init(&worker->async,
+                                    context->config.ext.use_mt_mutex ?
+                                    UCS_ASYNC_MODE_THREAD_MUTEX :
+                                    UCS_ASYNC_THREAD_LOCK_TYPE);
     if (status != UCS_OK) {
         goto err_free_tm_offload_stats;
     }
@@ -1517,7 +1520,6 @@ err_free_stats:
     UCS_STATS_NODE_FREE(worker->stats);
 err_free:
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
-    UCP_THREAD_LOCK_FINALIZE(&worker->mt_lock);
     ucs_free(worker);
     return status;
 }
@@ -1552,7 +1554,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_async_context_cleanup(&worker->async);
     ucp_ep_match_cleanup(&worker->ep_match_ctx);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
-    UCP_THREAD_LOCK_FINALIZE(&worker->mt_lock);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);
     ucs_free(worker);
@@ -1562,7 +1563,7 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
                               ucp_worker_attr_t *attr)
 {
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_THREAD_MODE) {
-        if (UCP_THREAD_IS_REQUIRED(&worker->mt_lock)) {
+        if (worker->flags & UCP_WORKER_FLAG_MT) {
             attr->thread_mode = UCS_THREAD_MODE_MULTI;
         } else {
             attr->thread_mode = UCS_THREAD_MODE_SINGLE;

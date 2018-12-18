@@ -19,9 +19,6 @@ static ucs_config_field_t uct_cm_iface_config_table[] = {
   {"IB_", "RX_INLINE=0", NULL,
    ucs_offsetof(uct_cm_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
-  {"ASYNC_MODE", "thread", "Async mode to use",
-   ucs_offsetof(uct_cm_iface_config_t, async_mode), UCS_CONFIG_TYPE_ENUM(ucs_async_mode_names)},
-
   {"TIMEOUT", "300ms", "Timeout for MAD layer",
    ucs_offsetof(uct_cm_iface_config_t, timeout), UCS_CONFIG_TYPE_TIME},
 
@@ -345,12 +342,13 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
         }
     } while (ret);
 
-    if (config->async_mode == UCS_ASYNC_MODE_SIGNAL) {
+    if (self->super.super.worker->async->mode == UCS_ASYNC_MODE_SIGNAL) {
         ucs_warn("ib_cm fd does not support SIGIO");
     }
 
-    status = ucs_async_set_event_handler(config->async_mode, self->cmdev->fd,
-                                         POLLIN, uct_cm_iface_event_handler, self,
+    status = ucs_async_set_event_handler(self->super.super.worker->async->mode,
+                                         self->cmdev->fd, POLLIN,
+                                         uct_cm_iface_event_handler, self,
                                          self->super.super.worker->async);
     if (status != UCS_OK) {
         ucs_error("failed to set event handler");

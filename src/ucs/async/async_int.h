@@ -73,7 +73,8 @@ typedef struct ucs_async_ops {
 } ucs_async_ops_t;
 
 
-extern ucs_async_ops_t ucs_async_thread_ops;
+extern ucs_async_ops_t ucs_async_thread_spinlock_ops;
+extern ucs_async_ops_t ucs_async_thread_mutex_ops;
 extern ucs_async_ops_t ucs_async_signal_ops;
 
 #endif

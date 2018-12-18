@@ -13,6 +13,7 @@ class test_uct_ep : public uct_test {
 protected:
 
     void init() {
+        uct_test::init();
         m_sender = uct_test::create_entity(0);
         m_entities.push_back(m_sender);
 
