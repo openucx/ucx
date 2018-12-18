@@ -94,15 +94,17 @@
 )
 
 /* Returns the number of 1-bits in x */
-#define ucs_count_one_bits(x)      __builtin_popcount(x)
+#define ucs_popcount(x) \
+    ((sizeof(x) <= 4) ? __builtin_popcount((uint32_t)(x)) : __builtin_popcountl(x))
 
 /* Returns the number of trailing 0-bits in x, starting at the least
  * significant bit position.  If x is 0, the result is undefined.
  */
-#define ucs_count_zero_bits(x)     __builtin_ctz(x)
+#define ucs_count_trailing_zero_bits(x) \
+    ((sizeof(x) <= 4) ? __builtin_ctz((uint32_t)(x)) : __builtin_ctzl(x))
 
 /* Returns the number of 1-bits by _idx mask */
 #define ucs_bitmap2idx(_map, _idx) \
-    ucs_count_one_bits((_map) & (UCS_MASK(_idx)))
+    ucs_popcount((_map) & (UCS_MASK(_idx)))
 
 #endif

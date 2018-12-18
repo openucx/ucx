@@ -1000,7 +1000,7 @@ static ucs_status_t ucp_wireup_add_bw_lanes(ucp_ep_h ep,
      * (we have to limit MD's number to avoid malloc in
      * memory registration) */
     while ((num_lanes < bw_info->max_lanes) &&
-           (ucs_count_one_bits(md_map) < UCP_MAX_OP_MDS)) {
+           (ucs_popcount(md_map) < UCP_MAX_OP_MDS)) {
         status = ucp_wireup_select_transport(ep, address_list, address_count,
                                              &bw_info->criteria, tl_bitmap, -1,
                                              local_dev_bitmap, remote_dev_bitmap,
@@ -1409,7 +1409,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     /* add to map first UCP_MAX_OP_MDS fastest MD's */
     for (i = 0;
          (key->rma_bw_lanes[i] != UCP_NULL_LANE) &&
-         (ucs_count_one_bits(key->rma_bw_md_map) < UCP_MAX_OP_MDS); i++) {
+         (ucs_popcount(key->rma_bw_md_map) < UCP_MAX_OP_MDS); i++) {
         lane = key->rma_bw_lanes[i];
         rsc_index = lane_descs[lane].rsc_index;
         md_index  = worker->context->tl_rscs[rsc_index].md_index;

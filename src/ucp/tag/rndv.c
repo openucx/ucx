@@ -313,7 +313,7 @@ static ucp_lane_index_t ucp_rndv_get_next_lane(ucp_request_t *rndv_req, uct_rkey
     rndv_req->send.rndv_get.lanes_map |= UCS_BIT(lane);
     /* in case if masked too much lanes - reset mask to zero
      * to select first lane next time */
-    if (ucs_count_one_bits(rndv_req->send.rndv_get.lanes_map) >=
+    if (ucs_popcount(rndv_req->send.rndv_get.lanes_map) >=
         ep->worker->context->config.ext.max_rndv_lanes) {
         rndv_req->send.rndv_get.lanes_map = 0;
     }

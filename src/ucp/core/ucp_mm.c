@@ -43,7 +43,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
         return UCS_OK; /* shortcut - no changes required */
     }
 
-    prev_num_memh = ucs_count_one_bits(*md_map_p);
+    prev_num_memh = ucs_popcount(*md_map_p);
     prev_uct_memh = ucs_alloca(prev_num_memh * sizeof(*prev_uct_memh));
 
     /* Go over previous handles, save only the ones we will need */
@@ -78,7 +78,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     }
 
     /* prev_uct_memh should contain the handles which should be reused */
-    ucs_assert(prev_memh_index == ucs_count_one_bits(*md_map_p & reg_md_map));
+    ucs_assert(prev_memh_index == ucs_popcount(*md_map_p & reg_md_map));
 
     /* Go over requested MD map, and use / register new handles */
     new_md_map      = 0;
