@@ -17,7 +17,6 @@
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/sys/memtype_cache.h>
-#include <ucs/type/component.h>
 #include <ucs/type/spinlock.h>
 
 

@@ -132,7 +132,6 @@ gtest_SOURCES = \
 	ucs/test_async.cc \
 	ucs/test_callbackq.cc \
 	ucs/test_class.cc \
-	ucs/test_component.cc \
 	ucs/test_config.cc \
 	ucs/test_datatype.cc \
 	ucs/test_debug.cc \

@@ -9,10 +9,9 @@
 
 #include "types.h"
 
-#include <ucs/datastruct/list_types.h>
-#include <ucs/type/component.h>
+#include <ucs/datastruct/list.h>
+#include <ucs/sys/compiler.h>
 #include <ucs/type/status.h>
-#include <ucs/sys/compiler_def.h>
 #include <stdio.h>
 
 
