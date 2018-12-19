@@ -56,6 +56,106 @@ UCS_CLASS_DECLARE(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *,
                   uct_ib_mlx5_base_av_t *, struct mlx5_grh_av *);
 
 
+ucs_status_t uct_dc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *payload,
+                                      unsigned length, uint64_t remote_addr,
+                                      uct_rkey_t rkey);
+
+ssize_t uct_dc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                                 void *arg, uint64_t remote_addr, uct_rkey_t rkey);
+
+ucs_status_t uct_dc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                                      uint64_t remote_addr, uct_rkey_t rkey,
+                                      uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
+                                      uct_unpack_callback_t unpack_cb,
+                                      void *arg, size_t length,
+                                      uint64_t remote_addr, uct_rkey_t rkey,
+                                      uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                                      uint64_t remote_addr, uct_rkey_t rkey,
+                                      uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
+                                     const void *buffer, unsigned length);
+
+ssize_t uct_dc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                                uct_pack_callback_t pack_cb, void *arg,
+                                unsigned flags);
+
+ucs_status_t uct_dc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
+                                     unsigned header_length, const uct_iov_t *iov,
+                                     size_t iovcnt, unsigned flags,
+                                     uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
+                                           uint64_t remote_addr, uct_rkey_t rkey,
+                                           uint64_t *result, uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32_t swap,
+                                           uint64_t remote_addr, uct_rkey_t rkey,
+                                           uint32_t *result, uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_atomic64_post(uct_ep_h ep, unsigned opcode, uint64_t value,
+                                          uint64_t remote_addr, uct_rkey_t rkey);
+
+ucs_status_t uct_dc_mlx5_ep_atomic32_post(uct_ep_h ep, unsigned opcode, uint32_t value,
+                                          uint64_t remote_addr, uct_rkey_t rkey);
+
+ucs_status_t uct_dc_mlx5_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
+                                           uint64_t value, uint64_t *result,
+                                           uint64_t remote_addr, uct_rkey_t rkey,
+                                           uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
+                                           uint32_t value, uint32_t *result,
+                                           uint64_t remote_addr, uct_rkey_t rkey,
+                                           uct_completion_t *comp);
+
+#if IBV_EXP_HW_TM_DC
+ucs_status_t uct_dc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
+                                            const void *data, size_t length);
+
+ssize_t uct_dc_mlx5_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                       uint64_t imm,
+                                       uct_pack_callback_t pack_cb,
+                                       void *arg, unsigned flags);
+
+ucs_status_t uct_dc_mlx5_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                            uint64_t imm, const uct_iov_t *iov,
+                                            size_t iovcnt, unsigned flags,
+                                            uct_completion_t *comp);
+
+ucs_status_ptr_t uct_dc_mlx5_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                               const void *header,
+                                               unsigned header_length,
+                                               const uct_iov_t *iov,
+                                               size_t iovcnt, unsigned flags,
+                                               uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
+                                             const void* header,
+                                             unsigned header_length,
+                                             unsigned flags);
+
+ucs_status_t uct_dc_mlx5_iface_tag_recv_zcopy(uct_iface_h tl_iface,
+                                              uct_tag_t tag,
+                                              uct_tag_t tag_mask,
+                                              const uct_iov_t *iov,
+                                              size_t iovcnt,
+                                              uct_tag_context_t *ctx);
+
+ucs_status_t uct_dc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
+                                               uct_tag_context_t *ctx,
+                                               int force);
+#endif
+
+ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
+                                    uct_rc_fc_request_t *req);
+
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
                                       ucs_arbiter_elem_t *elem,
@@ -339,6 +439,11 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
    return (ep->flags & UCT_DC_MLX5_EP_FLAG_GRH) ?
           &(ucs_derived_of(ep, uct_dc_mlx5_grh_ep_t)->grh_av) : NULL;
 }
+
+
+#define UCT_DC_MLX5_TXQP_DECL(_txqp, _txwq) \
+    uct_rc_txqp_t *_txqp; \
+    uct_ib_mlx5_txwq_t *_txwq;
 
 
 #define UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
