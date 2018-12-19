@@ -66,14 +66,14 @@ UCS_TEST_F(test_math, bitops) {
     EXPECT_EQ(14u, ucs_ilog2(17000));
     EXPECT_EQ(40u, ucs_ilog2(1ull<<40));
 
-    EXPECT_EQ(0u,  ucs_popcount(0));
-    EXPECT_EQ(2u,  ucs_popcount(5));
-    EXPECT_EQ(16u, ucs_popcount(0xffff));
-    EXPECT_EQ(48u, ucs_popcount(0xffffffffffffUL));
+    EXPECT_EQ(0,  ucs_popcount(0));
+    EXPECT_EQ(2,  ucs_popcount(5));
+    EXPECT_EQ(16, ucs_popcount(0xffff));
+    EXPECT_EQ(48, ucs_popcount(0xffffffffffffUL));
 
-    EXPECT_EQ(0u, ucs_count_trailing_zero_bits(1));
-    EXPECT_EQ(28u, ucs_count_trailing_zero_bits(0x10000000));
-    EXPECT_EQ(32u, ucs_count_trailing_zero_bits(0x100000000UL));
+    EXPECT_EQ(0, ucs_count_trailing_zero_bits(1));
+    EXPECT_EQ(28, ucs_count_trailing_zero_bits(0x10000000));
+    EXPECT_EQ(32, ucs_count_trailing_zero_bits(0x100000000UL));
 }
 
 #define TEST_ATOMIC_ADD(_bitsize) \
