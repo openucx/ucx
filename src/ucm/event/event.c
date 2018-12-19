@@ -20,6 +20,7 @@
 #include <ucm/util/sys.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/datastruct/khash.h>
+#include <ucs/sys/compiler.h>
 
 #include <sys/mman.h>
 #include <pthread.h>
