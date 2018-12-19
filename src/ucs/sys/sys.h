@@ -289,6 +289,15 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header, double scale);
 
 
 /**
+ * Print a message with either WARN otr DEBUG log level, depending on
+ * ucs_global_opts.warn_inv_tsc value.
+ *
+ * @param fmt  Printf like format string.
+ */
+void ucs_warn_inv_tsc(const char *fmt, ...);
+
+
+/**
  * Check if transparent huge-pages are enabled .
  *
  * @return 1 for true and 0 for false
