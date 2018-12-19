@@ -130,9 +130,8 @@ uct_rc_mlx5_ep_short_dm(uct_rc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
     ucs_status_t status;
     uct_ib_log_sge_t log_sge;
 
-    status = uct_rc_mlx5_common_dm_make_data(iface, &iface->super,
-                                             cache, hdr_len, payload, length, &desc,
-                                             &buffer, &log_sge);
+    status = uct_rc_mlx5_common_dm_make_data(iface, cache, hdr_len, payload,
+                                             length, &desc, &buffer, &log_sge);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         return status;
     }
@@ -386,7 +385,7 @@ uct_rc_mlx5_ep_atomic_fop(uct_rc_mlx5_ep_t *ep, int opcode, void *result, int ex
                           uint64_t swap_mask, uint64_t swap_add, uct_completion_t *comp)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep->super.super.super.iface,
-                                                       uct_rc_mlx5_iface_common_t);
+                                                uct_rc_mlx5_iface_common_t);
     uct_rc_iface_send_desc_t *desc;
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);

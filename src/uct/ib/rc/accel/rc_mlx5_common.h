@@ -284,14 +284,11 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
 
 ucs_status_t
 uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
-                                  uct_rc_iface_t *rc_iface,
-                                  uct_rc_iface_config_t *rc_config,
-                                  const uct_ib_mlx5_iface_config_t *mlx5_config,
+                                  uct_rc_mlx5_iface_config_t *config,
                                   struct ibv_exp_create_srq_attr *srq_init_attr,
                                   unsigned rndv_hdr_len);
 
-void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface,
-                                          uct_rc_iface_t *rc_iface);
+void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                                     void *data, size_t length, size_t valid_length,
