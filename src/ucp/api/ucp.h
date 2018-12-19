@@ -198,8 +198,8 @@ enum ucp_listener_params_field {
  * @ref ucp_worker_query "ucp_worker_query()" routine.
  */
 typedef enum {
-    UCP_WORKER_FLAG_NET_ADDRESS = UCS_BIT(0)  /**< Pack addresses of network
-                                                   devices only */
+    UCP_WORKER_ADDRESS_FLAG_NET_ONLY = UCS_BIT(0) /**< Pack addresses of network
+                                                       devices only */
 } ucp_worker_address_flags_t;
 
 
@@ -742,26 +742,26 @@ typedef struct ucp_worker_attr {
     ucs_thread_mode_t     thread_mode;
 
     /**
+     * Flags indicating requested details of the worker address.
+     * If UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS bit is set in the field_mask,
+     * this value should be set as well. Possible flags are specified
+     * in @ref ucp_worker_address_flags_t. @note This is an input attribute.
+     */
+    uint32_t              address_flags;
+
+    /**
      * Worker address, which can be passed to remote instances of the UCP library
      * in order to connect to this worker. The memory for the address handle is
      * allocated by @ref ucp_worker_query "ucp_worker_query()" routine, and
      * must be released by using @ref ucp_worker_release_address
-     * "ucp_worker_release_address()" routine. @note This is an output attribute.
+     * "ucp_worker_release_address()" routine.
      */
     ucp_address_t         *address;
 
     /**
-     * Size of worker address in bytes. @note This is an output attribute.
+     * Size of worker address in bytes.
      */
     size_t                address_length;
-
-    /**
-     * Flags indicating requested details of the worker address.
-     * If UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS bit is set in the field_mask,
-     * this value should be set as well. Possible flags are specified
-     * in @ref ucp_worker_address_flags_t.
-     */
-    uint32_t              address_flags;
 } ucp_worker_attr_t;
 
 

@@ -1580,7 +1580,7 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
         tl_bitmap = -1;
 
         if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS) {
-            if (attr->address_flags == UCP_WORKER_FLAG_NET_ADDRESS) {
+            if (attr->address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
                 tl_bitmap = 0;
                 ucs_for_each_bit(tl_id, context->tl_bitmap) {
                     if (context->tl_rscs[tl_id].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
