@@ -939,18 +939,6 @@ double ucs_get_cpuinfo_clock_freq(const char *header, double scale)
     return value * scale;
 }
 
-void ucs_warn_inv_tsc(const char *msg, ...)
-{
-    ucs_log_level_t level;
-    va_list ap;
-
-    level = ucs_global_opts.warn_inv_tsc ? UCS_LOG_LEVEL_WARN :
-                                           UCS_LOG_LEVEL_DEBUG;
-    va_start(ap, msg);
-    ucs_log(level, msg, ap);
-    va_end(ap);
-}
-
 void *ucs_sys_realloc(void *old_ptr, size_t old_length, size_t new_length)
 {
     void *ptr;
