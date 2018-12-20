@@ -839,7 +839,7 @@ static ucs_status_t ucp_worker_select_best_ifaces(ucp_worker_h worker,
     }
 
     *tl_bitmap_p       = tl_bitmap;
-    worker->num_ifaces = ucs_count_one_bits(tl_bitmap);
+    worker->num_ifaces = ucs_popcount(tl_bitmap);
     ucs_assert(worker->num_ifaces <= context->num_tls);
 
     if (worker->num_ifaces < context->num_tls) {
@@ -895,7 +895,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
      * available resources and then select the best ones. */
     ctx_tl_bitmap = context->tl_bitmap;
     if (ctx_tl_bitmap) {
-        worker->num_ifaces = ucs_count_one_bits(ctx_tl_bitmap);
+        worker->num_ifaces = ucs_popcount(ctx_tl_bitmap);
         tl_bitmap          = ctx_tl_bitmap;
     } else {
         worker->num_ifaces = context->num_tls;
@@ -941,7 +941,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
          * to select best ifaces. */
         context->tl_bitmap = tl_bitmap;
         ucs_debug("Selected tl bitmap: 0x%lx (%d tls)",
-                  tl_bitmap, ucs_count_one_bits(tl_bitmap));
+                  tl_bitmap, ucs_popcount(tl_bitmap));
     }
 
     iface_id = 0;
