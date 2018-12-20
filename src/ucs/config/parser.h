@@ -10,7 +10,6 @@
 #include "types.h"
 
 #include <ucs/datastruct/list.h>
-#include <ucs/sys/compiler.h>
 #include <ucs/type/status.h>
 #include <stdio.h>
 
