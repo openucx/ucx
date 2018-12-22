@@ -123,8 +123,9 @@ uct_rc_mlx5_ep_short_dm(uct_rc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
                         unsigned opcode, uint8_t fm_ce_se,
                         uint64_t rdma_raddr, uct_rkey_t rdma_rkey)
 {
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep->super.super.super.iface, uct_rc_mlx5_iface_common_t);
-    uct_rc_iface_t *rc_iface   = &iface->super;
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep->super.super.super.iface,
+                                                       uct_rc_mlx5_iface_common_t);
+    uct_rc_iface_t *rc_iface          = &iface->super;
     uct_rc_iface_send_desc_t *desc;
     void *buffer;
     ucs_status_t status;
@@ -151,8 +152,8 @@ uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
 {
 #if HAVE_IBV_EXP_DM
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_common_t);
-    uct_rc_iface_t *rc_iface   = &iface->super;
-    uct_rc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
+    uct_rc_iface_t *rc_iface          = &iface->super;
+    uct_rc_mlx5_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     ucs_status_t status;
 
     if (ucs_likely((length <= UCT_IB_MLX5_PUT_MAX_SHORT(0)) || !iface->dm.dm)) {
@@ -268,8 +269,8 @@ uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 {
 #if HAVE_IBV_EXP_DM
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_common_t);
-    uct_rc_iface_t *rc_iface   = &iface->super;
-    uct_rc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
+    uct_rc_iface_t *rc_iface          = &iface->super;
+    uct_rc_mlx5_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     ucs_status_t status;
     uct_rc_mlx5_dm_copy_data_t cache;
 
@@ -385,7 +386,7 @@ uct_rc_mlx5_ep_atomic_fop(uct_rc_mlx5_ep_t *ep, int opcode, void *result, int ex
                           uint64_t swap_mask, uint64_t swap_add, uct_completion_t *comp)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep->super.super.super.iface,
-                                                uct_rc_mlx5_iface_common_t);
+                                                       uct_rc_mlx5_iface_common_t);
     uct_rc_iface_send_desc_t *desc;
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
@@ -753,7 +754,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
 static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, struct ibv_qp *qp)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep->super.super.super.iface,
-                                                uct_rc_mlx5_iface_common_t);
+                                                       uct_rc_mlx5_iface_common_t);
 
     /* Make the HW generate CQEs for all in-progress SRQ receives from the QP,
      * so we clean them all before ibv_modify_qp() can see them.

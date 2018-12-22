@@ -120,7 +120,7 @@ UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(64)
 
 ucs_status_t
 uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
-                                  uct_rc_mlx5_iface_config_t *config,
+                                  uct_rc_mlx5_iface_common_config_t *config,
                                   struct ibv_exp_create_srq_attr *srq_init_attr,
                                   unsigned rndv_hdr_len)
 {

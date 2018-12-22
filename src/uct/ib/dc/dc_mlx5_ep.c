@@ -347,7 +347,6 @@ ssize_t uct_dc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     return length;
 }
 
-
 ucs_status_t uct_dc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                                      unsigned header_length, const uct_iov_t *iov,
                                      size_t iovcnt, unsigned flags,
@@ -373,7 +372,6 @@ ucs_status_t uct_dc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
 
     return UCS_INPROGRESS;
 }
-
 
 static ucs_status_t UCS_F_ALWAYS_INLINE
 uct_dc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer,

@@ -374,7 +374,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     dv_init_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
 
     iface->rx_dct = mlx5dv_create_qp(dev->ibv_context,
-                                    &init_attr, &dv_init_attr);
+                                     &init_attr, &dv_init_attr);
     if (iface->rx_dct == NULL) {
         ucs_error("Failed to created DC target %m");
         return UCS_ERR_INVALID_PARAM;
@@ -470,7 +470,7 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
 }
 
 static ucs_status_t uct_dc_mlx5_iface_tag_init(uct_rc_mlx5_iface_common_t *rc_iface,
-                                               uct_rc_mlx5_iface_config_t *rc_config)
+                                               uct_rc_mlx5_iface_common_config_t *rc_config)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
 #if IBV_EXP_HW_TM_DC
@@ -505,15 +505,6 @@ static ucs_status_t uct_dc_mlx5_iface_tag_init(uct_rc_mlx5_iface_common_t *rc_if
         iface->super.super.progress = uct_dc_mlx5_iface_progress;
     }
     return UCS_OK;
-}
-
-static void uct_dc_mlx5_iface_tag_cleanup(uct_dc_mlx5_iface_t *iface)
-{
-    if (UCT_RC_IFACE_TM_ENABLED(&iface->super.super)) {
-        uct_dc_mlx5_destroy_dct(iface);
-    }
-
-    uct_rc_mlx5_iface_common_tag_cleanup(&iface->super);
 }
 
 #if HAVE_DC_EXP
@@ -1103,9 +1094,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     uct_dc_mlx5_iface_init_version(self, md);
 
-    self->tx.ndci                    = config->ndci;
-    self->tx.policy                  = config->tx_policy;
-    self->tx.available_quota         = 0; /* overridden by mlx5/verbs */
+    self->tx.ndci                          = config->ndci;
+    self->tx.policy                        = config->tx_policy;
     self->super.super.config.tx_moderation = 0; /* disable tx moderation for dcs */
     ucs_list_head_init(&self->tx.gc_list);
 
@@ -1137,12 +1127,12 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     status = uct_ud_mlx5_iface_common_init(&self->super.super.super,
                                            &self->ud_common, &config->mlx5_ud);
     if (status != UCS_OK) {
-        goto err_rc_mlx5_tag_cleanup;
+        goto err_destroy_dct;
     }
 
     status = uct_dc_mlx5_iface_init_dcis(self, self->super.tx.mmio_mode);
     if (status != UCS_OK) {
-        goto err_rc_mlx5_tag_cleanup;
+        goto err_destroy_dct;
     }
 
     self->tx.available_quota = self->super.super.config.tx_qp_len -
@@ -1161,8 +1151,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     return UCS_OK;
 
-err_rc_mlx5_tag_cleanup:
-    uct_dc_mlx5_iface_tag_cleanup(self);
 err_destroy_dct:
     if (!UCT_RC_IFACE_TM_ENABLED(&self->super.super)) {
         uct_dc_mlx5_destroy_dct(self);
@@ -1179,7 +1167,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     uct_base_iface_progress_disable(&self->super.super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     uct_dc_mlx5_iface_cleanup_dcis(self);
-    uct_dc_mlx5_iface_tag_cleanup(self);
+    uct_rc_mlx5_iface_common_tag_cleanup(&self->super);
 
     uct_dc_mlx5_destroy_dct(self);
     ucs_list_for_each_safe(ep, tmp, &self->tx.gc_list, list) {

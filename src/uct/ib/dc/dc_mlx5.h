@@ -48,7 +48,7 @@ typedef enum {
 
 
 typedef struct uct_dc_mlx5_iface_config {
-    uct_rc_mlx5_iface_config_t          super;
+    uct_rc_mlx5_iface_common_config_t   super;
     uct_ud_iface_common_config_t        ud_common;
     int                                 ndci;
     int                                 tx_policy;

@@ -15,9 +15,19 @@
 
 #include "rc_mlx5.h"
 
+/**
+ * RC mlx5 interface configuration
+ */
+typedef struct uct_rc_mlx5_iface_config {
+    uct_rc_mlx5_iface_common_config_t super;
+    uct_rc_fc_config_t                fc;
+    /* TODO wc_mode, UAR mode SnB W/A... */
+} uct_rc_mlx5_iface_config_t;
+
+
 ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
   {"RC_", "", NULL,
-   ucs_offsetof(uct_rc_mlx5_iface_config_t, super),
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, super.super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
   {"", "", NULL,
@@ -25,14 +35,14 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
    UCS_CONFIG_TYPE_TABLE(uct_rc_fc_config_table)},
 
   {"", "", NULL,
-   ucs_offsetof(uct_rc_mlx5_iface_config_t, mlx5_common),
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, super.mlx5_common),
    UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
 
   {"TX_MAX_BB", "-1",
    "Limits the number of outstanding WQE building blocks. The actual limit is\n"
    "a minimum between this value and the number of building blocks in the TX QP.\n"
    "-1 means no limit.",
-   ucs_offsetof(uct_rc_mlx5_iface_config_t, tx_max_bb), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, super.tx_max_bb), UCS_CONFIG_TYPE_UINT},
 
   {NULL}
 };
@@ -256,7 +266,7 @@ static ucs_status_t uct_rc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 
 static ucs_status_t
 uct_rc_mlx5_iface_tag_init(uct_rc_mlx5_iface_common_t *iface,
-                           uct_rc_mlx5_iface_config_t *config)
+                           uct_rc_mlx5_iface_common_config_t *config)
 {
 #if IBV_EXP_HW_TM
     if (UCT_RC_IFACE_TM_ENABLED(&iface->super)) {
@@ -285,7 +295,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
                     uct_rc_mlx5_iface_ops_t *ops,
                     uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
-                    uct_rc_mlx5_iface_config_t *config,
+                    uct_rc_mlx5_iface_common_config_t *config,
                     uct_ib_iface_init_attr_t *init_attr)
 {
     ucs_status_t status;
@@ -398,9 +408,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t, &uct_rc_mlx5_iface_ops,
-                              md, worker, params, config, &init_attr);
+                              md, worker, params, &config->super, &init_attr);
 
-    status = uct_rc_init_fc_thresh(&config->fc, &config->super, &self->super.super);
+    status = uct_rc_init_fc_thresh(&config->fc, &config->super.super, &self->super.super);
     if (status != UCS_OK) {
         return status;
     }
