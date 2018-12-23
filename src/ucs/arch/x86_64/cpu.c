@@ -52,7 +52,7 @@ static int ucs_x86_invariant_tsc()
     return 1;
 
 warn:
-    ucs_warn_inv_tsc("CPU does not support invariant TSC, using fallback timer");
+    ucs_debug("CPU does not support invariant TSC, using fallback timer");
 
     return 0;
 }
@@ -100,7 +100,7 @@ double ucs_x86_tsc_freq_from_cpu_model()
     fclose(f);
 
     if (warn) {
-        ucs_warn_inv_tsc("Conflicting CPU frequencies detected, using fallback timer");
+        ucs_debug("Conflicting CPU frequencies detected, using fallback timer");
         return -1;
     }
 

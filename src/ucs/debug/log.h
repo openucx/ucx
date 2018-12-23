@@ -44,9 +44,6 @@ BEGIN_C_DECLS
 #define ucs_trace_async(_fmt, ...)  ucs_log(UCS_LOG_LEVEL_TRACE_ASYNC, _fmt, ## __VA_ARGS__)
 #define ucs_trace_func(_fmt, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_FUNC, "%s(" _fmt ")", __FUNCTION__, ## __VA_ARGS__)
 #define ucs_trace_poll(_fmt, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_POLL, _fmt, ## __VA_ARGS__)
-#define ucs_warn_inv_tsc(_fmt, ...) \
-    ucs_log(ucs_global_opts.warn_inv_tsc ? UCS_LOG_LEVEL_WARN : UCS_LOG_LEVEL_DEBUG, \
-            _fmt,  ## __VA_ARGS__)
 
 
 /**

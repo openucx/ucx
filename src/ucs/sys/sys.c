@@ -932,8 +932,7 @@ double ucs_get_cpuinfo_clock_freq(const char *header, double scale)
     fclose(f);
 
     if (warn) {
-        ucs_warn_inv_tsc("Conflicting CPU frequencies detected, using: %.2f",
-                         value);
+        ucs_debug("Conflicting CPU frequencies detected, using: %.2f", value);
     }
 
     return value * scale;
