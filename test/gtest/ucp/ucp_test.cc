@@ -325,7 +325,6 @@ bool ucp_test::check_test_param(const std::string& name,
     UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
                            ucp_config_read, NULL, NULL);
     set_ucp_config(config, test_param);
-    ucp_config_modify(config.get(), "WARN_INVARIANT_TSC", "n");
 
     ucp_context_h ucph;
     ucs_status_t status;
