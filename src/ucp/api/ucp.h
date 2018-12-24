@@ -198,8 +198,11 @@ enum ucp_listener_params_field {
  * @ref ucp_worker_query "ucp_worker_query()" routine.
  */
 typedef enum {
-    UCP_WORKER_ADDRESS_FLAG_NET_ONLY = UCS_BIT(0) /**< Pack addresses of network
-                                                       devices only */
+
+    /**< Pack addresses of network devices only. Using such shortened addresses
+     *   for the remote node peers would reduce the amount of wireup data being
+     *   exchanged during connection establishment phase. */
+    UCP_WORKER_ADDRESS_FLAG_NET_ONLY = UCS_BIT(0)
 } ucp_worker_address_flags_t;
 
 
