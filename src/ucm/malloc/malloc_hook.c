@@ -22,7 +22,6 @@
 #include <ucm/util/reloc.h>
 #include <ucm/util/sys.h>
 #include <ucs/datastruct/queue.h>
-#include <ucs/type/component.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/checker.h>

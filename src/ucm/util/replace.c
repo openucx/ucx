@@ -19,7 +19,6 @@
 #include <ucm/mmap/mmap.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
-#include <ucs/type/component.h>
 #include <ucm/bistro/bistro.h>
 
 #if HAVE_CUDA

@@ -44,7 +44,6 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/string.h \
 	time/time_def.h \
 	type/class.h \
-	type/component.h \
 	type/spinlock.h \
 	type/status.h \
 	type/thread_mode.h \
@@ -130,7 +129,6 @@ libucs_la_SOURCES = \
 	time/timer_wheel.c \
 	time/timerq.c \
 	type/class.c \
-	type/component.c \
 	type/spinlock.c \
 	type/status.c
 

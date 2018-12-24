@@ -9,7 +9,6 @@
 #include <uct/base/uct_md.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/cpu.h>
-#include <ucs/type/component.h>
 #include <ucs/type/class.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/debug/log.h>

@@ -10,7 +10,6 @@
 #include "uct_iface.h"
 
 #include <uct/api/uct.h>
-#include <ucs/type/component.h>
 #include <ucs/config/parser.h>
 
 
