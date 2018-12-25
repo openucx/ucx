@@ -262,19 +262,19 @@ endif
 noinst_HEADERS += \
     sm/base/sm_iface.h \
     sm/base/sm_ep.h \
-    sm/mm/mm_iface.h \
-    sm/mm/mm_ep.h \
-    sm/mm/mm_def.h \
-    sm/mm/mm_md.h
+    sm/mm/base/mm_iface.h \
+    sm/mm/base/mm_ep.h \
+    sm/mm/base/mm_def.h \
+    sm/mm/base/mm_md.h
 
 libuct_la_SOURCES += \
     sm/base/sm_iface.c \
     sm/base/sm_ep.c \
-    sm/mm/mm_iface.c \
-    sm/mm/mm_ep.c \
-    sm/mm/mm_md.c \
-    sm/mm/mm_sysv.c \
-    sm/mm/mm_posix.c
+    sm/mm/base/mm_iface.c \
+    sm/mm/base/mm_ep.c \
+    sm/mm/base/mm_md.c \
+    sm/mm/sysv/mm_sysv.c \
+    sm/mm/posix/mm_posix.c
 
 # SGI / Cray XPMEM
 if HAVE_XPMEM
@@ -282,7 +282,7 @@ libuct_la_CPPFLAGS += $(XPMEM_CPPFLAGS)
 libuct_la_LDFLAGS +=  $(XPMEM_LDFLAGS)
 
 libuct_la_SOURCES += \
-    sm/mm/mm_xpmem.c
+    sm/mm/xpmem/mm_xpmem.c
 endif
 
 # Cross Memory Attached

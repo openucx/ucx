@@ -4,12 +4,12 @@
  * See file LICENSE for terms.
  */
 
-#include "mm_md.h"
-#include "mm_iface.h"
-
+#include <uct/sm/mm/base/mm_md.h>
+#include <uct/sm/mm/base/mm_iface.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
+
 
 #define UCT_MM_SYSV_PERM (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #define UCT_MM_SYSV_MSTR (UCT_MM_SYSV_PERM | IPC_CREAT | IPC_EXCL)
