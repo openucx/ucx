@@ -44,6 +44,7 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/string.h \
 	time/time_def.h \
 	type/class.h \
+	type/init_once.h \
 	type/spinlock.h \
 	type/status.h \
 	type/thread_mode.h \
