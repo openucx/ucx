@@ -12,8 +12,8 @@
 #  include "config.h"
 #endif
 
-#include "libperf.h"
-#include "libperf_int.h"
+#include "api/libperf.h"
+#include "lib/libperf_int.h"
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
