@@ -60,7 +60,7 @@ libucm_la_SOURCES = \
 
 if HAVE_CUDA
 libucm_la_SOURCES += \
-    cuda/install.c
+    cuda/cudamem.c
 endif
 
 if HAVE_UCM_PTMALLOC286
