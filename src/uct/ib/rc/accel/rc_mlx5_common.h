@@ -49,6 +49,14 @@
 #define UCT_RC_MLX5_TO_BE(_val, _size) \
     ((_size) == sizeof(uint64_t) ? htobe64(_val) : htobe32(_val))
 
+#define UCT_RC_MLX5_DECLARE_ATOMIC_LE_HANDLER(_bits) \
+    void \
+    uct_rc_mlx5_common_atomic##_bits##_le_handler(uct_rc_iface_send_op_t *op, \
+                                                  const void *resp);
+
+UCT_RC_MLX5_DECLARE_ATOMIC_LE_HANDLER(32)
+UCT_RC_MLX5_DECLARE_ATOMIC_LE_HANDLER(64)
+
 enum {
     UCT_RC_MLX5_IFACE_STAT_RX_INL_32,
     UCT_RC_MLX5_IFACE_STAT_RX_INL_64,
@@ -185,8 +193,11 @@ typedef union uct_rc_mlx5_dm_copy_data {
 #endif
 
 typedef struct uct_rc_mlx5_iface_common {
+    uct_rc_iface_t                super;
     struct {
         ucs_mpool_t               atomic_desc_mp;
+        uct_ib_mlx5_mmio_mode_t   mmio_mode;
+        uint16_t                  bb_max;     /* limit number of outstanding WQE BBs */
     } tx;
     struct {
         uct_ib_mlx5_srq_t         srq;
@@ -216,13 +227,34 @@ typedef struct uct_rc_mlx5_iface_common {
     UCS_STATS_NODE_DECLARE(stats);
 } uct_rc_mlx5_iface_common_t;
 
+/**
+ * Common RC/DC mlx5 interface configuration
+ */
+typedef struct uct_rc_mlx5_iface_common_config {
+    uct_rc_iface_config_t             super;
+    uct_ib_mlx5_iface_config_t        mlx5_common;
+    unsigned                          tx_max_bb;
+} uct_rc_mlx5_iface_common_config_t;
+
+
+typedef struct uct_rc_mlx5_iface_ops {
+    uct_rc_iface_ops_t   super;
+    ucs_status_t         (*iface_tag_init)(uct_rc_mlx5_iface_common_t *iface,
+                                           uct_rc_mlx5_iface_common_config_t *config);
+} uct_rc_mlx5_iface_ops_t;
+
+
+UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_rc_mlx5_iface_ops_t*,
+                  uct_md_h, uct_worker_h,
+                  const uct_iface_params_t*, uct_rc_mlx5_iface_common_config_t*,
+                  uct_ib_iface_init_attr_t*);
+
 
 extern ucs_config_field_t uct_ib_mlx5_iface_config_table[];
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq);
 
-void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_iface_t *iface,
-                                            uct_rc_mlx5_iface_common_t *mlx5_common);
+void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface);
 
 ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                            uct_rc_iface_t *rc_iface,
@@ -230,6 +262,12 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                            const uct_ib_mlx5_iface_config_t *mlx5_config);
 
 void uct_rc_mlx5_iface_common_cleanup(uct_rc_mlx5_iface_common_t *iface);
+
+ucs_status_t uct_rc_mlx5_iface_common_dm_init(uct_rc_mlx5_iface_common_t *iface,
+                                              uct_rc_iface_t *rc_iface,
+                                              const uct_ib_mlx5_iface_config_t *mlx5_config);
+
+void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface, uct_iface_attr_t *iface_attr);
 
@@ -244,14 +282,11 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
 
 ucs_status_t
 uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
-                                  uct_rc_iface_t *rc_iface,
-                                  uct_rc_iface_config_t *rc_config,
-                                  const uct_ib_mlx5_iface_config_t *mlx5_config,
+                                  uct_rc_mlx5_iface_common_config_t *config,
                                   struct ibv_exp_create_srq_attr *srq_init_attr,
                                   unsigned rndv_hdr_len);
 
-void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface,
-                                          uct_rc_iface_t *rc_iface);
+void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                                     void *data, size_t length, size_t valid_length,

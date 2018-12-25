@@ -56,6 +56,106 @@ UCS_CLASS_DECLARE(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *,
                   uct_ib_mlx5_base_av_t *, struct mlx5_grh_av *);
 
 
+ucs_status_t uct_dc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *payload,
+                                      unsigned length, uint64_t remote_addr,
+                                      uct_rkey_t rkey);
+
+ssize_t uct_dc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                                 void *arg, uint64_t remote_addr, uct_rkey_t rkey);
+
+ucs_status_t uct_dc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                                      uint64_t remote_addr, uct_rkey_t rkey,
+                                      uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
+                                      uct_unpack_callback_t unpack_cb,
+                                      void *arg, size_t length,
+                                      uint64_t remote_addr, uct_rkey_t rkey,
+                                      uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                                      uint64_t remote_addr, uct_rkey_t rkey,
+                                      uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
+                                     const void *buffer, unsigned length);
+
+ssize_t uct_dc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                                uct_pack_callback_t pack_cb, void *arg,
+                                unsigned flags);
+
+ucs_status_t uct_dc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
+                                     unsigned header_length, const uct_iov_t *iov,
+                                     size_t iovcnt, unsigned flags,
+                                     uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
+                                           uint64_t remote_addr, uct_rkey_t rkey,
+                                           uint64_t *result, uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32_t swap,
+                                           uint64_t remote_addr, uct_rkey_t rkey,
+                                           uint32_t *result, uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_atomic64_post(uct_ep_h ep, unsigned opcode, uint64_t value,
+                                          uint64_t remote_addr, uct_rkey_t rkey);
+
+ucs_status_t uct_dc_mlx5_ep_atomic32_post(uct_ep_h ep, unsigned opcode, uint32_t value,
+                                          uint64_t remote_addr, uct_rkey_t rkey);
+
+ucs_status_t uct_dc_mlx5_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
+                                           uint64_t value, uint64_t *result,
+                                           uint64_t remote_addr, uct_rkey_t rkey,
+                                           uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
+                                           uint32_t value, uint32_t *result,
+                                           uint64_t remote_addr, uct_rkey_t rkey,
+                                           uct_completion_t *comp);
+
+#if IBV_EXP_HW_TM_DC
+ucs_status_t uct_dc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
+                                            const void *data, size_t length);
+
+ssize_t uct_dc_mlx5_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                       uint64_t imm,
+                                       uct_pack_callback_t pack_cb,
+                                       void *arg, unsigned flags);
+
+ucs_status_t uct_dc_mlx5_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                            uint64_t imm, const uct_iov_t *iov,
+                                            size_t iovcnt, unsigned flags,
+                                            uct_completion_t *comp);
+
+ucs_status_ptr_t uct_dc_mlx5_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                               const void *header,
+                                               unsigned header_length,
+                                               const uct_iov_t *iov,
+                                               size_t iovcnt, unsigned flags,
+                                               uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
+                                             const void* header,
+                                             unsigned header_length,
+                                             unsigned flags);
+
+ucs_status_t uct_dc_mlx5_iface_tag_recv_zcopy(uct_iface_h tl_iface,
+                                              uct_tag_t tag,
+                                              uct_tag_t tag_mask,
+                                              const uct_iov_t *iov,
+                                              size_t iovcnt,
+                                              uct_tag_context_t *ctx);
+
+ucs_status_t uct_dc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
+                                               uct_tag_context_t *ctx,
+                                               int force);
+#endif
+
+ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
+                                    uct_rc_fc_request_t *req);
+
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
                                       ucs_arbiter_elem_t *elem,
@@ -135,7 +235,7 @@ uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
     /* valid = 1, global = 0, tx_wait = 0 */
     ep->flags = UCT_DC_MLX5_EP_FLAG_VALID;
 
-    return uct_rc_fc_init(&ep->fc, iface->super.config.fc_wnd_size
+    return uct_rc_fc_init(&ep->fc, iface->super.super.config.fc_wnd_size
                           UCS_STATS_ARG(ep->super.stats));
 }
 
@@ -173,7 +273,7 @@ static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
     return (!(ep->flags & UCT_DC_MLX5_EP_FLAG_TX_WAIT)) &&
-           uct_rc_fc_has_resources(&iface->super, &ep->fc) &&
+           uct_rc_fc_has_resources(&iface->super.super, &ep->fc) &&
            uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci);
 }
 
@@ -182,7 +282,7 @@ void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx
 {
     /* If FC window is empty the group will be scheduled when
      * grant is received */
-    if (uct_rc_fc_has_resources(&iface->super, &ep->fc)) {
+    if (uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
         ucs_arbiter_group_schedule(uct_dc_mlx5_iface_dci_waitq(iface), &ep->arb_group);
     }
 }
@@ -241,7 +341,7 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
 static inline ucs_status_t
 uct_dc_mlx5_iface_check_txqp(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep, uct_rc_txqp_t *txqp)
 {
-    UCT_RC_CHECK_TXQP(&iface->super, ep, txqp);
+    UCT_RC_CHECK_TXQP(&iface->super.super, ep, txqp);
     return UCS_OK;
 }
 
@@ -341,6 +441,11 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 }
 
 
+#define UCT_DC_MLX5_TXQP_DECL(_txqp, _txwq) \
+    uct_rc_txqp_t *_txqp; \
+    uct_ib_mlx5_txwq_t *_txwq;
+
+
 #define UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
     { \
         ucs_status_t status; \
@@ -348,7 +453,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
         if (ucs_unlikely(status != UCS_OK)) { \
             return status; \
         } \
-        UCT_RC_CHECK_CQE(&(_iface)->super, _ep, \
+        UCT_RC_CHECK_CQE(&(_iface)->super.super, _ep, \
                          &(_iface)->tx.dcis[(_ep)->dci].txqp); \
     }
 
@@ -360,7 +465,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
         if (ucs_unlikely(status != UCS_OK)) { \
             return UCS_STATUS_PTR(status); \
         } \
-        UCT_RC_CHECK_CQE_RET(&(_iface)->super, _ep, \
+        UCT_RC_CHECK_CQE_RET(&(_iface)->super.super, _ep, \
                              &(_iface)->tx.dcis[(_ep)->dci].txqp, \
                              UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)); \
     }
@@ -373,7 +478,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 #define UCT_DC_CHECK_RES_AND_FC(_iface, _ep) \
     { \
         if (ucs_unlikely((_ep)->fc.fc_wnd <= \
-                         (_iface)->super.config.fc_hard_thresh)) { \
+                         (_iface)->super.super.config.fc_hard_thresh)) { \
             ucs_status_t status = uct_dc_mlx5_ep_check_fc(_iface, _ep); \
             if (ucs_unlikely(status != UCS_OK)) { \
                 if ((_ep)->dci != UCT_DC_MLX5_EP_NO_DCI) { \
