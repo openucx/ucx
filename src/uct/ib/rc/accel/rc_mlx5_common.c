@@ -203,7 +203,6 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 #endif
 }
 
-
 #if HAVE_IBV_EXP_DM
 static ucs_status_t
 uct_rc_mlx5_iface_common_dm_mpool_chunk_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)

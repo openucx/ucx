@@ -384,6 +384,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_common_t)
     UCS_STATS_NODE_FREE(self->stats);
     ucs_mpool_cleanup(&self->tx.atomic_desc_mp, 1);
     uct_rc_mlx5_iface_common_dm_cleanup(self);
+    uct_rc_mlx5_iface_common_tag_cleanup(self);
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_iface_common_t, uct_rc_iface_t);
@@ -429,7 +430,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
 {
     uct_base_iface_progress_disable(&self->super.super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-    uct_rc_mlx5_iface_common_tag_cleanup(&self->super);
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_iface_t, uct_rc_mlx5_iface_common_t);

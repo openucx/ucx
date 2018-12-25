@@ -430,8 +430,8 @@ void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface)
 {
     if (iface->rx_dct != NULL) {
         ibv_destroy_qp(iface->rx_dct);
+        iface->rx_dct = NULL;
     }
-    iface->rx_dct = NULL;
 }
 #endif
 
@@ -492,12 +492,6 @@ static ucs_status_t uct_dc_mlx5_iface_tag_init(uct_rc_mlx5_iface_common_t *rc_if
             return status;
         }
 
-        /* TM XRQ is ready, can create DCT now */
-        status = uct_dc_mlx5_iface_create_dct(iface);
-        if (status != UCS_OK) {
-            uct_rc_mlx5_iface_common_tag_cleanup(&iface->super);
-            return status;
-        }
         iface->super.super.progress = uct_dc_mlx5_iface_progress_tm;
     } else
 #endif
@@ -628,8 +622,8 @@ void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface)
 {
     if (iface->rx_dct != NULL) {
         ibv_exp_destroy_dct(iface->rx_dct);
+        iface->rx_dct = NULL;
     }
-    iface->rx_dct = NULL;
 }
 
 static ucs_status_t uct_dc_mlx5_device_init(uct_ib_device_t *dev)
@@ -1100,11 +1094,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     ucs_list_head_init(&self->tx.gc_list);
 
     /* create DC target */
-    if (!UCT_RC_IFACE_TM_ENABLED(&self->super.super)) {
-        status = uct_dc_mlx5_iface_create_dct(self);
-        if (status != UCS_OK) {
-            goto err;
-        }
+    status = uct_dc_mlx5_iface_create_dct(self);
+    if (status != UCS_OK) {
+        goto err;
     }
 
     /* create DC initiators */
@@ -1152,9 +1144,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     return UCS_OK;
 
 err_destroy_dct:
-    if (!UCT_RC_IFACE_TM_ENABLED(&self->super.super)) {
-        uct_dc_mlx5_destroy_dct(self);
-    }
+    uct_dc_mlx5_destroy_dct(self);
 err:
     return status;
 }
@@ -1167,9 +1157,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     uct_base_iface_progress_disable(&self->super.super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     uct_dc_mlx5_iface_cleanup_dcis(self);
-    uct_rc_mlx5_iface_common_tag_cleanup(&self->super);
 
     uct_dc_mlx5_destroy_dct(self);
+
     ucs_list_for_each_safe(ep, tmp, &self->tx.gc_list, list) {
         uct_dc_mlx5_ep_release(ep);
     }
