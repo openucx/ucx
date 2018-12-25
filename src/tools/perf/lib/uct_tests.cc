@@ -6,7 +6,7 @@
 * See file LICENSE for terms.
 */
 
-#include "libperf_int.h"
+#include <tools/perf/lib/libperf_int.h>
 
 extern "C" {
 #include <ucs/debug/log.h>
