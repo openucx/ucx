@@ -6,14 +6,18 @@
 # See file LICENSE for terms.
 #
 
-lib_LTLIBRARIES     = libuct.la
+SUBDIRS = base sm
 
+lib_LTLIBRARIES    = libuct.la
 libuct_la_CFLAGS   = $(BASE_CFLAGS)
 libuct_la_CPPFLAGS = $(BASE_CPPFLAGS)
 libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
-libuct_la_LIBADD   = $(LIBM) ../ucs/libucs.la
 libuct_ladir       = $(includedir)/uct
 libmlx5_ver        = \"`(rpm -qf $(IBVERBS_DIR)/include/infiniband/mlx5_hw.h &>/dev/null && rpm -qf /usr/include/infiniband/mlx5_hw.h) | head -1`\"
+libuct_la_LIBADD   = \
+	../ucs/libucs.la \
+	base/libuct_base.la \
+	sm/libuct_sm.la
 
 nobase_dist_libuct_la_HEADERS = \
 	api/tl.h \
@@ -22,19 +26,9 @@ nobase_dist_libuct_la_HEADERS = \
 	api/version.h
 
 noinst_HEADERS = \
-	base/uct_md.h \
-	base/uct_iface.h \
-	base/uct_log.h \
-	base/uct_worker.h \
-	sm/self/self.h \
 	tcp/tcp.h
 
 libuct_la_SOURCES = \
-	base/uct_md.c \
-	base/uct_mem.c \
-	base/uct_iface.c \
-	base/uct_worker.c \
-	sm/self/self.c \
 	tcp/tcp_ep.c \
 	tcp/tcp_iface.c \
 	tcp/tcp_md.c \
@@ -261,57 +255,4 @@ libuct_la_SOURCES += \
     rocm/rocm_cma_iface.c \
     rocm/rocm_cma_ep.c \
     rocm/rocm_common.c
-endif
-
-# FIXME these should be done conditionally
-noinst_HEADERS += \
-    sm/base/sm_iface.h \
-    sm/base/sm_ep.h \
-    sm/mm/base/mm_iface.h \
-    sm/mm/base/mm_ep.h \
-    sm/mm/base/mm_def.h \
-    sm/mm/base/mm_md.h
-
-libuct_la_SOURCES += \
-    sm/base/sm_iface.c \
-    sm/base/sm_ep.c \
-    sm/mm/base/mm_iface.c \
-    sm/mm/base/mm_ep.c \
-    sm/mm/base/mm_md.c \
-    sm/mm/sysv/mm_sysv.c \
-    sm/mm/posix/mm_posix.c
-
-# SGI / Cray XPMEM
-if HAVE_XPMEM
-libuct_la_CPPFLAGS += $(XPMEM_CPPFLAGS)
-libuct_la_LDFLAGS +=  $(XPMEM_LDFLAGS)
-
-libuct_la_SOURCES += \
-    sm/mm/xpmem/mm_xpmem.c
-endif
-
-# Cross Memory Attached
-if HAVE_CMA
-noinst_HEADERS += \
-	sm/cma/cma_iface.h \
-	sm/cma/cma_ep.h \
-	sm/cma/cma_md.h
-
-libuct_la_SOURCES += \
-	sm/cma/cma_iface.c \
-	sm/cma/cma_ep.c \
-	sm/cma/cma_md.c
-endif
-
-# Inria's KNEM 
-if HAVE_KNEM
-noinst_HEADERS += \
-	sm/knem/knem_iface.h \
-	sm/knem/knem_ep.h \
-	sm/knem/knem_md.h
-
-libuct_la_SOURCES += \
-	sm/knem/knem_iface.c \
-	sm/knem/knem_ep.c \
-	sm/knem/knem_md.c
 endif

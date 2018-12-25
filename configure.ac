@@ -121,7 +121,7 @@ AC_DEFINE_UNQUOTED([UCX_MODULE_SUBDIR], ["${modulesubdir}"], [UCX module sub-dir
 
 
 #
-# Configure modules
+# Additional m4 files
 #
 m4_include([config/m4/ax_prog_doxygen.m4])
 m4_include([config/m4/graphviz.m4])
@@ -177,14 +177,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      m4_include([config/m4/rte.m4])
      m4_include([config/m4/java.m4])
      m4_include([config/m4/cuda.m4])
-     m4_include([src/uct/ib/configure.m4])
-     m4_include([src/uct/ib/rdmacm/configure.m4])
-     m4_include([src/uct/ugni/configure.m4])
-     m4_include([src/uct/cuda/gdr_copy/configure.m4])
-     m4_include([src/uct/rocm/configure.m4])
-     m4_include([src/uct/sm/cma/configure.m4])
-     m4_include([src/uct/sm/knem/configure.m4])
-     m4_include([src/uct/sm/mm/xpmem/configure.m4])
+     m4_include([src/uct/configure.m4])
      m4_include([test/gtest/configure.m4])
 
      #
@@ -314,7 +307,6 @@ AC_CONFIG_FILES([
                  debian/control
                  debian/changelog
                  src/ucs/Makefile
-                 src/uct/Makefile
                  src/ucp/Makefile
                  src/ucp/api/ucp_version.h
                  src/ucp/core/ucp_version.c
@@ -332,4 +324,20 @@ AC_CONFIG_FILES([
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])
 ])
 
+
 AC_OUTPUT
+
+
+#
+# Print build condiguration
+#
+AC_MSG_NOTICE([=========================================================])
+AS_IF([test "x$with_docs_only" == xyes],
+[
+AC_MSG_NOTICE([Building documents only])
+],
+[
+AC_MSG_NOTICE([UCX build configuration:])
+AC_MSG_NOTICE([      UCT modules:    <$(echo $uct_modules|tr ':' ' ') >])
+])
+AC_MSG_NOTICE([=========================================================])
