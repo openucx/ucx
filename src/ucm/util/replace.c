@@ -19,11 +19,6 @@
 #include <ucm/mmap/mmap.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
-#include <ucm/bistro/bistro.h>
-
-#if HAVE_CUDA
-#include "ucm/cuda/cudamem.h"
-#endif
 
 
 #define MAP_FAILED ((void*)-1)
@@ -44,47 +39,6 @@ UCM_DEFINE_SELECT_FUNC(mmap, void*, MAP_FAILED, SYS_mmap, void*, size_t, int, in
 UCM_DEFINE_SELECT_FUNC(munmap, int, -1, SYS_munmap, void*, size_t)
 UCM_DEFINE_SELECT_FUNC(mremap, void*, MAP_FAILED, SYS_mremap, void*, size_t, size_t, int)
 UCM_DEFINE_SELECT_FUNC(madvise, int, -1, SYS_madvise, void*, size_t, int)
-
-#if HAVE_CUDA
-
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemFree, CUresult,-1, CUdeviceptr)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemFreeHost, CUresult, -1, void *)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemAlloc, CUresult, -1, CUdeviceptr *, size_t)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemAllocManaged, CUresult, -1, CUdeviceptr *,
-                             size_t, unsigned int)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemAllocPitch, CUresult, -1, CUdeviceptr *, size_t *,
-                             size_t, size_t, unsigned int)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemHostGetDevicePointer, CUresult, -1, CUdeviceptr *,
-                             void *, unsigned int)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemHostUnregister, CUresult, -1, void *)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaFree, cudaError_t, -1, void*)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaFreeHost, cudaError_t, -1, void*)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaMalloc, cudaError_t, -1, void**, size_t)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaMallocManaged, cudaError_t, -1, void**, size_t, unsigned int)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaMallocPitch, cudaError_t, -1, void**, size_t *,
-                             size_t, size_t)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaHostGetDevicePointer, cudaError_t, -1, void**,
-                             void *, unsigned int)
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaHostUnregister, cudaError_t, -1, void*)
-
-#if ENABLE_SYMBOL_OVERRIDE
-UCM_OVERRIDE_FUNC(cuMemFree,                 CUresult)
-UCM_OVERRIDE_FUNC(cuMemFreeHost,             CUresult)
-UCM_OVERRIDE_FUNC(cuMemAlloc,                CUresult)
-UCM_OVERRIDE_FUNC(cuMemAllocManaged,         CUresult)
-UCM_OVERRIDE_FUNC(cuMemAllocPitch,           CUresult)
-UCM_OVERRIDE_FUNC(cuMemHostGetDevicePointer, CUresult)
-UCM_OVERRIDE_FUNC(cuMemHostUnregister,       CUresult)
-UCM_OVERRIDE_FUNC(cudaFree,                  cudaError_t)
-UCM_OVERRIDE_FUNC(cudaFreeHost,              cudaError_t)
-UCM_OVERRIDE_FUNC(cudaMalloc,                cudaError_t)
-UCM_OVERRIDE_FUNC(cudaMallocManaged,         cudaError_t)
-UCM_OVERRIDE_FUNC(cudaMallocPitch,           cudaError_t)
-UCM_OVERRIDE_FUNC(cudaHostGetDevicePointer,  cudaError_t)
-UCM_OVERRIDE_FUNC(cudaHostUnregister,        cudaError_t)
-#endif
-
-#endif
 
 #if UCM_BISTRO_HOOKS
 #if HAVE_DECL_SYS_SHMAT
