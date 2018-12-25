@@ -204,6 +204,9 @@ endif
 
 if HAVE_CUDA
 if HAVE_GDR_COPY
+libuct_la_CPPFLAGS += $(GDR_COPY_CPPFLAGS)
+libuct_la_LDFLAGS  += $(GDR_COPY_LDFLAGS)
+
 noinst_HEADERS += \
     cuda/gdr_copy/gdr_copy_md.h \
     cuda/gdr_copy/gdr_copy_iface.h \
