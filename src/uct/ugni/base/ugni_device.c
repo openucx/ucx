@@ -381,14 +381,16 @@ ucs_status_t uct_ugni_iface_get_dev_address(uct_iface_t *tl_iface, uct_device_ad
 
 static int uct_ugni_next_power_of_two_inclusive (int value)
 {
-    for (int i = 3, bit = 31 ; i >= 0 ; --i) {
+    int i, j, bit;
+
+    for (i = 3, bit = 31 ; i >= 0 ; --i) {
         if (!(value & (0xff << (i << 3)))) {
             /* short circuit. no set bits present in this byte */
             bit -= 8;
             continue;
         }
 
-        for (int j = 7 ; j >= 0 ; --j, --bit) {
+        for (j = 7 ; j >= 0 ; --j, --bit) {
             int tmp = (1 << bit);
             if (value & tmp) {
                 return (value == tmp) ? bit : bit + 1;

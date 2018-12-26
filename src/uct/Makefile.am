@@ -9,8 +9,7 @@
 lib_LTLIBRARIES     = libuct.la
 
 libuct_la_CFLAGS   = $(BASE_CFLAGS)
-libuct_la_LIBS     =
-libuct_la_CPPFLAGS = $(BASE_CPPFLAGS) -I$(abs_top_srcdir)/src -I$(abs_top_builddir)/src 
+libuct_la_CPPFLAGS = $(BASE_CPPFLAGS)
 libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libuct_la_LIBADD   = $(LIBM) ../ucs/libucs.la
 libuct_ladir       = $(includedir)/uct
@@ -175,7 +174,6 @@ endif
 if HAVE_CRAY_UGNI 
 libuct_la_CFLAGS   += $(CRAY_UGNI_CFLAGS)
 libuct_la_LDFLAGS  += $(CRAY_UGNI_LIBS)
-libuct_la_LIBS     += $(CRAY_UGNI_LIBS)
 
 noinst_HEADERS += \
     ugni/base/ugni_def.h \
