@@ -1,5 +1,6 @@
 #
 # Copyright (C) Advanced Micro Devices, Inc. 2016 - 2018. ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -74,20 +75,17 @@ AS_IF([test "x$with_rocm" != "xno"],
                [xno], [rocm_happy=no],
                [x-l*], [ROCM_LIBS="$ac_cv_search_hsa_init $ROCM_LIBS"])])
     AS_IF([test "x$rocm_happy" == "xyes"],
-          [AC_DEFINE([HAVE_ROCM], [1], [Set to 1 to enable ROCm support])
-           transports="${transports},rocm"
+          [uct_modules+=":rocm"
            AC_SUBST([ROCM_CPPFLAGS])
            AC_SUBST([ROCM_LDFLAGS])
            AC_SUBST([ROCM_LIBS])],
-          [AC_DEFINE([HAVE_ROCM], [0], [Set to 1 to enable ROCm support])
-           AC_MSG_WARN([ROCm not found])])
+          [AC_MSG_WARN([ROCm not found])])
     CPPFLAGS="$SAVE_CPPFLAGS"
     LDFLAGS="$SAVE_LDFLAGS"
     LIBS="$SAVE_LIBS"
     ],
-    [AC_DEFINE([HAVE_ROCM], [0], [Set to 1 to enable ROCm support])
-     AC_MSG_WARN([ROCm was explicitly disabled])]
+    [AC_MSG_WARN([ROCm was explicitly disabled])]
 )
 
 AM_CONDITIONAL([HAVE_ROCM], [test "x$rocm_happy" != xno])
-
+AC_CONFIG_FILES([src/uct/rocm/Makefile])
