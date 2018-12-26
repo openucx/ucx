@@ -29,7 +29,7 @@ AS_IF([test "x$with_rdmacm" != xno],
        AC_CHECK_HEADER([$ucx_check_rdmacm_dir/include/rdma/rdma_cma.h],
                        [
                        AC_CHECK_LIB([rdmacm], [rdma_create_id],
-                                     [transports="${transports},rdmacm"
+                                     [uct_modules+=":rdmacm"
                                       rdmacm_happy="yes"
                                       AS_IF([test "$ucx_check_rdmacm_dir" != /usr],
                                             [
@@ -53,3 +53,4 @@ AS_IF([test "x$with_rdmacm" != xno],
 )
 
 AM_CONDITIONAL([HAVE_RDMACM], [test "x$rdmacm_happy" != xno])
+AC_CONFIG_FILES([src/uct/ib/rdmacm/Makefile])

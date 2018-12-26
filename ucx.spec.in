@@ -1,6 +1,9 @@
 %{!?configure_options: %global configure_options %{nil}}
 %bcond_without cma
+%bcond_without ib
+%bcond_without ib_cm
 %bcond_with knem
+%bcond_without rdmacm
 %bcond_with xpmem
 
 Name: ucx
@@ -18,13 +21,21 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 # UCX currently supports only the following architectures
 ExclusiveArch: aarch64 ppc64le x86_64
 
-BuildRequires: numactl-devel libibverbs-devel
-BuildRequires: automake autoconf libtool gcc-c++
+BuildRequires: automake autoconf libtool gcc-c++ numactl-devel
 %if %{with cma}
 BuildRequires: glibc-devel >= 2.15
 %endif
+%if %{with ib}
+BuildRequires: libibverbs-devel
+%endif
+%if %{with ib_cm}
+BuildRequires: libibcm-devel
+%endif
 %if %{with knem}
 BuildRequires: knem
+%endif
+%if %{with rdmacm}
+BuildRequires: librdmacm-devel
 %endif
 %if %{with xpmem}
 BuildRequires: xpmem-devel
@@ -66,7 +77,10 @@ Provides static libraries required for development with UCX.
            --disable-assertions \
            --disable-params-check \
            %{?with_cma:--enable-cma} %{!?with_cma:--disable-cma} \
+           %{?with_ib:--with-verbs} %{!?with_ib:--without-verbs} \
+           %{?with_ib_cm:--with-cm} %{!?with_ib_cm:--without-cm} \
            %{?with_knem:--with-knem} %{!?with_knem:--without-knem} \
+           %{?with_rdmacm:--with-rdmacm} %{!?with_rdmacm:--without-rdmacm} \
            %{?with_xpmem:--with-xpmem} %{!?with_xpmem:--without-xpmem} \
            %{?configure_options}
 make %{?_smp_mflags} V=1
@@ -115,6 +129,37 @@ process.
 %{_libdir}/ucx/libuct_cma.so.*
 %endif
 
+# ucx-ib
+%if %{with ib}
+%package ib
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX RDMA support
+Group: System Environment/Libraries
+
+%description ib
+Provides support for IBTA-compliant transports for UCX. This includes RoCE,
+InfiniBand, OmniPath, and any other transport supported by IB Verbs API.
+Typically these transports provide RDMA support, which enables a fast and
+hardware-offloaded data transfer.
+
+%files ib
+%{_libdir}/ucx/libuct_ib.so.*
+%endif
+
+# ucx-ib-cm
+%if %{with ib_cm}
+%package ib-cm
+Requires: %{name}-ib%{?_isa} = %{version}-%{release}
+Summary: UCX InfiniBand connection-manager support
+Group: System Environment/Libraries
+
+%description ib-cm
+Provides Infiniband Connection Manager (also known as ibcm) support for UCX.
+
+%files ib-cm
+%{_libdir}/ucx/libuct_ib_cm.so.*
+%endif
+
 # ucx-knem
 %if %{with knem}
 %package knem
@@ -129,6 +174,21 @@ messages.
 
 %files knem
 %{_libdir}/ucx/libuct_knem.so.*
+%endif
+
+# ucx-rdmacm
+%if %{with rdmacm}
+%package rdmacm
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX RDMA connection manager support
+Group: System Environment/Libraries
+
+%description rdmacm
+Provides RDMA connection-manager support to UCX, which enables client/server
+based connection establishment for RDMA-capable transports.
+
+%files rdmacm
+%{_libdir}/ucx/libuct_rdmacm.so.*
 %endif
 
 # ucx-xpmem

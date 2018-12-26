@@ -6,14 +6,13 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = base sm
+SUBDIRS = base ib sm
 
 lib_LTLIBRARIES    = libuct.la
 libuct_la_CFLAGS   = $(BASE_CFLAGS)
 libuct_la_CPPFLAGS = $(BASE_CPPFLAGS)
 libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libuct_ladir       = $(includedir)/uct
-libmlx5_ver        = \"`(rpm -qf $(IBVERBS_DIR)/include/infiniband/mlx5_hw.h &>/dev/null && rpm -qf /usr/include/infiniband/mlx5_hw.h) | head -1`\"
 libuct_la_LIBADD   = \
 	../ucs/libucs.la \
 	base/libuct_base.la \
@@ -33,137 +32,6 @@ libuct_la_SOURCES = \
 	tcp/tcp_iface.c \
 	tcp/tcp_md.c \
 	tcp/tcp_net.c
-
-if HAVE_IB
-libuct_la_CPPFLAGS += $(IBVERBS_CPPFLAGS)
-libuct_la_LDFLAGS +=  $(IBVERBS_LDFLAGS) $(NUMA_LIBS) -lpthread
-noinst_HEADERS += \
-	ib/base/ib_device.h \
-	ib/base/ib_iface.h \
-	ib/base/ib_log.h \
-	ib/base/ib_md.h \
-	ib/base/ib_verbs.h
-
-libuct_la_SOURCES += \
-	ib/base/ib_device.c \
-	ib/base/ib_iface.c \
-	ib/base/ib_log.c \
-	ib/base/ib_md.c
-
-if HAVE_MLX5_HW
-libuct_la_CPPFLAGS += \
-	-DLIB_MLX5_VER=$(libmlx5_ver)
-
-libuct_la_SOURCES += \
-	ib/mlx5/ib_mlx5_log.c \
-	ib/mlx5/ib_mlx5.c \
-	ib/mlx5/ib_mlx5_dv.c \
-	ib/mlx5/ib_mlx5_hw.c
-
-noinst_HEADERS += \
-	ib/mlx5/ib_mlx5_log.h \
-	ib/mlx5/ib_mlx5.h \
-	ib/mlx5/ib_mlx5.inl \
-	ib/mlx5/ib_mlx5_dv.h \
-	ib/mlx5/ib_mlx5_hw.h \
-	ib/mlx5/ib_mlx5_ifc.h
-
-if HAVE_MLX5_DV
-libuct_la_LDFLAGS += $(LIB_MLX5)
-endif
-endif
-
-if HAVE_TL_RC
-noinst_HEADERS += \
-	ib/rc/base/rc_def.h \
-	ib/rc/base/rc_ep.h \
-	ib/rc/base/rc_iface.h \
-	ib/rc/verbs/rc_verbs.h \
-	ib/rc/verbs/rc_verbs_impl.h
-
-libuct_la_SOURCES += \
-	ib/rc/base/rc_ep.c \
-	ib/rc/base/rc_iface.c \
-	ib/rc/verbs/rc_verbs_ep.c \
-	ib/rc/verbs/rc_verbs_iface.c
-
-if HAVE_MLX5_HW
-noinst_HEADERS += \
-	ib/rc/accel/rc_mlx5.h \
-	ib/rc/accel/rc_mlx5_common.h \
-	ib/rc/accel/rc_mlx5.inl
-
-libuct_la_SOURCES += \
-	ib/rc/accel/rc_mlx5_ep.c \
-	ib/rc/accel/rc_mlx5_iface.c \
-	ib/rc/accel/rc_mlx5_common.c
-endif
-endif
-
-if HAVE_TL_DC
-noinst_HEADERS += \
-	ib/dc/dc_mlx5.h \
-	ib/dc/dc_mlx5_ep.h
-
-libuct_la_SOURCES += \
-	ib/dc/dc_mlx5.c \
-	ib/dc/dc_mlx5_ep.c
-endif
-
-if HAVE_TL_UD
-libuct_la_SOURCES += \
-	ib/ud/base/ud_iface_common.c \
-	ib/ud/base/ud_iface.c \
-	ib/ud/base/ud_ep.c \
-	ib/ud/base/ud_log.c \
-	ib/ud/verbs/ud_verbs.c
-
-noinst_HEADERS += \
-	ib/ud/base/ud_iface_common.h \
-	ib/ud/base/ud_iface.h \
-	ib/ud/base/ud_ep.h \
-	ib/ud/base/ud_def.h \
-	ib/ud/base/ud_inl.h \
-	ib/ud/verbs/ud_verbs.h 
-
-if HAVE_MLX5_HW_UD
-noinst_HEADERS += \
-	ib/ud/accel/ud_mlx5_common.h \
-	ib/ud/accel/ud_mlx5.h
-
-libuct_la_SOURCES += \
-	ib/ud/accel/ud_mlx5_common.c \
-	ib/ud/accel/ud_mlx5.c 
-endif
-endif
-
-if HAVE_TL_CM
-libuct_la_LDFLAGS += $(IBCM_LIBS)
-libuct_la_SOURCES += \
-	ib/cm/cm_iface.c \
-	ib/cm/cm_ep.c
-
-noinst_HEADERS += \
-	ib/cm/cm.h
-endif
-
-if HAVE_RDMACM
-libuct_la_CPPFLAGS += $(RDMACM_CPPFLAGS)
-libuct_la_LDFLAGS  += $(RDMACM_LDFLAGS) $(RDMACM_LIBS)
-libuct_la_SOURCES  += \
-	ib/rdmacm/rdmacm_md.c \
-	ib/rdmacm/rdmacm_iface.c \
-	ib/rdmacm/rdmacm_ep.c
-
-noinst_HEADERS += \
-	ib/rdmacm/rdmacm_md.h \
-	ib/rdmacm/rdmacm_iface.h \
-	ib/rdmacm/rdmacm_ep.h \
-	ib/rdmacm/rdmacm_def.h
-
-endif
-
-endif
 
 if HAVE_CRAY_UGNI 
 libuct_la_CFLAGS   += $(CRAY_UGNI_CFLAGS)

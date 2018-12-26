@@ -7,7 +7,6 @@ uct_modules=""
 m4_include([src/uct/base/configure.m4])
 m4_include([src/uct/cuda/gdr_copy/configure.m4])
 m4_include([src/uct/ib/configure.m4])
-m4_include([src/uct/ib/rdmacm/configure.m4])
 m4_include([src/uct/rocm/configure.m4])
 m4_include([src/uct/sm/configure.m4])
 m4_include([src/uct/ugni/configure.m4])

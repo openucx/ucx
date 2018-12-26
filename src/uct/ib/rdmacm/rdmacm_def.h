@@ -6,7 +6,6 @@
 #ifndef UCT_RDMACM_H
 #define UCT_RDMACM_H
 
-#include <uct/ib/base/ib_iface.h>
 #include <uct/api/uct.h>
 #include <uct/api/uct_def.h>
 #include <uct/base/uct_iface.h>

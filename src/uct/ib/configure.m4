@@ -47,15 +47,6 @@ AC_ARG_WITH([dc],
 
 
 #
-# CM (IB connection manager) Support
-#
-AC_ARG_WITH([cm],
-            [AC_HELP_STRING([--with-cm], [Compile with IB Connection Manager support])],
-            [],
-            [with_cm=yes])
-
-
-#
 # mlx5 DV support
 #
 AC_ARG_WITH([mlx5-dv],
@@ -328,7 +319,6 @@ AS_IF([test "x$with_ib" == xyes],
 
        AS_IF([test "x$with_dc" != xno -a \( "x$have_dc_exp" = xyes -o "x$have_dc_dv" = xyes \) -a "x$with_mlx5_hw" == xyes], [
            AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
-           transports="${transports},dc"
            AS_IF([test -n "$have_dc_dv"],
                  [AC_DEFINE([HAVE_DC_DV], 1, [DC DV support])], [
            AS_IF([test -n "$have_dc_exp"],
@@ -336,23 +326,10 @@ AS_IF([test "x$with_ib" == xyes],
            [with_dc=no])
 
        AS_IF([test "x$with_rc" != xno],
-           [AC_DEFINE([HAVE_TL_RC], 1, [RC transport support])
-           transports="${transports},rc"])
+           [AC_DEFINE([HAVE_TL_RC], 1, [RC transport support])])
 
        AS_IF([test "x$with_ud" != xno],
-           [AC_DEFINE([HAVE_TL_UD], 1, [UD transport support])
-           transports="${transports},ud"])
-
-       AS_IF([test "x$with_cm" != xno],
-           [save_LIBS="$LIBS"
-            AC_CHECK_LIB([ibcm], [ib_cm_send_req],
-                         [AC_SUBST(IBCM_LIBS, [-libcm])],
-                         [with_cm=no])
-            LIBS="$save_LIBS"
-           ])
-       AS_IF([test "x$with_cm" != xno],
-           [AC_DEFINE([HAVE_TL_CM], 1, [Connection manager support])
-           transports="${transports},cm"])
+           [AC_DEFINE([HAVE_TL_UD], 1, [UD transport support])])
 
        # XRQ with Tag Matching support
        AS_IF([test "x$with_ib_hw_tm" != xno],
@@ -400,6 +377,8 @@ AS_IF([test "x$with_ib" == xyes],
        LDFLAGS="$save_LDFLAGS"
        CFLAGS="$save_CFLAGS"
        CPPFLAGS="$save_CPPFLAGS"
+
+       uct_modules+=":ib"
     ],
     [
         with_dc=no
@@ -410,7 +389,6 @@ AS_IF([test "x$with_ib" == xyes],
         with_ib_hw_tm=no
     ])
 
-
 #
 # For automake
 #
@@ -420,8 +398,13 @@ AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
 AM_CONDITIONAL([HAVE_DC_DV],   [test -n "$have_dc_dv"])
 AM_CONDITIONAL([HAVE_DC_EXP],  [test -n "$have_dc_exp"])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
-AM_CONDITIONAL([HAVE_TL_CM],   [test "x$with_cm" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
 AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
 AM_CONDITIONAL([HAVE_IBV_EX_HW_TM], [test "x$with_ib_hw_tm"  != xno])
+
+uct_ib_modules=""
+m4_include([src/uct/ib/cm/configure.m4])
+m4_include([src/uct/ib/rdmacm/configure.m4])
+AC_DEFINE_UNQUOTED([uct_ib_MODULES], ["${uct_ib_modules}"], [IB loadable modules])
+AC_CONFIG_FILES([src/uct/ib/Makefile])
