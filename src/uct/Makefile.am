@@ -6,7 +6,7 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = base ib sm tcp
+SUBDIRS = base cuda ib sm tcp
 
 lib_LTLIBRARIES    = libuct.la
 libuct_la_CFLAGS   = $(BASE_CFLAGS)
@@ -56,50 +56,6 @@ libuct_la_SOURCES += \
     ugni/udt/ugni_udt_ep.c \
     ugni/smsg/ugni_smsg_iface.c	\
     ugni/smsg/ugni_smsg_ep.c
-endif
-
-if HAVE_CUDA
-libuct_la_CPPFLAGS += $(CUDA_CPPFLAGS)
-libuct_la_LDFLAGS  += $(CUDA_LDFLAGS)
-
-if HAVE_GDR_COPY
-libuct_la_CPPFLAGS += $(GDR_COPY_CPPFLAGS)
-libuct_la_LDFLAGS  += $(GDR_COPY_LDFLAGS)
-
-noinst_HEADERS += \
-    cuda/gdr_copy/gdr_copy_md.h \
-    cuda/gdr_copy/gdr_copy_iface.h \
-    cuda/gdr_copy/gdr_copy_ep.h
-
-libuct_la_SOURCES += \
-    cuda/gdr_copy/gdr_copy_md.c \
-    cuda/gdr_copy/gdr_copy_iface.c \
-    cuda/gdr_copy/gdr_copy_ep.c
-endif
-noinst_HEADERS += \
-    cuda/base/cuda_md.h \
-    cuda/base/cuda_iface.h \
-    cuda/cuda_copy/cuda_copy_md.h \
-    cuda/cuda_copy/cuda_copy_iface.h \
-    cuda/cuda_copy/cuda_copy_ep.h
-
-libuct_la_SOURCES += \
-    cuda/base/cuda_md.c \
-    cuda/cuda_copy/cuda_copy_md.c \
-    cuda/cuda_copy/cuda_copy_iface.c \
-    cuda/cuda_copy/cuda_copy_ep.c
-
-noinst_HEADERS += \
-    cuda/cuda_ipc/cuda_ipc_md.h \
-    cuda/cuda_ipc/cuda_ipc_iface.h \
-    cuda/cuda_ipc/cuda_ipc_ep.h \
-    cuda/cuda_ipc/cuda_ipc_cache.h
-
-libuct_la_SOURCES += \
-    cuda/cuda_ipc/cuda_ipc_md.c \
-    cuda/cuda_ipc/cuda_ipc_iface.c \
-    cuda/cuda_ipc/cuda_ipc_ep.c \
-    cuda/cuda_ipc/cuda_ipc_cache.c
 endif
 
 if HAVE_ROCM

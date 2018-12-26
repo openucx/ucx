@@ -178,7 +178,9 @@ AS_IF([test "x$with_docs_only" == xyes],
      m4_include([config/m4/rte.m4])
      m4_include([config/m4/java.m4])
      m4_include([config/m4/cuda.m4])
+     m4_include([src/ucm/configure.m4])
      m4_include([src/uct/configure.m4])
+     m4_include([src/tools/perf/configure.m4])
      m4_include([test/gtest/configure.m4])
 
      #
@@ -287,7 +289,12 @@ DX_INIT_DOXYGEN([UCX],[doc/doxygen/ucxdox],[doc/doxygen-doc])
 # Print which transports are built
 #
 AC_MSG_NOTICE([Supported transports: $transports])
-AC_SUBST([build_modules], [${uct_modules}${uct_ib_modules}])
+build_modules="${uct_modules}"
+build_modules+="${uct_ib_modules}"
+build_modules+="${uct_cuda_modules}"
+build_modules+="${ucm_modules}"
+build_modules+="${ucx_perftest_modules}"
+AC_SUBST([build_modules], [${build_modules}])
 
 #
 # Final output
@@ -313,9 +320,7 @@ AC_CONFIG_FILES([
                  src/ucp/Makefile
                  src/ucp/api/ucp_version.h
                  src/ucp/core/ucp_version.c
-                 src/ucm/Makefile
                  src/tools/info/Makefile
-                 src/tools/perf/Makefile
                  src/tools/profile/Makefile
                  test/apps/Makefile
                  test/apps/sockaddr/Makefile
@@ -342,6 +347,9 @@ AC_MSG_NOTICE([Building documents only])
 [
 AC_MSG_NOTICE([UCX build configuration:])
 AC_MSG_NOTICE([      UCT modules:    <$(echo $uct_modules|tr ':' ' ') >])
+AC_MSG_NOTICE([        CUDA modules: <$(echo $uct_cuda_modules|tr ':' ' ') >])
 AC_MSG_NOTICE([        IB modules:   <$(echo $uct_ib_modules|tr ':' ' ') >])
+AC_MSG_NOTICE([      UCM modules:    <$(echo $ucm_modules|tr ':' ' ') >])
+AC_MSG_NOTICE([      Perf modules:   <$(echo $ucx_perftest_modules|tr ':' ' ') >])
 ])
 AC_MSG_NOTICE([=========================================================])

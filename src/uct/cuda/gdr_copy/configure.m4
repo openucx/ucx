@@ -41,6 +41,7 @@ AS_IF([test "x$with_gdrcopy" != "xno"],
             [
                 AC_SUBST(GDR_COPY_CPPFLAGS, "-I$ucx_check_gdrcopy_dir/include/ ")
                 AC_SUBST(GDR_COPY_LDFLAGS, "-lgdrapi -L$ucx_check_gdrcopy_dir/lib64")
+                uct_cuda_modules+=":gdrcopy"
             ],
             [
                 AS_IF([test "x$with_gdrcopy" != "xguess"],
@@ -51,3 +52,4 @@ AS_IF([test "x$with_gdrcopy" != "xno"],
     [AC_MSG_WARN([GDR_COPY was explicitly disabled])])
 
 AM_CONDITIONAL([HAVE_GDR_COPY], [test "x$gdrcopy_happy" != xno])
+AC_CONFIG_FILES([src/uct/cuda/gdr_copy/Makefile])

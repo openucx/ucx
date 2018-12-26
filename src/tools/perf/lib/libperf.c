@@ -9,6 +9,7 @@
 
 #include <ucs/debug/log.h>
 #include <ucs/arch/bitops.h>
+#include <ucs/sys/module.h>
 #include <string.h>
 #include <malloc.h>
 #include <tools/perf/lib/libperf_int.h>
@@ -1613,9 +1614,8 @@ void ucx_perf_global_init()
         .ucp_alloc = ucp_perf_test_alloc_host,
         .ucp_free  = ucp_perf_test_free_host
     };
+    UCS_MODULE_FRAMEWORK_DECLARE(ucx_perftest);
 
     ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_HOST] = &host_allocator;
-#if HAVE_CUDA
-    ucx_perf_cuda_global_init();
-#endif
+    UCS_MODULE_FRAMEWORK_LOAD(ucx_perftest);
 }

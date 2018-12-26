@@ -82,6 +82,8 @@ if [ $opt_binrpm -eq 1 ]; then
 
 	with_args=""
 	with_args+=" $(with_arg cma)"
+	with_args+=" $(with_arg cuda)"
+	with_args+=" $(with_arg gdrcopy)"
 	with_args+=" $(with_arg ib)"
 	with_args+=" $(with_arg cm ib_cm)"
 	with_args+=" $(with_arg knem)"

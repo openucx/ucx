@@ -136,9 +136,6 @@ void uct_perf_barrier(ucx_perf_context_t *perf);
 void ucp_perf_barrier(ucx_perf_context_t *perf);
 
 
-void ucx_perf_cuda_global_init();
-
-
 static UCS_F_ALWAYS_INLINE int ucx_perf_context_done(ucx_perf_context_t *perf)
 {
     return ucs_unlikely((perf->current.iters >= perf->max_iter) ||

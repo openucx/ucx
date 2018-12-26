@@ -8,14 +8,20 @@
 # See file LICENSE for terms.
 #
 
-if HAVE_MPICC
-ucx_perftest_CC = $(MPICC)
-else
-ucx_perftest_CC = $(CC)
-endif
+SUBDIRS = cuda lib
+CC      = $(UCX_PERFTEST_CC)
 
-# override CXXFLAGS to link C++ code with C linker
-CXXFLAGS += -nostdlib -fno-exceptions -fno-rtti
+noinst_HEADERS        = api/libperf.h
+bin_PROGRAMS          = ucx_perftest
+ucx_perftest_SOURCES  = perftest.c
+ucx_perftest_CPPFLAGS = $(BASE_CPPFLAGS) $(RTE_CPPFLAGS)
+ucx_perftest_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS)
+ucx_perftest_LDFLAGS  = $(RTE_LDFLAGS) -Wl,-dynamic-list-data
+ucx_perftest_LDADD    = \
+	$(abs_top_builddir)/src/uct/libuct.la \
+	$(abs_top_builddir)/src/ucp/libucp.la \
+	$(abs_top_builddir)/src/ucs/libucs.la \
+	lib/libucxperf.la
 
 perftestdir = $(pkgdatadir)/perftest
 dist_perftest_DATA = \
@@ -24,77 +30,6 @@ dist_perftest_DATA = \
 	$(top_srcdir)/contrib/ucx_perftest_config/test_types_uct \
 	$(top_srcdir)/contrib/ucx_perftest_config/test_types_ucp \
 	$(top_srcdir)/contrib/ucx_perftest_config/transports
-
-bin_PROGRAMS          = ucx_perftest
-noinst_LTLIBRARIES    = libucxperf.la
-
-noinst_HEADERS = \
-	api/libperf.h \
-	lib/libperf_int.h
-libucxperf_la_SOURCES = \
-	lib/libperf.c \
-	lib/uct_tests.cc \
-	lib/ucp_tests.cc
-libucxperf_la_LDFLAGS = \
-	$(RTE_LDFLAGS) \
-	$(OPENMP_CFLAGS)
-libucxperf_la_CPPFLAGS = \
-	$(BASE_CPPFLAGS)
-libucxperf_la_CXXFLAGS = \
-	$(BASE_CXXFLAGS) \
-	$(OPENMP_CFLAGS)
-libucxperf_la_CFLAGS = \
-	$(BASE_CFLAGS) \
-	$(OPENMP_CFLAGS)
-libucxperf_la_LIBADD = \
-	$(abs_top_builddir)/src/uct/libuct.la \
-	$(abs_top_builddir)/src/ucp/libucp.la \
-	$(abs_top_builddir)/src/ucs/libucs.la
-if HAVE_CUDA
-libucxperf_la_CPPFLAGS += $(CUDA_CPPFLAGS)
-libucxperf_la_LDFLAGS  += $(CUDA_LDFLAGS)
-libucxperf_la_SOURCES += \
-	cuda/cuda_alloc.c
-endif
-#libucxperf_la_LINK = $(CXX)
-
-ucx_perftest_SOURCES  = perftest.c
-ucx_perftest_LDFLAGS = \
-	$(RTE_LDFLAGS) \
-	$(OPENMP_CFLAGS)
-ucx_perftest_CPPFLAGS = \
-	$(BASE_CPPFLAGS) \
-	$(RTE_CPPFLAGS)
-ucx_perftest_CFLAGS = \
-	$(BASE_CFLAGS) \
-	$(OPENMP_CFLAGS)
-ucx_perftest_LDADD = \
-	$(abs_top_builddir)/src/uct/libuct.la \
-	$(abs_top_builddir)/src/ucp/libucp.la \
-	$(abs_top_builddir)/src/ucs/libucs.la \
-	libucxperf.la
-ucx_perftest_SOURCE_FILES = \
-	$(patsubst %, $(srcdir)/%, $(ucx_perftest_SOURCES))
-
-#
-# Add custom rules to compile and link ucx_perftest with MPICC
-#
-perftest_COMPILE = \
-	$(LIBTOOL) $(AM_V_lt) --mode=compile --tag=CC $(ucx_perftest_CC) \
-	$(DEFS) -I. -I$(top_builddir) $(AM_CPPFLAGS) $(CPPFLAGS) $(ucx_perftest_CPPFLAGS) \
-	$(AM_CFLAGS) $(CFLAGS) $(ucx_perftest_CFLAGS)
-
-perftest.lo: $(ucx_perftest_SOURCE_FILES)
-	$(AM_V_CC)
-if AMDEP
-	@$(perftest_COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/ucx_perftest-perftest.Po -c -o $@ $<
-endif
-	@$(perftest_COMPILE) $(ucx_perftest_SOURCE_FILES) -c -o $@
-
-ucx_perftest$(EXEEXT): perftest.lo $(ucx_perftest_LDADD)
-	$(AM_V_CCLD)
-	@$(LIBTOOL) $(AM_V_lt) --mode=link --tag=CC $(ucx_perftest_CC) \
-		perftest.lo $(LDFLAGS) $(ucx_perftest_LDFLAGS) $(ucx_perftest_LDADD) -o $@
 
 if HAVE_MPIRUN
 .PHONY: ucx test help

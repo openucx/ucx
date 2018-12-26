@@ -44,9 +44,10 @@ gtest_LDADD = \
 	$(top_builddir)/src/uct/libuct.la \
 	$(top_builddir)/src/ucm/libucm.la \
 	$(top_builddir)/src/ucp/libucp.la \
-	$(top_builddir)/src/tools/perf/libucxperf.la \
+	$(top_builddir)/src/tools/perf/lib/libucxperf.la \
 	$(OPENMP_CFLAGS) \
 	$(GTEST_LIBS)
+
 
 gtest_CPPFLAGS = \
 	$(BASE_CPPFLAGS) \
@@ -188,6 +189,8 @@ endif # HAVE_IB
 if HAVE_CUDA
 gtest_SOURCES += \
 	ucm/cuda_hooks.cc
+gtest_LDADD += \
+	$(top_builddir)/src/uct/cuda/libuct_cuda.la
 endif
 
 noinst_HEADERS = \
