@@ -8,8 +8,7 @@
 #define TEST_PERF_H_
 
 #include <common/test.h>
-
-#include <tools/perf/libperf.h>
+#include <tools/perf/api/libperf.h>
 
 
 class test_perf {

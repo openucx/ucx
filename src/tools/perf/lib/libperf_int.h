@@ -9,7 +9,7 @@
 #ifndef LIBPERF_INT_H_
 #define LIBPERF_INT_H_
 
-#include "libperf.h"
+#include <tools/perf/api/libperf.h>
 
 BEGIN_C_DECLS
 

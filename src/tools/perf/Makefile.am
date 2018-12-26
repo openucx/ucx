@@ -29,12 +29,12 @@ bin_PROGRAMS          = ucx_perftest
 noinst_LTLIBRARIES    = libucxperf.la
 
 noinst_HEADERS = \
-	libperf.h \
-	libperf_int.h
+	api/libperf.h \
+	lib/libperf_int.h
 libucxperf_la_SOURCES = \
-	libperf.c \
-	uct_tests.cc \
-	ucp_tests.cc
+	lib/libperf.c \
+	lib/uct_tests.cc \
+	lib/ucp_tests.cc
 libucxperf_la_LDFLAGS = \
 	$(RTE_LDFLAGS) \
 	$(OPENMP_CFLAGS)
