@@ -57,7 +57,7 @@ static ucs_status_t uct_rocm_cma_query_md_resources(uct_md_resource_desc_t **res
      * Note: We do not support PnP so ROCm configuration will be the same.
     */
     if (uct_rocm_init() != HSA_STATUS_SUCCESS) {
-        ucs_error("Could not initialize ROCm support");
+        ucs_debug("Could not initialize ROCm support");
         *resources_p     = NULL;
         *num_resources_p = 0;
         return UCS_OK;
