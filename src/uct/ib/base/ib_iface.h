@@ -60,10 +60,10 @@ enum {
 
 #if HAVE_CUDA
 enum {
-    PATH_PIX = 0,
-    PATH_PXB = 1,
-    PATH_PHB = 2,
-    PATH_SOC = 3
+    UCT_IB_PATH_PIX = 0,
+    UCT_IB_PATH_PXB = 1,
+    UCT_IB_PATH_PHB = 2,
+    UCT_IB_PATH_SOC = 3
 };
 #endif
 

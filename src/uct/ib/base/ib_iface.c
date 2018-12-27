@@ -1161,7 +1161,6 @@ static int uct_ib_iface_get_cuda_path(int cuda_dev, char** path)
     CUresult cu_err;
 
     /* Initialize bus_id array to avoid valgrind complaints */
-
     for (i = 0; i < 16; i++) {
         bus_id[i] = 0;
     }
@@ -1223,10 +1222,10 @@ static int uct_ib_iface_pci_distance(char* cuda_path, char* mlx_path)
             if (same == 1) score++;
         }
     }
-    if (score == 3) return PATH_SOC;
-    if (score == 4) return PATH_PHB;
-    if (score == depth-1) return PATH_PIX;
-    return PATH_PXB;
+    if (score == 3) return UCT_IB_PATH_SOC;
+    if (score == 4) return UCT_IB_PATH_PHB;
+    if (score == depth-1) return UCT_IB_PATH_PIX;
+    return UCT_IB_PATH_PXB;
 }
 
 static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
@@ -1253,7 +1252,7 @@ static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
     /* Obtain score from the cuda device and mlx device pair */
     score = uct_ib_iface_pci_distance(cuda_dev_path, mlx_dev_path);
     ucs_debug("device = %d ib = %s score = %d\n",
-              (int) cuda_device, ((char *) uct_ib_device_name(dev)), score);
+              (int) cuda_device, uct_ib_device_name(dev), score);
 
     /* Assign latency as a factor of score */
 
