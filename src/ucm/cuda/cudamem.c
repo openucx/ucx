@@ -26,20 +26,20 @@ UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemFree, CUresult,-1, CUdeviceptr)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemFreeHost, CUresult, -1, void *)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemAlloc, CUresult, -1, CUdeviceptr *, size_t)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemAllocManaged, CUresult, -1, CUdeviceptr *,
-                             size_t, unsigned int)
+                              size_t, unsigned int)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemAllocPitch, CUresult, -1, CUdeviceptr *, size_t *,
-                             size_t, size_t, unsigned int)
+                              size_t, size_t, unsigned int)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemHostGetDevicePointer, CUresult, -1, CUdeviceptr *,
-                             void *, unsigned int)
+                              void *, unsigned int)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemHostUnregister, CUresult, -1, void *)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaFree, cudaError_t, -1, void*)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaFreeHost, cudaError_t, -1, void*)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaMalloc, cudaError_t, -1, void**, size_t)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaMallocManaged, cudaError_t, -1, void**, size_t, unsigned int)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaMallocPitch, cudaError_t, -1, void**, size_t *,
-                             size_t, size_t)
+                              size_t, size_t)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaHostGetDevicePointer, cudaError_t, -1, void**,
-                             void *, unsigned int)
+                              void *, unsigned int)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cudaHostUnregister, cudaError_t, -1, void*)
 
 #if ENABLE_SYMBOL_OVERRIDE
@@ -353,10 +353,9 @@ static ucs_status_t ucm_cudamem_install(int events)
     static int ucm_cudamem_installed = 0;
     static pthread_mutex_t install_mutex = PTHREAD_MUTEX_INITIALIZER;
     ucm_reloc_patch_t *patch;
-    ucs_status_t status;
+    ucs_status_t status = UCS_OK;
 
     if (!(events & (UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE))) {
-        status = UCS_OK;
         goto out;
     }
 
@@ -369,7 +368,6 @@ static ucs_status_t ucm_cudamem_install(int events)
     pthread_mutex_lock(&install_mutex);
 
     if (ucm_cudamem_installed) {
-        status = UCS_OK;
         goto out_unlock;
     }
 
@@ -383,7 +381,6 @@ static ucs_status_t ucm_cudamem_install(int events)
 
     ucm_debug("cudaFree hooks are ready");
     ucm_cudamem_installed = 1;
-    status = UCS_OK;
 
 out_unlock:
     pthread_mutex_unlock(&install_mutex);
