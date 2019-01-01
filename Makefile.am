@@ -49,11 +49,6 @@ if HAVE_JAVA
 SUBDIRS += bindings/java/src/main/native
 endif
 
-EXTRA_DIST += config/m4/java.m4
-EXTRA_DIST += config/m4/gtest.m4
-EXTRA_DIST += config/m4/ucs.m4
-EXTRA_DIST += config/m4/ib.m4
-EXTRA_DIST += config/m4/sysdep.m4
 EXTRA_DIST += contrib/configure-devel
 EXTRA_DIST += contrib/configure-release
 EXTRA_DIST += contrib/configure-prof
