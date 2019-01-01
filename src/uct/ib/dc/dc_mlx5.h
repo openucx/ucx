@@ -43,6 +43,7 @@ typedef struct uct_dc_mlx5_iface_addr {
 typedef enum {
     UCT_DC_TX_POLICY_DCS,
     UCT_DC_TX_POLICY_DCS_QUOTA,
+    UCT_DC_TX_POLICY_RAND,
     UCT_DC_TX_POLICY_LAST
 } uct_dc_tx_policty_t;
 
@@ -177,7 +178,6 @@ ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_mlx5_iface_config_t *config);
 
 void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max);
-
 
 #if IBV_EXP_HW_TM_DC
 void uct_dc_mlx5_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,

@@ -174,13 +174,20 @@ void uct_dc_mlx5_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls);
 
 void uct_dc_mlx5_ep_release(uct_dc_mlx5_ep_t *ep);
 
-static inline void uct_dc_mlx5_iface_dci_sched_tx(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
+static UCS_F_ALWAYS_INLINE int uct_dc_mlx5_iface_is_dci_rand(uct_dc_mlx5_iface_t *iface)
 {
-    /* TODO: other policies have to add group always */
-    if (uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci)) {
+    return iface->tx.policy == UCT_DC_TX_POLICY_RAND;
+}
+
+static UCS_F_ALWAYS_INLINE void uct_dc_mlx5_iface_dci_sched_tx(uct_dc_mlx5_iface_t *iface,
+                                                              uct_dc_mlx5_ep_t *ep)
+{
+    if (uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci) ||
+        uct_dc_mlx5_iface_is_dci_rand(iface)) {
         ucs_arbiter_group_schedule(uct_dc_mlx5_iface_tx_waitq(iface), &ep->arb_group);
     }
 }
+
 
 /**
  * dci policies:
@@ -231,7 +238,14 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
     ucs_arbiter_group_init(&ep->arb_group);
-    ep->dci   = UCT_DC_MLX5_EP_NO_DCI;
+
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        /* coverity[dont_call] */
+        ep->dci = rand() % iface->tx.ndci;
+    } else {
+        ep->dci = UCT_DC_MLX5_EP_NO_DCI;
+    }
+
     /* valid = 1, global = 0, tx_wait = 0 */
     ep->flags = UCT_DC_MLX5_EP_FLAG_VALID;
 
@@ -257,8 +271,11 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface)
          *
          * So we keep progressing pending while dci_waitq is not
          * empty and it is possible to allocate a dci.
+         * NOTE: in case of rand dci allocation policy, dci_waitq is always
+         * empty.
          */
-        if (uct_dc_mlx5_iface_dci_can_alloc(iface)) {
+        if (uct_dc_mlx5_iface_dci_can_alloc(iface) &&
+            !uct_dc_mlx5_iface_is_dci_rand(iface)) {
             ucs_arbiter_dispatch(uct_dc_mlx5_iface_dci_waitq(iface), 1,
                                  uct_dc_mlx5_iface_dci_do_pending_wait, NULL);
         }
@@ -289,7 +306,13 @@ void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx
 
 static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci)
 {
-    uct_dc_mlx5_ep_t *ep = iface->tx.dcis[dci].ep;
+    uct_dc_mlx5_ep_t *ep;
+
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        return;
+    }
+
+    ep = iface->tx.dcis[dci].ep;
 
     ucs_assert(iface->tx.stack_top > 0);
 
@@ -363,6 +386,7 @@ static inline void uct_dc_mlx5_iface_dci_free(uct_dc_mlx5_iface_t *iface, uct_dc
 {
     uint8_t dci = ep->dci;
 
+    ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
     ucs_assert(dci != UCT_DC_MLX5_EP_NO_DCI);
     ucs_assert(iface->tx.stack_top > 0);
 
@@ -385,6 +409,11 @@ static inline ucs_status_t uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface,
 {
     uct_rc_txqp_t *txqp;
     int16_t available;
+
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        return uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci) ?
+               UCS_OK : UCS_ERR_NO_RESOURCE;
+    }
 
     if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
         /* dci is already assigned - keep using it */
