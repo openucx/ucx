@@ -10,10 +10,6 @@
 #define UCX_LIBPERF_H
 
 #include <ucs/sys/compiler.h>
-#if HAVE_CUDA
-#include <cuda.h>
-#include <cuda_runtime.h>
-#endif
 
 BEGIN_C_DECLS
 
@@ -192,6 +188,17 @@ typedef struct ucx_perf_params {
     } ucp;
 
 } ucx_perf_params_t;
+
+
+/* Allocators for each memory type */
+typedef struct ucx_perf_allocator ucx_perf_allocator_t;
+extern const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[];
+
+
+/**
+ * Initialize performance testing framework. May be called multiple times.
+ */
+void ucx_perf_global_init();
 
 
 /**

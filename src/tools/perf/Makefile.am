@@ -50,6 +50,10 @@ libucxperf_la_LIBADD = \
 	$(abs_top_builddir)/src/uct/libuct.la \
 	$(abs_top_builddir)/src/ucp/libucp.la \
 	$(abs_top_builddir)/src/ucs/libucs.la
+if HAVE_CUDA
+libucxperf_la_SOURCES += \
+	cuda/cuda_alloc.c
+endif
 #libucxperf_la_LINK = $(CXX)
 
 ucx_perftest_SOURCES  = perftest.c

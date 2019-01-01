@@ -335,6 +335,8 @@ static void usage(const struct perftest_context *ctx, const char *program)
     test_type_t *test;
     int UCS_V_UNUSED rank;
 
+    ucx_perf_global_init(); /* initialize memory types */
+
 #if HAVE_MPI
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     if (ctx->mpi && (rank != 0)) {
@@ -379,12 +381,6 @@ static void usage(const struct perftest_context *ctx, const char *program)
 #if HAVE_MPI
     printf("     -P <0|1>       disable/enable MPI mode (%d)\n", ctx->mpi);
 #endif
-    printf("     -m <mem type>  memory type of messages\n");
-    printf("                        host - system memory(default)\n");
-#if HAVE_CUDA
-    printf("                        cuda - NVIDIA GPU memory\n");
-    printf("                        cuda-managed - NVIDIA cuda managed/unified memory\n");
-#endif
     printf("     -h             show this help message\n");
     printf("\n");
     printf("  Output format:\n");
@@ -423,6 +419,14 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -r <mode>      receive mode for stream tests (recv)\n");
     printf("                        recv       : Use ucp_stream_recv_nb\n");
     printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
+    printf("     -m <mem type>  memory type of messages\n");
+    printf("                        host - system memory(default)\n");
+    if (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA] != NULL) {
+        printf("                        cuda - NVIDIA GPU memory\n");
+    }
+    if (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] != NULL) {
+        printf("                        cuda-managed - NVIDIA cuda managed/unified memory\n");
+    }
     printf("\n");
     printf("   NOTE: When running UCP tests, transport and device should be specified by\n");
     printf("         environment variables: UCX_TLS and UCX_[SELF|SHM|NET]_DEVICES.\n");
@@ -657,15 +661,14 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         if (!strcmp(optarg, "host")) {
             params->mem_type = UCT_MD_MEM_TYPE_HOST;
             return UCS_OK;
-        } else if(!strncmp(optarg, "cuda", 4)) {
-#if HAVE_CUDA
-            params->mem_type = (!strcmp(optarg, "cuda-managed")) ?
-                UCT_MD_MEM_TYPE_CUDA_MANAGED : UCT_MD_MEM_TYPE_CUDA;
+        } else if (!strcmp(optarg, "cuda") &&
+                   (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA] != NULL)) {
+            params->mem_type = UCT_MD_MEM_TYPE_CUDA;
             return UCS_OK;
-#else
-            ucs_error("not built with cuda support");
-            return UCS_ERR_INVALID_PARAM;
-#endif
+        } else if (!strcmp(optarg, "cuda-managed") &&
+                   (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] != NULL)) {
+            params->mem_type = UCT_MD_MEM_TYPE_CUDA_MANAGED;
+            return UCS_OK;
         }
         return UCS_ERR_INVALID_PARAM;
     default:

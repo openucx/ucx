@@ -26,6 +26,16 @@ typedef struct uct_peer          uct_peer_t;
 typedef struct ucp_peer          ucp_peer_t;
 typedef struct ucp_perf_request  ucp_perf_request_t;
 
+
+struct ucx_perf_allocator {
+    ucs_status_t (*init)(ucx_perf_context_t *perf);
+    ucs_status_t (*ucp_alloc)(ucx_perf_context_t *perf, size_t length,
+                              void **address_p, ucp_mem_h *memh, int non_blk_flag);
+    void         (*ucp_free)(ucx_perf_context_t *perf, void *address,
+                             ucp_mem_h memh);
+};
+
+
 struct ucx_perf_context {
     ucx_perf_params_t            params;
 
@@ -52,6 +62,7 @@ struct ucx_perf_context {
 
     ucs_time_t                   timing_queue[TIMING_QUEUE_SIZE];
     unsigned                     timing_queue_head;
+    const ucx_perf_allocator_t   *allocator;
 
     union {
         struct {
@@ -91,9 +102,11 @@ struct ucp_peer {
     ucp_rkey_h                   rkey;
 };
 
+
 struct ucp_perf_request {
     void                         *context;
 };
+
 
 #define UCX_PERF_TEST_FOREACH(perf) \
     while (!ucx_perf_context_done(perf))
@@ -121,6 +134,9 @@ void uct_perf_barrier(ucx_perf_context_t *perf);
 
 
 void ucp_perf_barrier(ucx_perf_context_t *perf);
+
+
+void ucx_perf_cuda_global_init();
 
 
 static UCS_F_ALWAYS_INLINE int ucx_perf_context_done(ucx_perf_context_t *perf)
