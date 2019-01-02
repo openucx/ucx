@@ -27,6 +27,9 @@
 #include <sched.h>
 #include <ctype.h>
 
+#if HAVE_SYS_CAPABILITY_H
+#  include <sys/capability.h>
+#endif
 
 /* Default huge page size is 2 MBytes */
 #define UCS_DEFAULT_MEM_FREE       640000
@@ -506,68 +509,110 @@ size_t ucs_get_shmmax()
     return size;
 }
 
-static void ucs_sysv_shmget_format_error(size_t alloc_size, int flags,
-                                         const char *alloc_name, int sys_errno,
-                                         char *buf, size_t max)
+static void ucs_sysv_shmget_error_check_ENOSPC(size_t alloc_size,
+                                               const struct shminfo *ipc_info,
+                                               char *buf, size_t max)
 {
     unsigned long new_used_ids;
     unsigned long new_shm_tot;
     struct shm_info shm_info;
-    struct shminfo shminfo;
-    int error_detected;
     char *p, *endp;
     int ret;
 
-    buf[0]         = '\0';
-    p              = buf;
-    endp           = p + max;
-    error_detected = 0;
-
-    snprintf(p, endp - p, "shmget(size=%zu flags=0x%x) for %s failed: %s",
-             alloc_size, flags, alloc_name, strerror(sys_errno));
-    p += strlen(p);
-
-    ret = shmctl(0, IPC_INFO, (struct shmid_ds *)&shminfo);
-    if (ret < 0) {
-        goto out;
-    }
+    p    = buf;
+    endp = p + max;
 
     ret = shmctl(0, SHM_INFO, (struct shmid_ds *)&shm_info);
-    if (ret < 0) {
-        goto out;
-    }
-
-    if ((sys_errno == EINVAL) && (alloc_size > shminfo.shmmax)) {
-        snprintf(p, endp - p,
-                 ", allocation size exceeds /proc/sys/kernel/shmmax (=%zu)",
-                 shminfo.shmmax);
-        p += strlen(p);
-        error_detected = 1;
+    if (ret >= 0) {
+        return;
     }
 
     new_used_ids = shm_info.used_ids;
-    if ((sys_errno == ENOSPC) && (new_used_ids > shminfo.shmmni)) {
+    if (new_used_ids > ipc_info->shmmni) {
         snprintf(p, endp - p,
                  ", total number of segments in the system (%lu) would exceed the"
                  " limit in /proc/sys/kernel/shmmni (=%lu)",
-                 new_used_ids, shminfo.shmmni);
+                 new_used_ids, ipc_info->shmmni);
         p += strlen(p);
-        error_detected = 1;
     }
 
     new_shm_tot = shm_info.shm_tot +
                   (alloc_size + ucs_get_page_size() - 1) / ucs_get_page_size();
-    if ((sys_errno == ENOSPC) && (new_shm_tot > shminfo.shmall)) {
+    if (new_shm_tot > ipc_info->shmall) {
         snprintf(p, endp - p,
                  ", total shared memory pages in the system (%lu) would exceed the"
                  " limit in /proc/sys/kernel/shmall (=%lu)",
-                 new_shm_tot, shminfo.shmall);
+                 new_shm_tot, ipc_info->shmall);
         p += strlen(p);
-        error_detected = 1;
+    }
+}
+
+static void ucs_sysv_shmget_error_check_EPERM(int flags, char *buf, size_t max)
+{
+#if HAVE_SYS_CAPABILITY_H
+    cap_user_header_t hdr = ucs_alloca(sizeof(*hdr));
+    cap_user_data_t data  = ucs_alloca(sizeof(*data) * _LINUX_CAPABILITY_U32S_3);
+    int ret;
+
+    hdr->pid     = 0; /* current thread */
+    hdr->version = _LINUX_CAPABILITY_VERSION_3;
+    ret = capget(hdr, data);
+    if (ret == 0) {
+        UCS_STATIC_ASSERT(CAP_IPC_LOCK < 32); /* we check this bit in data[0] */
+        if (!(data->effective & UCS_BIT(CAP_IPC_LOCK))) {
+            /* detected missing CAP_IPC_LOCK */
+            snprintf(buf, max, ", CAP_IPC_LOCK privilege is needed for SHM_HUGETLB");
+        }
+        return;
     }
 
-out:
-    if (!error_detected) {
+    /* log error and fallback to speculative error message */
+    ucs_debug("capget(pid=%d version=0x%x) failed: %m", hdr->pid, hdr->version);
+#endif
+
+    snprintf(buf, max,
+             ", please check for CAP_IPC_LOCK privilege for using SHM_HUGETLB");
+}
+
+static void ucs_sysv_shmget_format_error(size_t alloc_size, int flags,
+                                         const char *alloc_name, int sys_errno,
+                                         char *buf, size_t max)
+{
+    struct shminfo ipc_info;
+    char *p, *endp, *errp;
+    int ret;
+
+    buf[0] = '\0';
+    p      = buf;
+    endp   = p + max;
+
+    snprintf(p, endp - p, "shmget(size=%zu flags=0x%x) for %s failed: %s",
+             alloc_size, flags, alloc_name, strerror(sys_errno));
+    p   += strlen(p);
+    errp = p; /* save current string pointer to detect if anything was added */
+
+    ret = shmctl(0, IPC_INFO, (struct shmid_ds *)&ipc_info);
+    if (ret >= 0) {
+        if ((sys_errno == EINVAL) && (alloc_size > ipc_info.shmmax)) {
+            snprintf(p, endp - p,
+                     ", allocation size exceeds /proc/sys/kernel/shmmax (=%zu)",
+                     ipc_info.shmmax);
+            p += strlen(p);
+        }
+
+        if (sys_errno == ENOSPC) {
+            ucs_sysv_shmget_error_check_ENOSPC(alloc_size, &ipc_info, p, endp - p);
+            p += strlen(p);
+        }
+    }
+
+    if (sys_errno == EPERM) {
+        ucs_sysv_shmget_error_check_EPERM(flags, p, endp - p);
+        p += strlen(p);
+    }
+
+    /* default error message if no useful information was added to the string */
+    if (p == errp) {
         snprintf(p, endp - p, ", please check shared memory limits by 'ipcs -l'");
         p += strlen(p);
     }
@@ -609,12 +654,12 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
                                      error_string, sizeof(error_string));
         switch (sys_errno) {
         case ENOMEM:
+        case EPERM:
             if (!(flags & SHM_HUGETLB)) {
                 ucs_error("%s", error_string);
             }
             return UCS_ERR_NO_MEMORY;
         case ENOSPC:
-        case EPERM:
         case EINVAL:
             ucs_error("%s", error_string);
             return UCS_ERR_NO_MEMORY;
