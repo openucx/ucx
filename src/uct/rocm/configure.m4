@@ -6,7 +6,7 @@
 
 UCX_CHECK_ROCM
 
-AS_IF([test "x$rocm_happy" == "xyes"], [uct_modules+=":rocm"])
+AS_IF([test "x$rocm_happy" = "xyes"], [uct_modules+=":rocm"])
 uct_rocm_modules=""
 m4_include([src/uct/rocm/gdr/configure.m4])
 AC_DEFINE_UNQUOTED([uct_rocm_MODULES], ["${uct_rocm_modules}"], [ROCM loadable modules])

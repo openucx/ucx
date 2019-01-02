@@ -10,7 +10,7 @@ AC_ARG_WITH([knem],
             [], [with_knem=guess])
 
 AS_IF([test "x$with_knem" != xno],
-      [AS_IF([test "x$with_knem" == xguess -o "x$with_knem" == xyes -o "x$with_knem" == x],
+      [AS_IF([test "x$with_knem" = "xguess" -o "x$with_knem" = xyes -o "x$with_knem" = "x"],
              [AC_MSG_NOTICE([KNEM path was not found, guessing ...])
               ucx_check_knem_include_dir=$(pkg-config --cflags knem)],
              [ucx_check_knem_include_dir=-I$with_knem/include])

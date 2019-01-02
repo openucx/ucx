@@ -13,7 +13,7 @@ AC_ARG_WITH([verbs],
         [],
         [with_verbs=/usr])
 
-AS_IF([test "x$with_verbs" == "xyes"], [with_verbs=/usr])
+AS_IF([test "x$with_verbs" = "xyes"], [with_verbs=/usr])
 AS_IF([test -d "$with_verbs"], [with_ib=yes; str="with verbs support from $with_verbs"], [with_ib=no; str="without verbs support"])
 AS_IF([test -d "$with_verbs/lib64"],[libsuff="64"],[libsuff=""])
 
@@ -80,12 +80,12 @@ AC_ARG_WITH([dm],
 # Check basic IB support: User wanted at least one IB transport, and we found
 # verbs header file and library.
 #
-AS_IF([test "x$with_ib" == xyes],
+AS_IF([test "x$with_ib" = "xyes"],
         [
         save_LDFLAGS="$LDFLAGS"
         save_CFLAGS="$CFLAGS"
         save_CPPFLAGS="$CPPFLAGS"
-        AS_IF([test x/usr == "x$with_verbs"],
+        AS_IF([test "x/usr" = "x$with_verbs"],
           [],
           [verbs_incl="-I$with_verbs/include"
            verbs_libs="-L$with_verbs/lib$libsuff"])
@@ -123,7 +123,7 @@ AS_IF([test "x$with_ib" == xyes],
         CPPFLAGS="$save_CPPFLAGS"
         ],[:])
 
-AS_IF([test "x$with_ib" == xyes],
+AS_IF([test "x$with_ib" = "xyes"],
       [
        save_LDFLAGS="$LDFLAGS"
        save_CFLAGS="$CFLAGS"
@@ -197,7 +197,7 @@ AS_IF([test "x$with_ib" == xyes],
                                 with_mlx5_dv=yes
                                 mlx5_include=mlx5dv.h], [], [ ])])
 
-              AS_IF([test "x$with_mlx5_dv" == xyes -a "x$have_cq_io" == xyes ], [
+              AS_IF([test "x$with_mlx5_dv" = "xyes" -a "x$have_cq_io" = "xyes" ], [
                        AC_CHECK_DECLS([
                            mlx5dv_init_obj,
                            mlx5dv_create_qp,
@@ -218,13 +218,13 @@ AS_IF([test "x$with_ib" == xyes],
               AC_CHECK_DECLS([ibv_alloc_td],
                       [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])])
 
-       AS_IF([test "x$has_res_domain" == xyes -a "x$have_cq_io" == xyes ], [], [
+       AS_IF([test "x$has_res_domain" = "xyes" -a "x$have_cq_io" = "xyes" ], [], [
                with_mlx5_hw=no])
 
-       AS_IF([test "x$with_mlx5_hw" == xyes],
+       AS_IF([test "x$with_mlx5_hw" = "xyes"],
              [AC_MSG_NOTICE([Compiling with mlx5 bare-metal support])
               AC_DEFINE([HAVE_MLX5_HW], 1, [mlx5 bare-metal support])
-              AS_IF([test "x$has_get_av" == xyes],
+              AS_IF([test "x$has_get_av" = "xyes"],
                  [AC_DEFINE([HAVE_MLX5_HW_UD], 1, [mlx5 UD bare-metal support])])])
 
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
@@ -318,7 +318,7 @@ AS_IF([test "x$with_ib" == xyes],
        AC_CHECK_DECLS([IBV_EXP_QPT_DC_INI],
                 [have_dc_exp=yes], [], [[#include <infiniband/verbs.h>]])
 
-       AS_IF([test "x$with_dc" != xno -a \( "x$have_dc_exp" = xyes -o "x$have_dc_dv" = xyes \) -a "x$with_mlx5_hw" == xyes], [
+       AS_IF([test "x$with_dc" != xno -a \( "x$have_dc_exp" = xyes -o "x$have_dc_dv" = xyes \) -a "x$with_mlx5_hw" = "xyes"], [
            AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
            AS_IF([test -n "$have_dc_dv"],
                  [AC_DEFINE([HAVE_DC_DV], 1, [DC DV support])], [
