@@ -178,11 +178,6 @@ ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
 
 void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max);
 
-const static char *uct_dc_tx_policy_names[] UCS_V_UNUSED = {
-    [UCT_DC_TX_POLICY_DCS]           = "dcs",
-    [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
-    [UCT_DC_TX_POLICY_LAST]          = NULL
-};
 
 #if IBV_EXP_HW_TM_DC
 void uct_dc_mlx5_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,
