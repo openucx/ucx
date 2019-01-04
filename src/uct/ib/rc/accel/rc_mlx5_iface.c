@@ -47,7 +47,7 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
   {NULL}
 };
 
-static uct_rc_mlx5_iface_ops_t uct_rc_mlx5_iface_ops;
+static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops;
 
 #if ENABLE_STATS
 ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
@@ -265,22 +265,21 @@ static ucs_status_t uct_rc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 #endif
 
 static ucs_status_t
-uct_rc_mlx5_iface_tag_init(uct_rc_mlx5_iface_common_t *iface,
-                           uct_rc_mlx5_iface_common_config_t *config)
+uct_rc_mlx5_init_srq(uct_rc_iface_t *rc_iface,
+                     const uct_rc_iface_config_t *config)
 {
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
 #if IBV_EXP_HW_TM
     if (UCT_RC_IFACE_TM_ENABLED(&iface->super)) {
         struct ibv_exp_create_srq_attr srq_init_attr = {};
 
         iface->super.progress = uct_rc_mlx5_iface_progress_tm;
-
-        return uct_rc_mlx5_iface_common_tag_init(iface, config,
-                                                 &srq_init_attr,
-                                                 sizeof(struct ibv_exp_tmh_rvh));
+        return uct_rc_mlx5_init_srq_tm(rc_iface, config, &srq_init_attr,
+                                       sizeof(struct ibv_rvh), 0);
     }
 #endif
     iface->super.progress = uct_rc_mlx5_iface_progress;
-    return UCS_OK;
+    return uct_rc_iface_init_srq(rc_iface, config);
 }
 
 static void uct_rc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
@@ -292,7 +291,7 @@ static void uct_rc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
 }
 
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
-                    uct_rc_mlx5_iface_ops_t *ops,
+                    uct_rc_iface_ops_t *ops,
                     uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
                     uct_rc_mlx5_iface_common_config_t *config,
@@ -300,7 +299,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
 {
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &ops->super, md, worker, params,
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
                               &config->super, init_attr);
 
     self->tx.mmio_mode               = config->mlx5_common.mmio_mode;
@@ -318,7 +317,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         return status;
     }
 
-    status = ops->iface_tag_init(self, config);
+    status = uct_rc_mlx5_iface_common_tag_init(self, config);
     if (status != UCS_OK) {
         return status;
     }
@@ -440,8 +439,7 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
-static uct_rc_mlx5_iface_ops_t uct_rc_mlx5_iface_ops = {
-    {
+static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     {
     {
     .ep_put_short             = uct_rc_mlx5_ep_put_short,
@@ -496,10 +494,9 @@ static uct_rc_mlx5_iface_ops_t uct_rc_mlx5_iface_ops = {
     .set_ep_failed            = uct_rc_mlx5_ep_set_failed,
     .create_qp                = uct_rc_mlx5_iface_create_qp
     },
+    .init_srq                 = uct_rc_mlx5_init_srq,
     .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_rc_iface_fc_handler,
-    },
-    .iface_tag_init           = uct_rc_mlx5_iface_tag_init,
 };
 
 

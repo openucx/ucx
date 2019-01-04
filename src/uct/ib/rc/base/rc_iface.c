@@ -725,13 +725,32 @@ unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface)
     return iface->progress(iface);
 }
 
+ucs_status_t uct_rc_iface_init_srq(uct_rc_iface_t *iface,
+                                   const uct_rc_iface_config_t *config)
+{
+    struct ibv_srq_init_attr srq_init_attr;
+    struct ibv_pd *pd = uct_ib_iface_md(&iface->super)->pd;
+
+    srq_init_attr.attr.max_sge   = 1;
+    srq_init_attr.attr.max_wr    = config->super.rx.queue_len;
+    srq_init_attr.attr.srq_limit = 0;
+    srq_init_attr.srq_context    = iface;
+    iface->rx.srq.srq            = ibv_create_srq(pd, &srq_init_attr);
+    if (iface->rx.srq.srq == NULL) {
+        ucs_error("failed to create SRQ: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+    iface->rx.srq.quota          = srq_init_attr.attr.max_wr;
+
+    return UCS_OK;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_rc_iface_config_t *config,
                     uct_ib_iface_init_attr_t *init_attr)
 {
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
-    struct ibv_srq_init_attr srq_init_attr;
     ucs_status_t status;
 
     uct_rc_iface_preinit(self, md, config, params, init_attr);
@@ -803,21 +822,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_tx_mp;
     }
 
-    /* Create SRQ */
-    if (!UCT_RC_IFACE_TM_ENABLED(self)) {
-        srq_init_attr.attr.max_sge   = 1;
-        srq_init_attr.attr.max_wr    = config->super.rx.queue_len;
-        srq_init_attr.attr.srq_limit = 0;
-        srq_init_attr.srq_context    = self;
-        self->rx.srq.srq = ibv_create_srq(uct_ib_iface_md(&self->super)->pd, &srq_init_attr);
-        if (self->rx.srq.srq == NULL) {
-            ucs_error("failed to create SRQ: %m");
-            status = UCS_ERR_IO_ERROR;
-            goto err_free_tx_ops;
-        }
-        self->rx.srq.quota           = srq_init_attr.attr.max_wr;
-    } else {
-        self->rx.srq.srq             = NULL;
+    /* Initialize SRQ */
+    status = ops->init_srq(self, config);
+    if (status != UCS_OK) {
+        goto err_free_tx_ops;
     }
 
     /* Set atomic handlers according to atomic reply endianness */

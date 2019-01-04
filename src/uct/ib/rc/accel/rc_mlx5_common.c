@@ -120,9 +120,7 @@ UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(64)
 
 ucs_status_t
 uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
-                                  uct_rc_mlx5_iface_common_config_t *config,
-                                  struct ibv_exp_create_srq_attr *srq_init_attr,
-                                  unsigned rndv_hdr_len)
+                                  uct_rc_mlx5_iface_common_config_t *config)
 {
     ucs_status_t status = UCS_OK;
 #if IBV_EXP_HW_TM
@@ -131,12 +129,6 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
 
     if (!UCT_RC_IFACE_TM_ENABLED(&iface->super)) {
         return UCS_OK;
-    }
-
-    status = uct_rc_iface_tag_init(&iface->super, &config->super, srq_init_attr,
-                                   rndv_hdr_len, 0);
-    if (status != UCS_OK) {
-        goto err;
     }
 
     cmd_qp = uct_dv_get_cmd_qp(iface->super.rx.srq.srq);
@@ -185,7 +177,6 @@ err_cmd_wq_free:
     ucs_free(iface->tm.cmd_wq.ops);
 err_tag_cleanup:
     uct_rc_iface_tag_cleanup(&iface->super);
-err:
 #endif
 
     return status;
@@ -202,6 +193,34 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
     }
 #endif
 }
+
+#if IBV_EXP_HW_TM
+#  if ENABLE_STATS
+static ucs_stats_class_t uct_rc_iface_tag_stats_class = {
+    .name = "tag",
+    .num_counters = UCT_RC_IFACE_STAT_TAG_LAST,
+    .counter_names = {
+        [UCT_RC_IFACE_STAT_TAG_RX_EXP]            = "rx_exp",
+        [UCT_RC_IFACE_STAT_TAG_RX_EAGER_UNEXP]    = "rx_unexp_eager",
+        [UCT_RC_IFACE_STAT_TAG_RX_RNDV_UNEXP]     = "rx_unexp_rndv",
+        [UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_EXP]   = "rx_exp_rndv_req",
+        [UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_UNEXP] = "rx_unexp_rndv_req",
+        [UCT_RC_IFACE_STAT_TAG_RX_RNDV_FIN]       = "rx_rndv_fin",
+        [UCT_RC_IFACE_STAT_TAG_LIST_ADD]          = "tx_add_op",
+        [UCT_RC_IFACE_STAT_TAG_LIST_DEL]          = "tx_del_op",
+        [UCT_RC_IFACE_STAT_TAG_LIST_SYNC]         = "tx_sync_op"
+    }
+};
+#  endif
+
+static void uct_rc_iface_release_desc(uct_recv_desc_t *self, void *desc)
+{
+    uct_rc_iface_release_desc_t *release = ucs_derived_of(self,
+                                                          uct_rc_iface_release_desc_t);
+    void *ib_desc = (char*)desc - release->offset;
+    ucs_mpool_put_inline(ib_desc);
+}
+#endif
 
 #if HAVE_IBV_EXP_DM
 static ucs_status_t
@@ -319,6 +338,81 @@ static void uct_rc_mlx5_iface_common_dm_tl_cleanup(uct_mlx5_dm_data_t *data)
     ibv_exp_free_dm(data->dm);
 }
 #endif
+
+ucs_status_t uct_rc_mlx5_init_srq_tm(uct_rc_iface_t *iface,
+                                     const uct_rc_iface_config_t *config,
+                                     struct ibv_exp_create_srq_attr *srq_init_attr,
+                                     unsigned rndv_hdr_len,
+                                     unsigned max_cancel_sync_ops)
+{
+#if IBV_EXP_HW_TM
+    uct_ib_md_t *md       = uct_ib_iface_md(&iface->super);
+    unsigned tmh_hdrs_len = sizeof(struct ibv_exp_tmh) + rndv_hdr_len;
+    ucs_status_t status;
+
+    if (!UCT_RC_IFACE_TM_ENABLED(iface)) {
+        goto out_tm_disabled;
+    }
+
+    iface->tm.eager_desc.super.cb = uct_rc_iface_release_desc;
+    iface->tm.eager_desc.offset   = sizeof(struct ibv_exp_tmh)
+                                    - sizeof(uct_rc_hdr_t)
+                                    + iface->super.config.rx_headroom_offset;
+
+    iface->tm.rndv_desc.super.cb  = uct_rc_iface_release_desc;
+    iface->tm.rndv_desc.offset    = iface->tm.eager_desc.offset + rndv_hdr_len;
+
+    ucs_assert(IBV_DEVICE_TM_CAPS(&md->dev, max_rndv_hdr_size) >= tmh_hdrs_len);
+    iface->tm.max_rndv_data       = IBV_DEVICE_TM_CAPS(&md->dev, max_rndv_hdr_size) -
+                                    tmh_hdrs_len;
+
+    /* Init ptr array to store completions of RNDV operations. Index in
+     * ptr_array is used as operation ID and is passed in "app_context"
+     * of TM header. */
+    ucs_ptr_array_init(&iface->tm.rndv_comps, 0, "rm_rndv_completions");
+
+    /* Create TM-capable XRQ */
+    srq_init_attr->base.attr.max_sge   = 1;
+    srq_init_attr->base.attr.max_wr    = ucs_max(IBV_DEVICE_MIN_UWQ_POST,
+                                                 config->super.rx.queue_len);
+    srq_init_attr->base.attr.srq_limit = 0;
+    srq_init_attr->base.srq_context    = iface;
+    srq_init_attr->srq_type            = IBV_EXP_SRQT_TAG_MATCHING;
+    srq_init_attr->pd                  = md->pd;
+    srq_init_attr->cq                  = iface->super.cq[UCT_IB_DIR_RX];
+    srq_init_attr->tm_cap.max_num_tags = iface->tm.num_tags;
+
+    /* 2 ops for each tag (ADD + DEL) and extra ops for SYNC.
+     * There can be up to "max_cancel_sync_ops" SYNC ops during cancellation.
+     * Also we assume that there can be up to two pending SYNC ops during
+     * unexpected messages flow. */
+    iface->tm.cmd_qp_len = (2 * iface->tm.num_tags) + max_cancel_sync_ops + 2;
+    srq_init_attr->tm_cap.max_ops = iface->tm.cmd_qp_len;
+    srq_init_attr->comp_mask     |= IBV_EXP_CREATE_SRQ_CQ |
+                                    IBV_EXP_CREATE_SRQ_TM;
+
+    iface->rx.srq.srq = ibv_exp_create_srq(md->dev.ibv_context, srq_init_attr);
+    if (iface->rx.srq.srq == NULL) {
+        ucs_error("ibv_exp_create_srq(device=%s) failed: %m",
+                  uct_ib_device_name(&md->dev));
+        return UCS_ERR_IO_ERROR;
+    }
+
+    iface->rx.srq.quota = srq_init_attr->base.attr.max_wr;
+
+    status = UCS_STATS_NODE_ALLOC(&iface->tm.stats, &uct_rc_iface_tag_stats_class,
+                                  iface->stats);
+    if (status != UCS_OK) {
+        ucs_bug("Failed to allocate tag stats: %s", ucs_status_string(status));
+    }
+
+    ucs_debug("Tag Matching enabled: tag list size %d", iface->tm.num_tags);
+
+out_tm_disabled:
+#endif
+
+    return UCS_OK;
+}
 
 ucs_status_t
 uct_rc_mlx5_iface_common_dm_init(uct_rc_mlx5_iface_common_t *iface,

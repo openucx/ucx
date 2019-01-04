@@ -235,14 +235,7 @@ typedef struct uct_rc_mlx5_iface_common_config {
 } uct_rc_mlx5_iface_common_config_t;
 
 
-typedef struct uct_rc_mlx5_iface_ops {
-    uct_rc_iface_ops_t   super;
-    ucs_status_t         (*iface_tag_init)(uct_rc_mlx5_iface_common_t *iface,
-                                           uct_rc_mlx5_iface_common_config_t *config);
-} uct_rc_mlx5_iface_ops_t;
-
-
-UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_rc_mlx5_iface_ops_t*,
+UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_rc_iface_ops_t*,
                   uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, uct_rc_mlx5_iface_common_config_t*,
                   uct_ib_iface_init_attr_t*);
@@ -278,11 +271,15 @@ void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
                                    uct_ib_mlx5_srq_t *srq, uint32_t qpn);
 
+ucs_status_t uct_rc_mlx5_init_srq_tm(uct_rc_iface_t *iface,
+                                     const uct_rc_iface_config_t *config,
+                                     struct ibv_exp_create_srq_attr *srq_init_attr,
+                                     unsigned rndv_hdr_len,
+                                     unsigned max_cancel_sync_ops);
+
 ucs_status_t
 uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
-                                  uct_rc_mlx5_iface_common_config_t *config,
-                                  struct ibv_exp_create_srq_attr *srq_init_attr,
-                                  unsigned rndv_hdr_len);
+                                  uct_rc_mlx5_iface_common_config_t *config);
 
 void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface);
 

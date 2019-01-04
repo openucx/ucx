@@ -469,36 +469,37 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
     }
 }
 
-static ucs_status_t uct_dc_mlx5_iface_tag_init(uct_rc_mlx5_iface_common_t *rc_iface,
-                                               uct_rc_mlx5_iface_common_config_t *rc_config)
+static ucs_status_t
+uct_dc_mlx5_init_srq(uct_rc_iface_t *rc_iface,
+                     const uct_rc_iface_config_t *config)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
 #if IBV_EXP_HW_TM_DC
-    uct_dc_mlx5_iface_config_t *config = ucs_derived_of(rc_config, uct_dc_mlx5_iface_config_t);
 
-    if (UCT_RC_IFACE_TM_ENABLED(&iface->super.super)) {
-        struct ibv_exp_create_srq_attr srq_init_attr = {};
-        struct ibv_exp_srq_dc_offload_params dc_op   = {};
-        ucs_status_t status;
+    if (UCT_RC_IFACE_TM_ENABLED(rc_iface)) {
+         struct ibv_exp_create_srq_attr srq_attr      = {};
+         struct ibv_exp_srq_dc_offload_params dc_op   = {};
 
-        uct_dc_mlx5_iface_fill_xrq_init_attrs(&iface->super.super, &srq_init_attr, &dc_op);
+         iface->super.super.progress = uct_dc_mlx5_iface_progress_tm;
 
-        status = uct_rc_mlx5_iface_common_tag_init(&iface->super,
-                                                   &config->super,
-                                                   &srq_init_attr,
-                                                   sizeof(struct ibv_exp_tmh_rvh) +
-                                                   sizeof(struct ibv_exp_tmh_ravh));
-        if (status != UCS_OK) {
-            return status;
-        }
+         dc_op.timeout    = rc_iface->config.timeout;
+         dc_op.path_mtu   = rc_iface->config.path_mtu;
+         dc_op.pkey_index = rc_iface->super.pkey_index;
+         dc_op.sl         = rc_iface->super.config.sl;
+         dc_op.dct_key    = UCT_IB_KEY;
 
-        iface->super.super.progress = uct_dc_mlx5_iface_progress_tm;
-    } else
+         srq_attr.comp_mask         = IBV_EXP_CREATE_SRQ_DC_OFFLOAD_PARAMS;
+         srq_attr.dc_offload_params = &dc_op;
+
+         return uct_rc_mlx5_init_srq_tm(rc_iface, config,
+                                        &srq_attr,
+                                        sizeof(struct ibv_rvh) +
+                                        sizeof(struct ibv_ravh), 0);
+     }
 #endif
-    {
-        iface->super.super.progress = uct_dc_mlx5_iface_progress;
-    }
-    return UCS_OK;
+
+    iface->super.super.progress = uct_dc_mlx5_iface_progress;
+    return uct_rc_iface_init_srq(rc_iface, config);
 }
 
 #if HAVE_DC_EXP
@@ -975,24 +976,7 @@ ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
     return ep_status;
 }
 
-#if IBV_EXP_HW_TM_DC
-void uct_dc_mlx5_iface_fill_xrq_init_attrs(uct_rc_iface_t *rc_iface,
-                                           struct ibv_exp_create_srq_attr *srq_attr,
-                                           struct ibv_exp_srq_dc_offload_params *dc_op)
-{
-    dc_op->timeout    = rc_iface->config.timeout;
-    dc_op->path_mtu   = rc_iface->config.path_mtu;
-    dc_op->pkey_index = rc_iface->super.pkey_index;
-    dc_op->sl         = rc_iface->super.config.sl;
-    dc_op->dct_key    = UCT_IB_KEY;
-
-    srq_attr->comp_mask         = IBV_EXP_CREATE_SRQ_DC_OFFLOAD_PARAMS;
-    srq_attr->dc_offload_params = dc_op;
-}
-#endif
-
-static uct_rc_mlx5_iface_ops_t uct_dc_mlx5_iface_ops = {
-    {
+static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     {
     {
     .ep_put_short             = uct_dc_mlx5_ep_put_short,
@@ -1049,10 +1033,9 @@ static uct_rc_mlx5_iface_ops_t uct_dc_mlx5_iface_ops = {
     .create_qp                = uct_ib_iface_create_qp
 #endif
     },
+    .init_srq                 = uct_dc_mlx5_init_srq,
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_dc_mlx5_iface_fc_handler,
-    },
-    .iface_tag_init           = uct_dc_mlx5_iface_tag_init,
 };
 
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker,
