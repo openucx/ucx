@@ -188,7 +188,7 @@ typedef struct uct_rc_srq {
 } uct_rc_srq_t;
 
 
-#if IBV_EXP_HW_TM
+#if IBV_HW_TM
 
 enum {
     UCT_RC_IFACE_STAT_TAG_RX_EXP,
@@ -248,7 +248,7 @@ struct uct_rc_iface {
         uct_rc_srq_t         srq;
     } rx;
 
-#if IBV_EXP_HW_TM
+#if IBV_HW_TM
     struct {
         ucs_ptr_array_t              rndv_comps;
         unsigned                     num_tags;
@@ -356,7 +356,7 @@ typedef struct uct_rc_am_short_hdr {
 } UCS_S_PACKED uct_rc_am_short_hdr_t;
 
 
-#if IBV_EXP_HW_TM
+#if IBV_HW_TM
 
 #  define UCT_RC_IFACE_TM_STAT(_iface, _op) \
        UCS_STATS_UPDATE_COUNTER((_iface)->tm.stats, UCT_RC_IFACE_STAT_TAG_##_op, 1)
@@ -415,12 +415,12 @@ typedef struct uct_rc_am_short_hdr {
        }
 
 ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
-                                      struct ibv_exp_tmh *tmh, uct_tag_t tag,
+                                      struct ibv_tmh *tmh, uct_tag_t tag,
                                       unsigned byte_len);
 
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_iface_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,
+uct_rc_iface_fill_tmh(struct ibv_tmh *tmh, uct_tag_t tag,
                       uint32_t app_ctx, unsigned op)
 {
     tmh->opcode  = op;
@@ -429,7 +429,7 @@ uct_rc_iface_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_iface_fill_rvh(struct ibv_exp_tmh_rvh *rvh, const void *vaddr,
+uct_rc_iface_fill_rvh(struct ibv_rvh *rvh, const void *vaddr,
                       uint32_t rkey, uint32_t len)
 {
     rvh->va   = htobe64((uint64_t)vaddr);
@@ -446,7 +446,7 @@ uct_rc_iface_tag_get_op_id(uct_rc_iface_t *iface, uct_completion_t *comp)
 
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_iface_fill_tmh_priv_data(struct ibv_exp_tmh *tmh, const void *hdr,
+uct_rc_iface_fill_tmh_priv_data(struct ibv_tmh *tmh, const void *hdr,
                                 unsigned hdr_len, unsigned max_rndv_priv_data)
 {
     uct_rc_iface_tmh_priv_data_t *priv = (uct_rc_iface_tmh_priv_data_t*)tmh->reserved;

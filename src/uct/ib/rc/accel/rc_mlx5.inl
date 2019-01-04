@@ -595,19 +595,19 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, int qp_type,
         ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
         break;
 
-#if IBV_EXP_HW_TM
+#if IBV_HW_TM
     case MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_TM:
     case MLX5_OPCODE_SEND_IMM|UCT_RC_MLX5_OPCODE_FLAG_TM:
-        inl_seg_size     = ucs_align_up_pow2(sizeof(*inl) + sizeof(struct ibv_exp_tmh),
+        inl_seg_size     = ucs_align_up_pow2(sizeof(*inl) + sizeof(struct ibv_tmh),
                                              UCT_IB_MLX5_WQE_SEG_SIZE);
         inl              = next_seg;
-        inl->byte_count  = htonl(sizeof(struct ibv_exp_tmh) | MLX5_INLINE_SEG);
+        inl->byte_count  = htonl(sizeof(struct ibv_tmh) | MLX5_INLINE_SEG);
         dptr             = uct_ib_mlx5_txwq_wrap_exact(txwq, (char *)inl + inl_seg_size);
         wqe_size         = ctrl_av_size + inl_seg_size +
                            uct_ib_mlx5_set_data_seg_iov(txwq, dptr, iov, iovcnt);
 
-        uct_rc_mlx5_fill_tmh((struct ibv_exp_tmh*)(inl + 1), tag, app_ctx,
-                             IBV_EXP_TMH_EAGER);
+        uct_rc_mlx5_fill_tmh((struct ibv_tmh*)(inl + 1), tag, app_ctx,
+                             IBV_TMH_EAGER);
         ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
         break;
 #endif
@@ -636,7 +636,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, int qp_type,
                                  max_log_sge, NULL);
 }
 
-#if IBV_EXP_HW_TM
+#if IBV_HW_TM
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_set_tm_seg(uct_ib_mlx5_txwq_t *txwq,
@@ -697,8 +697,8 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, int qp_type,
     struct mlx5_wqe_ctrl_seg     *ctrl;
     struct mlx5_wqe_inl_data_seg *inl;
     size_t wqe_size, ctrl_av_size;
-    struct ibv_exp_tmh *tmh;
-    struct ibv_exp_tmh_rvh rvh;
+    struct ibv_tmh *tmh;
+    struct ibv_rvh rvh;
     unsigned tmh_data_len;
     size_t tm_hdr_len;
     void UCS_V_UNUSED *ravh_ptr;
@@ -707,19 +707,19 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_iface_t *iface, int qp_type,
     ctrl         = txwq->curr;
     ctrl_av_size = sizeof(*ctrl) + av_size; /* can be 16, 32 or 64 bytes */
     inl          = uct_ib_mlx5_txwq_wrap_exact(txwq, (char*)ctrl + ctrl_av_size);
-    tmh          = (struct ibv_exp_tmh*)(inl + 1);
+    tmh          = (struct ibv_tmh*)(inl + 1);
 
     ucs_assert((opcode == MLX5_OPCODE_SEND_IMM) || (opcode == MLX5_OPCODE_SEND));
 
     switch (tm_op) {
-    case IBV_EXP_TMH_EAGER:
+    case IBV_TMH_EAGER:
         wqe_size         = ctrl_av_size + sizeof(*inl) + sizeof(*tmh) + length;
         inl->byte_count  = htonl((length + sizeof(*tmh)) | MLX5_INLINE_SEG);
         data             = tmh + 1;
         tmh_data_len     = 0;
         break;
 
-    case IBV_EXP_TMH_RNDV:
+    case IBV_TMH_RNDV:
         /* RVH can be wrapped */
         uct_rc_iface_fill_rvh(&rvh, iov->buffer,
                               ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
@@ -889,7 +889,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_tag_consumed(uct_rc_mlx5_iface_common_t *iface,
                                struct mlx5_cqe64 *cqe, int opcode)
 {
-    struct ibv_exp_tmh *tmh = (struct ibv_exp_tmh*)cqe;
+    struct ibv_tmh *tmh = (struct ibv_tmh*)cqe;
     uct_rc_mlx5_tag_entry_t *tag;
     uct_tag_context_t *ctx;
     uct_rc_iface_ctx_priv_t *priv;
@@ -968,7 +968,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
                                    struct mlx5_cqe64 *cqe, unsigned byte_len)
 {
-    struct ibv_exp_tmh *tmh;
+    struct ibv_tmh     *tmh;
     uint64_t           imm_data;
     ucs_status_t       status;
     unsigned           flags;
@@ -976,7 +976,7 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
     tmh = uct_rc_mlx5_iface_common_data(iface, cqe,
                                         byte_len, &flags);
 
-    if (ucs_likely((tmh->opcode == IBV_EXP_TMH_EAGER) &&
+    if (ucs_likely((tmh->opcode == IBV_TMH_EAGER) &&
                    !UCT_RC_MLX5_TM_CQE_WITH_IMM(cqe))) {
         status = iface->super.tm.eager_unexp.cb(iface->super.tm.eager_unexp.arg,
                                                 tmh + 1, byte_len - sizeof(*tmh),
@@ -987,7 +987,7 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
 
         UCT_RC_IFACE_TM_STAT(&iface->super, RX_EAGER_UNEXP);
 
-    } else if (tmh->opcode == IBV_EXP_TMH_EAGER) {
+    } else if (tmh->opcode == IBV_TMH_EAGER) {
         imm_data = uct_rc_iface_tag_imm_data_unpack(cqe->imm_inval_pkey,
                                                     tmh->app_ctx, 1);
 
@@ -1010,7 +1010,7 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
         uct_rc_mlx5_iface_unexp_consumed(iface, &iface->super.tm.eager_desc,
                                          status, ntohs(cqe->wqe_counter));
     } else {
-        ucs_assertv_always(tmh->opcode == IBV_EXP_TMH_RNDV,
+        ucs_assertv_always(tmh->opcode == IBV_TMH_RNDV,
                            "Unsupported packet arrived %d", tmh->opcode);
         status = uct_rc_iface_handle_rndv(&iface->super, tmh, tmh->tag, byte_len);
 
@@ -1021,7 +1021,7 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
     }
 }
 
-#endif /* IBV_EXP_HW_TM */
+#endif /* IBV_HW_TM */
 
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
@@ -1034,8 +1034,8 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     unsigned count;
     void *rc_hdr;
     unsigned flags;
-#if IBV_EXP_HW_TM
-    struct ibv_exp_tmh *tmh;
+#if IBV_HW_TM
+    struct ibv_tmh *tmh;
     uct_rc_mlx5_tag_entry_t *tag;
     uct_tag_context_t *ctx;
     uct_rc_iface_ctx_priv_t *priv;
@@ -1064,7 +1064,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
         goto done;
     }
 
-#if IBV_EXP_HW_TM
+#if IBV_HW_TM
     ucs_assert(cqe->app == UCT_RC_MLX5_CQE_APP_TAG_MATCHING);
 
     /* Should be a fast path, because small (latency-critical) messages
@@ -1088,11 +1088,11 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
 
     case UCT_RC_MLX5_CQE_APP_OP_TM_NO_TAG:
         tmh = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, &flags);
-        if (tmh->opcode == IBV_EXP_TMH_NO_TAG) {
+        if (tmh->opcode == IBV_TMH_NO_TAG) {
             uct_rc_mlx5_iface_common_am_handler(iface, cqe, (uct_rc_hdr_t*)tmh,
                                                 flags, byte_len);
         } else {
-            ucs_assert(tmh->opcode == IBV_EXP_TMH_FIN);
+            ucs_assert(tmh->opcode == IBV_TMH_FIN);
             uct_rc_iface_handle_rndv_fin(&iface->super, tmh->app_ctx);
             seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq,
                                           ntohs(cqe->wqe_counter));
@@ -1111,7 +1111,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
         break;
 
     case UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG:
-        tmh = (struct ibv_exp_tmh*)cqe;
+        tmh = (struct ibv_tmh*)cqe;
 
         uct_rc_mlx5_iface_tag_consumed(iface, cqe,
                                        UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG);

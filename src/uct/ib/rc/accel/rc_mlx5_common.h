@@ -63,7 +63,6 @@ enum {
     UCT_RC_MLX5_IFACE_STAT_LAST
 };
 
-#if IBV_EXP_HW_TM
 
 enum {
     UCT_RC_MLX5_TM_OPCODE_NOP              = 0x00,
@@ -90,17 +89,21 @@ enum {
     UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG = 0xA
 };
 
+#if IBV_HW_TM
 #  define UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(_av_size) \
-       (UCT_IB_MLX5_AM_MAX_SHORT(_av_size + sizeof(struct ibv_exp_tmh))/ \
+       (UCT_IB_MLX5_AM_MAX_SHORT(_av_size + sizeof(struct ibv_tmh))/ \
         sizeof(struct mlx5_wqe_data_seg))
+# else
+#  define UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(_av_size)   0
+#endif /* IBV_HW_TM  */
 
-#  define UCT_RC_MLX5_TM_CQE_WITH_IMM(_cqe64) \
+#define UCT_RC_MLX5_TM_CQE_WITH_IMM(_cqe64) \
        (((_cqe64)->op_own >> 4) == MLX5_CQE_RESP_SEND_IMM)
 
-#  define UCT_RC_MLX5_TM_IS_SW_RNDV(_cqe64, _imm_data) \
+#define UCT_RC_MLX5_TM_IS_SW_RNDV(_cqe64, _imm_data) \
        (ucs_unlikely(UCT_RC_MLX5_TM_CQE_WITH_IMM(_cqe64) && !(_imm_data)))
 
-#  define UCT_RC_MLX5_CHECK_TAG(_mlx5_common_iface) \
+#define UCT_RC_MLX5_CHECK_TAG(_mlx5_common_iface) \
        if (ucs_unlikely((_mlx5_common_iface)->tm.head->next == NULL)) {  \
            return UCS_ERR_EXCEEDS_LIMIT; \
        }
@@ -144,8 +147,9 @@ typedef struct uct_rc_mlx5_cmd_wq {
                                                ops array size */
 } uct_rc_mlx5_cmd_wq_t;
 
+#if IBV_HW_TM
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,
+uct_rc_mlx5_fill_tmh(struct ibv_tmh *tmh, uct_tag_t tag,
                      uint32_t app_ctx, unsigned op)
 {
     tmh->opcode  = op;
@@ -161,7 +165,7 @@ uct_rc_mlx5_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,
            (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
            hdr = (_desc) + 1; \
            uct_rc_mlx5_fill_tmh(hdr, _tag, _app_ctx, IBV_EXP_TMH_EAGER); \
-           hdr += sizeof(struct ibv_exp_tmh); \
+           hdr += sizeof(struct ibv_tmh); \
            _length = _pack_cb(hdr, _arg); \
        }
 # else
@@ -185,9 +189,7 @@ typedef struct uct_mlx5_dm_data {
 
 typedef union uct_rc_mlx5_dm_copy_data {
     uct_rc_am_short_hdr_t am_hdr;
-#if IBV_EXP_HW_TM
-    struct ibv_exp_tmh    tm_hdr;
-#endif
+    struct ibv_tmh        tm_hdr;
     char                  bytes[sizeof(uint64_t) * 2];
 } UCS_S_PACKED uct_rc_mlx5_dm_copy_data_t;
 #endif
@@ -204,24 +206,20 @@ typedef struct uct_rc_mlx5_iface_common {
         void                      *pref_ptr;
     } rx;
     uct_ib_mlx5_cq_t              cq[UCT_IB_DIR_NUM];
-#if IBV_EXP_HW_TM
     struct {
         uct_rc_mlx5_cmd_wq_t      cmd_wq;
         uct_rc_mlx5_tag_entry_t   *head;
         uct_rc_mlx5_tag_entry_t   *tail;
         uct_rc_mlx5_tag_entry_t   *list;
     } tm;
-#endif
 #if HAVE_IBV_EXP_DM
     struct {
         uct_mlx5_dm_data_t        *dm;
         size_t                    seg_len; /* cached value to avoid double-pointer access */
         ucs_status_t              (*am_short)(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                               const void *payload, unsigned length);
-#if IBV_EXP_HW_TM
         ucs_status_t              (*tag_short)(uct_ep_h tl_ep, uct_tag_t tag,
                                                const void *data, size_t length);
-#endif
     } dm;
 #endif
     UCS_STATS_NODE_DECLARE(stats);

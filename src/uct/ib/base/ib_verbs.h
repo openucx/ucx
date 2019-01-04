@@ -16,6 +16,18 @@
 #include <infiniband/verbs_exp.h>
 #endif
 
+#if HAVE_INFINIBAND_TM_TYPES_H
+#  include <infiniband/tm_types.h>
+#else
+#  define ibv_tmh             ibv_exp_tmh
+#  define ibv_rvh             ibv_exp_tmh_rvh
+#  define ibv_ravh            ibv_exp_tmh_ravh
+#  define IBV_TMH_EAGER       IBV_EXP_TMH_EAGER
+#  define IBV_TMH_RNDV        IBV_EXP_TMH_RNDV
+#  define IBV_TMH_FIN         IBV_EXP_TMH_FIN
+#  define IBV_TMH_NO_TAG      IBV_EXP_TMH_NO_TAG
+#endif
+
 #include <errno.h>
 
 #ifndef HAVE_VERBS_EXP_H
@@ -186,15 +198,14 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
  * HW tag matching
  */
 #if IBV_EXP_HW_TM
+#  define IBV_HW_TM                         1
    /* TM (eager) is supported if tm_caps.max_num_tags is not 0. */
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr.tm_caps._field)
 
    /* If the gap between SW and HW counters is more than 32K, all messages will
     * be dropped and RNR ACK will be returned. Set threshold to 16K to avoid
     * hitting this gap at all. */
-#  define IBV_DEVICE_MAX_UNEXP_COUNT        UCS_BIT(14)
 
-#  define IBV_DEVICE_MIN_UWQ_POST           33
 #else
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
 #  define IBV_EXP_TM_CAP_RC                 0
@@ -203,6 +214,9 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #ifndef IBV_EXP_HW_TM_DC
 #  define IBV_EXP_TM_CAP_DC                 0
 #endif
+
+#define IBV_DEVICE_MAX_UNEXP_COUNT          UCS_BIT(14)
+#define IBV_DEVICE_MIN_UWQ_POST             33
 
 #if !HAVE_DECL_IBV_EXP_CREATE_SRQ
 #  define ibv_exp_create_srq_attr           ibv_srq_init_attr
