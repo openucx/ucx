@@ -476,7 +476,7 @@ uct_dc_mlx5_init_srq(uct_rc_iface_t *rc_iface,
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
 #if IBV_EXP_HW_TM_DC
 
-    if (UCT_RC_IFACE_TM_ENABLED(rc_iface)) {
+    if (UCT_RC_MLX5_TM_ENABLED(rc_iface)) {
          struct ibv_exp_create_srq_attr srq_attr      = {};
          struct ibv_exp_srq_dc_offload_params dc_op   = {};
 
@@ -725,7 +725,7 @@ int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
 
     return ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) == iface->version_flag) &&
            (UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) ==
-            UCT_RC_IFACE_TM_ENABLED(&iface->super.super)) &&
+            UCT_RC_MLX5_TM_ENABLED(&iface->super.super)) &&
            uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
 }
 
@@ -738,7 +738,7 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
     uct_ib_pack_uint24(addr->qp_num, uct_dc_mlx5_get_dct_num(iface));
     addr->atomic_mr_id = uct_ib_iface_get_atomic_mr_id(&iface->super.super.super);
     addr->flags        = iface->version_flag;
-    if (UCT_RC_IFACE_TM_ENABLED(&iface->super.super)) {
+    if (UCT_RC_MLX5_TM_ENABLED(&iface->super.super)) {
         addr->flags   |= UCT_DC_MLX5_IFACE_ADDR_HW_TM;
     }
 
@@ -1090,7 +1090,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     ucs_debug("dc iface %p: using '%s' policy with %d dcis, dct 0x%x", self,
               uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci,
-              UCT_RC_IFACE_TM_ENABLED(&self->super.super) ?
+              UCT_RC_MLX5_TM_ENABLED(&self->super.super) ?
               0 : uct_dc_mlx5_get_dct_num(self));
 
     /* Create fake endpoint which will be used for sending FC grants */

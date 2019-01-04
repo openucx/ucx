@@ -127,7 +127,7 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
     struct ibv_qp *cmd_qp;
     int i;
 
-    if (!UCT_RC_IFACE_TM_ENABLED(&iface->super)) {
+    if (!UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
         return UCS_OK;
     }
 
@@ -185,7 +185,7 @@ err_tag_cleanup:
 void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
 #if IBV_EXP_HW_TM
-    if (UCT_RC_IFACE_TM_ENABLED(&iface->super)) {
+    if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
         uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_wq.super);
         ucs_free(iface->tm.list);
         ucs_free(iface->tm.cmd_wq.ops);
@@ -219,6 +219,58 @@ static void uct_rc_iface_release_desc(uct_recv_desc_t *self, void *desc)
                                                           uct_rc_iface_release_desc_t);
     void *ib_desc = (char*)desc - release->offset;
     ucs_mpool_put_inline(ib_desc);
+}
+#endif
+
+#if IBV_HW_TM
+/* tag is passed as parameter, because some (but not all!) transports may need
+ * to translate TMH to LE */
+ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
+                                      struct ibv_exp_tmh *tmh, uct_tag_t tag,
+                                      unsigned byte_len)
+{
+#if IBV_EXP_HW_TM
+    uct_rc_iface_tmh_priv_data_t *priv = (uct_rc_iface_tmh_priv_data_t*)tmh->reserved;
+    uct_ib_md_t *ib_md                 = uct_ib_iface_md(&iface->super);
+    struct ibv_exp_tmh_rvh *rvh;
+    unsigned tm_hdrs_len;
+    unsigned rndv_usr_hdr_len;
+    size_t rndv_data_len;
+    void *rndv_usr_hdr;
+    void *rb;
+    char packed_rkey[UCT_MD_COMPONENT_NAME_MAX + UCT_IB_MD_PACKED_RKEY_SIZE];
+
+    rvh = (struct ibv_exp_tmh_rvh*)(tmh + 1);
+
+    /* RC uses two headers: TMH + RVH, DC uses three: TMH + RVH + RAVH.
+     * So, get actual RNDV hdrs len from offsets. */
+    tm_hdrs_len = sizeof(*tmh) +
+                  (iface->tm.rndv_desc.offset - iface->tm.eager_desc.offset);
+
+    rndv_usr_hdr     = (char*)tmh + tm_hdrs_len;
+    rndv_usr_hdr_len = byte_len - tm_hdrs_len;
+    rndv_data_len    = ntohl(rvh->len);
+
+    /* Private TMH data may contain the first bytes of the user header, so it
+       needs to be copied before that. Thus, either RVH (rc) or RAVH (dc)
+       will be overwritten. That's why we saved rvh->length before. */
+    ucs_assert(priv->length <= UCT_RC_IFACE_TMH_PRIV_LEN);
+
+    memcpy((char*)rndv_usr_hdr - priv->length, &priv->data, priv->length);
+
+    /* Create "packed" rkey to pass it in the callback */
+    rb = uct_md_fill_md_name(&ib_md->super, packed_rkey);
+    uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, rb);
+
+    /* Do not pass flags to cb, because rkey is allocated on stack */
+    return iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, 0, tag,
+                                   (char *)rndv_usr_hdr - priv->length,
+                                   rndv_usr_hdr_len + priv->length,
+                                   be64toh(rvh->va), rndv_data_len,
+                                   packed_rkey);
+#else
+    return UCS_ERR_UNSUPPORTED;
+#endif
 }
 #endif
 
@@ -339,19 +391,19 @@ static void uct_rc_mlx5_iface_common_dm_tl_cleanup(uct_mlx5_dm_data_t *data)
 }
 #endif
 
+#if IBV_EXP_HW_TM
 ucs_status_t uct_rc_mlx5_init_srq_tm(uct_rc_iface_t *iface,
                                      const uct_rc_iface_config_t *config,
                                      struct ibv_exp_create_srq_attr *srq_init_attr,
                                      unsigned rndv_hdr_len,
                                      unsigned max_cancel_sync_ops)
 {
-#if IBV_EXP_HW_TM
     uct_ib_md_t *md       = uct_ib_iface_md(&iface->super);
     unsigned tmh_hdrs_len = sizeof(struct ibv_exp_tmh) + rndv_hdr_len;
     ucs_status_t status;
 
-    if (!UCT_RC_IFACE_TM_ENABLED(iface)) {
-        goto out_tm_disabled;
+    if (!UCT_RC_MLX5_TM_ENABLED(iface)) {
+        return UCS_OK;
     }
 
     iface->tm.eager_desc.super.cb = uct_rc_iface_release_desc;
@@ -407,11 +459,60 @@ ucs_status_t uct_rc_mlx5_init_srq_tm(uct_rc_iface_t *iface,
     }
 
     ucs_debug("Tag Matching enabled: tag list size %d", iface->tm.num_tags);
-
-out_tm_disabled:
+    return UCS_OK;
+}
 #endif
 
-    return UCS_OK;
+void uct_rc_iface_tag_cleanup(uct_rc_iface_t *iface)
+{
+#if IBV_EXP_HW_TM
+    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+        ucs_ptr_array_cleanup(&iface->tm.rndv_comps);
+        UCS_STATS_NODE_FREE(iface->tm.stats);
+    }
+#endif
+}
+
+void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
+                            uct_iface_attr_t *iface_attr,
+                            size_t max_inline, size_t max_iov)
+{
+#if IBV_EXP_HW_TM
+    unsigned eager_hdr_size = sizeof(struct ibv_exp_tmh);
+    struct ibv_exp_port_attr* port_attr;
+
+    if (!UCT_RC_MLX5_TM_ENABLED(iface)) {
+        return;
+    }
+
+    iface_attr->cap.flags |= UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                             UCT_IFACE_FLAG_TAG_EAGER_ZCOPY |
+                             UCT_IFACE_FLAG_TAG_RNDV_ZCOPY;
+
+    if (max_inline >= eager_hdr_size) {
+        iface_attr->cap.tag.eager.max_short = max_inline - eager_hdr_size;
+        iface_attr->cap.flags              |= UCT_IFACE_FLAG_TAG_EAGER_SHORT;
+    }
+
+    iface_attr->cap.tag.eager.max_bcopy = iface->super.config.seg_size -
+                                          eager_hdr_size;
+    iface_attr->cap.tag.eager.max_zcopy = iface->super.config.seg_size -
+                                          eager_hdr_size;
+    iface_attr->cap.tag.eager.max_iov   = max_iov;
+
+    port_attr = uct_ib_iface_port_attr(&iface->super);
+    iface_attr->cap.tag.rndv.max_zcopy  = port_attr->max_msg_sz;
+
+    /* TMH can carry 2 additional bytes of private data */
+    iface_attr->cap.tag.rndv.max_hdr    = iface->tm.max_rndv_data +
+                                          UCT_RC_IFACE_TMH_PRIV_LEN;
+    iface_attr->cap.tag.rndv.max_iov    = 1;
+
+    iface_attr->cap.tag.recv.max_zcopy       = port_attr->max_msg_sz;
+    iface_attr->cap.tag.recv.max_iov         = 1;
+    iface_attr->cap.tag.recv.min_recv        = 0;
+    iface_attr->cap.tag.recv.max_outstanding = iface->tm.num_tags;
+#endif
 }
 
 ucs_status_t

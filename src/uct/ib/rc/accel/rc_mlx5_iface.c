@@ -264,13 +264,66 @@ static ucs_status_t uct_rc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 }
 #endif
 
+void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
+                          const uct_rc_iface_config_t *config,
+                          const uct_iface_params_t *params,
+                          uct_ib_iface_init_attr_t *init_attr)
+{
+#if IBV_EXP_HW_TM
+    uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
+    uint32_t cap_flags   = IBV_DEVICE_TM_CAPS(dev, capability_flags);
+    struct ibv_exp_tmh tmh;
+
+    iface->tm.enabled = config->tm.enable &&
+                        (cap_flags & init_attr->tm_cap_bit);
+
+    if (!iface->tm.enabled) {
+        goto out_tm_disabled;
+    }
+
+    /* Compile-time check that THM and uct_rc_hdr_t are wire-compatible for the
+     * case of no-tag protocol.
+     */
+    UCS_STATIC_ASSERT(sizeof(tmh.opcode) == sizeof(((uct_rc_hdr_t*)0)->tmh_opcode));
+    UCS_STATIC_ASSERT(ucs_offsetof(struct ibv_exp_tmh, opcode) ==
+                      ucs_offsetof(uct_rc_hdr_t, tmh_opcode));
+
+    UCS_STATIC_ASSERT(sizeof(uct_rc_iface_ctx_priv_t) <= UCT_TAG_PRIV_LEN);
+
+    iface->tm.eager_unexp.cb  = params->eager_cb;
+    iface->tm.eager_unexp.arg = params->eager_arg;
+    iface->tm.rndv_unexp.cb   = params->rndv_cb;
+    iface->tm.rndv_unexp.arg  = params->rndv_arg;
+    iface->tm.unexpected_cnt  = 0;
+    iface->tm.num_outstanding = 0;
+    iface->tm.num_tags        = ucs_min(IBV_DEVICE_TM_CAPS(dev, max_num_tags),
+                                        config->tm.list_size);
+
+    /* There can be:
+     * - up to rx.queue_len RX CQEs
+     * - up to 3 CQEs for every posted tag: ADD, TM_CONSUMED and MSG_ARRIVED
+     * - one SYNC CQE per every IBV_DEVICE_MAX_UNEXP_COUNT unexpected receives */
+    UCS_STATIC_ASSERT(IBV_DEVICE_MAX_UNEXP_COUNT);
+    init_attr->rx_cq_len = config->super.rx.queue_len + iface->tm.num_tags * 3 +
+                           config->super.rx.queue_len /
+                           IBV_DEVICE_MAX_UNEXP_COUNT;
+    init_attr->seg_size  = ucs_max(config->tm.max_bcopy,
+                                   config->super.super.max_bcopy);
+    return;
+
+out_tm_disabled:
+#endif
+    init_attr->rx_cq_len = config->super.rx.queue_len;
+    init_attr->seg_size  = config->super.super.max_bcopy;
+}
+
 static ucs_status_t
 uct_rc_mlx5_init_srq(uct_rc_iface_t *rc_iface,
                      const uct_rc_iface_config_t *config)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
 #if IBV_EXP_HW_TM
-    if (UCT_RC_IFACE_TM_ENABLED(&iface->super)) {
+    if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
         struct ibv_exp_create_srq_attr srq_init_attr = {};
 
         iface->super.progress = uct_rc_mlx5_iface_progress_tm;
@@ -298,6 +351,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
                     uct_ib_iface_init_attr_t *init_attr)
 {
     ucs_status_t status;
+
+    uct_rc_iface_preinit(&self->super, md, &config->super, params, init_attr);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
                               &config->super, init_attr);

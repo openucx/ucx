@@ -111,49 +111,6 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
     UCS_STATS_NODE_FREE(fc->stats);
 }
 
-static void uct_rc_ep_tag_qp_destroy(uct_rc_ep_t *ep)
-{
-#if IBV_EXP_HW_TM
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                           uct_rc_iface_t);
-    if (UCT_RC_IFACE_TM_ENABLED(iface)) {
-        uct_rc_iface_remove_qp(iface, ep->tm_qp->qp_num);
-        if (ibv_destroy_qp(ep->tm_qp)) {
-            ucs_warn("failed to destroy TM RNDV QP: %m");
-        }
-    }
-#endif
-}
-
-static ucs_status_t uct_rc_ep_tag_qp_create(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
-{
-#if IBV_EXP_HW_TM
-    struct ibv_qp_cap cap;
-    ucs_status_t status;
-    int ret;
-
-    if (UCT_RC_IFACE_TM_ENABLED(iface)) {
-        /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
-         * such a QP to be initialized with zero send queue length. */
-        status = uct_rc_iface_qp_create(iface, IBV_QPT_RC, &ep->tm_qp, &cap, 0);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        status = uct_rc_iface_qp_init(iface, ep->tm_qp);
-        if (status != UCS_OK) {
-            ret = ibv_destroy_qp(ep->tm_qp);
-            if (ret) {
-                ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
-            }
-            return status;
-        }
-        uct_rc_iface_add_qp(iface, ep, ep->tm_qp->qp_num);
-    }
-#endif
-    return UCS_OK;
-}
-
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 {
     struct ibv_qp_cap cap;
@@ -178,11 +135,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
         goto err_txqp_cleanup;
     }
 
-    status = uct_rc_ep_tag_qp_create(iface, self);
-    if (status != UCS_OK) {
-        goto err_fc_cleanup;
-    }
-
     self->sl                = iface->super.config.sl;    /* TODO multi-rail */
     self->path_bits         = iface->super.path_bits[0]; /* TODO multi-rail */
 
@@ -196,8 +148,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
     ucs_list_add_head(&iface->ep_list, &self->list);
     return UCS_OK;
 
-err_fc_cleanup:
-    uct_rc_fc_cleanup(&self->fc);
 err_txqp_cleanup:
     uct_rc_txqp_cleanup(&self->txqp);
 err:
@@ -212,7 +162,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 
     ucs_list_del(&self->list);
     uct_rc_iface_remove_qp(iface, self->txqp.qp->qp_num);
-    uct_rc_ep_tag_qp_destroy(self);
     uct_rc_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(&self->txqp);
@@ -531,17 +480,6 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
 
     return UCS_INPROGRESS;
 }
-
-#if IBV_EXP_HW_TM
-ucs_status_t uct_rc_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op)
-{
-    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
-
-    uint32_t op_index = (uint32_t)((uint64_t)op);
-    ucs_ptr_array_remove(&iface->tm.rndv_comps, op_index, 0);
-    return UCS_OK;
-}
-#endif
 
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(_num_bits, _is_be) \
     void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \
