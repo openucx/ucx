@@ -41,10 +41,15 @@
     UCT_TL_IFACE_GET_TX_DESC(&(_iface)->super.super, _mp, _desc, \
                              return UCS_ERR_NO_RESOURCE);
 
-#define UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(_iface, _mp, _desc, _id, _pack_cb, _arg, _length) \
+#define UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(_iface, _mp, _desc, _id, _pk_hdr_cb, \
+                                          _hdr, _pack_cb, _arg, _length) ({ \
+    _hdr *rch; \
     UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
     (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
-    uct_rc_bcopy_desc_fill((uct_rc_hdr_t*)(_desc + 1), _id, _pack_cb, _arg, _length);
+    rch = (_hdr *)(_desc + 1); \
+    _pk_hdr_cb(rch, _id); \
+    *(_length) = _pack_cb(rch + 1, _arg); \
+})
 
 #define UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(_iface, _mp, _desc, \
                                           _id, _header, _header_length, _comp, _send_flags) \
@@ -121,9 +126,6 @@ typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op, const void *re
  * RC network header.
  */
 typedef struct uct_rc_hdr {
-#if IBV_EXP_HW_TM
-    uint8_t           tmh_opcode; /* reserved for TMH.opcode */
-#endif
     uint8_t           am_id;     /* Active message ID */
 } UCS_S_PACKED uct_rc_hdr_t;
 
@@ -296,7 +298,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 uct_iface_attr_t *iface_attr,
                                 size_t put_max_short, size_t max_inline,
                                 size_t am_max_hdr, size_t am_max_iov,
-                                size_t tag_max_iov);
+                                size_t tag_max_iov, size_t tag_min_hdr);
 
 ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface,
                                       uct_iface_addr_t *addr);
@@ -391,18 +393,7 @@ uct_rc_iface_put_send_op(uct_rc_iface_send_op_t *op)
 static UCS_F_ALWAYS_INLINE void
 uct_rc_am_hdr_fill(uct_rc_hdr_t *rch, uint8_t id)
 {
-#if IBV_EXP_HW_TM
-    rch->tmh_opcode = IBV_EXP_TMH_NO_TAG;
-#endif
     rch->am_id      = id;
-}
-
-static inline void
-uct_rc_bcopy_desc_fill(uct_rc_hdr_t *rch, uint8_t id,
-                       uct_pack_callback_t pack_cb, void *arg, size_t *length)
-{
-    uct_rc_am_hdr_fill(rch, id);
-    *length = pack_cb(rch + 1, arg);
 }
 
 static inline void uct_rc_zcopy_desc_set_comp(uct_rc_iface_send_desc_t *desc,

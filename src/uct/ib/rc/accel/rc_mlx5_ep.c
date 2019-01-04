@@ -267,20 +267,20 @@ uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     ucs_status_t status;
     uct_rc_mlx5_dm_copy_data_t cache;
 
-    if (ucs_likely((sizeof(uct_rc_am_short_hdr_t) + length <= UCT_IB_MLX5_AM_MAX_SHORT(0)) ||
+    if (ucs_likely((sizeof(uct_rc_mlx5_am_short_hdr_t) + length <= UCT_IB_MLX5_AM_MAX_SHORT(0)) ||
                    !iface->dm.dm)) {
 #endif
         return uct_rc_mlx5_ep_am_short_inline(tl_ep, id, hdr, payload, length);
 #if HAVE_IBV_EXP_DM
     }
 
-    UCT_CHECK_LENGTH(length + sizeof(uct_rc_am_short_hdr_t), 0,
+    UCT_CHECK_LENGTH(length + sizeof(uct_rc_mlx5_am_short_hdr_t), 0,
                      iface->dm.seg_len, "am_short");
     UCT_CHECK_AM_ID(id);
     UCT_RC_MLX5_CHECK_RES(iface, ep);
     UCT_RC_MLX5_CHECK_FC(iface, ep, id);
 
-    uct_rc_am_hdr_fill(&cache.am_hdr.rc_hdr, id);
+    uct_rc_mlx5_am_hdr_fill(&cache.am_hdr.rc_hdr, id);
     cache.am_hdr.am_hdr = hdr;
 
     status = uct_rc_mlx5_ep_short_dm(ep, &cache, sizeof(cache.am_hdr), payload, length,
@@ -309,10 +309,11 @@ ssize_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     UCT_RC_MLX5_CHECK_RES(iface, ep);
     UCT_RC_MLX5_CHECK_FC(iface, ep, id);
     UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
-                                      id, pack_cb, arg, &length);
+                                      id, uct_rc_mlx5_am_hdr_fill, uct_rc_mlx5_hdr_t,
+                                      pack_cb, arg, &length);
 
     uct_rc_mlx5_txqp_bcopy_post(iface, &ep->super.txqp, &ep->tx.wq,
-                                MLX5_OPCODE_SEND, sizeof(uct_rc_hdr_t) + length,
+                                MLX5_OPCODE_SEND, sizeof(uct_rc_mlx5_hdr_t) + length,
                                 0, 0, MLX5_WQE_CTRL_SOLICITED, 0, desc, desc + 1,
                                 NULL);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
@@ -541,6 +542,103 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                  0, 0,
                                  NULL, NULL, 0, 0,
                                  INT_MAX);
+    return UCS_OK;
+}
+
+ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
+{
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    uct_rc_mlx5_ep_address_t *rc_addr = (uct_rc_mlx5_ep_address_t*)addr;
+
+    ucs_assert(ep->qp_num == ep->super.txqp.qp->qp_num);
+    uct_ib_pack_uint24(rc_addr->qp_num, ep->qp_num);
+    rc_addr->atomic_mr_id = uct_ib_iface_get_atomic_mr_id(&iface->super.super);
+
+    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+        uct_ib_pack_uint24(rc_addr->tm_qp_num, ep->tm_qp->qp_num);
+    }
+
+    return UCS_OK;
+}
+
+void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
+                                    void *data, size_t length, size_t valid_length,
+                                    char *buffer, size_t max)
+{
+    uct_rc_mlx5_hdr_t *rch = data;
+
+#if IBV_EXP_HW_TM
+    if (rch->tmh_opcode != IBV_TMH_NO_TAG) {
+        struct ibv_tmh *tmh = (void*)rch;
+        struct ibv_rvh *rvh = (void*)(tmh + 1);
+        uct_tag_t tag;
+        uint32_t app_ctx;
+
+        tag     = tmh->tag;
+        app_ctx = tmh->app_ctx;
+
+        switch (rch->tmh_opcode) {
+        case IBV_TMH_EAGER:
+            snprintf(buffer, max, " EAGER tag %lx app_ctx %d", tag, app_ctx);
+            return;
+        case IBV_TMH_RNDV:
+            snprintf(buffer, max, " RNDV tag %lx app_ctx %d va 0x%lx len %d rkey %x",
+                     tag, app_ctx, be64toh(rvh->va), ntohl(rvh->len), ntohl(rvh->rkey));
+            return;
+        case IBV_TMH_FIN:
+            snprintf(buffer, max, " FIN tag %lx app_ctx %d", tag, app_ctx);
+            return;
+        default:
+            break;
+        }
+    }
+#endif
+
+    data = &rch->rc_hdr;
+    /* coverity[overrun-buffer-val] */
+    uct_rc_ep_packet_dump(iface, type, data, length - (data - (void *)rch),
+                          valid_length, buffer, max);
+}
+
+ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
+                                          const uct_device_addr_t *dev_addr,
+                                          const uct_ep_addr_t *ep_addr)
+{
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
+    const uct_rc_mlx5_ep_address_t *rc_addr = (const uct_rc_mlx5_ep_address_t*)ep_addr;
+    uint32_t qp_num;
+    struct ibv_ah_attr ah_attr;
+    ucs_status_t status;
+
+    uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
+                                        ep->super.path_bits, &ah_attr);
+
+    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+        /* For HW TM we need 2 QPs, one of which will be used by the device for
+         * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
+         * should be posted to the send side of the QP which is owned by device. */
+        status = uct_rc_iface_qp_connect(&iface->super, ep->tm_qp,
+                                         uct_ib_unpack_uint24(rc_addr->qp_num),
+                                         &ah_attr);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        /* Need to connect local ep QP to the one owned by device
+         * (and bound to XRQ) on the peer. */
+        qp_num = uct_ib_unpack_uint24(rc_addr->tm_qp_num);
+    } else {
+        qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
+    }
+
+    status = uct_rc_iface_qp_connect(&iface->super, ep->super.txqp.qp, qp_num, &ah_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
+
     return UCS_OK;
 }
 

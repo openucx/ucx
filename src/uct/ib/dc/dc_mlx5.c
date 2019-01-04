@@ -127,7 +127,8 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                 max_am_inline,
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE),
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_IOV,
-                                UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE));
+                                UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE),
+                                sizeof(uct_rc_mlx5_hdr_t));
     if (status != UCS_OK) {
         return status;
     }
@@ -1053,7 +1054,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     init_attr.tm_cap_bit     = IBV_EXP_TM_CAP_DC;
     init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
     init_attr.fc_req_size    = sizeof(uct_dc_fc_request_t);
-    init_attr.rx_hdr_len     = sizeof(uct_rc_hdr_t);
+    init_attr.rx_hdr_len     = sizeof(uct_rc_mlx5_hdr_t);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_dc_mlx5_iface_ops,

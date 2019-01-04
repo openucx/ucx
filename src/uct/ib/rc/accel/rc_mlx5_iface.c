@@ -130,13 +130,15 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                 max_am_inline,
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(0),
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_IOV,
-                                UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0));
+                                UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0),
+                                sizeof(uct_rc_mlx5_hdr_t));
     if (status != UCS_OK) {
         return status;
     }
 
     uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr, max_am_inline, 0);
     iface_attr->latency.growth += 1e-9; /* 1 ns per each extra QP */
+    iface_attr->ep_addr_len     = sizeof(uct_rc_mlx5_ep_address_t);
     return UCS_OK;
 }
 
@@ -285,12 +287,14 @@ static void uct_rc_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_h md,
         goto out_tm_disabled;
     }
 
-    /* Compile-time check that THM and uct_rc_hdr_t are wire-compatible for the
+    /* Compile-time check that THM and uct_rc_mlx5_hdr_t are wire-compatible for the
      * case of no-tag protocol.
      */
-    UCS_STATIC_ASSERT(sizeof(tmh.opcode) == sizeof(((uct_rc_hdr_t*)0)->tmh_opcode));
-    UCS_STATIC_ASSERT(ucs_offsetof(struct ibv_exp_tmh, opcode) ==
-                      ucs_offsetof(uct_rc_hdr_t, tmh_opcode));
+    UCS_STATIC_ASSERT(sizeof(tmh.opcode) == sizeof(((uct_rc_mlx5_hdr_t*)0)->tmh_opcode));
+    UCS_STATIC_ASSERT(ucs_offsetof(struct ibv_tmh, opcode) ==
+                      ucs_offsetof(uct_rc_mlx5_hdr_t, tmh_opcode));
+    UCS_STATIC_ASSERT(ucs_offsetof(uct_rc_mlx5_hdr_t, am_id) ==
+                      ucs_offsetof(uct_rc_mlx5_hdr_t, rc_hdr.am_id));
 
     UCS_STATIC_ASSERT(sizeof(uct_rc_iface_ctx_priv_t) <= UCT_TAG_PRIV_LEN);
 
@@ -467,7 +471,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     init_attr.tm_cap_bit     = IBV_EXP_TM_CAP_RC;
     init_attr.fc_req_size    = sizeof(uct_rc_fc_request_t);
     init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
-    init_attr.rx_hdr_len     = sizeof(uct_rc_hdr_t);
+    init_attr.rx_hdr_len     = sizeof(uct_rc_mlx5_hdr_t);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t, &uct_rc_mlx5_iface_ops,
                               md, worker, params, &config->super, &init_attr);
@@ -524,8 +528,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
-    .ep_get_address           = uct_rc_ep_get_address,
-    .ep_connect_to_ep         = uct_rc_ep_connect_to_ep,
+    .ep_get_address           = uct_rc_mlx5_ep_get_address,
+    .ep_connect_to_ep         = uct_rc_mlx5_ep_connect_to_ep,
 #if IBV_EXP_HW_TM
     .ep_tag_eager_short       = uct_rc_mlx5_ep_tag_eager_short,
     .ep_tag_eager_bcopy       = uct_rc_mlx5_ep_tag_eager_bcopy,

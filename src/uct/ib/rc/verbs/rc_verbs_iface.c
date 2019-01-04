@@ -161,7 +161,8 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
                                 iface->config.max_inline,
                                 iface->config.short_desc_size,
                                 uct_ib_iface_get_max_iov(&iface->super.super) - 1,
-                                uct_ib_iface_get_max_iov(&iface->super.super) - 1);
+                                uct_ib_iface_get_max_iov(&iface->super.super) - 1,
+                                sizeof(uct_rc_hdr_t));
     if (status != UCS_OK) {
         return status;
     }

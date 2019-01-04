@@ -18,11 +18,16 @@
 #define UCT_RC_MLX5_OPCODE_MASK       0xff
 
 #define UCT_RC_MLX5_CHECK_AM_ZCOPY(_id, _header_length, _length, _seg_size, _av_size) \
-    UCT_RC_CHECK_AM_ZCOPY(_id, _header_length, _length, \
-                          UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(_av_size), _seg_size)
+    UCT_CHECK_AM_ID(_id); \
+    UCT_RC_CHECK_ZCOPY_DATA(_header_length, _length, _seg_size) \
+    UCT_CHECK_LENGTH(sizeof(uct_rc_mlx5_hdr_t) + _header_length, 0, \
+            UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(_av_size), "am_zcopy header");
+
 
 #define UCT_RC_MLX5_CHECK_AM_SHORT(_id, _length, _av_size) \
-    UCT_RC_CHECK_AM_SHORT(_id, _length, UCT_IB_MLX5_AM_MAX_SHORT(_av_size))
+    UCT_CHECK_AM_ID(_id); \
+    UCT_CHECK_LENGTH(sizeof(uct_rc_mlx5_am_short_hdr_t) + _length, 0, \
+            UCT_IB_MLX5_AM_MAX_SHORT(_av_size), "am_short");
 
 
 /* there is no need to do a special check for length == 0 because in that
@@ -106,6 +111,23 @@ enum {
        if (ucs_unlikely((_mlx5_common_iface)->tm.head->next == NULL)) {  \
            return UCS_ERR_EXCEEDS_LIMIT; \
        }
+
+
+typedef struct uct_rc_mlx5_hdr {
+    uint8_t           tmh_opcode; /* TMH.opcode */
+    union {
+        uint8_t       am_id;      /* Active message ID */
+        uct_rc_hdr_t  rc_hdr;
+    };
+} UCS_S_PACKED uct_rc_mlx5_hdr_t;
+
+/*
+ * Short active message header (active message header is always 64 bit).
+ */
+typedef struct uct_rc_mlx5_am_short_hdr {
+    uct_rc_mlx5_hdr_t  rc_hdr;
+    uint64_t           am_hdr;
+} UCS_S_PACKED uct_rc_mlx5_am_short_hdr_t;
 
 
 /* TODO: Remove this struct when mlx5dv.h is included! */
@@ -216,7 +238,7 @@ typedef struct uct_mlx5_dm_data {
 } uct_mlx5_dm_data_t;
 
 typedef union uct_rc_mlx5_dm_copy_data {
-    uct_rc_am_short_hdr_t      am_hdr;
+    uct_rc_mlx5_am_short_hdr_t am_hdr;
     struct ibv_tmh             tm_hdr;
     char                       bytes[sizeof(uint64_t) * 2];
 } UCS_S_PACKED uct_rc_mlx5_dm_copy_data_t;
@@ -486,4 +508,12 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
                                     void *data, size_t length, size_t valid_length,
                                     char *buffer, size_t max);
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_am_hdr_fill(uct_rc_mlx5_hdr_t *rch, uint8_t id)
+{
+#if IBV_HW_TM
+    rch->tmh_opcode = IBV_TMH_NO_TAG;
+#endif
+    rch->am_id      = id;
+}
 #endif

@@ -40,19 +40,12 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
 };
 
 
-void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
-                                    void *data, size_t length, size_t valid_length,
-                                    char *buffer, size_t max)
-{
-    uct_rc_ep_packet_dump(iface, type, data, length, valid_length, buffer, max);
-}
-
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq)
 {
     uct_ib_mlx5_srq_seg_t *seg;
     uct_ib_iface_recv_desc_t *desc;
     uint16_t count, index, next_index;
-    uct_rc_hdr_t *hdr;
+    void *hdr;
 
     /* Make sure the union is right */
     UCS_STATIC_ASSERT(ucs_offsetof(uct_ib_mlx5_srq_seg_t, mlx5_srq.next_wqe_index) ==
@@ -425,7 +418,7 @@ ucs_status_t uct_rc_mlx5_init_srq_tm(uct_rc_mlx5_iface_common_t *iface,
 
     iface->tm.eager_desc.super.cb = uct_rc_iface_release_desc;
     iface->tm.eager_desc.offset   = sizeof(struct ibv_tmh)
-                                    - sizeof(uct_rc_hdr_t)
+                                    - sizeof(uct_rc_mlx5_hdr_t)
                                     + iface->super.super.config.rx_headroom_offset;
 
     iface->tm.rndv_desc.super.cb  = uct_rc_iface_release_desc;
