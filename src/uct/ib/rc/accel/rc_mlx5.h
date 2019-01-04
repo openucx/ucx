@@ -25,6 +25,7 @@ typedef struct uct_rc_mlx5_ep {
     struct {
         uct_ib_mlx5_txwq_t  wq;
     } tx;
+    struct ibv_qp    *tm_qp;
 } uct_rc_mlx5_ep_t;
 
 
@@ -95,7 +96,6 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
 unsigned uct_rc_mlx5_iface_progress(void *arg);
 
-#if IBV_EXP_HW_TM
 ucs_status_t uct_rc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
                                             const void *data, size_t length);
 
@@ -120,6 +120,5 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
                                              const void* header,
                                              unsigned header_length,
                                              unsigned flags);
-#endif
 
 #endif

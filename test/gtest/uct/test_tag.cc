@@ -727,7 +727,7 @@ UCT_TAG_INSTANTIATE_TEST_CASE(test_tag)
 #if ENABLE_STATS && IBV_EXP_HW_TM
 extern "C" {
 #include <uct/api/uct.h>
-#include <uct/ib/rc/base/rc_iface.h>
+#include <uct/ib/rc/accel/rc_mlx5_common.h>
 #include <uct/ib/base/ib_verbs.h>
 }
 
@@ -750,12 +750,14 @@ public:
 
     ucs_stats_node_t *iface_stats(const entity &e)
     {
-        return ucs_derived_of(e.iface(), uct_rc_iface_t)->tm.stats;
+        return ucs_derived_of(e.iface(), uct_rc_mlx5_iface_common_t)->tm.stats;
     }
 
     void provoke_sync(const entity &e)
     {
-        uct_rc_iface_t *iface = ucs_derived_of(e.iface(), uct_rc_iface_t);
+        uct_rc_mlx5_iface_common_t *iface;
+
+        iface = ucs_derived_of(e.iface(), uct_rc_mlx5_iface_common_t);
 
         // Counters are synced every IBV_DEVICE_MAX_UNEXP_COUNT ops, set
         // it one op before, so that any following unexpected message would

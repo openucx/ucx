@@ -158,15 +158,6 @@ struct uct_rc_iface_config {
         double               hard_thresh;
         unsigned             wnd_size;
     } fc;
-
-#if IBV_EXP_HW_TM
-    struct {
-        int                  enable;
-        unsigned             list_size;
-        size_t               max_bcopy;
-    } tm;
-#endif
-
 };
 
 
@@ -190,44 +181,6 @@ typedef struct uct_rc_srq {
 } uct_rc_srq_t;
 
 
-#if IBV_HW_TM
-
-enum {
-    UCT_RC_IFACE_STAT_TAG_RX_EXP,
-    UCT_RC_IFACE_STAT_TAG_RX_EAGER_UNEXP,
-    UCT_RC_IFACE_STAT_TAG_RX_RNDV_UNEXP,
-    UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_EXP,
-    UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_UNEXP,
-    UCT_RC_IFACE_STAT_TAG_RX_RNDV_FIN,
-    UCT_RC_IFACE_STAT_TAG_LIST_ADD,
-    UCT_RC_IFACE_STAT_TAG_LIST_DEL,
-    UCT_RC_IFACE_STAT_TAG_LIST_SYNC,
-    UCT_RC_IFACE_STAT_TAG_LAST
-};
-
-typedef struct uct_rc_iface_tmh_priv_data {
-    uint8_t                     length;
-    uint16_t                    data;
-} UCS_S_PACKED uct_rc_iface_tmh_priv_data_t;
-
-
-typedef struct uct_rc_iface_release_desc {
-    uct_recv_desc_t             super;
-    unsigned                    offset;
-} uct_rc_iface_release_desc_t;
-
-
-typedef struct uct_rc_iface_ctx_priv {
-    uint64_t                    tag;
-    void                        *buffer;
-    uint32_t                    app_ctx;
-    uint32_t                    length;
-    uint32_t                    tag_handle;
-} uct_rc_iface_ctx_priv_t;
-
-#endif
-
-
 struct uct_rc_iface {
     uct_ib_iface_t              super;
 
@@ -249,30 +202,6 @@ struct uct_rc_iface {
         ucs_mpool_t          mp;
         uct_rc_srq_t         srq;
     } rx;
-
-#if IBV_HW_TM
-    struct {
-        ucs_ptr_array_t              rndv_comps;
-        unsigned                     num_tags;
-        unsigned                     num_outstanding;
-        unsigned                     max_rndv_data;
-        uint16_t                     unexpected_cnt;
-        uint16_t                     cmd_qp_len;
-        uint8_t                      enabled;
-        struct {
-            void                     *arg; /* User defined arg */
-            uct_tag_unexp_eager_cb_t cb;   /* Callback for unexpected eager messages */
-        } eager_unexp;
-
-        struct {
-            void                     *arg; /* User defined arg */
-            uct_tag_unexp_rndv_cb_t  cb;   /* Callback for unexpected rndv messages */
-        } rndv_unexp;
-        uct_rc_iface_release_desc_t  eager_desc;
-        uct_rc_iface_release_desc_t  rndv_desc;
-        UCS_STATS_NODE_DECLARE(stats);
-    } tm;
-#endif
 
     struct {
         unsigned             tx_qp_len;
@@ -357,7 +286,6 @@ typedef struct uct_rc_am_short_hdr {
     uint64_t          am_hdr;
 } UCS_S_PACKED uct_rc_am_short_hdr_t;
 
-#  define UCT_RC_IFACE_TM_ENABLED(_iface) 0
 
 extern ucs_config_field_t uct_rc_iface_config_table[];
 extern ucs_config_field_t uct_rc_fc_config_table[];

@@ -66,22 +66,6 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
    ucs_offsetof(uct_rc_iface_config_t, ooo_rw), UCS_CONFIG_TYPE_BOOL},
 #endif
 
-#if IBV_EXP_HW_TM
-  {"TM_ENABLE", "n",
-   "Enable HW tag matching",
-   ucs_offsetof(uct_rc_iface_config_t, tm.enable), UCS_CONFIG_TYPE_BOOL},
-
-  {"TM_LIST_SIZE", "1024",
-   "Limits the number of tags posted to the HW for matching. The actual limit \n"
-   "is a minimum between this value and the maximum value supported by the HW. \n"
-   "-1 means no limit.",
-   ucs_offsetof(uct_rc_iface_config_t, tm.list_size), UCS_CONFIG_TYPE_UINT},
-
-  {"TM_MAX_BCOPY", "48k",
-   "Maximal size of copy-out sends when tag-matching offload is enabled",
-   ucs_offsetof(uct_rc_iface_config_t, tm.max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
-#endif
-
   {NULL}
 };
 
@@ -488,7 +472,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 
     init_attr->rx_cq_len = config->super.rx.queue_len;
     init_attr->seg_size  = config->super.super.max_bcopy;
-    init_attr->rx_hdr_len = sizeof(uct_rc_hdr_t);
     init_attr->tx_cq_len  = config->tx.cq_len;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,

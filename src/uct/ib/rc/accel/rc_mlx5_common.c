@@ -21,11 +21,30 @@ typedef struct uct_mlx5_dm_va {
 #endif
 
 
+ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
+  {"TM_ENABLE", "n",
+   "Enable HW tag matching",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"TM_LIST_SIZE", "1024",
+   "Limits the number of tags posted to the HW for matching. The actual limit \n"
+   "is a minimum between this value and the maximum value supported by the HW. \n"
+   "-1 means no limit.",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.list_size), UCS_CONFIG_TYPE_UINT},
+
+  {"TM_MAX_BCOPY", "48k",
+   "Maximal size of copy-out sends when tag-matching offload is enabled",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {NULL}
+};
+
+
 void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                                     void *data, size_t length, size_t valid_length,
                                     char *buffer, size_t max)
 {
-    uct_rc_ep_packet_dump(iface, type, data, length, valid_length, buffer, max, 0);
+    uct_rc_ep_packet_dump(iface, type, data, length, valid_length, buffer, max);
 }
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq)
@@ -127,7 +146,7 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
     struct ibv_qp *cmd_qp;
     int i;
 
-    if (!UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
+    if (!UCT_RC_MLX5_TM_ENABLED(iface)) {
         return UCS_OK;
     }
 
@@ -145,9 +164,9 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
     }
 
     iface->tm.cmd_wq.qp_num   = cmd_qp->qp_num;
-    iface->tm.cmd_wq.ops_mask = iface->super.tm.cmd_qp_len - 1;
+    iface->tm.cmd_wq.ops_mask = iface->tm.cmd_qp_len - 1;
     iface->tm.cmd_wq.ops_head = iface->tm.cmd_wq.ops_tail = 0;
-    iface->tm.cmd_wq.ops      = ucs_calloc(iface->super.tm.cmd_qp_len,
+    iface->tm.cmd_wq.ops      = ucs_calloc(iface->tm.cmd_qp_len,
                                            sizeof(uct_rc_mlx5_srq_op_t),
                                            "srq tag ops");
     if (iface->tm.cmd_wq.ops == NULL) {
@@ -156,7 +175,7 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
         goto err_tag_cleanup;
     }
 
-    iface->tm.list = ucs_calloc(iface->super.tm.num_tags + 1,
+    iface->tm.list = ucs_calloc(iface->tm.num_tags + 1,
                                 sizeof(uct_rc_mlx5_tag_entry_t), "tm list");
     if (iface->tm.list == NULL) {
         ucs_error("Failed to allocate memory for tag matching list");
@@ -164,7 +183,7 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
         goto err_cmd_wq_free;
     }
 
-    for (i = 0; i < iface->super.tm.num_tags; ++i) {
+    for (i = 0; i < iface->tm.num_tags; ++i) {
         iface->tm.list[i].next = &iface->tm.list[i + 1];
     }
 
@@ -176,7 +195,7 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
 err_cmd_wq_free:
     ucs_free(iface->tm.cmd_wq.ops);
 err_tag_cleanup:
-    uct_rc_iface_tag_cleanup(&iface->super);
+    uct_rc_iface_tag_cleanup(iface);
 #endif
 
     return status;
@@ -184,14 +203,12 @@ err_tag_cleanup:
 
 void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
-#if IBV_EXP_HW_TM
-    if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
+    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_wq.super);
         ucs_free(iface->tm.list);
         ucs_free(iface->tm.cmd_wq.ops);
-        uct_rc_iface_tag_cleanup(&iface->super);
+        uct_rc_iface_tag_cleanup(iface);
     }
-#endif
 }
 
 #if IBV_EXP_HW_TM
@@ -225,14 +242,14 @@ static void uct_rc_iface_release_desc(uct_recv_desc_t *self, void *desc)
 #if IBV_HW_TM
 /* tag is passed as parameter, because some (but not all!) transports may need
  * to translate TMH to LE */
-ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
-                                      struct ibv_exp_tmh *tmh, uct_tag_t tag,
+ucs_status_t uct_rc_iface_handle_rndv(uct_rc_mlx5_iface_common_t *iface,
+                                      struct ibv_tmh *tmh, uct_tag_t tag,
                                       unsigned byte_len)
 {
 #if IBV_EXP_HW_TM
     uct_rc_iface_tmh_priv_data_t *priv = (uct_rc_iface_tmh_priv_data_t*)tmh->reserved;
-    uct_ib_md_t *ib_md                 = uct_ib_iface_md(&iface->super);
-    struct ibv_exp_tmh_rvh *rvh;
+    uct_ib_md_t *ib_md                 = uct_ib_iface_md(&iface->super.super);
+    struct ibv_rvh *rvh;
     unsigned tm_hdrs_len;
     unsigned rndv_usr_hdr_len;
     size_t rndv_data_len;
@@ -240,7 +257,7 @@ ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
     void *rb;
     char packed_rkey[UCT_MD_COMPONENT_NAME_MAX + UCT_IB_MD_PACKED_RKEY_SIZE];
 
-    rvh = (struct ibv_exp_tmh_rvh*)(tmh + 1);
+    rvh = (struct ibv_rvh*)(tmh + 1);
 
     /* RC uses two headers: TMH + RVH, DC uses three: TMH + RVH + RAVH.
      * So, get actual RNDV hdrs len from offsets. */
@@ -392,14 +409,14 @@ static void uct_rc_mlx5_iface_common_dm_tl_cleanup(uct_mlx5_dm_data_t *data)
 #endif
 
 #if IBV_EXP_HW_TM
-ucs_status_t uct_rc_mlx5_init_srq_tm(uct_rc_iface_t *iface,
+ucs_status_t uct_rc_mlx5_init_srq_tm(uct_rc_mlx5_iface_common_t *iface,
                                      const uct_rc_iface_config_t *config,
                                      struct ibv_exp_create_srq_attr *srq_init_attr,
                                      unsigned rndv_hdr_len,
                                      unsigned max_cancel_sync_ops)
 {
-    uct_ib_md_t *md       = uct_ib_iface_md(&iface->super);
-    unsigned tmh_hdrs_len = sizeof(struct ibv_exp_tmh) + rndv_hdr_len;
+    uct_ib_md_t *md       = uct_ib_iface_md(&iface->super.super);
+    unsigned tmh_hdrs_len = sizeof(struct ibv_tmh) + rndv_hdr_len;
     ucs_status_t status;
 
     if (!UCT_RC_MLX5_TM_ENABLED(iface)) {
@@ -407,9 +424,9 @@ ucs_status_t uct_rc_mlx5_init_srq_tm(uct_rc_iface_t *iface,
     }
 
     iface->tm.eager_desc.super.cb = uct_rc_iface_release_desc;
-    iface->tm.eager_desc.offset   = sizeof(struct ibv_exp_tmh)
+    iface->tm.eager_desc.offset   = sizeof(struct ibv_tmh)
                                     - sizeof(uct_rc_hdr_t)
-                                    + iface->super.config.rx_headroom_offset;
+                                    + iface->super.super.config.rx_headroom_offset;
 
     iface->tm.rndv_desc.super.cb  = uct_rc_iface_release_desc;
     iface->tm.rndv_desc.offset    = iface->tm.eager_desc.offset + rndv_hdr_len;
@@ -431,7 +448,7 @@ ucs_status_t uct_rc_mlx5_init_srq_tm(uct_rc_iface_t *iface,
     srq_init_attr->base.srq_context    = iface;
     srq_init_attr->srq_type            = IBV_EXP_SRQT_TAG_MATCHING;
     srq_init_attr->pd                  = md->pd;
-    srq_init_attr->cq                  = iface->super.cq[UCT_IB_DIR_RX];
+    srq_init_attr->cq                  = iface->super.super.cq[UCT_IB_DIR_RX];
     srq_init_attr->tm_cap.max_num_tags = iface->tm.num_tags;
 
     /* 2 ops for each tag (ADD + DEL) and extra ops for SYNC.
@@ -443,14 +460,14 @@ ucs_status_t uct_rc_mlx5_init_srq_tm(uct_rc_iface_t *iface,
     srq_init_attr->comp_mask     |= IBV_EXP_CREATE_SRQ_CQ |
                                     IBV_EXP_CREATE_SRQ_TM;
 
-    iface->rx.srq.srq = ibv_exp_create_srq(md->dev.ibv_context, srq_init_attr);
-    if (iface->rx.srq.srq == NULL) {
+    iface->super.rx.srq.srq = ibv_exp_create_srq(md->dev.ibv_context, srq_init_attr);
+    if (iface->super.rx.srq.srq == NULL) {
         ucs_error("ibv_exp_create_srq(device=%s) failed: %m",
                   uct_ib_device_name(&md->dev));
         return UCS_ERR_IO_ERROR;
     }
 
-    iface->rx.srq.quota = srq_init_attr->base.attr.max_wr;
+    iface->super.rx.srq.quota = srq_init_attr->base.attr.max_wr;
 
     status = UCS_STATS_NODE_ALLOC(&iface->tm.stats, &uct_rc_iface_tag_stats_class,
                                   iface->stats);
@@ -463,7 +480,7 @@ ucs_status_t uct_rc_mlx5_init_srq_tm(uct_rc_iface_t *iface,
 }
 #endif
 
-void uct_rc_iface_tag_cleanup(uct_rc_iface_t *iface)
+void uct_rc_iface_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
 #if IBV_EXP_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
@@ -473,12 +490,12 @@ void uct_rc_iface_tag_cleanup(uct_rc_iface_t *iface)
 #endif
 }
 
-void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
-                            uct_iface_attr_t *iface_attr,
-                            size_t max_inline, size_t max_iov)
+static void uct_rc_iface_tag_query(uct_rc_mlx5_iface_common_t *iface,
+                                   uct_iface_attr_t *iface_attr,
+                                   size_t max_inline, size_t max_iov)
 {
 #if IBV_EXP_HW_TM
-    unsigned eager_hdr_size = sizeof(struct ibv_exp_tmh);
+    unsigned eager_hdr_size = sizeof(struct ibv_tmh);
     struct ibv_exp_port_attr* port_attr;
 
     if (!UCT_RC_MLX5_TM_ENABLED(iface)) {
@@ -494,13 +511,13 @@ void uct_rc_iface_tag_query(uct_rc_iface_t *iface,
         iface_attr->cap.flags              |= UCT_IFACE_FLAG_TAG_EAGER_SHORT;
     }
 
-    iface_attr->cap.tag.eager.max_bcopy = iface->super.config.seg_size -
+    iface_attr->cap.tag.eager.max_bcopy = iface->super.super.config.seg_size -
                                           eager_hdr_size;
-    iface_attr->cap.tag.eager.max_zcopy = iface->super.config.seg_size -
+    iface_attr->cap.tag.eager.max_zcopy = iface->super.super.config.seg_size -
                                           eager_hdr_size;
     iface_attr->cap.tag.eager.max_iov   = max_iov;
 
-    port_attr = uct_ib_iface_port_attr(&iface->super);
+    port_attr = uct_ib_iface_port_attr(&iface->super.super);
     iface_attr->cap.tag.rndv.max_zcopy  = port_attr->max_msg_sz;
 
     /* TMH can carry 2 additional bytes of private data */
@@ -554,9 +571,13 @@ void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *iface)
 #endif
 }
 
-void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *iface, uct_iface_attr_t *iface_attr)
+void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
+                                    uct_iface_attr_t *iface_attr,
+                                    size_t max_inline, size_t av_size)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface,
+                                                       uct_rc_mlx5_iface_common_t);
+    uct_ib_device_t *dev = uct_ib_iface_device(ib_iface);
 
     /* Atomics */
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
@@ -598,6 +619,9 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *iface, uct_iface_attr_t *ifa
     /* Software overhead */
     iface_attr->overhead          = 40e-9;
 
+    /* Tag Offload */
+    uct_rc_iface_tag_query(iface, iface_attr, max_inline,
+                           UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(av_size));
 }
 
 void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,

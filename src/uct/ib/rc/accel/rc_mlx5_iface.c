@@ -38,6 +38,10 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_config_t, super.mlx5_common),
    UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
 
+  {"", "", NULL,
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
+
   {"TX_MAX_BB", "-1",
    "Limits the number of outstanding WQE building blocks. The actual limit is\n"
    "a minimum between this value and the number of building blocks in the TX QP.\n"
@@ -131,7 +135,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
         return status;
     }
 
-    uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr);
+    uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr, max_am_inline, 0);
     iface_attr->latency.growth += 1e-9; /* 1 ns per each extra QP */
     return UCS_OK;
 }
@@ -264,15 +268,15 @@ static ucs_status_t uct_rc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 }
 #endif
 
-void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
-                          const uct_rc_iface_config_t *config,
-                          const uct_iface_params_t *params,
-                          uct_ib_iface_init_attr_t *init_attr)
+static void uct_rc_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_h md,
+                                 uct_rc_mlx5_iface_common_config_t *config,
+                                 const uct_iface_params_t *params,
+                                 uct_ib_iface_init_attr_t *init_attr)
 {
 #if IBV_EXP_HW_TM
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     uint32_t cap_flags   = IBV_DEVICE_TM_CAPS(dev, capability_flags);
-    struct ibv_exp_tmh tmh;
+    struct ibv_tmh tmh;
 
     iface->tm.enabled = config->tm.enable &&
                         (cap_flags & init_attr->tm_cap_bit);
@@ -304,17 +308,19 @@ void uct_rc_iface_preinit(uct_rc_iface_t *iface, uct_md_h md,
      * - up to 3 CQEs for every posted tag: ADD, TM_CONSUMED and MSG_ARRIVED
      * - one SYNC CQE per every IBV_DEVICE_MAX_UNEXP_COUNT unexpected receives */
     UCS_STATIC_ASSERT(IBV_DEVICE_MAX_UNEXP_COUNT);
-    init_attr->rx_cq_len = config->super.rx.queue_len + iface->tm.num_tags * 3 +
-                           config->super.rx.queue_len /
+    init_attr->rx_cq_len = config->super.super.rx.queue_len + iface->tm.num_tags * 3 +
+                           config->super.super.rx.queue_len /
                            IBV_DEVICE_MAX_UNEXP_COUNT;
     init_attr->seg_size  = ucs_max(config->tm.max_bcopy,
-                                   config->super.super.max_bcopy);
+                                   config->super.super.super.max_bcopy);
     return;
 
 out_tm_disabled:
+#else
+    iface->tm.enabled         = 0;
 #endif
-    init_attr->rx_cq_len = config->super.rx.queue_len;
-    init_attr->seg_size  = config->super.super.max_bcopy;
+    init_attr->rx_cq_len = config->super.super.rx.queue_len;
+    init_attr->seg_size  = config->super.super.super.max_bcopy;
 }
 
 static ucs_status_t
@@ -323,11 +329,11 @@ uct_rc_mlx5_init_srq(uct_rc_iface_t *rc_iface,
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
 #if IBV_EXP_HW_TM
-    if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
+    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         struct ibv_exp_create_srq_attr srq_init_attr = {};
 
         iface->super.progress = uct_rc_mlx5_iface_progress_tm;
-        return uct_rc_mlx5_init_srq_tm(rc_iface, config, &srq_init_attr,
+        return uct_rc_mlx5_init_srq_tm(iface, config, &srq_init_attr,
                                        sizeof(struct ibv_rvh), 0);
     }
 #endif
@@ -352,7 +358,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
 {
     ucs_status_t status;
 
-    uct_rc_iface_preinit(&self->super, md, &config->super, params, init_attr);
+    uct_rc_iface_preinit(self, md, config, params, init_attr);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
                               &config->super, init_attr);
@@ -461,6 +467,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     init_attr.tm_cap_bit     = IBV_EXP_TM_CAP_RC;
     init_attr.fc_req_size    = sizeof(uct_rc_fc_request_t);
     init_attr.flags          = UCT_IB_CQ_IGNORE_OVERRUN;
+    init_attr.rx_hdr_len     = sizeof(uct_rc_hdr_t);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t, &uct_rc_mlx5_iface_ops,
                               md, worker, params, &config->super, &init_attr);

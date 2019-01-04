@@ -186,6 +186,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
 
     init_attr.res_domain_key = UCT_IB_IFACE_NULL_RES_DOMAIN_KEY;
     init_attr.fc_req_size    = sizeof(uct_rc_fc_request_t);
+    init_attr.rx_hdr_len     = sizeof(uct_rc_hdr_t);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
                               worker, params, &config->super, &init_attr);
