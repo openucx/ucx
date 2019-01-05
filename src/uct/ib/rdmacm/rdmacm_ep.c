@@ -82,12 +82,12 @@ static inline void uct_rdmacm_ep_add_to_pending(uct_rdmacm_iface_t *iface, uct_r
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 }
 
-static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
-                           const ucs_sock_addr_t *sockaddr,
-                           uct_sockaddr_priv_pack_callback_t pack_cb,
-                           void *arg, uint32_t cb_flags)
+static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t,
+                           const uct_ep_sockaddr_params_t *params)
 {
-    uct_rdmacm_iface_t *iface = ucs_derived_of(tl_iface, uct_rdmacm_iface_t);
+    uct_rdmacm_iface_t *iface       = ucs_derived_of(params->iface,
+                                                     uct_rdmacm_iface_t);
+    const ucs_sock_addr_t *sockaddr = params->sockaddr;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
 
@@ -98,14 +98,26 @@ static UCS_CLASS_INIT_FUNC(uct_rdmacm_ep_t, uct_iface_t *tl_iface,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    UCT_RDMACM_CB_FLAGS_CHECK(cb_flags);
+    if (!(params->field_mask & UCT_EP_SOCKADDR_PARAM_FIELD_SOCKADDR)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    UCT_RDMACM_CB_FLAGS_CHECK((params->field_mask &
+                               UCT_EP_SOCKADDR_PARAM_FIELD_CB_FLAGS) ?
+                              params->cb_flags : 0);
 
     /* Initialize these fields before calling rdma_resolve_addr to avoid a race
      * where they are used before being initialized (from the async thread
      * - after an RDMA_CM_EVENT_ROUTE_RESOLVED event) */
-    self->pack_cb       = pack_cb;
-    self->pack_cb_arg   = arg;
-    self->pack_cb_flags = cb_flags;
+    self->pack_cb       = (params->field_mask &
+                           UCT_EP_SOCKADDR_PARAM_FIELD_PACK_CB) ?
+                          params->pack_cb : NULL;
+    self->pack_cb_arg   = (params->field_mask &
+                           UCT_EP_SOCKADDR_PARAM_FIELD_USER_DATA) ?
+                          params->user_data : NULL;
+    self->pack_cb_flags = (params->field_mask &
+                           UCT_EP_SOCKADDR_PARAM_FIELD_CB_FLAGS) ?
+                          params->cb_flags : 0;
     pthread_mutex_init(&self->ops_mutex, NULL);
     ucs_queue_head_init(&self->ops);
 
@@ -196,10 +208,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_rdmacm_ep_t, uct_base_ep_t)
-UCS_CLASS_DEFINE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t, uct_iface_t*,
-                          const ucs_sock_addr_t *,
-                          uct_sockaddr_priv_pack_callback_t, void *,
-                          uint32_t);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t,
+                          const uct_ep_sockaddr_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rdmacm_ep_t, uct_ep_t);
 
 static unsigned uct_rdmacm_client_err_handle_progress(void *arg)

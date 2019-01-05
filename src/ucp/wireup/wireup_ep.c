@@ -568,6 +568,7 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
     ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
     ucp_worker_h worker        = ucp_ep->worker;
     char saddr_str[UCS_SOCKADDR_STRING_LEN];
+    uct_ep_sockaddr_params_t uct_ep_sockaddr_params;
     ucp_rsc_index_t sockaddr_rsc;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
@@ -583,10 +584,18 @@ ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
 
     wireup_ep->sockaddr_rsc_index = sockaddr_rsc;
 
-    /* send connection request using the transport */
-    status = uct_ep_create_sockaddr(wiface->iface, &params->sockaddr,
-                                    ucp_wireup_ep_sockaddr_fill_private_data,
-                                    wireup_ep, UCT_CB_FLAG_ASYNC,
+    /* Fill parameters and send connection request using the transport */
+    uct_ep_sockaddr_params.field_mask = UCT_EP_SOCKADDR_PARAM_FIELD_SOCKADDR  |
+                                        UCT_EP_SOCKADDR_PARAM_FIELD_IFACE     |
+                                        UCT_EP_SOCKADDR_PARAM_FIELD_USER_DATA |
+                                        UCT_EP_SOCKADDR_PARAM_FIELD_CB_FLAGS  |
+                                        UCT_EP_SOCKADDR_PARAM_FIELD_PACK_CB;
+    uct_ep_sockaddr_params.sockaddr   = &params->sockaddr;
+    uct_ep_sockaddr_params.iface      = wiface->iface;
+    uct_ep_sockaddr_params.user_data  = wireup_ep;
+    uct_ep_sockaddr_params.cb_flags   = UCT_CB_FLAG_ASYNC;
+    uct_ep_sockaddr_params.pack_cb    = ucp_wireup_ep_sockaddr_fill_private_data;
+    status = uct_ep_create_sockaddr(&uct_ep_sockaddr_params,
                                     &wireup_ep->sockaddr_ep);
     if (status != UCS_OK) {
         goto out;

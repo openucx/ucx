@@ -7,6 +7,7 @@
 #ifndef UCT_DEF_H_
 #define UCT_DEF_H_
 
+#include <ucs/config/types.h>
 #include <ucs/type/status.h>
 
 #include <stddef.h>
@@ -403,6 +404,43 @@ typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, unsigned flags,
                                                 unsigned header_length,
                                                 uint64_t remote_addr, size_t length,
                                                 const void *rkey_buf);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Tuning parameters for an UCT endpoint created by @ref uct_ep_create_sockaddr.
+ */
+typedef struct uct_ep_sockaddr_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_ep_sockaddr_params_field. Fields not specified in this mask
+     * would be ignored. Provides ABI compatibility with respect to adding new
+     * fields.
+     */
+    uint64_t                          field_mask;
+    /**
+     * The sockaddr to connect to on the remote peer. Mandatory filed for
+     * a client.
+     */
+    const ucs_sock_addr_t             *sockaddr;
+    /**
+     * Interface to create the endpoint on. Mandatory filed for a client.
+     */
+    uct_iface_h                       iface;
+    /**
+     * User data associated with the endpoint.
+     */
+    void                              *user_data;
+    /**
+     * Required @ref uct_cb_flags to indicate where callbacks can be invoked
+     * from.
+     */
+    uint32_t                          cb_flags;
+    /**
+     * Callback for filling the user's private data.
+     */
+    uct_sockaddr_priv_pack_callback_t pack_cb;
+} uct_ep_sockaddr_params_t;
 
 
 #endif

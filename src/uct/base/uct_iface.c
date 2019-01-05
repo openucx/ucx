@@ -481,12 +481,13 @@ uct_ep_create_connected(uct_iface_h iface, const uct_device_addr_t *dev_addr,
 }
 
 ucs_status_t
-uct_ep_create_sockaddr(uct_iface_h iface, const ucs_sock_addr_t *sockaddr,
-                       uct_sockaddr_priv_pack_callback_t pack_cb,
-                       void *arg, uint32_t cb_flags, uct_ep_h *ep_p)
+uct_ep_create_sockaddr(const uct_ep_sockaddr_params_t *params, uct_ep_h *ep_p)
 {
-    return iface->ops.ep_create_sockaddr(iface, sockaddr, pack_cb, arg,
-                                         cb_flags, ep_p);
+    if (!(params->field_mask & UCT_EP_SOCKADDR_PARAM_FIELD_IFACE)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return params->iface->ops.ep_create_sockaddr(params, ep_p);
 }
 
 void uct_ep_destroy(uct_ep_h ep)

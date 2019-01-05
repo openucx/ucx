@@ -686,9 +686,18 @@ void uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
     }
 
     /* Connect to the server */
-    status = uct_ep_create_sockaddr(iface(), remote_addr,
-                                    client_priv_data_cb, (void*)&client_cb_arg,
-                                    UCT_CB_FLAG_ASYNC, &ep);
+    uct_ep_sockaddr_params_t params;
+    params.field_mask = UCT_EP_SOCKADDR_PARAM_FIELD_SOCKADDR  |
+                        UCT_EP_SOCKADDR_PARAM_FIELD_IFACE     |
+                        UCT_EP_SOCKADDR_PARAM_FIELD_USER_DATA |
+                        UCT_EP_SOCKADDR_PARAM_FIELD_CB_FLAGS  |
+                        UCT_EP_SOCKADDR_PARAM_FIELD_PACK_CB;
+    params.sockaddr   = remote_addr;
+    params.iface      = iface();
+    params.user_data  = &client_cb_arg;
+    params.cb_flags   = UCT_CB_FLAG_ASYNC;
+    params.pack_cb    = client_priv_data_cb;
+    status = uct_ep_create_sockaddr(&params, &ep);
     ASSERT_UCS_OK(status);
 
     m_eps[index].reset(ep, uct_ep_destroy);

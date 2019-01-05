@@ -34,10 +34,8 @@ struct uct_rdmacm_ep {
     uct_rdmacm_ctx_t                   *cm_id_ctx;
 };
 
-UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t, uct_iface_t*,
-                           const ucs_sock_addr_t *,
-                           uct_sockaddr_priv_pack_callback_t, void *,
-                           uint32_t);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_ep_t, uct_ep_t,
+                           const uct_ep_sockaddr_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_ep_t, uct_ep_t);
 
 void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t status);

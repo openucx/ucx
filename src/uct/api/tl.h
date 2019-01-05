@@ -156,10 +156,8 @@ typedef struct uct_iface_ops {
                                         const uct_iface_addr_t *iface_addr,
                                         uct_ep_h* ep_p);
 
-    ucs_status_t (*ep_create_sockaddr)(uct_iface_h iface,
-                                       const ucs_sock_addr_t *sockaddr,
-                                       uct_sockaddr_priv_pack_callback_t pack_cb,
-                                       void *arg, uint32_t cb_flags, uct_ep_h *ep_p);
+    ucs_status_t (*ep_create_sockaddr)(const uct_ep_sockaddr_params_t *params,
+                                       uct_ep_h *ep_p);
 
     void         (*ep_destroy)(uct_ep_h ep);
 

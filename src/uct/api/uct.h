@@ -13,7 +13,6 @@
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
 #include <ucs/async/async_fwd.h>
-#include <ucs/config/types.h>
 #include <ucs/datastruct/callbackq.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
@@ -468,6 +467,25 @@ typedef enum {
                                 memory mapping and to avoid page faults when
                                 the memory is accessed for the first time. */
 } uct_mem_advice_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT endpoint created by @ref uct_ep_create_sockaddr parameters field
+ *        mask.
+ *
+ * The enumeration allows specifying which fields in @ref
+ * uct_ep_sockaddr_params_t are present. It is used for the enablement of
+ * backward compatibility support.
+ */
+enum uct_ep_sockaddr_params_field {
+    UCT_EP_SOCKADDR_PARAM_FIELD_SOCKADDR  = UCS_BIT(0), /**< Remote sockaddr. */
+    UCT_EP_SOCKADDR_PARAM_FIELD_IFACE     = UCS_BIT(1), /**< UCT interface. */
+    UCT_EP_SOCKADDR_PARAM_FIELD_USER_DATA = UCS_BIT(2), /**< User data. */
+    UCT_EP_SOCKADDR_PARAM_FIELD_CB_FLAGS  = UCS_BIT(3), /**< Callback flags. */
+    UCT_EP_SOCKADDR_PARAM_FIELD_PACK_CB   = UCS_BIT(4)  /**< Pack private data
+                                                             callback. */
+};
 
 
 /*
@@ -1376,14 +1394,8 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  * @note The interface in this routine requires the
  * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
  *
- * @param [in]  iface              Interface to create the endpoint on.
- * @param [in]  sockaddr           The sockaddr to connect to on the remote peer.
- * @param [in]  pack_cb            Callback for filling the user's private data.
- * @param [in]  arg                User defined argument for the callback.
- * @param [in]  cb_flags           Required @ref uct_cb_flags "callback flags" to
- *                                 indicate where the
- *                                 @ref uct_sockaddr_priv_pack_callback_t
- *                                 callback can be invoked from.
+ * @param [in]  params             User defined @ref uct_ep_sockaddr_params_t
+ *                                 configurations for the @a ep_p.
  * @param [out] ep_p               Handle to the created endpoint.
  *
  * @return UCS_OK                  Connection request was sent to the server.
@@ -1395,10 +1407,8 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
  *
  * @return error code              In case of an error. (@ref ucs_status_t)
  */
-ucs_status_t uct_ep_create_sockaddr(uct_iface_h iface,
-                                    const ucs_sock_addr_t *sockaddr,
-                                    uct_sockaddr_priv_pack_callback_t pack_cb,
-                                    void *arg, uint32_t cb_flags, uct_ep_h *ep_p);
+ucs_status_t uct_ep_create_sockaddr(const uct_ep_sockaddr_params_t *params,
+                                    uct_ep_h *ep_p);
 
 
 /**
