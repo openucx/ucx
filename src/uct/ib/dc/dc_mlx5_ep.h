@@ -11,6 +11,7 @@
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/sys/compiler_def.h>
 
+
 #include "dc_mlx5.h"
 
 enum {
@@ -55,6 +56,7 @@ UCS_CLASS_DECLARE(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *,
                   const uct_dc_mlx5_iface_addr_t *,
                   uct_ib_mlx5_base_av_t *, struct mlx5_grh_av *);
 
+ucs_status_t uct_dc_mlx5_iface_post_ops(uct_dc_mlx5_iface_t *iface, int async);
 
 ucs_status_t uct_dc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *payload,
                                       unsigned length, uint64_t remote_addr,

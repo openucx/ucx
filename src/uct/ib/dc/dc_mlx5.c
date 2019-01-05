@@ -16,6 +16,7 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/async/async.h>
+#include <ucs/arch/atomic.h>
 #include <ucs/debug/log.h>
 #include <string.h>
 
@@ -42,7 +43,12 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      "(up to " UCS_PP_QUOTE(UCT_DC_MLX5_IFACE_MAX_DCIS) ").",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, ndci), UCS_CONFIG_TYPE_UINT},
 
-    {"TX_POLICY", "dcs_quota",
+    {"ASYNC_TICK", "5000",
+     "How often to wake up async thread",
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, async_tick), UCS_CONFIG_TYPE_UINT},
+
+
+    {"TX_POLICY", "rand",
      "Specifies how DC initiator (DCI) is selected by the endpoint. The policies are:\n"
      "\n"
      "dcs        The endpoint either uses already assigned DCI or one is allocated\n"
@@ -230,7 +236,14 @@ static unsigned uct_dc_mlx5_iface_progress(void *arg)
     if (count > 0) {
         return count;
     }
-    return uct_dc_mlx5_poll_tx(iface);
+    if (pthread_mutex_trylock(&iface->async.lock)) {
+        return 0;
+    }
+    count = uct_dc_mlx5_poll_tx(iface);
+    uct_dc_mlx5_iface_post_ops(iface, 0);
+    pthread_mutex_unlock(&iface->async.lock);
+
+    return count;
 }
 
 #if IBV_EXP_HW_TM_DC
@@ -1053,6 +1066,50 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .fc_handler               = uct_dc_mlx5_iface_fc_handler,
 };
 
+static void *uct_dc_mlx5_thread_func(void *arg)
+{
+    uct_dc_mlx5_iface_t *iface = arg;
+
+    while(!iface->async.thread_stop) {
+        usleep(iface->async.tick);
+        if (pthread_mutex_trylock(&iface->async.lock)) {
+            /* lock taken by main thread */
+            continue;
+        }
+        uct_dc_mlx5_poll_tx(iface);
+        uct_dc_mlx5_iface_post_ops(iface, 1);
+        pthread_mutex_unlock(&iface->async.lock);
+    }
+
+    return NULL;
+}
+
+static void uct_dc_mlx5_iface_async_init(uct_dc_mlx5_iface_t *iface,
+                                         uct_dc_mlx5_iface_config_t *config)
+{
+    int ret;
+    ucs_status_t status;
+
+    iface->async.tick        = config->async_tick;
+    iface->async.thread_stop = 0;
+
+    ret = pthread_mutex_init(&iface->async.lock, NULL);
+    if (ret != 0) {
+        ucs_fatal("pthread_mutex_init() returned %d: %m", ret);
+    }
+
+    status = ucs_circular_buf_init(&iface->async.ops, sizeof(uct_dc_mlx5_op_t),
+                                   UCT_DC_MLX5_ASYNC_OP_MAX);
+    if (status != UCS_OK) {
+        ucs_fatal("Failed to allocate memory for DC async ops");
+    }
+
+    ret = pthread_create(&iface->async.thread_id, NULL, uct_dc_mlx5_thread_func, iface);
+    if (ret != 0) {
+        ucs_fatal("pthread_create() returned %d: %m", ret);
+    }
+}
+
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -1138,6 +1195,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     uct_rc_mlx5_iface_common_prepost_recvs(&self->super);
 
+    uct_dc_mlx5_iface_async_init(self, config);
+
     ucs_debug("created dc iface %p", self);
 
     return UCS_OK;
@@ -1153,6 +1212,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     uct_dc_mlx5_ep_t *ep, *tmp;
 
     ucs_trace_func("");
+    self->async.thread_stop = 1;
+    pthread_join(self->async.thread_id, NULL);
     uct_base_iface_progress_disable(&self->super.super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     uct_dc_mlx5_iface_cleanup_dcis(self);
@@ -1165,6 +1226,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     uct_dc_mlx5_iface_dcis_destroy(self, self->tx.ndci);
     uct_dc_mlx5_iface_cleanup_fc_ep(self);
     ucs_arbiter_cleanup(&self->tx.dci_arbiter);
+    ucs_circular_buf_cleanup(&self->async.ops);
 }
 
 UCS_CLASS_DEFINE(uct_dc_mlx5_iface_t, uct_rc_mlx5_iface_common_t);

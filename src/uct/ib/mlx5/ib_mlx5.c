@@ -30,7 +30,7 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
     {"DM_SIZE", "2k",
      "Device Memory segment size (0 - disabled)",
      ucs_offsetof(uct_ib_mlx5_iface_config_t, dm.seg_len), UCS_CONFIG_TYPE_MEMUNITS},
-    {"DM_COUNT", "1",
+    {"DM_COUNT", "0",
      "Device Memory segments count (0 - disabled)",
      ucs_offsetof(uct_ib_mlx5_iface_config_t, dm.count), UCS_CONFIG_TYPE_UINT},
 #endif

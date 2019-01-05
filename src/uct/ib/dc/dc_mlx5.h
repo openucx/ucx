@@ -13,9 +13,12 @@
 #include <uct/ib/rc/accel/rc_mlx5_common.h>
 #include <uct/ib/ud/base/ud_iface_common.h>
 #include <uct/ib/ud/accel/ud_mlx5_common.h>
+#include <ucs/datastruct/circular_buf.h>
 
 
 #define UCT_DC_MLX5_IFACE_MAX_DCIS   16
+
+#define UCT_DC_MLX5_ASYNC_OP_MAX     131072
 
 #define UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(_addr) \
     (!!((_addr)->flags & UCT_DC_MLX5_IFACE_ADDR_HW_TM))
@@ -52,6 +55,7 @@ typedef struct uct_dc_mlx5_iface_config {
     uct_rc_mlx5_iface_common_config_t   super;
     uct_ud_iface_common_config_t        ud_common;
     int                                 ndci;
+    int                                 async_tick;
     int                                 tx_policy;
     unsigned                            quota;
     uct_ud_mlx5_iface_common_config_t   mlx5_ud;
@@ -62,6 +66,19 @@ typedef enum {
     UCT_DC_DCI_FLAG_EP_CANCELED         = UCS_BIT(0),
     UCT_DC_DCI_FLAG_EP_DESTROYED        = UCS_BIT(1)
 } uct_dc_dci_state_t;
+
+enum {
+    UCT_DC_MLX5_PUT_SHORT,
+    UCT_DC_MLX5_PUT_BCOPY,
+    UCT_DC_MLX5_PUT_ZCOPY,
+    UCT_DC_MLX5_GET_BCOPY,
+    UCT_DC_MLX5_GET_ZCOPY,
+    UCT_DC_MLX5_AM_SHORT,
+    UCT_DC_MLX5_AM_BCOPY,
+    UCT_DC_MLX5_AM_ZCOPY,
+    UCT_DC_MLX5_FLUSH,
+    UCT_DC_MLX5_ATOMIC
+};
 
 
 typedef struct uct_dc_dci {
@@ -93,6 +110,46 @@ typedef struct uct_dc_fc_request {
     uint16_t                      lid;
 } uct_dc_fc_request_t;
 
+typedef struct uct_dc_mlx5_op {
+    uct_dc_mlx5_ep_t              *ep;
+    unsigned                      opcode;
+    union {
+        struct {
+            uint64_t              hdr;
+            uint8_t               id;
+        } am;
+
+        struct {
+            uint64_t              remote_addr;
+            uct_rkey_t            rkey;
+        } rma;
+    };
+    union {
+        struct {
+            uct_rc_iface_send_desc_t  *desc;
+            unsigned                  length;
+        } bcopy;
+
+        struct {
+            uct_iov_t             iov[UCT_IB_MAX_IOV];
+            size_t                iovcnt;
+            uct_completion_t      *comp;
+        } zcopy;
+
+        struct {
+            uint64_t              compare_mask;
+            uint64_t              compare;
+            uint64_t              swap_mask;
+            uint64_t              swap;
+            uct_rc_iface_send_desc_t  *desc;
+            int                   op;
+            unsigned              length;
+        } atomic;
+    };
+    uint8_t                       buf[512];
+    uint8_t                       buf_length;
+} uct_dc_mlx5_op_t;
+
 
 struct uct_dc_mlx5_iface {
     uct_rc_mlx5_iface_common_t    super;
@@ -119,6 +176,13 @@ struct uct_dc_mlx5_iface {
         ucs_list_link_t           gc_list;
 
     } tx;
+    struct {
+        ucs_time_t                tick;
+        pthread_t                 thread_id;
+        pthread_mutex_t           lock;
+        int                       thread_stop;
+        ucs_circular_buf_t        ops;
+    } async;
 
 #if HAVE_DC_EXP
     struct ibv_exp_dct            *rx_dct;
@@ -248,7 +312,8 @@ static inline ucs_status_t uct_dc_mlx5_iface_flush_dci(uct_dc_mlx5_iface_t *ifac
                    iface->tx.dcis[dci].txqp.available,
                    iface->super.super.config.tx_qp_len);
     ucs_assertv(uct_rc_txqp_unsignaled(&iface->tx.dcis[dci].txqp) == 0,
-                "unsignalled send is not supported!!!");
+                "unsignalled send is not supported!!! %d",
+                uct_rc_txqp_unsignaled(&iface->tx.dcis[dci].txqp));
     return UCS_INPROGRESS;
 }
 

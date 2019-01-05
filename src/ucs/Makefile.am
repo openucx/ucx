@@ -70,6 +70,7 @@ noinst_HEADERS = \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
 	datastruct/khash.h \
+	datastruct/circular_buf.h \
 	debug/assert.h \
 	debug/debug.h \
 	debug/log.h \

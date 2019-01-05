@@ -102,7 +102,6 @@ static inline int ucs_timerq_is_empty(ucs_timer_queue_t *timerq) {
 #define ucs_timerq_for_each_expired(_timer, _timerq, _current_time, _code) \
     { \
         ucs_time_t __current_time = _current_time; \
-        pthread_spin_lock(&(_timerq)->lock); /* Grab lock */ \
         for (_timer = (_timerq)->timers; \
              _timer != (_timerq)->timers + (_timerq)->num_timers; \
              ++_timer) \
@@ -113,7 +112,6 @@ static inline int ucs_timerq_is_empty(ucs_timer_queue_t *timerq) {
                 _code; \
             } \
         } \
-        pthread_spin_unlock(&(_timerq)->lock); /* Release lock  */ \
     }
 
 #endif

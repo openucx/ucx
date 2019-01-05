@@ -31,7 +31,8 @@ uct_rc_mlx5_common_update_tx_res(uct_rc_iface_t *rc_iface, uct_ib_mlx5_txwq_t *t
                 hw_ci, txwq->prev_sw_pi, txqp->available, bb_num);
 
     uct_rc_txqp_available_add(txqp, bb_num);
-    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
+    ucs_assertv(uct_rc_txqp_available(txqp) <= txwq->bb_max,
+                 "%d <= %d", uct_rc_txqp_available(txqp), txwq->bb_max);
 
     rc_iface->tx.cq_available += bb_num;
     ucs_assertv(rc_iface->tx.cq_available <= rc_iface->config.tx_cq_len,
