@@ -640,7 +640,7 @@ ssize_t uct_dc_mlx5_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     UCT_DC_MLX5_CHECK_RES(iface, ep);
 
-    UCT_RC_IFACE_FILL_TM_IMM(imm, app_ctx, ib_imm, opcode, MLX5_OPCODE_SEND, _IMM);
+    UCT_RC_MLX5_FILL_TM_IMM(imm, app_ctx, ib_imm, opcode, MLX5_OPCODE_SEND, _IMM);
 
     UCT_RC_MLX5_IFACE_GET_TM_BCOPY_DESC(&iface->super.super,
                                         &iface->super.super.tx.mp, desc, tag,
@@ -672,7 +672,7 @@ ucs_status_t uct_dc_mlx5_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                             iface->super.super.super.config.seg_size);
     UCT_DC_MLX5_CHECK_RES(iface, ep);
 
-    UCT_RC_IFACE_FILL_TM_IMM(imm, app_ctx, ib_imm, opcode, MLX5_OPCODE_SEND, _IMM);
+    UCT_RC_MLX5_FILL_TM_IMM(imm, app_ctx, ib_imm, opcode, MLX5_OPCODE_SEND, _IMM);
 
     uct_dc_mlx5_iface_zcopy_post(iface, ep, opcode|UCT_RC_MLX5_OPCODE_FLAG_TM,
                                  iov, iovcnt, 0, "", 0, 0, 0, tag, app_ctx,
@@ -700,10 +700,10 @@ ucs_status_ptr_t uct_dc_mlx5_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
     uint32_t op_index;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
-    UCT_RC_IFACE_CHECK_RNDV_PARAMS(iovcnt, header_length, tm_hdr_len,
+    UCT_RC_MLX5_CHECK_RNDV_PARAMS(iovcnt, header_length, tm_hdr_len,
                                    UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE),
                                    iface->super.tm.max_rndv_data +
-                                   UCT_RC_IFACE_TMH_PRIV_LEN);
+                                   UCT_RC_MLX5_TMH_PRIV_LEN);
     UCT_DC_CHECK_RES_PTR(iface, ep);
 
     op_index = uct_rc_mlx5_tag_get_op_id(&iface->super, comp);

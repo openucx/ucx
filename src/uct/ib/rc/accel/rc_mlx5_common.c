@@ -188,7 +188,7 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
 err_cmd_wq_free:
     ucs_free(iface->tm.cmd_wq.ops);
 err_tag_cleanup:
-    uct_rc_iface_tag_cleanup(iface);
+    uct_rc_mlx5_tag_cleanup(iface);
 #endif
 
     return status;
@@ -200,7 +200,7 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
         uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_wq.super);
         ucs_free(iface->tm.list);
         ucs_free(iface->tm.cmd_wq.ops);
-        uct_rc_iface_tag_cleanup(iface);
+        uct_rc_mlx5_tag_cleanup(iface);
     }
 }
 
@@ -235,9 +235,9 @@ static void uct_rc_iface_release_desc(uct_recv_desc_t *self, void *desc)
 #if IBV_HW_TM
 /* tag is passed as parameter, because some (but not all!) transports may need
  * to translate TMH to LE */
-ucs_status_t uct_rc_iface_handle_rndv(uct_rc_mlx5_iface_common_t *iface,
-                                      struct ibv_tmh *tmh, uct_tag_t tag,
-                                      unsigned byte_len)
+ucs_status_t uct_rc_mlx5_handle_rndv(uct_rc_mlx5_iface_common_t *iface,
+                                     struct ibv_tmh *tmh, uct_tag_t tag,
+                                     unsigned byte_len)
 {
 #if IBV_EXP_HW_TM
     uct_rc_iface_tmh_priv_data_t *priv = (uct_rc_iface_tmh_priv_data_t*)tmh->reserved;
@@ -264,7 +264,7 @@ ucs_status_t uct_rc_iface_handle_rndv(uct_rc_mlx5_iface_common_t *iface,
     /* Private TMH data may contain the first bytes of the user header, so it
        needs to be copied before that. Thus, either RVH (rc) or RAVH (dc)
        will be overwritten. That's why we saved rvh->length before. */
-    ucs_assert(priv->length <= UCT_RC_IFACE_TMH_PRIV_LEN);
+    ucs_assert(priv->length <= UCT_RC_MLX5_TMH_PRIV_LEN);
 
     memcpy((char*)rndv_usr_hdr - priv->length, &priv->data, priv->length);
 
@@ -473,7 +473,7 @@ ucs_status_t uct_rc_mlx5_init_srq_tm(uct_rc_mlx5_iface_common_t *iface,
 }
 #endif
 
-void uct_rc_iface_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
+void uct_rc_mlx5_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
 #if IBV_EXP_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
@@ -515,7 +515,7 @@ static void uct_rc_iface_tag_query(uct_rc_mlx5_iface_common_t *iface,
 
     /* TMH can carry 2 additional bytes of private data */
     iface_attr->cap.tag.rndv.max_hdr    = iface->tm.max_rndv_data +
-                                          UCT_RC_IFACE_TMH_PRIV_LEN;
+                                          UCT_RC_MLX5_TMH_PRIV_LEN;
     iface_attr->cap.tag.rndv.max_iov    = 1;
 
     iface_attr->cap.tag.recv.max_zcopy       = port_attr->max_msg_sz;

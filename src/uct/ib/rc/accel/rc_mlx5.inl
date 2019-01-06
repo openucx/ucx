@@ -741,7 +741,7 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
     case IBV_TMH_RNDV:
         /* RVH can be wrapped */
-        uct_rc_iface_fill_rvh(&rvh, iov->buffer,
+        uct_rc_mlx5_fill_rvh(&rvh, iov->buffer,
                               ((uct_ib_mem_t*)iov->memh)->mr->rkey, iov->length);
         uct_ib_mlx5_inline_copy(tmh + 1, &rvh, sizeof(rvh), txwq);
 
@@ -756,7 +756,7 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         }
 #endif
 
-        tmh_data_len    = uct_rc_iface_fill_tmh_priv_data(tmh, buffer, length,
+        tmh_data_len    = uct_rc_mlx5_fill_tmh_priv_data(tmh, buffer, length,
                                                           iface->tm.max_rndv_data);
         length         -= tmh_data_len; /* Note: change length func parameter */
         wqe_size        = ctrl_av_size + sizeof(*inl) + tm_hdr_len + length;
@@ -814,7 +814,7 @@ uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
                                   uct_tag_t tag_mask, const uct_iov_t *iov,
                                   size_t iovcnt, uct_tag_context_t *ctx)
 {
-    uct_rc_iface_ctx_priv_t  *priv = uct_rc_iface_ctx_priv(ctx);
+    uct_rc_iface_ctx_priv_t  *priv = uct_rc_mlx5_ctx_priv(ctx);
     uct_ib_mlx5_txwq_t       *txwq = &iface->tm.cmd_wq.super;
     struct mlx5_wqe_data_seg *dptr; /* 16 bytes */
     uct_rc_mlx5_tag_entry_t  *tag_entry;
@@ -852,7 +852,7 @@ uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
                                          UCT_RC_MLX5_SRQ_FLAG_TM_CQE_REQ |
                                          UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT);
 
-    UCT_RC_IFACE_TM_STAT(iface, LIST_ADD);
+    UCT_RC_MLX5_TM_STAT(iface, LIST_ADD);
 
     return UCS_OK;
 }
@@ -861,7 +861,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_iface_common_tag_recv_cancel(uct_rc_mlx5_iface_common_t *iface,
                                          uct_tag_context_t *ctx, int force)
 {
-    uct_rc_iface_ctx_priv_t  *priv = uct_rc_iface_ctx_priv(ctx);
+    uct_rc_iface_ctx_priv_t  *priv = uct_rc_mlx5_ctx_priv(ctx);
     uint16_t                 index = priv->tag_handle;
     uct_rc_mlx5_tag_entry_t  *tag_entry;
     unsigned flags;
@@ -881,7 +881,7 @@ uct_rc_mlx5_iface_common_tag_recv_cancel(uct_rc_mlx5_iface_common_t *iface,
                                          iface->tm.unexpected_cnt, 0ul, 0ul,
                                          flags);
 
-    UCT_RC_IFACE_TM_STAT(iface, LIST_DEL);
+    UCT_RC_MLX5_TM_STAT(iface, LIST_DEL);
 
     return UCS_OK;
 }
@@ -900,7 +900,7 @@ uct_rc_mlx5_iface_handle_tm_list_op(uct_rc_mlx5_iface_common_t *iface, int opcod
 
     if (opcode == UCT_RC_MLX5_CQE_APP_OP_TM_REMOVE) {
         ctx  = op->tag->ctx;
-        priv = uct_rc_iface_ctx_priv(ctx);
+        priv = uct_rc_mlx5_ctx_priv(ctx);
         ctx->completed_cb(ctx, priv->tag, 0, priv->length, UCS_ERR_CANCELED);
     }
 }
@@ -921,7 +921,7 @@ uct_rc_mlx5_iface_tag_consumed(uct_rc_mlx5_iface_common_t *iface,
     if (opcode == UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED) {
         /* Need to save TMH info, which will be used when
          * UCT_RC_MLX5_CQE_APP_OP_TM_EXPECTED CQE is received */
-        priv           = uct_rc_iface_ctx_priv(ctx);
+        priv           = uct_rc_mlx5_ctx_priv(ctx);
         priv->tag      = tmh->tag;
         priv->app_ctx  = tmh->app_ctx;
     }
@@ -938,7 +938,7 @@ uct_rc_mlx5_iface_handle_expected(uct_rc_mlx5_iface_common_t *iface, struct mlx5
 
     tag_entry = &iface->tm.list[ntohs(cqe->app_info)];
     ctx       = tag_entry->ctx;
-    priv      = uct_rc_iface_ctx_priv(tag_entry->ctx);
+    priv      = uct_rc_mlx5_ctx_priv(tag_entry->ctx);
 
     uct_rc_mlx5_release_tag_entry(iface, tag_entry);
 
@@ -949,16 +949,16 @@ uct_rc_mlx5_iface_handle_expected(uct_rc_mlx5_iface_common_t *iface, struct mlx5
         VALGRIND_MAKE_MEM_DEFINED(priv->buffer, byte_len);
     }
 
-    imm_data = uct_rc_iface_tag_imm_data_unpack(cqe->imm_inval_pkey, app_ctx,
+    imm_data = uct_rc_mlx5_tag_imm_data_unpack(cqe->imm_inval_pkey, app_ctx,
                                                 (cqe->op_own >> 4) ==
                                                 MLX5_CQE_RESP_SEND_IMM);
 
     if (UCT_RC_MLX5_TM_IS_SW_RNDV(cqe, imm_data)) {
         ctx->rndv_cb(ctx, tag, priv->buffer, byte_len, UCS_OK);
-        UCT_RC_IFACE_TM_STAT(iface, RX_RNDV_REQ_EXP);
+        UCT_RC_MLX5_TM_STAT(iface, RX_RNDV_REQ_EXP);
     } else {
         ctx->completed_cb(ctx, tag, imm_data, byte_len, UCS_OK);
-        UCT_RC_IFACE_TM_STAT(iface, RX_EXP);
+        UCT_RC_MLX5_TM_STAT(iface, RX_EXP);
     }
 }
 
@@ -980,7 +980,7 @@ uct_rc_mlx5_iface_unexp_consumed(uct_rc_mlx5_iface_common_t *iface,
                                              iface->tm.unexpected_cnt, 0ul, 0ul,
                                              UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT);
 
-        UCT_RC_IFACE_TM_STAT(iface, LIST_SYNC);
+        UCT_RC_MLX5_TM_STAT(iface, LIST_SYNC);
     }
 }
 
@@ -1005,10 +1005,10 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
         uct_rc_mlx5_iface_unexp_consumed(iface, &iface->tm.eager_desc,
                                          status, ntohs(cqe->wqe_counter));
 
-        UCT_RC_IFACE_TM_STAT(iface, RX_EAGER_UNEXP);
+        UCT_RC_MLX5_TM_STAT(iface, RX_EAGER_UNEXP);
 
     } else if (tmh->opcode == IBV_TMH_EAGER) {
-        imm_data = uct_rc_iface_tag_imm_data_unpack(cqe->imm_inval_pkey,
+        imm_data = uct_rc_mlx5_tag_imm_data_unpack(cqe->imm_inval_pkey,
                                                     tmh->app_ctx, 1);
 
         if (ucs_unlikely(!imm_data)) {
@@ -1018,13 +1018,13 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
                                              byte_len - sizeof(*tmh),
                                              0ul, 0, NULL);
 
-            UCT_RC_IFACE_TM_STAT(iface, RX_RNDV_REQ_UNEXP);
+            UCT_RC_MLX5_TM_STAT(iface, RX_RNDV_REQ_UNEXP);
         } else {
             status = iface->tm.eager_unexp.cb(iface->tm.eager_unexp.arg,
                                               tmh + 1, byte_len - sizeof(*tmh),
                                               flags, tmh->tag, imm_data);
 
-            UCT_RC_IFACE_TM_STAT(iface, RX_EAGER_UNEXP);
+            UCT_RC_MLX5_TM_STAT(iface, RX_EAGER_UNEXP);
         }
 
         uct_rc_mlx5_iface_unexp_consumed(iface, &iface->tm.eager_desc,
@@ -1032,12 +1032,12 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
     } else {
         ucs_assertv_always(tmh->opcode == IBV_TMH_RNDV,
                            "Unsupported packet arrived %d", tmh->opcode);
-        status = uct_rc_iface_handle_rndv(iface, tmh, tmh->tag, byte_len);
+        status = uct_rc_mlx5_handle_rndv(iface, tmh, tmh->tag, byte_len);
 
         uct_rc_mlx5_iface_unexp_consumed(iface, &iface->tm.rndv_desc,
                                          status, ntohs(cqe->wqe_counter));
 
-        UCT_RC_IFACE_TM_STAT(iface, RX_RNDV_UNEXP);
+        UCT_RC_MLX5_TM_STAT(iface, RX_RNDV_UNEXP);
     }
 }
 
@@ -1122,7 +1122,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
                                               ntohs(cqe->wqe_counter), UCS_OK,
                                               0, NULL);
 
-            UCT_RC_IFACE_TM_STAT(iface, RX_RNDV_FIN);
+            UCT_RC_MLX5_TM_STAT(iface, RX_RNDV_FIN);
         }
         break;
 
@@ -1144,7 +1144,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     case UCT_RC_MLX5_CQE_APP_OP_TM_EXPECTED:
         tag  = &iface->tm.list[ntohs(cqe->app_info)];
         ctx  = tag->ctx;
-        priv = uct_rc_iface_ctx_priv(ctx);
+        priv = uct_rc_mlx5_ctx_priv(ctx);
         uct_rc_mlx5_iface_handle_expected(iface, cqe, byte_len,
                                           priv->tag, priv->app_ctx);
         break;

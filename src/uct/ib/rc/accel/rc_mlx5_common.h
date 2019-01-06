@@ -169,15 +169,6 @@ typedef struct uct_rc_mlx5_cmd_wq {
 } uct_rc_mlx5_cmd_wq_t;
 
 #if IBV_HW_TM
-static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_fill_tmh(struct ibv_tmh *tmh, uct_tag_t tag,
-                     uint32_t app_ctx, unsigned op)
-{
-    tmh->opcode  = op;
-    tmh->app_ctx = app_ctx;
-    tmh->tag     = tag;
-}
-
 #  define UCT_RC_MLX5_IFACE_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
                                               _pack_cb, _arg, _length) \
        { \
@@ -216,7 +207,7 @@ typedef struct uct_rc_iface_release_desc {
 } uct_rc_iface_release_desc_t;
 
 
-typedef struct uct_rc_iface_ctx_priv {
+typedef struct uct_rc_mlx5_ctx_priv {
     uint64_t                    tag;
     void                        *buffer;
     uint32_t                    app_ctx;
@@ -316,7 +307,7 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_rc_iface_ops_t*,
                   uct_ib_iface_init_attr_t*);
 
 
-#define UCT_RC_IFACE_TM_STAT(_iface, _op) \
+#define UCT_RC_MLX5_TM_STAT(_iface, _op) \
        UCS_STATS_UPDATE_COUNTER((_iface)->tm.stats, UCT_RC_IFACE_STAT_TAG_##_op, 1)
 
 #define UCT_RC_MLX5_TM_ENABLED(_iface) (_iface)->tm.enabled
@@ -324,16 +315,16 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_rc_iface_ops_t*,
 
 
 /* TMH can carry 2 bytes of data in its reserved filed */
-#define UCT_RC_IFACE_TMH_PRIV_LEN       ucs_field_sizeof(uct_rc_iface_tmh_priv_data_t, \
+#define UCT_RC_MLX5_TMH_PRIV_LEN       ucs_field_sizeof(uct_rc_iface_tmh_priv_data_t, \
                                                            data)
 
-#define UCT_RC_IFACE_CHECK_RES_PTR(_iface, _ep) \
+#define UCT_RC_MLX5_CHECK_RES_PTR(_iface, _ep) \
        UCT_RC_CHECK_CQE_RET(&_iface->super, _ep, &(_ep)->txqp, \
                             UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
        UCT_RC_CHECK_TXQP_RET(&_iface->super, _ep, &(_ep)->txqp, \
                              UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
 
-#define UCT_RC_IFACE_CHECK_RNDV_PARAMS(_iovcnt, _header_len, _tm_len, \
+#define UCT_RC_MLX5_CHECK_RNDV_PARAMS(_iovcnt, _header_len, _tm_len, \
                                          _max_inline, _max_rndv_hdr) \
        { \
            UCT_CHECK_PARAM_PTR(_iovcnt <= 1ul, "Wrong iovcnt %lu", iovcnt); \
@@ -344,7 +335,7 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_rc_iface_ops_t*,
                                _header_len + _tm_len); \
        }
 
-#define UCT_RC_IFACE_FILL_TM_IMM(_imm_data, _app_ctx, _ib_imm, _res_op, \
+#define UCT_RC_MLX5_FILL_TM_IMM(_imm_data, _app_ctx, _ib_imm, _res_op, \
                                    _op, _imm_suffix) \
        if (_imm_data == 0) { \
            _res_op  = _op; \
@@ -352,34 +343,34 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_rc_iface_ops_t*,
            _ib_imm  = 0; \
        } else { \
            _res_op = UCS_PP_TOKENPASTE(_op, _imm_suffix); \
-           uct_rc_iface_tag_imm_data_pack(&(_ib_imm), &(_app_ctx), _imm_data); \
+           uct_rc_mlx5_tag_imm_data_pack(&(_ib_imm), &(_app_ctx), _imm_data); \
        }
 
-#define UCT_RC_IFACE_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, _hdr) \
+#define UCT_RC_MLX5_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, _hdr) \
       { \
           UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
           _hdr = _desc + 1; \
-          uct_rc_iface_fill_tmh(_hdr, _tag, _app_ctx, IBV_EXP_TMH_EAGER); \
+          uct_rc_mlx5_fill_tmh(_hdr, _tag, _app_ctx, IBV_EXP_TMH_EAGER); \
           _hdr += sizeof(struct ibv_tmh); \
       }
 
-#define UCT_RC_IFACE_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
+#define UCT_RC_MLX5_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
                                          _pack_cb, _arg, _length) \
        { \
            void *hdr; \
-           UCT_RC_IFACE_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, hdr) \
+           UCT_RC_MLX5_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, hdr) \
            (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
            _length = _pack_cb(hdr, _arg); \
        }
 
 #if IBV_HW_TM
-ucs_status_t uct_rc_iface_handle_rndv(uct_rc_mlx5_iface_common_t *iface,
+ucs_status_t uct_rc_mlx5_handle_rndv(uct_rc_mlx5_iface_common_t *iface,
                                       struct ibv_tmh *tmh, uct_tag_t tag,
                                       unsigned byte_len);
 
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_iface_fill_tmh(struct ibv_tmh *tmh, uct_tag_t tag,
+uct_rc_mlx5_fill_tmh(struct ibv_tmh *tmh, uct_tag_t tag,
                       uint32_t app_ctx, unsigned op)
 {
     tmh->opcode  = op;
@@ -388,7 +379,7 @@ uct_rc_iface_fill_tmh(struct ibv_tmh *tmh, uct_tag_t tag,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_iface_fill_rvh(struct ibv_rvh *rvh, const void *vaddr,
+uct_rc_mlx5_fill_rvh(struct ibv_rvh *rvh, const void *vaddr,
                       uint32_t rkey, uint32_t len)
 {
     rvh->va   = htobe64((uint64_t)vaddr);
@@ -405,7 +396,7 @@ uct_rc_mlx5_tag_get_op_id(uct_rc_mlx5_iface_common_t *iface, uct_completion_t *c
 
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_iface_fill_tmh_priv_data(struct ibv_tmh *tmh, const void *hdr,
+uct_rc_mlx5_fill_tmh_priv_data(struct ibv_tmh *tmh, const void *hdr,
                                 unsigned hdr_len, unsigned max_rndv_priv_data)
 {
     uct_rc_iface_tmh_priv_data_t *priv = (uct_rc_iface_tmh_priv_data_t*)tmh->reserved;
@@ -414,7 +405,7 @@ uct_rc_iface_fill_tmh_priv_data(struct ibv_tmh *tmh, const void *hdr,
      * rest to the TMH reserved field. */
     if (hdr_len > max_rndv_priv_data) {
         priv->length = hdr_len - max_rndv_priv_data;
-        ucs_assert(priv->length <= UCT_RC_IFACE_TMH_PRIV_LEN);
+        ucs_assert(priv->length <= UCT_RC_MLX5_TMH_PRIV_LEN);
         memcpy(&priv->data, (char*)hdr, priv->length);
     } else {
         priv->length = 0;
@@ -425,7 +416,7 @@ uct_rc_iface_fill_tmh_priv_data(struct ibv_tmh *tmh, const void *hdr,
 #endif
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_iface_tag_imm_data_pack(uint32_t *ib_imm, uint32_t *app_ctx,
+uct_rc_mlx5_tag_imm_data_pack(uint32_t *ib_imm, uint32_t *app_ctx,
                                uint64_t imm_val)
 {
     *ib_imm  = (uint32_t)(imm_val & 0xFFFFFFFF);
@@ -433,13 +424,13 @@ uct_rc_iface_tag_imm_data_pack(uint32_t *ib_imm, uint32_t *app_ctx,
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
-uct_rc_iface_tag_imm_data_unpack(uint32_t ib_imm, uint32_t app_ctx, int is_imm)
+uct_rc_mlx5_tag_imm_data_unpack(uint32_t ib_imm, uint32_t app_ctx, int is_imm)
 {
     return is_imm ? (((uint64_t)app_ctx << 32) | ib_imm) : 0ul;
 }
 
 static UCS_F_ALWAYS_INLINE uct_rc_iface_ctx_priv_t*
-uct_rc_iface_ctx_priv(uct_tag_context_t *ctx)
+uct_rc_mlx5_ctx_priv(uct_tag_context_t *ctx)
 {
     return (uct_rc_iface_ctx_priv_t*)ctx->priv;
 }
@@ -494,7 +485,7 @@ ucs_status_t uct_rc_mlx5_init_srq_tm(uct_rc_mlx5_iface_common_t *iface,
                                      unsigned rndv_hdr_len,
                                      unsigned max_cancel_sync_ops);
 
-void uct_rc_iface_tag_cleanup(uct_rc_mlx5_iface_common_t *iface);
+void uct_rc_mlx5_tag_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
 ucs_status_t
 uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
