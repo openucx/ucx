@@ -1366,11 +1366,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_THREAD_MODE) {
 #if !ENABLE_MT
-        if (params->thread_mode == UCS_THREAD_MODE_MULTI) {
-            return UCS_ERR_INVALID_PARAM;
-        }
-#endif
+        thread_mode = UCS_THREAD_MODE_SINGLE;
+#else
         thread_mode = params->thread_mode;
+#endif
     } else {
         thread_mode = UCS_THREAD_MODE_SINGLE;
     }
