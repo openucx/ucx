@@ -22,9 +22,9 @@
 
 /* DC specific parameters, expecting DC_ prefix */
 ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
-    {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=y;", NULL,
+    {"", "IB_TX_QUEUE_LEN=128;RC_FC_ENABLE=y;", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, super),
-     UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
+     UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
     {"", "", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, ud_common),
@@ -64,6 +64,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, mlx5_ud),
      UCS_CONFIG_TYPE_TABLE(uct_ud_mlx5_iface_common_config_table)},
+
     {"", "", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, super.mlx5_common),
      UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
@@ -472,17 +473,19 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
 }
 
 static ucs_status_t
-uct_dc_mlx5_init_srq(uct_rc_iface_t *rc_iface,
-                     const uct_rc_iface_config_t *config)
+uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
+                    const uct_rc_iface_config_t *rc_config)
 {
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
-#if IBV_EXP_HW_TM_DC
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
 
-    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+#if IBV_EXP_HW_TM_DC
+    uct_dc_mlx5_iface_config_t *config = ucs_derived_of(rc_config,
+                                                        uct_dc_mlx5_iface_config_t);
+    if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
          struct ibv_exp_create_srq_attr srq_attr      = {};
          struct ibv_exp_srq_dc_offload_params dc_op   = {};
 
-         iface->super.progress = uct_dc_mlx5_iface_progress_tm;
+         iface->super.super.progress = uct_dc_mlx5_iface_progress_tm;
 
          dc_op.timeout    = rc_iface->config.timeout;
          dc_op.path_mtu   = rc_iface->config.path_mtu;
@@ -493,15 +496,15 @@ uct_dc_mlx5_init_srq(uct_rc_iface_t *rc_iface,
          srq_attr.comp_mask         = IBV_EXP_CREATE_SRQ_DC_OFFLOAD_PARAMS;
          srq_attr.dc_offload_params = &dc_op;
 
-         return uct_rc_mlx5_init_srq_tm(iface, config,
-                                        &srq_attr,
-                                        sizeof(struct ibv_rvh) +
-                                        sizeof(struct ibv_ravh), 0);
+         return uct_rc_mlx5_init_rx_tm(&iface->super, &config->super,
+                                       &srq_attr,
+                                       sizeof(struct ibv_rvh) +
+                                       sizeof(struct ibv_ravh), 0);
      }
 #endif
 
-    iface->super.progress = uct_dc_mlx5_iface_progress;
-    return uct_rc_iface_init_srq(rc_iface, config);
+    iface->super.super.progress = uct_dc_mlx5_iface_progress;
+    return uct_rc_iface_init_rx(rc_iface, rc_config);
 }
 
 #if HAVE_DC_EXP
@@ -1005,7 +1008,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .ep_tag_eager_zcopy       = uct_dc_mlx5_ep_tag_eager_zcopy,
     .ep_tag_rndv_zcopy        = uct_dc_mlx5_ep_tag_rndv_zcopy,
     .ep_tag_rndv_request      = uct_dc_mlx5_ep_tag_rndv_request,
-    .ep_tag_rndv_cancel       = uct_rc_ep_tag_rndv_cancel,
+    .ep_tag_rndv_cancel       = uct_rc_mlx5_ep_tag_rndv_cancel,
     .iface_tag_recv_zcopy     = uct_dc_mlx5_iface_tag_recv_zcopy,
     .iface_tag_recv_cancel    = uct_dc_mlx5_iface_tag_recv_cancel,
 #endif
@@ -1035,7 +1038,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .create_qp                = uct_ib_iface_create_qp
 #endif
     },
-    .init_srq                 = uct_dc_mlx5_init_srq,
+    .init_rx                  = uct_dc_mlx5_init_rx,
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_dc_mlx5_iface_fc_handler,
 };
@@ -1045,7 +1048,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
                            const uct_iface_config_t *tl_config)
 {
     uct_dc_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
-                                                   uct_dc_mlx5_iface_config_t);
+                                                        uct_dc_mlx5_iface_config_t);
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
     ucs_trace_func("");

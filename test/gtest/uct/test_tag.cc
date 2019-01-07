@@ -810,7 +810,7 @@ UCS_TEST_P(test_tag_stats, tag_expected_eager)
         check_tx_counters(UCT_EP_STAT_TAG, i + 1,
                           sfuncs[i].second.second,
                           sfuncs[i].second.first);
-        check_rx_counter(UCT_RC_IFACE_STAT_TAG_RX_EXP, i + 1, receiver());
+        check_rx_counter(UCT_RC_MLX5_STAT_TAG_RX_EXP, i + 1, receiver());
     }
 }
 
@@ -833,7 +833,7 @@ UCS_TEST_P(test_tag_stats, tag_unexpected_eager)
         check_tx_counters(UCT_EP_STAT_TAG, i + 1,
                           sfuncs[i].second.second,
                           sfuncs[i].second.first);
-        check_rx_counter(UCT_RC_IFACE_STAT_TAG_RX_EAGER_UNEXP, i + 1, receiver());
+        check_rx_counter(UCT_RC_MLX5_STAT_TAG_RX_EAGER_UNEXP, i + 1, receiver());
     }
 }
 
@@ -846,20 +846,20 @@ UCS_TEST_P(test_tag_stats, tag_list_ops)
     init_recv_ctx(rctx, &recvbuf, 1);
 
     ASSERT_UCS_OK(tag_post(receiver(), rctx));
-    check_rx_counter(UCT_RC_IFACE_STAT_TAG_LIST_ADD, 1ul, receiver());
+    check_rx_counter(UCT_RC_MLX5_STAT_TAG_LIST_ADD, 1ul, receiver());
 
     ASSERT_UCS_OK(tag_cancel(receiver(), rctx, 1));
-    check_rx_counter(UCT_RC_IFACE_STAT_TAG_LIST_DEL, 1ul, receiver());
+    check_rx_counter(UCT_RC_MLX5_STAT_TAG_LIST_DEL, 1ul, receiver());
 
     // Every ADD and DEL is paired with SYNC, but stats counter is increased
     // when separate SYNC op is issued only. So, we expect it to be 0 after
     // ADD and DEL operations.
-    check_rx_counter(UCT_RC_IFACE_STAT_TAG_LIST_SYNC, 0ul, receiver());
+    check_rx_counter(UCT_RC_MLX5_STAT_TAG_LIST_SYNC, 0ul, receiver());
 
     // Provoke real SYNC op and send a message unexpectedly
     provoke_sync(receiver());
     test_tag_unexpected(static_cast<send_func>(&test_tag::tag_eager_bcopy));
-    check_rx_counter(UCT_RC_IFACE_STAT_TAG_LIST_SYNC, 1ul, receiver());
+    check_rx_counter(UCT_RC_MLX5_STAT_TAG_LIST_SYNC, 1ul, receiver());
 }
 
 
@@ -871,21 +871,21 @@ UCS_TEST_P(test_tag_stats, tag_rndv)
 
     // Check UNEXP_RNDV on the receiver
     test_tag_unexpected(static_cast<send_func>(&test_tag::tag_rndv_zcopy), len);
-    check_rx_counter(UCT_RC_IFACE_STAT_TAG_RX_RNDV_UNEXP, 1ul, receiver());
+    check_rx_counter(UCT_RC_MLX5_STAT_TAG_RX_RNDV_UNEXP, 1ul, receiver());
 
     // Check that sender receives RNDV_FIN in case of expected rndv message
     test_tag_expected(static_cast<send_func>(&test_tag::tag_rndv_zcopy), len);
-    check_rx_counter(UCT_RC_IFACE_STAT_TAG_RX_RNDV_FIN, 1ul, sender());
+    check_rx_counter(UCT_RC_MLX5_STAT_TAG_RX_RNDV_FIN, 1ul, sender());
 
 
     // Check UNEXP_RNDV_REQ on the receiver
     test_tag_unexpected(static_cast<send_func>(&test_tag::tag_rndv_request));
-    check_rx_counter(UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_UNEXP, 1ul, receiver());
+    check_rx_counter(UCT_RC_MLX5_STAT_TAG_RX_RNDV_REQ_UNEXP, 1ul, receiver());
 
     // Check NEXP_RNDV_REQ on the receiver
     test_tag_expected(static_cast<send_func>(&test_tag::tag_rndv_request),
                      sender().iface_attr().cap.tag.rndv.max_hdr, true);
-    check_rx_counter(UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_EXP, 1ul, receiver());
+    check_rx_counter(UCT_RC_MLX5_STAT_TAG_RX_RNDV_REQ_EXP, 1ul, receiver());
 }
 
 UCT_TAG_INSTANTIATE_TEST_CASE(test_tag_stats)

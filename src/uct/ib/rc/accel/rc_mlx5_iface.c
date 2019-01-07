@@ -26,30 +26,17 @@ typedef struct uct_rc_mlx5_iface_config {
 
 
 ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
-  {"RC_", "", NULL,
-   ucs_offsetof(uct_rc_mlx5_iface_config_t, super.super),
-   UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
+  {"", "", NULL,
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
   {"", "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_config_t, fc),
    UCS_CONFIG_TYPE_TABLE(uct_rc_fc_config_table)},
 
-  {"", "", NULL,
-   ucs_offsetof(uct_rc_mlx5_iface_config_t, super.mlx5_common),
-   UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
-
-  {"", "", NULL,
-   ucs_offsetof(uct_rc_mlx5_iface_config_t, super),
-   UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
-
-  {"TX_MAX_BB", "-1",
-   "Limits the number of outstanding WQE building blocks. The actual limit is\n"
-   "a minimum between this value and the number of building blocks in the TX QP.\n"
-   "-1 means no limit.",
-   ucs_offsetof(uct_rc_mlx5_iface_config_t, super.tx_max_bb), UCS_CONFIG_TYPE_UINT},
-
   {NULL}
 };
+
 
 static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops;
 
@@ -293,10 +280,8 @@ static void uct_rc_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_h md,
     UCS_STATIC_ASSERT(sizeof(tmh.opcode) == sizeof(((uct_rc_mlx5_hdr_t*)0)->tmh_opcode));
     UCS_STATIC_ASSERT(ucs_offsetof(struct ibv_tmh, opcode) ==
                       ucs_offsetof(uct_rc_mlx5_hdr_t, tmh_opcode));
-    UCS_STATIC_ASSERT(ucs_offsetof(uct_rc_mlx5_hdr_t, am_id) ==
-                      ucs_offsetof(uct_rc_mlx5_hdr_t, rc_hdr.am_id));
 
-    UCS_STATIC_ASSERT(sizeof(uct_rc_iface_ctx_priv_t) <= UCT_TAG_PRIV_LEN);
+    UCS_STATIC_ASSERT(sizeof(uct_rc_mlx5_ctx_priv_t) <= UCT_TAG_PRIV_LEN);
 
     iface->tm.eager_unexp.cb  = params->eager_cb;
     iface->tm.eager_unexp.arg = params->eager_arg;
@@ -328,21 +313,24 @@ out_tm_disabled:
 }
 
 static ucs_status_t
-uct_rc_mlx5_init_srq(uct_rc_iface_t *rc_iface,
-                     const uct_rc_iface_config_t *config)
+uct_rc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
+                    const uct_rc_iface_config_t *rc_config)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
 #if IBV_EXP_HW_TM
+    uct_rc_mlx5_iface_common_config_t *config = ucs_derived_of(rc_config,
+                                                               uct_rc_mlx5_iface_common_config_t);
+
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         struct ibv_exp_create_srq_attr srq_init_attr = {};
 
         iface->super.progress = uct_rc_mlx5_iface_progress_tm;
-        return uct_rc_mlx5_init_srq_tm(iface, config, &srq_init_attr,
-                                       sizeof(struct ibv_rvh), 0);
+        return uct_rc_mlx5_init_rx_tm(iface, config, &srq_init_attr,
+                                      sizeof(struct ibv_rvh), 0);
     }
 #endif
     iface->super.progress = uct_rc_mlx5_iface_progress;
-    return uct_rc_iface_init_srq(rc_iface, config);
+    return uct_rc_iface_init_rx(rc_iface, rc_config);
 }
 
 static void uct_rc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
@@ -536,7 +524,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_tag_eager_zcopy       = uct_rc_mlx5_ep_tag_eager_zcopy,
     .ep_tag_rndv_zcopy        = uct_rc_mlx5_ep_tag_rndv_zcopy,
     .ep_tag_rndv_request      = uct_rc_mlx5_ep_tag_rndv_request,
-    .ep_tag_rndv_cancel       = uct_rc_ep_tag_rndv_cancel,
+    .ep_tag_rndv_cancel       = uct_rc_mlx5_ep_tag_rndv_cancel,
     .iface_tag_recv_zcopy     = uct_rc_mlx5_iface_tag_recv_zcopy,
     .iface_tag_recv_cancel    = uct_rc_mlx5_iface_tag_recv_cancel,
 #endif
@@ -560,7 +548,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .set_ep_failed            = uct_rc_mlx5_ep_set_failed,
     .create_qp                = uct_rc_mlx5_iface_create_qp
     },
-    .init_srq                 = uct_rc_mlx5_init_srq,
+    .init_rx                  = uct_rc_mlx5_init_rx,
     .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_rc_iface_fc_handler,
 };

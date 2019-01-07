@@ -165,8 +165,8 @@ struct uct_rc_iface_config {
 
 typedef struct uct_rc_iface_ops {
     uct_ib_iface_ops_t   super;
-    ucs_status_t         (*init_srq)(uct_rc_iface_t *iface,
-                                     const uct_rc_iface_config_t *config);
+    ucs_status_t         (*init_rx)(uct_rc_iface_t *iface,
+                                    const uct_rc_iface_config_t *config);
     ucs_status_t         (*fc_ctrl)(uct_ep_t *ep, unsigned op,
                                     uct_rc_fc_request_t *req);
     ucs_status_t         (*fc_handler)(uct_rc_iface_t *iface, unsigned qp_num,
@@ -345,8 +345,8 @@ ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events);
 ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
                                            unsigned events, int force_rx_all);
 
-ucs_status_t uct_rc_iface_init_srq(uct_rc_iface_t *iface,
-                                   const uct_rc_iface_config_t *config);
+ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
+                                  const uct_rc_iface_config_t *config);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_fc_ctrl(uct_ep_t *ep, unsigned op, uct_rc_fc_request_t *req)

@@ -442,8 +442,8 @@ unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface)
     return iface->progress(iface);
 }
 
-ucs_status_t uct_rc_iface_init_srq(uct_rc_iface_t *iface,
-                                   const uct_rc_iface_config_t *config)
+ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
+                                  const uct_rc_iface_config_t *config)
 {
     struct ibv_srq_init_attr srq_init_attr;
     struct ibv_pd *pd = uct_ib_iface_md(&iface->super)->pd;
@@ -454,7 +454,7 @@ ucs_status_t uct_rc_iface_init_srq(uct_rc_iface_t *iface,
     srq_init_attr.srq_context    = iface;
     iface->rx.srq.srq            = ibv_create_srq(pd, &srq_init_attr);
     if (iface->rx.srq.srq == NULL) {
-        ucs_error("failed to create SRQ: %m");
+        ucs_error("ibv_create_srq() failed: %m");
         return UCS_ERR_IO_ERROR;
     }
     iface->rx.srq.quota          = srq_init_attr.attr.max_wr;
@@ -539,8 +539,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_tx_mp;
     }
 
-    /* Initialize SRQ */
-    status = ops->init_srq(self, config);
+    /* Initialize RX resources (SRQ) */
+    status = ops->init_rx(self, config);
     if (status != UCS_OK) {
         goto err_free_tx_ops;
     }
