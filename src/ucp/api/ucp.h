@@ -657,9 +657,9 @@ typedef struct ucp_params {
      * thread safety; if the context is used by worker 1 and worker 2,
      * and worker 1 is used by thread 1 and worker 2 is used by thread 2,
      * then this context needs thread safety.
-     * Note that actual thread mode may be different from mode
-     * passed to @ref ucp_init or @ref ucp_init_version. To get actual
-     * thread mode use @ref ucp_context_query.
+     * Note that actual thread mode may be different from mode passed
+     * to @ref ucp_init. To get actual thread mode use
+     * @ref ucp_context_query.
      */
     int                                mt_workers_shared;
 
