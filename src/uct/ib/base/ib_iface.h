@@ -58,6 +58,21 @@ enum {
 #endif
 };
 
+#if HAVE_CUDA
+enum {
+    /*
+    PHB = Connection traversing PCIe as well as a PCIe Host Bridge
+    PXB = Connection traversing multiple PCIe switches
+    PIX = Connection traversing a single PCIe switch
+    */
+
+    UCT_IB_PATH_PIX = 0,
+    UCT_IB_PATH_PXB = 1,
+    UCT_IB_PATH_PHB = 2,
+    UCT_IB_PATH_SOC = 3
+};
+#endif
+
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
 
