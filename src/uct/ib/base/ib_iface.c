@@ -1151,7 +1151,7 @@ static ucs_status_t uct_ib_iface_get_numa_latency(uct_ib_iface_t *iface,
 }
 
 #if HAVE_CUDA
-static int uct_ib_iface_get_cuda_path(int cuda_dev, char** path)
+static int uct_ib_iface_cuda_sysfs_path(int cuda_dev, char** path)
 {
     char* cuda_rpath = NULL;
     char bus_path[]  = "/sys/class/pci_bus/0000:00/device";
@@ -1174,17 +1174,15 @@ static int uct_ib_iface_get_cuda_path(int cuda_dev, char** path)
         bus_id[i] = tolower(bus_id[i]);
     }
 
-    memcpy(bus_path+sizeof("/sys/class/pci_bus/")-1, bus_id,
-           sizeof("0000:00")-1);
+    memcpy(bus_path + sizeof("/sys/class/pci_bus/") - 1, bus_id,
+           sizeof("0000:00") - 1);
     cuda_rpath = realpath(bus_path, NULL);
-    strncpy(pathname, cuda_rpath, MAXPATHSIZE - 1);
-    strncpy(pathname+strlen(pathname), "/", MAXPATHSIZE - 1 -strlen(pathname));
-    strncpy(pathname+strlen(pathname), bus_id, MAXPATHSIZE - 1 -strlen(pathname));
-    pathname[strlen(pathname)] = '\0';
+    snprintf(pathname, MAXPATHSIZE, "%s/%s", cuda_rpath, bus_id);
 
     *path = realpath(pathname, NULL);
     if (*path == NULL) {
         ucs_error("Could not find real path of %s", pathname);
+        free(cuda_rpath);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -1193,7 +1191,7 @@ static int uct_ib_iface_get_cuda_path(int cuda_dev, char** path)
     return UCS_OK;
 }
 
-static int uct_ib_iface_get_mlx_path(const char* ib_name, char** path)
+static int uct_ib_iface_ibdev_sysfs_path(const char* ib_name, char** path)
 {
     char device_path[MAXPATHSIZE];
 
@@ -1208,23 +1206,43 @@ static int uct_ib_iface_get_mlx_path(const char* ib_name, char** path)
     return UCS_OK;
 }
 
-static int uct_ib_iface_pci_distance(char* cuda_path, char* mlx_path)
+static int uct_ib_iface_pci_distance(char* cuda_path, char* ibdev_path)
 {
     int score = 0;
     int depth = 0;
     int same = 1;
     int i;
 
+    /* Compare cuda and ibdev paths to determine distance between them
+       Example for UCT_IB_PATH_PIX:
+
+     ibdev_path:
+     /sys/devices/pci0000:00/0000:00:02.0/0000:03:00.0/0000:04:04.0/0000:05:00.0
+     cuda path:
+     /sys/devices/pci0000:00/0000:00:02.0/0000:03:00.0/0000:04:08.0
+     */
     for (i = 0; i < strlen(cuda_path); i++) {
-        if (cuda_path[i] != mlx_path[i]) same = 0;
+        if (cuda_path[i] != ibdev_path[i]) same = 0;
         if (cuda_path[i] == '/') {
             depth++;
-            if (same == 1) score++;
+            if (same == 1) {
+                score++;
+            }
         }
     }
-    if (score == 3) return UCT_IB_PATH_SOC;
-    if (score == 4) return UCT_IB_PATH_PHB;
-    if (score == depth-1) return UCT_IB_PATH_PIX;
+
+    if (3 == score) {
+        return UCT_IB_PATH_SOC;
+    }
+
+    if (4 == score) {
+        return UCT_IB_PATH_PHB;
+    }
+
+    if ((depth - 1) == score) {
+        return UCT_IB_PATH_PIX;
+    }
+
     return UCT_IB_PATH_PXB;
 }
 
@@ -1232,11 +1250,11 @@ static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
                                                   double *latency)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    int score;
+    int pci_distance;
     CUdevice cuda_device;
     CUresult cu_err;
     char     *cuda_dev_path;
-    char     *mlx_dev_path;
+    char     *ibdev_path;
 
     /* Find cuda dev that the current ctx is using and find it's path*/
     cu_err = cuCtxGetDevice(&cuda_device);
@@ -1244,23 +1262,23 @@ static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
         *latency = 0.0;
         return UCS_OK;
     }
-    uct_ib_iface_get_cuda_path(cuda_device, &cuda_dev_path);
+    uct_ib_iface_cuda_sysfs_path(cuda_device, &cuda_dev_path);
 
-    /* Find mlx path for given iface */
-    uct_ib_iface_get_mlx_path(uct_ib_device_name(dev), &mlx_dev_path);
+    /* Find ibdev path for given iface */
+    uct_ib_iface_ibdev_sysfs_path(uct_ib_device_name(dev), &ibdev_path);
 
-    /* Obtain score from the cuda device and mlx device pair */
-    score = uct_ib_iface_pci_distance(cuda_dev_path, mlx_dev_path);
-    ucs_debug("device = %d ib = %s score = %d\n",
-              (int) cuda_device, uct_ib_device_name(dev), score);
+    /* Obtain pci_distance from the cuda device and ibdev device pair */
+    pci_distance = uct_ib_iface_pci_distance(cuda_dev_path, ibdev_path);
+    ucs_debug("device = %d ib = %s pci_distance = %d\n",
+              (int) cuda_device, uct_ib_device_name(dev), pci_distance);
 
-    /* Assign latency as a factor of score */
+    /* Assign latency as a factor of pci_distance */
 
-    *latency = 200e-9 * score;
+    *latency = 200e-9 * pci_distance;
 
     /* release realpath resources */
     free(cuda_dev_path);
-    free(mlx_dev_path);
+    free(ibdev_path);
 
     return UCS_OK;
 }

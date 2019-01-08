@@ -60,6 +60,12 @@ enum {
 
 #if HAVE_CUDA
 enum {
+    /*
+    PHB = Connection traversing PCIe as well as a PCIe Host Bridge
+    PXB = Connection traversing multiple PCIe switches
+    PIX = Connection traversing a single PCIe switch
+    */
+
     UCT_IB_PATH_PIX = 0,
     UCT_IB_PATH_PXB = 1,
     UCT_IB_PATH_PHB = 2,
