@@ -1225,7 +1225,7 @@ static int uct_ib_iface_pci_distance(char* cuda_path, char* ibdev_path)
         if (cuda_path[i] != ibdev_path[i]) same = 0;
         if (cuda_path[i] == '/') {
             depth++;
-            if (same == 1) {
+            if (same) {
                 score++;
             }
         }
