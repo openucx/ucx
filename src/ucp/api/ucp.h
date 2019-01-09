@@ -200,7 +200,7 @@ enum ucp_listener_params_field {
 typedef enum {
 
     /**< Pack addresses of network devices only. Using such shortened addresses
-     *   for the remote node peers would reduce the amount of wireup data being
+     *   for the remote node peers will reduce the amount of wireup data being
      *   exchanged during connection establishment phase. */
     UCP_WORKER_ADDRESS_FLAG_NET_ONLY = UCS_BIT(0)
 } ucp_worker_address_flags_t;
@@ -746,7 +746,7 @@ typedef struct ucp_worker_attr {
 
     /**
      * Flags indicating requested details of the worker address.
-     * If UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS bit is set in the field_mask,
+     * If @ref UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS bit is set in the field_mask,
      * this value should be set as well. Possible flags are specified
      * in @ref ucp_worker_address_flags_t. @note This is an input attribute.
      */
