@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -54,7 +54,7 @@ static void ucs_module_loader_add_dl_dir()
     dlpath_dup = ucs_strdup(dl_info.dli_fname,
                             UCS_MODULE_PATH_MEMTRACK_NAME);
     if (dlpath_dup == NULL) {
-        goto out;
+        return;
     }
 
     p = basename(dlpath_dup);
@@ -69,7 +69,7 @@ static void ucs_module_loader_add_dl_dir()
     dlpath_dup = ucs_strdup(dl_info.dli_fname,
                             UCS_MODULE_PATH_MEMTRACK_NAME);
     if (dlpath_dup == NULL) {
-        goto out;
+        return;
     }
 
     /* construct module directory path */
