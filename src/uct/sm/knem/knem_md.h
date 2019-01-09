@@ -11,7 +11,7 @@
 #include <ucs/config/types.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/status.h>
-#include <ucs/sys/rcache.h>
+#include <ucs/memory/rcache.h>
 #include <uct/base/uct_md.h>
 
 extern uct_md_component_t uct_knem_md_component;

@@ -29,6 +29,8 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/pgtable.h \
 	datastruct/queue_types.h \
 	datastruct/strided_alloc.h \
+	memory/rcache.h \
+	memory/memtype_cache.h \
 	profile/profile_defs.h \
 	profile/profile_off.h \
 	profile/profile_on.h \
@@ -37,8 +39,6 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/compiler_def.h\
 	sys/math.h \
 	sys/preprocessor.h \
-	sys/rcache.h \
-	sys/memtype_cache.h \
 	sys/string.h \
 	time/time_def.h \
 	type/class.h \
@@ -74,12 +74,12 @@ noinst_HEADERS = \
 	debug/debug.h \
 	debug/log.h \
 	debug/memtrack.h \
+	memory/numa.h \
+	memory/rcache_int.h \
 	profile/profile.h \
 	stats/stats.h \
 	sys/checker.h \
 	sys/compiler.h \
-	sys/numa.h \
-	sys/rcache_int.h \
 	sys/sys.h \
 	time/time.h \
 	time/timerq.h \
@@ -115,13 +115,13 @@ libucs_la_SOURCES = \
 	debug/debug.c \
 	debug/log.c \
 	debug/memtrack.c \
+	memory/numa.c \
+	memory/rcache.c \
+	memory/memtype_cache.c \
 	profile/profile.c \
 	stats/stats.c \
 	sys/init.c \
 	sys/math.c \
-	sys/numa.c \
-	sys/rcache.c \
-	sys/memtype_cache.c \
 	sys/string.c \
 	sys/sys.c \
 	time/time.c \

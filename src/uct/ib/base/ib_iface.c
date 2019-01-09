@@ -13,7 +13,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
-#include <ucs/sys/numa.h>
+#include <ucs/memory/numa.h>
 #include <string.h>
 #include <stdlib.h>
 #include <poll.h>
