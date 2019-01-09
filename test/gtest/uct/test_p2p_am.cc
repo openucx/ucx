@@ -34,7 +34,7 @@ public:
         m_keep_data(false)
     {
         m_pending_req.sendbuf = NULL;
-        m_pending_req.test = this;
+        m_pending_req.test = NULL;
         m_pending_req.posted = false;
         memset(&m_pending_req.uct, 0, sizeof(m_pending_req.uct));
 
