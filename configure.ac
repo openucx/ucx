@@ -164,6 +164,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      AM_CONDITIONAL([HAVE_JAVA], [false])
      AM_CONDITIONAL([HAVE_CXX11], [false])
      AM_CONDITIONAL([HAVE_TCMALLOC], [false])
+     AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [false])
      AM_CONDITIONAL([HAVE_EXAMPLES], [false])
     ],
     [
@@ -253,15 +254,25 @@ AS_IF([test "x$with_docs_only" == xyes],
 
 
      #
+     # Enable experimental header
+     #
+     AC_ARG_ENABLE([experimental-api],
+                   AS_HELP_STRING([--enable-experimental-api],
+                                  [Enable installing experimental APIs, default: NO]))
+	 AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [test "x$enable_experimental_api" == "xyes"])
+
+
+     #
      # Path for valgrind-enabled libraries
      #
      AC_SUBST([VALGRIND_LIBPATH], [${valgrind_libpath}])
+
 
      #
      # Enable examples build
      #
      AC_ARG_ENABLE([examples],
-                   [AC_HELP_STRING([--enable-examples],
+                   [AS_HELP_STRING([--enable-examples],
                                    [Enable examples build])],
                    [AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" == "xyes"])],
                    [AM_CONDITIONAL([HAVE_EXAMPLES], [false])])

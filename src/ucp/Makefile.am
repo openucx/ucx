@@ -51,6 +51,12 @@ noinst_HEADERS = \
 	wireup/wireup.h \
 	stream/stream.h
 
+if ENABLE_EXPERIMENTAL_API
+nobase_dist_libucp_la_HEADERS += api/ucpx.h
+else
+noinst_HEADERS                += api/ucpx.h
+endif
+
 libucp_la_SOURCES = \
 	core/ucp_context.c \
 	core/ucp_ep.c \

@@ -131,3 +131,14 @@ CHECK_CROSS_COMP([AC_LANG_SOURCE([#include <malloc.h>
                   AC_MSG_WARN([malloc hooks are not supported])]
                 )
 CFLAGS=$SAVE_CFLAGS
+
+
+#
+# Check for capability.h header (usually comes from libcap-devel package) and
+# make sure it defines the types we need
+#
+AC_CHECK_HEADERS([sys/capability.h],
+                 [AC_CHECK_TYPES([cap_user_header_t, cap_user_data_t], [],
+                                 [AC_DEFINE([HAVE_SYS_CAPABILITY_H], [0], [Linux capability API support])],
+                                 [[#include <sys/capability.h>]])]
+                 )

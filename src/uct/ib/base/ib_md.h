@@ -13,8 +13,8 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/stats/stats.h>
-#include <ucs/sys/numa.h>
-#include <ucs/sys/rcache.h>
+#include <ucs/memory/numa.h>
+#include <ucs/memory/rcache.h>
 
 #define UCT_IB_MD_MAX_MR_SIZE       0x80000000UL
 #define UCT_IB_MD_PACKED_RKEY_SIZE  sizeof(uint64_t)
