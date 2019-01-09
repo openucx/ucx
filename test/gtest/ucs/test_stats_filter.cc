@@ -45,7 +45,6 @@ public:
         modify_config("STATS_DEST",    stats_dest_config().c_str());
         modify_config("STATS_TRIGGER", stats_trigger_config().c_str());
         modify_config("STATS_FORMAT", stats_format_config().c_str());
-        modify_config("WARN_INVARIANT_TSC", "n");
         ucs_stats_init();
         ASSERT_TRUE(ucs_stats_is_active());
     }

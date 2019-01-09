@@ -7,12 +7,11 @@
 * See file LICENSE for terms.
 */
 
-#include "libperf_int.h"
-
 #include <ucs/debug/log.h>
 #include <ucs/arch/bitops.h>
 #include <string.h>
 #include <malloc.h>
+#include <tools/perf/lib/libperf_int.h>
 #include <unistd.h>
 
 #define ATOMIC_OP_CONFIG(_size, _op32, _op64, _op, _msg, _params, _status)        \
@@ -48,6 +47,9 @@ typedef struct {
     size_t             rkey_size;
     unsigned long      recv_buffer;
 } ucx_perf_ep_info_t;
+
+
+const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_LAST];
 
 static const char *perf_iface_ops[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_AM_SHORT)]         = "am short",
@@ -149,9 +151,9 @@ static ucs_time_t __find_median_quick_select(ucs_time_t arr[], int n)
     }
 }
 
-static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
-                                            ucx_perf_params_t *params)
+static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
 {
+    ucx_perf_params_t *params = &perf->params;
     ucs_status_t status;
     unsigned flags;
     size_t buffer_size;
@@ -225,9 +227,15 @@ static void uct_perf_test_free_mem(ucx_perf_context_t *perf)
 
 void ucx_perf_test_start_clock(ucx_perf_context_t *perf)
 {
-    perf->start_time        = ucs_get_time();
-    perf->prev_time         = perf->start_time;
-    perf->prev.time         = perf->start_time;
+    ucs_time_t start_time = ucs_get_time();
+
+    perf->start_time_acc   = ucs_get_accurate_time();
+    perf->end_time         = (perf->params.max_time == 0.0) ? UINT64_MAX :
+                              ucs_time_from_sec(perf->params.max_time) + start_time;
+    perf->prev_time        = start_time;
+    perf->prev.time        = start_time;
+    perf->prev.time_acc    = perf->start_time_acc;
+    perf->current.time_acc = perf->start_time_acc;
 }
 
 static void ucx_perf_test_reset(ucx_perf_context_t *perf,
@@ -236,10 +244,6 @@ static void ucx_perf_test_reset(ucx_perf_context_t *perf,
     unsigned i;
 
     perf->params            = *params;
-    perf->start_time        = ucs_get_time();
-    perf->prev_time         = perf->start_time;
-    perf->end_time          = (perf->params.max_time == 0.0) ? UINT64_MAX :
-                               ucs_time_from_sec(perf->params.max_time) + perf->start_time;
     perf->max_iter          = (perf->params.max_iter == 0) ? UINT64_MAX :
                                perf->params.max_iter;
     perf->report_interval   = ucs_time_from_sec(perf->params.report_interval);
@@ -247,23 +251,23 @@ static void ucx_perf_test_reset(ucx_perf_context_t *perf,
     perf->current.msgs      = 0;
     perf->current.bytes     = 0;
     perf->current.iters     = 0;
-    perf->prev.time         = perf->start_time;
     perf->prev.msgs         = 0;
     perf->prev.bytes        = 0;
     perf->prev.iters        = 0;
     perf->timing_queue_head = 0;
     perf->offset            = 0;
+    perf->allocator         = ucx_perf_mem_type_allocators[params->mem_type];
     for (i = 0; i < TIMING_QUEUE_SIZE; ++i) {
         perf->timing_queue[i] = 0;
     }
+    ucx_perf_test_start_clock(perf);
 }
 
 void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 {
+    ucs_time_t median;
     double factor;
-    double sec_value;
 
-    sec_value = ucs_time_from_sec(1.0);
     if (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG) {
         factor = 2.0;
     } else {
@@ -272,25 +276,20 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
     result->iters = perf->current.iters;
     result->bytes = perf->current.bytes;
-    result->elapsed_time = perf->current.time - perf->start_time;
+    result->elapsed_time = perf->current.time_acc - perf->start_time_acc;
 
     /* Latency */
-
-    result->latency.typical =
-        __find_median_quick_select(perf->timing_queue, TIMING_QUEUE_SIZE)
-        / sec_value
-        / factor;
+    median = __find_median_quick_select(perf->timing_queue, TIMING_QUEUE_SIZE);
+    result->latency.typical = ucs_time_to_sec(median) / factor;
 
     result->latency.moment_average =
-        (double)(perf->current.time - perf->prev.time)
+        (perf->current.time_acc - perf->prev.time_acc)
         / (perf->current.iters - perf->prev.iters)
-        / sec_value
         / factor;
 
     result->latency.total_average =
-        (double)(perf->current.time - perf->start_time)
+        (perf->current.time_acc - perf->start_time_acc)
         / perf->current.iters
-        / sec_value
         / factor;
 
 
@@ -299,12 +298,12 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
     result->bandwidth.typical = 0.0; // Undefined
 
     result->bandwidth.moment_average =
-        (perf->current.bytes - perf->prev.bytes) * sec_value
-        / (double)(perf->current.time - perf->prev.time) * factor;
+        (perf->current.bytes - perf->prev.bytes) /
+        (perf->current.time_acc - perf->prev.time_acc) * factor;
 
     result->bandwidth.total_average =
-        perf->current.bytes * sec_value
-        / (double)(perf->current.time - perf->start_time) * factor;
+        perf->current.bytes /
+        (perf->current.time_acc - perf->start_time_acc) * factor;
 
 
     /* Packet rate */
@@ -312,12 +311,12 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
     result->msgrate.typical = 0.0; // Undefined
 
     result->msgrate.moment_average =
-        (perf->current.msgs - perf->prev.msgs) * sec_value
-        / (double)(perf->current.time - perf->prev.time) * factor;
+        (perf->current.msgs - perf->prev.msgs) /
+        (perf->current.time_acc - perf->prev.time_acc) * factor;
 
     result->msgrate.total_average =
-        perf->current.msgs * sec_value
-        / (double)(perf->current.time - perf->start_time) * factor;
+        perf->current.msgs /
+        (perf->current.time_acc - perf->start_time_acc) * factor;
 
 }
 
@@ -853,9 +852,8 @@ static ucs_status_t ucp_perf_test_alloc_iov_mem(ucp_perf_datatype_t datatype,
 }
 
 static ucs_status_t
-ucp_perf_test_alloc_host(ucx_perf_context_t *perf, ucx_perf_params_t *params,
-                         void **addr, size_t length, ucp_mem_h *memh,
-                         int check_non_blk_flag)
+ucp_perf_test_alloc_host(ucx_perf_context_t *perf, size_t length,
+                         void **address_p, ucp_mem_h *memh, int non_blk_flag)
 {
     ucp_mem_map_params_t mem_map_params;
     ucp_mem_attr_t mem_attr;
@@ -864,12 +862,11 @@ ucp_perf_test_alloc_host(ucx_perf_context_t *perf, ucx_perf_params_t *params,
     mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                                 UCP_MEM_MAP_PARAM_FIELD_LENGTH |
                                 UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    mem_map_params.address    = *addr;
+    mem_map_params.address    = *address_p;
     mem_map_params.length     = length;
     mem_map_params.flags      = UCP_MEM_MAP_ALLOCATE;
-    if (check_non_blk_flag) {
-        mem_map_params.flags  |= (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
-                                 UCP_MEM_MAP_NONBLOCK : 0;
+    if (perf->params.flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) {
+        mem_map_params.flags |= non_blk_flag;
     }
 
     status = ucp_mem_map(perf->ucp.context, &mem_map_params, memh);
@@ -883,117 +880,69 @@ ucp_perf_test_alloc_host(ucx_perf_context_t *perf, ucx_perf_params_t *params,
         goto err;
     }
 
-    *addr = mem_attr.address;
-
+    *address_p = mem_attr.address;
     return UCS_OK;
 
 err:
     return status;
 }
 
-static ucs_status_t
-ucp_perf_test_alloc_cuda(void **addr, size_t length)
-{
-#if HAVE_CUDA
-    cudaError_t cerr;
-
-    cerr = cudaMalloc(addr, length);
-    if (cerr != cudaSuccess) {
-        return UCS_ERR_NO_MEMORY;
-    }
-#endif
-    return UCS_OK;
-}
-
-static ucs_status_t
-ucp_perf_test_alloc_cuda_managed(void **addr, size_t length)
-{
-#if HAVE_CUDA
-    cudaError_t cerr;
-
-    cerr = cudaMallocManaged(addr, length, cudaMemAttachGlobal);
-    if (cerr != cudaSuccess) {
-        return UCS_ERR_NO_MEMORY;
-    }
-#endif
-    return UCS_OK;
-}
-
-static ucs_status_t
-ucp_perf_test_alloc_contig(ucx_perf_context_t *perf, ucx_perf_params_t *params,
-                           void **addr, size_t length, ucp_mem_h *memh,
-                           int check_non_blk_flag)
-{
-    if (perf->params.mem_type == UCT_MD_MEM_TYPE_HOST) {
-        return ucp_perf_test_alloc_host(perf, params, addr, length, memh,
-                                        check_non_blk_flag);
-    } else if (perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA) {
-        return ucp_perf_test_alloc_cuda(addr, length);
-    } else if (perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED) {
-        return ucp_perf_test_alloc_cuda_managed(addr, length);
-    }
-
-    return UCS_ERR_UNSUPPORTED;
-}
-
-static void ucp_perf_test_free_contig(ucx_perf_context_t *perf, void *addr, ucp_mem_h memh)
+static void ucp_perf_test_free_host(ucx_perf_context_t *perf, void *address,
+                                    ucp_mem_h memh)
 {
     ucs_status_t status;
 
-    if (perf->params.mem_type == UCT_MD_MEM_TYPE_HOST) {
-        status = ucp_mem_unmap(perf->ucp.context, memh);
-        if (status != UCS_OK) {
-            ucs_warn("ucp_mem_unmap() failed: %s", ucs_status_string(status));
-        }
-    } else if ((perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA) ||
-               (perf->params.mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED)) {
-#if HAVE_CUDA
-        cudaFree(addr);
-#endif
+    status = ucp_mem_unmap(perf->ucp.context, memh);
+    if (status != UCS_OK) {
+        ucs_warn("ucp_mem_unmap() failed: %s", ucs_status_string(status));
     }
 }
 
-static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_params_t *params)
+static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
 {
+    ucx_perf_params_t *params = &perf->params;
     ucs_status_t status;
     size_t buffer_size;
 
     if (params->iov_stride) {
-        buffer_size           = params->msg_size_cnt * params->iov_stride;
+        buffer_size = params->msg_size_cnt * params->iov_stride;
     } else {
-        buffer_size           = ucx_perf_get_message_size(params);
+        buffer_size = ucx_perf_get_message_size(params);
     }
 
     /* Allocate send buffer memory */
-    perf->send_buffer         = NULL;
-    status = ucp_perf_test_alloc_contig(perf, params, &perf->send_buffer,
-                                        buffer_size * params->thread_count,
-                                        &perf->ucp.send_memh, 1);
+    perf->send_buffer = NULL;
+    status = perf->allocator->ucp_alloc(perf, buffer_size * params->thread_count,
+                                        &perf->send_buffer, &perf->ucp.send_memh,
+                                        UCP_MEM_MAP_NONBLOCK);
     if (status != UCS_OK) {
         goto err;
     }
 
     /* Allocate receive buffer memory */
     perf->recv_buffer = NULL;
-    status = ucp_perf_test_alloc_contig(perf, params, &perf->recv_buffer,
-                                        buffer_size * params->thread_count,
-                                        &perf->ucp.recv_memh, 0);
+    status = perf->allocator->ucp_alloc(perf, buffer_size * params->thread_count,
+                                        &perf->recv_buffer, &perf->ucp.recv_memh,
+                                        0);
     if (status != UCS_OK) {
         goto err_free_send_buffer;
     }
 
     /* Allocate IOV datatype memory */
-    perf->params.msg_size_cnt = params->msg_size_cnt;
-    perf->ucp.send_iov        = NULL;
-    status = ucp_perf_test_alloc_iov_mem(params->ucp.send_datatype, perf->params.msg_size_cnt,
-                                         params->thread_count, &perf->ucp.send_iov);
+    perf->ucp.send_iov = NULL;
+    status = ucp_perf_test_alloc_iov_mem(params->ucp.send_datatype,
+                                         perf->params.msg_size_cnt,
+                                         params->thread_count,
+                                         &perf->ucp.send_iov);
     if (UCS_OK != status) {
         goto err_free_buffers;
     }
 
-    perf->ucp.recv_iov        = NULL;
-    status = ucp_perf_test_alloc_iov_mem(params->ucp.recv_datatype, perf->params.msg_size_cnt,
-                                         params->thread_count, &perf->ucp.recv_iov);
+    perf->ucp.recv_iov = NULL;
+    status = ucp_perf_test_alloc_iov_mem(params->ucp.recv_datatype,
+                                         perf->params.msg_size_cnt,
+                                         params->thread_count,
+                                         &perf->ucp.recv_iov);
     if (UCS_OK != status) {
         goto err_free_send_iov_buffers;
     }
@@ -1003,9 +952,9 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
 err_free_send_iov_buffers:
     free(perf->ucp.send_iov);
 err_free_buffers:
-    ucp_perf_test_free_contig(perf, perf->recv_buffer, perf->ucp.recv_memh);
+    perf->allocator->ucp_free(perf, perf->recv_buffer, perf->ucp.recv_memh);
 err_free_send_buffer:
-    ucp_perf_test_free_contig(perf, perf->send_buffer, perf->ucp.send_memh);
+    perf->allocator->ucp_free(perf, perf->send_buffer, perf->ucp.send_memh);
 err:
     return UCS_ERR_NO_MEMORY;
 }
@@ -1014,8 +963,8 @@ static void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
 {
     free(perf->ucp.recv_iov);
     free(perf->ucp.send_iov);
-    ucp_perf_test_free_contig(perf, perf->recv_buffer, perf->ucp.recv_memh);
-    ucp_perf_test_free_contig(perf, perf->send_buffer, perf->ucp.send_memh);
+    perf->allocator->ucp_free(perf, perf->recv_buffer, perf->ucp.recv_memh);
+    perf->allocator->ucp_free(perf, perf->send_buffer, perf->ucp.send_memh);
 }
 
 static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf,
@@ -1293,8 +1242,9 @@ void ucp_perf_barrier(ucx_perf_context_t *perf)
              (void*)perf->ucp.worker);
 }
 
-static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *params)
+static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
 {
+    ucx_perf_params_t *params = &perf->params;
     uct_iface_config_t *iface_config;
     ucs_status_t status;
     uct_iface_params_t iface_params = {
@@ -1343,7 +1293,7 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         goto out_iface_close;
     }
 
-    status = uct_perf_test_alloc_mem(perf, params);
+    status = uct_perf_test_alloc_mem(perf);
     if (status != UCS_OK) {
         goto out_iface_close;
     }
@@ -1383,8 +1333,7 @@ static void uct_perf_cleanup(ucx_perf_context_t *perf)
     ucs_async_context_cleanup(&perf->uct.async);
 }
 
-static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf,
-                                   ucx_perf_params_t *params)
+static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
 {
     ucp_params_t ucp_params;
     ucp_worker_params_t worker_params;
@@ -1394,7 +1343,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf,
     ucp_params.field_mask = UCP_PARAM_FIELD_FEATURES;
     ucp_params.features   = 0;
 
-    status = ucp_perf_test_fill_params(params, &ucp_params);
+    status = ucp_perf_test_fill_params(&perf->params, &ucp_params);
     if (status != UCS_OK) {
         goto err;
     }
@@ -1411,7 +1360,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf,
     }
 
     worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
-    worker_params.thread_mode = params->thread_mode;
+    worker_params.thread_mode = perf->params.thread_mode;
 
     status = ucp_worker_create(perf->ucp.context, &worker_params,
                                &perf->ucp.worker);
@@ -1419,7 +1368,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf,
         goto err_cleanup;
     }
 
-    status = ucp_perf_test_alloc_mem(perf, params);
+    status = ucp_perf_test_alloc_mem(perf);
     if (status != UCS_OK) {
         ucs_warn("ucp test failed to alocate memory");
         goto err_destroy_worker;
@@ -1427,7 +1376,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf,
 
     status = ucp_perf_test_setup_endpoints(perf, ucp_params.features);
     if (status != UCS_OK) {
-        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+        if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Failed to setup endpoints: %s", ucs_status_string(status));
         }
         goto err_free_mem;
@@ -1455,7 +1404,7 @@ static void ucp_perf_cleanup(ucx_perf_context_t *perf)
 }
 
 static struct {
-    ucs_status_t (*setup)(ucx_perf_context_t *perf, ucx_perf_params_t *params);
+    ucs_status_t (*setup)(ucx_perf_context_t *perf);
     void         (*cleanup)(ucx_perf_context_t *perf);
     ucs_status_t (*run)(ucx_perf_context_t *perf);
     void         (*barrier)(ucx_perf_context_t *perf);
@@ -1469,36 +1418,12 @@ static struct {
 static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
                                  ucx_perf_result_t* result);
 
-#if HAVE_CUDA
-static ucs_status_t ucx_perf_init_cuda_device(ucx_perf_context_t *perf)
-{
-    cudaError_t cerr;
-    unsigned group_index;
-    int num_gpus;
-    int gpu_index;
-
-    group_index = rte_call(perf, group_index);
-
-    cerr = cudaGetDeviceCount(&num_gpus);
-    if (cerr != cudaSuccess) {
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    gpu_index = group_index % num_gpus;
-
-    cerr = cudaSetDevice(gpu_index);
-    if (cerr != cudaSuccess) {
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    return UCS_OK;
-}
-#endif
-
 ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
 {
     ucx_perf_context_t *perf;
     ucs_status_t status;
+
+    ucx_perf_global_init();
 
     if (params->command == UCX_PERF_CMD_LAST) {
         ucs_error("Test is not selected");
@@ -1520,17 +1445,18 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
 
     ucx_perf_test_reset(perf, params);
 
-#if HAVE_CUDA
-    if ((params->mem_type == UCT_MD_MEM_TYPE_CUDA) ||
-        (params->mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED)) {
-        status = ucx_perf_init_cuda_device(perf);
-        if (status != UCS_OK) {
-            goto out_free;
-        }
+    if (perf->allocator == NULL) {
+        ucs_error("Unsupported memory type");
+        status = UCS_ERR_UNSUPPORTED;
+        goto out_free;
     }
-#endif
 
-    status = ucx_perf_funcs[params->api].setup(perf, params);
+    status = perf->allocator->init(perf);
+    if (status != UCS_OK) {
+        goto out_free;
+    }
+
+    status = ucx_perf_funcs[params->api].setup(perf);
     if (status != UCS_OK) {
         goto out_free;
     }
@@ -1679,3 +1605,17 @@ static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
     return UCS_ERR_INVALID_PARAM;
 }
 #endif /* _OPENMP */
+
+void ucx_perf_global_init()
+{
+    static ucx_perf_allocator_t host_allocator = {
+        .init      = ucs_empty_function_return_success,
+        .ucp_alloc = ucp_perf_test_alloc_host,
+        .ucp_free  = ucp_perf_test_free_host
+    };
+
+    ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_HOST] = &host_allocator;
+#if HAVE_CUDA
+    ucx_perf_cuda_global_init();
+#endif
+}

@@ -13,48 +13,9 @@
 
 typedef struct ucs_async_thread_context {
     union {
-#ifndef NVALGRIND
-        pthread_mutex_t mutex;
-#endif
-        ucs_spinlock_t  spinlock;
+        ucs_spinlock_t      spinlock;
+        pthread_mutex_t     mutex;
     };
 } ucs_async_thread_context_t;
-
-
-#if defined(NVALGRIND) || defined(__COVERITY__)
-
-#define UCS_ASYNC_THREAD_BLOCK(_async) \
-    ucs_spin_lock(&(_async)->thread.spinlock)
-
-#define UCS_ASYNC_THREAD_UNBLOCK(_async) \
-    ucs_spin_unlock(&(_async)->thread.spinlock)
-
-#define UCS_ASYNC_THREAD_IS_RECURSIVELY_BLOCKED(...)    0
-
-#else
-
-#define UCS_ASYNC_THREAD_BLOCK(_async) \
-    { \
-        (RUNNING_ON_VALGRIND) ? \
-            (void)pthread_mutex_lock(&(_async)->thread.mutex) : \
-            ucs_spin_lock(&(_async)->thread.spinlock); \
-    }
-
-#define UCS_ASYNC_THREAD_UNBLOCK(_async) \
-    { \
-        (RUNNING_ON_VALGRIND) ? \
-            (void)pthread_mutex_unlock(&(_async)->thread.mutex) : \
-            ucs_spin_unlock(&(_async)->thread.spinlock); \
-    }
-
-#ifdef ENABLE_ASSERT
-
-#define UCS_ASYNC_THREAD_IS_RECURSIVELY_BLOCKED(_async) \
-    ((RUNNING_ON_VALGRIND) ? 0 : \
-     ucs_spin_is_owner(&(_async)->thread.spinlock, pthread_self()))
-
-#endif /* ENABLE_ASSERT */
-
-#endif /* NVALGRIND */
 
 #endif

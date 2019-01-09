@@ -9,6 +9,7 @@
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
 #include <ucm/mmap/mmap.h>
+#include <ucs/sys/compiler.h>
 
 
 #define UCM_CONFIG_PREFIX   "MEM_"

@@ -5,13 +5,13 @@
  * See file LICENSE for terms.
  */
 
-#include "mm_md.h"
-#include "mm_iface.h"
-
+#include <uct/sm/mm/base/mm_md.h>
+#include <uct/sm/mm/base/mm_iface.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <sys/mman.h>
 #include <ucs/sys/sys.h>
+
 
 #define UCT_MM_POSIX_SHM_OPEN_MODE  (0666)
 #define UCT_MM_POSIX_MMAP_PROT      (PROT_READ | PROT_WRITE)

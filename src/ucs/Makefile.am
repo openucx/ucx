@@ -6,16 +6,14 @@
 #
 
 AUTOMAKE_OPTIONS    = nostdinc # avoid collision with built-in debug.h
-AM_CPPFLAGS         = $(BASE_CPPFLAGS) -I$(top_builddir) -I$(abs_top_srcdir)/src
-libucs_la_CFLAGS    = $(BASE_CFLAGS)
 lib_LTLIBRARIES     = libucs.la
 bin_PROGRAMS        =
 
+libucs_la_CPPFLAGS = $(BASE_CPPFLAGS)
+libucs_la_CFLAGS   = $(BASE_CFLAGS)
 libucs_la_LDFLAGS  = -ldl $(NUMA_LIBS) -version-info $(SOVERSION)
 libucs_ladir       = $(includedir)/ucs
-libucs_la_LIBADD   = \
-	$(LIBM) \
-	$(top_builddir)/src/ucm/libucm.la
+libucs_la_LIBADD   = $(LIBM) $(top_builddir)/src/ucm/libucm.la
 
 nobase_dist_libucs_la_HEADERS = \
 	algorithm/crc.h \
@@ -31,6 +29,8 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/pgtable.h \
 	datastruct/queue_types.h \
 	datastruct/strided_alloc.h \
+	memory/rcache.h \
+	memory/memtype_cache.h \
 	profile/profile_defs.h \
 	profile/profile_off.h \
 	profile/profile_on.h \
@@ -39,12 +39,10 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/compiler_def.h\
 	sys/math.h \
 	sys/preprocessor.h \
-	sys/rcache.h \
-	sys/memtype_cache.h \
 	sys/string.h \
 	time/time_def.h \
 	type/class.h \
-	type/component.h \
+	type/init_once.h \
 	type/spinlock.h \
 	type/status.h \
 	type/thread_mode.h \
@@ -76,12 +74,12 @@ noinst_HEADERS = \
 	debug/debug.h \
 	debug/log.h \
 	debug/memtrack.h \
+	memory/numa.h \
+	memory/rcache_int.h \
 	profile/profile.h \
 	stats/stats.h \
 	sys/checker.h \
 	sys/compiler.h \
-	sys/numa.h \
-	sys/rcache_int.h \
 	sys/sys.h \
 	time/time.h \
 	time/timerq.h \
@@ -117,20 +115,19 @@ libucs_la_SOURCES = \
 	debug/debug.c \
 	debug/log.c \
 	debug/memtrack.c \
+	memory/numa.c \
+	memory/rcache.c \
+	memory/memtype_cache.c \
 	profile/profile.c \
 	stats/stats.c \
 	sys/init.c \
 	sys/math.c \
-	sys/numa.c \
-	sys/rcache.c \
-	sys/memtype_cache.c \
 	sys/string.c \
 	sys/sys.c \
 	time/time.c \
 	time/timer_wheel.c \
 	time/timerq.c \
 	type/class.c \
-	type/component.c \
 	type/spinlock.c \
 	type/status.c
 
@@ -141,6 +138,7 @@ libucs_la_SOURCES += \
 	stats/libstats.c
 
 bin_PROGRAMS            += ucs_stats_parser
+ucs_stats_parser_CPPFLAGS = $(BASE_CPPFLAGS)
 ucs_stats_parser_LDADD   = libucs.la
 ucs_stats_parser_SOURCES = stats/stats_parser.c
 endif

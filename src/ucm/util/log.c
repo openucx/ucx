@@ -7,7 +7,7 @@
 #include "log.h"
 #include "sys.h"
 
-#include <ucs/type/component.h>
+#include <ucs/sys/compiler.h>
 #include <sys/time.h>
 #include <string.h>
 #include <stdlib.h>

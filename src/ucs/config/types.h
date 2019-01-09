@@ -36,7 +36,9 @@ typedef enum {
  */
 typedef enum {
     UCS_ASYNC_MODE_SIGNAL,
-    UCS_ASYNC_MODE_THREAD,
+    UCS_ASYNC_MODE_THREAD,     /* Deprecated, keep for backward compatibility */
+    UCS_ASYNC_MODE_THREAD_SPINLOCK = UCS_ASYNC_MODE_THREAD,
+    UCS_ASYNC_MODE_THREAD_MUTEX,
     UCS_ASYNC_MODE_POLL,       /* TODO keep only in debug version */
     UCS_ASYNC_MODE_LAST
 } ucs_async_mode_t;

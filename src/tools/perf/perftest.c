@@ -12,8 +12,8 @@
 #  include "config.h"
 #endif
 
-#include "libperf.h"
-#include "libperf_int.h"
+#include "api/libperf.h"
+#include "lib/libperf_int.h"
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
@@ -35,7 +35,9 @@
 #   include<rte.h>
 #endif
 
-#define MAX_BATCH_FILES  32
+#define MAX_BATCH_FILES         32
+#define TL_RESOURCE_NAME_NONE   "<none>"
+#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCqM:r:T:d:x:A:BUm:"
 
 
 enum {
@@ -77,8 +79,6 @@ struct perftest_context {
     sock_rte_group_t             sock_rte_group;
 };
 
-#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oSCqM:r:T:d:x:A:BUm:"
-
 
 test_type_t tests[] = {
     {"am_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
@@ -94,13 +94,13 @@ test_type_t tests[] = {
      "get latency / bandwidth / message rate"},
 
     {"fadd", UCX_PERF_API_UCT, UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "atomic fetch-and-add latency / message rate"},
+     "atomic fetch-and-add latency / rate"},
 
     {"swap", UCX_PERF_API_UCT, UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "atomic swap latency / message rate"},
+     "atomic swap latency / rate"},
 
     {"cswap", UCX_PERF_API_UCT, UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "atomic compare-and-swap latency / message rate"},
+     "atomic compare-and-swap latency / rate"},
 
     {"am_bw", UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "active message bandwidth / message rate"},
@@ -112,43 +112,43 @@ test_type_t tests[] = {
      "atomic add message rate"},
 
     {"tag_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
-     "UCP tag match latency"},
+     "tag match latency"},
 
     {"tag_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "UCP tag match bandwidth"},
+     "tag match bandwidth"},
 
     {"tag_sync_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_PINGPONG,
-     "UCP tag sync match latency"},
+     "tag sync match latency"},
 
     {"tag_sync_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "UCP tag sync match bandwidth"},
+     "tag sync match bandwidth"},
 
     {"ucp_put_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
-     "UCP put latency"},
+     "put latency"},
 
     {"ucp_put_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "UCP put bandwidth"},
+     "put bandwidth"},
 
     {"ucp_get", UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "UCP get latency / bandwidth / message rate"},
+     "get latency / bandwidth / message rate"},
 
     {"ucp_add", UCX_PERF_API_UCP, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "UCP atomic add bandwidth / message rate"},
+     "atomic add bandwidth / message rate"},
 
     {"ucp_fadd", UCX_PERF_API_UCP, UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "UCP atomic fetch-and-add latency / bandwidth / message rate"},
+     "atomic fetch-and-add latency / bandwidth / rate"},
 
     {"ucp_swap", UCX_PERF_API_UCP, UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "UCP atomic swap latency / bandwidth / message rate"},
+     "atomic swap latency / bandwidth / rate"},
 
     {"ucp_cswap", UCX_PERF_API_UCP, UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "UCP atomic compare-and-swap latency / bandwidth / message rate"},
+     "atomic compare-and-swap latency / bandwidth / rate"},
 
     {"stream_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "UCP stream bandwidth"},
+     "stream bandwidth"},
 
     {"stream_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_PINGPONG,
-     "UCP stream latency"},
+     "stream latency"},
 
      {NULL}
 };
@@ -328,8 +328,14 @@ static void print_test_name(struct perftest_context *ctx)
 
 static void usage(const struct perftest_context *ctx, const char *program)
 {
+    static const char* api_names[] = {
+        [UCX_PERF_API_UCT] = "UCT",
+        [UCX_PERF_API_UCP] = "UCP"
+    };
     test_type_t *test;
     int UCS_V_UNUSED rank;
+
+    ucx_perf_global_init(); /* initialize memory types */
 
 #if HAVE_MPI
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -350,8 +356,10 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("  Common options:\n");
     printf("     -t <test>      test to run:\n");
     for (test = tests; test->name; ++test) {
-        printf("                   %11s - %s\n", test->name, test->desc);
+        printf("    %13s - %s %s\n", test->name,
+               api_names[test->api], test->desc);
     }
+    printf("\n");
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
@@ -363,7 +371,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
                                 ctx->params.max_outstanding);
     printf("     -i <offset>    distance between consecutive scatter-gather entries (%zu)\n",
                                 ctx->params.iov_stride);
-    printf("     -T <threads>   number of threads in the test (%d), if >1 implies \"-M multi\" for UCP\n",
+    printf("     -T <threads>   number of threads in the test (%d), if >1 implies \"-M multi\"\n",
                                 ctx->params.thread_count);
     printf("     -B             register memory with NONBLOCK flag\n");
     printf("     -b <file>      read and execute tests from a batch file: every line in the\n");
@@ -372,12 +380,6 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -p <port>      TCP port to use for data exchange (%d)\n", ctx->port);
 #if HAVE_MPI
     printf("     -P <0|1>       disable/enable MPI mode (%d)\n", ctx->mpi);
-#endif
-    printf("     -m <mem type>  memory type of messages\n");
-    printf("                        host - system memory(default)\n");
-#if HAVE_CUDA
-    printf("                        cuda - NVIDIA GPU memory\n");
-    printf("                        cuda-managed - NVIDIA cuda managed/unified memory\n");
 #endif
     printf("     -h             show this help message\n");
     printf("\n");
@@ -390,16 +392,17 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -d <device>    device to use for testing\n");
     printf("     -x <tl>        transport to use for testing\n");
     printf("     -D <layout>    data layout for sender side:\n");
-    printf("                        short - short messages API (default, cannot be used for get)\n");
-    printf("                        bcopy - copy-out API (cannot be used for atomics)\n");
-    printf("                        zcopy - zero-copy API (cannot be used for atomics)\n");
+    printf("                        short - short messages (default, cannot be used for get)\n");
+    printf("                        bcopy - copy-out (cannot be used for atomics)\n");
+    printf("                        zcopy - zero-copy (cannot be used for atomics)\n");
     printf("                        iov    - scatter-gather list (iovec)\n");
     printf("     -W <count>     flow control window size, for active messages (%u)\n",
                                 ctx->params.uct.fc_window);
     printf("     -H <size>      active message header size (%zu)\n",
                                 ctx->params.am_hdr_size);
-    printf("     -A <mode>      asynchronous progress mode (thread)\n");
-    printf("                        thread - separate progress thread\n");
+    printf("     -A <mode>      asynchronous progress mode (thread_spinlock)\n");
+    printf("                        thread_spinlock - separate progress thread with spin locking\n");
+    printf("                        thread_mutex - separate progress thread with mutex locking\n");
     printf("                        signal - signal-based timer\n");
     printf("\n");
     printf("  UCP only:\n");
@@ -416,6 +419,17 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -r <mode>      receive mode for stream tests (recv)\n");
     printf("                        recv       : Use ucp_stream_recv_nb\n");
     printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
+    printf("     -m <mem type>  memory type of messages\n");
+    printf("                        host - system memory(default)\n");
+    if (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA] != NULL) {
+        printf("                        cuda - NVIDIA GPU memory\n");
+    }
+    if (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] != NULL) {
+        printf("                        cuda-managed - NVIDIA cuda managed/unified memory\n");
+    }
+    printf("\n");
+    printf("   NOTE: When running UCP tests, transport and device should be specified by\n");
+    printf("         environment variables: UCX_TLS and UCX_[SELF|SHM|NET]_DEVICES.\n");
     printf("\n");
 }
 
@@ -493,7 +507,7 @@ static void init_test_params(ucx_perf_params_t *params)
     params->test_type       = UCX_PERF_TEST_TYPE_LAST;
     params->thread_mode     = UCS_THREAD_MODE_SINGLE;
     params->thread_count    = 1;
-    params->async_mode      = UCS_ASYNC_MODE_THREAD;
+    params->async_mode      = UCS_ASYNC_THREAD_LOCK_TYPE;
     params->wait_mode       = UCX_PERF_WAIT_MODE_LAST;
     params->max_outstanding = 1;
     params->warmup_iter     = 10000;
@@ -510,8 +524,8 @@ static void init_test_params(ucx_perf_params_t *params)
     params->iov_stride      = 0;
     params->ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->ucp.recv_datatype = UCP_PERF_DATATYPE_CONTIG;
-    strcpy(params->uct.dev_name, "<none>");
-    strcpy(params->uct.tl_name, "<none>");
+    strcpy(params->uct.dev_name, TL_RESOURCE_NAME_NONE);
+    strcpy(params->uct.tl_name,  TL_RESOURCE_NAME_NONE);
 
     params->msg_size_list    = malloc(sizeof(*params->msg_size_list) *
                                       params->msg_size_cnt);
@@ -621,8 +635,11 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         params->thread_mode = UCS_THREAD_MODE_MULTI;
         return UCS_OK;
     case 'A':
-        if (!strcmp(optarg, "thread")) {
-            params->async_mode = UCS_ASYNC_MODE_THREAD;
+        if (!strcmp(optarg, "thread") || !strcmp(optarg, "thread_spinlock")) {
+            params->async_mode = UCS_ASYNC_MODE_THREAD_SPINLOCK;
+            return UCS_OK;
+        } else if (!strcmp(optarg, "thread_mutex")) {
+            params->async_mode = UCS_ASYNC_MODE_THREAD_MUTEX;
             return UCS_OK;
         } else if (!strcmp(optarg, "signal")) {
             params->async_mode = UCS_ASYNC_MODE_SIGNAL;
@@ -644,15 +661,14 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         if (!strcmp(optarg, "host")) {
             params->mem_type = UCT_MD_MEM_TYPE_HOST;
             return UCS_OK;
-        } else if(!strncmp(optarg, "cuda", 4)) {
-#if HAVE_CUDA
-            params->mem_type = (!strcmp(optarg, "cuda-managed")) ?
-                UCT_MD_MEM_TYPE_CUDA_MANAGED : UCT_MD_MEM_TYPE_CUDA;
+        } else if (!strcmp(optarg, "cuda") &&
+                   (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA] != NULL)) {
+            params->mem_type = UCT_MD_MEM_TYPE_CUDA;
             return UCS_OK;
-#else
-            ucs_error("not built with cuda support");
-            return UCS_ERR_INVALID_PARAM;
-#endif
+        } else if (!strcmp(optarg, "cuda-managed") &&
+                   (ucx_perf_mem_type_allocators[UCT_MD_MEM_TYPE_CUDA_MANAGED] != NULL)) {
+            params->mem_type = UCT_MD_MEM_TYPE_CUDA_MANAGED;
+            return UCS_OK;
         }
         return UCS_ERR_INVALID_PARAM;
     default:
@@ -1360,6 +1376,17 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
     int line_num;
 
     ucs_trace_func("depth=%u, num_files=%u", depth, ctx->num_batch_files);
+
+    if (parent_params->api == UCX_PERF_API_UCP) {
+        if (strcmp(parent_params->uct.dev_name, TL_RESOURCE_NAME_NONE)) {
+            ucs_warn("-d '%s' ignored for UCP test; see NOTES section in help message",
+                     parent_params->uct.dev_name);
+        }
+        if (strcmp(parent_params->uct.tl_name, TL_RESOURCE_NAME_NONE)) {
+            ucs_warn("-x '%s' ignored for UCP test; see NOTES section in help message",
+                     parent_params->uct.tl_name);
+        }
+    }
 
     if (depth >= ctx->num_batch_files) {
         print_test_name(ctx);

@@ -16,6 +16,7 @@ Feaures:
   as deprecated.
 - New client/server connection establishment API
 - Added CUDA support for stream API
+- Added header file for experimental UCP API
 - Added network only worker addresses, which can be obtained using
   ucp_worker_query() routine
 

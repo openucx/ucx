@@ -8,7 +8,7 @@ lib_LTLIBRARIES     = libucp.la
 
 libucp_la_CFLAGS   = $(BASE_CFLAGS)
 libucp_la_LIBS     =
-libucp_la_CPPFLAGS = $(BASE_CPPFLAGS) -I$(abs_top_srcdir)/src -I$(abs_top_builddir)/src
+libucp_la_CPPFLAGS = $(BASE_CPPFLAGS)
 libucp_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libucp_la_LIBADD   = ../ucs/libucs.la ../uct/libuct.la
 libucp_ladir       = $(includedir)/ucp
@@ -50,6 +50,12 @@ noinst_HEADERS = \
 	wireup/wireup_ep.h \
 	wireup/wireup.h \
 	stream/stream.h
+
+if ENABLE_EXPERIMENTAL_API
+nobase_dist_libucp_la_HEADERS += api/ucpx.h
+else
+noinst_HEADERS                += api/ucpx.h
+endif
 
 libucp_la_SOURCES = \
 	core/ucp_context.c \

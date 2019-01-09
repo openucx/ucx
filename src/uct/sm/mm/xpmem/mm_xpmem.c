@@ -5,12 +5,12 @@
  * See file LICENSE for terms.
  */
 
-#include "mm_md.h"
-#include "mm_iface.h"
+#include "xpmem.h"
 
+#include <uct/sm/mm/base/mm_md.h>
+#include <uct/sm/mm/base/mm_iface.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
-#include "xpmem.h"
 
 
 static ucs_status_t uct_xpmem_query()

@@ -10,7 +10,7 @@
 #include <cuda_runtime.h>
 #endif
 extern "C" {
-#include <ucs/sys/memtype_cache.h>
+#include <ucs/memory/memtype_cache.h>
 }
 
 

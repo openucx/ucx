@@ -39,8 +39,7 @@ ucs_global_opts_t ucs_global_opts = {
     .profile_file          = "",
     .stats_filter          = { NULL, 0 },
     .stats_format          = UCS_STATS_FULL,
-    .rcache_check_pfn      = 0,
-    .warn_inv_tsc          = 1
+    .rcache_check_pfn      = 0
 };
 
 static const char *ucs_handle_error_modes[] = {
@@ -206,11 +205,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
    "memory region was not changed since the time the region was registered.\n",
    ucs_offsetof(ucs_global_opts_t, rcache_check_pfn), UCS_CONFIG_TYPE_BOOL},
 
-  {"WARN_INVARIANT_TSC", "y",
-   "Issue a warning in case of invariant TSC.\n",
-   ucs_offsetof(ucs_global_opts_t, warn_inv_tsc), UCS_CONFIG_TYPE_BOOL},
-
- {NULL}
+  {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucs_global_opts_table, "UCS global", NULL,
                           ucs_global_opts_t)

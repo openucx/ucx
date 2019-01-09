@@ -1000,7 +1000,7 @@ static ucs_status_t ucp_wireup_add_bw_lanes(ucp_ep_h ep,
      * (we have to limit MD's number to avoid malloc in
      * memory registration) */
     while ((num_lanes < bw_info->max_lanes) &&
-           (ucs_count_one_bits(md_map) < UCP_MAX_OP_MDS)) {
+           (ucs_popcount(md_map) < UCP_MAX_OP_MDS)) {
         status = ucp_wireup_select_transport(ep, address_list, address_count,
                                              &bw_info->criteria, tl_bitmap, -1,
                                              local_dev_bitmap, remote_dev_bitmap,
@@ -1107,16 +1107,15 @@ static ucs_status_t ucp_wireup_add_rma_bw_lanes(ucp_ep_h ep,
     ucp_wireup_select_bw_info_t bw_info;
     uct_memory_type_t mem_type;
 
-    if ((ucp_ep_get_context_features(ep) & UCP_FEATURE_RMA) ||
-        (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) {
-        /* if needed for RMA, need also access for remote allocated memory */
-        bw_info.criteria.remote_md_flags = bw_info.criteria.local_md_flags = 0;
-    } else {
-        if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG)) {
-            return UCS_OK;
-        }
+    if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
+        bw_info.criteria.remote_md_flags = 0;
+        bw_info.criteria.local_md_flags  = 0;
+    } else if (ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) {
         /* if needed for RNDV, need only access for remote registered memory */
-        bw_info.criteria.remote_md_flags = bw_info.criteria.local_md_flags = UCT_MD_FLAG_REG;
+        bw_info.criteria.remote_md_flags = UCT_MD_FLAG_REG;
+        bw_info.criteria.local_md_flags  = UCT_MD_FLAG_REG;
+    } else {
+        return UCS_OK;
     }
 
     bw_info.criteria.title              = "high-bw remote memory access";
@@ -1410,7 +1409,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, const ucp_ep_params_t *params,
     /* add to map first UCP_MAX_OP_MDS fastest MD's */
     for (i = 0;
          (key->rma_bw_lanes[i] != UCP_NULL_LANE) &&
-         (ucs_count_one_bits(key->rma_bw_md_map) < UCP_MAX_OP_MDS); i++) {
+         (ucs_popcount(key->rma_bw_md_map) < UCP_MAX_OP_MDS); i++) {
         lane = key->rma_bw_lanes[i];
         rsc_index = lane_descs[lane].rsc_index;
         md_index  = worker->context->tl_rscs[rsc_index].md_index;

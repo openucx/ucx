@@ -9,8 +9,7 @@
 lib_LTLIBRARIES     = libuct.la
 
 libuct_la_CFLAGS   = $(BASE_CFLAGS)
-libuct_la_LIBS     =
-libuct_la_CPPFLAGS = $(BASE_CPPFLAGS) -I$(abs_top_srcdir)/src -I$(abs_top_builddir)/src 
+libuct_la_CPPFLAGS = $(BASE_CPPFLAGS)
 libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libuct_la_LIBADD   = $(LIBM) ../ucs/libucs.la
 libuct_ladir       = $(includedir)/uct
@@ -97,7 +96,8 @@ libuct_la_SOURCES += \
 if HAVE_MLX5_HW
 noinst_HEADERS += \
 	ib/rc/accel/rc_mlx5.h \
-	ib/rc/accel/rc_mlx5_common.h 
+	ib/rc/accel/rc_mlx5_common.h \
+	ib/rc/accel/rc_mlx5.inl
 
 libuct_la_SOURCES += \
 	ib/rc/accel/rc_mlx5_ep.c \
@@ -108,18 +108,12 @@ endif
 
 if HAVE_TL_DC
 noinst_HEADERS += \
-	ib/dc/base/dc_iface.h \
-	ib/dc/base/dc_ep.h
+	ib/dc/dc_mlx5.h \
+	ib/dc/dc_mlx5_ep.h
 
 libuct_la_SOURCES += \
-	ib/dc/base/dc_iface.c \
-	ib/dc/base/dc_ep.c
-
-noinst_HEADERS += \
-	ib/dc/accel/dc_mlx5.h
-
-libuct_la_SOURCES += \
-	ib/dc/accel/dc_mlx5.c
+	ib/dc/dc_mlx5.c \
+	ib/dc/dc_mlx5_ep.c
 endif
 
 if HAVE_TL_UD
@@ -180,7 +174,6 @@ endif
 if HAVE_CRAY_UGNI 
 libuct_la_CFLAGS   += $(CRAY_UGNI_CFLAGS)
 libuct_la_LDFLAGS  += $(CRAY_UGNI_LIBS)
-libuct_la_LIBS     += $(CRAY_UGNI_LIBS)
 
 noinst_HEADERS += \
     ugni/base/ugni_def.h \
@@ -210,7 +203,13 @@ libuct_la_SOURCES += \
 endif
 
 if HAVE_CUDA
+libuct_la_CPPFLAGS += $(CUDA_CPPFLAGS)
+libuct_la_LDFLAGS  += $(CUDA_LDFLAGS)
+
 if HAVE_GDR_COPY
+libuct_la_CPPFLAGS += $(GDR_COPY_CPPFLAGS)
+libuct_la_LDFLAGS  += $(GDR_COPY_LDFLAGS)
+
 noinst_HEADERS += \
     cuda/gdr_copy/gdr_copy_md.h \
     cuda/gdr_copy/gdr_copy_iface.h \
@@ -245,7 +244,6 @@ libuct_la_SOURCES += \
     cuda/cuda_ipc/cuda_ipc_iface.c \
     cuda/cuda_ipc/cuda_ipc_ep.c \
     cuda/cuda_ipc/cuda_ipc_cache.c
-
 endif
 
 if HAVE_ROCM
@@ -269,19 +267,19 @@ endif
 noinst_HEADERS += \
     sm/base/sm_iface.h \
     sm/base/sm_ep.h \
-    sm/mm/mm_iface.h \
-    sm/mm/mm_ep.h \
-    sm/mm/mm_def.h \
-    sm/mm/mm_md.h
+    sm/mm/base/mm_iface.h \
+    sm/mm/base/mm_ep.h \
+    sm/mm/base/mm_def.h \
+    sm/mm/base/mm_md.h
 
 libuct_la_SOURCES += \
     sm/base/sm_iface.c \
     sm/base/sm_ep.c \
-    sm/mm/mm_iface.c \
-    sm/mm/mm_ep.c \
-    sm/mm/mm_md.c \
-    sm/mm/mm_sysv.c \
-    sm/mm/mm_posix.c
+    sm/mm/base/mm_iface.c \
+    sm/mm/base/mm_ep.c \
+    sm/mm/base/mm_md.c \
+    sm/mm/sysv/mm_sysv.c \
+    sm/mm/posix/mm_posix.c
 
 # SGI / Cray XPMEM
 if HAVE_XPMEM
@@ -289,7 +287,7 @@ libuct_la_CPPFLAGS += $(XPMEM_CPPFLAGS)
 libuct_la_LDFLAGS +=  $(XPMEM_LDFLAGS)
 
 libuct_la_SOURCES += \
-    sm/mm/mm_xpmem.c
+    sm/mm/xpmem/mm_xpmem.c
 endif
 
 # Cross Memory Attached

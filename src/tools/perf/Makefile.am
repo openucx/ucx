@@ -21,28 +21,25 @@ perftestdir = $(pkgdatadir)/perftest
 dist_perftest_DATA = \
 	$(top_srcdir)/contrib/ucx_perftest_config/msg_pow2 \
 	$(top_srcdir)/contrib/ucx_perftest_config/README \
-	$(top_srcdir)/contrib/ucx_perftest_config/test_types \
+	$(top_srcdir)/contrib/ucx_perftest_config/test_types_uct \
+	$(top_srcdir)/contrib/ucx_perftest_config/test_types_ucp \
 	$(top_srcdir)/contrib/ucx_perftest_config/transports
 
 bin_PROGRAMS          = ucx_perftest
 noinst_LTLIBRARIES    = libucxperf.la
 
-AM_CPPFLAGS           = \
-    $(BASE_CPPFLAGS) \
-    -I$(abs_top_srcdir)/src \
-    -I$(abs_top_builddir)/src \
-    $(RTE_CPPFLAGS)
-
 noinst_HEADERS = \
-	libperf.h \
-	libperf_int.h
+	api/libperf.h \
+	lib/libperf_int.h
 libucxperf_la_SOURCES = \
-	libperf.c \
-	uct_tests.cc \
-	ucp_tests.cc
+	lib/libperf.c \
+	lib/uct_tests.cc \
+	lib/ucp_tests.cc
 libucxperf_la_LDFLAGS = \
 	$(RTE_LDFLAGS) \
 	$(OPENMP_CFLAGS)
+libucxperf_la_CPPFLAGS = \
+	$(BASE_CPPFLAGS)
 libucxperf_la_CXXFLAGS = \
 	$(BASE_CXXFLAGS) \
 	$(OPENMP_CFLAGS)
@@ -53,6 +50,12 @@ libucxperf_la_LIBADD = \
 	$(abs_top_builddir)/src/uct/libuct.la \
 	$(abs_top_builddir)/src/ucp/libucp.la \
 	$(abs_top_builddir)/src/ucs/libucs.la
+if HAVE_CUDA
+libucxperf_la_CPPFLAGS += $(CUDA_CPPFLAGS)
+libucxperf_la_LDFLAGS  += $(CUDA_LDFLAGS)
+libucxperf_la_SOURCES += \
+	cuda/cuda_alloc.c
+endif
 #libucxperf_la_LINK = $(CXX)
 
 ucx_perftest_SOURCES  = perftest.c
@@ -60,7 +63,8 @@ ucx_perftest_LDFLAGS = \
 	$(RTE_LDFLAGS) \
 	$(OPENMP_CFLAGS)
 ucx_perftest_CPPFLAGS = \
-	$(BASE_CPPFLAGS)
+	$(BASE_CPPFLAGS) \
+	$(RTE_CPPFLAGS)
 ucx_perftest_CFLAGS = \
 	$(BASE_CFLAGS) \
 	$(OPENMP_CFLAGS)

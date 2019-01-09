@@ -6,7 +6,7 @@
 * See file LICENSE for terms.
 */
 
-#include "libperf_int.h"
+#include <tools/perf/lib/libperf_int.h>
 
 extern "C" {
 #include <ucs/debug/log.h>
@@ -295,12 +295,13 @@ public:
 
 	if (m_perf.params.mem_type == UCT_MD_MEM_TYPE_HOST) {
             *((volatile uint8_t*)m_perf.recv_buffer + length - 1) = -1;
-	} else if ((m_perf.params.mem_type == UCT_MD_MEM_TYPE_CUDA) ||
-                   (m_perf.params.mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED)) {
-#if HAVE_CUDA
-            cudaMemset(((uint8_t*)m_perf.recv_buffer + length - 1), -1, 1);
-#endif
-        }
+	}
+//	else if ((m_perf.params.mem_type == UCT_MD_MEM_TYPE_CUDA) ||
+//                   (m_perf.params.mem_type == UCT_MD_MEM_TYPE_CUDA_MANAGED)) {
+//#if HAVE__CUDA
+//            cudaMemset(((uint8_t*)m_perf.recv_buffer + length - 1), -1, 1);
+//#endif
+//        }
 
         ucp_perf_barrier(&m_perf);
 
@@ -342,6 +343,7 @@ public:
 
         wait_window(m_max_outstanding);
         ucp_worker_flush(m_perf.ucp.worker);
+        ucx_perf_get_time(&m_perf);
         ucp_perf_barrier(&m_perf);
         return UCS_OK;
     }
@@ -402,6 +404,7 @@ public:
 
         wait_window(m_max_outstanding);
         ucp_worker_flush(m_perf.ucp.worker);
+        ucx_perf_get_time(&m_perf);
 
         if (my_index == 1) {
             ucx_perf_update(&m_perf, 0, 0);

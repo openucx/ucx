@@ -138,6 +138,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      AM_CONDITIONAL([HAVE_JAVA], [false])
      AM_CONDITIONAL([HAVE_CXX11], [false])
      AM_CONDITIONAL([HAVE_TCMALLOC], [false])
+     AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [false])
      AM_CONDITIONAL([HAVE_EXAMPLES], [false])
     ],
     [
@@ -146,18 +147,18 @@ AS_IF([test "x$with_docs_only" == xyes],
      m4_include([config/m4/sysdep.m4])
      m4_include([config/m4/ucs.m4])
      m4_include([config/m4/ucm.m4])
-     m4_include([config/m4/ib.m4])
-     m4_include([config/m4/rdmacm.m4])
-     m4_include([config/m4/cray_ugni.m4])
      m4_include([config/m4/mpi.m4])
      m4_include([config/m4/rte.m4])
      m4_include([config/m4/java.m4])
      m4_include([config/m4/cuda.m4])
-     m4_include([config/m4/gdrcopy.m4])
-     m4_include([config/m4/rocm.m4])
-     m4_include([config/m4/cma.m4])
-     m4_include([config/m4/knem.m4])
-     m4_include([config/m4/xpmem.m4])
+     m4_include([src/uct/ib/configure.m4])
+     m4_include([src/uct/ib/rdmacm/configure.m4])
+     m4_include([src/uct/ugni/configure.m4])
+     m4_include([src/uct/cuda/gdr_copy/configure.m4])
+     m4_include([src/uct/rocm/configure.m4])
+     m4_include([src/uct/sm/cma/configure.m4])
+     m4_include([src/uct/sm/knem/configure.m4])
+     m4_include([src/uct/sm/mm/xpmem/configure.m4])
 
      #
      # Compile code with frame pointer. Optimizations usually omit the frame pointer,
@@ -226,15 +227,25 @@ AS_IF([test "x$with_docs_only" == xyes],
 
 
      #
+     # Enable experimental header
+     #
+     AC_ARG_ENABLE([experimental-api],
+                   AS_HELP_STRING([--enable-experimental-api],
+                                  [Enable installing experimental APIs, default: NO]))
+	 AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [test "x$enable_experimental_api" == "xyes"])
+
+
+     #
      # Path for valgrind-enabled libraries
      #
      AC_SUBST([VALGRIND_LIBPATH], [${valgrind_libpath}])
+
 
      #
      # Enable examples build
      #
      AC_ARG_ENABLE([examples],
-                   [AC_HELP_STRING([--enable-examples],
+                   [AS_HELP_STRING([--enable-examples],
                                    [Enable examples build])],
                    [AM_CONDITIONAL([HAVE_EXAMPLES], [test "x$enable_examples" == "xyes"])],
                    [AM_CONDITIONAL([HAVE_EXAMPLES], [false])])

@@ -20,7 +20,11 @@ doc_dir = $(pkgdatadir)/doc
 
 if !DOCS_ONLY
 perftest_dir = $(pkgdatadir)/perftest
-dist_perftest__DATA = contrib/ucx_perftest_config/msg_pow2 contrib/ucx_perftest_config/README contrib/ucx_perftest_config/test_types contrib/ucx_perftest_config/transports
+dist_perftest__DATA = contrib/ucx_perftest_config/msg_pow2 \
+					  contrib/ucx_perftest_config/README \
+					  contrib/ucx_perftest_config/test_types_uct \
+					  contrib/ucx_perftest_config/test_types_ucp \
+					  contrib/ucx_perftest_config/transports
 
 SUBDIRS = \
 	src/ucm \
@@ -45,18 +49,14 @@ if HAVE_JAVA
 SUBDIRS += bindings/java/src/main/native
 endif
 
-EXTRA_DIST += config/m4/java.m4
-EXTRA_DIST += config/m4/gtest.m4
-EXTRA_DIST += config/m4/ucs.m4
-EXTRA_DIST += config/m4/ib.m4
-EXTRA_DIST += config/m4/sysdep.m4
 EXTRA_DIST += contrib/configure-devel
 EXTRA_DIST += contrib/configure-release
 EXTRA_DIST += contrib/configure-prof
 EXTRA_DIST += contrib/buildrpm.sh
 EXTRA_DIST += contrib/ucx_perftest_config/msg_pow2
 EXTRA_DIST += contrib/ucx_perftest_config/README
-EXTRA_DIST += contrib/ucx_perftest_config/test_types
+EXTRA_DIST += contrib/ucx_perftest_config/test_types_uct
+EXTRA_DIST += contrib/ucx_perftest_config/test_types_ucp
 EXTRA_DIST += contrib/ucx_perftest_config/transports
 EXTRA_DIST += debian
 EXTRA_DIST += ucx.pc.in

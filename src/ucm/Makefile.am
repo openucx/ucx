@@ -16,8 +16,6 @@ libucm_la_LDFLAGS  = \
 
 libucm_la_CPPFLAGS = \
     $(BASE_CPPFLAGS) \
-    -I$(abs_top_srcdir)/src \
-    -I$(abs_top_builddir)/src \
     -DUCM_MALLOC_PREFIX=ucm_dl
 
 libucm_la_CFLAGS = \
@@ -42,11 +40,6 @@ noinst_HEADERS = \
 	bistro/bistro_aarch64.h \
 	bistro/bistro_ppc64.h
 
-if HAVE_CUDA
-noinst_HEADERS += \
-	cuda/cudamem.h
-endif
-
 libucm_la_SOURCES = \
 	event/event.c \
 	malloc/malloc_hook.c \
@@ -61,8 +54,12 @@ libucm_la_SOURCES = \
 	bistro/bistro_ppc64.c
 
 if HAVE_CUDA
+libucm_la_CPPFLAGS += $(CUDA_CPPFLAGS)
+libucm_la_LDFLAGS  += $(CUDA_LDFLAGS)
+noinst_HEADERS += \
+	cuda/cudamem.h
 libucm_la_SOURCES += \
-    cuda/install.c
+    cuda/cudamem.c
 endif
 
 if HAVE_UCM_PTMALLOC286

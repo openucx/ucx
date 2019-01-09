@@ -142,7 +142,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
 
     iface_attr->latency.overhead        = 80e-9; /* 80 ns */
     iface_attr->latency.growth          = 0;
-    iface_attr->bandwidth               = 6911 * 1024.0 * 1024.0;
+    iface_attr->bandwidth               = 12179 * 1024.0 * 1024.0;
     iface_attr->overhead                = 10e-9; /* 10 ns */
     iface_attr->priority                = uct_mm_md_mapper_ops(iface->super.md)->get_priority();
     return UCS_OK;
@@ -499,7 +499,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
                                      (mm_config->fifo_size * mm_config->release_fifo_factor),
                                      1)));
     self->fifo_mask                = mm_config->fifo_size - 1;
-    self->fifo_shift               = ucs_count_zero_bits(mm_config->fifo_size);
+    self->fifo_shift               = ucs_count_trailing_zero_bits(mm_config->fifo_size);
     self->rx_headroom              = params->rx_headroom;
     self->release_desc.cb          = uct_mm_iface_release_desc;
 

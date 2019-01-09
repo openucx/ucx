@@ -582,7 +582,6 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     unsigned flags;
     ucp_ep_h ep = NULL;
 
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     UCS_ASYNC_BLOCK(&worker->async);
 
     flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
@@ -602,7 +601,6 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
 }
 
@@ -617,13 +615,11 @@ ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params)
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     UCS_ASYNC_BLOCK(&worker->async);
 
     status = ucp_ep_adjust_params(ep, params);
 
     UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return UCS_STATUS_PTR(status);
 }
@@ -749,14 +745,12 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 {
     ucp_worker_h worker = ep->worker;
-    void *request;
+    void         *request;
 
     if ((mode == UCP_EP_CLOSE_MODE_FORCE) &&
         (ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER)) {
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
-
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -770,9 +764,6 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
-
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
-
     return request;
 }
 
@@ -983,7 +974,6 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
         rndv_nbr_thresh = context->config.ext.rndv_thresh;
     }
 
-    config->tag.rndv.max_get_zcopy = iface_attr->cap.get.max_zcopy;
     config->tag.rndv.max_put_zcopy = iface_attr->cap.put.max_zcopy;
     config->tag.rndv.rma_thresh    = ucp_ep_thresh(rndv_thresh,
                                                    iface_attr->cap.get.min_zcopy,
@@ -1068,6 +1058,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     size_t it;
     size_t max_rndv_thresh;
     size_t max_am_rndv_thresh;
+    double rndv_max_bw;
     int i;
 
     /* Default settings */
@@ -1116,8 +1107,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         }
     }
 
-    /* configuration for min zcopy */
+    /* configuration for rndv */
     config->tag.rndv.min_get_zcopy = 0;
+    rndv_max_bw = 0;
     for (i = 0; (i < config->key.num_lanes) &&
                 (config->key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
         lane      = config->key.rma_bw_lanes[i];
@@ -1127,6 +1119,19 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             config->tag.rndv.min_get_zcopy =
                 ucs_max(config->tag.rndv.min_get_zcopy,
                         worker->ifaces[rsc_index].attr.cap.get.min_zcopy);
+            config->tag.rndv.max_get_zcopy =
+                ucs_min(config->tag.rndv.max_get_zcopy,
+                        worker->ifaces[rsc_index].attr.cap.get.max_zcopy);
+            rndv_max_bw = ucs_max(rndv_max_bw, worker->ifaces[rsc_index].attr.bandwidth);
+        }
+    }
+
+    if (rndv_max_bw > 0) {
+        for (i = 0; (i < config->key.num_lanes) &&
+                    (config->key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
+            lane                         = config->key.rma_bw_lanes[i];
+            rsc_index                    = config->key.lanes[lane].rsc_index;
+            config->tag.rndv.scale[lane] = worker->ifaces[rsc_index].attr.bandwidth / rndv_max_bw;
         }
     }
 
@@ -1219,8 +1224,10 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         rma_config                   = &config->rma[lane];
         rma_config->put_zcopy_thresh = SIZE_MAX;
         rma_config->get_zcopy_thresh = SIZE_MAX;
-        rma_config->max_put_short    = -1;
-        rma_config->max_get_short    = -1;
+        rma_config->max_put_short    = SIZE_MAX;
+        rma_config->max_get_short    = SIZE_MAX;
+        rma_config->max_put_bcopy    = SIZE_MAX;
+        rma_config->max_get_bcopy    = SIZE_MAX;
 
         if (ucp_ep_config_get_multi_lane_prio(config->key.rma_lanes, lane) == -1) {
             continue;
@@ -1230,12 +1237,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
-                rma_config->max_put_short = iface_attr->cap.put.max_short;
-            }
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
-                rma_config->max_put_bcopy = iface_attr->cap.put.max_bcopy;
-            }
+            /* PUT */
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
                 rma_config->max_put_zcopy    = iface_attr->cap.put.max_zcopy;
                 /* TODO: formula */
@@ -1247,12 +1249,16 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                 rma_config->put_zcopy_thresh = ucs_max(rma_config->put_zcopy_thresh,
                                                        iface_attr->cap.put.min_zcopy);
             }
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_SHORT) {
-                rma_config->max_get_short = iface_attr->cap.get.max_short;
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
+                rma_config->max_put_bcopy = ucs_min(iface_attr->cap.put.max_bcopy,
+                                                    rma_config->put_zcopy_thresh);
             }
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) {
-                rma_config->max_get_bcopy = iface_attr->cap.get.max_bcopy;
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
+                rma_config->max_put_short = ucs_min(iface_attr->cap.put.max_short,
+                                                    rma_config->max_put_bcopy);
             }
+
+            /* GET */
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
                 /* TODO: formula */
                 rma_config->max_get_zcopy = iface_attr->cap.get.max_zcopy;
@@ -1263,6 +1269,14 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                 }
                 rma_config->get_zcopy_thresh = ucs_max(rma_config->get_zcopy_thresh,
                                                        iface_attr->cap.get.min_zcopy);
+            }
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) {
+                rma_config->max_get_bcopy = ucs_min(iface_attr->cap.get.max_bcopy,
+                                                    rma_config->get_zcopy_thresh);
+            }
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_SHORT) {
+                rma_config->max_get_short = ucs_min(iface_attr->cap.get.max_short,
+                                                    rma_config->max_get_bcopy);
             }
         } else {
             rma_config->max_put_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */

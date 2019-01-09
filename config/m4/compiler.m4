@@ -268,10 +268,16 @@ AM_CONDITIONAL([HAVE_CXX11], [test "x$cxx11_happy" != xno])
 #
 # Set C++ optimization/debug flags to be the same as for C
 #
-BASE_CPPFLAGS="-DCPU_FLAGS=\"$OPT_CFLAGS\""
 BASE_CXXFLAGS="$BASE_CFLAGS"
-
-AC_SUBST([BASE_CPPFLAGS], [$BASE_CPPFLAGS])
 AC_SUBST([BASE_CFLAGS], [$BASE_CFLAGS]) 
 AC_SUBST([BASE_CXXFLAGS], [$BASE_CXXFLAGS])
 
+#
+# Set common preprocessor flags
+#
+BASE_CPPFLAGS="-DCPU_FLAGS=\"$OPT_CFLAGS\""
+BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_srcdir}/src"
+BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_builddir}"
+BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_builddir}/src"
+AC_MSG_NOTICE([Common preprocessor flags: ${BASE_CPPFLAGS}])
+AC_SUBST([BASE_CPPFLAGS], [$BASE_CPPFLAGS])

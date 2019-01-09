@@ -8,10 +8,9 @@
 #define UCM_CUDAMEM_H_
 
 #include <ucm/api/ucm.h>
-#include <cuda.h>
 #include <cuda_runtime.h>
+#include <cuda.h>
 
-ucs_status_t ucm_cudamem_install();
 
 /*cuMemFree */
 CUresult ucm_override_cuMemFree(CUdeviceptr dptr);
@@ -98,4 +97,5 @@ cudaError_t ucm_cudaHostGetDevicePointer(void **pDevice, void *pHost, unsigned i
 cudaError_t ucm_override_cudaHostUnregister(void *ptr);
 cudaError_t ucm_orig_cudaHostUnregister(void *ptr);
 cudaError_t ucm_cudaHostUnregister(void *ptr);
+
 #endif

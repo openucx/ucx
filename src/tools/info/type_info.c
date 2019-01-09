@@ -17,8 +17,8 @@
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/pgtable.h>
 #include <ucs/datastruct/ptr_array.h>
-#include <ucs/sys/rcache.h>
-#include <ucs/sys/rcache_int.h>
+#include <ucs/memory/rcache.h>
+#include <ucs/memory/rcache_int.h>
 #include <ucs/time/timerq.h>
 #include <ucs/time/timer_wheel.h>
 #include <ucs/type/class.h>
@@ -48,9 +48,8 @@
 #endif
 
 #if HAVE_TL_DC
-#  include <uct/ib/dc/base/dc_iface.h>
-#  include <uct/ib/dc/base/dc_ep.h>
-#  include <uct/ib/dc/accel/dc_mlx5.h>
+#  include <uct/ib/dc/dc_mlx5.h>
+#  include <uct/ib/dc/dc_mlx5_ep.h>
 #endif
 
 #if HAVE_TL_UD
@@ -97,7 +96,6 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(ucs_async_signal_context_t);
         PRINT_SIZE(ucs_async_thread_context_t);
         PRINT_SIZE(ucs_class_t);
-        PRINT_SIZE(ucs_component_t);
         PRINT_SIZE(ucs_config_field_t);
         PRINT_SIZE(ucs_config_parser_t);
         PRINT_SIZE(ucs_frag_list_t);
@@ -192,8 +190,8 @@ void print_type_info(const char * tl_name)
 #if HAVE_MLX5_HW
         if (tl_name == NULL || !strcasecmp(tl_name, "rc_mlx5")) {
             PRINT_SIZE(uct_rc_mlx5_ep_t);
-            PRINT_SIZE(uct_rc_mlx5_iface_config_t);
-            PRINT_SIZE(uct_rc_mlx5_iface_t);
+            PRINT_SIZE(uct_rc_mlx5_iface_common_config_t);
+            PRINT_SIZE(uct_rc_mlx5_iface_common_t);
         }
 #endif
         printf("\n");
@@ -201,19 +199,12 @@ void print_type_info(const char * tl_name)
 #endif
 
 #if HAVE_TL_DC
-    if (tl_name == NULL || !strcasecmp(tl_name, "dc") ||
-        !strcasecmp(tl_name, "dc_mlx5"))
+    if (tl_name == NULL || !strcasecmp(tl_name, "dc_mlx5"))
     {
         printf("DC:\n");
-        PRINT_SIZE(uct_dc_ep_t);
-        PRINT_SIZE(uct_dc_iface_t);
-        PRINT_SIZE(uct_dc_iface_config_t);
-
-        if (tl_name == NULL || !strcasecmp(tl_name, "dc_mlx5")) {
-            PRINT_SIZE(uct_dc_mlx5_ep_t);
-            PRINT_SIZE(uct_dc_mlx5_grh_ep_t);
-            PRINT_SIZE(uct_dc_mlx5_iface_t);
-        }
+        PRINT_SIZE(uct_dc_mlx5_ep_t);
+        PRINT_SIZE(uct_dc_mlx5_iface_t);
+        PRINT_SIZE(uct_dc_mlx5_iface_config_t);
         printf("\n");
     }
 #endif
@@ -242,7 +233,6 @@ void print_type_info(const char * tl_name)
         if (tl_name == NULL || !strcasecmp(tl_name, "ud_mlx5")) {
             PRINT_SIZE(uct_ud_mlx5_ep_t);
             PRINT_SIZE(uct_ud_mlx5_iface_t);
-            PRINT_SIZE(uct_rc_mlx5_iface_config_t);
         }
 #endif
         printf("\n");
