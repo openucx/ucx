@@ -295,6 +295,8 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
     status = uct_query_md_resources(&md_resources, &num_md_resources);
     CHKERR_JUMP(UCS_OK != status, "query for memory domain resources", error_ret);
 
+    iface_p->iface = NULL; /* suppress coverity */
+
     /* Iterate through protected domain resources */
     for (i = 0; i < num_md_resources; ++i) {
         status = uct_md_config_read(md_resources[i].md_name, NULL, NULL, &md_config);
@@ -487,11 +489,12 @@ int sendrecv(int sock, const void *sbuf, size_t slen, void **rbuf)
 
 int main(int argc, char **argv)
 {
-    iface_info_t        if_info     = { .iface = NULL }; /* suppress coverity */
     uct_device_addr_t   *peer_dev   = NULL;
     uct_iface_addr_t    *peer_iface = NULL;
     uct_ep_addr_t       *own_ep     = NULL;
     uct_ep_addr_t       *peer_ep    = NULL;
+    uint8_t             id          = 0;
+    int                 oob_sock    = -1;  /* OOB connection socket */
     ucs_status_t        status      = UCS_OK; /* status codes for UCS */
     uct_device_addr_t   *own_dev;
     uct_iface_addr_t    *own_iface;
@@ -499,9 +502,7 @@ int main(int argc, char **argv)
     ucs_async_context_t *async;               /* Async event context manages
                                                  times and fd notifications */
     cmd_args_t          cmd_args;
-
-    uint8_t             id = 0;
-    int                 oob_sock = -1;  /* OOB connection socket */
+    iface_info_t        if_info;
 
     /* Parse the command line */
     if (parse_cmd(argc, argv, &cmd_args)) {
