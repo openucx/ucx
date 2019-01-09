@@ -94,11 +94,18 @@ err:
     return -1;
 }
 
-static void barrier(int oob_sock)
+static int barrier(int oob_sock)
 {
     int dummy = 0;
-    send(oob_sock, &dummy, sizeof(dummy), 0);
-    recv(oob_sock, &dummy, sizeof(dummy), 0);
+    ssize_t res;
+
+    res = send(oob_sock, &dummy, sizeof(dummy), 0);
+    if (res < 0) {
+        return res;
+    }
+
+    res = recv(oob_sock, &dummy, sizeof(dummy), 0);
+    return !(res == sizeof(dummy));
 }
 
 static void generate_random_string(char *str, int size)
@@ -112,6 +119,7 @@ static void generate_random_string(char *str, int size)
     }
 
     for (i = 0; i < (size-1); ++i) {
+        /* coverity[dont_call] */
         str[i] =  'A' + (rand() % 26);
     }
     str[i] = 0;

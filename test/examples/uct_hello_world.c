@@ -242,6 +242,7 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name,
     CHKERR_JUMP(UCS_OK != status, "setup iface_config", error_ret);
 
     /* Open communication interface */
+    assert(iface_p->iface == NULL);
     status = uct_iface_open(iface_p->pd, iface_p->worker, &params, config,
                             &iface_p->iface);
     uct_config_release(config);
@@ -273,6 +274,7 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name,
 
 error_iface:
     uct_iface_close(iface_p->iface);
+    iface_p->iface = NULL;
 error_ret:
     return UCS_ERR_UNSUPPORTED;
 }
@@ -462,11 +464,12 @@ int sendrecv(int sock, const void *sbuf, size_t slen, void **rbuf)
     }
 
     ret = recv(sock, &rlen, sizeof(rlen), 0);
-    if (ret < 0) {
+    if (ret != sizeof(rlen)) {
         fprintf(stderr, "failed to receive device address length\n");
         return -1;
     }
 
+    /* coverity[tainted_data] */
     *rbuf = calloc(1, rlen);
     if (!*rbuf) {
         fprintf(stderr, "failed to allocate receive buffer\n");
@@ -484,19 +487,19 @@ int sendrecv(int sock, const void *sbuf, size_t slen, void **rbuf)
 
 int main(int argc, char **argv)
 {
-    uct_device_addr_t   *own_dev;
+    iface_info_t        if_info     = { .iface = NULL }; /* suppress coverity */
     uct_device_addr_t   *peer_dev   = NULL;
-    uct_iface_addr_t    *own_iface;
     uct_iface_addr_t    *peer_iface = NULL;
     uct_ep_addr_t       *own_ep     = NULL;
     uct_ep_addr_t       *peer_ep    = NULL;
     ucs_status_t        status      = UCS_OK; /* status codes for UCS */
+    uct_device_addr_t   *own_dev;
+    uct_iface_addr_t    *own_iface;
     uct_ep_h            ep;                   /* Remote endpoint */
     ucs_async_context_t *async;               /* Async event context manages
                                                  times and fd notifications */
     cmd_args_t          cmd_args;
 
-    iface_info_t        if_info;
     uint8_t             id = 0;
     int                 oob_sock = -1;  /* OOB connection socket */
 
@@ -580,7 +583,10 @@ int main(int argc, char **argv)
 
         /* Connect endpoint to a remote endpoint */
         status = uct_ep_connect_to_ep(ep, peer_dev, peer_ep);
-        barrier(oob_sock);
+        if (barrier(oob_sock)) {
+            status = UCS_ERR_IO_ERROR;
+            goto out_free_ep;
+        }
     } else if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         /* Create an endpoint which is connected to a remote interface */
         status = uct_ep_create_connected(if_info.iface, peer_dev, peer_iface, &ep);
@@ -636,7 +642,9 @@ int main(int argc, char **argv)
         }
     }
 
-    barrier(oob_sock);
+    if (barrier(oob_sock)) {
+        status = UCS_ERR_IO_ERROR;
+    }
     close(oob_sock);
 
 out_free_ep:

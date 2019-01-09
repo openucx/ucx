@@ -325,6 +325,8 @@ static void usage()
 static int parse_cmd(int argc, char *const argv[], char **server_addr)
 {
     int c = 0;
+    int port;
+
     opterr = 0;
 
     while ((c = getopt(argc, argv, "a:p:")) != -1) {
@@ -333,11 +335,12 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr)
             *server_addr = optarg;
             break;
         case 'p':
-            server_port = atoi(optarg);
-            if (server_port < 0) {
+            port = atoi(optarg);
+            if ((port < 0) || (port > UINT16_MAX)) {
                 fprintf(stderr, "Wrong server port number %d\n", server_port);
                 return -1;
             }
+            server_port = port;
             break;
         default:
             usage();
@@ -445,6 +448,7 @@ int main(int argc, char **argv)
              * indicating that the server's endpoint was created and is ready to
              * be used. The client side should initiate the connection, leading
              * to this ep's creation */
+            /* coverity[loop_condition] */
             while (context.ep == NULL) {
                 ucp_worker_progress(ucp_worker);
             }
