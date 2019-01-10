@@ -49,7 +49,7 @@ struct uct_mm_fifo_ctl {
 
     /* 2nd cacheline */
     volatile uint64_t  tail;       /* how much was read */
-} UCS_S_PACKED;
+} UCS_S_PACKED UCS_V_ALIGNED(UCS_SYS_CACHE_LINE_SIZE);
 
 
 struct uct_mm_iface {

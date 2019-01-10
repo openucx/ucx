@@ -87,6 +87,9 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     self->signal.addrlen  = self->fifo_ctl->signal_addrlen;
     self->signal.sockaddr = self->fifo_ctl->signal_sockaddr;
 
+    /* Make sure the fifo ctrl is aligned */
+    ucs_assert_always(((uintptr_t)self->fifo_ctl % UCS_SYS_CACHE_LINE_SIZE) == 0);
+
     /* set the ep->fifo ptr to point to the beginning of the fifo elements at
      * the remote peer */
     uct_mm_set_fifo_elems_ptr(self->mapped_desc.address, &self->fifo);
