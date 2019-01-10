@@ -20,6 +20,12 @@
 #include <string.h>
 
 
+static const char *uct_dc_tx_policy_names[] = {
+    [UCT_DC_TX_POLICY_DCS]           = "dcs",
+    [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
+    [UCT_DC_TX_POLICY_LAST]          = NULL
+};
+
 /* DC specific parameters, expecting DC_ prefix */
 ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
     {"", "IB_TX_QUEUE_LEN=128;RC_FC_ENABLE=y;", NULL,
