@@ -136,4 +136,11 @@
    Memcheck:Cond
    fun:ibv_exp_cmd_query_device
 }
+{
+   ucma_init_device
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:ucma_init_device
+}
 
