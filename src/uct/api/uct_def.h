@@ -419,12 +419,11 @@ typedef struct uct_ep_sockaddr_params {
      */
     uint64_t                          field_mask;
     /**
-     * The sockaddr to connect to on the remote peer. Mandatory filed for
-     * a client.
+     * The sockaddr to connect to on the remote peer. This is a mandatory field.
      */
     const ucs_sock_addr_t             *sockaddr;
     /**
-     * Interface to create the endpoint on. Mandatory filed for a client.
+     * Interface to create the endpoint on. This is a mandatory field.
      */
     uct_iface_h                       iface;
     /**

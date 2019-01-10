@@ -475,16 +475,16 @@ typedef enum {
  *        mask.
  *
  * The enumeration allows specifying which fields in @ref
- * uct_ep_sockaddr_params_t are present. It is used for the enablement of
- * backward compatibility support.
+ * uct_ep_sockaddr_params_t are present. It provides backward compatibility
+ * support.
  */
 enum uct_ep_sockaddr_params_field {
-    UCT_EP_SOCKADDR_PARAM_FIELD_SOCKADDR  = UCS_BIT(0), /**< Remote sockaddr. */
-    UCT_EP_SOCKADDR_PARAM_FIELD_IFACE     = UCS_BIT(1), /**< UCT interface. */
-    UCT_EP_SOCKADDR_PARAM_FIELD_USER_DATA = UCS_BIT(2), /**< User data. */
-    UCT_EP_SOCKADDR_PARAM_FIELD_CB_FLAGS  = UCS_BIT(3), /**< Callback flags. */
+    UCT_EP_SOCKADDR_PARAM_FIELD_SOCKADDR  = UCS_BIT(0), /**< Remote sockaddr */
+    UCT_EP_SOCKADDR_PARAM_FIELD_IFACE     = UCS_BIT(1), /**< UCT interface */
+    UCT_EP_SOCKADDR_PARAM_FIELD_USER_DATA = UCS_BIT(2), /**< User data */
+    UCT_EP_SOCKADDR_PARAM_FIELD_CB_FLAGS  = UCS_BIT(3), /**< Callback flags */
     UCT_EP_SOCKADDR_PARAM_FIELD_PACK_CB   = UCS_BIT(4)  /**< Pack private data
-                                                             callback. */
+                                                             callback */
 };
 
 
