@@ -189,7 +189,9 @@ void print_type_info(const char * tl_name)
 
 #if HAVE_MLX5_HW
         if (tl_name == NULL || !strcasecmp(tl_name, "rc_mlx5")) {
+            PRINT_SIZE(uct_rc_mlx5_am_short_hdr_t);
             PRINT_SIZE(uct_rc_mlx5_ep_t);
+            PRINT_SIZE(uct_rc_mlx5_hdr_t);
             PRINT_SIZE(uct_rc_mlx5_iface_common_config_t);
             PRINT_SIZE(uct_rc_mlx5_iface_common_t);
         }

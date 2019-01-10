@@ -111,49 +111,6 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
     UCS_STATS_NODE_FREE(fc->stats);
 }
 
-static void uct_rc_ep_tag_qp_destroy(uct_rc_ep_t *ep)
-{
-#if IBV_EXP_HW_TM
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                           uct_rc_iface_t);
-    if (UCT_RC_IFACE_TM_ENABLED(iface)) {
-        uct_rc_iface_remove_qp(iface, ep->tm_qp->qp_num);
-        if (ibv_destroy_qp(ep->tm_qp)) {
-            ucs_warn("failed to destroy TM RNDV QP: %m");
-        }
-    }
-#endif
-}
-
-static ucs_status_t uct_rc_ep_tag_qp_create(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
-{
-#if IBV_EXP_HW_TM
-    struct ibv_qp_cap cap;
-    ucs_status_t status;
-    int ret;
-
-    if (UCT_RC_IFACE_TM_ENABLED(iface)) {
-        /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
-         * such a QP to be initialized with zero send queue length. */
-        status = uct_rc_iface_qp_create(iface, IBV_QPT_RC, &ep->tm_qp, &cap, 0);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        status = uct_rc_iface_qp_init(iface, ep->tm_qp);
-        if (status != UCS_OK) {
-            ret = ibv_destroy_qp(ep->tm_qp);
-            if (ret) {
-                ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
-            }
-            return status;
-        }
-        uct_rc_iface_add_qp(iface, ep, ep->tm_qp->qp_num);
-    }
-#endif
-    return UCS_OK;
-}
-
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 {
     struct ibv_qp_cap cap;
@@ -178,11 +135,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
         goto err_txqp_cleanup;
     }
 
-    status = uct_rc_ep_tag_qp_create(iface, self);
-    if (status != UCS_OK) {
-        goto err_fc_cleanup;
-    }
-
     self->sl                = iface->super.config.sl;    /* TODO multi-rail */
     self->path_bits         = iface->super.path_bits[0]; /* TODO multi-rail */
 
@@ -196,8 +148,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
     ucs_list_add_head(&iface->ep_list, &self->list);
     return UCS_OK;
 
-err_fc_cleanup:
-    uct_rc_fc_cleanup(&self->fc);
 err_txqp_cleanup:
     uct_rc_txqp_cleanup(&self->txqp);
 err:
@@ -212,7 +162,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 
     ucs_list_del(&self->list);
     uct_rc_iface_remove_qp(iface, self->txqp.qp->qp_num);
-    uct_rc_ep_tag_qp_destroy(self);
     uct_rc_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(&self->txqp);
@@ -229,12 +178,6 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_ib_pack_uint24(rc_addr->qp_num, ep->txqp.qp->qp_num);
     rc_addr->atomic_mr_id = uct_ib_iface_get_atomic_mr_id(&iface->super);
 
-#if IBV_EXP_HW_TM
-    if (UCT_RC_IFACE_TM_ENABLED(iface)) {
-        uct_ib_pack_uint24(rc_addr->tm_qp_num, ep->tm_qp->qp_num);
-    }
-#endif
-
     return UCS_OK;
 }
 
@@ -250,27 +193,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     ucs_status_t status;
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr, ep->path_bits, &ah_attr);
-
-#if IBV_EXP_HW_TM
-    if (UCT_RC_IFACE_TM_ENABLED(iface)) {
-        /* For HW TM we need 2 QPs, one of which will be used by the device for
-         * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
-         * should be posted to the send side of the QP which is owned by device. */
-        status = uct_rc_iface_qp_connect(iface, ep->tm_qp,
-                                         uct_ib_unpack_uint24(rc_addr->qp_num),
-                                         &ah_attr);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        /* Need to connect local ep QP to the one owned by device
-         * (and bound to XRQ) on the peer. */
-        qp_num = uct_ib_unpack_uint24(rc_addr->tm_qp_num);
-    } else
-#endif
-    {
-        qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
-    }
+    qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
 
     status = uct_rc_iface_qp_connect(iface, ep->txqp.qp, qp_num, &ah_attr);
     if (status != UCS_OK) {
@@ -284,43 +207,11 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
 
 void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                            void *data, size_t length, size_t valid_length,
-                           char *buffer, size_t max, int is_tmh_be)
+                           char *buffer, size_t max)
 {
     uct_rc_hdr_t *rch = data;
     uint8_t fc_hdr    = uct_rc_fc_get_fc_hdr(rch->am_id);
     uint8_t am_wo_fc;
-
-#if IBV_EXP_HW_TM
-    if (rch->tmh_opcode != IBV_EXP_TMH_NO_TAG) {
-        struct ibv_exp_tmh *tmh = (void*)rch;
-        struct ibv_exp_tmh_rvh *rvh = (void*)(tmh + 1);
-        uct_tag_t tag;
-        uint32_t app_ctx;
-
-        if (is_tmh_be) {
-            tag     = be64toh(tmh->tag);
-            app_ctx = ntohl(tmh->app_ctx);
-        } else {
-            tag     = tmh->tag;
-            app_ctx = tmh->app_ctx;
-        }
-
-        switch (rch->tmh_opcode) {
-        case IBV_EXP_TMH_EAGER:
-            snprintf(buffer, max, " EAGER tag %lx app_ctx %d", tag, app_ctx);
-            return;
-        case IBV_EXP_TMH_RNDV:
-            snprintf(buffer, max, " RNDV tag %lx app_ctx %d va 0x%lx len %d rkey %x",
-                     tag, app_ctx, be64toh(rvh->va), ntohl(rvh->len), ntohl(rvh->rkey));
-            return;
-        case IBV_EXP_TMH_FIN:
-            snprintf(buffer, max, " FIN tag %lx app_ctx %d", tag, app_ctx);
-            return;
-        default:
-            break;
-        }
-    }
-#endif
 
     /* Do not invoke AM tracer for auxiliary pure FC_GRANT message */
     if (fc_hdr != UCT_RC_EP_FC_PURE_GRANT) {
@@ -531,17 +422,6 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
 
     return UCS_INPROGRESS;
 }
-
-#if IBV_EXP_HW_TM
-ucs_status_t uct_rc_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op)
-{
-    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
-
-    uint32_t op_index = (uint32_t)((uint64_t)op);
-    ucs_ptr_array_remove(&iface->tm.rndv_comps, op_index, 0);
-    return UCS_OK;
-}
-#endif
 
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(_num_bits, _is_be) \
     void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \

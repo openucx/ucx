@@ -193,9 +193,6 @@ typedef struct uct_rc_fc {
 struct uct_rc_ep {
     uct_base_ep_t       super;
     uct_rc_txqp_t       txqp;
-#if IBV_EXP_HW_TM
-    struct ibv_qp       *tm_qp;
-#endif
     uint16_t            atomic_mr_offset;
     uint8_t             sl;
     uint8_t             path_bits;
@@ -209,21 +206,8 @@ UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
 
 typedef struct uct_rc_ep_address {
     uct_ib_uint24_t  qp_num;
-#if IBV_EXP_HW_TM
-    /* For RNDV TM enabling 2 QPs should be created, one is for sending WRs and
-     * another one for HW (device will use it for RDMA reads and sending RNDV
-     * Complete messages). */
-    uct_ib_uint24_t  tm_qp_num;
-#endif
     uint8_t          atomic_mr_id;
 } UCS_S_PACKED uct_rc_ep_address_t;
-
-
-#if IBV_EXP_HW_TM
-
-ucs_status_t uct_rc_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op);
-
-#endif
 
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
@@ -232,7 +216,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
 
 void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                            void *data, size_t length, size_t valid_length,
-                           char *buffer, size_t max, int is_tmh_be);
+                           char *buffer, size_t max);
 
 void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 

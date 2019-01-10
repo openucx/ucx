@@ -161,7 +161,8 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
                                 iface->config.max_inline,
                                 iface->config.short_desc_size,
                                 uct_ib_iface_get_max_iov(&iface->super.super) - 1,
-                                uct_ib_iface_get_max_iov(&iface->super.super) - 1);
+                                uct_ib_iface_get_max_iov(&iface->super.super) - 1,
+                                sizeof(uct_rc_hdr_t));
     if (status != UCS_OK) {
         return status;
     }
@@ -186,6 +187,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
 
     init_attr.res_domain_key = UCT_IB_IFACE_NULL_RES_DOMAIN_KEY;
     init_attr.fc_req_size    = sizeof(uct_rc_fc_request_t);
+    init_attr.rx_hdr_len     = sizeof(uct_rc_hdr_t);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
                               worker, params, &config->super, &init_attr);
@@ -364,6 +366,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .set_ep_failed            = uct_rc_verbs_ep_set_failed,
     .create_qp                = uct_ib_iface_create_qp
     },
+    .init_rx                  = uct_rc_iface_init_rx,
     .fc_ctrl                  = uct_rc_verbs_ep_fc_ctrl,
     .fc_handler               = uct_rc_iface_fc_handler
 };
