@@ -746,13 +746,16 @@ typedef struct ucp_worker_params {
     uint64_t                field_mask;
 
     /**
-     * Thread safety "mode" for the worker object and resources associated with it.
-     * This value is optional.
-     * If it's not set (along with its corresponding bit in the field_mask -
-     * UCP_WORKER_PARAM_FIELD_THREAD_MODE), the UCS_THREAD_MODE_SINGLE mode
-     * will be used. Note that actual thread mode may be different from mode
-     * passed to @ref ucp_worker_create. To get actual thread mode use
-     * @ref ucp_worker_query.
+     * The parameter thread_mode suggests the thread safety mode which worker
+     * and the associated resources should be created with. This is an
+     * optional parameter. The default value is UCS_THREAD_MODE_SINGLE and
+     * it is used when the value of the parameter is not set. When this
+     * parameter along with its corresponding bit in the
+     * field_mask - UCP_WORKER_PARAM_FIELD_THREAD_MODE is set, the
+     * @ref ucp_worker_create attempts to create worker with this thread mode.
+     * The thread mode with which worker is created can differ from the
+     * suggested mode. The actual thread mode of the worker should be obtained
+     * using the query interface @ref ucp_worker_query.
      */
     ucs_thread_mode_t       thread_mode;
 
