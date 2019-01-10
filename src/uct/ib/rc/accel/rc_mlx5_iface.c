@@ -4,7 +4,6 @@
 * See file LICENSE for terms.
 */
 
-
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/ib_mlx5_dv.h>
@@ -13,7 +12,8 @@
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
 
-#include "rc_mlx5.h"
+#include "rc_mlx5.inl"
+
 
 /**
  * RC mlx5 interface configuration
@@ -50,6 +50,33 @@ ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
     }
 };
 #endif
+
+void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
+                                           struct mlx5_cqe64 *cqe)
+{
+    uct_ib_mlx5_cq_t *cq      = &iface->cq[UCT_IB_DIR_RX];
+    struct mlx5_err_cqe *ecqe = (void*)cqe;
+    uct_ib_mlx5_srq_seg_t *seg;
+    uint16_t wqe_ctr;
+
+    ucs_memory_cpu_load_fence();
+
+    if (((ecqe->op_own >> 4) == MLX5_CQE_RESP_ERR) &&
+        (ecqe->syndrome == MLX5_CQE_SYNDROME_REMOTE_ABORTED_ERR) &&
+        (ecqe->vendor_err_synd == UCT_IB_MLX5_CQE_VENDOR_SYND_ODP))
+    {
+        /* Release the aborted segment */
+        wqe_ctr = ntohs(ecqe->wqe_counter);
+        seg     = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
+        ++cq->cq_ci;
+        uct_rc_mlx5_iface_release_srq_seg(iface, seg, wqe_ctr, UCS_OK,
+                                          iface->super.super.config.rx_headroom_offset,
+                                          &iface->super.super.release_desc);
+    } else {
+        ucs_assert((ecqe->op_own >> 4) != MLX5_CQE_INVALID);
+        uct_ib_mlx5_check_completion(&iface->super.super, cq, cqe);
+    }
+}
 
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
