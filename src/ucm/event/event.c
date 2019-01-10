@@ -10,13 +10,8 @@
 
 #include "event.h"
 
-#include <ucm/api/ucm.h>
 #include <ucm/mmap/mmap.h>
 #include <ucm/malloc/malloc_hook.h>
-#if HAVE_CUDA
-#include <ucm/cuda/cudamem.h>
-#endif
-#include <ucm/util/log.h>
 #include <ucm/util/sys.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/datastruct/khash.h>
@@ -30,6 +25,7 @@
 #include <string.h>
 #include <errno.h>
 
+UCS_LIST_HEAD(ucm_event_installer_list);
 
 static pthread_spinlock_t ucm_kh_lock;
 #define ucm_ptr_hash(_ptr)  kh_int64_hash_func((uintptr_t)(_ptr))
@@ -128,7 +124,7 @@ static ucs_list_link_t ucm_event_handlers =
                                      &ucm_event_orig_handler.list);
 
 
-static void ucm_event_dispatch(ucm_event_type_t event_type, ucm_event_t *event)
+ void ucm_event_dispatch(ucm_event_type_t event_type, ucm_event_t *event)
 {
     ucm_event_handler_t *handler;
 
@@ -150,43 +146,19 @@ static void ucm_event_dispatch(ucm_event_type_t event_type, ucm_event_t *event)
         } \
     }
 
-static void ucm_event_enter()
+void ucm_event_enter()
 {
     ucm_event_lock(pthread_rwlock_rdlock);
 }
 
-static void ucm_event_enter_exclusive()
+void ucm_event_enter_exclusive()
 {
     ucm_event_lock(pthread_rwlock_wrlock);
 }
 
-static void ucm_event_leave()
+void ucm_event_leave()
 {
     pthread_rwlock_unlock(&ucm_event_lock);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucm_dispatch_vm_mmap(void *addr, size_t length)
-{
-    ucm_event_t event;
-
-    ucm_trace("vm_map addr=%p length=%zu", addr, length);
-
-    event.vm_mapped.address = addr;
-    event.vm_mapped.size    = length;
-    ucm_event_dispatch(UCM_EVENT_VM_MAPPED, &event);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucm_dispatch_vm_munmap(void *addr, size_t length)
-{
-    ucm_event_t event;
-
-    ucm_trace("vm_unmap addr=%p length=%zu", addr, length);
-
-    event.vm_unmapped.address = addr;
-    event.vm_unmapped.size    = length;
-    ucm_event_dispatch(UCM_EVENT_VM_UNMAPPED, &event);
 }
 
 void *ucm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
@@ -460,280 +432,6 @@ int ucm_madvise(void *addr, size_t length, int advice)
     return event.madvise.result;
 }
 
-
-#if HAVE_CUDA
-static UCS_F_ALWAYS_INLINE void
-ucm_dispatch_mem_type_alloc(void *addr, size_t length, ucm_mem_type_t mem_type)
-{
-    ucm_event_t event;
-
-    event.mem_type.address  = addr;
-    event.mem_type.size     = length;
-    event.mem_type.mem_type = mem_type;
-    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucm_dispatch_mem_type_free(void *addr, size_t length, ucm_mem_type_t mem_type)
-{
-    ucm_event_t event;
-
-    event.mem_type.address  = addr;
-    event.mem_type.size     = length;
-    event.mem_type.mem_type = mem_type;
-    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
-}
-
-static void ucm_cudafree_dispatch_events(void *dptr)
-{
-    CUresult ret;
-    CUdeviceptr pbase;
-    size_t psize;
-
-    if (dptr == NULL) {
-        return;
-    }
-
-    ret = cuMemGetAddressRange(&pbase, &psize, (CUdeviceptr) dptr);
-    if (ret != CUDA_SUCCESS) {
-        ucm_warn("cuMemGetAddressRange(devPtr=%p) failed", (void *)dptr);
-        psize = 1; /* set minimum length */
-    }
-    ucs_assert(dptr == (void *)pbase);
-
-    ucm_dispatch_mem_type_free((void *)dptr, psize, UCM_MEM_TYPE_CUDA);
-}
-
-CUresult ucm_cuMemFree(CUdeviceptr dptr)
-{
-    CUresult ret;
-
-    ucm_event_enter();
-
-    ucm_trace("ucm_cuMemFree(dptr=%p)",(void *)dptr);
-
-    ucm_cudafree_dispatch_events((void *)dptr);
-
-    ret = ucm_orig_cuMemFree(dptr);
-
-    ucm_event_leave();
-    return ret;
-}
-
-CUresult ucm_cuMemFreeHost(void *p)
-{
-    CUresult ret;
-
-    ucm_event_enter();
-
-    ucm_trace("ucm_cuMemFreeHost(ptr=%p)", p);
-
-    ucm_dispatch_vm_munmap(p, 0);
-
-    ret = ucm_orig_cuMemFreeHost(p);
-
-    ucm_event_leave();
-    return ret;
-}
-
-CUresult ucm_cuMemAlloc(CUdeviceptr *dptr, size_t size)
-{
-    CUresult ret;
-
-    ucm_event_enter();
-
-    ret = ucm_orig_cuMemAlloc(dptr, size);
-    if (ret == CUDA_SUCCESS) {
-        ucm_trace("ucm_cuMemAlloc(dptr=%p size:%lu)",(void *)*dptr, size);
-        ucm_dispatch_mem_type_alloc((void *)*dptr, size, UCM_MEM_TYPE_CUDA);
-    }
-
-    ucm_event_leave();
-    return ret;
-}
-
-CUresult ucm_cuMemAllocManaged(CUdeviceptr *dptr, size_t size, unsigned int flags)
-{
-    CUresult ret;
-
-    ucm_event_enter();
-
-    ret = ucm_orig_cuMemAllocManaged(dptr, size, flags);
-    if (ret == CUDA_SUCCESS) {
-        ucm_trace("ucm_cuMemAllocManaged(dptr=%p size:%lu, flags:%d)",
-                  (void *)*dptr, size, flags);
-        ucm_dispatch_mem_type_alloc((void *)*dptr, size, UCM_MEM_TYPE_CUDA_MANAGED);
-    }
-
-    ucm_event_leave();
-    return ret;
-}
-
-CUresult ucm_cuMemAllocPitch(CUdeviceptr *dptr, size_t *pPitch,
-                             size_t WidthInBytes, size_t Height,
-                             unsigned int ElementSizeBytes)
-{
-    CUresult ret;
-
-    ucm_event_enter();
-
-    ret = ucm_orig_cuMemAllocPitch(dptr, pPitch, WidthInBytes, Height, ElementSizeBytes);
-    if (ret == CUDA_SUCCESS) {
-        ucm_trace("ucm_cuMemAllocPitch(dptr=%p size:%lu)",(void *)*dptr,
-                  (WidthInBytes * Height));
-        ucm_dispatch_mem_type_alloc((void *)*dptr, WidthInBytes * Height,
-                                    UCM_MEM_TYPE_CUDA);
-    }
-
-    ucm_event_leave();
-    return ret;
-}
-
-CUresult ucm_cuMemHostGetDevicePointer(CUdeviceptr *pdptr, void *p, unsigned int Flags)
-{
-    CUresult ret;
-
-    ucm_event_enter();
-
-    ret = ucm_orig_cuMemHostGetDevicePointer(pdptr, p, Flags);
-    if (ret == CUDA_SUCCESS) {
-        ucm_trace("ucm_cuMemHostGetDevicePointer(pdptr=%p p=%p)",(void *)*pdptr, p);
-    }
-
-    ucm_event_leave();
-    return ret;
-}
-
-CUresult ucm_cuMemHostUnregister(void *p)
-{
-    CUresult ret;
-
-    ucm_event_enter();
-
-    ucm_trace("ucm_cuMemHostUnregister(ptr=%p)", p);
-
-    ret = ucm_orig_cuMemHostUnregister(p);
-
-    ucm_event_leave();
-    return ret;
-}
-
-cudaError_t ucm_cudaFree(void *devPtr)
-{
-    cudaError_t ret;
-
-    ucm_event_enter();
-
-    ucm_trace("ucm_cudaFree(devPtr=%p)", devPtr);
-
-    ucm_cudafree_dispatch_events((void *)devPtr);
-
-    ret = ucm_orig_cudaFree(devPtr);
-
-    ucm_event_leave();
-
-    return ret;
-}
-
-cudaError_t ucm_cudaFreeHost(void *ptr)
-{
-    cudaError_t ret;
-
-    ucm_event_enter();
-
-    ucm_trace("ucm_cudaFreeHost(ptr=%p)", ptr);
-
-    ucm_dispatch_vm_munmap(ptr, 0);
-
-    ret = ucm_orig_cudaFreeHost(ptr);
-
-    ucm_event_leave();
-    return ret;
-}
-
-cudaError_t ucm_cudaMalloc(void **devPtr, size_t size)
-{
-    cudaError_t ret;
-
-    ucm_event_enter();
-
-    ret = ucm_orig_cudaMalloc(devPtr, size);
-    if (ret == cudaSuccess) {
-        ucm_trace("ucm_cudaMalloc(devPtr=%p size:%lu)", *devPtr, size);
-        ucm_dispatch_mem_type_alloc(*devPtr, size, UCM_MEM_TYPE_CUDA);
-    }
-
-    ucm_event_leave();
-
-    return ret;
-}
-
-cudaError_t ucm_cudaMallocManaged(void **devPtr, size_t size, unsigned int flags)
-{
-    cudaError_t ret;
-
-    ucm_event_enter();
-
-    ret = ucm_orig_cudaMallocManaged(devPtr, size, flags);
-    if (ret == cudaSuccess) {
-        ucm_trace("ucm_cudaMallocManaged(devPtr=%p size:%lu flags:%d)",
-                  *devPtr, size, flags);
-        ucm_dispatch_mem_type_alloc(*devPtr, size, UCM_MEM_TYPE_CUDA_MANAGED);
-    }
-
-    ucm_event_leave();
-
-    return ret;
-}
-
-cudaError_t ucm_cudaMallocPitch(void **devPtr, size_t *pitch,
-                                size_t width, size_t height)
-{
-    cudaError_t ret;
-
-    ucm_event_enter();
-
-    ret = ucm_orig_cudaMallocPitch(devPtr, pitch, width, height);
-    if (ret == cudaSuccess) {
-        ucm_trace("ucm_cudaMallocPitch(devPtr=%p size:%lu)",*devPtr, (width * height));
-        ucm_dispatch_mem_type_alloc(*devPtr, (width * height), UCM_MEM_TYPE_CUDA);
-    }
-
-    ucm_event_leave();
-    return ret;
-}
-
-cudaError_t ucm_cudaHostGetDevicePointer(void **pDevice, void *pHost, unsigned int flags)
-{
-    cudaError_t ret;
-
-    ucm_event_enter();
-
-    ret = ucm_orig_cudaHostGetDevicePointer(pDevice, pHost, flags);
-    if (ret == cudaSuccess) {
-        ucm_trace("ucm_cuMemHostGetDevicePointer(pDevice=%p pHost=%p)", pDevice, pHost);
-    }
-
-    ucm_event_leave();
-    return ret;
-}
-
-cudaError_t ucm_cudaHostUnregister(void *ptr)
-{
-    cudaError_t ret;
-
-    ucm_event_enter();
-
-    ucm_trace("ucm_cudaHostUnregister(ptr=%p)", ptr);
-
-    ret = ucm_orig_cudaHostUnregister(ptr);
-
-    ucm_event_leave();
-    return ret;
-}
-
-#endif
-
 void ucm_event_handler_add(ucm_event_handler_t *handler)
 {
     ucm_event_handler_t *elem;
@@ -760,6 +458,7 @@ void ucm_event_handler_remove(ucm_event_handler_t *handler)
 
 static ucs_status_t ucm_event_install(int events)
 {
+    ucm_event_installer_t *event_installer;
     int native_events, malloc_events;
     ucs_status_t status;
 
@@ -795,16 +494,13 @@ static ucs_status_t ucm_event_install(int events)
 
     ucm_debug("malloc hooks are ready");
 
-#if HAVE_CUDA
-    if (events & (UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE)) {
-        status = ucm_cudamem_install();
+    /* Call extra event installers */
+    ucs_list_for_each(event_installer, &ucm_event_installer_list, list) {
+        status = event_installer->func(events);
         if (status != UCS_OK) {
-            ucm_debug("failed to install cudamem events");
             goto out_unlock;
         }
-        ucm_debug("cudaFree hooks are ready");
     }
-#endif
 
     status = UCS_OK;
 

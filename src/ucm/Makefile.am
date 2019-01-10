@@ -40,11 +40,6 @@ noinst_HEADERS = \
 	bistro/bistro_aarch64.h \
 	bistro/bistro_ppc64.h
 
-if HAVE_CUDA
-noinst_HEADERS += \
-	cuda/cudamem.h
-endif
-
 libucm_la_SOURCES = \
 	event/event.c \
 	malloc/malloc_hook.c \
@@ -59,6 +54,10 @@ libucm_la_SOURCES = \
 	bistro/bistro_ppc64.c
 
 if HAVE_CUDA
+libucm_la_CPPFLAGS += $(CUDA_CPPFLAGS)
+libucm_la_LDFLAGS  += $(CUDA_LDFLAGS)
+noinst_HEADERS += \
+	cuda/cudamem.h
 libucm_la_SOURCES += \
     cuda/cudamem.c
 endif

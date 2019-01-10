@@ -8,7 +8,7 @@
 
 #include <uct/base/uct_md.h>
 #include <uct/cuda/base/cuda_md.h>
-#include <ucs/sys/rcache.h>
+#include <ucs/memory/rcache.h>
 #include "gdrapi.h"
 
 #define UCT_GDR_COPY_MD_NAME "gdr_copy"
