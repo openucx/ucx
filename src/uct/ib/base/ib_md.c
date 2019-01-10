@@ -153,7 +153,6 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
                              UCT_MD_FLAG_ADVISE;
     md_attr->cap.reg_mem_types = UCS_BIT(UCT_MD_MEM_TYPE_HOST);
 
-#if HAVE_CUDA
     if (md->config.enable_gpudirect_rdma != UCS_NO) {
         /* check if GDR driver is loaded */
         if (!access("/sys/kernel/mm/memory_peers/nv_mem/version", F_OK)) {
@@ -167,7 +166,6 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
             ucs_debug("%s: GPUDirect RDMA is disabled", uct_ib_device_name(&md->dev));
         }
     }
-#endif
 
     md_attr->cap.mem_type     = UCT_MD_MEM_TYPE_HOST;
     md_attr->rkey_packed_size = UCT_IB_MD_PACKED_RKEY_SIZE;
