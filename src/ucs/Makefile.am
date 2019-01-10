@@ -9,7 +9,7 @@ AUTOMAKE_OPTIONS    = nostdinc # avoid collision with built-in debug.h
 lib_LTLIBRARIES     = libucs.la
 bin_PROGRAMS        =
 
-libucs_la_CPPFLAGS = $(BASE_CPPFLAGS)
+libucs_la_CPPFLAGS = $(BASE_CPPFLAGS) -DUCX_MODULE_DIR=\"$(moduledir)\"
 libucs_la_CFLAGS   = $(BASE_CFLAGS)
 libucs_la_LDFLAGS  = -ldl $(NUMA_LIBS) -version-info $(SOVERSION)
 libucs_ladir       = $(includedir)/ucs
@@ -80,6 +80,7 @@ noinst_HEADERS = \
 	stats/stats.h \
 	sys/checker.h \
 	sys/compiler.h \
+	sys/module.h \
 	sys/sys.h \
 	time/time.h \
 	time/timerq.h \
@@ -122,6 +123,7 @@ libucs_la_SOURCES = \
 	stats/stats.c \
 	sys/init.c \
 	sys/math.c \
+	sys/module.c \
 	sys/string.c \
 	sys/sys.c \
 	time/time.c \
@@ -143,6 +145,10 @@ ucs_stats_parser_LDADD   = libucs.la
 ucs_stats_parser_SOURCES = stats/stats_parser.c
 endif
 
+all-local: $(objdir)/$(modulesubdir)
+
+$(objdir)/$(modulesubdir): $(lib_LTLIBRARIES)
+	$(AM_V_at)$(LN_RS) -fn $(localmoduledir) $(objdir)/$(modulesubdir)
 
 #TODO	stats/stats_dump.c
 #TODO	stats/stats_reader.c

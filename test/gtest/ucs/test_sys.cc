@@ -6,6 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
+#include <ucs/sys/module.h>
 #include <ucs/sys/sys.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/time/time.h>
@@ -103,4 +104,16 @@ UCS_TEST_F(test_sys, memory) {
     size_t phys_size = ucs_get_phys_mem_size();
     UCS_TEST_MESSAGE << "Physical memory size: " << ucs::size_value(phys_size);
     EXPECT_GT(phys_size, 1ul * 1024 * 1024);
+}
+
+extern "C" {
+int test_module_loaded = 0;
+}
+
+UCS_TEST_F(test_sys, module) {
+    UCS_MODULE_FRAMEWORK_DECLARE(test);
+
+    EXPECT_EQ(0, test_module_loaded);
+    UCS_MODULE_FRAMEWORK_LOAD(test);
+    EXPECT_EQ(1, test_module_loaded);
 }

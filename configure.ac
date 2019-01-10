@@ -68,6 +68,8 @@ AC_PROG_CC
 AC_PROG_CXX
 AC_OPENMP
 AM_PROG_AS
+AC_PROG_LN_S
+AC_PROG_MKDIR_P
 AC_PROG_SED
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
@@ -78,6 +80,18 @@ AC_FUNC_STRERROR_R
 
 m4_include([config/m4/pkg.m4])
 PKG_PROG_PKG_CONFIG
+
+
+#
+# Check if 'ln' supports creating relative links
+#
+AC_MSG_CHECKING([if ${LN_S} supports --relative])
+AS_IF([${LN_S} --relative symlinktest 2>/dev/null],
+      [AC_MSG_RESULT([yes])
+       AC_SUBST([LN_RS], ["${LN_S} --relative"])
+       rm symlinktest],
+      [AC_MSG_RESULT([no])
+       AC_SUBST([LN_RS], [${LN_S}])])
 
 
 #
@@ -93,6 +107,18 @@ m4_ifdef([AS_VAR_APPEND],
 [m4_copy([AS_VAR_APPEND], [ucx_AS_VAR_APPEND])],
 [m4_define([ucx_AS_VAR_APPEND],
 [AS_VAR_SET([$1], [AS_VAR_GET([$1])$2])])])
+
+
+#
+# Paths for loadable modules
+#
+AC_SUBST([modulesubdir],   [${PACKAGE_NAME}])               # module directory names
+AC_SUBST([moduledir],      [${libdir}/${modulesubdir}])     # module installation directory
+AC_SUBST([localmoduledir], ['$(abs_top_builddir)/modules']) # local directory for module symlinks
+AC_SUBST([objdir],         [${objdir}])                     # libtool objects dir, usually .libs
+AC_SUBST([shrext],         [${shrext_cmds}])                # libtool shared library extension
+AC_DEFINE_UNQUOTED([UCX_MODULE_SUBDIR], ["${modulesubdir}"], [UCX module sub-directory])
+
 
 #
 # Configure modules
@@ -159,6 +185,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      m4_include([src/uct/sm/cma/configure.m4])
      m4_include([src/uct/sm/knem/configure.m4])
      m4_include([src/uct/sm/mm/xpmem/configure.m4])
+     m4_include([test/gtest/configure.m4])
 
      #
      # Compile code with frame pointer. Optimizations usually omit the frame pointer,
@@ -298,8 +325,6 @@ AC_CONFIG_FILES([
                  test/apps/Makefile
                  test/apps/sockaddr/Makefile
                  test/examples/Makefile
-                 test/gtest/Makefile
-                 test/gtest/ucm/test_dlopen/Makefile
                  test/mpi/Makefile
                  bindings/java/src/main/native/Makefile
                  ])

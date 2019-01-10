@@ -17,7 +17,7 @@ GTEST_EXTRA_ARGS         ?=
 LAUNCHER                 ?=
 VALGRIND_EXTRA_ARGS      ?=
 
-SUBDIRS = ucm/test_dlopen
+SUBDIRS = ucs/test_module ucm/test_dlopen
 
 export UCX_HANDLE_ERRORS
 export UCX_LOG_LEVEL
@@ -57,7 +57,7 @@ gtest_CPPFLAGS = \
 	$(GTEST_CPPFLAGS) \
 	$(OPENMP_CFLAGS)
 
-gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install
+gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install -Wl,-dynamic-list-data
 gtest_CFLAGS   = $(BASE_CFLAGS)
 gtest_CXXFLAGS = $(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -fno-tree-vectorize \
 				 -DGTEST_UCM_HOOK_LIB_DIR="\"${abs_builddir}/ucm/test_dlopen/.libs\""

@@ -1,0 +1,26 @@
+#
+# Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+#
+# See file LICENSE for terms.
+#
+
+# Automake silent rules
+AM_V_LN   = $(AM_V_LN_@AM_V@)
+AM_V_LN_  = $(AM_V_LN_@AM_DEFAULT_V@)
+AM_V_LN_0 = echo "  LN      "
+AM_V_LN_1 = true
+
+local_la_modules = $(patsubst %, $(localmoduledir)/%, $(module_LTLIBRARIES))
+
+all-local: $(local_la_modules)
+
+# Create symbolic links for the built modules under $(localmoduledir)
+# Link also *.la files to create proper makefile dependencies
+$(local_la_modules): $(module_LTLIBRARIES)
+	$(AM_V_at)$(MKDIR_P) $(localmoduledir)
+	$(AM_V_at)for lib in *.la $(objdir)/*$(shrext)*; do \
+		(cd $(localmoduledir) && $(LN_RS) -nf $(shell pwd)/$$lib); \
+	done
+	@for lib in *.la $(objdir)/*$(shrext)*; do \
+		$(AM_V_LN) $$lib; \
+	done
