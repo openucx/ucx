@@ -914,12 +914,20 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ud_send_skb_t *skb, *sent_skb;
+    ucs_queue_iter_t resend_pos;
     uct_ud_zcopy_desc_t *zdesc;
     size_t iov_it;
 
     /* check window */
-    sent_skb = ucs_queue_iter_elem(sent_skb, ep->resend.pos, queue);
-    if ((sent_skb == NULL) || UCT_UD_PSN_COMPARE(sent_skb->neth->psn, >=, ep->tx.max_psn)) {
+    resend_pos = (void*)ep->resend.pos;
+    sent_skb   = ucs_queue_iter_elem(sent_skb, resend_pos, queue);
+    if (sent_skb == NULL) {
+        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
+        return NULL;
+    }
+
+    ucs_assert(((uintptr_t)sent_skb % UCT_UD_SKB_ALIGN) == 0);
+    if (UCT_UD_PSN_COMPARE(sent_skb->neth->psn, >=, ep->tx.max_psn)) {
         ucs_debug("ep(%p): out of window(psn=%d/max_psn=%d) - can not resend more",
                   ep, sent_skb ? sent_skb->neth->psn : -1, ep->tx.max_psn);
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
@@ -930,7 +938,7 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
     if ((uct_ud_neth_get_dest_id(sent_skb->neth) == UCT_UD_EP_NULL_ID) &&
         !(sent_skb->neth->packet_type & UCT_UD_PACKET_FLAG_CTL))
     {
-        ep->resend.pos = ucs_queue_iter_next(ep->resend.pos);
+        ep->resend.pos = ucs_queue_iter_next(resend_pos);
         return NULL;
     }
 
@@ -943,7 +951,7 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
     skb = uct_ud_iface_resend_skb_get(iface);
     ucs_assert_always(skb != NULL);
 
-    ep->resend.pos = ucs_queue_iter_next(ep->resend.pos);
+    ep->resend.pos = ucs_queue_iter_next(resend_pos);
     ep->resend.psn = sent_skb->neth->psn;
     memcpy(skb->neth, sent_skb->neth, sent_skb->len);
     skb->neth->ack_psn = ep->rx.acked_psn;

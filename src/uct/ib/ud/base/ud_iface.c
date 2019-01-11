@@ -467,7 +467,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     status = uct_iface_mpool_init(&self->super.super, &self->tx.mp,
                                   sizeof(uct_ud_send_skb_t) + data_size,
                                   sizeof(uct_ud_send_skb_t),
-                                  UCS_SYS_CACHE_LINE_SIZE,
+                                  UCT_UD_SKB_ALIGN,
                                   &config->super.tx.mp, self->config.tx_qp_len,
                                   uct_ud_iface_send_skb_init, "ud_tx_skb");
     if (status != UCS_OK) {
