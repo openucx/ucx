@@ -179,17 +179,15 @@ hsa_status_t uct_rocm_init()
 
     /* Initialize HSA RT just in case if it was not initialized before */
     status = hsa_init();
-
     if (status != HSA_STATUS_SUCCESS) {
-        ucs_error("Failure to open HSA connection: 0x%x", status);
+        ucs_debug("Failure to open HSA connection: 0x%x", status);
         goto end;
     }
 
     /* Collect information about GPU agents */
     status = hsa_iterate_agents(uct_rocm_hsa_agent_callback, NULL);
-
     if (status != HSA_STATUS_SUCCESS && status != HSA_STATUS_INFO_BREAK) {
-        ucs_error("Failure to iterate HSA agents: 0x%x", status);
+        ucs_debug("Failure to iterate HSA agents: 0x%x", status);
         goto end;
     }
 
