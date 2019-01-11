@@ -5,7 +5,6 @@
 */
 
 #include "rc_mlx5.h"
-
 #if HAVE_DECL_IBV_CMD_MODIFY_QP
 #include <infiniband/driver.h>
 #endif
@@ -13,6 +12,9 @@
 #include <ucs/arch/cpu.h>
 #include <ucs/sys/compiler.h>
 #include <arpa/inet.h> /* For htonl */
+
+#include "rc_mlx5.inl"
+
 
 /*
  *

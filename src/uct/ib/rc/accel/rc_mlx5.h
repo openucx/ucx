@@ -7,13 +7,14 @@
 #ifndef UCT_RC_MLX5_H
 #define UCT_RC_MLX5_H
 
+#include "rc_mlx5_common.h"
+
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/class.h>
 
-#include "rc_mlx5.inl"
 
 /**
  * RC remote endpoint
@@ -39,6 +40,9 @@ typedef struct uct_rc_mlx5_ep_address {
 UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
+
+void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
+                                           struct mlx5_cqe64 *cqe);
 
 ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
                                       uint64_t remote_addr, uct_rkey_t rkey);
