@@ -4,6 +4,7 @@
 */
 
 #include "ucx_hello_world.h"
+#include <limits.h>
 
 #include <uct/api/uct.h>
 
@@ -295,7 +296,7 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
     status = uct_query_md_resources(&md_resources, &num_md_resources);
     CHKERR_JUMP(UCS_OK != status, "query for memory domain resources", error_ret);
 
-    iface_p->iface = NULL; /* suppress coverity */
+    iface_p->iface = NULL;
 
     /* Iterate through protected domain resources */
     for (i = 0; i < num_md_resources; ++i) {
@@ -466,12 +467,11 @@ int sendrecv(int sock, const void *sbuf, size_t slen, void **rbuf)
     }
 
     ret = recv(sock, &rlen, sizeof(rlen), 0);
-    if (ret != sizeof(rlen)) {
+    if ((ret != sizeof(rlen)) || (rlen > (SIZE_MAX / 2))) {
         fprintf(stderr, "failed to receive device address length\n");
         return -1;
     }
 
-    /* coverity[tainted_data] */
     *rbuf = calloc(1, rlen);
     if (!*rbuf) {
         fprintf(stderr, "failed to allocate receive buffer\n");
@@ -611,7 +611,7 @@ int main(int argc, char **argv)
 
     if (cmd_args.server_name) {
         char *str = (char *)malloc(cmd_args.test_strlen);
-        generate_random_string(str, cmd_args.test_strlen);
+        generate_test_string(str, cmd_args.test_strlen);
 
         /* Send active message to remote endpoint */
         if (cmd_args.func_am_type == FUNC_AM_SHORT) {

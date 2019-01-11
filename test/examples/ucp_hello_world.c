@@ -372,7 +372,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     CHKERR_JUMP(!msg, "allocate memory\n", err_ep);
 
     msg->data_len = msg_len - sizeof(*msg);
-    generate_random_string((char *)(msg + 1), test_string_length);
+    generate_test_string((char *)(msg + 1), test_string_length);
 
     request = ucp_tag_send_nb(client_ep, msg, msg_len,
                               ucp_dt_make_contig(1), tag,

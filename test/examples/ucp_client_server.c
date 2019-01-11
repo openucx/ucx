@@ -441,27 +441,26 @@ int main(int argc, char **argv)
         }
 
         /* Server is always up */
+        printf("Waiting for connection...\n");
         while (1) {
-            printf("Waiting for connection...\n");
-
             /* Wait for the server's callback to set the context->ep field, thus
              * indicating that the server's endpoint was created and is ready to
              * be used. The client side should initiate the connection, leading
              * to this ep's creation */
-            /* coverity[loop_condition] */
-            while (context.ep == NULL) {
+            if (context.ep == NULL) {
                 ucp_worker_progress(ucp_worker);
-            }
+            } else {
+                /* Client-Server communication via Stream API */
+                send_recv_stream(ucp_worker, context.ep, is_server);
 
-            /* Client-Server communication via Stream API */
-            send_recv_stream(ucp_worker, context.ep, is_server);
+                /* Close the endpoint to the client */
+                ep_close(ucp_worker, context.ep);
 
-            /* Close the endpoint to the client */
-            ep_close(ucp_worker, context.ep);
-
-            /* Initialize server's endpoint for the next connection with a new
-             * client */
-            context.ep = NULL;
+                /* Initialize server's endpoint for the next connection with a new
+                 * client */
+                context.ep = NULL;
+                printf("Waiting for connection...\n");
+            };
         }
     } else {
         /* Client side */

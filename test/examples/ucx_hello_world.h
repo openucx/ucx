@@ -105,22 +105,17 @@ static int barrier(int oob_sock)
     }
 
     res = recv(oob_sock, &dummy, sizeof(dummy), 0);
+
+    /* number of received bytes should be the same as sent */
     return !(res == sizeof(dummy));
 }
 
-static void generate_random_string(char *str, int size)
+static void generate_test_string(char *str, int size)
 {
     int i;
-    static int init = 0;
-    /* randomize seed only once */
-    if (!init) {
-        srand(time(NULL));
-        init = 1;
-    }
 
-    for (i = 0; i < (size-1); ++i) {
-        /* coverity[dont_call] */
-        str[i] =  'A' + (rand() % 26);
+    for (i = 0; i < (size - 1); ++i) {
+        str[i] =  'A' + (i % 26);
     }
     str[i] = 0;
 }
