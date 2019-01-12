@@ -54,7 +54,9 @@ typedef enum ucm_event_type {
 typedef enum ucm_mem_type {
     /*cuda memory */
     UCM_MEM_TYPE_CUDA         = UCS_BIT(0),
-    UCM_MEM_TYPE_CUDA_MANAGED = UCS_BIT(1)
+    UCM_MEM_TYPE_CUDA_MANAGED = UCS_BIT(1),
+    /* rocm memory */
+    UCM_MEM_TYPE_ROCM         = UCS_BIT(2),
 } ucm_mem_type_t;
 
 
