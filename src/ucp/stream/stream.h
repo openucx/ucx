@@ -22,7 +22,7 @@ typedef struct {
         ucp_stream_am_hdr_t  hdr;
         ucp_recv_desc_t     *rdesc;
     };
-} UCS_S_PACKED ucp_stream_am_data_t;
+} ucp_stream_am_data_t;
 
 
 void ucp_stream_ep_init(ucp_ep_h ep);

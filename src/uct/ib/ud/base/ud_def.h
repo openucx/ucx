@@ -26,6 +26,7 @@
 #define UCT_UD_CA_MD_FACTOR     2   /* window = window/factor */
 #define UCT_UD_CA_DUP_ACK_CNT   2   /* TODO: not implemented yet */
 #define UCT_UD_RESENDS_PER_ACK  4   /* request per every N resends */
+#define UCT_UD_SKB_ALIGN        UCS_SYS_CACHE_LINE_SIZE
 
 /* note that the ud tx window is [acked_psn+1, max_psn)
  * and max_psn = acked_psn + cwnd
@@ -146,7 +147,7 @@ typedef struct uct_ud_send_skb {
     uint8_t                 flags;
     int8_t                  status;     /* used in case of failure */
     uct_ud_neth_t           neth[0];
-} UCS_S_PACKED UCS_V_ALIGNED(UCS_SYS_CACHE_LINE_SIZE) uct_ud_send_skb_t;
+} UCS_S_PACKED UCS_V_ALIGNED(UCT_UD_SKB_ALIGN) uct_ud_send_skb_t;
 
 
 typedef struct uct_ud_comp_desc {
