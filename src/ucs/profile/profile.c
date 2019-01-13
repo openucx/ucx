@@ -13,6 +13,9 @@
 #include <ucs/sys/sys.h>
 #include <ucs/time/time.h>
 #include <pthread.h>
+#ifdef HAVE_LIBGEN_H
+#include <libgen.h>
+#endif
 
 
 typedef struct ucs_profile_global_location {

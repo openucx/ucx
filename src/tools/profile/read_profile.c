@@ -20,6 +20,9 @@
 #include <stdio.h>
 #include <assert.h>
 #include <errno.h>
+#ifdef HAVE_LIBGEN_H
+#include <libgen.h>
+#endif
 
 
 #define INDENT             4

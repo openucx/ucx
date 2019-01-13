@@ -27,6 +27,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <link.h>
+#ifdef HAVE_LIBGEN_H
+#include <libgen.h>
+#endif
 
 
 typedef struct ucm_auxv {

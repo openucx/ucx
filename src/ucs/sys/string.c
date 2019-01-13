@@ -17,6 +17,9 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <time.h>
+#ifdef HAVE_LIBGEN_H
+#include <libgen.h>
+#endif
 
 
 void ucs_fill_filename_template(const char *tmpl, char *buf, size_t max)

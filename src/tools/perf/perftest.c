@@ -31,6 +31,9 @@
 #include <sys/types.h>
 #include <sys/poll.h>
 #include <locale.h>
+#ifdef HAVE_LIBGEN_H
+#include <libgen.h>
+#endif
 #if HAVE_MPI
 #  include <mpi.h>
 #elif HAVE_RTE

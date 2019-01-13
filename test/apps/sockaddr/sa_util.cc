@@ -4,11 +4,18 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include "sa_util.h"
 
 #include <sys/epoll.h>
 #include <sys/time.h>
 #include <unistd.h>
+#ifdef HAVE_LIBGEN_H
+#include <libgen.h>
+#endif
 #include <cstring>
 #include <climits>
 

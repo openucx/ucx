@@ -18,6 +18,9 @@
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
+#ifdef HAVE_LIBGEN_H
+#include <libgen.h>
+#endif
 
 #define UCM_LOG_BUG_SIZE   256
 
