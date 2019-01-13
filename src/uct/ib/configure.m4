@@ -239,8 +239,16 @@ AS_IF([test "x$with_ib" == xyes],
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_LINK_LAYER_ETHERNET,
                        IBV_EVENT_GID_CHANGE,
-                       ibv_create_qp_ex],
+                       ibv_create_qp_ex,
+                       ibv_create_srq_ex],
                       [], [], [[#include <infiniband/verbs.h>]])
+
+       AC_CHECK_DECL(ibv_query_device_ex, [
+       AC_TRY_COMPILE([#include <infiniband/verbs.h>],
+                      [ibv_query_device_ex(NULL, NULL, NULL)],
+                      [AC_DEFINE([HAVE_DECL_IBV_QUERY_DEVICE_EX], 1,
+                          [have upstream ibv_query_device_ex])])],
+                          [], [[#include <infiniband/verbs.h>]])
 
        AC_CHECK_DECLS([IBV_EXP_ACCESS_ALLOCATE_MR,
                        IBV_EXP_ACCESS_ON_DEMAND,
@@ -257,7 +265,8 @@ AS_IF([test "x$with_ib" == xyes],
                        ibv_exp_prefetch_mr,
                        ibv_exp_create_srq,
                        ibv_exp_setenv,
-                       ibv_exp_query_gid_attr],
+                       ibv_exp_query_gid_attr,
+                       ibv_exp_query_device],
                       [], [], [[#include <infiniband/verbs_exp.h>]])
 
        AC_CHECK_DECLS([ibv_exp_post_send,
@@ -353,12 +362,15 @@ AS_IF([test "x$with_ib" == xyes],
            ])
        AS_IF([test "x$with_ib_hw_tm" = xexp],
            [AC_DEFINE([IBV_EXP_HW_TM], 1, [IB Tag Matching support (EXP)])
+            AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
             AC_CHECK_MEMBERS([struct ibv_exp_create_srq_attr.dc_offload_params],
                              [AC_DEFINE([IBV_EXP_HW_TM_DC], 1, [DC Tag Matching support])],
                              [], [#include <infiniband/verbs_exp.h>])
            ])
        AS_IF([test "x$with_ib_hw_tm" = xupstream],
-           [AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])])
+           [AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
+            AC_CHECK_MEMBERS([struct ibv_tm_caps.flags], [], [],
+                             [#include <infiniband/verbs.h>])])
 
        # Device Memory support
        AS_IF([test "x$with_dm" != xno],

@@ -292,9 +292,9 @@ static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
     /* MTU is set by user configuration */
     if (config->path_mtu != UCT_IB_MTU_DEFAULT) {
         iface->config.path_mtu = config->path_mtu + (IBV_MTU_512 - UCT_IB_MTU_512);
-    } else if ((port_mtu > IBV_MTU_2048) && (dev->dev_attr.vendor_id == 0x02c9) &&
-        ((dev->dev_attr.vendor_part_id == 4099) || (dev->dev_attr.vendor_part_id == 4100) ||
-         (dev->dev_attr.vendor_part_id == 4103) || (dev->dev_attr.vendor_part_id == 4104)))
+    } else if ((port_mtu > IBV_MTU_2048) && (IBV_DEV_ATTR(dev, vendor_id) == 0x02c9) &&
+        ((IBV_DEV_ATTR(dev, vendor_part_id) == 4099) || (IBV_DEV_ATTR(dev, vendor_part_id) == 4100) ||
+         (IBV_DEV_ATTR(dev, vendor_part_id) == 4103) || (IBV_DEV_ATTR(dev, vendor_part_id) == 4104)))
     {
         /* On some devices optimal path_mtu is 2048 */
         iface->config.path_mtu = IBV_MTU_2048;

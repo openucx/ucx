@@ -173,7 +173,7 @@ typedef struct uct_rc_mlx5_cmd_wq {
            UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
            (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
            hdr = (_desc) + 1; \
-           uct_rc_mlx5_fill_tmh(hdr, _tag, _app_ctx, IBV_EXP_TMH_EAGER); \
+           uct_rc_mlx5_fill_tmh(hdr, _tag, _app_ctx, IBV_TMH_EAGER); \
            hdr += sizeof(struct ibv_tmh); \
            _length = _pack_cb(hdr, _arg); \
        }
@@ -245,6 +245,7 @@ typedef struct uct_rc_mlx5_iface_common {
     } rx;
     uct_ib_mlx5_cq_t                 cq[UCT_IB_DIR_NUM];
     struct {
+        struct ibv_qp                *cmd_qp;
         uct_rc_mlx5_cmd_wq_t         cmd_wq;
         uct_rc_mlx5_tag_entry_t      *head;
         uct_rc_mlx5_tag_entry_t      *tail;
