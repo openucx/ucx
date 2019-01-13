@@ -18,7 +18,7 @@ public:
 
     void init()
     {
-        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
+        m_env.push_back(new ucs::scoped_setenv("UCX_TM_ENABLE", "y"));
         test_ucp_tag::init();
         check_offload_support(true);
     }

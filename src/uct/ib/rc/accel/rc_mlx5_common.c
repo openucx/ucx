@@ -473,7 +473,7 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     iface->super.rx.srq.quota = srq_init_attr->base.attr.max_wr;
 
     status = UCS_STATS_NODE_ALLOC(&iface->tm.stats, &uct_rc_mlx5_tag_stats_class,
-                                  iface->stats);
+                                  iface->super.stats);
     if (status != UCS_OK) {
         ucs_error("Failed to allocate tag stats: %s", ucs_status_string(status));
         goto err;

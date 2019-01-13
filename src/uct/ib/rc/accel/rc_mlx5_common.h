@@ -369,8 +369,8 @@ uct_rc_mlx5_fill_tmh(struct ibv_tmh *tmh, uct_tag_t tag,
                      uint32_t app_ctx, unsigned op)
 {
     tmh->opcode  = op;
-    tmh->app_ctx = htonl(app_ctx);
-    tmh->tag     = htobe64(tag);
+    tmh->app_ctx = app_ctx;
+    tmh->tag     = tag;
 }
 
 static UCS_F_ALWAYS_INLINE void

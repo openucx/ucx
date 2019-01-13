@@ -372,7 +372,7 @@ UCS_TEST_P(test_ucp_peer_failure, zcopy, "ZCOPY_THRESH=1023") {
             true /* must_fail */);
 }
 
-UCS_TEST_P(test_ucp_peer_failure, bcopy_multi, "MAX_BCOPY?=512", "RC_TM_ENABLE?=n") {
+UCS_TEST_P(test_ucp_peer_failure, bcopy_multi, "MAX_BCOPY?=512", "TM_ENABLE?=n") {
     do_test(1024, /* msg_size */
             0, /* pre_msg_cnt */
             false, /* force_close */
