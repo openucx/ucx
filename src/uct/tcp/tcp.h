@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -103,9 +103,7 @@ ucs_status_t uct_tcp_ep_create(uct_tcp_iface_t *iface, int fd,
                                const struct sockaddr_in *dest_addr,
                                uct_tcp_ep_t **ep_p);
 
-ucs_status_t uct_tcp_ep_create_connected(uct_iface_t *tl_iface,
-                                         const uct_device_addr_t *dev_addr,
-                                         const uct_iface_addr_t *iface_addr,
+ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
                                          uct_ep_h *ep_p);
 
 void uct_tcp_ep_destroy(uct_ep_h tl_ep);

@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -582,6 +582,19 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
 }
 
 static ucs_status_t
+uct_ud_mlx5_ep_create(const uct_ep_params_t* params, uct_ep_h *ep_p)
+{
+    if (ucs_test_all_flags(params->field_mask, UCT_EP_PARAM_FIELD_DEV_ADDR |
+                                               UCT_EP_PARAM_FIELD_IFACE_ADDR)) {
+        return uct_ud_mlx5_ep_create_connected(params->iface, params->dev_addr,
+                                               params->iface_addr, ep_p);
+    }
+
+    return uct_ud_mlx5_ep_t_new(params->iface, ep_p);
+}
+
+
+static ucs_status_t
 uct_ud_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
                              const uct_device_addr_t *dev_addr,
                              const uct_ep_addr_t *uct_ep_addr)
@@ -660,8 +673,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .ep_pending_purge         = uct_ud_ep_pending_purge,
     .ep_flush                 = uct_ud_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_ud_mlx5_ep_t),
-    .ep_create_connected      = uct_ud_mlx5_ep_create_connected,
+    .ep_create                = uct_ud_mlx5_ep_create,
     .ep_destroy               = uct_ud_ep_disconnect ,
     .ep_get_address           = uct_ud_ep_get_address,
     .ep_connect_to_ep         = uct_ud_mlx5_ep_connect_to_ep,

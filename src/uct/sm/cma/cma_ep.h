@@ -1,6 +1,6 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -17,8 +17,7 @@ typedef struct uct_cma_ep {
     pid_t         remote_pid;
 } uct_cma_ep_t;
 
-UCS_CLASS_DECLARE_NEW_FUNC(uct_cma_ep_t, uct_ep_t, uct_iface_t*,
-                           const uct_device_addr_t *, const uct_iface_addr_t *);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_cma_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_cma_ep_t, uct_ep_t);
 ucs_status_t uct_cma_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
                                   uint64_t remote_addr, uct_rkey_t rkey,

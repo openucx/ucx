@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -8,6 +8,7 @@
 #include "ud_iface.h"
 #include "ud_inl.h"
 #include "ud_def.h"
+#include "api/uct_def.h"
 
 #include <uct/ib/base/ib_verbs.h>
 #include <ucs/debug/memtrack.h>
@@ -313,6 +314,7 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
                                                uct_ud_ep_t **new_ep_p,
                                                uct_ud_send_skb_t **skb_p)
 {
+    uct_ep_params_t params;
     ucs_status_t status;
     uct_ud_ep_t *ep;
     uct_ep_h new_ep_h;
@@ -326,7 +328,9 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
         return UCS_ERR_ALREADY_EXISTS;
     }
 
-    status = uct_ep_create(&iface->super.super.super, &new_ep_h);
+    params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    params.iface      = &iface->super.super.super;
+    status = uct_ep_create(&params, &new_ep_h);
     if (status != UCS_OK) {
         return status;
     }
@@ -471,12 +475,15 @@ static inline void uct_ud_ep_rx_put(uct_ud_neth_t *neth, unsigned byte_len)
 
 static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_hdr_t *ctl)
 {
+    uct_ep_params_t params;
     uct_ud_ep_t *ep;
     ucs_status_t status;
     uct_ep_t *ep_h;
-    uct_iface_t *iface_h =  &iface->super.super.super;
+
     /* create new endpoint */
-    status = uct_ep_create(iface_h, &ep_h);
+    params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    params.iface      = &iface->super.super.super;
+    status = uct_ep_create(&params, &ep_h);
     ucs_assert_always(status == UCS_OK);
     ep = ucs_derived_of(ep_h, uct_ud_ep_t);
 

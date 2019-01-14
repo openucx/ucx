@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -153,7 +153,6 @@ UCS_CLASS_INIT_FUNC(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
     self->iface.ops.iface_tag_recv_zcopy     = (void*)ucp_proxy_ep_fatal;
     self->iface.ops.iface_tag_recv_cancel    = (void*)ucp_proxy_ep_fatal;
     self->iface.ops.ep_create                = (void*)ucp_proxy_ep_fatal;
-    self->iface.ops.ep_create_connected      = (void*)ucp_proxy_ep_fatal;
     self->iface.ops.iface_flush              = (void*)ucp_proxy_ep_fatal;
     self->iface.ops.iface_fence              = (void*)ucp_proxy_ep_fatal;
     self->iface.ops.iface_progress_enable    = (void*)ucp_proxy_ep_fatal;

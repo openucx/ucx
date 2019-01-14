@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -290,7 +290,7 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  *                               routines respectively.
  * @param [in]  conn_priv_data   Points to the received data.
  *                               This is the private data that was passed to the
- *                               @ref uct_ep_create_sockaddr function on the
+ *                               @ref uct_ep_params_t::sockaddr_pack_cb on the
  *                               client side.
  * @param [in]  length           Length of the received data.
  *
@@ -408,20 +408,16 @@ typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, unsigned flags,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Tuning parameters for an UCT endpoint created by @ref uct_ep_create_sockaddr.
+ * @brief Tuning parameters for an UCT endpoint created by @ref uct_ep_create.
  */
-typedef struct uct_ep_sockaddr_params {
+typedef struct uct_ep_params {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_ep_sockaddr_params_field. Fields not specified in this mask
+     * @ref uct_ep_params_field. Fields not specified in this mask
      * would be ignored. Provides ABI compatibility with respect to adding new
      * fields.
      */
     uint64_t                          field_mask;
-    /**
-     * The sockaddr to connect to on the remote peer. This is a mandatory field.
-     */
-    const ucs_sock_addr_t             *sockaddr;
     /**
      * Interface to create the endpoint on. This is a mandatory field.
      */
@@ -431,15 +427,41 @@ typedef struct uct_ep_sockaddr_params {
      */
     void                              *user_data;
     /**
+     * The device address to connect to on the remote peer. Should be defined
+     * together with @ref uct_ep_params_t::iface_addr to create an endpoint
+     * connected to a remote interface.
+     */
+    const uct_device_addr_t           *dev_addr;
+     /**
+      * Create an endpoint which is connected to remote interface.
+      * The interface address to connect to on the remote peer.
+      * @note requires @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE capability.
+      */
+    const uct_iface_addr_t            *iface_addr;
+    /**
+     * The sockaddr to connect to on the remote peer. If set, #ref uct_ep_create
+     * will create an endpoint for a connection to the remote peer, specified by
+     * its socket address.
+     * @note The interface in this routine requires the
+     * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
+     */
+    const ucs_sock_addr_t             *sockaddr;
+    /**
      * Required @ref uct_cb_flags to indicate where callbacks can be invoked
      * from.
      */
-    uint32_t                          cb_flags;
+    uint32_t                          sockaddr_cb_flags;
     /**
-     * Callback for filling the user's private data.
+     * Callback for filling the user's private data, valid only if
+     * @ref uct_ep_params_t::sockaddr is set. The user may provide a callback
+     * function which will be used to fill the private data that will be sent on
+     * a connection request to the remote peer.
+     * @note It is never guaranteed that the callaback will be called.
+     * If, for example, the endpoint goes into error state before issuing the
+     * connection request, the callback will not be invoked.
      */
-    uct_sockaddr_priv_pack_callback_t pack_cb;
-} uct_ep_sockaddr_params_t;
+    uct_sockaddr_priv_pack_callback_t sockaddr_pack_cb;
+} uct_ep_params_t;
 
 
 #endif

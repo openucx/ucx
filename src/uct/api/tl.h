@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -149,15 +149,7 @@ typedef struct uct_iface_ops {
 
     /* endpoint - connection establishment */
 
-    ucs_status_t (*ep_create)(uct_iface_h iface, uct_ep_h *ep_p);
-
-    ucs_status_t (*ep_create_connected)(uct_iface_h iface,
-                                        const uct_device_addr_t *dev_addr,
-                                        const uct_iface_addr_t *iface_addr,
-                                        uct_ep_h* ep_p);
-
-    ucs_status_t (*ep_create_sockaddr)(const uct_ep_sockaddr_params_t *params,
-                                       uct_ep_h *ep_p);
+    ucs_status_t (*ep_create)(const uct_ep_params_t *params, uct_ep_h *ep_p);
 
     void         (*ep_destroy)(uct_ep_h ep);
 

@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -437,7 +437,7 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     .ep_pending_purge         = uct_cm_ep_pending_purge,
     .ep_flush                 = uct_cm_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
+    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
     .iface_flush              = uct_cm_iface_flush,
     .iface_fence              = uct_base_iface_fence,

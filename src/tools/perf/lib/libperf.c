@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015-2016. ALL RIGHTS RESERVED.
@@ -588,6 +588,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     uct_ep_addr_t *ep_addr;
     uct_iface_attr_t iface_attr;
     uct_md_attr_t md_attr;
+    uct_ep_params_t ep_params;
     void *rkey_buffer;
     ucs_status_t status;
     struct iovec vec[5];
@@ -659,13 +660,15 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         goto err_free;
     }
 
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = perf->uct.iface;
     if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         for (i = 0; i < group_size; ++i) {
             if (i == group_index) {
                 continue;
             }
 
-            status = uct_ep_create(perf->uct.iface, &perf->uct.peers[i].ep);
+            status = uct_ep_create(&ep_params, &perf->uct.peers[i].ep);
             if (status != UCS_OK) {
                 ucs_error("Failed to uct_ep_create: %s", ucs_status_string(status));
                 goto err_destroy_eps;
@@ -676,6 +679,9 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
                 goto err_destroy_eps;
             }
         }
+    } else if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+        ep_params.field_mask |= UCT_EP_PARAM_FIELD_DEV_ADDR |
+                                UCT_EP_PARAM_FIELD_IFACE_ADDR;
     }
 
     vec[0].iov_base         = &info;
@@ -724,8 +730,9 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
             status = uct_ep_connect_to_ep(perf->uct.peers[i].ep, dev_addr, ep_addr);
         } else if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
-            status = uct_ep_create_connected(perf->uct.iface, dev_addr, iface_addr,
-                                             &perf->uct.peers[i].ep);
+            ep_params.dev_addr   = dev_addr;
+            ep_params.iface_addr = iface_addr;
+            status = uct_ep_create(&ep_params, &perf->uct.peers[i].ep);
         } else {
             status = UCS_ERR_UNSUPPORTED;
         }

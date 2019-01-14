@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -21,6 +21,7 @@
 #include <uct/ib/ud/base/ud_def.h>
 
 #include "ud_verbs.h"
+#include "ucs/sys/math.h"
 
 #include <uct/ib/ud/base/ud_inl.h>
 
@@ -38,9 +39,11 @@ static ucs_config_field_t uct_ud_verbs_iface_config_table[] = {
 };
 
 
-UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, uct_iface_h tl_iface)
+UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, const uct_ep_params_t *params)
 {
-    uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_verbs_iface_t);
+    uct_ud_verbs_iface_t *iface = ucs_derived_of(params->iface,
+                                                 uct_ud_verbs_iface_t);
+
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_ep_t, &iface->super);
     self->ah = NULL;
@@ -53,7 +56,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_ud_verbs_ep_t, uct_ud_ep_t);
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_ud_verbs_ep_t, uct_ep_t, uct_iface_h);
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_ud_verbs_ep_t, uct_ep_t,
+                                 const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ud_verbs_ep_t, uct_ep_t);
 
 static inline void
@@ -484,6 +488,17 @@ uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     return uct_ib_iface_create_ah(iface, &ah_attr, &ep->ah);
 }
 
+static ucs_status_t
+uct_ud_verbs_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
+{
+    if (ucs_test_all_flags(params->field_mask, UCT_EP_PARAM_FIELD_DEV_ADDR |
+                                               UCT_EP_PARAM_FIELD_IFACE_ADDR)) {
+        return uct_ud_verbs_ep_create_connected(params->iface, params->dev_addr,
+                                                params->iface_addr, ep_p);
+    }
+
+    return uct_ud_verbs_ep_t_new(params, ep_p);
+}
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t)(uct_iface_t*);
 
@@ -498,8 +513,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .ep_pending_purge         = uct_ud_ep_pending_purge,
     .ep_flush                 = uct_ud_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_ep_t),
-    .ep_create_connected      = uct_ud_verbs_ep_create_connected,
+    .ep_create                = uct_ud_verbs_ep_create,
     .ep_destroy               = uct_ud_ep_disconnect,
     .ep_get_address           = uct_ud_ep_get_address,
     .ep_connect_to_ep         = uct_ud_verbs_ep_connect_to_ep,
