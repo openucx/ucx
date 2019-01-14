@@ -4,10 +4,16 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include "sa_tcp.h"
 
 #include <sys/socket.h>
+#ifdef HAVE_SYS_EPOLL_H
 #include <sys/epoll.h>
+#endif
 #include <sys/fcntl.h>
 #include <arpa/inet.h>
 #include <unistd.h>

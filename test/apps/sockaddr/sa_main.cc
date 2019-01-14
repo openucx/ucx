@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include "sa_base.h"
 
 #include <iostream>
@@ -12,7 +16,9 @@
 #include <sstream>
 #include <cstring>
 #include <map>
+#ifdef HAVE_SYS_EPOLL_H
 #include <sys/epoll.h>
+#endif
 #include <getopt.h>
 #include <netdb.h>
 #include <unistd.h>

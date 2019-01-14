@@ -24,7 +24,9 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/fcntl.h>
+#ifdef HAVE_SYS_EPOLL_H
 #include <sys/epoll.h>
+#endif
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/param.h>

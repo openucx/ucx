@@ -143,8 +143,13 @@ AC_CHECK_HEADERS([sys/capability.h],
                                  [[#include <sys/capability.h>]])]
                  )
 
-
 #
 # Check for PR_SET_PTRACER
 #
 AC_CHECK_DECLS([PR_SET_PTRACER], [], [], [#include <sys/prctl.h>])
+
+#
+# epoll vs. kqueue
+#
+AC_CHECK_HEADERS([sys/epoll.h])
+AC_CHECK_HEADERS([sys/event.h])

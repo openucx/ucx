@@ -6,7 +6,9 @@
 
 #include "sa_util.h"
 
+#ifdef HAVE_SYS_EPOLL_H
 #include <sys/epoll.h>
+#endif
 #include <sys/time.h>
 #include <unistd.h>
 #include <cstring>
