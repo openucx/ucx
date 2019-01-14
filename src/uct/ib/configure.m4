@@ -344,15 +344,20 @@ AS_IF([test "x$with_ib" == xyes],
 
        # XRQ with Tag Matching support
        AS_IF([test "x$with_ib_hw_tm" != xno],
-           [AC_CHECK_MEMBER([struct ibv_exp_tmh.tag], [], [with_ib_hw_tm=no],
+           [AC_CHECK_HEADERS([infiniband/tm_types.h])
+            AC_CHECK_MEMBER([struct ibv_exp_tmh.tag], [with_ib_hw_tm=exp], [],
                             [[#include <infiniband/verbs_exp.h>]])
+            AC_CHECK_MEMBER([struct ibv_tmh.tag], [with_ib_hw_tm=upstream], [],
+                            [[#include <infiniband/tm_types.h>]])
            ])
-       AS_IF([test "x$with_ib_hw_tm" != xno],
-           [AC_DEFINE([IBV_EXP_HW_TM], 1, [IB Tag Matching support])
+       AS_IF([test "x$with_ib_hw_tm" = xexp],
+           [AC_DEFINE([IBV_EXP_HW_TM], 1, [IB Tag Matching support (EXP)])
             AC_CHECK_MEMBERS([struct ibv_exp_create_srq_attr.dc_offload_params],
                              [AC_DEFINE([IBV_EXP_HW_TM_DC], 1, [DC Tag Matching support])],
                              [], [#include <infiniband/verbs_exp.h>])
            ])
+       AS_IF([test "x$with_ib_hw_tm" = xupstream],
+           [AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])])
 
        # Device Memory support
        AS_IF([test "x$with_dm" != xno],

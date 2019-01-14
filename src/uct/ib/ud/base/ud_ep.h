@@ -240,9 +240,9 @@ struct uct_ud_ep {
         uct_ud_psn_t  cwnd;
     } ca;
     struct UCS_S_PACKED {
+         ucs_queue_iter_t       pos;       /* points to the part of tx window that needs to be resent */
          uct_ud_psn_t           psn;       /* last psn that was retransmitted */
          uct_ud_psn_t           max_psn;   /* max psn that should be retransmitted */
-         ucs_queue_iter_t       pos;       /* points to the part of tx window that needs to be resent */
     } resend;
     ucs_list_link_t  cep_list;
     uint32_t         conn_id;      /* connection id. assigned in connect_to_iface() */

@@ -7,13 +7,14 @@
 #ifndef UCT_RC_MLX5_H
 #define UCT_RC_MLX5_H
 
+#include "rc_mlx5_common.h"
+
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/class.h>
 
-#include "rc_mlx5.inl"
 
 /**
  * RC remote endpoint
@@ -21,16 +22,27 @@
 typedef struct uct_rc_mlx5_ep {
     uct_rc_ep_t      super;
     unsigned         qp_num;
-
     struct {
         uct_ib_mlx5_txwq_t  wq;
     } tx;
+    struct ibv_qp    *tm_qp;
 } uct_rc_mlx5_ep_t;
 
+typedef struct uct_rc_mlx5_ep_address {
+    uct_ib_uint24_t  qp_num;
+    /* For RNDV TM enabling 2 QPs should be created, one is for sending WRs and
+     * another one for HW (device will use it for RDMA reads and sending RNDV
+     * Complete messages). */
+    uct_ib_uint24_t  tm_qp_num;
+    uint8_t          atomic_mr_id;
+} UCS_S_PACKED uct_rc_mlx5_ep_address_t;
 
 UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
+
+void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
+                                           struct mlx5_cqe64 *cqe);
 
 ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
                                       uint64_t remote_addr, uct_rkey_t rkey);
@@ -93,9 +105,12 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
 ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                     uct_rc_fc_request_t *req);
 
+ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
+                                          const uct_device_addr_t *dev_addr,
+                                          const uct_ep_addr_t *ep_addr);
+
 unsigned uct_rc_mlx5_iface_progress(void *arg);
 
-#if IBV_EXP_HW_TM
 ucs_status_t uct_rc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
                                             const void *data, size_t length);
 
@@ -120,6 +135,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
                                              const void* header,
                                              unsigned header_length,
                                              unsigned flags);
-#endif
+
+ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
 #endif

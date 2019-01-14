@@ -1366,11 +1366,13 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_THREAD_MODE) {
 #if !ENABLE_MT
-        if (params->thread_mode == UCS_THREAD_MODE_MULTI) {
-            return UCS_ERR_INVALID_PARAM;
+        thread_mode = UCS_THREAD_MODE_SINGLE;
+        if (params->thread_mode != UCS_THREAD_MODE_SINGLE) {
+            ucs_debug("forced single thread mode on worker create");
         }
-#endif
+#else
         thread_mode = params->thread_mode;
+#endif
     } else {
         thread_mode = UCS_THREAD_MODE_SINGLE;
     }
@@ -1562,6 +1564,11 @@ void ucp_worker_destroy(ucp_worker_h worker)
 ucs_status_t ucp_worker_query(ucp_worker_h worker,
                               ucp_worker_attr_t *attr)
 {
+    ucp_context_h context = worker->context;
+    ucs_status_t status   = UCS_OK;
+    uint64_t tl_bitmap;
+    ucp_rsc_index_t tl_id;
+
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_THREAD_MODE) {
         if (worker->flags & UCP_WORKER_FLAG_MT) {
             attr->thread_mode = UCS_THREAD_MODE_MULTI;
@@ -1570,7 +1577,27 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
         }
     }
 
-    return UCS_OK;
+    if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS) {
+        /* If UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS is not set,
+         * pack all tl adresses */
+        tl_bitmap = -1;
+
+        if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS) {
+            if (attr->address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
+                tl_bitmap = 0;
+                ucs_for_each_bit(tl_id, context->tl_bitmap) {
+                    if (context->tl_rscs[tl_id].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
+                        tl_bitmap |= UCS_BIT(tl_id);
+                    }
+                }
+            }
+        }
+
+        status = ucp_address_pack(worker, NULL, tl_bitmap, NULL, &attr->address_length,
+                                  (void**)&attr->address);
+    }
+
+    return status;
 }
 
 unsigned ucp_worker_progress(ucp_worker_h worker)

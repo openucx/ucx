@@ -108,6 +108,9 @@ typedef struct {
 
     /* registration cache checks if physical page is not moved */
     int                      rcache_check_pfn;
+
+    /* directory for loadable modules */
+    char                     *module_dir;
 } ucs_global_opts_t;
 
 

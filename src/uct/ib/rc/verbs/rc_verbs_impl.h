@@ -14,10 +14,6 @@
 
 ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status);
 
-void uct_rc_verbs_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
-                                     void *data, size_t length, size_t valid_length,
-                                     char *buffer, size_t max);
-
 static inline void
 uct_rc_verbs_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt,
                          uct_rc_iface_t *iface, int signaled)
@@ -125,7 +121,7 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
 
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super, i, hdr, wc, num_wcs) {
         uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, &wc[i], hdr,
-                                   wc[i].byte_len, uct_rc_verbs_common_packet_dump);
+                                   wc[i].byte_len, uct_rc_ep_packet_dump);
         uct_rc_verbs_iface_handle_am(iface, hdr, wc[i].wr_id, wc[i].qp_num,
                                      wc[i].byte_len, wc[i].imm_data, wc[i].slid);
     }

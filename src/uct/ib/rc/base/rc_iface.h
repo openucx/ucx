@@ -41,10 +41,15 @@
     UCT_TL_IFACE_GET_TX_DESC(&(_iface)->super.super, _mp, _desc, \
                              return UCS_ERR_NO_RESOURCE);
 
-#define UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(_iface, _mp, _desc, _id, _pack_cb, _arg, _length) \
+#define UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(_iface, _mp, _desc, _id, _pk_hdr_cb, \
+                                          _hdr, _pack_cb, _arg, _length) ({ \
+    _hdr *rch; \
     UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
     (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
-    uct_rc_bcopy_desc_fill((uct_rc_hdr_t*)(_desc + 1), _id, _pack_cb, _arg, _length);
+    rch = (_hdr *)(_desc + 1); \
+    _pk_hdr_cb(rch, _id); \
+    *(_length) = _pack_cb(rch + 1, _arg); \
+})
 
 #define UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(_iface, _mp, _desc, \
                                           _id, _header, _header_length, _comp, _send_flags) \
@@ -121,9 +126,6 @@ typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op, const void *re
  * RC network header.
  */
 typedef struct uct_rc_hdr {
-#if IBV_EXP_HW_TM
-    uint8_t           tmh_opcode; /* reserved for TMH.opcode */
-#endif
     uint8_t           am_id;     /* Active message ID */
 } UCS_S_PACKED uct_rc_hdr_t;
 
@@ -158,20 +160,13 @@ struct uct_rc_iface_config {
         double               hard_thresh;
         unsigned             wnd_size;
     } fc;
-
-#if IBV_EXP_HW_TM
-    struct {
-        int                  enable;
-        unsigned             list_size;
-        size_t               max_bcopy;
-    } tm;
-#endif
-
 };
 
 
 typedef struct uct_rc_iface_ops {
     uct_ib_iface_ops_t   super;
+    ucs_status_t         (*init_rx)(uct_rc_iface_t *iface,
+                                    const uct_rc_iface_config_t *config);
     ucs_status_t         (*fc_ctrl)(uct_ep_t *ep, unsigned op,
                                     uct_rc_fc_request_t *req);
     ucs_status_t         (*fc_handler)(uct_rc_iface_t *iface, unsigned qp_num,
@@ -186,44 +181,6 @@ typedef struct uct_rc_srq {
     unsigned                 available;
     unsigned                 quota;
 } uct_rc_srq_t;
-
-
-#if IBV_EXP_HW_TM
-
-enum {
-    UCT_RC_IFACE_STAT_TAG_RX_EXP,
-    UCT_RC_IFACE_STAT_TAG_RX_EAGER_UNEXP,
-    UCT_RC_IFACE_STAT_TAG_RX_RNDV_UNEXP,
-    UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_EXP,
-    UCT_RC_IFACE_STAT_TAG_RX_RNDV_REQ_UNEXP,
-    UCT_RC_IFACE_STAT_TAG_RX_RNDV_FIN,
-    UCT_RC_IFACE_STAT_TAG_LIST_ADD,
-    UCT_RC_IFACE_STAT_TAG_LIST_DEL,
-    UCT_RC_IFACE_STAT_TAG_LIST_SYNC,
-    UCT_RC_IFACE_STAT_TAG_LAST
-};
-
-typedef struct uct_rc_iface_tmh_priv_data {
-    uint8_t                     length;
-    uint16_t                    data;
-} UCS_S_PACKED uct_rc_iface_tmh_priv_data_t;
-
-
-typedef struct uct_rc_iface_release_desc {
-    uct_recv_desc_t             super;
-    unsigned                    offset;
-} uct_rc_iface_release_desc_t;
-
-
-typedef struct uct_rc_iface_ctx_priv {
-    uint64_t                    tag;
-    void                        *buffer;
-    uint32_t                    app_ctx;
-    uint32_t                    length;
-    uint32_t                    tag_handle;
-} uct_rc_iface_ctx_priv_t;
-
-#endif
 
 
 struct uct_rc_iface {
@@ -247,30 +204,6 @@ struct uct_rc_iface {
         ucs_mpool_t          mp;
         uct_rc_srq_t         srq;
     } rx;
-
-#if IBV_EXP_HW_TM
-    struct {
-        ucs_ptr_array_t              rndv_comps;
-        unsigned                     num_tags;
-        unsigned                     num_outstanding;
-        unsigned                     max_rndv_data;
-        uint16_t                     unexpected_cnt;
-        uint16_t                     cmd_qp_len;
-        uint8_t                      enabled;
-        struct {
-            void                     *arg; /* User defined arg */
-            uct_tag_unexp_eager_cb_t cb;   /* Callback for unexpected eager messages */
-        } eager_unexp;
-
-        struct {
-            void                     *arg; /* User defined arg */
-            uct_tag_unexp_rndv_cb_t  cb;   /* Callback for unexpected rndv messages */
-        } rndv_unexp;
-        uct_rc_iface_release_desc_t  eager_desc;
-        uct_rc_iface_release_desc_t  rndv_desc;
-        UCS_STATS_NODE_DECLARE(stats);
-    } tm;
-#endif
 
     struct {
         unsigned             tx_qp_len;
@@ -356,153 +289,6 @@ typedef struct uct_rc_am_short_hdr {
 } UCS_S_PACKED uct_rc_am_short_hdr_t;
 
 
-#if IBV_EXP_HW_TM
-
-#  define UCT_RC_IFACE_TM_STAT(_iface, _op) \
-       UCS_STATS_UPDATE_COUNTER((_iface)->tm.stats, UCT_RC_IFACE_STAT_TAG_##_op, 1)
-
-#  define UCT_RC_IFACE_TM_ENABLED(_iface) (_iface)->tm.enabled
-
-
-
-/* TMH can carry 2 bytes of data in its reserved filed */
-#  define UCT_RC_IFACE_TMH_PRIV_LEN       ucs_field_sizeof(uct_rc_iface_tmh_priv_data_t, \
-                                                           data)
-
-#  define UCT_RC_IFACE_CHECK_RES_PTR(_iface, _ep) \
-       UCT_RC_CHECK_CQE_RET(_iface, _ep, &(_ep)->txqp, \
-                            UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
-       UCT_RC_CHECK_TXQP_RET(_iface, _ep, &(_ep)->txqp, \
-                             UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
-
-#  define UCT_RC_IFACE_CHECK_RNDV_PARAMS(_iovcnt, _header_len, _tm_len, \
-                                         _max_inline, _max_rndv_hdr) \
-       { \
-           UCT_CHECK_PARAM_PTR(_iovcnt <= 1ul, "Wrong iovcnt %lu", iovcnt); \
-           UCT_CHECK_PARAM_PTR(_header_len <= _max_rndv_hdr, \
-                               "Invalid header len %u", _header_len); \
-           UCT_CHECK_PARAM_PTR((_header_len + _tm_len) <= _max_inline, \
-                               "Invalid RTS len gth %u", \
-                               _header_len + _tm_len); \
-       }
-
-#  define UCT_RC_IFACE_FILL_TM_IMM(_imm_data, _app_ctx, _ib_imm, _res_op, \
-                                   _op, _imm_suffix) \
-       if (_imm_data == 0) { \
-           _res_op  = _op; \
-           _app_ctx = 0; \
-           _ib_imm  = 0; \
-       } else { \
-           _res_op = UCS_PP_TOKENPASTE(_op, _imm_suffix); \
-           uct_rc_iface_tag_imm_data_pack(&(_ib_imm), &(_app_ctx), _imm_data); \
-       }
-
-#  define UCT_RC_IFACE_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, _hdr) \
-      { \
-          UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
-          _hdr = _desc + 1; \
-          uct_rc_iface_fill_tmh(_hdr, _tag, _app_ctx, IBV_EXP_TMH_EAGER); \
-          _hdr += sizeof(struct ibv_exp_tmh); \
-      }
-
-#  define UCT_RC_IFACE_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
-                                         _pack_cb, _arg, _length) \
-       { \
-           void *hdr; \
-           UCT_RC_IFACE_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, hdr) \
-           (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
-           _length = _pack_cb(hdr, _arg); \
-       }
-
-ucs_status_t uct_rc_iface_handle_rndv(uct_rc_iface_t *iface,
-                                      struct ibv_exp_tmh *tmh, uct_tag_t tag,
-                                      unsigned byte_len);
-
-
-static UCS_F_ALWAYS_INLINE void
-uct_rc_iface_fill_tmh(struct ibv_exp_tmh *tmh, uct_tag_t tag,
-                      uint32_t app_ctx, unsigned op)
-{
-    tmh->opcode  = op;
-    tmh->app_ctx = htonl(app_ctx);
-    tmh->tag     = htobe64(tag);
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_rc_iface_fill_rvh(struct ibv_exp_tmh_rvh *rvh, const void *vaddr,
-                      uint32_t rkey, uint32_t len)
-{
-    rvh->va   = htobe64((uint64_t)vaddr);
-    rvh->rkey = htonl(rkey);
-    rvh->len  = htonl(len);
-}
-
-static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_iface_tag_get_op_id(uct_rc_iface_t *iface, uct_completion_t *comp)
-{
-    uint32_t prev_ph;
-    return ucs_ptr_array_insert(&iface->tm.rndv_comps, comp, &prev_ph);
-}
-
-
-static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_iface_fill_tmh_priv_data(struct ibv_exp_tmh *tmh, const void *hdr,
-                                unsigned hdr_len, unsigned max_rndv_priv_data)
-{
-    uct_rc_iface_tmh_priv_data_t *priv = (uct_rc_iface_tmh_priv_data_t*)tmh->reserved;
-
-    /* If header length is bigger tha max_rndv_priv_data size, need to add the
-     * rest to the TMH reserved field. */
-    if (hdr_len > max_rndv_priv_data) {
-        priv->length = hdr_len - max_rndv_priv_data;
-        ucs_assert(priv->length <= UCT_RC_IFACE_TMH_PRIV_LEN);
-        memcpy(&priv->data, (char*)hdr, priv->length);
-    } else {
-        priv->length = 0;
-    }
-
-    return priv->length;
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_rc_iface_tag_imm_data_pack(uint32_t *ib_imm, uint32_t *app_ctx,
-                               uint64_t imm_val)
-{
-    *ib_imm  = (uint32_t)(imm_val & 0xFFFFFFFF);
-    *app_ctx = (uint32_t)(imm_val >> 32);
-}
-
-static UCS_F_ALWAYS_INLINE uint64_t
-uct_rc_iface_tag_imm_data_unpack(uint32_t ib_imm, uint32_t app_ctx, int is_imm)
-{
-    return is_imm ? (((uint64_t)app_ctx << 32) | ib_imm) : 0ul;
-}
-
-static UCS_F_ALWAYS_INLINE uct_rc_iface_ctx_priv_t*
-uct_rc_iface_ctx_priv(uct_tag_context_t *ctx)
-{
-    return (uct_rc_iface_ctx_priv_t*)ctx->priv;
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_rc_iface_handle_rndv_fin(uct_rc_iface_t *iface, uint32_t app_ctx)
-{
-    int found;
-    void *rndv_comp;
-
-    found = ucs_ptr_array_lookup(&iface->tm.rndv_comps, app_ctx, rndv_comp);
-    ucs_assert_always(found > 0);
-    uct_invoke_completion((uct_completion_t*)rndv_comp, UCS_OK);
-    ucs_ptr_array_remove(&iface->tm.rndv_comps, app_ctx, 0);
-}
-
-#else
-
-#  define UCT_RC_IFACE_TM_ENABLED(_iface) 0
-
-#endif
-
-
 extern ucs_config_field_t uct_rc_iface_config_table[];
 extern ucs_config_field_t uct_rc_fc_config_table[];
 
@@ -512,7 +298,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 uct_iface_attr_t *iface_attr,
                                 size_t put_max_short, size_t max_inline,
                                 size_t am_max_hdr, size_t am_max_iov,
-                                size_t tag_max_iov);
+                                size_t tag_max_iov, size_t tag_min_hdr);
 
 ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface,
                                       uct_iface_addr_t *addr);
@@ -520,14 +306,6 @@ ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface,
 int uct_rc_iface_is_reachable(const uct_iface_h tl_iface,
                               const uct_device_addr_t *dev_addr,
                               const uct_iface_addr_t *iface_addr);
-
-ucs_status_t uct_rc_iface_tag_init(uct_rc_iface_t *iface,
-                                   uct_rc_iface_config_t *config,
-                                   struct ibv_exp_create_srq_attr *srq_init_attr,
-                                   unsigned rndv_hdr_len,
-                                   unsigned max_cancel_sync_ops);
-
-void uct_rc_iface_tag_cleanup(uct_rc_iface_t *iface);
 
 void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
                          unsigned qp_num);
@@ -567,6 +345,8 @@ ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events);
 ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
                                            unsigned events, int force_rx_all);
 
+ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
+                                  const uct_rc_iface_config_t *config);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_fc_ctrl(uct_ep_t *ep, unsigned op, uct_rc_fc_request_t *req)
@@ -613,18 +393,7 @@ uct_rc_iface_put_send_op(uct_rc_iface_send_op_t *op)
 static UCS_F_ALWAYS_INLINE void
 uct_rc_am_hdr_fill(uct_rc_hdr_t *rch, uint8_t id)
 {
-#if IBV_EXP_HW_TM
-    rch->tmh_opcode = IBV_EXP_TMH_NO_TAG;
-#endif
     rch->am_id      = id;
-}
-
-static inline void
-uct_rc_bcopy_desc_fill(uct_rc_hdr_t *rch, uint8_t id,
-                       uct_pack_callback_t pack_cb, void *arg, size_t *length)
-{
-    uct_rc_am_hdr_fill(rch, id);
-    *length = pack_cb(rch + 1, arg);
 }
 
 static inline void uct_rc_zcopy_desc_set_comp(uct_rc_iface_send_desc_t *desc,

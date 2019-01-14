@@ -190,6 +190,23 @@ enum ucp_listener_params_field {
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief UCP worker address flags.
+ *
+ * The enumeration list describes possible UCP worker address flags, indicating
+ * what needs to be included to the worker address returned by
+ * @ref ucp_worker_query "ucp_worker_query()" routine.
+ */
+typedef enum {
+
+    /**< Pack addresses of network devices only. Using such shortened addresses
+     *   for the remote node peers will reduce the amount of wireup data being
+     *   exchanged during connection establishment phase. */
+    UCP_WORKER_ADDRESS_FLAG_NET_ONLY = UCS_BIT(0)
+} ucp_worker_address_flags_t;
+
+
+/**
  * @ingroup UCP_ENDPOINT
  * @brief UCP endpoint parameters field mask.
  *
@@ -316,7 +333,9 @@ enum ucp_context_attr_field {
  * present. It is used for the enablement of backward compatibility support.
  */
 enum ucp_worker_attr_field {
-    UCP_WORKER_ATTR_FIELD_THREAD_MODE = UCS_BIT(0)  /**< UCP thread mode */
+    UCP_WORKER_ATTR_FIELD_THREAD_MODE   = UCS_BIT(0), /**< UCP thread mode */
+    UCP_WORKER_ATTR_FIELD_ADDRESS       = UCS_BIT(1), /**< UCP address */
+    UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS = UCS_BIT(2)  /**< UCP address flags */
 };
 
 /**
@@ -657,6 +676,9 @@ typedef struct ucp_params {
      * thread safety; if the context is used by worker 1 and worker 2,
      * and worker 1 is used by thread 1 and worker 2 is used by thread 2,
      * then this context needs thread safety.
+     * Note that actual thread mode may be different from mode passed
+     * to @ref ucp_init. To get actual thread mode use
+     * @ref ucp_context_query.
      */
     int                                mt_workers_shared;
 
@@ -724,6 +746,28 @@ typedef struct ucp_worker_attr {
      * Thread safe level of the worker.
      */
     ucs_thread_mode_t     thread_mode;
+
+    /**
+     * Flags indicating requested details of the worker address.
+     * If @ref UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS bit is set in the field_mask,
+     * this value should be set as well. Possible flags are specified
+     * in @ref ucp_worker_address_flags_t. @note This is an input attribute.
+     */
+    uint32_t              address_flags;
+
+    /**
+     * Worker address, which can be passed to remote instances of the UCP library
+     * in order to connect to this worker. The memory for the address handle is
+     * allocated by @ref ucp_worker_query "ucp_worker_query()" routine, and
+     * must be released by using @ref ucp_worker_release_address
+     * "ucp_worker_release_address()" routine.
+     */
+    ucp_address_t         *address;
+
+    /**
+     * Size of worker address in bytes.
+     */
+    size_t                address_length;
 } ucp_worker_attr_t;
 
 
@@ -747,7 +791,9 @@ typedef struct ucp_worker_params {
      * This value is optional.
      * If it's not set (along with its corresponding bit in the field_mask -
      * UCP_WORKER_PARAM_FIELD_THREAD_MODE), the UCS_THREAD_MODE_SINGLE mode
-     * will be used.
+     * will be used. Note that actual thread mode may be different from mode
+     * passed to @ref ucp_worker_create. To get actual thread mode use
+     * @ref ucp_worker_query.
      */
     ucs_thread_mode_t       thread_mode;
 
@@ -1223,7 +1269,7 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream);
  * @brief Get the address of the worker object.
  *
  * This routine returns the address of the worker object.  This address can be
- * passed to remote instances of the UCP library in order to to connect to this
+ * passed to remote instances of the UCP library in order to connect to this
  * worker. The memory for the address handle is allocated by this function, and
  * must be released by using @ref ucp_worker_release_address
  * "ucp_worker_release_address()" routine.

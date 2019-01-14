@@ -51,6 +51,8 @@ libucxperf_la_LIBADD = \
 	$(abs_top_builddir)/src/ucp/libucp.la \
 	$(abs_top_builddir)/src/ucs/libucs.la
 if HAVE_CUDA
+libucxperf_la_CPPFLAGS += $(CUDA_CPPFLAGS)
+libucxperf_la_LDFLAGS  += $(CUDA_LDFLAGS)
 libucxperf_la_SOURCES += \
 	cuda/cuda_alloc.c
 endif
