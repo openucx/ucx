@@ -10,7 +10,9 @@
 
 #include "malloc_hook.h"
 
+#ifdef HAVE_MALLOC_H
 #include <malloc.h>
+#endif
 #undef M_TRIM_THRESHOLD
 #undef M_MMAP_THRESHOLD
 #include "allocator.h" /* have to be included after malloc.h */

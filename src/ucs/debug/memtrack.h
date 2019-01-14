@@ -13,7 +13,9 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <stdlib.h>
+#ifdef HAVE_MALLOC_H
 #include <malloc.h>
+#endif
 #include <stdio.h>
 
 
