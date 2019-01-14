@@ -1,23 +1,37 @@
 #
-## Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+## Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 ## Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
-## Copyright (C) ARM Ltd. 2017-2018.  ALL RIGHTS RESERVED.
+## Copyright (C) ARM Ltd. 2017-2019.  ALL RIGHTS RESERVED.
 ##
 ## See file LICENSE for terms.
 ##
 #
 
-## Current
-Feaures:
-- Statistics for UCT tag API
-- New emulation mode enabling full UCX functionality (Atomic, Put, Get)
-  over TCP and RDMA-CORE interconnects that don't implement full RDMA semantics.
-- Non-blocking API for all one-sided operations. All blocking communication APIs marked
-  as deprecated.
-- New client/server connection establishment API
-- Added CUDA support for stream API
+## 1.5.0 rc2 (January 14, 2019)
 
-## 1.4.0-rc2 (October 23, 2018)
+Features:
+- New emulation mode enabling full UCX functionality (Atomic, Put, Get)
+  over TCP and RDMA-CORE interconnects which don't implement full RDMA semantics
+- Non-blocking API for all one-sided operations. All blocking communication APIs marked
+  as deprecated
+- New client/server connection establishment API, which allows connected handover between workers
+- Support for rdma-core direct-verbs (DEVX) and DC with mlx5 transports
+- GPU - Support for stream API and receive side pipelining
+- Malloc hooks using binary instrumentation instead of symbol override
+- Statistics for UCT tag API
+- GPU-to-Infiniband HCA affinity support based on locality/distance (PCIe)
+
+Bugfixes:
+- Multiple bugfixes (full list on github)
+
+Tested configurations:
+- InfiniBand: MLNX_OFED 4.2-4.4, distribution inbox drivers, rdma-core
+- CUDA: gdrcopy 1.2, cuda 9.1.85
+- XPMEM: 2.6.2
+- KNEM: 1.1.2
+- Multiple bugfixes (full list on github)
+
+## 1.4.0 (October 23, 2018)
 
 Features:
 - Improved support for installation with latest ROCm
@@ -47,7 +61,6 @@ Tested configurations:
 - CUDA: gdrcopy 1.2, cuda 9.1.85
 - XPMEM: 2.6.2
 - KNEM: 1.1.2
-- Multiple bugfixes (full list on github)
 
 Known issues:
   #2919 - Segfault in CUDA support when KNEM not present and CMA is active
@@ -64,6 +77,7 @@ Bugfixes:
 - Limit IB CQE size for specific ARM boards
 - RPM: explicitly set gcc-c++ as requirement
 - Multiple bugfixes (full list on github)
+
 Tested configurations:
 - InfiniBand: MLNX_OFED 4.2, inbox OFED drivers.
 - CUDA: gdrcopy 1.2, cuda 9.1.85
@@ -91,13 +105,16 @@ Features:
 - Add support for external epoll fd and edge-triggered events
 - Added registration cache for knem
 - Initial support for Java bindings
+
 Bugfixes:
 - Multiple bugfixes (full list on github)
+
 Tested configurations:
 - InfiniBand: MLNX_OFED 4.2, inbox OFED drivers.
 - CUDA: gdrcopy 1.2, cuda 9.1.85
 - XPMEM: 2.6.2
 - KNEM: 1.1.2
+
 Known issues:
   #2047 - UCP: ucp_do_am_bcopy_multi drops data on UCS_ERROR_NO_RESOURCE
   #2047 - failure in ud/uct_flush_test.am_zcopy_flush_ep_nb/1
@@ -141,6 +158,7 @@ Supported platforms
     for community evaluation and has not been tested in context of this release
   - Cray Gemini and Aries
   - Architectures: x86_64, ARMv8 (64bit), Power64
+
 Features:
   - Added support for InfiniBand DC and UD transports, including accelerated verbs for Mellanox devices
   - Full support for PGAS/SHMEM interfaces, blocking and non-blocking APIs
@@ -153,8 +171,10 @@ Features:
   - Support for ARMv8 64bit architecture
   - A new API for efficient memory polling
   - Support for malloc-hooks and memory registration caching
+
 Bugfixes:
   - Multiple bugfixes improving overall stability of the library
+
 Known issues:
   #1604 - Failure in ud/test_ud_slow_timer.retransmit1/1 with valgrind bug
   #1588 - Fix reading cpuinfo timebase for ppc bug portability training
@@ -173,21 +193,14 @@ Known issues:
 
 ## 1.1.0 (September 1, 2015)
 
-Workarounds:
 Features:
   - Added support for AM based on FIFO in `mm` shared memory transport
   - Added support for UCT `knem` shared memory transport (http://knem.gforge.inria.fr)
   - Added support for UCT `mm/xpmem` shared memory transport (https://github.com/hjelmn/xpmem)
 
-
-Bugfixes:
-Known issues:
-
-
 ## 1.0.0 (July 22, 2015)
 
 Features:
-
   - Added support for UCT `cma` shared memory transport (Cross-Memory Attatch)
   - Added support for UCT `mm` shared memory transport with mmap/sysv APIs
   - Added support for UCT `rc` transport based on Infiniband/RC with verbs
