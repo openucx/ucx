@@ -13,6 +13,9 @@
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
 #endif
+#ifdef HAVE_MALLOC_NP_H
+#include <malloc_np.h>
+#endif
 #undef M_TRIM_THRESHOLD
 #undef M_MMAP_THRESHOLD
 #include "allocator.h" /* have to be included after malloc.h */
@@ -781,7 +784,7 @@ static void ucm_malloc_init_orig_funcs()
      * so patching the relocation tables would find their previous value by libucm
      */
     if (ucm_malloc_hook_state.usable_size == NULL) {
-        ucm_malloc_hook_state.usable_size = malloc_usable_size;
+        ucm_malloc_hook_state.usable_size = (size_t (*)(void *))malloc_usable_size;
     }
     if ( ucm_malloc_hook_state.free == NULL) {
         ucm_malloc_hook_state.free = free;
