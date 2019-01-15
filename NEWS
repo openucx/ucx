@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.5.0 rc2 (January 14, 2019)
+## 1.5.0 rc2 (January 15, 2019)
 
 Features:
 - New emulation mode enabling full UCX functionality (Atomic, Put, Get)
@@ -25,7 +25,7 @@ Bugfixes:
 - Multiple bugfixes (full list on github)
 
 Tested configurations:
-- InfiniBand: MLNX_OFED 4.2-4.4, distribution inbox drivers, rdma-core
+- InfiniBand: MLNX_OFED 4.4-4.5, distribution inbox drivers, rdma-core
 - CUDA: gdrcopy 1.2, cuda 9.1.85
 - XPMEM: 2.6.2
 - KNEM: 1.1.2
