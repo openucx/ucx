@@ -439,7 +439,7 @@ typedef struct uct_ep_params {
       */
     const uct_iface_addr_t            *iface_addr;
     /**
-     * The sockaddr to connect to on the remote peer. If set, #ref uct_ep_create
+     * The sockaddr to connect to on the remote peer. If set, @ref uct_ep_create
      * will create an endpoint for a connection to the remote peer, specified by
      * its socket address.
      * @note The interface in this routine requires the
