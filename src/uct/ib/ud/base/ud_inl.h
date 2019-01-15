@@ -32,7 +32,7 @@ uct_ud_ep_tx_stop(uct_ud_ep_t *ep)
  * check iface resources:tx_queue and return
  * prefetched/cached skb
  *
- * NOTE: caller must not return skn to mpool until it is
+ * NOTE: caller must not return skb to mpool until it is
  * removed from the cache
  * skb is removed from cache by
  *  uct_ud_iface_complete_tx_inl()
