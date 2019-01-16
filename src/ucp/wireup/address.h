@@ -101,6 +101,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitm
 /**
  * Unpack a list of addresses.
  *
+ * @param [in]  worker           Worker object.
  * @param [in]  buffer           Buffer with data to unpack.
  * @param [out] unpacked_address Filled with remote address data.
  *
@@ -110,7 +111,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitm
  * @note The address list inside @ref ucp_remote_address_t should be released
  *       by ucs_free().
  */
-ucs_status_t ucp_address_unpack(const void *buffer,
+ucs_status_t ucp_address_unpack(ucp_worker_h worker, const void *buffer,
                                 ucp_unpacked_address_t *unpacked_address);
 
 
