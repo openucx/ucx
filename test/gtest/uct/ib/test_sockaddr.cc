@@ -48,7 +48,7 @@ public:
     void init() {
         uct_test::init();
 
-        uct_iface_params server_params, client_params;
+        uct_iface_params_t server_params, client_params;
         struct sockaddr_in *listen_addr_in, *connect_addr_in;
 
         /* If we reached here, the interface is active, as it was tested at the
@@ -72,7 +72,11 @@ public:
         connect_addr_in->sin_port = listen_addr_in->sin_port;
 
         /* open iface for the server side */
-        memset(&server_params, 0, sizeof(server_params));
+        server_params.field_mask                     = UCT_IFACE_PARAM_FIELD_OPEN_MODE         |
+                                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER       |
+                                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   |
+                                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS |
+                                                       UCT_IFACE_PARAM_FIELD_SOCKADDR;
         server_params.open_mode                      = UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER;
         server_params.err_handler                    = err_handler;
         server_params.err_handler_arg                = reinterpret_cast<void*>(this);
@@ -86,7 +90,10 @@ public:
         m_entities.push_back(server);
 
         /* open iface for the client side */
-        memset(&client_params, 0, sizeof(client_params));
+        client_params.field_mask                     = UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
+                                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER     |
+                                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG |
+                                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS;
         client_params.open_mode                      = UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT;
         client_params.err_handler                    = err_handler;
         client_params.err_handler_arg                = reinterpret_cast<void*>(this);
@@ -214,14 +221,17 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
     UCS_TEST_MESSAGE << "Testing " << ucs::sockaddr_to_str(listen_sock_addr.addr)
                      << " Interface: " << GetParam()->dev_name.c_str();
 
-    uct_iface_params client_params;
+    uct_iface_params_t client_params;
     entity *client_test;
     int i, num_clients = 100;
 
     /* multiple clients, each on an iface of its own, connecting to the same server */
     for (i = 0; i < num_clients; ++i) {
         /* open iface for the client side */
-        memset(&client_params, 0, sizeof(client_params));
+        client_params.field_mask        = UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
+                                          UCT_IFACE_PARAM_FIELD_ERR_HANDLER     |
+                                          UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG |
+                                          UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS;
         client_params.open_mode         = UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT;
         client_params.err_handler       = err_handler;
         client_params.err_handler_arg   = reinterpret_cast<void*>(this);

@@ -61,7 +61,12 @@ public:
         uct_test::init();
 
         uct_iface_params params;
-        memset(&params, 0, sizeof(params));
+        params.field_mask  = UCT_IFACE_PARAM_FIELD_RX_HEADROOM     |
+                             UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
+                             UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB  |
+                             UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG |
+                             UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB   |
+                             UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG;
 
         // tl and dev names are taken from resources via GetParam, no need
         // to fill it here
