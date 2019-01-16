@@ -372,6 +372,42 @@ enum uct_iface_open_mode {
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT interface created by @ref uct_iface_open parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_iface_params_t are
+ * present. It provides backward compatibility support.
+ */
+enum uct_iface_params_field {
+    /** Mask of CPUs to use for resources */
+    UCT_IFACE_PARAM_FIELD_CPU_MASK          = UCS_BIT(0),
+    /** Interface open mode bitmap, mandatory field */
+    UCT_IFACE_PARAM_FIELD_OPEN_MODE         = UCS_BIT(1),
+    /** Transport and device name */
+    UCT_IFACE_PARAM_FIELD_DEVICE            = UCS_BIT(2),
+    /** Server listener sockaddr */
+    UCT_IFACE_PARAM_FIELD_SOCKADDR          = UCS_BIT(3),
+    /** Root in the statistics tree */
+    UCT_IFACE_PARAM_FIELD_STATS_ROOT        = UCS_BIT(4),
+    /** The receive segment headroom */
+    UCT_IFACE_PARAM_FIELD_RX_HEADROOM       = UCS_BIT(5),
+    /** Custom argument of @a err_handler */
+    UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   = UCS_BIT(6),
+    /** The callback to handle transport level error */
+    UCT_IFACE_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(7),
+    /** @a err_handler Callback flags */
+    UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS = UCS_BIT(8),
+    /** HW Tag Matching eager callback argument */
+    UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG   = UCS_BIT(9),
+    /** HW Tag Matching eager callback */
+    UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB    = UCS_BIT(10),
+    /** HW Tag Matching rndv callback argument */
+    UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG    = UCS_BIT(11),
+    /** HW Tag Matching rndv callback */
+    UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB     = UCS_BIT(12)
+};
+
+/**
  * @ingroup UCT_MD
  * @brief Socket address accessibility type.
  */
@@ -610,6 +646,11 @@ struct uct_iface_attr {
  * @ref uct_iface_open. User has to initialize all fields of this structure.
  */
 struct uct_iface_params {
+    /** Mask of valid fields in this structure, using bits from
+     *  @ref uct_iface_params_field. Fields not specified in this mask
+     *  would be ignored. Provides ABI compatibility with respect to adding new
+     *  fields. */
+    uint64_t                                     field_mask;
     /** Mask of CPUs to use for resources */
     ucs_cpu_set_t                                cpu_mask;
     /** Interface open mode bitmap. @ref uct_iface_open_mode */
