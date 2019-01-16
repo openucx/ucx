@@ -814,8 +814,10 @@ ucs_status_t ucm_malloc_install(int events)
     }
 
     if (!ucm_malloc_hook_state.hook_called) {
+#ifdef HAVE_MALLOC_TRIM
         /* Try to leak less memory from original malloc */
         malloc_trim(0);
+#endif
     }
 
     if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_SBRK_EVH)) {
