@@ -1121,15 +1121,16 @@ static void ucp_worker_enable_atomic_tl(ucp_worker_h worker, const char *mode,
 
 static void ucp_worker_init_cpu_atomics(ucp_worker_h worker)
 {
-    ucp_context_h context = worker->context;
-    ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t iface_id;
+    ucp_worker_iface_t *wiface;
 
     ucs_debug("worker %p: using cpu atomics", worker);
 
     /* Enable all interfaces which have host-based atomics */
-    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-        if (worker->ifaces[rsc_index].attr.cap.flags & UCT_IFACE_FLAG_ATOMIC_CPU) {
-            ucp_worker_enable_atomic_tl(worker, "cpu", rsc_index);
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        wiface = &worker->ifaces[iface_id];
+        if (wiface->attr.cap.flags & UCT_IFACE_FLAG_ATOMIC_CPU) {
+            ucp_worker_enable_atomic_tl(worker, "cpu", wiface->rsc_index);
         }
     }
 }
@@ -1141,9 +1142,11 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     ucp_tl_resource_desc_t *rsc, *best_rsc;
     uct_iface_attr_t *iface_attr;
     ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t iface_id;
     uint64_t iface_cap_flags;
     double score, best_score;
     ucp_rsc_index_t md_index;
+    ucp_worker_iface_t *wiface;
     uct_md_attr_t *md_attr;
     uint64_t supp_tls;
     uint8_t priority, best_priority;
@@ -1165,11 +1168,13 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     best_priority               = 0;
 
     /* Select best interface for atomics device */
-    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        wiface     = &worker->ifaces[iface_id];
+        rsc_index  = wiface->rsc_index;
         rsc        = &context->tl_rscs[rsc_index];
         md_index   = rsc->md_index;
         md_attr    = &context->tl_mds[md_index].attr;
-        iface_attr = &worker->ifaces[rsc_index].attr;
+        iface_attr = &wiface->attr;
 
         if (!(md_attr->cap.flags & UCT_MD_FLAG_REG) ||
             !ucs_test_all_flags(iface_attr->cap.flags, iface_cap_flags)                        ||
@@ -1203,7 +1208,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     ucs_debug("worker %p: using device atomics", worker);
 
     /* Enable atomics on all resources using same device as the "best" resource */
-    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+    ucs_for_each_bit(rsc_index, context->tl_bitmap) {
         rsc = &context->tl_rscs[rsc_index];
         if ((supp_tls & UCS_BIT(rsc_index)) &&
             (rsc->md_index == best_rsc->md_index) &&

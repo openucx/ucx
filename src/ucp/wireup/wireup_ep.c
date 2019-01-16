@@ -366,7 +366,8 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
 
     uct_worker_progress_unregister_safe(worker->uct, &self->progress_id);
     if (self->aux_ep != NULL) {
-        ucp_worker_iface_unprogress_ep(&worker->ifaces[self->aux_rsc_index]);
+        ucp_worker_iface_unprogress_ep(ucp_worker_iface(worker,
+                                                        self->aux_rsc_index));
         uct_ep_destroy(self->aux_ep);
     }
     if (self->sockaddr_ep != NULL) {
