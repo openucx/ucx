@@ -456,10 +456,18 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_status_t status;
     unsigned i;
 
-    ucs_assert(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE);
+    UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
+                    "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
+    if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
+        ucs_error("only UCT_IFACE_OPEN_MODE_DEVICE is supported");
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_mm_iface_ops, md, worker,
-                              params, tl_config UCS_STATS_ARG(params->stats_root)
+                              params, tl_config
+                              UCS_STATS_ARG((params->field_mask & 
+                                             UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
+                                            params->stats_root : NULL)
                               UCS_STATS_ARG(UCT_MM_TL_NAME));
 
     ucs_trace_func("Creating an MM iface=%p worker=%p", self, worker);
@@ -500,7 +508,9 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
                                      1)));
     self->fifo_mask                = mm_config->fifo_size - 1;
     self->fifo_shift               = ucs_count_trailing_zero_bits(mm_config->fifo_size);
-    self->rx_headroom              = params->rx_headroom;
+    self->rx_headroom              = (params->field_mask &
+                                      UCT_IFACE_PARAM_FIELD_RX_HEADROOM) ?
+                                     params->rx_headroom : 0;
     self->release_desc.cb          = uct_mm_iface_release_desc;
 
     /* create the receive FIFO */
@@ -523,7 +533,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     /* create a memory pool for receive descriptors */
     status = uct_iface_mpool_init(&self->super,
                                   &self->recv_desc_mp,
-                                  sizeof(uct_mm_recv_desc_t) + params->rx_headroom +
+                                  sizeof(uct_mm_recv_desc_t) + self->rx_headroom +
                                   self->config.seg_size,
                                   sizeof(uct_mm_recv_desc_t),
                                   UCS_SYS_CACHE_LINE_SIZE,

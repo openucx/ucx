@@ -148,8 +148,11 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
 {
     ucs_status_t status;
 
+    UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
+                    "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
     if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
-        return UCS_ERR_INVALID_PARAM;
+        ucs_error("Self transport supports only UCT_IFACE_OPEN_MODE_DEVICE");
+        return UCS_ERR_UNSUPPORTED;
     }
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
@@ -163,7 +166,10 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_self_iface_ops, md, worker,
-                              params, tl_config UCS_STATS_ARG(params->stats_root)
+                              params, tl_config
+                              UCS_STATS_ARG((params->field_mask & 
+                                             UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
+                                            params->stats_root : NULL)
                               UCS_STATS_ARG(UCT_SELF_NAME));
 
     self->id          = ucs_generate_uuid((uintptr_t)self);

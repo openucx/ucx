@@ -267,10 +267,18 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     socklen_t addrlen;
     int ret;
 
-    ucs_assert(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE);
+    UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
+                    "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
+    if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
+        ucs_error("only UCT_IFACE_OPEN_MODE_DEVICE is supported");
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_tcp_iface_ops, md, worker,
-                              params, tl_config UCS_STATS_ARG(params->stats_root)
+                              params, tl_config
+                              UCS_STATS_ARG((params->field_mask & 
+                                             UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
+                                            params->stats_root : NULL)
                               UCS_STATS_ARG(params->mode.device.dev_name));
 
     ucs_strncpy_zero(self->if_name, params->mode.device.dev_name,

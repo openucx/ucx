@@ -409,15 +409,23 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_iface_t, ops);
 
-    UCT_CB_FLAGS_CHECK(params->err_handler_flags);
+    UCT_CB_FLAGS_CHECK((params->field_mask &
+                        UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS) ?
+                       params->err_handler_flags : 0);
 
     self->md                = md;
     self->worker            = ucs_derived_of(worker, uct_priv_worker_t);
     self->am_tracer         = NULL;
     self->am_tracer_arg     = NULL;
-    self->err_handler       = params->err_handler;
-    self->err_handler_flags = params->err_handler_flags;
-    self->err_handler_arg   = params->err_handler_arg;
+    self->err_handler       = (params->field_mask &
+                               UCT_IFACE_PARAM_FIELD_ERR_HANDLER) ?
+                              params->err_handler : NULL;
+    self->err_handler_flags = (params->field_mask &
+                               UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS) ?
+                              params->err_handler_flags : 0;
+    self->err_handler_arg   = (params->field_mask &
+                               UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG) ?
+                              params->err_handler_arg : NULL;
     self->progress_flags    = 0;
     uct_worker_progress_init(&self->prog);
 
