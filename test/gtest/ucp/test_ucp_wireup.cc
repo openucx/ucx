@@ -30,9 +30,10 @@ public:
 
 protected:
     enum {
-        TEST_RMA,
-        TEST_TAG,
-        TEST_STREAM
+        TEST_RMA     = UCS_BIT(0),
+        TEST_TAG     = UCS_BIT(1),
+        TEST_STREAM  = UCS_BIT(2),
+        UNIFIED_MODE = UCS_BIT(3)
     };
 
     typedef uint64_t               elem_type;
@@ -100,19 +101,30 @@ test_ucp_wireup::enum_test_params_features(const ucp_params_t& ctx_params,
         tmp_ctx_params.features = UCP_FEATURE_RMA;
         generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/rma",
                                      tls, TEST_RMA, result);
+
+        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/rma",
+                                     tls, TEST_RMA | UNIFIED_MODE, result);
     }
 
     if (features & UCP_FEATURE_TAG) {
         tmp_ctx_params.features = UCP_FEATURE_TAG;
         generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/tag",
                                      tls, TEST_TAG, result);
+
+        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/tag",
+                                     tls, TEST_TAG | UNIFIED_MODE, result);
     }
 
     if (features & UCP_FEATURE_STREAM) {
         tmp_ctx_params.features = UCP_FEATURE_STREAM;
         generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/stream",
                                      tls, TEST_STREAM, result);
+
+        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/tag",
+                                     tls, TEST_STREAM | UNIFIED_MODE, result);
     }
+
+
 
     return result;
 }
@@ -125,13 +137,18 @@ void test_ucp_wireup::unmap_memh(ucp_mem_h memh, ucp_context_h context)
     }
 }
 
-void test_ucp_wireup::init() {
+void test_ucp_wireup::init()
+{
+    if (GetParam().variant & UNIFIED_MODE) {
+        modify_config("UNIFIED_MODE",  "y");
+    }
+
     ucp_test::init();
 
     m_send_data.resize(BUFFER_LENGTH, 0);
     m_recv_data.resize(BUFFER_LENGTH, 0);
 
-    if (GetParam().variant == TEST_RMA) {
+    if (GetParam().variant & TEST_RMA) {
         ucs_status_t status;
         ucp_mem_map_params_t params;
         ucp_mem_h memh;
@@ -191,7 +208,7 @@ void test_ucp_wireup::clear_recv_data() {
 void test_ucp_wireup::send_nb(ucp_ep_h ep, size_t length, int repeat,
                               std::vector<void*>& reqs, uint64_t send_data)
 {
-    if (GetParam().variant == TEST_TAG) {
+    if (GetParam().variant & TEST_TAG) {
         std::fill(m_send_data.begin(), m_send_data.end(), send_data);
         for (int i = 0; i < repeat; ++i) {
             void *req = ucp_tag_send_nb(ep, &m_send_data[0], length,
@@ -202,7 +219,7 @@ void test_ucp_wireup::send_nb(ucp_ep_h ep, size_t length, int repeat,
                 ASSERT_UCS_OK(UCS_PTR_STATUS(req));
             }
         }
-    } else if (GetParam().variant == TEST_STREAM) {
+    } else if (GetParam().variant & TEST_STREAM) {
         std::fill(m_send_data.begin(), m_send_data.end(), send_data);
         for (int i = 0; i < repeat; ++i) {
             void *req = ucp_stream_send_nb(ep, &m_send_data[0], length, DT_U64,
@@ -213,7 +230,7 @@ void test_ucp_wireup::send_nb(ucp_ep_h ep, size_t length, int repeat,
                 ASSERT_UCS_OK(UCS_PTR_STATUS(req));
             }
         }
-    } else if (GetParam().variant == TEST_RMA) {
+    } else if (GetParam().variant & TEST_RMA) {
         clear_recv_data();
 
         ucp_mem_h memh  = (sender().ucph() == ep->worker->context) ?
@@ -248,17 +265,16 @@ void test_ucp_wireup::send_b(ucp_ep_h ep, size_t length, int repeat,
 void test_ucp_wireup::recv_b(ucp_worker_h worker, ucp_ep_h ep, size_t length,
                              int repeat, uint64_t recv_data)
 {
-    if ((GetParam().variant == TEST_TAG) || (GetParam().variant == TEST_STREAM))
-    {
+    if (GetParam().variant & (TEST_TAG | TEST_STREAM)) {
         for (int i = 0; i < repeat; ++i) {
             size_t recv_length;
             void *req;
 
             clear_recv_data();
-            if (GetParam().variant == TEST_TAG) {
+            if (GetParam().variant & TEST_TAG) {
                 req = ucp_tag_recv_nb(worker, &m_recv_data[0], length, DT_U64,
                                       TAG, (ucp_tag_t)-1, tag_recv_completion);
-            } else if (GetParam().variant == TEST_STREAM) {
+            } else if (GetParam().variant & TEST_STREAM) {
                 req = ucp_stream_recv_nb(ep, &m_recv_data[0], length, DT_U64,
                                          stream_recv_completion, &recv_length,
                                          UCP_STREAM_RECV_FLAG_WAITALL);
@@ -277,7 +293,7 @@ void test_ucp_wireup::recv_b(ucp_worker_h worker, ucp_ep_h ep, size_t length,
                                          m_recv_data.begin() + length,
                                          recv_data));
         }
-    } else if (GetParam().variant == TEST_RMA) {
+    } else if (GetParam().variant & TEST_RMA) {
         for (size_t i = 0; i < length; ++i) {
             while (m_recv_data[i] != recv_data + repeat - 1) {
                 progress();
@@ -429,7 +445,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup) {
 UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup_rndv, "RNDV_THRESH=1") {
     sender().connect(&receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), BUFFER_LENGTH, 1);
-    if (is_loopback() && (GetParam().variant == TEST_TAG)) {
+    if (is_loopback() && (GetParam().variant & TEST_TAG)) {
         /* expect the endpoint to be connected to itself */
         ucp_ep_h ep = sender().ep();
         EXPECT_EQ((uintptr_t)ep, ucp_ep_dest_ep_ptr(ep));
@@ -641,7 +657,7 @@ void test_ucp_wireup_2sided::test_connect_loopback(bool delay_before_connect,
 
         EXPECT_NE(ep1, ep2);
 
-        if (GetParam().variant == TEST_STREAM) {
+        if (GetParam().variant & TEST_STREAM) {
             uint64_t data1 = (base_index * 10) + 1;
             uint64_t data2 = (base_index * 10) + 2;
 
