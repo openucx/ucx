@@ -184,7 +184,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     iface_attr->cap.get.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
 
     /* AM */
-    iface_attr->cap.am.max_short  = max_inline - tag_min_hdr;
+    iface_attr->cap.am.max_short  = uct_ib_iface_hdr_size(max_inline, tag_min_hdr);
     iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - tag_min_hdr;
     iface_attr->cap.am.min_zcopy  = 0;
     iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - tag_min_hdr;
