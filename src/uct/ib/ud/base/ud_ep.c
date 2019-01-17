@@ -1003,7 +1003,12 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
         skb =  uct_ud_ep_resend(ep);
     } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK)) {
         if (uct_ud_ep_is_connected(ep)) {
-            skb = ucs_unaligned_ptr(&iface->tx.skb_inl.super);
+            if (iface->config.max_inline >= sizeof(uct_ud_neth_t)) {
+                skb = ucs_unaligned_ptr(&iface->tx.skb_inl.super);
+            } else {
+                skb      = uct_ud_iface_resend_skb_get(iface);
+                skb->len = sizeof(uct_ud_neth_t);
+            }
             uct_ud_neth_ctl_ack(ep, skb->neth);
         } else {
             /* Do not send ACKs if not connected yet. It may happen if
@@ -1013,7 +1018,12 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
         }
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK);
     } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ)) {
-        skb = ucs_unaligned_ptr(&iface->tx.skb_inl.super);
+        if (iface->config.max_inline >= sizeof(uct_ud_neth_t)) {
+            skb = ucs_unaligned_ptr(&iface->tx.skb_inl.super);
+        } else {
+            skb      = uct_ud_iface_resend_skb_get(iface);
+            skb->len = sizeof(uct_ud_neth_t);
+        }
         uct_ud_neth_ctl_ack_req(ep, skb->neth);
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
     } else if (uct_ud_ep_ctl_op_isany(ep)) {

@@ -225,6 +225,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     uct_ib_iface_init_attr_t init_attr = {};
     struct ibv_qp_cap cap;
     struct ibv_qp *qp;
+    uct_rc_hdr_t *hdr;
 
     init_attr.res_domain_key = UCT_IB_IFACE_NULL_RES_DOMAIN_KEY;
     init_attr.tm_cap_bit     = IBV_EXP_TM_CAP_RC;
@@ -270,6 +271,14 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     self->verbs_common.config.max_inline = cap.max_inline_data;
     uct_ib_iface_set_max_iov(&self->super.super, cap.max_send_sge);
 
+    if (self->verbs_common.config.max_inline < sizeof(*hdr)) {
+        self->fc_desc = ucs_mpool_get(&self->verbs_common.short_desc_mp);
+        ucs_assert_always(self->fc_desc != NULL);
+        hdr        = (uct_rc_hdr_t*)(self->fc_desc + 1);
+        hdr->am_id = UCT_RC_EP_FC_PURE_GRANT;
+    } else {
+        self->fc_desc = NULL;
+    }
 
     return UCS_OK;
 
@@ -287,6 +296,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
     uct_rc_iface_tag_cleanup(&self->super);
+    if (self->fc_desc != NULL) {
+        ucs_mpool_put(self->fc_desc);
+    }
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_iface_t, uct_rc_iface_t);
