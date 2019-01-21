@@ -184,7 +184,7 @@ int main(int argc, char **argv)
     }
 
     if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP)) {
-        if (ucp_features == 0) {
+        if (ucp_features == 0 && ucp_ep_params.field_mask == 0) {
             printf("Please select UCP features using -u switch\n");
             return -1;
         }
