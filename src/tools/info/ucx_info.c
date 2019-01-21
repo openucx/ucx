@@ -100,6 +100,7 @@ int main(int argc, char **argv)
             print_opts |= PRINT_UCP_EP;
             break;
         case 't':
+            print_opts |= PRINT_DEVICES;
             tl_name = optarg;
             break;
         case 'n':
