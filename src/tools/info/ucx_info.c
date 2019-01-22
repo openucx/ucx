@@ -16,15 +16,16 @@
 
 static void usage() {
     printf("Usage: ucx_info [options]\n");
-    printf("Options are:\n");
+    printf("At least one of the following options has to be set:\n");
     printf("  -v              Show version information\n");
-    printf("  -b              Show build configuration\n");
-    printf("  -s              Show system information\n");
     printf("  -d              Show devices and transports\n");
-    printf("  -t <name>       Print information for a specific transport\n");
+    printf("  -b              Show build configuration\n");
+    printf("  -y              Show type and structures information\n");
+    printf("  -s              Show system information\n");
     printf("  -c              Show UCX configuration\n");
     printf("  -a              Show also hidden configuration\n");
     printf("  -f              Display fully decorated output\n");
+    printf("\nUCP information (-u is required):\n");
     printf("  -p              Show UCP context information\n");
     printf("  -w              Show UCP worker information\n");
     printf("  -e              Show UCP endpoint configuration\n");
@@ -33,14 +34,16 @@ static void usage() {
     printf("                    'r' : remote memory access\n");
     printf("                    't' : tag matching \n");
     printf("                    'w' : wakeup\n");
+    printf("                  Modificators to use in combination with upper features:\n");
     printf("                    'e' : error handling\n");
+    printf("\nOther settings:\n");
+    printf("  -t <name>       Filter devices information using specified transport (requires -d)\n");
     printf("  -n <count>      Estimated UCP endpoint count (for ucp_init)\n");
     printf("  -D <type>       Set which device types to use when creating UCP context:\n");
     printf("                    'all'  : all possible devices (default)\n");
     printf("                    'shm'  : shared memory devices only\n");
     printf("                    'net'  : network devices only\n");
     printf("                    'self' : self transport only\n");
-    printf("  -y              Show type and structures information\n");
     printf("  -h              Show this help message\n");
     printf("\n");
 }
@@ -100,7 +103,6 @@ int main(int argc, char **argv)
             print_opts |= PRINT_UCP_EP;
             break;
         case 't':
-            print_opts |= PRINT_DEVICES;
             tl_name = optarg;
             break;
         case 'n':
@@ -184,8 +186,9 @@ int main(int argc, char **argv)
     }
 
     if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP)) {
-        if (ucp_features == 0 && ucp_ep_params.field_mask == 0) {
-            printf("Please select UCP features using -u switch\n");
+        if (ucp_features == 0) {
+            printf("Please select UCP features using -u switch: a|r|t|w\n");
+            usage();
             return -1;
         }
         print_ucp_info(print_opts, print_flags, ucp_features, &ucp_ep_params,
