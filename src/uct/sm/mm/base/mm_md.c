@@ -5,6 +5,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "mm_md.h"
 
 ucs_config_field_t uct_mm_md_config_table[] = {

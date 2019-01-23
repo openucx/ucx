@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ud_iface.h"
 #include "ud_ep.h"
 #include "ud_inl.h"

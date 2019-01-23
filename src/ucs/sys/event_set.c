@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "event_set.h"
 
 #include <ucs/debug/memtrack.h>
@@ -16,10 +20,6 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/epoll.h>
-
-#ifdef HAVE_CONFIG_H
-#  include "config.h"
-#endif
 
 
 const unsigned ucs_sys_event_set_max_wait_events =
