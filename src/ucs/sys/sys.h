@@ -48,6 +48,19 @@
 #include <net/if.h>
 #include <netdb.h>
 
+
+#include <sys/types.h>
+#if defined(__linux__) || defined(HAVE_CPU_SET_T)
+#include <sched.h>
+typedef cpu_set_t ucs_sys_cpuset_t;
+#elif defined(__FreeBSD__) || defined(HAVE_CPUSET_T)
+#include <sys/cpuset.h>
+typedef cpuset_t ucs_sys_cpuset_t;
+#else
+#error "Port me"
+#endif
+
+
 BEGIN_C_DECLS
 
 /** @file sys.h */
@@ -371,7 +384,7 @@ void ucs_sys_free(void *ptr, size_t length);
  *
  * @return Filled string
  */
-char *ucs_make_affinity_str(const cpu_set_t *cpuset, char *str, size_t len);
+char *ucs_make_affinity_str(const ucs_sys_cpuset_t *cpuset, char *str, size_t len);
 
 END_C_DECLS
 

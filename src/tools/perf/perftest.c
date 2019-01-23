@@ -1336,7 +1336,7 @@ static ucs_status_t cleanup_mpi_rte(struct perftest_context *ctx)
 
 static ucs_status_t check_system(struct perftest_context *ctx)
 {
-    cpu_set_t cpuset;
+    ucs_sys_cpuset_t cpuset;
     unsigned i, count, nr_cpus;
     int ret;
 

@@ -21,6 +21,9 @@
 #include <ucs/time/time.h>
 #include <ucm/api/ucm.h>
 #include <pthread.h>
+#if HAVE_PTHREAD_NP_H
+#include <pthread_np.h>
+#endif
 #include <sys/resource.h>
 #include <float.h>
 
@@ -366,13 +369,14 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
     int mr_num = ucs_div_round_up(length, chunk);
     ucs_status_t status;
     void *thread_status;
-    cpu_set_t parent_set, thread_set;
+    ucs_sys_cpuset_t parent_set, thread_set;
     uct_ib_md_mem_reg_thread_t *ctxs, *cur_ctx;
     pthread_attr_t attr;
     char UCS_V_UNUSED affinity_str[64];
     int ret;
 
-    ret = pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &parent_set);
+    ret = pthread_getaffinity_np(pthread_self(), sizeof(ucs_sys_cpuset_t),
+                                 &parent_set);
     if (ret != 0) {
         ucs_error("pthread_getaffinity_np() failed: %m");
         return UCS_ERR_INVALID_PARAM;
@@ -415,8 +419,9 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
             }
 
             CPU_ZERO(&thread_set);
-            CPU_SET(cpu_id++, &thread_set);
-            pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &thread_set);
+            CPU_SET(cpu_id, &thread_set);
+            cpu_id++;
+            pthread_attr_setaffinity_np(&attr, sizeof(ucs_sys_cpuset_t), &thread_set);
         }
 
         ret = pthread_create(&cur_ctx->thread, &attr,

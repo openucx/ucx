@@ -226,7 +226,7 @@ static long ucs_sysconf(int name)
 int ucs_get_first_cpu()
 {
     int first_cpu, total_cpus, ret;
-    cpu_set_t mask;
+    ucs_sys_cpuset_t mask;
 
     ret = ucs_sysconf(_SC_NPROCESSORS_CONF);
     if (ret < 0) {
@@ -1083,7 +1083,7 @@ void ucs_sys_free(void *ptr, size_t length)
     }
 }
 
-char* ucs_make_affinity_str(const cpu_set_t *cpuset, char *str, size_t len)
+char* ucs_make_affinity_str(const ucs_sys_cpuset_t *cpuset, char *str, size_t len)
 {
     int i = 0, prev = -1;
     char *p = str;

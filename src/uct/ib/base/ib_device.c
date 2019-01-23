@@ -142,7 +142,8 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {0, 0, "Generic HCA", 0, 0}
 };
 
-static void uct_ib_device_get_locailty(const char *dev_name, cpu_set_t *cpu_mask,
+static void uct_ib_device_get_locailty(const char *dev_name,
+                                       ucs_sys_cpuset_t *cpu_mask,
                                        int *numa_node)
 {
     char *p, buf[ucs_max(CPU_SETSIZE, 10)];
