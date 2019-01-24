@@ -47,7 +47,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                               [CUDA_LDFLAGS+=" -lcudart"], [cuda_happy="no"])])
 
          CPPFLAGS="$save_CPPFLAGS"
-         LDFLAGS="$saveLDFLAGS"
+         LDFLAGS="$save_LDFLAGS"
 
          AS_IF([test "x$cuda_happy" == "xyes"],
                [AC_DEFINE([HAVE_CUDA], [1], [Enable CUDA support])
