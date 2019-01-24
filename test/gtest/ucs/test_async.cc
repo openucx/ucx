@@ -374,8 +374,14 @@ UCS_TEST_P(test_async, global_event) {
 
 UCS_TEST_P(test_async, global_timer) {
     global_timer gt(GetParam());
-    suspend_and_poll(&gt, COUNT * 4);
-    EXPECT_GE(gt.count(), COUNT / 4);
+    for (int i = 0; i < TIMER_RETRIES; ++i) {
+        suspend_and_poll(&gt, COUNT * 4);
+        if (gt.count() >= COUNT) {
+             break;
+        }
+        UCS_TEST_MESSAGE << "retry " << (i + 1);
+    }
+    EXPECT_GE(gt.count(), int(COUNT));
 }
 
 UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
