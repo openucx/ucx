@@ -89,6 +89,7 @@ typedef enum uct_am_trace_type   uct_am_trace_type_t;
 typedef struct uct_device_addr   uct_device_addr_t;
 typedef struct uct_iface_addr    uct_iface_addr_t;
 typedef struct uct_ep_addr       uct_ep_addr_t;
+typedef struct uct_ep_params     uct_ep_params_t;
 typedef struct uct_tag_context   uct_tag_context_t;
 typedef uint64_t                 uct_tag_t;  /* tag type - 64 bit */
 typedef int                      uct_worker_cb_id_t;
@@ -404,64 +405,6 @@ typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, unsigned flags,
                                                 unsigned header_length,
                                                 uint64_t remote_addr, size_t length,
                                                 const void *rkey_buf);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Tuning parameters for an UCT endpoint created by @ref uct_ep_create.
- */
-typedef struct uct_ep_params {
-    /**
-     * Mask of valid fields in this structure, using bits from
-     * @ref uct_ep_params_field. Fields not specified in this mask
-     * would be ignored. Provides ABI compatibility with respect to adding new
-     * fields.
-     */
-    uint64_t                          field_mask;
-    /**
-     * Interface to create the endpoint on. This is a mandatory field.
-     */
-    uct_iface_h                       iface;
-    /**
-     * User data associated with the endpoint.
-     */
-    void                              *user_data;
-    /**
-     * The device address to connect to on the remote peer. Should be defined
-     * together with @ref uct_ep_params_t::iface_addr to create an endpoint
-     * connected to a remote interface.
-     */
-    const uct_device_addr_t           *dev_addr;
-     /**
-      * Create an endpoint which is connected to remote interface.
-      * The interface address to connect to on the remote peer.
-      * @note requires @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE capability.
-      */
-    const uct_iface_addr_t            *iface_addr;
-    /**
-     * The sockaddr to connect to on the remote peer. If set, @ref uct_ep_create
-     * will create an endpoint for a connection to the remote peer, specified by
-     * its socket address.
-     * @note The interface in this routine requires the
-     * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
-     */
-    const ucs_sock_addr_t             *sockaddr;
-    /**
-     * Required @ref uct_cb_flags to indicate where callbacks can be invoked
-     * from.
-     */
-    uint32_t                          sockaddr_cb_flags;
-    /**
-     * Callback for filling the user's private data, valid only if
-     * @ref uct_ep_params_t::sockaddr is set. The user may provide a callback
-     * function which will be used to fill the private data that will be sent on
-     * a connection request to the remote peer.
-     * @note It is never guaranteed that the callaback will be called.
-     * If, for example, the endpoint goes into error state before issuing the
-     * connection request, the callback will not be invoked.
-     */
-    uct_sockaddr_priv_pack_callback_t sockaddr_pack_cb;
-} uct_ep_params_t;
 
 
 #endif

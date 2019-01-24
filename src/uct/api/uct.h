@@ -341,19 +341,19 @@ enum uct_msg_flags {
 enum uct_cb_flags {
     UCT_CB_FLAG_RESERVED = UCS_BIT(1), /**< Reserved for future use. */
     UCT_CB_FLAG_ASYNC    = UCS_BIT(2)  /**< Callback may be invoked from any
-                                            context (thread, process). For
-                                            example, it may be called from a
-                                            transport async progress thread. To
-                                            guarantee async invocation, the
-                                            interface must have the @ref
-                                            UCT_IFACE_FLAG_CB_ASYNC flag set. If
-                                            async callback is requested on an
-                                            interface which only supports sync
-                                            callback (i.e., only the @ref
-                                            UCT_IFACE_FLAG_CB_SYNC flag is set),
-                                            the callback may be invoked only
-                                            from the context that called @ref
-                                            uct_iface_progress). */
+                                            context (thread, process) and should
+                                            be thread safe. For example, it may
+                                            be called from a transport async
+                                            progress thread. To guarantee async
+                                            invocation, the interface must have
+                                            the @ref UCT_IFACE_FLAG_CB_ASYNC
+                                            flag set. If async callback is
+                                            requested on an interface which only
+                                            supports sync callback (i.e., only
+                                            the @ref UCT_IFACE_FLAG_CB_SYNC flag
+                                            is set), the callback may be invoked
+                                            only from the context that called
+                                            @ref uct_iface_progress). */
 };
 
 
@@ -474,13 +474,13 @@ typedef enum {
  * @brief UCT endpoint created by @ref uct_ep_create parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_ep_params_t are
- * present. It provides backward compatibility support.
+ * present, for backward compatibility support.
  */
 enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_IFACE             = UCS_BIT(0), /**< UCT interface */
     UCT_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(1), /**< User data */
-    UCT_EP_PARAM_FIELD_DEV_ADDR          = UCS_BIT(2), /**< User data */
-    UCT_EP_PARAM_FIELD_IFACE_ADDR        = UCS_BIT(3), /**< User data */
+    UCT_EP_PARAM_FIELD_DEV_ADDR          = UCS_BIT(2), /**< Device address */
+    UCT_EP_PARAM_FIELD_IFACE_ADDR        = UCS_BIT(3), /**< Interfaceface address */
     UCT_EP_PARAM_FIELD_SOCKADDR          = UCS_BIT(4), /**< Remote sockaddr */
     UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS = UCS_BIT(5), /**< Callback flags */
     UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB  = UCS_BIT(6)  /**< Pack private data
@@ -683,6 +683,70 @@ struct uct_iface_params {
     /** Callback for tag matching unexpected rndv messages */
     uct_tag_unexp_rndv_cb_t                      rndv_cb;
 };
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for creating a UCT endpoint by @ref uct_ep_create
+ */
+typedef struct uct_ep_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_ep_params_field. Fields not specified by this mask
+     * would be ignored.
+     */
+    uint64_t                          field_mask;
+
+    /**
+     * Interface to create the endpoint on. This is a mandatory field.
+     */
+    uct_iface_h                       iface;
+
+    /**
+     * User data associated with the endpoint.
+     */
+    void                              *user_data;
+
+    /**
+     * The device address to connect to on the remote peer. Should be defined
+     * together with @ref uct_ep_params_t::iface_addr to create an endpoint
+     * connected to a remote interface.
+     */
+    const uct_device_addr_t           *dev_addr;
+
+    /**
+      * Create an endpoint which is connected to remote interface.
+      * The interface address to connect to on the remote peer.
+      * @note requires @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE capability.
+      */
+    const uct_iface_addr_t            *iface_addr;
+
+    /**
+     * The sockaddr to connect to on the remote peer. If set, @ref uct_ep_create
+     * will create an endpoint for a connection to the remote peer, specified by
+     * its socket address.
+     * @note The interface in this routine requires the
+     * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
+     */
+    const ucs_sock_addr_t             *sockaddr;
+
+    /**
+     * @ref uct_cb_flags to indicate @ref uct_ep_params_t::sockaddr_pack_cb
+     * behavior. If @ref uct_ep_params_t::sockaddr_pack_cb is not set, this
+     * field will be ignored.
+     */
+    uint32_t                          sockaddr_cb_flags;
+
+    /**
+     * Callback for filling the user's private data which will be delivered to
+     * server side by @ref uct_sockaddr_conn_request_callback_t . This field is
+     * valid only if @ref uct_ep_params_t::sockaddr is set.
+     * @note It is never guaranteed that the callaback will be called. If, for
+     * example, the endpoint goes into error state before issuing the connection
+     * request, the callback will not be invoked.
+     */
+    uct_sockaddr_priv_pack_callback_t sockaddr_pack_cb;
+} uct_ep_params_t;
 
 
 /**
