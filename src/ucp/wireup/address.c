@@ -72,10 +72,16 @@ static size_t ucp_address_string_packed_size(const char *s)
     return strlen(s) + 1;
 }
 
-static int ucp_address_iface_attr_size(ucp_worker_t *worker)
+static size_t ucp_address_iface_attr_size(ucp_worker_t *worker)
 {
     return worker->context->config.ext.unified_mode ?
            sizeof(ucp_rsc_index_t) : sizeof(ucp_address_packed_iface_attr_t);
+}
+
+static int ucp_worker_iface_can_connect(uct_iface_attr_t *attrs)
+{
+    return (attrs->cap.flags &
+            (UCT_IFACE_FLAG_CONNECT_TO_IFACE | UCT_IFACE_FLAG_CONNECT_TO_EP)) ? 1 : 0;
 }
 
 /* Pack a string and return a pointer to storage right after the string */
@@ -148,8 +154,7 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int has_ep,
 
         iface_attr = ucp_worker_iface_get_attr(worker, i);
 
-        if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) &&
-            !(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP)) {
+        if (!ucp_worker_iface_can_connect(iface_attr)) {
             continue;
         }
 
@@ -429,8 +434,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             wiface     = ucp_worker_iface(worker, i);
             iface_attr = &wiface->attr;
 
-            if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) &&
-                !(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP)) {
+            if (!ucp_worker_iface_can_connect(iface_attr)) {
                 return UCS_ERR_INVALID_ADDR;
             }
 
