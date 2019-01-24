@@ -23,6 +23,7 @@
 static const char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS]           = "dcs",
     [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
+    [UCT_DC_TX_POLICY_RAND]          = "rand",
     [UCT_DC_TX_POLICY_LAST]          = NULL
 };
 
@@ -50,7 +51,10 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      "dcs_quota  Same as \"dcs\" but in addition the DCI is scheduled for release\n"
      "           if it has sent more than quota, and there are endpoints waiting for a DCI.\n"
      "           The dci is released once it completes all outstanding operations.\n"
-     "           This policy ensures that there will be no starvation among endpoints.",
+     "           This policy ensures that there will be no starvation among endpoints.\n"
+     "\n"
+     "rand       Every endpoint is assigned with its own DCI, selected in the random order.\n"
+     "           Multiple endpoints may share the same DCI.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
 
@@ -150,6 +154,15 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     uct_rc_mlx5_iface_common_query(&iface->super.super.super, iface_attr,
                                    max_am_inline, UCT_IB_MLX5_AV_FULL_SIZE);
+
+    /* Error handling is not supported with random dci policy
+     * TODO: Fix */
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        iface_attr->cap.flags &= ~(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                   UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF    |
+                                   UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM);
+    }
+
     return UCS_OK;
 }
 
