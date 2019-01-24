@@ -94,25 +94,28 @@ err:
     return -1;
 }
 
-static void barrier(int oob_sock)
+static int barrier(int oob_sock)
 {
     int dummy = 0;
-    send(oob_sock, &dummy, sizeof(dummy), 0);
-    recv(oob_sock, &dummy, sizeof(dummy), 0);
-}
+    ssize_t res;
 
-static void generate_random_string(char *str, int size)
-{
-    int i;
-    static int init = 0;
-    /* randomize seed only once */
-    if (!init) {
-        srand(time(NULL));
-        init = 1;
+    res = send(oob_sock, &dummy, sizeof(dummy), 0);
+    if (res < 0) {
+        return res;
     }
 
-    for (i = 0; i < (size-1); ++i) {
-        str[i] =  'A' + (rand() % 26);
+    res = recv(oob_sock, &dummy, sizeof(dummy), 0);
+
+    /* number of received bytes should be the same as sent */
+    return !(res == sizeof(dummy));
+}
+
+static void generate_test_string(char *str, int size)
+{
+    int i;
+
+    for (i = 0; i < (size - 1); ++i) {
+        str[i] =  'A' + (i % 26);
     }
     str[i] = 0;
 }

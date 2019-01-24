@@ -5,6 +5,7 @@
 */
 
 #include "ucx_hello_world.h"
+#include <limits.h>
 
 #include <uct/api/uct.h>
 
@@ -243,6 +244,7 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name,
     CHKERR_JUMP(UCS_OK != status, "setup iface_config", error_ret);
 
     /* Open communication interface */
+    assert(iface_p->iface == NULL);
     status = uct_iface_open(iface_p->pd, iface_p->worker, &params, config,
                             &iface_p->iface);
     uct_config_release(config);
@@ -274,6 +276,7 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name,
 
 error_iface:
     uct_iface_close(iface_p->iface);
+    iface_p->iface = NULL;
 error_ret:
     return UCS_ERR_UNSUPPORTED;
 }
@@ -293,6 +296,8 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
 
     status = uct_query_md_resources(&md_resources, &num_md_resources);
     CHKERR_JUMP(UCS_OK != status, "query for memory domain resources", error_ret);
+
+    iface_p->iface = NULL;
 
     /* Iterate through protected domain resources */
     for (i = 0; i < num_md_resources; ++i) {
@@ -463,7 +468,7 @@ int sendrecv(int sock, const void *sbuf, size_t slen, void **rbuf)
     }
 
     ret = recv(sock, &rlen, sizeof(rlen), 0);
-    if (ret < 0) {
+    if ((ret != sizeof(rlen)) || (rlen > (SIZE_MAX / 2))) {
         fprintf(stderr, "failed to receive device address length\n");
         return -1;
     }
@@ -485,21 +490,20 @@ int sendrecv(int sock, const void *sbuf, size_t slen, void **rbuf)
 
 int main(int argc, char **argv)
 {
-    uct_device_addr_t   *own_dev;
     uct_device_addr_t   *peer_dev   = NULL;
-    uct_iface_addr_t    *own_iface;
     uct_iface_addr_t    *peer_iface = NULL;
     uct_ep_addr_t       *own_ep     = NULL;
     uct_ep_addr_t       *peer_ep    = NULL;
+    uint8_t             id          = 0;
+    int                 oob_sock    = -1;  /* OOB connection socket */
     ucs_status_t        status      = UCS_OK; /* status codes for UCS */
+    uct_device_addr_t   *own_dev;
+    uct_iface_addr_t    *own_iface;
     uct_ep_h            ep;                   /* Remote endpoint */
     ucs_async_context_t *async;               /* Async event context manages
                                                  times and fd notifications */
     cmd_args_t          cmd_args;
-
     iface_info_t        if_info;
-    uint8_t             id = 0;
-    int                 oob_sock = -1;  /* OOB connection socket */
     uct_ep_params_t     ep_params;
 
     /* Parse the command line */
@@ -584,7 +588,10 @@ int main(int argc, char **argv)
 
         /* Connect endpoint to a remote endpoint */
         status = uct_ep_connect_to_ep(ep, peer_dev, peer_ep);
-        barrier(oob_sock);
+        if (barrier(oob_sock)) {
+            status = UCS_ERR_IO_ERROR;
+            goto out_free_ep;
+        }
     } else if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         /* Create an endpoint which is connected to a remote interface */
         ep_params.field_mask |= UCT_EP_PARAM_FIELD_DEV_ADDR |
@@ -612,7 +619,7 @@ int main(int argc, char **argv)
 
     if (cmd_args.server_name) {
         char *str = (char *)malloc(cmd_args.test_strlen);
-        generate_random_string(str, cmd_args.test_strlen);
+        generate_test_string(str, cmd_args.test_strlen);
 
         /* Send active message to remote endpoint */
         if (cmd_args.func_am_type == FUNC_AM_SHORT) {
@@ -644,7 +651,9 @@ int main(int argc, char **argv)
         }
     }
 
-    barrier(oob_sock);
+    if (barrier(oob_sock)) {
+        status = UCS_ERR_IO_ERROR;
+    }
     close(oob_sock);
 
 out_free_ep:

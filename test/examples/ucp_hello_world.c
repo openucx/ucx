@@ -372,7 +372,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     CHKERR_JUMP(!msg, "allocate memory\n", err_ep);
 
     msg->data_len = msg_len - sizeof(*msg);
-    generate_random_string((char *)(msg + 1), test_string_length);
+    generate_test_string((char *)(msg + 1), test_string_length);
 
     request = ucp_tag_send_nb(client_ep, msg, msg_len,
                               ucp_dt_make_contig(1), tag,
@@ -501,9 +501,9 @@ int main(int argc, char **argv)
 
     ret = run_test(client_target_name, ucp_worker);
 
-    if (!err_handling_opt.failure) {
+    if (!ret && !err_handling_opt.failure) {
         /* Make sure remote is disconnected before destroying local worker */
-        barrier(oob_sock);
+        ret = barrier(oob_sock);
     }
     close(oob_sock);
 
@@ -571,6 +571,7 @@ int parse_cmd(int argc, char * const argv[], char **server_name)
             } else {
                 fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
             }
+            /* Fall through */
         case 'h':
         default:
             fprintf(stderr, "Usage: ucp_hello_world [parameters]\n");
