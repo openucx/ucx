@@ -689,7 +689,7 @@ struct uct_iface_params {
  * @ingroup UCT_RESOURCE
  * @brief Parameters for creating a UCT endpoint by @ref uct_ep_create
  */
-typedef struct uct_ep_params {
+struct uct_ep_params {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref uct_ep_params_field. Fields not specified by this mask
@@ -746,7 +746,7 @@ typedef struct uct_ep_params {
      * request, the callback will not be invoked.
      */
     uct_sockaddr_priv_pack_callback_t sockaddr_pack_cb;
-} uct_ep_params_t;
+};
 
 
 /**
