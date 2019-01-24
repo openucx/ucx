@@ -499,7 +499,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
                                      (mm_config->fifo_size * mm_config->release_fifo_factor),
                                      1)));
     self->fifo_mask                = mm_config->fifo_size - 1;
-    self->fifo_shift               = ucs_count_zero_bits(mm_config->fifo_size);
+    self->fifo_shift               = ucs_count_trailing_zero_bits(mm_config->fifo_size);
     self->rx_headroom              = params->rx_headroom;
     self->release_desc.cb          = uct_mm_iface_release_desc;
 

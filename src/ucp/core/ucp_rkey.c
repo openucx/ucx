@@ -187,7 +187,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
 
     /* MD map for the unpacked rkey */
     md_map   = remote_md_map & ucp_ep_config(ep)->key.reachable_md_map;
-    md_count = ucs_count_one_bits(md_map);
+    md_count = ucs_popcount(md_map);
     p       += sizeof(ucp_md_map_t);
 
     /* Allocate rkey handle which holds UCT rkeys for all remote MDs. Small key
@@ -309,7 +309,7 @@ ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p)
     unsigned i;
     ucs_status_t status;
 
-    num_rkeys = ucs_count_one_bits(rkey->md_map);
+    num_rkeys = ucs_popcount(rkey->md_map);
 
     for (i = 0; i < num_rkeys; ++i) {
         status = uct_rkey_ptr(&rkey->uct[i], raddr, addr_p);
@@ -328,13 +328,13 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
     unsigned num_rkeys;
     unsigned i;
 
-    num_rkeys = ucs_count_one_bits(rkey->md_map);
+    num_rkeys = ucs_popcount(rkey->md_map);
 
     for (i = 0; i < num_rkeys; ++i) {
         uct_rkey_release(&rkey->uct[i]);
     }
 
-    if (ucs_count_one_bits(rkey->md_map) <= UCP_RKEY_MPOOL_MAX_MD) {
+    if (ucs_popcount(rkey->md_map) <= UCP_RKEY_MPOOL_MAX_MD) {
         context = ucs_container_of(ucs_mpool_obj_owner(rkey), ucp_context_t,
                                    rkey_mp);
         UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
@@ -392,7 +392,7 @@ static ucp_lane_index_t ucp_config_find_rma_lane(ucp_context_h context,
         dst_md_mask  = UCS_BIT(dst_md_index);
         if (rkey->md_map & dst_md_mask) {
             /* Return first matching lane */
-            rkey_index  = ucs_count_one_bits(rkey->md_map & (dst_md_mask - 1));
+            rkey_index  = ucs_popcount(rkey->md_map & (dst_md_mask - 1));
             *uct_rkey_p = rkey->uct[rkey_index].rkey;
             return lane;
         }
