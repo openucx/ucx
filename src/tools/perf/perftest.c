@@ -335,8 +335,6 @@ static void usage(const struct perftest_context *ctx, const char *program)
     test_type_t *test;
     int UCS_V_UNUSED rank;
 
-    ucx_perf_global_init(); /* initialize memory types */
-
 #if HAVE_MPI
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     if (ctx->mpi && (rank != 0)) {
@@ -725,6 +723,8 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized
     int c;
 
     ucs_trace_func("");
+
+    ucx_perf_global_init(); /* initialize memory types */
 
     init_test_params(&ctx->params);
     ctx->server_addr            = NULL;
