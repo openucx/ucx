@@ -44,11 +44,6 @@ public:
         return ucs_derived_of(e->ep(idx), uct_dc_mlx5_ep_t);
     }
 
-    static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length,
-                                         unsigned flags) {
-        return UCS_OK;
-    }
-
     virtual void cleanup() {
         uct_test::cleanup();
     }
@@ -71,6 +66,7 @@ public:
 
 protected:
     entity *m_e1, *m_e2;
+    static uint32_t m_am_rx_count;
 
     struct dcs_comp {
         uct_completion_t uct_comp;
@@ -88,6 +84,18 @@ protected:
         /* dci must be released before completion cb is called */
         EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
         comp->e->destroy_eps();
+    }
+
+    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+                                   unsigned flags)
+    {
+        ++m_am_rx_count;
+        return UCS_OK;
+    }
+
+    static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length,
+                                         unsigned flags) {
+        return UCS_OK;
     }
 
     struct dcs_pending {
@@ -145,7 +153,8 @@ protected:
 
 };
 
-int test_dc::n_warnings = 0;
+int test_dc::n_warnings         = 0;
+uint32_t test_dc::m_am_rx_count = 0;
 
 UCS_TEST_P(test_dc, dcs_single) {
     ucs_status_t status;
@@ -402,6 +411,43 @@ UCS_TEST_P(test_dc, dcs_ep_purge_pending) {
     flush();
     EXPECT_EQ(0, iface->tx.stack_top);
 }
+
+UCS_TEST_P(test_dc, rand_dci_many_eps) {
+    uct_dc_mlx5_ep_t *ep;
+
+    m_am_rx_count = 0;
+
+    if (UCS_OK != uct_config_modify(m_iface_config, "DC_TX_POLICY", "rand")) {
+        UCS_TEST_ABORT("Error: cannot enable random DCI policy");
+    }
+    entity *rand_e = uct_test::create_entity(0);
+    m_entities.push_back(rand_e);
+    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler, NULL, 0);
+
+    uct_dc_mlx5_iface_t *iface = dc_iface(rand_e);
+    int num_eps                = 2 * iface->tx.ndci;
+
+    /* Create more eps than we have dcis, all eps should have a valid dci */
+    for (int i = 0; i < num_eps; i++) {
+        rand_e->connect_to_iface(i, *m_e2);
+        ep = dc_ep(rand_e, i);
+        EXPECT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
+    }
+
+    /* Try to send on all eps (taking into account available resources) */
+    uint32_t num_sends = ucs_min(num_eps, iface->super.super.tx.cq_available);
+
+    for (unsigned i = 0; i < num_sends; i++) {
+        ucs_status_t status = uct_ep_am_short(rand_e->ep(i), 0, 0, NULL, 0);
+        EXPECT_UCS_OK(status);
+    }
+    wait_for_value(&m_am_rx_count, num_sends, true);
+
+    EXPECT_EQ(m_am_rx_count, num_sends);
+
+    flush();
+}
+
 
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc)
 
