@@ -991,8 +991,8 @@ struct ucp_tag_recv_info {
  * the run-time environment. Then, the fetched descriptor is used for
  * UCP library @ref ucp_init "initialization". The Application can print out the
  * descriptor using @ref ucp_config_print "print" routine. In addition
- * the application is responsible to @ref ucp_config_release "release" the
- * descriptor back to UCP library.
+ * the application is responsible for @ref ucp_config_release "releasing" the
+ * descriptor back to the UCP library.
  *
  * @param [in]  env_prefix    If non-NULL, the routine searches for the
  *                            environment variables that start with
@@ -1695,7 +1695,7 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream);
  * @return otherwise        - Flush operation was scheduled and can be completed
  *                          in any point in time. The request handle is returned
  *                          to the application in order to track progress. The
- *                          application is responsible to release the handle
+ *                          application is responsible for releasing the handle
  *                          using @ref ucp_request_free "ucp_request_free()"
  *                          routine.
  *
@@ -1937,7 +1937,7 @@ ucs_status_t ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
  * This routine packs the RKEY object in a portable format such that the
  * object can be @ref ucp_ep_rkey_unpack "unpacked" on any platform supported by the
  * UCP library. In order to release the memory buffer allocated by this routine
- * the application is responsible to call the @ref ucp_rkey_buffer_release
+ * the application is responsible for calling the @ref ucp_rkey_buffer_release
  * "ucp_rkey_buffer_release()" routine.
  *
  *
@@ -1945,7 +1945,7 @@ ucs_status_t ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
  * @li RKEYs for InfiniBand and Cray Aries networks typically includes
  * InifiniBand and Aries key.
  * @li In order to enable remote direct memory access to the memory associated
- * with the memory handle the application is responsible to share the RKEY with
+ * with the memory handle the application is responsible for sharing the RKEY with
  * the peers that will initiate the access.
  *
  * @param [in]  context       Application @ref ucp_context_h "context" which was
@@ -1985,9 +1985,9 @@ void ucp_rkey_buffer_release(void *rkey_buffer);
  * @brief Create remote access key from packed buffer.
  *
  * This routine unpacks the remote key (RKEY) object into the local memory
- * such that it can be accesses and used  by UCP routines. The RKEY object has
+ * such that it can be accessed and used by UCP routines. The RKEY object has
  * to be packed using the @ref ucp_rkey_pack "ucp_rkey_pack()" routine.
- * Application code should not make any alternations to the content of the RKEY
+ * Application code should not make any changes to the content of the RKEY
  * buffer.
  *
  * @param [in]  ep            Endpoint to access using the remote key.
@@ -2008,7 +2008,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
  * by the rkey.
  *
  * @note This routine can return a valid pointer only for the endpoints
- * that are reacheble via shared memory.
+ * that are reachable via shared memory.
  *
  * @param [in]  rkey          A remote key handle.
  * @param [in]  raddr         A remote memory address within the memory area
@@ -2078,7 +2078,7 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  *                          completed in any point in time. The request handle
  *                          is returned to the application in order to track
  *                          progress of the message. The application is
- *                          responsible to release the handle using
+ *                          responsible for releasing the handle using
  *                          @ref ucp_request_free routine.
  */
 ucs_status_ptr_t ucp_stream_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
@@ -2123,7 +2123,7 @@ ucs_status_ptr_t ucp_stream_send_nb(ucp_ep_h ep, const void *buffer, size_t coun
  *                          completed in any point in time. The request handle
  *                          is returned to the application in order to track
  *                          progress of the message. The application is
- *                          responsible to released the handle using
+ *                          responsible for releasing the handle using
  *                          @ref ucp_request_free "ucp_request_free()" routine.
  */
 ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
@@ -2239,7 +2239,7 @@ ucs_status_t ucp_tag_send_nbr(ucp_ep_h ep, const void *buffer, size_t count,
  *                          completed in any point in time. The request handle
  *                          is returned to the application in order to track
  *                          progress of the message. The application is
- *                          responsible to release the handle using
+ *                          responsible for releasing the handle using
  *                          @ref ucp_request_free "ucp_request_free()" routine.
  */
 ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t count,
@@ -2363,7 +2363,7 @@ ucs_status_ptr_t ucp_stream_recv_data_nb(ucp_ep_h ep, size_t *length);
  * @return otherwise          - Operation was scheduled for receive. The request
  *                              handle is returned to the application in order
  *                              to track progress of the operation. The
- *                              application is responsible to released the
+ *                              application is responsible for releasing the
  *                              handle using @ref ucp_request_free
  *                              "ucp_request_free()" routine.
  */
@@ -2480,7 +2480,7 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
  * @return otherwise          - Operation was scheduled for receive. The request
  *                              handle is returned to the application in order
  *                              to track progress of the operation. The
- *                              application is responsible to released the
+ *                              application is responsible for releasing the
  *                              handle using @ref ucp_request_free
  *                              "ucp_request_free()" routine.
  */
@@ -2788,7 +2788,7 @@ ucs_status_t ucp_stream_recv_request_test(void *request, size_t *length_p);
  * called with the @a status argument of the callback set to UCS_OK, and in a
  * case it is canceled the @a status argument is set to UCS_ERR_CANCELED.  It is
  * important to note that in order to release the request back to the library
- * the application is responsible to call @ref ucp_request_free
+ * the application is responsible for calling @ref ucp_request_free
  * "ucp_request_free()".
  */
 void ucp_request_cancel(ucp_worker_h worker, void *request);
@@ -2833,7 +2833,7 @@ void ucp_request_free(void *request);
  * generic datatype manipulation. Typically, generic datatypes are used for
  * integration with datatype engines provided with MPI implementations (MPICH,
  * Open MPI, etc).
- * The application is responsible to release the @a datatype_p  object using
+ * The application is responsible for releasing the @a datatype_p  object using
  * @ref ucp_dt_destroy "ucp_dt_destroy()" routine.
  *
  * @param [in]  ops          Generic datatype function table as defined by
@@ -2917,7 +2917,7 @@ ucs_status_t ucp_worker_fence(ucp_worker_h worker);
  * @return otherwise        - Flush operation was scheduled and can be completed
  *                          in any point in time. The request handle is returned
  *                          to the application in order to track progress. The
- *                          application is responsible to release the handle
+ *                          application is responsible for releasing the handle
  *                          using @ref ucp_request_free "ucp_request_free()"
  *                          routine.
  */
