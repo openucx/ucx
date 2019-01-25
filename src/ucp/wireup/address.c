@@ -78,10 +78,10 @@ static size_t ucp_address_iface_attr_size(ucp_worker_t *worker)
            sizeof(ucp_rsc_index_t) : sizeof(ucp_address_packed_iface_attr_t);
 }
 
-static int ucp_worker_iface_can_connect(uct_iface_attr_t *attrs)
+static uint64_t ucp_worker_iface_can_connect(uct_iface_attr_t *attrs)
 {
-    return (attrs->cap.flags &
-            (UCT_IFACE_FLAG_CONNECT_TO_IFACE | UCT_IFACE_FLAG_CONNECT_TO_EP)) ? 1 : 0;
+    return attrs->cap.flags &
+           (UCT_IFACE_FLAG_CONNECT_TO_IFACE | UCT_IFACE_FLAG_CONNECT_TO_EP);
 }
 
 /* Pack a string and return a pointer to storage right after the string */
