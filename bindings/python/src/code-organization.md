@@ -52,7 +52,7 @@ contiguous python objects, and for simple experiments.
 The basic connection model envisioned for UCP python bindings usage is for a
 process to call:
  + listen API if it expects connections
-   - `.start_server`
+   - `.start_listener`
  + connect API targeting listening processes
    - `.get_endpoint(server_ip, server_port)`
  + get bidirectional endpoint handles from connections
@@ -65,7 +65,7 @@ The envisioned transfer model is to call:
      which `.done` or `.result` calls can be made
    - `ep.send_fast`, `ep.recv_fast` which return `ucp_comm_request`
      objects on which *only* `.done` or `.result` calls can be made
-   - `ep.send_msg`, `ep.recv_msg` perform the same action but take
+   - `ep.send_obj`, `ep.recv_obj` perform the same action but take
      python objects as arguments and provide ways to return python
      objects
    - the expectation with the above calls is that a send operation
@@ -87,14 +87,14 @@ The above calls are exposed through classes/functions in
    - ucp context detects and sets up communication resources
    - worker helps with connection establishment, drives transfer
      operations, executes callbacks
- + `.start_server(py_func, server_port = -1, is_coroutine = False)`
+ + `.start_listener(py_func, server_port = -1, is_coroutine = False)`
    - setup a process to listen for connections @ `server_port`
    - pass a python function `py_func` to be called when an incoming
      connection gets accepted
    - `py_func` can be a coroutine but must be indicated
      * TODO: Find out how to automatically detect if a function is a
        coroutine
- + `.stop_server()`
+ + `.stop_listener()`
    - stop listening for incoming connections
      * TODO: find if outstandidng operations on existing endpoints are
        completed if listener is destroyed during an ongoing transfer
