@@ -301,6 +301,8 @@ public:
             params.transports.clear();
             params.transports.push_back(*i);
             create_entity(true, params);
+            sender().connect(&receiver(), get_ep_params());
+            check_offload_support(true);
         }
     }
 
