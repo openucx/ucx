@@ -227,7 +227,7 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
             goto err_cleanup_eps;
         }
 
-        status = ucp_address_unpack(address_buffer, &local_address);
+        status = ucp_address_unpack(worker, address_buffer, &local_address);
         if (status != UCS_OK) {
             goto err_free_address_buffer;
         }
@@ -398,7 +398,7 @@ ucs_status_t ucp_ep_create_accept(ucp_worker_h worker,
     params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
     params.err_mode   = client_data->err_mode;
 
-    status = ucp_address_unpack(client_data + 1, &remote_address);
+    status = ucp_address_unpack(worker, client_data + 1, &remote_address);
     if (status != UCS_OK) {
         goto out;
     }
@@ -501,7 +501,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 
     UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
 
-    status = ucp_address_unpack(params->address, &remote_address);
+    status = ucp_address_unpack(worker, params->address, &remote_address);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1116,22 +1116,27 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         rsc_index = config->key.lanes[lane].rsc_index;
 
         if (rsc_index != UCP_NULL_RESOURCE) {
-            config->tag.rndv.min_get_zcopy =
-                ucs_max(config->tag.rndv.min_get_zcopy,
-                        worker->ifaces[rsc_index].attr.cap.get.min_zcopy);
-            config->tag.rndv.max_get_zcopy =
-                ucs_min(config->tag.rndv.max_get_zcopy,
-                        worker->ifaces[rsc_index].attr.cap.get.max_zcopy);
-            rndv_max_bw = ucs_max(rndv_max_bw, worker->ifaces[rsc_index].attr.bandwidth);
+            iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+            config->tag.rndv.min_get_zcopy = ucs_max(config->tag.rndv.min_get_zcopy,
+                                                     iface_attr->cap.get.min_zcopy);
+
+            config->tag.rndv.max_get_zcopy = ucs_min(config->tag.rndv.max_get_zcopy,
+                                                     iface_attr->cap.get.max_zcopy);
+
+            rndv_max_bw = ucs_max(rndv_max_bw, iface_attr->bandwidth);
         }
     }
 
     if (rndv_max_bw > 0) {
         for (i = 0; (i < config->key.num_lanes) &&
                     (config->key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
-            lane                         = config->key.rma_bw_lanes[i];
-            rsc_index                    = config->key.lanes[lane].rsc_index;
-            config->tag.rndv.scale[lane] = worker->ifaces[rsc_index].attr.bandwidth / rndv_max_bw;
+            lane      = config->key.rma_bw_lanes[i];
+            rsc_index = config->key.lanes[lane].rsc_index;
+
+            if (rsc_index != UCP_NULL_RESOURCE) {
+                iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+                config->tag.rndv.scale[lane] = iface_attr->bandwidth / rndv_max_bw;
+            }
         }
     }
 
