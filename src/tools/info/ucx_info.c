@@ -34,7 +34,7 @@ static void usage() {
     printf("                    'r' : remote memory access\n");
     printf("                    't' : tag matching \n");
     printf("                    'w' : wakeup\n");
-    printf("                  Modificators to use in combination with upper features:\n");
+    printf("                  Modifiers to use in combination with above features:\n");
     printf("                    'e' : error handling\n");
     printf("\nOther settings:\n");
     printf("  -t <name>       Filter devices information using specified transport (requires -d)\n");
