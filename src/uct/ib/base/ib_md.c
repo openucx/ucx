@@ -1430,7 +1430,8 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     }
 
     if (status != UCS_OK) {
-        ucs_debug("Failed to initialize IB device %s", md_name);
+        ucs_assert(status == UCS_ERR_UNSUPPORTED);
+        ucs_debug("Unsupported IB device %s", md_name);
         goto out_free_dev_list;
     }
 

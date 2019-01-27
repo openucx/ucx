@@ -140,13 +140,13 @@ typedef struct uct_ib_md_open_entry {
                                            uct_ib_md_t **p_md);
 } uct_ib_md_open_entry_t;
 
-#define UCT_IB_MD_OPEN(_open_fn, priority) \
+#define UCT_IB_MD_OPEN(_open_fn, _priority) \
     UCS_STATIC_INIT { \
         extern ucs_list_link_t uct_ib_md_open_list; \
         static uct_ib_md_open_entry_t entry = { \
             .md_open = _open_fn, \
         }; \
-        if (priority == 1) { \
+        if (_priority) { \
             ucs_list_add_head(&uct_ib_md_open_list, &entry.list); \
         } else { \
             ucs_list_add_tail(&uct_ib_md_open_list, &entry.list); \
