@@ -242,8 +242,8 @@ static void uct_ib_async_event_handler(int fd, void *arg)
     ibv_ack_async_event(&event);
 }
 
-static ucs_status_t uct_ib_verbs_device_init(struct ibv_device *ibv_device,
-                                             uct_ib_md_t **p_md)
+static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
+                                         uct_ib_md_t **p_md)
 {
     uct_ib_device_t *dev;
     ucs_status_t status;
@@ -304,7 +304,6 @@ static ucs_status_t uct_ib_verbs_device_init(struct ibv_device *ibv_device,
 #endif
 
     *p_md = md;
-
     return UCS_OK;
 
 err_free_context:
@@ -314,7 +313,7 @@ err:
     return status;
 }
 
-UCT_IB_DEVICE_INIT(uct_ib_verbs_device_init, 0);
+UCT_IB_MD_OPEN(uct_ib_verbs_md_open, 0);
 
 ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                                 struct ibv_device *ibv_device, int async_events

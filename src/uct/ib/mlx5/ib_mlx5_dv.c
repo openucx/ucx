@@ -73,14 +73,14 @@ err_cq:
     return status;
 }
 
-static ucs_status_t uct_ib_mlx5dv_device_init(struct ibv_device *ibv_device,
-                                              uct_ib_md_t **p_md)
+static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
+                                          uct_ib_md_t **p_md)
 {
     uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {0};
     uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_in)] = {0};
     struct mlx5dv_context_attr dv_attr = {};
     ucs_status_t status = UCS_OK;
-    int has_dc = 1, atomic = 0;
+    int atomic = 0, has_dc = 1;
     struct ibv_context *ctx;
     uct_ib_device_t *dev;
     uct_ib_md_t *md;
@@ -96,14 +96,16 @@ static ucs_status_t uct_ib_mlx5dv_device_init(struct ibv_device *ibv_device,
     ctx = mlx5dv_open_device(ibv_device, &dv_attr);
     if (ctx == NULL) {
         ucs_debug("mlx5dv_open_device(%s) failed: %m", ibv_get_device_name(ibv_device));
-        return UCS_ERR_UNSUPPORTED;
+        status = UCS_ERR_UNSUPPORTED;
+        goto err;
     }
 
     md = ucs_calloc(1, sizeof(*md), "ib_md");
     if (md == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto err_free_context;
     }
+
     dev              = &md->dev;
     dev->ibv_context = ctx;
 
@@ -112,7 +114,7 @@ static ucs_status_t uct_ib_mlx5dv_device_init(struct ibv_device *ibv_device,
     if (ret != 0) {
         ucs_error("ibv_query_device() returned %d: %m", ret);
         status = UCS_ERR_IO_ERROR;
-        goto err;
+        goto err_free;
     }
 
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
@@ -135,10 +137,10 @@ static ucs_status_t uct_ib_mlx5dv_device_init(struct ibv_device *ibv_device,
                (errno != EOPNOTSUPP)) {
         ucs_error("MLX5_CMD_OP_QUERY_HCA_CAP failed: %m");
         status = UCS_ERR_IO_ERROR;
-        goto err;
+        goto err_free;
     } else {
         status = UCS_ERR_UNSUPPORTED;
-        goto err;
+        goto err_free;
     }
 
     if (atomic) {
@@ -191,17 +193,19 @@ static ucs_status_t uct_ib_mlx5dv_device_init(struct ibv_device *ibv_device,
     if (has_dc) {
         status = uct_ib_mlx5_check_dc(dev);
     }
-    *p_md = md;
 
+    *p_md = md;
     return status;
 
-err:
-    ibv_close_device(ctx);
+err_free:
     ucs_free(md);
+err_free_context:
+    ibv_close_device(ctx);
+err:
     return status;
 }
 
-UCT_IB_DEVICE_INIT(uct_ib_mlx5dv_device_init, 1);
+UCT_IB_MD_OPEN(uct_ib_mlx5dv_md_open, 1);
 
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
