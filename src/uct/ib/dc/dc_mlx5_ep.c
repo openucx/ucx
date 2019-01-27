@@ -822,7 +822,9 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         av.fl_mlid      = ib_iface->path_bits[0] & 0x7f;
 
         /* lid in dc_req is in BE already  */
-        av.rlid         = dc_req->lid | htons(ib_iface->path_bits[0]);
+        av.rlid         = uct_ib_iface_is_roce(ib_iface) ?
+                            htons(UCT_IB_MLX5_ROCE_SRC_PORT_MIN) :
+                            (dc_req->lid | htons(ib_iface->path_bits[0]));
         av.dqp_dct      = htonl(dc_req->dct_num);
 
         if (!iface->ud_common.config.compact_av || ah_attr.is_global) {
