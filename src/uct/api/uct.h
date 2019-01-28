@@ -390,10 +390,12 @@ enum uct_iface_params_field {
     /** Enables @ref uct_iface_params_t::open_mode */
     UCT_IFACE_PARAM_FIELD_OPEN_MODE         = UCS_BIT(1),
 
-    /** Enables @ref uct_iface_params_t::mode::device */
+    /** Enables @ref uct_iface_params_t_mode_device
+     *  "uct_iface_params_t::mode::device" */
     UCT_IFACE_PARAM_FIELD_DEVICE            = UCS_BIT(2),
 
-    /** Enables @ref uct_iface_params_t::mode::sockaddr */
+    /** Enables @ref uct_iface_params_t_mode_sockaddr
+     *  "uct_iface_params_t::mode::sockaddr" */
     UCT_IFACE_PARAM_FIELD_SOCKADDR          = UCS_BIT(3),
 
     /** Enables @ref uct_iface_params_t::stats_root */
@@ -673,7 +675,8 @@ struct uct_iface_params {
     uint64_t                                     open_mode;
     /** Mode-specific parameters */
     union {
-        /** The fields in this structure (tl_name and dev_name) need to be set only when
+        /** @anchor uct_iface_params_t_mode_device
+         *  The fields in this structure (tl_name and dev_name) need to be set only when
          *  the @ref UCT_IFACE_OPEN_MODE_DEVICE bit is set in @ref
          *  uct_iface_params_t.open_mode This will make @ref uct_iface_open
          *  open the interface on the specified device.
@@ -682,7 +685,8 @@ struct uct_iface_params {
             const char                           *tl_name;  /**< Transport name */
             const char                           *dev_name; /**< Device Name */
         } device;
-        /** These callbacks and address are only relevant for client-server
+        /** @anchor uct_iface_params_t_mode_sockaddr
+         *  These callbacks and address are only relevant for client-server
          *  connection establishment with sockaddr and are needed on the server side.
          *  The callbacks and address need to be set when the @ref
          *  UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER bit is set in @ref
