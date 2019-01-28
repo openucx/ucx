@@ -458,3 +458,18 @@ uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
     ucs_assert(index <= srq->mask);
     return srq->buf + index * UCT_IB_MLX5_SRQ_STRIDE;
 }
+
+static inline void uct_ib_mlx5_iface_set_av_sport(uct_ib_iface_t *iface,
+                                                  uct_ib_mlx5_base_av_t *av,
+                                                  uint32_t flow_id)
+{
+    uint16_t sport;
+
+    if (!IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface)) ||
+        (ntohs(av->rlid) >= UCT_IB_MLX5_ROCE_SRC_PORT_MIN)) {
+        return;
+    }
+
+    sport    = flow_id ^ (flow_id >> 16);
+    av->rlid = htons(UCT_IB_MLX5_ROCE_SRC_PORT_MIN | sport);
+}
