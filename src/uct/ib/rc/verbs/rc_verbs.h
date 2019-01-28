@@ -56,6 +56,7 @@ typedef struct uct_rc_verbs_iface {
     struct ibv_sge              inl_sge[2];
     uct_rc_am_short_hdr_t       am_inl_hdr;
     ucs_mpool_t                 short_desc_mp;
+    uct_rc_iface_send_desc_t   *fc_desc; /* used when max_inline is zero */
     struct {
         size_t                  short_desc_size;
         size_t                  max_inline;

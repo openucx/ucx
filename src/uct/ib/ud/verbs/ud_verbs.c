@@ -206,8 +206,9 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
 
     UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super) - 1,
                        "uct_ud_verbs_ep_am_zcopy");
-    UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length,
-                     0, iface->super.config.max_inline, "am_zcopy header");
+
+    UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + sizeof(uct_ud_zcopy_desc_t) + header_length,
+                     0, iface->super.super.config.seg_size, "am_zcopy header");
 
     UCT_UD_CHECK_ZCOPY_LENGTH(&iface->super, header_length,
                               uct_iov_total_length(iov, iovcnt));
@@ -402,7 +403,10 @@ uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
         return status;
     }
 
-    iface_attr->overhead = 105e-9; /* Software overhead */
+    iface_attr->overhead       = 105e-9; /* Software overhead */
+    iface_attr->cap.am.max_hdr = uct_ib_iface_hdr_size(iface->super.config.seg_size,
+                                                       sizeof(uct_ud_neth_t) +
+                                                       sizeof(uct_ud_zcopy_desc_t));
 
     return UCS_OK;
 }
