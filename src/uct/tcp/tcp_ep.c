@@ -119,11 +119,7 @@ ucs_status_t uct_tcp_ep_create_connected(const uct_ep_params_t *params,
     struct sockaddr_in dest_addr;
     ucs_status_t status;
 
-    UCT_CHECK_PARAM(ucs_test_all_flags(params->field_mask,
-                                       UCT_EP_PARAM_FIELD_IFACE_ADDR |
-                                       UCT_EP_PARAM_FIELD_DEV_ADDR),
-                    "UCT_EP_PARAM_FIELD_IFACE_ADDR and UCT_EP_PARAM_FIELD_DEV_ADDR are not defined");
-
+    UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     memset(&dest_addr, 0, sizeof(dest_addr));
     dest_addr.sin_family = AF_INET;
     dest_addr.sin_port   = *(in_port_t*)params->iface_addr;

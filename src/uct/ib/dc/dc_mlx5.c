@@ -93,11 +93,7 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
 
     ucs_trace_func("");
 
-    UCT_CHECK_PARAM(ucs_test_all_flags(params->field_mask,
-                                       UCT_EP_PARAM_FIELD_IFACE_ADDR |
-                                       UCT_EP_PARAM_FIELD_DEV_ADDR),
-                    "UCT_EP_PARAM_FIELD_IFACE_ADDR and UCT_EP_PARAM_FIELD_DEV_ADDR are not defined");
-
+    UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     ib_addr = (const uct_ib_address_t *)params->dev_addr;
     if_addr = (const uct_dc_mlx5_iface_addr_t *)params->iface_addr;
 

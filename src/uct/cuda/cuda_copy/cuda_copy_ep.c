@@ -17,11 +17,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_ep_t, const uct_ep_params_t *params)
     uct_cuda_copy_iface_t *iface = ucs_derived_of(params->iface,
                                                   uct_cuda_copy_iface_t);
 
-    UCT_CHECK_PARAM(ucs_test_all_flags(params->field_mask,
-                                       UCT_EP_PARAM_FIELD_IFACE_ADDR |
-                                       UCT_EP_PARAM_FIELD_DEV_ADDR),
-                    "UCT_EP_PARAM_FIELD_IFACE_ADDR and UCT_EP_PARAM_FIELD_DEV_ADDR are not defined");
-
+    UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
     return UCS_OK;

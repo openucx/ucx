@@ -104,6 +104,20 @@ enum {
 
 
 /**
+ * In release mode - do nothing.
+ *
+ * In debug mode, if @a _params field mask does not have set
+ * @ref UCT_EP_PARAM_FIELD_DEV_ADDR and @ref UCT_EP_PARAM_FIELD_IFACE_ADDR
+ * flags, return an error.
+ */
+#define UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(_params) \
+    UCT_CHECK_PARAM(ucs_test_all_flags((_params)->field_mask, \
+                                       UCT_EP_PARAM_FIELD_DEV_ADDR | \
+                                       UCT_EP_PARAM_FIELD_IFACE_ADDR), \
+                    "UCT_EP_PARAM_FIELD_DEV_ADDR and UCT_EP_PARAM_FIELD_IFACE_ADDR are not defined")
+
+
+/**
  * Check the condition and return status as a pointer if not true.
  */
 #define UCT_CHECK_PARAM_PTR(_condition, _err_message, ...) \
