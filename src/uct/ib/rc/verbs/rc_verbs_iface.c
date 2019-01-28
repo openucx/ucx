@@ -292,13 +292,13 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
+    if (self->fc_desc != NULL) {
+        ucs_mpool_put(self->fc_desc);
+    }
     uct_base_iface_progress_disable(&self->super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
     uct_rc_iface_tag_cleanup(&self->super);
-    if (self->fc_desc != NULL) {
-        ucs_mpool_put(self->fc_desc);
-    }
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_iface_t, uct_rc_iface_t);
