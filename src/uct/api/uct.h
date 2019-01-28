@@ -1400,8 +1400,8 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
  *
  * Create a UCT endpoint in one form available modes:
  * -# not connected if no any type of address is present, to connect the
- *    endpoint to remote one need to call @ref ep_connect_to_ep later, requires
- *    @ref UCT_IFACE_FLAG_CONNECT_TO_EP
+ *    endpoint to remote one need to call @ref uct_ep_connect_to_ep later,
+ *    requires @ref UCT_IFACE_FLAG_CONNECT_TO_EP
  * -# connected to remote interface if @ref uct_ep_params_t::dev_addr and
  *    @ref uct_ep_params_t::iface_addr are set, requires iface flag
  *    @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE
