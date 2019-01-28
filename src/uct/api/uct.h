@@ -384,43 +384,43 @@ enum uct_iface_open_mode {
  * present, for backward compatibility support.
  */
 enum uct_iface_params_field {
-    /** Mask of CPUs to use for resources */
+    /** Enables @ref uct_iface_params_t::cpu_mask */
     UCT_IFACE_PARAM_FIELD_CPU_MASK          = UCS_BIT(0),
 
-    /** Interface open mode bitmap, mandatory field */
+    /** Enables @ref uct_iface_params_t::open_mode */
     UCT_IFACE_PARAM_FIELD_OPEN_MODE         = UCS_BIT(1),
 
-    /** Transport and device name */
+    /** Enables @ref uct_iface_params_t::mode::device */
     UCT_IFACE_PARAM_FIELD_DEVICE            = UCS_BIT(2),
 
-    /** Server listener sockaddr */
+    /** Enables @ref uct_iface_params_t::mode::sockaddr */
     UCT_IFACE_PARAM_FIELD_SOCKADDR          = UCS_BIT(3),
 
-    /** Root in the statistics tree */
+    /** Enables @ref uct_iface_params_t::stats_root */
     UCT_IFACE_PARAM_FIELD_STATS_ROOT        = UCS_BIT(4),
 
-    /** The receive segment headroom */
+    /** Enables @ref uct_iface_params_t::rx_headroom */
     UCT_IFACE_PARAM_FIELD_RX_HEADROOM       = UCS_BIT(5),
 
-    /** Custom argument of @ref uct_iface_params_t::err_handler */
+    /** Enables @ref uct_iface_params_t::err_handler_arg */
     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   = UCS_BIT(6),
 
-    /** The callback to handle transport level error */
+    /** Enables @ref uct_iface_params_t::err_handler */
     UCT_IFACE_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(7),
 
-    /** @ref uct_iface_params_t::err_handler callback flags */
+    /** Enables @ref uct_iface_params_t::err_handler_flags */
     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS = UCS_BIT(8),
 
-    /** HW Tag Matching eager callback argument */
+    /** Enables @ref uct_iface_params_t::eager_arg */
     UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG   = UCS_BIT(9),
 
-    /** HW Tag Matching eager callback */
+    /** Enables @ref uct_iface_params_t::eager_cb */
     UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB    = UCS_BIT(10),
 
-    /** HW Tag Matching rndv callback argument */
+    /** Enables @ref uct_iface_params_t::rndv_arg */
     UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG    = UCS_BIT(11),
 
-    /** HW Tag Matching rndv callback */
+    /** Enables @ref uct_iface_params_t::rndv_cb */
     UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB     = UCS_BIT(12)
 };
 
