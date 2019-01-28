@@ -615,20 +615,31 @@ ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
     uct_dc_iface_dci_put(iface, dci);
     ucs_assert_always(ep->dci == UCT_DC_EP_NO_DCI);
 
-    ep_status = iface->super.super.ops->set_ep_failed(ib_iface,
-                                                      &ep->super.super, status);
-    if (ep_status == UCS_OK) {
-        status = dc_ops->reset_dci(iface, dci);
-        if (status != UCS_OK) {
-            ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
-                       iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+    if (ep == iface->tx.fc_ep) {
+        /* Cannot handle errors on flow-control endpoint.
+         * Or shall we ignore them?
+         */
+        ucs_error("Got error on DC flow-control endpoint, iface %p: %s", iface,
+                  ucs_status_string(status));
+        return status;
+    } else {
+        ep_status = iface->super.super.ops->set_ep_failed(ib_iface,
+                                                          &ep->super.super, status);
+        if (ep_status != UCS_OK) {
+            return ep_status;
         }
+   }
 
-        status = uct_dc_iface_dci_connect(iface, txqp);
-        if (status != UCS_OK) {
-            ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
-                      iface, dci, txqp->qp->qp_num, ucs_status_string(status));
-        }
+    status = dc_ops->reset_dci(iface, dci);
+    if (status != UCS_OK) {
+        ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
+                   iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+    }
+
+    status = uct_dc_iface_dci_connect(iface, txqp);
+    if (status != UCS_OK) {
+        ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
+                  iface, dci, txqp->qp->qp_num, ucs_status_string(status));
     }
 
     return ep_status;
