@@ -84,6 +84,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     struct ibv_context *ctx;
     uct_ib_device_t *dev;
     uct_ib_md_t *md;
+    void *cap;
     int ret;
 
 #if HAVE_DECL_MLX5DV_IS_SUPPORTED
@@ -117,19 +118,19 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
+    cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX |
                                                    (UCT_IB_MLX5_CAP_GENERAL << 1));
     ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out));
     if (ret == 0) {
-        if (!UCT_IB_MLX5DV_GET(query_hca_cap_out, out, capability.cmd_hca_cap.dct)) {
+        if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dct)) {
             has_dc = 0;
         }
-        if (UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
-                              capability.cmd_hca_cap.compact_address_vector)) {
+        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, compact_address_vector)) {
             dev->flags |= UCT_IB_DEVICE_FLAG_AV;
         }
-        if (UCT_IB_MLX5DV_GET(query_hca_cap_out, out, capability.cmd_hca_cap.atomic)) {
+        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
             atomic = 1;
         }
     } else if ((errno != EPERM) &&
@@ -157,14 +158,9 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
             return UCS_ERR_IO_ERROR;
         }
 
-        arg_size = UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
-                                     capability.atomic_caps.atomic_size_qp);
-
-        cap_ops = UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
-                                    capability.atomic_caps.atomic_operations);
-
-        mode8b = UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
-                                   capability.atomic_caps.atomic_req_8B_endianness_mode);
+        arg_size = UCT_IB_MLX5DV_GET(atomic_caps, cap, atomic_size_qp);
+        cap_ops  = UCT_IB_MLX5DV_GET(atomic_caps, cap, atomic_operations);
+        mode8b   = UCT_IB_MLX5DV_GET(atomic_caps, cap, atomic_req_8B_endianness_mode);
 
         if ((cap_ops & ops) == ops) {
             dev->atomic_arg_sizes = sizeof(uint64_t);
