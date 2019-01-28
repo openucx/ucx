@@ -128,6 +128,32 @@ typedef struct uct_ib_rcache_region {
 } uct_ib_rcache_region_t;
 
 
+/**
+ * IB memory domain constructor. Should have following logic:
+ * - probe provided IB device, may return UCS_ERR_UNSUPPORTED
+ * - allocate MD and IB context
+ * - determine device attributes and flags
+ */
+typedef struct uct_ib_md_open_entry {
+    ucs_list_link_t             list;
+    ucs_status_t                (*md_open)(struct ibv_device *ibv_device,
+                                           uct_ib_md_t **p_md);
+} uct_ib_md_open_entry_t;
+
+#define UCT_IB_MD_OPEN(_open_fn, _priority) \
+    UCS_STATIC_INIT { \
+        extern ucs_list_link_t uct_ib_md_open_list; \
+        static uct_ib_md_open_entry_t entry = { \
+            .md_open = _open_fn, \
+        }; \
+        if (_priority) { \
+            ucs_list_add_head(&uct_ib_md_open_list, &entry.list); \
+        } else { \
+            ucs_list_add_tail(&uct_ib_md_open_list, &entry.list); \
+        } \
+    }
+
+
 extern uct_md_component_t uct_ib_mdc;
 
 

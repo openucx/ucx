@@ -140,7 +140,7 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     return UCS_OK;
 }
 
-#if !HAVE_DECL_MLX5DV_DEVX_GENERAL_CMD
+#if !HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
     struct mlx5_wqe_av  mlx5_av;

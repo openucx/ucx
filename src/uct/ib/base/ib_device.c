@@ -94,8 +94,6 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {0, 0, "Generic HCA", 0, 0}
 };
 
-UCS_LIST_HEAD(uct_ib_device_init_list);
-
 static void uct_ib_device_get_locailty(const char *dev_name, cpu_set_t *cpu_mask,
                                        int *numa_node)
 {
@@ -244,16 +242,19 @@ static void uct_ib_async_event_handler(int fd, void *arg)
     ibv_ack_async_event(&event);
 }
 
-ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
-                                struct ibv_device *ibv_device, int async_events
-                                UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
+static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
+                                         uct_ib_md_t **p_md)
 {
-    uct_ib_device_init_entry_t *init_entry;
+    uct_ib_device_t *dev;
     ucs_status_t status;
-    uint8_t i;
+    uct_ib_md_t *md;
     int ret;
 
-    dev->async_events = async_events;
+    md = ucs_calloc(1, sizeof(*md), "ib_md");
+    if (md == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+    dev              = &md->dev;
 
     /* Open verbs context */
     dev->ibv_context = ibv_open_device(ibv_device);
@@ -264,26 +265,12 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     }
 
     /* Read device properties */
-    memset(&dev->dev_attr, 0, sizeof(dev->dev_attr));
     IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(&dev->dev_attr);
     ret = ibv_exp_query_device(dev->ibv_context, &dev->dev_attr);
     if (ret != 0) {
         ucs_error("ibv_query_device() returned %d: %m", ret);
         status = UCS_ERR_IO_ERROR;
         goto err_free_context;
-    }
-
-    /* Check device type*/
-    switch (ibv_device->node_type) {
-    case IBV_NODE_SWITCH:
-        dev->first_port = 0;
-        dev->num_ports  = 1;
-        break;
-    case IBV_NODE_CA:
-    default:
-        dev->first_port = 1;
-        dev->num_ports  = dev->dev_attr.phys_port_cnt;
-        break;
     }
 
     if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr) ||
@@ -310,11 +297,45 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
         }
     }
 
-    ucs_list_for_each(init_entry, &uct_ib_device_init_list, list) {
-        status = init_entry->init(dev);
-        if (status != UCS_OK) {
-            goto err_free_context;
-        }
+#if HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_EXP_DEVICE_CAP_FLAGS
+    if (dev->dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT) {
+        dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+    }
+#endif
+
+    *p_md = md;
+    return UCS_OK;
+
+err_free_context:
+    ibv_close_device(dev->ibv_context);
+err:
+    ucs_free(md);
+    return status;
+}
+
+UCT_IB_MD_OPEN(uct_ib_verbs_md_open, 0);
+
+ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
+                                struct ibv_device *ibv_device, int async_events
+                                UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
+{
+    ucs_status_t status;
+    uint8_t i;
+    int ret;
+
+    dev->async_events = async_events;
+
+    /* Check device type*/
+    switch (ibv_device->node_type) {
+    case IBV_NODE_SWITCH:
+        dev->first_port = 0;
+        dev->num_ports  = 1;
+        break;
+    case IBV_NODE_CA:
+    default:
+        dev->first_port = 1;
+        dev->num_ports  = dev->dev_attr.phys_port_cnt;
+        break;
     }
 
     if (dev->num_ports > UCT_IB_DEV_MAX_PORTS) {
@@ -375,7 +396,6 @@ err_release_stats:
     UCS_STATS_NODE_FREE(dev->stats);
 err_free_context:
     ibv_close_device(dev->ibv_context);
-err:
     return status;
 }
 
