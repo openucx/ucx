@@ -854,9 +854,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     uint8_t port_num;
     int is_roce_v2;
     size_t inl;
-#if ENABLE_STATS
-    ucs_stats_node_t *stats_root;
-#endif
 
     if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
         return UCS_ERR_UNSUPPORTED;
@@ -870,17 +867,13 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     preferred_cpu = ucs_cpu_set_find_lcs(&cpu_mask);
 
-#if ENABLE_STATS
-    if (!(params->field_mask & UCT_IFACE_PARAM_FIELD_STATS_ROOT) ||
-        (params->stats_root == NULL)) {
-        stats_root = dev->stats;
-    } else {
-        stats_root = params->stats_root;
-    }
-#endif
-
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
-                              params, &config->super UCS_STATS_ARG(stats_root)
+                              params, &config->super
+                              UCS_STATS_ARG(((params->field_mask &
+                                              UCT_IFACE_PARAM_FIELD_STATS_ROOT) &&
+                                             (params->stats_root != NULL)) ?
+                                            params->stats_root :
+                                            dev->stats)
                               UCS_STATS_ARG(params->mode.device.dev_name));
 
     status = uct_ib_device_find_port(dev, params->mode.device.dev_name, &port_num);
