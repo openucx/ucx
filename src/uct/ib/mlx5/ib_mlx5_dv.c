@@ -38,12 +38,12 @@ static ucs_status_t uct_ib_mlx5dv_create_ksm(uct_ib_md_t *md,
                                              off_t offset)
 {
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
-    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_mkey_out)] = {0};
+    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(create_mkey_out)] = {};
     struct ibv_mr *mr = memh->super.mr;
-    size_t reg_length, length, inlen;
     ucs_status_t status = UCS_OK;
     struct mlx5dv_pd dvpd = {};
     struct mlx5dv_obj dv = {};
+    size_t reg_length, length, inlen;
     int list_size, i;
     void *mkc, *klm;
     uint32_t *in;
@@ -189,8 +189,8 @@ err_cq:
 static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
                                           uct_ib_md_t **p_md)
 {
-    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {0};
-    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_in)] = {0};
+    uint32_t out[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_out)] = {};
+    uint32_t in[UCT_IB_MLX5DV_ST_SZ_DW(query_hca_cap_in)] = {};
     struct mlx5dv_context_attr dv_attr = {};
     ucs_status_t status = UCS_OK;
     int atomic = 0, has_dc = 1;
