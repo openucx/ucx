@@ -92,7 +92,9 @@ const char *ucs_signal_names[] = {
     UCS_SYS_SIGNAME(PIPE),
     UCS_SYS_SIGNAME(ALRM),
     UCS_SYS_SIGNAME(TERM),
+#ifdef SIGSTKFLT
     UCS_SYS_SIGNAME(STKFLT),
+#endif
     UCS_SYS_SIGNAME(CHLD),
     UCS_SYS_SIGNAME(CONT),
     UCS_SYS_SIGNAME(STOP),
@@ -106,9 +108,17 @@ const char *ucs_signal_names[] = {
     UCS_SYS_SIGNAME(PROF),
     UCS_SYS_SIGNAME(WINCH),
     UCS_SYS_SIGNAME(IO),
+#ifdef SIGPWR
     UCS_SYS_SIGNAME(PWR),
+#endif
     UCS_SYS_SIGNAME(SYS),
+#if __linux__
     [SIGSYS + 1] = NULL
+#elif __FreeBSD__
+    [SIGRTMIN] = NULL
+#else
+#error "Port me"
+#endif
 };
 
 #if HAVE_SIGACTION_SA_RESTORER
