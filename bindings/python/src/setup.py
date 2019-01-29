@@ -1,7 +1,6 @@
 # Copyright (c) 2018-2019, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2019, Anaconda, Inc. All rights reserved.
 # See file LICENSE for terms.
-
-# Anaconda placeholder
 
 # This file is a copy of what is available in a Cython demo + some additions
 

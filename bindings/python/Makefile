@@ -1,7 +1,6 @@
 # Copyright (c) 2018-2019, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2019, Anaconda, Inc. All rights reserved.
 # See file LICENSE for terms.
-#
-# Anaconda placeholder
 
 CC = gcc
 UCX_PY_UCX_PATH ?= /usr/local
