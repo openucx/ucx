@@ -1610,38 +1610,6 @@ void ucp_listener_destroy(ucp_listener_h listener);
 ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
                            ucp_ep_h *ep_p);
 
-
-/**
- * @ingroup UCP_ENDPOINT
- * @brief Modify endpoint parameters.
- *
- * This routine modifies @ref ucp_ep_h "endpoint" created by @ref ucp_ep_create
- * or @ref ucp_listener_accept_callback_t. For example, this API can be used
- * to setup custom parameters like @ref ucp_ep_params_t::user_data or
- * @ref ucp_ep_params_t::err_handler_cb to endpoint created by 
- * @ref ucp_listener_accept_callback_t.
- *
- * @param [in]  ep          A handle to the endpoint.
- * @param [in]  params      User defined @ref ucp_ep_params_t configurations
- *                          for the @ref ucp_ep_h "UCP endpoint".
- *
- * @return NULL             - The endpoint is modified successfully.
- * @return UCS_PTR_IS_ERR(_ptr) - The reconfiguration failed and an error code
- *                                indicates the status. However, the @a endpoint
- *                                is not modified and can be used further.
- * @return otherwise        - The reconfiguration process is started, and can be
- *                            completed at any point in time. A request handle
- *                            is returned to the application in order to track
- *                            progress of the endpoint modification.
- *                            The application is responsible for releasing the
- *                            handle using the @ref ucp_request_free routine.
- *
- * @note See the documentation of @ref ucp_ep_params_t for details, only some of
- *       the parameters can be modified.
- */
-ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params);
-
-
 /**
  * @ingroup UCP_ENDPOINT
  *
