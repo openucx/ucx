@@ -189,6 +189,7 @@ enum ucp_listener_params_field {
     UCP_LISTENER_PARAM_FIELD_CONN_HANDLER        = UCS_BIT(2)
 };
 
+
 /**
  * @ingroup UCP_WORKER
  * @brief UCP worker address flags.
@@ -279,6 +280,7 @@ enum ucp_ep_close_mode {
                                               flushes on all outstanding
                                               operations. */
 };
+
 
 /**
  * @ingroup UCP_MEM
@@ -1609,6 +1611,7 @@ void ucp_listener_destroy(ucp_listener_h listener);
  */
 ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
                            ucp_ep_h *ep_p);
+
 
 /**
  * @ingroup UCP_ENDPOINT
