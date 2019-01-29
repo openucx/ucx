@@ -191,22 +191,6 @@ enum ucp_listener_params_field {
 
 /**
  * @ingroup UCP_WORKER
- * @brief Flags for a UCP AM callback
- *
- * Flags that indicate how to handle UCP Active Messages
- * Currently only UCP_AM_FLAG_WHOLE_MSG is supported,
- * which indicates the entire message is handled in one
- * callback
- */
-enum ucp_am_cb_flags {
-    UCP_AM_FLAG_WHOLE_MSG = UCS_BIT(0)
-};
-
-enum ucp_send_am_flags {
-    UCP_AM_SEND_REPLY = UCS_BIT(0)
-};
-/**
- * @ingroup UCP_WORKER
  * @brief UCP worker address flags.
  *
  * The enumeration list describes possible UCP worker address flags, indicating
@@ -294,19 +278,6 @@ enum ucp_ep_close_mode {
     UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
                                               flushes on all outstanding
                                               operations. */
-};
-
-/**
- * @ingroup UCP_ENDPOINT
- * @brief Descriptor flags for Active Message Callback
- *
- * In a callback, if flags is set to UCP_CB_PARAM_FLAG_DATA, data
- * was allocated, so if UCS_INPROGRESS is returned from the
- * callback, the data parameter will persist and the user has to call
- * @ref ucp_am_data_release
- */
-enum ucp_cb_param_flags {
-    UCP_CB_PARAM_FLAG_DATA = UCS_BIT(0)
 };
 
 /**
