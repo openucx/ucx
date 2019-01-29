@@ -284,10 +284,10 @@ static ucs_status_t uct_rc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 }
 #endif
 
-static void uct_rc_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_h md,
-                                 uct_rc_mlx5_iface_common_config_t *config,
-                                 const uct_iface_params_t *params,
-                                 uct_ib_iface_init_attr_t *init_attr)
+static void uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface, uct_md_h md,
+                                      uct_rc_mlx5_iface_common_config_t *config,
+                                      const uct_iface_params_t *params,
+                                      uct_ib_iface_init_attr_t *init_attr)
 {
 #if IBV_HW_TM
     uct_ib_device_t UCS_V_UNUSED *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
@@ -377,7 +377,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
 {
     ucs_status_t status;
 
-    uct_rc_iface_preinit(self, md, config, params, init_attr);
+    uct_rc_mlx5_iface_preinit(self, md, config, params, init_attr);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
                               &config->super, init_attr);

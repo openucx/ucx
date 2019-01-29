@@ -361,8 +361,7 @@ AS_IF([test "x$with_ib" == xyes],
                             [[#include <infiniband/tm_types.h>]])
            ])
        AS_IF([test "x$with_ib_hw_tm" = xexp],
-           [AC_DEFINE([IBV_EXP_HW_TM], 1, [IB Tag Matching support (EXP)])
-            AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
+           [AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
             AC_CHECK_MEMBERS([struct ibv_exp_create_srq_attr.dc_offload_params],
                              [AC_DEFINE([IBV_EXP_HW_TM_DC], 1, [DC Tag Matching support])],
                              [], [#include <infiniband/verbs_exp.h>])
