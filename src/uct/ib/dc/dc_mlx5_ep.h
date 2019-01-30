@@ -188,40 +188,6 @@ static UCS_F_ALWAYS_INLINE void uct_dc_mlx5_iface_dci_sched_tx(uct_dc_mlx5_iface
     }
 }
 
-
-/**
- * dci policies:
- * - fixed: all eps always use same dci no matter what
- * - dcs:
- *    - ep uses already assigned dci or
- *    - free dci is assigned in LIFO (stack) order or
- *    - ep has not resources to transmit
- *    - on FULL completion (once there are no outstanding ops)
- *      dci is pushed to the stack of free dcis
- *    it is possible that ep will never release its dci:
- *      ep send, gets some completion, sends more, repeat
- * - dcs + quota:
- *    - same as dcs with following addition:
- *    - if dci can not tx, and there are eps waiting for dci
- *      allocation ep goes into tx_wait state
- *    - in tx_wait state:
- *          - ep can not transmit while there are eps
- *            waiting for dci allocation. This will break
- *            starvation.
- *          - if there are no eps that are waiting for dci allocation
- *            ep goes back to normal state
- *
- * Not implemented policies:
- *
- * - hash:
- *    - dci is allocated to ep by some hash function
- *      for example dlid % ndci
- *
- * - random
- *    - dci is choosen by random() % ndci
- *    - ep keeps using dci as long as it has oustanding sends
- */
-
 enum uct_dc_mlx5_ep_flags {
     UCT_DC_MLX5_EP_FLAG_TX_WAIT  = UCS_BIT(0), /* ep is in the tx_wait state. See
                                                   description of the dcs+quota dci
