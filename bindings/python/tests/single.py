@@ -1,4 +1,4 @@
-# Anaconda license placeholder
+# Copyright (c) 2019, Anaconda, Inc. All rights reserved.
 
 import asyncio
 import sys
