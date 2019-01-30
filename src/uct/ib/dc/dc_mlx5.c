@@ -980,9 +980,9 @@ ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
         /* Cannot handle errors on flow-control endpoint.
          * Or shall we ignore them?
          */
-        ucs_error("Got error on DC flow-control endpoint, iface %p: %s", iface,
+        ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
                   ucs_status_string(status));
-        return status;
+        ep_status = UCS_OK;
     } else {
         ep_status = iface->super.super.super.ops->set_ep_failed(ib_iface,
                                                                 &ep->super.super,
