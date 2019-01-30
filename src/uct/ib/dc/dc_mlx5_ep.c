@@ -969,7 +969,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
 
-    /* ep can tx if
+    /* ep can tx iff
      * - iface has resources: cqe and tx skb
      * - dci is either assigned or can be assigned
      * - dci has resources
@@ -1123,7 +1123,6 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t c
     } else {
         ucs_arbiter_group_purge(uct_dc_mlx5_iface_tx_waitq(iface), &ep->arb_group,
                                 uct_dc_mlx5_ep_abriter_purge_cb, &args);
-
         uct_dc_mlx5_iface_dci_free(iface, ep);
     }
 }

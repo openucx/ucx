@@ -241,7 +241,7 @@ uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         /* coverity[dont_call] */
-        ep->dci = rand() % iface->tx.ndci;
+        ep->dci = rand_r(&iface->tx.rand_seed) % iface->tx.ndci;
     } else {
         ep->dci = UCT_DC_MLX5_EP_NO_DCI;
     }

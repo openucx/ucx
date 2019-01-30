@@ -53,10 +53,14 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      "           The dci is released once it completes all outstanding operations.\n"
      "           This policy ensures that there will be no starvation among endpoints.\n"
      "\n"
-     "rand       Every endpoint is assigned with its own DCI, selected in the random order.\n"
+     "rand       Every endpoint is assigned with a randomly selected DCI.\n"
      "           Multiple endpoints may share the same DCI.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
+
+    {"RAND_DCI_SEED", "0",
+     "Seed for DCI allocation when \"rand\" dci policy is used (0 - use default).",
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, rand_seed), UCS_CONFIG_TYPE_UINT},
 
     {"QUOTA", "32",
      "When \"dcs_quota\" policy is selected, how much to send from a DCI when\n"
@@ -1087,6 +1091,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     self->tx.policy                        = config->tx_policy;
     self->super.super.config.tx_moderation = 0; /* disable tx moderation for dcs */
     ucs_list_head_init(&self->tx.gc_list);
+
+    self->tx.rand_seed = config->rand_seed ? config->rand_seed : time(NULL);
 
     /* create DC target */
     status = uct_dc_mlx5_iface_create_dct(self);

@@ -54,6 +54,7 @@ typedef struct uct_dc_mlx5_iface_config {
     int                                 ndci;
     int                                 tx_policy;
     unsigned                            quota;
+    unsigned                            rand_seed;
     uct_ud_mlx5_iface_common_config_t   mlx5_ud;
 } uct_dc_mlx5_iface_config_t;
 
@@ -117,6 +118,9 @@ struct uct_dc_mlx5_iface {
 
         /* List of destroyed endpoints waiting for credit grant */
         ucs_list_link_t           gc_list;
+
+        /* Seed used for random dci allocation */
+        unsigned                  rand_seed;
 
     } tx;
 
