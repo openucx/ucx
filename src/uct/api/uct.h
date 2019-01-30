@@ -666,8 +666,8 @@ struct uct_iface_attr {
  */
 struct uct_iface_params {
     /** Mask of valid fields in this structure, using bits from
-     *  @ref uct_iface_params_field. Fields not specified in this mask
-     *  would be ignored. */
+     *  @ref uct_iface_params_field. Fields not specified in this mask will be
+     *  ignored. */
     uint64_t                                     field_mask;
     /** Mask of CPUs to use for resources */
     ucs_cpu_set_t                                cpu_mask;
