@@ -705,8 +705,8 @@ struct uct_iface_params {
 struct uct_ep_params {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_ep_params_field. Fields not specified by this mask
-     * would be ignored.
+     * @ref uct_ep_params_field. Fields not specified by this mask will be
+     * ignored.
      */
     uint64_t                          field_mask;
 
