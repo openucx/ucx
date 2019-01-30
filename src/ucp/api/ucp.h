@@ -145,7 +145,9 @@ enum ucp_feature {
     UCP_FEATURE_WAKEUP = UCS_BIT(4),  /**< Request interrupt notification
                                            support */
     UCP_FEATURE_STREAM = UCS_BIT(5),  /**< Request stream support */
-    UCP_FEATURE_X      = UCS_BIT(6)   /**< Request am support */
+    UCP_FEATURE_EXPERIMENTAL = UCS_BIT(6)   /**< Request all 
+                                                 experimental 
+                                                 features support */
 };
 
 
