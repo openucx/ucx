@@ -8,6 +8,7 @@
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
 #include <uct/ib/base/ib_md.h>
+#include <uct/ib/mlx5/ib_mlx5.h>
 
 #include <common/test.h>
 #include <uct/test_md.h>
@@ -92,7 +93,8 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
 
 bool test_ib_md::has_ksm() const {
 #if HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
-    return ucs_derived_of(md(), uct_ib_md_t)->dev.flags & UCT_IB_DEVICE_FLAG_KSM;
+    return (ucs_derived_of(md(), uct_ib_md_t)->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) &&
+           (ucs_derived_of(md(), uct_ib_mlx5_md_t)->flags & UCT_IB_MLX5_MD_FLAG_KSM);
 #elif defined(HAVE_EXP_UMR_KSM)
     return ucs_derived_of(md(), uct_ib_md_t)->dev.dev_attr.exp_device_cap_flags &
            IBV_EXP_DEVICE_UMR_FIXED_SIZE;

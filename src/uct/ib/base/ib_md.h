@@ -78,7 +78,7 @@ typedef struct uct_ib_mem {
 struct uct_ib_md;
 
 typedef struct uct_ib_md_ops {
-    size_t                  struct_size;
+    size_t                  memh_struct_size;
     ucs_status_t            (*reg_atomic_key)(struct uct_ib_md *md,
                                               uct_ib_mem_t *memh,
                                               off_t offset);
