@@ -243,6 +243,8 @@ AS_IF([test "x$with_ib" == xyes],
                        ibv_create_srq_ex],
                       [], [], [[#include <infiniband/verbs.h>]])
 
+       # We shouldn't confuse upstream ibv_query_device_ex with
+       # legacy MOFED one, distinguish by arguments number
        AC_CHECK_DECL(ibv_query_device_ex, [
        AC_TRY_COMPILE([#include <infiniband/verbs.h>],
                       [ibv_query_device_ex(NULL, NULL, NULL)],

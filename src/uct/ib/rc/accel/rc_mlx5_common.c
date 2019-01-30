@@ -145,6 +145,24 @@ UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(32)
 UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(64)
 
 #if IBV_HW_TM
+#  if ENABLE_STATS
+static ucs_stats_class_t uct_rc_mlx5_tag_stats_class = {
+    .name = "tag",
+    .num_counters = UCT_RC_MLX5_STAT_TAG_LAST,
+    .counter_names = {
+        [UCT_RC_MLX5_STAT_TAG_RX_EXP]            = "rx_exp",
+        [UCT_RC_MLX5_STAT_TAG_RX_EAGER_UNEXP]    = "rx_unexp_eager",
+        [UCT_RC_MLX5_STAT_TAG_RX_RNDV_UNEXP]     = "rx_unexp_rndv",
+        [UCT_RC_MLX5_STAT_TAG_RX_RNDV_REQ_EXP]   = "rx_exp_rndv_req",
+        [UCT_RC_MLX5_STAT_TAG_RX_RNDV_REQ_UNEXP] = "rx_unexp_rndv_req",
+        [UCT_RC_MLX5_STAT_TAG_RX_RNDV_FIN]       = "rx_rndv_fin",
+        [UCT_RC_MLX5_STAT_TAG_LIST_ADD]          = "tx_add_op",
+        [UCT_RC_MLX5_STAT_TAG_LIST_DEL]          = "tx_del_op",
+        [UCT_RC_MLX5_STAT_TAG_LIST_SYNC]         = "tx_sync_op"
+    }
+};
+#  endif
+
 static struct ibv_qp *
 uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 {
@@ -153,21 +171,16 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     return uct_dv_get_cmd_qp(iface->super.rx.srq.srq);
 #else
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
-    struct ibv_qp_init_attr qp_init_attr;
-    struct ibv_qp_attr qp_attr;
+    struct ibv_qp_init_attr qp_init_attr = {};
+    struct ibv_qp_attr qp_attr = {};
+    uct_ib_device_t *ibdev = &md->dev;
+    struct ibv_port_attr *port_attr;
+    struct ibv_qp *qp;
     uint8_t port_num;
     int ret;
-    uct_ib_device_t *ibdev;
-    struct ibv_port_attr *port_attr;
-    int is_roce_v2;
-    struct ibv_qp *qp;
 
-    ibdev = &md->dev;
-
-    port_num = ibdev->first_port;
+    port_num  = ibdev->first_port;
     port_attr = uct_ib_device_port_attr(ibdev, port_num);
-
-    memset(&qp_init_attr, 0, sizeof(qp_init_attr));
 
     qp_init_attr.qp_type             = IBV_QPT_RC;
     qp_init_attr.send_cq             = iface->super.super.cq[UCT_IB_DIR_RX];
@@ -182,7 +195,6 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
         goto err;
     }
 
-    memset(&qp_attr, 0, sizeof(qp_attr));
 
     /* Modify QP to INIT state */
     qp_attr.qp_state                 = IBV_QPS_INIT;
@@ -198,15 +210,10 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     qp_attr.qp_state                 = IBV_QPS_RTR;
     qp_attr.dest_qp_num              = qp->qp_num;
     qp_attr.path_mtu                 = IBV_MTU_512;
-
-    memset(&qp_attr.ah_attr, 0, sizeof(qp_attr.ah_attr));
     qp_attr.ah_attr.port_num         = port_num;
     qp_attr.ah_attr.dlid             = port_attr->lid;
     qp_attr.ah_attr.is_global        = 1;
-    if (uct_ib_device_query_gid(ibdev, port_num, UCT_IB_MD_DEFAULT_GID_INDEX,
-                                &qp_attr.ah_attr.grh.dgid, &is_roce_v2) != UCS_OK) {
-        goto err_destroy_qp;
-    }
+    qp_attr.ah_attr.grh.dgid         = iface->super.super.gid;
     ret = ibv_modify_qp(qp, &qp_attr,
                         IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN |
                         IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER);
@@ -227,7 +234,6 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     }
 
     iface->tm.cmd_qp = qp;
-
     return qp;
 
 err_destroy_qp:
@@ -291,6 +297,13 @@ uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface,
     iface->tm.head = &iface->tm.list[0];
     iface->tm.tail = &iface->tm.list[i];
 
+    status = UCS_STATS_NODE_ALLOC(&iface->tm.stats, &uct_rc_mlx5_tag_stats_class,
+                                  iface->stats);
+    if (status != UCS_OK) {
+        ucs_error("Failed to allocate tag stats: %s", ucs_status_string(status));
+        goto err_cmd_wq_free;
+    }
+
     return UCS_OK;
 
 err_cmd_wq_free:
@@ -316,24 +329,6 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 }
 
 #if IBV_HW_TM
-#  if ENABLE_STATS
-static ucs_stats_class_t uct_rc_mlx5_tag_stats_class = {
-    .name = "tag",
-    .num_counters = UCT_RC_MLX5_STAT_TAG_LAST,
-    .counter_names = {
-        [UCT_RC_MLX5_STAT_TAG_RX_EXP]            = "rx_exp",
-        [UCT_RC_MLX5_STAT_TAG_RX_EAGER_UNEXP]    = "rx_unexp_eager",
-        [UCT_RC_MLX5_STAT_TAG_RX_RNDV_UNEXP]     = "rx_unexp_rndv",
-        [UCT_RC_MLX5_STAT_TAG_RX_RNDV_REQ_EXP]   = "rx_exp_rndv_req",
-        [UCT_RC_MLX5_STAT_TAG_RX_RNDV_REQ_UNEXP] = "rx_unexp_rndv_req",
-        [UCT_RC_MLX5_STAT_TAG_RX_RNDV_FIN]       = "rx_rndv_fin",
-        [UCT_RC_MLX5_STAT_TAG_LIST_ADD]          = "tx_add_op",
-        [UCT_RC_MLX5_STAT_TAG_LIST_DEL]          = "tx_del_op",
-        [UCT_RC_MLX5_STAT_TAG_LIST_SYNC]         = "tx_sync_op"
-    }
-};
-#  endif
-
 static void uct_rc_mlx5_release_desc(uct_recv_desc_t *self, void *desc)
 {
     uct_rc_mlx5_release_desc_t *release = ucs_derived_of(self,
@@ -341,16 +336,13 @@ static void uct_rc_mlx5_release_desc(uct_recv_desc_t *self, void *desc)
     void *ib_desc = (char*)desc - release->offset;
     ucs_mpool_put_inline(ib_desc);
 }
-#endif
 
-#if IBV_HW_TM
 /* tag is passed as parameter, because some (but not all!) transports may need
  * to translate TMH to LE */
 ucs_status_t uct_rc_mlx5_handle_rndv(uct_rc_mlx5_iface_common_t *iface,
                                      struct ibv_tmh *tmh, uct_tag_t tag,
                                      unsigned byte_len)
 {
-#if IBV_HW_TM
     uct_rc_mlx5_tmh_priv_data_t *priv = (uct_rc_mlx5_tmh_priv_data_t*)tmh->reserved;
     uct_ib_md_t *ib_md                = uct_ib_iface_md(&iface->super.super);
     struct ibv_rvh *rvh;
@@ -389,9 +381,6 @@ ucs_status_t uct_rc_mlx5_handle_rndv(uct_rc_mlx5_iface_common_t *iface,
                                    rndv_usr_hdr_len + priv->length,
                                    be64toh(rvh->va), rndv_data_len,
                                    packed_rkey);
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
 }
 #endif
 
@@ -521,7 +510,6 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 {
     uct_ib_md_t *md       = uct_ib_iface_md(&iface->super.super);
     unsigned tmh_hdrs_len = sizeof(struct ibv_tmh) + rndv_hdr_len;
-    ucs_status_t status;
 
     iface->tm.eager_desc.super.cb = uct_rc_mlx5_release_desc;
     iface->tm.eager_desc.offset   = sizeof(struct ibv_tmh)
@@ -601,18 +589,8 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     iface->super.rx.srq.quota = srq_init_attr->attr.max_wr;
 #endif
 
-    status = UCS_STATS_NODE_ALLOC(&iface->tm.stats, &uct_rc_mlx5_tag_stats_class,
-                                  iface->super.stats);
-    if (status != UCS_OK) {
-        ucs_error("Failed to allocate tag stats: %s", ucs_status_string(status));
-        goto err;
-    }
-
     ucs_debug("Tag Matching enabled: tag list size %d", iface->tm.num_tags);
     return UCS_OK;
-
-err:
-    return status;
 }
 #endif
 

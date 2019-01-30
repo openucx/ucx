@@ -245,7 +245,7 @@ typedef struct uct_rc_mlx5_iface_common {
     } rx;
     uct_ib_mlx5_cq_t                 cq[UCT_IB_DIR_NUM];
     struct {
-        struct ibv_qp                *cmd_qp;
+        struct ibv_qp                *cmd_qp;    /* set if QP was created by UCX */
         uct_rc_mlx5_cmd_wq_t         cmd_wq;
         uct_rc_mlx5_tag_entry_t      *head;
         uct_rc_mlx5_tag_entry_t      *tail;

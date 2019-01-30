@@ -397,32 +397,32 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         return status;
     }
 
-    status = uct_rc_mlx5_iface_common_tag_init(self, config);
+    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_mlx5_iface_stats_class,
+                                  self->super.stats);
     if (status != UCS_OK) {
         return status;
+    }
+
+    status = uct_rc_mlx5_iface_common_tag_init(self, config);
+    if (status != UCS_OK) {
+        goto cleanup_stats;
     }
 
     status = uct_ib_mlx5_srq_init(&self->rx.srq, self->super.rx.srq.srq,
                                   self->super.super.config.seg_size);
     if (status != UCS_OK) {
-        return status;
+        goto cleanup_tm;
     }
 
     status = uct_rc_mlx5_iface_common_dm_init(self, &self->super, &config->mlx5_common);
     if (status != UCS_OK) {
-        return status;
+        goto cleanup_tm;
     }
 
     self->super.rx.srq.quota = self->rx.srq.mask + 1;
 
     /* By default set to something that is always in cache */
     self->rx.pref_ptr = self;
-
-    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_mlx5_iface_stats_class,
-                                  self->super.stats);
-    if (status != UCS_OK) {
-        goto cleanup_dm;
-    }
 
     status = uct_iface_mpool_init(&self->super.super.super,
                                   &self->tx.atomic_desc_mp,
@@ -434,7 +434,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
                                   uct_rc_iface_send_desc_init,
                                   "rc_mlx5_atomic_desc");
     if (status != UCS_OK) {
-        UCS_STATS_NODE_FREE(self->stats);
         goto cleanup_dm;
     }
 
@@ -455,15 +454,19 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
 
 cleanup_dm:
     uct_rc_mlx5_iface_common_dm_cleanup(self);
+cleanup_tm:
+    uct_rc_mlx5_iface_common_tag_cleanup(self);
+cleanup_stats:
+    UCS_STATS_NODE_FREE(self->stats);
     return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_common_t)
 {
-    UCS_STATS_NODE_FREE(self->stats);
     ucs_mpool_cleanup(&self->tx.atomic_desc_mp, 1);
     uct_rc_mlx5_iface_common_dm_cleanup(self);
     uct_rc_mlx5_iface_common_tag_cleanup(self);
+    UCS_STATS_NODE_FREE(self->stats);
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_iface_common_t, uct_rc_iface_t);
