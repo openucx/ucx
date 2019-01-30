@@ -214,17 +214,15 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     iface_attr->iface_addr_len  = 0;
     iface_attr->ep_addr_len     = sizeof(uct_rc_ep_address_t);
     iface_attr->max_conn_priv   = 0;
-    iface_attr->cap.flags       = UCT_IFACE_FLAG_AM_SHORT |
-                                  UCT_IFACE_FLAG_AM_BCOPY |
-                                  UCT_IFACE_FLAG_AM_ZCOPY |
-                                  UCT_IFACE_FLAG_PUT_SHORT |
-                                  UCT_IFACE_FLAG_PUT_BCOPY |
-                                  UCT_IFACE_FLAG_PUT_ZCOPY |
-                                  UCT_IFACE_FLAG_GET_BCOPY |
-                                  UCT_IFACE_FLAG_GET_ZCOPY |
-                                  UCT_IFACE_FLAG_PENDING   |
-                                  UCT_IFACE_FLAG_CONNECT_TO_EP |
-                                  UCT_IFACE_FLAG_CB_SYNC |
+    iface_attr->cap.flags       = UCT_IFACE_FLAG_AM_BCOPY        |
+                                  UCT_IFACE_FLAG_AM_ZCOPY        |
+                                  UCT_IFACE_FLAG_PUT_BCOPY       |
+                                  UCT_IFACE_FLAG_PUT_ZCOPY       |
+                                  UCT_IFACE_FLAG_GET_BCOPY       |
+                                  UCT_IFACE_FLAG_GET_ZCOPY       |
+                                  UCT_IFACE_FLAG_PENDING         |
+                                  UCT_IFACE_FLAG_CONNECT_TO_EP   |
+                                  UCT_IFACE_FLAG_CB_SYNC         |
                                   UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                   UCT_IFACE_FLAG_EVENT_RECV;
 
@@ -290,6 +288,14 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
 
     /* Tag Offload */
     uct_rc_iface_tag_query(iface, iface_attr, max_inline, tag_max_iov);
+
+    if (iface_attr->cap.am.max_short) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_AM_SHORT;
+    }
+
+    if (iface_attr->cap.put.max_short) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_PUT_SHORT;
+    }
 
     return UCS_OK;
 }
