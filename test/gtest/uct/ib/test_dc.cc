@@ -21,7 +21,7 @@ extern "C" {
     _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
 
 
-class test_dc : public uct_test {
+class test_dc : public test_rc {
 public:
     virtual void init() {
         uct_test::init();
@@ -65,7 +65,6 @@ public:
     }
 
 protected:
-    entity *m_e1, *m_e2;
     static uint32_t m_am_rx_count;
 
     struct dcs_comp {
@@ -448,6 +447,10 @@ UCS_TEST_P(test_dc, rand_dci_many_eps) {
     flush();
 }
 
+
+UCS_TEST_P(test_dc, stress_iface_ops) {
+    test_iface_ops();
+}
 
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc)
 
