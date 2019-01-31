@@ -565,8 +565,7 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_a
         return status;
     }
 
-    iface_attr->cap.flags              = UCT_IFACE_FLAG_AM_SHORT         |
-                                         UCT_IFACE_FLAG_AM_BCOPY         |
+    iface_attr->cap.flags              = UCT_IFACE_FLAG_AM_BCOPY         |
                                          UCT_IFACE_FLAG_AM_ZCOPY         |
                                          UCT_IFACE_FLAG_CONNECT_TO_EP    |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
@@ -597,6 +596,10 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_a
 
     /* UD lacks of scatter to CQE support */
     iface_attr->latency.overhead      += 10e-9;
+
+    if (iface_attr->cap.am.max_short) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_AM_SHORT;
+    }
 
     return UCS_OK;
 }
