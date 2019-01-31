@@ -8,6 +8,7 @@
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
 #include <uct/ib/base/ib_md.h>
+#include <uct/ib/mlx5/ib_mlx5.h>
 
 #include <common/test.h>
 #include <uct/test_md.h>
@@ -19,6 +20,7 @@ protected:
                          bool amo_access,
                          size_t size = 8192);
     bool has_ksm() const;
+    bool check_umr(uct_ib_md_t *ib_md) const;
 };
 
 
@@ -71,16 +73,16 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
     EXPECT_UCS_OK(status);
 
     if (amo_access) {
-        if (ib_md->umr_qp != NULL) {
+        if (check_umr(ib_md)) {
             EXPECT_TRUE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
-            EXPECT_TRUE(ib_memh->atomic_mr != NULL);
+            EXPECT_TRUE(ib_memh->atomic_rkey != 0);
         } else {
             EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
-            EXPECT_TRUE(ib_memh->atomic_mr == NULL);
+            EXPECT_TRUE(ib_memh->atomic_rkey == 0);
         }
     } else {
         EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
-        EXPECT_TRUE(ib_memh->atomic_mr == NULL);
+        EXPECT_TRUE(ib_memh->atomic_rkey == 0);
     }
 
     status = uct_md_mem_dereg(md(), memh);
@@ -90,11 +92,22 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
 }
 
 bool test_ib_md::has_ksm() const {
-#ifdef HAVE_EXP_UMR_KSM
+#if HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
+    return (ucs_derived_of(md(), uct_ib_md_t)->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) &&
+           (ucs_derived_of(md(), uct_ib_mlx5_md_t)->flags & UCT_IB_MLX5_MD_FLAG_KSM);
+#elif defined(HAVE_EXP_UMR_KSM)
     return ucs_derived_of(md(), uct_ib_md_t)->dev.dev_attr.exp_device_cap_flags &
            IBV_EXP_DEVICE_UMR_FIXED_SIZE;
 #else
     return false;
+#endif
+}
+
+bool test_ib_md::check_umr(uct_ib_md_t *ib_md) const {
+#if HAVE_DECL_MLX5DV_CONTEXT_FLAGS_DEVX
+    return has_ksm();
+#else
+    return ib_md->umr_qp != NULL;
 #endif
 }
 
