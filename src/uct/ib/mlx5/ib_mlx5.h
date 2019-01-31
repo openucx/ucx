@@ -232,6 +232,21 @@ typedef struct uct_ib_mlx5_base_av {
 } UCS_S_PACKED uct_ib_mlx5_base_av_t;
 
 
+typedef struct uct_ib_mlx5_err_cqe {
+    uint8_t                     rsvd0[32];
+    uint32_t                    srqn;
+    uint8_t                     rsvd1[16];
+    uint8_t                     hw_err_synd;
+    uint8_t                     hw_synd_type;
+    uint8_t                     vendor_err_synd;
+    uint8_t                     syndrome;
+    uint32_t                    s_wqe_opcode_qpn;
+    uint16_t                    wqe_counter;
+    uint8_t                     signature;
+    uint8_t                     op_own;
+} UCS_S_PACKED uct_ib_mlx5_err_cqe_t;
+
+
 /**
  * SRQ segment
  *

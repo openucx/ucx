@@ -162,6 +162,10 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
                                           uct_rc_hdr_t *hdr, unsigned length,
                                           uint32_t imm_data, uint16_t lid, unsigned flags);
 
+void uct_dc_mlx5_iface_set_av_sport(uct_dc_mlx5_iface_t *iface,
+                                    uct_ib_mlx5_base_av_t *av,
+                                    uint32_t remote_dctn);
+
 ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
                                    ucs_status_t status);
 

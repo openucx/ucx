@@ -927,6 +927,14 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
     return UCS_OK;
 }
 
+void uct_dc_mlx5_iface_set_av_sport(uct_dc_mlx5_iface_t *iface,
+                                    uct_ib_mlx5_base_av_t *av,
+                                    uint32_t remote_dctn)
+{
+    uct_ib_mlx5_iface_set_av_sport(&iface->super.super.super, av,
+                                   remote_dctn ^ uct_dc_mlx5_get_dct_num(iface));
+}
+
 ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
                                    ucs_status_t status)
 {
@@ -955,20 +963,32 @@ ucs_status_t uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num,
     uct_dc_mlx5_iface_dci_put(iface, dci);
     ucs_assert_always(ep->dci == UCT_DC_MLX5_EP_NO_DCI);
 
-    ep_status = iface->super.super.super.ops->set_ep_failed(ib_iface,
-                                                      &ep->super.super, status);
-    if (ep_status == UCS_OK) {
-        status = uct_dc_mlx5_iface_reset_dci(iface, dci);
-        if (status != UCS_OK) {
-            ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
-                       iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+    if (ep == iface->tx.fc_ep) {
+        /* Cannot handle errors on flow-control endpoint.
+         * Or shall we ignore them?
+         */
+        ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
+                  ucs_status_string(status));
+        ep_status = UCS_OK;
+    } else {
+        ep_status = iface->super.super.super.ops->set_ep_failed(ib_iface,
+                                                                &ep->super.super,
+                                                                status);
+        if (ep_status != UCS_OK) {
+            return ep_status;
         }
+    }
 
-        status = uct_dc_mlx5_iface_dci_connect(iface, txqp);
-        if (status != UCS_OK) {
-            ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
-                      iface, dci, txqp->qp->qp_num, ucs_status_string(status));
-        }
+    status = uct_dc_mlx5_iface_reset_dci(iface, dci);
+    if (status != UCS_OK) {
+        ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
+                   iface, dci, txqp->qp->qp_num, ucs_status_string(status));
+    }
+
+    status = uct_dc_mlx5_iface_dci_connect(iface, txqp);
+    if (status != UCS_OK) {
+        ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
+                  iface, dci, txqp->qp->qp_num, ucs_status_string(status));
     }
 
     return ep_status;
